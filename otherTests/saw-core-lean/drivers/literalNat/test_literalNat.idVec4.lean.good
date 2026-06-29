@@ -9,8 +9,10 @@ open CryptolToLean.SAWCoreVectors
 noncomputable def idVec4 (xs : Except String (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1))) Bool)) : Except String (Vec
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))) Bool)) : Except String (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1))) Bool) :=
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))) Bool) :=
   xs

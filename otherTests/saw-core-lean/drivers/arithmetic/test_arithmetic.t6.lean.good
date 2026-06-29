@@ -10,11 +10,13 @@ noncomputable def TestArith_Xor : Except String (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))) Bool) :=
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) :=
   Bind.bind (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))))
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
@@ -22,11 +24,13 @@ noncomputable def TestArith_Xor : Except String (Vec
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  (CryptolToLean.SAWCorePrimitives.bit1_macro 1)))))))))) (fun v_1 => Bind.bind
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))))))))) (fun v_1 => Bind.bind
   (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))))
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
@@ -34,8 +38,10 @@ noncomputable def TestArith_Xor : Except String (Vec
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))))))) (fun v_2 => Pure.pure
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))))))))) (fun v_2 => Pure.pure
   (bvXor (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))) v_1 v_2)))
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) v_1 v_2)))

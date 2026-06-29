@@ -14,58 +14,69 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) -> (Op_p1ziy : Vec
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) -> (Op_p1ziy : Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) -> (Op_p2zix : Vec
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) -> (Op_p2zix : Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) -> (Op_p2ziy : Vec
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) -> (Op_p2ziy : Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) ->
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) ->
   let Op_p1zix := (Pure.pure Op_p1zix); let Op_p1ziy := (Pure.pure Op_p1ziy);
   let Op_p2zix := (Pure.pure Op_p2zix); let Op_p2ziy := (Pure.pure Op_p2ziy);
-  let x__ := (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro 1)
-  0)); @Eq (Except String Bool) (Bind.bind
-  (CryptolToLean.SAWCorePreludeExtra.iteM (Vec
-  (CryptolToLean.SAWCorePrimitives.natPos_macro 1) Bool) (Bind.bind Op_p2zix
+  let x__ := (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)
+  CryptolToLean.SAWCorePrimitives.zero_macro)); @Eq (Except String Bool)
+  (Bind.bind (CryptolToLean.SAWCorePreludeExtra.iteM (Vec
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro) Bool) (Bind.bind Op_p2zix
   (fun v_1 => Bind.bind Op_p1zix (fun v_2 => Pure.pure (bvEq
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))))
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))))
   (CryptolToLean.SAWCorePreludeExtra.iteM (Vec
-  (CryptolToLean.SAWCorePrimitives.natPos_macro 1) Bool) (Bind.bind Op_p2ziy
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro) Bool) (Bind.bind Op_p2ziy
   (fun v_1 => Bind.bind Op_p1ziy (fun v_2 => Pure.pure (bvEq
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))) (Pure.pure
-  (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro 1)
-  (CryptolToLean.SAWCorePrimitives.natPos_macro 1))) x__) x__)
-  (fun v_1' => Bind.bind (vecSequenceM 1 Bool
-  #v[CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind Op_p1zix
-  (fun v_1 => Bind.bind Op_p2zix (fun v_2 => Pure.pure (bvEq
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))) (Pure.pure (bvNat
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))) x__) x__) (fun v_1' => Bind.bind
+  (vecSequenceM 1 Bool #v[CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind
+  Op_p1zix (fun v_1 => Bind.bind Op_p2zix (fun v_2 => Pure.pure (bvEq
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))))
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))))
   (CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind Op_p1ziy
   (fun v_1 => Bind.bind Op_p2ziy (fun v_2 => Pure.pure (bvEq
   (CryptolToLean.SAWCorePrimitives.natPos_macro
@@ -73,10 +84,11 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))) (Pure.pure
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))) (Pure.pure
   Bool.true) (Pure.pure Bool.false)) (Pure.pure Bool.false)])
-  (fun v_2' => Pure.pure (bvEq (CryptolToLean.SAWCorePrimitives.natPos_macro 1)
-  v_1' v_2')))) (Pure.pure Bool.true)
+  (fun v_2' => Pure.pure (bvEq (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro) v_1' v_2')))) (Pure.pure Bool.true)
 
 theorem goal_holds : goal := by
   sorry

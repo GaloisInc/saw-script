@@ -10,38 +10,46 @@ noncomputable def TestRec_MixedWidth : Except String (RecordType "x" (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))) Bool) (RecordType "y" (Vec
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) (RecordType "y" (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))) Bool) EmptyType)) :=
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))))) Bool) EmptyType)) :=
   Bind.bind (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))
-  (CryptolToLean.SAWCorePrimitives.natPos_macro 1))) (fun v_3' => Bind.bind
-  (Bind.bind (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))
+  CryptolToLean.SAWCorePrimitives.one_macro))))
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))) (fun v_3 => Bind.bind
-  (Pure.pure EmptyType.Empty) (fun v_4 => Pure.pure (@RecordType.RecordValue "y"
-  (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))) (fun v_3' => Bind.bind (Bind.bind
+  (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))) Bool) EmptyType v_3 v_4))))
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))))
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) (fun v_3 => Bind.bind (Pure.pure
+  EmptyType.Empty) (fun v_4 => Pure.pure (@RecordType.RecordValue "y" (Vec
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))))) Bool) EmptyType v_3 v_4))))
   (fun v_4' => Pure.pure (@RecordType.RecordValue "x" (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))) Bool) (RecordType "y" (Vec
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) (RecordType "y" (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))) Bool) EmptyType) v_3'
-  v_4')))
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))))) Bool) EmptyType) v_3' v_4')))

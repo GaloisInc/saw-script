@@ -280,6 +280,10 @@ translation with a clear, principled diagnostic.
     reduction when a concrete numeral is needed. Keep removing any remaining
     `UseMacro` uses that compute semantic equivalences rather than emitting
     syntax or wrapper plumbing.
+  - 2026-06-28 checkpoint: `Zero` / `One` now follow the same helper pattern
+    (`zero_macro`, `one_macro`) instead of emitting Lean numeric literals
+    directly. The helpers are reducible and simp-normalizing, so proofs still
+    reduce concrete lengths on the Lean side while Haskell stays syntactic.
   - 2026-06-28 checkpoint: removed the global `liftRawValue` Lean-AST
     recognizer. All wrapped-formal adaptation now uses translated shape
     metadata or explicit `UseMapsToWrapped` conventions.

@@ -21,4 +21,5 @@ noncomputable def TestLit_Poly1 (u1218 : Num) : Except String (@Num.rec
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))))
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))))))

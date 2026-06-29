@@ -12,14 +12,17 @@ namespace DagSharing
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) :=
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) :=
     Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))))
-    (CryptolToLean.SAWCorePrimitives.natPos_macro 1))
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))))))
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))
 
   noncomputable def x1 : Except String (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
@@ -27,21 +30,25 @@ namespace DagSharing
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) :=
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) :=
     let x__ := (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))))
-    (CryptolToLean.SAWCorePrimitives.natPos_macro 1))); Bind.bind x__
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))))))
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))); Bind.bind x__
     (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))
 
   noncomputable def x2 : Except String (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
@@ -49,28 +56,33 @@ namespace DagSharing
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) :=
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) :=
     let x__ := (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))))
-    (CryptolToLean.SAWCorePrimitives.natPos_macro 1))); let x__' := (Bind.bind
-    x__ (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))))))
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))); let x__' := (Bind.bind x__
+    (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))); Bind.bind
-    x__' (fun v_1 => Bind.bind x__' (fun v_2 => Pure.pure (bvAdd
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))); Bind.bind x__'
+    (fun v_1 => Bind.bind x__' (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))
 
   noncomputable def x3 : Except String (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
@@ -78,35 +90,41 @@ namespace DagSharing
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) :=
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) :=
     let x__ := (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))))
-    (CryptolToLean.SAWCorePrimitives.natPos_macro 1))); let x__' := (Bind.bind
-    x__ (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))))))
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))); let x__' := (Bind.bind x__
+    (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'' := (Bind.bind x__' (fun v_1 => Bind.bind x__'
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))); Bind.bind
-    x__'' (fun v_1 => Bind.bind x__'' (fun v_2 => Pure.pure (bvAdd
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))); Bind.bind x__''
+    (fun v_1 => Bind.bind x__'' (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))
 
   noncomputable def x4 : Except String (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
@@ -114,42 +132,49 @@ namespace DagSharing
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) :=
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) :=
     let x__ := (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))))
-    (CryptolToLean.SAWCorePrimitives.natPos_macro 1))); let x__' := (Bind.bind
-    x__ (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))))))
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))); let x__' := (Bind.bind x__
+    (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'' := (Bind.bind x__' (fun v_1 => Bind.bind x__'
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''' := (Bind.bind x__'' (fun v_1 => Bind.bind x__''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))); Bind.bind
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))); Bind.bind
     x__''' (fun v_1 => Bind.bind x__''' (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))
 
   noncomputable def x5 : Except String (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
@@ -157,49 +182,57 @@ namespace DagSharing
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) :=
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) :=
     let x__ := (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))))
-    (CryptolToLean.SAWCorePrimitives.natPos_macro 1))); let x__' := (Bind.bind
-    x__ (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))))))
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))); let x__' := (Bind.bind x__
+    (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'' := (Bind.bind x__' (fun v_1 => Bind.bind x__'
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''' := (Bind.bind x__'' (fun v_1 => Bind.bind x__''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''' := (Bind.bind x__''' (fun v_1 => Bind.bind x__'''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))); Bind.bind
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))); Bind.bind
     x__'''' (fun v_1 => Bind.bind x__'''' (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))
 
   noncomputable def x6 : Except String (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
@@ -207,56 +240,65 @@ namespace DagSharing
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) :=
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) :=
     let x__ := (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))))
-    (CryptolToLean.SAWCorePrimitives.natPos_macro 1))); let x__' := (Bind.bind
-    x__ (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))))))
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))); let x__' := (Bind.bind x__
+    (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'' := (Bind.bind x__' (fun v_1 => Bind.bind x__'
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''' := (Bind.bind x__'' (fun v_1 => Bind.bind x__''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''' := (Bind.bind x__''' (fun v_1 => Bind.bind x__'''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''''' := (Bind.bind x__'''' (fun v_1 => Bind.bind x__''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))); Bind.bind
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))); Bind.bind
     x__''''' (fun v_1 => Bind.bind x__''''' (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))
 
   noncomputable def x7 : Except String (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
@@ -264,63 +306,73 @@ namespace DagSharing
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) :=
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) :=
     let x__ := (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))))
-    (CryptolToLean.SAWCorePrimitives.natPos_macro 1))); let x__' := (Bind.bind
-    x__ (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))))))
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))); let x__' := (Bind.bind x__
+    (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'' := (Bind.bind x__' (fun v_1 => Bind.bind x__'
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''' := (Bind.bind x__'' (fun v_1 => Bind.bind x__''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''' := (Bind.bind x__''' (fun v_1 => Bind.bind x__'''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''''' := (Bind.bind x__'''' (fun v_1 => Bind.bind x__''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''''' := (Bind.bind x__''''' (fun v_1 => Bind.bind x__'''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))); Bind.bind
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))); Bind.bind
     x__'''''' (fun v_1 => Bind.bind x__'''''' (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))
 
   noncomputable def x8 : Except String (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
@@ -328,70 +380,81 @@ namespace DagSharing
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) :=
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) :=
     let x__ := (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))))
-    (CryptolToLean.SAWCorePrimitives.natPos_macro 1))); let x__' := (Bind.bind
-    x__ (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))))))
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))); let x__' := (Bind.bind x__
+    (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'' := (Bind.bind x__' (fun v_1 => Bind.bind x__'
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''' := (Bind.bind x__'' (fun v_1 => Bind.bind x__''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''' := (Bind.bind x__''' (fun v_1 => Bind.bind x__'''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''''' := (Bind.bind x__'''' (fun v_1 => Bind.bind x__''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''''' := (Bind.bind x__''''' (fun v_1 => Bind.bind x__'''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''''''' := (Bind.bind x__'''''' (fun v_1 => Bind.bind x__''''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))); Bind.bind
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))); Bind.bind
     x__''''''' (fun v_1 => Bind.bind x__''''''' (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))
 
   noncomputable def x9 : Except String (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
@@ -399,77 +462,89 @@ namespace DagSharing
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) :=
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) :=
     let x__ := (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))))
-    (CryptolToLean.SAWCorePrimitives.natPos_macro 1))); let x__' := (Bind.bind
-    x__ (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))))))
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))); let x__' := (Bind.bind x__
+    (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'' := (Bind.bind x__' (fun v_1 => Bind.bind x__'
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''' := (Bind.bind x__'' (fun v_1 => Bind.bind x__''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''' := (Bind.bind x__''' (fun v_1 => Bind.bind x__'''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''''' := (Bind.bind x__'''' (fun v_1 => Bind.bind x__''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''''' := (Bind.bind x__''''' (fun v_1 => Bind.bind x__'''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''''''' := (Bind.bind x__'''''' (fun v_1 => Bind.bind x__''''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''''''' := (Bind.bind x__''''''' (fun v_1 => Bind.bind x__'''''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))); Bind.bind
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))); Bind.bind
     x__'''''''' (fun v_1 => Bind.bind x__'''''''' (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))
 
   noncomputable def x10 : Except String (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
@@ -477,84 +552,97 @@ namespace DagSharing
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) :=
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) :=
     let x__ := (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))))
-    (CryptolToLean.SAWCorePrimitives.natPos_macro 1))); let x__' := (Bind.bind
-    x__ (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))))))
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))); let x__' := (Bind.bind x__
+    (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'' := (Bind.bind x__' (fun v_1 => Bind.bind x__'
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''' := (Bind.bind x__'' (fun v_1 => Bind.bind x__''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''' := (Bind.bind x__''' (fun v_1 => Bind.bind x__'''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''''' := (Bind.bind x__'''' (fun v_1 => Bind.bind x__''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''''' := (Bind.bind x__''''' (fun v_1 => Bind.bind x__'''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''''''' := (Bind.bind x__'''''' (fun v_1 => Bind.bind x__''''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''''''' := (Bind.bind x__''''''' (fun v_1 => Bind.bind x__'''''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''''''''' := (Bind.bind x__'''''''' (fun v_1 => Bind.bind x__''''''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))); Bind.bind
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))); Bind.bind
     x__''''''''' (fun v_1 => Bind.bind x__''''''''' (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))
 
   noncomputable def x11 : Except String (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
@@ -562,77 +650,89 @@ namespace DagSharing
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) :=
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) :=
     let x__ := (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))))
-    (CryptolToLean.SAWCorePrimitives.natPos_macro 1))); let x__' := (Bind.bind
-    x__ (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))))))
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))); let x__' := (Bind.bind x__
+    (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'' := (Bind.bind x__' (fun v_1 => Bind.bind x__'
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''' := (Bind.bind x__'' (fun v_1 => Bind.bind x__''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''' := (Bind.bind x__''' (fun v_1 => Bind.bind x__'''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''''' := (Bind.bind x__'''' (fun v_1 => Bind.bind x__''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''''' := (Bind.bind x__''''' (fun v_1 => Bind.bind x__'''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''''''' := (Bind.bind x__'''''' (fun v_1 => Bind.bind x__''''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''''''' := (Bind.bind x__''''''' (fun v_1 => Bind.bind x__'''''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''''''''' := (Bind.bind x__'''''''' (fun v_1 => Bind.bind x__''''''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''''''''' := (Bind.bind x__''''''''' (fun v_1 => Bind.bind
     x__''''''''' (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
@@ -640,14 +740,16 @@ namespace DagSharing
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))); Bind.bind
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))); Bind.bind
     x__'''''''''' (fun v_1 => Bind.bind x__'''''''''' (fun v_2 => Pure.pure
     (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))
 
   noncomputable def x12 : Except String (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
@@ -655,77 +757,89 @@ namespace DagSharing
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) :=
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) :=
     let x__ := (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))))
-    (CryptolToLean.SAWCorePrimitives.natPos_macro 1))); let x__' := (Bind.bind
-    x__ (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))))))
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))); let x__' := (Bind.bind x__
+    (fun v_1 => Bind.bind x__ (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'' := (Bind.bind x__' (fun v_1 => Bind.bind x__'
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''' := (Bind.bind x__'' (fun v_1 => Bind.bind x__''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''' := (Bind.bind x__''' (fun v_1 => Bind.bind x__'''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''''' := (Bind.bind x__'''' (fun v_1 => Bind.bind x__''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''''' := (Bind.bind x__''''' (fun v_1 => Bind.bind x__'''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''''''' := (Bind.bind x__'''''' (fun v_1 => Bind.bind x__''''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''''''' := (Bind.bind x__''''''' (fun v_1 => Bind.bind x__'''''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''''''''' := (Bind.bind x__'''''''' (fun v_1 => Bind.bind x__''''''''
     (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__'''''''''' := (Bind.bind x__''''''''' (fun v_1 => Bind.bind
     x__''''''''' (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
@@ -733,7 +847,8 @@ namespace DagSharing
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))));
     let x__''''''''''' := (Bind.bind x__'''''''''' (fun v_1 => Bind.bind
     x__'''''''''' (fun v_2 => Pure.pure (bvAdd
     (CryptolToLean.SAWCorePrimitives.natPos_macro
@@ -741,13 +856,15 @@ namespace DagSharing
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))); Bind.bind
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))); Bind.bind
     x__''''''''''' (fun v_1 => Bind.bind x__''''''''''' (fun v_2 => Pure.pure
     (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))
 
 end DagSharing

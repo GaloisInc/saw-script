@@ -10,34 +10,40 @@ noncomputable def TestTuple_Snd : Except String Bool :=
   let x__ := (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))
-  (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))); Bind.bind (Bind.bind
-  (Bind.bind (Bind.bind (Pure.pure (natToInt
-  (CryptolToLean.SAWCorePrimitives.natPos_macro 1))) (fun v_2' => Bind.bind
-  (Bind.bind x__ (fun v_2 => Bind.bind (Pure.pure UnitType.Unit)
-  (fun v_3 => Pure.pure (@PairType.PairValue (Vec
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))))
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))); Bind.bind (Bind.bind (Bind.bind
+  (Bind.bind (Pure.pure (natToInt (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))) (fun v_2' => Bind.bind (Bind.bind
+  x__ (fun v_2 => Bind.bind (Pure.pure UnitType.Unit) (fun v_3 => Pure.pure
+  (@PairType.PairValue (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))) Bool) UnitType v_2 v_3))))
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) UnitType v_2 v_3))))
   (fun v_3' => Pure.pure (@PairType.PairValue Int (PairType (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))) Bool) UnitType) v_2'
-  v_3')))) (fun v_2'' => Pure.pure (Pair_snd Int (PairType (Vec
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) UnitType) v_2' v_3'))))
+  (fun v_2'' => Pure.pure (Pair_snd Int (PairType (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))) Bool) UnitType) v_2'')))
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) UnitType) v_2'')))
   (fun v_2''' => Pure.pure (Pair_fst (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))) Bool) UnitType v_2''')))
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) UnitType v_2''')))
   (fun v_1 => Bind.bind x__ (fun v_2'''' => Pure.pure (bvEq
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))) v_1 v_2'''')))
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) v_1 v_2'''')))

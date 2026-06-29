@@ -545,8 +545,8 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- than computing binary-positive constructor-chain equivalences in
     -- Haskell. The helpers are reducible on the Lean side, so concrete
     -- lengths still elaborate by definitional reduction.
-  , ("Zero",   replaceDropArgs 0 (Lean.NatLit 0))
-  , ("One",    replaceDropArgs 0 (Lean.NatLit 1))
+  , ("Zero",   replaceDropArgs 0 (Lean.Var zeroMacroIdent))
+  , ("One",    replaceDropArgs 0 (Lean.Var oneMacroIdent))
   , ("Succ",   replace (Lean.Var (Lean.Ident "Nat.succ")))
   , ("Bit0",   rawUnaryHelper bit0MacroIdent)
   , ("Bit1",   rawUnaryHelper bit1MacroIdent)
@@ -969,9 +969,12 @@ rawUnaryHelper target =
   IdentSpecialTreatment DefSkip
     (UseMacro 1 UseResultRaw (\args -> Lean.App (Lean.Var target) args))
 
--- | Lean-side helpers for SAWCore's binary Nat/Pos constructors.
+-- | Lean-side helpers for SAWCore's Nat/Pos constructors.
 -- Defined in 'CryptolToLean.SAWCorePrimitives'.
-bit0MacroIdent, bit1MacroIdent, natPosMacroIdent :: Lean.Ident
+zeroMacroIdent, oneMacroIdent, bit0MacroIdent, bit1MacroIdent, natPosMacroIdent
+  :: Lean.Ident
+zeroMacroIdent = Lean.Ident "CryptolToLean.SAWCorePrimitives.zero_macro"
+oneMacroIdent = Lean.Ident "CryptolToLean.SAWCorePrimitives.one_macro"
 bit0MacroIdent = Lean.Ident "CryptolToLean.SAWCorePrimitives.bit0_macro"
 bit1MacroIdent = Lean.Ident "CryptolToLean.SAWCorePrimitives.bit1_macro"
 natPosMacroIdent = Lean.Ident "CryptolToLean.SAWCorePrimitives.natPos_macro"

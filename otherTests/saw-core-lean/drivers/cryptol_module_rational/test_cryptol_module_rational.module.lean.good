@@ -23,9 +23,10 @@ namespace RationalProbe
 
   noncomputable def half : Except String Rational :=
     Bind.bind (Pure.pure (natToInt (CryptolToLean.SAWCorePrimitives.natPos_macro
-    1))) (fun v_0 => Bind.bind (Pure.pure (natToInt
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))) (fun v_1 => Pure.pure
-    (ratio v_0 v_1)))
+    CryptolToLean.SAWCorePrimitives.one_macro))) (fun v_0 => Bind.bind
+    (Pure.pure (natToInt (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) (fun v_1 => Pure.pure (ratio
+    v_0 v_1)))
 
 end RationalProbe

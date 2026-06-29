@@ -42,9 +42,8 @@ throughout Cryptol's numeric-kind machinery: a finite length (via
 `TCNum`) or an infinite stream marker (`TCInf`).
 
 SAWCore's `Nat` is mapped to Lean's native `Nat` at the
-'SpecialTreatment' level (with `NatPos`/`Bit0`/`Bit1`/`One`/`Zero`
-collapsed to numeric literals via `UseMacro`), so `TCNum` takes a
-Lean `Nat` here. If a future user term exercises SAWCore's
+'SpecialTreatment' level through reducible constructor helpers, so `TCNum`
+takes a Lean `Nat` here. If a future user term exercises SAWCore's
 `Nat#rec` with a non-Lean-matching argument order we'll need to
 revisit; for now specialization reduces those eliminations away
 before the translator sees them. -/
@@ -60,9 +59,11 @@ SAWCore's `Nat` / `Pos` constructors (`Zero`, `NatPos`, `One`,
 instead of computing constructor-chain equivalences in Haskell; Lean reduces
 the helpers when a concrete numeral is needed. -/
 
-@[reducible] def bit0_macro (n : Nat) : Nat := 2 * n
-@[reducible] def bit1_macro (n : Nat) : Nat := 2 * n + 1
-@[reducible] def natPos_macro (n : Nat) : Nat := n
+@[simp, reducible] def zero_macro : Nat := 0
+@[simp, reducible] def one_macro : Nat := 1
+@[simp, reducible] def bit0_macro (n : Nat) : Nat := 2 * n
+@[simp, reducible] def bit1_macro (n : Nat) : Nat := 2 * n + 1
+@[simp, reducible] def natPos_macro (n : Nat) : Nat := n
 
 /-- SAWCore Prelude `Stream a` — infinite sequences of `a`. The
 single constructor `MkStream : (Nat → a) → Stream a` packages an

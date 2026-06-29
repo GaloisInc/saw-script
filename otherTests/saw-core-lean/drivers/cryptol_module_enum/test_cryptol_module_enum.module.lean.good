@@ -10,59 +10,73 @@ namespace EnumProbe
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit1_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))) (Vec
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool)) :=
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)) :=
     genM (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit1_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))) (Vec
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool)
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)
     (fun (i : Nat) => Pure.pure (bvNat
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) (addNat i
-    (CryptolToLean.SAWCorePrimitives.natPos_macro 1))))
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) (addNat i
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))))
 
   noncomputable def byTwos : Except String (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit1_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1))) (Vec
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))) (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool)) :=
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)) :=
     genM (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit1_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1))) (Vec
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))) (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool)
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)
     (fun (i : Nat) => Pure.pure (bvNat
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) (subNat (addNat 0
-    (mulNat i (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))) (mulNat i 0))))
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) (subNat (addNat
+    CryptolToLean.SAWCorePrimitives.zero_macro (mulNat i
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) (mulNat i
+    CryptolToLean.SAWCorePrimitives.zero_macro))))
 
 end EnumProbe

@@ -12,260 +12,306 @@ namespace Popcount
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool)) : Except String
-    (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) :=
-    atWithDefaultM (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit1_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) (Vec
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)) : Except String (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) (saw_throw_error
-    (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) :=
+    atWithDefaultM (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit1_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) (Pure.pure
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) (Vec
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) (saw_throw_error (Vec
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) (Pure.pure
     "at: index out of bounds")) (genM
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit1_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) (Vec
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool)
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)
     (fun (i : Nat) => atWithDefaultM
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit1_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) (Vec
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) (saw_throw_error
-    (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) (saw_throw_error (Vec
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) (Pure.pure
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) (Pure.pure
     "at: index out of bounds")) (let fix_body_ := (fun (ic : Except String (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit1_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) (Vec
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool))) => genM
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool))) => genM
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit1_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) (Vec
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool)
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)
     (fun (i' : Nat) => let x__ := (saw_throw_error (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) (Pure.pure
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) (Pure.pure
     "at: index out of bounds")); CryptolToLean.SAWCorePreludeExtra.iteM (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) (Pure.pure (ltNat
-    i' (CryptolToLean.SAWCorePrimitives.natPos_macro 1))) (atWithDefaultM
-    (CryptolToLean.SAWCorePrimitives.natPos_macro 1) (Vec
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) (Pure.pure (ltNat i'
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))) (atWithDefaultM
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro) (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) x__ (vecSequenceM
-    1 (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) x__ (vecSequenceM 1
+    (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) #v[Pure.pure
-    (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) 0)]) i') (atWithDefaultM
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) #v[Pure.pure (bvNat
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) (Vec
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))))))
+    CryptolToLean.SAWCorePrimitives.zero_macro)]) i') (atWithDefaultM
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) x__ (genM
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) (Vec
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) x__ (genM
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool)
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) (Vec
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)
     (fun (i'' : Nat) => let x__' := (atWithDefaultM
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) (PairType Bool (PairType
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) (PairType Bool (PairType
     (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) UnitType))
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) UnitType))
     (saw_throw_error (PairType Bool (PairType (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) UnitType))
-    (Pure.pure "at: index out of bounds")) (Bind.bind bits (fun v_4 => Bind.bind
-    ic (fun v_5 => Pure.pure (zip Bool (Vec
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) UnitType)) (Pure.pure
+    "at: index out of bounds")) (Bind.bind bits (fun v_4 => Bind.bind ic
+    (fun v_5 => Pure.pure (zip Bool (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool)
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))))
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))))))
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit1_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_4 v_5)))) i'');
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_4 v_5)))) i'');
     let x__'' := (Bind.bind (Bind.bind x__' (fun v_2 => Pure.pure (Pair_snd Bool
     (PairType (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) UnitType) v_2)))
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) UnitType) v_2)))
     (fun v_2' => Pure.pure (Pair_fst (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) UnitType v_2')));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) UnitType v_2')));
     CryptolToLean.SAWCorePreludeExtra.iteM (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) (Bind.bind x__'
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) (Bind.bind x__'
     (fun v_2 => Pure.pure (Pair_fst Bool (PairType (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool) UnitType) v_2)))
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) UnitType) v_2)))
     (Bind.bind x__'' (fun v_1 => Bind.bind (Pure.pure (bvNat
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1))))))
-    (CryptolToLean.SAWCorePrimitives.natPos_macro 1))) (fun v_2 => Pure.pure
-    (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))))))
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))) (fun v_2 => Pure.pure (bvAdd
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) v_1 v_2)))) x__''))
-    (subNat i' (CryptolToLean.SAWCorePrimitives.natPos_macro 1)))));
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2)))) x__'')) (subNat
+    i' (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))));
     let h_fix_unique_obligation_ : (Prop) := (saw_fix_unique_exists (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit1_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) (Vec
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool)) fix_body_);
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)) fix_body_);
     let h_fix_unique_ : (h_fix_unique_obligation_) := ((by sorry));
     saw_fix_choose (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit1_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) (Vec
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) Bool)) fix_body_
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)) fix_body_
     h_fix_unique_) (subNat (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro 1)))))) i))) 0
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) i)))
+    CryptolToLean.SAWCorePrimitives.zero_macro
 
 end Popcount
