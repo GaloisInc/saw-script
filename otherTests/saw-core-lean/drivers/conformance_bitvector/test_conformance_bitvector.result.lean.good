@@ -279,13 +279,14 @@ noncomputable def BitvectorConformance : Except String Bool :=
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))) (Nat.succ
+  CryptolToLean.SAWCorePrimitives.one_macro)))
+  (CryptolToLean.SAWCorePrimitives.succ_macro
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))) Bool
   (fun (i : Nat) => let x__'''''''''''' := (vecSequenceM 4 Bool #v[Pure.pure
   Bool.true, Pure.pure Bool.true, Pure.pure Bool.true, Pure.pure Bool.true]);
-  let x__''''''''''''' := (Nat.succ
+  let x__''''''''''''' := (CryptolToLean.SAWCorePrimitives.succ_macro
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   CryptolToLean.SAWCorePrimitives.one_macro)));

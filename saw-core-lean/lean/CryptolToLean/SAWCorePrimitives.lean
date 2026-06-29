@@ -66,6 +66,7 @@ the helpers when a concrete numeral is needed. -/
 
 @[simp, reducible] def zero_macro : Nat := 0
 @[simp, reducible] def one_macro : Nat := 1
+@[simp, reducible] def succ_macro (n : Nat) : Nat := Nat.succ n
 @[simp, reducible] def bit0_macro (n : Nat) : Nat := 2 * n
 @[simp, reducible] def bit1_macro (n : Nat) : Nat := 2 * n + 1
 @[simp, reducible] def natPos_macro (n : Nat) : Nat := n

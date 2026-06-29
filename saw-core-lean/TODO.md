@@ -313,6 +313,8 @@ translation with a clear, principled diagnostic.
     (`zero_macro`, `one_macro`) instead of emitting Lean numeric literals
     directly. The helpers are reducible and simp-normalizing, so proofs still
     reduce concrete lengths on the Lean side while Haskell stays syntactic.
+  - 2026-06-29 checkpoint: `Succ` also routes through a reducible Lean helper
+    (`succ_macro`) rather than a direct Haskell rewrite to Lean `Nat.succ`.
   - 2026-06-28 checkpoint: removed the global `liftRawValue` Lean-AST
     recognizer. All wrapped-formal adaptation now uses translated shape
     metadata or explicit `UseMapsToWrapped` conventions.

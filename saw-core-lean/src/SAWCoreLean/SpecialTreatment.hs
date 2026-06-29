@@ -558,7 +558,7 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- lengths still elaborate by definitional reduction.
   , ("Zero",   replaceDropArgs 0 (Lean.Var zeroMacroIdent))
   , ("One",    replaceDropArgs 0 (Lean.Var oneMacroIdent))
-  , ("Succ",   replace (Lean.Var (Lean.Ident "Nat.succ")))
+  , ("Succ",   rawUnaryHelper succMacroIdent)
   , ("Bit0",   rawUnaryHelper bit0MacroIdent)
   , ("Bit1",   rawUnaryHelper bit1MacroIdent)
   , ("NatPos", rawUnaryHelper natPosMacroIdent)
@@ -995,10 +995,11 @@ rawUnaryHelper target =
 
 -- | Lean-side helpers for SAWCore's Nat/Pos constructors.
 -- Defined in 'CryptolToLean.SAWCorePrimitives'.
-zeroMacroIdent, oneMacroIdent, bit0MacroIdent, bit1MacroIdent, natPosMacroIdent
+zeroMacroIdent, oneMacroIdent, succMacroIdent, bit0MacroIdent, bit1MacroIdent, natPosMacroIdent
   :: Lean.Ident
 zeroMacroIdent = Lean.Ident "CryptolToLean.SAWCorePrimitives.zero_macro"
 oneMacroIdent = Lean.Ident "CryptolToLean.SAWCorePrimitives.one_macro"
+succMacroIdent = Lean.Ident "CryptolToLean.SAWCorePrimitives.succ_macro"
 bit0MacroIdent = Lean.Ident "CryptolToLean.SAWCorePrimitives.bit0_macro"
 bit1MacroIdent = Lean.Ident "CryptolToLean.SAWCorePrimitives.bit1_macro"
 natPosMacroIdent = Lean.Ident "CryptolToLean.SAWCorePrimitives.natPos_macro"
