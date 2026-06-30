@@ -1,0 +1,14 @@
+enable_experimental;
+
+// SAW Prelude's `AccessiblePos p` is the well-foundedness witness
+// inductive over `Pos`, dual to `AccessibleNat`. Same coverage gap
+// as accessible_nat_rec_rejection — placed in L-3 auto-opacity but
+// no direct emission test. Audit (2026-05-06).
+let probe = parse_core
+  "\\(p : Pos) (a : AccessiblePos p) -> \
+  \  AccessiblePos#rec (\\(q : Pos) (aq : AccessiblePos q) -> Bool) \
+  \                    True \
+  \                    (\\(q : Pos) (aq : AccessiblePos q) (b : Bool) -> False) \
+  \                    p a";
+
+write_lean_term "probe" [] [] "-" probe;

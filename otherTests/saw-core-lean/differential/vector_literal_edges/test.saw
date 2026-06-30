@@ -1,0 +1,14 @@
+// TRUE differential litmus for empty, singleton, and nested vector literals.
+
+let observed = {{
+  (([] : [0][8]) == []) &&
+  ((([7] : [1][8]) @ 0) == 7) &&
+  (((([[1, 2], [3, 4]] : [2][2][8]) @ 1) @ 0) == 3)
+}};
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

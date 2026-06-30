@@ -1,0 +1,1 @@
+Direct partial-operation result emission currently lacks required nonzero proof obligations in some result positions; final conformance needs checked obligations, not unchecked total primitive calls.

@@ -1,0 +1,15 @@
+// TRUE differential litmus for small Cryptol append, reverse, join, and split.
+
+let observed = {{
+  ((([1, 2] # [3, 4]) : [4][8]) == [1, 2, 3, 4]) &&
+  (reverse ([1, 2, 3, 4] : [4][8]) == [4, 3, 2, 1]) &&
+  (join ([[1, 2], [3, 4]] : [2][2][8]) == [1, 2, 3, 4]) &&
+  (split ([1, 2, 3, 4] : [4][8]) == ([[1, 2], [3, 4]] : [2][2][8]))
+}};
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

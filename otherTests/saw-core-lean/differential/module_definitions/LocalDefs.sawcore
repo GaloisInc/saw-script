@@ -1,0 +1,9 @@
+module LocalDefs where
+
+import Prelude;
+
+base : Nat = 3;
+
+inc (x : Nat) : Nat = addNat x 1;
+
+observed : Bool = and (equalNat (inc base) 4) (equalNat LocalDefs::base 3);

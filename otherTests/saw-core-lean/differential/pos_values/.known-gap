@@ -1,0 +1,1 @@
+SAW's evaluator currently panics on closed Pos constructor/operation observations before Lean observation; final conformance needs a non-panicking SAW observation path and matching Lean emission.

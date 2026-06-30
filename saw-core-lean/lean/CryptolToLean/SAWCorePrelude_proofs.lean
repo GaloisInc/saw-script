@@ -1,0 +1,873 @@
+/-
+`CryptolToLean.SAWCorePrelude_proofs` — non-bitvector lemmas
+about the support library's axioms / `@[reducible]` defs.
+
+P3-4. Mirrors the lemma set in
+`saw-core-rocq/rocq/handwritten/CryptolToRocq/SAWCorePrelude_proofs.v`.
+The bv lemmas live in their own file
+(`SAWCoreBitvectors_proofs.lean`); this one collects round-trip
+properties of `gen` / `atWithDefault` / `foldr` / `foldl`, the
+trivial Nat-arithmetic bridges, and a handful of vector lemmas
+users might reach for.
+
+Some lemmas reduce by definitional equality (the `addNat = Nat.add`
+family below — our Lean-side `addNat` is `@[reducible] def addNat
+:= Nat.add`, so the equation is `rfl`). Others are axiomatic
+transpositions of Rocq theorems whose proofs depend on a `Vector
+α n` representation we don't expose. Each axiom cites its Rocq
+counterpart.
+-/
+
+import CryptolToLean.SAWCorePrimitives
+import CryptolToLean.SAWCoreVectors
+import CryptolToLean.SAWCorePreludeExtra
+
+namespace CryptolToLean.SAWCorePreludeProofs
+
+open CryptolToLean.SAWCorePrimitives
+open CryptolToLean.SAWCoreVectors
+
+/-! ## Nat-arithmetic alias `@[simp]` lemmas (proof ergonomics)
+
+**Not "theorems about SAW behavior" — convenience plumbing.** These
+all reduce by `rfl` because our Lean-side `addNat` / `subNat` /
+`mulNat` / `equalNat` / etc. are `@[reducible] def` aliases for
+the Lean stdlib operation. The `@[simp]` tag means user proofs
+can `simp` to rewrite SAW-named goals into Lean-stdlib form
+without manually unfolding the alias depth. They mirror Rocq's
+identical plumbing (`addNat_add`, `mulNat_mul`, etc.).
+
+If you're looking for substantive theorems about translator-emitted
+output, see the Vector round-trip / Bool-Nat decision-bridge
+sections below or `SAWCoreBitvectors_proofs.lean`. -/
+
+/-- SAW `addNat` is Lean `Nat.add`. Rocq: `rewrite_addNat`. -/
+@[simp] theorem addNat_eq_natAdd (m n : Nat) : addNat m n = m + n := rfl
+
+/-- SAW `subNat` is Lean `Nat.sub` (saturating). Both saturate
+at zero on under-flow. -/
+@[simp] theorem subNat_eq_natSub (m n : Nat) : subNat m n = m - n := rfl
+
+/-- SAW `equalNat` is decidable Nat equality. -/
+@[simp] theorem equalNat_eq_decide_eq (m n : Nat) :
+    equalNat m n = decide (m = n) := rfl
+
+/-- SAW `ltNat` matches Lean's strict less-than. -/
+@[simp] theorem ltNat_eq_decide_lt (m n : Nat) :
+    ltNat m n = decide (m < n) := rfl
+
+/-- SAW `leNat` matches Lean's less-than-or-equal. -/
+@[simp] theorem leNat_eq_decide_le (m n : Nat) :
+    leNat m n = decide (m ≤ n) := rfl
+
+/-- SAW `mulNat` is Lean `Nat.mul`. Rocq: `mulNat_mul`. -/
+@[simp] theorem mulNat_eq_natMul (m n : Nat) : mulNat m n = m * n := rfl
+
+/-- SAW `minNat` is Lean `Nat.min`. Rocq: `minNat_min`. -/
+@[simp] theorem minNat_eq_natMin (m n : Nat) : minNat m n = Nat.min m n := rfl
+
+/-- SAW `maxNat` is Lean `Nat.max`. Rocq: `maxNat_max`. -/
+@[simp] theorem maxNat_eq_natMax (m n : Nat) : maxNat m n = Nat.max m n := rfl
+
+/-- SAW `expNat` is Lean `Nat.pow`. -/
+@[simp] theorem expNat_eq_natPow (m n : Nat) : expNat m n = Nat.pow m n := rfl
+
+/-- SAW `pred` is Lean `Nat.pred`. -/
+@[simp] theorem pred_eq_natPred (n : Nat) : pred n = Nat.pred n := rfl
+
+/-- SAW `doubleNat n` equals `2 * n`. -/
+@[simp] theorem doubleNat_eq (n : Nat) : doubleNat n = 2 * n := rfl
+
+/-! ## Vector round-trip theorems
+
+`gen` and `atWithDefault` form an isomorphism: enumerating an
+`n`-element vector by index reconstructs the same vector;
+indexing into `gen f` returns `f i` for in-bounds `i`.
+
+Phase 8 (2026-05-02 evening): these were axioms before
+`gen` / `atWithDefault` became structural defs over Lean's
+`Vector`. Now provable from `Vector.getElem_ofFn` and
+`Vector.ext`. The previous axiom names are preserved as
+theorems for downstream-proof compatibility. -/
+
+@[simp] theorem ofFnM_except_ok {α : Type} {n : Nat} (f : Fin n → α) :
+    Vector.ofFnM (m := Except String) (fun i => Except.ok (f i)) =
+      Except.ok (Vector.ofFn f) := by
+  simpa [Pure.pure, Except.pure] using
+    (Vector.ofFnM_pure (m := Except String) (f := f))
+
+/-- If every generated element succeeds, the monadic `genM` is exactly
+the pure `gen` wrapped in `Except.ok`.
+
+This is the safe form of the tempting but false rule
+`atWithDefaultM d (genM f) i = f i`: `genM` is eager and sequences the
+whole vector, so selecting one element is equal to `f i` only after Lean
+has proved the other generated elements also succeed. -/
+theorem genM_eq_ok_gen {α : Type} (n : Nat)
+    (f : Nat → Except String α) (g : Nat → α)
+    (h : ∀ i : Nat, i < n → f i = Except.ok (g i)) :
+    genM n α f = Except.ok (gen n α g) := by
+  unfold genM gen
+  have hf :
+      (fun i : Fin n => f i.val) =
+        (fun i : Fin n => Except.ok (g i.val)) := by
+    funext i
+    exact h i.val i.isLt
+  rw [hf]
+  exact Vector.ofFnM_pure (m := Except String)
+    (f := fun i : Fin n => g i.val)
+
+/-- If every element of a wrapped vector is successful, eager vector
+sequencing succeeds with the corresponding pure vector.
+
+This is the all-width form behind literal-vector simplifications such as
+`vecSequenceM_singleton_ok`. It keeps the proof obligation explicit:
+`vecSequenceM` is eager, so callers must prove every element succeeds, not only
+the element they later index. -/
+theorem vecSequenceM_ok_of_get {α : Type} {n : Nat}
+    (vM : Vec n (Except String α)) (v : Vec n α)
+    (h : ∀ i : Fin n, vM[i] = Except.ok v[i]) :
+    vecSequenceM n α vM = Except.ok v := by
+  unfold vecSequenceM
+  have hv :
+      (fun i : Fin n => vM[i]) =
+        (fun i : Fin n => Except.ok v[i]) := by
+    funext i
+    exact h i
+  rw [hv]
+  rw [show
+    Vector.ofFnM (m := Except String) (fun i : Fin n => Except.ok v[i]) =
+      Except.ok (Vector.ofFn (fun i : Fin n => v[i])) from by
+    change Vector.ofFnM (m := Except String) (fun i : Fin n => pure v[i]) =
+      pure (Vector.ofFn (fun i : Fin n => v[i]))
+    exact Vector.ofFnM_pure (m := Except String) (f := fun i : Fin n => v[i])]
+  congr 1
+  apply Vector.ext
+  intro i
+  simp
+
+@[simp] theorem vecSequenceM_singleton_ok {α : Type} (x : α) :
+    vecSequenceM 1 α #v[Except.ok x] = Except.ok #v[x] := by
+  apply vecSequenceM_ok_of_get
+  intro i
+  cases i with
+  | mk val isLt =>
+      cases val with
+      | zero => rfl
+      | succ _ => omega
+
+/-- Wrapped indexing through an already-successful vector, in bounds.
+This is the direct Phase-beta counterpart of `atWithDefault_lt`. -/
+theorem atWithDefaultM_ok_lt {α : Type} (n : Nat)
+    (d : Except String α) (vM : Except String (Vec n α)) (v : Vec n α)
+    (i : Nat) (hVec : vM = Except.ok v) (hLt : i < n) :
+    atWithDefaultM n α d vM i = Except.ok (v[i]'hLt) := by
+  unfold atWithDefaultM
+  rw [hVec]
+  simp [hLt, Bind.bind, Pure.pure, Except.bind, Except.pure]
+
+/-- Wrapped indexing through an already-successful vector, out of bounds.
+The vector must still succeed because `atWithDefaultM` evaluates it eagerly. -/
+theorem atWithDefaultM_ok_ge {α : Type} (n : Nat)
+    (d : Except String α) (vM : Except String (Vec n α)) (v : Vec n α)
+    (i : Nat) (hVec : vM = Except.ok v) (hGe : n ≤ i) :
+    atWithDefaultM n α d vM i = d := by
+  unfold atWithDefaultM
+  rw [hVec]
+  simp [Nat.not_lt.mpr hGe, Bind.bind, Except.bind]
+
+/-- In-bounds indexing through an eagerly sequenced vector.
+
+The premise deliberately states success for every element of `vM`: sequencing
+is eager, so this is the safe all-width form of the common generated pattern
+`atWithDefaultM ... (vecSequenceM ... #v[...]) i`. -/
+theorem atWithDefaultM_vecSequenceM_ok_lt {α : Type} {n : Nat}
+    (d : Except String α) (vM : Vec n (Except String α)) (v : Vec n α)
+    (i : Nat) (hOk : ∀ j : Fin n, vM[j] = Except.ok v[j]) (hLt : i < n) :
+    atWithDefaultM n α d (vecSequenceM n α vM) i =
+      Except.ok (v[i]'hLt) := by
+  rw [vecSequenceM_ok_of_get vM v hOk]
+  exact atWithDefaultM_ok_lt n d (Except.ok v) v i rfl hLt
+
+/-- Out-of-bounds indexing through an eagerly sequenced vector.
+
+Even when the selected index is out of bounds, `atWithDefaultM` evaluates the
+vector argument first, so callers must still prove that every element succeeds
+before the default branch is returned. -/
+theorem atWithDefaultM_vecSequenceM_ok_ge {α : Type} {n : Nat}
+    (d : Except String α) (vM : Vec n (Except String α)) (v : Vec n α)
+    (i : Nat) (hOk : ∀ j : Fin n, vM[j] = Except.ok v[j]) (hGe : n ≤ i) :
+    atWithDefaultM n α d (vecSequenceM n α vM) i = d := by
+  rw [vecSequenceM_ok_of_get vM v hOk]
+  exact atWithDefaultM_ok_ge n d (Except.ok v) v i rfl hGe
+
+/-- In-bounds selected indexing through `genM`, under an explicit
+all-elements-success premise. This keeps the eager sequencing semantics
+visible in the theorem statement rather than hiding it in Haskell. -/
+theorem atWithDefaultM_genM_ok_lt {α : Type} (n : Nat)
+    (d : Except String α) (f : Nat → Except String α) (g : Nat → α)
+    (i : Nat) (hOk : ∀ j : Nat, j < n → f j = Except.ok (g j))
+    (hLt : i < n) :
+    atWithDefaultM n α d (genM n α f) i = f i := by
+  rw [genM_eq_ok_gen n f g hOk]
+  rw [hOk i hLt]
+  unfold atWithDefaultM
+  simp [hLt]
+  show Except.ok ((gen n α g)[i]'hLt) = Except.ok (g i)
+  simp [gen]
+
+/-- Out-of-bounds selected indexing through `genM`, again under an
+explicit all-elements-success premise. This premise is required because
+`atWithDefaultM` sequences the vector argument before checking bounds. -/
+theorem atWithDefaultM_genM_ok_ge {α : Type} (n : Nat)
+    (d : Except String α) (f : Nat → Except String α) (g : Nat → α)
+    (i : Nat) (hOk : ∀ j : Nat, j < n → f j = Except.ok (g j))
+    (hGe : n ≤ i) :
+    atWithDefaultM n α d (genM n α f) i = d := by
+  rw [genM_eq_ok_gen n f g hOk]
+  unfold atWithDefaultM
+  simp [Nat.not_lt.mpr hGe]
+  cases d <;> rfl
+
+/-- Congruence for selected in-bounds indexing through eager `genM`.
+The selected element may be compared directly only after both generated
+vectors are known to be all-success. -/
+theorem atWithDefaultM_genM_congr_lt {α : Type} (n : Nat)
+    (d : Except String α)
+    (f₁ f₂ : Nat → Except String α) (g₁ g₂ : Nat → α)
+    (i : Nat)
+    (hOk₁ : ∀ j : Nat, j < n → f₁ j = Except.ok (g₁ j))
+    (hOk₂ : ∀ j : Nat, j < n → f₂ j = Except.ok (g₂ j))
+    (hLt : i < n) (hEq : f₁ i = f₂ i) :
+    atWithDefaultM n α d (genM n α f₁) i =
+      atWithDefaultM n α d (genM n α f₂) i := by
+  rw [atWithDefaultM_genM_ok_lt n d f₁ g₁ i hOk₁ hLt]
+  rw [atWithDefaultM_genM_ok_lt n d f₂ g₂ i hOk₂ hLt]
+  exact hEq
+
+/-- Out-of-bounds congruence for selected indexing through eager `genM`.
+Even though the default branch is returned, both vector computations must
+first succeed. -/
+theorem atWithDefaultM_genM_congr_ge {α : Type} (n : Nat)
+    (d : Except String α)
+    (f₁ f₂ : Nat → Except String α) (g₁ g₂ : Nat → α)
+    (i : Nat)
+    (hOk₁ : ∀ j : Nat, j < n → f₁ j = Except.ok (g₁ j))
+    (hOk₂ : ∀ j : Nat, j < n → f₂ j = Except.ok (g₂ j))
+    (hGe : n ≤ i) :
+    atWithDefaultM n α d (genM n α f₁) i =
+      atWithDefaultM n α d (genM n α f₂) i := by
+  rw [atWithDefaultM_genM_ok_ge n d f₁ g₁ i hOk₁ hGe]
+  rw [atWithDefaultM_genM_ok_ge n d f₂ g₂ i hOk₂ hGe]
+
+/-- In-bounds selected indexing through eager `genM`, phrased using
+success evidence rather than an explicit pure generator. This is often
+the ergonomic form for generated proof obligations: the proof must show
+every eager element succeeds, while the selected result remains exactly
+the original wrapped element. -/
+theorem atWithDefaultM_genM_ok_lt_of_success {α : Type} [Inhabited α] (n : Nat)
+    (d : Except String α) (f : Nat → Except String α)
+    (i : Nat) (hOk : ∀ j : Nat, j < n → ∃ x : α, f j = Except.ok x)
+    (hLt : i < n) :
+    atWithDefaultM n α d (genM n α f) i = f i := by
+  let g : Nat → α := fun j =>
+    if h : j < n then Classical.choose (hOk j h) else default
+  have hOk' : ∀ j : Nat, j < n → f j = Except.ok (g j) := by
+    intro j hj
+    dsimp [g]
+    rw [dif_pos hj]
+    exact Classical.choose_spec (hOk j hj)
+  exact atWithDefaultM_genM_ok_lt n d f g i hOk' hLt
+
+/-- Out-of-bounds selected indexing through eager `genM`, using
+success evidence. Even out of bounds, `genM` is sequenced first. -/
+theorem atWithDefaultM_genM_ok_ge_of_success {α : Type} [Inhabited α] (n : Nat)
+    (d : Except String α) (f : Nat → Except String α)
+    (i : Nat) (hOk : ∀ j : Nat, j < n → ∃ x : α, f j = Except.ok x)
+    (hGe : n ≤ i) :
+    atWithDefaultM n α d (genM n α f) i = d := by
+  let g : Nat → α := fun j =>
+    if h : j < n then Classical.choose (hOk j h) else default
+  have hOk' : ∀ j : Nat, j < n → f j = Except.ok (g j) := by
+    intro j hj
+    dsimp [g]
+    rw [dif_pos hj]
+    exact Classical.choose_spec (hOk j hj)
+  exact atWithDefaultM_genM_ok_ge n d f g i hOk' hGe
+
+/-- Congruence for selected in-bounds indexing through eager `genM`,
+using success evidence for the eager parts and equality only at the
+selected index. -/
+theorem atWithDefaultM_genM_congr_lt_of_success {α : Type} [Inhabited α]
+    (n : Nat) (d : Except String α)
+    (f₁ f₂ : Nat → Except String α) (i : Nat)
+    (hOk₁ : ∀ j : Nat, j < n → ∃ x : α, f₁ j = Except.ok x)
+    (hOk₂ : ∀ j : Nat, j < n → ∃ x : α, f₂ j = Except.ok x)
+    (hLt : i < n) (hEq : f₁ i = f₂ i) :
+    atWithDefaultM n α d (genM n α f₁) i =
+      atWithDefaultM n α d (genM n α f₂) i := by
+  rw [atWithDefaultM_genM_ok_lt_of_success n d f₁ i hOk₁ hLt]
+  rw [atWithDefaultM_genM_ok_lt_of_success n d f₂ i hOk₂ hLt]
+  exact hEq
+
+/-- Out-of-bounds congruence for selected indexing through eager `genM`,
+using success evidence for both eager vectors. -/
+theorem atWithDefaultM_genM_congr_ge_of_success {α : Type} [Inhabited α]
+    (n : Nat) (d : Except String α)
+    (f₁ f₂ : Nat → Except String α) (i : Nat)
+    (hOk₁ : ∀ j : Nat, j < n → ∃ x : α, f₁ j = Except.ok x)
+    (hOk₂ : ∀ j : Nat, j < n → ∃ x : α, f₂ j = Except.ok x)
+    (hGe : n ≤ i) :
+    atWithDefaultM n α d (genM n α f₁) i =
+      atWithDefaultM n α d (genM n α f₂) i := by
+  rw [atWithDefaultM_genM_ok_ge_of_success n d f₁ i hOk₁ hGe]
+  rw [atWithDefaultM_genM_ok_ge_of_success n d f₂ i hOk₂ hGe]
+
+/-- The fundamental vector round-trip: indexing every element of
+`v` and re-`gen`-ing yields `v` back. Rocq: `gen_sawAt`. -/
+theorem gen_atWithDefault
+    (n : Nat) (α : Type) (d : α) (v : Vec n α) :
+    gen n α (fun i => atWithDefault n α d v i) = v := by
+  apply Vector.ext
+  intro i hi
+  simp [gen, atWithDefault]
+
+/-- Indexing into a freshly `gen`-erated vector returns the
+generator's output, for any in-bounds index. -/
+theorem atWithDefault_gen
+    (n : Nat) (α : Type) (d : α) (f : Nat → α) (i : Nat)
+    (h : i < n) :
+    atWithDefault n α d (gen n α f) i = f i := by
+  simp [atWithDefault, gen, h]
+
+/-- Vector reverse-self-inverse for our `gen`/`atWithDefault`
+formulation. Given any default, double-reversing a vector via
+the `gen n (fun i => at v (subNat (subNat n 1) i))` shape
+recovers the original.
+
+This is the lemma needed for stress-test E5
+(`reverse (reverse xs) == xs`) and is one of the building
+blocks for the deferred Salsa20 littleendian round-trip. The
+lemma is stated using `subNat` (not `n - 1 - i`) so it
+directly matches the translator's emitted shape — `subNat` is
+a reducible alias but `simp only` doesn't unfold reducibles by
+default. -/
+theorem gen_atWithDefault_double_reverse
+    (n : Nat) (α : Type) [Inhabited α] (d : α) (xs : Vec n α) :
+    gen n α (fun i => atWithDefault n α d
+      (gen n α (fun j => atWithDefault n α d xs (subNat (subNat n 1) j)))
+      (subNat (subNat n 1) i)) = xs := by
+  apply Vector.ext
+  intro k hk
+  simp only [gen, atWithDefault, subNat, Vector.getElem_ofFn]
+  have h1 : n - 1 - k < n := by omega
+  have h3 : n - 1 - (n - 1 - k) = k := by omega
+  simp [h1, h3, hk]
+
+/-- Out-of-bounds index returns the default. The translator's
+emitted `error _ "at: index out of bounds"` plays this role at
+emission time; this theorem states the corresponding semantic
+fact for downstream proofs. -/
+theorem atWithDefault_out_of_bounds
+    (n : Nat) (α : Type) (d : α) (v : Vec n α) (i : Nat)
+    (h : n ≤ i) : atWithDefault n α d v i = d := by
+  simp [atWithDefault, Nat.not_lt.mpr h]
+
+/-- Indexing a singleton literal vector at position 0 returns the
+element. Used by Phase 5b's recursion-discharge proofs over
+emitted `[seed] # …` shapes. Phase 8: now provable directly
+from the structural `atWithDefault`. -/
+theorem atWithDefault_singleton_zero
+    (α : Type) (d : α) (x : α) :
+    atWithDefault 1 α d #v[x] 0 = x := by
+  simp [atWithDefault]
+
+/-! ### Outer-wrapper peeling lemmas
+
+`atWithDefault N α d (gen N α f) k = f k` reduces SAW emission's
+outer wrapper one `Vector.ofFn` layer at a time without forcing whnf
+on the body. Critical for proofs over deeply-nested `gen` shapes where
+the body contains another `gen` — `Vector.ofFn` materializes strictly,
+so naive `show`/`rfl` can trigger cartesian-product whnf cost. -/
+
+theorem atWithDefault_gen_lt {α : Type} (n : Nat) (d : α) (f : Nat → α)
+    (k : Nat) (h : k < n) :
+    atWithDefault n α d (gen n α f) k = f k := by
+  unfold atWithDefault gen
+  simp [h, Vector.getElem_ofFn]
+
+/-- Generic `atWithDefault` peel: when the index is in bounds, the
+default is unused and the result is the underlying vector indexing.
+Used to bridge SAW's `atWithDefault N _ d v k` to Lean's `v[k]`
+without committing to `v`'s specific shape (gen / zip / arbitrary).
+Compose with shape-specific reductions (e.g. `zip_getElem_lt`)
+downstream.
+
+`@[simp]` so it fires on every emission where `k < n` is in
+context — the dominant `atWithDefault` use pattern. Side condition
+`h : k < n` is consumed via simp's standard hypothesis-discharge. -/
+@[simp] theorem atWithDefault_lt {α : Type} {n : Nat}
+    (d : α) (v : Vec n α) (k : Nat) (h : k < n) :
+    atWithDefault n α d v k = v[k]'h := by
+  unfold atWithDefault; simp [h]
+
+/-- Local helper: `v.get ⟨k, h⟩ = v[k]'h`. Used to bridge the
+`.get`-based form `zip` produces to `[]` notation. -/
+theorem Vector_get_eq_getElem {α : Type} {n : Nat}
+    (v : Vector α n) (k : Nat) (h : k < n) :
+    v.get ⟨k, h⟩ = v[k]'h := by
+  unfold Vector.get; simp
+
+/-- `zip` indexed at `k < min m n` gives a literal `PairValue` of
+the elements at `k`. Lets a `zip`-using body's per-index proofs go
+through without whnf-ing the underlying `Vector.ofFn`. -/
+theorem zip_getElem_lt {α β : Type} (m n : Nat) (v : Vec m α) (w : Vec n β)
+    (k : Nat) (h : k < Nat.min m n) :
+    (zip α β m n v w)[k]'h
+    = PairType.PairValue
+        (v[k]'(Nat.lt_of_lt_of_le h (Nat.min_le_left m n)))
+        (PairType.PairValue
+          (w[k]'(Nat.lt_of_lt_of_le h (Nat.min_le_right m n)))
+          UnitType.Unit) := by
+  unfold zip
+  rw [Vector.getElem_ofFn]
+  have hm : k < m := Nat.lt_of_lt_of_le h (Nat.min_le_left m n)
+  have hn : k < n := Nat.lt_of_lt_of_le h (Nat.min_le_right m n)
+  show PairType.PairValue (v.get ⟨k, hm⟩) (PairType.PairValue (w.get ⟨k, hn⟩) UnitType.Unit) = _
+  rw [Vector_get_eq_getElem v k hm, Vector_get_eq_getElem w k hn]
+
+/-! ### `atWithDefault` on small literal vectors (Case Study C)
+
+These specialized `@[simp]` lemmas reduce `atWithDefault N α d
+#v[…] i` for small concrete `N` and `i` directly to the indexed
+element, side-stepping the dependent-`if` whnf cost that bloats
+when many such lookups are nested. Vec-of-4 covers the Salsa20
+quarterround pattern; vec-of-3 / vec-of-2 / longer widths can
+be added the same way as case studies surface them. -/
+
+@[simp] theorem atWithDefault_4_lit_0 {α : Type} (d a b c d2 : α) :
+    atWithDefault 4 α d #v[a, b, c, d2] 0 = a := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_4_lit_1 {α : Type} (d a b c d2 : α) :
+    atWithDefault 4 α d #v[a, b, c, d2] 1 = b := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_4_lit_2 {α : Type} (d a b c d2 : α) :
+    atWithDefault 4 α d #v[a, b, c, d2] 2 = c := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_4_lit_3 {α : Type} (d a b c d2 : α) :
+    atWithDefault 4 α d #v[a, b, c, d2] 3 = d2 := by
+  unfold atWithDefault; simp
+
+/-! Vec-of-16 literal peelers — covers ChaCha20's 16-word state.
+Each indexes into a 16-element literal vec at concrete `i ∈ [0, 16)`.
+The naming `_16_lit_<i>` mirrors the vec-of-4 family above. -/
+
+@[simp] theorem atWithDefault_16_lit_0 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 0 = x0 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_1 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 1 = x1 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_2 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 2 = x2 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_3 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 3 = x3 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_4 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 4 = x4 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_5 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 5 = x5 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_6 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 6 = x6 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_7 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 7 = x7 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_8 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 8 = x8 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_9 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 9 = x9 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_10 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 10 = x10 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_11 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 11 = x11 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_12 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 12 = x12 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_13 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 13 = x13 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_14 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 14 = x14 := by
+  unfold atWithDefault; simp
+
+@[simp] theorem atWithDefault_16_lit_15 {α : Type} (d x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 : α) :
+    atWithDefault 16 α d #v[x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15] 15 = x15 := by
+  unfold atWithDefault; simp
+
+/-! ### `coerce` identity collapse
+
+SAW's `coerce α β h x` where `α = β` (the dominant case for
+emitted Cryptol type-arithmetic equalities like `n - 0 = n`,
+`min n m = n` when `m ≥ n`, etc.) is just identity. The proof
+witness `h` is irrelevant — proof irrelevance on `Eq Type α α`
+makes any two proofs interchangeable, so the coerce reduces to
+the input value regardless of how `h` was constructed
+(including `unsafeAssert` synthesized witnesses).
+
+Tier 2 readability fix per `doc/2026-05-09_readability-review.md`:
+collapses the entire `Eq.rec`/`unsafeAssert` ceremony from goals
+where the source and target types are syntactically equal —
+which is virtually every emitted polymorphic Cryptol use of
+`coerce`. -/
+
+@[simp] theorem coerce_id {α : Type} (h : @Eq Type α α) (x : α) :
+    coerce α α h x = x := by
+  unfold coerce
+  -- `cast h x` where `h : α = α` is `x` by proof irrelevance on Eq.
+  rfl
+
+/-! ### §4.4 SAW-emission peelers
+
+The translator emits a small alphabet of SAW Prelude primitives
+whose reduction in symbolic contexts requires explicit peelers —
+Lean's reducer alone cannot unfold `gen` / `atWithDefault` /
+`Pair_fst`/`Pair_snd` / `zip` past metavariables or in-bound
+checks. These peelers reduce a goal in SAW emission shape down to
+underlying primitives that checked Lean-side proof scripts can close.
+
+These peelers are intentionally local facts about ordinary emitted
+SAW Prelude syntax. Larger recurrence/fix reasoning should be expressed
+as separate Lean proof obligations rather than hidden in Haskell-side
+shape rewrites.
+
+Together these are the building blocks of a `saw_simp` simp-set
+(forthcoming as a `@[saw_peeler]` attribute when the surface
+stabilizes; for now they're individually `@[simp]`-tagged so a
+user-written `simp` invocation can pick them up).
+
+The peelers split into three groups:
+
+1. **Pair projection** (`Pair_fst_PairValue`, `Pair_snd_PairValue`)
+   — eta on SAW `PairValue`. Definitional but symbolic-`k` proofs
+   need them explicitly because `Pair_fst` is not `@[reducible]`.
+
+2. **`atWithDefault` on `zip`** (`atWithDefault_zip_lt`) — combines
+   the in-bounds atWithDefault rule with `zip_getElem_lt` into a
+   single rewrite for the common SAW-emitted shape `atWithDefault N
+   _ _ (zip α β m n v w) k` with `k < N`.
+
+3. **Arithmetic micro-rules** — `subNat (k+1) 1 = k`,
+   `ltNat_succ_one_eq_false`. These could be derived via
+   `simp [subNat_eq_natSub]; omega` chains, but having them as
+   `@[simp]` lemmas keeps the peeler invocation a one-liner. -/
+
+/-- Pair projection eta on `Pair_fst` over a literal `PairValue`.
+SAW emits `Pair_fst α β (PairValue x y)` and we want to project to
+`x`. Reduces by definition, but `Pair_fst` is `def`-not-`@[reducible]`
+so we need the rewrite available to `simp`. -/
+@[simp] theorem Pair_fst_PairValue {α β : Type} (x : α) (y : β) :
+    Pair_fst α β (PairType.PairValue x y) = x := rfl
+
+/-- Pair projection eta on `Pair_snd`. Companion to `Pair_fst_PairValue`. -/
+@[simp] theorem Pair_snd_PairValue {α β : Type} (x : α) (y : β) :
+    Pair_snd α β (PairType.PairValue x y) = y := rfl
+
+/-- `atWithDefault` over a `zip` at an in-bounds index reduces to the
+literal `PairValue` of the per-element values. The atWithDefault
+length is `Nat.min m n`, matching what `zip` produces. -/
+theorem atWithDefault_zip_lt {α β : Type} (m n : Nat)
+    (v : Vec m α) (w : Vec n β) (d : PairType α (PairType β UnitType))
+    (k : Nat) (h : k < Nat.min m n) :
+    atWithDefault (Nat.min m n) (PairType α (PairType β UnitType))
+      d (zip α β m n v w) k
+    = PairType.PairValue
+        (v[k]'(Nat.lt_of_lt_of_le h (Nat.min_le_left m n)))
+        (PairType.PairValue
+          (w[k]'(Nat.lt_of_lt_of_le h (Nat.min_le_right m n)))
+          UnitType.Unit) := by
+  unfold atWithDefault
+  simp only [h, ↓reduceDIte]
+  exact zip_getElem_lt m n v w k h
+
+/-! Note on length normalization for `zip`: when SAW emits
+`atWithDefault L PT d (zip α β m n v w) k` the elaborator may have
+already reduced `minNat m n` (zip's return-type length) to a
+concrete `m` or `n`. The peeler `atWithDefault_zip_lt` is stated at
+the type-correct length `Nat.min m n`. To apply it on a goal where
+the length appears as `m` or `n` directly, the user rewrites first
+via the standard library's `Nat.min_eq_left`/`Nat.min_eq_right`
+(no wrapper needed). The `simp` invocation pattern is:
+
+  -- goal has `atWithDefault m PT d (zip α β m n v w) k`, m ≤ n
+  rw [show m = Nat.min m n from (Nat.min_eq_left ‹m ≤ n›).symm]
+  rw [atWithDefault_zip_lt m n v w d k ‹k < Nat.min m n›]
+
+This is one rewrite step; the alternative of stating
+`_left`/`_right` adapter variants would force a `cast` over the
+underlying `zip` value (since `Vec m ≠ Vec (minNat m n)`
+syntactically) and is not principled. -/
+
+/-- `ltNat (k+1) 1 = false`. The SAW comprehension lowering emits
+`ite (ltNat i' 1) seed-branch step-branch`; after the outer `gen`
+unfolds to step `i' = k+1`, this peeler takes the False branch.
+
+Justified as a focused peeler: `simp [ltNat_eq_decide_lt]` reduces
+to `decide ((k+1) < 1)`, but `decide` won't close that for symbolic
+`k` without an additional `omega`/`Nat.succ_ne_zero` hop. Packaging
+the chain here keeps downstream `simp` invocations terse. -/
+@[simp] theorem ltNat_succ_one_eq_false (k : Nat) : ltNat (k+1) 1 = false := by
+  show decide ((k+1) < 1) = false
+  apply decide_eq_false; omega
+
+/-! ## Fold reduction theorems
+
+Phase 8: `foldr` / `foldl` are now defined via `Vector.foldr` /
+`Vector.foldl`, so the empty-vec equations hold by reduction. -/
+
+/-- `foldr` over a 0-vector is the seed. Rocq's `foldr` mirrors
+this by definition. -/
+theorem foldr_zero
+    (α β : Type) (f : α → β → β) (z : β) (v : Vec 0 α) :
+    foldr α β 0 f z v = z := by
+  unfold foldr
+  obtain ⟨arr, harr⟩ := v
+  have : arr = #[] := Array.eq_empty_of_size_eq_zero harr
+  subst this
+  rfl
+
+/-- `foldl` over a 0-vector is the seed. -/
+theorem foldl_zero
+    (α β : Type) (f : β → α → β) (z : β) (v : Vec 0 α) :
+    foldl α β 0 f z v = z := by
+  unfold foldl
+  obtain ⟨arr, harr⟩ := v
+  have : arr = #[] := Array.eq_empty_of_size_eq_zero harr
+  subst this
+  rfl
+
+/- `foldrM` bridge for pure successful SAW fold bodies.  This is the
+right-fold counterpart of `foldlM_pure_eq_foldl`: it preserves the eager
+`Except` semantics and rewrites to the pure fold only after Lean has checked
+that every successful step maps to a successful pure step. -/
+theorem foldrM_pure_eq_foldr
+    (α β : Type) (n : Nat)
+    (fM : Except String α → Except String β → Except String β)
+    (f : α → β → β) (z : β) (v : Vec n α)
+    (hStep : ∀ a acc, fM (Except.ok a) (Except.ok acc) =
+      Except.ok (f a acc)) :
+    foldrM α β n fM (Except.ok z) (Except.ok v) =
+      Except.ok (foldr α β n f z v) := by
+  unfold foldrM foldr
+  simp [Bind.bind, Pure.pure, Except.bind, Except.pure]
+  induction n generalizing z with
+  | zero =>
+      obtain ⟨arr, harr⟩ := v
+      have : arr = #[] := Array.eq_empty_of_size_eq_zero harr
+      subst this
+      rfl
+  | succ k ih =>
+      conv =>
+        lhs
+        rw [show v = v.pop.push v.back from (Vector.push_pop_back v).symm]
+      conv =>
+        rhs
+        rw [show v = v.pop.push v.back from (Vector.push_pop_back v).symm]
+      change Vector.foldr (fun a acc => fM (Except.ok a) acc) (Except.ok z)
+          (Vector.push v.pop v.back) =
+        Except.ok (Vector.foldr f z (Vector.push v.pop v.back))
+      rw [Vector.foldr_push, Vector.foldr_push]
+      rw [hStep v.back z]
+      exact ih (f v.back z) v.pop
+
+/- `foldlM` bridge for pure successful SAW fold bodies.  The Haskell
+emitter still produces the literal `Except`-wrapped fold; proofs use
+this theorem to move from the monadic emitted shape to the pure
+`foldl` recurrence after proving the step succeeds on successful
+inputs. -/
+theorem foldlM_pure_eq_foldl
+    (α β : Type) (n : Nat)
+    (fM : Except String β → Except String α → Except String β)
+    (f : β → α → β) (z : β) (v : Vec n α)
+    (hStep : ∀ acc a, fM (Except.ok acc) (Except.ok a) = Except.ok (f acc a)) :
+    foldlM α β n fM (Except.ok z) (Except.ok v) =
+      Except.ok (foldl α β n f z v) := by
+  unfold foldlM foldl
+  simp [Bind.bind, Pure.pure, Except.bind, Except.pure]
+  induction n with
+  | zero =>
+      obtain ⟨arr, harr⟩ := v
+      have : arr = #[] := Array.eq_empty_of_size_eq_zero harr
+      subst this
+      rfl
+  | succ k ih =>
+      conv =>
+        lhs
+        rw [show v = v.pop.push v.back from (Vector.push_pop_back v).symm]
+      conv =>
+        rhs
+        rw [show v = v.pop.push v.back from (Vector.push_pop_back v).symm]
+      change Vector.foldl (fun acc a => fM acc (Except.ok a)) (Except.ok z)
+          (Vector.push v.pop v.back) =
+        Except.ok (Vector.foldl f z (Vector.push v.pop v.back))
+      rw [Vector.foldl_push, Vector.foldl_push]
+      have hpop :
+          Vector.foldl (fun acc a => fM acc (Except.ok a)) (Except.ok z) v.pop =
+            Except.ok (Vector.foldl f z v.pop) := by
+        simpa [Nat.succ_sub_one] using ih v.pop
+      conv =>
+        lhs
+        arg 1
+        rw [hpop]
+      exact hStep (Vector.foldl f z v.pop) v.back
+
+/-- Bridge: `foldl` over a `Vec n α` equals `Nat.rec` iterated `n` times,
+where each step indexes into the vector via `atWithDefault`. The default
+value `d` is unused since iteration only touches in-bounds indices.
+
+Together with `saw_self_ref_comp_iterate`, this lets us close popcount/
+ChaCha20-style equivalences by bridging both the SAW emission's foldl
+form (LHS) and the SAW emission's self-referential comprehension form
+(RHS) to the same `Nat.rec` shape. Concrete-width bitvector work still
+requires checked lemmas or manual proof scripts under the current trust
+policy. -/
+theorem foldl_eq_natRec_atWithDefault
+    (α β : Type) (n : Nat) (f : β → α → β) (z : β) (v : Vec n α) (d : α) :
+    foldl α β n f z v
+      = Nat.rec (motive := fun _ => β) z
+          (fun i acc => f acc (atWithDefault n α d v i)) n := by
+  induction n with
+  | zero =>
+    rw [foldl_zero]
+    rfl
+  | succ k ih =>
+    -- Decompose v as v.pop.push v.back; foldl_push handles the inductive
+    -- step; ih bridges the k-prefix.
+    conv =>
+      lhs
+      rw [show v = v.pop.push v.back from (Vector.push_pop_back v).symm]
+    show Vector.foldl f z (v.pop.push v.back) = _
+    rw [Vector.foldl_push]
+    show f (foldl α β k f z v.pop) v.back = _
+    rw [ih v.pop]
+    -- Goal: f (Nat.rec z step_k k) v.back = Nat.rec z step_{k+1} (k+1)
+    -- where step_k uses atWithDefault k α d v.pop, and
+    -- step_{k+1} uses atWithDefault (k+1) α d v.
+    -- Nat.rec at (k+1) unfolds: step (Nat.rec z step k) at i=k.
+    show _ = (fun i acc => f acc (atWithDefault (k+1) α d v i)) k _
+    -- The two Nat.rec applications must be shown equal; their step funcs
+    -- agree on i < k via `pop[i] = v[i]`. The outer `f _ v.back` matches
+    -- `f _ (atWithDefault (k+1) α d v k)` since `v.back = v[k]`.
+    have h_step_eq : ∀ j, j ≤ k →
+        Nat.rec (motive := fun _ => β) z
+          (fun i acc => f acc (atWithDefault k α d v.pop i)) j
+        = Nat.rec (motive := fun _ => β) z
+          (fun i acc => f acc (atWithDefault (k+1) α d v i)) j := by
+      intro j hj
+      induction j with
+      | zero => rfl
+      | succ m ihm =>
+        show f (Nat.rec _ _ m) (atWithDefault k α d v.pop m)
+           = f (Nat.rec _ _ m) (atWithDefault (k+1) α d v m)
+        rw [ihm (by omega : m ≤ k)]
+        congr 1
+        -- Need: atWithDefault k α d v.pop m = atWithDefault (k+1) α d v m for m < k.
+        have hm : m < k := by omega
+        rw [atWithDefault_lt _ _ _ hm]
+        rw [atWithDefault_lt _ _ _ (by omega : m < k+1)]
+        -- v.pop[m] = v[m]'(by omega : m < k+1)
+        simp
+    rw [h_step_eq k (Nat.le_refl k)]
+    -- Now: f (Nat.rec ... k) v.back = f (Nat.rec ... k) (atWithDefault (k+1) α d v k)
+    -- Need: v.back = atWithDefault (k+1) α d v k
+    congr 1
+    rw [atWithDefault_lt _ _ _ (Nat.lt_succ_self k)]
+    haveI : NeZero (k+1) := ⟨Nat.succ_ne_zero k⟩
+    show v.back = v[k]
+    rw [Vector.back_eq_getElem (xs := v)]
+    congr 1
+
+/-- `foldr` over a `gen`-built `Bool`-vec with `(∧, true)` reduces to
+the conjunction of the generator's outputs over `[0, n)`. SAW emits
+this shape for `llvm_points_to`-style state-equality goals: each
+position contributes a `bvEq` and the points-to assertion is the
+foldr-of-AND.
+
+This bridge lets the user discharge such goals by case-splitting on
+the index, then using checked bitvector lemmas for each per-position
+bvEq. The parametric statement avoids the Vector.foldr / Vector.ofFn
+materialization cost at concrete `n`.
+
+Direction: `(∀ i < n, f i = true) → foldr ∧ true (gen n f) = true`.
+The reverse direction would also hold but isn't needed for discharge. -/
+theorem foldr_and_gen_eq_true_of_all
+    (n : Nat) (f : Nat → Bool)
+    (h : ∀ i, i < n → f i = true) :
+    foldr Bool Bool n
+      (fun b1 b2 => CryptolToLean.SAWCorePreludeExtra.ite Bool b1 b2 false)
+      Bool.true (gen n Bool f) = Bool.true := by
+  induction n with
+  | zero =>
+    rw [foldr_zero]
+  | succ k ih =>
+    -- foldr over (gen (k+1)) = ite_∧ (gen[0]) (foldr over (gen-shifted k))
+    -- Use foldr's structural decomposition; reduce the outer step.
+    -- Strategy: gen (k+1) f = (gen k (f ∘ id)).push (f k); then foldr_push.
+    -- Equivalent: peel foldr's first step as f 0 ∧ (foldr over k-tail).
+    -- Cleanest: use Vector.foldr's relation to Array.foldr and List.foldr.
+    -- We unfold to Vector.foldr; the Vec is `Vector.ofFn (fun i : Fin (k+1) => f i.val)`
+    -- which equals `(Vector.ofFn (fun i : Fin k => f i.val)).push (f k)` by
+    -- Vector.ofFn_succ. But that's not a stdlib lemma name we can rely on.
+    -- Use the Vector.foldr_push / push_pop_back symmetry as in foldl.
+    show Vector.foldr _ true (gen (k+1) Bool f) = true
+    -- gen (k+1) f = Vector.ofFn (fun i : Fin (k+1) => f i.val)
+    --             = (Vector.ofFn (fun i : Fin k => f i.val)).push (f k)   -- via ofFn-push
+    -- via the analog of push_pop_back.
+    have h_split : (gen (k+1) Bool f) = (gen k Bool f).push (f k) := by
+      apply Vector.ext
+      intro i hi
+      unfold gen
+      simp only [Vector.getElem_ofFn]
+      by_cases hk : i < k
+      · simp [Vector.getElem_push_lt hk]
+      · have : i = k := by omega
+        subst this
+        simp
+    rw [h_split]
+    rw [Vector.foldr_push]
+    -- Goal: (fun b1 b2 => ite Bool b1 b2 false) (f k) (Vector.foldr _ true (gen k Bool f)) = true
+    -- = ite Bool (f k) (foldr ... gen k) false
+    -- f k = true (by h applied at k); foldr-rec for k = true (by ih)
+    have hk : f k = true := h k (Nat.lt_succ_self k)
+    rw [hk]
+    show CryptolToLean.SAWCorePreludeExtra.ite Bool true (Vector.foldr _ true (gen k Bool f)) false = true
+    rw [CryptolToLean.SAWCorePreludeExtra.ite_True]
+    -- Goal: Vector.foldr ... = true. This is foldr ... = true at length k.
+    show foldr Bool Bool k _ Bool.true (gen k Bool f) = true
+    exact ih (fun i hi => h i (Nat.lt_succ_of_lt hi))
+
+end CryptolToLean.SAWCorePreludeProofs

@@ -1,0 +1,12 @@
+// Differential known-gap litmus for Cryptol.sawcore signed shift wrapper.
+
+let observed =
+  parse_core
+    "bvEq 8 (ecSShiftR (TCNum 8) Integer PIntegralInteger 0xf8 (natToInt 1)) 0xfc";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

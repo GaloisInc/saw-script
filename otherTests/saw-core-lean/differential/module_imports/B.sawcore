@@ -1,0 +1,6 @@
+module B where
+
+import Prelude;
+import A (base, inc);
+
+observed : Bool = and (equalNat (inc A::base) 5) (equalNat base 4);

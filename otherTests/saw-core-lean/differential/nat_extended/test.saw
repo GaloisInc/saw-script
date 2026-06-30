@@ -1,0 +1,11 @@
+// TRUE differential litmus for additional defined Nat primitives.
+
+let observed =
+  parse_core "and (equalNat (mulNat 6 7) 42) (and (equalNat (minNat 3 8) 3) (and (equalNat (maxNat 3 8) 8) (and (equalNat (expNat 2 5) 32) (and (equalNat (doubleNat 6) 12) (equalNat (subNat 3 8) 0)))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

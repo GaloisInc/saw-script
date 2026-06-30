@@ -1,0 +1,7 @@
+module A where
+
+import Prelude;
+
+base : Nat = 4;
+
+inc (x : Nat) : Nat = addNat x 1;

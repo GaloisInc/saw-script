@@ -1,0 +1,52 @@
+// Case Study C — LLVM Salsa20 quarterround verify with Lean discharge.
+//
+// Adapted from exercises/functional-correctness/salsa20/solution.saw,
+// which uses z3 to close every llvm_verify goal. Here we replace the
+// quarterround closer with offline_lean so the obligation is emitted
+// as a Lean .lean file for offline discharge in
+// proofs/llvm_salsa20_q_eq/proof.lean.
+//
+// quarterround is pure bv arithmetic — XOR, +, and rotate-left on
+// 32-bit words, no comprehension recursion. Per the long-term plan
+// (doc/2026-05-05_long-term-plan.md §3 Case C), this hypothesis-tests
+// whether pure-bv-arith case studies discharge cleanly via bv_decide.
+//
+// Predicted outcome: ~10-line proof closing via bv_decide. If it
+// doesn't, that's a new translator/tactic-library pain point.
+//
+// Sources: this dir contains the .saw script and pre-compiled
+// salsa20.bc. The canonical Salsa20.cry and salsa20.c live under
+// exercises/functional-correctness/salsa20/ — we reference Salsa20.cry
+// and the common/helpers.saw helper directly. Rebuild salsa20.bc with:
+//
+//   cd otherTests/saw-core-lean/drivers/llvm_salsa20_q_verify
+//   clang -c -g -O0 -emit-llvm \
+//     -o salsa20.bc \
+//     ../../../../exercises/functional-correctness/salsa20/salsa20.c
+
+include "../../../../exercises/common/helpers.saw";
+import "../../../../exercises/functional-correctness/salsa20/Salsa20.cry";
+
+m <- llvm_load_module "salsa20.bc";
+
+let quarterround_setup = do {
+    (y0, p0) <- ptr_to_fresh "y0" (llvm_int 32);
+    (y1, p1) <- ptr_to_fresh "y1" (llvm_int 32);
+    (y2, p2) <- ptr_to_fresh "y2" (llvm_int 32);
+    (y3, p3) <- ptr_to_fresh "y3" (llvm_int 32);
+
+    llvm_execute_func [p0, p1, p2, p3];
+
+    let zs = {{ quarterround [y0,y1,y2,y3] }};
+    llvm_points_to p0 (llvm_term {{ zs@0 }});
+    llvm_points_to p1 (llvm_term {{ zs@1 }});
+    llvm_points_to p2 (llvm_term {{ zs@2 }});
+    llvm_points_to p3 (llvm_term {{ zs@3 }});
+};
+
+// LEAN DISCHARGE STEP. Emits the quarterround equivalence obligation
+// as test_llvm_salsa20_q_verify.<goalType>0.lean. The discharge lives
+// in proofs/llvm_salsa20_q_eq/proof.lean.
+llvm_verify m "s20_quarterround" [] true
+    quarterround_setup
+    (offline_lean "test_llvm_salsa20_q_verify.s20_quarterround");

@@ -1,0 +1,1 @@
+Suite-B Cryptol primitives are in scope, but Cryptol.sawcore currently defines representative crypto operations through runtime `error`.

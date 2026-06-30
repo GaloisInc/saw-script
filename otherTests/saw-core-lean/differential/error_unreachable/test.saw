@@ -1,0 +1,13 @@
+// TRUE differential litmus for unreachable Cryptol error branches.
+
+let observed = {{
+  ((if True then (1 : [8]) else error "boom") == 1) &&
+  ((if False then error "boom" else (2 : [8])) == 2)
+}};
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

@@ -1,0 +1,12 @@
+// TRUE differential litmus for higher explicit SAWCore sort binders.
+
+let observed =
+  parse_core
+    "and ((\\(a : sort 1) -> True) (sort 0)) ((\\(a : sort 2) -> True) (sort 1))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

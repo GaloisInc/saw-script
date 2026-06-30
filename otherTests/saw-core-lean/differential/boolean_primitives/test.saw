@@ -1,0 +1,11 @@
+// TRUE differential litmus for the basic SAWCore Boolean primitive surface.
+
+let observed =
+  parse_core "and (not False) (and (and True True) (and (or False True) (and (xor True False) (and (boolEq True True) (not (boolEq True False))))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

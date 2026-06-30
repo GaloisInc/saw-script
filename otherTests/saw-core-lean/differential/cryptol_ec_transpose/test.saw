@@ -1,0 +1,12 @@
+// TRUE differential litmus for direct finite Cryptol.sawcore `ecTranspose`.
+
+let observed =
+  parse_core
+    "bvEq 4 (ecJoin (TCNum 2) (TCNum 2) Bool (ecTranspose (TCNum 2) (TCNum 2) Bool (ecSplit (TCNum 2) (TCNum 2) Bool 0b1001))) 0b1001";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

@@ -1,0 +1,14 @@
+// Differential conformance checks for concrete SAWCore vector-helper
+// semantics.
+//
+// These use `parse_core` directly so residual SAWCore helpers such as
+// `gen`, `atWithDefault`, `shiftL`, `rotateR`, and `foldl` are the source-side
+// operations being checked.
+
+let vector_conformance = parse_core "and (equalNat (atWithDefault 3 Nat 99 (gen 3 Nat (\\ (i : Nat) -> addNat i 10)) 2) 12) (and (equalNat (atWithDefault 3 Nat 99 (gen 3 Nat (\\ (i : Nat) -> addNat i 10)) 3) 99) (and (and (equalNat (atWithDefault 4 Nat 99 (shiftL 4 Nat 0 (gen 4 Nat (\\ (i : Nat) -> addNat i 1)) 1) 0) 2) (equalNat (atWithDefault 4 Nat 99 (shiftL 4 Nat 0 (gen 4 Nat (\\ (i : Nat) -> addNat i 1)) 1) 3) 0)) (and (and (equalNat (atWithDefault 4 Nat 99 (shiftR 4 Nat 0 (gen 4 Nat (\\ (i : Nat) -> addNat i 1)) 1) 0) 0) (equalNat (atWithDefault 4 Nat 99 (shiftR 4 Nat 0 (gen 4 Nat (\\ (i : Nat) -> addNat i 1)) 1) 3) 3)) (and (and (equalNat (atWithDefault 4 Nat 99 (rotateL 4 Nat (gen 4 Nat (\\ (i : Nat) -> addNat i 1)) 1) 0) 2) (equalNat (atWithDefault 4 Nat 99 (rotateL 4 Nat (gen 4 Nat (\\ (i : Nat) -> addNat i 1)) 1) 3) 1)) (and (and (equalNat (atWithDefault 4 Nat 99 (rotateR 4 Nat (gen 4 Nat (\\ (i : Nat) -> addNat i 1)) 1) 0) 4) (equalNat (atWithDefault 4 Nat 99 (rotateR 4 Nat (gen 4 Nat (\\ (i : Nat) -> addNat i 1)) 1) 3) 3)) (and (equalNat (foldr Nat Nat 3 addNat 0 (gen 3 Nat (\\ (i : Nat) -> addNat i 1))) 6) (equalNat (foldl Nat Nat 3 addNat 0 (gen 3 Nat (\\ (i : Nat) -> addNat i 1))) 6)))))))";
+
+prove_print w4 vector_conformance;
+write_lean_term
+  "VectorConformance" [] []
+  "test_conformance_vector.result.lean"
+  vector_conformance;

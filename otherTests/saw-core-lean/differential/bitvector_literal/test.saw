@@ -1,0 +1,10 @@
+// TRUE differential litmus for bitvector literals and bitvector equality.
+
+let observed = {{ (0x0f : [8]) == 15 }};
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

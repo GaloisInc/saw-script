@@ -1,0 +1,15 @@
+/*
+ * Popcount over a 32-bit input. Copied verbatim from
+ * exercises/functional-correctness/popcount/Popcount.cry.
+ *
+ * Tests the self-referential comprehension shape ('ic = [0] # ...
+ * | ... <- ic'). Whether this fully specializes is the open
+ * question that the slice test answers; if it doesn't translate,
+ * we get a concrete diagnostic (residual primitive list).
+ */
+
+module Popcount where
+
+popCount : [32] -> [32]
+popCount bits = ic ! 0 where
+     ic = [0] # [ if elt then prev + 1 else prev | elt <- bits | prev <- ic]

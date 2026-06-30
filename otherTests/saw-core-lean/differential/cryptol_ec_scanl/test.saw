@@ -1,0 +1,13 @@
+// TRUE differential litmus for Cryptol.sawcore `ecScanl`.
+// Currently pinned as a translator-level known gap through `Prelude.scanl`.
+
+let observed =
+  parse_core
+    "equalNat (atWithDefault 4 Nat 0 (ecScanl (TCNum 3) Nat Nat addNat 0 (gen 3 Nat (\\(i : Nat) -> addNat i 1))) 2) 3";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

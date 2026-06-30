@@ -1,0 +1,3 @@
+Direct Cryptol.sawcore `ecFoldl` and `ecFoldlPrime` currently expose
+wrapper-adaptation gaps in emitted Lean: raw folding functions and raw vector
+bodies are emitted where monadic vector helpers expect Except-wrapped values.

@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "arrayCopy";
+write_lean_term "ArrayCopyProbe" [] [] "-" probe;

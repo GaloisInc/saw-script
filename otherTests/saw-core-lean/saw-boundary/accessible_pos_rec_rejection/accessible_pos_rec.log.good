@@ -1,0 +1,20 @@
+Loading file "accessible_pos_rec.saw"
+Stack trace:
+   (builtin) in write_lean_term
+   accessible_pos_rec.saw:14:1-14:40 (at top level)
+Error translating: Refusing to translate primitive Pos.
+
+Reason: No SAW-core-lean mapping for `Prelude.Pos`. Either:
+  * Cryptol's `scNormalizeForLean` was supposed to unfold this primitive before translation but didn't (translator gap; report it);
+  * The primitive is genuinely unsupported and should be catalogued as a `reject` entry in `SAWCoreLean.SpecialTreatment.specialTreatmentMap` with a documented reason; or
+  * It needs a real mapping (use `mapsTo` / `replace` / etc).
+Workaround: monomorphize / specialize at the SAWScript call site so the primitive is unfolded; or refactor the Cryptol code to avoid the construct.
+
+This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
+transposition for this primitive yet. If your Cryptol code specialised down to it,
+you've hit one of the open cases tracked in the long-term plan.
+
+Workaround: refactor to avoid the primitive (e.g. recursion via `fix` can sometimes
+be expressed as a bounded fold instead). Run dump_lean_residual_primitives on your
+term to see all surviving names — Pos will be one of them.
+

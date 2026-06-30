@@ -1,0 +1,93 @@
+// ChaCha20 core C coupling — per-qround compositional verifications.
+//
+// Couples the unmodified reference C `qround` from
+// `examples/chacha20/chacha20.c` to the unmodified reference Cryptol
+// `qround` from `deps/cryptol-specs/.../chacha20.cry`, at each of
+// the 8 (a, b, c, d) index tuples that the C `core` invokes per
+// doubleround:
+//   * column round: (0,4,8,12) (1,5,9,13) (2,6,10,14) (3,7,11,15)
+//   * diagonal round: (0,5,10,15) (1,6,11,12) (2,7,8,13) (3,4,9,14)
+// Together these 8 specs cover every quarterround invocation in
+// `core` (10 doublerounds × 8 qrounds = 80 calls), so verifying
+// them is a complete C↔Cryptol coupling for the bv-arithmetic
+// content of one ChaCha20 block.
+//
+// **Why per-tuple instead of one symbolic-tuple spec.** A single
+// qround spec parameterised over symbolic (a, b, c, d) emits a
+// 34 K-line Lean goal because `update`-chains over symbolic indices
+// don't reduce. Per-fixed-tuple specs reduce `update` to literal
+// 16-word vectors, keeping each emission a few hundred lines.
+//
+// **Why this driver doesn't compose them into `core`.** Passing
+// these 8 specs as overrides to `llvm_verify "core"` does unblock
+// SAW's per-qround symbolic execution, but the resulting `core`
+// post-state has 80 nested `update`s wrapping the Cryptol-side
+// `qround` calls, which SAW's normalizer cannot canonicalise in
+// reasonable time (>10 min and counting). Closing the full `core`
+// verification needs either a different override strategy
+// (e.g. a per-doubleround helper) or a SAW-side normalizer
+// improvement; tracked in `2026-05-09_release-case-study.md`.
+//
+// **Cryptol side note.** `core x = blocked (x + iterate cdround x
+// @ 10)`. The `iterate cdround` shape now goes through the generic
+// proof-carrying `Prelude.fix` path rather than a dedicated Haskell
+// classifier; `blocked` byte-packs the post-round state to match C's
+// little-endian byte output.
+
+include "../../../../exercises/common/helpers.saw";
+import "../../../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Stream/chacha20.cry";
+
+m <- llvm_load_module "chacha20_ref.bc";
+
+// qround spec at a *concrete* (a, b, c, d) index tuple. The C
+// signature is `qround(unsigned int* x, unsigned int a, unsigned int b,
+// unsigned int c, unsigned int d)`, mutating `x[a]`, `x[b]`, `x[c]`,
+// `x[d]` in place. With (a, b, c, d) concrete, the post-state literal
+// `#v[...16 words with 4 positions overwritten...]` is small and SAW's
+// override-matcher selects it cleanly per invocation. a/b/c/d are SAW
+// Cryptol terms (e.g. `{{ 0 : [32] }}`), spliced via SAW's value-level
+// interpolation rather than Cryptol type-level backticks.
+let qround_spec a b c d = do {
+    (state, p_state) <- ptr_to_fresh "state" (llvm_array 16 (llvm_int 32));
+
+    llvm_execute_func [p_state, llvm_term a, llvm_term b,
+                                llvm_term c, llvm_term d];
+
+    // Build the post-state by `update`-ing the four positions in
+    // sequence. At concrete indices the chained `update`s reduce to a
+    // literal 16-word vector.
+    llvm_points_to p_state (llvm_term {{
+        update (update (update (update state
+                a ((qround [state @ a, state @ b, state @ c, state @ d]) @ 0))
+                b ((qround [state @ a, state @ b, state @ c, state @ d]) @ 1))
+                c ((qround [state @ a, state @ b, state @ c, state @ d]) @ 2))
+                d ((qround [state @ a, state @ b, state @ c, state @ d]) @ 3)
+    }});
+};
+
+// Verify qround once per (a, b, c, d) tuple `core` invokes. The eight
+// tuples below are exact transcripts of the calls in `examples/chacha20/
+// chacha20.c:55-65` — column round (0,4,8,12 / 1,5,9,13 / 2,6,10,14 /
+// 3,7,11,15) followed by diagonal round (0,5,10,15 / 1,6,11,12 / 2,7,8,
+// 13 / 3,4,9,14).
+qr_c0 <- llvm_verify m "qround" [] true (qround_spec {{ 0 : [32] }} {{ 4  : [32] }} {{ 8  : [32] }} {{ 12 : [32] }})
+            (offline_lean "test_llvm_chacha20_core_verify.qround_c0");
+qr_c1 <- llvm_verify m "qround" [] true (qround_spec {{ 1 : [32] }} {{ 5  : [32] }} {{ 9  : [32] }} {{ 13 : [32] }})
+            (offline_lean "test_llvm_chacha20_core_verify.qround_c1");
+qr_c2 <- llvm_verify m "qround" [] true (qround_spec {{ 2 : [32] }} {{ 6  : [32] }} {{ 10 : [32] }} {{ 14 : [32] }})
+            (offline_lean "test_llvm_chacha20_core_verify.qround_c2");
+qr_c3 <- llvm_verify m "qround" [] true (qround_spec {{ 3 : [32] }} {{ 7  : [32] }} {{ 11 : [32] }} {{ 15 : [32] }})
+            (offline_lean "test_llvm_chacha20_core_verify.qround_c3");
+qr_d0 <- llvm_verify m "qround" [] true (qround_spec {{ 0 : [32] }} {{ 5  : [32] }} {{ 10 : [32] }} {{ 15 : [32] }})
+            (offline_lean "test_llvm_chacha20_core_verify.qround_d0");
+qr_d1 <- llvm_verify m "qround" [] true (qround_spec {{ 1 : [32] }} {{ 6  : [32] }} {{ 11 : [32] }} {{ 12 : [32] }})
+            (offline_lean "test_llvm_chacha20_core_verify.qround_d1");
+qr_d2 <- llvm_verify m "qround" [] true (qround_spec {{ 2 : [32] }} {{ 7  : [32] }} {{ 8  : [32] }} {{ 13 : [32] }})
+            (offline_lean "test_llvm_chacha20_core_verify.qround_d2");
+qr_d3 <- llvm_verify m "qround" [] true (qround_spec {{ 3 : [32] }} {{ 4  : [32] }} {{ 9  : [32] }} {{ 14 : [32] }})
+            (offline_lean "test_llvm_chacha20_core_verify.qround_d3");
+
+// NOTE: the full `core` verification using the eight overrides above
+// is the next step but currently stalls in SAW's normalizer at the
+// "Checking proof obligations core..." phase. Re-enable when the
+// SAW-side limitation is addressed.

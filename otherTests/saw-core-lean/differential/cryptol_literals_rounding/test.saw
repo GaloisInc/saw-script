@@ -1,0 +1,12 @@
+// TRUE differential litmus for Cryptol.sawcore literal and rounding dictionaries.
+
+let observed =
+  parse_core
+    "and (intEq (ecNumber (TCNum 5) Integer PLiteralInteger) (natToInt 5)) (and (boolEq (ecNumber (TCNum 1) Bool PLiteralBit) True) (and (bvEq 8 (ecNumber (TCNum 257) (Vec 8 Bool) (PLiteralSeqBool (TCNum 8))) 0x01) (and (rationalEq (ecFraction (TCNum 1) (TCNum 2) (TCNum 0) Rational PFLiteralRational) (ratio (natToInt 1) (natToInt 2))) (and (intEq (ecFromInteger Integer PRingInteger (intNeg (natToInt 3))) (intNeg (natToInt 3))) (and (intEq (ecFloor Rational PRoundRational (ratio (natToInt 7) (natToInt 2))) (natToInt 3)) (and (intEq (ecCeiling Rational PRoundRational (ratio (natToInt 7) (natToInt 2))) (natToInt 4)) (and (intEq (ecTruncate Rational PRoundRational (ratio (natToInt 7) (natToInt 2))) (natToInt 3)) (and (intEq (ecRoundAway Rational PRoundRational (ratio (natToInt 7) (natToInt 2))) (natToInt 4)) (intEq (ecRoundToEven Rational PRoundRational (ratio (natToInt 7) (natToInt 2))) (natToInt 4))))))))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

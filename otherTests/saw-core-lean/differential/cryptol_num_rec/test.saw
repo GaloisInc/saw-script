@@ -1,0 +1,12 @@
+// TRUE differential litmus for direct Cryptol.sawcore `Num_rec`.
+
+let observed =
+  parse_core
+    "and (Num_rec (\\(_ : Num) -> Bool) (\\(n : Nat) -> equalNat n 3) False (TCNum 3)) (not (Num_rec (\\(_ : Num) -> Bool) (\\(_ : Nat) -> True) False TCInf))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

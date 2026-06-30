@@ -1,0 +1,13 @@
+// TRUE differential litmus for Cryptol.sawcore stream dictionaries.
+// Finite observations avoid comparing infinite streams directly.
+
+let observed =
+  parse_core
+    "and (boolEq (streamGet Bool (ecAnd (Stream Bool) (PLogicStream Bool PLogicBit) (streamConst Bool True) (streamConst Bool False)) 5) False) (intEq (streamGet Integer (ecPlus (Stream Integer) (PRingStream Integer PRingInteger) (streamConst Integer (natToInt 2)) (streamConst Integer (natToInt 3))) 0) (natToInt 5))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

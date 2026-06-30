@@ -1,0 +1,12 @@
+// TRUE differential litmus for defined Cryptol.sawcore integral and field entry points.
+
+let observed =
+  parse_core
+    "and (intEq (ecDiv Integer PIntegralInteger (natToInt 7) (natToInt 2)) (natToInt 3)) (and (intEq (ecMod Integer PIntegralInteger (natToInt 7) (natToInt 2)) (natToInt 1)) (and (bvEq 8 (ecDiv (Vec 8 Bool) (PIntegralWord 8) 0x0d 0x03) 0x04) (and (bvEq 8 (ecMod (Vec 8 Bool) (PIntegralWord 8) 0x0d 0x03) 0x01) (and (rationalEq (ecRecip Rational PFieldRational (ratio (natToInt 2) (natToInt 3))) (ratio (natToInt 3) (natToInt 2))) (rationalEq (ecFieldDiv Rational PFieldRational (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 1) (natToInt 4))) (ratio (natToInt 2) (natToInt 1)))))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

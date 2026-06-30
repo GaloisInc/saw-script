@@ -1,0 +1,1 @@
+SAW evaluates reachable Cryptol `ecRandom` as a runtime error; executable SAW-vs-Lean error-outcome comparison is not implemented in the differential harness yet.

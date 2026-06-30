@@ -1,0 +1,19 @@
+// Stretch probe derived from otherTests/saw-core-rocq/test_cryptol_module_sha512.saw.
+// SHA-512's full functor exposes several soundness/scalability surfaces:
+//
+//   - raw-position `Prelude.error` from Cryptol partiality/proof-index
+//     artifacts, now translated into explicit unreachable-branch Lean
+//     obligations rather than raw defaults;
+//   - residual `Prelude.fix` in the message-schedule/compression stream
+//     recurrences, now represented by proof-carrying obligations for focused
+//     extracted terms;
+//   - very large generated obligations in the full-module path.
+//
+// Rocq rejects the analogous full-module path at `Prelude.fix`, so solving this
+// file is not required for Rocq parity. Keep it out of the default test suite
+// until obligation sharing/proof ergonomics make full SHA512 a tractable
+// scalability target.
+
+write_lean_cryptol_module
+  "../../../../exercises/sha512/SHA512.cry"
+  "test_cryptol_module_sha512.module.lean" [] [];

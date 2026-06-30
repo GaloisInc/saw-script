@@ -1,0 +1,14 @@
+// TRUE differential litmus for Lambda/App/Variable flow.
+//
+// SAW evaluates a closed Cryptol lambda application. Lean observes the
+// backend-emitted artifact itself; the harness compares the Boolean result.
+
+let f = {{ \(x : Bit) -> x || False }};
+let observed = {{ f True }};
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

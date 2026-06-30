@@ -1,0 +1,26 @@
+// CG-4 case study (audit 2026-05-07): Cryptol's `error "msg"`
+// is a real and common idiom — guards against undefined behaviour
+// in pre-conditions, partial functions, etc. Cryptol elaborates
+// `error msg` to `Cryptol.ecError`, whose body uses SAW's
+// `appendString` and `bytesToString` to build the SAW-side error
+// message string.
+//
+// Pre-CG-4: any Cryptol module containing `error "..."` rejected
+// at translation with "Refusing to translate primitive
+// appendString. Reason: String primitives are not yet mapped."
+// Post-CG-4: the three SAW-Prelude string ops map to Lean
+// equivalents (String.append / String.beq / Vec-of-bytes ↔ Char ↔
+// String) and translation succeeds.
+
+module SafePred where
+
+// A bounded-decrement that refuses x = 0. The standard partial-
+// function-with-precondition pattern.
+safe_pred : [8] -> [8]
+safe_pred x = if x == 0 then error "underflow: x is zero" else x - 1
+
+// Multiple error sites — exercises shared bytesToString / appendString
+// emission shape across multiple call sites.
+safe_div : [8] -> [8] -> [8]
+safe_div x y =
+  if y == 0 then error "division by zero" else x / y

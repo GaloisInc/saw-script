@@ -1,0 +1,3 @@
+Direct Cryptol.sawcore `ecExp` currently reaches residual `Prelude.expByNat`,
+which the Lean translator rejects as an unsupported proof/recursion surface
+until it has a checked realization or proof-carrying lowering.

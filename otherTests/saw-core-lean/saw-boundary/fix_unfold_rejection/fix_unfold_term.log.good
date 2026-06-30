@@ -1,0 +1,16 @@
+Loading file "fix_unfold_term.saw"
+Stack trace:
+   (builtin) in write_lean_term
+   fix_unfold_term.saw:10:1-10:40 (at top level)
+Error translating: Refusing to translate primitive fix_unfold.
+
+Reason: fix_unfold is the unfolding lemma for Prelude.fix. The Lean backend emits proof-carrying fix terms instead of trusting this primitive proof principle directly.
+
+This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
+transposition for this primitive yet. If your Cryptol code specialised down to it,
+you've hit one of the open cases tracked in the long-term plan.
+
+Workaround: refactor to avoid the primitive (e.g. recursion via `fix` can sometimes
+be expressed as a bounded fold instead). Run dump_lean_residual_primitives on your
+term to see all surviving names — fix_unfold will be one of them.
+

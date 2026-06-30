@@ -1,0 +1,12 @@
+// TRUE differential litmus for Prelude `PairType1` at sort 1.
+
+let observed =
+  parse_core
+    "((\\(a : sort 0) -> (\\(b : sort 0) -> True) (sndPairType1 (sort 0) (sort 0) (PairValue1 (sort 0) (sort 0) Nat Bool))) (fstPairType1 (sort 0) (sort 0) (PairValue1 (sort 0) (sort 0) Nat Bool)))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

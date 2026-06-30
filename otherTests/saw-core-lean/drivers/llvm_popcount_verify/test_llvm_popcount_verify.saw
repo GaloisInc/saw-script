@@ -1,0 +1,45 @@
+// Case Study B — LLVM Popcount verify with Lean discharge.
+//
+// Adapted from exercises/functional-correctness/popcount/solution.saw.
+// The original solution proves three different C popcount
+// implementations equivalent to the Cryptol naive recursive spec:
+//
+//   pop_count          — Hacker's Delight bit-twiddling.
+//   pop_count_mul      — multiplication-based variant.
+//   pop_count_sparse   — while(x){x &= x-1; n++} loop.
+//
+// Here we replace the SMT closer with offline_lean for the first
+// (pop_count) so the obligation is emitted as a Lean .lean file
+// for offline discharge. The goal compares the C bit-twiddling
+// output against the Cryptol Popcount.popCount spec —
+//   popCount bits = ic ! 0 where
+//        ic = [0] # [ if elt then prev + 1 else prev
+//                   | elt <- bits | prev <- ic ]
+// — the same self-referential comprehension shape that now needs
+// explicit Lean-side recurrence obligations rather than a Haskell-selected
+// structural helper.
+//
+// Sources: this dir contains only the .saw script and pre-compiled
+// popcount.bc. Popcount.cry lives at exercises/.../popcount/ and
+// is referenced directly. Rebuild with:
+//
+//   cd otherTests/saw-core-lean/drivers/llvm_popcount_verify
+//   clang -c -g -O0 -emit-llvm \
+//     -o popcount.bc \
+//     ../../../../exercises/functional-correctness/popcount/popcount.c
+
+import "../../../../exercises/functional-correctness/popcount/Popcount.cry";
+m <- llvm_load_module "popcount.bc";
+
+let pop_cryptol_check = do {
+     x <- llvm_fresh_var "x" (llvm_int 32);
+     llvm_execute_func [llvm_term x];
+     llvm_return ( llvm_term {{ popCount x }} );
+};
+
+// LEAN DISCHARGE STEP. Emits the popCount equivalence obligation
+// as test_llvm_popcount_verify.<goalType>0.lean. The discharge
+// lives in proofs/llvm_popcount_eq/proof.lean.
+llvm_verify m "pop_count" [] true
+    pop_cryptol_check
+    (offline_lean "test_llvm_popcount_verify.pop_count");

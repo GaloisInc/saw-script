@@ -1,0 +1,13 @@
+// TRUE differential litmus for additional deterministic Cryptol.sawcore `ec*`
+// comparison, logic, and basic ring entry points.
+
+let observed =
+  parse_core
+    "and (ecNotEq Integer PEqInteger (natToInt 1) (natToInt 2)) (and (ecGt Integer PCmpInteger (natToInt 3) (natToInt 2)) (and (ecLtEq Integer PCmpInteger (natToInt 2) (natToInt 2)) (and (ecGtEq Integer PCmpInteger (natToInt 3) (natToInt 3)) (and (boolEq (ecOr Bool PLogicBit False True) True) (and (boolEq (ecXor Bool PLogicBit True True) False) (and (boolEq (ecCompl Bool PLogicBit False) True) (and (intEq (ecNeg Integer PRingInteger (natToInt 5)) (intNeg (natToInt 5))) (and (intEq (ecToInteger Integer PIntegralInteger (intNeg (natToInt 4))) (intNeg (natToInt 4))) (intEq (ecFromZ (TCNum 5) (toIntMod 5 (natToInt 12))) (natToInt 2))))))))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

@@ -1,0 +1,14 @@
+// Differential conformance checks for concrete SAWCore string primitives.
+//
+// Cryptol source string literals elaborate mostly as byte vectors. These
+// SAWCore `String` primitives are still part of the supported backend surface
+// because Cryptol `error` messages use `appendString`, `bytesToString`, and
+// `equalString` after Cryptol-to-SAWCore elaboration.
+
+let string_conformance = parse_core "and (equalString (appendString \"lean\" \"-saw\") \"lean-saw\") (not (equalString \"lean\" \"saw\"))";
+
+prove_print w4 string_conformance;
+write_lean_term
+  "StringConformance" [] []
+  "test_conformance_string.result.lean"
+  string_conformance;

@@ -1,0 +1,50 @@
+// Cryptol records — exercises RecordType / RecordValue. Mirrors
+// otherTests/saw-core-rocq/test_records.saw, dropping a few cases
+// that the Rocq side itself caveats (Cryptol's record-update
+// syntax has prelude-side dispatch that may surface ec*Update
+// primitives we haven't enumerated yet).
+
+let t1 = {{ {x = 1, y = 2} : {x : [8], y : [8]} }};
+write_lean_term "TestRec" [] [] "test_records.t1.lean" t1;
+
+let t2 = {{ {val = 42} : {val : [8]} }};
+write_lean_term "TestRec_Single" [] [] "test_records.t2.lean" t2;
+
+let t3 = {{ {a = 1, b = 2, c = 3} : {a : [8], b : [8], c : [8]} }};
+write_lean_term "TestRec_Three" [] [] "test_records.t3.lean" t3;
+
+let t4 = {{ {x = 1, y = 2} : {x : [8], y : [16]} }};
+write_lean_term "TestRec_MixedWidth" [] [] "test_records.t4.lean" t4;
+
+let t5 = {{ {inner = {x = 1, y = 2}, z = 3} : {inner : {x : [8], y : [8]}, z : [8]} }};
+write_lean_term "TestRec_Nested" [] [] "test_records.t5.lean" t5;
+
+let t6 = {{ {x = 42, y = 100}.y : [8] }};
+write_lean_term "TestRec_ProjY" [] [] "test_records.t6.lean" t6;
+
+let t7 = {{ {inner = {x = 1, y = 2}, z = 3}.inner.x : [8] }};
+write_lean_term "TestRec_NestedProj" [] [] "test_records.t7.lean" t7;
+
+let t8 = {{ { t1 | x = 3 } : {x : [8], y : [8]} }};
+write_lean_term "TestRec_Update1" [] [] "test_records.t8.lean" t8;
+
+let t9 = {{ (True, True) }};
+write_lean_term "TestRec_Tuple" [] [] "test_records.t9.lean" t9;
+
+let t10 = {{ { pt = t1, size = 100 } }};
+write_lean_term "TestRec_Nested2" [] [] "test_records.t10.lean" t10;
+
+let t11 = {{ { t1 | x = 30 } == { x = 30, y = 20 } }};
+write_lean_term "TestRec_Update2" [] [] "test_records.t11.lean" t11;
+
+let t12 = {{ { t9 | 0 = False } == (False, True) }};
+write_lean_term "TestRec_TupleUpdate" [] [] "test_records.t12.lean" t12;
+
+let t13 = {{ { t1 | x -> x + 5 } == { x = 20, y = 20 } }};
+write_lean_term "TestRec_RelativeUpdate" [] [] "test_records.t13.lean" t13;
+
+let t14 = {{ { t10 | pt.x = 10 } == { pt = { x = 10, y = 20 }, size = 100 } }};
+write_lean_term "TestRec_NestedField1" [] [] "test_records.t14.lean" t14;
+
+let t15 = {{ { t10 | pt.x -> x + 10 } == { pt = { x = 25, y = 20 }, size = 100 } }};
+write_lean_term "TestRec_NestedField2" [] [] "test_records.t15.lean" t15;

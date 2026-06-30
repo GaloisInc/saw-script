@@ -1,0 +1,14 @@
+// TRUE differential litmus for SAWCore StringLit and string primitives.
+//
+// SAW observes concrete string equality. Lean observes the emitted Boolean
+// artifact rather than rebuilding the string expression by hand.
+
+let observed =
+  parse_core "and (equalString (appendString \"lean\" \"-saw\") \"lean-saw\") (not (equalString \"lean\" \"saw\"))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

@@ -1,0 +1,6 @@
+// Equality decision on Bit. Exercises the iteDep/Bool.rec ordering
+// permutation in SAWCorePreludeExtra: SAWCore Bool's True-before-
+// False vs Lean Bool's false-before-true. A regression here would
+// silently swap branches in any Cryptol comparison.
+let eq_bit = {{ \(x : Bit) (y : Bit) -> x == y }};
+write_lean_term "eqBit" [] [] "test_eqBool.eqBit.lean" eq_bit;

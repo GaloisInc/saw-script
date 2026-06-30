@@ -1,0 +1,53 @@
+// ChaCha20 quarterround verify — reference C + reference Cryptol spec.
+//
+// Uses the UNMODIFIED reference implementations:
+//   * C:        examples/chacha20/chacha20.c (RFC 7539, Austin Seipp).
+//               qround there is `static`; chacha20_ref.bc is built
+//               from this source via `clang -c -emit-llvm`. SAW finds
+//               static functions via their internal-linkage symbols.
+//   * Cryptol:  deps/cryptol-specs/Primitive/Symmetric/Cipher/Stream/chacha20.cry,
+//               which gives `qround : [4][32] -> [4][32]`.
+//
+// Verification couples the two: call C qround on a 16-word state at
+// concrete indices (a=0, b=4, c=8, d=12 — column-round positions),
+// then assert state[a,b,c,d] post-call equals Cryptol's qround on
+// the original values. No translator-side cleverness — just SAW's
+// LLVM symbolic execution + offline_lean for the Lean discharge.
+
+include "../../../../exercises/common/helpers.saw";
+import "../../../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Stream/chacha20.cry";
+
+m <- llvm_load_module "chacha20_ref.bc";
+
+// Concrete column-round positions per RFC 7539. The verification
+// fixes these (rather than treating a/b/c/d as symbolic) so the
+// LLVM symbolic executor sees concrete array indices.
+let a_idx = {{ 0 : [32] }};
+let b_idx = {{ 4 : [32] }};
+let c_idx = {{ 8 : [32] }};
+let d_idx = {{ 12 : [32] }};
+
+let chacha20_qround_setup = do {
+    (state, p_state) <- ptr_to_fresh "state" (llvm_array 16 (llvm_int 32));
+
+    llvm_execute_func [p_state, llvm_term a_idx, llvm_term b_idx,
+                                llvm_term c_idx, llvm_term d_idx];
+
+    // Cryptol-side: qround on the 4 input words at the column positions.
+    let outputs = {{ qround [state @ 0, state @ 4, state @ 8, state @ 12] }};
+
+    // The post-call state has the 4 mutated positions overwritten.
+    // We assert state-as-a-whole equals the input with those 4
+    // positions replaced by `outputs`.
+    let post_state = {{
+      [ outputs @ 0, state @ 1, state @ 2, state @ 3,
+        outputs @ 1, state @ 5, state @ 6, state @ 7,
+        outputs @ 2, state @ 9, state @ 10, state @ 11,
+        outputs @ 3, state @ 13, state @ 14, state @ 15 ]
+    }};
+    llvm_points_to p_state (llvm_term post_state);
+};
+
+llvm_verify m "qround" [] true
+    chacha20_qround_setup
+    (offline_lean "test_llvm_chacha20_q_verify.chacha20_qround");

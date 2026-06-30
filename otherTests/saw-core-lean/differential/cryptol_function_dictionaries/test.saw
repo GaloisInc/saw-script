@@ -1,0 +1,13 @@
+// TRUE differential litmus for Cryptol.sawcore function dictionaries.
+// The observer applies dictionary-produced functions to concrete arguments.
+
+let observed =
+  parse_core
+    "and (equalNat ((ecZero (Nat -> Nat) (PZeroFun Nat Nat 7)) 3) 7) (and (boolEq ((ecAnd (Nat -> Bool) (PLogicFun Nat Bool PLogicBit) (\\(x : Nat) -> equalNat x 1) (\\(x : Nat) -> True)) 1) True) (intEq ((ecPlus (Nat -> Integer) (PRingFun Nat Integer PRingInteger) (\\(x : Nat) -> natToInt x) (\\(x : Nat) -> natToInt 10)) 2) (natToInt 12)))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

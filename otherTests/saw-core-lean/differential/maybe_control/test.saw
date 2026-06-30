@@ -1,0 +1,11 @@
+// TRUE differential litmus for Maybe constructors and elimination.
+
+let observed =
+  parse_core "and (equalNat (Maybe#rec Nat (\\(_ : Maybe Nat) -> Nat) 0 (\\(x : Nat) -> addNat x 1) (Nothing Nat)) 0) (equalNat (Maybe#rec Nat (\\(_ : Maybe Nat) -> Nat) 0 (\\(x : Nat) -> addNat x 1) (Just Nat 4)) 5)";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

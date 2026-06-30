@@ -1,0 +1,3 @@
+Direct Cryptol.sawcore `ecScanl` currently reaches `Prelude.scanl`, which the
+Lean translator deliberately rejects because bounded-vector scanl has no mapped
+sound realization yet.

@@ -1,0 +1,15 @@
+// TRUE differential litmus for SAWCore sort flag parser surface.
+//
+// `SortFlags` are advisory for some backends, but the Lean translator still
+// needs parser coverage for terms that mention `isort` and `qsort`.
+
+let observed =
+  parse_core
+    "and (((\\(A : isort 0) -> True) Nat)) (((\\(A : qsort 0) -> True) Bool))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

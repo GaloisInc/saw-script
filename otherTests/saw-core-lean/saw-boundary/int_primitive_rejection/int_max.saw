@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "intMax (intNeg (natToInt 3)) (natToInt 2)";
+write_lean_term "IntMaxProbe" [] [] "-" probe;

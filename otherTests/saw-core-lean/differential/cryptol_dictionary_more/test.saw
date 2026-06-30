@@ -1,0 +1,12 @@
+// TRUE differential litmus for additional Cryptol.sawcore dictionary instances.
+
+let observed =
+  parse_core
+    "and (ecEq Rational PEqRational (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 1) (natToInt 2))) (and (ecLt Rational PCmpRational (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 2) (natToInt 3))) (and (ecEq (IntMod 5) (PEqIntMod 5) (toIntMod 5 (natToInt 7)) (toIntMod 5 (natToInt 2))) (and (ecEq UnitType PEqUnit Unit Unit) (and (ecLtEq UnitType PCmpUnit Unit Unit) (and (ecEq (seq (TCNum 4) Bool) (PEqSeqBool (TCNum 4)) 0xa 0xa) (and (ecLt (seq (TCNum 4) Bool) (PCmpSeqBool (TCNum 4)) 0x1 0x2) (and (intModEq 5 (ecZero (IntMod 5) (PZeroIntMod 5)) (toIntMod 5 (natToInt 0))) (intModEq 5 (ecPlus (IntMod 5) (PRingIntMod 5) (toIntMod 5 (natToInt 4)) (toIntMod 5 (natToInt 4))) (toIntMod 5 (natToInt 3))))))))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

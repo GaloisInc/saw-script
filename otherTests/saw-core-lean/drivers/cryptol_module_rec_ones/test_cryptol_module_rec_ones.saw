@@ -1,0 +1,8 @@
+// Single-stream fix emission test. The Cryptol `xs = [True] # xs` lowers
+// to a SAWCore `fix (Stream Bool) ...`; the Lean backend should translate
+// it through the generic proof-carrying fix path rather than a structural
+// helper selected by a Haskell recognizer.
+
+write_lean_cryptol_module
+  "RecOnes.cry"
+  "test_cryptol_module_rec_ones.module.lean" [] [];

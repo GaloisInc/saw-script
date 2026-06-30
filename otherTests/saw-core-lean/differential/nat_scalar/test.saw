@@ -1,0 +1,15 @@
+// TRUE differential litmus for basic SAWCore Nat constants and application.
+//
+// The observed result is Boolean equality over a small closed Nat expression,
+// so both sides can compare concrete behavior without a hand-written Lean
+// analogue of the Nat computation.
+
+let observed =
+  parse_core "and (equalNat (addNat 2 3) 5) (and (equalNat (pred 0) 0) (ltNat 3 4))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

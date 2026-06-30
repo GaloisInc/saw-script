@@ -1,0 +1,18 @@
+// Recursive-comprehension emission test at small width.
+//
+// `runningSumComprehension` mirrors popcount's `[seed] # [body |
+// elt <- ext | prev <- self]` shape exactly, but with a different
+// body (`s + x` instead of `if elt then prev+1 else prev`). The Lean
+// backend should expose recurrence reasoning as explicit proof obligations.
+//
+// `runningSumNaive` is the same function written as an explicit
+// indexed sum — pure bv_decide-friendly.
+//
+// The `prove_print (offline_lean ...)` emits the equivalence goal
+// `runningSumComprehension xs == runningSumNaive xs` as a Lean file.
+
+import "RunningSum.cry";
+
+prove_print (offline_lean "test_cryptol_running_sum_verify.eq")
+  {{ \(xs : [8][32]) ->
+       runningSumComprehension xs == runningSumNaive xs }};

@@ -1,0 +1,141 @@
+# saw-core-lean
+
+A SAW backend that translates SAWCore terms to Lean 4 source.
+The generated `.lean` files import a small handwritten support
+library (also in this directory) and elaborate under a Lean 4
+toolchain via `lake build`.
+
+## Status
+
+Working end-to-end on:
+
+- `write_lean_term` — translate one Term + its type to a
+  `noncomputable def`.
+- `write_lean_cryptol_module` — translate a Cryptol `.cry` file
+  into a Lean `namespace` of `def`s.
+- `write_lean_cryptol_primitives_for_sawcore` — regenerate the
+  Cryptol primitives module in Lean.
+- `offline_lean` — emit a SAW proof obligation as
+  `def goal : Prop := …` plus a `theorem goal_holds := by sorry`
+  stub. Phase 2's `getting-started.md` walks through discharging
+  one of these end-to-end with a tactic proof.
+
+`Prelude.fix` is handled by proof-carrying emission. The backend emits
+the literal fixed-point body plus explicit Lean obligations for the
+semantic facts needed to use it; shape-specific helper lowerings such as
+`mkStreamFix`, `mkStreamFixPair`, and `genFix` are obsolete and are not
+part of the live support library.
+
+What's punted (with diagnostics — translator refuses cleanly):
+
+- Large recursive Cryptol examples still need proof-side recurrence
+  libraries over the generic `fix` obligations.
+- Bitvector-gated partial recursion (e.g. factorial on `[8]`) and
+  polymorphic `Num#rec1` dispatch (e.g. SHA-512 functor) — these
+  shapes can't be soundly translated under productivity-only trust;
+  refused at translation time with the `RejectedPrimitive`
+  diagnostic.
+- Universe-polymorphic terms (`(t : sort 1) → …`) — refused with
+  `polymorphismResidual`.
+- Native `Lean.BitVec` binding (currently `bitvector n := Vec n
+  Bool`, with `bv*` operations as axioms; non-bv axioms like `gen`
+  / `atWithDefault` get structural definitions in Phase 8 per the
+  revised plan).
+- **Class-dictionary primitives (`PCmp`, `PEq`, `PRing`,
+  `PIntegral`, `PArith`, `PLogic`, …).** Cryptol's class
+  dictionaries currently translate as bare SAWCore identifiers
+  with no Lean-side `SpecialTreatment` mapping, so a polymorphic
+  Cryptol def that hits one of them surfaces as an unknown
+  identifier at Lean elaboration. Long-term plan §6 keeps this
+  deferred ("expand surface as case studies demand"); refactor to
+  monomorphise away from class methods (`(==)` on a known type,
+  `(+)` on `[N]`, …) until coverage lands.
+
+## Documentation
+
+Top-level docs are the **current** as-of-today reference:
+
+- [`doc/architecture.md`](doc/architecture.md) — design overview.
+- [`doc/getting-started.md`](doc/getting-started.md) — a 30-minute
+  walkthrough from a Cryptol property to a closed Lean theorem.
+- [`doc/contributing.md`](doc/contributing.md) — how to add a
+  primitive, extend a soundness gate, write tests.
+- [`doc/2026-04-24_soundness-boundaries.md`](doc/2026-04-24_soundness-boundaries.md)
+  — canonical trust contract; cites every regression test that
+  pins a soundness claim.
+- [`doc/2026-05-02_residual-trust.md`](doc/2026-05-02_residual-trust.md)
+  — auditor-facing index of inherited-trust assumptions (what
+  the translator trusts but doesn't itself test, organized by
+  category).
+- [`doc/2026-05-05_long-term-plan.md`](doc/2026-05-05_long-term-plan.md)
+  — current plan-of-record (case-study-driven). Supersedes the two
+  Phase-organized May-02 plans (`2026-05-02_post-audit-plan.md`
+  and `2026-05-02_revised-plan.md`), which remain in `doc/archive/`
+  as historical accounts of work shipped.
+
+For independent audit reports, see [`doc/audit/`](doc/audit/).
+
+For the trajectory of how the project got here (failed P4 / P6
+attempts, the specialization-mode pivot), see
+[`doc/archive/`](doc/archive/).
+
+## Layout
+
+```
+saw-core-lean/
+├── README.md                 # this file
+├── doc/                      # current docs + dated trajectory in archive/
+├── src/
+│   ├── Language/Lean/        # Lean 4 surface-syntax AST
+│   └── SAWCoreLean/          # translator
+├── lean/                     # support library (Lake project)
+│   └── CryptolToLean/
+│       ├── SAWCoreScaffolding.lean
+│       ├── SAWCoreVectors.lean         # Vec ≡ Vector
+│       ├── SAWCoreBitvectors.lean      # bitvector n ≡ Vec n Bool
+│       ├── SAWCorePreludeExtra.lean    # iteDep / ite wrappers (L-7)
+│       ├── SAWCorePrimitives.lean      # axioms + inductives
+│       ├── SAWCoreBitvectors_proofs.lean  # ~15 axiomatic bv lemmas
+│       └── SAWCorePrelude_proofs.lean     # round-trip + Nat lemmas
+└── smoketest/                # Tasty unit / regression tests
+```
+
+## Building
+
+```bash
+# Build the saw binary
+cabal build exe:saw
+
+# Run smoketest (translator-internal; no Lean toolchain needed)
+cabal test saw-core-lean-smoketest
+
+# Run integration suite (saw → emitted Lean → optional lake env lean)
+make -C otherTests/saw-core-lean test
+
+# Build the Lean support library directly
+( cd lean && lake build )
+```
+
+Lean toolchain pinned in `lean/lean-toolchain`
+(`leanprover/lean4:v4.29.1`).
+
+## Tests
+
+Three layers:
+
+- `saw-core-lean-smoketest` — Tasty unit tests. Runs in
+  `cabal test`. Covers AST / pretty-printer / translator
+  internals + the lockdown items L-3, L-6, L-7, L-9, L-10, L-11,
+  L-14, L-16.
+- `saw-core-lean-tests` — runs the
+  [`otherTests/saw-core-lean/`](../otherTests/saw-core-lean/)
+  integration suite (one cabal test wrapping `bash test.sh`).
+  Pinned `.log.good` and `.lean.good` files; optional
+  `lake env lean` elaboration when `lake` is available.
+- `otherTests/saw-core-lean/{shape,saw-boundary,proofs}/` — bespoke
+  per-test directories. Soundness shape probes
+  (`shape/`), gate-firing tests (`saw-boundary/`), end-to-end
+  semantic proofs (`proofs/offline_t{1,3,4}/`,
+  `proofs/walkthrough/`).
+
+CI runs all three on every push (`.github/workflows/ci.yml`).

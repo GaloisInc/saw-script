@@ -1,0 +1,6 @@
+enable_experimental;
+
+// Unsupported Int primitive: must reject at SAW translation time rather than
+// emit an unmapped Lean name or an unjustified helper.
+let probe = parse_core "intAbs (intNeg (natToInt 3))";
+write_lean_term "IntAbsProbe" [] [] "-" probe;

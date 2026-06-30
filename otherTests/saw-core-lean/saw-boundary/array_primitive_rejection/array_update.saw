@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "arrayUpdate";
+write_lean_term "ArrayUpdateProbe" [] [] "-" probe;

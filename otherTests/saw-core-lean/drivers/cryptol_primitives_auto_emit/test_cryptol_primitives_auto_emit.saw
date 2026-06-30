@@ -1,0 +1,4 @@
+// Command-level parity with otherTests/saw-core-rocq/test_cryptol_primitives.saw.
+// This exercises the Lean analogue of write_rocq_cryptol_primitives_for_sawcore.
+write_lean_cryptol_primitives_for_sawcore
+  "test_cryptol_primitives_auto_emit.primitives.lean" [] [];

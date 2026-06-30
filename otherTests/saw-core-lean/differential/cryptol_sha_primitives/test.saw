@@ -1,0 +1,13 @@
+// TRUE differential litmus for representative Cryptol.sawcore SHA2
+// processing primitives.
+
+let observed =
+  parse_core
+    "bvEq 32 (atWithDefault 8 (Vec 32 Bool) 0x00000000 (processSHA2_256 (TCNum 0) (EmptyVec (Vec 16 (Vec 32 Bool)))) 0) 0x00000000";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

@@ -1,0 +1,25 @@
+// Real-shape Cryptol module that uses an algebraic enum. Audit
+// (2026-05-07): pre-fix, write_lean_cryptol_module crashed with a
+// SAWCore-internal panic ("scLambda: variable typing context
+// mismatch") because scNormalizeForLean unfolds the body of
+// Cryptol's enum encoding (via SAW's `ListSort` / `FunsTo`
+// primitives) along paths whose results don't unify their typing
+// contexts.
+//
+// Post-fix: discoverEnumEncodingReachers in
+// SAWCentral.Prover.Exporter marks any def whose body uses
+// ListSort / FunsTo recursors as opaque under scNormalizeForLean.
+// The translator then sees the surface ListSort / FunsTo refs and
+// rejects them via documented `reject` SpecialTreatments — clean,
+// loud, user-facing diagnostic ("Cryptol algebraic enum types ...
+// have no Lean-side realisation yet"). This driver pins that
+// behaviour as a regression target.
+
+module Color where
+
+enum Color = Red | Green | Blue
+
+isRed : Color -> Bit
+isRed c = case c of
+  Red -> True
+  _   -> False

@@ -1,0 +1,11 @@
+// TRUE differential litmus for SAWCore gen and atWithDefault.
+
+let observed =
+  parse_core "and (equalNat (atWithDefault 3 Nat 99 (gen 3 Nat (\\(i : Nat) -> addNat i 10)) 2) 12) (equalNat (atWithDefault 3 Nat 99 (gen 3 Nat (\\(i : Nat) -> addNat i 10)) 3) 99)";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

@@ -1,0 +1,13 @@
+// TRUE differential litmus for additional finite Cryptol.sawcore sequence
+// entry points: `ecAtBack`, `ecUpdate`, and `ecUpdateEnd`.
+
+let observed =
+  parse_core
+    "and (boolEq (ecAtBack (TCNum 4) Bool Integer PIntegralInteger 0b1010 (natToInt 0)) False) (and (boolEq (atWithDefault 4 Bool False (ecUpdate (TCNum 4) Bool Integer PIntegralInteger 0b0000 (natToInt 2) True) 2) True) (boolEq (atWithDefault 4 Bool False (ecUpdateEnd (TCNum 4) Bool Integer PIntegralInteger 0b0000 (natToInt 0) True) 3) True))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

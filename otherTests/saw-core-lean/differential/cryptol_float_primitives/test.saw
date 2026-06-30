@@ -1,0 +1,12 @@
+// Differential known-gap litmus for unimplemented Cryptol.sawcore float dictionaries.
+
+let observed =
+  parse_core
+    "ecEq (TCFloat (TCNum 8) (TCNum 24)) (PEqFloat (TCNum 8) (TCNum 24)) Unit Unit";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

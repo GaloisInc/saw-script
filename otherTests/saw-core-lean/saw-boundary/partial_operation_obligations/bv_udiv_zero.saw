@@ -1,0 +1,6 @@
+enable_experimental;
+
+// Boundary litmus: bitvector division by zero must be proof-carrying.
+let probe = parse_core "bvUDiv 8 0x01 0x00";
+
+write_lean_term "BvUDivZeroProbe" [] [] "-" probe;

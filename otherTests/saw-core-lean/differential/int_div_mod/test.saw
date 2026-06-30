@@ -1,0 +1,13 @@
+// TRUE differential litmus for defined Integer division and modulus.
+//
+// Division by zero is a partiality surface and belongs in an obligation row.
+
+let observed =
+  parse_core "and (intEq (intDiv (intNeg (natToInt 3)) (natToInt 2)) (intNeg (natToInt 2))) (and (intEq (intMod (intNeg (natToInt 3)) (natToInt 2)) (natToInt 1)) (and (intEq (intDiv (natToInt 3) (intNeg (natToInt 2))) (intNeg (natToInt 2))) (intEq (intMod (natToInt 3) (intNeg (natToInt 2))) (intNeg (natToInt 1)))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

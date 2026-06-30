@@ -1,0 +1,21 @@
+// Width-32 popcount discharge via the §4.1 bridge. Same shape as
+// E6 (width 4) but at the realistic Cryptol target width. Tests
+// whether the bridge approach scales — and whether the recently
+// added @[simp] peelers (coerce_id, atWithDefault_lt) keep the
+// per-case reduction tractable.
+
+let {{
+  popCount_fold : [32] -> [32]
+  popCount_fold bits =
+    foldl (\acc b -> if b then acc + 1 else acc) 0 bits
+
+  popCount_naive : [32] -> [32]
+  popCount_naive bits = ic ! 0
+    where
+      ic : [33][32]
+      ic = [0] # [ if elt then prev + 1 else prev
+                 | elt <- bits
+                 | prev <- ic ]
+}};
+prove_print (offline_lean "test_popcount32")
+  {{ \(bits : [32]) -> popCount_fold bits == popCount_naive bits }};

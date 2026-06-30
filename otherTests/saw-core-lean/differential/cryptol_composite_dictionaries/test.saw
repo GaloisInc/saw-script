@@ -1,0 +1,12 @@
+// TRUE differential litmus for composite Cryptol.sawcore dictionaries.
+
+let observed =
+  parse_core
+    "and (ecEq (PairType Bool Bool) (PEqPair Bool Bool PEqBit PEqBit) (PairValue Bool Bool True False) (PairValue Bool Bool True False)) (and (ecLt (PairType Bool Bool) (PCmpPair Bool Bool PCmpBit PCmpBit) (PairValue Bool Bool False True) (PairValue Bool Bool True False)) (and (boolEq (Pair_fst Bool Bool (ecAnd (PairType Bool Bool) (PLogicPair Bool Bool PLogicBit PLogicBit) (PairValue Bool Bool True True) (PairValue Bool Bool True False))) True) (boolEq (Pair_snd Bool Bool (ecAnd (PairType Bool Bool) (PLogicPair Bool Bool PLogicBit PLogicBit) (PairValue Bool Bool True True) (PairValue Bool Bool True False))) False)))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

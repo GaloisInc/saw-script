@@ -1,0 +1,1 @@
+SAW evaluates `ecAt`, but emitted Lean currently relies on an unresolved proof stub for the index obligation.

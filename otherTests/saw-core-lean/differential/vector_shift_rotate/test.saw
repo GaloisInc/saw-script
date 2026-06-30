@@ -1,0 +1,11 @@
+// TRUE differential litmus for vector shift and rotate helpers.
+
+let observed =
+  parse_core "and (equalNat (atWithDefault 4 Nat 99 (shiftL 4 Nat 0 (gen 4 Nat (\\(i : Nat) -> addNat i 1)) 1) 0) 2) (and (equalNat (atWithDefault 4 Nat 99 (shiftR 4 Nat 0 (gen 4 Nat (\\(i : Nat) -> addNat i 1)) 1) 3) 3) (and (equalNat (atWithDefault 4 Nat 99 (rotateL 4 Nat (gen 4 Nat (\\(i : Nat) -> addNat i 1)) 1) 3) 1) (equalNat (atWithDefault 4 Nat 99 (rotateR 4 Nat (gen 4 Nat (\\(i : Nat) -> addNat i 1)) 1) 0) 4)))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

@@ -1,0 +1,12 @@
+// TRUE differential litmus for empty and record Cryptol.sawcore dictionaries.
+
+let observed =
+  parse_core
+    "and (ecEq #{} PEqEmpty Empty Empty) (and (ecLtEq #{} PCmpEmpty Empty Empty) (and (ecEq (RecordType \"x\" Bool #{}) (PEqRecord \"x\" Bool #{} PEqBit PEqEmpty) (RecordValue \"x\" Bool #{} True Empty) (RecordValue \"x\" Bool #{} True Empty)) (and (ecLt (RecordType \"x\" Bool #{}) (PCmpRecord \"x\" Bool #{} PCmpBit PCmpEmpty) (RecordValue \"x\" Bool #{} False Empty) (RecordValue \"x\" Bool #{} True Empty)) (and (boolEq (headRecord \"x\" Bool #{} (ecAnd (RecordType \"x\" Bool #{}) (PLogicRecord \"x\" Bool #{} PLogicBit PLogicEmpty) (RecordValue \"x\" Bool #{} True Empty) (RecordValue \"x\" Bool #{} False Empty))) False) (intEq (headRecord \"x\" Integer #{} (ecPlus (RecordType \"x\" Integer #{}) (PRingRecord \"x\" Integer #{} PRingInteger PRingEmpty) (RecordValue \"x\" Integer #{} (natToInt 2) Empty) (RecordValue \"x\" Integer #{} (natToInt 3) Empty))) (natToInt 5))))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

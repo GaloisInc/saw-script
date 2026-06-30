@@ -1,0 +1,103 @@
+// E-series coverage driver (originally named offline_lean_stress;
+// renamed per audit M-9, 2026-05-06 — "stress" misled readers into
+// thinking this was a memory-stress probe; the actual memory-stress
+// regression is drivers/cryptol_module_dag_sharing/).
+//
+// This file emits the offline_lean .lean files for E1..E7 stress
+// proofs (doc/2026-05-03_stress-test-plan.md). Each prove_print
+// emits a `*.prove0.lean` file with a Cryptol property as
+// `goal : Prop` and a sorry placeholder; the corresponding
+// otherTests/saw-core-lean/proofs/E<N>_*/ directory carries the
+// discharge.
+//
+// SAW's SMT prover will fail/succeed per usual on these — the
+// prove_print result is not what we test. What we test is:
+//   (1) SAW emits the .lean file with the expected shape (pinned
+//       via *.prove0.lean.good).
+//   (2) The Lean discharge in otherTests/saw-core-lean/proofs/E<N>_*/ closes cleanly.
+
+// E1 — bvAdd commutativity over [8]. Baseline one-liner via
+// bvAdd_comm. Tier 1.
+prove_print (offline_lean "test_offline_lean_e_series.E1")
+  {{ \(x : [8]) (y : [8]) -> x + y == y + x }};
+
+// E2 — iteDep reflexivity. `(if b then x else y) == (if b then x
+// else y)` — same term on both sides. Exercises the SAW ite
+// wrapper and bvEq_refl. Tier 1.
+prove_print (offline_lean "test_offline_lean_e_series.E2")
+  {{ \(b : Bit) (x : [8]) (y : [8]) ->
+       (if b then x else y) == (if b then x else y) }};
+
+// E3 — Point record-field commutativity. Mirrors the
+// PointExercise.cry use case, but stated inline here so the
+// whole stress sequence lives in one driver. Two-field record
+// with bvAdd per field; commutativity follows from bvAdd_comm
+// per field. Exercises RecordType.rec reduction + nested records.
+// Tier 2.
+let {{
+  type Point = { x : [32], y : [32] }
+  point_add : Point -> Point -> Point
+  point_add p1 p2 = { x = p1.x + p2.x, y = p1.y + p2.y }
+}};
+prove_print (offline_lean "test_offline_lean_e_series.E3")
+  {{ \(p1 : Point) (p2 : Point) -> point_add p1 p2 == point_add p2 p1 }};
+
+// E4 — sequence-level bv identity: map of bvAdd-with-zero is the
+// identity. Exercises Cryptol `map`, @/atWithDefault indexing,
+// bvAdd_id_r per element, and sequence equality. Tier 2.
+prove_print (offline_lean "test_offline_lean_e_series.E4")
+  {{ \(xs : [4][32]) -> map (\x -> x + 0) xs == xs }};
+
+// E5 — reverse self-inverse. \(xs : [4][8]) -> reverse (reverse xs) == xs.
+// Vector rearrangement identity. Discharges via per-index
+// reduction (gen-of-reverse-of-gen-of-reverse collapses on each
+// fixed i ∈ {0,1,2,3}). Tier 3.
+//
+// The full Salsa20 littleendian round-trip property
+// (\(b : [4][8]) -> reverse (split (join (reverse b))) == b) is
+// a more ambitious version of this shape: same family but adds
+// split/join interaction. It's parked as a future tier-4
+// exercise — it requires a structural lemma library for split-
+// join round-trip that we haven't yet built.
+prove_print (offline_lean "test_offline_lean_e_series.E5")
+  {{ \(xs : [4][8]) -> reverse (reverse xs) == xs }};
+
+// E7 — bvAdd associativity at a wide width (256). SMT bit-blasting
+// can handle this with effort, but Lean closes in one line via
+// bvAdd_assoc. The width of 256 is a stand-in for "a width SMT
+// finds painful"; the real distinguishing case (universal
+// quantification over width via Cryptol type variables) requires
+// SAW-emission features beyond fixed-width. Tier 4.
+prove_print (offline_lean "test_offline_lean_e_series.E7")
+  {{ \(x : [256]) (y : [256]) (z : [256]) -> (x + y) + z == x + (y + z) }};
+
+// E6 — Two-implementations-of-popcount equivalence over [4].
+// Two definitions of bit-count that should agree pointwise:
+//   - popCount_fold:  Cryptol `foldl` accumulating a counter.
+//   - popCount_naive: the self-referential comprehension shape
+//     `ic ! 0 where ic = [0] # [...| ... <- ic]` from Popcount.cry.
+//
+// Stated at width 4 (not 32) to keep both the SAW translation
+// and the Lean discharge tractable. The width-4 form still
+// exercises the BoundedVecFold lowering (Phase 5 Slice B) on
+// the naive side and ordinary `foldl` on the spec side.
+//
+// Discharge strategy: SMT can decide width-4 by enumeration; the
+// Lean proof either (a) closes by `decide`/`native_decide` if the
+// translator emits computable defs, or (b) does the case analysis
+// manually. Tier 3.
+let {{
+  popCount_fold : [4] -> [3]
+  popCount_fold bits =
+    foldl (\acc b -> if b then acc + 1 else acc) 0 bits
+
+  popCount_naive : [4] -> [3]
+  popCount_naive bits = ic ! 0
+    where
+      ic : [5][3]
+      ic = [0] # [ if elt then prev + 1 else prev
+                 | elt <- bits
+                 | prev <- ic ]
+}};
+prove_print (offline_lean "test_offline_lean_e_series.E6")
+  {{ \(bits : [4]) -> popCount_fold bits == popCount_naive bits }};

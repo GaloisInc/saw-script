@@ -1,0 +1,29 @@
+// Diagnostic companion to sha512_fix.saw.
+//
+// This is a stretch probe, not a default regression. Historically these focused
+// terms stopped at unsupported `Prelude.fix`; the proof-carrying design can now
+// emit obligations for at least some of them. Keep this around to inspect
+// residual primitives and generated obligation size when returning to full
+// SHA512 scalability work.
+
+m <- cryptol_load "../../../../exercises/sha512/SHA512.cry";
+
+sha <- cryptol_extract m "sha";
+print "== sha ==";
+dump_lean_residual_primitives [] sha;
+fails (write_lean_term "ShaProbe" [] [] "sha_probe.lean" sha);
+
+common <- cryptol_extract m "SHA_2_Common'";
+print "== SHA_2_Common' ==";
+dump_lean_residual_primitives [] common;
+fails (write_lean_term "CommonProbe" [] [] "common_probe.lean" common);
+
+process <- cryptol_extract m "processBlock_Common";
+print "== processBlock_Common ==";
+dump_lean_residual_primitives [] process;
+fails (write_lean_term "ProcessProbe" [] [] "process_probe.lean" process);
+
+update <- cryptol_extract m "SHAUpdate";
+print "== SHAUpdate ==";
+dump_lean_residual_primitives [] update;
+fails (write_lean_term "UpdateProbe" [] [] "update_probe.lean" update);

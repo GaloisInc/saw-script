@@ -1,0 +1,15 @@
+// Differential conformance checks for concrete SAWCore/Cryptol tuple
+// construction and projection semantics.
+
+let tuple_conformance = {{
+  (((1, 2).0 : [8]) == 1) &&
+  (((1, 2).1 : [8]) == 2) &&
+  ((((1, 2), 3).0.1 : [8]) == 2) &&
+  ((((1, 2), 3).1 : [8]) == 3)
+}};
+
+prove_print w4 tuple_conformance;
+write_lean_term
+  "TupleConformance" [] []
+  "test_conformance_tuple.result.lean"
+  tuple_conformance;

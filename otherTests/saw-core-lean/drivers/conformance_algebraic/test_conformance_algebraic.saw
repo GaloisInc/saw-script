@@ -1,0 +1,14 @@
+// Differential conformance checks for small algebraic/control primitives.
+//
+// SAW proves concrete `Either`, `UnitType`, `EmptyType`, and `ite` facts with
+// `w4`. The paired Lean proof pins the corresponding support-library
+// realizations directly, because SAW normalization reduces these concrete
+// source facts before the emitted Lean term reaches the backend.
+
+let algebraic_conformance = parse_core "and (equalNat (Either#rec Nat Nat (\\(_ : Either Nat Nat) -> Nat) (\\(x : Nat) -> x) (\\(y : Nat) -> y) (Left Nat Nat 3)) 3) (and (equalNat (Either#rec Nat Nat (\\(_ : Either Nat Nat) -> Nat) (\\(x : Nat) -> x) (\\(y : Nat) -> y) (Right Nat Nat 4)) 4) (and (equalNat (UnitType#rec (\\(_ : UnitType) -> Nat) 7 Unit) 7) (and (equalNat (EmptyType#rec (\\(_ : EmptyType) -> Nat) 9 Empty) 9) (and (equalNat (ite Nat True 1 2) 1) (equalNat (ite Nat False 1 2) 2)))))";
+
+prove_print w4 algebraic_conformance;
+write_lean_term
+  "AlgebraicConformance" [] []
+  "test_conformance_algebraic.result.lean"
+  algebraic_conformance;

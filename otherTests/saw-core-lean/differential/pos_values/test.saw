@@ -1,0 +1,11 @@
+// TRUE differential litmus for Pos constructors and defined operations.
+
+let observed =
+  parse_core "and (posEq (posAdd (Bit0 One) (Bit1 One)) (Bit1 (Bit0 One))) (and (posEq (posMul (Bit0 One) (Bit1 One)) (Bit0 (Bit1 One))) (and (posLe (Bit0 One) (Bit1 One)) (posLt One (Bit0 One))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

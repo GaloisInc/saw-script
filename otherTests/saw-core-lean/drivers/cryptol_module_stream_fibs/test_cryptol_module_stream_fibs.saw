@@ -1,0 +1,7 @@
+// Mutual-stream fix emission test. The backend should emit a Lean artifact
+// with explicit proof obligations for the recurrence facts it needs, not a
+// direct structural helper selected by a Haskell classifier.
+
+write_lean_cryptol_module
+  "StreamFibs.cry"
+  "test_cryptol_module_stream_fibs.module.lean" [] [];

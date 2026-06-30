@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "Array";
+write_lean_term "ArrayTypeProbe" [] [] "-" probe;
