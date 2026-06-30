@@ -174,6 +174,8 @@ Any backend feature that would otherwise rely on a hidden invariant should be
 converted into a contract:
 
 - rawifying a wrapped function;
+- using a partial operation such as division, modulus, rational construction,
+  rational reciprocal, or bitvector division/remainder;
 - proving a vector index is in bounds;
 - proving a stream/corecursive lookup is productive;
 - using a hand-written helper whose semantics assumes normalized Cryptol input;
@@ -187,6 +189,13 @@ For each case:
 4. optionally include a Lean-side proof attempt;
 5. otherwise leave the obligation explicit or reject when the command requires a
    completed proof.
+
+The current next application of this rule is partial operations. The dedicated
+implementation plan is
+`2026-06-30_partial-operation-obligations-plan.md`: direct zero-divisor and
+zero-denominator surfaces should be converted from pinned known gaps into
+proof-carrying emissions with visible nonzero preconditions and checked helper
+calls.
 
 ## Raw `Prelude.error` and Partiality
 

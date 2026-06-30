@@ -135,7 +135,45 @@ Rocq feature surface. The next priority is emission quality: every emitted Lean
 file should either elaborate with explicit proof obligations or fail at SAW
 translation with a clear, principled diagnostic.
 
+Current implementation priority:
+
+1. Close partial-operation obligations in principle:
+   `doc/2026-06-30_partial-operation-obligations-plan.md`.
+2. Promote each pinned zero-divisor/zero-denominator `.known-gap` fixture into
+   a positive obligation-shape test as the corresponding operation family is
+   implemented.
+3. Then move to bounds/index obligations (`ecAt` and with-proof vector
+   primitives), followed by smaller wrapper-shape gaps.
+
 ## Priority 0: Emission Soundness
+
+- [ ] Implement proof-carrying partial-operation contracts.
+  - Design reference:
+    `doc/2026-06-30_partial-operation-obligations-plan.md`.
+  - This is the current top backend priority. Direct partial operations must
+    not emit unchecked total-looking Lean calls at zero divisors or zero
+    denominators. They must emit visible preconditions and consume Lean-checked
+    evidence.
+  - Scope, in order:
+    1. Direct scalar Prelude operations:
+       `divNat`, `modNat`, `divModNat`, `intDiv`, `intMod`, `ratio`,
+       `rationalRecip`.
+    2. Direct bitvector Prelude operations:
+       `bvUDiv`, `bvURem`, `bvSDiv`, `bvSRem`.
+    3. Cryptol.sawcore wrappers:
+       `ecDiv`, `ecMod`, `ecFieldDiv`, `ecRecip`, `ecSDiv`, `ecSMod`.
+  - Implementation rule: add a small data-driven partial-operation contract
+    interface. Haskell may construct the operation-specific proposition and
+    call a checked helper, but it must not inspect generated Lean syntax to
+    prove nonzero-ness, erase the obligation, or choose a total fallback value.
+  - Lean support-library helpers should be thin proof-taking wrappers around
+    the existing operations. The proof argument may be computationally unused;
+    its purpose is to put the soundness precondition into the checked type of
+    the emitted result.
+  - Acceptance: promote the existing `obligations/partial_*` and
+    `obligations/cryptol_ec_*_zero` known gaps to positive obligation-shape
+    tests, preserving or adding checks for the precondition, evidence consumer,
+    checked helper, and forbidden unchecked primitive bypass.
 
 - [ ] Close the bitvector primitive conformance surface found in the
   2026-06-29 audit.
@@ -162,9 +200,8 @@ translation with a clear, principled diagnostic.
   - 2026-06-29 checkpoint: `divModNat`'s support-library result type now uses
     SAW's nested `PairType ... UnitType` tuple representation instead of Lean's
     native `Nat × Nat`.
-  - Remaining work: design a small, module-qualified proof-obligation emission
-    table for zero-divisor/reciprocal contracts, then audit higher-level Cryptol
-    operations that may hide these primitives.
+  - Remaining work: follow the dedicated partial-operation plan above, then
+    audit higher-level Cryptol operations that may hide these primitives.
   - Audit reference: `doc/2026-06-29_comprehensive-audit.md`.
 
 - [x] Close the `fix` productivity surface for emit-stage soundness.
@@ -709,7 +746,7 @@ translation with a clear, principled diagnostic.
     Lean emission deliberately rejects residual `ListSort` because the
     algebraic-enum support encoding has no checked Lean realization yet.
 
-- [ ] Add obligation-shape tests for proof-carrying boundaries.
+- [x] Add obligation-shape tests for proof-carrying boundaries.
   - Current planning note:
     `doc/2026-06-30_obligation-shape-testing-plan.md`.
   - These tests should inspect the actual emitted Lean artifact and check that
@@ -757,6 +794,11 @@ translation with a clear, principled diagnostic.
     Also added the remaining explicit positive rows from the obligation plan:
     non-definitional/provable `unsafeAssert` equality and raw index/proof
     `fix` alongside the existing raw function-position `fix`.
+  - 2026-06-30 checkpoint: completed the obligation-shape testing plan as a
+    testing corpus. The current conformance target reports all remaining
+    missing proof-carrying surfaces as explicit known gaps; this is the
+    guardrail for the next backend implementation phase, not proof that those
+    surfaces are implemented.
   - 2026-06-29 checkpoint: expanded `saw-boundary` expected-rejection coverage
     for mapped-but-unsupported primitives. The new fixtures pin explicit
     diagnostics for unsupported Int primitives (`intAbs`, `intMin`, `intMax`),

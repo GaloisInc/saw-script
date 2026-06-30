@@ -204,14 +204,22 @@ boundary, or known-gap rows.
 
 ## Immediate Coverage Priorities
 
-1. Add true differential or boundary tests for remaining parser/module holes:
+1. Promote the partial-operation obligation known gaps according to
+   `saw-core-lean/doc/2026-06-30_partial-operation-obligations-plan.md`.
+   The next backend implementation slice is direct scalar Prelude operations
+   (`divNat`, `modNat`, `divModNat`, `intDiv`, `intMod`, `ratio`,
+   `rationalRecip`), followed by direct BV operations and Cryptol.sawcore
+   wrappers. Each promotion must keep the test proof-carrying: visible
+   precondition, evidence consumer, checked helper, and forbidden unchecked
+   bypass.
+2. Add true differential or boundary tests for remaining parser/module holes:
    injected-code handling if a public generic SAWCore-module Lean writer
    appears, and richer user datatype emission.
-2. Migrate the next small legacy candidates into `differential/*` or
+3. Migrate the next small legacy candidates into `differential/*` or
    `saw-boundary/*`: checked stream-helper totality obligation shapes,
    remaining partial-operation obligation rows, and the pinned tuple-update /
    `ecAt` proof-carrying gaps.
-3. Add explicit known-gap litmus tests for remaining noncomputable or
+4. Add explicit known-gap litmus tests for remaining noncomputable or
    unimplemented surfaces that are executable in SAW.
-4. Convert every `.known-gap` row either to a green differential/proof-obligation
+5. Convert every `.known-gap` row either to a green differential/proof-obligation
    test or to a documented final boundary decision.
