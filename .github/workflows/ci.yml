@@ -730,15 +730,15 @@ jobs:
           name: "${{ matrix.os }}-bins"
           path: dist/bin
 
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v6
         with:
           # Ensure that this matches saw-python/mypy.ini file
           # and that saw-python/pyproject.toml file is compatible with this version
           python-version: '3.12'
 
-      - uses: abatilo/actions-poetry@v2.0.0
+      - uses: abatilo/actions-poetry@v4
         with:
-          poetry-version: 1.4.2
+          poetry-version: 2.4.1
 
       - name: ${{ matrix.name }}
         shell: bash
@@ -1061,16 +1061,16 @@ jobs:
           cache-to: type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }},mode=max
 
       - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v6
         with:
           # Ensure that this matches saw-python/mypy.ini file
           # and that saw-python/pyproject.toml file is compatible with this version
           python-version: '3.12'
 
       - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
-        uses: abatilo/actions-poetry@v2.0.0
+        uses: abatilo/actions-poetry@v4
         with:
-          poetry-version: 1.4.2
+          poetry-version: 2.4.1
 
       - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
         name: Test saw-remote-api
