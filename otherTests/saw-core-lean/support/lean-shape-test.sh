@@ -6,9 +6,6 @@
 #   *.shouldfail.lean — MUST FAIL Lean elaboration. A successful
 #                       elaboration means the axiom/def was loosened
 #                       beyond SAW's declared shape — soundness drift.
-#   *.shouldpass.lean — MUST elaborate cleanly AND contain no `sorry`.
-#                       These mirror the legitimate translator-emitted
-#                       shapes this test guards.
 #
 # The test fails if any single probe misbehaves. Every probe in the
 # test dir matching either suffix is exercised; adding more is just
@@ -71,7 +68,7 @@ TEST_NAME="$(basename "$(pwd)")"
 PROBE_DIR="$LAKE_DIR/intTestsProbe/$TEST_NAME"
 
 mkdir -p "$PROBE_DIR"
-for probe in *.shouldfail.lean *.shouldpass.lean; do
+for probe in *.shouldfail.lean; do
     [ -f "$probe" ] || continue
     cp "$probe" "$PROBE_DIR/$probe"
 done

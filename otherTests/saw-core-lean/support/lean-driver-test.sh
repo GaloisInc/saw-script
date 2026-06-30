@@ -17,13 +17,10 @@
 #                        non-zero. Without it, exit non-zero is a
 #                        test failure.
 #
-# Lean elaboration is controlled by the `lean-elaborate` flag file:
-#   lean-elaborate     — if present, every emitted *.lean file in
-#                        this directory after the saw run is fed to
-#                        ../support/lean-elaborate.sh. Missing file
-#                        means we trust the .lean.good diff alone.
-#                        Lean unavailability (exit 77) does not fail
-#                        the test.
+# Every emitted *.lean file in this directory after the saw run is fed to
+# ../support/lean-elaborate.sh. There is no opt-out flag and no environment
+# skip: missing lake, Lake build failure, or Lean elaboration failure is a hard
+# test failure.
 #
 # Exit codes match SAW conventions: 0 = test passed, non-zero = at
 # least one diff disagreed or saw misbehaved.

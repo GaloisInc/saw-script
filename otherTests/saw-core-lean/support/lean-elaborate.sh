@@ -10,10 +10,8 @@
 #
 # Exit codes:
 #   0  — every file elaborated cleanly (no errors; warnings allowed).
-#   1  — at least one file produced a Lean elaboration error.
-#   77 — `lake` is not on PATH; treat as "skip this elaboration step".
-#        The caller should NOT propagate 77 as a test failure; instead
-#        emit a one-line note to the test log and exit 0.
+#   1  — lake is unavailable, the support library fails to build, an input is
+#        missing, or at least one file produces a Lean elaboration error.
 #
 # We deliberately keep saw-core-lean/lean as the working Lake project
 # rather than spinning a fresh one per test: lake's incremental build

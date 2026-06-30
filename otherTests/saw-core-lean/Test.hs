@@ -11,11 +11,10 @@ Maintainer  : saw@galois.com
 Stability   : experimental
 Portability : portable
 
-Tasty wrapper that invokes @bash test.sh@ in this directory and
-checks the exit code. The shell script handles all the per-test
-work (running saw, diffing stdout against @*.log.good@, diffing
-emitted @.lean@ against @*.lean.good@, optionally elaborating each
-@.lean@ via @lake env lean@).
+Tasty wrapper that invokes @bash test.sh@ in this directory and checks the exit
+code. The shell script handles all per-test work: generated-output driver
+checks, differential SAW-vs-Lean observations, proof-obligation shape checks,
+SAW boundary diagnostics, proof replay, and Lean shape probes.
 
 Direct port of @otherTests/saw-core-rocq/Test.hs@.
 -}

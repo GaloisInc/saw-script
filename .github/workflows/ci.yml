@@ -764,8 +764,8 @@ jobs:
           #     (lean-shape-test.sh, lean-proof-test.sh, test-lean.sh).
           #
           #   - saw-core-lean-tests: otherTests/saw-core-lean/test.sh, which
-          #     drives drivers/* and proofs/* through lean-driver-test.sh /
-          #     lean-elaborate.sh / lean-proof-test.sh.
+          #     drives drivers/*, differential/*, obligations/*, saw-boundary/*,
+          #     proofs/*, and shape/* through the support harnesses.
           #
           # Phase A audit (2026-05-04): the Lean test harnesses FAIL LOUDLY
           # when lake is missing, instead of silently skipping. So this
