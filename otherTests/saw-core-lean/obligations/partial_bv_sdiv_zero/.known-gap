@@ -1,0 +1,1 @@
+Direct signed bitvector division by zero currently emits a total primitive call instead of a visible zero-divisor obligation or SAW-exact checked wrapper.

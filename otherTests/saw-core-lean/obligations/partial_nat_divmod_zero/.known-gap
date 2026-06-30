@@ -1,0 +1,1 @@
+Direct Nat divMod by zero currently emits a total primitive call instead of a visible nonzero-divisor obligation.

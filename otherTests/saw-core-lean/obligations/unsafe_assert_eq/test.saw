@@ -1,0 +1,7 @@
+enable_experimental;
+
+// Obligation-shape litmus: fully-applied unsafeAssert must expose the literal
+// equality as a Lean proof obligation, not call a trusted unsafeAssert axiom.
+let probe = parse_core "unsafeAssert (sort 0) Nat Nat";
+
+write_lean_term "UnsafeAssertEqProbe" [] [] "emitted.lean" probe;

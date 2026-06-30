@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "bvUDiv 8 0x01 0x00";
+write_lean_term "BvUDivZeroProbe" [] [] "emitted.lean" probe;

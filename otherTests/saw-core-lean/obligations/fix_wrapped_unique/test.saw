@@ -1,0 +1,7 @@
+enable_experimental;
+
+// Obligation-shape litmus: wrapped value-domain fix must emit the generic
+// unique-fixed-point contract and consume the checked evidence.
+let probe = parse_core "fix Bool (\\(b : Bool) -> b)";
+
+write_lean_term "FixWrappedProbe" [] [] "emitted.lean" probe;

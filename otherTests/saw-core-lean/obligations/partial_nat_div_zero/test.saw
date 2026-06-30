@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "divNat 1 0";
+write_lean_term "NatDivZeroProbe" [] [] "emitted.lean" probe;

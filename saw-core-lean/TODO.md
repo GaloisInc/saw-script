@@ -708,6 +708,17 @@ translation with a clear, principled diagnostic.
     differential known gap. SAW evaluates the closed observation to true, but
     Lean emission deliberately rejects residual `ListSort` because the
     algebraic-enum support encoding has no checked Lean realization yet.
+
+- [ ] Add obligation-shape tests for proof-carrying boundaries.
+  - Current planning note:
+    `doc/2026-06-30_obligation-shape-testing-plan.md`.
+  - These tests should inspect the actual emitted Lean artifact and check that
+    soundness-sensitive surfaces expose the right contract while avoiding
+    hidden totalization, obsolete helpers, unchecked axioms, or Haskell-side
+    semantic shortcuts.
+  - First targets: partial-operation preconditions, fully applied
+    `unsafeAssert`, generic `fix`, raw-position `Prelude.error`, and
+    `MkStream`/stream totality.
   - 2026-06-29 checkpoint: expanded `saw-boundary` expected-rejection coverage
     for mapped-but-unsupported primitives. The new fixtures pin explicit
     diagnostics for unsupported Int primitives (`intAbs`, `intMin`, `intMax`),

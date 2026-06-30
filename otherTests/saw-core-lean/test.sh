@@ -24,6 +24,13 @@
 #                          This is the only positive executable-test category
 #                          that counts as semantic conformance.
 #
+#   obligations/<name>/    OBLIGATION-SHAPE CONFORMANCE. Run SAW on a small
+#                          proof-carrying litmus, compile the emitted Lean
+#                          outline, and inspect that artifact for the required
+#                          visible contract and forbidden bypasses. These tests
+#                          do not prove the obligation; they only pin that the
+#                          backend emits the right contract shape.
+#
 #   proofs/<name>/         Discharge a proof against generator-emitted
 #                          Lean. Each subdir has source.txt (path to a
 #                          drivers/* emission) + proof.lean (tactic
@@ -188,6 +195,7 @@ run_one() {
 iterate_drivers()       { for d in drivers/*/;       do run_one drivers       "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_conformance_drivers() { for d in drivers/conformance_*/; do run_one drivers "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_differential()  { for d in differential/*/;  do run_one differential  "$(basename "$d")" lean-differential-test.sh "$@"; done; }
+iterate_obligations()   { for d in obligations/*/;   do run_one obligations   "$(basename "$d")" lean-obligation-test.sh "$@"; done; }
 iterate_saw_boundary()  { for d in saw-boundary/*/;  do run_one saw-boundary  "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_proofs()        { for d in proofs/*/;        do run_one proofs        "$(basename "$d")" lean-proof-test.sh   "$@"; done; }
 iterate_conformance_proofs() { for d in proofs/conformance_*/; do run_one proofs "$(basename "$d")" lean-proof-test.sh "$@"; done; }
@@ -203,6 +211,7 @@ case "$verb" in
     test|run)
         iterate_drivers
         iterate_differential
+        iterate_obligations
         iterate_saw_boundary
         iterate_proofs
         iterate_shape
@@ -210,6 +219,7 @@ case "$verb" in
         ;;
     conformance)
         iterate_differential
+        iterate_obligations
         iterate_saw_boundary
         print_summary_and_exit
         ;;
@@ -222,6 +232,7 @@ case "$verb" in
     clean)
         iterate_drivers clean
         iterate_differential clean
+        iterate_obligations clean
         iterate_saw_boundary clean
         iterate_proofs clean
         iterate_shape clean

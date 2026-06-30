@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "rationalRecip rationalZero";
+write_lean_term "RationalRecipZeroProbe" [] [] "emitted.lean" probe;
