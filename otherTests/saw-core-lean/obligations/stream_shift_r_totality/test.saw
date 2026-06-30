@@ -1,0 +1,8 @@
+enable_experimental;
+
+// Obligation-shape litmus: streamShiftR must expose the totality evidence for
+// the stream it constructs.
+let probe =
+  parse_core "let { xs = MkStream Nat (\\(i : Nat) -> i); } in streamShiftR Nat 0 xs 2";
+
+write_lean_term "StreamShiftRTotalityProbe" [] [] "emitted.lean" probe;

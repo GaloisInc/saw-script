@@ -1,0 +1,8 @@
+enable_experimental;
+
+// Obligation-shape litmus: streamShiftL must keep stream construction
+// totality explicit through the helper lowering.
+let probe =
+  parse_core "let { xs = MkStream Nat (\\(i : Nat) -> i); } in streamShiftL Nat xs 2";
+
+write_lean_term "StreamShiftLTotalityProbe" [] [] "emitted.lean" probe;

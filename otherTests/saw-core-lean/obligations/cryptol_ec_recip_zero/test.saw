@@ -1,0 +1,8 @@
+enable_experimental;
+
+// Obligation-shape litmus: Cryptol reciprocal of zero must expose a nonzero
+// argument contract or checked SAW-exact total semantics.
+let probe =
+  parse_core "ecRecip Rational PFieldRational (ratio (natToInt 0) (natToInt 1))";
+
+write_lean_term "CryptolEcRecipZeroProbe" [] [] "emitted.lean" probe;

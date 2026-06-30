@@ -716,6 +716,13 @@ translation with a clear, principled diagnostic.
     soundness-sensitive surfaces expose the right contract while avoiding
     hidden totalization, obsolete helpers, unchecked axioms, or Haskell-side
     semantic shortcuts.
+  - Planning rule: this phase is testing-only, like the differential
+    conformance plan. Do not change backend semantics or Lean support-library
+    semantics to make these pass. Missing obligation support must appear as a
+    small corpus fixture, usually `.known-gap`, with a pinned failure
+    diagnostic. Positive obligation fixtures must fail when the emitted
+    contract is absent or bypassed; known-gap fixtures must fail when the pinned
+    failure disappears so the case can be promoted.
   - First targets: partial-operation preconditions, fully applied
     `unsafeAssert`, generic `fix`, raw-position `Prelude.error`, and
     `MkStream`/stream totality.
@@ -726,6 +733,16 @@ translation with a clear, principled diagnostic.
     positions, and `MkStream` totality. Known-gap obligation fixtures now pin
     direct partial-operation preconditions, representative proof primitives,
     all with-proof vector primitives, and direct recursor families.
+  - 2026-06-30 checkpoint: expanded the obligation corpus for stream helpers
+    and Cryptol wrappers without changing backend semantics. Positive
+    obligation-shape fixtures now cover `streamMap`, `streamShiftL`, and
+    `streamScanl` as stream-producing helper lowerings. Known-gap obligation
+    fixtures pin `streamShiftR`'s current Nat-vs-`Except` emitted-outline
+    mismatch, Cryptol zero-divisor/zero-denominator wrappers
+    (`ecDiv`, `ecMod`, `ecFieldDiv`, `ecRecip`, `ecSDiv`, `ecSMod`), and
+    `ecAt`'s current indexing emission gap. `streamGet` finite projection is
+    intentionally kept as value/differential coverage, not a fake standalone
+    obligation test.
   - 2026-06-29 checkpoint: expanded `saw-boundary` expected-rejection coverage
     for mapped-but-unsupported primitives. The new fixtures pin explicit
     diagnostics for unsupported Int primitives (`intAbs`, `intMin`, `intMax`),

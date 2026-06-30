@@ -1,0 +1,8 @@
+enable_experimental;
+
+// Obligation-shape litmus: Cryptol field division by zero must expose a
+// nonzero denominator contract or checked SAW-exact total semantics.
+let probe =
+  parse_core "ecFieldDiv Rational PFieldRational (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 0) (natToInt 1))";
+
+write_lean_term "CryptolEcFieldDivZeroProbe" [] [] "emitted.lean" probe;

@@ -1,0 +1,1 @@
+streamShiftR currently emits a Nat default where the generated stream body expects an Except-valued result.

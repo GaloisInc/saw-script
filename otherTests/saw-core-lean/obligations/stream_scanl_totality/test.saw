@@ -1,0 +1,8 @@
+enable_experimental;
+
+// Obligation-shape litmus: streamScanl constructs a stream and must expose
+// totality evidence for the generated stream.
+let probe =
+  parse_core "let { ones = MkStream Nat (\\(_ : Nat) -> 1); } in streamScanl Nat Nat addNat 0 ones";
+
+write_lean_term "StreamScanlTotalityProbe" [] [] "emitted.lean" probe;

@@ -1,0 +1,1 @@
+Cryptol ecAt currently emits unchecked index proof stubs instead of a visible bounds obligation.

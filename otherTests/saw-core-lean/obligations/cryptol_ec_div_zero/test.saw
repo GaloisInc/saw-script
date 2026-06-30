@@ -1,0 +1,8 @@
+enable_experimental;
+
+// Obligation-shape litmus: Cryptol ecDiv by zero must not lower to a plain
+// partial Lean primitive without evidence.
+let probe =
+  parse_core "ecDiv Integer PIntegralInteger (natToInt 7) (natToInt 0)";
+
+write_lean_term "CryptolEcDivZeroProbe" [] [] "emitted.lean" probe;

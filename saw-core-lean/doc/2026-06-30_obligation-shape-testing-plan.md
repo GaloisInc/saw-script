@@ -10,11 +10,14 @@ when the Lean backend cannot soundly emit a plain value, the test suite must say
 whether the backend emits the exact Lean precondition or proof obligation that
 makes the lowering sound.
 
-This is a testing plan, not a backend implementation plan. The work should not
-fix backend bugs, change semantic Lean support-library behavior, or add Haskell
-special cases to make tests pass. If a required obligation shape is missing
-today, the corpus should contain a small fixture that exposes that fact. Missing
-backend support is a test result, not a reason to omit the surface.
+This is a testing plan, not a backend implementation plan. It should be shaped
+like the differential conformance plan: the work builds coverage, observes the
+real generated artifact, and records every current miss as an explicit corpus
+case. It must not fix backend bugs, change semantic Lean support-library
+behavior, or add Haskell special cases to make tests pass. If a required
+obligation shape is missing today, the corpus should contain a small fixture
+that exposes that fact. Missing backend support is a test result, not a reason
+to omit the surface.
 
 An obligation-shape test answers:
 
@@ -27,9 +30,15 @@ An obligation-shape test answers:
 These tests are not proof-discharge tests. They may accept an emit-stage
 outline with a placeholder proof, as long as the placeholder is visibly attached
 to the right proposition and the test is classified as "obligation emitted",
-not "proof checked". They must fail when the expected emitted obligation is
-absent, weakened, hidden behind a totalized primitive, or replaced by an
-unchecked semantic claim.
+not "proof checked". They must fail on failure: a positive obligation test fails
+when the expected emitted obligation is absent, weakened, hidden behind a
+totalized primitive, or replaced by an unchecked semantic claim. A known-gap
+fixture passes only by proving that the real current failure is still pinned by
+the expected diagnostic; that pass is not evidence of parity.
+
+Passing the complete obligation-shape suite means there are no unrepresented
+soundness-sensitive surfaces. It does not mean backend parity while any
+`.known-gap` obligation fixtures remain.
 
 ## Scope And Rules
 
@@ -46,6 +55,15 @@ suite:
 - Do not reconstruct equivalent hand-written Lean terms in observers.
 - Do not silently skip missing tools, missing emissions, unsupported primitives,
   or malformed obligations.
+- Do not repair a failing obligation fixture by changing the code under test.
+  Repair the test only when the test is wrong; otherwise classify the real
+  failure as a corpus gap.
+- Do not leave a missing obligation surface only in prose. If the current
+  backend cannot emit it, add the smallest fixture that exposes the missing
+  piece and mark it `.known-gap`.
+- Do not let a known-gap fixture go green silently. If the real run starts
+  satisfying the positive shape check, the expected-gap wrapper must fail until
+  the case is promoted to an ordinary obligation test.
 
 Each soundness-sensitive surface should be represented in the corpus in one of
 three ways:
@@ -59,6 +77,12 @@ three ways:
 
 There should be no fourth state where a known missing obligation is recorded
 only in prose.
+
+The obligation corpus therefore plays the same role as the differential corpus:
+it is a coverage map of the language surface, not a curated set of currently
+successful examples. The matrix must continue to include rows that the backend
+currently rejects, rows whose emitted Lean does not yet elaborate, and rows
+whose emitted artifact elaborates but lacks the required visible contract.
 
 ## Coverage Matrix
 
@@ -449,10 +473,14 @@ Required rows:
 - stream constructor from an `Except`-valued function requiring
   `saw_mkStream_total_exists`;
 - stream helpers that currently emit unresolved totality stubs:
-  - `streamGet`;
   - `streamMap`;
   - stream shifts;
   - `streamScanl`.
+- `streamGet` as a finite projection is value/differential coverage rather
+  than a standalone stream-construction obligation after ordinary SAWCore
+  reduction. It should still appear in the conformance matrix through
+  differential stream-observation rows, and through helper tests that use
+  `streamGet` only as an observer.
 
 Corpus expectation:
 
@@ -565,10 +593,13 @@ The obligation-shape suite is good enough for the next backend phase when:
 2. Every passing obligation fixture observes the emitted artifact itself.
 3. Every fixture checks both required contract heads and forbidden bypasses.
 4. Known gaps remain visible in the conformance summary.
-5. No completed proof-discharge test accepts `sorry`, hidden axioms, or a proof
+5. A positive fixture fails when the emitted contract is absent, changed, or
+   bypassed, and a `.known-gap` fixture fails when the backend no longer exhibits
+   the pinned failure.
+6. No completed proof-discharge test accepts `sorry`, hidden axioms, or a proof
    of a different proposition.
-6. The matrix, not the test count, is the coverage measure.
-7. There are no unrepresented known missing obligation surfaces.
+7. The matrix, not the test count, is the coverage measure.
+8. There are no unrepresented known missing obligation surfaces.
 
 ## Implementation Roadmap
 
@@ -578,7 +609,7 @@ The obligation-shape suite is good enough for the next backend phase when:
      without changing each test directory.
 2. Build the initial corpus before fixing backend behavior.
    - Add every P0 row as either a positive obligation test or a known-gap
-     fixture.
+     fixture. Do this even when the current backend output is obviously wrong.
    - Add P1/P2 rows as known gaps where the current backend lacks an
      obligation interface.
    - Update `CONFORMANCE.md` so every surface has a path and status.
@@ -602,6 +633,10 @@ The obligation-shape suite is good enough for the next backend phase when:
 Backend fixes happen after this testing work has made the current state visible.
 As fixes land, individual `.known-gap` fixtures should fail, then be promoted to
 positive obligation tests with the same small source case.
+
+This roadmap should not block corpus growth on perfect observation machinery.
+If a surface is known to matter and the current observer can only pin a failing
+diagnostic, add the litmus as `.known-gap` now and improve the observer later.
 
 ## Non-Goals
 

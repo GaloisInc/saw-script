@@ -1,0 +1,8 @@
+enable_experimental;
+
+// Obligation-shape litmus: Cryptol ecMod by zero must expose a nonzero
+// divisor contract or checked SAW-exact total semantics.
+let probe =
+  parse_core "ecMod Integer PIntegralInteger (natToInt 7) (natToInt 0)";
+
+write_lean_term "CryptolEcModZeroProbe" [] [] "emitted.lean" probe;

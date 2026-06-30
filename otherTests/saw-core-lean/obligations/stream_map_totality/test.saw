@@ -1,0 +1,8 @@
+enable_experimental;
+
+// Obligation-shape litmus: streamMap produces a stream, so its lowering must
+// expose an explicit totality contract rather than fabricating defaults.
+let probe =
+  parse_core "let { xs = MkStream Nat (\\(i : Nat) -> i); } in streamMap Nat Nat (\\(x : Nat) -> addNat x 1) xs";
+
+write_lean_term "StreamMapTotalityProbe" [] [] "emitted.lean" probe;

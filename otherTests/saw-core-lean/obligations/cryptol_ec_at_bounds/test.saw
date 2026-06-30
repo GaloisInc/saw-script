@@ -1,0 +1,8 @@
+enable_experimental;
+
+// Obligation-shape litmus: Cryptol ecAt on a finite sequence must expose the
+// bounds/index evidence consumed by the underlying vector access.
+let probe =
+  parse_core "ecAt (TCNum 4) Nat Integer PIntegralInteger (gen 4 Nat (\\(i : Nat) -> addNat i 10)) (natToInt 2)";
+
+write_lean_term "CryptolEcAtBoundsProbe" [] [] "emitted.lean" probe;

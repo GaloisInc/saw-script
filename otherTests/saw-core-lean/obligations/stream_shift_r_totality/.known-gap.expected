@@ -1,0 +1,4 @@
+FAIL: emitted Lean obligation outline did not compile
+has type
+but is expected to have type
+Except String Nat
