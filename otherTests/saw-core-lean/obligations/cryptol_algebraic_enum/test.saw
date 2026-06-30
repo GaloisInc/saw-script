@@ -1,0 +1,5 @@
+enable_experimental;
+
+// Obligation-shape litmus: Cryptol algebraic enums lower through SAWCore
+// ListSort/FunsTo encodings that need checked Lean realizations.
+write_lean_cryptol_module "Color.cry" "emitted.lean" [] [];

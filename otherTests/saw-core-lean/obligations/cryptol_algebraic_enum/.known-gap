@@ -1,0 +1,1 @@
+Cryptol algebraic enum lowering currently has no checked Lean realization for the underlying ListSort/FunsTo encoding.

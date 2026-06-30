@@ -1,0 +1,3 @@
+FAIL: SAW obligation producer failed
+Refusing to translate primitive ListSort
+Cryptol algebraic enum types

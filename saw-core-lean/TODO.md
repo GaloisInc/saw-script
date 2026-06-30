@@ -743,6 +743,11 @@ translation with a clear, principled diagnostic.
     `ecAt`'s current indexing emission gap. `streamGet` finite projection is
     intentionally kept as value/differential coverage, not a fake standalone
     obligation test.
+  - 2026-06-30 checkpoint: added obligation known-gap fixtures for P2 datatype
+    and list surfaces: direct `List`/`ListSort`/`FunsTo`, direct user-defined
+    SAWCore datatype recursors, and Cryptol algebraic enum lowering. These are
+    not backend fixes; they pin the current rejection/realization gaps as
+    corpus entries so they cannot remain prose-only.
   - 2026-06-29 checkpoint: expanded `saw-boundary` expected-rejection coverage
     for mapped-but-unsupported primitives. The new fixtures pin explicit
     diagnostics for unsupported Int primitives (`intAbs`, `intMin`, `intMax`),

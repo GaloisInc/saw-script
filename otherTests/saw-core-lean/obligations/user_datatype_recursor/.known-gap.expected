@@ -1,0 +1,3 @@
+FAIL: SAW obligation producer failed
+Refusing to translate primitive Color
+No SAW-core-lean mapping for `Color.Color`

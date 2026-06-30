@@ -1,0 +1,8 @@
+module Color where
+
+enum Color = Red | Green | Blue
+
+isRed : Color -> Bit
+isRed c = case c of
+  Red -> True
+  _   -> False
