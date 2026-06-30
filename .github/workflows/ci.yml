@@ -55,7 +55,7 @@ jobs:
       is-stable-branch: ${{ steps.config.outputs.is-stable-branch }}
       retention-days: ${{ steps.config.outputs.retention-days }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -130,7 +130,7 @@ jobs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: |
            git submodule update --init
 
@@ -148,7 +148,7 @@ jobs:
       # sign the binaries after they have been built.
       # Do not run this step in forks, as this requires repo-specific secrets.
       - name: Import signing certificate (macOS)
-        uses: apple-actions/import-codesign-certs@v3
+        uses: apple-actions/import-codesign-certs@v7
         if: runner.os == 'macOS' &&
             github.event.pull_request.head.repo.fork == false &&
             github.repository_owner == 'GaloisInc' &&
@@ -181,7 +181,7 @@ jobs:
         name: Add what4-solvers to GITHUB_PATH
         run: echo "$PWD/bin" >> $GITHUB_PATH
 
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v6
         name: Restore cabal store cache
         with:
           path: |
@@ -387,7 +387,7 @@ jobs:
           path: hpc.tar.gz
           name: ${{ matrix.os }}-hpc.tar.gz
 
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v6
         name: Save cabal store cache
         if: always()
         with:
@@ -414,7 +414,7 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: git submodule update --init
       - name: make-source-distribution
         shell: bash
@@ -441,10 +441,10 @@ jobs:
         os: [ubuntu-24.04]
     steps:
       - name: Check out repository (no submodules)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Cache Python environment
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: doc/.venv
           key: ${{ matrix.os }}-venv-${{ hashFiles('doc/scripts/requirements.txt') }}
@@ -498,7 +498,7 @@ jobs:
         os: [ubuntu-24.04]
     steps:
       - name: Check out repository (no submodules)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download HTML artifact
         uses: actions/download-artifact@v4
@@ -537,7 +537,7 @@ jobs:
         os: [ubuntu-24.04]
     steps:
       - name: Check out gh-pages
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: gh-pages
 
@@ -577,7 +577,7 @@ jobs:
         os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -635,7 +635,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repo and submodules
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -711,7 +711,7 @@ jobs:
             test: saw-remote-api/scripts/check_docs.sh
             os: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -730,15 +730,15 @@ jobs:
           name: "${{ matrix.os }}-bins"
           path: dist/bin
 
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v6
         with:
           # Ensure that this matches saw-python/mypy.ini file
           # and that saw-python/pyproject.toml file is compatible with this version
           python-version: '3.12'
 
-      - uses: abatilo/actions-poetry@v2.0.0
+      - uses: abatilo/actions-poetry@v4
         with:
-          poetry-version: 1.4.2
+          poetry-version: 2.4.1
 
       - name: ${{ matrix.name }}
         shell: bash
@@ -779,7 +779,7 @@ jobs:
           # crux-mir-comp-tests job, which is defined separately.
           - suite: crux-mir-comp-tests
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -822,7 +822,7 @@ jobs:
           java-version: "8"
           java-package: jdk
 
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v6
         name: Restore SMT solver result cache
         if: "matrix.suite == 'integration-tests'"
         with:
@@ -845,7 +845,7 @@ jobs:
           export PATH="$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
 
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v6
         name: Save SMT solver result cache
         if: "matrix.suite == 'integration-tests'"
         with:
@@ -874,7 +874,7 @@ jobs:
         os: [ubuntu-24.04]
     steps:
       # Need a copy of the source to generate coverage HTML
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -921,7 +921,7 @@ jobs:
       # `cabal-test` also runs the integration tests and uploads an updated
       # cache. Because the test suite is the same, the resulting cache files
       # would also be identical.
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v6
         name: Restore SMT solver result cache
         with:
           path: ${{ matrix.suite }}.cache
@@ -996,7 +996,7 @@ jobs:
             image-repo: GaloisInc/crux
             image-tag: ${{ needs.config.outputs.crux-version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -1061,16 +1061,16 @@ jobs:
           cache-to: type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }},mode=max
 
       - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v6
         with:
           # Ensure that this matches saw-python/mypy.ini file
           # and that saw-python/pyproject.toml file is compatible with this version
           python-version: '3.12'
 
       - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
-        uses: abatilo/actions-poetry@v2.0.0
+        uses: abatilo/actions-poetry@v4
         with:
-          poetry-version: 1.4.2
+          poetry-version: 2.4.1
 
       - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
         name: Test saw-remote-api
@@ -1111,7 +1111,7 @@ jobs:
         os: [ubuntu-24.04]
         ghc: ["9.6.7"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: |
           mkdir -p s2nTests/bin
 
@@ -1132,7 +1132,7 @@ jobs:
         working-directory: s2nTests
         run: docker compose build s2n
 
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v6
         name: Restore SMT solver result cache
         with:
           path: s2nTests/cache
@@ -1149,7 +1149,7 @@ jobs:
           chmod -R +rw cache
           make ${{ matrix.s2n-target }}
 
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v6
         name: Save SMT solver result cache
         if: always()
         with:
@@ -1165,7 +1165,7 @@ jobs:
         os: [ubuntu-24.04]
         ghc: ["9.6.7"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: |
           mkdir -p exercises/bin
 
