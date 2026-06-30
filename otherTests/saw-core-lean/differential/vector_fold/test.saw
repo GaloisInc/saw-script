@@ -1,0 +1,11 @@
+// TRUE differential litmus for vector fold helpers over Nat.
+
+let observed =
+  parse_core "and (equalNat (foldr Nat Nat 3 addNat 0 (gen 3 Nat (\\(i : Nat) -> addNat i 1))) 6) (equalNat (foldl Nat Nat 3 addNat 0 (gen 3 Nat (\\(i : Nat) -> addNat i 1))) 6)";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

@@ -1,0 +1,1 @@
+Vector shift/rotate helpers built from gen over raw Nat currently emit raw Nat bodies where wrapped vector helpers expect Except String Nat; final parity needs principled wrapper-aware emission or Lean-side proof obligations.

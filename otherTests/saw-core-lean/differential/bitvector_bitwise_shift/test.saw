@@ -1,0 +1,11 @@
+// TRUE differential litmus for bitvector bitwise and shift primitives.
+
+let observed =
+  parse_core "and (bvEq 8 (bvShl 8 0x81 1) 0x02) (and (bvEq 8 (bvShr 8 0x81 1) 0x40) (and (bvEq 8 (bvSShr 7 0xf8 1) 0xfc) (and (bvEq 8 (bvNot 8 0x0f) 0xf0) (and (bvEq 8 (bvAnd 8 0xf0 0xcc) 0xc0) (and (bvEq 8 (bvOr 8 0xf0 0x0f) 0xff) (bvEq 8 (bvXor 8 0xaa 0xff) 0x55))))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

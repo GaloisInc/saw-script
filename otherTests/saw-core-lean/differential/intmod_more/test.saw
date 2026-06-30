@@ -1,0 +1,11 @@
+// TRUE differential litmus for additional defined IntMod primitives.
+
+let observed =
+  parse_core "and (intModEq 5 (intModAdd 5 (toIntMod 5 (natToInt 4)) (toIntMod 5 (natToInt 4))) (toIntMod 5 (natToInt 3))) (and (intModEq 5 (intModNeg 5 (toIntMod 5 (natToInt 2))) (toIntMod 5 (natToInt 3))) (intModEq 5 (toIntMod 5 (natToInt 12)) (toIntMod 5 (natToInt 2))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

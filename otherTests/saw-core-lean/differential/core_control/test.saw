@@ -1,0 +1,11 @@
+// TRUE differential litmus for small Prelude control helpers.
+
+let observed =
+  parse_core "and (equalNat (id Nat 5) 5) (sawLet Nat Bool 3 (\\(x : Nat) -> equalNat x 3))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

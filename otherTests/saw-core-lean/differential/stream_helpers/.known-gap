@@ -1,0 +1,1 @@
+Finite stream-helper observations currently emit unresolved MkStream totality proof stubs; executable differential coverage needs either checked obligations or a boundary fixture for the obligation shape.

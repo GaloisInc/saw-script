@@ -1,0 +1,12 @@
+// Differential known-gap litmus for Cryptol.sawcore sign extension wrapper.
+
+let observed =
+  parse_core
+    "bvEq 8 (ecSExt (TCNum 4) (TCNum 4) 0xf) 0xff";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

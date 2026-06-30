@@ -1,0 +1,12 @@
+// TRUE differential litmus for Cryptol.sawcore `ecFoldl` and `ecFoldlPrime`.
+
+let observed =
+  parse_core
+    "and (equalNat (ecFoldl (TCNum 3) Nat Nat addNat 0 (gen 3 Nat (\\(i : Nat) -> addNat i 1))) 6) (intEq (ecFoldlPrime (TCNum 2) Integer Integer PEqInteger intAdd (natToInt 0) (gen 2 Integer (\\(i : Nat) -> natToInt (addNat i 1)))) (natToInt 3))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

@@ -1,0 +1,11 @@
+// TRUE differential litmus for SAWCore surface let and type ascription.
+
+let observed =
+  parse_core "let { x = 3; } in and (equalNat (addNat x (3 : Nat)) 6) (boolEq (True : Bool) True)";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

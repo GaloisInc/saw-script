@@ -1,0 +1,14 @@
+// TRUE differential litmus for small Cryptol take/drop/update operations.
+
+let observed = {{
+  ((take`{2} (drop`{1} ([1, 2, 3, 4] : [4][8]))) == [2, 3]) &&
+  (((update ([1, 2, 3, 4] : [4][8]) 2 99) @ 2) == 99) &&
+  (((update ([1, 2, 3, 4] : [4][8]) 0 99) @ 0) == 99)
+}};
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

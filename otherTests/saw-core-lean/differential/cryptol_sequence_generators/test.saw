@@ -1,0 +1,12 @@
+// TRUE differential litmus for finite Cryptol.sawcore sequence generator entry points.
+
+let observed =
+  parse_core
+    "and (intEq (atWithDefault 3 Integer (natToInt 0) (ecFromTo (TCNum 2) (TCNum 4) Integer PLiteralInteger) 2) (natToInt 4)) (and (intEq (atWithDefault 3 Integer (natToInt 0) (ecFromToLessThan (TCNum 2) (TCNum 5) Integer PLiteralInteger) 2) (natToInt 4)) (and (intEq (atWithDefault 4 Integer (natToInt 0) (ecFromThenTo (TCNum 1) (TCNum 3) (TCNum 7) Integer (TCNum 4) PLiteralInteger PLiteralInteger PLiteralInteger) 3) (natToInt 7)) (and (intEq (atWithDefault 4 Integer (natToInt 0) (ecFromToBy (TCNum 1) (TCNum 7) (TCNum 2) Integer PLiteralInteger) 3) (natToInt 7)) (intEq (atWithDefault 4 Integer (natToInt 0) (ecFromToDownBy (TCNum 7) (TCNum 1) (TCNum 2) Integer PLiteralInteger) 3) (natToInt 1)))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

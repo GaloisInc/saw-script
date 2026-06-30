@@ -16,6 +16,11 @@
 #   3. Lean ran the observer against that emitted artifact.
 #   4. The normalized SAW and Lean observed outcome lines are identical.
 #
+# If a directory contains `.known-gap`, this harness instead expects the real
+# differential run to fail and requires `.known-gap.expected` to list stable
+# diagnostic substrings that must appear in `known-gap.actual`. This is for
+# pinning current backend gaps only; it is not parity evidence.
+#
 # This harness deliberately does NOT accept golden diffs, standalone Lean
 # support-library proofs, or "Lean elaborated" as differential evidence.
 
@@ -28,7 +33,8 @@ TEST_NAME="$(basename "$(pwd)")"
 
 case "$VERB" in
     clean)
-        rm -f *.rawlog *.log *.lean.log *.observed *.observed.diff
+        rm -f *.rawlog *.log *.lean.log *.observed *.observed.diff \
+              known-gap.actual
         if [ -n "$RESOLVED_LAKE_DIR" ]; then
             rm -rf "$RESOLVED_LAKE_DIR/intTestsProbe/differential_$TEST_NAME"
         fi
@@ -74,6 +80,45 @@ fi
 if [ ! -f lean-observe.lean ]; then
     echo "FAIL: differential test requires lean-observe.lean" >&2
     exit 1
+fi
+
+if [ -f .known-gap ] && [ -z "${SAW_LEAN_DIFFERENTIAL_KNOWN_GAP_INNER:-}" ]; then
+    if [ ! -f .known-gap.expected ]; then
+        echo "FAIL: differential known gap requires .known-gap.expected" >&2
+        exit 1
+    fi
+
+    set +e
+    SAW_LEAN_DIFFERENTIAL_KNOWN_GAP_INNER=1 bash "$0" test \
+        >known-gap.actual 2>&1
+    gap_rc=$?
+    set -u
+
+    if [ "$gap_rc" -eq 0 ]; then
+        cat known-gap.actual
+        echo "FAIL: known-gap differential test unexpectedly passed" >&2
+        exit 1
+    fi
+
+    missing=0
+    while IFS= read -r expected || [ -n "$expected" ]; do
+        case "$expected" in
+            ''|\#*) continue ;;
+        esac
+        if ! grep -F "$expected" known-gap.actual >/dev/null 2>&1; then
+            echo "MISSING EXPECTED KNOWN-GAP DIAGNOSTIC: $expected" >&2
+            missing=1
+        fi
+    done < .known-gap.expected
+
+    if [ "$missing" -ne 0 ]; then
+        cat known-gap.actual
+        echo "FAIL: known-gap differential diagnostic changed" >&2
+        exit 1
+    fi
+
+    echo "OK: known differential gap pinned"
+    exit 0
 fi
 
 LAKE_DIR="$(cd ../../../../saw-core-lean/lean && pwd)"

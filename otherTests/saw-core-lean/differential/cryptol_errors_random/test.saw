@@ -1,0 +1,12 @@
+// Differential known-gap litmus for reachable Cryptol.sawcore runtime error behavior.
+
+let observed =
+  parse_core
+    "ecRandom Bool 0x00000000";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

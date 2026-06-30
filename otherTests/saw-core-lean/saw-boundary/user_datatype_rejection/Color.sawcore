@@ -1,0 +1,8 @@
+module Color where
+
+import Prelude;
+
+data Color : sort 0 where {
+  Red : Color;
+  Blue : Color;
+}

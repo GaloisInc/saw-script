@@ -1,0 +1,10 @@
+// TRUE differential litmus for record construction and projection.
+
+let observed = {{ ({x = 42, y = 100}.y : [8]) == 100 }};
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

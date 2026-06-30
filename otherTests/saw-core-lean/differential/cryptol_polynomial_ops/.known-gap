@@ -1,0 +1,3 @@
+Cryptol.sawcore GF2 polynomial entry points currently require residual proof
+lemmas such as `Prelude.eqNatAddS`, which the Lean translator rejects until the
+proof surface has a checked realization or proof-carrying lowering.

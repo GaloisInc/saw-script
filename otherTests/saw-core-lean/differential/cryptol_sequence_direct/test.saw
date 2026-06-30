@@ -1,0 +1,14 @@
+// TRUE differential litmus for direct Cryptol.sawcore sequence helpers.
+// This is currently pinned as a known gap because emitted Lean exposes
+// wrapper-adaptation failures in the direct helper implementations.
+
+let observed =
+  parse_core
+    "and (equalNat (atWithDefault 3 Nat 0 (seqConst (TCNum 3) Nat 7) 1) 7) (and (equalNat ((atWithDefault 2 #(Nat, Nat) (0, 0) (seqZip Nat Nat (TCNum 2) (TCNum 3) (gen 2 Nat (\\(i : Nat) -> addNat i 1)) (gen 3 Nat (\\(i : Nat) -> addNat i 4))) 1).0) 2) (equalNat ((atWithDefault 2 #(Nat, Nat) (0, 0) (seqZip Nat Nat (TCNum 2) (TCNum 3) (gen 2 Nat (\\(i : Nat) -> addNat i 1)) (gen 3 Nat (\\(i : Nat) -> addNat i 4))) 1).1) 5))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

@@ -1,0 +1,12 @@
+// Differential known-gap litmus for reachable Prelude.error behavior.
+
+let observed =
+  parse_core
+    "error Bool \"boom\"";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

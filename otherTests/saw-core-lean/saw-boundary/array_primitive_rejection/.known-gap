@@ -1,0 +1,1 @@
+SMT-array primitives are in SAWCore; current translator rejection pins missing Lean array semantics.

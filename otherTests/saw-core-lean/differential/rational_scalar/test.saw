@@ -1,0 +1,14 @@
+// TRUE differential litmus for defined Rational primitive behavior.
+//
+// Zero-denominator and reciprocal-zero cases are partiality surfaces and need
+// separate proof-obligation rows.
+
+let observed =
+  parse_core "and (rationalLe (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 2) (natToInt 3))) (and (rationalLt (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 2) (natToInt 3))) (and (rationalEq (rationalAdd (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 1) (natToInt 3))) (ratio (natToInt 5) (natToInt 6))) (and (rationalEq (rationalSub (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 1) (natToInt 3))) (ratio (natToInt 1) (natToInt 6))) (and (rationalEq (rationalMul (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 1) (natToInt 3))) (ratio (natToInt 1) (natToInt 6))) (and (rationalEq (rationalNeg (ratio (natToInt 1) (natToInt 2))) (ratio (intNeg (natToInt 1)) (natToInt 2))) (and (rationalEq (rationalRecip (ratio (natToInt 2) (natToInt 3))) (ratio (natToInt 3) (natToInt 2))) (intEq (rationalFloor (ratio (natToInt 7) (natToInt 2))) (natToInt 3))))))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

@@ -470,12 +470,25 @@ translation with a clear, principled diagnostic.
 ## Priority 2: Regression Coverage
 
 - [ ] Build a comprehensive differential conformance suite.
-  - Use `make conformance` from `otherTests/saw-core-lean` for the focused
-    backend conformance sweep. It intentionally runs only true conformance
-    categories:
+  - Current planning note:
+    `doc/2026-06-29_differential-conformance-plan.md`. This is the
+    authoritative roadmap for treating conformance as complete SAWCore
+    coverage: cover the actual SAWCore constructors (`App`, `Lambda`, `Pi`,
+    `Constant`, `Variable`, `Recursor`, `Sort`, `ArrayValue`, `StringLit`),
+    module/parser constructs, every Prelude/Cryptol-SAWCore family, and every
+    known gap. Current Lean `noncomputable` markings or backend rejections are
+    test targets, not scope exclusions.
+  - Use `make test-saw-core-lean-conformance` from the `deps/saw-script`
+    repository root for the focused backend conformance sweep. From
+    `otherTests/saw-core-lean`, the local-development equivalent is
+    `make conformance`. It intentionally runs only true conformance categories:
     - `differential/*`: positive executable litmus tests where SAW observes an
       outcome, Lean observes an outcome from the SAW-Lean emitted artifact, and
       the harness mechanically compares those observations.
+    - `differential/*/.known-gap`: the real differential run fails at a pinned
+      SAW producer, emitted-Lean, or Lean observer diagnostic. This records
+      missing parity or an observation-path blocker; it is not a passing
+      conformance case.
     - `saw-boundary/*`: expected rejection or obligation-boundary litmus tests.
     Broad examples, whole-module extraction examples, crypto/stress drivers,
     proof-discharge demos, emitted-shape goldens, and Lean support-library-only
@@ -502,6 +515,32 @@ translation with a clear, principled diagnostic.
     `proofs/conformance_*`. Added the first tiny true-differential Boolean
     litmus. Next work is to migrate existing small legacy litmus candidates
     into this shape without adding large examples.
+  - 2026-06-29 checkpoint: the active true differential suite now includes
+    focused litmus tests for Boolean primitives, closed lambda/application,
+    `id`/`sawLet`, unreachable `error` branches, algebraic/control recursors,
+    Nat/Int/IntMod/Rational scalars, string primitives including
+    `bytesToString`, tuple and record projection/update, bitvector literals,
+    bitvector conversions, bitvector arithmetic, bitwise/shift operations,
+    order/extension/counting operations, and finite vector literals. All
+    positive cases compare SAW-observed output against Lean-observed output
+    from the emitted artifact.
+  - 2026-06-29 checkpoint: expanded true differential coverage for SAWCore
+    parser `let` and type ascription, string empty/escape cases, vector
+    empty/singleton/nested literals, Cryptol sequence take/drop/update/map/zip,
+    and Cryptol bitvector rotates. These all passed as real SAW-vs-emitted-Lean
+    observations.
+  - 2026-06-29 checkpoint: expanded scalar/algebraic coverage with defined Nat
+    arithmetic, Int division/modulus, IntMod add/neg, and Maybe
+    constructors/recursor. Added pinned differential known gaps for SAW-side
+    evaluator panics on Pos-backed observations (`pos_values` and
+    `nat_pos_recursor_eval`); these fail before Lean can observe an emitted
+    artifact, so they are conformance-harness/backend-input findings rather
+    than Lean backend fixes.
+  - 2026-06-29 checkpoint: `differential/*/.known-gap` support now pins real
+    differential failures with required diagnostic substrings. The first such
+    cases are `vector_gen_at`, `vector_shift_rotate`, and `vector_fold`, which
+    expose raw-`Nat` bodies/functions being emitted where wrapped
+    `Except String Nat` vector helpers are expected.
   - 2026-06-29 checkpoint: added the first bitvector conformance pair for
     defined division/remainder, signed division/remainder, arithmetic shift,
     and `bvLg2`. Added a scalar conformance pair for Nat, Int, IntMod, and a
@@ -541,6 +580,10 @@ translation with a clear, principled diagnostic.
     flow expects `Except String Nat`. Do not patch this with local
     "already-wrapped" predicates; resolve it through an explicit recursor
     convention/adaptation design.
+  - 2026-06-29 checkpoint: added focused true-differential coverage for a
+    finite `MkStream`/`Stream#rec` projection. This small projection now
+    compares SAW and emitted-Lean observations directly; the larger legacy
+    `streamScanl`/helper surface still needs focused litmus migration.
   - 2026-06-29 checkpoint: added Boolean conformance for `not`, `and`, `or`,
     `xor`, and `boolEq`. The paired Lean proof pins the checked `xor`/`boolEq`
     facades without adding any Haskell-side special reasoning.
@@ -564,6 +607,107 @@ translation with a clear, principled diagnostic.
     input lengths, truncation to `minNat`, pair projection, and defaulted
     out-of-bounds access. This exposes the same raw function-result adaptation
     gap as the existing `genM` vector fixture.
+  - 2026-06-29 checkpoint: added parser/module differential coverage for
+    explicit `Pi`/`sort 0` binders and a loaded `.sawcore` module with local
+    and qualified ordinary-definition references. Added Cryptol.sawcore
+    differential coverage for `const`, `compose`, finite append, reverse, join,
+    and split.
+  - 2026-06-29 checkpoint: expanded the parser/module coverage with a
+    cross-module import/qualified-name litmus and explicit `isort`/`qsort`
+    parser-surface coverage. Added a small Cryptol.sawcore `Num` litmus for
+    `TCNum`, `TCInf`, `tcFin`, and `getFinNat`.
+  - 2026-06-29 checkpoint: added a positive import-hiding litmus for loaded
+    `.sawcore` modules. It checks that a non-hidden import resolves
+    unqualified while a hidden declaration is still available by qualified
+    name. A stricter local-shadowing probe exposed SAW-side ambiguity, so that
+    should be treated separately if we decide it is an input-language boundary
+    worth pinning.
+  - 2026-06-29 checkpoint: added a direct user-defined SAWCore datatype
+    boundary fixture. A closed datatype computation can reduce away before
+    Lean emission, which is not enough to prove datatype emission support; the
+    new fixture forces the datatype to remain in the term and pins the current
+    rejection as a known gap.
+  - 2026-06-29 checkpoint: added focused direct-result partial-operation
+    boundary fixtures for `divNat`, `divModNat`, `intDiv`, `bvUDiv`,
+    `bvSDiv`, `ratio`, and `rationalRecip` at zero divisors/denominators.
+    These are marked known gaps because the direct-result forms currently emit
+    unchecked total primitive calls in several positions instead of the
+    required nonzero proof obligations. This is distinct from larger Boolean
+    contexts that may already route through checked helpers.
+  - 2026-06-29 checkpoint: added a focused finite-observation stream-helper
+    differential known gap for `streamGet`, `streamMap`, shifts, and
+    `streamScanl`. SAW evaluates the closed Boolean, but the emitted Lean
+    contains unresolved `MkStream` totality proof stubs, so this cannot count
+    as executable differential coverage until those obligations are checked or
+    moved into an explicit obligation-shape boundary fixture.
+  - 2026-06-29 checkpoint: expanded Cryptol.sawcore dictionary and entry-point
+    coverage. Positive true-differential rows now cover type-level `tc*`
+    arithmetic, Bool/Integer/word/pair equality and comparison dictionaries,
+    signed word comparison, zero/logic/ring dictionaries, and defined
+    integral/field entry points (`ecDiv`, `ecMod`, `ecRecip`, `ecFieldDiv`).
+    Two focused known gaps are pinned: `updFst`/`updSnd` updater lambdas
+    currently hit raw/wrapped `Except String Nat` adaptation failures in emitted
+    Lean, and `ecAt` currently emits an unresolved index proof stub. Keep both as
+    conformance failures until the backend emits checked evidence or a clean
+    obligation shape.
+  - 2026-06-29 checkpoint: added true-differential coverage for ordinary
+    literal dictionaries and rounding entry points (`ecNumber`, `ecFraction`,
+    `ecFromInteger`, Rational floor/ceiling/truncate/rounding), plus
+    deterministic effect-like Cryptol entry points (`ecTrace`, `ecDeepseq`) and
+    finite `ecParmap`. Added a focused float known gap: `TCFloat` and its
+    dictionaries are in the backend surface, but Cryptol.sawcore currently routes
+    representative operations through runtime `error`.
+  - 2026-06-29 checkpoint: added higher-universe sort binder coverage,
+    sort-1 `PairType1` coverage, safe `coerce`/`rcoerce` coverage, direct
+    `Num_rec` coverage, additional finite/infinite `tc*` arithmetic coverage,
+    finite observations of infinite sequences, finite Cryptol sequence
+    generator wrappers, additional Rational/IntMod/Unit/sequence dictionaries,
+    and more BV `ec*` wrappers. New pinned gaps: residual `ZtoNat`, reachable
+    `Prelude.error`/`ecRandom` runtime errors pending an error-outcome observer,
+    Suite-B crypto primitives implemented as runtime `error`, and residual
+    `natCase` in `ecSShiftR`/`ecSExt` wrappers.
+  - 2026-06-29 checkpoint: added record and empty-tuple/empty-record dictionary
+    coverage, a message-specific `ecError` runtime-error known gap, a
+    representative projective-helper runtime-error known gap, and a direct
+    Cryptol.sawcore sequence-helper known gap. The direct sequence fixture shows
+    the same principled wrapper-adaptation problem as the vector helper gaps:
+    raw Nat bodies are emitted where the Lean vector helpers expect
+    `Except String Nat`.
+  - 2026-06-29 checkpoint: added positive true-differential coverage for
+    `tcWidth`, function dictionaries, stream dictionaries, and additional
+    deterministic `ec*` comparison/logic/ring wrappers. Added focused known gaps
+    for `ecFoldl`/`ecFoldlPrime` wrapper adaptation and `ecScanl` reaching the
+    deliberately rejected bounded-vector `Prelude.scanl` primitive.
+  - 2026-06-29 checkpoint: expanded direct Cryptol.sawcore `ec*` coverage with
+    positive true-differential tests for finite `ecCat`/`ecTake`/`ecDrop`/
+    `ecJoin`/`ecSplit`, `ecTranspose`, `ecAtBack`, `ecUpdate`, `ecUpdateEnd`,
+    `ecShiftL`/`ecShiftR`, and `toSignedInteger`. Added focused known gaps for
+    `ecSDiv`/`ecSMod` leaving residual `Nat__rec`, `ecExp` leaving residual
+    `expByNat`, and GF2 polynomial operations leaving residual proof lemmas
+    such as `eqNatAddS`.
+  - 2026-06-29 checkpoint: added positive direct coverage for the remaining
+    finite range producers `ecFromToByLessThan` and
+    `ecFromToDownByGreaterThan`, plus direct finite `ecReverse`.
+  - 2026-06-29 checkpoint: added direct Cryptol.sawcore entry coverage for
+    IntMod literal dictionaries, `ecArray*`, `ecFp*`, and SHA2 primitives.
+    IntMod and IntModNum literals are true SAW-vs-emitted-Lean differential
+    conformance. The array, FP, and SHA rows are pinned known gaps with real
+    diagnostics from the SAW producer path: unsupported SMT-array translation
+    and Cryptol.sawcore runtime `error` implementations.
+  - 2026-06-29 checkpoint: added a true differential litmus for an
+    under-applied/function-valued SAWCore term. SAW observes the same lambda
+    application after applying it to a concrete argument; Lean imports the
+    emitted function artifact and applies that artifact. This closes the main
+    `App`/`Lambda` function-valued coverage hole without reconstructing the
+    term by hand in the observer.
+  - 2026-06-29 checkpoint: tightened existing positive coverage by adding a
+    non-`Nat` Bool type-ascription observation and `zipWith` to the small
+    sequence litmus. These are still tiny differential tests, not broad
+    examples.
+  - 2026-06-29 checkpoint: added a direct `List`/`ListSort`/`FunsTo`
+    differential known gap. SAW evaluates the closed observation to true, but
+    Lean emission deliberately rejects residual `ListSort` because the
+    algebraic-enum support encoding has no checked Lean realization yet.
   - 2026-06-29 checkpoint: expanded `saw-boundary` expected-rejection coverage
     for mapped-but-unsupported primitives. The new fixtures pin explicit
     diagnostics for unsupported Int primitives (`intAbs`, `intMin`, `intMax`),
@@ -597,6 +741,13 @@ translation with a clear, principled diagnostic.
     or should be split into smaller conformance drivers before entering the
     gate.
   - Remaining conformance backlog from the mapped support surface:
+    - Injected-code declarations: no public generic SAWCore-module Lean writer
+      path currently exposes `InjectCodeDecl` to the conformance harness. Add a
+      small scoped fixture as soon as injected declarations can reach the Lean
+      module emitter without using hand-written Lean.
+    - Direct `Void`: `Void` has no closed value source. Keep `EmptyType` and
+      eliminator coverage, and add a direct `Void` boundary only if a genuine
+      source term can reach the backend.
     - Checked Lean proof-library coverage for nontrivial Rational arithmetic.
       The SAW driver proves the source facts and the emitted Lean elaborates,
       but the local Lean environment has no lightweight checked Rat arithmetic
@@ -606,8 +757,10 @@ translation with a clear, principled diagnostic.
       avoided or a different clean SAW proof path is available.
     - `Float`, `Double`, `mkFloat`, and `mkDouble`: SAW currently exposes no
       equality or eliminator surface that makes these bindings observable in a
-      clean differential test. Keep documented until there is an observable
-      source-level property to compare.
+      clean differential test. A direct probe showed the Lean backend emits
+      these primitive terms rather than rejecting them, but elaboration-only
+      checks do not count as conformance. Keep documented until there is an
+      observable source-level property to compare.
 
 - [ ] Pin audit findings with focused regression tests as code is removed.
   - Assert obsolete direct fix helpers do not appear in generated output unless

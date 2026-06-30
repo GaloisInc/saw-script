@@ -1,0 +1,3 @@
+FAIL: SAW differential producer failed
+Error translating: Refusing to translate primitive expByNat.
+SAW-internal proof primitive; mapping requires a Lean realization.

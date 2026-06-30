@@ -1,0 +1,12 @@
+// TRUE differential litmus for Cryptol.sawcore IntMod literal dictionaries.
+
+let observed =
+  parse_core
+    "and (intModEq 5 (ecNumber (TCNum 12) (IntMod 5) (PLiteralIntMod 5)) (toIntMod 5 (natToInt 2))) (intEq (ecNumber (TCNum 12) (IntModNum TCInf) (PLiteralIntModNum TCInf)) (natToInt 12))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

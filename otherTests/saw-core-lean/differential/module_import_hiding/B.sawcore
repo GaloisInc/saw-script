@@ -1,0 +1,6 @@
+module B where
+
+import Prelude;
+import A hiding (hidden);
+
+observed : Bool = and (equalNat kept 4) (equalNat A::hidden 99);

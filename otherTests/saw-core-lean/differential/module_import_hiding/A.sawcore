@@ -1,0 +1,7 @@
+module A where
+
+import Prelude;
+
+kept : Nat = 4;
+
+hidden : Nat = 99;

@@ -1,0 +1,16 @@
+// Differential known-gap litmus for unimplemented Cryptol.sawcore projective helpers.
+
+let point =
+  parse_core
+    "RecordValue \"x\" (IntModNum (TCNum 5)) (RecordType \"y\" (IntModNum (TCNum 5)) (RecordType \"z\" (IntModNum (TCNum 5)) #{})) (toIntMod 5 (natToInt 1)) (RecordValue \"y\" (IntModNum (TCNum 5)) (RecordType \"z\" (IntModNum (TCNum 5)) #{}) (toIntMod 5 (natToInt 2)) (RecordValue \"z\" (IntModNum (TCNum 5)) #{} (toIntMod 5 (natToInt 1)) Empty))";
+
+let observed =
+  parse_core
+    "intModEq 5 (headRecord \"x\" (IntModNum (TCNum 5)) (RecordType \"y\" (IntModNum (TCNum 5)) (RecordType \"z\" (IntModNum (TCNum 5)) #{})) (ec_double (TCNum 5) (RecordValue \"x\" (IntModNum (TCNum 5)) (RecordType \"y\" (IntModNum (TCNum 5)) (RecordType \"z\" (IntModNum (TCNum 5)) #{})) (toIntMod 5 (natToInt 1)) (RecordValue \"y\" (IntModNum (TCNum 5)) (RecordType \"z\" (IntModNum (TCNum 5)) #{}) (toIntMod 5 (natToInt 2)) (RecordValue \"z\" (IntModNum (TCNum 5)) #{} (toIntMod 5 (natToInt 1)) Empty))))) (toIntMod 5 (natToInt 0))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

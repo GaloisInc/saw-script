@@ -1,0 +1,6 @@
+foldrM Nat Nat
+addNat
+has type
+Nat → Nat → Nat
+Except String Nat → Except String Nat → Except String Nat
+foldlM Nat Nat

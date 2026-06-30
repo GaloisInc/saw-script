@@ -1,0 +1,12 @@
+// TRUE differential litmus for direct Prelude List/ListSort/FunsTo values.
+
+let observed =
+  parse_core
+    "and (equalNat (List__rec Nat (\\(_ : List Nat) -> Nat) 0 (\\(x : Nat) (_ : List Nat) (rec : Nat) -> addNat x rec) (Cons Nat 2 (Cons Nat 3 (Nil Nat)))) 5) (and (equalNat (listSort_length (LS_Cons Nat (LS_Cons Bool LS_Nil))) 2) (equalNat (listSort_length (FunsToIns Nat (FunsTo_Cons Nat Bool (\\(_ : Bool) -> 7) (FunsTo_Nil Nat)))) 1))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

@@ -1,0 +1,12 @@
+// TRUE differential litmus for finite Cryptol.sawcore `ecParmap`.
+
+let observed =
+  parse_core
+    "and (boolEq (atWithDefault 2 Bool False (ecParmap Bool Bool (TCNum 2) PEqBit not (gen 2 Bool (\\(i : Nat) -> equalNat i 0))) 0) False) (boolEq (atWithDefault 2 Bool False (ecParmap Bool Bool (TCNum 2) PEqBit not (gen 2 Bool (\\(i : Nat) -> equalNat i 0))) 1) True)";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

@@ -1,0 +1,12 @@
+// TRUE differential litmus for additional Cryptol.sawcore bitvector entry points.
+
+let observed =
+  parse_core
+    "and (bvEq 8 (ecLg2 (TCNum 8) 0x05) 0x03) (and (bvEq 8 (ecRotL (TCNum 8) Integer Bool PIntegralInteger 0x81 (natToInt 1)) 0x03) (and (bvEq 8 (ecRotR (TCNum 8) Integer Bool PIntegralInteger 0x81 (natToInt 1)) 0xc0) (and (bvEq 4 (ecTrunc (TCNum 4) (TCNum 4) 0xff) 0xf) (and (bvEq 8 (ecUExt (TCNum 4) (TCNum 4) 0xf) 0x0f) (and (ecSlt (TCNum 8) 0xff 0x01) (and (ecSgt (TCNum 8) 0x01 0xff) (and (ecSle (TCNum 8) 0xff 0xff) (ecSge (TCNum 8) 0xff 0xff))))))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

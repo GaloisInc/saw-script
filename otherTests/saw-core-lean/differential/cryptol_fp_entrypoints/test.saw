@@ -1,0 +1,13 @@
+// TRUE differential litmus for direct Cryptol.sawcore floating-point
+// `ecFp*` entry points.
+
+let observed =
+  parse_core
+    "ecFpEq (TCNum 8) (TCNum 24) Unit Unit";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

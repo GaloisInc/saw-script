@@ -1,0 +1,12 @@
+// TRUE differential litmus for Cryptol.sawcore tuple update helpers.
+
+let observed =
+  parse_core
+    "and (equalNat (Pair_fst Nat Nat (updFst Nat Nat (\\(x : Nat) -> addNat x 1) (PairValue Nat Nat 2 5))) 3) (equalNat (Pair_snd Nat Nat (updSnd Nat Nat (\\(y : Nat) -> mulNat y 2) (PairValue Nat Nat 2 5))) 10)";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

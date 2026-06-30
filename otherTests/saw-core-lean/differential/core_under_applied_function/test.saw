@@ -1,0 +1,20 @@
+// TRUE differential litmus for under-applied SAWCore applications.
+//
+// The emitted artifact is a function value, not the already-applied Boolean.
+// SAW observes the same under-applied term after applying it to a concrete
+// argument; Lean imports the emitted function and applies that artifact.
+
+let observed =
+  parse_core
+    "(\\(x : Bool) -> and x) True";
+
+let saw_observed =
+  parse_core
+    "((\\(x : Bool) -> and x) True) False";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool saw_observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

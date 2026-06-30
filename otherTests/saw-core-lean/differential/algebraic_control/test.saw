@@ -1,0 +1,11 @@
+// TRUE differential litmus for small algebraic/control primitives.
+
+let observed =
+  parse_core "and (equalNat (Either#rec Nat Nat (\\(_ : Either Nat Nat) -> Nat) (\\(x : Nat) -> x) (\\(y : Nat) -> y) (Left Nat Nat 3)) 3) (and (equalNat (Either#rec Nat Nat (\\(_ : Either Nat Nat) -> Nat) (\\(x : Nat) -> x) (\\(y : Nat) -> y) (Right Nat Nat 4)) 4) (and (equalNat (UnitType#rec (\\(_ : UnitType) -> Nat) 7 Unit) 7) (and (equalNat (EmptyType#rec (\\(_ : EmptyType) -> Nat) 9 Empty) 9) (and (equalNat (ite Nat True 1 2) 1) (equalNat (ite Nat False 1 2) 2)))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

@@ -1,0 +1,6 @@
+enable_experimental;
+
+// Boundary litmus for the tuple-valued Nat divisor surface.
+let probe = parse_core "divModNat 1 0";
+
+write_lean_term "NatDivModZeroProbe" [] [] "-" probe;

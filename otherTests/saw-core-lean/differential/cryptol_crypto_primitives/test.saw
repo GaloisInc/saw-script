@@ -1,0 +1,12 @@
+// Differential known-gap litmus for unimplemented Cryptol.sawcore crypto primitives.
+
+let observed =
+  parse_core
+    "bvEq 32 (atWithDefault 4 (Vec 32 Bool) 0x00000000 (AESEncRound (gen 4 (Vec 32 Bool) (\\(_ : Nat) -> 0x00000000))) 0) 0x00000000";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

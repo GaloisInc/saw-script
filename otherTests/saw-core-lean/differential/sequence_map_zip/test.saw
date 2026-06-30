@@ -1,0 +1,16 @@
+// TRUE differential litmus for small Cryptol map/zip/zipWith operations.
+
+let observed = {{
+  ((map (\(x : [8]) -> x + 1) ([1, 2, 3] : [3][8])) == [2, 3, 4]) &&
+  (((zip ([1, 2, 3] : [3][8]) ([4, 5, 6] : [3][8])) @ 1).0 == 2) &&
+  (((zip ([1, 2, 3] : [3][8]) ([4, 5, 6] : [3][8])) @ 1).1 == 5) &&
+  (zipWith (\(x : [8]) -> \(y : [8]) -> x + y)
+     ([1, 2] : [2][8]) ([3, 4] : [2][8]) == [4, 6])
+}};
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

@@ -1,0 +1,13 @@
+// TRUE differential litmus for Cryptol.sawcore GF2 polynomial entry points.
+// The concrete zero cases keep the test small while forcing the entry points.
+
+let observed =
+  parse_core
+    "and (bvEq 3 (ecPmult (TCNum 1) (TCNum 1) 0b00 0b00) 0b000) (bvEq 1 (ecPmod (TCNum 2) (TCNum 1) 0b00 0b10) 0b0)";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

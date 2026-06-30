@@ -1,0 +1,12 @@
+// TRUE differential litmus for less common finite Cryptol.sawcore Num operators.
+
+let observed =
+  parse_core
+    "and (equalNat (getFinNat (tcExp (TCNum 2) (TCNum 5))) 32) (and (equalNat (getFinNat (tcCeilDiv (TCNum 10) (TCNum 3))) 4) (and (equalNat (getFinNat (tcCeilMod (TCNum 10) (TCNum 3))) 2) (and (tcEqual (TCNum 4) (TCNum 4)) (and (not (tcEqual (TCNum 4) TCInf)) (equalNat (getFinNat (tcLenFromThenTo (TCNum 1) (TCNum 3) (TCNum 7))) 4)))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

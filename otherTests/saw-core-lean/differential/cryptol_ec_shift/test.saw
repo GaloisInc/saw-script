@@ -1,0 +1,13 @@
+// TRUE differential litmus for direct Cryptol.sawcore `ecShiftL` and
+// `ecShiftR` on finite sequences.
+
+let observed =
+  parse_core
+    "and (bvEq 4 (ecShiftL (TCNum 4) Integer Bool PIntegralInteger PZeroBit 0b1010 (natToInt 1)) 0b0100) (bvEq 4 (ecShiftR (TCNum 4) Integer Bool PIntegralInteger PZeroBit 0b1010 (natToInt 1)) 0b0101)";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

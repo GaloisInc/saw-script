@@ -1,0 +1,11 @@
+// TRUE differential litmus for defined Integer primitive behavior.
+
+let observed =
+  parse_core "and (intEq (intAdd (intNeg (natToInt 2)) (natToInt 5)) (natToInt 3)) (and (intEq (intSub (natToInt 2) (natToInt 5)) (intNeg (natToInt 3))) (and (intEq (intMul (intNeg (natToInt 3)) (natToInt 4)) (intNeg (natToInt 12))) (and (intLe (intNeg (natToInt 3)) (natToInt 2)) (and (intLt (intNeg (natToInt 3)) (natToInt 2)) (and (equalNat (intToNat (intNeg (natToInt 3))) 0) (equalNat (intToNat (natToInt 7)) 7))))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

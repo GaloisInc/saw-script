@@ -1,0 +1,12 @@
+// Differential known-gap litmus for reachable Cryptol.sawcore `ecError`.
+
+let observed =
+  parse_core
+    "ecError Bool (TCNum 2) (gen 2 (Vec 8 Bool) (\\(i : Nat) -> ite (Vec 8 Bool) (equalNat i 0) 0x48 0x69))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

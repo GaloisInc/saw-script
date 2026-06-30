@@ -1,0 +1,3 @@
+Direct Prelude ListSort/FunsTo encodings are in scope, but current Lean
+translation deliberately rejects residual ListSort because there is no checked
+Lean realization for the algebraic-enum support encoding yet.

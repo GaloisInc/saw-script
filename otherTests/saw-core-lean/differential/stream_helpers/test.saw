@@ -1,0 +1,17 @@
+// Differential known-gap litmus for finite observations of SAWCore stream helpers.
+//
+// Streams are infinite, so every observation projects a small finite index.
+// SAW can evaluate the closed Boolean, but current emission leaves MkStream
+// totality proof stubs in the artifact, which is not executable differential
+// evidence.
+
+let observed =
+  parse_core
+    "let { xs = MkStream Nat (\\(i : Nat) -> i); ones = MkStream Nat (\\(_ : Nat) -> 1); } in and (equalNat (streamGet Nat (MkStream Nat (\\(i : Nat) -> addNat i 1)) 2) 3) (and (equalNat (streamGet Nat (streamMap Nat Nat (\\(x : Nat) -> addNat x 1) xs) 2) 3) (and (equalNat (streamGet Nat (streamShiftL Nat xs 2) 3) 5) (and (equalNat (streamGet Nat (streamShiftR Nat 0 xs 2) 0) 0) (equalNat (streamGet Nat (streamScanl Nat Nat addNat 0 ones) 3) 3))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

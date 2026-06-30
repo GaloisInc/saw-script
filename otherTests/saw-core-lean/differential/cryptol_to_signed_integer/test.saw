@@ -1,0 +1,12 @@
+// TRUE differential litmus for Cryptol.sawcore `toSignedInteger`.
+
+let observed =
+  parse_core
+    "and (intEq (toSignedInteger (TCNum 8) 0xff) (intNeg (natToInt 1))) (intEq (toSignedInteger (TCNum 8) 0x7f) (natToInt 127))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

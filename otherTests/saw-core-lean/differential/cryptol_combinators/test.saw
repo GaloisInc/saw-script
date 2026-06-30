@@ -1,0 +1,12 @@
+// TRUE differential litmus for Cryptol.sawcore `const` and `compose`.
+
+let observed =
+  parse_core
+    "and (equalNat (const Nat Bool 7 False) 7) (equalNat (compose Nat Nat Nat (\\(x : Nat) -> addNat x 1) (\\(x : Nat) -> addNat x 2) 3) 6)";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

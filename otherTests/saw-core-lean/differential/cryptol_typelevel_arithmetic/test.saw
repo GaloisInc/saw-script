@@ -1,0 +1,12 @@
+// TRUE differential litmus for finite and infinite Cryptol.sawcore Num arithmetic.
+
+let observed =
+  parse_core
+    "and (equalNat (getFinNat (tcAdd (TCNum 2) (TCNum 3))) 5) (and (equalNat (getFinNat (tcSub (TCNum 2) (TCNum 5))) 0) (and (equalNat (getFinNat (tcMul (TCNum 2) (TCNum 3))) 6) (and (equalNat (getFinNat (tcDiv (TCNum 7) (TCNum 2))) 3) (and (equalNat (getFinNat (tcMod (TCNum 7) (TCNum 2))) 1) (and (equalNat (getFinNat (tcMin (TCNum 2) (TCNum 5))) 2) (and (equalNat (getFinNat (tcMax (TCNum 2) (TCNum 5))) 5) (and (not (tcFin (tcAdd TCInf (TCNum 1)))) (tcLt (TCNum 2) TCInf))))))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

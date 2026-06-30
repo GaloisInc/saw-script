@@ -43,3 +43,15 @@ test-saw-core-lean:
 	cabal test integration-tests
 	@echo
 	@echo "=== ALL SAW-CORE-LEAN VALIDATIONS PASSED ==="
+
+# saw-core-lean focused semantic conformance gate.
+#
+# This is intentionally namespaced rather than a generic `conformance`
+# target: it is a SAW-Lean backend suite, not a whole-repository
+# conformance statement.
+.PHONY: test-saw-core-lean-conformance
+test-saw-core-lean-conformance:
+	@echo "=== build SAW with current translator ==="
+	cabal build exe:saw
+	@echo "=== saw-core-lean differential conformance ==="
+	$(MAKE) -C otherTests/saw-core-lean conformance

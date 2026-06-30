@@ -52,6 +52,13 @@
 #                          SAW's diagnostic output is the primary
 #                          observable, not its emitted Lean.
 #
+#                          If a directory contains a `.known-gap` file, a
+#                          passing run pins a current backend/library gap,
+#                          not final boundary behavior. The final summary
+#                          reports these separately so `make conformance`
+#                          cannot be mistaken for full parity while gaps
+#                          remain.
+#
 #   stretch/<name>/        Manually-run stress probes that are useful for
 #                          future scalability work but are not part of the
 #                          default parity/regression sweep.
@@ -120,16 +127,31 @@ fi
 # Failure tracking. We accumulate failures and print them at the end.
 
 declare -a failures=()
+declare -a known_gaps=()
 
 record_failure() {
     failures+=("$1")
+}
+
+record_known_gap() {
+    known_gaps+=("$1")
 }
 
 print_summary_and_exit() {
     echo
     echo "================================================================"
     if [ "${#failures[@]}" -eq 0 ]; then
-        echo "ALL TESTS PASSED"
+        if [ "${#known_gaps[@]}" -eq 0 ]; then
+            echo "ALL TESTS PASSED"
+        else
+            echo "ALL CHECKED TESTS PASSED, BUT ${#known_gaps[@]} KNOWN GAP(S) ARE PINNED:"
+            for g in "${known_gaps[@]}"; do
+                echo "  - $g"
+            done
+            echo
+            echo "This is not full backend conformance. Each listed item is a"
+            echo "SAWCore feature that is in scope but not yet matched by SAW-Lean."
+        fi
         exit 0
     fi
     echo "${#failures[@]} TEST(S) FAILED:"
@@ -155,6 +177,10 @@ run_one() {
     ( cd "$cat/$sub" && bash "$HERE/support/$harness" "$subverb" ) || rc=$?
     if [ "$rc" -ne 0 ]; then
         record_failure "$cat/$sub (exit=$rc, harness=$harness)"
+    elif [ "$subverb" = "test" ] && [ -f "$cat/$sub/.known-gap" ]; then
+        local reason
+        reason="$(tr '\n' ' ' < "$cat/$sub/.known-gap" | sed 's/[[:space:]][[:space:]]*/ /g; s/[[:space:]]*$//')"
+        record_known_gap "$cat/$sub${reason:+ — $reason}"
     fi
 }
 

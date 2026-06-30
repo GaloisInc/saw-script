@@ -1,0 +1,10 @@
+// TRUE differential litmus for tuple construction and projection.
+
+let observed = {{ (((1, 2), 3).0.1 : [8]) == 2 }};
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

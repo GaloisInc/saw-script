@@ -1,0 +1,11 @@
+// TRUE differential litmus for SAWCore bytesToString.
+
+let observed =
+  parse_core "equalString (bytesToString 2 (gen 2 (Vec 8 Bool) (\\(i : Nat) -> ite (Vec 8 Bool) (equalNat i 0) 0x48 0x69))) \"Hi\"";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

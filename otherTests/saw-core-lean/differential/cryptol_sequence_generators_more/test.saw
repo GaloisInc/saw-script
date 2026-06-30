@@ -1,0 +1,13 @@
+// TRUE differential litmus for additional finite Cryptol.sawcore sequence
+// range-generator entry points.
+
+let observed =
+  parse_core
+    "and (intEq (atWithDefault 3 Integer (natToInt 0) (ecFromToByLessThan (TCNum 1) (TCNum 7) (TCNum 2) Integer PLiteralInteger) 2) (natToInt 5)) (intEq (atWithDefault 3 Integer (natToInt 0) (ecFromToDownByGreaterThan (TCNum 7) (TCNum 1) (TCNum 2) Integer PLiteralInteger) 2) (natToInt 3))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

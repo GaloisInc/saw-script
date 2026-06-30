@@ -1,0 +1,11 @@
+// TRUE differential litmus for bitvector conversion primitives.
+
+let observed =
+  parse_core "and (equalNat (bvToNat 8 0xff) 255) (and (intEq (bvToInt 8 0x7f) (natToInt 127)) (and (intEq (sbvToInt 8 0xff) (intNeg (natToInt 1))) (and (bvEq 8 (bvNat 8 257) 0x01) (and (bvEq 8 (intToBv 8 (intNeg (natToInt 1))) 0xff) (bvEq 8 (intToBv 8 (natToInt 257)) 0x01)))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

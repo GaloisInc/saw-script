@@ -1,0 +1,11 @@
+// TRUE differential litmus for empty strings and escaped SAWCore strings.
+
+let observed =
+  parse_core "and (equalString \"\" (appendString \"\" \"\")) (and (equalString \"quote: \\\"\" \"quote: \\\"\") (not (equalString \"\" \"x\")))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

@@ -1,0 +1,2 @@
+SHA2 Cryptol primitives are in scope, but Cryptol.sawcore currently defines
+representative SHA processing operations through runtime `error`.

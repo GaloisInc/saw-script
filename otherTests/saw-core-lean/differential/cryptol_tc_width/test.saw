@@ -1,0 +1,13 @@
+// TRUE differential litmus for Cryptol.sawcore `tcWidth`.
+// Currently expected to expose the SAW-side `widthNat` evaluator gap.
+
+let observed =
+  parse_core
+    "equalNat (getFinNat (tcWidth (TCNum 8))) 4";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

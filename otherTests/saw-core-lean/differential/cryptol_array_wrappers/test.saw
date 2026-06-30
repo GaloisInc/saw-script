@@ -1,0 +1,15 @@
+// TRUE differential litmus for direct Cryptol.sawcore `ecArray*` wrappers.
+// Currently pinned as a known gap through the underlying SMT-array primitive.
+
+enable_experimental;
+
+let observed =
+  parse_core
+    "ecArrayConstant";
+
+print "SAW_OBSERVED: reached ecArrayConstant";
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

@@ -1,0 +1,1 @@
+Cryptol algebraic enum lowering reaches SAWCore encodings; current rejection pins missing coverage for that surface.

@@ -1,0 +1,3 @@
+FAIL: SAW differential producer failed
+Error translating: Refusing to translate primitive Nat__rec.
+No SAW-core-lean mapping for `Prelude.Nat__rec`

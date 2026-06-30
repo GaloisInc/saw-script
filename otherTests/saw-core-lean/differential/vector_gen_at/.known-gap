@@ -1,0 +1,1 @@
+Vector gen over raw Nat currently emits a raw Nat body where the wrapped vector helper expects Except String Nat; final parity needs principled wrapper-aware emission or Lean-side proof obligations.

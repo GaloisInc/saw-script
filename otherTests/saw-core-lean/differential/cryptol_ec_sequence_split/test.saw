@@ -1,0 +1,13 @@
+// TRUE differential litmus for direct finite Cryptol.sawcore sequence
+// concatenation, take/drop, split, and join entry points.
+
+let observed =
+  parse_core
+    "and (bvEq 4 (ecCat (TCNum 2) (TCNum 2) Bool 0b10 0b01) 0b1001) (and (bvEq 2 (ecTake (TCNum 2) (TCNum 2) Bool 0b1001) 0b10) (and (bvEq 2 (ecDrop (TCNum 2) (TCNum 2) Bool 0b1001) 0b01) (bvEq 4 (ecJoin (TCNum 2) (TCNum 2) Bool (ecSplit (TCNum 2) (TCNum 2) Bool 0b1001)) 0b1001)))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

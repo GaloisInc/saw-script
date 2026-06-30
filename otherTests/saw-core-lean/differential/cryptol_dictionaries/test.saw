@@ -1,0 +1,12 @@
+// TRUE differential litmus for representative Cryptol.sawcore dictionaries.
+
+let observed =
+  parse_core
+    "and (ecEq Bool PEqBit True True) (and (not (ecEq Integer PEqInteger (natToInt 1) (natToInt 2))) (and (ecLt Integer PCmpInteger (intNeg (natToInt 1)) (natToInt 2)) (and (boolEq (ecAnd Bool PLogicBit True False) False) (and (intEq (ecZero Integer PZeroInteger) (natToInt 0)) (and (intEq (ecPlus Integer PRingInteger (natToInt 2) (natToInt 3)) (natToInt 5)) (and (intEq (ecMinus Integer PRingInteger (natToInt 2) (natToInt 5)) (intNeg (natToInt 3))) (and (intEq (ecMul Integer PRingInteger (intNeg (natToInt 3)) (natToInt 4)) (intNeg (natToInt 12))) (and (ecEq (Vec 4 Bool) (PEqWord 4) 0xa 0xa) (and (ecLt (Vec 4 Bool) (PCmpWord 4) 0x1 0x2) (and (bvEq 4 (ecAnd (Vec 4 Bool) (PLogicWord 4) 0xc 0xa) 0x8) (bvEq 4 (ecPlus (Vec 4 Bool) (PRingWord 4) 0xf 0x1) 0x0)))))))))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

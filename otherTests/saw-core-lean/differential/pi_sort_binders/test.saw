@@ -1,0 +1,16 @@
+// TRUE differential litmus for SAWCore Pi/sort binder shapes.
+//
+// The source uses explicit dependent function types in type ascriptions so the
+// parsed term contains Pi nodes and ordinary `sort 0` binders. The observation
+// is still a closed Boolean result compared against the emitted Lean artifact.
+
+let observed =
+  parse_core
+    "and (equalNat ((((\\(A : sort 0) -> \\(x : A) -> x) : (A : sort 0) -> A -> A) Nat 7)) 7) (bvEq 2 ((((\\(n : Nat) -> \\(x : Vec n Bool) -> x) : (n : Nat) -> Vec n Bool -> Vec n Bool) 2 0b10)) 0b10)";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

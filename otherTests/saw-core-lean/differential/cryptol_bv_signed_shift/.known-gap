@@ -1,0 +1,1 @@
+SAW evaluates `ecSShiftR`, but emitted Lean currently rejects a residual `natCase` from the finite-width wrapper.

@@ -1,0 +1,1 @@
+SAW observes reachable `Prelude.error` as a runtime failure; executable SAW-vs-Lean error-outcome comparison is not implemented in the differential harness yet.

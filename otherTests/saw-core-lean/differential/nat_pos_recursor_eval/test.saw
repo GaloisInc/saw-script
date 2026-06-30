@@ -1,0 +1,11 @@
+// Differential known-gap litmus for SAW evaluator panics on Pos-backed Nat ops.
+
+let observed =
+  parse_core "and (equalNat (widthNat 8) 4) (leNat 4 4)";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

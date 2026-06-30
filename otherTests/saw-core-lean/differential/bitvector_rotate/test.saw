@@ -1,0 +1,13 @@
+// TRUE differential litmus for Cryptol bitvector rotate operators.
+
+let observed = {{
+  (((0x81 : [8]) <<< 1) == 0x03) &&
+  (((0x81 : [8]) >>> 1) == 0xc0)
+}};
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

@@ -1,0 +1,12 @@
+// TRUE differential litmus for deterministic Cryptol.sawcore effect-like entry points.
+
+let observed =
+  parse_core
+    "and (equalNat (ecTrace (TCNum 0) Nat Nat (seqConst (TCNum 0) (Vec 8 Bool) 0x00) 1 2) 2) (equalNat (ecDeepseq Bool Nat PEqBit True 7) 7)";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

@@ -1,0 +1,2 @@
+Cryptol.sawcore `ecArray*` wrappers are in scope, but they currently reach
+unsupported SAWCore SMT-array primitives in the Lean translator.

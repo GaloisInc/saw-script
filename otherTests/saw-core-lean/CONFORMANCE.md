@@ -1,91 +1,170 @@
-# SAW Core Lean Conformance Suite
+# SAW-Lean Conformance Matrix
 
 Run the focused backend conformance suite with:
 
 ```sh
-make conformance
+make test-saw-core-lean-conformance
 ```
 
-This target is intentionally narrow. It runs:
+From this directory, the equivalent local-development command is
+`make conformance`.
 
-- every `differential/*` true SAW-vs-Lean executable litmus, and
-- every `saw-boundary/*` expected rejection or obligation-boundary litmus.
+This file is the live coverage matrix for SAW-Lean conformance. Test count is
+not the measure of coverage; this matrix is. Every row should eventually point
+to a minimal litmus test that either:
 
-`make conformance` must not run a test merely because it is small, useful, or
-green. Positive executable conformance requires a real differential comparison:
-SAW must observe an outcome, Lean must observe an outcome from the SAW-Lean
-emitted artifact, and the harness must mechanically compare those observations.
+- compares a real SAW observation with a real observation of backend-emitted
+  Lean, or
+- pins a specific intended boundary or known backend gap with its exact reason.
 
-It does not run broad legacy examples, whole-module extraction examples, stress
-drivers, crypto examples, or selected proof-discharge demos. Those tests remain
-useful as integration checks and as sources for new litmus cases, but they do
-not belong in the conformance gate. When a large example exposes a real backend
-gap, extract the smallest focused `differential/*` or `saw-boundary/*` test that
-captures the feature boundary.
+Statuses:
 
-It also does not run `drivers/conformance_*` or `proofs/conformance_*` today.
-Those directories contain useful litmus candidates and Lean support-library
-regression checks, but most of them are not true differential tests: SAW-side
-proof plus Lean elaboration plus a separate Lean theorem is not a compared
-SAW-vs-Lean observation. Migrate those cases into `differential/*` one feature
-family at a time.
+- `conforms`: true SAW-vs-Lean differential coverage exists.
+- `boundary`: rejection or an explicit Lean proof obligation is the intended
+  final behavior.
+- `known gap`: SAWCore/Cryptol-SAWCore is in scope, but the current backend or
+  Lean support library cannot yet match it.
+- `not yet tested`: no adequate conformance litmus exists yet.
 
-The command is allowed to fail while the backend is incomplete; its job is to
-report exactly which small supported or boundary surfaces currently do not emit
-correct Lean.
+Known gaps are not parity. Directories containing `.known-gap` are reported
+separately by the conformance target so a green command cannot be mistaken for
+full backend conformance.
 
-Known broken litmus surfaces currently represented by legacy litmus candidates,
-not yet by true differential tests:
+## Current Harness Categories
 
-- `conformance_bitvector`: defined division/remainder cases still expose the
-  stripped zero-divisor obligation machinery in the generated golden diff.
-- `conformance_scalar`: scalar division/remainder/rational cases likewise need
-  principled proof-obligation emission.
-- `conformance_stream`: raw `Stream.rec` value results are not adapted back into
-  the `Except String` value flow.
-- `conformance_vector`: higher-order helper functions for `genM`, `foldrM`, and
-  `foldlM` need a principled convention or certificate design.
-- `conformance_vector_zip`: direct SAWCore `zip` truncation/projection coverage
-  is source-proved by SAW, but emission hits the same raw function result to
-  `Except String` adaptation gap when constructing its input vectors with
-  `genM`.
-- `conformance_zero_divisor_obligations`: zero-divisor and reciprocal calls do
-  not currently emit the required Lean precondition obligations.
+| Category | Meaning | Counts as parity? |
+| --- | --- | --- |
+| `differential/*` | True positive SAW-vs-Lean value/outcome comparison. | Yes, for the exact matrix row it covers. |
+| `differential/*/.known-gap` | The real differential run fails at a pinned SAW producer, emitted-Lean, or Lean observer diagnostic listed in `.known-gap.expected`. | No. It records missing parity or an observation-path blocker. |
+| `saw-boundary/*` | Expected rejection or obligation-boundary litmus. | Yes only for intended final boundaries. |
+| `saw-boundary/*/.known-gap` | Pinned current backend/library gap. | No. It records missing parity. |
+| `drivers/conformance_*` | Legacy litmus candidates using goldens/elaboration/support proofs. | No. Mine these into `differential/*`. |
+| `proofs/conformance_*` | Lean proof/support-library checks. | No unless paired with emitted-artifact observation. |
 
-Passing `proofs/conformance_*` files check Lean support-library semantics
-directly. They are useful regression tests, but they are not conformance tests
-unless paired with a differential harness that observes the emitted artifact.
+## Core SAWCore AST
 
-Passing `saw-boundary/*` files check that unsupported or partial SAWCore
-surfaces fail loudly or emit explicit obligations instead of silently producing
-semantically different Lean.
+Authoritative source: `saw-core/src/SAWCore/Term/Functor.hs`.
 
-Boundary coverage currently includes:
+| Construct | Test path | Observation method | Status | TODO |
+| --- | --- | --- | --- | --- |
+| `App` | `differential/algebraic_control`, `differential/maybe_control`, `differential/boolean`, `differential/boolean_primitives`, `differential/core_lambda`, `differential/core_under_applied_function`, `differential/core_control`, `differential/error_unreachable`, `differential/surface_let_ascription`, `differential/pi_sort_binders`, `differential/sort_flags`, `differential/module_definitions`, `differential/module_imports`, `differential/module_import_hiding`, `differential/cryptol_combinators`, `differential/cryptol_num`, `differential/nat_scalar`, `differential/nat_extended`, `differential/nat_pos_recursor_eval`, `differential/pos_values`, `differential/int_scalar`, `differential/int_div_mod`, `differential/intmod_scalar`, `differential/intmod_more`, `differential/rational_scalar`, `differential/string`, `differential/string_edges`, `differential/string_bytes`, `differential/tuple_projection`, `differential/record_projection`, `differential/record_update`, `differential/bitvector_literal`, `differential/bitvector_conversions`, `differential/bitvector_arithmetic`, `differential/bitvector_bitwise_shift`, `differential/bitvector_order_width`, `differential/bitvector_rotate`, `differential/vector_literal`, `differential/vector_literal_edges`, `differential/sequence_take_drop_update`, `differential/sequence_map_zip`, `differential/sequence_append_reverse`, `differential/stream_projection`, `differential/vector_gen_at`, `differential/vector_shift_rotate`, `differential/vector_fold` | SAW `eval_bool`; Lean reduces emitted `Observed` or pins expected emitted-Lean/SAW-evaluator diagnostic for known gaps. `core_under_applied_function` emits an under-applied function value and observes it by applying the emitted artifact. | conforms / known gap | Add more higher-order application cases only if a distinct backend path appears. |
+| `Lambda` | `differential/core_lambda`, `differential/core_under_applied_function`, `differential/pi_sort_binders`, `differential/cryptol_combinators` | SAW evaluates closed lambda applications and a function-valued lambda/application result; Lean reduces the emitted result or applies the emitted function artifact. | conforms | Add more higher-order lambda cases only if a distinct backend path appears. |
+| `Variable` | `differential/core_lambda`, `differential/core_under_applied_function`, `differential/pi_sort_binders`, `differential/module_definitions`, `differential/module_imports`, `differential/module_import_hiding` | Variable occurrences observed through closed lambda application, function-valued lambda/application output, and loaded/imported definition references. | conforms | Add open local-definition parser workaround coverage. |
+| `Pi` | `differential/pi_sort_binders`, `differential/sort_flags`, `differential/higher_sort_binders` | SAW evaluates closed uses of polymorphic and dependent identity functions with explicit Pi type ascriptions, sort flags, and higher universe binders; Lean reduces emitted result. | conforms | Add more universe-polymorphic module-emission cases only if a distinct backend path appears. |
+| `Constant` | `differential/algebraic_control`, `differential/maybe_control`, `differential/boolean`, `differential/boolean_primitives`, `differential/core_control`, `differential/error_unreachable`, `differential/surface_let_ascription`, `differential/module_definitions`, `differential/module_imports`, `differential/module_import_hiding`, `differential/cryptol_combinators`, `differential/cryptol_num`, `differential/nat_scalar`, `differential/nat_extended`, `differential/nat_pos_recursor_eval`, `differential/pos_values`, `differential/int_scalar`, `differential/int_div_mod`, `differential/intmod_scalar`, `differential/intmod_more`, `differential/rational_scalar`, `differential/string`, `differential/string_edges`, `differential/string_bytes`, `differential/bitvector_conversions`, `differential/bitvector_arithmetic`, `differential/bitvector_bitwise_shift`, `differential/bitvector_order_width`, `differential/bitvector_rotate`, `differential/stream_projection`; many gap rows below | SAW/Lean value comparison for covered Prelude/Cryptol constants; pinned SAW evaluator gaps for Pos-backed constants. | conforms / known gap | Add constant-family coverage for every Prelude/Cryptol family below. |
+| `Recursor` | `differential/algebraic_control`, `differential/maybe_control`, `differential/stream_projection`, `differential/nat_pos_recursor_eval`, `differential/pos_values`; `saw-boundary/boolrec`, `natrec`, `zrec_rejection`, `accessible_*_rec_rejection`, `saw-boundary/user_datatype_rejection` | Positive SAW/Lean comparison for `Either#rec`, `Maybe#rec`, `UnitType#rec`, `EmptyType#rec`, and a finite `Stream#rec` projection; pinned SAW evaluator gap for Pos-backed recursors; rejection diagnostics for dangerous/unsupported direct and user-datatype recursors. | conforms / known gap | Add Z positive recursor tests and proof-carrying realization for dangerous recursors. |
+| `Sort` / `SortFlags` | `differential/pi_sort_binders`, `differential/sort_flags`, `differential/higher_sort_binders` | SAW/Lean compare closed values flowing through explicit `sort 0`, `isort 0`, `qsort 0`, `sort 1`, and `sort 2` binders. | conforms | Add universe-polymorphic module-emission rows if needed. |
+| `ArrayValue` | `differential/bitvector_literal`, `differential/vector_literal`, `differential/vector_literal_edges` | SAW/Lean compare emitted Boolean result for literal values. | conforms | Add zero-width bitvector edge case if accepted by SAW. |
+| `StringLit` | `differential/string`, `differential/string_edges` | SAW observes string equality; Lean reduces emitted Boolean result. | conforms | Add direct string-value observer if SAW grows one. |
 
-- Unsupported recursors or recursion forms: `Bool.rec`, `Nat.rec`, `Z.rec`,
-  accessibility recursors, and unsupported `fix` unfold shapes.
-- Raw-position partiality/obligation behavior: polynomial literals and generic
-  `fix` obligations.
-- Unsupported source forms: Cryptol algebraic enums.
-- Mapped-but-unsupported primitives that must reject explicitly rather than
-  leaking unmapped names or ad hoc semantics: `intAbs`, `intMin`, `intMax`,
-  vector `head`/`tail`/`EmptyVec`/`scanl`, with-proof vector variants,
-  SMT-array primitives, and under-applied `unsafeAssert`.
-- SAW-internal proof primitives and lemma axioms that must not be emitted as
-  trusted Lean axioms without checked realizations, including representative
-  Nat, vector, bitvector, coerce, UIP, and size-bound assertion cases.
+## Parser And Module Surface
 
-Legacy litmus candidates added after the initial consolidation:
+Authoritative source: `saw-core/src/SAWCore/Parser/AST.hs` and
+`saw-core/src/SAWCore/Module.hs`.
 
-- `conformance_boolean`: `not`, `and`, `or`, `xor`, and `boolEq`.
-- `conformance_bitvector_conversions`: `bvToNat`, `bvToInt`, `sbvToInt`,
-  `bvNat`, and `intToBv`.
-- `conformance_core`: `id` and `sawLet`.
-- `conformance_error`: unreachable Cryptol `error` branches and the checked
-  `saw_throw_error` / `iteM` support behavior.
-- `conformance_proof_obligations`: fully-applied `unsafeAssert` feeding
-  `coerce`, pinned as a visible Lean equality obligation.
-- `conformance_scalar_extra`: defined Nat, Int, IntMod, and Rational operations
-  not covered by the division-focused scalar fixture.
-- `conformance_string_bytes`: `bytesToString` on a concrete ASCII byte vector.
-- `conformance_vector_zip`: SAWCore `zip` truncation and pair projection.
+| Family | Test path | Observation method | Status | TODO |
+| --- | --- | --- | --- | --- |
+| Names and qualified names | `differential/module_definitions`, `differential/module_imports`, `differential/module_import_hiding` | Loaded `.sawcore` modules reference local, imported, qualified, and import-hidden names; SAW/Lean compare emitted Boolean result. | conforms | Add ambiguous-name boundary if needed. |
+| `Let` | `differential/surface_let_ascription` | SAWCore parser `let { ... } in ...`; SAW/Lean compare emitted Boolean result. | conforms | Add multiple local definitions and open-variable parser workaround coverage if needed. |
+| Type ascription | `differential/surface_let_ascription` | SAWCore parser type constraints over Nat and Bool in a closed Boolean term; SAW/Lean compare emitted result. | conforms | Add richer ascription cases only if a distinct backend path appears. |
+| Records, projections, and updates | `differential/record_projection`, `differential/record_update` | SAW/Lean compare emitted Boolean result after record projection/update. | conforms | Add empty-record and deeper nested-update cases. |
+| Tuples and selectors | `differential/tuple_projection`; `differential/tuple_update_helpers` | SAW/Lean compare emitted Boolean result after nested tuple projection; pinned emitted-Lean wrapper mismatch for `updFst`/`updSnd` updater lambdas. | conforms / known gap | Add larger tuple cases and close tuple-update wrapper adaptation. |
+| Natural literals | `differential/nat_scalar` | SAW/Lean compare Boolean equality over small closed Nat expressions. | conforms | Add zero/successor and larger literal edge cases. |
+| String literals | `differential/string` | SAW/Lean compare emitted string equality result. | conforms | Add escaping and empty-string cases. |
+| Vector literals | `differential/vector_literal`, `differential/vector_literal_edges` | SAW/Lean compare emitted Boolean result after vector indexing/equality. | conforms | Add zero-width bitvector element edge cases if accepted by SAW. |
+| Bitvector literals | `differential/bitvector_literal`, `differential/bitvector_conversions` | SAW/Lean compare emitted Boolean result for bitvector equality and conversion overflow. | conforms | Add zero-width and signed-edge conversion cases. |
+| Ordinary definitions | `differential/module_definitions`, `differential/module_imports`, `differential/module_import_hiding` | Loaded `.sawcore` modules have definitions reference local, imported, and import-hidden qualified definitions; SAW/Lean compare emitted Boolean result. | conforms | Add mutually-independent multi-definition module litmus if needed. |
+| Primitive declarations | rows below | rejection or value observation | known gap | Matrix every primitive family. |
+| Axiom declarations | rows below | proof obligation/rejection | known gap | Matrix every proof/axiom family. |
+| Data declarations | `saw-boundary/cryptol_algebraic_enum_rejection`, `saw-boundary/user_datatype_rejection` | SAW-Lean rejection diagnostics for Cryptol-lowered and direct user datatypes. | known gap | Implement checked datatype emission/realization or make a final out-of-scope decision. |
+| Injected code | none | none | not yet tested | No public generic SAWCore-module Lean writer exists today; add a scoped test when injected-code declarations can reach the Lean module emitter. |
+
+## SAWCore Prelude Families
+
+Authoritative source: `saw-core/prelude/Prelude.sawcore`.
+
+| Family | Test path | Observation method | Status | TODO |
+| --- | --- | --- | --- | --- |
+| Core control: `id`, `sawLet` | `differential/core_control` | SAW/Lean compare emitted Boolean result using `id` and `sawLet`. | conforms | Add surface `let` syntax and polymorphic `id` cases. |
+| `fix` | `saw-boundary/fix_obligation` | Golden diagnostic/emitted obligation shape. | boundary | Strengthen to explicit obligation-shape matrix row if needed. |
+| `fix_unfold` | `saw-boundary/fix_unfold_rejection` | SAW-Lean rejection diagnostic. | known gap | Replace rejection with proof-carrying obligation if supported. |
+| `error` | `differential/error_unreachable`, `differential/reachable_error` | SAW/Lean compare emitted Boolean result where Cryptol `error` branches are unreachable; pinned SAW-side runtime failure for reachable `Prelude.error` because executable error-outcome comparison is not yet implemented in the differential harness. | conforms / known gap | Add Lean-observed reachable `Except.error` comparison once the harness can capture SAW runtime errors as values. |
+| `UnitType`, `Void`, `EmptyType` | `differential/algebraic_control` for `UnitType` and `EmptyType` recursors; `differential/cryptol_dictionary_more` for direct `Unit` equality | SAW/Lean compare emitted Boolean result after eliminator use and direct `Unit` dictionary equality. | conforms / not yet tested | Add direct `Void` coverage if a genuine value source appears. |
+| `PairType`, `PairType1` | `differential/tuple_projection` for value-level tuples; `differential/type_level_pair` for sort-1 pairs | SAW/Lean compare emitted Boolean result after value tuple projection and sort-1 pair projection. | conforms | Add larger pair-nesting litmus if needed. |
+| `RecordType` | `differential/record_projection`, `differential/record_update` | SAW/Lean compare emitted Boolean result after record projection/update. | conforms | Add empty-record and deeper nested-update cases. |
+| `Bool` values and operators | `differential/boolean`, `differential/boolean_primitives`, `differential/core_lambda`, `differential/algebraic_control` | SAW `eval_bool`; Lean `#reduce` of emitted artifact. | conforms | Add `iteDep` and direct `Bool#rec` gap closure. |
+| Direct `Bool#rec` | `saw-boundary/boolrec` | SAW-Lean rejection diagnostic. | known gap | Implement/prove constructor-order-safe recursor or keep as explicit final boundary with rationale. |
+| `Either` / `Maybe` | `differential/algebraic_control`, `differential/maybe_control` | SAW/Lean compare emitted Boolean result for `Left`, `Right`, `Either#rec`, `Nothing`, `Just`, and `Maybe#rec`. | conforms | Add derived `maybe` helper surface if it survives normalization. |
+| `Eq`, `EqDep`, proof combinators | `saw-boundary/proof_primitive_rejection` | SAW-Lean rejection diagnostics for representative proof primitives. | known gap | Emit Lean-checked obligations/certificates for proof surfaces. |
+| `unsafeAssert`, `coerce` | `saw-boundary/unsafe_assert_rejection`; `saw-boundary/proof_primitive_rejection` | Under-applied rejection; representative proof primitive rejection. | boundary / known gap | Add fully-applied obligation-shape coverage under conformance. |
+| `Pos`, `Nat`, `Z` values | `differential/nat_scalar`, `differential/nat_extended`; `differential/pos_values`; `differential/z_values`; `saw-boundary/zrec_rejection` | Positive SAW/Lean comparison for Nat arithmetic; pinned SAW evaluator panic for Pos constructors/operations; pinned Lean-backend rejection of residual `ZtoNat`; Z recursor rejection. | conforms / known gap | Add checked Z primitive/recursor realizations. |
+| Direct `Nat#rec`, `Z#rec`, accessibility recursors | `saw-boundary/natrec`, `zrec_rejection`, `accessible_*_rec_rejection` | SAW-Lean rejection diagnostics. | known gap | Add checked recursor/proof-obligation realization. |
+| Nat arithmetic/order/division | `differential/nat_scalar`, `differential/nat_extended`, `differential/nat_pos_recursor_eval`, `saw-boundary/partial_operation_obligations` | Positive SAW/Lean comparison for add/mul/min/max/exp/double/sub/pred/lt; pinned SAW evaluator panic for `widthNat`/`leNat`; pinned direct-result zero-divisor obligation gap for `divNat` and `divModNat`. | conforms / known gap | Emit checked nonzero-divisor obligations for every partial Nat result position. |
+| Nat proof/order primitives | `saw-boundary/proof_primitive_rejection` | SAW-Lean rejection diagnostics. | known gap | Add Lean-checked proof-obligation coverage. |
+| `Vec` type and primitives | `differential/vector_literal`, `differential/vector_literal_edges`, `differential/sequence_take_drop_update`, `differential/sequence_map_zip`; `differential/vector_gen_at`, `differential/vector_shift_rotate`, `differential/vector_fold`; `saw-boundary/vector_primitive_rejection` | Positive vector literal/index/sequence observations; known-gap emitted-Lean diagnostics for raw-Nat higher-order helpers; rejection diagnostics for unsupported primitives. | conforms / known gap | Close wrapper-aware helper emission and missing primitive realizations. |
+| Vector with-proof primitives | `saw-boundary/vector_with_proof_rejection` | SAW-Lean rejection diagnostics. | known gap | Emit Lean obligations for proof-carrying vector operations. |
+| Derived vector operations | `differential/sequence_take_drop_update`, `differential/sequence_map_zip`, `differential/sequence_append_reverse`; `differential/vector_shift_rotate`, `differential/vector_fold` | Positive Cryptol sequence observations for take/drop/update/map/zip/zipWith/append/reverse/join/split; known-gap SAWCore helper diagnostics for raw-Nat shift/rotate/fold bodies. | conforms / known gap | Close wrapper-aware helper emission. |
+| `String`, `appendString`, `bytesToString`, `equalString` | `differential/string`, `differential/string_edges`, `differential/string_bytes` | SAW/Lean compare emitted Boolean result for literals, append/equality, escapes, empty strings, and `bytesToString`. | conforms | Add direct string-value observer if SAW grows one. |
+| Bitvector primitives | `differential/bitvector_literal`, `differential/bitvector_conversions`, `differential/bitvector_arithmetic`, `differential/bitvector_bitwise_shift`, `differential/bitvector_order_width`, `differential/bitvector_rotate`; `saw-boundary/partial_operation_obligations`; `saw-boundary/proof_primitive_rejection/bv_forall.saw` | Positive literal/equality/conversion/arithmetic/bitwise/order/count/rotate observations; pinned direct-result zero-divisor obligation gap for unsigned/signed division; SAW-Lean rejection for `bvForall`. | conforms / known gap | Emit checked nonzero-divisor obligations for every partial BV result position; keep proof primitives as obligations. |
+| Bitvector proof lemmas | `saw-boundary/proof_primitive_rejection` | SAW-Lean rejection diagnostics. | known gap | Add Lean-checked obligations/certificates. |
+| `Stream` and stream helpers | `differential/stream_projection`, `differential/stream_helpers` | SAW/Lean compare emitted Boolean result for a finite projection through `MkStream` and `Stream#rec`; pinned known gap where finite observations of `streamGet`, `streamMap`, shifts, and `streamScanl` emit unresolved `MkStream` totality proof stubs. | conforms / known gap | Convert stream-helper totality stubs into checked obligation-shape boundary rows or executable differential cases. |
+| `Integer` and Int primitives | `differential/int_scalar`, `differential/int_div_mod`; `saw-boundary/partial_operation_obligations`; `saw-boundary/int_primitive_rejection` | Positive SAW/Lean comparison for add/sub/mul/div/mod/order/conversions; pinned direct-result zero-divisor obligation gap for `intDiv`; rejection diagnostics for `intAbs`/`intMin`/`intMax`. | conforms / known gap | Emit checked nonzero-divisor obligations for every partial Int result position and close rejected primitives. |
+| `IntMod` primitives | `differential/intmod_scalar`, `differential/intmod_more` | SAW/Lean compare emitted Boolean result for conversion, add/sub/neg/mul modulo 5. | conforms | Add zero-modulus boundary and Cryptol dictionary entry points. |
+| `Float`, `Double`, constructors | `differential/cryptol_float_primitives` | Pinned SAW-side runtime error for representative Cryptol float equality dictionary; Cryptol.sawcore currently implements float operations with `error`. Direct Prelude `Float`/`Double`/`mkFloat`/`mkDouble` terms can be emitted today, but SAW exposes no clean executable equality/observer for comparing those values, so elaboration alone is not counted as conformance. | known gap | Add direct constructor/bit-conversion rows once there is a real SAW-side observation method. |
+| SMT arrays | `saw-boundary/array_primitive_rejection` | SAW-Lean rejection diagnostics for every array primitive. | known gap | Add Lean array semantics or final out-of-scope decision. |
+| `Rational` primitives | `differential/rational_scalar`, `saw-boundary/partial_operation_obligations` | SAW/Lean compare emitted Boolean result for nonzero rational arithmetic, order, reciprocal, and floor; pinned direct-result obligation gap for zero denominator and reciprocal zero. | conforms / known gap | Emit checked nonzero-denominator/nonzero-argument obligations for every partial Rational result position. |
+| `List`, `ListSort`, `FunsTo` | `differential/list_sort_funs_to`, `saw-boundary/cryptol_algebraic_enum_rejection` | SAW evaluates direct `List`/`ListSort`/`FunsTo` recursor-derived behavior, but current Lean translation deliberately rejects residual `ListSort`; boundary fixture pins the representative lowered enum path. | known gap | Add checked Lean realization for list/list-sort/funsto encodings. |
+
+## Cryptol-SAWCore Families
+
+Authoritative source: `cryptol-saw-core/saw/Cryptol.sawcore`.
+
+| Family | Test path | Observation method | Status | TODO |
+| --- | --- | --- | --- | --- |
+| Basic combinators: `const`, `compose` | `differential/cryptol_combinators` | SAW/Lean compare emitted Boolean result for closed `const` and `compose` applications. | conforms | Add function-valued/under-applied combinator boundary if needed. |
+| Pair/record update helpers | `differential/record_update`, `differential/sequence_take_drop_update`, `differential/tuple_update_helpers` | SAW/Lean compare emitted Boolean result for Cryptol record and sequence update; pinned emitted-Lean wrapper mismatch for `updFst`/`updSnd` updater lambdas. | conforms / known gap | Close tuple-update wrapper adaptation. |
+| `Num`, `TCNum`, `TCInf`, `Num_rec` | `differential/cryptol_num`, `differential/cryptol_num_rec` | SAW/Lean compare emitted Boolean result for finite/infinite `tcFin`, `getFinNat (TCNum n)`, and direct `Num_rec` finite/infinite cases. | conforms | Add explicit infinite-error boundary only where a user-facing precondition exists. |
+| Type-level arithmetic `tc*` | `differential/cryptol_typelevel_arithmetic`, `differential/cryptol_typelevel_more`, `differential/cryptol_tc_width` | SAW/Lean compare emitted Boolean result for finite `tcAdd`/`tcSub`/`tcMul`/`tcDiv`/`tcMod`/`tcMin`/`tcMax`/`tcExp`/`tcCeilDiv`/`tcCeilMod`/`tcLenFromThenTo`/`tcWidth` and infinite `tcAdd`/`tcLt`/`tcEqual` behavior. | conforms | Add explicit type-level partial-operation obligation rows if a user-facing precondition boundary is exposed. |
+| `seq`, finite/infinite sequence split | `differential/sequence_take_drop_update`, `differential/sequence_append_reverse`, `differential/vector_literal_edges`, `differential/cryptol_infinite_sequences`, `differential/cryptol_ec_sequence_split`, `differential/cryptol_ec_reverse`, `differential/cryptol_ec_transpose` for finite and infinite sequence surface | SAW/Lean compare emitted Boolean result for finite sequence take/drop/update/append/reverse/join/split/transpose operations and finite observations of infinite streams. | conforms | Add extra infinite transpose rows if a distinct backend path appears. |
+| Sequence maps/const/comprehensions | `differential/sequence_map_zip`, `differential/sequence_append_reverse`, `differential/cryptol_parmap`, `differential/cryptol_sequence_generators` for finite `map`/`zip`/reverse/join/split/parmap/range generation; `differential/cryptol_sequence_direct` for direct `seqConst`/`seqZip`/`seqMap`/`seqBinary`/`mlet` SAWCore entry points | SAW/Lean compare emitted Boolean result for finite surface sequence operations; pinned emitted-Lean wrapper mismatch for direct raw-Nat sequence helper bodies. | conforms / known gap | Close direct sequence-helper wrapper adaptation; add transpose-specific finite/infinite rows if needed. |
+| Type coercions/congruences | `differential/type_coercions`, `saw-boundary/proof_primitive_rejection` | SAW/Lean compare emitted Boolean result for safe `coerce`/`rcoerce` with `Refl`; proof/congruence primitives remain pinned rejection gaps. | conforms / known gap | Add explicit `piCong*` and unsafe-coerce obligation rows. |
+| Equality dictionaries `PEq*` | `differential/cryptol_dictionaries`, `differential/cryptol_composite_dictionaries`, `differential/cryptol_dictionary_more`, `differential/cryptol_record_empty_dictionaries` | SAW/Lean compare emitted Boolean result for Bool, Integer, Rational, IntMod, Unit, word, finite sequence, pair, record, and empty-tuple/empty-record equality dictionaries. | conforms | Add function and stream equality uses if the source surface makes them observable. |
+| Comparison dictionaries `PCmp*`, `PSignedCmp*` | `differential/cryptol_dictionaries`, `differential/cryptol_signed_cmp`, `differential/cryptol_composite_dictionaries`, `differential/cryptol_dictionary_more`, `differential/cryptol_record_empty_dictionaries` | SAW/Lean compare emitted Boolean result for Integer, Rational, Unit, word, finite sequence, signed-word, pair, record, and empty comparison dictionaries. | conforms | Add Vec-of-non-Bool comparison uses if needed. |
+| Zero/Logic/Ring dictionaries | `differential/cryptol_dictionaries`, `differential/cryptol_composite_dictionaries`, `differential/cryptol_dictionary_more`, `differential/cryptol_record_empty_dictionaries`, `differential/cryptol_function_dictionaries`, `differential/cryptol_stream_dictionaries` | SAW/Lean compare emitted Boolean result for Integer/word/IntMod/Rational zero, logic, ring, pair, record, sequence, function, stream, and empty dictionaries where currently observable. | conforms | Add narrower rows only if a missing dictionary family is found in the source survey. |
+| Integral/Field/Round dictionaries | `differential/cryptol_integral_field`, `differential/cryptol_literals_rounding`, `saw-boundary/partial_operation_obligations` | SAW/Lean compare emitted Boolean result for defined Integer/word division/modulus, Rational reciprocal/division, and Rational floor/ceiling/truncate/rounding; pinned direct-result zero-divisor/zero-denominator obligation gaps. | conforms / known gap | Close partial-operation proof obligations. |
+| Literal dictionaries | `differential/cryptol_literals_rounding`, `differential/cryptol_intmod_literals`, `saw-boundary/polynomial_literal_rejection` | SAW/Lean compare emitted Boolean result for ordinary integer, bit, word, rational fractional, IntMod, IntModNum, and `ecFromInteger` literal paths; SAW-Lean rejection diagnostic for polynomial literal path. | conforms / known gap | Close polynomial literal support. |
+| Overloaded entry points `ec*` | `differential/cryptol_dictionaries`, `differential/cryptol_dictionary_more`, `differential/cryptol_integral_field`, `differential/cryptol_signed_cmp`, `differential/cryptol_literals_rounding`, `differential/cryptol_intmod_literals`, `differential/cryptol_effect_control`, `differential/cryptol_parmap`, `differential/cryptol_sequence_generators`, `differential/cryptol_sequence_generators_more`, `differential/cryptol_bv_entrypoints`, `differential/cryptol_ec_order_logic`, `differential/cryptol_ec_sequence_split`, `differential/cryptol_ec_sequence_update`, `differential/cryptol_ec_reverse`, `differential/cryptol_ec_shift`, `differential/cryptol_ec_transpose`, `differential/cryptol_to_signed_integer`, `differential/cryptol_ec_fold_scan`, `differential/cryptol_ec_scanl`, `differential/cryptol_ec_signed_exp`, `differential/cryptol_ec_exp_signed_conversion`, `differential/cryptol_indexing`, `differential/cryptol_bv_signed_shift`, `differential/cryptol_bv_sext`, `differential/cryptol_error_message`, `differential/cryptol_polynomial_ops`, `differential/cryptol_array_wrappers`, `differential/cryptol_fp_entrypoints`, `differential/cryptol_sha_primitives` | SAW/Lean compare emitted Boolean result for many deterministic `ec*` wrappers; pinned gaps for `ecAt`, `ecFoldl`/`ecFoldlPrime`, `ecScanl`, `ecSDiv`/`ecSMod`, `ecExp`, `ecSShiftR`, `ecSExt`, reachable `ecError`, polynomial proof surfaces, SMT-array wrappers, floating-point wrappers, and SHA primitives. | conforms / known gap | Close pinned proof-carrying/wrapper-adaptation gaps and audit newly added `ec*` wrappers as Cryptol.sawcore grows. |
+| Cryptol BV operators | `differential/bitvector_arithmetic`, `differential/bitvector_bitwise_shift`, `differential/bitvector_order_width`, `differential/bitvector_conversions`, `differential/bitvector_rotate`, `differential/cryptol_dictionaries`, `differential/cryptol_signed_cmp`, `differential/cryptol_integral_field`, `differential/cryptol_bv_entrypoints`, `differential/cryptol_ec_shift`, `differential/cryptol_to_signed_integer`, `differential/cryptol_bv_signed_shift`, `differential/cryptol_bv_sext`, `differential/cryptol_ec_signed_exp`, `differential/cryptol_polynomial_ops` | SAW/Lean compare emitted Boolean result for primitive and Cryptol rotate/shift BV operations plus overloaded word equality/order/signed-order/logic/ring/integral, `ecLg2`, rotate, truncation, unsigned extension, signed comparisons, and signed-to-integer conversion; pinned gaps for signed division/modulus, signed shift, sign extension, and polynomial proof surfaces. | conforms / known gap | Close residual recursor/proof-wrapper gaps. |
+| Cryptol arrays `ecArray*` | `differential/cryptol_array_wrappers`, `saw-boundary/array_primitive_rejection` | Pinned SAW-Lean rejection diagnostics for direct `ecArray*` wrapper entry and the underlying SMT-array primitives. | known gap | Close array support or make arrays a documented final boundary. |
+| Cryptol floats `TCFloat`, `ecFp*`, predicates | `differential/cryptol_float_primitives`, `differential/cryptol_fp_entrypoints` | Pinned SAW-side runtime error for representative float equality dictionary and direct `ecFp*` entry point; Cryptol.sawcore currently implements float operations with `error`. | known gap | Add direct constructor/bit-conversion observations if the float model becomes executable. |
+| Cryptol crypto primitives | `differential/cryptol_crypto_primitives`, `differential/cryptol_sha_primitives` | Pinned SAW-side runtime errors for representative Suite-B AES and SHA2 primitives; Cryptol.sawcore currently implements these primitives with `error`. | known gap | Add narrower rows only if crypto primitive families diverge from the same runtime-error shape. |
+| `ecError`, `ecTrace`, `ecRandom`, `ecDeepseq`, `ecParmap` | `differential/cryptol_effect_control`, `differential/cryptol_parmap`, `differential/reachable_error`, `differential/cryptol_errors_random`, `differential/cryptol_error_message` | SAW/Lean compare emitted Boolean result for deterministic `ecTrace`, `ecDeepseq`, and finite `ecParmap`; pinned SAW-side runtime failures for reachable `Prelude.error`, message-specific `ecError`, and `ecRandom` because executable error-outcome comparison is not yet implemented in the differential harness. | conforms / known gap | Add Lean-observed runtime-error comparison once the harness supports it. |
+| Elliptic/projective helpers | `differential/cryptol_projective_helpers` | Pinned SAW-side runtime error for a representative projective helper; Cryptol.sawcore currently implements this surface with `error`. | known gap | Add more focused helper rows only if they diverge from the same runtime-error shape. |
+
+## Known Broken Legacy Litmus Candidates
+
+These are not counted as conformance until migrated into true differential,
+boundary, or known-gap rows.
+
+| Legacy path | Current finding | Required migration |
+| --- | --- | --- |
+| `drivers/conformance_bitvector` | Defined arithmetic/bitwise/order/count cases now have true differential rows; zero-divisor obligation churn remains. | Add partial-operation obligation rows for zero divisors and rotate-specific coverage. |
+| `drivers/conformance_scalar` | Defined Nat/Int/IntMod/Rational cases now have true differential rows; partial zero-divisor/denominator cases need principled obligations. | Add proof-obligation rows for zero divisors and zero denominators. |
+| `drivers/conformance_stream` | Finite `MkStream`/`Stream#rec` projection now has true differential coverage; `streamGet`/`streamMap`/shift/`streamScanl` finite observations are pinned as a focused differential known gap due unresolved totality stubs. | Convert stream-helper totality stubs into checked obligation-shape boundary rows or executable differential cases. |
+| `drivers/conformance_vector` | `genM`/`foldrM`/`foldlM` wrapper adaptation gap is now pinned by focused differential known-gap rows. | Close wrapper-aware helper emission; then convert known gaps to positive differential rows. |
+| `drivers/conformance_vector_zip` | Cryptol equal-length `zip` now has true differential coverage; direct SAWCore unequal-length helper coverage still hits vector construction adaptation gaps. | Add focused known-gap row for direct SAWCore unequal-length `zip` if it remains important. |
+| `drivers/conformance_zero_divisor_obligations` | Direct-result zero-divisor/zero-denominator gaps are now pinned by focused `saw-boundary/partial_operation_obligations`; the legacy combined conjunction remains a broader regression probe. | Convert the pinned direct-result gaps to green obligation-shape boundary rows once emission is proof-carrying in all result positions. |
+
+## Immediate Coverage Priorities
+
+1. Add true differential or boundary tests for remaining parser/module holes:
+   injected-code handling if a public generic SAWCore-module Lean writer
+   appears, and richer user datatype emission.
+2. Migrate the next small legacy candidates into `differential/*` or
+   `saw-boundary/*`: checked stream-helper totality obligation shapes,
+   remaining partial-operation obligation rows, and the pinned tuple-update /
+   `ecAt` proof-carrying gaps.
+3. Add explicit known-gap litmus tests for remaining noncomputable or
+   unimplemented surfaces that are executable in SAW.
+4. Convert every `.known-gap` row either to a green differential/proof-obligation
+   test or to a documented final boundary decision.

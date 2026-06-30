@@ -1,0 +1,16 @@
+// Differential known-gap litmus for finite observation of SAWCore streams.
+//
+// SAW can evaluate the closed Boolean. The current Lean emission hits a
+// recursor result-shape convention gap instead of producing an artifact the
+// observer can reduce.
+
+let observed =
+  parse_core
+    "equalNat (Stream#rec Nat (\\(_ : Stream Nat) -> Nat) (\\(xs : Nat -> Nat) -> xs 3) (MkStream Nat (\\(i : Nat) -> i))) 3";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;
