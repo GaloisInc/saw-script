@@ -75,7 +75,9 @@
 #                    on any failure.
 #   run            — alias for test.
 #   conformance    — run only true conformance categories:
-#                    differential/* and saw-boundary/*. Do not add
+#                    differential/*, obligations/*, and saw-boundary/*.
+#                    Known gaps in these categories are pinned failures,
+#                    not evidence of full parity. Do not add
 #                    drivers/conformance_* or proofs/conformance_* here:
 #                    proof/library/elaboration checks are not differential
 #                    tests unless the harness compares real SAW and Lean

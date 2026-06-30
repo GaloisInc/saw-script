@@ -1,0 +1,7 @@
+module ExternalAxiom where
+
+import Prelude;
+
+axiom externalProof : Eq Nat 0 0;
+
+observed : Eq Nat 0 0 = externalProof;

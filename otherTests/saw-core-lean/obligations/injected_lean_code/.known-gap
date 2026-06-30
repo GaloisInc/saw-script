@@ -1,0 +1,1 @@
+Injected Lean code declarations have no public generic SAWCore-module Lean emission path in the obligation corpus; term emission ignores the module injection.

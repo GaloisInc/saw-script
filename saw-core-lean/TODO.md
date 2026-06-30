@@ -748,6 +748,15 @@ translation with a clear, principled diagnostic.
     SAWCore datatype recursors, and Cryptol algebraic enum lowering. These are
     not backend fixes; they pin the current rejection/realization gaps as
     corpus entries so they cannot remain prose-only.
+  - 2026-06-30 checkpoint: expanded proof-primitive obligation known gaps to
+    include `uip`, `bvEqToEq`, `foldr_nil`, and `head_gen`, and added loaded
+    SAWCore primitive/axiom declaration fixtures plus an injected-Lean-code
+    fixture. The injected-code fixture documents the current public API gap:
+    term emission ignores module-level `injectCode`, and there is no public
+    generic SAWCore-module Lean writer for the obligation corpus yet.
+    Also added the remaining explicit positive rows from the obligation plan:
+    non-definitional/provable `unsafeAssert` equality and raw index/proof
+    `fix` alongside the existing raw function-position `fix`.
   - 2026-06-29 checkpoint: expanded `saw-boundary` expected-rejection coverage
     for mapped-but-unsupported primitives. The new fixtures pin explicit
     diagnostics for unsupported Int primitives (`intAbs`, `intMin`, `intMax`),

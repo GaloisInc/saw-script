@@ -1,0 +1,7 @@
+module Injected where
+
+import Prelude;
+
+injectCode "Lean" "def injectedWitness : Nat := 7";
+
+observed : Nat = 7;

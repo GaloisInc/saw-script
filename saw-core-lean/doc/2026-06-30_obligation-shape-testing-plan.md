@@ -64,6 +64,10 @@ suite:
 - Do not let a known-gap fixture go green silently. If the real run starts
   satisfying the positive shape check, the expected-gap wrapper must fail until
   the case is promoted to an ordinary obligation test.
+- Do not treat a missing harness feature as permission to skip a backend
+  surface. Add the smallest corpus fixture that demonstrates the missing
+  observation path, mark it as a known gap, and record the harness work needed
+  to promote it.
 
 Each soundness-sensitive surface should be represented in the corpus in one of
 three ways:
@@ -83,6 +87,29 @@ it is a coverage map of the language surface, not a curated set of currently
 successful examples. The matrix must continue to include rows that the backend
 currently rejects, rows whose emitted Lean does not yet elaborate, and rows
 whose emitted artifact elaborates but lacks the required visible contract.
+
+This phase is complete when the coverage map is honest and executable. It is
+not complete because the backend has been repaired, and it must not repair the
+backend as part of making the map look better.
+
+## Failure Semantics
+
+The suite must fail on real failures.
+
+For a positive obligation test, failure means any of the following:
+
+- SAW does not emit the expected Lean artifact;
+- the artifact no longer elaborates as an obligation outline;
+- the expected contract is absent, weakened, or represented by the wrong
+  family;
+- the generated term no longer consumes evidence for the contract;
+- a forbidden bypass, hidden axiom, totalized primitive, or obsolete helper is
+  used instead.
+
+For a `.known-gap` obligation test, success means only that the current failure
+is still present at the expected stage with the expected diagnostic. If the
+backend starts emitting the desired shape, the `.known-gap` test must fail so
+the case is promoted. A known-gap pass is never parity.
 
 ## Coverage Matrix
 
@@ -601,7 +628,7 @@ The obligation-shape suite is good enough for the next backend phase when:
 7. The matrix, not the test count, is the coverage measure.
 8. There are no unrepresented known missing obligation surfaces.
 
-## Implementation Roadmap
+## Testing Roadmap
 
 1. Add `obligations/*` harness support.
    - Start with text/source checks plus Lean elaboration.
@@ -631,8 +658,9 @@ The obligation-shape suite is good enough for the next backend phase when:
    - imported/injected declarations.
 
 Backend fixes happen after this testing work has made the current state visible.
-As fixes land, individual `.known-gap` fixtures should fail, then be promoted to
-positive obligation tests with the same small source case.
+They are downstream consumers of the corpus findings, not part of this plan. As
+fixes land later, individual `.known-gap` fixtures should fail, then be promoted
+to positive obligation tests with the same small source case.
 
 This roadmap should not block corpus growth on perfect observation machinery.
 If a surface is known to matter and the current observer can only pin a failing

@@ -1,0 +1,7 @@
+module ExternalPrim where
+
+import Prelude;
+
+primitive externalNat : Nat;
+
+observed : Nat = externalNat;

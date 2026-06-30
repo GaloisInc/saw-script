@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "head_gen";
+write_lean_term "ProofHeadGenProbe" [] [] "emitted.lean" probe;
