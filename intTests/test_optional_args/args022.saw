@@ -1,0 +1,9 @@
+// This should be rejected because the type of g doesn't include a
+// named argument x.
+//
+// (and, as checked by other tests, there should be no way to write an
+// f that still takes a named argument x after one has been applied,
+// including by chains of lambdas, returning other functions, etc.)
+
+let f x?=3 () = x;
+print (let g = f x=2 in g x=4 ());

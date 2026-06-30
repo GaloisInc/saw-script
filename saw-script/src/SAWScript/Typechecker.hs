@@ -430,11 +430,72 @@ applyCurrentSubst t = do
 --
 -- The type t has already been checked, so it's ok to panic if it refers
 -- to something in the typedef collection that's not visible.
-resolveCurrentTypedefs :: SubstituteTyVars t => t -> TI t
+resolveCurrentTypedefs :: Type -> TI Type
 resolveCurrentTypedefs t = do
     avail <- asks primsAvail
     s <- gets tyEnv
     return $ substituteTyVars avail s t
+
+-- | Condense functions that return functions to a single function
+--   type with more parameters. The passed-in position is used for
+--   error reporting and should be the position of the expression
+--   or other object whose type we're working on. (The position of
+--   the type itself is not suitable; positions of types are meant
+--   as further annotations to errors.)
+condenseFunctions :: Pos -> Type -> TI Type
+condenseFunctions errPos ty = case ty of
+    TyFunc pos1 names1 params1 namedParams1 ret1 ->
+        case ret1 of
+            TyFunc _pos2 names2 params2 namedParams2 ret2 ->
+                let dups = Map.intersection namedParams1 namedParams2 in
+                case null dups of
+                    True -> do
+                        -- FUTURE: we could/should splice pos1 and
+                        -- pos2... but we don't have a way to
+                        -- represent disjoint position spans, so it's
+                        -- only a good idea if they're "near" each
+                        -- other. But they won't necessarily be, and
+                        -- we have no way to figure that for the time
+                        -- being.
+                        let pos = pos1
+                            names = names1 <> names2
+                            params = params1 ++ params2
+                            namedParams = Map.union namedParams1 namedParams2
+                            ret = ret2
+                            ty' = TyFunc pos names params namedParams ret
+                        -- Try again in case there's more functions hiding
+                        condenseFunctions errPos ty'
+                    False -> do
+                        let dups' = Text.intercalate " " $ Map.keys dups
+                        recordError errPos $ "Function has duplicate parameter names: " <>
+                                             Text.unpack dups'
+                        getErrorTyVar pos1
+            _ ->
+                pure ty
+    _ ->
+        pure ty
+
+-- | Apply both the current substitution and the current typedef
+--   collection. Then if we get a function type, condense functions
+--   that return functions to a single function type with more
+--   parameters.
+--
+--   The position should be the position of the AST construct whose
+--   type we're handling, and is used for error reporting.
+expandFully :: Pos -> Type -> TI Type
+expandFully pos t = do
+    t' <- resolveCurrentTypedefs t
+    t'' <- applyCurrentSubst t'
+    condenseFunctions pos t''
+
+-- | Like `expandFully`, but don't do the `condenseFunctions` step.
+--   Used from a context where we shouldn't generate failures, and
+--   where if we'd generate an invalid function type somewhere else
+--   also will.
+expandMostly :: Type -> TI Type
+expandMostly t = do
+    t' <- resolveCurrentTypedefs t
+    applyCurrentSubst t'
 
 -- Get the unification vars that are used in the current variable typing
 -- and named type environments.
@@ -968,8 +1029,11 @@ unify :: ContextName -> Type -> Pos -> Type -> TI ()
 unify cname t1 pos t2 = do
   ppopts <- asks tiPPOpts
 
-  t1' <- applyCurrentSubst =<< resolveCurrentTypedefs t1
-  t2' <- applyCurrentSubst =<< resolveCurrentTypedefs t2
+  -- Use pos as the failure position for either type; they're the
+  -- same type after all, and any position that gives rise to it
+  -- should be good enough if expandFully croaks. (Hopefully.)
+  t1' <- expandFully pos t1
+  t2' <- expandFully pos t2
   case mgu ppopts t1' t2' of
     Right s -> modify $ \rw -> rw { subst = mergeSubst s $ subst rw }
     Left msgs -> do
@@ -996,8 +1060,8 @@ matches :: Type -> Type -> TI Bool
 matches t1 t2 = do
   ppopts <- asks tiPPOpts
 
-  t1' <- applyCurrentSubst =<< resolveCurrentTypedefs t1
-  t2' <- applyCurrentSubst =<< resolveCurrentTypedefs t2
+  t1' <- expandMostly t1
+  t2' <- expandMostly t2
   case mgu ppopts t1' t2' of
     Right _ -> return True
     Left _ -> return False
@@ -1256,7 +1320,7 @@ inferExpr (ln, expr) = case expr of
 
   Lookup pos e n -> do
       (e1,t) <- inferExpr (ln, e)
-      t1 <- applyCurrentSubst =<< resolveCurrentTypedefs t
+      t1 <- expandFully (getPos e1) t
       elTy <- case t1 of
           TyRecord typos fs
            | Just ty <- Map.lookup n fs -> do
@@ -1279,7 +1343,7 @@ inferExpr (ln, expr) = case expr of
 
   TLookup pos e i -> do
       (e1,t) <- inferExpr (ln,e)
-      t1 <- applyCurrentSubst =<< resolveCurrentTypedefs t
+      t1 <- expandFully (getPos e1) t
       elTy <- case t1 of
           TyCon typos (TupleCon n) tys
            | i < n ->
@@ -1546,7 +1610,7 @@ inferExpr (ln, expr) = case expr of
                 getFreshTyVar pos
 
       (f', ty'f) <- inferExpr (ln, f)
-      ty'f' <- applyCurrentSubst =<< resolveCurrentTypedefs ty'f
+      ty'f' <- expandFully (getPos f) ty'f
 
       let oneArg (mbName, a) = do
             (a', ty'a) <- inferExpr (ln, a)
@@ -1794,7 +1858,7 @@ inferStmt cname atSyntacticTopLevel blockpos ctx s = do
             -- If the special cases don't apply, unify the result type
             -- with the complete type.
             (e', ty) <- inferExpr (cname, e)
-            ty' <- applyCurrentSubst =<< resolveCurrentTypedefs ty
+            ty' <- expandFully (getPos e) ty
 
             -- The correct, restricted case
             let restrictToCorrect = do
@@ -2105,7 +2169,7 @@ generalize foralls pats0 es0 ts0 = do
 --
 requireFunction :: Pos -> Type -> TI ()
 requireFunction pos ty = do
-    ty' <- applyCurrentSubst =<< resolveCurrentTypedefs ty
+    ty' <- expandFully pos ty
     case ty' of
         TyFunc _pos _ninfo _params _namedParams _ret ->
             return ()

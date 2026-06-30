@@ -198,6 +198,11 @@ data NamedParamInfo = NamedParamInfo Int [Text]
 noNames :: NamedParamInfo
 noNames = NamedParamInfo 0 []
 
+-- | Allow splicing two `NamedParamInfo` values together with `<>`.
+instance Semigroup NamedParamInfo where
+    NamedParamInfo n1 nps1 <> NamedParamInfo n2 nps2 =
+        NamedParamInfo (n1 + n2) (nps1 ++ nps2)
+
 -- The position information in a type should be thought of as its
 -- provenance; for a type annotation in the input it'll be a concrete
 -- file position. For types we infer, we want the position to record
