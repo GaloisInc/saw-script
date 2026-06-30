@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "bvForall";
+write_lean_term "ProofBvForallProbe" [] [] "emitted.lean" probe;

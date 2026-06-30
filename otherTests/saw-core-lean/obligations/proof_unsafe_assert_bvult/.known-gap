@@ -1,0 +1,1 @@
+unsafeAssertBVULt is a Cryptol size-bound assertion surface, but currently rejected instead of emitted as a checked proof obligation.

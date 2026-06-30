@@ -1,0 +1,5 @@
+enable_experimental;
+
+let probe = parse_core "\\(b : Bool) -> Bool#rec (\\(_ : Bool) -> Bool) True False b";
+
+write_lean_term "RecursorBoolProbe" [] [] "emitted.lean" probe;

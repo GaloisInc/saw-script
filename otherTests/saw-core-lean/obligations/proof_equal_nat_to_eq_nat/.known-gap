@@ -1,0 +1,1 @@
+equalNatToEqNat is a SAWCore Nat proof primitive, but currently rejected instead of emitted as a Lean theorem realization or proof obligation.

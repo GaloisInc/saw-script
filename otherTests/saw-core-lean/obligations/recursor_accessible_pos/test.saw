@@ -1,0 +1,10 @@
+enable_experimental;
+
+let probe = parse_core
+  "\\(p : Pos) (a : AccessiblePos p) -> \
+  \  AccessiblePos#rec (\\(q : Pos) (aq : AccessiblePos q) -> Bool) \
+  \                    True \
+  \                    (\\(q : Pos) (aq : AccessiblePos q) (b : Bool) -> False) \
+  \                    p a";
+
+write_lean_term "RecursorAccessiblePosProbe" [] [] "emitted.lean" probe;

@@ -1,0 +1,7 @@
+enable_experimental;
+
+// Obligation-shape litmus: raw function-position fix must use the raw generic
+// unique-fixed-point contract, not wrapped value-domain fix helpers.
+let probe = parse_core "fix (Nat -> Nat) (\\(f : Nat -> Nat) -> f)";
+
+write_lean_term "FixRawFunctionProbe" [] [] "emitted.lean" probe;

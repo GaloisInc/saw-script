@@ -1,0 +1,7 @@
+enable_experimental;
+
+// Obligation-shape litmus: impossible fully-applied unsafeAssert must remain
+// an explicit open equality obligation, not a trusted axiom.
+let probe = parse_core "unsafeAssert Bool True False";
+
+write_lean_term "UnsafeAssertFalseEqProbe" [] [] "emitted.lean" probe;

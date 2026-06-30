@@ -1,0 +1,7 @@
+enable_experimental;
+
+// Obligation-shape litmus: MkStream from an Except-valued index function must
+// expose totality and consume totality evidence before producing a raw stream.
+let probe = parse_core "MkStream Nat (\\(i : Nat) -> i)";
+
+write_lean_term "MkStreamTotalProbe" [] [] "emitted.lean" probe;

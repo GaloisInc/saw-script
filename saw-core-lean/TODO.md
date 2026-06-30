@@ -719,6 +719,13 @@ translation with a clear, principled diagnostic.
   - First targets: partial-operation preconditions, fully applied
     `unsafeAssert`, generic `fix`, raw-position `Prelude.error`, and
     `MkStream`/stream totality.
+  - 2026-06-30 checkpoint: added the dedicated `obligations/*` harness and
+    expanded the corpus beyond the initial P0 rows. Positive obligation-shape
+    fixtures now cover wrapped and raw-function `fix`, definitional and open
+    fully-applied `unsafeAssert`, raw `Prelude.error` in Nat/function/proof
+    positions, and `MkStream` totality. Known-gap obligation fixtures now pin
+    direct partial-operation preconditions, representative proof primitives,
+    all with-proof vector primitives, and direct recursor families.
   - 2026-06-29 checkpoint: expanded `saw-boundary` expected-rejection coverage
     for mapped-but-unsupported primitives. The new fixtures pin explicit
     diagnostics for unsupported Int primitives (`intAbs`, `intMin`, `intMax`),

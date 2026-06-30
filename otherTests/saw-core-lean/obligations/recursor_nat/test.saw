@@ -1,0 +1,5 @@
+enable_experimental;
+
+let probe = parse_core "\\(n : Nat) -> Nat#rec (\\(_ : Nat) -> Nat) Zero (\\(_ : Pos) -> Zero) n";
+
+write_lean_term "RecursorNatProbe" [] [] "emitted.lean" probe;

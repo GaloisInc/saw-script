@@ -1,0 +1,10 @@
+enable_experimental;
+
+let probe = parse_core
+  "\\(z : Z) -> \
+  \  Z#rec (\\(_ : Z) -> Bool) True \
+  \        (\\(_ : Pos) -> False) \
+  \        (\\(_ : Pos) -> False) \
+  \        z";
+
+write_lean_term "RecursorZProbe" [] [] "emitted.lean" probe;

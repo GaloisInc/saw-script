@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "equalNatToEqNat";
+write_lean_term "ProofEqualNatToEqNatProbe" [] [] "emitted.lean" probe;

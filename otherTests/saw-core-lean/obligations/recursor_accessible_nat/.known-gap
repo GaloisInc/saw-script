@@ -1,0 +1,1 @@
+AccessibleNat recursor emission is in SAWCore scope, but currently rejected at the underlying AccessibleNat type surface before the recursor can be emitted with a checked realization or obligation.
