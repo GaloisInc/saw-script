@@ -56,11 +56,25 @@ are the acceptance tests for this work. They must be promoted from
 - promoted `ecDiv`, `ecMod`, `ecFieldDiv`, and `ecRecip` obligation fixtures
   where Cryptol normalization reaches the scalar contract path.
 
-Remaining contract families are the direct bitvector operations and the
-remaining Cryptol.sawcore wrappers that reach bitvector signed division/mod.
-The bitvector slice should first settle a reusable Lean-side nonzero predicate,
-then extend the same contract table rather than adding operation-specific
-Haskell reasoning.
+2026-06-30 bitvector checkpoint:
+
+- extended `PartialOpContract` with explicit helper argument modes and a
+  data-driven proposition builder. This handles operations whose checked helper
+  takes a raw width argument plus wrapped value arguments without adding a
+  bitvector-specific semantic classifier.
+- added named Lean predicates `bvNonzero` / `bvNonzeroM` and thin checked
+  helpers for `bvUDiv`, `bvURem`, `bvSDiv`, and `bvSRem`.
+- promoted the four direct bitvector zero-divisor obligation fixtures from
+  known gaps to positive shape tests.
+- split nonzero executable bitvector division into a pinned differential known
+  gap. The emitted obligations are the intended sound shape, but the starter
+  proof does not yet discharge concrete vector nonzero facts.
+
+The remaining partial-operation contract family is the Cryptol.sawcore
+signed-BV wrapper surface (`ecSDiv`, `ecSMod`), which still hits wrapper or
+recursor emission before reaching the direct BV contract path. That work
+should reuse this contract table rather than adding wrapper-specific Haskell
+reasoning.
 
 ## Correctness Contract
 

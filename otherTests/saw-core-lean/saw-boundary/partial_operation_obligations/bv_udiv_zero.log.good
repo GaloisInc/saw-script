@@ -13,15 +13,25 @@ noncomputable def BvUDivZeroProbe : Except String (Vec
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) :=
-  Bind.bind (vecSequenceM 8 Bool #v[Pure.pure Bool.false, Pure.pure
+  let h_nonzero_obligation_ : (Prop) := (bvNonzeroM
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) (vecSequenceM 8 Bool
+  #v[Pure.pure Bool.false, Pure.pure Bool.false, Pure.pure Bool.false, Pure.pure
   Bool.false, Pure.pure Bool.false, Pure.pure Bool.false, Pure.pure
-  Bool.false, Pure.pure Bool.false, Pure.pure Bool.false, Pure.pure Bool.true])
-  (fun v_1 => Bind.bind (vecSequenceM 8 Bool #v[Pure.pure Bool.false, Pure.pure
+  Bool.false, Pure.pure Bool.false]));
+  let h_nonzero_ : (h_nonzero_obligation_) := ((by (try unfold h_nonzero_obligation_); (first | omega | simp [Pure.pure, Except.pure, Except.bind, Bind.bind, zero_macro, one_macro, succ_macro, bit0_macro, bit1_macro, natPos_macro, natToInt, divNat_checked, modNat_checked, divModNat_checked, intDiv_checkedM, intMod_checkedM, ratio_checkedM, rationalRecip_checkedM, bvNonzero, bvNonzeroM, bvNat, vecSequenceM, bvUDiv_checkedM, bvURem_checkedM, bvSDiv_checkedM, bvSRem_checkedM, ratio, ratio_checked, rationalRecip, rationalRecip_checked] | decide | skip); all_goals sorry));
+  bvUDiv_checkedM (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) (vecSequenceM 8 Bool
+  #v[Pure.pure Bool.false, Pure.pure Bool.false, Pure.pure Bool.false, Pure.pure
   Bool.false, Pure.pure Bool.false, Pure.pure Bool.false, Pure.pure
-  Bool.false, Pure.pure Bool.false, Pure.pure Bool.false, Pure.pure Bool.false])
-  (fun v_2 => Pure.pure (bvUDiv (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) v_1 v_2)))
+  Bool.false, Pure.pure Bool.true]) (vecSequenceM 8 Bool #v[Pure.pure
+  Bool.false, Pure.pure Bool.false, Pure.pure Bool.false, Pure.pure
+  Bool.false, Pure.pure Bool.false, Pure.pure Bool.false, Pure.pure
+  Bool.false, Pure.pure Bool.false]) h_nonzero_
 

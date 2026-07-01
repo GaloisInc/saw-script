@@ -170,17 +170,22 @@ Current implementation priority:
        Remaining proof-ergonomics gap: rational executable differential cases
        are pinned known gaps where the emitted obligations are correct but the
        starter tactic does not yet prove all rational nonzero facts.
-    2. [ ] Direct bitvector Prelude operations:
+    2. [x] Direct bitvector Prelude operations:
        `bvUDiv`, `bvURem`, `bvSDiv`, `bvSRem`.
-       Next design point: choose the stable Lean predicate for a nonzero
-       SAW bitvector, likely a named support-library predicate rather than
-       spelling equality to a generated zero vector everywhere.
+       2026-06-30 checkpoint: these now use the same `PartialOpContract`
+       table with explicit helper argument modes: raw width argument, wrapped
+       vector operands, named `bvNonzeroM` precondition, and checked Lean
+       helpers. The four direct BV zero-divisor obligation fixtures have been
+       promoted from known gaps. Nonzero executable BV division is pinned as a
+       proof-ergonomics known gap because the emitted obligations are sound but
+       the starter tactic does not yet prove concrete vector nonzero facts.
     3. [ ] Cryptol.sawcore wrappers:
        `ecDiv`, `ecMod`, `ecFieldDiv`, and `ecRecip` are covered by scalar
-       normalization. Remaining wrapper work: `ecSDiv`, `ecSMod`, and any
-       wrapper that reaches the pending bitvector contract surface. These
-       should reuse the same proof-carrying contract interface rather than
-       duplicating wrapper-specific Haskell semantic recognizers.
+       normalization. Remaining wrapper work: `ecSDiv` and `ecSMod`, which
+       still hit wrapper/recursor emission before reaching the direct BV
+       contract surface. They should reuse the same proof-carrying contract
+       interface rather than duplicating wrapper-specific Haskell semantic
+       recognizers.
   - Implementation rule: add a small data-driven partial-operation contract
     interface. Haskell may construct the operation-specific proposition and
     call a checked helper, but it must not inspect generated Lean syntax to
@@ -189,10 +194,12 @@ Current implementation priority:
     the existing operations. The proof argument may be computationally unused;
     its purpose is to put the soundness precondition into the checked type of
     the emitted result.
-  - Acceptance: promote the existing `obligations/partial_*` and
-    `obligations/cryptol_ec_*_zero` known gaps to positive obligation-shape
-    tests, preserving or adding checks for the precondition, evidence consumer,
-    checked helper, and forbidden unchecked primitive bypass.
+  - Acceptance: promote the existing direct `obligations/partial_*` and
+    scalar `obligations/cryptol_ec_*_zero` known gaps to positive
+    obligation-shape tests, preserving or adding checks for the precondition,
+    evidence consumer, checked helper, and forbidden unchecked primitive
+    bypass. Remaining Cryptol signed-BV wrapper rows stay pinned until the
+    wrapper reaches the direct BV contract path.
 
 - [ ] Close the bitvector primitive conformance surface found in the
   2026-06-29 audit.

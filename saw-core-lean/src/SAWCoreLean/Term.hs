@@ -1192,14 +1192,17 @@ data PartialOpContract = PartialOpContract
   { pocModule      :: ModuleName
   , pocName        :: String
   , pocArity       :: Int
-  , pocNonzeroArg  :: Int
-  , pocNonzeroType :: Lean.Term
+  , pocBuildProp   :: [Lean.Term] -> Lean.Term
   , pocConvention  :: PartialOpConvention
   }
 
 data PartialOpConvention
   = PartialOpRaw Lean.Ident
-  | PartialOpWrapped Lean.Ident
+  | PartialOpWrapped Lean.Ident [PartialOpArgMode]
+
+data PartialOpArgMode
+  = PartialOpArgRaw
+  | PartialOpArgWrapped
 
 partialOpContracts :: [PartialOpContract]
 partialOpContracts =
@@ -1208,23 +1211,41 @@ partialOpContracts =
   , natBinaryPartial "divModNat" "divModNat_checked"
   , intBinaryPartial "intDiv"    "intDiv_checkedM"
   , intBinaryPartial "intMod"    "intMod_checkedM"
-  , PartialOpContract preludeModule "ratio" 2 1
-      (Lean.Var (Lean.Ident "Int"))
-      (PartialOpWrapped (Lean.Ident "ratio_checkedM"))
-  , PartialOpContract preludeModule "rationalRecip" 1 0
-      (Lean.Var (Lean.Ident "Rational"))
-      (PartialOpWrapped (Lean.Ident "rationalRecip_checkedM"))
+  , PartialOpContract preludeModule "ratio" 2
+      (wrappedNonzeroArg (Lean.Var (Lean.Ident "Int")) 1)
+      (wrappedBinary "ratio_checkedM")
+  , PartialOpContract preludeModule "rationalRecip" 1
+      (wrappedNonzeroArg (Lean.Var (Lean.Ident "Rational")) 0)
+      (PartialOpWrapped (Lean.Ident "rationalRecip_checkedM")
+        [PartialOpArgWrapped])
+  , bvBinaryPartial "bvUDiv" "bvUDiv_checkedM"
+  , bvBinaryPartial "bvURem" "bvURem_checkedM"
+  , bvSignedBinaryPartial "bvSDiv" "bvSDiv_checkedM"
+  , bvSignedBinaryPartial "bvSRem" "bvSRem_checkedM"
   ]
   where
     preludeModule = mkModuleName ["Prelude"]
     natBinaryPartial source target =
-      PartialOpContract preludeModule source 2 1
-        (Lean.Var (Lean.Ident "Nat"))
+      PartialOpContract preludeModule source 2
+        (rawNonzeroArg (Lean.Var (Lean.Ident "Nat")) 1)
         (PartialOpRaw (Lean.Ident target))
     intBinaryPartial source target =
-      PartialOpContract preludeModule source 2 1
-        (Lean.Var (Lean.Ident "Int"))
-        (PartialOpWrapped (Lean.Ident target))
+      PartialOpContract preludeModule source 2
+        (wrappedNonzeroArg (Lean.Var (Lean.Ident "Int")) 1)
+        (wrappedBinary target)
+    wrappedBinary target =
+      PartialOpWrapped (Lean.Ident target)
+        [PartialOpArgWrapped, PartialOpArgWrapped]
+    bvBinaryPartial source target =
+      PartialOpContract preludeModule source 3
+        (bvNonzeroArg 0 2)
+        (PartialOpWrapped (Lean.Ident target)
+          [PartialOpArgRaw, PartialOpArgWrapped, PartialOpArgWrapped])
+    bvSignedBinaryPartial source target =
+      PartialOpContract preludeModule source 3
+        (bvSignedNonzeroArg 0 2)
+        (PartialOpWrapped (Lean.Ident target)
+          [PartialOpArgRaw, PartialOpArgWrapped, PartialOpArgWrapped])
 
 findPartialOpContract :: Ident -> Int -> Maybe PartialOpContract
 findPartialOpContract ident nArgs =
@@ -1250,6 +1271,25 @@ notEqPureZero ty value =
       , Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [Lean.NatLit 0]
       ]]
 
+rawNonzeroArg :: Lean.Term -> Int -> [Lean.Term] -> Lean.Term
+rawNonzeroArg ty argIdx args =
+  notEqZero ty (args !! argIdx)
+
+wrappedNonzeroArg :: Lean.Term -> Int -> [Lean.Term] -> Lean.Term
+wrappedNonzeroArg ty argIdx args =
+  notEqPureZero ty (args !! argIdx)
+
+bvNonzeroArg :: Int -> Int -> [Lean.Term] -> Lean.Term
+bvNonzeroArg widthIdx argIdx args =
+  Lean.App (Lean.Var (Lean.Ident "bvNonzeroM"))
+    [args !! widthIdx, args !! argIdx]
+
+bvSignedNonzeroArg :: Int -> Int -> [Lean.Term] -> Lean.Term
+bvSignedNonzeroArg widthIdx argIdx args =
+  Lean.App (Lean.Var (Lean.Ident "bvNonzeroM"))
+    [Lean.App (Lean.Var (Lean.Ident "succ_macro")) [args !! widthIdx],
+     args !! argIdx]
+
 partialOpProofScript :: Lean.Ident -> Set Lean.Ident -> Lean.Term
 partialOpProofScript propName proofIdents =
   Lean.Tactic $
@@ -1259,6 +1299,8 @@ partialOpProofScript propName proofIdents =
     \zero_macro, one_macro, succ_macro, bit0_macro, bit1_macro, natPos_macro, \
     \natToInt, divNat_checked, modNat_checked, divModNat_checked, \
     \intDiv_checkedM, intMod_checkedM, ratio_checkedM, rationalRecip_checkedM, \
+    \bvNonzero, bvNonzeroM, bvNat, vecSequenceM, bvUDiv_checkedM, \
+    \bvURem_checkedM, bvSDiv_checkedM, bvSRem_checkedM, \
     \ratio, ratio_checked, rationalRecip, rationalRecip_checked] | decide | skip); \
     \all_goals sorry"
   where
@@ -1311,22 +1353,23 @@ lowerPartialOpContract contract ident args = do
            shouldBind
            argResults
            contract
-       PartialOpWrapped checkedName ->
+       PartialOpWrapped checkedName argModes ->
          buildWrappedProofCarryingApplication
            (Lean.Var checkedName)
+           argModes
            argResults
            contract
 
 buildWrappedProofCarryingApplication ::
   TermTranslationMonad m =>
   Lean.Term ->
+  [PartialOpArgMode] ->
   [TranslatedTerm] ->
   PartialOpContract ->
   m TranslatedTerm
-buildWrappedProofCarryingApplication head_ argResults contract = do
-  let wrappedArgs = map translatedTermAsWrapped argResults
-      divisor = wrappedArgs !! pocNonzeroArg contract
-      prop = notEqPureZero (pocNonzeroType contract) divisor
+buildWrappedProofCarryingApplication head_ argModes argResults contract = do
+  let helperArgs = zipWith partialOpArgTerm argModes argResults
+      prop = pocBuildProp contract helperArgs
   unavailable <- view unavailableIdents <$> askTR
   let proofIdents = Set.union (leanTermIdents prop) unavailable
   tm <- withLocalProofObligationUsing
@@ -1334,8 +1377,11 @@ buildWrappedProofCarryingApplication head_ argResults contract = do
           prop
           (`partialOpProofScript` proofIdents)
           $ \proof ->
-              pure (Lean.App head_ (wrappedArgs ++ [proof]))
+              pure (Lean.App head_ (helperArgs ++ [proof]))
   pure (TranslatedTerm tm BindingWrapped)
+  where
+    partialOpArgTerm PartialOpArgRaw = ttLean
+    partialOpArgTerm PartialOpArgWrapped = translatedTermAsWrapped
 
 buildRawProofCarryingApplication ::
   TermTranslationMonad m =>
@@ -1368,8 +1414,7 @@ buildRawProofCarryingApplication resultShape head_ pureWrap shouldBind argResult
                 Nothing    -> origTerm
             | (pos, origTerm) <- zip [0..] argTerms
             ]
-          divisor = finalArgs !! pocNonzeroArg contract
-          prop = notEqZero (pocNonzeroType contract) divisor
+          prop = pocBuildProp contract finalArgs
       unavailable <- view unavailableIdents <$> askTR
       let proofIdents = Set.union (leanTermIdents prop) unavailable
       withLocalProofObligationUsing

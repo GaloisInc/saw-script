@@ -1,1 +1,0 @@
-Direct bitvector partial-operation result emission currently lacks required nonzero proof obligations; final conformance needs checked obligations, not unchecked total primitive calls. Scalar Nat/Int/Rational cases now emit proof-carrying obligations.

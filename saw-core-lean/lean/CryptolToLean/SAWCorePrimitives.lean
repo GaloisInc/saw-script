@@ -415,6 +415,13 @@ through `BitVec`. -/
 
 noncomputable def bvNat (n : Nat) (k : Nat) : Vec n Bool :=
   bitVecToVec (BitVec.ofNat n k)
+/-- Bitvector nonzero predicate used by proof-carrying division/remainder
+helpers. Spelling this once keeps generated contracts stable while preserving
+the SAW surface representation as `Vec n Bool`. -/
+@[reducible] def bvNonzero (n : Nat) (v : Vec n Bool) : Prop :=
+  Not (v = bvNat n 0)
+@[reducible] def bvNonzeroM (n : Nat) (v : Except String (Vec n Bool)) : Prop :=
+  Not (v = Pure.pure (bvNat n 0))
 noncomputable def bvToNat (n : Nat) (v : Vec n Bool) : Nat :=
   (vecToBitVec v).toNat
 noncomputable def bvToInt (n : Nat) (v : Vec n Bool) : Int :=
@@ -434,13 +441,49 @@ noncomputable def bvNeg (n : Nat) (x : Vec n Bool) : Vec n Bool :=
   bitVecToVec (- (vecToBitVec x))
 noncomputable def bvUDiv (n : Nat) (x y : Vec n Bool) : Vec n Bool :=
   bitVecToVec ((vecToBitVec x).udiv (vecToBitVec y))
+noncomputable def bvUDiv_checked (n : Nat) (x y : Vec n Bool)
+    (_h : bvNonzero n y) : Vec n Bool :=
+  bvUDiv n x y
+noncomputable def bvUDiv_checkedM (n : Nat)
+    (x y : Except String (Vec n Bool)) (_h : bvNonzeroM n y) :
+    Except String (Vec n Bool) := do
+  let x' ← x
+  let y' ← y
+  Pure.pure (bvUDiv n x' y')
 noncomputable def bvURem (n : Nat) (x y : Vec n Bool) : Vec n Bool :=
   bitVecToVec ((vecToBitVec x).umod (vecToBitVec y))
+noncomputable def bvURem_checked (n : Nat) (x y : Vec n Bool)
+    (_h : bvNonzero n y) : Vec n Bool :=
+  bvURem n x y
+noncomputable def bvURem_checkedM (n : Nat)
+    (x y : Except String (Vec n Bool)) (_h : bvNonzeroM n y) :
+    Except String (Vec n Bool) := do
+  let x' ← x
+  let y' ← y
+  Pure.pure (bvURem n x' y')
 
 noncomputable def bvSDiv (n : Nat) (x y : Vec (n + 1) Bool) : Vec (n + 1) Bool :=
   bitVecToVec ((vecToBitVec x).sdiv (vecToBitVec y))
+noncomputable def bvSDiv_checked (n : Nat) (x y : Vec (n + 1) Bool)
+    (_h : bvNonzero (n + 1) y) : Vec (n + 1) Bool :=
+  bvSDiv n x y
+noncomputable def bvSDiv_checkedM (n : Nat)
+    (x y : Except String (Vec (n + 1) Bool)) (_h : bvNonzeroM (n + 1) y) :
+    Except String (Vec (n + 1) Bool) := do
+  let x' ← x
+  let y' ← y
+  Pure.pure (bvSDiv n x' y')
 noncomputable def bvSRem (n : Nat) (x y : Vec (n + 1) Bool) : Vec (n + 1) Bool :=
   bitVecToVec ((vecToBitVec x).srem (vecToBitVec y))
+noncomputable def bvSRem_checked (n : Nat) (x y : Vec (n + 1) Bool)
+    (_h : bvNonzero (n + 1) y) : Vec (n + 1) Bool :=
+  bvSRem n x y
+noncomputable def bvSRem_checkedM (n : Nat)
+    (x y : Except String (Vec (n + 1) Bool)) (_h : bvNonzeroM (n + 1) y) :
+    Except String (Vec (n + 1) Bool) := do
+  let x' ← x
+  let y' ← y
+  Pure.pure (bvSRem n x' y')
 
 noncomputable def bvShl (w : Nat) (x : Vec w Bool) (i : Nat) : Vec w Bool :=
   bitVecToVec ((vecToBitVec x) <<< i)

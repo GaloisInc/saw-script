@@ -1,0 +1,16 @@
+// TRUE differential litmus for nonzero bitvector division/remainder.
+//
+// This is currently pinned as a known gap: SAW and the emitted Lean term agree
+// semantically, but the proof-carrying backend now emits explicit nonzero
+// obligations and the starter proof does not yet discharge concrete vector
+// nonzero facts.
+
+let observed =
+  parse_core "and (bvEq 8 (bvUDiv 8 0x0d 0x03) 0x04) (and (bvEq 8 (bvURem 8 0x0d 0x03) 0x01) (and (bvEq 8 (bvSDiv 7 0xf9 0x02) 0xfd) (bvEq 8 (bvSRem 7 0xf9 0x02) 0xff)))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

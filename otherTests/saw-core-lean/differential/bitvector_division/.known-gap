@@ -1,0 +1,1 @@
+Nonzero bitvector division/remainder now emits proof-carrying divisor obligations, but the starter Lean proof does not yet discharge concrete vector nonzero facts for executable differential replay.

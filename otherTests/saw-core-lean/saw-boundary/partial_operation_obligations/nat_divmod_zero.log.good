@@ -11,7 +11,7 @@ noncomputable def NatDivModZeroProbe : Except String (PairType Nat (PairType Nat
   UnitType)) :=
   let h_nonzero_obligation_ : (Prop) := (Not (@Eq Nat
   CryptolToLean.SAWCorePrimitives.zero_macro 0));
-  let h_nonzero_ : (h_nonzero_obligation_) := ((by (try unfold h_nonzero_obligation_); (first | omega | simp [Pure.pure, Except.pure, Except.bind, Bind.bind, zero_macro, one_macro, succ_macro, bit0_macro, bit1_macro, natPos_macro, natToInt, divNat_checked, modNat_checked, divModNat_checked, intDiv_checkedM, intMod_checkedM, ratio_checkedM, rationalRecip_checkedM, ratio, ratio_checked, rationalRecip, rationalRecip_checked] | decide | skip); all_goals sorry));
+  let h_nonzero_ : (h_nonzero_obligation_) := ((by (try unfold h_nonzero_obligation_); (first | omega | simp [Pure.pure, Except.pure, Except.bind, Bind.bind, zero_macro, one_macro, succ_macro, bit0_macro, bit1_macro, natPos_macro, natToInt, divNat_checked, modNat_checked, divModNat_checked, intDiv_checkedM, intMod_checkedM, ratio_checkedM, rationalRecip_checkedM, bvNonzero, bvNonzeroM, bvNat, vecSequenceM, bvUDiv_checkedM, bvURem_checkedM, bvSDiv_checkedM, bvSRem_checkedM, ratio, ratio_checked, rationalRecip, rationalRecip_checked] | decide | skip); all_goals sorry));
   Pure.pure (divModNat_checked (CryptolToLean.SAWCorePrimitives.natPos_macro
   CryptolToLean.SAWCorePrimitives.one_macro)
   CryptolToLean.SAWCorePrimitives.zero_macro h_nonzero_)
