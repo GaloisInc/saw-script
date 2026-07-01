@@ -427,6 +427,12 @@ Current implementation priority:
        needs the raw `IsLeNat` proof datatype surface itself to be emitted or
        imported first; that is separate Prelude proof-infrastructure work, not
        a reason to add ad hoc support in this row.
+       `bvEqToEqNat` remains a pinned known gap: a direct proof-value fixture
+       exposes the separate `eqNat` Prelude-alias rejection, while consuming
+       the proof through `Eq__rec` exposes the existing raw/wrapped `bvToNat`
+       Nat mismatch in proof positions. Do not paper over either issue with a
+       special proof-primitive contract; this needs the surrounding
+       proof/value-shape interface fixed first.
        2026-07-01 checkpoint: `eqNatAddComm` now emits an exact local
        `Eq Nat (addNat x y) (addNat y x)` obligation and the fixture consumes
        that proof through `Eq__rec`, avoiding the unrelated direct `eqNat`
