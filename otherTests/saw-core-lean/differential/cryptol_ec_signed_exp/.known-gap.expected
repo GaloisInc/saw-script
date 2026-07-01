@@ -1,3 +1,2 @@
-FAIL: SAW differential producer failed
-Error translating: Refusing to translate primitive Nat__rec.
-No SAW-core-lean mapping for `Prelude.Nat__rec`
+uses `sorry`
+FAIL: true differential executable tests may not rely on proof stubs

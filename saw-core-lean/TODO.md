@@ -139,22 +139,23 @@ Current implementation priority:
 
 1. Close partial-operation obligations in principle:
    `doc/2026-06-30_partial-operation-obligations-plan.md`.
-   Direct scalar and direct bitvector operations now use checked
-   proof-carrying helpers. The remaining partial-operation slice is the
-   Cryptol signed-BV wrapper surface (`ecSDiv`, `ecSMod`), which must be fixed
-   at the wrapper/recursor contract layer rather than by width-specific Haskell
+   Direct scalar operations, direct bitvector operations, and the Cryptol
+   signed-BV wrapper surface (`ecSDiv`, `ecSMod`) now use checked
+   proof-carrying helpers. The wrapper slice is fixed at the
+   wrapper/recursor contract layer rather than by width-specific Haskell
    normalization.
 2. Execute the Priority #1 principled-emission plan:
    `doc/2026-06-30_priority-1-principled-emission-plan.md`.
-   The first driver is `ecSDiv`/`ecSMod`; the design goal is a reusable
-   contract interface for wrapper and recursor-shaped emissions, not another
-   special case.
+   The first driver, `ecSDiv`/`ecSMod`, is complete. The next step is to test
+   whether the same checked-contract abstraction cleanly covers bounds/index
+   obligations (`ecAt` and with-proof vector primitives) before coding another
+   local case.
 3. Then move to bounds/index obligations (`ecAt` and with-proof vector
    primitives), followed by smaller wrapper-shape gaps.
 
 ## Priority 0: Emission Soundness
 
-- [ ] Implement proof-carrying partial-operation contracts.
+- [x] Implement proof-carrying partial-operation contracts.
   - Design reference:
     `doc/2026-06-30_partial-operation-obligations-plan.md`.
   - This is the current top backend priority. Direct partial operations must
@@ -186,19 +187,15 @@ Current implementation priority:
        promoted from known gaps. Nonzero executable BV division is pinned as a
        proof-ergonomics known gap because the emitted obligations are sound but
        the starter tactic does not yet prove concrete vector nonzero facts.
-    3. [ ] Cryptol.sawcore wrappers:
+    3. [x] Cryptol.sawcore wrappers:
        `ecDiv`, `ecMod`, `ecFieldDiv`, and `ecRecip` are covered by scalar
-       normalization. Remaining wrapper work: `ecSDiv` and `ecSMod`, which
-       still hit wrapper/recursor emission before reaching the direct BV
-       contract surface. They should reuse the same proof-carrying contract
-       interface rather than duplicating wrapper-specific Haskell semantic
-       recognizers.
+       normalization. `ecSDiv` and `ecSMod` now stay opaque across
+       normalization and route through a checked wrapper contract over
+       `Cryptol.Num`; the Lean helper case-splits on `Num` and requires
+       `ecSignedBVNonzeroM` evidence for the finite positive case. This avoids
+       any Haskell rewrite from `ecSDiv (TCNum (Succ n))` to `bvSDiv n`.
        Planning reference:
        `doc/2026-06-30_priority-1-principled-emission-plan.md`.
-       The intended fix is not a Haskell rewrite from `ecSDiv (TCNum (Succ n))`
-       to `bvSDiv n`. The backend should emit a checked wrapper/recursor
-       contract whose Lean type exposes the finite-positive-width and
-       nonzero-divisor evidence needed to reach the existing BV checked helper.
   - Implementation rule: add a small data-driven partial-operation contract
     interface. Haskell may construct the operation-specific proposition and
     call a checked helper, but it must not inspect generated Lean syntax to
@@ -207,12 +204,11 @@ Current implementation priority:
     the existing operations. The proof argument may be computationally unused;
     its purpose is to put the soundness precondition into the checked type of
     the emitted result.
-  - Acceptance: promote the existing direct `obligations/partial_*` and
-    scalar `obligations/cryptol_ec_*_zero` known gaps to positive
-    obligation-shape tests, preserving or adding checks for the precondition,
-    evidence consumer, checked helper, and forbidden unchecked primitive
-    bypass. Remaining Cryptol signed-BV wrapper rows stay pinned until the
-    wrapper reaches the direct BV contract path.
+  - 2026-06-30 checkpoint: all direct `obligations/partial_*` and
+    `obligations/cryptol_ec_*_zero` zero-divisor/zero-denominator fixtures are
+    positive obligation-shape tests. Remaining gaps in this area are proof
+    ergonomics for executable replay of nonzero Rational/BV examples, not
+    missing emission contracts.
 
 - [ ] Close the bitvector primitive conformance surface found in the
   2026-06-29 audit.
@@ -706,10 +702,10 @@ Current implementation priority:
   - 2026-06-29 checkpoint: added focused direct-result partial-operation
     boundary fixtures for `divNat`, `divModNat`, `intDiv`, `bvUDiv`,
     `bvSDiv`, `ratio`, and `rationalRecip` at zero divisors/denominators.
-    2026-06-30 update: scalar Nat/Int/Rational and direct bitvector fixtures
-    now emit proof-carrying obligations and checked helpers. Remaining
-    zero-divisor work is in Cryptol wrapper surfaces such as `ecSDiv` and
-    `ecSMod`, plus proof ergonomics for executable replay of nonzero examples.
+    2026-06-30 update: scalar Nat/Int/Rational, direct bitvector, and Cryptol
+    zero-divisor wrapper fixtures now emit proof-carrying obligations and
+    checked helpers. Remaining work is proof ergonomics for executable replay
+    of nonzero examples.
   - 2026-06-29 checkpoint: added a focused finite-observation stream-helper
     differential known gap for `streamGet`, `streamMap`, shifts, and
     `streamScanl`. SAW evaluates the closed Boolean, but the emitted Lean
@@ -819,6 +815,11 @@ Current implementation priority:
     `ecAt`'s current indexing emission gap. `streamGet` finite projection is
     intentionally kept as value/differential coverage, not a fake standalone
     obligation test.
+  - 2026-06-30 checkpoint: promoted `ecSDiv` and `ecSMod` from known-gap
+    rows to positive obligation-shape tests. Their emitted artifacts expose
+    `ecSignedBVNonzeroM` and checked `ecSDiv_checkedM` / `ecSMod_checkedM`
+    helpers, and assert absence of residual `Nat__rec` and unchecked direct
+    signed-BV bypasses.
   - 2026-06-30 checkpoint: added obligation known-gap fixtures for P2 datatype
     and list surfaces: direct `List`/`ListSort`/`FunsTo`, direct user-defined
     SAWCore datatype recursors, and Cryptol algebraic enum lowering. These are

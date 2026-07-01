@@ -13,6 +13,12 @@ a residual `Prelude.Nat__rec`. The fix must be principled; it must not be a
 Haskell classifier that recognizes one width pattern and rewrites the term to a
 convenient direct primitive call.
 
+Implementation checkpoint: the immediate `ecSDiv` / `ecSMod` driver is now
+implemented. The wrappers stay opaque under Lean normalization and route
+through checked Lean helpers over `Cryptol.Num`; Haskell passes the raw `Num`
+argument and wrapped operands to the contract table but does not compute a
+finite predecessor width or erase the wrapper's recursor structure.
+
 ## Goal
 
 For every soundness-sensitive emission surface:
@@ -73,9 +79,10 @@ Cryptol `Num` width:
 - finite successor width delegates to `bvSDiv n` / `bvSRem n`;
 - infinite stream width goes to a runtime error function.
 
-Today, a focused zero-divisor fixture such as `ecSDiv (TCNum 8) 0xf9 0x00`
-fails because `Nat__rec` survives normalization and the translator rejects the
-residual recursor before the direct BV partial-operation contract can fire.
+Before the checkpoint, a focused zero-divisor fixture such as
+`ecSDiv (TCNum 8) 0xf9 0x00` failed because `Nat__rec` survived normalization
+and the translator rejected the residual recursor before the direct BV
+partial-operation contract could fire.
 
 The principled fix is:
 
@@ -135,16 +142,16 @@ After `ecSDiv` / `ecSMod`, use the same contract style for:
 
 For the immediate signed-BV wrapper slice:
 
-- `make test-saw-core-lean-conformance` passes.
-- `obligations/cryptol_ec_sdiv_zero` and
-  `obligations/cryptol_ec_smod_zero` are no longer known gaps.
-- The positive shape tests require the relevant checked helper and obligation
-  names and forbid unchecked `bvSDiv (` / `bvSRem (` bypasses.
-- No Haskell code computes the predecessor width or recognizes a closed
-  `TCNum` pattern to decide the semantic translation.
-- Any starter proof that cannot discharge concrete nonzero evidence leaves a
-  visible obligation or pinned proof-ergonomics known gap; it must not weaken
-  the emitted contract.
+- done: `obligations/cryptol_ec_sdiv_zero` and
+  `obligations/cryptol_ec_smod_zero` are positive shape tests rather than
+  known gaps;
+- done: the positive shape tests require `ecSignedBVNonzeroM`, checked
+  `ecSDiv_checkedM` / `ecSMod_checkedM`, and absence of residual `Nat__rec` or
+  unchecked direct signed-BV bypasses;
+- done: Haskell does not compute the predecessor width or recognize a closed
+  `TCNum` pattern to decide the semantic translation;
+- validation remains the normal full conformance gate:
+  `make test-saw-core-lean-conformance`.
 
 For the broader Priority #1 architecture:
 
@@ -158,13 +165,16 @@ For the broader Priority #1 architecture:
 
 ## Work Breakdown
 
-1. Refactor `PartialOpContract` toward a general checked application contract,
-   or document why a separate wrapper-contract type is cleaner.
-2. Add the Lean support predicates/helpers needed for finite-successor signed
-   BV wrapper contracts.
-3. Route fully applied `ecSDiv` and `ecSMod` through that contract table.
-4. Refresh the two obligation fixtures from known gaps to positive shape tests.
-5. Run `lake build`, `cabal build exe:saw`, and
+1. Done: extended `PartialOpContract` to cover this wrapper-shaped case
+   directly; a separate wrapper-contract type was not needed for the current
+   arity and argument-convention shape.
+2. Done: added the Lean support carrier, predicate, and helpers needed for
+   finite-successor signed-BV wrapper contracts.
+3. Done: routed fully applied `ecSDiv` and `ecSMod` through that contract
+   table.
+4. Done: refreshed the two obligation fixtures from known gaps to positive
+   shape tests.
+5. Next validation gate: run `lake build`, `cabal build exe:saw`, and
    `make test-saw-core-lean-conformance`.
 6. Reassess whether the same abstraction cleanly covers `ecAt`; if yes, move
    directly to bounds/index obligations. If not, update this plan before

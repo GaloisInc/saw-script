@@ -1,3 +1,4 @@
-Direct Cryptol.sawcore `ecSDiv` and `ecSMod` currently leave residual
-`Prelude.Nat__rec` in the emitted term, which the Lean translator deliberately
-rejects until there is a checked recursor mapping or proof-carrying lowering.
+Direct Cryptol.sawcore `ecSDiv` and `ecSMod` now emit proof-carrying
+nonzero-divisor obligations, but executable differential replay still depends
+on generated proof stubs until Lean-side automation can discharge the concrete
+nonzero facts.

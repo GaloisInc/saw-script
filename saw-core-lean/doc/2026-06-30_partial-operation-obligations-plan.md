@@ -70,19 +70,28 @@ are the acceptance tests for this work. They must be promoted from
   gap. The emitted obligations are the intended sound shape, but the starter
   proof does not yet discharge concrete vector nonzero facts.
 
-The remaining partial-operation contract family is the Cryptol.sawcore
-signed-BV wrapper surface (`ecSDiv`, `ecSMod`), which still hits wrapper or
-recursor emission before reaching the direct BV contract path. That work
-should reuse this contract table rather than adding wrapper-specific Haskell
-reasoning.
+2026-06-30 signed-wrapper checkpoint:
 
-Planning update: the signed-BV wrapper slice is now tracked as the first driver
-for the broader Priority #1 principled-emission plan:
-`2026-06-30_priority-1-principled-emission-plan.md`. The important design
-constraint is that Haskell must not recognize a closed finite width and rewrite
-`ecSDiv` / `ecSMod` directly to `bvSDiv` / `bvSRem`. The fix should expose a
-checked wrapper or recursor contract whose Lean-side evidence justifies the
-finite-successor width and nonzero-divisor requirements.
+- kept `ecSDiv` and `ecSMod` opaque across Lean normalization so their
+  wrapper boundary remains visible to the translator instead of exposing a
+  residual `Nat__rec`;
+- added Lean-side `seq` / `seqBool` carriers for Cryptol `Num` sequence types;
+- added `ecSignedBVNonzeroM` and checked `ecSDiv_checkedM` /
+  `ecSMod_checkedM` helpers. These helpers case-split on `Num` in Lean and
+  require nonzero evidence only in the finite positive branch. The zero-width
+  and infinite branches are impossible under the contract, so they cannot be
+  silently totalized.
+- routed fully applied `ecSDiv` / `ecSMod` through the same data-driven
+  `PartialOpContract` table using raw `Num` plus wrapped value arguments.
+  Haskell does not compute a predecessor width or rewrite to `bvSDiv` /
+  `bvSRem`.
+- promoted `obligations/cryptol_ec_sdiv_zero` and
+  `obligations/cryptol_ec_smod_zero` from known gaps to positive
+  obligation-shape tests.
+
+The partial-operation obligation family is now closed at the emitted-contract
+level. Remaining work in this area is proof ergonomics for executable replay of
+nonzero Rational and bitvector examples.
 
 ## Correctness Contract
 

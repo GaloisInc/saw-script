@@ -1222,9 +1222,12 @@ partialOpContracts =
   , bvBinaryPartial "bvURem" "bvURem_checkedM"
   , bvSignedBinaryPartial "bvSDiv" "bvSDiv_checkedM"
   , bvSignedBinaryPartial "bvSRem" "bvSRem_checkedM"
+  , cryptolSignedBVPartial "ecSDiv" "ecSDiv_checkedM"
+  , cryptolSignedBVPartial "ecSMod" "ecSMod_checkedM"
   ]
   where
     preludeModule = mkModuleName ["Prelude"]
+    cryptolModule = mkModuleName ["Cryptol"]
     natBinaryPartial source target =
       PartialOpContract preludeModule source 2
         (rawNonzeroArg (Lean.Var (Lean.Ident "Nat")) 1)
@@ -1244,6 +1247,11 @@ partialOpContracts =
     bvSignedBinaryPartial source target =
       PartialOpContract preludeModule source 3
         (bvSignedNonzeroArg 0 2)
+        (PartialOpWrapped (Lean.Ident target)
+          [PartialOpArgRaw, PartialOpArgWrapped, PartialOpArgWrapped])
+    cryptolSignedBVPartial source target =
+      PartialOpContract cryptolModule source 3
+        (cryptolSignedBVNonzeroArg 0 2)
         (PartialOpWrapped (Lean.Ident target)
           [PartialOpArgRaw, PartialOpArgWrapped, PartialOpArgWrapped])
 
@@ -1289,6 +1297,11 @@ bvSignedNonzeroArg widthIdx argIdx args =
   Lean.App (Lean.Var (Lean.Ident "bvNonzeroM"))
     [Lean.App (Lean.Var (Lean.Ident "succ_macro")) [args !! widthIdx],
      args !! argIdx]
+
+cryptolSignedBVNonzeroArg :: Int -> Int -> [Lean.Term] -> Lean.Term
+cryptolSignedBVNonzeroArg widthIdx argIdx args =
+  Lean.App (Lean.Var (Lean.Ident "ecSignedBVNonzeroM"))
+    [args !! widthIdx, args !! argIdx]
 
 partialOpProofScript :: Lean.Ident -> Set Lean.Ident -> Lean.Term
 partialOpProofScript propName proofIdents =

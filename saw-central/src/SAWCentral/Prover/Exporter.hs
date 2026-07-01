@@ -1241,6 +1241,14 @@ leanOpaqueBuiltins =
     -- streamScanl_succ lemmas) mirrors Rocq's approach and gives
     -- downstream proofs a named target.
   , "streamScanl"
+    -- Cryptol signed bitvector division/modulus wrappers contain a
+    -- finite-width dispatch through Prelude.Nat__rec before reaching the
+    -- underlying signed BV primitive. Keep the wrappers opaque so the Lean
+    -- backend can route fully-applied uses through checked proof-carrying
+    -- contracts over Cryptol.Num instead of relying on Haskell normalization to
+    -- compute a predecessor width.
+  , "ecSDiv"
+  , "ecSMod"
     -- not / and / or / xor / boolEq defs use ite internally; once
     -- ite is opaque (above), these unfold one step to ite and stop
     -- there, routing via the SpecialTreatment ite mapping to our

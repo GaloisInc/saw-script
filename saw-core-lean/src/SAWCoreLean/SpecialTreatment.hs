@@ -382,6 +382,7 @@ cryptolPreludeSpecialTreatmentMap = Map.fromList
   [ ("Num",   mapsTo sawCorePrimitivesModule "Num")
   , ("TCNum", mapsTo sawCorePrimitivesModule "Num.TCNum")
   , ("TCInf", mapsTo sawCorePrimitivesModule "Num.TCInf")
+  , ("seq",   mapsTo sawCorePrimitivesModule "seq")
   ]
 
 -- | Seed entries for 'Prelude.*' primitives whose Lean realisation is

@@ -77,6 +77,17 @@ indexed view of the stream. -/
 inductive Stream (α : Type) : Type where
   | MkStream : (Nat → α) → Stream α
 
+/-- Cryptol's `seq n α` carrier at the Lean support-library level. Finite
+widths are vectors; the infinite case is the SAW stream representation. Keeping
+this as a Lean definition lets wrapper contracts for Cryptol entry points
+reason by cases on `Num` inside Lean rather than asking Haskell to compute
+width refinements. -/
+@[reducible] def seq : Num → Type → Type
+  | Num.TCNum n, α => Vec n α
+  | Num.TCInf, α => Stream α
+
+@[reducible] def seqBool (n : Num) : Type := seq n Bool
+
 /-- SAWCore Prelude `EmptyType : sort 0` — the "end of record"
 marker. Has one constructor `Empty`; Cryptol's records are encoded
 as right-nested `RecordType` chains ending in `EmptyType` / `Empty`.
@@ -484,6 +495,38 @@ noncomputable def bvSRem_checkedM (n : Nat)
   let x' ← x
   let y' ← y
   Pure.pure (bvSRem n x' y')
+
+/-- Nonzero contract for Cryptol signed bitvector division/modulus wrappers.
+Only finite positive widths are admissible for the checked helper. The zero
+width and infinite stream branches are impossible under this contract, which
+keeps those source-surface error cases from being silently totalized. -/
+@[reducible] def ecSignedBVNonzeroM (n : Num)
+    (v : Except String (seqBool n)) : Prop :=
+  match n with
+  | Num.TCNum 0 => False
+  | Num.TCNum (Nat.succ w) => bvNonzeroM (Nat.succ w) v
+  | Num.TCInf => False
+
+noncomputable def ecSDiv_checkedM (n : Num)
+    (x y : Except String (seqBool n)) (h : ecSignedBVNonzeroM n y) :
+    Except String (seqBool n) :=
+  match n with
+  | Num.TCNum 0 => False.elim h
+  | Num.TCNum (Nat.succ _w) => do
+      let x' ← x
+      let y' ← y
+      Pure.pure (bitVecToVec ((vecToBitVec x').sdiv (vecToBitVec y')))
+  | Num.TCInf => False.elim h
+
+noncomputable def ecSMod_checkedM (n : Num)
+    (x y : Except String (seqBool n)) (h : ecSignedBVNonzeroM n y) :
+    Except String (seqBool n) :=
+  match n with
+  | Num.TCNum 0 => False.elim h
+  | Num.TCNum (Nat.succ _w) => do
+      let x' ← x
+      let y' ← y
+      Pure.pure (bitVecToVec ((vecToBitVec x').srem (vecToBitVec y')))
 
 noncomputable def bvShl (w : Nat) (x : Vec w Bool) (i : Nat) : Vec w Bool :=
   bitVecToVec ((vecToBitVec x) <<< i)

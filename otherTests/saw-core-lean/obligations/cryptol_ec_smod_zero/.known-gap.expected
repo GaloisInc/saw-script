@@ -1,3 +1,0 @@
-FAIL: SAW obligation producer failed
-Refusing to translate primitive Nat__rec
-No SAW-core-lean mapping for `Prelude.Nat__rec`
