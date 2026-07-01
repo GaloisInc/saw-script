@@ -1,4 +1,4 @@
 enable_experimental;
 
-let probe = parse_core "bvNat_bvToNat";
+let probe = parse_core "bvNat_bvToNat 8 0x03";
 write_lean_term "ProofBvNatBvToNatProbe" [] [] "emitted.lean" probe;

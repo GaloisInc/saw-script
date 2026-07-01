@@ -418,6 +418,11 @@ Current implementation priority:
        against the translated vector operand. This remains proof-carrying
        emission only; the existing Lean `bvAdd_id_l` / `bvAdd_id_r` theorems
        are not invoked from Haskell.
+       2026-07-01 checkpoint: `bvNat_bvToNat` now emits the exact nested
+       wrapped equality obligation for the translated `bvToNat` result fed
+       back through `bvNat`. The contract deliberately mirrors the backend's
+       monadic emission shape rather than simplifying it by a monad law, so
+       Haskell is only constructing the proposition that Lean must check.
        `IsLeNat_SuccSucc` remains a pinned known gap because a positive fixture
        needs the raw `IsLeNat` proof datatype surface itself to be emitted or
        imported first; that is separate Prelude proof-infrastructure work, not

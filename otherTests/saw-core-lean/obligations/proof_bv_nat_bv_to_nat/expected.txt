@@ -1,1 +1,12 @@
 contains:h_proof_obligation_
+contains:h_proof_
+contains:bvNat
+contains:bvToNat
+contains:Vec
+contains:Bool
+contains-normalized:@Eq (Except String (Vec
+contains-normalized:Bool)) (Bind.bind
+contains-normalized:Pure.pure (bvToNat
+contains-normalized:Pure.pure (bvNat
+absent:CryptolToLean.SAWCorePrimitives.bvNat_bvToNat
+absent:bvNat_bvToNat_id

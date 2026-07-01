@@ -1426,6 +1426,10 @@ proofPrimitiveContracts =
       [ProofArgRaw, ProofArgWrapped]
       (bvAddZeroContract False)
       (\_ proof -> pure proof)
+  , ProofPrimitiveContract preludeModule "bvNat_bvToNat" 2
+      [ProofArgRaw, ProofArgWrapped]
+      bvNatBvToNatContract
+      (\_ proof -> pure proof)
   , ProofPrimitiveContract preludeModule "eqNatAdd0" 1
       [ProofArgRaw]
       eqNatAdd0Contract
@@ -1570,6 +1574,28 @@ bvAddZeroContract zeroOnLeft args =
       Except.throwError (RejectedPrimitive "proof primitive"
         "bvAddZero contract expected exactly width and vector arguments")
 
+bvNatBvToNatContract ::
+  TermTranslationMonad m =>
+  [Lean.Term] ->
+  m Lean.Term
+bvNatBvToNatContract args =
+  case args of
+    [width, value] -> do
+      let vecTy =
+            Lean.App (Lean.Var (Lean.Ident "Vec"))
+              [width, Lean.Var (Lean.Ident "Bool")]
+          toNat v =
+            Lean.App (Lean.Var (Lean.Ident "bvToNat")) [width, v]
+          toBv n =
+            Lean.App (Lean.Var (Lean.Ident "bvNat"))
+              [width, n]
+      natValue <- bvUnaryM toNat value
+      rebuilt <- bvUnaryM toBv natValue
+      pure (boolEqAt (wrapExcept vecTy) rebuilt value)
+    _ ->
+      Except.throwError (RejectedPrimitive "proof primitive"
+        "bvNat_bvToNat contract expected exactly width and vector arguments")
+
 eqNatAdd0Contract ::
   TermTranslationMonad m =>
   [Lean.Term] ->
@@ -1651,6 +1677,22 @@ bvBinaryM op width lhs rhs = do
             , Lean.Lambda [Lean.Binder Lean.Explicit rhsName Nothing]
                 (Lean.App pureVar [opApp])
             ])
+      ]
+
+bvUnaryM ::
+  TermTranslationMonad m =>
+  (Lean.Term -> Lean.Term) ->
+  Lean.Term ->
+  m Lean.Term
+bvUnaryM mkBody value = do
+  valueName <- freshVariantAvoiding (leanTermIdents value) (Lean.Ident "v_")
+  let bindVar = Lean.Var (Lean.Ident "Bind.bind")
+      pureVar = Lean.Var (Lean.Ident "Pure.pure")
+  pure $
+    Lean.App bindVar
+      [ value
+      , Lean.Lambda [Lean.Binder Lean.Explicit valueName Nothing]
+          (Lean.App pureVar [mkBody (Lean.Var valueName)])
       ]
 
 bvComparisonEqM ::

@@ -1,1 +1,0 @@
-bvNat_bvToNat represents the SAWCore bitvector/Nat roundtrip lemma family, but currently rejected instead of emitted as a Lean theorem realization or proof obligation.
