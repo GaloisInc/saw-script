@@ -1,4 +1,4 @@
 enable_experimental;
 
-let probe = parse_core "bvEq_refl";
+let probe = parse_core "bvEq_refl 8 0x03";
 write_lean_term "ProofBvEqReflProbe" [] [] "emitted.lean" probe;

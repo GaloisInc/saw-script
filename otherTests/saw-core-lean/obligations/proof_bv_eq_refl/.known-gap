@@ -1,1 +1,0 @@
-bvEq_refl represents the SAWCore bitvector Boolean-equality lemma family, but currently rejected instead of emitted as a Lean theorem realization or proof obligation.

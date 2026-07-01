@@ -1410,13 +1410,21 @@ proofPrimitiveContracts =
       [ProofArgRaw, ProofArgWrapped, ProofArgWrapped, ProofArgRaw]
       bvEqToEqContract
       applyLastArg
+  , ProofPrimitiveContract preludeModule "bvEq_refl" 2
+      [ProofArgRaw, ProofArgWrapped]
+      bvEqReflContract
+      (\_ proof -> pure proof)
+  , ProofPrimitiveContract preludeModule "not_bvult_zero" 2
+      [ProofArgRaw, ProofArgWrapped]
+      notBvultZeroContract
+      (\_ proof -> pure proof)
   ]
   where
     preludeModule = mkModuleName ["Prelude"]
     bvAssertion source op =
       ProofPrimitiveContract preludeModule source 3
         [ProofArgRaw, ProofArgWrapped, ProofArgWrapped]
-        (bvComparisonTrueM (Lean.Ident op))
+        (bvComparisonEqM (Lean.Ident op) (Lean.Ident "Bool.true"))
         (\_ proof -> pure proof)
 
 applyLastArg ::
@@ -1472,7 +1480,7 @@ bvEqToEqContract ::
 bvEqToEqContract args =
   case args of
     [width, lhs, rhs, _premise] -> do
-      premiseTy <- bvComparisonTrueM (Lean.Ident "bvEq") [width, lhs, rhs]
+      premiseTy <- bvComparisonEqM (Lean.Ident "bvEq") (Lean.Ident "Bool.true") [width, lhs, rhs]
       let vecTy =
             Lean.App (Lean.Var (Lean.Ident "Vec"))
               [width, Lean.Var (Lean.Ident "Bool")]
@@ -1482,12 +1490,44 @@ bvEqToEqContract args =
       Except.throwError (RejectedPrimitive "proof primitive"
         "bvEqToEq contract expected exactly width, lhs, rhs, and premise arguments")
 
-bvComparisonTrueM ::
+bvEqReflContract ::
   TermTranslationMonad m =>
+  [Lean.Term] ->
+  m Lean.Term
+bvEqReflContract args =
+  case args of
+    [width, value] ->
+      bvComparisonEqM (Lean.Ident "bvEq") (Lean.Ident "Bool.true")
+        [width, value, value]
+    _ ->
+      Except.throwError (RejectedPrimitive "proof primitive"
+        "bvEq_refl contract expected exactly width and vector arguments")
+
+notBvultZeroContract ::
+  TermTranslationMonad m =>
+  [Lean.Term] ->
+  m Lean.Term
+notBvultZeroContract args =
+  case args of
+    [width, value] -> do
+      let zeroVec =
+            Lean.App (Lean.Var (Lean.Ident "bvNat"))
+              [width, Lean.NatLit 0]
+          zeroVecM =
+            Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [zeroVec]
+      bvComparisonEqM (Lean.Ident "bvult") (Lean.Ident "Bool.false")
+        [width, value, zeroVecM]
+    _ ->
+      Except.throwError (RejectedPrimitive "proof primitive"
+        "not_bvult_zero contract expected exactly width and vector arguments")
+
+bvComparisonEqM ::
+  TermTranslationMonad m =>
+  Lean.Ident ->
   Lean.Ident ->
   [Lean.Term] ->
   m Lean.Term
-bvComparisonTrueM op args =
+bvComparisonEqM op expected args =
   case args of
     [width, lhs, rhs] -> do
       let avoid = Set.unions (map leanTermIdents args)
@@ -1496,7 +1536,7 @@ bvComparisonTrueM op args =
       let bindVar = Lean.Var (Lean.Ident "Bind.bind")
           pureVar = Lean.Var (Lean.Ident "Pure.pure")
           boolTy = Lean.Var (Lean.Ident "Bool")
-          trueVal = Lean.Var (Lean.Ident "Bool.true")
+          expectedVal = Lean.Var expected
           comparison =
             Lean.App (Lean.Var op)
               [width, Lean.Var lhsName, Lean.Var rhsName]
@@ -1510,7 +1550,7 @@ bvComparisonTrueM op args =
                         (Lean.App pureVar [comparison])
                     ])
               ]
-      pure (boolEqAt (wrapExcept boolTy) comparisonM (Lean.App pureVar [trueVal]))
+      pure (boolEqAt (wrapExcept boolTy) comparisonM (Lean.App pureVar [expectedVal]))
     _ ->
       Except.throwError (RejectedPrimitive "proof primitive"
         "bitvector assertion contract expected exactly width, lhs, and rhs arguments")

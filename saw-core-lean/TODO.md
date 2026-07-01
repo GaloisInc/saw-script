@@ -409,6 +409,10 @@ Current implementation priority:
        the source proof argument. The fixture uses a proof binder rather than a
        concrete `Refl` so it tests the contract shape without depending on Lean
        reducing a closed bitvector equality proof.
+       2026-07-01 checkpoint: `bvEq_refl` and `not_bvult_zero` now emit exact
+       monadic bitvector-comparison obligations against `Bool.true` and
+       `Bool.false`, respectively. This generalized the comparison helper over
+       the expected Boolean literal without adding BV reasoning in Haskell.
     6. [x] Add any missing representative fixtures discovered by the survey,
        such as `bvEqToEqNat`, `bvultToIsLtNat`, `natCompareLe`, or a second
        BV-add-zero row if it follows a distinct realization path.

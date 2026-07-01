@@ -1,1 +1,8 @@
 contains:h_proof_obligation_
+contains:h_proof_
+contains:bvult
+contains:bvNat
+contains:Bool.false
+contains-normalized:@Eq (Except String Bool) (Bind.bind
+contains-normalized:Pure.pure Bool.false
+absent:CryptolToLean.SAWCorePrimitives.not_bvult_zero
