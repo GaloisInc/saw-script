@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "Eq__rec Nat (addNat 2 0) (\\ (y : Nat) -> \\ (_ : Eq Nat (addNat 2 0) y) -> Nat) 0 2 (eqNatAdd0 2)";
+write_lean_term "ProofEqNatAdd0Probe" [] [] "emitted.lean" probe;

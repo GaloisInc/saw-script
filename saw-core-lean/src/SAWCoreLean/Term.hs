@@ -1426,9 +1426,21 @@ proofPrimitiveContracts =
       [ProofArgRaw, ProofArgWrapped]
       (bvAddZeroContract False)
       (\_ proof -> pure proof)
+  , ProofPrimitiveContract preludeModule "eqNatAdd0" 1
+      [ProofArgRaw]
+      eqNatAdd0Contract
+      (\_ proof -> pure proof)
+  , ProofPrimitiveContract preludeModule "eqNatAddS" 2
+      [ProofArgRaw, ProofArgRaw]
+      eqNatAddSContract
+      (\_ proof -> pure proof)
   , ProofPrimitiveContract preludeModule "eqNatAddComm" 2
       [ProofArgRaw, ProofArgRaw]
       eqNatAddCommContract
+      (\_ proof -> pure proof)
+  , ProofPrimitiveContract preludeModule "addNat_assoc" 3
+      [ProofArgRaw, ProofArgRaw, ProofArgRaw]
+      addNatAssocContract
       (\_ proof -> pure proof)
   ]
   where
@@ -1558,20 +1570,61 @@ bvAddZeroContract zeroOnLeft args =
       Except.throwError (RejectedPrimitive "proof primitive"
         "bvAddZero contract expected exactly width and vector arguments")
 
+eqNatAdd0Contract ::
+  TermTranslationMonad m =>
+  [Lean.Term] ->
+  m Lean.Term
+eqNatAdd0Contract args =
+  case args of
+    [x] ->
+      pure (natEq (addNat x zeroNat) x)
+    _ ->
+      Except.throwError (RejectedPrimitive "proof primitive"
+        "eqNatAdd0 contract expected exactly one Nat argument")
+
+eqNatAddSContract ::
+  TermTranslationMonad m =>
+  [Lean.Term] ->
+  m Lean.Term
+eqNatAddSContract args =
+  case args of
+    [x, y] ->
+      pure (natEq (addNat x (succNat y)) (succNat (addNat x y)))
+    _ ->
+      Except.throwError (RejectedPrimitive "proof primitive"
+        "eqNatAddS contract expected exactly two Nat arguments")
+
 eqNatAddCommContract ::
   TermTranslationMonad m =>
   [Lean.Term] ->
   m Lean.Term
 eqNatAddCommContract args =
   case args of
-    [lhs, rhs] -> do
-      let natTy = Lean.Var (Lean.Ident "Nat")
-          addNat x y =
-            Lean.App (Lean.Var (Lean.Ident "addNat")) [x, y]
-      pure (boolEqAt natTy (addNat lhs rhs) (addNat rhs lhs))
+    [lhs, rhs] ->
+      pure (natEq (addNat lhs rhs) (addNat rhs lhs))
     _ ->
       Except.throwError (RejectedPrimitive "proof primitive"
         "eqNatAddComm contract expected exactly two Nat arguments")
+
+addNatAssocContract ::
+  TermTranslationMonad m =>
+  [Lean.Term] ->
+  m Lean.Term
+addNatAssocContract args =
+  case args of
+    [x, y, z] ->
+      pure (natEq (addNat x (addNat y z)) (addNat (addNat x y) z))
+    _ ->
+      Except.throwError (RejectedPrimitive "proof primitive"
+        "addNat_assoc contract expected exactly three Nat arguments")
+
+natEq :: Lean.Term -> Lean.Term -> Lean.Term
+natEq =
+  boolEqAt (Lean.Var (Lean.Ident "Nat"))
+
+addNat :: Lean.Term -> Lean.Term -> Lean.Term
+addNat x y =
+  Lean.App (Lean.Var (Lean.Ident "addNat")) [x, y]
 
 bvBinaryM ::
   TermTranslationMonad m =>
@@ -1621,6 +1674,10 @@ bvComparisonEqM op expected args =
 zeroNat :: Lean.Term
 zeroNat =
   Lean.Var (Lean.Ident "CryptolToLean.SAWCorePrimitives.zero_macro")
+
+succNat :: Lean.Term -> Lean.Term
+succNat n =
+  Lean.App (Lean.Var (Lean.Ident "CryptolToLean.SAWCorePrimitives.succ_macro")) [n]
 
 boolEqAt :: Lean.Term -> Lean.Term -> Lean.Term -> Lean.Term
 boolEqAt ty lhs rhs =

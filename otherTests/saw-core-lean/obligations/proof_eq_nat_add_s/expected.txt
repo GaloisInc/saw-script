@@ -1,0 +1,10 @@
+contains:h_proof_obligation_
+contains:h_proof_
+contains:addNat
+contains:@Eq
+contains:CryptolToLean.SAWCorePrimitives.succ_macro
+contains-normalized:@Eq Nat (addNat
+contains-normalized:CryptolToLean.SAWCorePrimitives.succ_macro
+contains-normalized:h_proof_
+absent:CryptolToLean.SAWCorePrimitives.eqNatAddS
+absent:eqNatAddS

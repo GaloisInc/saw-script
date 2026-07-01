@@ -426,6 +426,9 @@ Current implementation priority:
        `Eq Nat (addNat x y) (addNat y x)` obligation and the fixture consumes
        that proof through `Eq__rec`, avoiding the unrelated direct `eqNat`
        Prelude-alias gap.
+       2026-07-01 checkpoint: the adjacent `eqNatAdd0`, `eqNatAddS`, and
+       `addNat_assoc` Nat arithmetic lemmas now use the same exact-obligation
+       path and have focused obligation-shape fixtures.
     6. [x] Add any missing representative fixtures discovered by the survey,
        such as `bvEqToEqNat`, `bvultToIsLtNat`, `natCompareLe`, or a second
        BV-add-zero row if it follows a distinct realization path.
@@ -993,8 +996,9 @@ Current implementation priority:
     `ecJoin`/`ecSplit`, `ecTranspose`, `ecAtBack`, `ecUpdate`, `ecUpdateEnd`,
     `ecShiftL`/`ecShiftR`, and `toSignedInteger`. Added focused known gaps for
     `ecSDiv`/`ecSMod` leaving residual `Nat__rec`, `ecExp` leaving residual
-    `expByNat`, and GF2 polynomial operations leaving residual proof lemmas
-    such as `eqNatAddS`.
+    `expByNat`, and GF2 polynomial operations leaving residual proof lemmas.
+    2026-07-01 update: the Nat arithmetic proof lemmas now emit obligations;
+    the GF2 polynomial fixture gets further and now pins residual `Nat__rec`.
   - 2026-06-29 checkpoint: added positive direct coverage for the remaining
     finite range producers `ecFromToByLessThan` and
     `ecFromToDownByGreaterThan`, plus direct finite `ecReverse`.
