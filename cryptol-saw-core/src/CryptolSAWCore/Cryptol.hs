@@ -1792,12 +1792,7 @@ importDeclGroup declOpts sc (C.Recursive decls) =
              NestedDeclGroup -> pure r
      rhss <- sequence (Map.fromList (zip (map C.dName decls) (zipWith3 mkRhs decls rs ts)))
 
-     -- NOTE: The eAllTerms fields of env2 and the following Env
-     -- are different.  The same names bound in env2 are now bound to
-     -- the output of the fixed-point operator:
      addToAllTerms sc rhss
-     addToAllVars sc (Map.fromList binds)
-
 
 importDeclGroup declOpts sc (C.NonRecursive decl) = do
   rhs <- case C.dDefinition decl of
