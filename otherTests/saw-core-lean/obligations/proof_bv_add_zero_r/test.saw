@@ -1,4 +1,4 @@
 enable_experimental;
 
-let probe = parse_core "bvAddZeroR";
+let probe = parse_core "bvAddZeroR 8 0x03";
 write_lean_term "ProofBvAddZeroRProbe" [] [] "emitted.lean" probe;

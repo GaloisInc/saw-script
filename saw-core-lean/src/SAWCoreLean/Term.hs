@@ -1418,6 +1418,14 @@ proofPrimitiveContracts =
       [ProofArgRaw, ProofArgWrapped]
       notBvultZeroContract
       (\_ proof -> pure proof)
+  , ProofPrimitiveContract preludeModule "bvAddZeroL" 2
+      [ProofArgRaw, ProofArgWrapped]
+      (bvAddZeroContract True)
+      (\_ proof -> pure proof)
+  , ProofPrimitiveContract preludeModule "bvAddZeroR" 2
+      [ProofArgRaw, ProofArgWrapped]
+      (bvAddZeroContract False)
+      (\_ proof -> pure proof)
   ]
   where
     preludeModule = mkModuleName ["Prelude"]
@@ -1512,7 +1520,7 @@ notBvultZeroContract args =
     [width, value] -> do
       let zeroVec =
             Lean.App (Lean.Var (Lean.Ident "bvNat"))
-              [width, Lean.NatLit 0]
+              [width, zeroNat]
           zeroVecM =
             Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [zeroVec]
       bvComparisonEqM (Lean.Ident "bvult") (Lean.Ident "Bool.false")
@@ -1520,6 +1528,58 @@ notBvultZeroContract args =
     _ ->
       Except.throwError (RejectedPrimitive "proof primitive"
         "not_bvult_zero contract expected exactly width and vector arguments")
+
+bvAddZeroContract ::
+  TermTranslationMonad m =>
+  Bool ->
+  [Lean.Term] ->
+  m Lean.Term
+bvAddZeroContract zeroOnLeft args =
+  case args of
+    [width, value] -> do
+      let zeroVec =
+            Lean.App (Lean.Var (Lean.Ident "bvNat"))
+              [width, zeroNat]
+          zeroVecM =
+            Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [zeroVec]
+          vecTy =
+            Lean.App (Lean.Var (Lean.Ident "Vec"))
+              [width, Lean.Var (Lean.Ident "Bool")]
+          (lhsArg, rhsArg)
+            | zeroOnLeft = (zeroVecM, value)
+            | otherwise  = (value, zeroVecM)
+      addExpr <- bvBinaryM (Lean.Ident "bvAdd") width lhsArg rhsArg
+      pure (boolEqAt (wrapExcept vecTy) addExpr value)
+    _ ->
+      Except.throwError (RejectedPrimitive "proof primitive"
+        "bvAddZero contract expected exactly width and vector arguments")
+
+bvBinaryM ::
+  TermTranslationMonad m =>
+  Lean.Ident ->
+  Lean.Term ->
+  Lean.Term ->
+  Lean.Term ->
+  m Lean.Term
+bvBinaryM op width lhs rhs = do
+  let avoid = Set.unions [leanTermIdents width, leanTermIdents lhs, leanTermIdents rhs]
+  lhsName <- freshVariantAvoiding avoid (Lean.Ident "v_1")
+  rhsName <- freshVariantAvoiding (Set.insert lhsName avoid) (Lean.Ident "v_2")
+  let bindVar = Lean.Var (Lean.Ident "Bind.bind")
+      pureVar = Lean.Var (Lean.Ident "Pure.pure")
+      opApp =
+        Lean.App (Lean.Var op)
+          [width, Lean.Var lhsName, Lean.Var rhsName]
+  pure $
+    Lean.App bindVar
+      [ lhs
+      , Lean.Lambda [Lean.Binder Lean.Explicit lhsName Nothing]
+          (Lean.App bindVar
+            [ rhs
+            , Lean.Lambda [Lean.Binder Lean.Explicit rhsName Nothing]
+                (Lean.App pureVar [opApp])
+            ])
+      ]
 
 bvComparisonEqM ::
   TermTranslationMonad m =>
@@ -1530,30 +1590,18 @@ bvComparisonEqM ::
 bvComparisonEqM op expected args =
   case args of
     [width, lhs, rhs] -> do
-      let avoid = Set.unions (map leanTermIdents args)
-      lhsName <- freshVariantAvoiding avoid (Lean.Ident "v_1")
-      rhsName <- freshVariantAvoiding (Set.insert lhsName avoid) (Lean.Ident "v_2")
-      let bindVar = Lean.Var (Lean.Ident "Bind.bind")
-          pureVar = Lean.Var (Lean.Ident "Pure.pure")
-          boolTy = Lean.Var (Lean.Ident "Bool")
+      comparisonM <- bvBinaryM op width lhs rhs
+      let boolTy = Lean.Var (Lean.Ident "Bool")
           expectedVal = Lean.Var expected
-          comparison =
-            Lean.App (Lean.Var op)
-              [width, Lean.Var lhsName, Lean.Var rhsName]
-          comparisonM =
-            Lean.App bindVar
-              [ lhs
-              , Lean.Lambda [Lean.Binder Lean.Explicit lhsName Nothing]
-                  (Lean.App bindVar
-                    [ rhs
-                    , Lean.Lambda [Lean.Binder Lean.Explicit rhsName Nothing]
-                        (Lean.App pureVar [comparison])
-                    ])
-              ]
+          pureVar = Lean.Var (Lean.Ident "Pure.pure")
       pure (boolEqAt (wrapExcept boolTy) comparisonM (Lean.App pureVar [expectedVal]))
     _ ->
       Except.throwError (RejectedPrimitive "proof primitive"
         "bitvector assertion contract expected exactly width, lhs, and rhs arguments")
+
+zeroNat :: Lean.Term
+zeroNat =
+  Lean.Var (Lean.Ident "CryptolToLean.SAWCorePrimitives.zero_macro")
 
 boolEqAt :: Lean.Term -> Lean.Term -> Lean.Term -> Lean.Term
 boolEqAt ty lhs rhs =

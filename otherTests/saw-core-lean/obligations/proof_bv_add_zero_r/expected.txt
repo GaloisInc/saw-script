@@ -1,1 +1,12 @@
 contains:h_proof_obligation_
+contains:h_proof_
+contains:bvAdd
+contains:bvNat
+contains:Bool
+contains-normalized:@Eq (Except String (Vec
+contains-normalized:Bool)) (Bind.bind
+contains-normalized:(Bind.bind (vecSequenceM 8 Bool
+contains-normalized:(fun v_1 => Bind.bind (Pure.pure (bvNat
+contains-normalized:Pure.pure (bvAdd
+absent:CryptolToLean.SAWCorePrimitives.bvAddZeroR
+absent:bvAdd_id_r

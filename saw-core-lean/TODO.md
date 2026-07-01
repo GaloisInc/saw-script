@@ -413,6 +413,15 @@ Current implementation priority:
        monadic bitvector-comparison obligations against `Bool.true` and
        `Bool.false`, respectively. This generalized the comparison helper over
        the expected Boolean literal without adding BV reasoning in Haskell.
+       2026-07-01 checkpoint: `bvAddZeroL` and `bvAddZeroR` now emit exact
+       wrapped equality obligations for the translated `bvAdd` expression
+       against the translated vector operand. This remains proof-carrying
+       emission only; the existing Lean `bvAdd_id_l` / `bvAdd_id_r` theorems
+       are not invoked from Haskell.
+       `IsLeNat_SuccSucc` remains a pinned known gap because a positive fixture
+       needs the raw `IsLeNat` proof datatype surface itself to be emitted or
+       imported first; that is separate Prelude proof-infrastructure work, not
+       a reason to add ad hoc support in this row.
     6. [x] Add any missing representative fixtures discovered by the survey,
        such as `bvEqToEqNat`, `bvultToIsLtNat`, `natCompareLe`, or a second
        BV-add-zero row if it follows a distinct realization path.
