@@ -82,6 +82,9 @@
 #                    proof/library/elaboration checks are not differential
 #                    tests unless the harness compares real SAW and Lean
 #                    observed outcomes.
+#   conformance-strict
+#                  — same as conformance, but exits nonzero if any known gaps
+#                    remain. Use this for the final parity gate.
 #   good           — refresh *.log.good and *.lean.good in every driver
 #                    and saw-boundary subdir (no effect on proofs/shape).
 #   clean          — clean transient outputs across all subdirs.
@@ -146,6 +149,30 @@ record_known_gap() {
     known_gaps+=("$1")
 }
 
+preflight_conformance_inputs() {
+    local failed=0
+    local d
+    local f
+
+    for d in differential/*/; do
+        [ -d "$d" ] || continue
+        for f in test.saw source.txt lean-observe.lean; do
+            if [ ! -f "$d$f" ]; then
+                echo "FAIL: $d requires $f for true differential testing" >&2
+                failed=1
+            fi
+        done
+        if command -v git >/dev/null 2>&1; then
+            if git -C "$HERE" check-ignore -q -- "${d}lean-observe.lean"; then
+                echo "FAIL: ${d}lean-observe.lean is ignored by git but is a required test source" >&2
+                failed=1
+            fi
+        fi
+    done
+
+    return "$failed"
+}
+
 print_summary_and_exit() {
     echo
     echo "================================================================"
@@ -160,6 +187,11 @@ print_summary_and_exit() {
             echo
             echo "This is not full backend conformance. Each listed item is a"
             echo "SAWCore feature that is in scope but not yet matched by SAW-Lean."
+            if [ "${SAW_LEAN_FAIL_ON_KNOWN_GAPS:-0}" = "1" ]; then
+                echo
+                echo "Strict conformance requested: failing because known gaps remain."
+                exit 1
+            fi
         fi
         exit 0
     fi
@@ -220,6 +252,15 @@ case "$verb" in
         print_summary_and_exit
         ;;
     conformance)
+        preflight_conformance_inputs || record_failure "conformance input preflight"
+        iterate_differential
+        iterate_obligations
+        iterate_saw_boundary
+        print_summary_and_exit
+        ;;
+    conformance-strict)
+        SAW_LEAN_FAIL_ON_KNOWN_GAPS=1
+        preflight_conformance_inputs || record_failure "conformance input preflight"
         iterate_differential
         iterate_obligations
         iterate_saw_boundary
@@ -241,7 +282,7 @@ case "$verb" in
         print_summary_and_exit
         ;;
     *)
-        echo "$0: unknown verb '$verb' (expected: test, run, conformance, good, clean)" >&2
+        echo "$0: unknown verb '$verb' (expected: test, run, conformance, conformance-strict, good, clean)" >&2
         exit 1
         ;;
 esac

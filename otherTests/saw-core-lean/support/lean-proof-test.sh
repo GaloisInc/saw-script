@@ -118,6 +118,11 @@ if [ -f source.txt ]; then
         echo "Proof tests must use a tracked .lean.good artifact, not only an ignored stale .lean file."
         exit 1
     fi
+    if [ -f "$EMITTED_ABS" ] && ! cmp -s "$EMITTED_ABS" "$EMITTED_REF_ABS"; then
+        echo "FAIL: current emitted file $EMITTED_ABS differs from $EMITTED_REF_ABS"
+        echo "Run the producing driver and refresh/review the golden before trusting this proof."
+        exit 1
+    fi
     if [ -f completed.lean ]; then
         STAGED_EMITTED_ABS="$(pwd)/completed.lean"
         USING_COMPLETED_OUTLINE=1

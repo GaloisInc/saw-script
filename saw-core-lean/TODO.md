@@ -109,9 +109,15 @@ emission strategy. Therefore:
 - Prototype-critical harness checks should prevent stale artifacts, unrelated
   proofs, generated `sorry` dependencies, and unchecked axioms from making a
   regression look green.
-- Full SAW-side proof replay, import isolation, provenance manifests, and final
-  user-facing ergonomics remain required before the backend can be called sound,
-  but they come after the emitted obligations and Lean proof libraries settle.
+- `offline_lean` replay is a required final-product soundness boundary, but it
+  is not the next blocker while the backend is still stabilizing its emitted
+  obligation shapes. Treat current `offline_lean` output as emit-stage evidence
+  only.
+- Full SAW-side proof replay, import isolation, provenance manifests, and
+  final user-facing ergonomics remain required before the backend can be called
+  a sound proof-discharge product. They come after the conformance harness is
+  trustworthy and after emitted obligations/Lean support-library contracts are
+  stable enough that replay is checking the right artifact.
 
 ## Current State
 
@@ -144,46 +150,110 @@ The Phase-beta expected-shape migration has reached a useful checkpoint:
   declaration convention and elaborates under the focused driver test.
 
 The backend is not yet complete for arbitrary accepted SAWCore or for the full
-Rocq feature surface. The next priority is emission quality: every emitted Lean
+Rocq feature surface. The current audit changes the immediate ordering:
+regression results must become trustworthy before more backend rows are
+promoted. After that, the next priority is emission quality: every emitted Lean
 file should either elaborate with explicit proof obligations or fail at SAW
 translation with a clear, principled diagnostic.
 
-Current implementation priority:
+Current implementation priority after the 2026-07-01 audit:
 
-1. Continue the bounds/index obligation plan:
-   `doc/2026-06-30_bounds-index-obligations-plan.md`.
-   Direct fully applied Prelude with-proof vector primitives now use a
-   declarative checked-application contract and Lean checked helpers without
-   trusting source proof terms. `Cryptol.ecAt` finite indexing now reaches the
-   same contract by preserving `Prelude.at` through normalization and emitting
-   the source `i < n` precondition as Lean evidence consumed by
-   `atWithProof_checkedM`. Ordinary `Prelude.gen` now routes through
-   `genWithBoundsM`, which supplies Lean-checked `i < n` evidence to generated
-   element bodies. Direct generated-index rows that only need that evidence are
-   promoted back to true differential tests; remaining rows stay pinned where
-   they require derived arithmetic bounds or other proof obligations.
-2. Completed: close partial-operation obligations in principle:
-   `doc/2026-06-30_partial-operation-obligations-plan.md`.
-   Direct scalar operations, direct bitvector operations, and the Cryptol
-   signed-BV wrapper surface (`ecSDiv`, `ecSMod`) now use checked
-   proof-carrying helpers. The wrapper slice is fixed at the
-   wrapper/recursor contract layer rather than by width-specific Haskell
-   normalization. Post-audit fix: the finite positive signed-wrapper branch
-   now delegates to the existing checked BV helpers rather than duplicating
-   signed-BV semantics in a second Lean definition.
-3. Continue applying the Priority #1 principled-emission plan:
-   `doc/2026-06-30_priority-1-principled-emission-plan.md`.
-   The first driver, `ecSDiv`/`ecSMod`, is complete. Bounds/index obligations
-   are the next driver for the same checked-contract style.
-4. Start the proof-primitive obligation plan:
-   `doc/2026-07-01_proof-primitive-obligations-plan.md`.
-   The goal is to replace broad proof-primitive rejection gaps with explicit
-   Lean obligations or checked theorem-realization contracts, without adding
-   Haskell proof search, Lean axioms, or proof automation.
-5. Then move to smaller wrapper-shape gaps and remaining recursor/datatype
-   surfaces.
+1. Fix conformance-harness integrity. The differential and obligation suites
+   are the guardrail for the remaining work, so they must not pass because of
+   ignored observer files, stale emitted Lean, fake Lean observers, or known
+   gaps that look like parity.
+2. Continue proof-carrying emission gaps using existing checked-contract
+   designs. Bounds/index and partial operations have reached useful
+   checkpoints; the next emission families are proof primitives, then smaller
+   raw/wrapped wrapper-shape issues.
+3. Close core representation gaps that block Rocq parity and SAWCore coverage:
+   direct recursors, user datatypes, `ListSort`/`FunsTo`, loaded
+   primitive/axiom declarations, and the raw injected-Lean-code policy.
+4. Reduce the trusted base and clever Haskell surface: `scLiteralFold`,
+   imported realization contracts, residual raw/wrapped heuristics, and the two
+   Vec/BitVec round-trip axioms.
+5. Defer proof ergonomics and broad automation until emitted contracts are
+   stable. BV-heavy crypto examples and SHA512 remain stress/scalability work,
+   not the feature-completion gate.
+6. Defer SAW-side proof replay / `offline_lean` checked-discharge UX until the
+   emission and testing layers are stable. It is required before a final
+   soundness claim, but it is not the present blocker.
 
-## Priority 0: Emission Soundness
+## Priority 0: Test Harness Integrity
+
+- [x] Track all files required by true differential tests.
+  - Immediate audit finding: `otherTests/saw-core-lean/.gitignore` ignores
+    `**/*.lean`, so most `differential/**/lean-observe.lean` files are ignored
+    and absent from a clean checkout even though local conformance runs depend
+    on them.
+  - Unignore and track differential observers and any other required
+    source-level Lean harness files. Generated emitted `.lean` artifacts should
+    remain ignored unless they are intentional `.lean.good` goldens.
+  - Add a preflight check that fails when a differential test directory has
+    required source files that are ignored or untracked.
+  - 2026-07-01 checkpoint: `differential/**/lean-observe.lean` is unignored,
+    and the conformance orchestrator preflights required differential source
+    files plus ignored-observer status before running the suite.
+
+- [x] Ensure producer tests cannot pass with stale emitted Lean.
+  - Before every SAW producer run, delete the exact emitted file named by
+    `source.txt` and any non-golden emitted `.lean` files owned by that test.
+  - This applies to `lean-differential-test.sh`,
+    `lean-obligation-test.sh`, and driver tests.
+  - A test should only inspect Lean artifacts created by the current SAW run,
+    or tracked `.lean.good` files in tests that are explicitly golden-based.
+  - 2026-07-01 checkpoint: differential and obligation harnesses delete the
+    exact `source.txt` output before invoking SAW, after validating that the
+    source path names a local generated `.lean` file. Driver tests delete all
+    non-golden emitted `.lean` files before producer runs.
+
+- [x] Bind proof replay and completed-outline tests to current emission.
+  - Proof examples may still use tracked `.lean.good` artifacts as regression
+    fixtures, but the harness should make drift from the current producer
+    loud. If a proof is meant to validate current emission, it must stage the
+    just-emitted artifact or depend on a freshly checked driver/golden step.
+  - Keep the existing `sorryAx` and axiom-report checks; this item is about
+    stale-source coupling, not final SAW-side proof replay.
+  - 2026-07-01 checkpoint: when a current emitted file exists next to the
+    tracked `.lean.good`, proof replay fails if those files differ. Standalone
+    proof runs can still use the tracked golden when no current producer output
+    is present.
+
+- [x] Harden differential observers against fake comparisons.
+  - The observer must import and inspect the emitted artifact itself, not
+    reconstruct an equivalent term or print an expected constant.
+  - Prefer a machine-readable observer declaration naming the emitted symbol,
+    or generate a small wrapper around a declared observed term. At minimum,
+    add a lint/preflight check that catches observers which import `Emitted`
+    but never reference its declarations.
+  - 2026-07-01 checkpoint: the differential harness requires every observer to
+    import `Emitted` and reference the emitted observation convention
+    (`Observed`/`Emitted.`) before it will accept `LEAN_OBSERVED` output. This
+    is a pragmatic lint, not a full observer DSL.
+
+- [x] Keep known gaps visibly distinct from parity.
+  - The current 79 `.known-gap` entries are useful backlog markers, not green
+    conformance.
+  - Keep `make conformance` useful for development, but add a strict mode or
+    summary failure mode that makes "no known gaps remain" a separate explicit
+    milestone.
+  - Expected-gap success means "the gap is pinned", not "the backend conforms".
+  - 2026-07-01 checkpoint: `test.sh conformance-strict` and
+    `SAW_LEAN_FAIL_ON_KNOWN_GAPS=1` fail the run if any known gaps remain, while
+    normal development conformance still reports pinned gaps separately.
+
+- [x] Tighten expected-failure boundary tests.
+  - Tests marked `*.expect-fail` should require the expected failing stage or
+    explicitly record why exit status is not meaningful.
+  - Where possible, record and check exit status in addition to the diagnostic
+    text so a rejection test cannot pass after SAW starts accepting the input.
+  - 2026-07-01 checkpoint: driver/boundary tests now fail when a
+    `*.expect-fail` case exits successfully. This exposed a stale
+    `coerce_eq` rejection-boundary row; that row was removed from
+    `saw-boundary/proof_primitive_rejection` because the real current failure
+    is already pinned by `obligations/proof_coerce_eq`.
+
+## Priority 1: Emission Soundness
 
 - [x] Implement proof-carrying partial-operation contracts.
   - Design reference:
@@ -570,7 +640,7 @@ Current implementation priority:
   - The Lean elaboration harness now preserves diagnostics from failing
     `lake env lean` probes instead of exiting early under `set -e`.
 
-## Priority 1: Emission Architecture
+## Priority 2: Emission Architecture
 
 - [ ] Complete the audit-driven removal of clever/legacy emission paths.
   - 2026-06-28 audit reference:
@@ -793,7 +863,7 @@ Current implementation priority:
   - Defer until the proof-discharge core is stable; this will be broad
     artifact/import churn rather than a semantic milestone.
 
-## Priority 2: Regression Coverage
+## Priority 3: Regression Coverage
 
 - [ ] Build a comprehensive differential conformance suite.
   - Current planning note:
@@ -1244,7 +1314,7 @@ Current implementation priority:
     Lean's standard kernel axioms plus the two current support-library
     Vec/BitVec round-trip axioms.
 
-## Priority 3: Proof Ergonomics
+## Priority 4: Proof Ergonomics
 
 - [ ] Refresh generated goldens and proof examples after proof-carrying
   emission changes.
@@ -1344,7 +1414,7 @@ Current implementation priority:
     names, rather than appending unqualified checks inside the user's proof-file
     namespace.
 
-## Priority 4: SAW-Side Proof Checking
+## Priority 5: SAW-Side Proof Checking
 
 - [ ] Add an integrated SAW-side proof-check command.
   - Emit-only mode should produce obligations for offline work without
@@ -1422,6 +1492,60 @@ Architecture follow-ups:
   checked discharge.
 - Scrub docs after the immediate semantic fixes so current behavior is not
   confused with the intended final proof-discharge workflow.
+
+## Audit Findings: 2026-07-01
+
+Fresh adversarial audit summary:
+
+- The project is converging, not merely patching examples. The strongest sign
+  is the move toward declarative contract tables for partial operations,
+  bounds/index evidence, and proof primitives. Keep measuring progress by
+  reducing known-gap families through principled contracts, not by making
+  individual examples pass.
+- The immediate blocker is harness validity. Most differential observers are
+  currently ignored/untracked, producer harnesses can inspect stale emitted
+  `.lean` files, completed proof tests are coupled to tracked goldens more than
+  fresh producer output, and known gaps can be mistaken for green conformance.
+  These issues threaten our ability to validate all later backend work, so they
+  are now Priority 0.
+- `offline_lean` remains an important final trust boundary, but it is not the
+  current top priority. Until the emission and harness layers stabilize, treat
+  `offline_lean` as an emit-stage workflow. Do not spend this phase building
+  final SAW-side replay UX unless a test-harness issue requires it.
+- Continue the proof-carrying-emission path next: remaining proof primitives,
+  raw/wrapped proof-value interfaces, direct recursors, user datatypes,
+  `ListSort`/`FunsTo`, and loaded primitive/axiom declarations.
+- Decide the raw Lean injection policy before claiming a sound module-emission
+  story. `InjectCodeDecl "Lean"` cannot remain an ordinary untrusted path to
+  arbitrary emitted Lean in the final backend.
+- Keep shrinking the TCB: prove or isolate the Vec/BitVec round-trip axioms,
+  replace or make proof-carrying `scLiteralFold`, and decide whether imported
+  realizations need semantic theorem obligations beyond type checking.
+
+Backlog triage from the current 79 known-gap entries:
+
+- High priority after harness repair:
+  - obligation known gaps for proof primitives:
+    `proof_coerce_eq`, `proof_bv_eq_to_eq_nat`, `proof_prove_le_nat`,
+    `proof_nat_compare_le`, BV/order bridges, vector/fold lemmas, and
+    conditional-congruence lemmas;
+  - direct recursor and datatype/list surfaces:
+    `recursor_*`, `user_datatype_recursor`, `list_sort_funs_to`, and
+    `cryptol_algebraic_enum`;
+  - loaded custom primitive/axiom declarations and injected Lean code policy.
+- Medium priority:
+  - executable differential rows that already expose correct obligations but
+    wait on Lean-side proof support for bounds, branch-guard reflection,
+    direct constant vector/literal bounds, Rational/BV nonzero evidence, or
+    derived index arithmetic;
+  - tuple/update and stream-helper raw/wrapped adaptation gaps where a named
+    convention can remove a family of failures.
+- Low priority / not a feature-completion gate:
+  - full SHA512 and large BV-heavy crypto proofs;
+  - broad proof automation and proof-cookbook polish;
+  - final SAW-side `offline_lean` proof replay UX, import isolation, and
+    provenance manifests. These remain required before a final soundness claim,
+    but not before the emission/conformance milestone.
 
 ## Decision Log
 

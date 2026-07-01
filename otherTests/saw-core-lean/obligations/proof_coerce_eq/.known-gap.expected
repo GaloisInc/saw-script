@@ -1,1 +1,4 @@
-Refusing to translate primitive coerce__eq
+Application type mismatch
+Unknown identifier `CryptolToLean.SAWCorePrelude.coerce__def`
+Unknown identifier `coerce__eq_checked`
+FAIL: emitted Lean obligation outline did not compile

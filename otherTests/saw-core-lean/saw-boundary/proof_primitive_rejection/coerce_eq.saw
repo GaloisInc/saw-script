@@ -1,4 +1,0 @@
-enable_experimental;
-
-let probe = parse_core "coerce__eq";
-write_lean_term "CoerceEqProbe" [] [] "-" probe;

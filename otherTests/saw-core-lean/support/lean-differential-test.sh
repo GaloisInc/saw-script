@@ -82,6 +82,16 @@ if [ ! -f lean-observe.lean ]; then
     exit 1
 fi
 
+if ! grep -Eq '^[[:space:]]*import[[:space:]]+Emitted([[:space:]]|$)' lean-observe.lean; then
+    echo "FAIL: lean-observe.lean must import the emitted artifact as Emitted" >&2
+    exit 1
+fi
+
+if ! grep -Eq '(^|[^[:alnum:]_])(Observed|Emitted\.)([^[:alnum:]_]|$)' lean-observe.lean; then
+    echo "FAIL: lean-observe.lean must reference the emitted observation, not a rebuilt value" >&2
+    exit 1
+fi
+
 if [ -f .known-gap ] && [ -z "${SAW_LEAN_DIFFERENTIAL_KNOWN_GAP_INNER:-}" ]; then
     if [ ! -f .known-gap.expected ]; then
         echo "FAIL: differential known gap requires .known-gap.expected" >&2
@@ -136,6 +146,22 @@ if [ -z "$emitted" ]; then
     echo "FAIL: source.txt is empty" >&2
     exit 1
 fi
+case "$emitted" in
+    /*|../*|*/../*|*.lean.good)
+        echo "FAIL: source.txt must name a local generated .lean output, got '$emitted'" >&2
+        exit 1
+        ;;
+    *.lean)
+        ;;
+    *)
+        echo "FAIL: source.txt must name a generated .lean output, got '$emitted'" >&2
+        exit 1
+        ;;
+esac
+
+# Remove the expected output before running SAW. A successful producer must
+# create the artifact in this run; ignored stale .lean files are not evidence.
+rm -f -- "$emitted"
 
 echo "$SAW test.saw"
 if ! "$SAW" test.saw >test.rawlog 2>&1; then

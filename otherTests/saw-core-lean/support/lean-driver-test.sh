@@ -46,15 +46,30 @@ CURDIR=$(pwd -P || pwd)
 # `run-tests` runs SAW for each *.saw and stages outputs.
 run-tests() {
     rm -f *.log *.diff *.lean.diff *.lean.elaboration *.lean.elaboration.fail \
-          *.lean.obsolete-helpers.fail
+          *.lean.obsolete-helpers.fail *.exit.fail
+    # Remove generated Lean before running SAW so stale ignored artifacts cannot
+    # satisfy .lean.good diffs or elaboration checks.
+    for f in *.lean; do
+        [ -f "$f" ] || continue
+        case "$f" in
+            *.lean.good) ;;
+            *) rm -f "$f" ;;
+        esac
+    done
 
     for TEST in $TESTS; do
         echo "$SAW $TEST.saw"
 
-        # Run SAW. If `*.expect-fail` exists we accept either exit
-        # status; the saw output diff is what enforces correctness.
+        # Run SAW. Expected-failure tests must actually fail; otherwise a
+        # rejection boundary can silently turn into acceptance while the old log
+        # text still happens to match.
         if [ -f "$TEST.expect-fail" ]; then
-            $SAW "$TEST.saw" >"$TEST.rawlog" 2>&1 || true
+            $SAW "$TEST.saw" >"$TEST.rawlog" 2>&1
+            rc=$?
+            if [ "$rc" -eq 0 ]; then
+                echo "FAILED: expected $TEST.saw to fail, but SAW exited 0" \
+                    >"$TEST.exit.fail"
+            fi
         else
             $SAW "$TEST.saw" >"$TEST.rawlog" 2>&1 || \
                 echo "FAILED" >>"$TEST.rawlog"
@@ -131,6 +146,9 @@ show-diffs() {
         if [ -s "$TEST.lean.obsolete-helpers.fail" ] 2>/dev/null; then
             cat "$TEST.lean.obsolete-helpers.fail"
         fi
+        if [ -s "$TEST.exit.fail" ] 2>/dev/null; then
+            cat "$TEST.exit.fail"
+        fi
     done
     return 0
 }
@@ -145,6 +163,7 @@ check-diffs() {
         done
         [ -f "$TEST.lean.elaboration.fail" ] && failed=1
         [ -f "$TEST.lean.obsolete-helpers.fail" ] && failed=1
+        [ -f "$TEST.exit.fail" ] && failed=1
     done
     if [ "$failed" -ne 0 ]; then
         cat 1>&2 <<EOF
@@ -159,7 +178,12 @@ EOF
 
 # `good` updates *.log.good and every emitted *.lean to its .good.
 good() {
+    run-tests
     for TEST in $TESTS; do
+        if [ -f "$TEST.exit.fail" ]; then
+            cat "$TEST.exit.fail" >&2
+            exit 1
+        fi
         [ -f "$TEST.log" ] && cp "$TEST.log" "$TEST.log.good"
         for f in *.lean; do
             [ -f "$f" ] || continue
@@ -173,7 +197,7 @@ good() {
 
 clean() {
     rm -f *.rawlog *.log *.diff *.lean.diff *.lean.elaboration \
-          *.lean.elaboration.fail *.lean.obsolete-helpers.fail
+          *.lean.elaboration.fail *.lean.obsolete-helpers.fail *.exit.fail
     # Remove any emitted .lean files (but never .lean.good).
     for f in *.lean; do
         [ -f "$f" ] || continue

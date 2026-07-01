@@ -136,6 +136,22 @@ if [ -z "$emitted" ]; then
     echo "FAIL: source.txt is empty" >&2
     exit 1
 fi
+case "$emitted" in
+    /*|../*|*/../*|*.lean.good)
+        echo "FAIL: source.txt must name a local generated .lean output, got '$emitted'" >&2
+        exit 1
+        ;;
+    *.lean)
+        ;;
+    *)
+        echo "FAIL: source.txt must name a generated .lean output, got '$emitted'" >&2
+        exit 1
+        ;;
+esac
+
+# Remove the expected output before running SAW. A successful producer must
+# create the artifact in this run; ignored stale .lean files are not evidence.
+rm -f -- "$emitted"
 
 echo "$SAW test.saw"
 if ! "$SAW" test.saw >test.rawlog 2>&1; then
