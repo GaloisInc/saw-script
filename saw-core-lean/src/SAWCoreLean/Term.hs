@@ -53,7 +53,7 @@ import           Data.Foldable                (toList)
 import qualified Data.IntMap.Strict           as IntMap
 import           Data.IntMap.Strict           (IntMap)
 import qualified Data.IntSet                  as IntSet
-import           Data.List                    (findIndex)
+import           Data.List                    (find, findIndex)
 import qualified Data.Map                     as Map
 import           Data.Map                     (Map)
 import           Data.Maybe                   (fromMaybe, isJust, isNothing,
@@ -1188,6 +1188,209 @@ lowerMkStreamSound elTypeLean indexFnLean =
       Except.throwError (RejectedPrimitive "MkStream"
         "MkStream expects a unary index function after translation.")
 
+data PartialOpContract = PartialOpContract
+  { pocModule      :: ModuleName
+  , pocName        :: String
+  , pocArity       :: Int
+  , pocNonzeroArg  :: Int
+  , pocNonzeroType :: Lean.Term
+  , pocConvention  :: PartialOpConvention
+  }
+
+data PartialOpConvention
+  = PartialOpRaw Lean.Ident
+  | PartialOpWrapped Lean.Ident
+
+partialOpContracts :: [PartialOpContract]
+partialOpContracts =
+  [ natBinaryPartial "divNat"    "divNat_checked"
+  , natBinaryPartial "modNat"    "modNat_checked"
+  , natBinaryPartial "divModNat" "divModNat_checked"
+  , intBinaryPartial "intDiv"    "intDiv_checkedM"
+  , intBinaryPartial "intMod"    "intMod_checkedM"
+  , PartialOpContract preludeModule "ratio" 2 1
+      (Lean.Var (Lean.Ident "Int"))
+      (PartialOpWrapped (Lean.Ident "ratio_checkedM"))
+  , PartialOpContract preludeModule "rationalRecip" 1 0
+      (Lean.Var (Lean.Ident "Rational"))
+      (PartialOpWrapped (Lean.Ident "rationalRecip_checkedM"))
+  ]
+  where
+    preludeModule = mkModuleName ["Prelude"]
+    natBinaryPartial source target =
+      PartialOpContract preludeModule source 2 1
+        (Lean.Var (Lean.Ident "Nat"))
+        (PartialOpRaw (Lean.Ident target))
+    intBinaryPartial source target =
+      PartialOpContract preludeModule source 2 1
+        (Lean.Var (Lean.Ident "Int"))
+        (PartialOpWrapped (Lean.Ident target))
+
+findPartialOpContract :: Ident -> Int -> Maybe PartialOpContract
+findPartialOpContract ident nArgs =
+  find matches partialOpContracts
+  where
+    matches contract =
+         identModule ident == pocModule contract
+      && identName ident == pocName contract
+      && nArgs == pocArity contract
+
+notEqZero :: Lean.Term -> Lean.Term -> Lean.Term
+notEqZero ty value =
+  Lean.App (Lean.Var (Lean.Ident "Not"))
+    [Lean.App (Lean.ExplVar (Lean.Ident "Eq"))
+      [ty, value, Lean.NatLit 0]]
+
+notEqPureZero :: Lean.Term -> Lean.Term -> Lean.Term
+notEqPureZero ty value =
+  Lean.App (Lean.Var (Lean.Ident "Not"))
+    [Lean.App (Lean.ExplVar (Lean.Ident "Eq"))
+      [ wrapExcept ty
+      , value
+      , Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [Lean.NatLit 0]
+      ]]
+
+partialOpProofScript :: Lean.Ident -> Set Lean.Ident -> Lean.Term
+partialOpProofScript propName proofIdents =
+  Lean.Tactic $
+    unfoldProp propName ++
+    concatMap substCandidate (Set.toList proofIdents) ++
+    "(first | omega | simp [Pure.pure, Except.pure, Except.bind, Bind.bind, \
+    \zero_macro, one_macro, succ_macro, bit0_macro, bit1_macro, natPos_macro, \
+    \natToInt, divNat_checked, modNat_checked, divModNat_checked, \
+    \intDiv_checkedM, intMod_checkedM, ratio_checkedM, rationalRecip_checkedM, \
+    \ratio, ratio_checked, rationalRecip, rationalRecip_checked] | decide | skip); \
+    \all_goals sorry"
+  where
+    unfoldProp (Lean.Ident name) = "(try unfold " ++ name ++ "); "
+    substCandidate (Lean.Ident name)
+      | '.' `elem` name = ""
+      | not ("x__" `Text.isPrefixOf` Text.pack name) = ""
+      | otherwise = "(try subst " ++ name ++ "); "
+
+-- | Lower direct partial primitives through proof-carrying helpers.
+-- Haskell constructs the visible nonzero contract and wires the checked
+-- evidence into the helper call; it does not inspect or prove the divisor.
+lowerPartialOpContract ::
+  TermTranslationMonad m =>
+  PartialOpContract ->
+  Ident ->
+  [Term] ->
+  m TranslatedTerm
+lowerPartialOpContract contract ident args = do
+  argResults <- traverse translateTermWithShape args
+  mm <- view sawModuleMap <$> askTR
+  phase <- phaseBetaEnabled
+  fty <- case resolveNameInMap mm ident of
+    Just (ResolvedDef def)   -> pure (defType def)
+    Just (ResolvedCtor ctor) -> pure (ctorType ctor)
+    Just (ResolvedDataType _) ->
+      Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+        "partial-operation contract unexpectedly resolved to a datatype")
+    Nothing ->
+      Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+        "partial-operation contract could not find the SAWCore source type")
+  let (binders, retTy) = asPiList fty
+      pureWrap =
+           phase
+        && (shouldWrapBinder retTy || isVariableHead retTy || natValueResult fty)
+      shouldBind =
+        if phase
+           then take (length args) (argumentBindPlan fty argResults ++ repeat False)
+           else replicate (length args) False
+      resultShape = phaseBetaResultShape fty (length args)
+  if length args /= length binders
+     then Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+            "partial-operation contracts currently require a fully applied direct primitive")
+     else case pocConvention contract of
+       PartialOpRaw checkedName ->
+         buildRawProofCarryingApplication
+           resultShape
+           (Lean.Var checkedName)
+           pureWrap
+           shouldBind
+           argResults
+           contract
+       PartialOpWrapped checkedName ->
+         buildWrappedProofCarryingApplication
+           (Lean.Var checkedName)
+           argResults
+           contract
+
+buildWrappedProofCarryingApplication ::
+  TermTranslationMonad m =>
+  Lean.Term ->
+  [TranslatedTerm] ->
+  PartialOpContract ->
+  m TranslatedTerm
+buildWrappedProofCarryingApplication head_ argResults contract = do
+  let wrappedArgs = map translatedTermAsWrapped argResults
+      divisor = wrappedArgs !! pocNonzeroArg contract
+      prop = notEqPureZero (pocNonzeroType contract) divisor
+  unavailable <- view unavailableIdents <$> askTR
+  let proofIdents = Set.union (leanTermIdents prop) unavailable
+  tm <- withLocalProofObligationUsing
+          (Lean.Ident "h_nonzero_")
+          prop
+          (`partialOpProofScript` proofIdents)
+          $ \proof ->
+              pure (Lean.App head_ (wrappedArgs ++ [proof]))
+  pure (TranslatedTerm tm BindingWrapped)
+
+buildRawProofCarryingApplication ::
+  TermTranslationMonad m =>
+  BindingShape ->
+  Lean.Term ->
+  Bool ->
+  [Bool] ->
+  [TranslatedTerm] ->
+  PartialOpContract ->
+  m TranslatedTerm
+buildRawProofCarryingApplication resultShape head_ pureWrap shouldBind argResults contract = do
+  tm <- go 0 argResults shouldBind []
+  pure (TranslatedTerm tm resultShape)
+  where
+    bindVar = Lean.Var (Lean.Ident "Bind.bind")
+    pureVar = Lean.Var (Lean.Ident "Pure.pure")
+    argTerms = map ttLean argResults
+    avoidIdents = Set.unions (leanTermIdents head_ : map leanTermIdents argTerms)
+
+    go :: TermTranslationMonad m =>
+          Int ->
+          [TranslatedTerm] ->
+          [Bool] ->
+          [(Int, Lean.Ident)] ->
+          m Lean.Term
+    go _ [] _ subs = do
+      let finalArgs =
+            [ case lookup pos subs of
+                Just bname -> Lean.Var bname
+                Nothing    -> origTerm
+            | (pos, origTerm) <- zip [0..] argTerms
+            ]
+          divisor = finalArgs !! pocNonzeroArg contract
+          prop = notEqZero (pocNonzeroType contract) divisor
+      unavailable <- view unavailableIdents <$> askTR
+      let proofIdents = Set.union (leanTermIdents prop) unavailable
+      withLocalProofObligationUsing
+        (Lean.Ident "h_nonzero_")
+        prop
+        (`partialOpProofScript` proofIdents)
+        $ \proof -> do
+            let body = Lean.App head_ (finalArgs ++ [proof])
+            pure (if pureWrap then Lean.App pureVar [body] else body)
+    go pos (_ : rest) (False : bs) subs =
+      go (pos + 1) rest bs subs
+    go pos (t : rest) (True : bs) subs = do
+      bname <- freshVariantAvoiding avoidIdents (Lean.Ident ("v_" ++ show pos))
+      rest' <- go (pos + 1) rest bs ((pos, bname) : subs)
+      let lam = Lean.Lambda
+                  [Lean.Binder Lean.Explicit bname Nothing]
+                  rest'
+      pure (Lean.App bindVar [translatedTermAsWrapped t, lam])
+    go pos (_ : rest) [] subs =
+      go (pos + 1) rest [] subs
+
 leanBinderName :: Lean.Binder -> Lean.Ident
 leanBinderName (Lean.Binder _ name _) = name
 
@@ -1361,6 +1564,8 @@ translateIdentWithArgs i args = ttLean <$> translateIdentWithArgsWithShape i arg
 translateIdentWithArgsWithShape ::
   TermTranslationMonad m => Ident -> [Term] -> m TranslatedTerm
 translateIdentWithArgsWithShape i args
+  | Just contract <- findPartialOpContract i (length args)
+  = lowerPartialOpContract contract i args
   | i == "Prelude.unsafeAssert"
   , [aArg, xArg, yArg] <- args
   = translateUnsafeAssertObligation aArg xArg yArg

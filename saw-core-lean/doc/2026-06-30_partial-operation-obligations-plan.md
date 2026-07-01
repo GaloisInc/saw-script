@@ -38,6 +38,30 @@ The existing corpus entries under `otherTests/saw-core-lean/obligations/*`
 are the acceptance tests for this work. They must be promoted from
 `.known-gap` to positive obligation-shape tests as each family is implemented.
 
+## Implementation Checkpoints
+
+2026-06-30 scalar checkpoint:
+
+- implemented a shared direct-primitive `PartialOpContract` lowering path for
+  `divNat`, `modNat`, `divModNat`, `intDiv`, `intMod`, `ratio`, and
+  `rationalRecip`;
+- added thin checked Lean helpers for those operations in
+  `CryptolToLean.SAWCorePrimitives`;
+- promoted the seven direct scalar zero-divisor / zero-denominator obligation
+  fixtures from known gaps to positive shape tests.
+- represented Int and Rational value-domain contracts over wrapped
+  `Except String` expressions, not over post-bind variables. This keeps the
+  proposition connected to the emitted computation and lets Lean prove simple
+  closed nonzero cases before the monadic bind erases the expression.
+- promoted `ecDiv`, `ecMod`, `ecFieldDiv`, and `ecRecip` obligation fixtures
+  where Cryptol normalization reaches the scalar contract path.
+
+Remaining contract families are the direct bitvector operations and the
+remaining Cryptol.sawcore wrappers that reach bitvector signed division/mod.
+The bitvector slice should first settle a reusable Lean-side nonzero predicate,
+then extend the same contract table rather than adding operation-specific
+Haskell reasoning.
+
 ## Correctness Contract
 
 For each partial operation, generated Lean should have this shape:

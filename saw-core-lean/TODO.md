@@ -155,13 +155,32 @@ Current implementation priority:
     denominators. They must emit visible preconditions and consume Lean-checked
     evidence.
   - Scope, in order:
-    1. Direct scalar Prelude operations:
+    1. [x] Direct scalar Prelude operations:
        `divNat`, `modNat`, `divModNat`, `intDiv`, `intMod`, `ratio`,
        `rationalRecip`.
-    2. Direct bitvector Prelude operations:
+       2026-06-30 checkpoint: these now route through a shared
+       `PartialOpContract` table, emit local `h_nonzero_obligation_` /
+       `h_nonzero_` bindings, and call checked Lean helpers. Nat operations
+       use raw preconditions; Int/Rational value-domain operations use
+       wrapped `Except` preconditions so proof automation can reason about the
+       emitted computation before monadic bind erases its expression shape. The
+       seven corresponding obligation fixtures have been promoted from known
+       gaps. `ecDiv`, `ecMod`, `ecFieldDiv`, and `ecRecip` also promote through
+       the same scalar path after normalization.
+       Remaining proof-ergonomics gap: rational executable differential cases
+       are pinned known gaps where the emitted obligations are correct but the
+       starter tactic does not yet prove all rational nonzero facts.
+    2. [ ] Direct bitvector Prelude operations:
        `bvUDiv`, `bvURem`, `bvSDiv`, `bvSRem`.
-    3. Cryptol.sawcore wrappers:
-       `ecDiv`, `ecMod`, `ecFieldDiv`, `ecRecip`, `ecSDiv`, `ecSMod`.
+       Next design point: choose the stable Lean predicate for a nonzero
+       SAW bitvector, likely a named support-library predicate rather than
+       spelling equality to a generated zero vector everywhere.
+    3. [ ] Cryptol.sawcore wrappers:
+       `ecDiv`, `ecMod`, `ecFieldDiv`, and `ecRecip` are covered by scalar
+       normalization. Remaining wrapper work: `ecSDiv`, `ecSMod`, and any
+       wrapper that reaches the pending bitvector contract surface. These
+       should reuse the same proof-carrying contract interface rather than
+       duplicating wrapper-specific Haskell semantic recognizers.
   - Implementation rule: add a small data-driven partial-operation contract
     interface. Haskell may construct the operation-specific proposition and
     call a checked helper, but it must not inspect generated Lean syntax to
@@ -667,10 +686,11 @@ Current implementation priority:
   - 2026-06-29 checkpoint: added focused direct-result partial-operation
     boundary fixtures for `divNat`, `divModNat`, `intDiv`, `bvUDiv`,
     `bvSDiv`, `ratio`, and `rationalRecip` at zero divisors/denominators.
-    These are marked known gaps because the direct-result forms currently emit
-    unchecked total primitive calls in several positions instead of the
-    required nonzero proof obligations. This is distinct from larger Boolean
-    contexts that may already route through checked helpers.
+    2026-06-30 update: scalar Nat/Int/Rational fixtures now emit
+    proof-carrying obligations and checked helpers. The boundary directory
+    remains a known gap only because direct bitvector division/remainder still
+    emits unchecked total primitive calls instead of required nonzero proof
+    obligations.
   - 2026-06-29 checkpoint: added a focused finite-observation stream-helper
     differential known gap for `streamGet`, `streamMap`, shifts, and
     `streamScanl`. SAW evaluates the closed Boolean, but the emitted Lean

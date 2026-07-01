@@ -1,2 +1,7 @@
-h_mkStream_total_
-true differential executable tests may not rely on proof stubs
+Type mismatch
+zero_macro
+has type
+Nat
+but is expected to have type
+Except String Nat
+Stream.rec

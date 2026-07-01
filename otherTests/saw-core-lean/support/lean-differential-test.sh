@@ -165,19 +165,6 @@ if [ ! -f "$emitted" ]; then
     exit 1
 fi
 
-bad_sorry=$(awk '
-  /sorry/ {
-    print FILENAME ":" FNR ":" $0
-    bad = 1
-  }
-  END { exit bad }
-' "$emitted" 2>/dev/null || true)
-if [ -n "$bad_sorry" ]; then
-    echo "$bad_sorry"
-    echo "FAIL: true differential executable tests may not rely on proof stubs" >&2
-    exit 1
-fi
-
 mkdir -p "$PROBE_DIR"
 cp "$emitted" "$PROBE_DIR/Emitted.lean"
 cp lean-observe.lean "$PROBE_DIR/lean-observe.lean"
@@ -200,6 +187,12 @@ emit_out=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake env lean \
 if [ "$emit_rc" -ne 0 ]; then
     echo "$emit_out"
     echo "FAIL: emitted Lean artifact did not compile" >&2
+    rm -rf "$PROBE_DIR"
+    exit 1
+fi
+if printf '%s\n' "$emit_out" | grep -F 'uses `sorry`' >/dev/null 2>&1; then
+    echo "$emit_out"
+    echo "FAIL: true differential executable tests may not rely on proof stubs" >&2
     rm -rf "$PROBE_DIR"
     exit 1
 fi

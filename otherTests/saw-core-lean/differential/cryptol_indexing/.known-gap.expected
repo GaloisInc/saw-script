@@ -1,2 +1,6 @@
-FAIL: true differential executable tests may not rely on proof stubs
-by sorry
+Type mismatch
+addNat i
+has type
+Nat
+but is expected to have type
+Except String Nat

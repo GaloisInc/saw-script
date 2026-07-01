@@ -190,6 +190,13 @@ is reciprocal. -/
 @[reducible] def Rational : Type := Rat
 @[reducible] def rationalZero : Rational := 0
 @[reducible] def ratio : Int → Int → Rational := fun a b => (a : Rat) / (b : Rat)
+@[reducible] def ratio_checked (a b : Int) (_h : Not (b = 0)) : Rational :=
+  ratio a b
+@[reducible] def ratio_checkedM (a b : Except String Int)
+    (_h : Not (b = Pure.pure 0)) : Except String Rational := do
+  let a' ← a
+  let b' ← b
+  Pure.pure (ratio a' b')
 @[reducible] def rationalEq : Rational → Rational → Bool := fun a b => decide (a = b)
 @[reducible] def rationalLe : Rational → Rational → Bool := fun a b => decide (a ≤ b)
 @[reducible] def rationalLt : Rational → Rational → Bool := fun a b => decide (a < b)
@@ -198,6 +205,13 @@ is reciprocal. -/
 @[reducible] def rationalMul : Rational → Rational → Rational := fun a b => a * b
 @[reducible] def rationalNeg : Rational → Rational := fun a => -a
 @[reducible] def rationalRecip : Rational → Rational := fun a => a⁻¹
+@[reducible] def rationalRecip_checked (a : Rational)
+    (_h : Not (a = 0)) : Rational :=
+  rationalRecip a
+@[reducible] def rationalRecip_checkedM (a : Except String Rational)
+    (_h : Not (a = Pure.pure 0)) : Except String Rational := do
+  let a' ← a
+  Pure.pure (rationalRecip a')
 @[reducible] def rationalFloor : Rational → Int := fun a => a.floor
 
 /-! ## Floating-point (Phase 6 → Phase 9 follow-up)
@@ -240,14 +254,21 @@ Lean's `Nat.sub` has the same truncated-subtraction semantics. -/
 @[reducible] def pred     : Nat → Nat := Nat.pred
 /-- SAW Prelude `divNat x y = (divModNat x y).0`. -/
 @[reducible] def divNat : Nat → Nat → Nat := Nat.div
+@[reducible] def divNat_checked (x y : Nat) (_h : Not (y = 0)) : Nat :=
+  divNat x y
 /-- SAW Prelude `modNat x y = (divModNat x y).1`. -/
 @[reducible] def modNat : Nat → Nat → Nat := Nat.mod
+@[reducible] def modNat_checked (x y : Nat) (_h : Not (y = 0)) : Nat :=
+  modNat x y
 /-- SAW Prelude primitive `divModNat : Nat -> Nat -> Nat * Nat`.
 Returns (quotient, remainder). -/
 @[reducible] def divModNat : Nat → Nat → PairType Nat (PairType Nat UnitType) :=
   fun x y =>
     PairType.PairValue (Nat.div x y)
       (PairType.PairValue (Nat.mod x y) UnitType.Unit)
+@[reducible] def divModNat_checked (x y : Nat) (_h : Not (y = 0)) :
+    PairType Nat (PairType Nat UnitType) :=
+  divModNat x y
 
 /-- SAWCore Prelude `if0Nat α n x y`: returns `x` when `n = 0` and
 `y` otherwise. SAW defines this with `Nat#rec` over its binary Nat
@@ -290,7 +311,21 @@ NOT `Int.div` / `Int.mod` (which are truncated). -/
 @[reducible] def intSub : Int → Int → Int := fun a b => a - b
 @[reducible] def intMul : Int → Int → Int := fun a b => a * b
 @[reducible] def intDiv : Int → Int → Int := Int.fdiv
+@[reducible] def intDiv_checked (x y : Int) (_h : Not (y = 0)) : Int :=
+  intDiv x y
+@[reducible] def intDiv_checkedM (x y : Except String Int)
+    (_h : Not (y = Pure.pure 0)) : Except String Int := do
+  let x' ← x
+  let y' ← y
+  Pure.pure (intDiv x' y')
 @[reducible] def intMod : Int → Int → Int := Int.fmod
+@[reducible] def intMod_checked (x y : Int) (_h : Not (y = 0)) : Int :=
+  intMod x y
+@[reducible] def intMod_checkedM (x y : Except String Int)
+    (_h : Not (y = Pure.pure 0)) : Except String Int := do
+  let x' ← x
+  let y' ← y
+  Pure.pure (intMod x' y')
 @[reducible] def intNeg : Int → Int := fun a => -a
 @[reducible] def intEq  : Int → Int → Bool := fun a b => decide (a = b)
 @[reducible] def intLe  : Int → Int → Bool := fun a b => decide (a ≤ b)

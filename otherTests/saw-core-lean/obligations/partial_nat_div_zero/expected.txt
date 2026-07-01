@@ -1,1 +1,5 @@
-contains:h_nonzero
+contains:h_nonzero_obligation_
+contains:h_nonzero_
+contains:Not (@Eq Nat
+contains:divNat_checked
+absent:divNat (
