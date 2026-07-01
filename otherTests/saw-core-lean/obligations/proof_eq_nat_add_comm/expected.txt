@@ -1,1 +1,9 @@
 contains:h_proof_obligation_
+contains:h_proof_
+contains:addNat
+contains:@Eq
+contains-normalized:@Eq Nat (addNat (CryptolToLean.SAWCorePrimitives.natPos_macro CryptolToLean.SAWCorePrimitives.one_macro) (CryptolToLean.SAWCorePrimitives.natPos_macro (CryptolToLean.SAWCorePrimitives.bit0_macro CryptolToLean.SAWCorePrimitives.one_macro)))
+contains-normalized:(addNat (CryptolToLean.SAWCorePrimitives.natPos_macro (CryptolToLean.SAWCorePrimitives.bit0_macro CryptolToLean.SAWCorePrimitives.one_macro)) (CryptolToLean.SAWCorePrimitives.natPos_macro CryptolToLean.SAWCorePrimitives.one_macro))
+contains-normalized:h_proof_
+absent:CryptolToLean.SAWCorePrimitives.eqNatAddComm
+absent:eqNatAddComm

@@ -422,6 +422,10 @@ Current implementation priority:
        needs the raw `IsLeNat` proof datatype surface itself to be emitted or
        imported first; that is separate Prelude proof-infrastructure work, not
        a reason to add ad hoc support in this row.
+       2026-07-01 checkpoint: `eqNatAddComm` now emits an exact local
+       `Eq Nat (addNat x y) (addNat y x)` obligation and the fixture consumes
+       that proof through `Eq__rec`, avoiding the unrelated direct `eqNat`
+       Prelude-alias gap.
     6. [x] Add any missing representative fixtures discovered by the survey,
        such as `bvEqToEqNat`, `bvultToIsLtNat`, `natCompareLe`, or a second
        BV-add-zero row if it follows a distinct realization path.

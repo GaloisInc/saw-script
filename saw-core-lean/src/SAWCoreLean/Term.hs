@@ -1426,6 +1426,10 @@ proofPrimitiveContracts =
       [ProofArgRaw, ProofArgWrapped]
       (bvAddZeroContract False)
       (\_ proof -> pure proof)
+  , ProofPrimitiveContract preludeModule "eqNatAddComm" 2
+      [ProofArgRaw, ProofArgRaw]
+      eqNatAddCommContract
+      (\_ proof -> pure proof)
   ]
   where
     preludeModule = mkModuleName ["Prelude"]
@@ -1553,6 +1557,21 @@ bvAddZeroContract zeroOnLeft args =
     _ ->
       Except.throwError (RejectedPrimitive "proof primitive"
         "bvAddZero contract expected exactly width and vector arguments")
+
+eqNatAddCommContract ::
+  TermTranslationMonad m =>
+  [Lean.Term] ->
+  m Lean.Term
+eqNatAddCommContract args =
+  case args of
+    [lhs, rhs] -> do
+      let natTy = Lean.Var (Lean.Ident "Nat")
+          addNat x y =
+            Lean.App (Lean.Var (Lean.Ident "addNat")) [x, y]
+      pure (boolEqAt natTy (addNat lhs rhs) (addNat rhs lhs))
+    _ ->
+      Except.throwError (RejectedPrimitive "proof primitive"
+        "eqNatAddComm contract expected exactly two Nat arguments")
 
 bvBinaryM ::
   TermTranslationMonad m =>
