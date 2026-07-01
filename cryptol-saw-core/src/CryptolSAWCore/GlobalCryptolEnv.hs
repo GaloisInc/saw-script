@@ -192,8 +192,8 @@ instance IsMetadata GlobalCryptolEnv where
 --   range with respect to the corresponding global environment
 --   before combining them into a 'CryptolEnv'.
   restoreMetadata chk now = return $
-    let newMEnv = geModuleEnv chk
-        chkMEnv = geModuleEnv now
+    let newMEnv = geModuleEnv now
+        chkMEnv = geModuleEnv chk
     in chk { geModuleEnv = chkMEnv 
                { ME.meNameSeeds = ME.meNameSeeds newMEnv
                , ME.meSupply = ME.meSupply newMEnv 
