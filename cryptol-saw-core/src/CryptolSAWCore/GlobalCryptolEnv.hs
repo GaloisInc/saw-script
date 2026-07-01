@@ -281,7 +281,7 @@ withFreshScope env0 f = do
   let env1 = pushScope env0
   (a, env2) <- f env1
   unless (sameHeight env1 env2) $
-    fail "withFreshScope: mismatched push/pops"
+    panic "withFreshScope" ["mismatched push/pops"]
   let env3 = popScope env2
   return (a, env3)
 
