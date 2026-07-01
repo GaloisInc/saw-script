@@ -689,7 +689,6 @@ learnPointsTo opts sc cc spec prepost pt =
                 valueToSC sym md failMsg tval jval
 
          when (len > toInteger (maxBound :: Int)) $ fail "jvm_array_is: array length too long"
-         let _cryenv = cc ^. jccCryptolEnv
          ety_tm <- liftIO $ Cryptol.translateType sc ety
          ts <- traverse load [0 .. fromInteger len - 1]
          realTerm <- liftIO $ scVector sc ety_tm ts

@@ -7724,7 +7724,7 @@ primValueEnv opts bic = Map.mapWithKey extract primitives
            (primitiveFn p) opts bic, Just $ doc n p)
 
 primEnviron :: Options -> BuiltinContext -> CEnv.CryptolEnv -> Environ
-primEnviron opts bic env =
+primEnviron opts bic cenv =
 
     -- Do a scope push so the builtins live by themselves in their own
     -- scope layer. This has the result of separating them from the
@@ -7735,5 +7735,5 @@ primEnviron opts bic env =
     let tyenv = ScopedMap.push primNamedTypeEnv
         varenv = ScopedMap.push $ ScopedMap.seed $ primValueEnv opts bic
     in
-    Environ varenv tyenv env
+    Environ varenv tyenv cenv
 

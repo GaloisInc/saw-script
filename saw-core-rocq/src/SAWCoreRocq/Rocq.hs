@@ -38,7 +38,6 @@ import           SAWCoreRocq.Monad
 import           SAWCoreRocq.SpecialTreatment
 import qualified SAWCoreRocq.Term             as TermTranslation
 import           CryptolSAWCore.TypedTerm
-import           CryptolSAWCore.Cryptol       (CryptolEnv)
 
 text :: String -> Doc ann
 text = pretty
@@ -91,15 +90,15 @@ translateSAWModule sc configuration mm m = do
 
 -- | Translate a Cryptol module to a Rocq module
 translateCryptolModule ::
-  SharedContext -> CryptolEnv ->
+  SharedContext ->
   Rocq.Ident {- ^ Section name -} ->
   TranslationConfiguration ->
   -- | List of already translated global declarations
   [Rocq.Ident] ->
   CryptolModule ->
   IO (Either TranslationError (Doc ann))
-translateCryptolModule sc env nm configuration globalDecls m = do
-  translated <- CMT.translateCryptolModule sc env configuration globalDecls m
+translateCryptolModule sc nm configuration globalDecls m = do
+  translated <- CMT.translateCryptolModule sc configuration globalDecls m
   return $ Rocq.prettyDecl . Rocq.Section (escapeIdent nm) <$> translated
 
 -- | Extract out the 'String' name of a declaration in a SAW core module

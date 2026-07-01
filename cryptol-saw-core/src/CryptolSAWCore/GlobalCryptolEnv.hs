@@ -112,37 +112,10 @@ data ImportVisibility
 
 -- | The global environment for capturing the Cryptol state, both
 --   Cryptol's own state and the state associated with
---   importing/translating into SAWCore.
---   This is intended to be a write-once record of any work done
---   during translation, analagous to the 'SharedContext' from
----  SAWCore. Rather than directly accessing this environment,
---   operations take/return a 'CryptolEnv', which additionally
---   includes a scoped naming environment via 'CryptolScope'.
-
-
---
--- Note that prior to 202603 there were two environment types,
--- `CryptolEnv` carrying around the persistent bits and generally
--- being (in most places) the external interface; and another type
--- called (far too generically) @Env@ used by the import logic in this
--- file. There was a bunch of code for copying bits from `CryptolEnv`
--- into an empty @Env@ on the fly, calling into here, then pouring the
--- results back. This code was arbitrary and in some cases possibly
--- wrong. Furthermore, having the import code tied to an incompatible
--- type made a bunch of external code calling directly into it pass an
--- empty environment instead, which caused further problems.
---
--- While this was being fixed the prior @Env@ type got renamed to
--- @ImportEnv@. There should be no references to it or its field names
--- (@imp*@ rather than @env*@) left, but in case some are hiding in
--- comments the transitional field names are also documented below.
---
--- There is now one environment type. The history above remains
--- relevant until all the leftover warts and weaknesses arising from
--- the old structure get cleaned out, which may take a while.
---
--- (FUTURE: once that's done, remove the historical notes; they are
--- only of value while they remain relevant to the current code.)
+--   importing/translating into SAWCore. This is intended to be a
+--   write-once record of any work done during translation. Rather than
+--   using the fields of this datatype directly, it is accessed as
+--   'SharedContext' data via the setters and getters below.
 data GlobalCryptolEnv = GlobalCryptolEnv
   { geModuleEnv   :: ME.ModuleEnv
   -- | Invariant: This is a subset of 'geAllVars', which is
@@ -160,7 +133,7 @@ data GlobalCryptolEnv = GlobalCryptolEnv
   }
 
 -- | Initialize the global environment with the given 'ME.ModuleEnv',
---   and populate the 'geAllVars' accordingly.
+--   and populate the 'geAllVars' field accordingly.
 initGlobalEnv :: ME.ModuleEnv -> GlobalCryptolEnv
 initGlobalEnv modEnv = refreshCryptolEnv $
     GlobalCryptolEnv modEnv

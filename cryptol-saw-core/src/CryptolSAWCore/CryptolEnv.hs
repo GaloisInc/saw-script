@@ -839,7 +839,7 @@ importCryptolModule sc env src as False vis imps =
   do
   mod' <- loadAndTranslateModule sc src
   let import' = mkImport vis (locatedUnknown (T.mName mod')) as imps
-  return $ C.mapImports ((:) import') env
+  return $ C.mapImports (\imports -> import':imports) env
 importCryptolModule _sc _env (Right __nm) _as True _vis _imps =
   -- importing submodule by name:
   -- FIXME: this will be implemented in #2618 (soon).
