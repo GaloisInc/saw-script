@@ -512,10 +512,7 @@ noncomputable def ecSDiv_checkedM (n : Num)
     Except String (seqBool n) :=
   match n with
   | Num.TCNum 0 => False.elim h
-  | Num.TCNum (Nat.succ _w) => do
-      let x' ← x
-      let y' ← y
-      Pure.pure (bitVecToVec ((vecToBitVec x').sdiv (vecToBitVec y')))
+  | Num.TCNum (Nat.succ w) => bvSDiv_checkedM w x y h
   | Num.TCInf => False.elim h
 
 noncomputable def ecSMod_checkedM (n : Num)
@@ -523,10 +520,20 @@ noncomputable def ecSMod_checkedM (n : Num)
     Except String (seqBool n) :=
   match n with
   | Num.TCNum 0 => False.elim h
-  | Num.TCNum (Nat.succ _w) => do
-      let x' ← x
-      let y' ← y
-      Pure.pure (bitVecToVec ((vecToBitVec x').srem (vecToBitVec y')))
+  | Num.TCNum (Nat.succ w) => bvSRem_checkedM w x y h
+  | Num.TCInf => False.elim h
+
+theorem ecSDiv_checkedM_TCNum_succ (w : Nat)
+    (x y : Except String (seqBool (Num.TCNum (Nat.succ w))))
+    (h : ecSignedBVNonzeroM (Num.TCNum (Nat.succ w)) y) :
+    ecSDiv_checkedM (Num.TCNum (Nat.succ w)) x y h =
+      bvSDiv_checkedM w x y h := rfl
+
+theorem ecSMod_checkedM_TCNum_succ (w : Nat)
+    (x y : Except String (seqBool (Num.TCNum (Nat.succ w))))
+    (h : ecSignedBVNonzeroM (Num.TCNum (Nat.succ w)) y) :
+    ecSMod_checkedM (Num.TCNum (Nat.succ w)) x y h =
+      bvSRem_checkedM w x y h := rfl
 
 noncomputable def bvShl (w : Nat) (x : Vec w Bool) (i : Nat) : Vec w Bool :=
   bitVecToVec ((vecToBitVec x) <<< i)

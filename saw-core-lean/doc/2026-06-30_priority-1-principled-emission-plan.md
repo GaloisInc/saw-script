@@ -18,6 +18,11 @@ implemented. The wrappers stay opaque under Lean normalization and route
 through checked Lean helpers over `Cryptol.Num`; Haskell passes the raw `Num`
 argument and wrapped operands to the contract table but does not compute a
 finite predecessor width or erase the wrapper's recursor structure.
+Audit follow-up: the finite positive helper branches now call
+`bvSDiv_checkedM` / `bvSRem_checkedM` rather than reimplementing signed-BV
+semantics, `rfl` equations pin those finite-successor branches, and
+non-exact-arity partial-operation uses reject until a proof-carrying
+higher-order wrapper is designed.
 
 ## Goal
 
@@ -148,6 +153,10 @@ For the immediate signed-BV wrapper slice:
 - done: the positive shape tests require `ecSignedBVNonzeroM`, checked
   `ecSDiv_checkedM` / `ecSMod_checkedM`, and absence of residual `Nat__rec` or
   unchecked direct signed-BV bypasses;
+- done: the checked wrapper helpers delegate to `bvSDiv_checkedM` /
+  `bvSRem_checkedM` in the finite positive case;
+- done: non-exact-arity partial-operation identifiers reject before falling
+  through to unchecked direct mappings;
 - done: Haskell does not compute the predecessor width or recognize a closed
   `TCNum` pattern to decide the semantic translation;
 - validation remains the normal full conformance gate:

@@ -1,0 +1,16 @@
+Loading file "under_applied_partial.saw"
+Stack trace:
+   (builtin) in write_lean_term
+   under_applied_partial.saw:8:1-8:59 (at top level)
+Error translating: Refusing to translate primitive divNat.
+
+Reason: partial-operation contracts require exactly 2 argument(s); under-applied or over-applied partial operations must use a proof-carrying function-wrapper design before they can be emitted soundly
+
+This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
+transposition for this primitive yet. If your Cryptol code specialised down to it,
+you've hit one of the open cases tracked in the long-term plan.
+
+Workaround: refactor to avoid the primitive (e.g. recursion via `fix` can sometimes
+be expressed as a bounded fold instead). Run dump_lean_residual_primitives on your
+term to see all surviving names — divNat will be one of them.
+

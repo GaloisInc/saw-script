@@ -80,7 +80,9 @@ are the acceptance tests for this work. They must be promoted from
   `ecSMod_checkedM` helpers. These helpers case-split on `Num` in Lean and
   require nonzero evidence only in the finite positive branch. The zero-width
   and infinite branches are impossible under the contract, so they cannot be
-  silently totalized.
+  silently totalized. Audit follow-up: the finite positive branches delegate
+  to `bvSDiv_checkedM` / `bvSRem_checkedM` instead of reimplementing signed-BV
+  semantics, with `rfl` equations pinning those finite-successor branches.
 - routed fully applied `ecSDiv` / `ecSMod` through the same data-driven
   `PartialOpContract` table using raw `Num` plus wrapped value arguments.
   Haskell does not compute a predecessor width or rewrite to `bvSDiv` /
@@ -88,10 +90,15 @@ are the acceptance tests for this work. They must be promoted from
 - promoted `obligations/cryptol_ec_sdiv_zero` and
   `obligations/cryptol_ec_smod_zero` from known gaps to positive
   obligation-shape tests.
+- rejected under-applied or over-applied partial-operation identifiers before
+  they can fall through to unchecked function-shaped mappings. Higher-order
+  partial operations need a separate proof-carrying function-wrapper design.
 
 The partial-operation obligation family is now closed at the emitted-contract
-level. Remaining work in this area is proof ergonomics for executable replay of
-nonzero Rational and bitvector examples.
+level for fully applied operations. Remaining work in this area is proof
+ergonomics for executable replay of nonzero Rational and bitvector examples,
+plus a future higher-order wrapper design if under-applied partial operations
+become required.
 
 ## Correctness Contract
 
@@ -166,12 +173,11 @@ only because Lean checks the proof term.
 
 Under-applied forms need careful handling. A partially-applied division
 function cannot consume evidence until the divisor argument exists. The
-conservative first implementation should:
+conservative first implementation:
 
-- emit obligations only for fully-applied direct calls;
-- keep under-applied forms on the existing function-shaped mapping when no
-  divisor is available; and
-- add a TODO/test before claiming full higher-order partial-operation support.
+- emits obligations only for fully-applied direct calls; and
+- rejects under-applied or over-applied partial-operation identifiers before
+  they can fall through to unchecked function-shaped mappings.
 
 If higher-order uses become important, add a proof-carrying function wrapper
 whose returned function requires evidence at application time. Do not infer or

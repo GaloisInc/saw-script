@@ -143,7 +143,9 @@ Current implementation priority:
    signed-BV wrapper surface (`ecSDiv`, `ecSMod`) now use checked
    proof-carrying helpers. The wrapper slice is fixed at the
    wrapper/recursor contract layer rather than by width-specific Haskell
-   normalization.
+   normalization. Post-audit fix: the finite positive signed-wrapper branch
+   now delegates to the existing checked BV helpers rather than duplicating
+   signed-BV semantics in a second Lean definition.
 2. Execute the Priority #1 principled-emission plan:
    `doc/2026-06-30_priority-1-principled-emission-plan.md`.
    The first driver, `ecSDiv`/`ecSMod`, is complete. The next step is to test
@@ -194,6 +196,10 @@ Current implementation priority:
        `Cryptol.Num`; the Lean helper case-splits on `Num` and requires
        `ecSignedBVNonzeroM` evidence for the finite positive case. This avoids
        any Haskell rewrite from `ecSDiv (TCNum (Succ n))` to `bvSDiv n`.
+       2026-06-30 audit follow-up: the finite positive helper branch now calls
+       `bvSDiv_checkedM` / `bvSRem_checkedM` instead of reimplementing signed
+       BV division/remainder directly, with `rfl` helper theorems pinning the
+       finite-successor equations.
        Planning reference:
        `doc/2026-06-30_priority-1-principled-emission-plan.md`.
   - Implementation rule: add a small data-driven partial-operation contract
@@ -206,9 +212,12 @@ Current implementation priority:
     the emitted result.
   - 2026-06-30 checkpoint: all direct `obligations/partial_*` and
     `obligations/cryptol_ec_*_zero` zero-divisor/zero-denominator fixtures are
-    positive obligation-shape tests. Remaining gaps in this area are proof
-    ergonomics for executable replay of nonzero Rational/BV examples, not
-    missing emission contracts.
+    positive obligation-shape tests for fully applied operations. Under-applied
+    or over-applied partial-operation identifiers now reject with a pinned
+    `saw-boundary/partial_operation_obligations/under_applied_partial`
+    diagnostic until a proof-carrying function-wrapper design exists.
+    Remaining gaps in this area are proof ergonomics for executable replay of
+    nonzero Rational/BV examples, not missing fully applied emission contracts.
 
 - [ ] Close the bitvector primitive conformance surface found in the
   2026-06-29 audit.

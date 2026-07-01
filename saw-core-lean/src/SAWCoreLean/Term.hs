@@ -1264,6 +1264,14 @@ findPartialOpContract ident nArgs =
       && identName ident == pocName contract
       && nArgs == pocArity contract
 
+findPartialOpContractArity :: Ident -> Maybe Int
+findPartialOpContractArity ident =
+  pocArity <$> find matches partialOpContracts
+  where
+    matches contract =
+         identModule ident == pocModule contract
+      && identName ident == pocName contract
+
 notEqZero :: Lean.Term -> Lean.Term -> Lean.Term
 notEqZero ty value =
   Lean.App (Lean.Var (Lean.Ident "Not"))
@@ -1624,6 +1632,13 @@ translateIdentWithArgsWithShape ::
 translateIdentWithArgsWithShape i args
   | Just contract <- findPartialOpContract i (length args)
   = lowerPartialOpContract contract i args
+  | Just expectedArity <- findPartialOpContractArity i
+  = Except.throwError (RejectedPrimitive (Text.pack (identName i))
+      ("partial-operation contracts require exactly "
+       <> Text.pack (show expectedArity)
+       <> " argument(s); under-applied or over-applied partial operations \
+          \must use a proof-carrying function-wrapper design before they can \
+          \be emitted soundly"))
   | i == "Prelude.unsafeAssert"
   , [aArg, xArg, yArg] <- args
   = translateUnsafeAssertObligation aArg xArg yArg
