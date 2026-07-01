@@ -711,6 +711,11 @@ arguments. -/
 /-- Wrapped variant of 'gen'. The element-producing function arg
 returns wrapped elements; the result is a wrapped vector. Short-
 circuits on the first `Except.error` element. -/
+def genWithBoundsM (n : Nat) (α : Type)
+    (f : (i : Nat) → i < n → Except String α) :
+    Except String (Vec n α) :=
+  Vector.ofFnM (fun (i : Fin n) => f i.val i.isLt)
+
 def genM (n : Nat) (α : Type) (f : Nat → Except String α) :
     Except String (Vec n α) :=
   Vector.ofFnM (fun (i : Fin n) => f i.val)
@@ -741,7 +746,7 @@ def atWithProof_checkedM (n : Nat) (α : Type)
 def genWithProof_checkedM (n : Nat) (α : Type)
     (f : (i : Nat) → i < n → Except String α) :
     Except String (Vec n α) :=
-  Vector.ofFnM (fun (i : Fin n) => f i.val i.isLt)
+  genWithBoundsM n α f
 
 def updWithProof_checkedM (n : Nat) (α : Type)
     (xs : Except String (Vec n α)) (i : Nat) (x : Except String α)

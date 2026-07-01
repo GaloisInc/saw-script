@@ -1164,6 +1164,51 @@ translateFunctionWithWrappedResult t = do
                   pure (Lean.Lambda (concatMap bindTransToBinder bts) bodyLean)
        _ -> translateTerm t
 
+translateFunctionWithNatLtWrappedResult ::
+  TermTranslationMonad m =>
+  Text.Text ->
+  Lean.Term ->
+  Bool ->
+  Term ->
+  m Lean.Term
+translateFunctionWithNatLtWrappedResult primitiveName nLean expectsSourceProof fnTerm =
+  case unwrapTermF fnTerm of
+    Lambda {} ->
+      case asLambdaList fnTerm of
+        ((idxName, _) : [], body)
+          | not expectsSourceProof ->
+              translateBinderWithLeanType idxName (Lean.Var (Lean.Ident "Nat")) $
+                \idxBinder@(Lean.Binder _ idxLean _) -> do
+                  let idxTerm = Lean.Var idxLean
+                      proofTy = natLt idxTerm nLean
+                  proofName <- freshVariantAvoiding
+                    (Set.insert idxLean (leanTermIdents nLean))
+                    (Lean.Ident "h_gen_bounds_")
+                  let proofBinder =
+                        Lean.Binder Lean.Explicit proofName (Just proofTy)
+                  bodyResult <- translateTermLetWithShape body
+                  pure (Lean.Lambda [idxBinder, proofBinder]
+                    (translatedTermAsWrapped bodyResult))
+        ((idxName, _) : (proofName, _) : [], body)
+          | expectsSourceProof ->
+              translateBinderWithLeanType idxName (Lean.Var (Lean.Ident "Nat")) $
+                \idxBinder@(Lean.Binder _ idxLean _) ->
+                  let idxTerm = Lean.Var idxLean
+                      proofTy = natLt idxTerm nLean
+                  in translateBinderWithLeanType proofName proofTy $
+                    \proofBinder -> do
+                      bodyResult <- translateTermLetWithShape body
+                      pure (Lean.Lambda [idxBinder, proofBinder]
+                        (translatedTermAsWrapped bodyResult))
+        _ ->
+          Except.throwError (RejectedPrimitive primitiveName
+            (if expectsSourceProof
+                then "expected a generator function with exactly Nat and bounds-proof binders"
+                else "expected a generator function with exactly one Nat binder"))
+    _ ->
+      Except.throwError (RejectedPrimitive primitiveName
+        "expected a lambda generator function so Lean can receive checked index evidence")
+
 lowerMkStreamSound ::
   TermTranslationMonad m => Lean.Term -> Lean.Term -> m Lean.Term
 lowerMkStreamSound elTypeLean indexFnLean =
@@ -1442,7 +1487,7 @@ boundsProofScript propName proofIdents =
   Lean.Tactic $
     unfoldProp propName ++
     concatMap substCandidate (Set.toList proofIdents) ++
-    "(first | omega | simp [Pure.pure, Except.pure, Except.bind, Bind.bind, \
+    "(first | assumption | omega | simp [Pure.pure, Except.pure, Except.bind, Bind.bind, \
     \addNat, zero_macro, one_macro, succ_macro, bit0_macro, bit1_macro, \
     \natPos_macro] | decide | skip); all_goals sorry"
   where
@@ -1618,7 +1663,11 @@ lowerCheckedApplicationContract contract ident args = do
           go acc modes rest
         go acc (CheckedArgFunctionWithNatLt nIdx : modes) (arg : rest)
           | nIdx < length acc = do
-              helperArg <- translateNatLtProofFunction (reverse acc !! nIdx) arg
+              helperArg <- translateFunctionWithNatLtWrappedResult
+                (Text.pack (identName ident))
+                (reverse acc !! nIdx)
+                True
+                arg
               go (helperArg : acc) modes rest
           | otherwise =
               Except.throwError (RejectedPrimitive (Text.pack (identName ident))
@@ -1647,32 +1696,6 @@ lowerCheckedApplicationContract contract ident args = do
     checkedApplicationArgTerm CheckedArgIgnoredProof _ =
       Except.throwError (RejectedPrimitive (Text.pack (identName ident))
         "checked-application contract attempted to translate an ignored proof argument")
-
-    translateNatLtProofFunction ::
-      TermTranslationMonad m =>
-      Lean.Term ->
-      Term ->
-      m Lean.Term
-    translateNatLtProofFunction nLean fnTerm =
-      case unwrapTermF fnTerm of
-        Lambda {} ->
-          case asLambdaList fnTerm of
-            ((idxName, _) : (proofName, _) : [], body) ->
-              translateBinderWithLeanType idxName (Lean.Var (Lean.Ident "Nat")) $
-                \idxBinder@(Lean.Binder _ idxLean _) ->
-                  let idxTerm = Lean.Var idxLean
-                      proofTy = natLt idxTerm nLean
-                  in translateBinderWithLeanType proofName proofTy $
-                    \proofBinder -> do
-                      bodyResult <- translateTermLetWithShape body
-                      pure (Lean.Lambda [idxBinder, proofBinder]
-                        (translatedTermAsWrapped bodyResult))
-            _ ->
-              Except.throwError (RejectedPrimitive (Text.pack (identName ident))
-                "genWithProof expects a function with exactly Nat and bounds-proof binders")
-        _ ->
-          Except.throwError (RejectedPrimitive (Text.pack (identName ident))
-            "genWithProof expects a lambda function argument")
 
 leanBinderName :: Lean.Binder -> Lean.Ident
 leanBinderName (Lean.Binder _ name _) = name
@@ -2244,16 +2267,17 @@ originalDispatchWithShape i args = do
     apply _ _ (UseMapsToWrapped argShapes target)
       | length args >= n
       , (mArgs, rest) <- splitAt n args = do
-          argResults <- traverse translateTermWithShape mArgs
+          argResults <- translateWrappedHelperArgs argShapes mArgs
           let actualWrapped = map (isWrappedShape . ttShape) argResults
               expectedWrapped =
-                [ argShape == UseArgWrapped
+                [ wrappedHelperArgExpectsWrapped argShape
                 | argShape <- argShapes
                 ]
               functionMismatches =
                 [ pos
-                | (pos, (UseArgFunction, BindingWrapped)) <-
+                | (pos, (argShape, BindingWrapped)) <-
                     zip [0 :: Int ..] (zip argShapes (map ttShape argResults))
+                , wrappedHelperArgExpectsFunction argShape
                 ]
           case functionMismatches of
             pos : _ ->
@@ -2267,7 +2291,9 @@ originalDispatchWithShape i args = do
           -- wrapped actual before applying the helper. Function
           -- formals pass through as function-shaped values; there is
           -- no sound general conversion from an arbitrary Except
-          -- value to a function.
+          -- value to a function. Proof-carrying generator formals
+          -- translate source lambdas into Lean callbacks that receive
+          -- checked index evidence from the helper.
           let shouldBindRaw =
                 zipWith (\expectsWrapped isWrappedActual ->
                            not expectsWrapped && isWrappedActual)
@@ -2284,17 +2310,18 @@ originalDispatchWithShape i args = do
           -- return a function-shaped partial application. This keeps
           -- partial helpers from escaping the raw/wrapped convention
           -- system.
-          do argResults <- traverse translateTermWithShape args
+          do let suppliedShapes = take (length args) argShapes
+             argResults <- translateWrappedHelperArgs suppliedShapes args
              let actualWrapped = map (isWrappedShape . ttShape) argResults
-                 suppliedShapes = take (length args) argShapes
                  expectedWrapped =
-                   [ argShape == UseArgWrapped
+                   [ wrappedHelperArgExpectsWrapped argShape
                    | argShape <- suppliedShapes
                    ]
                  functionMismatches =
                    [ pos
-                   | (pos, (UseArgFunction, BindingWrapped)) <-
+                   | (pos, (argShape, BindingWrapped)) <-
                        zip [0 :: Int ..] (zip suppliedShapes (map ttShape argResults))
+                   , wrappedHelperArgExpectsFunction argShape
                    ]
              case functionMismatches of
                pos : _ ->
@@ -2315,6 +2342,31 @@ originalDispatchWithShape i args = do
              pure (TranslatedTerm tm BindingFunction)
       where
         n = length argShapes
+        wrappedHelperArgExpectsWrapped UseArgWrapped = True
+        wrappedHelperArgExpectsWrapped _ = False
+        wrappedHelperArgExpectsFunction UseArgFunction = True
+        wrappedHelperArgExpectsFunction UseArgFunctionWithNatLt{} = True
+        wrappedHelperArgExpectsFunction _ = False
+        translateWrappedHelperArgs modes0 args0 = go [] modes0 args0
+          where
+            go acc [] [] = pure acc
+            go acc (UseArgFunctionWithNatLt nIdx : modes) (arg : rest)
+              | nIdx < length acc = do
+                  helperArg <- translateFunctionWithNatLtWrappedResult
+                    (Text.pack (identName i))
+                    (ttLean (acc !! nIdx))
+                    False
+                    arg
+                  go (acc ++ [TranslatedTerm helperArg BindingFunction]) modes rest
+              | otherwise =
+                  Except.throwError (RejectedPrimitive (Text.pack (identName i))
+                    "wrapped helper proof-carrying function argument referenced a missing Nat bound")
+            go acc (_mode : modes) (arg : rest) = do
+              translated <- translateTermWithShape arg
+              go (acc ++ [translated]) modes rest
+            go _ _ _ =
+              Except.throwError (RejectedPrimitive (Text.pack (identName i))
+                "wrapped helper argument table did not match source arity")
     apply _ _ (UseReject reason) =
       Except.throwError
         (RejectedPrimitive (Text.pack (identName i)) reason)

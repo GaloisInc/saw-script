@@ -1,1 +1,1 @@
-Finite stream-helper observations currently emit unresolved MkStream totality proof stubs; executable differential coverage needs either checked obligations or a boundary fixture for the obligation shape.
+Finite stream-helper observations currently expose a Stream.rec raw/wrapped mismatch: the recursor returns raw Nat where the surrounding Phase-beta context expects Except-wrapped Nat.

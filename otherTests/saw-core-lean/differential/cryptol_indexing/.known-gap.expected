@@ -1,6 +1,0 @@
-Type mismatch
-addNat i
-has type
-Nat
-but is expected to have type
-Except String Nat

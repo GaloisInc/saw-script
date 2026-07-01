@@ -1,1 +1,1 @@
-Emitted Lean now exposes checked Prelude.at bounds obligations in this row, but the current generated-sequence proof context does not discharge every bound. True differential tests may not rely on `sorry`.
+Generated-index evidence now discharges direct `i < n` bounds, but append/reverse still expose derived bounds over offsets and transformed indices that the current Lean proof outline does not discharge. True differential tests may not rely on `sorry`.

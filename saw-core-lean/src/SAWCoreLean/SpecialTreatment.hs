@@ -99,6 +99,12 @@ data UseArgShape
   = UseArgRaw
   | UseArgWrapped
   | UseArgFunction
+    -- | Function argument for a finite generator. The referenced earlier
+    -- argument is the vector length; the emitted Lean function receives the
+    -- generated Nat index plus kernel-checked evidence that the index is
+    -- in bounds. Index 0 is the first SAWCore argument consumed by the
+    -- enclosing 'UseMapsToWrapped' treatment.
+  | UseArgFunctionWithNatLt Int
   deriving (Eq, Show)
 
 -- | How to translate a SAWCore identifier at its use sites.
@@ -597,8 +603,10 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- result. SAW signatures: 'gen' takes 3 args (n, α, f);
     -- 'atWithDefault' takes 5 (n, α, d, v, i).
   , ("gen",           mapsToWrapped
-                        [UseArgRaw, UseArgRaw, UseArgFunction]
-                        (Lean.Ident "genM"))
+                        [ UseArgRaw, UseArgRaw
+                        , UseArgFunctionWithNatLt 0
+                        ]
+                        (Lean.Ident "genWithBoundsM"))
   , ("atWithDefault", mapsToWrapped
                         [ UseArgRaw, UseArgRaw, UseArgWrapped
                         , UseArgWrapped, UseArgRaw

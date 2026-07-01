@@ -144,9 +144,11 @@ Current implementation priority:
    trusting source proof terms. `Cryptol.ecAt` finite indexing now reaches the
    same contract by preserving `Prelude.at` through normalization and emitting
    the source `i < n` precondition as Lean evidence consumed by
-   `atWithProof_checkedM`. Newly exposed generated-sequence bounds failures are
-   preserved as visible known gaps; the next backend target is threading
-   generated-index evidence through `genM` and sequence-helper functions.
+   `atWithProof_checkedM`. Ordinary `Prelude.gen` now routes through
+   `genWithBoundsM`, which supplies Lean-checked `i < n` evidence to generated
+   element bodies. Direct generated-index rows that only need that evidence are
+   promoted back to true differential tests; remaining rows stay pinned where
+   they require derived arithmetic bounds or other proof obligations.
 2. Completed: close partial-operation obligations in principle:
    `doc/2026-06-30_partial-operation-obligations-plan.md`.
    Direct scalar operations, direct bitvector operations, and the Cryptol
@@ -269,14 +271,22 @@ Current implementation priority:
        sequence. `differential/cryptol_ec_at_infinite` compares SAW and Lean for
        the stream branch. `obligations/cryptol_ec_at_oob_bounds` pins the
        intentionally open out-of-bounds finite obligation.
-    7. [ ] Design the next generated-sequence evidence convention.
+    7. [x] Design and implement the next generated-sequence evidence convention.
        Preserving `Prelude.at` exposes real obligations inside `genM` and
        derived finite sequence helpers. Existing executable rows that used to
-       hide this via `atWithDefault` are now pinned known gaps rather than
-       silent passes. The principled fix is Lean-side evidence threading: the
-       helper should call element functions with `Fin n` evidence (or an
-       equivalent checked proof argument), so bounds obligations in the body can
-       consume kernel-checked `i < n` instead of falling through to `sorry`.
+       hide this via `atWithDefault` are pinned known gaps rather than silent
+       passes until they are genuinely discharged. The implemented convention
+       routes `Prelude.gen` to `genWithBoundsM`, whose callback receives both
+       the generated Nat index and Lean-checked `i < n` evidence supplied from
+       `Fin n`. This promotes direct generated-index rows such as
+       `differential/sequence_map_zip`, `differential/vector_literal_edges`,
+       and `differential/cryptol_parmap`.
+    8. [ ] Improve Lean-side proof support for derived bounds.
+       Remaining generated-sequence known gaps need facts about transformed
+       indices (`subNat`, offsets, reverse/split/update branches, nested
+       transpose indices) and some nonzero arithmetic obligations. Keep these
+       as visible failures until Lean proves them; do not add Haskell
+       arithmetic classifiers.
   - Acceptance: the conformance matrix records every target row as
     `obligation`, `known gap`, or `boundary`; full validation passes; and no
     target path relies on Haskell-side bounds reasoning.
@@ -780,9 +790,8 @@ Current implementation priority:
   - 2026-06-29 checkpoint: added a focused finite-observation stream-helper
     differential known gap for `streamGet`, `streamMap`, shifts, and
     `streamScanl`. SAW evaluates the closed Boolean, but the emitted Lean
-    contains unresolved `MkStream` totality proof stubs, so this cannot count
-    as executable differential coverage until those obligations are checked or
-    moved into an explicit obligation-shape boundary fixture.
+    now exposes a `Stream.rec` raw/wrapped mismatch: the recursor returns raw
+    `Nat` where the surrounding Phase-beta context expects `Except String Nat`.
   - 2026-06-29 checkpoint: expanded Cryptol.sawcore dictionary and entry-point
     coverage. Positive true-differential rows now cover type-level `tc*`
     arithmetic, Bool/Integer/word/pair equality and comparison dictionaries,
@@ -791,9 +800,8 @@ Current implementation priority:
     One focused wrapper-adaptation known gap remains here:
     `updFst`/`updSnd` updater lambdas currently hit raw/wrapped
     `Except String Nat` adaptation failures in emitted Lean. `ecAt`'s finite
-    bounds surface has since moved to checked `Prelude.at` obligations, though
-    generated-vector `ecAt` examples can still expose the separate `genM`
-    wrapper gap.
+    bounds surface has since moved to checked `Prelude.at` obligations, and
+    generated-vector `ecAt` examples now replay through `genWithBoundsM`.
   - 2026-06-29 checkpoint: added true-differential coverage for ordinary
     literal dictionaries and rounding entry points (`ecNumber`, `ecFraction`,
     `ecFromInteger`, Rational floor/ceiling/truncate/rounding), plus
@@ -813,10 +821,9 @@ Current implementation priority:
   - 2026-06-29 checkpoint: added record and empty-tuple/empty-record dictionary
     coverage, a message-specific `ecError` runtime-error known gap, a
     representative projective-helper runtime-error known gap, and a direct
-    Cryptol.sawcore sequence-helper known gap. The direct sequence fixture shows
-    the same principled wrapper-adaptation problem as the vector helper gaps:
-    raw Nat bodies are emitted where the Lean vector helpers expect
-    `Except String Nat`.
+    Cryptol.sawcore sequence-helper known gap. Later generated-index evidence
+    promotes the direct sequence fixture; remaining sequence gaps involve
+    derived-index arithmetic or other helper-specific proof obligations.
   - 2026-06-29 checkpoint: added positive true-differential coverage for
     `tcWidth`, function dictionaries, stream dictionaries, and additional
     deterministic `ec*` comparison/logic/ring wrappers. Added focused known gaps
@@ -879,11 +886,11 @@ Current implementation priority:
     all with-proof vector primitives, and direct recursor families.
   - 2026-06-30 checkpoint: expanded the obligation corpus for stream helpers
     and Cryptol wrappers without changing backend semantics. Positive
-    obligation-shape fixtures now cover `streamMap`, `streamShiftL`, and
-    `streamScanl` as stream-producing helper lowerings. Known-gap obligation
-    fixtures pin `streamShiftR`'s current Nat-vs-`Except` emitted-outline
-    mismatch and Cryptol zero-divisor/zero-denominator wrappers
-    (`ecDiv`, `ecMod`, `ecFieldDiv`, `ecRecip`, `ecSDiv`, `ecSMod`).
+    obligation-shape fixtures now cover `streamMap`, `streamShiftL`,
+    `streamShiftR`, and `streamScanl` as stream-producing helper lowerings.
+    Cryptol zero-divisor/zero-denominator wrappers (`ecDiv`, `ecMod`,
+    `ecFieldDiv`, `ecRecip`, `ecSDiv`, `ecSMod`) also have positive
+    obligation-shape coverage.
     `streamGet` finite projection is intentionally kept as value/differential
     coverage, not a fake standalone obligation test. Later updates promote the
     zero-divisor wrappers and finite `ecAt` to checked obligation rows.

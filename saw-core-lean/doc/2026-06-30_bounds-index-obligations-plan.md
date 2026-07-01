@@ -330,9 +330,13 @@ paper over:
 - do not add Haskell index arithmetic recognizers to prove these cases;
 - pin affected executable rows as known gaps if the true differential harness
   rejects them for `sorry`-backed generated bounds;
-- record the next principled target as Lean-side generated-index evidence
+- route ordinary generators through Lean-side generated-index evidence
   threading, so element functions can consume `Fin n`/`i < n` evidence checked
-  by the kernel.
+  by the kernel;
+- after direct `i < n` obligations are discharged, preserve any remaining
+  derived-index failures as known gaps until Lean-side proof support handles
+  transformed indices such as offsets, subtraction, reverse, split/update
+  branches, and nested transpose indices.
 
 ## Acceptance Criteria
 

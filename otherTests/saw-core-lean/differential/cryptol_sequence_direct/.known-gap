@@ -1,3 +1,0 @@
-Direct Cryptol.sawcore sequence helpers currently expose wrapper-adaptation
-gaps in emitted Lean: raw Nat vector bodies are emitted where monadic vector
-helpers expect Except String Nat.

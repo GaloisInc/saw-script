@@ -1,7 +1,6 @@
 Type mismatch
-zero_macro
+Stream.rec
 has type
 Nat
 but is expected to have type
-Except String Nat
-Stream.rec
+Except String
