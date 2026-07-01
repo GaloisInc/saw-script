@@ -1,4 +1,4 @@
 enable_experimental;
 
-let probe = parse_core "bvEqToEq";
+let probe = parse_core "\\ (pf : Eq Bool (bvEq 8 0x03 0x03) True) -> bvEqToEq 8 0x03 0x03 pf";
 write_lean_term "ProofBvEqToEqProbe" [] [] "emitted.lean" probe;

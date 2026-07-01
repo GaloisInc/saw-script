@@ -1271,7 +1271,7 @@ data ProofPrimitiveContract = ProofPrimitiveContract
   , ppcArity     :: Int
   , ppcArgModes  :: [ProofPrimitiveArgMode]
   , ppcBuildProp :: forall m. TermTranslationMonad m => [Lean.Term] -> m Lean.Term
-  , ppcUseProof  :: [Lean.Term] -> Lean.Term -> Lean.Term
+  , ppcUseProof  :: forall m. TermTranslationMonad m => [Lean.Term] -> Lean.Term -> m Lean.Term
   }
 
 data ProofPrimitiveArgMode
@@ -1398,9 +1398,17 @@ proofPrimitiveContracts :: [ProofPrimitiveContract]
 proofPrimitiveContracts =
   [ bvAssertion "unsafeAssertBVULt" "bvult"
   , bvAssertion "unsafeAssertBVULe" "bvule"
+  , ProofPrimitiveContract preludeModule "uip" 5
+      [ProofArgRaw, ProofArgRaw, ProofArgRaw, ProofArgRaw, ProofArgRaw]
+      uipContract
+      (\_ proof -> pure proof)
   , ProofPrimitiveContract preludeModule "equalNatToEqNat" 3
       [ProofArgRaw, ProofArgRaw, ProofArgRaw]
       equalNatToEqNatContract
+      applyLastArg
+  , ProofPrimitiveContract preludeModule "bvEqToEq" 4
+      [ProofArgRaw, ProofArgWrapped, ProofArgWrapped, ProofArgRaw]
+      bvEqToEqContract
       applyLastArg
   ]
   where
@@ -1409,13 +1417,32 @@ proofPrimitiveContracts =
       ProofPrimitiveContract preludeModule source 3
         [ProofArgRaw, ProofArgWrapped, ProofArgWrapped]
         (bvComparisonTrueM (Lean.Ident op))
-        (\_ proof -> proof)
+        (\_ proof -> pure proof)
 
-applyLastArg :: [Lean.Term] -> Lean.Term -> Lean.Term
+applyLastArg ::
+  TermTranslationMonad m =>
+  [Lean.Term] ->
+  Lean.Term ->
+  m Lean.Term
 applyLastArg args proof =
   case reverse args of
-    (premise : _) -> Lean.App proof [premise]
-    []            -> proof
+    (premise : _) -> pure (Lean.App proof [premise])
+    [] -> pure proof
+
+uipContract ::
+  TermTranslationMonad m =>
+  [Lean.Term] ->
+  m Lean.Term
+uipContract args =
+  case args of
+    [ty, lhs, rhs, proof1, proof2] -> do
+      let proofTy =
+            Lean.App (Lean.ExplVar (Lean.Ident "Eq")) [ty, lhs, rhs]
+      pure (Lean.App (Lean.ExplVar (Lean.Ident "Eq"))
+          [proofTy, proof1, proof2])
+    _ ->
+      Except.throwError (RejectedPrimitive "proof primitive"
+        "uip contract expected exactly type, lhs, rhs, and two proof arguments")
 
 equalNatToEqNatContract ::
   TermTranslationMonad m =>
@@ -1437,6 +1464,23 @@ equalNatToEqNatContract args =
     _ ->
       Except.throwError (RejectedPrimitive "proof primitive"
         "equalNatToEqNat contract expected exactly m, n, and premise arguments")
+
+bvEqToEqContract ::
+  TermTranslationMonad m =>
+  [Lean.Term] ->
+  m Lean.Term
+bvEqToEqContract args =
+  case args of
+    [width, lhs, rhs, _premise] -> do
+      premiseTy <- bvComparisonTrueM (Lean.Ident "bvEq") [width, lhs, rhs]
+      let vecTy =
+            Lean.App (Lean.Var (Lean.Ident "Vec"))
+              [width, Lean.Var (Lean.Ident "Bool")]
+          resultTy = boolEqAt (wrapExcept vecTy) lhs rhs
+      pure (Lean.Pi [Lean.PiBinder Lean.Explicit Nothing premiseTy] resultTy)
+    _ ->
+      Except.throwError (RejectedPrimitive "proof primitive"
+        "bvEqToEq contract expected exactly width, lhs, rhs, and premise arguments")
 
 bvComparisonTrueM ::
   TermTranslationMonad m =>
@@ -1798,7 +1842,7 @@ lowerProofPrimitiveContract contract args = do
   tm <- withLocalProofObligation
           (Lean.Ident "h_proof_")
           prop
-          (pure . ppcUseProof contract argTerms)
+          (ppcUseProof contract argTerms)
   pure (TranslatedTerm tm BindingRaw)
   where
     proofPrimitiveArgs [] [] = pure []

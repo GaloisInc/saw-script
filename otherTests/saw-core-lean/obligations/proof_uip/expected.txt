@@ -1,1 +1,6 @@
 contains:h_proof_obligation_
+contains:h_proof_
+contains:@Eq
+contains:Eq.refl
+contains-normalized:@Eq (@Eq Nat
+absent:CryptolToLean.SAWCorePrimitives.uip

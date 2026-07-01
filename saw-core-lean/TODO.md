@@ -380,12 +380,13 @@ Current implementation priority:
        is clear: `uip`, `coerce__eq`, `equalNatToEqNat`, and `proveLeNat`.
        Use checked Lean theorems only when they are axiom-clean; otherwise emit
        exact obligations and keep proof-library work separate.
-       2026-07-01 checkpoint: `equalNatToEqNat` now emits a theorem-shaped
+       2026-07-01 checkpoint: `uip` now emits the exact proof-equality result
+       as a local obligation. `equalNatToEqNat` now emits a theorem-shaped
        local obligation from the translated raw Boolean-equality premise to
        translated Nat equality, then applies that local evidence to the source
        proof argument. The fixture consumes the result through `Eq__rec` so it
        tests proof evidence without papering over the separate `eqNat`
-       Prelude-alias emission gap. `uip`, `coerce__eq`, `proveLeNat`, and
+       Prelude-alias emission gap. `coerce__eq`, `proveLeNat`, and
        `natCompareLe` remain pinned known gaps.
     4. [x] Promote assertion-style BV bound rows such as
        `unsafeAssertBVULt` and `unsafeAssertBVULe` by emitting the comparison
@@ -402,6 +403,12 @@ Current implementation priority:
        `bvAddZeroL`, `head_gen`, and `foldr_nil` only through exact
        obligations or checked realization theorems. Leave BV-heavy proof work
        as known gaps until Lean-side proof support exists.
+       2026-07-01 checkpoint: `bvEqToEq` now emits a theorem-shaped local
+       obligation from the translated monadic `bvEq` proof premise to the
+       translated wrapped vector equality, then applies that local evidence to
+       the source proof argument. The fixture uses a proof binder rather than a
+       concrete `Refl` so it tests the contract shape without depending on Lean
+       reducing a closed bitvector equality proof.
     6. [x] Add any missing representative fixtures discovered by the survey,
        such as `bvEqToEqNat`, `bvultToIsLtNat`, `natCompareLe`, or a second
        BV-add-zero row if it follows a distinct realization path.
