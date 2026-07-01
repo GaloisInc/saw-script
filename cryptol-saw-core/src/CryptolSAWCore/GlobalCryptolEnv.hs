@@ -322,14 +322,17 @@ mapModEnv sc f = mapGlobal sc (\genv -> genv { geModuleEnv = f (geModuleEnv genv
 -- NOTE: We could enforce a write-once policy here, but it's
 -- not immediately obvious if we need to support key clashes
 -- for equal entries (not possible for
--- some times like 'C.Expr'), or if it is even useful to do so.
+-- some types like 'C.Expr'), or if it is even useful to do so.
 
--- == Maps from 'GlobalCryptolEnv':
+------------------------------------------------------------
+-- Accessing 'GlobalCryptolEnv' from 'SharedContext'
 
--- == Pieces relating to Cryptol primitives:
+--
+-- Pieces relating to Cryptol primitives:
+--
 
--- | Maps Cryptol primitives to their reference
--- implementations that Cryptol keeps around. Currently this field is
+-- | Map from Cryptol primitives to their reference
+-- implementations that Cryptol keeps around. Currently this data is
 -- only populated during initialization; it isn't clear if that's a
 -- bug. (If there are really no further uses after initialization,
 -- regardless of what the user does, dropping the contents allows the
@@ -346,10 +349,8 @@ addRefPrims :: SharedContext -> Map C.PrimIdent C.Expr -> IO ()
 addRefPrims sc m = mapGlobal sc $ \genv -> 
   genv { geRefPrims = Map.union m (geRefPrims genv) }
 
--- | Maps names of Cryptol primitives to their implementations
--- as SAWCore terms. Before the environment types were merged, it was
--- also present in @Env@ under the name @envPrims@ (transitionally
--- @impPrims@).
+-- | Map from names of Cryptol primitives to their implementations
+-- as SAWCore terms.
 ePrims :: SharedContext -> IO (Map C.PrimIdent Term)
 ePrims = getGlobal gePrims
 
@@ -358,10 +359,8 @@ addPrims :: SharedContext -> Map C.PrimIdent Term -> IO ()
 addPrims sc m = mapGlobal sc $ \genv -> 
   genv { gePrims = Map.union m (gePrims genv) }
 
--- | Maps names of Cryptol primitive types to their
--- implementations as SAWCore terms (that are types). Before the
--- environment types were merged, it was also present in @Env@ under
--- the name @envPrimTypes@ (transitionally @impPrimTypes@).
+-- | Map from names of Cryptol primitive types to their
+-- implementations as SAWCore terms (that are types).
 ePrimTypes :: SharedContext -> IO (Map C.PrimIdent Term)
 ePrimTypes = getGlobal gePrimTypes
 
@@ -370,7 +369,10 @@ addPrimTypes :: SharedContext -> Map C.PrimIdent Term -> IO ()
 addPrimTypes sc m = mapGlobal sc $ \genv -> 
   genv { gePrimTypes = Map.union m (gePrimTypes genv) }
 
--- == Second, the pieces that track Cryptol-level objects and types:
+
+--
+-- Pieces that track Cryptol-level objects and types:
+--
 
 -- | The Cryptol-level module environment; it holds all
 -- the modules that have been loaded. Its type is also the state for
@@ -384,6 +386,7 @@ defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
 meSolverConfig :: ME.ModuleEnv -> TM.SolverConfig
 meSolverConfig env = TM.defaultSolverConfig (ME.meSearchPath env)
 
+-- | Add an entry to the 'ME.meSearchPath' of the 'eModuleEnv'.
 addSearchPath :: SharedContext -> FilePath -> IO ()
 addSearchPath sc fp = mapGlobal sc $ \genv ->
   genv { geModuleEnv = (geModuleEnv genv) 
@@ -417,10 +420,9 @@ runModuleM sc m = do
     Left err -> return (Left err, ws)
 
 
--- | Formerly @eExtraTSyns@, holds the expansions for
--- the "extra names" that are type aliases (synonyms). Maps names to
--- `T.TySyn`, which wraps Cryptol types and among other things allows
--- synonyms to take parameters.
+-- | Expansions for the "extra names" that are type aliases (synonyms).
+-- Maps names to `T.TySyn`, which wraps Cryptol types and among other
+-- things allows synonyms to take parameters.
 eExtraTySyns :: SharedContext -> IO (Map C.Name C.TySyn)
 eExtraTySyns = getGlobal geExtraTySyns
 
@@ -442,22 +444,11 @@ addExtraVars sc m = mapGlobal sc $ \genv ->
        , geAllVars = Map.union m (geAllVars genv) 
        }
 
--- Before the environment types were merged, the above five fields
--- were not accessible via @Env@, which turned out to cause
--- complications.
-
 -- | Map from Cryptol names to Cryptol types. This is
 -- used to call `fastTypeOf` and `fastSchemaOf` on Cryptol expressions
--- to fetch their types. This table is derived from information
--- properly kept elsewhere and is a headache to have.
+-- to fetch their types. This table is implicitly updated after every
+-- 'runModuleM' action to ensure it is always up-to-date.
 --
--- Before the environment types were merged, this was found only in
--- @Env@ under the name @envC@. It was built on the fly when calling
--- into the import code using @Env@ and thrown away afterwards.
--- Now it is updated every time the module environment is modified
--- via 'setModuleEnv'.
--- (Transitionally it was called @impCry@ and then @impAllVars@.)
-
 -- FUTURE: in principle we should be able to use the SAWCore types of
 -- the SAWCore terms after importing them, instead of `fastTypeOf` and
 -- `fastSchemaOf`, and drop the `eAllVars` table. In practice, doing
@@ -482,13 +473,12 @@ addAllVars :: SharedContext  -> Map C.Name C.Schema -> IO ()
 addAllVars sc m = mapGlobal sc $ \genv -> 
   genv { geAllVars = Map.union m (geAllVars genv) }
 
--- == Third, the pieces that track imported SAWCore bits:
+--
+-- Pieces that track imported SAWCore bits:
+--
 
--- | Maps Cryptol type variable IDs to SAWCore types. This is
+-- | Map from Cryptol type variable IDs to SAWCore types. This is
 -- only nonempty during import, when working inside a forall-binding.
--- Before the environment types were merged, this was only needed in
--- (and only found in) @Env@ as @envT@. Transitionally, it was called
--- @impTy@ and then @impTyVars@.
 eTyVars :: SharedContext -> IO (Map Int Term)
 eTyVars = getGlobal geTyVars
 
@@ -497,7 +487,7 @@ addTyVars :: SharedContext -> Map Int Term -> IO ()
 addTyVars sc m = mapGlobal sc $ \genv -> 
   genv { geTyVars = Map.union m (geTyVars genv) }
 
--- | Maps Cryptol `C.Prop`, which are type constraints, to
+-- | Map from Cryptol `C.Prop`, which are type constraints, to
 -- corresponding SAWCore information. There is both a term and a list
 -- of `FieldName`. The actual class dictionary we need is obtained by
 -- applying the given field selectors (in reverse order!) to the term.
@@ -508,15 +498,10 @@ addTyVars sc m = mapGlobal sc $ \genv ->
 -- Like `eTyVars`, this table is only nonempty during import, when
 -- working inside a forall-binding, and carries the info from that
 -- binding.
---
--- Before the environment types were merged, this was only needed in
--- (and only found in) @Env@ as @envP@. Transitionally, it was called
--- @impProp@ and then @envTyProps@.
 eTyProps :: SharedContext -> IO (Map C.Prop (Term, [FieldName]))
 eTyProps = getGlobal geTyProps
 
 -- | Add entries to 'eTyProps'.
-
 --   The one current use of this function in 'CryptolSAWCore.Cryptol'
 --   collects all of the superclasses of the given 'C.Prop' as well.
 --   It may make sense to move that logic here, as the current
@@ -528,19 +513,14 @@ addTyProps :: SharedContext -> Map C.Prop (Term, [FieldName]) -> IO ()
 addTyProps sc m = mapGlobal sc $ \genv -> 
   genv { geTyProps = Map.union m (geTyProps genv)  }
 
--- | Formerly @eTermEnv@, holds the translations for all
--- Cryptol names in scope. It maps names to SAWCore terms. Apparently
--- it includes types as well as values. Does not include the contents
+-- | The translations for all Cryptol names in scope. It maps names to
+-- SAWCore terms, both types and values. Does not include the contents
 -- of `ePrims` or `ePrimTypes` (which are not identified with a
--- 'C.Name').
--- Note that the keys in this map are not necessarily a superset of
--- those in 'eAllVars', which may contain variables that have not been
--- translated into SAWCore yet. For entries with matching keys, the
--- 'Term' in 'eAllTerms' should be a 'Variable' with a type that is the
--- imported 'C.Schema' from 'eAllVars'.
---
--- Before the environment types were merged, it was also found in @Env@
--- under the name @envE@.
+-- 'C.Name'). Note that the keys in this map are not necessarily a
+-- superset of those in 'eAllVars', which may contain variables that
+-- have not been translated into SAWCore yet. For entries with matching
+-- keys, the 'Term' in 'eAllTerms' should be a 'Variable' with a type
+-- that is the imported 'C.Schema' from 'eAllVars'.
 eAllTerms :: SharedContext -> IO (Map C.Name Term)
 eAllTerms = getGlobal geAllTerms
 
@@ -549,9 +529,7 @@ addAllTerms :: SharedContext -> Map C.Name Term -> IO ()
 addAllTerms sc m = mapGlobal sc $ \genv -> 
   genv { geAllTerms = Map.union m (geAllTerms genv) }
 
--- | Maps SAWCore names to Cryptol FFI info where relevant.
--- Before the environment types were merged, this was unavailable in
--- @Env@.
+-- | Map from SAWCore names to Cryptol FFI info where relevant.
 eFFITypes :: SharedContext -> IO (Map NameInfo C.FFI)
 eFFITypes = getGlobal geFFITypes
 
@@ -560,7 +538,9 @@ addFFITypes :: SharedContext -> Map NameInfo C.FFI -> IO ()
 addFFITypes sc m = mapGlobal sc $ \genv -> 
   genv { geFFITypes = Map.union m (geFFITypes genv) }
 
--- == Scoped entries from 'CryptolEnv':
+--
+-- Scoped entries from 'CryptolEnv':
+--
 
 -- | The "extra" naming environment that captures Cryptol names
 --   which don't correspond to any imported module. Generally these
@@ -569,7 +549,7 @@ addFFITypes sc m = mapGlobal sc $ \genv ->
 --   This is scoped content, where the accessible names are expected
 --   to be managed by SAW and correspond to the same SAW values that
 --   are in scope.
-
+--
 -- FUTURE: Cryptol has its own functionality for additional bindings
 -- (it uses it for things created from the Cryptol REPL) and we ought
 -- to be able to use it instead of bolting on our own additional layer

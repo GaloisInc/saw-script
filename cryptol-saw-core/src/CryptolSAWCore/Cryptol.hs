@@ -130,8 +130,8 @@ bindTParam' sc tp =
   addTyVars sc (Map.singleton (C.tpUnique tp) v)
   return (v, k)
 
--- | bindTParam - create a binding for a type parameter, just return
---                the new environment and the new sawcore type var (as Term).
+-- | bindTParam - create a binding for a type parameter. Returns
+--                the new SAWCore type var (as `Term`).
 bindTParam :: SharedContext -> C.TParam -> IO Term
 bindTParam sc tp =
   do
@@ -139,10 +139,9 @@ bindTParam sc tp =
   return v
 
 
--- | bindName - create a new binding, adding to appropriate
---              environments; return 3-tuple
---               - the updated environment,
---               - the new SAWCore var (as a Term), and
+-- | bindName - create a new binding, adding it to the
+--              environment; returns a tuple:
+--               - the new SAWCore var (as a 'Term'), and
 --               - the SAWCore type of the variable.
 bindName :: SharedContext -> C.Name -> C.Schema -> IO (Term, Term)
 bindName sc name schema = do
@@ -1649,8 +1648,8 @@ importName cnm =
                                        " in Cryptol name " <> QN.ppQualName qn
           pure (mkImportedName qn)
 
--- | Map 'bindName' over a list of names and signatures, returning an updated
--- 'CryptolEnv' and a list of fresh SAWCore variables.
+-- | Map 'bindName' over a list of names and signatures, updating the
+-- environment and returning a list of fresh SAWCore variables.
 bindNames :: SharedContext -> [(C.Name, C.Schema)] -> IO [Term]
 bindNames _ [] = pure []
 bindNames sc ((nm, ty) : binds) =
@@ -1861,11 +1860,11 @@ data DeclGroupOptions
   = TopLevelDeclGroup ImportPrimitiveOptions
   | NestedDeclGroup
 
--- | Import a list of (non-top-level) Cryptol `C.DeclGroup` into the `CryptolEnv`.
+-- | Import a list of (non-top-level) Cryptol `C.DeclGroup` into the environment.
 importDeclGroups :: SharedContext -> [C.DeclGroup] -> IO ()
 importDeclGroups sc = mapM_ (importDeclGroup NestedDeclGroup sc)
 
--- | Import a list of top-level Cryptol `C.DeclGroup` into the `CryptolEnv`.
+-- | Import a list of top-level Cryptol `C.DeclGroup` into the environment.
 importTopLevelDeclGroups :: SharedContext -> ImportPrimitiveOptions -> [C.DeclGroup] -> IO ()
 importTopLevelDeclGroups sc primOpts = mapM_ (importDeclGroup (TopLevelDeclGroup primOpts) sc)
 
