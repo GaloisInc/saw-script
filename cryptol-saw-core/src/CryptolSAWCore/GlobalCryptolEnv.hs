@@ -33,13 +33,13 @@ module CryptolSAWCore.GlobalCryptolEnv
   , eExtraTySyns
   , addExtraTySyns
   , eAllVars
-  , addAllVars
+  , addToAllVars
   , eTyVars
   , addTyVars
   , eTyProps
   , addTyProps
   , eAllTerms
-  , addAllTerms
+  , addToAllTerms
   , eRefPrims
   , addRefPrims
   , ePrims
@@ -469,8 +469,8 @@ eAllVars :: SharedContext -> IO (Map C.Name C.Schema)
 eAllVars = getGlobal geAllVars
 
 -- | Add entries to 'eAllVars'
-addAllVars :: SharedContext  -> Map C.Name C.Schema -> IO ()
-addAllVars sc m = mapGlobal sc $ \genv -> 
+addToAllVars :: SharedContext  -> Map C.Name C.Schema -> IO ()
+addToAllVars sc m = mapGlobal sc $ \genv ->
   genv { geAllVars = Map.union m (geAllVars genv) }
 
 --
@@ -525,8 +525,8 @@ eAllTerms :: SharedContext -> IO (Map C.Name Term)
 eAllTerms = getGlobal geAllTerms
 
 -- | Add entries to 'eAllTerms'
-addAllTerms :: SharedContext -> Map C.Name Term -> IO ()
-addAllTerms sc m = mapGlobal sc $ \genv -> 
+addToAllTerms :: SharedContext -> Map C.Name Term -> IO ()
+addToAllTerms sc m = mapGlobal sc $ \genv ->
   genv { geAllTerms = Map.union m (geAllTerms genv) }
 
 -- | Map from SAWCore names to Cryptol FFI info where relevant.

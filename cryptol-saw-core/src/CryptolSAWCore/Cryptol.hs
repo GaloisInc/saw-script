@@ -147,9 +147,14 @@ bindName :: SharedContext -> C.Name -> C.Schema -> IO (Term, Term)
 bindName sc name schema = do
   ty <- importSchema sc schema
   v  <- scFreshVariable sc (nameToLocalName name) ty
-  addAllTerms sc (Map.singleton name v)
-  addAllVars sc (Map.singleton name schema)
+  addToAllTerms sc (Map.singleton name v)
+  addToAllVars sc (Map.singleton name schema)
   return (v, ty)
+
+-- | Map 'bindName' over a list of names and signatures, updating the
+-- environment and returning a list of fresh SAWCore variables.
+bindNames :: SharedContext -> [(C.Name, C.Schema)] -> IO [Term]
+bindNames sc vars = mapM (\(nm,sch) -> fst <$> bindName sc nm sch) vars
 
 bindProp :: SharedContext -> C.Prop -> Text -> IO (Term)
 bindProp sc prop nm =
@@ -1648,15 +1653,6 @@ importName cnm =
                                        " in Cryptol name " <> QN.ppQualName qn
           pure (mkImportedName qn)
 
--- | Map 'bindName' over a list of names and signatures, updating the
--- environment and returning a list of fresh SAWCore variables.
-bindNames :: SharedContext -> [(C.Name, C.Schema)] -> IO [Term]
-bindNames _ [] = pure []
-bindNames sc ((nm, ty) : binds) =
-  do (v, _) <- bindName sc nm ty
-     vs <- bindNames sc binds
-     pure (v : vs)
-
 -- | Recognize 'Term's of the form @PairType1 a b@.
 asPairType1 :: Term -> Maybe (Term, Term)
 asPairType1 t =
@@ -1799,8 +1795,8 @@ importDeclGroup declOpts sc (C.Recursive decls) =
      -- NOTE: The eAllTerms fields of env2 and the following Env
      -- are different.  The same names bound in env2 are now bound to
      -- the output of the fixed-point operator:
-     addAllTerms sc rhss
-     addAllVars sc (Map.fromList binds)
+     addToAllTerms sc rhss
+     addToAllVars sc (Map.fromList binds)
 
 
 importDeclGroup declOpts sc (C.NonRecursive decl) = do
@@ -1833,8 +1829,8 @@ importDeclGroup declOpts sc (C.NonRecursive decl) = do
         TopLevelDeclGroup _ ->
           importConstant sc (C.dName decl) (C.dSignature decl) rhs
         NestedDeclGroup -> return rhs
-  addAllTerms sc (Map.singleton (C.dName decl) rhs)
-  addAllVars sc (Map.singleton (C.dName decl) (C.dSignature decl))
+  addToAllTerms sc (Map.singleton (C.dName decl) rhs)
+  addToAllVars sc (Map.singleton (C.dName decl) (C.dSignature decl))
 
 -- | Type holding a setting for the way we import Cryptol primitives.
 --
@@ -2431,8 +2427,8 @@ genCodeForNominalTypes sc nominalMap =
 
       constrs <- newDefsForNominal nt
       let conTs = C.nominalTypeConTypes nt
-      addAllTerms sc (Map.fromList constrs)
-      addAllVars sc (Map.fromList conTs)
+      addToAllTerms sc (Map.fromList constrs)
+      addToAllVars sc (Map.fromList conTs)
 
         -- NOTE: the Cryptol schemas for the Struct & Enum constructors get added to
         --       the Cryptol environment.

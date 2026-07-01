@@ -648,7 +648,7 @@ bindCryptolModule :: SharedContext -> (P.ModName, CryptolModule) -> CryptolEnv -
 bindCryptolModule sc (modName, CryptolModule sm tm) env0 = do
   addExtraTySyns sc sm
   addExtraVars sc (fmap fst tm')
-  addAllTerms sc (fmap snd tm')
+  addToAllTerms sc (fmap snd tm')
   return $ C.mapNaming (flip (foldr addName) (Map.keys tm') .
                flip (foldr addTSyn) (Map.keys sm)) env0
   where
@@ -894,7 +894,7 @@ bindExtraVar sc (ident, TypedTerm (TypedTermSchema schema) trm) env0 = do
   name <- bindIdent sc ident
   let pname = P.mkUnqual ident
   addExtraVars sc (Map.singleton name schema) 
-  addAllTerms sc (Map.singleton name trm)
+  addToAllTerms sc (Map.singleton name trm)
   return $ C.mapNaming (MR.shadowing $ MN.singletonNS C.NSValue pname name) env0
 
 -- Only bind terms that have Cryptol schemas.
