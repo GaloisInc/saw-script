@@ -1,1 +1,7 @@
 contains:h_bounds_obligation_
+contains:h_bounds_
+contains:LE.le
+contains:addNat
+contains:sliceWithProof_checkedM
+absent:atWithDefault
+absent:IsLeNat_base

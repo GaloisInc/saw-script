@@ -1,1 +1,3 @@
-contains:h_bounds_obligation_
+contains:genWithProof_checkedM
+contains:LT.lt
+absent:IsLtNat

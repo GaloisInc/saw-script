@@ -1,1 +1,0 @@
-updWithProof is a proof-carrying vector operation, but currently rejected instead of emitted with a visible bounds obligation.

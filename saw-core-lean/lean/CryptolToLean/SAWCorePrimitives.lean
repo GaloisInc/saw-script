@@ -724,6 +724,55 @@ def atWithDefaultM (n : Nat) (α : Type)
   let vec ← v
   if _h : i < n then pure vec[i] else d
 
+/-! ### Proof-carrying vector operations
+
+These checked helpers realize SAWCore's `*WithProof` vector primitives in the
+Phase β `Except` convention. The SAW-side proof arguments are not trusted by
+the translator. Instead, generated Lean code must pass kernel-checked evidence
+for the corresponding bounds proposition.
+-/
+
+def atWithProof_checkedM (n : Nat) (α : Type)
+    (xs : Except String (Vec n α)) (i : Nat) (h : i < n) :
+    Except String α := do
+  let vec ← xs
+  pure vec[i]
+
+def genWithProof_checkedM (n : Nat) (α : Type)
+    (f : (i : Nat) → i < n → Except String α) :
+    Except String (Vec n α) :=
+  Vector.ofFnM (fun (i : Fin n) => f i.val i.isLt)
+
+def updWithProof_checkedM (n : Nat) (α : Type)
+    (xs : Except String (Vec n α)) (i : Nat) (x : Except String α)
+    (_h : i < n) : Except String (Vec n α) := do
+  let vec ← xs
+  let x' ← x
+  pure (Vector.ofFn (fun (j : Fin n) =>
+    if _heq : j.val = i then x' else vec[j]))
+
+def sliceWithProof_checkedM (α : Type) (n off len : Nat)
+    (xs : Except String (Vec n α)) (h : off + len <= n) :
+    Except String (Vec len α) := do
+  let vec ← xs
+  pure (Vector.ofFn (fun (j : Fin len) =>
+    have hj : off + j.val < n :=
+      Nat.lt_of_lt_of_le (Nat.add_lt_add_left j.isLt off) h
+    vec[off + j.val]))
+
+def updSliceWithProof_checkedM (α : Type) (n off len : Nat)
+    (xs : Except String (Vec n α)) (ys : Except String (Vec len α))
+    (_h : off + len <= n) : Except String (Vec n α) := do
+  let vec ← xs
+  let ys' ← ys
+  pure (Vector.ofFn (fun (j : Fin n) =>
+    if hlo : off <= j.val then
+      if hhi : j.val < off + len then
+        have hidx : j.val - off < len := by omega
+        ys'[j.val - off]
+      else vec[j]
+    else vec[j]))
+
 /-- Wrapped variant of 'foldr'. The folding function takes wrapped
 α and accumulator, returns wrapped accumulator. The pre-existing
 'foldr' raw definition stays for any non-monadic call paths. -/

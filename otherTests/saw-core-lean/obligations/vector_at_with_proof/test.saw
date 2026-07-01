@@ -1,4 +1,6 @@
 enable_experimental;
 
-let probe = parse_core "atWithProof";
+let probe =
+  parse_core "atWithProof 3 Bool 0b101 2 (IsLeNat_base 3)";
+
 write_lean_term "AtWithProofObligationProbe" [] [] "emitted.lean" probe;

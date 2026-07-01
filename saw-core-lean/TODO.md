@@ -137,7 +137,17 @@ translation with a clear, principled diagnostic.
 
 Current implementation priority:
 
-1. Close partial-operation obligations in principle:
+1. Continue the bounds/index obligation plan:
+   `doc/2026-06-30_bounds-index-obligations-plan.md`.
+   Direct fully applied Prelude with-proof vector primitives now use a
+   declarative checked-application contract and Lean checked helpers without
+   trusting source proof terms. `Cryptol.ecAt` finite indexing now reaches the
+   same contract by preserving `Prelude.at` through normalization and emitting
+   the source `i < n` precondition as Lean evidence consumed by
+   `atWithProof_checkedM`. Newly exposed generated-sequence bounds failures are
+   preserved as visible known gaps; the next backend target is threading
+   generated-index evidence through `genM` and sequence-helper functions.
+2. Completed: close partial-operation obligations in principle:
    `doc/2026-06-30_partial-operation-obligations-plan.md`.
    Direct scalar operations, direct bitvector operations, and the Cryptol
    signed-BV wrapper surface (`ecSDiv`, `ecSMod`) now use checked
@@ -146,14 +156,12 @@ Current implementation priority:
    normalization. Post-audit fix: the finite positive signed-wrapper branch
    now delegates to the existing checked BV helpers rather than duplicating
    signed-BV semantics in a second Lean definition.
-2. Execute the Priority #1 principled-emission plan:
+3. Continue applying the Priority #1 principled-emission plan:
    `doc/2026-06-30_priority-1-principled-emission-plan.md`.
-   The first driver, `ecSDiv`/`ecSMod`, is complete. The next step is to test
-   whether the same checked-contract abstraction cleanly covers bounds/index
-   obligations (`ecAt` and with-proof vector primitives) before coding another
-   local case.
-3. Then move to bounds/index obligations (`ecAt` and with-proof vector
-   primitives), followed by smaller wrapper-shape gaps.
+   The first driver, `ecSDiv`/`ecSMod`, is complete. Bounds/index obligations
+   are the next driver for the same checked-contract style.
+4. Then move to smaller wrapper-shape gaps and remaining proof/recursor
+   surfaces.
 
 ## Priority 0: Emission Soundness
 
@@ -218,6 +226,60 @@ Current implementation priority:
     diagnostic until a proof-carrying function-wrapper design exists.
     Remaining gaps in this area are proof ergonomics for executable replay of
     nonzero Rational/BV examples, not missing fully applied emission contracts.
+
+- [ ] Implement proof-carrying bounds/index contracts.
+  - Design reference:
+    `doc/2026-06-30_bounds-index-obligations-plan.md`.
+  - This is the current top backend priority. Bounds-sensitive indexing and
+    proof-carrying vector operations must not emit unchecked total-looking
+    indexing, arbitrary defaults, or trusted SAW proof terms. They must emit
+    visible Lean obligations such as `i < n` or `off + len <= n`, and the
+    emitted result must consume Lean-checked evidence.
+  - Scope, in order:
+    1. [x] Rewrite/promote the with-proof vector obligation fixtures so they
+       exercise fully applied operations, while preserving under-applied
+       rejection as boundary coverage.
+    2. [x] Add thin Lean checked helpers for `atWithProof`, `updWithProof`,
+       `sliceWithProof`, `updSliceWithProof`, and `genWithProof` as needed.
+       Helpers should delegate to faithful vector operations or carry Lean
+       realization theorems; they must not duplicate semantics without proof.
+    3. [x] Add a declarative checked-application contract path in Haskell.
+       Haskell may construct propositions and wire proof variables, but must
+       not prove bounds, inspect index arithmetic, trust source proof terms, or
+       pattern-match current examples.
+    4. [x] Promote `obligations/vector_at_with_proof`,
+       `obligations/vector_upd_with_proof`,
+       `obligations/vector_slice_with_proof`,
+       `obligations/vector_upd_slice_with_proof`, and
+       `obligations/vector_gen_with_proof` as the contract path covers each.
+       `genWithProof` uses a proof-binder adapter that replaces SAW's
+       `IsLtNat i n` source proof binder with Lean evidence `i < n` and passes
+       that checked evidence to `genWithProof_checkedM`.
+    5. [x] Route finite `Cryptol.ecAt` through the same discipline and promote
+       `obligations/cryptol_ec_at_bounds`.
+       The implementation keeps `Prelude.at` opaque during normalization and
+       routes fully applied uses through the checked-application contract table.
+       This is intentionally more general than an `ecAt` classifier: Haskell
+       does not inspect Cryptol index branches, it only emits the precondition
+       attached to the underlying SAWCore vector access.
+    6. [x] Add or classify branch coverage for `ecAt` negative-index and
+       infinite-stream behavior before claiming `ecAt` complete.
+       `differential/cryptol_ec_at_literal_branches` compares SAW and Lean for
+       finite nonnegative and current negative-index behavior over a literal
+       sequence. `differential/cryptol_ec_at_infinite` compares SAW and Lean for
+       the stream branch. `obligations/cryptol_ec_at_oob_bounds` pins the
+       intentionally open out-of-bounds finite obligation.
+    7. [ ] Design the next generated-sequence evidence convention.
+       Preserving `Prelude.at` exposes real obligations inside `genM` and
+       derived finite sequence helpers. Existing executable rows that used to
+       hide this via `atWithDefault` are now pinned known gaps rather than
+       silent passes. The principled fix is Lean-side evidence threading: the
+       helper should call element functions with `Fin n` evidence (or an
+       equivalent checked proof argument), so bounds obligations in the body can
+       consume kernel-checked `i < n` instead of falling through to `sorry`.
+  - Acceptance: the conformance matrix records every target row as
+    `obligation`, `known gap`, or `boundary`; full validation passes; and no
+    target path relies on Haskell-side bounds reasoning.
 
 - [ ] Close the bitvector primitive conformance surface found in the
   2026-06-29 audit.
@@ -726,11 +788,12 @@ Current implementation priority:
     arithmetic, Bool/Integer/word/pair equality and comparison dictionaries,
     signed word comparison, zero/logic/ring dictionaries, and defined
     integral/field entry points (`ecDiv`, `ecMod`, `ecRecip`, `ecFieldDiv`).
-    Two focused known gaps are pinned: `updFst`/`updSnd` updater lambdas
-    currently hit raw/wrapped `Except String Nat` adaptation failures in emitted
-    Lean, and `ecAt` currently emits an unresolved index proof stub. Keep both as
-    conformance failures until the backend emits checked evidence or a clean
-    obligation shape.
+    One focused wrapper-adaptation known gap remains here:
+    `updFst`/`updSnd` updater lambdas currently hit raw/wrapped
+    `Except String Nat` adaptation failures in emitted Lean. `ecAt`'s finite
+    bounds surface has since moved to checked `Prelude.at` obligations, though
+    generated-vector `ecAt` examples can still expose the separate `genM`
+    wrapper gap.
   - 2026-06-29 checkpoint: added true-differential coverage for ordinary
     literal dictionaries and rounding entry points (`ecNumber`, `ecFraction`,
     `ecFromInteger`, Rational floor/ceiling/truncate/rounding), plus
@@ -819,11 +882,11 @@ Current implementation priority:
     obligation-shape fixtures now cover `streamMap`, `streamShiftL`, and
     `streamScanl` as stream-producing helper lowerings. Known-gap obligation
     fixtures pin `streamShiftR`'s current Nat-vs-`Except` emitted-outline
-    mismatch, Cryptol zero-divisor/zero-denominator wrappers
-    (`ecDiv`, `ecMod`, `ecFieldDiv`, `ecRecip`, `ecSDiv`, `ecSMod`), and
-    `ecAt`'s current indexing emission gap. `streamGet` finite projection is
-    intentionally kept as value/differential coverage, not a fake standalone
-    obligation test.
+    mismatch and Cryptol zero-divisor/zero-denominator wrappers
+    (`ecDiv`, `ecMod`, `ecFieldDiv`, `ecRecip`, `ecSDiv`, `ecSMod`).
+    `streamGet` finite projection is intentionally kept as value/differential
+    coverage, not a fake standalone obligation test. Later updates promote the
+    zero-divisor wrappers and finite `ecAt` to checked obligation rows.
   - 2026-06-30 checkpoint: promoted `ecSDiv` and `ecSMod` from known-gap
     rows to positive obligation-shape tests. Their emitted artifacts expose
     `ecSignedBVNonzeroM` and checked `ecSDiv_checkedM` / `ecSMod_checkedM`

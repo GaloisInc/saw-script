@@ -1,0 +1,1 @@
+Emitted Lean now exposes checked Prelude.at bounds obligations in this row, but the current generated-sequence proof context does not discharge every bound. True differential tests may not rely on `sorry`.

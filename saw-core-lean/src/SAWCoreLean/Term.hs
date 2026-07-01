@@ -1204,6 +1204,22 @@ data PartialOpArgMode
   = PartialOpArgRaw
   | PartialOpArgWrapped
 
+data CheckedApplicationContract = CheckedApplicationContract
+  { cacModule     :: ModuleName
+  , cacName       :: String
+  , cacArity      :: Int
+  , cacBuildProp  :: Maybe ([Lean.Term] -> Lean.Term)
+  , cacHelperName :: Lean.Ident
+  , cacArgModes   :: [CheckedApplicationArgMode]
+  }
+
+data CheckedApplicationArgMode
+  = CheckedArgRaw
+  | CheckedArgWrapped
+  | CheckedArgFunction
+  | CheckedArgFunctionWithNatLt Int
+  | CheckedArgIgnoredProof
+
 partialOpContracts :: [PartialOpContract]
 partialOpContracts =
   [ natBinaryPartial "divNat"    "divNat_checked"
@@ -1255,6 +1271,71 @@ partialOpContracts =
         (PartialOpWrapped (Lean.Ident target)
           [PartialOpArgRaw, PartialOpArgWrapped, PartialOpArgWrapped])
 
+checkedApplicationContracts :: [CheckedApplicationContract]
+checkedApplicationContracts =
+  [ vecIndexContract
+      "at"
+      4
+      (Lean.Ident "atWithProof_checkedM")
+      [CheckedArgRaw, CheckedArgRaw, CheckedArgWrapped, CheckedArgRaw]
+      0
+      3
+  , vecIndexContract
+      "atWithProof"
+      5
+      (Lean.Ident "atWithProof_checkedM")
+      [CheckedArgRaw, CheckedArgRaw, CheckedArgWrapped, CheckedArgRaw,
+       CheckedArgIgnoredProof]
+      0
+      3
+  , vecIndexContract
+      "updWithProof"
+      6
+      (Lean.Ident "updWithProof_checkedM")
+      [CheckedArgRaw, CheckedArgRaw, CheckedArgWrapped, CheckedArgRaw,
+       CheckedArgWrapped, CheckedArgIgnoredProof]
+      0
+      3
+  , vecSliceContract
+      "sliceWithProof"
+      6
+      (Lean.Ident "sliceWithProof_checkedM")
+      [CheckedArgRaw, CheckedArgRaw, CheckedArgRaw, CheckedArgRaw,
+       CheckedArgIgnoredProof, CheckedArgWrapped]
+      1
+      2
+      3
+  , vecSliceContract
+      "updSliceWithProof"
+      7
+      (Lean.Ident "updSliceWithProof_checkedM")
+      [CheckedArgRaw, CheckedArgRaw, CheckedArgRaw, CheckedArgRaw,
+       CheckedArgIgnoredProof, CheckedArgWrapped, CheckedArgWrapped]
+      1
+      2
+      3
+  , CheckedApplicationContract preludeModule "genWithProof" 3
+      Nothing
+      (Lean.Ident "genWithProof_checkedM")
+      [CheckedArgRaw, CheckedArgRaw, CheckedArgFunctionWithNatLt 0]
+  ]
+  where
+    preludeModule = mkModuleName ["Prelude"]
+    vecIndexContract source arity helper argModes nIdx iIdx =
+      CheckedApplicationContract preludeModule source arity
+        (Just (\helperArgs -> natLt (helperArgs !! iIdx) (helperArgs !! nIdx)))
+        helper
+        argModes
+    vecSliceContract source arity helper argModes nIdx offIdx lenIdx =
+      CheckedApplicationContract preludeModule source arity
+        (Just (\helperArgs ->
+          natLe
+            (Lean.App (Lean.Var (Lean.Ident "addNat"))
+              [helperArgs !! offIdx, helperArgs !! lenIdx])
+            (helperArgs !! nIdx)))
+        helper
+        argModes
+
 findPartialOpContract :: Ident -> Int -> Maybe PartialOpContract
 findPartialOpContract ident nArgs =
   find matches partialOpContracts
@@ -1271,6 +1352,23 @@ findPartialOpContractArity ident =
     matches contract =
          identModule ident == pocModule contract
       && identName ident == pocName contract
+
+findCheckedApplicationContract :: Ident -> Int -> Maybe CheckedApplicationContract
+findCheckedApplicationContract ident nArgs =
+  find matches checkedApplicationContracts
+  where
+    matches contract =
+         identModule ident == cacModule contract
+      && identName ident == cacName contract
+      && nArgs == cacArity contract
+
+findCheckedApplicationContractArity :: Ident -> Maybe Int
+findCheckedApplicationContractArity ident =
+  cacArity <$> find matches checkedApplicationContracts
+  where
+    matches contract =
+         identModule ident == cacModule contract
+      && identName ident == cacName contract
 
 notEqZero :: Lean.Term -> Lean.Term -> Lean.Term
 notEqZero ty value =
@@ -1311,6 +1409,14 @@ cryptolSignedBVNonzeroArg widthIdx argIdx args =
   Lean.App (Lean.Var (Lean.Ident "ecSignedBVNonzeroM"))
     [args !! widthIdx, args !! argIdx]
 
+natLt :: Lean.Term -> Lean.Term -> Lean.Term
+natLt lhs rhs =
+  Lean.App (Lean.Var (Lean.Ident "LT.lt")) [lhs, rhs]
+
+natLe :: Lean.Term -> Lean.Term -> Lean.Term
+natLe lhs rhs =
+  Lean.App (Lean.Var (Lean.Ident "LE.le")) [lhs, rhs]
+
 partialOpProofScript :: Lean.Ident -> Set Lean.Ident -> Lean.Term
 partialOpProofScript propName proofIdents =
   Lean.Tactic $
@@ -1324,6 +1430,21 @@ partialOpProofScript propName proofIdents =
     \bvURem_checkedM, bvSDiv_checkedM, bvSRem_checkedM, \
     \ratio, ratio_checked, rationalRecip, rationalRecip_checked] | decide | skip); \
     \all_goals sorry"
+  where
+    unfoldProp (Lean.Ident name) = "(try unfold " ++ name ++ "); "
+    substCandidate (Lean.Ident name)
+      | '.' `elem` name = ""
+      | not ("x__" `Text.isPrefixOf` Text.pack name) = ""
+      | otherwise = "(try subst " ++ name ++ "); "
+
+boundsProofScript :: Lean.Ident -> Set Lean.Ident -> Lean.Term
+boundsProofScript propName proofIdents =
+  Lean.Tactic $
+    unfoldProp propName ++
+    concatMap substCandidate (Set.toList proofIdents) ++
+    "(first | omega | simp [Pure.pure, Except.pure, Except.bind, Bind.bind, \
+    \addNat, zero_macro, one_macro, succ_macro, bit0_macro, bit1_macro, \
+    \natPos_macro] | decide | skip); all_goals sorry"
   where
     unfoldProp (Lean.Ident name) = "(try unfold " ++ name ++ "); "
     substCandidate (Lean.Ident name)
@@ -1456,6 +1577,102 @@ buildRawProofCarryingApplication resultShape head_ pureWrap shouldBind argResult
       pure (Lean.App bindVar [translatedTermAsWrapped t, lam])
     go pos (_ : rest) [] subs =
       go (pos + 1) rest [] subs
+
+-- | Lower direct proof-carrying applications through checked Lean helpers.
+-- The source proof arguments are intentionally ignored: Haskell only emits
+-- the corresponding Lean proposition and passes a proof variable checked by
+-- Lean. It does not inspect the index arithmetic or trust SAW proof terms.
+lowerCheckedApplicationContract ::
+  TermTranslationMonad m =>
+  CheckedApplicationContract ->
+  Ident ->
+  [Term] ->
+  m TranslatedTerm
+lowerCheckedApplicationContract contract ident args = do
+  helperArgs <- checkedApplicationHelperArgs (cacArgModes contract) args
+  tm <- case cacBuildProp contract of
+          Nothing ->
+            pure (Lean.App (Lean.Var (cacHelperName contract)) helperArgs)
+          Just buildProp -> do
+            let prop = buildProp helperArgs
+            unavailable <- view unavailableIdents <$> askTR
+            let proofIdents = Set.union (leanTermIdents prop) unavailable
+            withLocalProofObligationUsing
+              (Lean.Ident "h_bounds_")
+              prop
+              (`boundsProofScript` proofIdents)
+              $ \proof ->
+                  pure (Lean.App (Lean.Var (cacHelperName contract))
+                    (helperArgs ++ [proof]))
+  pure (TranslatedTerm tm BindingWrapped)
+  where
+    checkedApplicationHelperArgs ::
+      TermTranslationMonad m =>
+      [CheckedApplicationArgMode] ->
+      [Term] ->
+      m [Lean.Term]
+    checkedApplicationHelperArgs modes0 args0 = go [] modes0 args0
+      where
+        go acc [] [] = pure (reverse acc)
+        go acc (CheckedArgIgnoredProof : modes) (_ : rest) =
+          go acc modes rest
+        go acc (CheckedArgFunctionWithNatLt nIdx : modes) (arg : rest)
+          | nIdx < length acc = do
+              helperArg <- translateNatLtProofFunction (reverse acc !! nIdx) arg
+              go (helperArg : acc) modes rest
+          | otherwise =
+              Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+                "checked-application proof-function argument referenced a missing Nat bound")
+        go acc (mode : modes) (arg : rest) = do
+          translated <- translateTermWithShape arg
+          helperArg <- checkedApplicationArgTerm mode translated
+          go (helperArg : acc) modes rest
+        go _ _ _ =
+          Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+            "checked-application contract argument table did not match source arity")
+
+    checkedApplicationArgTerm CheckedArgRaw translated =
+      pure (ttLean translated)
+    checkedApplicationArgTerm CheckedArgWrapped translated =
+      pure (translatedTermAsWrapped translated)
+    checkedApplicationArgTerm CheckedArgFunction translated =
+      case ttShape translated of
+        BindingWrapped ->
+          Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+            "checked-application contract expected a function argument, but the translated actual was an Except value")
+        _ -> pure (ttLean translated)
+    checkedApplicationArgTerm CheckedArgFunctionWithNatLt{} _ =
+      Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+        "checked-application proof-function argument must be translated from the source term")
+    checkedApplicationArgTerm CheckedArgIgnoredProof _ =
+      Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+        "checked-application contract attempted to translate an ignored proof argument")
+
+    translateNatLtProofFunction ::
+      TermTranslationMonad m =>
+      Lean.Term ->
+      Term ->
+      m Lean.Term
+    translateNatLtProofFunction nLean fnTerm =
+      case unwrapTermF fnTerm of
+        Lambda {} ->
+          case asLambdaList fnTerm of
+            ((idxName, _) : (proofName, _) : [], body) ->
+              translateBinderWithLeanType idxName (Lean.Var (Lean.Ident "Nat")) $
+                \idxBinder@(Lean.Binder _ idxLean _) ->
+                  let idxTerm = Lean.Var idxLean
+                      proofTy = natLt idxTerm nLean
+                  in translateBinderWithLeanType proofName proofTy $
+                    \proofBinder -> do
+                      bodyResult <- translateTermLetWithShape body
+                      pure (Lean.Lambda [idxBinder, proofBinder]
+                        (translatedTermAsWrapped bodyResult))
+            _ ->
+              Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+                "genWithProof expects a function with exactly Nat and bounds-proof binders")
+        _ ->
+          Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+            "genWithProof expects a lambda function argument")
 
 leanBinderName :: Lean.Binder -> Lean.Ident
 leanBinderName (Lean.Binder _ name _) = name
@@ -1630,6 +1847,15 @@ translateIdentWithArgs i args = ttLean <$> translateIdentWithArgsWithShape i arg
 translateIdentWithArgsWithShape ::
   TermTranslationMonad m => Ident -> [Term] -> m TranslatedTerm
 translateIdentWithArgsWithShape i args
+  | Just contract <- findCheckedApplicationContract i (length args)
+  = lowerCheckedApplicationContract contract i args
+  | Just expectedArity <- findCheckedApplicationContractArity i
+  = Except.throwError (RejectedPrimitive (Text.pack (identName i))
+      ("checked bounds/index contracts require exactly "
+       <> Text.pack (show expectedArity)
+       <> " argument(s); under-applied or over-applied proof-carrying \
+          \operations must use a higher-order proof-wrapper design before \
+          \they can be emitted soundly"))
   | Just contract <- findPartialOpContract i (length args)
   = lowerPartialOpContract contract i args
   | Just expectedArity <- findPartialOpContractArity i

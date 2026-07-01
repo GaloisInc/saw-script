@@ -1,0 +1,14 @@
+// TRUE differential litmus for finite Cryptol.sawcore `ecAt` branches over a
+// literal sequence. Covers both a nonnegative in-bounds index and the source's
+// current negative-index branch, which indexes position zero.
+
+let observed =
+  parse_core
+    "and (boolEq (ecAt (TCNum 4) Bool Integer PIntegralInteger 0b1010 (natToInt 2)) True) (boolEq (ecAt (TCNum 4) Bool Integer PIntegralInteger 0b1010 (intNeg (natToInt 1))) True)";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

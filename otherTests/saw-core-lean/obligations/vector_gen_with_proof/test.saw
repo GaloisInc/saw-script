@@ -1,4 +1,6 @@
 enable_experimental;
 
-let probe = parse_core "genWithProof";
+let probe =
+  parse_core "genWithProof 3 Nat (\\(i : Nat) -> \\(pf : IsLtNat i 3) -> addNat i 10)";
+
 write_lean_term "GenWithProofObligationProbe" [] [] "emitted.lean" probe;

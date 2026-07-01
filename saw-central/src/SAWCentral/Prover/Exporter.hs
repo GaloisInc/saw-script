@@ -1241,6 +1241,10 @@ leanOpaqueBuiltins =
     -- streamScanl_succ lemmas) mirrors Rocq's approach and gives
     -- downstream proofs a named target.
   , "streamScanl"
+    -- Partial vector lookup. Keep the source precondition visible instead of
+    -- unfolding to atWithDefault/error; the Lean backend routes fully applied
+    -- uses through a checked bounds contract.
+  , "at"
     -- Cryptol signed bitvector division/modulus wrappers contain a
     -- finite-width dispatch through Prelude.Nat__rec before reaching the
     -- underlying signed BV primitive. Keep the wrappers opaque so the Lean

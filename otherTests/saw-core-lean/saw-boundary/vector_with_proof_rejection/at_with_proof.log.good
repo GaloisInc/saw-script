@@ -4,7 +4,7 @@ Stack trace:
    at_with_proof.saw:4:1-4:51 (at top level)
 Error translating: Refusing to translate primitive atWithProof.
 
-Reason: with-proof Vec variants not mapped; use atWithDefault instead, or refactor to thread the proof manually.
+Reason: checked bounds/index contracts require exactly 5 argument(s); under-applied or over-applied proof-carrying operations must use a higher-order proof-wrapper design before they can be emitted soundly
 
 This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
 transposition for this primitive yet. If your Cryptol code specialised down to it,

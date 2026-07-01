@@ -1,1 +1,1 @@
-SAW evaluates `ecAt`, but emitted Lean currently relies on an unresolved proof stub for the index obligation.
+SAW evaluates this generated-vector `ecAt` case, but emitted Lean still passes a raw `Nat` result to `genM`, which expects `Except String Nat`. The `ecAt` bounds obligation itself is now emitted through checked `Prelude.at`.
