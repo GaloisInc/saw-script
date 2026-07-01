@@ -2500,16 +2500,7 @@ genCodeForEnum sc nt ctors =
   -- | create variables for the type Params:
   -- tyParamsVars  <- mapM (scVariable sc) tyParamsECs
 
-  ((),tks) <-
-    mapAccumLM
-      (\() tpi -> do
-                    (ty,k) <- bindTParam' sc tpi
-                    return ((), (ty,k))
-      )
-      ()
-      tyParamsInfo
-  let (tyParamsVars, tyParamsKinds) = unzip tks
-
+  (tyParamsVars, tyParamsKinds) <- unzip <$> mapM (bindTParam' sc) tyParamsInfo
 
   let
       -- | @addTypeAbstractions t@ - create the SAWCore type
@@ -2923,15 +2914,3 @@ newIdent name suffix =
        --        the prelude but to the module where the Enum (or ...)
        --        is defined.
     (C.identText (C.nameIdent name) `Text.append` suffix)
-
---------------------------------------------------------------------------------
--- Utility Functions:
-
-mapAccumLM :: (Monad m) => (a -> x -> m (a, y)) -> a -> [x] -> m (a, [y])
-mapAccumLM _ acc []     = return (acc, [])
-mapAccumLM f acc (x:xs) = do
-                          (acc', y) <- f acc x
-                          (acc'', ys) <- mapAccumLM f acc' xs
-                          return (acc'', y:ys)
-  -- FIXME: When support ends for ghc-9.4.8, we can remove this
-  -- definition and call Data.Traversable.mapAccumM instead.
