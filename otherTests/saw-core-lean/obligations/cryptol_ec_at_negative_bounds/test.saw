@@ -1,0 +1,9 @@
+enable_experimental;
+
+// Obligation-shape litmus: Cryptol.sawcore currently handles a negative
+// finite ecAt index by selecting position zero. Pin that branch separately from
+// executable replay so a generic proof-stub known gap cannot hide branch drift.
+let probe =
+  parse_core "ecAt (TCNum 4) Bool Integer PIntegralInteger 0b1010 (intNeg (natToInt 1))";
+
+write_lean_term "CryptolEcAtNegativeBoundsProbe" [] [] "emitted.lean" probe;

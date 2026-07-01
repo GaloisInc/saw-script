@@ -1,0 +1,1 @@
+Finite ecAt branch replay exposes checked bounds obligations; the obligation shape is covered, but executable discharge belongs to later Lean proof support.

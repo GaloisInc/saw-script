@@ -2,6 +2,7 @@ contains:h_bounds_obligation_
 contains:h_bounds_
 contains:LE.le
 contains:addNat
+contains-normalized:let h_bounds_obligation_ : (Prop) := (LE.le (addNat (CryptolToLean.SAWCorePrimitives.natPos_macro CryptolToLean.SAWCorePrimitives.one_macro) (CryptolToLean.SAWCorePrimitives.natPos_macro (CryptolToLean.SAWCorePrimitives.bit0_macro CryptolToLean.SAWCorePrimitives.one_macro))) (CryptolToLean.SAWCorePrimitives.natPos_macro (CryptolToLean.SAWCorePrimitives.bit1_macro CryptolToLean.SAWCorePrimitives.one_macro)))
 contains:updSliceWithProof_checkedM
 absent:atWithDefault
 absent:IsLeNat_base

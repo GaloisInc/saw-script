@@ -1,3 +1,7 @@
 contains:genWithProof_checkedM
 contains:LT.lt
+contains-normalized:fun (i : Nat) (pf : LT.lt i (CryptolToLean.SAWCorePrimitives.natPos_macro (CryptolToLean.SAWCorePrimitives.bit1_macro CryptolToLean.SAWCorePrimitives.one_macro))) => let h_bounds_obligation_ : (Prop) := (LT.lt i (CryptolToLean.SAWCorePrimitives.natPos_macro (CryptolToLean.SAWCorePrimitives.bit1_macro CryptolToLean.SAWCorePrimitives.one_macro)))
+contains-normalized:let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | skip); all_goals sorry))
+contains-normalized:atWithProof_checkedM (CryptolToLean.SAWCorePrimitives.natPos_macro (CryptolToLean.SAWCorePrimitives.bit1_macro CryptolToLean.SAWCorePrimitives.one_macro)) Bool
+contains-normalized:i h_bounds_
 absent:IsLtNat

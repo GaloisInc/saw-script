@@ -54,6 +54,28 @@ handles (`Type 0` and `Prop`). The `leanOpaqueBuiltins` list +
 `discoverNatRecReachers` auto-derived set keep selected defs
 opaque to prevent unsound recursors from surfacing.
 
+## Minimal backend emission
+
+The Haskell backend is deliberately not a prover. Its job is to emit
+the smallest faithful Lean representation of the SAWCore term plus any
+explicit contracts needed for soundness. It should be simple enough to
+audit by inspection:
+
+- construct Lean syntax, names, binders, imports, and explicit
+  contract propositions;
+- preserve SAWCore control flow and value/error behavior;
+- reject unsupported shapes before emitting a semantically different
+  Lean term;
+- leave missing evidence as a visible obligation.
+
+The backend should not normalize generated Lean terms, classify
+semantic patterns, discharge arithmetic, erase preconditions, or add
+fallback lowerings because they make examples elaborate. Any nontrivial
+reasoning belongs in Lean: as a checked helper type, theorem, proof
+term, or user-support tactic. Convenience automation may live in the
+Lean proof-support library, but generated backend output must not rely
+on broad Haskell-selected proof search to count as correct emission.
+
 ## Module map
 
 ```

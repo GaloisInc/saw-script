@@ -1463,39 +1463,20 @@ natLe lhs rhs =
   Lean.App (Lean.Var (Lean.Ident "LE.le")) [lhs, rhs]
 
 partialOpProofScript :: Lean.Ident -> Set Lean.Ident -> Lean.Term
-partialOpProofScript propName proofIdents =
+partialOpProofScript propName _proofIdents =
   Lean.Tactic $
     unfoldProp propName ++
-    concatMap substCandidate (Set.toList proofIdents) ++
-    "(first | omega | simp [Pure.pure, Except.pure, Except.bind, Bind.bind, \
-    \zero_macro, one_macro, succ_macro, bit0_macro, bit1_macro, natPos_macro, \
-    \natToInt, divNat_checked, modNat_checked, divModNat_checked, \
-    \intDiv_checkedM, intMod_checkedM, ratio_checkedM, rationalRecip_checkedM, \
-    \bvNonzero, bvNonzeroM, bvNat, vecSequenceM, bvUDiv_checkedM, \
-    \bvURem_checkedM, bvSDiv_checkedM, bvSRem_checkedM, \
-    \ratio, ratio_checked, rationalRecip, rationalRecip_checked] | decide | skip); \
-    \all_goals sorry"
+    "(first | assumption | skip); all_goals sorry"
   where
     unfoldProp (Lean.Ident name) = "(try unfold " ++ name ++ "); "
-    substCandidate (Lean.Ident name)
-      | '.' `elem` name = ""
-      | not ("x__" `Text.isPrefixOf` Text.pack name) = ""
-      | otherwise = "(try subst " ++ name ++ "); "
 
 boundsProofScript :: Lean.Ident -> Set Lean.Ident -> Lean.Term
-boundsProofScript propName proofIdents =
+boundsProofScript propName _proofIdents =
   Lean.Tactic $
     unfoldProp propName ++
-    concatMap substCandidate (Set.toList proofIdents) ++
-    "(first | assumption | omega | simp [Pure.pure, Except.pure, Except.bind, Bind.bind, \
-    \addNat, zero_macro, one_macro, succ_macro, bit0_macro, bit1_macro, \
-    \natPos_macro] | decide | skip); all_goals sorry"
+    "(first | assumption | skip); all_goals sorry"
   where
     unfoldProp (Lean.Ident name) = "(try unfold " ++ name ++ "); "
-    substCandidate (Lean.Ident name)
-      | '.' `elem` name = ""
-      | not ("x__" `Text.isPrefixOf` Text.pack name) = ""
-      | otherwise = "(try subst " ++ name ++ "); "
 
 -- | Lower direct partial primitives through proof-carrying helpers.
 -- Haskell constructs the visible nonzero contract and wires the checked

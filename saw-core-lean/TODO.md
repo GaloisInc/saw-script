@@ -18,6 +18,10 @@ Hard requirements:
 - Never erase or reinterpret `Except.error`.
 - Reject unsupported SAWCore shapes before emitting semantically different
   Lean.
+- Keep the Haskell backend as small and auditable as possible. It emits
+  faithful Lean syntax and explicit contracts; it does not prove, normalize,
+  simplify, classify semantic equivalences, or make examples pass by adding
+  backend-selected automation.
 - Treat every Haskell-side "clever equivalence" recognizer or rewrite as
   removal-target code. The acceptable replacement is proof-carrying emission:
   emit the literal obligation plus optional Lean-side checked helpers/lemmas.
@@ -68,6 +72,10 @@ automatic proof search.
 
 Lean automation policy for the current prototype:
 
+- Automation belongs in the Lean user/proof-support library, not in the
+  Haskell emitter. Generated proof outlines may expose placeholders and use
+  evidence already present in context, but broad tactic search is a later
+  proof-ergonomics layer.
 - `grind`, `simp`, `omega`/`bv_omega`, `cbv`, and hand-written helper lemmas are
   acceptable when the checked theorem's axiom report contains only the allowed
   standard axioms plus the explicitly cataloged support-library assumptions.
@@ -266,11 +274,13 @@ Current implementation priority:
        attached to the underlying SAWCore vector access.
     6. [x] Add or classify branch coverage for `ecAt` negative-index and
        infinite-stream behavior before claiming `ecAt` complete.
-       `differential/cryptol_ec_at_literal_branches` compares SAW and Lean for
-       finite nonnegative and current negative-index behavior over a literal
-       sequence. `differential/cryptol_ec_at_infinite` compares SAW and Lean for
-       the stream branch. `obligations/cryptol_ec_at_oob_bounds` pins the
-       intentionally open out-of-bounds finite obligation.
+       `differential/cryptol_ec_at_infinite` compares SAW and Lean for the
+       stream branch. Finite literal nonnegative and current negative-index
+       replay are pinned in `differential/cryptol_ec_at_literal_branches` and
+       `differential/cryptol_indexing` as proof-support gaps: they now expose
+       visible `i < n` obligations and must not rely on generated backend
+       automation to count as executable parity. `obligations/cryptol_ec_at_*`
+       pins the positive and out-of-bounds finite obligation shapes.
     7. [x] Design and implement the next generated-sequence evidence convention.
        Preserving `Prelude.at` exposes real obligations inside `genM` and
        derived finite sequence helpers. Existing executable rows that used to
@@ -279,17 +289,49 @@ Current implementation priority:
        routes `Prelude.gen` to `genWithBoundsM`, whose callback receives both
        the generated Nat index and Lean-checked `i < n` evidence supplied from
        `Fin n`. This promotes direct generated-index rows such as
-       `differential/sequence_map_zip`, `differential/vector_literal_edges`,
-       and `differential/cryptol_parmap`.
-    8. [ ] Improve Lean-side proof support for derived bounds.
-       Remaining generated-sequence known gaps need facts about transformed
+       `differential/vector_gen_at` and `differential/cryptol_parmap`.
+       Direct literal/index rows such as `differential/vector_literal`,
+       `differential/vector_literal_edges`, and `differential/sequence_map_zip`
+       remain pinned where executable replay still contains visible proof
+       stubs.
+    8. [ ] Improve Lean-side proof support for direct and derived bounds.
+       Remaining known gaps need facts about direct constant bounds, transformed
        indices (`subNat`, offsets, reverse/split/update branches, nested
-       transpose indices) and some nonzero arithmetic obligations. Keep these
+       transpose indices), and some nonzero arithmetic obligations such as
+       executable `intDiv`/`intMod` with literal nonzero divisors. Keep these
        as visible failures until Lean proves them; do not add Haskell
-       arithmetic classifiers.
+       arithmetic classifiers. Automatic proof discharge is not the backend
+       objective: it belongs in explicit Lean-side proof support, and tests
+       must continue to distinguish checked conformance from pinned gaps.
+    9. [ ] Reflect Boolean branch guards into proof-carrying bounds.
+       Remaining generated-sequence known gaps include branches guarded by
+       emitted Boolean tests such as `ltNat`; the generated Lean does not yet
+       expose a corresponding Prop hypothesis to the branch body. Preserve
+       these failures until a Lean-checked guard-reflection helper supplies
+       the evidence. Do not add Haskell arithmetic or branch classifiers.
+    10. [ ] Add proof-library realization checks for the checked vector helpers.
+        The current helpers are intentionally small definitions over Lean
+        `Vec`/`Vector` operations, but final soundness should still have
+        explicit Lean theorems documenting that `atWithProof_checkedM`,
+        `genWithProof_checkedM`, `updWithProof_checkedM`,
+        `sliceWithProof_checkedM`, and `updSliceWithProof_checkedM` realize the
+        corresponding SAWCore `*WithProof` semantics. This is proof-library
+        assurance work, not permission to add backend automation.
   - Acceptance: the conformance matrix records every target row as
     `obligation`, `known gap`, or `boundary`; full validation passes; and no
     target path relies on Haskell-side bounds reasoning.
+  - 2026-07-01 adversarial audit follow-up:
+    1. [x] Strengthen obligation-shape fixtures so they pin the actual
+       proposition over translated terms, not merely `LT.lt`/`LE.le` and helper
+       names.
+    2. [x] Add focused coverage for the finite negative-index `ecAt` branch
+       showing that the current Cryptol.sawcore semantics index position zero.
+    3. [x] Add a `genWithProof` fixture whose body consumes the proof evidence,
+       so the proof-binder adapter is tested rather than only the unused-binder
+       case.
+    4. [x] Keep checked-helper realization theorems tracked as proof-library
+       assurance work, and avoid claiming executable parity for those helpers
+       before those theorems exist.
 
 - [ ] Close the bitvector primitive conformance surface found in the
   2026-06-29 audit.
@@ -428,9 +470,25 @@ Current implementation priority:
     raw/wrapped inference heuristics.
   - Continue removing backup or deferral switches that preserve old behavior
     whenever the proof-carrying path has become the only intended path.
+    Old fallback behavior is not a compatibility feature for this backend: if
+    it is not a faithful emission path, a documented rejection boundary, or a
+    checked proof-carrying contract, it should be deleted rather than kept as a
+    safety net.
   - Treat Haskell-side classifiers as valid only when they emit optional
     Lean-checked proof artifacts over the ordinary literal obligation. They
     must not erase, weaken, or replace the obligation.
+
+- [ ] Ruthlessly delete fallback, backup, and legacy emission code.
+  - Search the backend for fallback/legacy/backup language and old compatibility
+    paths. For each one, either delete it, convert it to an explicit rejection
+    boundary, or replace it with a faithful proof-carrying contract.
+  - Do not preserve obsolete behavior to keep historical examples green. If an
+    example depended on a legacy path, pin the resulting failure in the
+    conformance or obligation corpus and fix the emission principle first.
+  - Acceptance: there are no undocumented fallback paths in
+    `SAWCoreLean.Term`, `SAWCoreLean.SpecialTreatment`,
+    `SAWCoreLean.CryptolModule`, or the Lean support-library declarations that
+    the Haskell emitter calls.
 
 - [ ] Close semantics-injection paths in prelude/module emission.
   - 2026-06-28 checkpoint: removed generic `DefReplace` and moved the remaining

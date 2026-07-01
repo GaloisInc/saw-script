@@ -21,7 +21,7 @@ noncomputable def BvSDivZeroProbe : Except String (Vec
   #v[Pure.pure Bool.false, Pure.pure Bool.false, Pure.pure Bool.false, Pure.pure
   Bool.false, Pure.pure Bool.false, Pure.pure Bool.false, Pure.pure
   Bool.false, Pure.pure Bool.false]));
-  let h_nonzero_ : (h_nonzero_obligation_) := ((by (try unfold h_nonzero_obligation_); (first | omega | simp [Pure.pure, Except.pure, Except.bind, Bind.bind, zero_macro, one_macro, succ_macro, bit0_macro, bit1_macro, natPos_macro, natToInt, divNat_checked, modNat_checked, divModNat_checked, intDiv_checkedM, intMod_checkedM, ratio_checkedM, rationalRecip_checkedM, bvNonzero, bvNonzeroM, bvNat, vecSequenceM, bvUDiv_checkedM, bvURem_checkedM, bvSDiv_checkedM, bvSRem_checkedM, ratio, ratio_checked, rationalRecip, rationalRecip_checked] | decide | skip); all_goals sorry));
+  let h_nonzero_ : (h_nonzero_obligation_) := ((by (try unfold h_nonzero_obligation_); (first | assumption | skip); all_goals sorry));
   bvSDiv_checkedM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro

@@ -89,6 +89,19 @@ The L-14 smoketest
 `every SAW Prelude primitive is mapped or rejects`) verifies the
 table stays complete on every run.
 
+## Backend minimality rule
+
+The Haskell backend should stay boring. When adding or changing emission code,
+prefer the smallest faithful Lean term plus explicit proof obligations. Do not
+add Haskell-side semantic recognizers, generated proof search, defaulting
+fallbacks, or special-case rewrites just to make a test elaborate.
+
+If a lowering needs a fact to be sound, emit that fact as a Lean proposition and
+route through a checked helper whose type requires exactly that evidence. If a
+common obligation should be easy to prove, add a theorem or tactic to the Lean
+proof-support library and test it as proof support. Do not hide that reasoning
+inside the translator.
+
 ## How to add a Cryptol-prelude (Cryptol stdlib) entry
 
 These live under the `Cryptol` SAWCore module, separate from the

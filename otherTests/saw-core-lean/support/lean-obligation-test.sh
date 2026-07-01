@@ -10,8 +10,10 @@
 #
 # expected.txt directives:
 #
-#   contains:<literal>  emitted Lean must contain <literal>
-#   absent:<literal>    emitted Lean must not contain <literal>
+#   contains:<literal>             emitted Lean must contain <literal>
+#   contains-normalized:<literal>  emitted Lean with collapsed whitespace must
+#                                  contain <literal> with collapsed whitespace
+#   absent:<literal>               emitted Lean must not contain <literal>
 #
 # Optional:
 #
@@ -178,12 +180,30 @@ fi
 status=0
 : >test.observed
 
+normalize_ws() {
+    tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//'
+}
+
 check_contains() {
     local literal="$1"
     if grep -F "$literal" "$emitted" >/dev/null 2>&1; then
         echo "OBLIGATION_OBSERVED: contains:$literal" >>test.observed
     else
         echo "MISSING EXPECTED OBLIGATION: contains:$literal" >&2
+        status=1
+    fi
+}
+
+check_contains_normalized() {
+    local literal="$1"
+    local normalized_emitted
+    local normalized_literal
+    normalized_emitted="$(normalize_ws < "$emitted")"
+    normalized_literal="$(printf '%s' "$literal" | normalize_ws)"
+    if printf '%s\n' "$normalized_emitted" | grep -F "$normalized_literal" >/dev/null 2>&1; then
+        echo "OBLIGATION_OBSERVED: contains-normalized:$literal" >>test.observed
+    else
+        echo "MISSING EXPECTED NORMALIZED OBLIGATION: contains-normalized:$literal" >&2
         status=1
     fi
 }
@@ -202,6 +222,7 @@ check_absent() {
 while IFS= read -r directive || [ -n "$directive" ]; do
     case "$directive" in
         ''|\#*) continue ;;
+        contains-normalized:*) check_contains_normalized "${directive#contains-normalized:}" ;;
         contains:*) check_contains "${directive#contains:}" ;;
         absent:*) check_absent "${directive#absent:}" ;;
         *)
@@ -221,6 +242,7 @@ if [ -f forbidden.txt ]; then
 fi
 
 awk '
+  /^contains-normalized:/ { print "OBLIGATION_OBSERVED: " $0; next }
   /^contains:/ { print "OBLIGATION_OBSERVED: " $0; next }
   /^absent:/ { print "OBLIGATION_OBSERVED: " $0; next }
   /^#/ || /^$/ { next }

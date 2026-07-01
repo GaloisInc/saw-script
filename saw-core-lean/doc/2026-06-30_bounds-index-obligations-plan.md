@@ -21,6 +21,14 @@ emit-stage artifacts. The target is sound emission: no unchecked default, no
 hidden Haskell proof, no trusted SAW proof argument, and no fallback to a
 total-looking helper when the source operation is partial or proof-carrying.
 
+Strict phase boundary: do not build Lean automation while executing this plan.
+Do not add convenience tactics, proof-search macros, simp bundles, generated
+starter scripts, or proof-library lemmas whose purpose is to make emitted
+obligations discharge automatically. That is a later proof-ergonomics phase.
+For this phase, success means the emitted Lean states the right obligation and
+the helper types require the right evidence, not that Lean can automatically
+prove the evidence.
+
 ## Why This Is Next
 
 The conformance matrix now shows the partial-operation family as closed for
@@ -60,9 +68,11 @@ stays dumb.
   the default branch is unreachable and Lean checks that proof.
 - Do not add Haskell pattern recognizers for the current examples. Tests should
   pass because the backend has a general checked-application contract.
-- Do not solve all generated bounds proofs automatically. Starter tactics are
-  allowed only when their result is checked by Lean against the visible
-  obligation.
+- Do not add Lean automation for generated bounds proofs in this phase. No new
+  tactics, tactic macros, generated starter proof scripts, broad `simp`/`omega`
+  proof search, or proof-support lemmas should be introduced to make current
+  rows pass. Leave obligations open and pin known gaps when evidence is not
+  already available through the checked helper interface.
 - Under-applied proof-carrying operations remain final-boundary rejections until
   a proof-carrying higher-order wrapper is designed.
 
@@ -83,7 +93,8 @@ branches before claiming `ecAt` complete:
 - finite `TCNum n` sequence, negative index: follow `Cryptol.sawcore`
   semantics exactly. Today the negative branch indexes at zero rather than
   raising the commented-out error; do not invent a stricter boundary unless the
-  source changes.
+  source changes. Pin the emitted zero-index branch specifically; a generic
+  proof-stub known gap is not enough branch coverage.
 - infinite `TCInf` stream: no finite bound exists; indexing should route
   through the stream lookup semantics after the same source index conversion.
 - unsupported or malformed residual shapes: reject with a clear diagnostic,
@@ -225,9 +236,9 @@ def genWithProof_checkedM
 ```
 
 If the existing translator cannot yet translate the source function into this
-shape, do not work around it with Haskell body rewriting. Emit a known-gap
-fixture describing the required function-binder adaptation, then design that
-adapter explicitly.
+shape, do not work around it with Haskell body rewriting and do not add Lean
+automation to force the example through. Emit a known-gap fixture describing the
+required function-binder adaptation, then design that adapter explicitly.
 
 For `ecAt`, the chosen implementation is more general than a Cryptol-specific
 classifier: keep the underlying `Prelude.at` definition opaque during
@@ -255,12 +266,11 @@ phase:
 def ecAt_checkedM ... (h : <finite index bound>) : Except String α := ...
 ```
 
-The helper must match `Cryptol.sawcore` branch behavior. Add small `rfl`
-theorems for finite-successor/finite-`TCNum` branches when the helper is
-definitionally tied to an existing checked primitive. If definitional equality
-is not available, prove the Lean theorem before promoting the row. A missing
-theorem is a proof-library gap to track, not permission to trust a semantic
-copy of the helper.
+The helper must match `Cryptol.sawcore` branch behavior. During this phase,
+prefer helpers that are definitionally tied to existing checked primitives. If
+that definitional tie is not available, do not build a proof library or tactic
+layer to force completion. Record the missing realization theorem as a
+proof-library gap and keep the corresponding row pinned until the proof phase.
 
 ## Testing Plan
 
@@ -272,6 +282,7 @@ infrastructure.
 Promote these only after they emit the expected proof-carrying shape:
 
 - `obligations/cryptol_ec_at_bounds`
+- `obligations/cryptol_ec_at_negative_bounds`
 - `obligations/vector_at_with_proof`
 - `obligations/vector_gen_with_proof`
 - `obligations/vector_upd_with_proof`
@@ -311,7 +322,8 @@ Before claiming `ecAt` complete, add or classify focused rows for:
 - finite nonnegative out-of-bounds index: visible obligation that cannot be
   discharged, or a pinned known gap if the emit-stage cannot represent it yet;
 - finite negative index: source-semantics row matching `Cryptol.sawcore`'s
-  current zero-index branch;
+  current zero-index branch, with checks specific enough to fail if the emitted
+  access no longer uses index zero;
 - infinite stream index: value differential or obligation row, depending on
   whether any source-side precondition remains visible.
 
@@ -336,7 +348,11 @@ paper over:
 - after direct `i < n` obligations are discharged, preserve any remaining
   derived-index failures as known gaps until Lean-side proof support handles
   transformed indices such as offsets, subtraction, reverse, split/update
-  branches, and nested transpose indices.
+  branches, and nested transpose indices. Getting emitted Lean to pass
+  automatically is not the objective; broad proof search must not be part of
+  this goal. If we add proof automation later, it should be explicit Lean-side
+  proof-library work in a separate phase, and failures should remain visible
+  until that checked proof support exists.
 
 ## Acceptance Criteria
 
@@ -353,14 +369,17 @@ This phase is complete only when all of the following are true:
 4. Haskell implements a declarative checked-application contract path rather
    than operation-specific semantic branches.
 5. Lean helpers consume proof evidence in their types and are either thin
-   wrappers around faithful vector operations or accompanied by Lean-side
-   realization theorems/TODOs.
+   wrappers around faithful vector operations or explicitly recorded as pending
+   proof-library realization gaps.
 6. `otherTests/saw-core-lean/CONFORMANCE.md` records the final status of every
    target row as `obligation`, `known gap`, or `boundary`.
 7. `saw-core-lean/TODO.md` points to the completed checkpoint and lists any
    residual proof-ergonomics or function-wrapper work separately from emission
    soundness.
-8. Validation passes:
+8. No new Lean automation was added for this feature: no convenience tactics,
+   tactic macros, generated proof-search scripts, or proof-support lemmas whose
+   purpose is to discharge these bounds/index obligations automatically.
+9. Validation passes:
    - `lake build` in `saw-core-lean/lean`;
    - `cabal build exe:saw`;
    - focused obligation/boundary tests for each changed row;
@@ -381,6 +400,9 @@ Stop and reassess rather than patching locally if any of these occur:
   term, or hiding a condition in Haskell.
 - adding the next operation requires a second bespoke lowering path rather than
   another table entry.
+- progress appears to require Lean automation, proof-search tactics, or helper
+  lemmas whose purpose is proof discharge rather than defining the checked
+  emission interface.
 
 These are design points, not permission to add a special case.
 
@@ -388,8 +410,9 @@ These are design points, not permission to add a special case.
 
 1. Rewrite the with-proof obligation fixtures so positive tests use fully
    applied minimal terms; keep under-applied rejection as boundary coverage.
-2. Add Lean checked helpers and any `rfl`/realization theorems needed for direct
-   vector operations.
+2. Add only thin Lean checked helpers needed as the emission interface. Do not
+   add proof automation or proof-support theorems to discharge generated
+   obligations.
 3. Add the checked-application contract abstraction in Haskell and route one
    direct operation, starting with `atWithProof`.
 4. Promote `vector_at_with_proof`; then route and promote `updWithProof`,

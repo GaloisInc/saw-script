@@ -8,11 +8,11 @@ soundness-sensitive backend lowerings:
 > If a lowering is sound only under a precondition, encode that precondition in
 > Lean and make the generated file provide evidence for it.
 
-The translator may include a starter proof script for common cases, but proof
-search is not the translator's job. The required interface is to emit the
+Proof search is not the translator's job. The required interface is to emit the
 contract as a Lean proof obligation. It must not silently assume the
-precondition in Haskell, hide it in a comment, or add an axiom that weakens the
-Lean trusted base.
+precondition in Haskell, hide it in a comment, add an axiom that weakens the
+Lean trusted base, or make examples pass by embedding broad generated tactic
+search in the backend output.
 
 ## Motivation
 
@@ -30,17 +30,16 @@ translated body. For stream construction, the contract is pointwise totality of
 the translated index function. For raw-position partiality, the contract is an
 explicit proof obligation rather than a fabricated default.
 
-Haskell may still generate a starter proof script when it recognizes a common
-shape, but the recognized fact is not trusted. The generated proof must check in
-Lean against the exact emitted obligation. If it does not check, the obligation
+Haskell should not try to recognize common proof shapes as part of emission.
+If an obligation is easy, that fact belongs in the Lean proof-support library
+or in a user-authored proof file. If it is not discharged, the obligation
 remains visible for a human, AI assistant, or later proof script.
 
 This gives one uniform soundness pattern:
 
 1. Haskell emits syntax for the literal translated program and the required
    contract proposition.
-2. Haskell may emit a proof attempt, but the main term depends only on the
-   resulting Lean-checked evidence.
+2. The main term depends only on Lean-checked evidence.
 3. Lean theorems and tactics perform recurrence, productivity, totality, or
    normalization reasoning.
 4. Failed automation is acceptable; accepting an unchecked semantic claim is
@@ -63,10 +62,11 @@ The backend should support two workflow stages:
   original goal only when Lean checks all required evidence and the artifact
   contains no forbidden escapes.
 
-Automation lives inside the check stage as ordinary Lean proof search. It is
-useful for ergonomics, but it is not part of the trusted Haskell backend. A
-failed tactic is not a backend failure if the obligation remains available for a
-human, AI assistant, or later prover script to discharge.
+Automation lives inside the check stage as ordinary Lean proof search or in a
+separate user-support library. It is useful for ergonomics, but it is not part
+of the trusted Haskell backend. A failed tactic is not a backend failure if the
+obligation remains available for a human, AI assistant, or later prover script
+to discharge.
 
 Accepted automation must also respect the backend's trusted-base policy. Tactics
 such as `simp`, `grind`, `omega`/`bv_omega`, `cbv`, and hand-written bridge
@@ -149,10 +149,11 @@ aggressively on generated terms, because its output is checked by Lean's kernel.
 A Haskell recognizer doing the same work changes the trusted base and should be
 phased out unless it is only selecting which explicit obligation to emit.
 
-Equivalently: Haskell may classify to improve proof ergonomics, not to remove a
-proof obligation. A classifier can emit a specialized lemma, choose a tactic
-script, or name a known theorem that should solve the obligation. It cannot make
-the lowering sound by fiat.
+Equivalently: Haskell should not classify semantic Lean shapes to improve proof
+ergonomics during emission. A later proof-library phase may provide tactics or
+named theorems that recognize generated obligations, but those recognizers live
+on the Lean side where their output is kernel-checked. Haskell cannot make the
+lowering sound by fiat.
 
 When reasoning is needed, it belongs in Lean:
 
