@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "IsLeNat_SuccSucc";
+write_lean_term "ProofIsLeNatSuccSuccProbe" [] [] "emitted.lean" probe;

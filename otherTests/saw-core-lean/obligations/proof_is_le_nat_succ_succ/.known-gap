@@ -1,0 +1,1 @@
+IsLeNat_SuccSucc represents the SAWCore Nat proof-conversion lemma family, but currently rejects instead of emitting a Lean theorem realization or proof obligation.

@@ -1,0 +1,1 @@
+eqNatAddComm represents the SAWCore Nat arithmetic equality lemma family, but currently rejects instead of emitting a Lean theorem realization or proof obligation.

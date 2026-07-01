@@ -1,4 +1,4 @@
 enable_experimental;
 
-let probe = parse_core "unsafeAssertBVULe";
+let probe = parse_core "unsafeAssertBVULe 8 0x02 0x02";
 write_lean_term "ProofUnsafeAssertBVULeProbe" [] [] "emitted.lean" probe;

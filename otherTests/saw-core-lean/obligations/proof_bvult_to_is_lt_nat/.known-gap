@@ -1,0 +1,1 @@
+bvultToIsLtNat is a SAWCore bitvector-order-to-Nat proof surface, but currently rejected instead of emitted as a Lean theorem realization or proof obligation.

@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "not_bvult_zero";
+write_lean_term "ProofNotBvultZeroProbe" [] [] "emitted.lean" probe;

@@ -1,1 +1,9 @@
 contains:h_proof_obligation_
+contains:h_proof_
+contains:equalNat
+contains:Bool.true
+contains:@Eq
+contains-normalized:@Eq Bool (equalNat
+contains-normalized:Bool.true -> @Eq Nat
+contains-normalized:h_proof_ (@Eq.refl
+absent:CryptolToLean.SAWCorePrimitives.equalNatToEqNat

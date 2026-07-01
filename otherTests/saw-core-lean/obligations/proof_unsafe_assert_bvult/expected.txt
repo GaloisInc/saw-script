@@ -1,1 +1,5 @@
 contains:h_proof_obligation_
+contains:h_proof_
+contains:bvult
+contains:Bool.true
+absent:CryptolToLean.SAWCorePrimitives.unsafeAssertBVULt

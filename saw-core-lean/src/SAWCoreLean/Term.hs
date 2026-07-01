@@ -1265,6 +1265,19 @@ data CheckedApplicationArgMode
   | CheckedArgFunctionWithNatLt Int
   | CheckedArgIgnoredProof
 
+data ProofPrimitiveContract = ProofPrimitiveContract
+  { ppcModule    :: ModuleName
+  , ppcName      :: String
+  , ppcArity     :: Int
+  , ppcArgModes  :: [ProofPrimitiveArgMode]
+  , ppcBuildProp :: forall m. TermTranslationMonad m => [Lean.Term] -> m Lean.Term
+  , ppcUseProof  :: [Lean.Term] -> Lean.Term -> Lean.Term
+  }
+
+data ProofPrimitiveArgMode
+  = ProofArgRaw
+  | ProofArgWrapped
+
 partialOpContracts :: [PartialOpContract]
 partialOpContracts =
   [ natBinaryPartial "divNat"    "divNat_checked"
@@ -1381,6 +1394,88 @@ checkedApplicationContracts =
         helper
         argModes
 
+proofPrimitiveContracts :: [ProofPrimitiveContract]
+proofPrimitiveContracts =
+  [ bvAssertion "unsafeAssertBVULt" "bvult"
+  , bvAssertion "unsafeAssertBVULe" "bvule"
+  , ProofPrimitiveContract preludeModule "equalNatToEqNat" 3
+      [ProofArgRaw, ProofArgRaw, ProofArgRaw]
+      equalNatToEqNatContract
+      applyLastArg
+  ]
+  where
+    preludeModule = mkModuleName ["Prelude"]
+    bvAssertion source op =
+      ProofPrimitiveContract preludeModule source 3
+        [ProofArgRaw, ProofArgWrapped, ProofArgWrapped]
+        (bvComparisonTrueM (Lean.Ident op))
+        (\_ proof -> proof)
+
+applyLastArg :: [Lean.Term] -> Lean.Term -> Lean.Term
+applyLastArg args proof =
+  case reverse args of
+    (premise : _) -> Lean.App proof [premise]
+    []            -> proof
+
+equalNatToEqNatContract ::
+  TermTranslationMonad m =>
+  [Lean.Term] ->
+  m Lean.Term
+equalNatToEqNatContract args =
+  case args of
+    [m, n, _premise] -> do
+      let boolTy = Lean.Var (Lean.Ident "Bool")
+          natTy = Lean.Var (Lean.Ident "Nat")
+          trueVal = Lean.Var (Lean.Ident "Bool.true")
+          equalNatApp =
+            Lean.App (Lean.Var (Lean.Ident "equalNat")) [m, n]
+          premiseTy =
+            boolEqAt boolTy equalNatApp trueVal
+          resultTy =
+            Lean.App (Lean.ExplVar (Lean.Ident "Eq")) [natTy, m, n]
+      pure (Lean.Pi [Lean.PiBinder Lean.Explicit Nothing premiseTy] resultTy)
+    _ ->
+      Except.throwError (RejectedPrimitive "proof primitive"
+        "equalNatToEqNat contract expected exactly m, n, and premise arguments")
+
+bvComparisonTrueM ::
+  TermTranslationMonad m =>
+  Lean.Ident ->
+  [Lean.Term] ->
+  m Lean.Term
+bvComparisonTrueM op args =
+  case args of
+    [width, lhs, rhs] -> do
+      let avoid = Set.unions (map leanTermIdents args)
+      lhsName <- freshVariantAvoiding avoid (Lean.Ident "v_1")
+      rhsName <- freshVariantAvoiding (Set.insert lhsName avoid) (Lean.Ident "v_2")
+      let bindVar = Lean.Var (Lean.Ident "Bind.bind")
+          pureVar = Lean.Var (Lean.Ident "Pure.pure")
+          boolTy = Lean.Var (Lean.Ident "Bool")
+          trueVal = Lean.Var (Lean.Ident "Bool.true")
+          comparison =
+            Lean.App (Lean.Var op)
+              [width, Lean.Var lhsName, Lean.Var rhsName]
+          comparisonM =
+            Lean.App bindVar
+              [ lhs
+              , Lean.Lambda [Lean.Binder Lean.Explicit lhsName Nothing]
+                  (Lean.App bindVar
+                    [ rhs
+                    , Lean.Lambda [Lean.Binder Lean.Explicit rhsName Nothing]
+                        (Lean.App pureVar [comparison])
+                    ])
+              ]
+      pure (boolEqAt (wrapExcept boolTy) comparisonM (Lean.App pureVar [trueVal]))
+    _ ->
+      Except.throwError (RejectedPrimitive "proof primitive"
+        "bitvector assertion contract expected exactly width, lhs, and rhs arguments")
+
+boolEqAt :: Lean.Term -> Lean.Term -> Lean.Term -> Lean.Term
+boolEqAt ty lhs rhs =
+  Lean.App (Lean.ExplVar (Lean.Ident "Eq"))
+    [ty, lhs, rhs]
+
 findPartialOpContract :: Ident -> Int -> Maybe PartialOpContract
 findPartialOpContract ident nArgs =
   find matches partialOpContracts
@@ -1414,6 +1509,15 @@ findCheckedApplicationContractArity ident =
     matches contract =
          identModule ident == cacModule contract
       && identName ident == cacName contract
+
+findProofPrimitiveContract :: Ident -> Int -> Maybe ProofPrimitiveContract
+findProofPrimitiveContract ident nArgs =
+  find matches proofPrimitiveContracts
+  where
+    matches contract =
+         identModule ident == ppcModule contract
+      && identName ident == ppcName contract
+      && nArgs == ppcArity contract
 
 notEqZero :: Lean.Term -> Lean.Term -> Lean.Term
 notEqZero ty value =
@@ -1678,6 +1782,37 @@ lowerCheckedApplicationContract contract ident args = do
       Except.throwError (RejectedPrimitive (Text.pack (identName ident))
         "checked-application contract attempted to translate an ignored proof argument")
 
+-- | Lower proof primitives to explicit local proof obligations. The
+-- contract table decides which arguments are raw proof/type terms and which
+-- are wrapped value terms, then states the checked local proposition and how
+-- the local evidence is consumed. Haskell only reconstructs the proposition;
+-- it does not prove or simplify it.
+lowerProofPrimitiveContract ::
+  TermTranslationMonad m =>
+  ProofPrimitiveContract ->
+  [Term] ->
+  m TranslatedTerm
+lowerProofPrimitiveContract contract args = do
+  argTerms <- proofPrimitiveArgs (ppcArgModes contract) args
+  prop <- ppcBuildProp contract argTerms
+  tm <- withLocalProofObligation
+          (Lean.Ident "h_proof_")
+          prop
+          (pure . ppcUseProof contract argTerms)
+  pure (TranslatedTerm tm BindingRaw)
+  where
+    proofPrimitiveArgs [] [] = pure []
+    proofPrimitiveArgs (mode : modes) (arg : rest) = do
+      translated <- case mode of
+        ProofArgRaw ->
+          withRawTranslationMode (translateTerm arg)
+        ProofArgWrapped ->
+          translatedTermAsWrapped <$> translateTermWithShape arg
+      (translated :) <$> proofPrimitiveArgs modes rest
+    proofPrimitiveArgs _ _ =
+      Except.throwError (RejectedPrimitive "proof primitive"
+        "proof-primitive contract argument table did not match source arity")
+
 leanBinderName :: Lean.Binder -> Lean.Ident
 leanBinderName (Lean.Binder _ name _) = name
 
@@ -1851,6 +1986,8 @@ translateIdentWithArgs i args = ttLean <$> translateIdentWithArgsWithShape i arg
 translateIdentWithArgsWithShape ::
   TermTranslationMonad m => Ident -> [Term] -> m TranslatedTerm
 translateIdentWithArgsWithShape i args
+  | Just contract <- findProofPrimitiveContract i (length args)
+  = lowerProofPrimitiveContract contract args
   | Just contract <- findCheckedApplicationContract i (length args)
   = lowerCheckedApplicationContract contract i args
   | Just expectedArity <- findCheckedApplicationContractArity i

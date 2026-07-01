@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "foldl_nil";
+write_lean_term "ProofFoldlNilProbe" [] [] "emitted.lean" probe;

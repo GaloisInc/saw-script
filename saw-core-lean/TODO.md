@@ -18,6 +18,11 @@ Hard requirements:
 - Never erase or reinterpret `Except.error`.
 - Reject unsupported SAWCore shapes before emitting semantically different
   Lean.
+- Finished backend users may need to prove emitted Lean obligations, but they
+  must not need to change the Haskell emitter or Lean generation for in-scope
+  SAWCore terms. A new example that requires emission changes is a backend
+  coverage bug unless it hits a documented final boundary or upstream language
+  extension.
 - Keep the Haskell backend as small and auditable as possible. It emits
   faithful Lean syntax and explicit contracts; it does not prove, normalize,
   simplify, classify semantic equivalences, or make examples pass by adding
@@ -170,7 +175,12 @@ Current implementation priority:
    `doc/2026-06-30_priority-1-principled-emission-plan.md`.
    The first driver, `ecSDiv`/`ecSMod`, is complete. Bounds/index obligations
    are the next driver for the same checked-contract style.
-4. Then move to smaller wrapper-shape gaps and remaining proof/recursor
+4. Start the proof-primitive obligation plan:
+   `doc/2026-07-01_proof-primitive-obligations-plan.md`.
+   The goal is to replace broad proof-primitive rejection gaps with explicit
+   Lean obligations or checked theorem-realization contracts, without adding
+   Haskell proof search, Lean axioms, or proof automation.
+5. Then move to smaller wrapper-shape gaps and remaining recursor/datatype
    surfaces.
 
 ## Priority 0: Emission Soundness
@@ -332,6 +342,73 @@ Current implementation priority:
     4. [x] Keep checked-helper realization theorems tracked as proof-library
        assurance work, and avoid claiming executable parity for those helpers
        before those theorems exist.
+
+- [ ] Implement proof-primitive obligation contracts.
+  - Design reference:
+    `doc/2026-07-01_proof-primitive-obligations-plan.md`.
+  - This is the next backend-emission target after the bounds/index checkpoint.
+    SAWCore proof primitives and lemma axioms must not be translated as Lean
+    axioms, trusted SAW proof terms, hidden Haskell rewrites, or old fallback
+    primitive names. Each in-scope fully applied surface must emit an exact
+    proof obligation or call a checked Lean theorem/helper whose type realizes
+    the source primitive.
+  - Scope, in order:
+    1. [x] Survey `Prelude.sawcore` proof-like primitives/axioms and the
+       `SpecialTreatment` rejection table, and make sure every distinct family
+       is represented by a positive row, known-gap fixture, separate phase
+       reference, or explicit final-boundary rationale.
+       2026-07-01 checkpoint: added an explicit proof-primitive inventory to
+       `otherTests/saw-core-lean/CONFORMANCE.md`, comparing the source
+       Prelude entries, Rocq handling, current Lean fixtures, and intended
+       trust strategy. Added known-gap obligation fixtures for missing
+       representative families: `bvAddZeroR`, `bvEqToEqNat`,
+       `bvultToIsLtNat`, `natCompareLe`, `eqNatAddComm`,
+       `IsLeNat_SuccSucc`, `tail_gen`, `foldl_nil`, `bvNat_bvToNat`,
+       `bvEq_refl`, `not_bvult_zero`, `IsLtNat_to_bvult`, and
+       `ite_split_cong`.
+    2. [x] Design a declarative proof-primitive contract path. Haskell may
+       translate arguments, construct the exact proposition, bind local proof
+       evidence, and call checked theorem realizations; it must not prove,
+       simplify, classify, inspect generated Lean, or trust source proofs at a
+       different proposition.
+       2026-07-01 checkpoint: added a `ProofPrimitiveContract` table in the
+       term translator. Contracts declare arity, raw/wrapped argument
+       translation modes, the local proposition to bind, and how checked local
+       evidence is consumed. The table currently covers assertion-style BV
+       bounds and `equalNatToEqNat`; it is deliberately small and data-driven.
+    3. [ ] Promote representative equality/Nat rows where the contract shape
+       is clear: `uip`, `coerce__eq`, `equalNatToEqNat`, and `proveLeNat`.
+       Use checked Lean theorems only when they are axiom-clean; otherwise emit
+       exact obligations and keep proof-library work separate.
+       2026-07-01 checkpoint: `equalNatToEqNat` now emits a theorem-shaped
+       local obligation from the translated raw Boolean-equality premise to
+       translated Nat equality, then applies that local evidence to the source
+       proof argument. The fixture consumes the result through `Eq__rec` so it
+       tests proof evidence without papering over the separate `eqNat`
+       Prelude-alias emission gap. `uip`, `coerce__eq`, `proveLeNat`, and
+       `natCompareLe` remain pinned known gaps.
+    4. [x] Promote assertion-style BV bound rows such as
+       `unsafeAssertBVULt` and `unsafeAssertBVULe` by emitting the comparison
+       fact as a local obligation when the source assertion reaches the
+       backend. Do not treat these assertions as unconditional theorems.
+       2026-07-01 checkpoint: fully applied `unsafeAssertBVULt` and
+       `unsafeAssertBVULe` now route through a small proof-primitive contract
+       table. The backend emits the monadic comparison proposition over the
+       translated bitvector operands and returns local Lean evidence for that
+       exact proposition. No Lean automation, theorem assumption, or Haskell
+       BV reasoning was added. Bare/under-applied assertion names remain
+       rejection-boundary cases.
+    5. [ ] Promote representative BV/vector lemma rows such as `bvEqToEq`,
+       `bvAddZeroL`, `head_gen`, and `foldr_nil` only through exact
+       obligations or checked realization theorems. Leave BV-heavy proof work
+       as known gaps until Lean-side proof support exists.
+    6. [x] Add any missing representative fixtures discovered by the survey,
+       such as `bvEqToEqNat`, `bvultToIsLtNat`, `natCompareLe`, or a second
+       BV-add-zero row if it follows a distinct realization path.
+  - Acceptance: conformance records every target as `obligation`, `known gap`,
+    or `boundary`; positive rows inspect the emitted artifact for exact
+    propositions/evidence consumers or checked realization calls; and no new
+    Lean automation, Lean axioms, or Haskell semantic proof logic is added.
 
 - [ ] Close the bitvector primitive conformance surface found in the
   2026-06-29 audit.

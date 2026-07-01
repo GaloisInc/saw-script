@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "IsLtNat_to_bvult";
+write_lean_term "ProofIsLtNatToBvultProbe" [] [] "emitted.lean" probe;
