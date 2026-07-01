@@ -76,6 +76,14 @@ recursor emission before reaching the direct BV contract path. That work
 should reuse this contract table rather than adding wrapper-specific Haskell
 reasoning.
 
+Planning update: the signed-BV wrapper slice is now tracked as the first driver
+for the broader Priority #1 principled-emission plan:
+`2026-06-30_priority-1-principled-emission-plan.md`. The important design
+constraint is that Haskell must not recognize a closed finite width and rewrite
+`ecSDiv` / `ecSMod` directly to `bvSDiv` / `bvSRem`. The fix should expose a
+checked wrapper or recursor contract whose Lean-side evidence justifies the
+finite-successor width and nonzero-divisor requirements.
+
 ## Correctness Contract
 
 For each partial operation, generated Lean should have this shape:

@@ -206,10 +206,11 @@ boundary, or known-gap rows.
 
 1. Promote the partial-operation obligation known gaps according to
    `saw-core-lean/doc/2026-06-30_partial-operation-obligations-plan.md`.
-   The next backend implementation slice is direct scalar Prelude operations
-   (`divNat`, `modNat`, `divModNat`, `intDiv`, `intMod`, `ratio`,
-   `rationalRecip`), followed by direct BV operations and Cryptol.sawcore
-   wrappers. Each promotion must keep the test proof-carrying: visible
+   Direct scalar Prelude operations and direct BV operations now have positive
+   obligation-shape coverage. The remaining partial-operation slice is the
+   Cryptol signed-BV wrapper surface (`ecSDiv`, `ecSMod`), which should follow
+   the Priority #1 principled-emission plan rather than adding a closed-width
+   Haskell rewrite. Each promotion must keep the test proof-carrying: visible
    precondition, evidence consumer, checked helper, and forbidden unchecked
    bypass.
 2. Add true differential or boundary tests for remaining parser/module holes:

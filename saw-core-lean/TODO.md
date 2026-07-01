@@ -139,9 +139,16 @@ Current implementation priority:
 
 1. Close partial-operation obligations in principle:
    `doc/2026-06-30_partial-operation-obligations-plan.md`.
-2. Promote each pinned zero-divisor/zero-denominator `.known-gap` fixture into
-   a positive obligation-shape test as the corresponding operation family is
-   implemented.
+   Direct scalar and direct bitvector operations now use checked
+   proof-carrying helpers. The remaining partial-operation slice is the
+   Cryptol signed-BV wrapper surface (`ecSDiv`, `ecSMod`), which must be fixed
+   at the wrapper/recursor contract layer rather than by width-specific Haskell
+   normalization.
+2. Execute the Priority #1 principled-emission plan:
+   `doc/2026-06-30_priority-1-principled-emission-plan.md`.
+   The first driver is `ecSDiv`/`ecSMod`; the design goal is a reusable
+   contract interface for wrapper and recursor-shaped emissions, not another
+   special case.
 3. Then move to bounds/index obligations (`ecAt` and with-proof vector
    primitives), followed by smaller wrapper-shape gaps.
 
@@ -186,6 +193,12 @@ Current implementation priority:
        contract surface. They should reuse the same proof-carrying contract
        interface rather than duplicating wrapper-specific Haskell semantic
        recognizers.
+       Planning reference:
+       `doc/2026-06-30_priority-1-principled-emission-plan.md`.
+       The intended fix is not a Haskell rewrite from `ecSDiv (TCNum (Succ n))`
+       to `bvSDiv n`. The backend should emit a checked wrapper/recursor
+       contract whose Lean type exposes the finite-positive-width and
+       nonzero-divisor evidence needed to reach the existing BV checked helper.
   - Implementation rule: add a small data-driven partial-operation contract
     interface. Haskell may construct the operation-specific proposition and
     call a checked helper, but it must not inspect generated Lean syntax to
@@ -693,11 +706,10 @@ Current implementation priority:
   - 2026-06-29 checkpoint: added focused direct-result partial-operation
     boundary fixtures for `divNat`, `divModNat`, `intDiv`, `bvUDiv`,
     `bvSDiv`, `ratio`, and `rationalRecip` at zero divisors/denominators.
-    2026-06-30 update: scalar Nat/Int/Rational fixtures now emit
-    proof-carrying obligations and checked helpers. The boundary directory
-    remains a known gap only because direct bitvector division/remainder still
-    emits unchecked total primitive calls instead of required nonzero proof
-    obligations.
+    2026-06-30 update: scalar Nat/Int/Rational and direct bitvector fixtures
+    now emit proof-carrying obligations and checked helpers. Remaining
+    zero-divisor work is in Cryptol wrapper surfaces such as `ecSDiv` and
+    `ecSMod`, plus proof ergonomics for executable replay of nonzero examples.
   - 2026-06-29 checkpoint: added a focused finite-observation stream-helper
     differential known gap for `streamGet`, `streamMap`, shifts, and
     `streamScanl`. SAW evaluates the closed Boolean, but the emitted Lean
