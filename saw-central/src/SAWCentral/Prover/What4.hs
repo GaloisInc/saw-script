@@ -45,7 +45,7 @@ import SAWCore.SharedTerm
 import SAWCore.FiniteValue
 import SAWCore.SATQuery (SATQuery(..))
 
-import           SAWCentral.Proof(Sequent, sequentToSATQuery, CEX)
+import           SAWCentral.Proof(Prop, propToSATQuery, CEX)
 import           SAWCentral.Value (TopLevel, io, getSharedContext, rwWhat4PushMuxOps)
 
 import           Data.Parameterized.Nonce
@@ -92,14 +92,14 @@ setupWhat4_sym hashConsing what4PushMuxOps =
 what4Theories ::
   Set VarIndex ->
   Bool ->
-  Sequent ->
+  Prop ->
   TopLevel [Text]
 what4Theories unintSet hashConsing goal = do
   sc <- getSharedContext
   what4PushMuxOps <- gets rwWhat4PushMuxOps
   io $ do
      sym <- setupWhat4_sym hashConsing what4PushMuxOps
-     satq <- sequentToSATQuery sc unintSet goal
+     satq <- propToSATQuery sc unintSet goal
      (_varMap, lits) <- W.w4Solve sym sc satq
      let pf lit = (predicateVarInfo lit)^.problemFeatures
      return (nub (concatMap evalTheories (map pf lits)))
