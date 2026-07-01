@@ -770,7 +770,7 @@ say so.
 
 There are two incompatible schools of thought about coding style; one
 is that style rules are mandatory, inflexible demands that must be
-observed uniformly across thte code base at all times; the other is
+observed uniformly across the code base at all times; the other is
 that style guidelines are recommendations for writing legible code.
 SAW follows the "recommendations" school of thought.
 

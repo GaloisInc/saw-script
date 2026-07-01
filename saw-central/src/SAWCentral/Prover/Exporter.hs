@@ -586,7 +586,7 @@ writeRocqCryptolPrimitivesForSAWCore cryFile notations skips = do
     "-" -> print doc
     _   -> writeFile cryFile $ show doc
 
--- | Tranlsate a SAWCore term into an AIG
+-- | Translate a SAWCore term into an AIG
 bitblastPrim :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> Term -> IO (AIG.Network l g)
 bitblastPrim proxy sc t = do
 {-

@@ -3,7 +3,7 @@ Verifying f...
 Simulating f...
 Stack trace:
    (builtin) in llvm_verify
-   llvm.saw:16:1-16:44 (at top level)
+   llvm.saw:16:1-16:45 (at top level)
 Symbolic execution failed.
 Abort due to assertion failure:
   llvm.saw:12:3: error: in _SAW_LLVM_verifyPrestate

@@ -4018,7 +4018,7 @@ primitives = Map.fromList $
     [ "Add a proved equality theorem to a simplification rule set."
     , "The rule is treated as a 'shallow' rewrite, which means that"
     , "further rewrite rules will not be applied to the result if this"
-    , "rule fires. Returns a new set.n"
+    , "rule fires. Returns a new set."
     ]
 
   , prim "addsimps"            "[Theorem] -> Simpset -> Simpset"
@@ -5215,7 +5215,7 @@ primitives = Map.fromList $
     , "   record of 'fixed' inputs, and a record of circuit outputs."
     , " - The fourth parameter is a list of strings specifying certain"
     , "   circuit inputs as fixed - these inputs are assumed to remain"
-    , "   unchanged across cycles, and are therefore accesible from the"
+    , "   unchanged across cycles, and are therefore accessible from the"
     , "   query function."
     ]
 
@@ -6038,7 +6038,7 @@ primitives = Map.fromList $
   , prim "crucible_points_to_untyped" "LLVMValue -> LLVMValue -> LLVMSetup ()"
     (pureVal (llvm_points_to False))
     WarnDeprecated
-    [ "Legacy alternative name for 'llvm_points_to'."
+    [ "Legacy alternative name for 'llvm_points_to_untyped'."
     , ""
     , "Expected to be hidden by default in SAW 1.6."
     ]
