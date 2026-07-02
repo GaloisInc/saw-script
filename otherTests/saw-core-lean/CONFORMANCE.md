@@ -43,7 +43,7 @@ full backend conformance.
 | `saw-boundary/*` | Expected rejection or obligation-boundary litmus. | Yes only for intended final boundaries. |
 | `saw-boundary/*/.known-gap` | Pinned current backend/library gap. | No. It records missing parity. |
 | `drivers/conformance_*` | Legacy litmus candidates using goldens/elaboration/support proofs. | No. Mine these into `differential/*`. |
-| `proofs/conformance_*` | Lean proof/support-library checks. | No unless paired with emitted-artifact observation. |
+| `support-proofs/*` | Lean support-library regression proofs. | No unless paired with emitted-artifact observation. |
 
 ## Proof-Carrying Obligation Surface
 

@@ -37,6 +37,12 @@
 #                          discharge). The harness imports the emitted
 #                          file unchanged and elaborates the proof.
 #
+#   support-proofs/<name>/ Lean support-library regression proofs that are
+#                          intentionally NOT generated proof-backend examples.
+#                          These may be self-contained and may import
+#                          CryptolToLean directly. They run in the default
+#                          sweep, but do not count as proof-discharge examples.
+#
 #   proof-gaps/<name>/     Preserved proof attempts for obligations that are
 #                          intentionally not in the default green proof set.
 #                          These are real artifacts, not silent skips: they
@@ -78,7 +84,7 @@
 #                    differential/*, obligations/*, and saw-boundary/*.
 #                    Known gaps in these categories are pinned failures,
 #                    not evidence of full parity. Do not add
-#                    drivers/conformance_* or proofs/conformance_* here:
+#                    drivers/conformance_* or support-proofs/* here:
 #                    proof/library/elaboration checks are not differential
 #                    tests unless the harness compares real SAW and Lean
 #                    observed outcomes.
@@ -232,7 +238,7 @@ iterate_differential()  { for d in differential/*/;  do run_one differential  "$
 iterate_obligations()   { for d in obligations/*/;   do run_one obligations   "$(basename "$d")" lean-obligation-test.sh "$@"; done; }
 iterate_saw_boundary()  { for d in saw-boundary/*/;  do run_one saw-boundary  "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_proofs()        { for d in proofs/*/;        do run_one proofs        "$(basename "$d")" lean-proof-test.sh   "$@"; done; }
-iterate_conformance_proofs() { for d in proofs/conformance_*/; do run_one proofs "$(basename "$d")" lean-proof-test.sh "$@"; done; }
+iterate_support_proofs() { for d in support-proofs/*/; do run_one support-proofs "$(basename "$d")" lean-proof-test.sh "$@"; done; }
 iterate_shape()         { for d in shape/*/;         do run_one shape         "$(basename "$d")" lean-shape-test.sh   "$@"; done; }
 
 # -----------------------------------------------------------------------------
@@ -248,6 +254,7 @@ case "$verb" in
         iterate_obligations
         iterate_saw_boundary
         iterate_proofs
+        iterate_support_proofs
         iterate_shape
         print_summary_and_exit
         ;;
@@ -278,6 +285,7 @@ case "$verb" in
         iterate_obligations clean
         iterate_saw_boundary clean
         iterate_proofs clean
+        iterate_support_proofs clean
         iterate_shape clean
         print_summary_and_exit
         ;;

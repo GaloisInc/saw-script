@@ -1,0 +1,1 @@
+otherTests/saw-core-lean/drivers/offline_lean_popcount32/test_popcount32_prove0.lean

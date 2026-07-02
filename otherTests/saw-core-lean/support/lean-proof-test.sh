@@ -1,4 +1,5 @@
-# Shared harness for otherTests/saw-core-lean/proofs/*/ directories.
+# Shared harness for otherTests/saw-core-lean/proofs/*/ and
+# support-proofs/*/ directories.
 #
 # Discharge pattern:
 #
@@ -78,7 +79,8 @@ if ! command -v lake >/dev/null 2>&1; then
 FAIL: `lake` is not on PATH.
 
 This harness discharges Lean-side proof obligations against
-SAW-emitted goals. It cannot run without the Lean toolchain.
+SAW-emitted goals or runs support-library proof regressions. It
+cannot run without the Lean toolchain.
 
 Install elan + the toolchain pinned in saw-core-lean/lean/lean-toolchain.
 EOF
@@ -86,8 +88,8 @@ EOF
 fi
 
 # Locate the Lake project root and this test's probe dir.
-# Test dirs live at otherTests/saw-core-lean/proofs/<name>/, so the
-# Lake project (saw-core-lean/lean/) is four levels up, and the
+# Test dirs live at otherTests/saw-core-lean/{proofs,support-proofs}/<name>/,
+# so the Lake project (saw-core-lean/lean/) is four levels up, and the
 # saw-script root is also four levels up.
 LAKE_DIR="$(cd ../../../../saw-core-lean/lean && pwd)"
 SAW_DIR="$(cd ../../../.. && pwd)"

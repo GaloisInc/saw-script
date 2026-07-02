@@ -526,7 +526,7 @@ Current implementation priority after the 2026-07-01 audit:
   - Added the first differential conformance driver/proof pair:
     `drivers/conformance_bitvector` proves defined concrete SAWCore bitvector
     facts with SAW's `w4` backend and emits the same term for Lean elaboration;
-    `proofs/conformance_bitvector` checks the corresponding Lean support
+    `support-proofs/conformance_bitvector` checks the corresponding Lean support
     realizations.
   - Division/remainder/modulus by zero is not a green conformance case today.
     Although some `Prelude.sawcore` comments describe concrete results, SAW's
@@ -889,7 +889,7 @@ Current implementation priority after the 2026-07-01 audit:
     Broad examples, whole-module extraction examples, crypto/stress drivers,
     proof-discharge demos, emitted-shape goldens, and Lean support-library-only
     proofs do not belong in this gate.
-  - WARNING: `drivers/conformance_*` and `proofs/conformance_*` are legacy
+  - WARNING: `drivers/conformance_*` and `support-proofs/conformance_*` are legacy
     litmus candidates/regression checks, not true differential conformance.
     Most of them do "SAW proves" + "Lean elaborates" + "separate Lean theorem";
     that is useful, but it is not a compared SAW-vs-Lean observation. Migrate
@@ -908,7 +908,7 @@ Current implementation priority after the 2026-07-01 audit:
     semantic conformance.
   - 2026-06-29 correction: added `differential/*` and changed `make
     conformance` to exclude legacy `drivers/conformance_*` and
-    `proofs/conformance_*`. Added the first tiny true-differential Boolean
+    `support-proofs/conformance_*`. Added the first tiny true-differential Boolean
     litmus. Next work is to migrate existing small legacy litmus candidates
     into this shape without adding large examples.
   - 2026-06-29 checkpoint: the active true differential suite now includes
@@ -1360,11 +1360,10 @@ Current implementation priority after the 2026-07-01 audit:
     `implRev4`, stream/fix module examples, and large crypto/LLVM rows remain
     backend-gap, proof-gap, or stress items until reduced or handled by a
     principled design.
-  - Follow-up decision needed after the first proof repair pass: move
-    support-library-only rows such as `proofs/conformance_*` and
-    `proofs/cookbook` out of the proof-backend example surface, or keep them
-    clearly labeled as support regressions rather than generated proof
-    discharge examples.
+  - 2026-07-02 support-proof bucket checkpoint: support-library-only rows
+    such as `proofs/conformance_*` and `proofs/cookbook` were moved to
+    `support-proofs/*`, which still runs in the default sweep but is not
+    advertised as generated proof discharge.
   - 2026-07-01 E-series checkpoint: `E3_point_commutes` is back in the
     current-proof set after a principled recursor/binder shape fix pinned by
     `differential/record_projection_binder`. `E4_map_id` and
@@ -1424,6 +1423,15 @@ Current implementation priority after the 2026-07-01 audit:
     `Except String (RecordType ...)` but `RecordType.rec` expects the raw
     record. Do not fix this by rawifying the dictionary; use the existing
     wrapping/convention design or emit an explicit obligation.
+  - 2026-07-02 record-update proof checkpoint:
+    `drivers/cryptol_module_record_update`,
+    `drivers/cryptol_module_point`, and `proofs/point_shift_property` all pass
+    focused tests against current emitted artifacts. `point_shift_property`
+    remains a real proof-backend example, not a proof gap.
+  - 2026-07-02 proof-gap note checkpoint: added explicit gap notes for
+    `proof-gaps/cryptol_running_sum_verify` and
+    `proof-gaps/offline_lean_popcount32` so recurrence/popcount examples are
+    visible as proof-support blockers rather than unexplained stale failures.
 
 - [ ] Refresh generated goldens and proof examples after proof-carrying
   emission changes.
@@ -1500,7 +1508,7 @@ Current implementation priority after the 2026-07-01 audit:
   - Quarantine or mark BV-heavy crypto examples that currently need
     `bv_decide`; they are useful stress cases, but they should not be counted as
     green proof regressions under the current trust policy.
-  - 2026-06-27 checkpoint: `proofs/cookbook` now pins small wrapped-helper
+  - 2026-06-27 checkpoint: `support-proofs/cookbook` now pins small wrapped-helper
     examples for `vecSequenceM`/`atWithDefaultM` and `foldrM`, giving users a
     copyable proof shape that preserves eager `Except` semantics.
 
