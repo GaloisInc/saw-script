@@ -358,23 +358,28 @@ motive fix: `make -C otherTests/saw-core-lean test` reports 18 remaining
 failures. The remaining failing rows are now classified blockers rather than
 unreviewed safe refreshes:
 
-- stream/recursor wrapping gaps: `conformance_stream`;
-- direct vector fallback/defaulting gaps: `conformance_vector`,
-  `conformance_vector_zip`;
-- wrapped dictionary/record-rec gaps: `cryptol_module_simple`,
-  `cryptol_polymorphic_class_dict`, now pinned by
-  `differential/cryptol_vector_eq_dictionary`;
-- higher-order proof-carrying/indexing gap: `implRev4`;
-- recurrence/proof-obligation gaps: `cryptol_running_sum_verify`;
-- large/stress examples: Chacha/Salsa/LLVM/popcount rows and
-  `offline_lean_popcount32`;
-- mixed stale-plus-real sequence gap: `sequences`, blocked by `t18`.
+- P0 raw/wrapped recursor and dictionary convention:
+  `cryptol_module_simple`, `cryptol_polymorphic_class_dict`,
+  `differential/cryptol_vector_eq_dictionary`, `conformance_stream`, and
+  possibly part of `sequences`. This is the highest-impact target-example gap.
+- P1 direct vector fallback/defaulting cleanup:
+  `conformance_vector`, `conformance_vector_zip`.
+- P2 higher-order proof-carrying/indexing gap: `implRev4`.
+- P3 recurrence/proof-obligation gaps: `cryptol_running_sum_verify`.
+- P4 large/stress examples: Chacha/Salsa/LLVM/popcount rows and
+  `offline_lean_popcount32`.
+- Mixed stale-plus-real sequence gap: `sequences`, blocked by `t18`; classify
+  sub-failures against P0/P1/P3 before refreshing any golden.
 
 1. The wrapped dictionary/record-rec gap exposed by `cryptol_module_simple`
    and `cryptol_polymorphic_class_dict` is now reduced to
    `differential/cryptol_vector_eq_dictionary`. Do not refresh those whole
    module goldens until the backend has a principled raw/wrapped dictionary
-   recursor convention.
+   recursor convention. The likely general shape is: bind a wrapped scrutinee,
+   run the raw recursor inside the continuation, and preserve the surrounding
+   expected shape. Do not rawify dictionaries or add fixture-specific record
+   recursor code. See
+   `doc/2026-07-02_raw-wrapped-recursor-dictionary-plan.md`.
 2. Review and refresh only the small stale proof-backend goldens whose new
    emission is the expected proof-carrying shape:
    the remaining whole-module or sequence driver goldens are first candidates.

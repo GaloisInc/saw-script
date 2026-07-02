@@ -156,28 +156,74 @@ promoted. After that, the next priority is emission quality: every emitted Lean
 file should either elaborate with explicit proof obligations or fail at SAW
 translation with a clear, principled diagnostic.
 
-Current implementation priority after the 2026-07-01 audit:
+Current execution order after the 2026-07-02 example refresh:
 
-1. Fix conformance-harness integrity. The differential and obligation suites
-   are the guardrail for the remaining work, so they must not pass because of
-   ignored observer files, stale emitted Lean, fake Lean observers, or known
-   gaps that look like parity.
-2. Continue proof-carrying emission gaps using existing checked-contract
-   designs. Bounds/index and partial operations have reached useful
-   checkpoints; the next emission families are proof primitives, then smaller
-   raw/wrapped wrapper-shape issues.
-3. Close core representation gaps that block Rocq parity and SAWCore coverage:
-   direct recursors, user datatypes, `ListSort`/`FunsTo`, loaded
-   primitive/axiom declarations, and the raw injected-Lean-code policy.
-4. Reduce the trusted base and clever Haskell surface: `scLiteralFold`,
-   imported realization contracts, residual raw/wrapped heuristics, and the two
-   Vec/BitVec round-trip axioms.
-5. Defer proof ergonomics and broad automation until emitted contracts are
-   stable. BV-heavy crypto examples and SHA512 remain stress/scalability work,
-   not the feature-completion gate.
-6. Defer SAW-side proof replay / `offline_lean` checked-discharge UX until the
-   emission and testing layers are stable. It is required before a final
-   soundness claim, but it is not the present blocker.
+1. **P0: raw/wrapped recursor and dictionary convention.**
+   This is the highest-impact target-example gap because it blocks ordinary
+   whole-module Cryptol examples, not just proof ergonomics. Current witnesses:
+   `drivers/cryptol_module_simple`,
+   `drivers/cryptol_polymorphic_class_dict`,
+   `differential/cryptol_vector_eq_dictionary`,
+   `differential/stream_helpers`,
+   `differential/unit_recursor_raw_scrutinee`, and likely part of
+   `drivers/sequences`.
+   The expected design is shape-aware recursor emission: when a raw Lean
+   recursor needs a raw scrutinee but the translated source term is wrapped,
+   sequence the wrapped computation with `Bind.bind`, run the raw recursor in
+   the continuation, and keep the final value in the expected wrapped/raw shape.
+   Do not rawify a dictionary or stream by default, do not inspect emitted Lean
+   syntax, and do not special-case `PEqSeq`, `RecordType.rec`, or `Stream.rec`.
+   Working plan: `doc/2026-07-02_raw-wrapped-recursor-dictionary-plan.md`.
+
+2. **P1: direct vector fallback/defaulting cleanup.**
+   Current witnesses: `drivers/conformance_vector` and
+   `drivers/conformance_vector_zip`. These examples still expose old
+   fallback/defaulting paths in direct vector helper emission. The fix should be
+   an extension of the existing checked bounds/index contract discipline, or a
+   clear rejection boundary if a higher-order proof-carrying wrapper is needed.
+   Do not refresh these goldens until the artifact no longer blesses obsolete
+   defaulting behavior.
+
+3. **P2: higher-order proof-carrying wrappers.**
+   Current witness: `drivers/implRev4`, which reaches checked bounds/index
+   contracts at non-exact arity. This is lower priority than P0/P1 because the
+   backend can soundly reject it today, but it is still relevant to Rocq parity
+   and real examples. The eventual design must carry the proof obligation
+   through function values; it must not discard the proof argument or restore
+   raw/defaulting helper functions.
+
+4. **P3: core SAWCore representation gaps.**
+   These block full Rocq parity and complete SAWCore coverage: direct recursors,
+   user datatypes, `ListSort`/`FunsTo`, loaded primitive/axiom declarations,
+   and injected Lean code policy. They are broad design tasks; keep them pinned
+   in differential/obligation/boundary rows until each has a checked
+   realization or proof-carrying contract.
+
+5. **P4: remaining proof-primitive obligations.**
+   Many representative proof primitives now emit exact obligations, but rows
+   such as `proof_coerce_eq`, `proof_bv_eq_to_eq_nat`, `proof_prove_le_nat`,
+   `proof_nat_compare_le`, vector/fold lemmas, and order bridges remain known
+   gaps. Promote these only through exact emitted obligations or axiom-clean
+   Lean theorem realizations.
+
+6. **P5: proof ergonomics and large stress proofs.**
+   Derived bounds proofs, recurrence proofs, BV-heavy crypto, SHA512, and
+   broad tactic support are important but not the backend-completion gate.
+   They should remain explicit proof gaps or stress items until the emitted
+   contracts are stable. Do not add Lean automation in the Haskell emitter and
+   do not use `bv_decide`/native-evaluation proof artifacts as accepted proof
+   discharge.
+
+7. **P6: final SAW-side proof replay UX.**
+   Integrated `offline_lean` proof checking, import isolation, provenance
+   manifests, and user-facing replay ergonomics are required before a final
+   soundness claim. They remain behind emission correctness and conformance
+   guardrails.
+
+The 2026-07-01 audit's original ordering is preserved below in the detailed
+priority sections. The key change after the example refresh is that harness
+integrity is no longer the blocker; the next highest-impact backend task is the
+P0 recursor/dictionary convention.
 
 2026-07-02 example-refresh checkpoint:
 
@@ -194,6 +240,12 @@ Current implementation priority after the 2026-07-01 audit:
   fallback/defaulting cleanup, higher-order checked index wrappers, recurrence
   proof gaps, `sequences.t18`, and large crypto/LLVM stress examples. Preserve
   those failures until each has a principled emission or proof-support path.
+- Highest-impact target-example gap: the wrapped dictionary / raw recursor
+  convention. Fixing that one principledly should unlock or sharpen
+  `cryptol_module_simple`, `cryptol_polymorphic_class_dict`,
+  `cryptol_vector_eq_dictionary`, `stream_helpers`, and likely part of
+  `sequences`. Treat direct vector fallback cleanup and higher-order checked
+  wrappers as the next target-example blockers after that.
 
 ## Priority 0: Test Harness Integrity
 
