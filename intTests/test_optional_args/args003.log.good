@@ -11,6 +11,5 @@ args003.saw:7:6-7:29: Type mismatch.
     Expected: Int -> a?Int -> Int
     Found:    Int -> b?Int -> Int
 
-    within "g" (args003.saw:7:6-7:7)
 
 FAILED

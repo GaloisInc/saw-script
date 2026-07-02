@@ -7,6 +7,5 @@ err045.saw:2:26-2:27: Type mismatch.
     Expected: String
     Found:    Int
 
-    within "f" (err045.saw:2:6-2:7)
 
 FAILED

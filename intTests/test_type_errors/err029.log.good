@@ -9,7 +9,6 @@ Type errors:
     Expected: t.0 Int
     Found:    Term
 
-    within "x" (err029.saw:7:5-7:6)
 
 
 FAILED

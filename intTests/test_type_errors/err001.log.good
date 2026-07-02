@@ -7,6 +7,5 @@ err001.saw:1:23-1:24: Type mismatch.
     Expected: String
     Found:    Int
 
-    within "foo" (err001.saw:1:5-1:8)
 
 FAILED

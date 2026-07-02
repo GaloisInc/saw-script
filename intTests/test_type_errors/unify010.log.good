@@ -10,6 +10,5 @@ unify010.saw:9:17-9:29: Type mismatch.
     Expected: t.0 Int
     Found:    t.2 String
 
-    within "_" (unify010.saw:8:5-8:6)
 
 FAILED

@@ -7,6 +7,5 @@ unify001.saw:8:10-8:11: Type mismatch.
     Expected: String
     Found:    Int
 
-    within "x" (unify001.saw:8:5-8:6)
 
 FAILED

@@ -7,6 +7,5 @@ unify005.saw:10:15-10:25: Type mismatch.
     Expected: Int
     Found:    ()
 
-    within "x" (unify005.saw:10:5-10:6)
 
 FAILED

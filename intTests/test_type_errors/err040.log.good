@@ -10,6 +10,5 @@ err040.saw:8:11-8:26: Type mismatch.
     Expected: (Int, Int, Int)
     Found:    (Int, Int, String)
 
-    within "x" (err040.saw:8:5-8:6)
 
 FAILED

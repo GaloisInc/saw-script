@@ -7,6 +7,5 @@ file001.saw:2:1-2:2: Type mismatch.
     Expected: TopLevel t.0
     Found:    Int
 
-    within "<toplevel>" (file001.saw:2:1-2:2)
 
 FAILED

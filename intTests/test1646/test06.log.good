@@ -8,6 +8,5 @@ test06.saw:8:16-8:17: Type mismatch.
     Expected: Int
     Found:    String
 
-    within "x" (test06.saw:8:16-8:17)
 
 FAILED
