@@ -9,7 +9,6 @@ Type errors:
     Expected: Int
     Found:    String
 
-    within "<toplevel>" (unify011.saw:12:2-12:19)
 
 
 FAILED

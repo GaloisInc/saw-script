@@ -10,6 +10,5 @@ err011.saw:11:11-11:14: Type mismatch.
     Expected: TopLevel (t.0, t.1)
     Found:    LLVMSetup (Int, Int)
 
-    within "<toplevel>" (err011.saw:11:1-11:14)
 
 FAILED

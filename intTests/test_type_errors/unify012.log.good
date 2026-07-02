@@ -10,7 +10,6 @@ Type errors:
     Expected: ()
     Found:    LLVMSetup ()
 
-    within "<toplevel>" (unify012.saw:14:2-14:14)
 
 
 FAILED

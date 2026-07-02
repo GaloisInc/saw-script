@@ -7,6 +7,5 @@ unify006.saw:7:22-7:23: Type mismatch.
     Expected: Bool
     Found:    Int
 
-    within "f" (unify006.saw:7:5-7:6)
 
 FAILED

@@ -10,7 +10,6 @@ Type errors:
     Expected: Int
     Found:    LLVMSetup Int
 
-    within "<toplevel>" (err012.saw:12:2-12:17)
 
 
 FAILED

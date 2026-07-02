@@ -7,6 +7,5 @@ err038.saw:10:16-10:17: Type mismatch.
     Expected: [t.0]
     Found:    [Int] -> [Int]
 
-    within "t" (err038.saw:10:5-10:6)
 
 FAILED

@@ -7,6 +7,5 @@ err016.saw:12:13-12:14: Type mismatch.
     Expected: Int
     Found:    Int -> t.1
 
-    within "y" (err016.saw:12:5-12:6)
 
 FAILED

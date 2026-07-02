@@ -7,6 +7,5 @@ err017.saw:27:11-27:12: Type mismatch.
     Expected: { a : Int, b : Int }
     Found:    Int
 
-    within "y" (err017.saw:27:5-27:6)
 
 FAILED

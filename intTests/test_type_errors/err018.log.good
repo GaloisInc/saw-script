@@ -20,6 +20,5 @@ err018.saw:26:11-26:12: Type mismatch.
    turquoise : Int
 }
 
-    within "y" (err018.saw:26:5-26:6)
 
 FAILED

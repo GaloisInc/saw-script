@@ -11,6 +11,5 @@ args002.saw:5:14-5:15: Type mismatch.
     Expected: () -> a?Int -> b?Int -> c?Int -> Int
     Found:    () -> a?Int -> b?Int -> d?Int -> Int
 
-    within "fg" (args002.saw:5:5-5:7)
 
 FAILED
