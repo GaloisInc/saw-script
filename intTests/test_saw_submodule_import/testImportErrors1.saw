@@ -1,3 +1,4 @@
 import submodule "D.cry";
+  // An error to "import submodule" a top-level module.
 
 print "done";

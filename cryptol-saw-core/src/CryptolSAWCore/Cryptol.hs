@@ -27,6 +27,8 @@ between these two modules is mostly a function of historical accident.
 module CryptolSAWCore.Cryptol
   ( ImportVisibility(..)
   , CryptolEnv(..)
+  , IsSubmodule
+  , ImportInfo(..)
 
   , isErasedProp
   , proveProp
@@ -322,7 +324,7 @@ data ImportVisibility
 -- avoided; that isn't super clear.
 --
 data CryptolEnv = CryptolEnv
-  { eImports     :: [(ImportVisibility, C.Import)]
+  { eImports     :: [(ImportInfo, ImportVisibility, C.Import)]
   , eModuleEnv   :: ME.ModuleEnv
   , eExtraNaming :: MR.NamingEnv
   , eExtraVars   :: Map C.Name C.Schema
@@ -337,6 +339,11 @@ data CryptolEnv = CryptolEnv
   , eFFITypes    :: Map NameInfo C.FFI
   }
 
+type IsSubmodule = Bool
+
+-- | capture extra information needed for "import submodule"
+data ImportInfo = ImportNested C.Name  -- ^ "import submodule ..."
+                | ImportTop            -- ^ "import ...
 
 -- | bindTParam' - create a binding for a type parameter, returning 3-tuple:
 --                 - environment

@@ -1,0 +1,16 @@
+module F where
+
+import D                   // D2 now in scope
+
+submodule D2a = submodule D2  // PREVIEW: problematic when F imported.
+
+x1 = D2a::d2                  // sanity check.
+
+submodule D3 where            // PREVIEW: works as expected.
+  d3 = 3
+
+private submodule D4 where    // PREVIEW: works as expected.
+  d4 = 4
+
+submodule D4a = submodule D4  // PREVEW: works as expected
+                              //   D4a is public alias to private submodule
