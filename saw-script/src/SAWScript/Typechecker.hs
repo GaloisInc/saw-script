@@ -625,16 +625,9 @@ patternBindingsWithSchema pat sch =
 -- add more expected/found type pairs on the way out of the recursion,
 -- so we print every layer of the type.
 --
--- As a special case, we keep only the outermost of a series of nested
--- function types, and drop the nested ones. Because functions are
--- curried, this prints the complete function signature once and skips
--- the incremental types completed by consuming each argument. (These
--- add little information and can also confuse casual users.)
---
 -- The FailMGU type tracks this material. It contains three elements:
 --    * the initial message
 --    * the list of pairs of expected/found messages
---    * the current function-type expected/found message, if any
 --
 -- Empty strings are inserted between pairs to make the output more
 -- readable.
@@ -642,13 +635,6 @@ patternBindingsWithSchema pat sch =
 -- Note that we print the messages on the fly rather than accumulating
 -- a list of type pairs and printing them at the end. (That may have
 -- been a mistake; we'll see.)
---
--- The last element (current function-type expected/found message) is
--- always either a list of two message strings or empty. Function types
--- we see go in it (replacing anything already there, so we keep only
--- the outermost of a series) and are shifted out of it when we see
--- something else. It could be a Maybe (Text, Text), but the code
--- is noticeably more convenient the way it is.
 --
 -- The initial message is kept separate so that the expected/found
 -- list can readily be built in either order. It's not clear if it's
@@ -680,7 +666,6 @@ patternBindingsWithSchema pat sch =
 data FailMGU = FailMGU
                     [Text]    -- initial error message (often multiple lines)
                     [Text]    -- list of found/expected message pairs
-                    [Text]    -- current found/expected function pair if any
 
 -- common code for printing expected/found types
 ppTypes :: PPS.Opts -> Type -> Type -> [Text]
@@ -748,28 +733,28 @@ ppTypeDetails' ppopts ty =
 
 -- fail with expected/found types
 failMGU :: PPS.Opts -> Text -> Type -> Type -> Either FailMGU a
-failMGU ppopts start ty1 ty2 = Left (FailMGU start' ("" : ppTypes ppopts ty1 ty2) [])
+failMGU ppopts start ty1 ty2 = Left (FailMGU start' ("" : ppTypes ppopts ty1 ty2))
   where start' = [start, ppTypeDetails ppopts ty1, ppTypeDetails ppopts ty2]
 
 -- like failMGU but with multiple lines in the initial message
 failMGUn :: PPS.Opts -> [Text] -> Type -> Type -> Either FailMGU a
-failMGUn ppopts start ty1 ty2 = Left (FailMGU start' ("" : ppTypes ppopts ty1 ty2) [])
+failMGUn ppopts start ty1 ty2 = Left (FailMGU start' ("" : ppTypes ppopts ty1 ty2))
   where start' = start ++ [ppTypeDetails ppopts ty1, ppTypeDetails ppopts ty2]
 
 -- fail with no types
 failMGU' :: Text -> Either FailMGU a
-failMGU' start = Left (FailMGU [start] [] [])
+failMGU' start = Left (FailMGU [start] [])
 
 -- add another expected/found type pair to the failure
 -- (pull in the last function-type lines if any)
 failMGUAdd :: PPS.Opts -> FailMGU -> Type -> Type -> FailMGU
-failMGUAdd ppopts (FailMGU start eflines lastfunlines) ty1 ty2 =
-  FailMGU start (eflines ++ lastfunlines ++ ppTypes ppopts ty1 ty2) []
+failMGUAdd ppopts (FailMGU start eflines) ty1 ty2 =
+  FailMGU start (eflines ++ ppTypes ppopts ty1 ty2)
 
 -- print the failure as a string list
 ppFailMGU :: FailMGU -> [Text]
-ppFailMGU (FailMGU start eflines lastfunlines) =
-  start ++ eflines ++ lastfunlines
+ppFailMGU (FailMGU start eflines) =
+  start ++ eflines
 
 -- We've found a substitution for unification var i.
 --
