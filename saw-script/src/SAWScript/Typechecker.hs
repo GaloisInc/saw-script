@@ -299,18 +299,25 @@ instance AppSubst NamedType where
 
 
 ------------------------------------------------------------
--- Pass context
+-- Pass context / monad
 
 -- | The monad for this pass is "TI", which is composed of a read-only
 --   part plus a read-write part that accumulates as we move through the
 --   code.
+--
+--   Note that, for the time being at least, this monad cannot be in
+--   IO, because we need to be able to use the typechecker in a pure
+--   context when constructing the builtins table during startup. If
+--   that becomes a prohibitive problem, we can rearrange the builtins
+--   table construction, but that will be expensive.
+--
 newtype TI a = TI { unTI :: ReaderT RO (StateT RW Identity) a }
     deriving (Functor, Applicative, Monad, MonadReader RO, MonadState RW)
 
 -- | The read-only portion
 data RO = RO {
     -- | The variable availability (lifecycle set)
-    primsAvail :: Set PrimitiveLifecycle,
+    tiPrimsAvail :: Set PrimitiveLifecycle,
 
     -- | The prettyprinter options
     tiPPOpts :: PPS.Opts
@@ -319,57 +326,89 @@ data RO = RO {
 -- | The read-write portion
 data RW = RW {
     -- | The variable typing environment (variable name to type scheme)
-    varEnv :: VarEnv,
+    tiVarEnv :: VarEnv,
 
     -- | The type environment: named type variables, which are either
     --   typedefs (map to ConcreteType) or abstract types (AbstractType)
-    tyEnv :: TyEnv,
+    tiTyEnv :: TyEnv,
 
     -- | The next fresh unification var number
-    nextTypeIndex :: TypeIndex,
+    tiNextTypeIndex :: TypeIndex,
 
     -- | The unification var substitution we're accumulating
-    subst :: Subst,
+    tiSubst :: Subst,
 
     -- | Any type errors and warnings we've generated so far
-    errors :: [(Pos, String)],
-    warnings :: [(Pos, String)]
+    --   These accumulate in reverse order; later messages are consed
+    --   on the head of the list.
+    tiErrors :: [(Pos, String)],
+    tiWarnings :: [(Pos, String)]
 }
 
--- | A startup read-write state, given an initial varEnv and tyEnv.
-initialRW :: VarEnv -> TyEnv -> RW
-initialRW varenv tyenv = RW {
-    varEnv = varenv,
-    tyEnv = tyenv,
-    nextTypeIndex = 0,
-    subst = emptySubst,
-    errors = [],
-    warnings = []
-}
+-- | The result of a `TI` typechecker computation is either a list of
+--   errors or a result value, along with (always) a list of warnings.
+--   FUTURE: it would be better to preserve the ordering of warnings
+--   and errors in a single list...
+--
+type MsgList = [(Pos, String)]
+type Result a = (Either MsgList a, MsgList)
+
+-- | Run the TI monad.
+--
+-- Note that we don't return the updated environments! This is a
+-- manifestation of the unhealthy codependent relationship with the
+-- interpreter.
+--
+runTI :: PPS.Opts -> Set PrimitiveLifecycle -> VarEnv -> TyEnv -> TI a -> Result a
+runTI ppopts avail varenv tyenv m =
+    let rw = RW {
+            tiVarEnv = varenv,
+            tiTyEnv = tyenv,
+            tiNextTypeIndex = 0,
+            tiSubst = emptySubst,
+            tiErrors = [],
+            tiWarnings = []
+        }
+        ro = RO {
+            tiPrimsAvail = avail,
+            tiPPOpts = ppopts
+        }
+        (result, rw') = runState (runReaderT (unTI m) ro) rw
+        errs = reverse $ tiErrors rw'
+        warns = reverse $ tiWarnings rw'
+    in
+    -- We succeed if and only if the error list is empty.
+    case errs of
+        [] -> (Right result, warns)
+        _ -> (Left errs, warns)
+
+
+------------------------------------------------------------
+-- TI monad ops
 
 -- | Enter a scope
 pushScope :: TI ()
 pushScope = do
-  varenv <- gets varEnv
-  tyenv <- gets tyEnv
+  varenv <- gets tiVarEnv
+  tyenv <- gets tiTyEnv
   let varenv' = ScopedMap.push varenv
       tyenv' = ScopedMap.push tyenv
-  modify (\rw -> rw { varEnv = varenv', tyEnv = tyenv' })
+  modify (\rw -> rw { tiVarEnv = varenv', tiTyEnv = tyenv' })
 
 -- | Leave a scope
 popScope :: TI ()
 popScope = do
-  varenv <- gets varEnv
-  tyenv <- gets tyEnv
+  varenv <- gets tiVarEnv
+  tyenv <- gets tiTyEnv
   let varenv' = ScopedMap.pop varenv
       tyenv' = ScopedMap.pop tyenv
-  modify (\rw -> rw { varEnv = varenv', tyEnv = tyenv' })
+  modify (\rw -> rw { tiVarEnv = varenv', tiTyEnv = tyenv' })
 
 -- Get a fresh unification var number.
 getFreshTypeIndex :: TI TypeIndex
 getFreshTypeIndex = do
-  next <- gets nextTypeIndex
-  modify $ (\rw -> rw { nextTypeIndex = next + 1 })
+  next <- gets tiNextTypeIndex
+  modify $ (\rw -> rw { tiNextTypeIndex = next + 1 })
   return next
 
 -- Construct a fresh type variable.
@@ -394,7 +433,7 @@ getErrorTyVar pos = getFreshTyVar pos
 -- Add an error message.
 recordError :: Pos -> String -> TI ()
 recordError pos err = do
-    modify $ \rw -> rw { errors = (pos, err) : errors rw }
+    modify $ \rw -> rw { tiErrors = (pos, err) : tiErrors rw }
 
 -- Add an error message. Variant meant for use with ppTypeDetails'.
 recordError' :: (Pos, Text) -> TI ()
@@ -403,12 +442,16 @@ recordError' (pos, err) = recordError pos (Text.unpack err)
 -- Add a warning message.
 recordWarning :: Pos -> String -> TI ()
 recordWarning pos msg = do
-    modify $ \rw -> rw { warnings = (pos, msg) : warnings rw }
+    modify $ \rw -> rw { tiWarnings = (pos, msg) : tiWarnings rw }
+
+
+------------------------------------------------------------
+-- Resolution 
 
 -- Apply the current substitution with appSubst.
 applyCurrentSubst :: AppSubst t => t -> TI t
 applyCurrentSubst t = do
-    s <- gets subst
+    s <- gets tiSubst
     return $ appSubst s t
 
 -- Apply the current typedef collection with substituteTyVars.
@@ -417,8 +460,8 @@ applyCurrentSubst t = do
 -- to something in the typedef collection that's not visible.
 resolveCurrentTypedefs :: Type -> TI Type
 resolveCurrentTypedefs t = do
-    avail <- asks primsAvail
-    s <- gets tyEnv
+    avail <- asks tiPrimsAvail
+    s <- gets tiTyEnv
     return $ substituteTyVars avail s t
 
 -- | Condense functions that return functions to a single function
@@ -482,6 +525,10 @@ expandMostly t = do
     t' <- resolveCurrentTypedefs t
     applyCurrentSubst t'
 
+
+------------------------------------------------------------
+-- Further extraction / support logic
+
 -- Get the unification vars that are used in the current variable typing
 -- and named type environments.
 --
@@ -510,8 +557,8 @@ expandMostly t = do
 -- Returns a map of the index number to the occurrence position.
 unifyVarsInEnvs :: TI (Map TypeIndex Pos)
 unifyVarsInEnvs = do
-    venv <- gets varEnv
-    tenv <- gets tyEnv
+    venv <- gets tiVarEnv
+    tenv <- gets tiTyEnv
     vtys <- mapM applyCurrentSubst $ ScopedMap.allElems venv
     ttys <- mapM applyCurrentSubst $ ScopedMap.allElems tenv
     return $ Map.unionWith choosePos (unifyVars vtys) (unifyVars ttys)
@@ -520,7 +567,7 @@ unifyVarsInEnvs = do
 -- environment.
 namedVarDefinitions :: TI (Set Name)
 namedVarDefinitions = do
-    env <- gets tyEnv
+    env <- gets tiTyEnv
     return $ ScopedMap.allKeysSet env
 
 -- Get all the bindings in a pattern.
@@ -997,7 +1044,7 @@ unify t1 pos t2 = do
   t1' <- expandFully pos t1
   t2' <- expandFully pos t2
   case mgu ppopts t1' t2' of
-    Right s -> modify $ \rw -> rw { subst = mergeSubst s $ subst rw }
+    Right s -> modify $ \rw -> rw { tiSubst = mergeSubst s $ tiSubst rw }
     Left msgs -> do
        recordError pos $ Text.unpack $ Text.unlines $ firstline : morelines'
        where
@@ -1082,7 +1129,7 @@ inspectTypeFTVs kind ty = case ty of
     TyUnifyVar _pos _x ->
         return Map.empty
     TyVar pos x -> do
-        tyenv <- gets tyEnv
+        tyenv <- gets tiTyEnv
         case ScopedMap.lookup x tyenv of
             Nothing -> return $ Map.singleton x (pos, kind)
             Just _ -> return $ Map.empty
@@ -1171,9 +1218,9 @@ inferField (n,e) = do
 -- Add x with type ty to the environment.
 addVar :: Name -> Pos -> Rebindable -> Schema -> TI ()
 addVar x pos rb ty = do
-    env <- gets varEnv
+    env <- gets tiVarEnv
     let env' = ScopedMap.insert x (pos, Current, rb, ty) env
-    modify (\rw -> rw { varEnv = env' })
+    modify (\rw -> rw { tiVarEnv = env' })
 
 -- Add xs with type tys to the environment.
 addVars :: Rebindable -> [(Name, Pos, Schema)] -> TI ()
@@ -1226,9 +1273,9 @@ addAbstractTyVars vars = do
             ScopedMap.insert x (Current, AbstractType kind) tyenv
         insertAll tyenv =
             Map.foldrWithKey insertOne tyenv vars
-    tyenv <- gets tyEnv
+    tyenv <- gets tiTyEnv
     let tyenv' = insertAll tyenv
-    modify (\rw -> rw { tyEnv = tyenv' })
+    modify (\rw -> rw { tiTyEnv = tyenv' })
 
 --
 -- Infer the type for an expression.
@@ -1325,8 +1372,8 @@ inferExpr expr = case expr of
       return (TLookup pos e1 i, elTy)
 
   Var pos x -> do
-      avail <- asks primsAvail
-      env <- gets varEnv
+      avail <- asks tiPrimsAvail
+      env <- gets tiVarEnv
       case ScopedMap.lookup x env of
         Nothing -> do
           recordError pos $ "Unbound variable: " ++ show x ++ " (" ++ show pos ++ ")"
@@ -1658,7 +1705,7 @@ inferPattern rebindable pat = do
          return (t, PWild pos (Just t))
     PVar allpos xpos x mt ->
       do t <- resolveType allpos mt
-         env <- gets varEnv
+         env <- gets tiVarEnv
          case ScopedMap.lookup x env of
              Nothing -> pure ()
              Just (prevpos, lc, prevrb, tyscheme) -> case rebindable of
@@ -1666,7 +1713,7 @@ inferPattern rebindable pat = do
                      let croak msg =
                            recordError xpos $ "Cannot rebind " ++
                                               Text.unpack x ++ ": " ++ msg
-                     avail <- asks primsAvail
+                     avail <- asks tiPrimsAvail
                      when (not $ Set.member lc avail) $
                          croak "A previous binding exists but is hidden"
                      oldt <- case tyscheme of
@@ -1726,11 +1773,11 @@ checkPattern rebindable t pat = do
 -- refers to something not visible in the environment.
 addTypedef :: Name -> Type -> TI ()
 addTypedef a ty = do
-    avail <- asks primsAvail
-    env <- gets tyEnv
+    avail <- asks tiPrimsAvail
+    env <- gets tiTyEnv
     let ty' = substituteTyVars avail env ty
         env' = ScopedMap.insert a (Current, ConcreteType ty') env
-    modify (\rw -> rw { tyEnv = env' })
+    modify (\rw -> rw { tiTyEnv = env' })
 
 -- break a monadic type down into its monad and value types, if it is one
 --
@@ -1916,7 +1963,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
             return s
         StmtTypedef allpos apos a ty -> do
             ty' <- checkType kindStar ty
-            tyenv <- gets tyEnv
+            tyenv <- gets tiTyEnv
             case ScopedMap.lookup a tyenv of
                 Nothing -> do
                     let s' = StmtTypedef allpos apos a ty'
@@ -1933,7 +1980,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
                     -- that any corresponding future use of
                     -- enable_experimental or enable_deprecated must
                     -- be blocked.
-                    avail <- asks primsAvail
+                    avail <- asks tiPrimsAvail
                     let addendum =
                           if Set.member lc avail then ""
                           else " (which is not currently visible)"
@@ -2332,8 +2379,8 @@ checkType kind ty = case ty of
           return $ TyRecord pos fields'
 
   TyVar pos x -> do
-      avail <- asks primsAvail
-      tyenv <- gets tyEnv
+      avail <- asks tiPrimsAvail
+      tyenv <- gets tiTyEnv
       case ScopedMap.lookup x tyenv of
           Nothing -> do
               recordError pos ("Unbound type variable " ++ Text.unpack x)
@@ -2392,30 +2439,6 @@ checkType kind ty = case ty of
 ------------------------------------------------------------
 -- External interface
 
--- Some short names for use in the signatures below
-type MsgList = [(Pos, String)]
-type Result a = (Either MsgList a, MsgList)
-
--- Run the TI monad.
---
--- Note that the error and warning lists accumulate in reverse order
--- (later messages are consed onto the head of the list) so we
--- reverse on the way out.
-runTIWithEnv :: PPS.Opts -> Set PrimitiveLifecycle -> VarEnv -> TyEnv -> TI a -> (a, Subst, MsgList, MsgList)
-runTIWithEnv ppopts avail env tenv m = (a, subst rw', reverse $ errors rw', reverse $ warnings rw')
-  where
-    m' = runReaderT (unTI m) (RO avail ppopts)
-    rw = initialRW env tenv
-    (a, rw') = runState m' rw
-
--- Run the TI monad and interpret/collect the results
--- (failure if any errors were produced)
-evalTIWithEnv :: PPS.Opts -> Set PrimitiveLifecycle -> VarEnv -> TyEnv -> TI a -> Result a
-evalTIWithEnv ppopts avail env tenv m =
-  case runTIWithEnv ppopts avail env tenv m of
-    (res, _, [], warns) -> (Right res, warns)
-    (_, _, errs, warns) -> (Left errs, warns)
-
 -- | Check a single statement. (This is an external interface.)
 --
 -- The first two arguments are the starting variable and typedef
@@ -2454,7 +2477,7 @@ checkStmt ppopts avail env tenv ctx stmt =
     let pos = getPos stmt
         ctxtype = TyCon pos (ContextCon ctx) []
     in
-    evalTIWithEnv ppopts avail env tenv (inferSingleStmt pos ctxtype stmt)
+    runTI ppopts avail env tenv (inferSingleStmt pos ctxtype stmt)
 
 -- | Check a single declaration. (This is an external interface.)
 --
@@ -2462,7 +2485,7 @@ checkStmt ppopts avail env tenv ctx stmt =
 -- environments to use.
 checkDecl :: PPS.Opts -> Set PrimitiveLifecycle -> VarEnv -> TyEnv -> Decl -> Result Decl
 checkDecl ppopts avail env tenv decl =
-    evalTIWithEnv ppopts avail env tenv (inferDecl ReadOnlyVar decl)
+    runTI ppopts avail env tenv (inferDecl ReadOnlyVar decl)
 
 -- | Check a found type (first argument) against an expected type
 --   (second argument) and return True if they can be unified.
@@ -2487,7 +2510,7 @@ typesMatch ppopts avail tenv schema'found schema'expected =
         ty'expected <- unpack schema'expected
         matches ty'found ty'expected
   in
-  case evalTIWithEnv ppopts avail ScopedMap.empty tenv match of
+  case runTI ppopts avail ScopedMap.empty tenv match of
     (Left _errors, _warnings) -> False          -- not actually reachable
     (Right b, _warnings) -> b                   -- return match success/failure
 
@@ -2541,7 +2564,7 @@ checkSchema ppopts contextLC tyenv schema = do
           WarnDeprecated -> [Current, WarnDeprecated]
           HideDeprecated -> [Current, WarnDeprecated, HideDeprecated, Experimental]
           Experimental -> [Current, Experimental]
-  evalTIWithEnv ppopts avail ScopedMap.empty tyenv check
+  runTI ppopts avail ScopedMap.empty tyenv check
 
 -- | Check a schema (type) pattern as used by :search. (This is an
 -- external interface.)
