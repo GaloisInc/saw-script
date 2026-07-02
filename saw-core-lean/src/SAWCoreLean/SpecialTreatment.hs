@@ -98,6 +98,10 @@ data UseResultShape
 data UseArgShape
   = UseArgRaw
   | UseArgWrapped
+    -- | Value-level function argument for a wrapped helper. The
+    -- source function is translated at the helper formal's wrapped
+    -- function convention: value binders/results are kept in
+    -- @Except String@ so errors remain observable.
   | UseArgFunction
     -- | Function argument for a finite generator. The referenced earlier
     -- argument is the vector length; the emitted Lean function receives the

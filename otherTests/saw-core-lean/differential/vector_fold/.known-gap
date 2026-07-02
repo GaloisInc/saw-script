@@ -1,1 +1,0 @@
-Vector fold helpers over raw Nat currently emit raw functions where wrapped Except functions are required; final parity needs principled wrapper-aware emission or Lean-side proof obligations.

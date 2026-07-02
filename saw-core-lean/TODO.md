@@ -934,9 +934,10 @@ Current implementation priority after the 2026-07-01 audit:
     than Lean backend fixes.
   - 2026-06-29 checkpoint: `differential/*/.known-gap` support now pins real
     differential failures with required diagnostic substrings. The first such
-    cases are `vector_gen_at`, `vector_shift_rotate`, and `vector_fold`, which
-    expose raw-`Nat` bodies/functions being emitted where wrapped
-    `Except String Nat` vector helpers are expected.
+    cases were `vector_gen_at`, `vector_shift_rotate`, and `vector_fold`.
+    2026-07-01 update: `vector_fold` now has positive differential coverage;
+    the remaining vector known gaps are proof-support/bounds issues rather
+    than the raw-function-to-wrapped-helper adaptation gap.
   - 2026-06-29 checkpoint: added the first bitvector conformance pair for
     defined division/remainder, signed division/remainder, arithmetic shift,
     and `bvLg2`. Added a scalar conformance pair for Nat, Int, IntMod, and a
@@ -952,10 +953,9 @@ Current implementation priority after the 2026-07-01 audit:
     Haskell-side recognizers.
   - 2026-06-29 checkpoint: added vector-helper conformance for `gen`,
     `atWithDefault`, `shiftL`, `shiftR`, `rotateL`, `rotateR`, `foldr`, and
-    `foldl`. This exposes a higher-order wrapper adaptation gap. The first
-    attempted Haskell adapter was stripped because it was too clever; keep the
-    regression coverage and solve this with a principled convention/certificate
-    design.
+    `foldl`. This exposed a higher-order wrapper adaptation gap. 2026-07-01
+    update: the gap is closed by the explicit `UseArgFunction` convention for
+    wrapped helper formals; the row is now a positive differential test.
   - 2026-06-29 checkpoint: added tuple conformance for concrete pair
     construction/projection and nested tuple projection. This pins the
     `PairType ... UnitType` representation used by emitted SAW tuples and by
@@ -976,6 +976,10 @@ Current implementation priority after the 2026-07-01 audit:
     flow expects `Except String Nat`. Do not patch this with local
     "already-wrapped" predicates; resolve it through an explicit recursor
     convention/adaptation design.
+    2026-07-01 update: the focused wrapping migration did not safely close the
+    stream-helper row. Wrapped `MkStream`/helper results still flow into raw
+    `Stream.rec` positions; solving this needs separate proof-carrying
+    stream/recursor design, not another local wrapping patch.
   - 2026-06-29 checkpoint: added focused true-differential coverage for a
     finite `MkStream`/`Stream#rec` projection. This small projection now
     compares SAW and emitted-Lean observations directly; the larger legacy
@@ -1032,17 +1036,18 @@ Current implementation priority after the 2026-07-01 audit:
     of nonzero examples.
   - 2026-06-29 checkpoint: added a focused finite-observation stream-helper
     differential known gap for `streamGet`, `streamMap`, shifts, and
-    `streamScanl`. SAW evaluates the closed Boolean, but the emitted Lean
-    now exposes a `Stream.rec` raw/wrapped mismatch: the recursor returns raw
-    `Nat` where the surrounding Phase-beta context expects `Except String Nat`.
+    `streamScanl`. SAW evaluates the closed Boolean, but emitted Lean still
+    mixes wrapped stream construction with raw `Stream.rec` positions. The true
+    differential harness correctly refuses to count it as executable
+    conformance.
   - 2026-06-29 checkpoint: expanded Cryptol.sawcore dictionary and entry-point
     coverage. Positive true-differential rows now cover type-level `tc*`
     arithmetic, Bool/Integer/word/pair equality and comparison dictionaries,
     signed word comparison, zero/logic/ring dictionaries, and defined
     integral/field entry points (`ecDiv`, `ecMod`, `ecRecip`, `ecFieldDiv`).
-    One focused wrapper-adaptation known gap remains here:
-    `updFst`/`updSnd` updater lambdas currently hit raw/wrapped
-    `Except String Nat` adaptation failures in emitted Lean. `ecAt`'s finite
+    2026-07-01 update: the focused wrapper-adaptation gaps for
+    `updFst`/`updSnd` updater lambdas and `ecFoldl`/`ecFoldlPrime` are now
+    positive true-differential rows. `ecAt`'s finite
     bounds surface has since moved to checked `Prelude.at` obligations, and
     generated-vector `ecAt` examples now replay through `genWithBoundsM`.
   - 2026-06-29 checkpoint: added true-differential coverage for ordinary
@@ -1071,7 +1076,10 @@ Current implementation priority after the 2026-07-01 audit:
     `tcWidth`, function dictionaries, stream dictionaries, and additional
     deterministic `ec*` comparison/logic/ring wrappers. Added focused known gaps
     for `ecFoldl`/`ecFoldlPrime` wrapper adaptation and `ecScanl` reaching the
-    deliberately rejected bounded-vector `Prelude.scanl` primitive.
+    deliberately rejected bounded-vector `Prelude.scanl` primitive. 2026-07-01
+    update: `ecFoldl`/`ecFoldlPrime` now have positive differential coverage;
+    `ecScanl` remains separate because it reaches the rejected bounded-vector
+    `Prelude.scanl` primitive.
   - 2026-06-29 checkpoint: expanded direct Cryptol.sawcore `ec*` coverage with
     positive true-differential tests for finite `ecCat`/`ecTake`/`ecDrop`/
     `ecJoin`/`ecSplit`, `ecTranspose`, `ecAtBack`, `ecUpdate`, `ecUpdateEnd`,
@@ -1538,8 +1546,9 @@ Backlog triage from the current 79 known-gap entries:
     wait on Lean-side proof support for bounds, branch-guard reflection,
     direct constant vector/literal bounds, Rational/BV nonzero evidence, or
     derived index arithmetic;
-  - tuple/update and stream-helper raw/wrapped adaptation gaps where a named
-    convention can remove a family of failures.
+  - stream-helper executable replay, now blocked on separate proof-carrying
+    stream/recursor design for wrapped construction flowing into raw
+    `Stream.rec` positions.
 - Low priority / not a feature-completion gate:
   - full SHA512 and large BV-heavy crypto proofs;
   - broad proof automation and proof-cookbook polish;
@@ -1584,6 +1593,7 @@ Backlog triage from the current 79 known-gap entries:
 
 - `doc/2026-06-26_phase-beta-expected-shape.md`
 - `doc/2026-06-26_expected-shape-todo.md`
+- `doc/2026-07-01_complete-wrapping-migration-goal.md`
 - `doc/2026-05-14_wrap-invariant-audit.md`
 - `doc/2026-05-02_residual-trust.md`
 - `doc/2026-06-28_clever-legacy-path-audit.md`

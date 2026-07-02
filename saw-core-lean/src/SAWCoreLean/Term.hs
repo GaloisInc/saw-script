@@ -1037,8 +1037,7 @@ etaExpandWrappedFunctionResult ::
   TermTranslationMonad m => Term -> Lean.Term -> m Lean.Term
 etaExpandWrappedFunctionResult fty fn = do
   let (binders, retTy) = asPiList fty
-      pureWrap = shouldWrapBinder retTy
-              || isVariableHead retTy
+      pureWrap = functionConventionResultIsValue retTy
               || natValueResult fty
   if null binders || not pureWrap
      then pure fn
@@ -1057,6 +1056,7 @@ etaExpandWrappedFunctionResult fty fn = do
                && isNothing (asSort bty)
                && isNothing (asEq bty)
                && isNothing (asPi bty)
+               && not (isCryptolNumType bty)
                && (isNothing (asNatType bty) || shouldWrapBinder bty)
              | (ix, (_, bty)) <- zip [0..] binders
              ]
@@ -1109,6 +1109,7 @@ argumentBindPlanFromWrapped fty argTerms wrappedActuals =
         && not (isJust (asSort bty))
         && not (isJust (asEq bty))
         && not (isJust (asPi bty))
+        && not (isCryptolNumType bty)
         && not (paramActualAlreadyExpected ix bty)
         && (isNothing (asNatType bty) || actualWrapped)
   in
@@ -1163,6 +1164,91 @@ translateFunctionWithWrappedResult t = do
                   let bodyLean = translatedTermAsWrapped bodyResult
                   pure (Lean.Lambda (concatMap bindTransToBinder bts) bodyLean)
        _ -> translateTerm t
+
+functionConventionValueSlot :: [Int] -> Int -> Term -> Bool
+functionConventionValueSlot typeIxs ix ty =
+     ix `notElem` typeIxs
+  && isNothing (asSort ty)
+  && isNothing (asEq ty)
+  && isNothing (asPi ty)
+  && not (isCryptolNumType ty)
+  && (shouldWrapBinder ty || isVariableHead ty || isJust (asNatType ty))
+
+functionConventionResultIsValue :: Term -> Bool
+functionConventionResultIsValue ty =
+     isNothing (asSort ty)
+  && isNothing (asEq ty)
+  && isNothing (asPi ty)
+  && not (isCryptolNumType ty)
+  && (shouldWrapBinder ty || isVariableHead ty || isJust (asNatType ty))
+
+translateFunctionConventionBinders ::
+  TermTranslationMonad m =>
+  [Int] ->
+  [(VarName, Term)] ->
+  ([Lean.Binder] -> [TranslatedTerm] -> m a) ->
+  m a
+translateFunctionConventionBinders typeIxs params0 k = go 0 [] [] params0
+  where
+    go _ binders args [] = k (reverse binders) (reverse args)
+    go ix binders args ((vn, ty) : rest) = do
+      tyLean <- localTR (set skipBinderWrap False) (translateTerm ty)
+      let wrapped = functionConventionValueSlot typeIxs ix ty
+          binderTy = if wrapped then wrapExcept tyLean else tyLean
+      ident <-
+        if vnName vn == "_"
+           then freshVariant (Lean.Ident ("η_arg_" ++ show ix))
+           else translateLocalIdent (vnName vn)
+      withUsedLeanIdent ident $
+        localTR ( over namedEnvironment (Map.insert vn ident)
+                . withBindingShape ident (bindingShapeOfType binderTy)) $ do
+          let binder = Lean.Binder Lean.Explicit ident (Just binderTy)
+          let argShape = if wrapped then BindingWrapped
+                                    else bindingShapeOfType binderTy
+              arg = TranslatedTerm (Lean.Var ident) argShape
+          go (ix + 1) (binder : binders) (arg : args) rest
+
+translateFunctionToWrappedFormal ::
+  TermTranslationMonad m =>
+  Text.Text ->
+  Term ->
+  m Lean.Term
+translateFunctionToWrappedFormal primitiveName fnTerm =
+  case unwrapTermF fnTerm of
+    Variable{} -> translateTerm fnTerm
+    Lambda{} -> do
+      let (params, body) = asLambdaList fnTerm
+          mFunType = case termSortOrType fnTerm of
+            Right fty -> Just fty
+            Left{}    -> Nothing
+          typeIxs = maybe (typeArgPositionsBinders params)
+                          typeArgPositions
+                          mFunType
+      typeBody <- isTypeProducing body
+      if typeBody
+         then Except.throwError (RejectedPrimitive primitiveName
+                "wrapped helper expected a value-level function argument, but the lambda body is type-producing")
+         else
+           translateFunctionConventionBinders typeIxs params $
+             \binders _args -> do
+               bodyResult <- translateTermLetWithShape body
+               pure (Lean.Lambda binders (translatedTermAsWrapped bodyResult))
+    _ ->
+      case termSortOrType fnTerm of
+        Right fty
+          | (params, retTy) <- asPiList fty
+          , not (null params)
+          , functionConventionResultIsValue retTy -> do
+              fnLean <- translateTerm fnTerm
+              let typeIxs = typeArgPositions fty
+              translateFunctionConventionBinders typeIxs params $
+                \binders args -> do
+                  let shouldBind = map (isWrappedShape . ttShape) args
+                  body <- buildLifted fnLean True shouldBind args
+                  pure (Lean.Lambda binders body)
+        _ ->
+          Except.throwError (RejectedPrimitive primitiveName
+            "wrapped helper expected a value-level function argument with a value result")
 
 translateFunctionWithNatLtWrappedResult ::
   TermTranslationMonad m =>
@@ -2434,9 +2520,7 @@ originalDispatchWithShape i args = do
       phase <- phaseBetaEnabled
       case funType mm' of
         Just fty
-          | phase
-          , any (shouldWrapBinder . snd) (fst (asPiList fty))
-              || shouldWrapBinder (retTypeOfFun fty) -> do
+          | phase -> do
               -- Lift when either:
               --   * the function returns a value-domain type
               --     (bvAdd-style: result needs wrapping), OR
@@ -2473,13 +2557,27 @@ originalDispatchWithShape i args = do
               let (binders, _) = asPiList fty
                   ret = retTypeOfFun fty
                   fullyApplied = length args' >= length binders
-              if fullyApplied
+                  shouldUseLift =
+                       any (shouldWrapBinder . snd) binders
+                    || shouldWrapBinder ret
+                    || any id shouldBind
+              if not shouldUseLift
+                 then do
+                   let tm = Lean.App f argTerms
+                   pure (TranslatedTerm tm (phaseBetaResultShape fty (length args')))
+                 else if fullyApplied
                  then
                    let shouldBindForArgs =
                          take (length args') (shouldBind ++ repeat False)
                        pureWrap =
-                         shouldWrapBinder ret || isVariableHead ret || natValueResult fty
-                       resultShape = phaseBetaResultShape fty (length args')
+                            shouldWrapBinder ret
+                         || isVariableHead ret
+                         || natValueResult fty
+                         || any id shouldBindForArgs
+                       resultShape =
+                         if pureWrap
+                            then BindingWrapped
+                            else phaseBetaResultShape fty (length args')
                    in buildLiftedWithShape resultShape f pureWrap shouldBindForArgs argResults
                  else do
                    -- Partial application: eta-expand so the
@@ -2517,7 +2615,9 @@ originalDispatchWithShape i args = do
                          ]
                        etaArgTerms = argTerms ++ map Lean.Var etaNames
                        pureWrap =
-                         shouldWrapBinder ret || isVariableHead ret || natValueResult fty
+                            shouldWrapBinder ret
+                         || isVariableHead ret
+                         || natValueResult fty
                        typeIxs = typeArgPositions fty
                        missingWrapped =
                          [ ix `notElem` typeIxs
@@ -2538,7 +2638,8 @@ originalDispatchWithShape i args = do
                    let shouldBindEta =
                          argumentBindPlanFromWrapped fty etaArgTerms
                            (suppliedWrapped ++ missingWrapped)
-                   body <- buildLifted f pureWrap
+                   let pureWrapEta = pureWrap || any id shouldBindEta
+                   body <- buildLifted f pureWrapEta
                              (take (length etaArgTerms)
                                    (shouldBindEta ++ repeat False))
                              etaResults
@@ -2729,6 +2830,11 @@ originalDispatchWithShape i args = do
               | otherwise =
                   Except.throwError (RejectedPrimitive (Text.pack (identName i))
                     "wrapped helper proof-carrying function argument referenced a missing Nat bound")
+            go acc (UseArgFunction : modes) (arg : rest) = do
+              helperArg <- translateFunctionToWrappedFormal
+                (Text.pack (identName i))
+                arg
+              go (acc ++ [TranslatedTerm helperArg BindingFunction]) modes rest
             go acc (_mode : modes) (arg : rest) = do
               translated <- translateTermWithShape arg
               go (acc ++ [translated]) modes rest
@@ -3083,18 +3189,27 @@ translateRecursorAppWithShape crec args = do
              []       -> error "translateRecursorApp: scrutinee \
                                \missing despite fullySupplied"
            (paramArgs, _) = splitAt nParams preScrut
-       -- A motive returning a 'Sort' (like @fun num => Type@)
-       -- produces a type expression. A motive whose body itself
-       -- has sort 'Prop' (like @fun y h => Eq Type ...@) produces
-       -- a proof. Only value-producing motives use the Phase-β
-       -- scrutinee bind and wrapped result type.
+       scrutResult <- translateTermWithShape scrut
+       let scrutTrans = ttLean scrutResult
+           scrutWrapped = isWrappedShape (ttShape scrutResult)
+       -- A motive returning a type expression (like @fun num => seq n a@)
+       -- or a proof stays raw. Only value-producing motives use the
+       -- Phase-β scrutinee bind and wrapped result type, and only when
+       -- the scrutinee itself is wrapped so the recursor appears in an
+       -- Except-producing continuation.
        let motiveArg = preScrut !! nParams
            (_, motiveBody) = asLambdaList motiveArg
-           motiveReturnsType = isJust (asSort motiveBody)
-           motiveReturnsProof = case termSortOrType motiveBody of
+       motiveReturnsType <- isTypeProducing motiveBody
+       let motiveReturnsProof = case termSortOrType motiveBody of
              Left s  -> s == propSort
              Right _ -> False
            motiveReturnsRaw = motiveReturnsType || motiveReturnsProof
+           motiveReturnsWrappedValue =
+             scrutWrapped
+             && not motiveReturnsRaw
+             && functionConventionResultIsValue motiveBody
+           recursorReturnsValue =
+             not motiveReturnsRaw && functionConventionResultIsValue motiveBody
        paramTrans <- traverse translateTerm paramArgs
        casePlans <- recursorCasePlans paramTrans crec
        preTrans <- sequence (zipWith
@@ -3104,11 +3219,11 @@ translateRecursorAppWithShape crec args = do
                        then translateRecursorMotive motiveReturnsRaw a
                        else if isCasePos i
                          then translateCaseHandler
+                                motiveReturnsRaw
+                                motiveReturnsWrappedValue
                                 (casePlans !! (i - caseFirst)) a
                          else translateTerm a)
          [0..] preScrut)
-       scrutResult <- translateTermWithShape scrut
-       let scrutTrans = ttLean scrutResult
        postTrans  <- traverse translateTerm postScrut
        -- Decide whether to 'Bind.bind' the scrutinee. The
        -- recursor's scrutinee SAW type is usually value-domain
@@ -3131,20 +3246,23 @@ translateRecursorAppWithShape crec args = do
        --     check missed.
        --   * Otherwise — pass directly (raw type-arg binder,
        --     constructor literal, etc.).
-       let scrutWrapped = isWrappedShape (ttShape scrutResult)
-           resultShape
+       let resultShape
              | motiveReturnsRaw = BindingRaw
              | otherwise        = BindingWrapped
-       if motiveReturnsRaw || not scrutWrapped
-          then pure (TranslatedTerm
-                       (Lean.App recHead
-                         (preTrans ++ [scrutTrans] ++ postTrans))
-                       resultShape)
+           recCallWith scrutTerm =
+             Lean.App recHead (preTrans ++ [scrutTerm] ++ postTrans)
+       if motiveReturnsRaw
+          then pure (TranslatedTerm (recCallWith scrutTrans) resultShape)
+          else if not scrutWrapped
+          then do
+            let recCall = recCallWith scrutTrans
+                recTerm = if recursorReturnsValue
+                             then Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [recCall]
+                             else recCall
+            pure (TranslatedTerm recTerm resultShape)
           else do
             scrutName <- freshVariant (Lean.Ident "scrut_")
-            let recCall =
-                  Lean.App recHead
-                    (preTrans ++ [Lean.Var scrutName] ++ postTrans)
+            let recCall = recCallWith (Lean.Var scrutName)
                 lam = Lean.Lambda
                         [Lean.Binder Lean.Explicit scrutName Nothing]
                         recCall
@@ -3212,7 +3330,8 @@ translateRecursorAppWithShape crec args = do
               localTR (set skipBinderWrap surroundingSkipWrap) $ do
                 bodyLean <- translateTermLet body
                 let bodyWrapped =
-                      if phase && not motiveReturnsRaw && shouldWrapBinder body
+                      if phase && not motiveReturnsRaw
+                         && functionConventionResultIsValue body
                          then wrapExcept bodyLean
                          else bodyLean
                 pure (Lean.Lambda paramTerms bodyWrapped)
@@ -3241,14 +3360,14 @@ translateRecursorAppWithShape crec args = do
 -- TCInf case for a type-computing motive) translate as
 -- ordinary terms — there are no binders to shadow.
 translateCaseHandler ::
-  TermTranslationMonad m => CaseHandlerPlan -> Term -> m Lean.Term
-translateCaseHandler casePlan caseTerm = case asLambdaList caseTerm of
+  TermTranslationMonad m => Bool -> Bool -> CaseHandlerPlan -> Term -> m Lean.Term
+translateCaseHandler motiveReturnsRaw expectedWrappedResult casePlan caseTerm = case asLambdaList caseTerm of
   ([], _) ->
     -- No explicit source binders to wrap. A bare function-valued
     -- handler such as `bvNat` may still be used at a recursor branch
     -- whose motive expects a wrapped result function, so eta-expand
     -- and lift the result when the handler's SAW type demands it.
-    adaptBareCaseHandler caseTerm
+    adaptBareCaseHandler expectedWrappedResult caseTerm
   (params, body) -> do
     -- Translate constructor-field binders according to their roles.
     -- Constructor fields are raw recursor inputs and get body-entry
@@ -3268,11 +3387,21 @@ translateCaseHandler casePlan caseTerm = case asLambdaList caseTerm of
         -- lift rules should fire normally inside the case body.
         localTR (set inRecursorCaseBinder surroundingFlag) $
           translateBinders normalParams $ \normalParamTerms -> do
-            body' <- translateTermLet body
-            -- Shadow only raw constructor fields that the body uses.
-            -- Function-shaped parameter fields and motive-result
-            -- binders already have their expected Phase-beta type.
-            shadowed <- shadowBinders rawFieldBinders body'
+            body' <-
+              if motiveReturnsRaw
+                 then translateTermLet body
+                 else do
+                   bodyResult <- translateTermLetWithShape body
+                   pure $ if expectedWrappedResult
+                             then translatedTermAsWrapped bodyResult
+                             else ttLean bodyResult
+            -- Shadow raw constructor fields only for value-producing motives.
+            -- Type/proof motives must keep constructor fields raw; wrapping a
+            -- Nat index there feeds `Except String Nat` into type constructors
+            -- such as `Vec n Bool`.
+            shadowed <- if motiveReturnsRaw
+                           then pure body'
+                           else shadowBinders rawFieldBinders body'
             pure (Lean.Lambda (fieldBinders ++ normalParamTerms)
                               shadowed)
   where
@@ -3343,7 +3472,8 @@ translateCaseHandler casePlan caseTerm = case asLambdaList caseTerm of
           case mShadowRhs of
             Just shadowRhs ->
               let mLetTy = case binderTy of
-                    Just bt | shouldWrapBinder saw_ty -> Just (wrapExcept bt)
+                    Just bt | functionConventionResultIsValue saw_ty ->
+                      Just (wrapExcept bt)
                     _ -> Nothing
               in pure (Lean.Let (binderName binder) [] mLetTy shadowRhs body')
             Nothing -> pure body'
@@ -3362,7 +3492,7 @@ translateCaseHandler casePlan caseTerm = case asLambdaList caseTerm of
       -- constructor-arg types), so emit a 'Pure.pure'-lifted shadow
       -- @let v := Pure.pure v@. The case body, translated under
       -- Phase β, then sees @v : Except String τ@ transparently.
-      | shouldWrapBinder saw_ty =
+      | functionConventionResultIsValue saw_ty =
           pure (Just (Lean.App pureVar [Lean.Var name]))
       -- Pi-shaped binders: gamma.11 keeps the Pi body raw, so the
       -- binder is raw. Body operations under Phase β expect the
@@ -3381,9 +3511,12 @@ translateCaseHandler casePlan caseTerm = case asLambdaList caseTerm of
     pureVar = Lean.Var (Lean.Ident "Pure.pure")
 
     adaptBareCaseHandler ::
-      TermTranslationMonad m => Term -> m Lean.Term
-    adaptBareCaseHandler caseTerm' = do
-      caseLean <- translateTerm caseTerm'
+      TermTranslationMonad m => Bool -> Term -> m Lean.Term
+    adaptBareCaseHandler expectedWrapped caseTerm' = do
+      caseResult <- translateTermWithShape caseTerm'
+      let caseLean = if expectedWrapped
+                        then translatedTermAsWrapped caseResult
+                        else ttLean caseResult
       mFty <- functionTypeOfTerm caseTerm'
       case mFty of
         Just fty -> etaExpandWrappedFunctionResult fty caseLean
@@ -3855,8 +3988,16 @@ applyKnownFunctionWithShape fty f args = do
                actualWrapped
            adapted =
              zipWith adaptWrappedFormal expectedWrapped argResults
-           resultShape = bindingShapeOfType retType
-       buildLiftedWithShape resultShape f False
+           targetReturnsWrapped = isExceptStringType retType
+           sourceResultShape = phaseBetaResultShape fty (length args)
+           pureWrap =
+                not targetReturnsWrapped
+             && (isWrappedShape sourceResultShape || any id shouldBindRaw)
+           resultShape =
+             if targetReturnsWrapped || pureWrap
+                then BindingWrapped
+                else sourceResultShape
+       buildLiftedWithShape resultShape f pureWrap
          (take (length adapted) (shouldBindRaw ++ repeat False))
          adapted
      else do

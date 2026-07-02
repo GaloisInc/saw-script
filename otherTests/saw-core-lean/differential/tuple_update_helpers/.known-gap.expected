@@ -1,5 +1,0 @@
-FAIL: emitted Lean artifact did not compile
-has type
-Except String Nat
-but is expected to have type
-Nat

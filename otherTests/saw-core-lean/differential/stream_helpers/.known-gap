@@ -1,1 +1,1 @@
-Finite stream-helper observations currently expose a Stream.rec raw/wrapped mismatch: the recursor returns raw Nat where the surrounding Phase-beta context expects Except-wrapped Nat.
+Finite stream-helper observations still expose a Stream.rec / stream-construction convention gap: wrapped MkStream/helper results flow into raw Stream.rec positions, and fixing this requires a separate stream/recursor design rather than a fixture-specific wrapper patch.

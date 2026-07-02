@@ -1,6 +1,8 @@
-Type mismatch
-Stream.rec
-has type
-Nat
+failed to synthesize instance of type class
+Pure CryptolToLean.SAWCorePrimitives.Stream
+Bind CryptolToLean.SAWCorePrimitives.Stream
+saw_mkStream_choose
+Except String (CryptolToLean.SAWCorePrimitives.Stream Nat)
+CryptolToLean.SAWCorePreludeExtra.streamScanl
 but is expected to have type
-Except String
+FAIL: emitted Lean artifact did not compile
