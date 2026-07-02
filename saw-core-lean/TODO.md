@@ -179,6 +179,21 @@ Current implementation priority after the 2026-07-01 audit:
    emission and testing layers are stable. It is required before a final
    soundness claim, but it is not the present blocker.
 
+2026-07-02 example-refresh checkpoint:
+
+- The default example sweep now has 18 classified driver failures; every
+  `proofs/*` and `support-proofs/*` row passes in the current harness.
+- `drivers/cryptol_module_rec_ones` and
+  `drivers/cryptol_module_stream_fibs` are current-emission smoke tests for
+  stream/fix proof-carrying output. They elaborate with explicit
+  `saw_mkStream_total_exists` and `saw_fix_unique_exists` obligations, but
+  they are not proof-discharge examples because the generated local
+  obligations are still placeholders.
+- The live blocking rows are now wrapper/recursor conventions, direct-vector
+  fallback/defaulting cleanup, higher-order checked index wrappers, recurrence
+  proof gaps, `sequences.t18`, and large crypto/LLVM stress examples. Preserve
+  those failures until each has a principled emission or proof-support path.
+
 ## Priority 0: Test Harness Integrity
 
 - [x] Track all files required by true differential tests.

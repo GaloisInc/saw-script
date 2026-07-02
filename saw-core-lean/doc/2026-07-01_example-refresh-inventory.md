@@ -19,28 +19,18 @@ Commands run from `deps/saw-script`:
   pinned known gaps. This remains a guardrail, not a full parity claim.
 - `make -C otherTests/saw-core-lean clean`: passed and removed generated
   artifacts after the exploratory runs.
-- 2026-07-02 `make -C otherTests/saw-core-lean test`: still reports the same
-  18 classified driver failures. The default sweep now runs both `proofs/*`
-  and `support-proofs/*`; every row in those two buckets passed.
+- 2026-07-02 `make -C otherTests/saw-core-lean test`: reports 18 classified
+  driver failures. The default sweep now runs both `proofs/*` and
+  `support-proofs/*`; every row in those two buckets passed.
 
-The full-suite failures were:
+The current full-suite failures are:
 
-- `drivers/arithmetic`
-- `drivers/conformance_bitvector`
-- `drivers/conformance_scalar`
-- `drivers/conformance_scalar_extra`
 - `drivers/conformance_stream`
-- `drivers/conformance_string_bytes`
 - `drivers/conformance_vector`
 - `drivers/conformance_vector_zip`
-- `drivers/conformance_zero_divisor_obligations`
 - `drivers/cryptol_chacha20_core_iterate`
 - `drivers/cryptol_chacha20_iround_zero`
-- `drivers/cryptol_chained_projection_share`
-- `drivers/cryptol_module_enum`
-- `drivers/cryptol_module_error_string`
 - `drivers/cryptol_module_popcount`
-- `drivers/cryptol_module_rational`
 - `drivers/cryptol_module_salsa20_q`
 - `drivers/cryptol_module_simple`
 - `drivers/cryptol_polymorphic_class_dict`
@@ -51,9 +41,7 @@ The full-suite failures were:
 - `drivers/llvm_eq_u128_verify`
 - `drivers/llvm_popcount_verify`
 - `drivers/llvm_salsa20_q_verify`
-- `drivers/offline_lean`
 - `drivers/offline_lean_popcount32`
-- `drivers/sawcore_prelude_auto_emit`
 - `drivers/sequences`
 
 Observed failure families:
@@ -121,12 +109,12 @@ the row is already handled or still needs refresh, reduction, or movement.
 | `drivers/cryptol_module_point` | `current-emission` | Focused driver passes; no current golden drift. | Record/tuple rows pass; proof counterpart separate. | Keep as current Point exercise emission smoke. |
 | `drivers/cryptol_module_popcount` | `stress` | Full suite failed. | BV/proof ergonomics and large proof obligations. | Keep out of conformance; mine small blockers only. |
 | `drivers/cryptol_module_rational` | `current-emission` | Focused driver passes after reviewed rational nonzero-obligation golden refresh. | `differential/rational_scalar`, partial rational obligations. | Keep as whole-module emission smoke; rational proof/library gaps remain pinned separately. |
-| `drivers/cryptol_module_rec_ones` | `backend-gap` | Full suite failed. | Generic `fix`/stream obligation surfaces. | Link to minimal fix/stream rows before backend work. |
+| `drivers/cryptol_module_rec_ones` | `current-emission` | Focused driver passes; current artifact elaborates with explicit `saw_mkStream_total_exists` and `saw_fix_unique_exists` obligations. | `obligations/mkstream_total`, `obligations/fix_wrapped_unique`, stream totality rows. | Keep as proof-carrying stream/fix emission smoke. Do not count as proof discharge, and do not treat the remaining local `by sorry` obligations as solved. |
 | `drivers/cryptol_module_record_update` | `current-proof` | Focused driver passes, and `proofs/point_shift_property` checks against the current emitted module. | `differential/record_update`; `proofs/point_shift_property`. | Keep as generated proof-backend example for record-update behavior. |
 | `drivers/cryptol_module_salsa20_q` | `stress` | Full suite failed. | Large BV/crypto proof surface. | Keep stress; mine small blockers only. |
 | `drivers/cryptol_module_sha_sigma` | `current-emission` | Full suite passed. | Crypto primitive litmus rows cover smaller gaps. | Keep as current emission smoke. |
 | `drivers/cryptol_module_simple` | `backend-gap` | Lean elaboration fails when wrapped Eq dictionary evidence is passed to raw `RecordType.rec`. | Same wrapped dictionary/record-rec surface as `cryptol_polymorphic_class_dict`; reduced by `differential/cryptol_vector_eq_dictionary`. | Do not refresh; needs principled raw/wrapped record-rec/dictionary convention. |
-| `drivers/cryptol_module_stream_fibs` | `backend-gap` | Full suite failed. | Stream/fix rows. | Needs stream/recursor design, not a fixture patch. |
+| `drivers/cryptol_module_stream_fibs` | `current-emission` | Focused driver passes; current artifact elaborates with explicit stream totality and fixed-point uniqueness obligations. | `obligations/mkstream_total`, `obligations/fix_wrapped_unique`, stream totality rows. | Keep as proof-carrying stream/fix emission smoke. Do not count as proof discharge, and do not hide the remaining local proof placeholders. |
 | `drivers/cryptol_polymorphic_class_dict` | `backend-gap` | Lean elaboration fails when wrapped Eq dictionary evidence is passed to raw `RecordType.rec`. | Wrapped dictionary/record-rec convention gap, reduced by `differential/cryptol_vector_eq_dictionary`. | Do not refresh; needs principled raw/wrapped record-rec/dictionary convention. |
 | `drivers/cryptol_primitives_auto_emit` | `current-emission` | Full suite passed. | Command-level Rocq parity. | Keep. |
 | `drivers/cryptol_running_sum_verify` | `proof-gap` | Full suite failed; explicit gap note exists. | `proof-gaps/cryptol_running_sum_verify`; generic fix/proof-carrying recurrence surface. | Keep as proof gap; do not restore deleted recurrence helpers. |
@@ -389,10 +377,12 @@ unreviewed safe refreshes:
    `drivers/cryptol_module_record_update` both pass focused tests against the
    current emitted artifact; keep this as a current proof-backend example. `E3`
    is repaired and `E4`/`E5` are explicit proof gaps.
-4. Do not refresh `conformance_stream`, `sequences.t18`, `implRev4`, stream
-   module examples, or large crypto/LLVM examples as a way to make the harness
-   green. Each currently points at a real backend/design/proof-ergonomics
-   blocker.
+4. Do not refresh `conformance_stream`, `sequences.t18`, `implRev4`, or large
+   crypto/LLVM examples as a way to make the harness green. Each currently
+   points at a real backend/design/proof-ergonomics blocker. The stream module
+   examples `cryptol_module_rec_ones` and `cryptol_module_stream_fibs` are
+   already classified as current emission smoke only; they still expose local
+   stream/fix obligations and are not proof-discharge successes.
 5. Completed: legacy support-library proof rows moved from
    `proofs/conformance_*` and `proofs/cookbook` to `support-proofs/*`, which
    runs in the default sweep while keeping `proofs/` reserved for generated
