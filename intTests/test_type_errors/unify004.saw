@@ -1,10 +1,11 @@
 //
-// Exercise failure of the first unify call (via checkExpr) in the
-// Application case of inferExpr. This is the check of the function
-// against (->).
+// Exercise failure of the unify call in the TyFunc case of the
+// Application case of inferExpr. This is the case where we retrieve a
+// function type from the environment and then unify its parameters
+// with the arguments given.
 //
 
-let q = 3;
-let x = q 6;
+let q (a: Int) () = a;
+let x = q () ();
 
 

@@ -1,0 +1,3 @@
+Loading file "err068.saw"
+err068.saw:5:10-5:11: Invalid named argument x: No such named parameter
+FAILED

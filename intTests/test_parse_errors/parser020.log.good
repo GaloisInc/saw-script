@@ -1,0 +1,3 @@
+Loading file "parser020.saw"
+parser020.saw:2:9-2:10: Error: Invalid name for named parameter
+FAILED

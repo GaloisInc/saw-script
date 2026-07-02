@@ -1,0 +1,12 @@
+let f a?=1 b?=2 c?=3 d?=4 () = {{ `a + `b + `c + `d }};
+print (f ());
+print (f () a=2);
+print (f () a=2 c=5);
+
+let g () d?=1 c?=2 b?=3 a?=4 = {{ `a + `b + `c + `d }};
+print (g ());
+print (g a=2 ());
+print (g c=5 a=2 ());
+
+// These are the same type and can go in a list together
+let fg = [f, g];

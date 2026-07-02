@@ -1,0 +1,5 @@
+// calling a function with a nonexistent named parameter
+
+let f a?=0 () = ();
+
+print (f x=3 ());

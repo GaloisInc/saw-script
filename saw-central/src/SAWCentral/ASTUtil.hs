@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module SAWCentral.ASTUtil (
@@ -39,9 +40,18 @@ instance (Ord k, NamedTyVars a) => NamedTyVars (Map k a) where
 instance (NamedTyVars a) => NamedTyVars [a] where
   namedTyVars = Map.unionsWith choosePos . map namedTyVars
 
+instance (NamedTyVars a) => NamedTyVars (Pos, a) where
+  namedTyVars (_pos, x) = namedTyVars x
+
 instance NamedTyVars Type where
   namedTyVars t = case t of
     TyCon _ _ ts      -> namedTyVars ts
+    TyFunc _ _ params namedParams ret ->
+        let paramVars = namedTyVars params
+            namedParamVars = namedTyVars namedParams
+            retVars = namedTyVars ret
+        in
+        Map.unionWith choosePos (Map.unionWith choosePos paramVars namedParamVars) retVars
     TyRecord _ tm     -> namedTyVars tm
     TyVar pos n       -> Map.singleton n pos
     TyUnifyVar _ _    -> Map.empty
@@ -82,9 +92,21 @@ instance (SubstituteTyVars a) => SubstituteTyVars (Maybe a) where
 instance (SubstituteTyVars a) => SubstituteTyVars [a] where
   substituteTyVars avail tyenv = map (substituteTyVars avail tyenv)
 
+instance (SubstituteTyVars a) => SubstituteTyVars (Map k a) where
+  substituteTyVars avail tyenv m = Map.map (substituteTyVars avail tyenv) m
+
+instance (SubstituteTyVars a) => SubstituteTyVars (pos, a) where
+  substituteTyVars avail tyenv (pos, x) = (pos, substituteTyVars avail tyenv x)
+
 instance SubstituteTyVars Type where
   substituteTyVars avail tyenv ty = case ty of
     TyCon pos tc ts     -> TyCon pos tc (substituteTyVars avail tyenv ts)
+    TyFunc pos nameinfo params namedParams ret ->
+        let params' = substituteTyVars avail tyenv params
+            namedParams' = substituteTyVars avail tyenv namedParams
+            ret' = substituteTyVars avail tyenv ret
+        in
+        TyFunc pos nameinfo params' namedParams' ret'
     TyRecord pos fs     -> TyRecord pos (fmap (substituteTyVars avail tyenv) fs)
     TyUnifyVar _ _      -> ty
     TyVar _ n           ->
@@ -120,9 +142,21 @@ instance (SubstituteTyVars' a) => SubstituteTyVars' (Maybe a) where
 instance (SubstituteTyVars' a) => SubstituteTyVars' [a] where
   substituteTyVars' avail tyenv = map (substituteTyVars' avail tyenv)
 
+instance (SubstituteTyVars' a) => SubstituteTyVars' (Map k a) where
+  substituteTyVars' avail tyenv m = Map.map (substituteTyVars' avail tyenv) m
+
+instance (SubstituteTyVars' a) => SubstituteTyVars' (pos, a) where
+  substituteTyVars' avail tyenv (pos, x) = (pos, substituteTyVars' avail tyenv x)
+
 instance SubstituteTyVars' Type where
   substituteTyVars' avail tyenv ty = case ty of
     TyCon pos tc ts     -> TyCon pos tc (substituteTyVars' avail tyenv ts)
+    TyFunc pos nameinfo params namedParams ret ->
+        let params' = substituteTyVars' avail tyenv params
+            namedParams' = substituteTyVars' avail tyenv namedParams
+            ret' = substituteTyVars' avail tyenv ret
+        in
+        TyFunc pos nameinfo params' namedParams' ret'
     TyRecord pos fs     -> TyRecord pos (fmap (substituteTyVars' avail tyenv) fs)
     TyUnifyVar _ _      -> ty
     TyVar _ n           ->

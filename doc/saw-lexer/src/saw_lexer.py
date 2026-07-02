@@ -30,9 +30,9 @@ class SAWScriptLexer(RegexLexer):
             (r"\{\{|\{\|", Literal, "cryptol"),
             # Symbols
             (r"<-|->|==>", Operator.Word),
-            (r"~|-|\*|\+|/|%|\^|#|>>|>=|>|<<|<=|<|==|!=|&&|&|\|\||\||@", Operator),
-            (r"=", Operator.Word),
-            (r",|;|\(|\)|::|:|\[|\]|\{|\}|\.|\\", Punctuation),
+            (r"~|-|\*|\+|/|%|\^|#|>>|>=|>|<<|<=|<|==|!=|&&|&|\|\||\|", Operator),
+            (r"=|\?=|@", Operator.Word),
+            (r",|;|\(|\)|::|:|\[|\]|\{|\}|\.|\\|\?", Punctuation),
 
             # Identifiers of various kinds
             # These require at least a space after (so we don't eat part of some

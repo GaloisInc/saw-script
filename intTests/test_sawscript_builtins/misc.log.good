@@ -31,7 +31,7 @@ Environment variable not found: SAW_MISSING_ENV
 ("f", "\\ () -> ()")
 ("do { return 0; }", "do { (return) 0; }")
 ("(record)", "{ x = 3, y = \"abc\" }")
-("\\x -> 3", "\\ (x : t.7) -> 3")
+("\\x -> 3", "\\ (x : t.3) -> 3")
 ("return 3", "return 3")
 ("(TopLevel)", "<<TopLevel>>")
 ("(ProofScript)", "<<proof script>>")

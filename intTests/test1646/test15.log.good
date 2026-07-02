@@ -428,7 +428,7 @@ simplify_local : [Int] -> Simpset -> ProofScript ()
 simpset_union : Simpset -> Simpset -> Simpset
 size_to_term : Type -> Term
 str_concat : String -> String -> String
-str_concats : [String] -> String
+str_concats : [String] -> sep?String -> String
 tail : {a} [a] -> [a]
 term_apply : Term -> [Term] -> Term
 term_eval : Term -> Term

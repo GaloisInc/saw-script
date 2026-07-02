@@ -1,0 +1,16 @@
+// It is possible for default argument expressions to be effecting,
+// at least as long as we have "run" and "undefined".
+//
+// Test this to make sure we don't accidentally break or alter the
+// behavior.
+//
+// Don't try this at home either, kids.
+
+print "Binding time.";
+let f x?=(run (print "hi")) () = ();
+
+print "No value given.";
+print (f ());
+
+print "With value given.";
+print (f x=() ());

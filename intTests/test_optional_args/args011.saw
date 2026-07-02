@@ -1,0 +1,7 @@
+// Calling another function from the same recursive declaration group
+// also works. But isn't recommended.
+
+rec f s t?=(g "hi") = str_concat s t
+and g s = str_concat "~" (str_concat s "~");
+
+print (f "aa");

@@ -1,0 +1,6 @@
+// This should fail with duplicate named parameters.
+
+typedef q = x?Int -> () -> Int;
+
+let f x?=2 (g: q) = g;
+

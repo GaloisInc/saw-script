@@ -1,0 +1,5 @@
+let f a?=1 b?=2 c?=3 () = 0;
+let g a?=1 b?=2 d?=3 () = 0;
+
+// These are not the same type and this will fail
+let fg = [f, g];

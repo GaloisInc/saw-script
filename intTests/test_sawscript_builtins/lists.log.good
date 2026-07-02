@@ -61,6 +61,8 @@ str_concat:
 ("defgabc", "defgabc")
 ("", "")
 ("abc", "abc")
+("a, b, c", "a, b, c")
+("a, b, c", "a, b, c")
 *** for (empty) ***
 *** for (one) ***
 1

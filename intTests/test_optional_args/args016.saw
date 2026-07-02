@@ -1,0 +1,4 @@
+// This should fail with duplicate named parameters.
+
+let f x?=2 () = x;
+let g x?=3 () = \() -> f;

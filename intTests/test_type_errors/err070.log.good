@@ -1,0 +1,3 @@
+Loading file "err070.saw"
+err070.saw:3:12-3:13: Error: Duplicate named parameter x
+FAILED
