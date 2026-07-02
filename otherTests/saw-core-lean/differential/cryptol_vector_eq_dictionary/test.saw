@@ -1,0 +1,23 @@
+// TRUE differential known-gap litmus for PEqSeq over a finite non-Boolean
+// element.
+//
+// The SAW side executes vector equality. The Lean side must import the emitted
+// artifact and observe that same term, but current emission passes a wrapped
+// sequence equality dictionary from `Num#rec` to raw `RecordType.rec`. This
+// row pins the small backend gap exposed by larger whole-module examples such
+// as `cryptol_module_simple`.
+
+let fn =
+  parse_core
+    "\\(n : Num) -> \\(x : seq n (Vec 4 Bool)) -> ecEq (seq n (Vec 4 Bool)) (PEqSeq n (Vec 4 Bool) (PEqWord 4)) x x";
+
+let observed =
+  parse_core
+    "((\\(n : Num) -> \\(x : seq n (Vec 4 Bool)) -> ecEq (seq n (Vec 4 Bool)) (PEqSeq n (Vec 4 Bool) (PEqWord 4)) x x) (TCNum 2) (gen 2 (Vec 4 Bool) (\\(i : Nat) -> 0xa)))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  fn;

@@ -22,14 +22,16 @@ namespace RationalProbe
     v_1)))
 
   noncomputable def half : Except String Rational :=
-    Bind.bind (Pure.pure (natToInt (CryptolToLean.SAWCorePrimitives.natPos_macro
+    let h_nonzero_obligation_ : (Prop) := (Not (@Eq (Except String Int)
+    (Pure.pure (natToInt (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro))))
-    (fun v_divisor_ => let h_nonzero_divisor_obligation_ : (Prop) := (Not (@Eq
-    Int v_divisor_ (0 : Int)));
-    let h_nonzero_divisor_ : (h_nonzero_divisor_obligation_) := ((by sorry));
-    Bind.bind (Pure.pure (natToInt (CryptolToLean.SAWCorePrimitives.natPos_macro
-    CryptolToLean.SAWCorePrimitives.one_macro))) (fun v_dividend_ => Pure.pure
-    (ratioChecked v_dividend_ v_divisor_ h_nonzero_divisor_)))
+    CryptolToLean.SAWCorePrimitives.one_macro)))) (Pure.pure 0)));
+    let h_nonzero_ : (h_nonzero_obligation_) := ((by (try unfold h_nonzero_obligation_); (first | assumption | skip); all_goals sorry));
+    ratio_checkedM (Pure.pure (natToInt
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))) (Pure.pure (natToInt
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) h_nonzero_
 
 end RationalProbe

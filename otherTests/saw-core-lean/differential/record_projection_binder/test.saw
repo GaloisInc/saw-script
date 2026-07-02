@@ -1,0 +1,19 @@
+// TRUE differential litmus for record projection from a source binder.
+//
+// This pins the Phase-beta shadowing shape used by proof obligations such as
+// E3: the source binder is introduced raw by the forall/lambda, then the
+// generated body shadows it with `Pure.pure`. A value-producing
+// `RecordType.rec` over that shadowed binder must bind the wrapped scrutinee
+// before calling Lean's raw recursor.
+
+let fn = {{ \(p : { x : [8], y : [8] }) -> p.x }};
+
+let observed =
+  {{ ((\(p : { x : [8], y : [8] }) -> p.x) { x = 42, y = 100 }) == 42 }};
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  fn;

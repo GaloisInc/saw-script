@@ -1,8 +1,5 @@
-failed to synthesize instance of type class
-Pure CryptolToLean.SAWCorePrimitives.Stream
-Bind CryptolToLean.SAWCorePrimitives.Stream
-saw_mkStream_choose
-Except String (CryptolToLean.SAWCorePrimitives.Stream Nat)
-CryptolToLean.SAWCorePreludeExtra.streamScanl
+Application type mismatch
+s (natPos_macro (bit1_macro one_macro))
 but is expected to have type
+pure (s (natPos_macro (bit1_macro one_macro)))
 FAIL: emitted Lean artifact did not compile

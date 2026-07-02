@@ -10,6 +10,12 @@ under checked automation. Keeping them out of `proofs/` prevents the default
 regression suite from treating native-axiom or unavailable automation as a green
 proof-discharge path.
 
+Small proof examples can also live here when the backend now emits a sound
+proof-carrying obligation but the proof-support phase has not yet discharged
+that obligation. For example, E4/E5 now expose checked vector bounds contracts
+inside the generated artifact; treating their old pre-obligation scripts as
+green proof discharges would be false.
+
 To work on one manually, enter the subdirectory and run:
 
 ```sh

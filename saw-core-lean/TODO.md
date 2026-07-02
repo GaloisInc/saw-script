@@ -1329,6 +1329,102 @@ Current implementation priority after the 2026-07-01 audit:
 
 ## Priority 4: Proof Ergonomics
 
+- [ ] Refresh the example/proof corpus as product workflow coverage.
+  - Goal document:
+    `doc/2026-07-01_example-proof-backend-refresh-goal.md`.
+  - Current inventory:
+    `doc/2026-07-01_example-refresh-inventory.md`.
+  - This phase treats examples as instances of the intended SAW-Lean use case:
+    SAW emits a Lean proof obligation, a user/assistant supplies a Lean proof,
+    and Lean checks that proof against the current emitted artifact.
+  - The task is classification plus principled repair, not "make all old
+    examples green". Every example should become a current proof-backend
+    example, current emission example, explicit proof gap, backend gap, final
+    boundary, stress case, or retired legacy example.
+  - If an example cannot be completed without backend design work, reduce or
+    link it to a minimal conformance/obligation/boundary row and record the
+    blocker here before moving on.
+  - 2026-07-01 baseline after the E-series checkpoint: full
+    `make -C otherTests/saw-core-lean test` reports 30 failures, all in
+    driver/example emission surfaces, while the conformance, obligation,
+    boundary, and default proof-harness categories behave as intended. The
+    failures are mostly stale checked-obligation goldens, stream/recursor gaps,
+    under-applied proof-carrying/indexing gaps, and large Cryptol/LLVM examples
+    now exposing proof-carrying obligations.
+  - 2026-07-01 inventory checkpoint: every current
+    `drivers/*`, `proofs/*`, `proof-gaps/*`, and `stretch/*` row has an
+    initial classification. The immediate small-example candidates are
+    reviewed refreshes for `offline_lean`, `offline_lean_e_series`,
+    `arithmetic`, and the small conformance-style driver goldens. Do not
+    refresh or hide the real blockers: `conformance_stream`, `sequences.t18`,
+    `implRev4`, stream/fix module examples, and large crypto/LLVM rows remain
+    backend-gap, proof-gap, or stress items until reduced or handled by a
+    principled design.
+  - Follow-up decision needed after the first proof repair pass: move
+    support-library-only rows such as `proofs/conformance_*` and
+    `proofs/cookbook` out of the proof-backend example surface, or keep them
+    clearly labeled as support regressions rather than generated proof
+    discharge examples.
+  - 2026-07-01 E-series checkpoint: `E3_point_commutes` is back in the
+    current-proof set after a principled recursor/binder shape fix pinned by
+    `differential/record_projection_binder`. `E4_map_id` and
+    `E5_littleendian` moved to `proof-gaps/` because current emission exposes
+    the intended checked bounds obligations with local proof placeholders;
+    treating the old pre-obligation proofs as green would be false. The
+    `offline_lean_e_series` driver goldens were reviewed and refreshed only for
+    this current proof-carrying emission shape.
+  - 2026-07-01 `offline_lean` checkpoint: focused driver now passes after a
+    reviewed `t6` refresh. The diff is the expected move from
+    `genM`/`atWithDefaultM`/fallback indexing to `genWithBoundsM`,
+    `atWithProof_checkedM`, and visible bounds obligations for the small
+    reverse property. This is current emission coverage, not proof discharge;
+    no Lean automation or Haskell-side bounds reasoning was added.
+  - 2026-07-01 `arithmetic` checkpoint: focused driver now passes after
+    reviewed refreshes for `t2`, `t3`, `t4`, `t11`, and `t12`. The refreshed
+    goldens expose checked BV nonzero obligations for division/remainder and
+    checked bounds obligations for bitvector extension indexing. This is
+    current emission coverage, not proof discharge; do not add backend
+    arithmetic reasoning or Lean automation to make these obligations vanish.
+  - 2026-07-01 small conformance-style driver checkpoint:
+    `conformance_bitvector`, `conformance_scalar`,
+    `conformance_scalar_extra`, `conformance_string_bytes`, and
+    `conformance_zero_divisor_obligations` now pass focused driver tests after
+    reviewed checked-obligation golden refreshes. They remain legacy smoke
+    examples; the real conformance gate is the differential/obligation suite.
+  - 2026-07-01 vector driver classification: do not refresh
+    `conformance_vector` or `conformance_vector_zip` yet. Their current
+    generated artifacts still contain legacy `atWithDefaultM` fallback paths,
+    so they are backend gaps for direct vector-helper proof-carrying migration,
+    not valid current-emission baselines to bless.
+  - 2026-07-01 small whole-module/projection checkpoint:
+    `cryptol_chained_projection_share`, `cryptol_module_enum`,
+    `cryptol_module_error_string`, and `cryptol_module_rational` now pass
+    focused driver tests after reviewed golden refreshes. These are current
+    emission smoke rows only; enum/ListSort, source-level error,
+    partial-operation, and rational proof/library conformance remain tracked by
+    the focused differential/obligation rows.
+  - 2026-07-01 prelude auto-emit checkpoint: `sawcore_prelude_auto_emit` now
+    passes again after a general recursor motive-shape fix. Opaque local type
+    families of type `... -> Sort u` stay raw rather than being mistaken for
+    value-domain motives and wrapped with `Pure.pure`; the record-projection
+    binder regression and E-series driver still pass.
+  - 2026-07-01 full-harness checkpoint after reviewed refreshes: full
+    `make -C otherTests/saw-core-lean test` now reports 18 driver failures.
+    The remaining failures are classified blockers, not safe unreviewed
+    golden drift: stream/recursor wrapping, direct vector `atWithDefaultM`
+    fallback migration, wrapped dictionary/record-rec gaps, under-applied
+    proof-carrying `at`, recurrence/bounds proof gaps, and large crypto/LLVM
+    stress rows.
+  - 2026-07-01 wrapped dictionary/record-rec reduction checkpoint: added
+    `differential/cryptol_vector_eq_dictionary` as a minimal known-gap row for
+    the failure exposed by `cryptol_module_simple` and
+    `cryptol_polymorphic_class_dict`. SAW executes the function-valued
+    `PEqSeq` example, Lean imports the emitted artifact, and the harness pins
+    the current diagnostic where an Eq dictionary is available as
+    `Except String (RecordType ...)` but `RecordType.rec` expects the raw
+    record. Do not fix this by rawifying the dictionary; use the existing
+    wrapping/convention design or emit an explicit obligation.
+
 - [ ] Refresh generated goldens and proof examples after proof-carrying
   emission changes.
   - The default `otherTests/saw-core-lean` sweep no longer treats full SHA512 as

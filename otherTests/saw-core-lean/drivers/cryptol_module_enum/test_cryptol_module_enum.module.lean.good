@@ -19,7 +19,7 @@ namespace EnumProbe
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)) :=
-    genM (CryptolToLean.SAWCorePrimitives.natPos_macro
+    genWithBoundsM (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit1_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -31,7 +31,12 @@ namespace EnumProbe
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)
-    (fun (i : Nat) => Pure.pure (bvNat
+    (fun (i : Nat) (h_gen_bounds_ : LT.lt i
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit1_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro))))) => Pure.pure (bvNat
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -54,7 +59,7 @@ namespace EnumProbe
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)) :=
-    genM (CryptolToLean.SAWCorePrimitives.natPos_macro
+    genWithBoundsM (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit1_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro))) (Vec
@@ -65,7 +70,11 @@ namespace EnumProbe
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)
-    (fun (i : Nat) => Pure.pure (bvNat
+    (fun (i : Nat) (h_gen_bounds_ : LT.lt i
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit1_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) => Pure.pure (bvNat
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro

@@ -600,6 +600,19 @@ isVariableHead t = case unwrapTermF t of
   App f _ -> isVariableHead f
   _ -> False
 
+-- | True when the head is an opaque local type family, e.g.
+-- @p : (y : t) -> Eq t x y -> Sort u@ used as @p y pf@.
+-- Such a term is type-producing, but Haskell cannot know whether
+-- the family returns a value-domain type, a proposition, or a
+-- higher universe. Keep it raw and let Lean check the motive.
+isVariableHeadTypeFamily :: Term -> Bool
+isVariableHeadTypeFamily t =
+  case unwrapTermF (fst (asApplyAll t)) of
+    Variable _ fty -> case snd (asPiList fty) of
+      ret | Just _ <- asSort ret -> True
+      _                          -> False
+    _ -> False
+
 -- | For a SAW function type @(x₁ : T₁) → … → (xₙ : Tₙ) → R@,
 -- compute the 0-based positions of the *type-arg* binders. A
 -- binder is a type-arg if its variable appears free in any
@@ -694,6 +707,7 @@ isTypeProducing :: TermTranslationMonad m => Term -> m Bool
 isTypeProducing t
   | Just _ <- asSort t = pure True
   | Just _ <- asPi t   = pure True
+  | isVariableHeadTypeFamily t = pure True
   | otherwise = case unwrapTermF t of
       Lambda _ _ body -> isTypeProducing body
       App {} -> case asGlobalDef head_ of
@@ -3200,16 +3214,24 @@ translateRecursorAppWithShape crec args = do
        let motiveArg = preScrut !! nParams
            (_, motiveBody) = asLambdaList motiveArg
        motiveReturnsType <- isTypeProducing motiveBody
-       let motiveReturnsProof = case termSortOrType motiveBody of
+       let motiveReturnsOpaqueTypeFamily =
+             isVariableHeadTypeFamily motiveBody
+           motiveResultIsValue =
+             functionConventionResultIsValue motiveBody
+             && not motiveReturnsOpaqueTypeFamily
+           motiveReturnsProof = case termSortOrType motiveBody of
              Left s  -> s == propSort
              Right _ -> False
-           motiveReturnsRaw = motiveReturnsType || motiveReturnsProof
+           motiveReturnsRaw =
+             motiveReturnsProof ||
+             motiveReturnsOpaqueTypeFamily ||
+             (motiveReturnsType && not (scrutWrapped && motiveResultIsValue))
            motiveReturnsWrappedValue =
              scrutWrapped
              && not motiveReturnsRaw
-             && functionConventionResultIsValue motiveBody
+             && motiveResultIsValue
            recursorReturnsValue =
-             not motiveReturnsRaw && functionConventionResultIsValue motiveBody
+             not motiveReturnsRaw && motiveResultIsValue
        paramTrans <- traverse translateTerm paramArgs
        casePlans <- recursorCasePlans paramTrans crec
        preTrans <- sequence (zipWith
@@ -3385,7 +3407,22 @@ translateCaseHandler motiveReturnsRaw expectedWrappedResult casePlan caseTerm = 
       \fieldBinders rawFieldBinders normalParams ->
         -- Clear the flag before body translation: Phase beta's body
         -- lift rules should fire normally inside the case body.
-        localTR (set inRecursorCaseBinder surroundingFlag) $
+        -- Value fields shadowed at recursor entry are already lifted for a
+        -- wrapped-value motive, so later variable uses must be treated as
+        -- wrapped rather than lifted a second time.
+        let valueShadowNames =
+              [ binderName binder
+              | (binder, (_, sawTy)) <- rawFieldBinders
+              , functionConventionResultIsValue sawTy
+              ]
+            markValueShadows =
+              if motiveReturnsRaw
+                 then id
+                 else over bindingShapes
+                        (\m -> foldr (`Map.insert` BindingWrapped) m
+                                  valueShadowNames)
+        in localTR (set inRecursorCaseBinder surroundingFlag
+                    . markValueShadows) $
           translateBinders normalParams $ \normalParamTerms -> do
             body' <-
               if motiveReturnsRaw
@@ -3872,7 +3909,9 @@ translateTermUnshared t =
                     -- Type), don't wrap — they're not value-
                     -- domain. 'shouldWrapBinder' is the same
                     -- predicate the Pi case uses for its body.
-                    let body'' = if phase && shouldWrapBinder body
+                    let body'' = if phase
+                                    && shouldWrapBinder body
+                                    && not (isVariableHeadTypeFamily body)
                                     then wrapExcept body'
                                     else body'
                     pure (Lean.Lambda paramTerms body'')

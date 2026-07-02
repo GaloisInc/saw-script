@@ -1,0 +1,4 @@
+PEqSeq over a finite non-Boolean element currently constructs the sequence
+equality dictionary through Num#rec, then projects that wrapped dictionary
+through raw RecordType.rec. This is a backend wrapping-convention gap, not a
+final boundary.

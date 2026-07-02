@@ -8,9 +8,9 @@ open CryptolToLean.SAWCoreVectors
 
 noncomputable def ZeroDivModNatObligation : Except String (PairType Nat
   (PairType Nat UnitType)) :=
-  let h_nonzero_divisor_obligation_ : (Prop) := (Not (@Eq Nat
+  let h_nonzero_obligation_ : (Prop) := (Not (@Eq Nat
   CryptolToLean.SAWCorePrimitives.zero_macro 0));
-  let h_nonzero_divisor_ : (h_nonzero_divisor_obligation_) := ((by sorry));
-  Pure.pure (divModNatChecked (CryptolToLean.SAWCorePrimitives.natPos_macro
+  let h_nonzero_ : (h_nonzero_obligation_) := ((by (try unfold h_nonzero_obligation_); (first | assumption | skip); all_goals sorry));
+  Pure.pure (divModNat_checked (CryptolToLean.SAWCorePrimitives.natPos_macro
   CryptolToLean.SAWCorePrimitives.one_macro)
-  CryptolToLean.SAWCorePrimitives.zero_macro h_nonzero_divisor_)
+  CryptolToLean.SAWCorePrimitives.zero_macro h_nonzero_)

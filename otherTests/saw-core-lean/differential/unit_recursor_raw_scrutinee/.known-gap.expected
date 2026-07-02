@@ -1,7 +1,7 @@
-Application type mismatch
-has type
-Except String UnitType
+Type mismatch
+let scrut_ ← u
+UnitType.rec (pure (natPos_macro (bit1_macro (bit1_macro one_macro)))) scrut_
+Except String Nat
 but is expected to have type
-UnitType
-UnitType.rec
+Nat
 FAIL: emitted Lean artifact did not compile
