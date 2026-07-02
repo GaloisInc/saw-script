@@ -50,7 +50,9 @@
 #                          crypto goals that currently require `bv_decide`
 #                          native axioms or exceed current checked automation.
 #                          Run manually with the proof harness when working on
-#                          that obligation.
+#                          that obligation. The default sweep and the `gaps`
+#                          verb inventory these directories so they cannot
+#                          become invisible skipped tests.
 #
 #   shape/<name>/          Hand-rolled NEGATIVE Lean probes
 #                          (*.shouldfail.lean) that pin support-library
@@ -93,6 +95,8 @@
 #                    remain. Use this for the final parity gate.
 #   good           — refresh *.log.good and *.lean.good in every driver
 #                    and saw-boundary subdir (no effect on proofs/shape).
+#   gaps           — validate and report proof-gaps/* and stretch/* inventory
+#                    without trying to make those gaps pass.
 #   clean          — clean transient outputs across all subdirs.
 #
 # Design rules (do not violate without rewriting this comment block):
@@ -109,6 +113,8 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
 
+verb="${1:-test}"
+
 # -----------------------------------------------------------------------------
 # SAW availability check. Driver / saw-boundary harnesses invoke
 # `$SAW <test>.saw`; without `SAW` set, every per-test harness fails
@@ -119,9 +125,12 @@ cd "$HERE"
 # run gated). cabal test path sets SAW=eval saw via Test.hs and puts
 # the saw binary on PATH via build-tool-depends; manual local runs
 # need `make` (which discovers the dist-newstyle binary) or an
-# explicit `SAW=...`.
-if [ -z "${SAW:-}" ]; then
-    cat >&2 <<'EOF'
+# explicit `SAW=...`. Inventory-only and cleanup verbs do not need SAW.
+case "$verb" in
+    gaps|proof-gaps|clean) ;;
+    *)
+        if [ -z "${SAW:-}" ]; then
+            cat >&2 <<'EOF'
 FAIL: SAW environment variable is not set.
 
 This orchestrator runs the saw-core-lean translator end-to-end:
@@ -138,8 +147,10 @@ How to fix:
 
 See otherTests/saw-core-lean/Makefile for the local-dev path.
 EOF
-    exit 1
-fi
+            exit 1
+        fi
+        ;;
+esac
 
 # -----------------------------------------------------------------------------
 # Failure tracking. We accumulate failures and print them at the end.
@@ -205,6 +216,16 @@ print_summary_and_exit() {
     for f in "${failures[@]}"; do
         echo "  - $f"
     done
+    if [ "${#known_gaps[@]}" -ne 0 ]; then
+        echo
+        echo "${#known_gaps[@]} KNOWN GAP(S) ALSO PINNED:"
+        for g in "${known_gaps[@]}"; do
+            echo "  - $g"
+        done
+        echo
+        echo "Known gaps are tracked failures or stress/proof-gap inventory,"
+        echo "not evidence of full backend conformance."
+    fi
     echo "================================================================"
     exit 1
 }
@@ -241,12 +262,44 @@ iterate_proofs()        { for d in proofs/*/;        do run_one proofs        "$
 iterate_support_proofs() { for d in support-proofs/*/; do run_one support-proofs "$(basename "$d")" lean-proof-test.sh "$@"; done; }
 iterate_shape()         { for d in shape/*/;         do run_one shape         "$(basename "$d")" lean-shape-test.sh   "$@"; done; }
 
+record_gap_inventory_item() {
+    local path="$1"
+    local note="$2"
+    local title
+    if [ -f "$path/GAP.md" ]; then
+        title="$(sed -n 's/^# *//p' "$path/GAP.md" | head -1)"
+    else
+        title="$note"
+    fi
+    record_known_gap "$path${title:+ — $title}"
+}
+
+iterate_gap_inventory() {
+    local d
+
+    for d in proof-gaps/*/; do
+        [ -d "$d" ] || continue
+        if [ ! -f "$d/GAP.md" ]; then
+            echo "FAIL: $d is a proof gap but has no GAP.md note" >&2
+            record_failure "${d%/} (missing GAP.md)"
+        fi
+        if [ ! -f "$d/source.txt" ]; then
+            echo "FAIL: $d is a proof gap but has no source.txt" >&2
+            record_failure "${d%/} (missing source.txt)"
+        fi
+        record_gap_inventory_item "${d%/}" "proof gap"
+    done
+
+    for d in stretch/*/; do
+        [ -d "$d" ] || continue
+        record_known_gap "${d%/} — stress case excluded from default proof/conformance gates"
+    done
+}
+
 # -----------------------------------------------------------------------------
 # Verb dispatch.
 
 shopt -s nullglob
-
-verb="${1:-test}"
 case "$verb" in
     test|run)
         iterate_drivers
@@ -256,6 +309,7 @@ case "$verb" in
         iterate_proofs
         iterate_support_proofs
         iterate_shape
+        iterate_gap_inventory
         print_summary_and_exit
         ;;
     conformance)
@@ -279,6 +333,10 @@ case "$verb" in
         iterate_saw_boundary good
         print_summary_and_exit
         ;;
+    gaps|proof-gaps)
+        iterate_gap_inventory
+        print_summary_and_exit
+        ;;
     clean)
         iterate_drivers clean
         iterate_differential clean
@@ -290,7 +348,7 @@ case "$verb" in
         print_summary_and_exit
         ;;
     *)
-        echo "$0: unknown verb '$verb' (expected: test, run, conformance, conformance-strict, good, clean)" >&2
+        echo "$0: unknown verb '$verb' (expected: test, run, conformance, conformance-strict, good, gaps, proof-gaps, clean)" >&2
         exit 1
         ;;
 esac

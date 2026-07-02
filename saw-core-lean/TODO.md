@@ -181,8 +181,9 @@ Current implementation priority after the 2026-07-01 audit:
 
 2026-07-02 example-refresh checkpoint:
 
-- The default example sweep now has 18 classified driver failures; every
-  `proofs/*` and `support-proofs/*` row passes in the current harness.
+- The default example sweep now has 18 classified driver failures and reports
+  87 pinned known-gap/proof-gap/stress inventory rows; every `proofs/*` and
+  `support-proofs/*` row passes in the current harness.
 - `drivers/cryptol_module_rec_ones` and
   `drivers/cryptol_module_stream_fibs` are current-emission smoke tests for
   stream/fix proof-carrying output. They elaborate with explicit
@@ -1447,6 +1448,12 @@ Current implementation priority after the 2026-07-01 audit:
     `proof-gaps/cryptol_running_sum_verify` and
     `proof-gaps/offline_lean_popcount32` so recurrence/popcount examples are
     visible as proof-support blockers rather than unexplained stale failures.
+  - 2026-07-02 gap-inventory checkpoint: every `proof-gaps/*` directory now has
+    a local `GAP.md` note and `source.txt`, and `make -C
+    otherTests/saw-core-lean gaps` / `make test-saw-core-lean-gaps` reports
+    proof/stress gaps as tracked inventory rather than silent skips. The
+    default sweep also inventories these rows separately from passing
+    proof-discharge examples.
 
 - [ ] Refresh generated goldens and proof examples after proof-carrying
   emission changes.

@@ -20,8 +20,15 @@ Commands run from `deps/saw-script`:
 - `make -C otherTests/saw-core-lean clean`: passed and removed generated
   artifacts after the exploratory runs.
 - 2026-07-02 `make -C otherTests/saw-core-lean test`: reports 18 classified
-  driver failures. The default sweep now runs both `proofs/*` and
-  `support-proofs/*`; every row in those two buckets passed.
+  driver failures and 87 pinned known-gap/proof-gap/stress inventory rows. The
+  default sweep now runs both `proofs/*` and `support-proofs/*`; every row in
+  those two buckets passed. It also inventories `proof-gaps/*` and `stretch/*`
+  so preserved gaps are surfaced in the test summary rather than silent skips.
+- 2026-07-02 `make -C otherTests/saw-core-lean gaps`: reports every
+  `proof-gaps/*` and `stretch/*` row as a tracked gap/stress item and validates
+  that proof-gap directories have local `GAP.md` notes plus `source.txt`.
+  From the repository root, the equivalent named target is
+  `make test-saw-core-lean-gaps`.
 
 The current full-suite failures are:
 
@@ -185,13 +192,13 @@ generated proof-backend discharge examples.
 
 | Path | Classification | Evidence | Linked source | Action |
 | --- | --- | --- | --- | --- |
-| `proof-gaps/cryptol_chacha20_core_iterate` | `proof-gap` | Explicit gap directory; large crypto proof. | `drivers/cryptol_chacha20_core_iterate`. | Keep pinned; no native-eval proof shortcut. |
-| `proof-gaps/cryptol_chacha20_iround_zero` | `proof-gap` | Explicit gap directory; large crypto proof. | `drivers/cryptol_chacha20_iround_zero`. | Keep pinned; no native-eval proof shortcut. |
+| `proof-gaps/cryptol_chacha20_core_iterate` | `proof-gap` | Explicit local gap note; large crypto proof attempt exceeds practical checked-proof budget. | `drivers/cryptol_chacha20_core_iterate`. | Keep pinned; no native-eval proof shortcut or heartbeat-only promotion. |
+| `proof-gaps/cryptol_chacha20_iround_zero` | `proof-gap` | Explicit local gap note; large crypto recurrence proof attempt exceeds practical checked-proof budget. | `drivers/cryptol_chacha20_iround_zero`. | Keep pinned; no native-eval proof shortcut or heartbeat-only promotion. |
 | `proof-gaps/cryptol_running_sum_verify` | `proof-gap` | Explicit gap note for the small recurrence proof. | `drivers/cryptol_running_sum_verify`. | Keep pinned; close through later proof-support work for recurrence and bounds obligations. |
 | `proof-gaps/E4_map_id` | `proof-gap` | Small E-series proof now blocked only by visible checked bounds obligations. | `drivers/offline_lean_e_series/E4`. | Keep out of the default proof harness until proof-support work closes the obligations. |
 | `proof-gaps/E5_littleendian` | `proof-gap` | Small E-series proof now blocked by visible checked bounds obligations over reverse/indexing. | `drivers/offline_lean_e_series/E5`. | Keep out of the default proof harness until proof-support work closes the obligations. |
-| `proof-gaps/llvm_chacha20_q_eq` | `proof-gap` | Explicit gap directory; large LLVM/crypto proof. | `drivers/llvm_chacha20_q_verify`. | Keep pinned; mine only minimal blockers. |
-| `proof-gaps/llvm_salsa20_q_eq` | `proof-gap` | Explicit gap directory; large LLVM/crypto proof. | `drivers/llvm_salsa20_q_verify`. | Keep pinned; mine only minimal blockers. |
+| `proof-gaps/llvm_chacha20_q_eq` | `proof-gap` | Explicit local gap note; preserved proof attempt still uses `bv_decide` for quarterround BV equations. | `drivers/llvm_chacha20_q_verify`. | Keep pinned; mine only minimal blockers and do not promote while it depends on native-evaluation proof artifacts. |
+| `proof-gaps/llvm_salsa20_q_eq` | `proof-gap` | Explicit local gap note; preserved proof attempt still uses `bv_decide` for the final Salsa20 BV identity. | `drivers/llvm_salsa20_q_verify`. | Keep pinned; mine only minimal blockers and do not promote while it depends on native-evaluation proof artifacts. |
 | `proof-gaps/offline_lean_popcount32` | `proof-gap` | Explicit gap note for the width-32 popcount recurrence proof. | `drivers/offline_lean_popcount32`. | Keep pinned as stress/proof gap; no native proof shortcuts. |
 
 ## Stretch Inventory
@@ -392,6 +399,8 @@ unreviewed safe refreshes:
 ```sh
 make -C otherTests/saw-core-lean test
 make -C otherTests/saw-core-lean conformance
+make -C otherTests/saw-core-lean gaps
+make test-saw-core-lean-gaps
 make -C otherTests/saw-core-lean clean
 ```
 

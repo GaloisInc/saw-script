@@ -7,11 +7,6 @@
 SAW ?= $(shell find $(abspath ../../dist-newstyle) -name saw -type f -perm +111 \
          2>/dev/null | head -1)
 
-ifeq ($(SAW),)
-$(error No saw binary found under dist-newstyle. \
-        Run `cabal build exe:saw` first or pass SAW=/path/to/saw)
-endif
-
 export SAW
 
 all test:
@@ -20,10 +15,13 @@ all test:
 conformance:
 	bash test.sh conformance
 
+gaps proof-gaps:
+	bash test.sh gaps
+
 good:
 	bash test.sh good
 
 clean:
 	bash test.sh clean
 
-.PHONY: all test conformance good clean
+.PHONY: all test conformance gaps proof-gaps good clean

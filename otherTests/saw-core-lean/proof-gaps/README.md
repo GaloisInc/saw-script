@@ -20,6 +20,27 @@ Some directories contain only `GAP.md` and `source.txt`. Those are classified
 proof gaps without a useful current proof attempt; do not add a fake proof just
 to make the directory runnable.
 
+The gap inventory is part of the harness. Run:
+
+```sh
+make -C otherTests/saw-core-lean gaps
+```
+
+From the repository root, the equivalent named target is:
+
+```sh
+make test-saw-core-lean-gaps
+```
+
+From this directory, the direct harness command is:
+
+```sh
+bash test.sh gaps
+```
+
+This validates that each proof-gap directory has an explicit local note and
+reports proof/stress gaps separately from passing proof-discharge examples.
+
 To work on one manually when it has a `proof.lean`, enter the subdirectory and
 run:
 

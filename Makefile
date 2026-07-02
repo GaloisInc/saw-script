@@ -55,3 +55,12 @@ test-saw-core-lean-conformance:
 	cabal build exe:saw
 	@echo "=== saw-core-lean differential conformance ==="
 	$(MAKE) -C otherTests/saw-core-lean conformance
+
+# saw-core-lean proof/stress gap inventory.
+#
+# This is intentionally separate from the conformance gate: it reports
+# preserved proof gaps and stress probes that are not accepted proof-discharge
+# examples. It does not require a built saw binary.
+.PHONY: test-saw-core-lean-gaps
+test-saw-core-lean-gaps:
+	$(MAKE) -C otherTests/saw-core-lean gaps
