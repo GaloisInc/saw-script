@@ -1,0 +1,3 @@
+Wrapped-scrutinee value recursors currently feed an Except-wrapped scrutinee to
+Lean's raw recursor. This row pins the required future behavior: bind the
+scrutinee and propagate an incoming Except.error.

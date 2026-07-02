@@ -1,0 +1,14 @@
+enable_experimental;
+
+// Generated-artifact behavior litmus for raw-scrutinee value recursors.
+//
+// A value-producing motive should return Except String Bool even when the
+// scrutinee is already raw. The Num binder stays raw under Phase beta, so this
+// avoids the closed-Unit simplifier and actually exercises a raw-scrutinee
+// recursor. The TCNum branch is effectful, so the final artifact must expose
+// the error directly, not double-wrap the recursor result or emit a raw
+// False.elim obligation for the branch.
+let probe =
+  parse_core "\\(n : Num) -> Num_rec (\\(_ : Num) -> Bool) (\\(_ : Nat) -> error Bool \"sentinel\") False n";
+
+write_lean_term "Observed" [] [] "emitted.lean" probe;

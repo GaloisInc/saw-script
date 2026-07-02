@@ -1,0 +1,5 @@
+has type
+Except String Bool
+but is expected to have type
+Bool
+FAIL: emitted Lean obligation outline did not compile

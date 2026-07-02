@@ -1,0 +1,3 @@
+Raw-scrutinee value recursors currently keep the value motive raw, so an
+effectful branch has the wrong shape. This row pins the required future
+behavior: value motives return Except String T independent of scrutinee shape.

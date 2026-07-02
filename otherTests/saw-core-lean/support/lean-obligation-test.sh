@@ -18,6 +18,14 @@
 # Optional:
 #
 #   forbidden.txt       one forbidden literal per non-comment line.
+#   lean-observe.lean   Lean observer importing the emitted artifact as
+#                       `Emitted`. Used for generated-artifact behavior that
+#                       is not a source-level differential observation, such as
+#                       checking that an emitted wrapper propagates an
+#                       `Except.error` argument instead of defaulting it.
+#   lean-expected.txt   expected normalized `LEAN_OBSERVED: ...` payloads for
+#                       lean-observe.lean, one per line. Required when
+#                       lean-observe.lean is present.
 #   .known-gap          reason reported in the conformance summary.
 #   .known-gap.expected diagnostic substrings required when the positive
 #                       obligation check fails.
@@ -34,7 +42,8 @@ TEST_NAME="$(basename "$(pwd)")"
 
 case "$VERB" in
     clean)
-        rm -f *.rawlog *.log *.observed *.observed.diff known-gap.actual
+        rm -f *.rawlog *.log *.lean.log *.observed *.observed.diff \
+              lean.observed lean.observed.diff known-gap.actual
         if [ -f source.txt ]; then
             emitted=$(head -n1 source.txt)
             [ -n "$emitted" ] && rm -f "$emitted"
@@ -79,6 +88,19 @@ fi
 
 if [ ! -f expected.txt ]; then
     echo "FAIL: obligation test requires expected.txt" >&2
+    exit 1
+fi
+if [ -f lean-observe.lean ] && [ ! -f lean-expected.txt ]; then
+    echo "FAIL: obligation observer requires lean-expected.txt" >&2
+    exit 1
+fi
+if [ -f lean-expected.txt ] && [ ! -f lean-observe.lean ]; then
+    echo "FAIL: lean-expected.txt requires lean-observe.lean" >&2
+    exit 1
+fi
+if [ -f lean-observe.lean ] && \
+   ! grep -Eq '^[[:space:]]*import[[:space:]]+Emitted([[:space:]]|$)' lean-observe.lean; then
+    echo "FAIL: lean-observe.lean must import the emitted artifact as Emitted" >&2
     exit 1
 fi
 
@@ -170,6 +192,9 @@ fi
 
 mkdir -p "$PROBE_DIR"
 cp "$emitted" "$PROBE_DIR/Emitted.lean"
+if [ -f lean-observe.lean ]; then
+    cp lean-observe.lean "$PROBE_DIR/lean-observe.lean"
+fi
 
 set +e
 build_log=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake build ) 2>&1 )
@@ -191,6 +216,47 @@ if [ "$emit_rc" -ne 0 ]; then
     echo "FAIL: emitted Lean obligation outline did not compile" >&2
     rm -rf "$PROBE_DIR"
     exit 1
+fi
+
+if [ -f lean-observe.lean ]; then
+    lean_out=$( ( cd "$LAKE_DIR" && LEAN_PATH="intTestsProbe/$PROBE_NAME:${LEAN_PATH:-}" \
+                  $LAKE_TIMEOUT_CMD lake env lean \
+                  "intTestsProbe/$PROBE_NAME/lean-observe.lean" ) 2>&1 ) && \
+        lean_rc=0 || lean_rc=$?
+    printf '%s\n' "$lean_out" >test.lean.log
+    if [ "$lean_rc" -ne 0 ] || printf '%s\n' "$lean_out" | grep -qE '^[^"[:space:]][^:]*: error' ; then
+        cat test.lean.log
+        echo "FAIL: Lean obligation observer failed" >&2
+        rm -rf "$PROBE_DIR"
+        exit 1
+    fi
+
+    awk '
+      /^"?LEAN_OBSERVED:[[:space:]]*/ {
+        sub(/^"?LEAN_OBSERVED:[[:space:]]*/, "")
+        sub(/"$/, "")
+        print
+        found = 1
+      }
+      END { if (!found) exit 1 }
+    ' test.lean.log >lean.observed || {
+        cat test.lean.log
+        echo "FAIL: Lean obligation observer did not contain any LEAN_OBSERVED lines" >&2
+        rm -rf "$PROBE_DIR"
+        exit 1
+    }
+
+    if ! diff -u lean-expected.txt lean.observed >lean.observed.diff 2>&1; then
+        echo "--- expected Lean obligation observer ---"
+        cat lean-expected.txt
+        echo "--- actual Lean obligation observer ---"
+        cat lean.observed
+        echo "--- diff ---"
+        cat lean.observed.diff
+        echo "FAIL: Lean obligation observer output changed" >&2
+        rm -rf "$PROBE_DIR"
+        exit 1
+    fi
 fi
 
 status=0

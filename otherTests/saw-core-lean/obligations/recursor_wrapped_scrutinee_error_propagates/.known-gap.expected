@@ -1,0 +1,5 @@
+UnitType.rec
+Except String Nat
+but is expected to have type
+Nat
+FAIL: emitted Lean obligation outline did not compile

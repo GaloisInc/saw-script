@@ -1,0 +1,11 @@
+enable_experimental;
+
+// Generated-artifact behavior litmus for the raw/wrapped recursor convention.
+//
+// The emitted function receives its UnitType scrutinee in the Phase-beta
+// wrapped shape. A sound recursor convention must propagate an incoming
+// Except.error instead of rawifying/defaulting it.
+let probe =
+  parse_core "\\(u : UnitType) -> UnitType#rec (\\(_ : UnitType) -> Nat) 7 u";
+
+write_lean_term "Observed" [] [] "emitted.lean" probe;
