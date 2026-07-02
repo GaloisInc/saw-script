@@ -969,6 +969,11 @@ Current implementation priority after the 2026-07-01 audit:
     `Either`, `UnitType`, `EmptyType`, and `ite` behavior. The driver proves
     the source facts in SAW; the paired Lean proof pins the support-library
     constructors, recursor behavior, and `iteM` branch order.
+    2026-07-01 audit follow-up: added
+    `differential/unit_recursor_raw_scrutinee` as a pinned known gap. It emits
+    a value-producing `UnitType#rec` function and applies it in the observer,
+    catching the raw-scrutinee convention bug where a wrapped source variable
+    is passed to Lean's raw `UnitType.rec`.
   - 2026-06-29 checkpoint: drafted stream conformance for `Stream#rec`,
     `MkStream`, `streamIdx`, and `streamScanl`. This exposed a recursor
     result-shape convention gap: a wrapped scrutinee can feed a recursor whose

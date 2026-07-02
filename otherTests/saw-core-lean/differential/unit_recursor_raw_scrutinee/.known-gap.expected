@@ -1,0 +1,7 @@
+Application type mismatch
+has type
+Except String UnitType
+but is expected to have type
+UnitType
+UnitType.rec
+FAIL: emitted Lean artifact did not compile

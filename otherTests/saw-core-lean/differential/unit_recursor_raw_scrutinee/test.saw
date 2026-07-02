@@ -1,0 +1,19 @@
+// TRUE differential known-gap litmus for value-producing recursors whose
+// scrutinee is a raw source variable.
+//
+// The SAW observation applies the emitted function to Unit. The Lean observer
+// must do the same against the backend-emitted function, not reconstruct the
+// recursor by hand.
+
+let fn =
+  parse_core "\\(u : UnitType) -> UnitType#rec (\\(_ : UnitType) -> Nat) 7 u";
+
+let observed =
+  parse_core "equalNat ((\\(u : UnitType) -> UnitType#rec (\\(_ : UnitType) -> Nat) 7 u) Unit) 7";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  fn;
