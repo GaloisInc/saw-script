@@ -13,7 +13,6 @@ module SAWCentral.Prover.What4 (
     proveWhat4_bitwuzla,
     proveWhat4_rme,
     proveWhat4_boolector,
-    proveWhat4_cvc4,
     proveWhat4_cvc5,
     proveWhat4_dreal,
     proveWhat4_stp,
@@ -23,7 +22,6 @@ module SAWCentral.Prover.What4 (
     proveExportWhat4_z3,
     proveExportWhat4_bitwuzla,
     proveExportWhat4_boolector,
-    proveExportWhat4_cvc4,
     proveExportWhat4_cvc5,
     proveExportWhat4_dreal,
     proveExportWhat4_stp,
@@ -154,7 +152,7 @@ proveExportWhat4_sym solver hashConsing outFilePath satq = do
 
 proveWhat4_z3,
   proveWhat4_bitwuzla, proveWhat4_boolector,
-  proveWhat4_cvc4, proveWhat4_cvc5,
+  proveWhat4_cvc5,
   proveWhat4_dreal, proveWhat4_stp, proveWhat4_yices,
   proveWhat4_abc, proveWhat4_rme ::
   Bool          {- ^ Hash-consing of What4 terms -}->
@@ -165,7 +163,6 @@ proveWhat4_z3        = proveWhat4_sym z3Adapter
 proveWhat4_bitwuzla  = proveWhat4_sym bitwuzlaAdapter
 proveWhat4_rme       = proveWhat4_sym rmeAdapter
 proveWhat4_boolector = proveWhat4_sym boolectorAdapter
-proveWhat4_cvc4      = proveWhat4_sym cvc4Adapter
 proveWhat4_cvc5      = proveWhat4_sym cvc5Adapter
 proveWhat4_dreal     = proveWhat4_sym drealAdapter
 proveWhat4_stp       = proveWhat4_sym stpAdapter
@@ -189,7 +186,7 @@ proveWhat4_z3_using tactic hashConsing satq = do
 
 proveExportWhat4_z3,
   proveExportWhat4_bitwuzla, proveExportWhat4_boolector,
-  proveExportWhat4_cvc4, proveExportWhat4_cvc5,
+  proveExportWhat4_cvc5,
   proveExportWhat4_dreal, proveExportWhat4_stp, proveExportWhat4_yices ::
   Bool          {- ^ Hash-consing of ExportWhat4 terms -}->
   FilePath      {- ^ Path of file to write SMT to -}->
@@ -199,7 +196,6 @@ proveExportWhat4_z3,
 proveExportWhat4_z3        = proveExportWhat4_sym z3Adapter
 proveExportWhat4_bitwuzla  = proveExportWhat4_sym bitwuzlaAdapter
 proveExportWhat4_boolector = proveExportWhat4_sym boolectorAdapter
-proveExportWhat4_cvc4      = proveExportWhat4_sym cvc4Adapter
 proveExportWhat4_cvc5      = proveExportWhat4_sym cvc5Adapter
 proveExportWhat4_dreal     = proveExportWhat4_sym drealAdapter
 proveExportWhat4_stp       = proveExportWhat4_sym stpAdapter
