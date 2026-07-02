@@ -620,25 +620,12 @@ patternBindingsWithSchema pat sch =
 -- system of nested records and typles) but we also want to print the
 -- rest of the original context as well.
 --
--- Therefore, we start with an initial descriptive message plus (in
--- most cases) a pair of expected and found types. Once we fail, we
--- add more expected/found type pairs on the way out of the recursion,
--- so we print every layer of the type.
---
--- The FailMGU type tracks this material. It contains three elements:
---    * the initial message
---    * the list of pairs of expected/found messages
+-- Therefore, as we recurse into the type we accumulate a list of the
+-- expected/found pairs that we have seen; and when we get an error,
+-- we print all of them along with the rest of the error message.
 --
 -- Empty strings are inserted between pairs to make the output more
 -- readable.
---
--- Note that we print the messages on the fly rather than accumulating
--- a list of type pairs and printing them at the end. (That may have
--- been a mistake; we'll see.)
---
--- The initial message is kept separate so that the expected/found
--- list can readily be built in either order. It's not clear if it's
--- better to print the outermost or innermost mismatches first.
 --
 -- Further notes on the message formatting:
 --
@@ -656,16 +643,10 @@ patternBindingsWithSchema pat sch =
 -- all the stuff we generate is part of that message and not, for
 -- example, an additional separate error. The indenting happens below.
 --
--- Note that although we append to the end of the expected/found list,
--- we don't stick the start line in that list, because I keep going
--- back and forth on whether the larger types should be printed first
--- (prepending in failMGUadd) or last (appending). If we commit to
--- appending we don't need to keep the start line separate.
+-- I keep going back and forth on whether the larger types should be
+-- printed first (as is) or last (needs a reverse in
+-- `ppEnclosing`).
 --
-
-data FailMGU = FailMGU
-                    [Text]    -- initial error message (often multiple lines)
-                    [Text]    -- list of found/expected message pairs
 
 -- common code for printing expected/found types
 ppTypes :: PPS.Opts -> Type -> Type -> [Text]
@@ -674,6 +655,12 @@ ppTypes ppopts ty1 ty2 =
       found    = "Found:    " <> ppType ppopts ty2
   in
   [expected, found, ""]
+
+-- print a list of enclosing types
+ppEnclosing :: PPS.Opts -> [(Type, Type)] -> [Text]
+ppEnclosing ppopts tys =
+    let once (tyexp, tyfound) = ppTypes ppopts tyexp tyfound in
+    concatMap once tys
 
 -- logic for showing details of a type
 ppTypeDetails :: PPS.Opts -> Type -> Text
@@ -732,29 +719,35 @@ ppTypeDetails' ppopts ty =
     pos -> pr pos "this type annotation"
 
 -- fail with expected/found types
-failMGU :: PPS.Opts -> Text -> Type -> Type -> Either FailMGU a
-failMGU ppopts start ty1 ty2 = Left (FailMGU start' ("" : ppTypes ppopts ty1 ty2))
-  where start' = [start, ppTypeDetails ppopts ty1, ppTypeDetails ppopts ty2]
+failMGU :: PPS.Opts -> Text -> Type -> Type -> [(Type, Type)] -> Either [Text] a
+failMGU ppopts start tyexp tyfound enc =
+    let start' = [
+            start,
+            ppTypeDetails ppopts tyexp,
+            ppTypeDetails ppopts tyfound,
+            ""
+         ]
+        encs' = ppEnclosing ppopts ((tyexp, tyfound) : enc)
+    in
+    Left $ start' ++ encs'
 
 -- like failMGU but with multiple lines in the initial message
-failMGUn :: PPS.Opts -> [Text] -> Type -> Type -> Either FailMGU a
-failMGUn ppopts start ty1 ty2 = Left (FailMGU start' ("" : ppTypes ppopts ty1 ty2))
-  where start' = start ++ [ppTypeDetails ppopts ty1, ppTypeDetails ppopts ty2]
+failMGUn :: PPS.Opts -> [Text] -> Type -> Type -> [(Type, Type)] -> Either [Text] a
+failMGUn ppopts start tyexp tyfound encs =
+    let start' = start ++ [
+            ppTypeDetails ppopts tyexp,
+            ppTypeDetails ppopts tyfound,
+            ""
+         ]
+        encs' = ppEnclosing ppopts ((tyexp, tyfound) : encs)
+    in
+    Left $ start' ++ encs'
 
 -- fail with no types
-failMGU' :: Text -> Either FailMGU a
-failMGU' start = Left (FailMGU [start] [])
-
--- add another expected/found type pair to the failure
--- (pull in the last function-type lines if any)
-failMGUAdd :: PPS.Opts -> FailMGU -> Type -> Type -> FailMGU
-failMGUAdd ppopts (FailMGU start eflines) ty1 ty2 =
-  FailMGU start (eflines ++ ppTypes ppopts ty1 ty2)
-
--- print the failure as a string list
-ppFailMGU :: FailMGU -> [Text]
-ppFailMGU (FailMGU start eflines) =
-  start ++ eflines
+failMGU' :: PPS.Opts -> [(Type, Type)] -> Text -> Either [Text] a
+failMGU' ppopts encs start =
+    let encs' = ppEnclosing ppopts encs in
+    Left $ [start] ++ encs'
 
 -- We've found a substitution for unification var i.
 --
@@ -783,8 +776,8 @@ resolveUnificationVar i t2 =
 -- Given two types, produce either a failure report or a substitution
 -- (to add to the cumulative substitution we build up) that makes them
 -- the same.
-mgu :: PPS.Opts -> Type -> Type -> Either FailMGU Subst
-mgu ppopts t1 t2 = case (t1, t2) of
+mgu :: PPS.Opts -> [(Type, Type)] -> Type -> Type -> Either [Text] Subst
+mgu ppopts encs t1 t2 = case (t1, t2) of
 
   (TyUnifyVar _ i, TyUnifyVar _ j) | i == j ->
       -- same unification var, nothing to do
@@ -800,7 +793,7 @@ mgu ppopts t1 t2 = case (t1, t2) of
               let msg = "Occurs check failure: cannot unify " <> t1' <>
                         " with " <> t2' <> " because " <> t1' <>
                         " appears within " <> t2'
-              failMGU ppopts msg t1 t2
+              failMGU ppopts msg t1 t2 encs
 
   (_, TyUnifyVar _ i) ->
       -- the other side is a unification var, resolve it
@@ -812,7 +805,7 @@ mgu ppopts t1 t2 = case (t1, t2) of
               let msg = "Occurs check failure: cannot unify " <> t1' <>
                         " with " <> t2' <> " because " <> t2' <>
                         " appears within " <> t1'
-              failMGU ppopts msg t1 t2
+              failMGU ppopts msg t1 t2 encs
 
   (TyFunc pos1 _ params1 namedParams1 ret1, TyFunc pos2 _ params2 namedParams2 ret2) -> do
       -- Run in the either monad for convenience
@@ -847,7 +840,7 @@ mgu ppopts t1 t2 = case (t1, t2) of
                   missing' = missing1' ++ missing2'
                   msg = PP.vsep ("Mismatched named parameters:" : missing')
                   msg' = Text.lines $ PPS.renderText ppopts msg
-              failMGUn ppopts msg' t1 t2
+              failMGUn ppopts msg' t1 t2 encs
           else do
               -- In principle when you have checked that the keys
               -- match, you can do zip (Map.toList namedParams1)
@@ -856,9 +849,7 @@ mgu ppopts t1 t2 = case (t1, t2) of
               -- this instead.
               let namedParamsAll = Map.intersectionWith (\a b -> (a, b)) namedParams1 namedParams2
                   (np1, np2) = unzip $ Map.elems namedParamsAll
-              case mgus ppopts np1 np2 of
-                  Left msgs -> Left $ failMGUAdd ppopts msgs t1 t2
-                  Right result -> Right result
+              mgus ppopts ((t1, t2) : encs) np1 np2
 
       -- Apply that substitution to the positional parameters and the return
       -- value. We do the named parameters first because because they don't
@@ -877,22 +868,22 @@ mgu ppopts t1 t2 = case (t1, t2) of
           n2 = length params2'
       (substP, remainder1, remainder2) <- do
           if n1 < n2 then
-              case mgus ppopts params1' (take n1 params2') of
-                Left msgs -> Left $ failMGUAdd ppopts msgs t1 t2
+              case mgus ppopts ((t1, t2) : encs) params1' (take n1 params2') of
+                Left msgs -> Left msgs
                 Right result ->
                     -- we've used up params1'.
                     Right (result, ret1', TyFunc pos2 noNames (drop n1 params2') Map.empty ret2')
           else if n1 > n2 then
               -- unfortunately we need two copies of this because
               -- left vs. right side is semantically significant :-(
-              case mgus ppopts (take n2 params1') params2' of
-                Left msgs -> Left $ failMGUAdd ppopts msgs t1 t2
+              case mgus ppopts ((t1, t2) : encs) (take n2 params1') params2' of
+                Left msgs -> Left msgs
                 Right result ->
                     -- we've used up params2'.
                     Right (result, TyFunc pos1 noNames (drop n2 params1') Map.empty ret1', ret2')
           else
-              case mgus ppopts params1' params2' of
-                Left msgs -> Left $ failMGUAdd ppopts msgs t1 t2
+              case mgus ppopts ((t1, t2) : encs) params1' params2' of
+                Left msgs -> Left msgs
                 Right result ->
                     -- we've used up both params1' and params2'.
                     Right (result, ret1', ret2')
@@ -903,38 +894,31 @@ mgu ppopts t1 t2 = case (t1, t2) of
 
       -- now unify the remainders / return types
       substR <-
-          case mgu ppopts remainder1' remainder2' of
-            Left msgs -> Left $ failMGUAdd ppopts msgs t1 t2
-            Right result -> Right result
+          mgu ppopts ((t1, t2) : encs) remainder1' remainder2'
+
       -- return all substitutions
       pure $ mergeSubst substR (mergeSubst substP substN)
 
   (TyRecord _ ts1, TyRecord _ ts2)
     | Map.keys ts1 /= Map.keys ts2 ->
       -- records with different keys
-      failMGU ppopts "Record field names mismatch." t1 t2
+      failMGU ppopts "Record field names mismatch." t1 t2 encs
 
     | otherwise ->
       -- records with the same field names, try unifying the field types
-      case mgus ppopts (Map.elems ts1) (Map.elems ts2) of
-        Right result -> Right result
-        Left msgs -> Left $ failMGUAdd ppopts msgs t1 t2
+      mgus ppopts ((t1, t2) : encs) (Map.elems ts1) (Map.elems ts2)
 
   (TyCon _ tc1 ts1, TyCon _ tc2 ts2)
     | tc1 == tc2 ->
       -- same type constructor, unify the args
-      case mgus ppopts ts1 ts2 of
-        Right result -> Right result
-        Left msgs ->
-          -- oops, didn't work.
-          Left $ failMGUAdd ppopts msgs t1 t2
+      mgus ppopts ((t1, t2) : encs) ts1 ts2
 
     | otherwise ->
       -- Wrong type constructors
       case tc1 of
         _ ->
           failMGU ppopts ("Mismatch of type constructors. Expected: " <> ppTyCon ppopts tc1 <>
-                   " but got " <> ppTyCon ppopts tc2) t1 t2
+                   " but got " <> ppTyCon ppopts tc2) t1 t2 encs
 
   (TyVar _ a, TyVar _ b) | a == b ->
       -- Same named variable
@@ -943,21 +927,21 @@ mgu ppopts t1 t2 = case (t1, t2) of
   (_, TyFunc{}) ->
       -- If we expected a scalar and found a function, speculate that
       -- someone forgot a function argument earlier.
-      failMGU ppopts "Mismatch of types. Perhaps a function was not given enough arguments?" t1 t2
+      failMGU ppopts "Mismatch of types. Perhaps a function was not given enough arguments?" t1 t2 encs
   (_, _) ->
       -- Did not work
-      failMGU ppopts "Mismatch of types." t1 t2
+      failMGU ppopts "Mismatch of types." t1 t2 encs
 
 -- Run mgu on two lists of types.
-mgus :: PPS.Opts -> [Type] -> [Type] -> Either FailMGU Subst
-mgus ppopts t1s t2s = case (t1s, t2s) of
+mgus :: PPS.Opts -> [(Type, Type)] -> [Type] -> [Type] -> Either [Text] Subst
+mgus ppopts encs t1s t2s = case (t1s, t2s) of
     ([], []) ->
         return emptySubst
     (t1 : t1s', t2 : t2s') -> do
         -- unify the first types
-        s <- mgu ppopts t1 t2
+        s <- mgu ppopts encs t1 t2
         -- apply that substitution and then recurse
-        s' <- mgus ppopts (map (appSubst s) t1s') (map (appSubst s) t2s')
+        s' <- mgus ppopts encs (map (appSubst s) t1s') (map (appSubst s) t2s')
         return (mergeSubst s' s)
     (_, _) ->
       -- XXX this is no good, it will always print one of the lengths as 0!
@@ -982,8 +966,8 @@ mgus ppopts t1s t2s = case (t1s, t2s) of
       let t1s' = Text.pack $ show (length t1s)
           t2s' = Text.pack $ show (length t2s)
       in
-      failMGU' $ "Wrong number of arguments. Expected " <> t1s' <>
-                 " but got " <> t2s'
+      failMGU' ppopts encs $ "Wrong number of arguments. Expected " <> t1s' <>
+                             " but got " <> t2s'
 
 --
 -- Unify two types.
@@ -1028,19 +1012,18 @@ unify t1 pos t2 = do
   -- should be good enough if expandFully croaks. (Hopefully.)
   t1' <- expandFully pos t1
   t2' <- expandFully pos t2
-  case mgu ppopts t1' t2' of
+  case mgu ppopts [] t1' t2' of
     Right s -> modify $ \rw -> rw { tiSubst = mergeSubst s $ tiSubst rw }
     Left msgs -> do
-       recordError pos $ Text.unpack $ Text.unlines $ firstline : morelines'
+       recordError pos $ Text.unpack $ Text.unlines $ firstline : msgs'
        where
          firstline = "Type mismatch."
-         morelines = ppFailMGU msgs
          -- Indent all but the first line by four spaces.
          -- Don't indent blank lines; that produces trailing whitespace.
          adjust msg = case msg of
              "" -> ""
              _ -> "    " <> msg
-         morelines' = map adjust morelines
+         msgs' = map adjust msgs
 
 -- Check if two types match but don't actually unify them
 -- (that is, on success throw away the substitution and on error
@@ -1056,7 +1039,7 @@ matches t1 t2 = do
 
   t1' <- expandMostly t1
   t2' <- expandMostly t2
-  case mgu ppopts t1' t2' of
+  case mgu ppopts [] t1' t2' of
     Right _ -> return True
     Left _ -> return False
 
