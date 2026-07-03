@@ -8,17 +8,16 @@ err018.saw:26:11-26:12: Type mismatch.
     Found:    Int
 
     Expected: {
-   amethyst : String,
-   moonstone : String,
-   obsidian : String,
-   turquoise : String
-}
-    Found:    {
-   amethyst : Int,
-   moonstone : Int,
-   obsidian : Int,
-   turquoise : Int
-}
-
+          amethyst : String,
+          moonstone : String,
+          obsidian : String,
+          turquoise : String
+       }
+    Found: {
+          amethyst : Int,
+          moonstone : Int,
+          obsidian : Int,
+          turquoise : Int
+       }
 
 FAILED

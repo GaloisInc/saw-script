@@ -10,5 +10,4 @@ err013.saw:9:33-9:35: Type mismatch.
     Expected: [t.1]
     Found:    [[t.1]]
 
-
 FAILED

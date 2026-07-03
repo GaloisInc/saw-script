@@ -10,5 +10,4 @@ unify010.saw:9:17-9:29: Type mismatch.
     Expected: t.0 Int
     Found:    t.2 String
 
-
 FAILED

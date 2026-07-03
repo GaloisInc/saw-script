@@ -7,5 +7,4 @@ err002.saw:5:44-5:57: Type mismatch.
     Expected: String
     Found:    [LLVMType]
 
-
 FAILED

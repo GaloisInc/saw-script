@@ -10,5 +10,4 @@ unify009.saw:21:6-21:19: Type mismatch.
     Expected: Int -> String
     Found:    Int -> Int
 
-
 FAILED

@@ -7,5 +7,4 @@ err019.saw:5:11-5:12: Type mismatch.
     Expected: (Int, Int, Int, Int)
     Found:    (Int, Int, Int)
 
-
 FAILED

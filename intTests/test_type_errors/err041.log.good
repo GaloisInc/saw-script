@@ -10,5 +10,4 @@ err041.saw:9:11-9:14: Type mismatch.
     Expected: Int -> Int -> Int -> Int
     Found:    Int -> Int -> String -> Int
 
-
 FAILED

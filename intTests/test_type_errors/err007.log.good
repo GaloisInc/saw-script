@@ -7,5 +7,4 @@ err007.saw:2:1-2:4: Type mismatch.
     Expected: TopLevel t.0
     Found:    [Int]
 
-
 FAILED

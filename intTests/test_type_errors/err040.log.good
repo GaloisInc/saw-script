@@ -10,5 +10,4 @@ err040.saw:8:11-8:26: Type mismatch.
     Expected: (Int, Int, Int)
     Found:    (Int, Int, String)
 
-
 FAILED

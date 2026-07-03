@@ -7,5 +7,4 @@ unify005.saw:10:15-10:25: Type mismatch.
     Expected: Int
     Found:    ()
 
-
 FAILED
