@@ -7,5 +7,4 @@ unify007.saw:7:37-7:41: Type mismatch.
     Expected: Int
     Found:    String
 
-
 FAILED

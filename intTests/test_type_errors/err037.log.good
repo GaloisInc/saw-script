@@ -7,5 +7,4 @@ err037.saw:9:18-9:33: Type mismatch.
     Expected: [Int]
     Found:    [Int] -> [Int]
 
-
 FAILED

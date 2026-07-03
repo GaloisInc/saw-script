@@ -341,8 +341,8 @@ data RW = RW {
     -- | Any type errors and warnings we've generated so far
     --   These accumulate in reverse order; later messages are consed
     --   on the head of the list.
-    tiErrors :: [(Pos, String)],
-    tiWarnings :: [(Pos, String)]
+    tiErrors :: [(Pos, PPS.Doc)],
+    tiWarnings :: [(Pos, PPS.Doc)]
 }
 
 -- | The result of a `TI` typechecker computation is either a list of
@@ -350,7 +350,7 @@ data RW = RW {
 --   FUTURE: it would be better to preserve the ordering of warnings
 --   and errors in a single list...
 --
-type MsgList = [(Pos, String)]
+type MsgList = [(Pos, PPS.Doc)]
 type Result a = (Either MsgList a, MsgList)
 
 -- | Run the TI monad.
@@ -431,16 +431,16 @@ getErrorTyVar :: Pos -> TI Type
 getErrorTyVar pos = getFreshTyVar pos
 
 -- Add an error message.
-recordError :: Pos -> String -> TI ()
+recordError :: Pos -> PPS.Doc -> TI ()
 recordError pos err = do
     modify $ \rw -> rw { tiErrors = (pos, err) : tiErrors rw }
 
 -- Add an error message. Variant meant for use with ppTypeDetails'.
-recordError' :: (Pos, Text) -> TI ()
-recordError' (pos, err) = recordError pos (Text.unpack err)
+recordError' :: (Pos, PPS.Doc) -> TI ()
+recordError' (pos, err) = recordError pos err
 
 -- Add a warning message.
-recordWarning :: Pos -> String -> TI ()
+recordWarning :: Pos -> PPS.Doc -> TI ()
 recordWarning pos msg = do
     modify $ \rw -> rw { tiWarnings = (pos, msg) : tiWarnings rw }
 
@@ -494,9 +494,9 @@ condenseFunctions errPos ty = case ty of
                         -- Try again in case there's more functions hiding
                         condenseFunctions errPos ty'
                     False -> do
-                        let dups' = Text.intercalate " " $ Map.keys dups
-                        recordError errPos $ "Function has duplicate parameter names: " <>
-                                             Text.unpack dups'
+                        let dups' = PP.hsep $ map PP.pretty $ Map.keys dups
+                        recordError errPos $ "Function has duplicate parameter names:" <+>
+                                             dups'
                         getErrorTyVar pos1
             _ ->
                 pure ty
@@ -645,109 +645,87 @@ patternBindingsWithSchema pat sch =
 --
 -- I keep going back and forth on whether the larger types should be
 -- printed first (as is) or last (needs a reverse in
--- `ppEnclosing`).
+-- `prettyEnclosing`).
 --
 
--- common code for printing expected/found types
-ppTypes :: PPS.Opts -> Type -> Type -> [Text]
-ppTypes ppopts ty1 ty2 =
-  let expected = "Expected: " <> ppType ppopts ty1
-      found    = "Found:    " <> ppType ppopts ty2
-  in
-  [expected, found, ""]
-
 -- print a list of enclosing types
-ppEnclosing :: PPS.Opts -> [(Type, Type)] -> [Text]
-ppEnclosing ppopts tys =
-    let once (tyexp, tyfound) = ppTypes ppopts tyexp tyfound in
-    concatMap once tys
+prettyEnclosing :: PPS.Opts -> [(Type, Type)] -> PPS.Doc
+prettyEnclosing ppopts tys =
+    let once (tyexp, tyfound) =
+          let tyexp' = prettyType ppopts tyexp
+              tyfound' = prettyType ppopts tyfound
+              expectedShort  = "Expected:" <+> tyexp'
+              foundShort     = "Found:   " <+> tyfound'
+              -- Use of nest here allows the open-brace of records to
+              -- go on the same line, which ends up looking better
+              expectedLong   = "Expected:" <+> PP.nest 3 tyexp'
+              foundLong      = "Found:" <+> PP.nest 3 tyfound'
+              expected = PP.group $ PP.flatAlt expectedLong expectedShort
+              found = PP.group $ PP.flatAlt foundLong foundShort
+          in
+          expected <> PP.hardline <> found <> PP.hardline <> ""
+    in
+    PP.vsep $ map once tys
 
 -- logic for showing details of a type
-ppTypeDetails :: PPS.Opts -> Type -> Text
-ppTypeDetails ppopts ty =
-  let pr pos what =
-        -- XXX: just doing ppType here uglifies the message for
-        -- records the prettyprinter thinks don't fit on one line; it
-        -- splits them, but in doing so it doesn't know that there's a
-        -- reindent downstream of here, so all but the first line of
-        -- the message ends up reindented. However, sending the whole
-        -- message here through the prettyprinter makes things worse;
-        -- then if the whole message doesn't fit on a line, which is
-        -- routinely the case, it gets split... and only at points
-        -- within the type, so if e.g. the type is a pair it gets
-        -- split between the components, only, with seriously
-        -- unsightly results.
-        --
-        -- This is also not improved by the prettyprinter currently
-        -- limiting itself to 64 characters wide when it knows how to
-        -- break lines.
-        --
-        -- There's also an additional concern: we don't really want
-        -- line breaks in these messages at all; the idea is that the
-        -- file and line number appears at the front of the message to
-        -- be recognizable by editors/IDEs and the rest of the message
-        -- goes on the same line. If we want to move away from that we
-        -- ought to rethink the layout of the error reporting more
-        -- deeply. And maybe we should because there will be e.g.
-        -- record types where trying to print the type on one line is
-        -- doomed.
-        --
-        -- Blah.
-        --
-        let pos' = ppPosition pos
-            ty' = ppType ppopts ty
-        in
-        pos' <> ": The type " <> ty' <> " arises from " <> what
-  in
-  case getPos ty of
-    PosInferred InfFresh pos -> pr pos "a fresh type variable introduced here"
-    PosInferred InfTerm pos -> pr pos "the type of this term"
-    PosInferred InfContext pos -> pr pos "the context of the term"
-    pos -> pr pos "this type annotation"
+prettyTypeDetails :: PPS.Opts -> Type -> (Pos, PPS.Doc)
+prettyTypeDetails ppopts ty =
+    let (pos, what) = case getPos ty of
+           PosInferred InfFresh p -> (p, "a fresh type variable introduced here")
+           PosInferred InfTerm p -> (p, "the type of this term")
+           PosInferred InfContext p -> (p, "the context of the term")
+           p -> (p, "this type annotation")
+    in
+    let ty' = prettyType ppopts ty
+        what' = "arises from" <+> what
 
--- Variant for direct use with recordError' instead of via the FailMGU stuff
-ppTypeDetails' :: PPS.Opts -> Type -> (Pos, Text)
-ppTypeDetails' ppopts ty =
-  let pr pos what =
-        let ty' = ppType ppopts ty in
-        (pos, "The type " <> ty' <> " arises from " <> what)
-  in
-  case getPos ty of
-    PosInferred InfFresh pos -> pr pos "a fresh type variable introduced here"
-    PosInferred InfTerm pos -> pr pos "the type of this term"
-    PosInferred InfContext pos -> pr pos "the context of the term"
-    pos -> pr pos "this type annotation"
+        -- Deliberately render and re-docify the type, and generate a
+        -- multi-line message only if the type comes out as multiple
+        -- lines when rendered on its own. This is kind of gross, but
+        -- the prettyprinter library does not give much in the way of
+        -- formatting control, and if we just do things its way we
+        -- pretty much always get a multiline message, even for very
+        -- short types like (), because what' coupled
+        -- with the position text at the beginning of the line is long
+        -- enough to make the prettyprinter library think the message
+        -- ought to be multiline. Perhaps the right way to deal with
+        -- this problem is to force it to use a different notion of
+        -- what constitutes a "long" line when dealing with error
+        -- messages rather than program text; but for the time being
+        -- at least we have no useful infrastructure to support that.
+        -- So instead generate our own faux "reactive" layout. XXX.
+        --
+        -- If you find a way to fix this better, please also fix the
+        -- analogous code for "Too many arguments to function" below.
+        --
+        msg = case map PP.pretty $ Text.lines $ PPS.renderText ppopts ty' of
+            [ty''] -> "The type" <+> ty'' <+> what'
+            ty'' -> "The type" <+> PP.nest 3 (PP.vsep ty'' <> PP.line <> what')
+    in
+    (pos, msg)
 
 -- fail with expected/found types
-failMGU :: PPS.Opts -> Text -> Type -> Type -> [(Type, Type)] -> Either [Text] a
-failMGU ppopts start tyexp tyfound enc =
-    let start' = [
-            start,
-            ppTypeDetails ppopts tyexp,
-            ppTypeDetails ppopts tyfound,
-            ""
-         ]
-        encs' = ppEnclosing ppopts ((tyexp, tyfound) : enc)
+failMGU :: PPS.Opts -> PPS.Doc -> Type -> Type -> [(Type, Type)] -> Either PPS.Doc a
+failMGU ppopts start tyexp tyfound encs =
+    let (posexp, tyexp') = prettyTypeDetails ppopts tyexp
+        (posfound, tyfound') = prettyTypeDetails ppopts tyfound
+        encs' = prettyEnclosing ppopts ((tyexp, tyfound) : encs)
     in
-    Left $ start' ++ encs'
-
--- like failMGU but with multiple lines in the initial message
-failMGUn :: PPS.Opts -> [Text] -> Type -> Type -> [(Type, Type)] -> Either [Text] a
-failMGUn ppopts start tyexp tyfound encs =
-    let start' = start ++ [
-            ppTypeDetails ppopts tyexp,
-            ppTypeDetails ppopts tyfound,
-            ""
-         ]
-        encs' = ppEnclosing ppopts ((tyexp, tyfound) : encs)
-    in
-    Left $ start' ++ encs'
+    Left $ PP.vsep [
+        start,
+        -- XXX the error infrastructure is supposed to be what knows
+        -- how to print positions
+        prettyPosition posexp <> ":" <+> tyexp',
+        prettyPosition posfound <> ":" <+> tyfound',
+        "",
+        encs'
+    ]
 
 -- fail with no types
-failMGU' :: PPS.Opts -> [(Type, Type)] -> Text -> Either [Text] a
+failMGU' :: PPS.Opts -> [(Type, Type)] -> PPS.Doc -> Either PPS.Doc a
 failMGU' ppopts encs start =
-    let encs' = ppEnclosing ppopts encs in
-    Left $ [start] ++ encs'
+    let encs' = prettyEnclosing ppopts encs in
+    Left $ PP.vsep [start, encs']
 
 -- We've found a substitution for unification var i.
 --
@@ -776,7 +754,7 @@ resolveUnificationVar i t2 =
 -- Given two types, produce either a failure report or a substitution
 -- (to add to the cumulative substitution we build up) that makes them
 -- the same.
-mgu :: PPS.Opts -> [(Type, Type)] -> Type -> Type -> Either [Text] Subst
+mgu :: PPS.Opts -> [(Type, Type)] -> Type -> Type -> Either PPS.Doc Subst
 mgu ppopts encs t1 t2 = case (t1, t2) of
 
   (TyUnifyVar _ i, TyUnifyVar _ j) | i == j ->
@@ -788,11 +766,11 @@ mgu ppopts encs t1 t2 = case (t1, t2) of
       case resolveUnificationVar i t2 of
           Just someSubst -> return someSubst
           Nothing -> do
-              let t1' = ppType ppopts t1
-                  t2' = ppType ppopts t2
-              let msg = "Occurs check failure: cannot unify " <> t1' <>
-                        " with " <> t2' <> " because " <> t1' <>
-                        " appears within " <> t2'
+              let t1' = prettyType ppopts t1
+                  t2' = prettyType ppopts t2
+              let msg = "Occurs check failure: cannot unify" <+> t1' <+>
+                        "with" <+> t2' <+> "because" <+> t1' <+>
+                        "appears within" <+> t2'
               failMGU ppopts msg t1 t2 encs
 
   (_, TyUnifyVar _ i) ->
@@ -800,11 +778,11 @@ mgu ppopts encs t1 t2 = case (t1, t2) of
       case resolveUnificationVar i t1 of
           Just someSubst -> return someSubst
           Nothing -> do
-              let t1' = ppType ppopts t1
-                  t2' = ppType ppopts t2
-              let msg = "Occurs check failure: cannot unify " <> t1' <>
-                        " with " <> t2' <> " because " <> t2' <>
-                        " appears within " <> t1'
+              let t1' = prettyType ppopts t1
+                  t2' = prettyType ppopts t2
+              let msg = "Occurs check failure: cannot unify" <+> t1' <+>
+                        "with" <+> t2' <+> "because" <+> t2' <+>
+                        "appears within" <+> t1'
               failMGU ppopts msg t1 t2 encs
 
   (TyFunc pos1 _ params1 namedParams1 ret1, TyFunc pos2 _ params2 namedParams2 ret2) -> do
@@ -839,8 +817,7 @@ mgu ppopts encs t1 t2 = case (t1, t2) of
                   missing2' = prettyMissingList t2' missing2
                   missing' = missing1' ++ missing2'
                   msg = PP.vsep ("Mismatched named parameters:" : missing')
-                  msg' = Text.lines $ PPS.renderText ppopts msg
-              failMGUn ppopts msg' t1 t2 encs
+              failMGU ppopts msg t1 t2 encs
           else do
               -- In principle when you have checked that the keys
               -- match, you can do zip (Map.toList namedParams1)
@@ -917,8 +894,12 @@ mgu ppopts encs t1 t2 = case (t1, t2) of
       -- Wrong type constructors
       case tc1 of
         _ ->
-          failMGU ppopts ("Mismatch of type constructors. Expected: " <> ppTyCon ppopts tc1 <>
-                   " but got " <> ppTyCon ppopts tc2) t1 t2 encs
+          let tc1' = prettyTyCon tc1
+              tc2' = prettyTyCon tc2
+              msg = "Mismatch of type constructors. Expected:" <+> tc1' <+>
+                    "but got" <+> tc2'
+          in
+          failMGU ppopts msg t1 t2 encs
 
   (TyVar _ a, TyVar _ b) | a == b ->
       -- Same named variable
@@ -933,7 +914,7 @@ mgu ppopts encs t1 t2 = case (t1, t2) of
       failMGU ppopts "Mismatch of types." t1 t2 encs
 
 -- Run mgu on two lists of types.
-mgus :: PPS.Opts -> [(Type, Type)] -> [Type] -> [Type] -> Either [Text] Subst
+mgus :: PPS.Opts -> [(Type, Type)] -> [Type] -> [Type] -> Either PPS.Doc Subst
 mgus ppopts encs t1s t2s = case (t1s, t2s) of
     ([], []) ->
         return emptySubst
@@ -963,11 +944,12 @@ mgus ppopts encs t1s t2s = case (t1s, t2s) of
       --
       -- Update 20260410: the parser is no longer so restricted; we
       -- should check if this is live and fix it if so.
-      let t1s' = Text.pack $ show (length t1s)
-          t2s' = Text.pack $ show (length t2s)
+      let t1s' = PP.viaShow $ length t1s
+          t2s' = PP.viaShow $ length t2s
+          msg = "Wrong number of arguments. Expected" <+> t1s' <+>
+                "but got" <+> t2s'
       in
-      failMGU' ppopts encs $ "Wrong number of arguments. Expected " <> t1s' <>
-                             " but got " <> t2s'
+      failMGU' ppopts encs msg
 
 --
 -- Unify two types.
@@ -1014,16 +996,12 @@ unify t1 pos t2 = do
   t2' <- expandFully pos t2
   case mgu ppopts [] t1' t2' of
     Right s -> modify $ \rw -> rw { tiSubst = mergeSubst s $ tiSubst rw }
-    Left msgs -> do
-       recordError pos $ Text.unpack $ Text.unlines $ firstline : msgs'
-       where
-         firstline = "Type mismatch."
-         -- Indent all but the first line by four spaces.
-         -- Don't indent blank lines; that produces trailing whitespace.
-         adjust msg = case msg of
-             "" -> ""
-             _ -> "    " <> msg
-         msgs' = map adjust msgs
+    Left msg -> do
+       let msg' = PP.vsep [
+               "Type mismatch.",
+               PP.indent 4 msg
+            ]
+       recordError pos msg'
 
 -- Check if two types match but don't actually unify them
 -- (that is, on success throw away the substitution and on error
@@ -1300,18 +1278,21 @@ inferExpr expr = case expr of
            | Just ty <- Map.lookup n fs -> do
               return ty
            | otherwise -> do
+              let n' = PP.pretty n
               recordError pos $
-                  "Record type has no field named " ++ Text.unpack n
+                  "Record type has no field named" <+> n'
               getErrorTyVar typos
           TyUnifyVar _ _ -> do
+              let n' = PP.pretty n
               recordError pos $
-                  "Cannot infer a record type for field " ++
-                  Text.unpack n ++ "; please use a type annotation"
+                  "Cannot infer a record type for field" <+> n' <>
+                  "; please use a type annotation"
               getErrorTyVar pos
           _ -> do
               ppopts <- asks tiPPOpts
+              let t1' = prettyType ppopts t1
               recordError pos $
-                  "Record lookup on non-record value of type " ++ Text.unpack (ppType ppopts t1)
+                  "Record lookup on non-record value of type" <+> t1'
               getErrorTyVar pos
       return (Lookup pos e1 n, elTy)
 
@@ -1323,28 +1304,31 @@ inferExpr expr = case expr of
            | i < n ->
               return (tys !! fromIntegral i)
            | otherwise -> do
+              let i' = PP.viaShow i
+                  n' = PP.viaShow n
               recordError pos $
-                  "Tuple index " ++ show i ++ " out of bounds; limit is " ++
-                  show n
+                  "Tuple index" <+> i' <+> "out of bounds; limit is" <+> n'
               getErrorTyVar typos
           TyUnifyVar _ _ -> do
+              let i' = PP.viaShow i
               recordError pos $
-                  "Cannot infer tuple arity for lookup of element " ++
-                  show i ++ "; please use a type annotation"
+                  "Cannot infer tuple arity for lookup of element" <+> i' <>
+                  "; please use a type annotation"
               getErrorTyVar pos
           _ -> do
               ppopts <- asks tiPPOpts
-              recordError pos $ 
-                  "Tuple lookup on non-tuple value of type " ++ Text.unpack (ppType ppopts t1)
+              let t1' = prettyType ppopts t1
+              recordError pos $ "Tuple lookup on non-tuple value of type" <+> t1'
               getErrorTyVar pos
       return (TLookup pos e1 i, elTy)
 
   Var pos x -> do
+      let x' = PP.dquotes (PP.pretty x)
       avail <- asks tiPrimsAvail
       env <- gets tiVarEnv
       case ScopedMap.lookup x env of
         Nothing -> do
-          recordError pos $ "Unbound variable: " ++ show x ++ " (" ++ show pos ++ ")"
+          recordError pos $ "Unbound variable:" <+> x'
           t <- getFreshTyVar pos
           return (Var pos x, t)
         Just (_prevpos, lc, _rebindable, Forall as t)
@@ -1352,9 +1336,9 @@ inferExpr expr = case expr of
           when (isDeprecated lc) $
               case t of
                   TyFunc _typos _ _params _namedparams _ret ->
-                      recordWarning pos $ "Function is deprecated: " <> show x
+                      recordWarning pos $ "Function is deprecated:" <+> x'
                   _ ->
-                      recordWarning pos $ "Value is deprecated: " <> show x
+                      recordWarning pos $ "Value is deprecated:" <+> x'
 
           -- get a fresh tyvar for each quantifier binding, convert
           -- to a name -> ty map, and substitute the fresh tyvars
@@ -1365,10 +1349,11 @@ inferExpr expr = case expr of
           let t' = substituteTyVars' avail (Map.fromList substs) t
           return (Var pos x, t')
          | otherwise -> do
-          recordError pos $ "Inaccessible variable: " ++ show x ++ " (" ++ show pos ++ ")"
+          recordError pos $ "Inaccessible variable:" <+> x'
           let how = if lc == HideDeprecated then "deprecated" else "experimental"
-          recordError pos $ "This command is available only after running " ++
-                            "`enable_" ++ how ++ "`."
+              cmd = "`enable_" <> how <> "`."
+          recordError pos $ "This command is available only after running" <+> cmd
+
           t' <- getFreshTyVar pos
           return (Var pos x, t')
 
@@ -1485,8 +1470,8 @@ inferExpr expr = case expr of
 
                 let objectToLeftoverArgs = do
                       let once (name, (namepos, _arg, _ty)) =
-                            recordError namepos $ "Invalid named argument " ++
-                                                  Text.unpack name ++ ": " ++
+                            recordError namepos $ "Invalid named argument" <+>
+                                                  PP.pretty name <> ":" <+>
                                                   "No such named parameter"
                       mapM_ once (Map.toList namedArginfo')
 
@@ -1563,21 +1548,29 @@ inferExpr expr = case expr of
                     -- The value we got didn't accept any arguments at
                     -- all, so use the position of the function value
                     -- to complain that it isn't a function.
-                    let ty' = Text.unpack $ ppType ppopts ty
+                    let ty' = prettyType ppopts ty
                     let nargs' = case length arginfo + length (Map.toList namedArginfo) of
                           1 -> "one argument"
-                          n -> show n ++ " arguments"
-                    recordError (getPos f) $ "This expression is not a function (type is " ++ ty' ++ ")"
-                    recordError pos $ "but is applied here to " ++ nargs' ++ "."
-                    recordError' $ ppTypeDetails' ppopts ty
+                          n -> PP.viaShow n <+> "arguments"
+                    recordError (getPos f) $ "This expression is not a function (type is"
+                                             <+> ty' <> ")"
+                    recordError pos $ "but is applied here to" <+> nargs' <> "."
+                    recordError' $ prettyTypeDetails ppopts ty
                 else do
                     -- We already absorbed some arguments so we have
                     -- too many arguments rather than a non-function.
                     -- Use the position of the first excess argument
                     -- to complain.
-                    let origTy' = Text.unpack $ ppType ppopts origTy
-                    recordError argpos $ "Too many arguments to function of type " ++ origTy'
-                    recordError' $ ppTypeDetails' ppopts origTy
+                    let origTy' = prettyType ppopts origTy
+                        -- Abuse the prettyprinter to keep it from inserting extra
+                        -- unwanted line breaks. Compare the code in `prettyTypeDetails`.
+                        -- XXX.
+                        origTy'' =
+                          case map PP.pretty $ Text.lines $ PPS.renderText ppopts origTy' of
+                              [t] -> t
+                              ts -> PP.nest 3 $ PP.vsep ts
+                    recordError argpos $ "Too many arguments to function of type" <+> origTy''
+                    recordError' $ prettyTypeDetails ppopts origTy
                 when (differentLines (trailingPos argpos) (leadingPos pos)) $
                     recordError argpos "Did you forget a semicolon?"
                 -- Return a fresh tyvar as an error placeholder.
@@ -1604,8 +1597,8 @@ inferExpr expr = case expr of
                             Just _ -> do
                                 -- maybe we should have this check upstream like
                                 -- lambdas do...
-                                recordError namepos $ "Duplicate named argument " ++
-                                                      Text.unpack name
+                                recordError namepos $ "Duplicate named argument" <+>
+                                                      PP.pretty name
                                 pure (pa, na)
           (pa, na) <- foldM once ([], Map.empty) arginfo
           -- Because foldM is a foldl, we need to reverse pa
@@ -1679,8 +1672,8 @@ inferPattern rebindable pat = do
              Just (prevpos, lc, prevrb, tyscheme) -> case rebindable of
                  RebindableVar -> do
                      let croak msg =
-                           recordError xpos $ "Cannot rebind " ++
-                                              Text.unpack x ++ ": " ++ msg
+                           recordError xpos $ "Cannot rebind" <+> PP.pretty x <>
+                                              ":" <+> msg
                      avail <- asks tiPrimsAvail
                      when (not $ Set.member lc avail) $
                          croak "A previous binding exists but is hidden"
@@ -1716,7 +1709,7 @@ inferPattern rebindable pat = do
                      -- the syntactic top level, and (b) have a
                      -- different warning for locals that shadow
                      -- variables from outer scopes.
-                     recordWarning xpos $ "Redeclaration of " ++ Text.unpack x
+                     recordWarning xpos $ "Redeclaration of" <+> PP.pretty x
                      recordWarning prevpos $ "Previous declaration was here"
          return (t, PVar allpos xpos x (Just t))
     PTuple pos ps ->
@@ -1843,7 +1836,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
 
             -- The special case for non-monadic values
             let allowNonMonadic = do
-                  recordError spos $ "Monadic bind of non-monadic value; " ++
+                  recordError spos $ "Monadic bind of non-monadic value;" <+>
                                      "rewrite as let-binding or use return"
                   unify pty (getPos e') ty
                   -- Wrap the expression in "return" to correct the type
@@ -1851,12 +1844,14 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
 
             -- The special case for the wrong monad
             let allowWrongMonad ctx' valty' = do
-                  recordError spos $ "Monadic bind with the wrong monad; " ++
-                                     "found " ++ Text.unpack (ppType ppopts ctx') ++
-                                     " but expected " ++ Text.unpack (ppType ppopts ctx)
-                  recordError spos $ "This creates the action but does " ++
-                                     "not execute it; if you meant to do " ++
-                                     "that, prefix the " ++
+                  let pctx =  prettyType ppopts ctx
+                      pctx' = prettyType ppopts ctx'
+                  recordError spos $ "Monadic bind with the wrong monad;" <+>
+                                     "found" <+> pctx' <+>
+                                     "but expected" <+> pctx
+                  recordError spos $ "This creates the action but does" <+>
+                                     "not execute it; if you meant to do" <+>
+                                     "that, prefix the" <+>
                                      "expression with return"
 
                   -- The historic behavior is that the pattern gets bound
@@ -1948,12 +1943,13 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
                     -- that any corresponding future use of
                     -- enable_experimental or enable_deprecated must
                     -- be blocked.
+                    let a' = PP.pretty a
                     avail <- asks tiPrimsAvail
                     let addendum =
                           if Set.member lc avail then ""
                           else " (which is not currently visible)"
-                    recordError allpos $ "Redefinition of type " ++
-                                         Text.unpack a ++ addendum
+                    recordError allpos $ "Redefinition of type" <+> a' <>
+                                         addendum
                     -- FUTURE: print the position of the previous definition
                     -- (currently we don't keep it around)
                     return s
@@ -2303,17 +2299,22 @@ checkType kind ty = case ty of
           -- XXX special case for BlockCon (remove along with BlockCon)
           let (nargs', nparams', tycon') =
                 case (tycon, args) of
-                    (BlockCon, arg : _) -> (nargs - 1, nparams - 1, ppType ppopts arg)
-                    (_, _) -> (nargs, nparams, ppTyCon ppopts tycon)
+                    (BlockCon, arg : _) ->
+                        let ty' = prettyType ppopts arg in
+                        (PP.viaShow $ nargs - 1, PP.viaShow $ nparams - 1, ty')
+                    (_, _) ->
+                        let ty' = prettyTyCon tycon in
+                        (PP.viaShow nargs, PP.viaShow nparams, ty')
 
-          recordError pos ("Too many type arguments for type " <>
-                                   "constructor " <> Text.unpack tycon' <>
-                                   "; found " <> show nargs' <>
-                                   " but expected only " <> show nparams')
+          recordError pos $ "Too many type arguments for type constructor" <+>
+                            tycon' <> "; found" <+> nargs' <+>
+                            "but expected only" <+> nparams'
           getErrorTyVar pos
       else if nargs + argsleft /= nparams then do
-          recordError pos ("Kind mismatch: expected " <> Text.unpack (ppKind kind) <>
-                           " but found " <> Text.unpack (ppKind (Kind (nparams - nargs))))
+          let kind' = prettyKind kind
+              kindExp' = prettyKind $ Kind (nparams - nargs)
+          recordError pos $ "Kind mismatch: expected" <+> kind' <+>
+                            "but found" <+> kindExp'
           getErrorTyVar pos
       else do
           -- note that this will ignore the extra params, and return
@@ -2323,8 +2324,10 @@ checkType kind ty = case ty of
 
   TyFunc pos nameinfo params namedParams ret -> do
       if kind /= kindStar then do
-          recordError pos ("Kind mismatch: expected " ++ Text.unpack (ppKind kind) ++
-                           " but found " ++ Text.unpack (ppKind kindStar))
+          let kind' = prettyKind kind
+              kindStar' = prettyKind kindStar
+          recordError pos $ "Kind mismatch: expected" <+> kind' <+>
+                            "but found" <+> kindStar'
           getErrorTyVar pos
       else do
           params' <- mapM (checkType kindStar) params
@@ -2336,8 +2339,10 @@ checkType kind ty = case ty of
 
   TyRecord pos fields -> do
       if kind /= kindStar then do
-          recordError pos ("Kind mismatch: expected " ++ Text.unpack (ppKind kind) ++
-                           " but found " ++ Text.unpack (ppKind kindStar))
+          let kind' = prettyKind kind
+              kindStar' = prettyKind kindStar
+          recordError pos $ "Kind mismatch: expected" <+> kind' <+>
+                            "but found" <+> kindStar'
           getErrorTyVar pos
       else do
           -- Someone upstream had better have checked for duplicate
@@ -2351,12 +2356,12 @@ checkType kind ty = case ty of
       tyenv <- gets tiTyEnv
       case ScopedMap.lookup x tyenv of
           Nothing -> do
-              recordError pos ("Unbound type variable " ++ Text.unpack x)
+              recordError pos $ "Unbound type variable" <+> PP.pretty x
               getErrorTyVar pos
           Just (lc, ty')
            | Set.member lc avail -> do
               when (isDeprecated lc) $
-                  recordWarning pos $ "Type is deprecated: " <> Text.unpack x
+                  recordWarning pos $ "Type is deprecated:" <+> PP.pretty x
 
               -- For typedefs, which appear here as ConcreteType
               -- expansions, assume ty' was checked when it was
@@ -2380,18 +2385,22 @@ checkType kind ty = case ty of
                     AbstractType kf -> kf
 
               if kind /= kindFound then do
-                  recordError pos ("Kind mismatch: expected " ++ Text.unpack (ppKind kind) ++
-                                   " but found " ++ Text.unpack (ppKind kindFound))
+                  let kind' = prettyKind kind
+                      kindFound' = prettyKind kindFound
+                  recordError pos $ "Kind mismatch: expected" <+> kind' <+>
+                                   "but found" <+> kindFound'
                   getErrorTyVar pos
               else
                   -- We do _not_ want to expand typedefs when checking,
                   -- so return the original TyVar.
                   return ty
            | otherwise -> do
-                  recordError pos $ "Inaccessible type: " ++ show x
+                  let x' = PP.dquotes (PP.pretty x)
+                  recordError pos $ "Inaccessible type:" <+> x'
                   let how = if lc == HideDeprecated then "deprecated" else "experimental"
-                  recordError pos $ "This type is available only after running " ++
-                                    "`enable_" ++ how ++ "`."
+                      cmd = "`enable_" <> how <> "`"
+                  recordError pos $ "This type is available only after running" <+>
+                                    cmd <> "."
                   t' <- getFreshTyVar pos
                   return t'
 

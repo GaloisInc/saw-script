@@ -40,8 +40,8 @@ module SAWCentral.AST
      , Decl(..)
      , DeclGroup(..)
 
-     , ppKind
-     , ppTyCon
+     , ppKind, prettyKind
+     , ppTyCon, prettyTyCon
      , ppType, prettyType
      , ppSchema, prettySchema
      , prettyNamedType
@@ -447,6 +447,9 @@ instance Positioned Decl where
 ppKind :: Kind -> Text
 ppKind (Kind n) =
     Text.intercalate " -> " $ genericReplicate (n + 1) "*"
+
+prettyKind :: Kind -> PPS.Doc
+prettyKind k = PP.pretty $ ppKind k
 
 ppContext :: Context -> Text
 ppContext c = case c of

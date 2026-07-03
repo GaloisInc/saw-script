@@ -7,5 +7,4 @@ err017.saw:27:11-27:12: Type mismatch.
     Expected: { a : Int, b : Int }
     Found:    Int
 
-
 FAILED

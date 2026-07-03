@@ -8,7 +8,6 @@ Type errors:
     Expected: Int
     Found:    String
 
-
-  unify002.saw:7:23-7:27: Unbound variable: "True" (unify002.saw:7:23-7:27)
+  unify002.saw:7:23-7:27: Unbound variable: "True"
 
 FAILED

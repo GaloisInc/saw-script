@@ -7,5 +7,4 @@ err016.saw:12:13-12:14: Type mismatch.
     Expected: Int
     Found:    Int -> t.1
 
-
 FAILED

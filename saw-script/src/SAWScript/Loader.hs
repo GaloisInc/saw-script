@@ -29,6 +29,7 @@ import System.Directory
 import System.FilePath (normalise, takeDirectory)
 
 import qualified Prettyprinter as PP
+import Prettyprinter ((<+>))
 
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
@@ -185,10 +186,11 @@ panicOnMsgs ppopts whoAmI result =
 -- | Like `panicOnMsgs` but for typechecker results. XXX: the
 --   typechecker should issue its own messages; if not, it at least
 --   shouldn't be arbitrarily different.
-panicOnMsgs' :: Text -> (Either [(Pos, String)] a, [(Pos, String)]) -> a
+panicOnMsgs' :: Text -> (Either [(Pos, PPS.Doc)] a, [(Pos, PPS.Doc)]) -> a
 panicOnMsgs' whoAmI (errs_or_results, warns) =
     let pp (pos, msg) =
-          PosSupport.ppPosition pos <> ": " <> Text.pack msg
+          let msg' = PosSupport.prettyPosition pos <> ":" <+> msg in
+          PPS.renderText PPS.defaultOpts msg'  -- startup time, use default
     in
     case warns of
         [] -> case errs_or_results of
@@ -219,12 +221,12 @@ dispatchMsgs result =
 --   Add HasCallStack because if the panic happens we'll want to know
 --   where we came from. XXX: figure out how to get rid of the panic
 --   and remove HasCallStack again.
-dispatchMsgs' :: HasCallStack => (Either [(Pos, String)] a, [(Pos, String)]) -> IO a
+dispatchMsgs' :: HasCallStack => (Either [(Pos, PPS.Doc)] a, [(Pos, PPS.Doc)]) -> IO a
 dispatchMsgs' (errs_or_result, warns) = do
-    mapM_ (\(pos, msg) -> Cons.warnP pos $ Text.pack msg) warns
+    mapM_ (\(pos, msg) -> Cons.warnP' pos msg) warns
     case errs_or_result of
         Left errs -> do
-            mapM_ (\(pos, msg) -> Cons.errDP pos $ Text.pack msg) errs
+            mapM_ (\(pos, msg) -> Cons.errDP' pos msg) errs
             Cons.checkFail
             panic "dispatchMsgs'" ["checkFail didn't fail"]
         Right tree ->

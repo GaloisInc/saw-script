@@ -7,5 +7,4 @@ err038.saw:10:16-10:17: Type mismatch.
     Expected: [t.0]
     Found:    [Int] -> [Int]
 
-
 FAILED
