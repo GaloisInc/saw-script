@@ -344,6 +344,16 @@ witness.
   `differential/cryptol_ec_fold_scan`. The broad `sequences` driver now passes
   after reviewed checked-bounds golden refresh; it remains current-emission
   smoke, not proof discharge.
+- 2026-07-03 proof/example audit: every current `proofs/*` example passes
+  against tracked emitted artifacts, and `make -C otherTests/saw-core-lean
+  gaps` reports the expected proof-gap/stress inventory. Probing the preserved
+  `proof-gaps/*/proof.lean` attempts did not reveal an obvious promotable
+  proof: E4/E5 are still blocked by visible bounds obligations, crypto/LLVM
+  gaps remain proof-support or scalability work, and
+  `cryptol_chacha20_core_iterate` also exposes stale large-artifact drift
+  around checked Nat div/mod helper names. Do not update examples merely to
+  hide these obligations; promote a gap only when the current emitted artifact
+  has a checked proof without forbidden automation.
 
 ## Priority 0: Test Harness Integrity
 
@@ -1614,6 +1624,13 @@ witness.
     proof/stress gaps as tracked inventory rather than silent skips. The
     default sweep also inventories these rows separately from passing
     proof-discharge examples.
+  - 2026-07-03 proof-audit checkpoint: all default `proofs/*` examples pass
+    under `lean-proof-test.sh`. The explicit proof-gap attempts remain gaps:
+    E4/E5 fail because emitted artifacts still contain unresolved checked
+    bounds obligations, large crypto/LLVM proofs remain proof-support or
+    scalability problems, and `cryptol_chacha20_core_iterate` should not be
+    promoted until its current large artifact is refreshed/reviewed and the
+    Nat div/mod checked-helper drift is reduced or otherwise tracked.
 
 - [ ] Refresh generated goldens and proof examples after proof-carrying
   emission changes.

@@ -192,7 +192,7 @@ generated proof-backend discharge examples.
 
 | Path | Classification | Evidence | Linked source | Action |
 | --- | --- | --- | --- | --- |
-| `proof-gaps/cryptol_chacha20_core_iterate` | `proof-gap` | Explicit local gap note; large crypto proof attempt exceeds practical checked-proof budget. | `drivers/cryptol_chacha20_core_iterate`. | Keep pinned; no native-eval proof shortcut or heartbeat-only promotion. |
+| `proof-gaps/cryptol_chacha20_core_iterate` | `proof-gap` | Explicit local gap note; large crypto proof attempt exceeds practical checked-proof budget. 2026-07-03 probe also shows stale large-artifact drift around checked Nat div/mod helper names, so this is not promotable as a proof example. | `drivers/cryptol_chacha20_core_iterate`. | Keep pinned; no native-eval proof shortcut or heartbeat-only promotion. Refresh/review the large artifact only as stress work, or reduce the Nat div/mod helper drift into a focused litmus before treating it as a backend priority. |
 | `proof-gaps/cryptol_chacha20_iround_zero` | `proof-gap` | Explicit local gap note; large crypto recurrence proof attempt exceeds practical checked-proof budget. | `drivers/cryptol_chacha20_iround_zero`. | Keep pinned; no native-eval proof shortcut or heartbeat-only promotion. |
 | `proof-gaps/cryptol_running_sum_verify` | `proof-gap` | Explicit gap note for the small recurrence proof. | `drivers/cryptol_running_sum_verify`. | Keep pinned; close through later proof-support work for recurrence and bounds obligations. |
 | `proof-gaps/E4_map_id` | `proof-gap` | Small E-series proof now blocked only by visible checked bounds obligations. | `drivers/offline_lean_e_series/E4`. | Keep out of the default proof harness until proof-support work closes the obligations. |

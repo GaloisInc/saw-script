@@ -12,6 +12,13 @@ back to `proofs/` until the generated obligation or proof script checks
 reliably without heartbeat inflation, native-evaluation proof artifacts, or
 backend-added automation.
 
+2026-07-03 probe: the tracked large emitted artifact also fails to compile
+because it references stale checked Nat div/mod helper names
+`divNatChecked`/`modNatChecked`. That does not make this a proof-backend
+candidate; it means any future work on this stress example must first refresh
+and review the generated artifact, or reduce the helper-name drift to a small
+litmus before treating it as a backend priority.
+
 Next principled path: keep mining smaller emitted-obligation blockers into
 focused differential or obligation rows, and defer the large proof itself to a
 later proof-ergonomics/scalability phase.
