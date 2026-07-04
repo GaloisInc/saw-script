@@ -6,5 +6,8 @@ contains:CryptolToLean.SAWCorePrimitives.zero_macro
 contains-normalized:@Eq Nat (addNat
 contains-normalized:CryptolToLean.SAWCorePrimitives.zero_macro
 contains-normalized:h_proof_
+contains-normalized:=> Nat)
+absent:=> Except String Nat
+absent:Pure.pure CryptolToLean.SAWCorePrimitives.zero_macro
 absent:CryptolToLean.SAWCorePrimitives.eqNatAdd0
 absent:eqNatAdd0

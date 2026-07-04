@@ -1,1 +1,0 @@
-Value-producing UnitType#rec with a source-variable scrutinee emits the scrutinee at Except String UnitType, but Lean's raw UnitType.rec expects UnitType. This pins the direct-recursion raw-scrutinee convention gap.

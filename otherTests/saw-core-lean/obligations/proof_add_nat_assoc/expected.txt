@@ -5,5 +5,8 @@ contains:@Eq
 contains-normalized:@Eq Nat (addNat
 contains-normalized:(addNat (addNat
 contains-normalized:h_proof_
+contains-normalized:=> Nat)
+absent:=> Except String Nat
+absent:Pure.pure CryptolToLean.SAWCorePrimitives.zero_macro
 absent:CryptolToLean.SAWCorePrimitives.addNat_assoc
 absent:addNat_assoc

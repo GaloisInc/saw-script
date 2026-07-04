@@ -6,4 +6,7 @@ contains:@Eq
 contains-normalized:@Eq Bool (equalNat
 contains-normalized:Bool.true -> @Eq Nat
 contains-normalized:h_proof_ (@Eq.refl
+contains-normalized:=> Nat)
+absent:=> Except String Nat
+absent:Pure.pure CryptolToLean.SAWCorePrimitives.zero_macro
 absent:CryptolToLean.SAWCorePrimitives.equalNatToEqNat

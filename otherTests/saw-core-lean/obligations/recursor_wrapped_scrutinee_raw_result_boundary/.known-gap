@@ -1,3 +1,0 @@
-Wrapped-scrutinee proof-result recursors currently fail late at Lean elaboration.
-Final behavior should reject at SAW translation time with a diagnostic that no
-raw result can be extracted from an Except-wrapped scrutinee.

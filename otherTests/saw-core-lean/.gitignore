@@ -11,6 +11,8 @@
 !**/*.lean.good
 # Differential observers are source files, not generated artifacts.
 !differential/**/lean-observe.lean
+# Obligation observers are also source files; they import the emitted artifact.
+!obligations/**/lean-observe.lean
 # Discharge probes are tracked, even though they match *.lean above.
 !proofs/**/proof.lean
 !shape/**/*.shouldfail.lean

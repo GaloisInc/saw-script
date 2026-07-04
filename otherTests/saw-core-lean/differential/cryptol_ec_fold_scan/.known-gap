@@ -1,0 +1,4 @@
+Direct Cryptol.sawcore ecFoldl/ecFoldlPrime currently reach residual foldl
+with a higher-order value-level function argument. The translator rejects
+rather than converting a wrapped function to a raw function; this needs a
+separate higher-order function convention design.

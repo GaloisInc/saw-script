@@ -1,4 +1,6 @@
 contains:h_unsafeAssert_obligation_
 contains:h_unsafeAssert_
 contains:Eq
+contains-normalized:@Eq.{2} Type Nat Nat
+absent:Except String Type
 absent:CryptolToLean.SAWCorePrimitives.unsafeAssert

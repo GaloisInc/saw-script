@@ -103,6 +103,64 @@ data BindingShape
   | BindingFunction
   deriving (Eq, Show)
 
+data RawReason
+  = RawValuePosition
+  | RawTypePosition
+  | RawIndexPosition
+  | RawPropositionPosition
+  | RawProofPosition
+  | RawMotivePosition
+  | RawLogicalPosition
+  | RawLeanFormalPosition
+  | StructuralRecursorFieldPosition
+  deriving (Eq, Show)
+
+data ExpectedPosition
+  = ExpectRuntimeValue
+  | ExpectRaw RawReason
+  | ExpectFunctionPosition
+  deriving (Eq, Show)
+
+data EqualitySubjectRep
+  = EqualitySubjectRuntimeValue
+  | EqualitySubjectRaw RawReason
+  deriving (Eq, Show)
+
+data RawLogicalCallee
+  = RawLogicalEq
+  | RawLogicalRefl
+  | RawLogicalEqRec
+  deriving (Eq, Show)
+
+data CalleeConvention
+  = CalleePhaseBetaDefinition
+  | CalleeRawLeanTarget
+  | CalleeRawLogical RawLogicalCallee
+  | CalleeWrappedHelper
+  | CalleeProofObligation
+  | CalleeMacro
+  | CalleeReject
+  | CalleeTransitional Text.Text
+  deriving (Eq, Show)
+
+data RecursorScrutineeMode
+  = RecursorScrutineeRaw
+  | RecursorScrutineeWrapped
+  deriving (Eq, Show)
+
+data RecursorResultMode
+  = RecursorReturnsWrappedValue
+  | RecursorReturnsRawTypeOrProof
+  | RecursorReturnsFunction
+  deriving (Eq, Show)
+
+data RecursorConvention = RecursorConvention
+  { recScrutineeMode :: RecursorScrutineeMode
+  , recResultMode    :: RecursorResultMode
+  , recFinalShape    :: BindingShape
+  }
+  deriving (Eq, Show)
+
 data TranslatedTerm = TranslatedTerm
   { ttLean  :: Lean.Term
   , ttShape :: BindingShape
@@ -1186,7 +1244,7 @@ functionConventionValueSlot typeIxs ix ty =
   && isNothing (asEq ty)
   && isNothing (asPi ty)
   && not (isCryptolNumType ty)
-  && (shouldWrapBinder ty || isVariableHead ty || isJust (asNatType ty))
+  && (shouldWrapBinder ty || isVariableHead ty)
 
 functionConventionResultIsValue :: Term -> Bool
 functionConventionResultIsValue ty =
@@ -1194,7 +1252,7 @@ functionConventionResultIsValue ty =
   && isNothing (asEq ty)
   && isNothing (asPi ty)
   && not (isCryptolNumType ty)
-  && (shouldWrapBinder ty || isVariableHead ty || isJust (asNatType ty))
+  && (shouldWrapBinder ty || isVariableHead ty)
 
 translateFunctionConventionBinders ::
   TermTranslationMonad m =>
@@ -2310,20 +2368,10 @@ translateRawErrorObligation resultTy = do
 translateUnsafeAssertObligation ::
   TermTranslationMonad m => Term -> Term -> Term -> m TranslatedTerm
 translateUnsafeAssertObligation aArg xArg yArg = do
-  aLean <- translateTerm aArg
-  xTrans <- translateTermWithShape xArg
-  yTrans <- translateTermWithShape yArg
-  let (eqType, xLean, yLean)
-        | shouldWrapBinder aArg =
-            ( wrapExcept aLean
-            , translatedTermAsWrapped xTrans
-            , translatedTermAsWrapped yTrans
-            )
-        | otherwise =
-            (aLean, ttLean xTrans, ttLean yTrans)
-      prop =
-        Lean.App (Lean.ExplVar (Lean.Ident "Eq"))
-          [eqType, xLean, yLean]
+  prop <- equalityPropositionAtSubjectRep
+            "unsafeAssert"
+            (EqualitySubjectRaw RawProofPosition)
+            aArg xArg yArg
   tm <- withLocalProofObligation
           (Lean.Ident "h_unsafeAssert_")
           prop
@@ -2333,11 +2381,177 @@ translateUnsafeAssertObligation aArg xArg yArg = do
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
 translateIdentWithArgs i args = ttLean <$> translateIdentWithArgsWithShape i args
 
+calleeConventionForIdent :: Ident -> CalleeConvention
+calleeConventionForIdent i
+  | isPreludeIdent "Eq" i =
+      CalleeRawLogical RawLogicalEq
+  | isPreludeIdent "Refl" i =
+      CalleeRawLogical RawLogicalRefl
+  | isPreludeIdent "Eq__rec" i =
+      CalleeRawLogical RawLogicalEqRec
+  | otherwise =
+      CalleeTransitional "classified by existing dispatch branch"
+
+calleeConventionForRecursor :: CompiledRecursor -> CalleeConvention
+calleeConventionForRecursor rec
+  | ModuleIdentifier ident <- nameInfo (recursorDataType rec)
+  , isPreludeIdent "Eq" ident =
+      CalleeRawLogical RawLogicalEqRec
+  | otherwise =
+      CalleeTransitional "classified by existing recursor dispatch branch"
+
+isPreludeIdent :: String -> Ident -> Bool
+isPreludeIdent baseName i =
+     identModule i == preludeModule
+  && identName i == baseName
+  where
+    preludeModule = mkModuleName ["Prelude"]
+
+subjectRepFromTranslatedOperands ::
+  TermTranslationMonad m =>
+  Text.Text -> [TranslatedTerm] -> m EqualitySubjectRep
+subjectRepFromTranslatedOperands who operands
+  | any ((== BindingFunction) . ttShape) operands =
+      Except.throwError (RejectedPrimitive who
+        "raw logical equality over function-shaped subjects is not \
+        \implemented in this slice")
+  | any (isWrappedShape . ttShape) operands =
+      pure EqualitySubjectRuntimeValue
+  | otherwise =
+      pure (EqualitySubjectRaw RawLogicalPosition)
+
+subjectCarrier :: EqualitySubjectRep -> Lean.Term -> Lean.Term
+subjectCarrier EqualitySubjectRuntimeValue ty = wrapExcept ty
+subjectCarrier (EqualitySubjectRaw _) ty = ty
+
+subjectTerm :: EqualitySubjectRep -> TranslatedTerm -> Lean.Term
+subjectTerm EqualitySubjectRuntimeValue = translatedTermAsWrapped
+subjectTerm (EqualitySubjectRaw _) = ttLean
+
+equalityPropositionAtSubjectRep ::
+  TermTranslationMonad m =>
+  Text.Text -> EqualitySubjectRep -> Term -> Term -> Term -> m Lean.Term
+equalityPropositionAtSubjectRep who rep aArg xArg yArg = do
+  aLean <- withRawTranslationMode (translateTerm aArg)
+  eqHead <- explicitCoreNameAtArgUniverse (Lean.Ident "Eq") aArg
+  case rep of
+    EqualitySubjectRuntimeValue -> do
+      xTrans <- translateTermWithShape xArg
+      yTrans <- translateTermWithShape yArg
+      case filter ((== BindingFunction) . ttShape) [xTrans, yTrans] of
+        _ : _ ->
+          Except.throwError (RejectedPrimitive who
+            "raw logical equality over function-shaped subjects is not \
+            \implemented in this slice")
+        [] -> pure (Lean.App eqHead
+          [ wrapExcept aLean
+          , translatedTermAsWrapped xTrans
+          , translatedTermAsWrapped yTrans
+          ])
+    EqualitySubjectRaw _ -> do
+      xLean <- withRawTranslationMode (translateTerm xArg)
+      yLean <- withRawTranslationMode (translateTerm yArg)
+      pure (Lean.App eqHead [aLean, xLean, yLean])
+
+explicitCoreNameAtArgUniverse ::
+  TermTranslationMonad m => Lean.Ident -> Term -> m Lean.Term
+explicitCoreNameAtArgUniverse target arg = do
+  mLvl <- levelOfArg arg
+  pure $ case mLvl of
+    Just lvl -> Lean.ExplVarUniv target [lvl]
+    Nothing  -> Lean.ExplVar target
+
+lowerRawLogicalCallee ::
+  TermTranslationMonad m =>
+  RawLogicalCallee -> Ident -> [Term] -> m TranslatedTerm
+lowerRawLogicalCallee RawLogicalEq _ [aArg, xArg, yArg] = do
+  aLean <- withRawTranslationMode (translateTerm aArg)
+  xTrans <- translateTermWithShape xArg
+  yTrans <- translateTermWithShape yArg
+  rep <- subjectRepFromTranslatedOperands "Eq" [xTrans, yTrans]
+  eqHead <- explicitCoreNameAtArgUniverse (Lean.Ident "Eq") aArg
+  pure (TranslatedTerm
+    (Lean.App eqHead
+      [ subjectCarrier rep aLean
+      , subjectTerm rep xTrans
+      , subjectTerm rep yTrans
+      ])
+    BindingRaw)
+lowerRawLogicalCallee RawLogicalRefl _ [aArg, xArg] = do
+  aLean <- withRawTranslationMode (translateTerm aArg)
+  xTrans <- translateTermWithShape xArg
+  rep <- subjectRepFromTranslatedOperands "Refl" [xTrans]
+  reflHead <- explicitCoreNameAtArgUniverse (Lean.Ident "Eq.refl") aArg
+  pure (TranslatedTerm
+    (Lean.App reflHead
+      [ subjectCarrier rep aLean
+      , subjectTerm rep xTrans
+      ])
+    BindingRaw)
+lowerRawLogicalCallee RawLogicalEqRec _ [aArg, xArg, motiveArg, branchArg, yArg, eqProofArg] = do
+  aLean <- withRawTranslationMode (translateTerm aArg)
+  xTrans <- translateTermWithShape xArg
+  yTrans <- translateTermWithShape yArg
+  branchTrans <- translateTermWithShape branchArg
+  case filter ((/= BindingRaw) . ttShape) [xTrans, yTrans, branchTrans] of
+    bad : _ ->
+      Except.throwError (RejectedPrimitive "Eq__rec"
+        ("raw logical Eq__rec expected raw equality operands and a raw \
+        \branch in this slice, but saw "
+        <> Text.pack (show (ttShape bad))))
+    [] -> pure ()
+  motiveLean <- withRawTranslationMode (translateTerm motiveArg)
+  eqProofLean <- withRawTranslationMode (translateTerm eqProofArg)
+  pure (TranslatedTerm
+    (Lean.App (Lean.ExplVar (Lean.Ident "Eq.rec"))
+      [ aLean
+      , ttLean xTrans
+      , motiveLean
+      , ttLean branchTrans
+      , ttLean yTrans
+      , eqProofLean
+      ])
+    BindingRaw)
+lowerRawLogicalCallee callee ident _ =
+  Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+    ("raw logical callee "
+     <> Text.pack (show callee)
+     <> " was used at an unsupported arity"))
+
+-- First-slice dispatch classification:
+--
+-- * 'findProofPrimitiveContract', 'findCheckedApplicationContract',
+--   'findPartialOpContract', 'Prelude.unsafeAssert', raw 'Prelude.error',
+--   'Prelude.fix', and 'Prelude.MkStream' are proof-obligation or
+--   checked-helper conventions: Haskell emits the declared contract or
+--   rejects unsupported arities, but does not prove it.
+-- * 'Prelude.Eq', 'Prelude.Refl', and 'Prelude.Eq__rec' are the only
+--   behavior-changing raw logical callees in this slice. They route through
+--   'lowerRawLogicalCallee' so equality subject representation is explicit
+--   and proof-transport motives stay raw.
+-- * 'Prelude.if0Nat', raw 'Prelude.natCase', and function 'Prelude.coerce'
+--   are existing transitional macro/raw-target branches. They are kept here
+--   with their current conservative rejections instead of being broadened
+--   during the equality slice.
+-- * 'UseMapsToWrapped' in 'originalDispatchWithShape' is the wrapped-helper
+--   convention. Its argument table controls wrapped function/value formals
+--   and rejects unsupported higher-order residuals rather than rawifying.
+-- * Other 'autoEmitRaw' proof combinators such as 'sym', 'trans',
+--   'eq_cong', and 'coerce__def' remain transitional raw-logical
+--   'UsePreserve' calls in this checkpoint. Do not add name-by-name behavior
+--   here until the next convention slice gives them explicit subject and
+--   arity contracts.
+-- * The final 'originalDispatchWithShape' call is the declared transitional
+--   fallback for pre-existing use-site treatments and ordinary Phase-beta
+--   definitions; unmapped identifiers still reject through
+--   'SpecialTreatment.defaultTreatmentFor'.
 translateIdentWithArgsWithShape ::
   TermTranslationMonad m => Ident -> [Term] -> m TranslatedTerm
 translateIdentWithArgsWithShape i args
   | Just contract <- findProofPrimitiveContract i (length args)
   = lowerProofPrimitiveContract contract args
+  | CalleeRawLogical callee <- calleeConventionForIdent i
+  = lowerRawLogicalCallee callee i args
   | Just contract <- findCheckedApplicationContract i (length args)
   = lowerCheckedApplicationContract contract i args
   | Just expectedArity <- findCheckedApplicationContractArity i
@@ -2446,33 +2660,6 @@ translateIdentWithArgsWithShape i args
                    then pure coerced
                    else Except.throwError (RejectedPrimitive "coerce"
                           "non-function coerce was applied to extra arguments")
-  -- SAWCore @Eq : (a : sort 1) → a → a → Prop@. When @a@ is a
-  -- value-domain SAW type (Bool, Vec n α, …), the Phase β
-  -- translation of @x@/@y@ at type @a@ is wrapped in
-  -- @Except String a@. Lean's @Eq@ is polymorphic in its type
-  -- arg, so we can pass @Except String a@ as the type-arg and
-  -- @x@/@y@ at their wrapped types — natural shape for VC
-  -- discharge ("@F_wrapped x = Pure.pure true@"). Type-level
-  -- uses (@Eq Type X Y@) translate without wrap because
-  -- 'shouldWrapBinder' returns False on @Sort@.
-  | i == "Prelude.Eq"
-  , [aArg, xArg, yArg] <- args
-  , shouldWrapBinder aArg
-  = do
-      phase <- phaseBetaEnabled
-      if not phase
-         then originalDispatchWithShape i args
-         else do
-           aTrans <- translateTerm aArg
-           xTrans <- translateTermWithShape xArg
-           yTrans <- translateTermWithShape yArg
-           pure $ TranslatedTerm
-             (Lean.App (Lean.ExplVar (Lean.Ident "Eq"))
-               [ wrapExcept aTrans
-               , translatedTermAsWrapped xTrans
-               , translatedTermAsWrapped yTrans
-               ])
-             BindingRaw
 translateIdentWithArgsWithShape i args = originalDispatchWithShape i args
 
 originalDispatchWithShape ::
@@ -3182,6 +3369,12 @@ translateRecursorApp crec args = ttLean <$> translateRecursorAppWithShape crec a
 
 translateRecursorAppWithShape :: TermTranslationMonad m =>
                         CompiledRecursor -> [Term] -> m TranslatedTerm
+translateRecursorAppWithShape crec args
+  | CalleeRawLogical RawLogicalEqRec <- calleeConventionForRecursor crec =
+      lowerRawLogicalCallee
+        RawLogicalEqRec
+        (mkIdent (mkModuleName ["Prelude"]) "Eq__rec")
+        args
 translateRecursorAppWithShape crec args = do
   recHead <- translateFTermF (Recursor crec)
   let nParams  = recursorNumParams crec
@@ -3206,32 +3399,21 @@ translateRecursorAppWithShape crec args = do
        scrutResult <- translateTermWithShape scrut
        let scrutTrans = ttLean scrutResult
            scrutWrapped = isWrappedShape (ttShape scrutResult)
-       -- A motive returning a type expression (like @fun num => seq n a@)
-       -- or a proof stays raw. Only value-producing motives use the
-       -- Phase-β scrutinee bind and wrapped result type, and only when
-       -- the scrutinee itself is wrapped so the recursor appears in an
-       -- Except-producing continuation.
+       -- Lean recursors consume raw scrutinees. The convention decision below
+       -- is the only place that classifies the motive result and decides
+       -- whether a wrapped source scrutinee may be sequenced through
+       -- 'Bind.bind'. Value-producing motives always return @Except String T@.
+       -- Function-producing motives may bind the scrutinee only after
+       -- eta-expanding to a function whose final result can carry @Except@.
+       -- Raw/proof/type motives never extract a raw scrutinee from @Except@.
        let motiveArg = preScrut !! nParams
            (_, motiveBody) = asLambdaList motiveArg
-       motiveReturnsType <- isTypeProducing motiveBody
-       let motiveReturnsOpaqueTypeFamily =
-             isVariableHeadTypeFamily motiveBody
-           motiveResultIsValue =
-             functionConventionResultIsValue motiveBody
-             && not motiveReturnsOpaqueTypeFamily
-           motiveReturnsProof = case termSortOrType motiveBody of
-             Left s  -> s == propSort
-             Right _ -> False
-           motiveReturnsRaw =
-             motiveReturnsProof ||
-             motiveReturnsOpaqueTypeFamily ||
-             (motiveReturnsType && not (scrutWrapped && motiveResultIsValue))
+       convention <- recursorConvention
+         crec scrutWrapped motiveBody (length postScrut)
+       let motiveReturnsRaw =
+             recResultMode convention /= RecursorReturnsWrappedValue
            motiveReturnsWrappedValue =
-             scrutWrapped
-             && not motiveReturnsRaw
-             && motiveResultIsValue
-           recursorReturnsValue =
-             not motiveReturnsRaw && motiveResultIsValue
+             recResultMode convention == RecursorReturnsWrappedValue
        paramTrans <- traverse translateTerm paramArgs
        casePlans <- recursorCasePlans paramTrans crec
        preTrans <- sequence (zipWith
@@ -3246,53 +3428,151 @@ translateRecursorAppWithShape crec args = do
                                 (casePlans !! (i - caseFirst)) a
                          else translateTerm a)
          [0..] preScrut)
-       postTrans  <- traverse translateTerm postScrut
-       -- Decide whether to 'Bind.bind' the scrutinee. The
-       -- recursor's scrutinee SAW type is usually value-domain
-       -- (Num, Stream α, RecordType, …), but the recursor result
-       -- may be a type expression or a proof. Those results must
-       -- stay raw: wrapping an equality proof through 'Bind.bind'
-       -- gives an @Except String Prop@-shaped term where Lean
-       -- expects a proof, which is both ill-typed and unsound for
-       -- coercions.
-       --
-       -- Decide whether the scrutinee arrives Except-wrapped:
-       --   * 'Lean.Var' tracked as 'BindingWrapped' — wrapped.
-       --   * 'Lean.App' headed by a known wrap-producing
-       --     identifier ('Bind.bind', 'Pure.pure', a '*.rec'
-       --     call whose translated motive returns 'Except', or one
-       --     of the wrapped support-library helpers like 'genM') —
-       --     wrapped. This catches the rec-result-as-scrutinee
-       --     case (chained 'RecordType.rec' projections) and
-       --     bind-chain scrutinees, which the previous Var-only
-       --     check missed.
-       --   * Otherwise — pass directly (raw type-arg binder,
-       --     constructor literal, etc.).
-       let resultShape
-             | motiveReturnsRaw = BindingRaw
-             | otherwise        = BindingWrapped
-           recCallWith scrutTerm =
+       postResults <- traverse translateTermWithShape postScrut
+       let postTrans = recursorPostArgs motiveBody postResults
+       let recCallWith scrutTerm =
              Lean.App recHead (preTrans ++ [scrutTerm] ++ postTrans)
-       if motiveReturnsRaw
-          then pure (TranslatedTerm (recCallWith scrutTrans) resultShape)
-          else if not scrutWrapped
-          then do
-            let recCall = recCallWith scrutTrans
-                recTerm = if recursorReturnsValue
-                             then Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [recCall]
-                             else recCall
-            pure (TranslatedTerm recTerm resultShape)
-          else do
-            scrutName <- freshVariant (Lean.Ident "scrut_")
-            let recCall = recCallWith (Lean.Var scrutName)
-                lam = Lean.Lambda
-                        [Lean.Binder Lean.Explicit scrutName Nothing]
-                        recCall
-            pure (TranslatedTerm
-                    (Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
-                      [scrutTrans, lam])
-                    BindingWrapped)
+       case (recScrutineeMode convention, recResultMode convention) of
+         (RecursorScrutineeRaw, _) ->
+           pure (TranslatedTerm (recCallWith scrutTrans)
+                                (recFinalShape convention))
+         (RecursorScrutineeWrapped, RecursorReturnsWrappedValue) -> do
+           scrutName <- freshVariant (Lean.Ident "scrut_")
+           let recCall = recCallWith (Lean.Var scrutName)
+               lam = Lean.Lambda
+                       [Lean.Binder Lean.Explicit scrutName Nothing]
+                       recCall
+           pure (TranslatedTerm
+                   (Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
+                     [scrutTrans, lam])
+                   BindingWrapped)
+         (RecursorScrutineeWrapped, RecursorReturnsFunction)
+           | recFinalShape convention == BindingWrapped -> do
+               scrutName <- freshVariant (Lean.Ident "scrut_")
+               let recCall = recCallWith (Lean.Var scrutName)
+                   lam = Lean.Lambda
+                           [Lean.Binder Lean.Explicit scrutName Nothing]
+                           recCall
+               pure (TranslatedTerm
+                       (Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
+                         [scrutTrans, lam])
+                       BindingWrapped)
+           | null postScrut
+           , recFinalShape convention == BindingFunction
+           , recursorFunctionResultCanPropagate motiveBody -> do
+               fn <- etaExpandWrappedScrutineeFunctionResult
+                       motiveBody scrutTrans recCallWith
+               pure (TranslatedTerm fn BindingFunction)
+         (RecursorScrutineeWrapped, _) ->
+           rejectWrappedRawRecursor crec convention
   where
+    recursorConvention ::
+      TermTranslationMonad m =>
+      CompiledRecursor -> Bool -> Term -> Int -> m RecursorConvention
+    recursorConvention rec scrutWrapped' motiveBody nPostArgs = do
+      let scrutMode =
+            if scrutWrapped'
+               then RecursorScrutineeWrapped
+               else RecursorScrutineeRaw
+          resultMode = classifyRecursorResult rec motiveBody
+          finalShape = case resultMode of
+            RecursorReturnsWrappedValue   -> BindingWrapped
+            RecursorReturnsRawTypeOrProof -> BindingRaw
+            RecursorReturnsFunction       ->
+              phaseBetaResultShape motiveBody nPostArgs
+          convention = RecursorConvention
+            { recScrutineeMode = scrutMode
+            , recResultMode    = resultMode
+            , recFinalShape    = finalShape
+            }
+      case (scrutMode, resultMode) of
+        (RecursorScrutineeWrapped, RecursorReturnsRawTypeOrProof) ->
+          rejectWrappedRawRecursor rec convention
+        (RecursorScrutineeWrapped, RecursorReturnsFunction) ->
+          if finalShape == BindingWrapped ||
+             (nPostArgs == 0 &&
+              finalShape == BindingFunction &&
+              recursorFunctionResultCanPropagate motiveBody)
+             then pure convention
+             else rejectWrappedRawRecursor rec convention
+        _ -> pure convention
+
+    classifyRecursorResult :: CompiledRecursor -> Term -> RecursorResultMode
+    classifyRecursorResult rec motiveBody
+      | recursorDirectResultIsValue rec motiveBody
+      , not (isVariableHeadTypeFamily motiveBody) =
+          RecursorReturnsWrappedValue
+      | Just _ <- asPi motiveBody =
+          RecursorReturnsFunction
+      | otherwise =
+          RecursorReturnsRawTypeOrProof
+
+    recursorDirectResultIsValue :: CompiledRecursor -> Term -> Bool
+    recursorDirectResultIsValue rec motiveBody =
+         functionConventionResultIsValue motiveBody
+      || (recursorSort rec /= propSort && isJust (asNatType motiveBody))
+
+    rejectWrappedRawRecursor ::
+      TermTranslationMonad m =>
+      CompiledRecursor -> RecursorConvention -> m a
+    rejectWrappedRawRecursor rec convention =
+      Except.throwError (RejectedPrimitive
+        (toAbsoluteName (nameInfo (recursorDataType rec)))
+        ("raw/wrapped recursor convention cannot extract a raw "
+         <> recursorResultDescription (recResultMode convention)
+         <> " from an Except-wrapped scrutinee; only value-producing \
+            \recursors and value-producing function recursors may bind \
+            \wrapped scrutinees"))
+
+    recursorResultDescription :: RecursorResultMode -> Text.Text
+    recursorResultDescription RecursorReturnsWrappedValue =
+      "value result"
+    recursorResultDescription RecursorReturnsRawTypeOrProof =
+      "type/proof/raw result"
+    recursorResultDescription RecursorReturnsFunction =
+      "function result"
+
+    recursorFunctionResultCanPropagate :: Term -> Bool
+    recursorFunctionResultCanPropagate fty =
+      not (null binders) &&
+      (functionConventionResultIsValue retTy || natValueResult fty)
+      where
+        (binders, retTy) = asPiList fty
+
+    recursorPostArgs :: Term -> [TranslatedTerm] -> [Lean.Term]
+    recursorPostArgs fty argResults =
+      [ case drop ix binders of
+          (_, bty) : _
+            | functionConventionValueSlot typeIxs ix bty ->
+                translatedTermAsWrapped result
+          _ -> ttLean result
+      | (ix, result) <- zip [0..] argResults
+      ]
+      where
+        (binders, _) = asPiList fty
+        typeIxs = typeArgPositions fty
+
+    etaExpandWrappedScrutineeFunctionResult ::
+      TermTranslationMonad m =>
+      Term ->
+      Lean.Term ->
+      (Lean.Term -> Lean.Term) ->
+      m Lean.Term
+    etaExpandWrappedScrutineeFunctionResult fty scrutTrans recCallWith = do
+      let (binders, _) = asPiList fty
+          typeIxs = typeArgPositions fty
+      translateFunctionConventionBinders typeIxs binders $
+        \etaBinders etaArgs -> do
+          scrutName <- freshVariant (Lean.Ident "scrut_")
+          let recFun = recCallWith (Lean.Var scrutName)
+              recResult = Lean.App recFun (map ttLean etaArgs)
+              scrutLam = Lean.Lambda
+                [Lean.Binder Lean.Explicit scrutName Nothing]
+                recResult
+          pure (Lean.Lambda etaBinders
+            (Lean.App (Lean.Var (Lean.Ident "Bind.bind"))
+              [scrutTrans, scrutLam]))
+
     -- Constructor case handlers are lambdas whose first binders are
     -- determined by the constructor fields. These fields do not all have
     -- the same Phase-beta shape: structural fields are raw recursor
@@ -3353,7 +3633,6 @@ translateRecursorAppWithShape crec args = do
                 bodyLean <- translateTermLet body
                 let bodyWrapped =
                       if phase && not motiveReturnsRaw
-                         && functionConventionResultIsValue body
                          then wrapExcept bodyLean
                          else bodyLean
                 pure (Lean.Lambda paramTerms bodyWrapped)
@@ -3782,7 +4061,12 @@ translateTermUnshared t =
       -- those positions; 'translateBindersSelective' applies
       -- 'skipBinderWrap' transiently at each.
       phase <- phaseBetaEnabled
-      let valueBody = phase && shouldWrapBinder body
+      let valueBody =
+            phase &&
+            ( shouldWrapBinder body
+              || isVariableHead body
+              || natValueResult t
+            )
           -- A Pi with a Prop or Eq body is a /quantifier/
           -- ('∀ x, P x') — its binders are universally-quantified
           -- value inputs that should wrap (so the body's

@@ -1,1 +1,5 @@
-Finite stream-helper observations still expose a Stream.rec / stream-construction convention gap: wrapped MkStream/helper results flow into raw Stream.rec positions, and fixing this requires a separate stream/recursor design rather than a fixture-specific wrapper patch.
+Finite stream-helper observations currently require proof-carrying stream
+productivity/totality evidence before they can serve as executable
+differential parity tests. The emitted artifact now elaborates only by using
+proof stubs, and the differential harness correctly rejects relying on those
+stubs.

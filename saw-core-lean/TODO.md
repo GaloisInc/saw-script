@@ -148,6 +148,14 @@ The Phase-beta expected-shape migration has reached a useful checkpoint:
   pointwise-totality obligation rather than defaulting those effects.
 - The auto-emitted SAWCore Prelude path now has an explicit raw-vs-wrapped
   declaration convention and elaborates under the focused driver test.
+- 2026-07-02 position/callee checkpoint: the proof-transport regressions in
+  rows such as `obligations/proof_add_nat_assoc` show that the current
+  wrapping migration is still missing a first-class expected-position /
+  callee-convention abstraction. `RecursorConvention` is a useful local
+  instance, but raw logical callees such as `Eq__rec` must not be translated
+  through the ordinary Phase-beta value application path. Working design note:
+  `doc/2026-07-02_position-callee-conventions-design.md`. Semantic contract:
+  `doc/2026-07-02_position-callee-calculus.md`.
 
 The backend is not yet complete for arbitrary accepted SAWCore or for the full
 Rocq feature surface. The current audit changes the immediate ordering:
@@ -158,24 +166,82 @@ translation with a clear, principled diagnostic.
 
 Current execution order after the 2026-07-02 example refresh:
 
-1. **P0: raw/wrapped recursor and dictionary convention.**
-   This is the highest-impact target-example gap because it blocks ordinary
-   whole-module Cryptol examples, not just proof ergonomics. Current witnesses:
-   `drivers/cryptol_module_simple`,
-   `drivers/cryptol_polymorphic_class_dict`,
+1. **P0: position/callee convention design gate.**
+   The theory review has converged on
+   `doc/2026-07-02_position-callee-calculus.md` as the semantic contract for the
+   next implementation slice. Execute
+   `doc/2026-07-02_position-callee-conventions-goal.md`: add explicit
+   expected-position/callee/definition conventions, make equality subject
+   representations explicit, promote the raw logical proof-transport rows, and
+   classify rather than patch all adjacent surfaces. Do not patch `Eq__rec`,
+   `Nat`, or the failing proof fixtures locally; use them as load-bearing
+   examples for the accepted convention. Treat the first checkpoint as narrow:
+   dispatch classification plus `Eq`/`Refl`/`Eq.rec` raw logical handling, with
+   Lean-elaborating positive proof-transport rows before any broader migration.
+   2026-07-03 checkpoint: the first raw-logical slice is implemented and
+   focused validation passes. The five Nat proof-transport rows
+   (`proof_add_nat_assoc`, `proof_eq_nat_add_0`, `proof_eq_nat_add_s`,
+   `proof_eq_nat_add_comm`, `proof_equal_nat_to_eq_nat`) now elaborate as
+   positive obligation rows, and artifact review shows raw `Eq.rec` motives
+   returning `Nat`, not `Except String Nat`. The new
+   `obligations/proof_transport_runtime_subject` row pins the opposite case:
+   equality over runtime computations uses the wrapped carrier
+   `Except String Bool`. The implementation still deliberately rejects
+   function-carrier equality in this slice; that is a follow-up convention
+   problem, not a reason to rawify functions or infer from Lean syntax.
+
+   Current broad-sweep classification after this checkpoint:
+   - `differential/cryptol_ec_fold_scan` and `differential/vector_fold` are
+     higher-order fold/function-convention gaps. They reject residual
+     `foldl`/`foldr` because the wrapped helper expects a value-level function
+     whose result can carry errors. These rows are now pinned as known gaps so
+     `make conformance` reports them explicitly without counting them as
+     parity. Do not absorb this into the Eq/Eq.rec slice.
+   - `differential/stream_helpers` is a pinned stream/productivity gap whose
+     expected diagnostic has been updated: the artifact now elaborates only
+     with proof stubs, and true differential tests correctly reject reliance on
+     `sorry`. Treat this as stream proof-carrying/productivity work, not as
+     raw-logical equality work.
+   - `drivers/sawcore_prelude_auto_emit` exposes function-shaped equality
+     subjects in auto-emitted Prelude code. The current raw-logical convention
+     rejects these conservatively; a future slice needs a principled
+     function-carrier equality convention or proof obligation.
+   - The remaining full `test` failures are stale broad goldens/proof-driver
+     artifacts from explicit-universe `@Eq.{u}` output, checked
+     bounds/index/helper changes such as `genWithBoundsM`/`atWithProof_checkedM`,
+     stream/core recursor boundaries, and known higher-order example gaps.
+     Refresh only after artifact review; do not treat those diffs as evidence
+     against the raw-logical slice.
+   - 2026-07-03 verification: `cabal build exe:saw`,
+     `cabal test saw-core-lean-smoketest`, `git diff --check`, and
+     `make -C otherTests/saw-core-lean conformance` pass. The required
+     `make -C otherTests/saw-core-lean test` sweep reports 34 failures, all in
+     broad `drivers/*` or `proofs/*` rows. The focused raw-logical,
+     runtime-subject equality, recursor, and dictionary rows pass as positive
+     rows; the 34 broad failures remain classified as stale golden/proof-driver
+     drift, stream/core recursor boundaries, checked-bounds golden churn, or
+     higher-order proof-carrying/function-convention gaps.
+
+2. **P1: raw/wrapped recursor and dictionary convention.**
+   2026-07-02 checkpoint: the core wrapped-dictionary portion is implemented.
+   `differential/unit_recursor_raw_scrutinee`,
    `differential/cryptol_vector_eq_dictionary`,
-   `differential/stream_helpers`,
-   `differential/unit_recursor_raw_scrutinee`, and likely part of
-   `drivers/sequences`.
-   The expected design is shape-aware recursor emission: when a raw Lean
-   recursor needs a raw scrutinee but the translated source term is wrapped,
-   sequence the wrapped computation with `Bind.bind`, run the raw recursor in
-   the continuation, and keep the final value in the expected wrapped/raw shape.
-   Do not rawify a dictionary or stream by default, do not inspect emitted Lean
-   syntax, and do not special-case `PEqSeq`, `RecordType.rec`, or `Stream.rec`.
+   `drivers/cryptol_module_simple`, and
+   `drivers/cryptol_polymorphic_class_dict` now pass focused validation. The
+   convention is explicit: wrapped value scrutinees are sequenced with
+   `Bind.bind`; value-producing function recursors either bind after
+   eta-expansion or, when post-scrutinee function arguments are already present,
+   bind the scrutinee around the fully applied recursor call; raw/proof results
+   reject at SAW translation.
+   Remaining former P0 witnesses are now classified as separate work:
+   `differential/stream_helpers` needs stream-recursion/productivity design, and
+   `drivers/sequences.t18` exposes a higher-order wrapped-function application
+   mismatch in `foldl (+)`, not a dictionary-rec rawification bug. Do not
+   rawify dictionaries/streams/functions by default, inspect emitted Lean syntax,
+   or special-case `PEqSeq`, `RecordType.rec`, or `Stream.rec`.
    Working plan: `doc/2026-07-02_raw-wrapped-recursor-dictionary-plan.md`.
 
-2. **P1: direct vector fallback/defaulting cleanup.**
+3. **P2: direct vector fallback/defaulting cleanup.**
    Current witnesses: `drivers/conformance_vector` and
    `drivers/conformance_vector_zip`. These examples still expose old
    fallback/defaulting paths in direct vector helper emission. The fix should be
@@ -184,7 +250,7 @@ Current execution order after the 2026-07-02 example refresh:
    Do not refresh these goldens until the artifact no longer blesses obsolete
    defaulting behavior.
 
-3. **P2: higher-order proof-carrying wrappers.**
+4. **P3: higher-order proof-carrying wrappers.**
    Current witness: `drivers/implRev4`, which reaches checked bounds/index
    contracts at non-exact arity. This is lower priority than P0/P1 because the
    backend can soundly reject it today, but it is still relevant to Rocq parity
@@ -192,21 +258,21 @@ Current execution order after the 2026-07-02 example refresh:
    through function values; it must not discard the proof argument or restore
    raw/defaulting helper functions.
 
-4. **P3: core SAWCore representation gaps.**
+5. **P4: core SAWCore representation gaps.**
    These block full Rocq parity and complete SAWCore coverage: direct recursors,
    user datatypes, `ListSort`/`FunsTo`, loaded primitive/axiom declarations,
    and injected Lean code policy. They are broad design tasks; keep them pinned
    in differential/obligation/boundary rows until each has a checked
    realization or proof-carrying contract.
 
-5. **P4: remaining proof-primitive obligations.**
+6. **P5: remaining proof-primitive obligations.**
    Many representative proof primitives now emit exact obligations, but rows
    such as `proof_coerce_eq`, `proof_bv_eq_to_eq_nat`, `proof_prove_le_nat`,
    `proof_nat_compare_le`, vector/fold lemmas, and order bridges remain known
    gaps. Promote these only through exact emitted obligations or axiom-clean
    Lean theorem realizations.
 
-6. **P5: proof ergonomics and large stress proofs.**
+7. **P6: proof ergonomics and large stress proofs.**
    Derived bounds proofs, recurrence proofs, BV-heavy crypto, SHA512, and
    broad tactic support are important but not the backend-completion gate.
    They should remain explicit proof gaps or stress items until the emitted
@@ -214,7 +280,7 @@ Current execution order after the 2026-07-02 example refresh:
    do not use `bv_decide`/native-evaluation proof artifacts as accepted proof
    discharge.
 
-7. **P6: final SAW-side proof replay UX.**
+8. **P7: final SAW-side proof replay UX.**
    Integrated `offline_lean` proof checking, import isolation, provenance
    manifests, and user-facing replay ergonomics are required before a final
    soundness claim. They remain behind emission correctness and conformance
@@ -223,7 +289,9 @@ Current execution order after the 2026-07-02 example refresh:
 The 2026-07-01 audit's original ordering is preserved below in the detailed
 priority sections. The key change after the example refresh is that harness
 integrity is no longer the blocker; the next highest-impact backend task is the
-P0 recursor/dictionary convention.
+P0 position/callee convention gate. The recursor/dictionary convention remains
+important, but it is now a local instance of that larger representation
+discipline.
 
 2026-07-02 example-refresh checkpoint:
 
@@ -240,12 +308,13 @@ P0 recursor/dictionary convention.
   fallback/defaulting cleanup, higher-order checked index wrappers, recurrence
   proof gaps, `sequences.t18`, and large crypto/LLVM stress examples. Preserve
   those failures until each has a principled emission or proof-support path.
-- Highest-impact target-example gap: the wrapped dictionary / raw recursor
-  convention. Fixing that one principledly should unlock or sharpen
-  `cryptol_module_simple`, `cryptol_polymorphic_class_dict`,
-  `cryptol_vector_eq_dictionary`, `stream_helpers`, and likely part of
-  `sequences`. Treat direct vector fallback cleanup and higher-order checked
-  wrappers as the next target-example blockers after that.
+- Highest-impact target-example gap at this checkpoint: direct vector
+  fallback/defaulting cleanup and higher-order wrapped/proof-carrying function
+  wrappers. The wrapped dictionary / raw recursor convention has been promoted
+  for `cryptol_module_simple`, `cryptol_polymorphic_class_dict`, and
+  `cryptol_vector_eq_dictionary`; `stream_helpers` and `sequences.t18` are now
+  separate design gaps, not evidence that dictionary recursor emission is still
+  ad hoc.
 
 ## Priority 0: Test Harness Integrity
 
@@ -1486,11 +1555,19 @@ P0 recursor/dictionary convention.
     `differential/cryptol_vector_eq_dictionary` as a minimal known-gap row for
     the failure exposed by `cryptol_module_simple` and
     `cryptol_polymorphic_class_dict`. SAW executes the function-valued
-    `PEqSeq` example, Lean imports the emitted artifact, and the harness pins
-    the current diagnostic where an Eq dictionary is available as
-    `Except String (RecordType ...)` but `RecordType.rec` expects the raw
-    record. Do not fix this by rawifying the dictionary; use the existing
-    wrapping/convention design or emit an explicit obligation.
+    `PEqSeq` example, Lean imports the emitted artifact, and the harness pinned
+    the diagnostic where an Eq dictionary was available as
+    `Except String (RecordType ...)` but `RecordType.rec` expected the raw
+    record.
+  - 2026-07-02 raw/wrapped recursor checkpoint: promoted
+    `differential/cryptol_vector_eq_dictionary` and the focused Unit/function
+    recursor obligation rows. The backend now binds wrapped scrutinees only in
+    value-producing contexts, including value-producing function recursors via
+    eta expansion or full post-scrutinee application. This was fixed without
+    rawifying dictionaries or recognizing `PEqSeq`/`RecordType.rec` by name.
+    Remaining `drivers/sequences.t18` failure is a higher-order wrapped
+    function application mismatch around `foldl (+)`; keep it out of the
+    recursor/dictionary bucket.
   - 2026-07-02 record-update proof checkpoint:
     `drivers/cryptol_module_record_update`,
     `drivers/cryptol_module_point`, and `proofs/point_shift_property` all pass
@@ -1769,14 +1846,20 @@ Backlog triage from the current 79 known-gap entries:
   proof-local native-evaluation axioms. Use checked Lean proof automation
   (`grind`, `simp`, `omega`/`bv_omega`, `cbv`, helper lemmas) where it works,
   and leave hard BV obligations open rather than widening the trusted base.
-- [ ] Decide how much of the expected-shape design to encode in data types
-  before migrating proof ergonomics.
+- [x] Decide and start encoding the position/callee convention design before
+  further local wrapping fixes. The 2026-07-03 raw-logical slice introduced the
+  explicit convention vocabulary and routed `Eq`/`Refl`/`Eq.rec` through it.
+  Remaining convention surfaces should extend this design by new declared
+  positions/callee contracts, not by local patches.
 
 ## References
 
 - `doc/2026-06-26_phase-beta-expected-shape.md`
 - `doc/2026-06-26_expected-shape-todo.md`
 - `doc/2026-07-01_complete-wrapping-migration-goal.md`
+- `doc/2026-07-02_position-callee-calculus.md`
+- `doc/2026-07-02_position-callee-conventions-design.md`
+- `doc/2026-07-02_position-callee-conventions-goal.md`
 - `doc/2026-05-14_wrap-invariant-audit.md`
 - `doc/2026-05-02_residual-trust.md`
 - `doc/2026-06-28_clever-legacy-path-audit.md`

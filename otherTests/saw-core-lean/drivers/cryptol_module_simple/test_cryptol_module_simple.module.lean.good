@@ -157,25 +157,22 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool))) => genM n (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool))) => genWithBoundsM n
+    (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)
-    (fun (i : Nat) => Bind.bind (atWithDefaultM n (Vec
+    (fun (i : Nat) (h_gen_bounds_ : LT.lt i n) => Bind.bind
+    (let h_bounds_obligation_ : (Prop) := (LT.lt i n);
+    let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | skip); all_goals sorry));
+    atWithProof_checkedM n (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) v i h_bounds_)
+    (fun v_1 => Bind.bind key (fun v_2 => Pure.pure (bvXor
     (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) (saw_throw_error (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) (Pure.pure
-    "at: index out of bounds")) v i) (fun v_1 => Bind.bind key
-    (fun v_2 => Pure.pure (bvXor (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -283,25 +280,22 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool))) => genM n (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool))) => genWithBoundsM n
+    (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)
-    (fun (i : Nat) => Bind.bind (atWithDefaultM n (Vec
+    (fun (i : Nat) (h_gen_bounds_ : LT.lt i n) => Bind.bind
+    (let h_bounds_obligation_ : (Prop) := (LT.lt i n);
+    let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | skip); all_goals sorry));
+    atWithProof_checkedM n (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) v i h_bounds_)
+    (fun v_1 => Bind.bind key (fun v_2 => Pure.pure (bvXor
     (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) (saw_throw_error (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) (Pure.pure
-    "at: index out of bounds")) v i) (fun v_1 => Bind.bind key
-    (fun v_2 => Pure.pure (bvXor (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -447,25 +441,22 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool))) => genM n (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool))) => genWithBoundsM n
+    (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)
-    (fun (i : Nat) => Bind.bind (atWithDefaultM n (Vec
+    (fun (i : Nat) (h_gen_bounds_ : LT.lt i n) => Bind.bind
+    (let h_bounds_obligation_ : (Prop) := (LT.lt i n);
+    let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | skip); all_goals sorry));
+    atWithProof_checkedM n (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) v i h_bounds_)
+    (fun v_1 => Bind.bind k (fun v_2 => Pure.pure (bvXor
     (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) (saw_throw_error (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) (Pure.pure
-    "at: index out of bounds")) v i) (fun v_1 => Bind.bind k
-    (fun v_2 => Pure.pure (bvXor (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -484,15 +475,20 @@ namespace Simple
     (Vec n a)) (y : Except String (Vec n a)) => foldrM Bool Bool n
     (fun (b1 : Except String Bool) (b2 : Except String
     Bool) => CryptolToLean.SAWCorePreludeExtra.iteM Bool b1 b2 (Pure.pure
-    Bool.false)) (Pure.pure Bool.true) (genM n Bool
-    (fun (i : Nat) => let x__''' := (saw_throw_error a (Pure.pure
-    "at: index out of bounds")); Bind.bind pa (fun scrut_ => @RecordType.rec
-    "eq" (Except String a -> (_' : Except String a) -> Except String Bool)
-    EmptyType (fun (_ : RecordType "eq" (Except String a -> (_' : Except String
-    a) -> Except String Bool) EmptyType) => (_' : Except String a) ->
-    (_'' : Except String a) -> Except String Bool) (fun (x' : Except String a ->
-    (_' : Except String a) -> Except String Bool) (y' : EmptyType) => x') scrut_
-    (atWithDefaultM n a x__''' x i) (atWithDefaultM n a x__''' y i))))) v_4)))
+    Bool.false)) (Pure.pure Bool.true) (genWithBoundsM n Bool
+    (fun (i : Nat) (h_gen_bounds_ : LT.lt i n) => Bind.bind pa
+    (fun scrut_ => @RecordType.rec "eq" (Except String a -> (_' : Except String
+    a) -> Except String Bool) EmptyType (fun (_ : RecordType "eq" (Except String
+    a -> (_' : Except String a) -> Except String Bool)
+    EmptyType) => (_' : Except String a) -> (_'' : Except String a) -> Except
+    String Bool) (fun (x' : Except String a -> (_' : Except String a) -> Except
+    String Bool) (y' : EmptyType) => x') scrut_
+    (let h_bounds_obligation_ : (Prop) := (LT.lt i n);
+    let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | skip); all_goals sorry));
+    atWithProof_checkedM n a x i h_bounds_)
+    (let h_bounds_obligation_ : (Prop) := (LT.lt i n);
+    let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | skip); all_goals sorry));
+    atWithProof_checkedM n a y i h_bounds_))))) v_4)))
     (fun (a : Type) (pa : Except String (RecordType "eq" (Except String a ->
     (_' : Except String a) -> Except String Bool) EmptyType)) => saw_throw_error
     (RecordType "eq" (Except String (Stream a) -> (_' : Except String (Stream
@@ -638,25 +634,22 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool))) => genM n (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool))) => genWithBoundsM n
+    (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)
-    (fun (i : Nat) => Bind.bind (atWithDefaultM n (Vec
+    (fun (i : Nat) (h_gen_bounds_ : LT.lt i n) => Bind.bind
+    (let h_bounds_obligation_ : (Prop) := (LT.lt i n);
+    let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | skip); all_goals sorry));
+    atWithProof_checkedM n (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) v i h_bounds_)
+    (fun v_1 => Bind.bind k (fun v_2 => Pure.pure (bvXor
     (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) (saw_throw_error (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) (Pure.pure
-    "at: index out of bounds")) v i) (fun v_1 => Bind.bind k
-    (fun v_2 => Pure.pure (bvXor (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -735,25 +728,22 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool))) => genM n (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool))) => genWithBoundsM n
+    (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)
-    (fun (i : Nat) => Bind.bind (atWithDefaultM n (Vec
+    (fun (i : Nat) (h_gen_bounds_ : LT.lt i n) => Bind.bind
+    (let h_bounds_obligation_ : (Prop) := (LT.lt i n);
+    let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | skip); all_goals sorry));
+    atWithProof_checkedM n (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) v i h_bounds_)
+    (fun v_1 => Bind.bind k (fun v_2 => Pure.pure (bvXor
     (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) (saw_throw_error (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) (Pure.pure
-    "at: index out of bounds")) v i) (fun v_1 => Bind.bind k
-    (fun v_2 => Pure.pure (bvXor (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro

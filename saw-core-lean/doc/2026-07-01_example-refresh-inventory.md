@@ -120,9 +120,9 @@ the row is already handled or still needs refresh, reduction, or movement.
 | `drivers/cryptol_module_record_update` | `current-proof` | Focused driver passes, and `proofs/point_shift_property` checks against the current emitted module. | `differential/record_update`; `proofs/point_shift_property`. | Keep as generated proof-backend example for record-update behavior. |
 | `drivers/cryptol_module_salsa20_q` | `stress` | Full suite failed. | Large BV/crypto proof surface. | Keep stress; mine small blockers only. |
 | `drivers/cryptol_module_sha_sigma` | `current-emission` | Full suite passed. | Crypto primitive litmus rows cover smaller gaps. | Keep as current emission smoke. |
-| `drivers/cryptol_module_simple` | `backend-gap` | Lean elaboration fails when wrapped Eq dictionary evidence is passed to raw `RecordType.rec`. | Same wrapped dictionary/record-rec surface as `cryptol_polymorphic_class_dict`; reduced by `differential/cryptol_vector_eq_dictionary`. | Do not refresh; needs principled raw/wrapped record-rec/dictionary convention. |
+| `drivers/cryptol_module_simple` | `current-emission` | Focused driver passes after the raw/wrapped recursor convention and reviewed golden refresh. | `differential/cryptol_vector_eq_dictionary`, `obligations/recursor_wrapped_scrutinee_function_result_error_propagates`. | Keep as target whole-module regression for wrapped dictionary recursors plus checked bounds obligations. |
 | `drivers/cryptol_module_stream_fibs` | `current-emission` | Focused driver passes; current artifact elaborates with explicit stream totality and fixed-point uniqueness obligations. | `obligations/mkstream_total`, `obligations/fix_wrapped_unique`, stream totality rows. | Keep as proof-carrying stream/fix emission smoke. Do not count as proof discharge, and do not hide the remaining local proof placeholders. |
-| `drivers/cryptol_polymorphic_class_dict` | `backend-gap` | Lean elaboration fails when wrapped Eq dictionary evidence is passed to raw `RecordType.rec`. | Wrapped dictionary/record-rec convention gap, reduced by `differential/cryptol_vector_eq_dictionary`. | Do not refresh; needs principled raw/wrapped record-rec/dictionary convention. |
+| `drivers/cryptol_polymorphic_class_dict` | `current-emission` | Focused driver passes after the raw/wrapped recursor convention. | `differential/cryptol_vector_eq_dictionary`, `obligations/recursor_wrapped_scrutinee_function_result_error_propagates`. | Keep as target whole-module regression for polymorphic class dictionaries. |
 | `drivers/cryptol_primitives_auto_emit` | `current-emission` | Full suite passed. | Command-level Rocq parity. | Keep. |
 | `drivers/cryptol_running_sum_verify` | `proof-gap` | Full suite failed; explicit gap note exists. | `proof-gaps/cryptol_running_sum_verify`; generic fix/proof-carrying recurrence surface. | Keep as proof gap; do not restore deleted recurrence helpers. |
 | `drivers/eqBool` | `current-emission` | Full suite passed. | Small proof-obligation emission. | Keep. |
@@ -142,7 +142,7 @@ the row is already handled or still needs refresh, reduction, or movement.
 | `drivers/offline_lean_popcount32` | `stress` | Full suite failed; explicit gap note exists. | `proof-gaps/offline_lean_popcount32`; BV-heavy popcount proof surface. | Keep stress/proof gap; no native-eval proof shortcuts. |
 | `drivers/records` | `current-emission` | Full suite passed. | `differential/record_*`. | Keep. |
 | `drivers/sawcore_prelude_auto_emit` | `current-emission` | Focused driver passes after recursor motive-shape fix; no golden refresh needed. | Prelude auto-emit convention; opaque type-family motives stay raw. | Keep as regression for higher-sort recursor motives. |
-| `drivers/sequences` | `backend-gap` | Stale bounds diffs plus `t18` wrapped-function elaboration failure. | `differential/sequence_*`, branch/derived-bounds gaps. | Do not refresh failing row until reduced/design-linked. |
+| `drivers/sequences` | `backend-gap` | Stale bounds diffs plus `t18` higher-order wrapped-function application failure in `foldl (+)`. | `differential/sequence_*`, branch/derived-bounds gaps. | Do not refresh failing row until the `foldl (+)` function-adapter gap is reduced/design-linked. |
 | `drivers/tuples` | `current-emission` | Full suite passed. | `differential/tuple_*`. | Keep. |
 | `drivers/typelevel` | `current-emission` | Full suite passed. | Sort/typelevel differential rows. | Keep. |
 
@@ -360,24 +360,26 @@ unreviewed safe refreshes:
 
 - P0 raw/wrapped recursor and dictionary convention:
   `cryptol_module_simple`, `cryptol_polymorphic_class_dict`,
-  `differential/cryptol_vector_eq_dictionary`, `conformance_stream`, and
-  possibly part of `sequences`. This is the highest-impact target-example gap.
+  and `differential/cryptol_vector_eq_dictionary` are now promoted by the
+  2026-07-02 recursor checkpoint. `conformance_stream` / `stream_helpers` and
+  `sequences.t18` remain separate stream-recursion and higher-order function
+  adapter gaps.
 - P1 direct vector fallback/defaulting cleanup:
   `conformance_vector`, `conformance_vector_zip`.
 - P2 higher-order proof-carrying/indexing gap: `implRev4`.
 - P3 recurrence/proof-obligation gaps: `cryptol_running_sum_verify`.
 - P4 large/stress examples: Chacha/Salsa/LLVM/popcount rows and
   `offline_lean_popcount32`.
-- Mixed stale-plus-real sequence gap: `sequences`, blocked by `t18`; classify
-  sub-failures against P0/P1/P3 before refreshing any golden.
+- Mixed stale-plus-real sequence gap: `sequences`, blocked by `t18`; the live
+  blocker is now classified as higher-order wrapped-function application around
+  `foldl (+)`, not the dictionary recursor convention.
 
 1. The wrapped dictionary/record-rec gap exposed by `cryptol_module_simple`
-   and `cryptol_polymorphic_class_dict` is now reduced to
-   `differential/cryptol_vector_eq_dictionary`. Do not refresh those whole
-   module goldens until the backend has a principled raw/wrapped dictionary
-   recursor convention. The likely general shape is: bind a wrapped scrutinee,
-   run the raw recursor inside the continuation, and preserve the surrounding
-   expected shape. Do not rawify dictionaries or add fixture-specific record
+   and `cryptol_polymorphic_class_dict` is closed by the 2026-07-02
+   raw/wrapped recursor convention. The implementation binds a wrapped
+   scrutinee, runs the raw recursor inside the continuation, and preserves the
+   surrounding expected shape, including value-producing function recursors.
+   Do not rawify dictionaries or add fixture-specific record
    recursor code. See
    `doc/2026-07-02_raw-wrapped-recursor-dictionary-plan.md`.
 2. Review and refresh only the small stale proof-backend goldens whose new

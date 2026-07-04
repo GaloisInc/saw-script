@@ -1,9 +1,9 @@
-// TRUE differential known-gap litmus for value-producing recursors whose
-// scrutinee is a raw source variable.
+// TRUE differential litmus for value-producing recursors whose scrutinee is a
+// source variable.
 //
-// The SAW observation applies the emitted function to Unit. The Lean observer
-// must do the same against the backend-emitted function, not reconstruct the
-// recursor by hand.
+// The SAW observation applies the source function to Unit. The Lean observer
+// applies the backend-emitted function to the corresponding successful
+// Phase-beta value, not a reconstructed recursor.
 
 let fn =
   parse_core "\\(u : UnitType) -> UnitType#rec (\\(_ : UnitType) -> Nat) 7 u";

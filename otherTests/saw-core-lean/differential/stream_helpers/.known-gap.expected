@@ -1,5 +1,2 @@
-Application type mismatch
-s (natPos_macro (bit1_macro one_macro))
-but is expected to have type
-pure (s (natPos_macro (bit1_macro one_macro)))
-FAIL: emitted Lean artifact did not compile
+warning: declaration uses `sorry`
+FAIL: true differential executable tests may not rely on proof stubs

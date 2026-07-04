@@ -7,6 +7,12 @@ requirement: reject rather than emit semantically different Lean.
 
 ## Current slice
 
+2026-07-02 correction: the earlier checklist entry "Move application lifting
+behind an explicit callee convention" is only complete for the value/wrapped
+helper slices. The `proof_add_nat_assoc` family exposed that raw logical
+callees still flow through accidental Phase-beta value application. The active
+follow-up is `2026-07-02_position-callee-conventions-goal.md`.
+
 - [x] Replace recursor case-handler raw-arity splitting with per-binder
   roles derived from constructor metadata and actual datatype parameters.
 - [x] Make `cryptol_module_simple` generated Lean elaborate directly,
@@ -30,12 +36,15 @@ requirement: reject rather than emit semantically different Lean.
   environment that distinguishes raw, wrapped, and function-shaped
   bindings. This is the first environment slice; full function
   conventions are still tracked by the callee-convention item below.
-- [x] Move application lifting behind an explicit callee convention:
+- [ ] Finish moving application lifting behind an explicit callee convention:
   raw Lean target, Phase-beta emitted definition, wrapped helper, macro.
   Progress: global and special-treated application dispatch now has a
   `TranslatedTerm` path. Macro-style `SpecialTreatment` entries carry
   explicit result shapes, and `UseMapsToWrapped` records per-formal
   conventions for raw, wrapped, and function-shaped helper arguments.
+  Remaining gap: raw logical callees such as `Eq__rec` need an explicit
+  use-site convention so proof/type/motive positions do not get wrapped by the
+  ordinary runtime-value path.
 - [x] Replace transitional Lean helper result-shape recognition with
   result shapes carried by translation.
   Progress: application argument planning and shared `let` bindings now

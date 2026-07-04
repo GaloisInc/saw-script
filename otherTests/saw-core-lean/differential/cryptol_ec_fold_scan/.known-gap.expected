@@ -1,0 +1,3 @@
+Refusing to translate primitive foldl.
+Reason: wrapped helper expected a value-level function argument with a value result
+FAIL: SAW differential producer failed

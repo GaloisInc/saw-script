@@ -1,0 +1,5 @@
+*.rawlog
+*.log
+*.diff
+*.lean.elaboration
+*.exit.fail

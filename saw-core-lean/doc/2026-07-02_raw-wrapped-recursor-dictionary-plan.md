@@ -4,6 +4,14 @@
 
 ## Just Woke Up: Start Here
 
+**Status update, 2026-07-02**: this plan reached a useful checkpoint, but it is
+no longer the active top-level goal. The recursor convention remains valid local
+architecture; however, full conformance exposed raw logical proof-transport
+failures that require the broader position/callee convention described in
+`doc/2026-07-02_position-callee-conventions-design.md`. Continue with
+`doc/2026-07-02_position-callee-conventions-goal.md` before adding more
+wrapping patches.
+
 This is the next backend-completion task after the 2026-07-02 example refresh.
 It exists because ordinary Cryptol module examples still fail when wrapped
 value computations, especially dictionaries, flow into raw Lean recursors.

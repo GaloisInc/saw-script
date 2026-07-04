@@ -1,0 +1,7 @@
+enable_experimental;
+
+// Runtime-subject equality litmus: standalone Eq over a value-domain
+// computation must compare the wrapped runtime representation, not extract a
+// raw value from Except and not silently switch to all-raw equality.
+let probe = parse_core "Eq Bool (coerce Bool Bool (Refl (sort 0) Bool) True) True";
+write_lean_term "ProofTransportRuntimeSubjectProbe" [] [] "emitted.lean" probe;

@@ -1,0 +1,5 @@
+contains:Bind.bind
+contains:UnitType.rec
+contains:fun (b : Except String Bool) =>
+absent:Except.error "sentinel"
+absent:saw_unreachable_default

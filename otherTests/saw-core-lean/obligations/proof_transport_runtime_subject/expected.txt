@@ -1,0 +1,7 @@
+contains:@Eq
+contains:Except String Bool
+contains-normalized:@Eq.{1} (Except String Bool)
+contains:Pure.pure Bool.true
+absent:@Eq.{1} Bool
+absent:Except.ok
+absent:Except.get

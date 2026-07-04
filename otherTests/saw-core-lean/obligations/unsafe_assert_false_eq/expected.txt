@@ -1,4 +1,6 @@
 contains:h_unsafeAssert_obligation_
 contains:h_unsafeAssert_
 contains:Eq
+contains-normalized:@Eq.{1} Bool Bool.true Bool.false
+absent:Except String Bool
 absent:CryptolToLean.SAWCorePrimitives.unsafeAssert

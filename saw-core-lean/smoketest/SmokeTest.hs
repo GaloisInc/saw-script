@@ -268,7 +268,9 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertContains "obligation name"
         "h_unsafeAssert_obligation_" s
       assertContainsSquashed "asserted proposition"
-        "@Eq (Except String Bool) (Pure.pure Bool.true) (Pure.pure Bool.false)" s
+        "@Eq.{1} Bool Bool.true Bool.false" s
+      assertNotContains "proof obligation does not invent wrapped carrier"
+        "Except String Bool" s
       assertContains "placeholder proof"
         "by sorry" s
       assertNotContains "does not hide assertion in tactic"
@@ -843,10 +845,10 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       proofOut <- translateOrFail sc "errorProofObligation" errProof
       assertContains "proof error has unreachable obligation"
                      "h_raw_error_obligation_ : (Prop) := (False)" proofOut
-      assertContains "proof error uses False.elim"
+      assertContainsSquashed "proof error uses False.elim"
                      "@False.elim (@Eq" proofOut
-      assertContains "proof error proposition is preserved"
-                     "(Pure.pure Bool.true) (Pure.pure Bool.false)" proofOut
+      assertContainsSquashed "proof error proposition is preserved raw"
+                     "@Eq.{1} Bool Bool.true Bool.false" proofOut
 
       errFn <- mkErrorAt sc funTy "function error"
       fnOut <- translateOrFail sc "errorFunctionObligation" errFn
@@ -911,7 +913,7 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       eqTerm <- scGlobalApply sc "Prelude.Eq" [boolTy, coerced, true]
       out <- translateOrFail sc "coerceWrappedEq" eqTerm
       assertContainsSquashed "Eq compares wrapped Bool values"
-        "@Eq (Except String Bool) (Bind.bind (Pure.pure Bool.true)" out
+        "@Eq.{1} (Except String Bool) (Bind.bind (Pure.pure Bool.true)" out
       assertNotContainsSquashed "coerce result is not double-lifted"
         "Pure.pure (Bind.bind (Pure.pure Bool.true)" out
 
@@ -1037,7 +1039,7 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       s <- translateOrFail sc "vecFix" fixApp
       assertContains "emits fixed-point contract" "saw_fix_unique_exists" s
       assertContains "chooses fixed point from proof" "saw_fix_choose" s
-      assertContains "preserves wrapped vector body" "genM" s
+      assertContains "preserves wrapped vector body" "genWithBoundsM" s
       assertContains "vector length remains a Lean helper chain"
                      "CryptolToLean.SAWCorePrimitives.natPos_macro" s
       assertNotContains "does not emit legacy vector helper" "genFixVecChecked" s

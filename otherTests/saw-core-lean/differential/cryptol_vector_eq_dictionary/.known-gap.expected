@@ -1,5 +1,0 @@
-RecordType.rec
-has type
-Except String (RecordType "eq"
-but is expected to have type
-RecordType "eq"
