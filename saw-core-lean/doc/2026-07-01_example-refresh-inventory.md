@@ -377,7 +377,9 @@ unreviewed safe refreshes:
   checked-index fallback.
 - P3 higher-order proof-carrying/indexing gap: `implRev4`; this is the next
   real design blocker for examples that pass checked indexing operations as
-  function values.
+  function values. Execute it under
+  `doc/2026-07-03_higher-order-proof-carrying-wrappers-goal.md`; do not
+  restore raw/defaulting fallback behavior.
 - P4 recurrence/proof-obligation gaps: `cryptol_running_sum_verify`.
 - P5 large/stress examples: Chacha/Salsa/LLVM/popcount rows and
   `offline_lean_popcount32`.

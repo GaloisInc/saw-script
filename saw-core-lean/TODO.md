@@ -277,6 +277,8 @@ Current execution order after the 2026-07-03 position/callee checkpoint:
    proof-carrying vector helpers.
 
 5. **P4: higher-order proof-carrying wrappers.**
+   Goal document:
+   `doc/2026-07-03_higher-order-proof-carrying-wrappers-goal.md`.
    Current witness: `drivers/implRev4`, which reaches checked bounds/index
    contracts at non-exact arity. This is lower priority than the ordinary
    value-function convention because the backend can soundly reject it today,
