@@ -2207,9 +2207,17 @@ lowerPartialCheckedApplicationContract contract ident args = do
   let (sourceBinders, _) = asPiList fty
       suppliedCount = length args
       argModes = cacArgModes contract
+      suppliedSourceVars =
+        IntSet.fromList (map (vnIndex . fst) (take suppliedCount sourceBinders))
+      missingSourceBinders = drop suppliedCount (take (cacArity contract) sourceBinders)
+      missingBinderMentionsSupplied (_, ty) =
+        not (IntSet.null (IntSet.intersection suppliedSourceVars (freeVars ty)))
   if length sourceBinders < cacArity contract
      then Except.throwError (RejectedPrimitive (Text.pack (identName ident))
             "checked-application source type has fewer binders than its contract arity")
+     else if any missingBinderMentionsSupplied missingSourceBinders
+     then Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+            "prefix checked-application binders depend on supplied arguments; this needs an explicit substitution-aware proof-carrying convention")
      else do
        suppliedHelperArgs <-
          checkedApplicationHelperArgsFor ident
@@ -2218,7 +2226,7 @@ lowerPartialCheckedApplicationContract contract ident args = do
        withMissingCheckedApplicationBinders
          ident
          (drop suppliedCount argModes)
-         (drop suppliedCount (take (cacArity contract) sourceBinders))
+         missingSourceBinders
          $ \lambdaBinders missingHelperArgs -> do
              body <- lowerCheckedApplicationHelperArgs contract
                        (suppliedHelperArgs ++ missingHelperArgs)

@@ -1,0 +1,10 @@
+enable_experimental;
+
+// Obligation-shape litmus: the bare checked vector access primitive may only
+// become a higher-order function that eventually emits and consumes the
+// ordinary bounds obligation. It must not become an unchecked/defaulting
+// accessor.
+let probe =
+  parse_core "at";
+
+write_lean_term "PartialAtBareProbe" [] [] "emitted.lean" probe;

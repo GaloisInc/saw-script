@@ -23,11 +23,13 @@ total-looking helper when the source operation is partial or proof-carrying.
 
 Strict phase boundary: do not build Lean automation while executing this plan.
 Do not add convenience tactics, proof-search macros, simp bundles, generated
-starter scripts, or proof-library lemmas whose purpose is to make emitted
-obligations discharge automatically. That is a later proof-ergonomics phase.
-For this phase, success means the emitted Lean states the right obligation and
-the helper types require the right evidence, not that Lean can automatically
-prove the evidence.
+proof-search scripts, or proof-library lemmas whose purpose is to make emitted
+obligations discharge automatically. The existing local obligation placeholder
+skeleton is allowed only as emit-stage scaffolding and must not count as proof
+discharge. Proof search is a later proof-ergonomics phase. For this phase,
+success means the emitted Lean states the right obligation and the helper
+types require the right evidence, not that Lean can automatically prove the
+evidence.
 
 ## Why This Is Next
 
@@ -69,12 +71,13 @@ stays dumb.
 - Do not add Haskell pattern recognizers for the current examples. Tests should
   pass because the backend has a general checked-application contract.
 - Do not add Lean automation for generated bounds proofs in this phase. No new
-  tactics, tactic macros, generated starter proof scripts, broad `simp`/`omega`
+  tactics, tactic macros, generated proof-search scripts, broad `simp`/`omega`
   proof search, or proof-support lemmas should be introduced to make current
   rows pass. Leave obligations open and pin known gaps when evidence is not
   already available through the checked helper interface.
-- Under-applied proof-carrying operations remain final-boundary rejections until
-  a proof-carrying higher-order wrapper is designed.
+- Under-applied proof-carrying operations remain boundary rejections unless
+  they are covered by an explicit proof-carrying higher-order wrapper
+  convention, such as the checked prefix-partial access convention.
 
 ## In-Scope Surfaces
 

@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "at 3 Bool";
+write_lean_term "AtPrefixTypeProbe" [] [] "at_prefix_type.lean" probe;

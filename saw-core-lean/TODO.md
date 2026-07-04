@@ -280,12 +280,15 @@ Current execution order after the 2026-07-03 position/callee checkpoint:
    Goal document:
    `doc/2026-07-03_higher-order-proof-carrying-wrappers-goal.md`.
    2026-07-03 checkpoint: implemented the prefix-partial checked-access slice.
-   `obligations/vector_at_partial_function` now pins partial `at n a xs` as a
-   function over the missing index that emits the same `i < n` obligation and
-   consumes `atWithProof_checkedM`. `drivers/implRev4` now elaborates after a
-   reviewed golden refresh. The implementation keeps unsupported missing
-   proof/function argument shapes rejected; it does not restore raw/defaulting
-   fallback behavior.
+   `obligations/vector_at_partial_bare` and
+   `obligations/vector_at_partial_function` pin bare `at` and `at n a xs` as
+   functions over the missing ordinary arguments that emit the same `i < n`
+   obligation and consume `atWithProof_checkedM`. Dependent-prefix forms such
+   as `at n` and `at n a` are pinned as boundary rejections until a
+   substitution-aware higher-order convention is designed. `drivers/implRev4`
+   now elaborates after a reviewed golden refresh. The implementation keeps
+   unsupported missing proof/function argument shapes rejected; it does not
+   restore raw/defaulting fallback behavior.
 
 6. **P5: core SAWCore representation gaps.**
    These block full Rocq parity and complete SAWCore coverage: direct recursors,

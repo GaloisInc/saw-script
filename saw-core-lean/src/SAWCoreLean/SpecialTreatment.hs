@@ -618,10 +618,10 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
                         (Lean.Ident "atWithDefaultM"))
     -- `Prelude.at` is intentionally opaque to normalization so its
     -- source precondition (`i < n`) remains visible. Fully applied
-    -- uses are intercepted by the checked-application contract path
-    -- before this table. Residual function-valued uses reject rather
-    -- than falling back to `atWithDefault` with an unchecked error
-    -- default.
+    -- and supported prefix-partial uses are intercepted by the
+    -- checked-application contract path before this table. Any
+    -- unsupported residual use must reject rather than falling back to
+    -- `atWithDefault` with an unchecked error default.
   , ("at", reject "Prelude.at must be fully applied so the Lean backend \
                   \can emit the vector bounds proof obligation.")
   , ("shiftL",        mapsTo sawCorePrimitivesModule "shiftL")

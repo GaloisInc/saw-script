@@ -130,8 +130,10 @@ The convention must not:
 - Do not emit unchecked `at`, `atWithDefaultM`, or a raw vector lookup as the
   realization of a proof-carrying access unless a Lean-checked proof makes the
   default branch unreachable.
-- Do not add Lean automation, convenience tactics, simp bundles, generated
-  proof scripts, BV automation, or proof-library work for this phase.
+- Do not add Lean automation, convenience tactics, simp bundles, BV
+  automation, or proof-library work for this phase. Emitted outlines may use
+  the existing local obligation placeholder skeleton; they must not add new
+  generated proof search or treat that placeholder as proof discharge.
 - Do not hide failures by moving rows out of the harness or weakening
   observers.
 - Do not call Lean elaboration with unresolved local obligations proof

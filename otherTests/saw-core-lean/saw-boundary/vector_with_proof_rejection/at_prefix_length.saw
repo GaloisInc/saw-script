@@ -1,0 +1,4 @@
+enable_experimental;
+
+let probe = parse_core "at 3";
+write_lean_term "AtPrefixLengthProbe" [] [] "at_prefix_length.lean" probe;
