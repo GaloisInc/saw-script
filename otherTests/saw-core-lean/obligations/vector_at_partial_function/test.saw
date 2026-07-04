@@ -1,0 +1,10 @@
+enable_experimental;
+
+// Obligation-shape litmus: partial vector access must not become a raw or
+// defaulting function. The eventual emitted function should introduce the
+// missing index argument and expose the same checked `i < n` contract used by
+// fully applied `at`.
+let probe =
+  parse_core "at 3 Bool 0b101";
+
+write_lean_term "PartialAtFunctionProbe" [] [] "emitted.lean" probe;

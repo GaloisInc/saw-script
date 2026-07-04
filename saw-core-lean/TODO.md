@@ -279,12 +279,13 @@ Current execution order after the 2026-07-03 position/callee checkpoint:
 5. **P4: higher-order proof-carrying wrappers.**
    Goal document:
    `doc/2026-07-03_higher-order-proof-carrying-wrappers-goal.md`.
-   Current witness: `drivers/implRev4`, which reaches checked bounds/index
-   contracts at non-exact arity. This is lower priority than the ordinary
-   value-function convention because the backend can soundly reject it today,
-   but it is still relevant to Rocq parity and real examples. The eventual
-   design must carry the proof obligation through function values; it must not
-   discard the proof argument or restore raw/defaulting helper functions.
+   2026-07-03 checkpoint: implemented the prefix-partial checked-access slice.
+   `obligations/vector_at_partial_function` now pins partial `at n a xs` as a
+   function over the missing index that emits the same `i < n` obligation and
+   consumes `atWithProof_checkedM`. `drivers/implRev4` now elaborates after a
+   reviewed golden refresh. The implementation keeps unsupported missing
+   proof/function argument shapes rejected; it does not restore raw/defaulting
+   fallback behavior.
 
 6. **P5: core SAWCore representation gaps.**
    These block full Rocq parity and complete SAWCore coverage: direct recursors,
@@ -317,10 +318,10 @@ Current execution order after the 2026-07-03 position/callee checkpoint:
 The 2026-07-01 audit's original ordering is preserved below in the detailed
 priority sections. After the 2026-07-03 checkpoints, the raw-logical,
 recursor/dictionary, fold-family value-function, direct-vector fallback review,
-and broad `sequences` golden-drift slices are no longer active blockers. The
-next highest-impact backend design task is higher-order proof-carrying wrappers
-for checked bounds/index contracts, with `drivers/implRev4` as the current
-witness.
+broad `sequences` golden-drift, and prefix-partial checked-access slices are no
+longer active blockers. The next highest-impact backend design task is now the
+remaining core representation/proof surfaces: stream/productivity, direct
+recursors, proof primitives, and other pinned conformance gaps.
 
 2026-07-02 example-refresh checkpoint:
 

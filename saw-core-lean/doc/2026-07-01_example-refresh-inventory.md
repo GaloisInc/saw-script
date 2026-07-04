@@ -127,7 +127,7 @@ the row is already handled or still needs refresh, reduction, or movement.
 | `drivers/cryptol_running_sum_verify` | `proof-gap` | Full suite failed; explicit gap note exists. | `proof-gaps/cryptol_running_sum_verify`; generic fix/proof-carrying recurrence surface. | Keep as proof gap; do not restore deleted recurrence helpers. |
 | `drivers/eqBool` | `current-emission` | Full suite passed. | Small proof-obligation emission. | Keep. |
 | `drivers/idBool` | `current-emission` | Full suite passed. | Small proof-obligation emission. | Keep. |
-| `drivers/implRev4` | `backend-gap` | Rejected checked bounds/index contracts at non-exact arity. | Higher-order proof-carrying wrapper design gap. | Keep diagnostic; do not add raw/defaulting fallback. |
+| `drivers/implRev4` | `current-emission` | Focused driver passes after the prefix-partial checked-access convention. Current emission uses `genWithBoundsM`, eta-expanded partial `at` wrappers, visible `i < n` obligations, and `atWithProof_checkedM`; no raw/defaulting fallback remains. | `obligations/vector_at_partial_function`; higher-order proof-carrying wrapper slice. | Keep as current-emission proof-carrying smoke. Do not count local `by sorry` bounds obligations as proof discharge. |
 | `drivers/lambda` | `current-emission` | Full suite passed. | `differential/core_lambda`. | Keep. |
 | `drivers/literalNat` | `current-emission` | Full suite passed. | Nat literal/macro emission. | Keep. |
 | `drivers/literals` | `current-emission` | Full suite passed. | Literal rows. | Keep. |
@@ -375,11 +375,11 @@ unreviewed safe refreshes:
   `conformance_vector_zip` now pass after reviewed golden refreshes; their
   `atWithDefaultM` occurrences are faithful source-level defaults, not legacy
   checked-index fallback.
-- P3 higher-order proof-carrying/indexing gap: `implRev4`; this is the next
-  real design blocker for examples that pass checked indexing operations as
-  function values. Execute it under
-  `doc/2026-07-03_higher-order-proof-carrying-wrappers-goal.md`; do not
-  restore raw/defaulting fallback behavior.
+- P3 higher-order proof-carrying/indexing gap:
+  prefix-partial checked access is completed for `implRev4` on 2026-07-03
+  under `doc/2026-07-03_higher-order-proof-carrying-wrappers-goal.md`.
+  Unsupported missing proof/function argument shapes remain out of scope and
+  should stay rejected until a distinct convention is designed.
 - P4 recurrence/proof-obligation gaps: `cryptol_running_sum_verify`.
 - P5 large/stress examples: Chacha/Salsa/LLVM/popcount rows and
   `offline_lean_popcount32`.

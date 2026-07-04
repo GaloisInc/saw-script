@@ -1957,6 +1957,15 @@ findCheckedApplicationContractArity ident =
          identModule ident == cacModule contract
       && identName ident == cacName contract
 
+findCheckedApplicationContractPrefix :: Ident -> Int -> Maybe CheckedApplicationContract
+findCheckedApplicationContractPrefix ident nArgs =
+  find matches checkedApplicationContracts
+  where
+    matches contract =
+         identModule ident == cacModule contract
+      && identName ident == cacName contract
+      && nArgs < cacArity contract
+
 findProofPrimitiveContract :: Ident -> Int -> Maybe ProofPrimitiveContract
 findProofPrimitiveContract ident nArgs =
   find matches proofPrimitiveContracts
@@ -2167,6 +2176,60 @@ lowerCheckedApplicationContract ::
   m TranslatedTerm
 lowerCheckedApplicationContract contract ident args = do
   helperArgs <- checkedApplicationHelperArgs (cacArgModes contract) args
+  tm <- lowerCheckedApplicationHelperArgs contract helperArgs
+  pure (TranslatedTerm tm BindingWrapped)
+  where
+    checkedApplicationHelperArgs =
+      checkedApplicationHelperArgsFor ident
+
+-- | Lower a prefix partial proof-carrying application to a function that emits
+-- the same checked obligation once the missing arguments are supplied. This is
+-- deliberately limited to missing raw/wrapped value arguments; missing source
+-- proof and higher-order function arguments still reject until they have an
+-- explicit proof-carrying convention.
+lowerPartialCheckedApplicationContract ::
+  TermTranslationMonad m =>
+  CheckedApplicationContract ->
+  Ident ->
+  [Term] ->
+  m TranslatedTerm
+lowerPartialCheckedApplicationContract contract ident args = do
+  mm <- view sawModuleMap <$> askTR
+  fty <- case resolveNameInMap mm ident of
+    Just (ResolvedDef def)   -> pure (defType def)
+    Just (ResolvedCtor ctor) -> pure (ctorType ctor)
+    Just (ResolvedDataType _) ->
+      Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+        "checked-application contract unexpectedly resolved to a datatype")
+    Nothing ->
+      Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+        "checked-application contract could not find the SAWCore source type")
+  let (sourceBinders, _) = asPiList fty
+      suppliedCount = length args
+      argModes = cacArgModes contract
+  if length sourceBinders < cacArity contract
+     then Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+            "checked-application source type has fewer binders than its contract arity")
+     else do
+       suppliedHelperArgs <-
+         checkedApplicationHelperArgsFor ident
+           (take suppliedCount argModes)
+           args
+       withMissingCheckedApplicationBinders
+         ident
+         (drop suppliedCount argModes)
+         (drop suppliedCount (take (cacArity contract) sourceBinders))
+         $ \lambdaBinders missingHelperArgs -> do
+             body <- lowerCheckedApplicationHelperArgs contract
+                       (suppliedHelperArgs ++ missingHelperArgs)
+             pure (TranslatedTerm (Lean.Lambda lambdaBinders body) BindingFunction)
+
+lowerCheckedApplicationHelperArgs ::
+  TermTranslationMonad m =>
+  CheckedApplicationContract ->
+  [Lean.Term] ->
+  m Lean.Term
+lowerCheckedApplicationHelperArgs contract helperArgs = do
   tm <- case cacBuildProp contract of
           Nothing ->
             pure (Lean.App (Lean.Var (cacHelperName contract)) helperArgs)
@@ -2181,53 +2244,105 @@ lowerCheckedApplicationContract contract ident args = do
               $ \proof ->
                   pure (Lean.App (Lean.Var (cacHelperName contract))
                     (helperArgs ++ [proof]))
-  pure (TranslatedTerm tm BindingWrapped)
-  where
-    checkedApplicationHelperArgs ::
-      TermTranslationMonad m =>
-      [CheckedApplicationArgMode] ->
-      [Term] ->
-      m [Lean.Term]
-    checkedApplicationHelperArgs modes0 args0 = go [] modes0 args0
-      where
-        go acc [] [] = pure (reverse acc)
-        go acc (CheckedArgIgnoredProof : modes) (_ : rest) =
-          go acc modes rest
-        go acc (CheckedArgFunctionWithNatLt nIdx : modes) (arg : rest)
-          | nIdx < length acc = do
-              helperArg <- translateFunctionWithNatLtWrappedResult
-                (Text.pack (identName ident))
-                (reverse acc !! nIdx)
-                True
-                arg
-              go (helperArg : acc) modes rest
-          | otherwise =
-              Except.throwError (RejectedPrimitive (Text.pack (identName ident))
-                "checked-application proof-function argument referenced a missing Nat bound")
-        go acc (mode : modes) (arg : rest) = do
-          translated <- translateTermWithShape arg
-          helperArg <- checkedApplicationArgTerm mode translated
-          go (helperArg : acc) modes rest
-        go _ _ _ =
-          Except.throwError (RejectedPrimitive (Text.pack (identName ident))
-            "checked-application contract argument table did not match source arity")
+  pure tm
 
-    checkedApplicationArgTerm CheckedArgRaw translated =
-      pure (ttLean translated)
-    checkedApplicationArgTerm CheckedArgWrapped translated =
-      pure (translatedTermAsWrapped translated)
-    checkedApplicationArgTerm CheckedArgFunction translated =
-      case ttShape translated of
-        BindingWrapped ->
+checkedApplicationHelperArgsFor ::
+  TermTranslationMonad m =>
+  Ident ->
+  [CheckedApplicationArgMode] ->
+  [Term] ->
+  m [Lean.Term]
+checkedApplicationHelperArgsFor ident modes0 args0 = go [] modes0 args0
+  where
+    go acc [] [] = pure (reverse acc)
+    go acc (CheckedArgIgnoredProof : modes) (_ : rest) =
+      go acc modes rest
+    go acc (CheckedArgFunctionWithNatLt nIdx : modes) (arg : rest)
+      | nIdx < length acc = do
+          helperArg <- translateFunctionWithNatLtWrappedResult
+            (Text.pack (identName ident))
+            (reverse acc !! nIdx)
+            True
+            arg
+          go (helperArg : acc) modes rest
+      | otherwise =
           Except.throwError (RejectedPrimitive (Text.pack (identName ident))
-            "checked-application contract expected a function argument, but the translated actual was an Except value")
-        _ -> pure (ttLean translated)
-    checkedApplicationArgTerm CheckedArgFunctionWithNatLt{} _ =
+            "checked-application proof-function argument referenced a missing Nat bound")
+    go acc (mode : modes) (arg : rest) = do
+      translated <- translateTermWithShape arg
+      helperArg <- checkedApplicationArgTerm ident mode translated
+      go (helperArg : acc) modes rest
+    go _ _ _ =
       Except.throwError (RejectedPrimitive (Text.pack (identName ident))
-        "checked-application proof-function argument must be translated from the source term")
-    checkedApplicationArgTerm CheckedArgIgnoredProof _ =
+        "checked-application contract argument table did not match source arity")
+
+checkedApplicationArgTerm ::
+  TermTranslationMonad m =>
+  Ident ->
+  CheckedApplicationArgMode ->
+  TranslatedTerm ->
+  m Lean.Term
+checkedApplicationArgTerm _ CheckedArgRaw translated =
+  pure (ttLean translated)
+checkedApplicationArgTerm _ CheckedArgWrapped translated =
+  pure (translatedTermAsWrapped translated)
+checkedApplicationArgTerm ident CheckedArgFunction translated =
+  case ttShape translated of
+    BindingWrapped ->
       Except.throwError (RejectedPrimitive (Text.pack (identName ident))
-        "checked-application contract attempted to translate an ignored proof argument")
+        "checked-application contract expected a function argument, but the translated actual was an Except value")
+    _ -> pure (ttLean translated)
+checkedApplicationArgTerm ident CheckedArgFunctionWithNatLt{} _ =
+  Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+    "checked-application proof-function argument must be translated from the source term")
+checkedApplicationArgTerm ident CheckedArgIgnoredProof _ =
+  Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+    "checked-application contract attempted to translate an ignored proof argument")
+
+withMissingCheckedApplicationBinders ::
+  TermTranslationMonad m =>
+  Ident ->
+  [CheckedApplicationArgMode] ->
+  [(VarName, Term)] ->
+  ([Lean.Binder] -> [Lean.Term] -> m a) ->
+  m a
+withMissingCheckedApplicationBinders ident modes0 binders0 k =
+  go [] [] modes0 binders0
+  where
+    go binders helperArgs [] [] =
+      k (reverse binders) (reverse helperArgs)
+    go binders helperArgs (mode : modes) ((vn, ty) : rest) =
+      case mode of
+        CheckedArgRaw ->
+          bindMissing False binders helperArgs modes (vn, ty) rest
+        CheckedArgWrapped ->
+          bindMissing True binders helperArgs modes (vn, ty) rest
+        CheckedArgIgnoredProof ->
+          Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+            "missing source proof arguments need an explicit higher-order proof-carrying convention")
+        CheckedArgFunction ->
+          Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+            "missing function arguments need an explicit higher-order proof-carrying convention")
+        CheckedArgFunctionWithNatLt{} ->
+          Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+            "missing proof-function arguments need an explicit higher-order proof-carrying convention")
+    go _ _ _ _ =
+      Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+        "checked-application partial argument table did not match source arity")
+
+    bindMissing wrapped binders helperArgs modes (vn, ty) rest = do
+      tyLean <- localTR (set skipBinderWrap False) (translateTerm ty)
+      let binderTy = if wrapped then wrapExcept tyLean else tyLean
+      ident' <-
+        if vnName vn == "_"
+           then freshVariant (Lean.Ident ("η_checked_arg_" ++ show (length binders)))
+           else translateLocalIdent (vnName vn)
+      withUsedLeanIdent ident' $
+        localTR ( over namedEnvironment (Map.insert vn ident')
+                . withBindingShape ident' (bindingShapeOfType binderTy)) $ do
+          let binder = Lean.Binder Lean.Explicit ident' (Just binderTy)
+              helperArg = Lean.Var ident'
+          go (binder : binders) (helperArg : helperArgs) modes rest
 
 -- | Lower proof primitives to explicit local proof obligations. The
 -- contract table decides which arguments are raw proof/type terms and which
@@ -2593,6 +2708,8 @@ translateIdentWithArgsWithShape i args
   = lowerRawLogicalCallee callee i args
   | Just contract <- findCheckedApplicationContract i (length args)
   = lowerCheckedApplicationContract contract i args
+  | Just contract <- findCheckedApplicationContractPrefix i (length args)
+  = lowerPartialCheckedApplicationContract contract i args
   | Just expectedArity <- findCheckedApplicationContractArity i
   = Except.throwError (RejectedPrimitive (Text.pack (identName i))
       ("checked bounds/index contracts require exactly "
@@ -3869,9 +3986,11 @@ translateCaseHandler motiveReturnsRaw expectedWrappedResult casePlan caseTerm = 
       TermTranslationMonad m => Bool -> Term -> m Lean.Term
     adaptBareCaseHandler expectedWrapped caseTerm' = do
       caseResult <- translateTermWithShape caseTerm'
-      let caseLean = if expectedWrapped
-                        then translatedTermAsWrapped caseResult
-                        else ttLean caseResult
+      let caseLean =
+            case ttShape caseResult of
+              BindingFunction -> ttLean caseResult
+              _ | expectedWrapped -> translatedTermAsWrapped caseResult
+              _ -> ttLean caseResult
       mFty <- functionTypeOfTerm caseTerm'
       case mFty of
         Just fty -> etaExpandWrappedFunctionResult fty caseLean
