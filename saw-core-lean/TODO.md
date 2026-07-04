@@ -164,7 +164,7 @@ promoted. After that, the next priority is emission quality: every emitted Lean
 file should either elaborate with explicit proof obligations or fail at SAW
 translation with a clear, principled diagnostic.
 
-Current execution order after the 2026-07-02 example refresh:
+Current execution order after the 2026-07-03 position/callee checkpoint:
 
 1. **P0: position/callee convention design gate.**
    The theory review has converged on
@@ -241,38 +241,54 @@ Current execution order after the 2026-07-02 example refresh:
    or special-case `PEqSeq`, `RecordType.rec`, or `Stream.rec`.
    Working plan: `doc/2026-07-02_raw-wrapped-recursor-dictionary-plan.md`.
 
-3. **P2: direct vector fallback/defaulting cleanup.**
-   Current witnesses: `drivers/conformance_vector` and
-   `drivers/conformance_vector_zip`. These examples still expose old
-   fallback/defaulting paths in direct vector helper emission. The fix should be
-   an extension of the existing checked bounds/index contract discipline, or a
-   clear rejection boundary if a higher-order proof-carrying wrapper is needed.
-   Do not refresh these goldens until the artifact no longer blesses obsolete
-   defaulting behavior.
+3. **P2: higher-order value-function conventions for wrapped helpers.**
+   Goal document:
+   `doc/2026-07-03_higher-order-function-conventions-goal.md`.
+   Current witnesses: `differential/vector_fold`,
+   `differential/cryptol_ec_fold_scan`, and `drivers/sequences.t18`. These
+   rows expose the same ordinary value-function convention gap: the source
+   function is a SAW value-level function, while the Lean helper formal expects
+   an `Except String`-aware value function. Fix this through a declared helper
+   formal convention, not by recognizing `+`, `addNat`, generated Lean syntax,
+   or any fixture path. This is the next example-relevant backend target
+   because it should reduce the live `sequences` blocker without entering proof
+   automation or stream/productivity work.
 
-4. **P3: higher-order proof-carrying wrappers.**
+4. **P3: direct vector fallback/defaulting review, if still live after P2.**
+   Older example inventory classified `drivers/conformance_vector` and
+   `drivers/conformance_vector_zip` as broad-driver gaps because some generated
+   artifacts contained legacy `atWithDefaultM` fallback/defaulting paths.
+   Current focused conformance rows already cover `genM`/`foldrM`/`foldlM`
+   wrapper adaptation and equal-length `zip`; do not treat the old broad-driver
+   classification as the next backend target without first reducing any
+   remaining failure to a small litmus row. If a distinct direct-vector helper
+   still uses obsolete fallback behavior, fix it through the checked
+   bounds/index contract discipline or pin a clear rejection boundary. Do not
+   refresh broad goldens to bless fallback/defaulting behavior.
+
+5. **P4: higher-order proof-carrying wrappers.**
    Current witness: `drivers/implRev4`, which reaches checked bounds/index
-   contracts at non-exact arity. This is lower priority than P0/P1 because the
-   backend can soundly reject it today, but it is still relevant to Rocq parity
-   and real examples. The eventual design must carry the proof obligation
-   through function values; it must not discard the proof argument or restore
-   raw/defaulting helper functions.
+   contracts at non-exact arity. This is lower priority than the ordinary
+   value-function convention because the backend can soundly reject it today,
+   but it is still relevant to Rocq parity and real examples. The eventual
+   design must carry the proof obligation through function values; it must not
+   discard the proof argument or restore raw/defaulting helper functions.
 
-5. **P4: core SAWCore representation gaps.**
+6. **P5: core SAWCore representation gaps.**
    These block full Rocq parity and complete SAWCore coverage: direct recursors,
    user datatypes, `ListSort`/`FunsTo`, loaded primitive/axiom declarations,
    and injected Lean code policy. They are broad design tasks; keep them pinned
    in differential/obligation/boundary rows until each has a checked
    realization or proof-carrying contract.
 
-6. **P5: remaining proof-primitive obligations.**
+7. **P6: remaining proof-primitive obligations.**
    Many representative proof primitives now emit exact obligations, but rows
    such as `proof_coerce_eq`, `proof_bv_eq_to_eq_nat`, `proof_prove_le_nat`,
    `proof_nat_compare_le`, vector/fold lemmas, and order bridges remain known
    gaps. Promote these only through exact emitted obligations or axiom-clean
    Lean theorem realizations.
 
-7. **P6: proof ergonomics and large stress proofs.**
+8. **P7: proof ergonomics and large stress proofs.**
    Derived bounds proofs, recurrence proofs, BV-heavy crypto, SHA512, and
    broad tactic support are important but not the backend-completion gate.
    They should remain explicit proof gaps or stress items until the emitted
@@ -280,18 +296,19 @@ Current execution order after the 2026-07-02 example refresh:
    do not use `bv_decide`/native-evaluation proof artifacts as accepted proof
    discharge.
 
-8. **P7: final SAW-side proof replay UX.**
+9. **P8: final SAW-side proof replay UX.**
    Integrated `offline_lean` proof checking, import isolation, provenance
    manifests, and user-facing replay ergonomics are required before a final
    soundness claim. They remain behind emission correctness and conformance
    guardrails.
 
 The 2026-07-01 audit's original ordering is preserved below in the detailed
-priority sections. The key change after the example refresh is that harness
-integrity is no longer the blocker; the next highest-impact backend task is the
-P0 position/callee convention gate. The recursor/dictionary convention remains
-important, but it is now a local instance of that larger representation
-discipline.
+priority sections. The key change after the 2026-07-03 position/callee
+checkpoint is that the raw-logical and recursor/dictionary slices are no longer
+the active blocker. The next highest-impact backend task is the ordinary
+higher-order value-function convention for fold-family helpers; direct-vector
+fallback/defaulting should be revisited only after any remaining broad-driver
+failure is reduced to a focused litmus row.
 
 2026-07-02 example-refresh checkpoint:
 
@@ -304,17 +321,17 @@ discipline.
   `saw_mkStream_total_exists` and `saw_fix_unique_exists` obligations, but
   they are not proof-discharge examples because the generated local
   obligations are still placeholders.
-- The live blocking rows are now wrapper/recursor conventions, direct-vector
-  fallback/defaulting cleanup, higher-order checked index wrappers, recurrence
-  proof gaps, `sequences.t18`, and large crypto/LLVM stress examples. Preserve
-  those failures until each has a principled emission or proof-support path.
-- Highest-impact target-example gap at this checkpoint: direct vector
-  fallback/defaulting cleanup and higher-order wrapped/proof-carrying function
-  wrappers. The wrapped dictionary / raw recursor convention has been promoted
-  for `cryptol_module_simple`, `cryptol_polymorphic_class_dict`, and
-  `cryptol_vector_eq_dictionary`; `stream_helpers` and `sequences.t18` are now
+- The live blocking rows are now higher-order fold/function conventions,
+  stream/productivity design, higher-order checked index wrappers, recurrence
+  proof gaps, and large crypto/LLVM stress examples. Preserve those failures
+  until each has a principled emission or proof-support path.
+- 2026-07-03 update: the wrapped dictionary / raw recursor convention has been
+  promoted for `cryptol_module_simple`, `cryptol_polymorphic_class_dict`, and
+  `cryptol_vector_eq_dictionary`. `stream_helpers` and `sequences.t18` are
   separate design gaps, not evidence that dictionary recursor emission is still
-  ad hoc.
+  ad hoc. The next target-example gap is `sequences.t18`, reduced to focused
+  fold/function known gaps in `differential/vector_fold` and
+  `differential/cryptol_ec_fold_scan`.
 
 ## Priority 0: Test Harness Integrity
 

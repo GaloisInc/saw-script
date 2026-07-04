@@ -2,6 +2,13 @@
 
 **Date**: 2026-07-01
 
+**2026-07-03 status note**: this document remains useful background, but it is
+no longer the operative next-sprint goal. Tuple update helper coverage is now
+classified as conforming, and the next live value-level wrapping target is the
+fold-family higher-order function convention described in
+`doc/2026-07-03_higher-order-function-conventions-goal.md`. Prefer that newer
+goal document for execution.
+
 ## Just Woke Up: Start Here
 
 The task is to finish the value-level raw/wrapped adaptation migration for the

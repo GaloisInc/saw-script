@@ -364,11 +364,20 @@ unreviewed safe refreshes:
   2026-07-02 recursor checkpoint. `conformance_stream` / `stream_helpers` and
   `sequences.t18` remain separate stream-recursion and higher-order function
   adapter gaps.
-- P1 direct vector fallback/defaulting cleanup:
-  `conformance_vector`, `conformance_vector_zip`.
-- P2 higher-order proof-carrying/indexing gap: `implRev4`.
-- P3 recurrence/proof-obligation gaps: `cryptol_running_sum_verify`.
-- P4 large/stress examples: Chacha/Salsa/LLVM/popcount rows and
+- P1 higher-order value-function convention:
+  `sequences.t18`, with focused litmus coverage in `differential/vector_fold`
+  and `differential/cryptol_ec_fold_scan`. This is the next backend target
+  because it is an ordinary value-function wrapping convention, not proof
+  automation.
+- P2 direct vector fallback/defaulting review:
+  `conformance_vector`, `conformance_vector_zip` only after reducing any
+  remaining broad-driver failure to a focused litmus row. Current conformance
+  documentation records positive focused coverage for `genM`/`foldrM`/`foldlM`
+  wrapper adaptation and equal-length `zip`, so do not chase the older broad
+  classification without a fresh reduction.
+- P3 higher-order proof-carrying/indexing gap: `implRev4`.
+- P4 recurrence/proof-obligation gaps: `cryptol_running_sum_verify`.
+- P5 large/stress examples: Chacha/Salsa/LLVM/popcount rows and
   `offline_lean_popcount32`.
 - Mixed stale-plus-real sequence gap: `sequences`, blocked by `t18`; the live
   blocker is now classified as higher-order wrapped-function application around
