@@ -30,18 +30,27 @@ noncomputable def VectorZipConformance : Except String Bool :=
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)) (PairType Nat (PairType Nat
-  UnitType)) x__ (Bind.bind (genM (CryptolToLean.SAWCorePrimitives.natPos_macro
+  UnitType)) x__ (Bind.bind (genWithBoundsM
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)) Nat (fun (i : Nat) => addNat i
+  CryptolToLean.SAWCorePrimitives.one_macro)) Nat
+  (fun (i : Nat) (h_gen_bounds_ : LT.lt i
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))) (fun v_4 => Bind.bind (genM
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))) => Pure.pure (addNat i
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) (fun v_4 => Bind.bind
+  (genWithBoundsM (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)) Nat
+  (fun (i : Nat) (h_gen_bounds_ : LT.lt i
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)) Nat (fun (i : Nat) => addNat i
+  CryptolToLean.SAWCorePrimitives.one_macro))) => Pure.pure (addNat i
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))) (fun v_5 => Pure.pure (zip Nat
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) (fun v_5 => Pure.pure (zip Nat
   Nat (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   CryptolToLean.SAWCorePrimitives.one_macro))
@@ -56,18 +65,27 @@ noncomputable def VectorZipConformance : Except String Bool :=
   (atWithDefaultM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)) (PairType Nat (PairType Nat
-  UnitType)) x__ (Bind.bind (genM (CryptolToLean.SAWCorePrimitives.natPos_macro
+  UnitType)) x__ (Bind.bind (genWithBoundsM
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)) Nat (fun (i : Nat) => addNat i
+  CryptolToLean.SAWCorePrimitives.one_macro)) Nat
+  (fun (i : Nat) (h_gen_bounds_ : LT.lt i
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))) (fun v_4 => Bind.bind (genM
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))) => Pure.pure (addNat i
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) (fun v_4 => Bind.bind
+  (genWithBoundsM (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)) Nat
+  (fun (i : Nat) (h_gen_bounds_ : LT.lt i
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)) Nat (fun (i : Nat) => addNat i
+  CryptolToLean.SAWCorePrimitives.one_macro))) => Pure.pure (addNat i
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))) (fun v_5 => Pure.pure (zip Nat
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) (fun v_5 => Pure.pure (zip Nat
   Nat (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   CryptolToLean.SAWCorePrimitives.one_macro))
@@ -85,18 +103,27 @@ noncomputable def VectorZipConformance : Except String Bool :=
   (atWithDefaultM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)) (PairType Nat (PairType Nat
-  UnitType)) x__ (Bind.bind (genM (CryptolToLean.SAWCorePrimitives.natPos_macro
+  UnitType)) x__ (Bind.bind (genWithBoundsM
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)) Nat (fun (i : Nat) => addNat i
+  CryptolToLean.SAWCorePrimitives.one_macro)) Nat
+  (fun (i : Nat) (h_gen_bounds_ : LT.lt i
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))) (fun v_4 => Bind.bind (genM
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))) => Pure.pure (addNat i
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) (fun v_4 => Bind.bind
+  (genWithBoundsM (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)) Nat
+  (fun (i : Nat) (h_gen_bounds_ : LT.lt i
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)) Nat (fun (i : Nat) => addNat i
+  CryptolToLean.SAWCorePrimitives.one_macro))) => Pure.pure (addNat i
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))) (fun v_5 => Pure.pure (zip Nat
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) (fun v_5 => Pure.pure (zip Nat
   Nat (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   CryptolToLean.SAWCorePrimitives.one_macro))
@@ -113,18 +140,27 @@ noncomputable def VectorZipConformance : Except String Bool :=
   (atWithDefaultM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)) (PairType Nat (PairType Nat
-  UnitType)) x__ (Bind.bind (genM (CryptolToLean.SAWCorePrimitives.natPos_macro
+  UnitType)) x__ (Bind.bind (genWithBoundsM
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)) Nat (fun (i : Nat) => addNat i
+  CryptolToLean.SAWCorePrimitives.one_macro)) Nat
+  (fun (i : Nat) (h_gen_bounds_ : LT.lt i
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))) (fun v_4 => Bind.bind (genM
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))) => Pure.pure (addNat i
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) (fun v_4 => Bind.bind
+  (genWithBoundsM (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)) Nat
+  (fun (i : Nat) (h_gen_bounds_ : LT.lt i
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)) Nat (fun (i : Nat) => addNat i
+  CryptolToLean.SAWCorePrimitives.one_macro))) => Pure.pure (addNat i
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))) (fun v_5 => Pure.pure (zip Nat
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) (fun v_5 => Pure.pure (zip Nat
   Nat (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   CryptolToLean.SAWCorePrimitives.one_macro))
@@ -142,18 +178,27 @@ noncomputable def VectorZipConformance : Except String Bool :=
   (atWithDefaultM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)) (PairType Nat (PairType Nat
-  UnitType)) x__ (Bind.bind (genM (CryptolToLean.SAWCorePrimitives.natPos_macro
+  UnitType)) x__ (Bind.bind (genWithBoundsM
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)) Nat (fun (i : Nat) => addNat i
+  CryptolToLean.SAWCorePrimitives.one_macro)) Nat
+  (fun (i : Nat) (h_gen_bounds_ : LT.lt i
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))) (fun v_4 => Bind.bind (genM
+  (CryptolToLean.SAWCorePrimitives.bit1_macro
+  CryptolToLean.SAWCorePrimitives.one_macro))) => Pure.pure (addNat i
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) (fun v_4 => Bind.bind
+  (genWithBoundsM (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)) Nat
+  (fun (i : Nat) (h_gen_bounds_ : LT.lt i
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)) Nat (fun (i : Nat) => addNat i
+  CryptolToLean.SAWCorePrimitives.one_macro))) => Pure.pure (addNat i
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))) (fun v_5 => Pure.pure (zip Nat
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) (fun v_5 => Pure.pure (zip Nat
   Nat (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   CryptolToLean.SAWCorePrimitives.one_macro))

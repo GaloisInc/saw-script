@@ -265,17 +265,16 @@ Current execution order after the 2026-07-03 position/callee checkpoint:
    remaining `drivers/sequences` failure is stale checked-bounds golden drift,
    not a fold-function convention blocker.
 
-4. **P3: direct vector fallback/defaulting review, if still live after P2.**
-   Older example inventory classified `drivers/conformance_vector` and
-   `drivers/conformance_vector_zip` as broad-driver gaps because some generated
-   artifacts contained legacy `atWithDefaultM` fallback/defaulting paths.
-   Current focused conformance rows already cover `genM`/`foldrM`/`foldlM`
-   wrapper adaptation and equal-length `zip`; do not treat the old broad-driver
-   classification as the next backend target without first reducing any
-   remaining failure to a small litmus row. If a distinct direct-vector helper
-   still uses obsolete fallback behavior, fix it through the checked
-   bounds/index contract discipline or pin a clear rejection boundary. Do not
-   refresh broad goldens to bless fallback/defaulting behavior.
+4. **P3: direct vector fallback/defaulting review.**
+   2026-07-03 checkpoint: reviewed and refreshed
+   `drivers/conformance_vector` and `drivers/conformance_vector_zip`.
+   The visible `atWithDefaultM` calls in those artifacts are faithful emissions
+   of source-level `atWithDefault`, including explicit default behavior, not
+   legacy fallback/defaulting from checked indexing. No `saw_throw_error`
+   default, unchecked checked-helper bypass, or Lean elaboration failure remains
+   in these rows. Keep future direct-vector fixes under the checked
+   bounds/index contract discipline; do not reintroduce fallback/defaulting for
+   proof-carrying vector helpers.
 
 5. **P4: higher-order proof-carrying wrappers.**
    Current witness: `drivers/implRev4`, which reaches checked bounds/index
@@ -314,12 +313,12 @@ Current execution order after the 2026-07-03 position/callee checkpoint:
    guardrails.
 
 The 2026-07-01 audit's original ordering is preserved below in the detailed
-priority sections. The key change after the 2026-07-03 position/callee
-checkpoint is that the raw-logical and recursor/dictionary slices are no longer
-the active blocker. The next highest-impact backend task is the ordinary
-higher-order value-function convention for fold-family helpers; direct-vector
-fallback/defaulting should be revisited only after any remaining broad-driver
-failure is reduced to a focused litmus row.
+priority sections. After the 2026-07-03 checkpoints, the raw-logical,
+recursor/dictionary, fold-family value-function, direct-vector fallback review,
+and broad `sequences` golden-drift slices are no longer active blockers. The
+next highest-impact backend design task is higher-order proof-carrying wrappers
+for checked bounds/index contracts, with `drivers/implRev4` as the current
+witness.
 
 2026-07-02 example-refresh checkpoint:
 
@@ -333,18 +332,18 @@ failure is reduced to a focused litmus row.
   they are not proof-discharge examples because the generated local
   obligations are still placeholders.
 - The live blocking rows are now stream/productivity design, higher-order
-  checked index wrappers, recurrence proof gaps, stale checked-bounds broad
-  driver goldens, and large crypto/LLVM stress examples. Preserve those
-  failures until each has a principled emission, proof-support path, or
-  reviewed current-emission refresh.
+  checked index wrappers, recurrence proof gaps, and large crypto/LLVM stress
+  examples. Preserve those failures until each has a principled emission,
+  proof-support path, or reviewed current-emission refresh.
 - 2026-07-03 update: the wrapped dictionary / raw recursor convention has been
   promoted for `cryptol_module_simple`, `cryptol_polymorphic_class_dict`, and
   `cryptol_vector_eq_dictionary`. `stream_helpers` and `sequences.t18` are
   separate design gaps, not evidence that dictionary recursor emission is still
   ad hoc. The `sequences.t18` fold-function blocker is now covered by promoted
   differential rows in `differential/vector_fold` and
-  `differential/cryptol_ec_fold_scan`; the broad `sequences` driver still needs
-  reviewed checked-bounds golden refresh or further reduction.
+  `differential/cryptol_ec_fold_scan`. The broad `sequences` driver now passes
+  after reviewed checked-bounds golden refresh; it remains current-emission
+  smoke, not proof discharge.
 
 ## Priority 0: Test Harness Integrity
 
@@ -1557,11 +1556,12 @@ failure is reduced to a focused litmus row.
     `conformance_zero_divisor_obligations` now pass focused driver tests after
     reviewed checked-obligation golden refreshes. They remain legacy smoke
     examples; the real conformance gate is the differential/obligation suite.
-  - 2026-07-01 vector driver classification: do not refresh
-    `conformance_vector` or `conformance_vector_zip` yet. Their current
-    generated artifacts still contain legacy `atWithDefaultM` fallback paths,
-    so they are backend gaps for direct vector-helper proof-carrying migration,
-    not valid current-emission baselines to bless.
+  - 2026-07-03 vector driver checkpoint: `conformance_vector` and
+    `conformance_vector_zip` now pass focused driver tests after reviewed
+    golden refreshes. Their `atWithDefaultM` occurrences are source-level
+    `atWithDefault` behavior, not fallback/defaulting for checked indexing.
+    They are current-emission smoke rows; the real conformance gate remains the
+    differential/obligation suite.
   - 2026-07-01 small whole-module/projection checkpoint:
     `cryptol_chained_projection_share`, `cryptol_module_enum`,
     `cryptol_module_error_string`, and `cryptol_module_rational` now pass

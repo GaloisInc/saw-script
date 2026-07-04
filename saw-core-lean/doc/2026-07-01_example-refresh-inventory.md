@@ -103,8 +103,8 @@ the row is already handled or still needs refresh, reduction, or movement.
 | `drivers/conformance_string` | `current-emission` | Full suite passed. | `differential/string*`. | Keep as smoke or retire after migration. |
 | `drivers/conformance_string_bytes` | `current-emission` | Focused driver passes after reviewed `genWithBoundsM` golden refresh. | `differential/string_bytes`. | Keep as legacy smoke; do not count as differential conformance. |
 | `drivers/conformance_tuple` | `current-emission` | Full suite passed. | `differential/tuple_*`. | Keep as smoke or retire after migration. |
-| `drivers/conformance_vector` | `backend-gap` | Current generated artifact still contains legacy `atWithDefaultM` fallback paths. | `differential/vector_*`, vector proof-carrying obligation rows. | Do not refresh until direct vector helper emission is migrated away from fallback/defaulting. |
-| `drivers/conformance_vector_zip` | `backend-gap` | Current generated artifact still contains legacy `atWithDefaultM` fallback paths. | `differential/sequence_map_zip`, vector proof-carrying obligation rows. | Do not refresh until direct vector helper emission is migrated away from fallback/defaulting. |
+| `drivers/conformance_vector` | `current-emission` | Focused driver passes after reviewed golden refresh. The remaining `atWithDefaultM` occurrences are faithful source-level `atWithDefault` emissions, including explicit default behavior, not fallback/defaulting from checked indexing. | `differential/vector_*`, vector proof-carrying obligation rows. | Keep as legacy smoke; do not count as differential conformance or proof discharge. |
+| `drivers/conformance_vector_zip` | `current-emission` | Focused driver passes after reviewed golden refresh. The current artifact uses source-level `atWithDefaultM` over `zip` to observe default behavior and paired projections; no direct checked-index fallback is being blessed. | `differential/sequence_map_zip`, vector proof-carrying obligation rows. | Keep as legacy smoke; do not count as differential conformance or proof discharge. |
 | `drivers/conformance_zero_divisor_obligations` | `current-emission` | Focused driver passes after reviewed checked-obligation golden refresh. | `obligations/partial_*`, `obligations/cryptol_ec_*_zero`. | Keep as obligation smoke; do not count as proof discharge. |
 | `drivers/cryptol_chacha20_core_iterate` | `stress` | Full suite failed; corresponding proof gap exists. | `proof-gaps/cryptol_chacha20_core_iterate`. | Keep as stress/proof gap; mine only small blockers. |
 | `drivers/cryptol_chacha20_iround_zero` | `stress` | Full suite failed; corresponding proof gap exists. | `proof-gaps/cryptol_chacha20_iround_zero`. | Keep as stress/proof gap; mine only small blockers. |
@@ -142,7 +142,7 @@ the row is already handled or still needs refresh, reduction, or movement.
 | `drivers/offline_lean_popcount32` | `stress` | Full suite failed; explicit gap note exists. | `proof-gaps/offline_lean_popcount32`; BV-heavy popcount proof surface. | Keep stress/proof gap; no native-eval proof shortcuts. |
 | `drivers/records` | `current-emission` | Full suite passed. | `differential/record_*`. | Keep. |
 | `drivers/sawcore_prelude_auto_emit` | `current-emission` | Focused driver passes after recursor motive-shape fix; no golden refresh needed. | Prelude auto-emit convention; opaque type-family motives stay raw. | Keep as regression for higher-sort recursor motives. |
-| `drivers/sequences` | `current-emission gap` | The former `t18` higher-order wrapped-function application failure in `foldl (+)` now elaborates under the 2026-07-03 value-function convention. The broad driver still fails because tracked goldens are stale around checked bounds helpers (`genWithBoundsM`, `atWithProof_checkedM`, and local bounds obligations). | `differential/sequence_*`, branch/derived-bounds gaps, `differential/vector_fold`. | Review the current checked-bounds emission before any broad golden refresh; reduce any remaining semantic failure to a focused litmus row first. |
+| `drivers/sequences` | `current-emission` | Focused driver passes after reviewed checked-bounds golden refresh. The former `t18` higher-order wrapped-function application failure in `foldl (+)` elaborates under the 2026-07-03 value-function convention; remaining changed artifacts expose `genWithBoundsM`, `atWithProof_checkedM`, and local bounds obligations as current proof-carrying emission. | `differential/sequence_*`, branch/derived-bounds gaps, `differential/vector_fold`. | Keep as current-emission smoke. Do not count local `by sorry` obligations as proof discharge. |
 | `drivers/tuples` | `current-emission` | Full suite passed. | `differential/tuple_*`. | Keep. |
 | `drivers/typelevel` | `current-emission` | Full suite passed. | Sort/typelevel differential rows. | Keep. |
 
@@ -299,10 +299,10 @@ Reviewed result:
 - The generated artifacts selected for refresh were checked for old
   fallback/defaulting helpers such as `atWithDefaultM`, unchecked
   `*Checked` helpers, `ratioChecked`, and `saw_throw_error` fallbacks.
-- `conformance_vector` and `conformance_vector_zip` were not refreshed. Their
-  current generated artifacts still contain legacy `atWithDefaultM` fallback
-  paths, so they are backend gaps for the direct vector-helper migration rather
-  than valid current-emission goldens.
+- 2026-07-03 follow-up: `conformance_vector` and
+  `conformance_vector_zip` were reviewed and refreshed. Their `atWithDefaultM`
+  occurrences are source-level `atWithDefault`, not fallback/defaulting for
+  checked indexing.
 
 ### Small Whole-Module/Projection Refreshes
 
@@ -371,18 +371,19 @@ unreviewed safe refreshes:
   closed an ordinary value-function wrapping convention without proof
   automation.
 - P2 direct vector fallback/defaulting review:
-  `conformance_vector`, `conformance_vector_zip` only after reducing any
-  remaining broad-driver failure to a focused litmus row. Current conformance
-  documentation records positive focused coverage for `genM`/`foldrM`/`foldlM`
-  wrapper adaptation and equal-length `zip`, so do not chase the older broad
-  classification without a fresh reduction.
-- P3 higher-order proof-carrying/indexing gap: `implRev4`.
+  completed on 2026-07-03. `conformance_vector` and
+  `conformance_vector_zip` now pass after reviewed golden refreshes; their
+  `atWithDefaultM` occurrences are faithful source-level defaults, not legacy
+  checked-index fallback.
+- P3 higher-order proof-carrying/indexing gap: `implRev4`; this is the next
+  real design blocker for examples that pass checked indexing operations as
+  function values.
 - P4 recurrence/proof-obligation gaps: `cryptol_running_sum_verify`.
 - P5 large/stress examples: Chacha/Salsa/LLVM/popcount rows and
   `offline_lean_popcount32`.
-- Mixed sequence gap: `sequences` is no longer blocked by `t18`. The remaining
-  broad-driver failure is stale checked-bounds golden drift unless a fresh
-  reduction finds another focused semantic blocker.
+- Mixed sequence gap: completed on 2026-07-03. `sequences` is no longer blocked
+  by `t18`, and its stale checked-bounds broad-driver drift has been reviewed
+  and refreshed as current proof-carrying emission.
 
 1. The wrapped dictionary/record-rec gap exposed by `cryptol_module_simple`
    and `cryptol_polymorphic_class_dict` is closed by the 2026-07-02
