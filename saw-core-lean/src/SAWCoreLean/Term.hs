@@ -1254,18 +1254,35 @@ functionConventionResultIsValue ty =
   && not (isCryptolNumType ty)
   && (shouldWrapBinder ty || isVariableHead ty)
 
-translateFunctionConventionBinders ::
+wrappedHelperFunctionValueSlot :: [Int] -> Int -> Term -> Bool
+wrappedHelperFunctionValueSlot typeIxs ix ty =
+     ix `notElem` typeIxs
+  && isNothing (asSort ty)
+  && isNothing (asEq ty)
+  && isNothing (asPi ty)
+  && not (isCryptolNumType ty)
+
+wrappedHelperFunctionResultIsValue :: Term -> Bool
+wrappedHelperFunctionResultIsValue ty =
+     isNothing (asSort ty)
+  && isNothing (asEq ty)
+  && isNothing (asPi ty)
+  && not (isCryptolNumType ty)
+
+translateFunctionConventionBindersWith ::
   TermTranslationMonad m =>
+  ([Int] -> Int -> Term -> Bool) ->
   [Int] ->
   [(VarName, Term)] ->
   ([Lean.Binder] -> [TranslatedTerm] -> m a) ->
   m a
-translateFunctionConventionBinders typeIxs params0 k = go 0 [] [] params0
+translateFunctionConventionBindersWith valueSlot typeIxs params0 k =
+  go 0 [] [] params0
   where
     go _ binders args [] = k (reverse binders) (reverse args)
     go ix binders args ((vn, ty) : rest) = do
       tyLean <- localTR (set skipBinderWrap False) (translateTerm ty)
-      let wrapped = functionConventionValueSlot typeIxs ix ty
+      let wrapped = valueSlot typeIxs ix ty
           binderTy = if wrapped then wrapExcept tyLean else tyLean
       ident <-
         if vnName vn == "_"
@@ -1280,6 +1297,15 @@ translateFunctionConventionBinders typeIxs params0 k = go 0 [] [] params0
               arg = TranslatedTerm (Lean.Var ident) argShape
           go (ix + 1) (binder : binders) (arg : args) rest
 
+translateFunctionConventionBinders ::
+  TermTranslationMonad m =>
+  [Int] ->
+  [(VarName, Term)] ->
+  ([Lean.Binder] -> [TranslatedTerm] -> m a) ->
+  m a
+translateFunctionConventionBinders =
+  translateFunctionConventionBindersWith functionConventionValueSlot
+
 translateFunctionToWrappedFormal ::
   TermTranslationMonad m =>
   Text.Text ->
@@ -1287,7 +1313,6 @@ translateFunctionToWrappedFormal ::
   m Lean.Term
 translateFunctionToWrappedFormal primitiveName fnTerm =
   case unwrapTermF fnTerm of
-    Variable{} -> translateTerm fnTerm
     Lambda{} -> do
       let (params, body) = asLambdaList fnTerm
           mFunType = case termSortOrType fnTerm of
@@ -1296,28 +1321,42 @@ translateFunctionToWrappedFormal primitiveName fnTerm =
           typeIxs = maybe (typeArgPositionsBinders params)
                           typeArgPositions
                           mFunType
+          resultIsValue = case mFunType of
+            Just fty ->
+              let (_, retTy) = asPiList fty
+              in wrappedHelperFunctionResultIsValue retTy
+            Nothing -> True
       typeBody <- isTypeProducing body
       if typeBody
          then Except.throwError (RejectedPrimitive primitiveName
                 "wrapped helper expected a value-level function argument, but the lambda body is type-producing")
+         else if not resultIsValue
+         then Except.throwError (RejectedPrimitive primitiveName
+                "wrapped helper expected a value-level function argument with a value result")
          else
-           translateFunctionConventionBinders typeIxs params $
-             \binders _args -> do
-               bodyResult <- translateTermLetWithShape body
-               pure (Lean.Lambda binders (translatedTermAsWrapped bodyResult))
+           translateFunctionConventionBindersWith
+             wrappedHelperFunctionValueSlot typeIxs params $
+               \binders _args -> do
+                 bodyResult <- translateTermLetWithShape body
+                 pure (Lean.Lambda binders (translatedTermAsWrapped bodyResult))
     _ ->
       case termSortOrType fnTerm of
         Right fty
           | (params, retTy) <- asPiList fty
           , not (null params)
-          , functionConventionResultIsValue retTy -> do
-              fnLean <- translateTerm fnTerm
+          , wrappedHelperFunctionResultIsValue retTy -> do
+              fnTranslated <- translateTermWithShape fnTerm
               let typeIxs = typeArgPositions fty
-              translateFunctionConventionBinders typeIxs params $
-                \binders args -> do
-                  let shouldBind = map (isWrappedShape . ttShape) args
-                  body <- buildLifted fnLean True shouldBind args
-                  pure (Lean.Lambda binders body)
+              case (unwrapTermF fnTerm, ttShape fnTranslated) of
+                (App{}, BindingFunction) ->
+                  pure (ttLean fnTranslated)
+                _ ->
+                  translateFunctionConventionBindersWith
+                    wrappedHelperFunctionValueSlot typeIxs params $
+                    \binders args -> do
+                      let shouldBind = map (isWrappedShape . ttShape) args
+                      body <- buildLifted (ttLean fnTranslated) True shouldBind args
+                      pure (Lean.Lambda binders body)
         _ ->
           Except.throwError (RejectedPrimitive primitiveName
             "wrapped helper expected a value-level function argument with a value result")

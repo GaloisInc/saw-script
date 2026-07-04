@@ -1,4 +1,0 @@
-Direct vector foldr/foldl currently reach residual fold helpers with
-higher-order value-level function arguments. The translator rejects rather
-than converting a wrapped function to a raw function; this needs a separate
-higher-order function convention design.

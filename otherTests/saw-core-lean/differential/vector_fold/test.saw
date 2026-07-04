@@ -1,7 +1,11 @@
-// TRUE differential litmus for vector fold helpers over Nat.
+// TRUE differential litmus for vector fold helpers.
+//
+// The Nat cases exercise bare value-function constants. The bitvector case
+// exercises a residual partial application (`bvAdd 4`) as the folding
+// function, which is the minimal shape exposed by drivers/sequences.t18.
 
 let observed =
-  parse_core "and (equalNat (foldr Nat Nat 3 addNat 0 (gen 3 Nat (\\(i : Nat) -> addNat i 1))) 6) (equalNat (foldl Nat Nat 3 addNat 0 (gen 3 Nat (\\(i : Nat) -> addNat i 1))) 6)";
+  parse_core "and (equalNat (foldr Nat Nat 3 addNat 0 (gen 3 Nat (\\(i : Nat) -> addNat i 1))) 6) (and (equalNat (foldl Nat Nat 3 addNat 0 (gen 3 Nat (\\(i : Nat) -> addNat i 1))) 6) (bvEq 4 (foldl (Vec 4 Bool) (Vec 4 Bool) 2 (bvAdd 4) 0x0 (gen 2 (Vec 4 Bool) (\\(i : Nat) -> bvNat 4 (addNat i 1)))) 0x3))";
 
 print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
 

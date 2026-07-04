@@ -191,12 +191,25 @@ Current execution order after the 2026-07-03 position/callee checkpoint:
    problem, not a reason to rawify functions or infer from Lean syntax.
 
    Current broad-sweep classification after this checkpoint:
-   - `differential/cryptol_ec_fold_scan` and `differential/vector_fold` are
-     higher-order fold/function-convention gaps. They reject residual
-     `foldl`/`foldr` because the wrapped helper expects a value-level function
-     whose result can carry errors. These rows are now pinned as known gaps so
-     `make conformance` reports them explicitly without counting them as
-     parity. Do not absorb this into the Eq/Eq.rec slice.
+   - 2026-07-03 follow-up: `differential/cryptol_ec_fold_scan` and
+     `differential/vector_fold` have been promoted to true differential rows by
+     the higher-order value-function convention. The `vector_fold` row also
+     covers the residual bitvector partial-application shape (`bvAdd 4`) that
+     previously blocked `drivers/sequences.t18`.
+     Validation for this fold-family checkpoint:
+     `git diff --check`, focused `differential/vector_fold`, focused
+     `differential/cryptol_ec_fold_scan`,
+     `make -C otherTests/saw-core-lean conformance`, and
+     `cabal test saw-core-lean-smoketest` all passed. A focused
+     `drivers/sequences` run still reports only stale checked-bounds golden
+     diffs; no `*.fail` artifacts were produced, and `test_sequences.t18.lean`
+     elaborates.
+   - Audit note: unsupported residual partial applications should continue to
+     fail clearly at SAW translation where possible. The current fold fix did
+     not add a confirmed unsound path, generated-Lean recognizer, or fixture
+     special case, but future higher-order convention work should keep the
+     generic partial-application eta path aligned with the explicit
+     wrapped-helper value-slot predicate so diagnostics stay principled.
    - `differential/stream_helpers` is a pinned stream/productivity gap whose
      expected diagnostic has been updated: the artifact now elaborates only
      with proof stubs, and true differential tests correctly reject reliance on
@@ -235,24 +248,22 @@ Current execution order after the 2026-07-03 position/callee checkpoint:
    reject at SAW translation.
    Remaining former P0 witnesses are now classified as separate work:
    `differential/stream_helpers` needs stream-recursion/productivity design, and
-   `drivers/sequences.t18` exposes a higher-order wrapped-function application
-   mismatch in `foldl (+)`, not a dictionary-rec rawification bug. Do not
-   rawify dictionaries/streams/functions by default, inspect emitted Lean syntax,
-   or special-case `PEqSeq`, `RecordType.rec`, or `Stream.rec`.
+   the former `drivers/sequences.t18` mismatch is closed by the P2 fold-family
+   value-function convention below. Do not rawify dictionaries/streams/functions
+   by default, inspect emitted Lean syntax, or special-case `PEqSeq`,
+   `RecordType.rec`, or `Stream.rec`.
    Working plan: `doc/2026-07-02_raw-wrapped-recursor-dictionary-plan.md`.
 
 3. **P2: higher-order value-function conventions for wrapped helpers.**
    Goal document:
    `doc/2026-07-03_higher-order-function-conventions-goal.md`.
-   Current witnesses: `differential/vector_fold`,
-   `differential/cryptol_ec_fold_scan`, and `drivers/sequences.t18`. These
-   rows expose the same ordinary value-function convention gap: the source
-   function is a SAW value-level function, while the Lean helper formal expects
-   an `Except String`-aware value function. Fix this through a declared helper
-   formal convention, not by recognizing `+`, `addNat`, generated Lean syntax,
-   or any fixture path. This is the next example-relevant backend target
-   because it should reduce the live `sequences` blocker without entering proof
-   automation or stream/productivity work.
+   2026-07-03 checkpoint: implemented for the fold-family slice.
+   `differential/vector_fold` and `differential/cryptol_ec_fold_scan` now pass
+   as true differential rows. The implementation uses a declared wrapped-helper
+   value-function convention, not recognition of `+`, `addNat`, generated Lean
+   syntax, or fixture paths. `drivers/sequences.t18` now elaborates; the
+   remaining `drivers/sequences` failure is stale checked-bounds golden drift,
+   not a fold-function convention blocker.
 
 4. **P3: direct vector fallback/defaulting review, if still live after P2.**
    Older example inventory classified `drivers/conformance_vector` and
@@ -321,17 +332,19 @@ failure is reduced to a focused litmus row.
   `saw_mkStream_total_exists` and `saw_fix_unique_exists` obligations, but
   they are not proof-discharge examples because the generated local
   obligations are still placeholders.
-- The live blocking rows are now higher-order fold/function conventions,
-  stream/productivity design, higher-order checked index wrappers, recurrence
-  proof gaps, and large crypto/LLVM stress examples. Preserve those failures
-  until each has a principled emission or proof-support path.
+- The live blocking rows are now stream/productivity design, higher-order
+  checked index wrappers, recurrence proof gaps, stale checked-bounds broad
+  driver goldens, and large crypto/LLVM stress examples. Preserve those
+  failures until each has a principled emission, proof-support path, or
+  reviewed current-emission refresh.
 - 2026-07-03 update: the wrapped dictionary / raw recursor convention has been
   promoted for `cryptol_module_simple`, `cryptol_polymorphic_class_dict`, and
   `cryptol_vector_eq_dictionary`. `stream_helpers` and `sequences.t18` are
   separate design gaps, not evidence that dictionary recursor emission is still
-  ad hoc. The next target-example gap is `sequences.t18`, reduced to focused
-  fold/function known gaps in `differential/vector_fold` and
-  `differential/cryptol_ec_fold_scan`.
+  ad hoc. The `sequences.t18` fold-function blocker is now covered by promoted
+  differential rows in `differential/vector_fold` and
+  `differential/cryptol_ec_fold_scan`; the broad `sequences` driver still needs
+  reviewed checked-bounds golden refresh or further reduction.
 
 ## Priority 0: Test Harness Integrity
 
@@ -1510,8 +1523,8 @@ failure is reduced to a focused litmus row.
     initial classification. The immediate small-example candidates are
     reviewed refreshes for `offline_lean`, `offline_lean_e_series`,
     `arithmetic`, and the small conformance-style driver goldens. Do not
-    refresh or hide the real blockers: `conformance_stream`, `sequences.t18`,
-    `implRev4`, stream/fix module examples, and large crypto/LLVM rows remain
+    refresh or hide the real blockers: `conformance_stream`, `implRev4`,
+    stream/fix module examples, and large crypto/LLVM rows remain
     backend-gap, proof-gap, or stress items until reduced or handled by a
     principled design.
   - 2026-07-02 support-proof bucket checkpoint: support-library-only rows
@@ -1582,9 +1595,10 @@ failure is reduced to a focused litmus row.
     value-producing contexts, including value-producing function recursors via
     eta expansion or full post-scrutinee application. This was fixed without
     rawifying dictionaries or recognizing `PEqSeq`/`RecordType.rec` by name.
-    Remaining `drivers/sequences.t18` failure is a higher-order wrapped
-    function application mismatch around `foldl (+)`; keep it out of the
-    recursor/dictionary bucket.
+    2026-07-03 update: the `drivers/sequences.t18` higher-order wrapped
+    function application mismatch around `foldl (+)` is closed by the
+    fold-family value-function convention and pinned by `differential/vector_fold`.
+    Keep any remaining `sequences` drift out of the recursor/dictionary bucket.
   - 2026-07-02 record-update proof checkpoint:
     `drivers/cryptol_module_record_update`,
     `drivers/cryptol_module_point`, and `proofs/point_shift_property` all pass

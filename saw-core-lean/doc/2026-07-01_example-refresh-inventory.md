@@ -61,8 +61,8 @@ Observed failure families:
   checkpoint, the default proof harness rows pass; remaining failures are
   driver/emission rows.
 - Real backend gaps: stream/helper construction still flows into raw
-  `Stream.rec` positions, and `sequences.t18` exposes a wrapped function-result
-  mismatch.
+  `Stream.rec` positions. The earlier `sequences.t18` wrapped function-result
+  mismatch is closed by the 2026-07-03 higher-order value-function convention.
 - Higher-order proof-carrying wrapper gap: `implRev4` reaches under-applied or
   over-applied checked `at` contracts and is rejected with a design diagnostic.
 - Large crypto/LLVM examples expose sound obligations, but they are too large
@@ -142,7 +142,7 @@ the row is already handled or still needs refresh, reduction, or movement.
 | `drivers/offline_lean_popcount32` | `stress` | Full suite failed; explicit gap note exists. | `proof-gaps/offline_lean_popcount32`; BV-heavy popcount proof surface. | Keep stress/proof gap; no native-eval proof shortcuts. |
 | `drivers/records` | `current-emission` | Full suite passed. | `differential/record_*`. | Keep. |
 | `drivers/sawcore_prelude_auto_emit` | `current-emission` | Focused driver passes after recursor motive-shape fix; no golden refresh needed. | Prelude auto-emit convention; opaque type-family motives stay raw. | Keep as regression for higher-sort recursor motives. |
-| `drivers/sequences` | `backend-gap` | Stale bounds diffs plus `t18` higher-order wrapped-function application failure in `foldl (+)`. | `differential/sequence_*`, branch/derived-bounds gaps. | Do not refresh failing row until the `foldl (+)` function-adapter gap is reduced/design-linked. |
+| `drivers/sequences` | `current-emission gap` | The former `t18` higher-order wrapped-function application failure in `foldl (+)` now elaborates under the 2026-07-03 value-function convention. The broad driver still fails because tracked goldens are stale around checked bounds helpers (`genWithBoundsM`, `atWithProof_checkedM`, and local bounds obligations). | `differential/sequence_*`, branch/derived-bounds gaps, `differential/vector_fold`. | Review the current checked-bounds emission before any broad golden refresh; reduce any remaining semantic failure to a focused litmus row first. |
 | `drivers/tuples` | `current-emission` | Full suite passed. | `differential/tuple_*`. | Keep. |
 | `drivers/typelevel` | `current-emission` | Full suite passed. | Sort/typelevel differential rows. | Keep. |
 
@@ -361,13 +361,14 @@ unreviewed safe refreshes:
 - P0 raw/wrapped recursor and dictionary convention:
   `cryptol_module_simple`, `cryptol_polymorphic_class_dict`,
   and `differential/cryptol_vector_eq_dictionary` are now promoted by the
-  2026-07-02 recursor checkpoint. `conformance_stream` / `stream_helpers` and
-  `sequences.t18` remain separate stream-recursion and higher-order function
-  adapter gaps.
+  2026-07-02 recursor checkpoint. `conformance_stream` / `stream_helpers`
+  remain separate from the dictionary recursor bucket; the older
+  `sequences.t18` failure is closed by P1 below.
 - P1 higher-order value-function convention:
-  `sequences.t18`, with focused litmus coverage in `differential/vector_fold`
-  and `differential/cryptol_ec_fold_scan`. This is the next backend target
-  because it is an ordinary value-function wrapping convention, not proof
+  completed for the fold-family slice on 2026-07-03. `sequences.t18` now
+  elaborates, and focused litmus coverage in `differential/vector_fold` and
+  `differential/cryptol_ec_fold_scan` runs as true differential coverage. This
+  closed an ordinary value-function wrapping convention without proof
   automation.
 - P2 direct vector fallback/defaulting review:
   `conformance_vector`, `conformance_vector_zip` only after reducing any
@@ -379,9 +380,9 @@ unreviewed safe refreshes:
 - P4 recurrence/proof-obligation gaps: `cryptol_running_sum_verify`.
 - P5 large/stress examples: Chacha/Salsa/LLVM/popcount rows and
   `offline_lean_popcount32`.
-- Mixed stale-plus-real sequence gap: `sequences`, blocked by `t18`; the live
-  blocker is now classified as higher-order wrapped-function application around
-  `foldl (+)`, not the dictionary recursor convention.
+- Mixed sequence gap: `sequences` is no longer blocked by `t18`. The remaining
+  broad-driver failure is stale checked-bounds golden drift unless a fresh
+  reduction finds another focused semantic blocker.
 
 1. The wrapped dictionary/record-rec gap exposed by `cryptol_module_simple`
    and `cryptol_polymorphic_class_dict` is closed by the 2026-07-02
@@ -400,9 +401,9 @@ unreviewed safe refreshes:
    `drivers/cryptol_module_record_update` both pass focused tests against the
    current emitted artifact; keep this as a current proof-backend example. `E3`
    is repaired and `E4`/`E5` are explicit proof gaps.
-4. Do not refresh `conformance_stream`, `sequences.t18`, `implRev4`, or large
-   crypto/LLVM examples as a way to make the harness green. Each currently
-   points at a real backend/design/proof-ergonomics blocker. The stream module
+4. Do not refresh `conformance_stream`, `implRev4`, or large crypto/LLVM
+   examples as a way to make the harness green. Each currently points at a real
+   backend/design/proof-ergonomics blocker. The stream module
    examples `cryptol_module_rec_ones` and `cryptol_module_stream_fibs` are
    already classified as current emission smoke only; they still expose local
    stream/fix obligations and are not proof-discharge successes.
