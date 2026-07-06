@@ -166,6 +166,18 @@ the following when run:</p>
 are in C and Rust.
 The syntax for function calls is like ML and Haskell: you just put
 the argument next to the function name.</p>
+<p>Some SAWScript functions take optional named arguments; for example,
+<code class="docutils literal notranslate"><span class="pre">str_concats</span></code>, which concatenates a list of strings, takes an optional
+argument <code class="docutils literal notranslate"><span class="pre">sep</span></code> that, if given, gets inserted as a separator between
+each pair of strings in the list.
+These arguments show up with the name and a <code class="docutils literal notranslate"><span class="pre">?</span></code> in the type of the
+function: the optional argument to <code class="docutils literal notranslate"><span class="pre">str_concats</span></code> appears in its type
+signature as <code class="docutils literal notranslate"><span class="pre">sep?String</span></code>.</p>
+<p>Optional arguments can, obviously, be left off.
+To pass one, use its name, an equals sign, and an expression giving
+the value you want: <code class="docutils literal notranslate"><span class="pre">str_concats</span> <span class="pre">sep=&quot;</span> <span class="pre">-</span> <span class="pre">&quot;</span> <span class="pre">[&quot;x&quot;,</span> <span class="pre">&quot;y&quot;,</span> <span class="pre">&quot;z&quot;]</span></code> returns
+the string <code class="docutils literal notranslate"><span class="pre">&quot;x</span> <span class="pre">-</span> <span class="pre">y</span> <span class="pre">-</span> <span class="pre">z&quot;</span></code>, and <code class="docutils literal notranslate"><span class="pre">str_concats</span> <span class="pre">[&quot;x&quot;,</span> <span class="pre">&quot;y&quot;,</span> <span class="pre">&quot;z&quot;]</span></code>
+returns <code class="docutils literal notranslate"><span class="pre">&quot;xyz&quot;</span></code>.</p>
 <section id="types">
 <h2>Types<a class="headerlink" href="#types" title="Link to this heading"></a></h2>
 <p>The basic types in SAWScript are:</p>

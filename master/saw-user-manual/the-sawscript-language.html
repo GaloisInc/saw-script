@@ -594,7 +594,13 @@ colons.)</p></li>
 Function types are written with a right-arrow <code class="docutils literal notranslate"><span class="pre">-&gt;</span></code>.
 Functions are curried, so a function of two arguments and a function
 of one argument that returns a function of one argument are the same
-type, and function types with multiple arguments have multiple arrows.</p></li>
+type, and function types with multiple arguments have multiple arrows.
+SAWScript supports named optional arguments; these arguments appear in
+function types with the argument name and a question mark, like <code class="docutils literal notranslate"><span class="pre">a?Int</span></code>.
+Functions with the same (by name and type) optional parameters are
+the same type, regardless of the order the parameters appear in.
+The implementation will print them in alphabetical order.
+Note that functions are not allowed to have <em>only</em> optional arguments.</p></li>
 </ul>
 <p>As already mentioned there are five monad types:</p>
 <ul class="simple">
@@ -732,6 +738,15 @@ For example:</p>
 <div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">intPair</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="p">:</span><span class="w"> </span><span class="n">Int</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="n">y</span><span class="p">:</span><span class="w"> </span><span class="n">Int</span><span class="p">)</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">);</span>
 </pre></div>
 </div>
+<p>Optional named parameters are declared by providing a default value with
+<code class="docutils literal notranslate"><span class="pre">?=</span></code>.
+This example allows passing either <code class="docutils literal notranslate"><span class="pre">x</span></code> or <code class="docutils literal notranslate"><span class="pre">y</span></code> by name, or both, and each
+defaults to zero if not passed explicitly.</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">intPairOpt</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="ow">?=</span><span class="mi">0</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Int</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="n">y</span><span class="ow">?=</span><span class="mi">0</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Int</span><span class="p">)</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>An additional unit parameter is given because functions are not allowed
+to have <em>only</em> optional arguments.</p>
 <p>Recursive functions can be written using the keyword <code class="docutils literal notranslate"><span class="pre">rec</span></code> in place of <code class="docutils literal notranslate"><span class="pre">let</span></code>.
 Groups of mutually recursive functions can be written using <code class="docutils literal notranslate"><span class="pre">rec</span></code> for the
 first function, and then <code class="docutils literal notranslate"><span class="pre">and</span></code> for each successive function, and then finally
@@ -744,6 +759,23 @@ the reserved variable name <code class="docutils literal notranslate"><span clas
 <p>It is legal (but useless) to write a function and call it <code class="docutils literal notranslate"><span class="pre">_</span></code>.
 It is not legal to write a function that uses a tuple pattern in place
 of its name.</p>
+<p>By default the outward-facing and function-internal names of an
+optional parameter are the same.
+A different name can be used internally using the following syntax:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kd">let</span><span class="w"> </span><span class="n">intPairOpt</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="ow">@</span><span class="n">a</span><span class="w"> </span><span class="ow">?=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Int</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="n">y</span><span class="ow">@</span><span class="n">b</span><span class="w"> </span><span class="ow">?=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Int</span><span class="p">)</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="p">(</span><span class="n">a</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>The right-hand side of the <code class="docutils literal notranslate"><span class="pre">&#64;</span></code> can be any pattern, such as a tuple, or
+<code class="docutils literal notranslate"><span class="pre">_</span></code> to ignore a value.</p>
+<p>The default value of an optional parameter will normally be a
+constant; however, you can use any expression.
+Using functions that are effectful is not recommended, and the
+resulting observable behavior may not be consistent between different
+releases of SAW.
+Default values for optional parameters of recursive functions can call the
+function (or any function in the same group) recursively if needed.
+This too is not recommended, if only because it is confusing to reason
+about.</p>
 <p>Binding a variable name that already exists will, in general, create a
 new variable for the new value; the old value is left alone and
 references to it are unchanged.</p>
@@ -892,7 +924,26 @@ An expression followed by a dot and an integer constant looks up the
 nth field of a tuple value.
 Tuple indexes are zero-based.</p>
 <p>Juxtaposition of expressions does function application, like in Haskell
-and ML: <code class="docutils literal notranslate"><span class="pre">f</span> <span class="pre">x</span></code> applies the function <code class="docutils literal notranslate"><span class="pre">f</span></code> to an argument <code class="docutils literal notranslate"><span class="pre">x</span></code>.</p>
+and ML: <code class="docutils literal notranslate"><span class="pre">f</span> <span class="pre">x</span></code> applies the function <code class="docutils literal notranslate"><span class="pre">f</span></code> to an argument <code class="docutils literal notranslate"><span class="pre">x</span></code>.
+Since functions are curried, applying some of the arguments to a
+function produces a function/closure that still expects the rest.
+(This is called <em>partial application</em>.)</p>
+<p>SAWScript supports optional named arguments; <code class="docutils literal notranslate"><span class="pre">f</span></code> <code class="docutils literal notranslate"><span class="pre">a=x</span></code> applies the
+function <code class="docutils literal notranslate"><span class="pre">f</span></code> to the argument <code class="docutils literal notranslate"><span class="pre">x</span></code>, treating it as the named argument
+with name <code class="docutils literal notranslate"><span class="pre">a</span></code>.
+If <code class="docutils literal notranslate"><span class="pre">x</span></code> is a complex expression that requires parentheses, you can
+extend the parentheses to include the argument name as well, for
+tidiness: <code class="docutils literal notranslate"><span class="pre">f</span></code> <code class="docutils literal notranslate"><span class="pre">(a=x)</span></code>.
+Optional arguments can be applied in any order (with respect to each
+other and to positional arguments), and, obviously, can be left off if
+desired.
+Functions with optional arguments can also be partially applied.
+However, the call site that applies the last positional argument
+completes the call.
+There can be further optional arguments after the last positional
+argument in that call site; however, once those are applied the
+call is done, any non-supplied optional arguments are set to their
+default values, and the function body is evaluated.</p>
 <p>There are no infix operators.
 Arithmetic (and computation on boolean values) is done in Cryptol blocks.</p>
 <p>There are four kinds of compound expressions:  let-bindings, lambdas,
@@ -986,6 +1037,8 @@ it returns it as a <code class="docutils literal notranslate"><span class="pre">
 be useful for constructing more detailed messages later.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">str_concat</span> <span class="pre">:</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">String</span> <span class="pre">-&gt;</span> <span class="pre">String</span></code> concatenates two <code class="docutils literal notranslate"><span class="pre">String</span></code>
 values, and can also be useful with <code class="docutils literal notranslate"><span class="pre">show</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">str_concats</span> <span class="pre">:</span> <span class="pre">sep?String</span> <span class="pre">-&gt;</span> <span class="pre">[String]</span> <span class="pre">-&gt;</span> <span class="pre">String</span></code> concatenates a list
+of <code class="docutils literal notranslate"><span class="pre">String</span></code> values, taking an optional separator string as well.</p></li>
 </ul>
 </section>
 <section id="list-functions">
