@@ -366,53 +366,42 @@ processResults ppopts (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile ri
       nameRight  str = (("right_" <> str <> "_") <>)
       nameCenter str = ((str <> "_") <>)
 
+      varpat x = SAWScript.PVar triggerPos triggerPos x Nothing
+      varexpr x = SAWScript.Var triggerPos x
+      bind pat e = SAWScript.StmtBind triggerPos pat e
+      bind' e = bind (SAWScript.PWild triggerPos Nothing) e
+      apply f args = SAWScript.Application triggerPos (varexpr f) $ map (\a -> (Nothing, a)) args
+      strlit' txt = SAWScript.String triggerPos txt
+      strlit txt = strlit' $ Text.pack txt
+
       loadFile :: (Text -> Text) -> SourceLanguage -> FilePath -> ScriptWriter s tp (SAWScript.Name)
       loadFile prefix lang file = do
          boundName <- newNameWith prefix
          returning boundName . tell $
             case lang of
                Cryptol ->
-                  [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)
-                     (SAWScript.Application triggerPos
-                        (SAWScript.Var triggerPos "cryptol_load")
-                        (SAWScript.String triggerPos $ Text.pack file))]
+                  [bind (varpat boundName) (apply "cryptol_load" [strlit file])]
                LLVM ->
-                  [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)
-                     (SAWScript.Application triggerPos
-                        (SAWScript.Var triggerPos "llvm_load_module")
-                        (SAWScript.String triggerPos $ Text.pack file))]
+                  [bind (varpat boundName) (apply "llvm_load_module" [strlit file])]
                JVM ->
-                  [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)
-                     (SAWScript.Application triggerPos
-                        (SAWScript.Var triggerPos "java_load_class")
-                        (SAWScript.String triggerPos $ Text.pack $ dropExtension file))]
+                  let file' = dropExtension file in
+                  [bind (varpat boundName) (apply "java_load_class" [strlit file'])]
 
       extractFunction :: (Text -> Text) -> SourceLanguage -> Text -> SAWScript.Name -> ScriptWriter s tp (SAWScript.Name)
       extractFunction prefix lang function loadedModule = do
          boundName <- newNameWith prefix
+         let args = [
+                 varexpr loadedModule,
+                 strlit' function
+              ]
          returning boundName . tell $
             case lang of
                Cryptol ->
-                  [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)
-                     (SAWScript.Application triggerPos
-                        (SAWScript.Application triggerPos
-                           (SAWScript.Var triggerPos "cryptol_extract")
-                           (SAWScript.Var triggerPos loadedModule))
-                        (SAWScript.String triggerPos function))]
+                  [bind (varpat boundName) (apply "cryptol_extract" args)]
                LLVM ->
-                  [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)
-                     (SAWScript.Application triggerPos
-                        (SAWScript.Application triggerPos
-                           (SAWScript.Var triggerPos "llvm_extract")
-                           (SAWScript.Var triggerPos loadedModule))
-                        (SAWScript.String triggerPos function))]
+                  [bind (varpat boundName) (apply "llvm_extract" args)]
                JVM ->
-                  [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos boundName Nothing)
-                     (SAWScript.Application triggerPos
-                        (SAWScript.Application triggerPos
-                           (SAWScript.Var triggerPos "jvm_extract")
-                           (SAWScript.Var triggerPos loadedModule))
-                        (SAWScript.String triggerPos function))]
+                  [bind (varpat boundName) (apply "jvm_extract" args )]
 
       equivalenceTheorem :: (Text -> Text) -> SAWScript.Name -> SAWScript.Name -> Assignments -> ScriptWriter s tp (SAWScript.Name)
       equivalenceTheorem prefix leftFunction rightFunction assigns = do
@@ -424,7 +413,7 @@ processResults ppopts (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile ri
                   name <- newNameWith (nameCenter (leftName <> "_" <> rightName))
                   return ((leftIndex, name), (rightIndex, name))
          returning theoremName . tell $
-            [SAWScript.StmtBind triggerPos (SAWScript.PVar triggerPos triggerPos theoremName Nothing) .
+            [bind (varpat theoremName) .
                 SAWScript.Code triggerPos .
                    PPS.renderText ppopts . CryPP.pretty .
                       cryptolAbstractNamesSAW leftArgs .
@@ -451,19 +440,10 @@ processResults ppopts (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile ri
 
       prove :: SAWScript.Name -> ScriptWriter s tp ()
       prove theorem = tell $
-         [SAWScript.StmtBind triggerPos (SAWScript.PWild triggerPos Nothing)
-             (SAWScript.Application triggerPos
-                (SAWScript.Application triggerPos
-                   (SAWScript.Var triggerPos "prove_print")
-                   (SAWScript.Var triggerPos "abc"))
-                (SAWScript.Var triggerPos theorem))]
+         [bind' (apply "prove_print" [varexpr "abc", varexpr theorem])]
 
       printString :: Text -> ScriptWriter s tp ()
-      printString string = tell $
-         [SAWScript.StmtBind triggerPos (SAWScript.PWild triggerPos Nothing)
-             (SAWScript.Application triggerPos
-                (SAWScript.Var triggerPos "print")
-                (SAWScript.String triggerPos string))]
+      printString string = tell [bind' (apply "print" [strlit' string])]
 
       cryptolLocate :: Text -> Cryptol.LPName
       cryptolLocate name =

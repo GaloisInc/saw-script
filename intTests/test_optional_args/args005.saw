@@ -1,0 +1,5 @@
+// Functions that take only optional arguments are problematic in
+// conjunction with currying. We prohibit them, so this declaration
+// will fail.
+
+let f : x?Int -> Int = undefined;

@@ -16,6 +16,7 @@ module SAWScript.Search (
 
 import Data.Functor.Classes(Eq1(..), Ord1(..)) -- for liftEq, liftCompare
 import Data.Text (Text)
+import Data.Maybe (mapMaybe)
 import Data.List (sortBy)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -106,6 +107,7 @@ unifyVarPanic :: Text -> Text -> a
 unifyVarPanic who what =
     panic ("search / " <> who) [what <> " contained a unification var"]
 
+
 ------------------------------------------------------------
 -- Exact matching
 
@@ -119,6 +121,11 @@ matchExact ty1 ty2 = case (ty1, ty2) of
         ctor1 == ctor2 &&
         length args1 == length args2 &&
         liftEq matchExact args1 args2
+    (TyFunc _pos1 _ params1 namedParams1 ret1, TyFunc _pos2 _ params2 namedParams2 ret2) ->
+        -- parameter lists must be equivalent via matchExact
+        liftEq matchExact params1 params2 &&
+        liftEq matchExact namedParams1 namedParams2 &&
+        matchExact ret1 ret2
     (TyRecord _pos1 members1, TyRecord _pos2 members2) ->
         -- member maps must be equivalent via matchExact
         liftEq matchExact members1 members2
@@ -127,6 +134,8 @@ matchExact ty1 ty2 = case (ty1, ty2) of
     (TyUnifyVar _pos1 a1, TyUnifyVar _pos2 a2) ->
         a1 == a2
     (TyCon _ _ _, _) ->
+        False
+    (TyFunc _ _ _ _ _, _) ->
         False
     (TyRecord _ _, _) ->
         False
@@ -192,20 +201,32 @@ instance Ord Candidate where
                 (TyCon _pos1 ctor1 args1, TyCon _pos2 ctor2 args2) ->
                     compare ctor1 ctor2 <>
                     liftCompare compareType args1 args2
+                (TyCon _ _ _, TyFunc _ _ _ _ _) -> LT
                 (TyCon _ _ _, TyRecord _ _) -> LT
                 (TyCon _ _ _, TyVar _ _) -> LT
                 (TyCon _ _ _, TyUnifyVar _ _) -> LT
+                (TyFunc _ _ _ _ _, TyCon _ _ _) -> GT
+                (TyFunc _pos1 _ params1 namedParams1 ret1, TyFunc _pos2 _ params2 namedParams2 ret2) ->
+                    liftCompare compareType params1 params2 <>
+                    liftCompare compareType namedParams1 namedParams2 <>
+                    compareType ret1 ret2
+                (TyFunc _ _ _ _ _, TyRecord _ _) -> LT
+                (TyFunc _ _ _ _ _, TyVar _ _) -> LT
+                (TyFunc _ _ _ _ _, TyUnifyVar _ _) -> LT
                 (TyRecord _ _, TyCon _ _ _) -> GT
+                (TyRecord _ _, TyFunc _ _ _ _ _) -> GT
                 (TyRecord _pos1 fields1, TyRecord _pos2 fields2) ->
                     liftCompare compareType fields1 fields2
                 (TyRecord _ _, TyVar _ _) -> LT
                 (TyRecord _ _, TyUnifyVar _ _) -> LT
                 (TyVar _ _, TyCon _ _ _) -> GT
+                (TyVar _ _, TyFunc _ _ _ _ _) -> GT
                 (TyVar _ _, TyRecord _ _) -> GT
                 (TyVar _pos1 x1, TyVar _pos2 x2) ->
                     compare x1 x2
                 (TyVar _ _, TyUnifyVar _ _) -> LT
                 (TyUnifyVar _ _, TyCon _ _ _) -> GT
+                (TyUnifyVar _ _, TyFunc _ _ _ _ _) -> GT
                 (TyUnifyVar _ _, TyRecord _ _) -> GT
                 (TyUnifyVar _ _, TyVar _ _) -> GT
                 (TyUnifyVar _pos1 x1, TyUnifyVar _pos2 x2) ->
@@ -256,6 +277,10 @@ compareBySelectivity ctx ty1 ty2 =
               -- take the max score of the args, deduct one,
               -- clamp to 1
               max 1 ((foldr max 1 $ map score args) - 1)
+          TyFunc _pos _ninfo params namedParams ret ->
+              -- same treatment
+              let np' = Map.elems namedParams in
+              max 1 ((foldr max 1 $ map score (ret : params ++ np')) - 1)
           TyRecord _pos fields ->
               -- same treatment
               max 1 ((foldr max 1 $ map score $ Map.elems fields) - 1)
@@ -302,6 +327,23 @@ matchFullOnce ctx cand tgtType patType =
                   else
                       -- all the args must match
                       matchFullAllPairs ctx cand (zip tgtArgs patArgs)
+              _ -> Nothing
+
+      TyFunc _patpos _ninfo patParams patNamedParams patRet ->
+          -- The pattern is a function; only accept functions.
+          case tgtType of
+              TyFunc _tgtpos _ninfo tgtParams tgtNamedParams tgtRet ->
+                  -- Expect all the parameters and the return type to
+                  -- match.
+                  if length tgtParams /= length patParams then Nothing
+                  else if Map.keysSet tgtNamedParams /= Map.keysSet patNamedParams then Nothing
+                  else do  -- use the maybe monad
+                      -- Match the positional targets against the positional patterns
+                      cand' <- matchFullAllPairs ctx cand (zip tgtParams patParams)
+                      -- Match the named targets against the named patterns.
+                      -- We have all the same keys, pair them up with intersection
+                      cand'' <- matchFullAllPairs ctx cand' (Map.elems $ Map.intersectionWith (\t p -> (t, p)) tgtNamedParams patNamedParams)
+                      matchFullOnce ctx cand'' tgtRet patRet
               _ -> Nothing
 
       TyRecord _patpos patFields ->
@@ -404,6 +446,40 @@ matchFullAllPairs ctx cand0 pairs =
 -- general there are many possible alignments, produces a set of
 -- candidate substitutions.
 
+-- | Figure out all the possible ways in which a list of patterns can
+--   sequentially match a possibly longer list of targets, skipping
+--   targets that don't match. E.g. given targets t0 t1 t2 and patterns
+--   p0 p1, we return these lists:
+--      (t0, p0), (t1, p1)      (skipping t2)
+--      (t0, p0), (t2, p2)      (skipping t1)
+--      (t1, p1), (t2, p2)      (skipping t0)
+--
+alignParameters :: [a] -> [a] -> [[(a, a)]]
+alignParameters tgts pats =
+    case (tgts, pats) of
+        (_, []) ->
+            -- We have run out of patterns; whether or not there are
+            -- more targets this is potentially a successful match, so
+            -- return an empty list to build onto.
+            [[]]
+        ([], _pat' : _pats) ->
+            -- Ran out of targets; this is not a successful match, so
+            -- return nothing.
+            []
+        (tgt : tgts', pat : pats') ->
+            -- Two choices: we can match this pattern against this
+            -- target, or skip this target. In both cases, align the
+            -- rest of the material; then in the first case, prefix
+            -- this pair to everything we get back, and the final
+            -- result is all the combinations.
+            let here =
+                    let chains = alignParameters tgts' pats' in
+                    map (\chain -> (tgt, pat) : chain) chains
+                skip =
+                    alignParameters tgts' (pat : pats')
+            in
+            here ++ skip
+
 -- | Try matching each subelement of one target type against one
 -- pattern type, with one current match candidate; return possibly
 -- several updated match candidates, or none on complete match
@@ -420,6 +496,73 @@ matchFragOnceBody ctx cand tgtType patType =
         TyCon _tgtpos _tgtCtor tgtArgs ->
             -- The target is a type constructor; we can match any argument.
             checkList tgtArgs
+        TyFunc _tgtpos _ tgtParams tgtNamedParams tgtRet ->
+            -- The target is a function.
+            case patType of
+                TyFunc _patPos _ patParams _patNamedParams _patRet
+                        | length tgtParams < length patParams ->
+                    -- The pattern is a function but the target is a
+                    -- function with fewer arguments. It doesn't
+                    -- match.
+                    Set.empty
+                TyFunc _patPos _ _patParams patNamedParams _patRet
+                        | not (Set.isSubsetOf (Map.keysSet patNamedParams) (Map.keysSet tgtNamedParams)) ->
+                    -- The pattern is a function but it expects at
+                    -- least one named argument the target
+                    -- doesn't. The target doesn't match.
+                    Set.empty
+                TyFunc _patPos _ patParams patNamedParams patRet ->
+                    -- The pattern is also a function. Match the
+                    -- return types, and the named parameters, and
+                    -- then try each positional parameter type in the
+                    -- function against each parameter type in the
+                    -- target, independent of position but not
+                    -- order. (That is, Int -> String -> _ should
+                    -- match Int -> () -> String -> _ but should not
+                    -- match String -> Int -> _.) Note that if you
+                    -- want to find both Int -> String -> _ and also
+                    -- String -> Int -> _, you should write two
+                    -- patterns String -> _ and Int -> _.
+                    --
+                    -- Generate lists of target parameter vs. pattern
+                    -- parameter alignments. This is a list of
+                    -- alternates, each of which is a list of pairs that
+                    -- should all match.
+                    let combos = alignParameters tgtParams patParams in
+
+                    -- Make a list of the types from corresponding named
+                    -- parameters.
+                    let namedPairs = Map.elems $ Map.intersectionWith (\t p -> (t, p)) tgtNamedParams patNamedParams in
+
+                    -- To run this match we want to feed each candidate
+                    -- through each sequence of target/pattern matches.
+                    -- Use matchFullAllPairs to run each sequence: the
+                    -- whole sequence should match, and we want a full
+                    -- match because we've looked inside the function
+                    -- type and should not start matching subportions
+                    -- of its components.
+                    let oneCand tgtPatSeq cand' =
+                          matchFullAllPairs ctx cand' tgtPatSeq
+                        oneCombo cands' combo =
+                          Set.fromList $ mapMaybe (oneCand combo) $ Set.elems cands'
+                    in
+                    -- Get an initial candidate by matching the return
+                    -- types, then try the named parameters, then each
+                    -- of the positional parameter combos.
+                    --
+                    -- Use matchFullOnce for the return type because
+                    -- we've looked inside the function type etc etc.
+                    let cands' = case matchFullOnce ctx cand tgtRet patRet of
+                          Nothing -> Set.empty
+                          Just c -> Set.singleton c
+                    in
+                    let cands'' = oneCombo cands' namedPairs in
+                    Set.unions $ map (oneCombo cands'') combos
+                _ ->
+                    -- The pattern is not a function. We can match any
+                    -- parameter or the return type.
+                    checkList (tgtRet : tgtParams)
+
         TyRecord _tgtpos tgtFields ->
             -- The target is a record. We can match any field.
             checkList (Map.elems tgtFields)

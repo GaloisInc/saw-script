@@ -1,0 +1,7 @@
+// Try calling a function with too many arguments.
+//
+// Also see err016, err066. If anyone ever renumbers the test dir, it
+// might make sense to group these all together.
+
+let f x = (x, 3);
+let y = f 4 5;

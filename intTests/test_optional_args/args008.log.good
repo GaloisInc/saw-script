@@ -1,0 +1,3 @@
+Loading file "args008.saw"
+args008.saw:6:11-6:12: Unbound variable: "f" (args008.saw:6:11-6:12)
+FAILED

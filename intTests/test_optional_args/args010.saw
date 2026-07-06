@@ -1,0 +1,11 @@
+// Default argument expressions should absolutely not be able to refer
+// to each other circularly.
+//
+// (Unless I guess we go and inspect such cycles and demand at least
+// one value from each cycle to be provided, like default
+// implementations in Haskell typeclasses. We could do that, but it
+// seems like a lot of work for little gain.)
+
+let f (x?=y) (y?=x) () = (x, y);
+print (f ());
+

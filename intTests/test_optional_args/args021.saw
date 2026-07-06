@@ -1,0 +1,4 @@
+// This should be rejected for duplicate named arguments.
+
+let f x?=3 () = x;
+print (f x=2 x=4 ());

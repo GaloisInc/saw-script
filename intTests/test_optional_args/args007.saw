@@ -1,0 +1,17 @@
+// The default values for optional arguments are evaluated in the
+// lambda's own context. It is currently possible to refer to earlier
+// parameters in the same lambda; however, this is somewhat dodgy and
+// might change in the future. Users probably shouldn't rely on it.
+
+// should typecheck and print 6
+let a = 6;
+let f x?=a () = x;
+print (f ());
+
+// should typecheck and print 5
+let g = \y -> \x?=y () -> x;
+print (g 5 ());
+
+// should typecheck and print 4 (at least for now)
+let h = \y x?=y () -> x;
+print (h 4 ());

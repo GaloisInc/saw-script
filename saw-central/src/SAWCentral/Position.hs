@@ -8,6 +8,7 @@ Stability   : provisional
 {-# LANGUAGE DeriveDataTypeable  #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -15,6 +16,7 @@ module SAWCentral.Position (
     Inference(..),
     Pos(..),
     fmtPos,
+    differentLines,
     leadingPos,
     trailingPos,
     spanPos,
@@ -128,6 +130,22 @@ data Pos = Range !FilePath -- file
 fmtPos :: Pos -> String -> String
 fmtPos p m = show p ++ ":\n" ++ m'
   where m' = intercalate "\n" . map ("  " ++) . lines $ m
+
+-- | Check if two positions are on different source lines. This is
+--   used to guide certain hints in the SAWScript typechecker. It
+--   is not intended to do anything useful on more exotic kinds of
+--   position.
+differentLines :: Pos -> Pos -> Bool
+differentLines p1 p2 =
+    case (p1, p2) of
+        (Range f1 l1a _ l1b _, Range f2 l2a _ l2b _) ->
+            f1 == f2 && (l2a > l1b || l1a > l2b)
+        (PosInferred _ p1',  _) ->
+            differentLines p1' p2
+        (_, PosInferred _ p2') ->
+            differentLines p1 p2'
+        (_, _) ->
+            False
 
 -- Get the empty position at the beginning of the position of
 -- something else. This can be used to provide positions for implicit
@@ -369,6 +387,10 @@ class Positioned a where
 
 instance Positioned Pos where
   getPos p = p
+
+instance (Positioned a, Positioned b) => Positioned (Maybe a, b) where
+  getPos (Nothing, b) = getPos b
+  getPos (Just a, b) = spanPos (getPos a) (getPos b)
 
 -- Caution: if you write maxSpan (a, b) for heterogeneous types a and b,
 -- it will typecheck but not actually work correctly. Either call getPos

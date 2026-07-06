@@ -1,0 +1,5 @@
+// duplicate named arguments
+
+let f x?=0 () = x;
+
+print (f x=3 x=4 ());

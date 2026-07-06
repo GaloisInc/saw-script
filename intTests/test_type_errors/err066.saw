@@ -1,0 +1,8 @@
+// Try calling a non-function. This has a different error path from
+// "too many arguments" these days.
+//
+// Also see err016, err065. If anyone ever renumbers the test dir, it
+// might make sense to group these all together.
+
+let f = 3;
+let y = f ();
