@@ -944,6 +944,10 @@ mgu ppopts t1 t2 = case (t1, t2) of
       -- Same named variable
       return emptySubst
 
+  (_, TyFunc{}) ->
+      -- If we expected a scalar and found a function, speculate that
+      -- someone forgot a function argument earlier.
+      failMGU ppopts "Mismatch of types. Perhaps a function was not given enough arguments?" t1 t2
   (_, _) ->
       -- Did not work
       failMGU ppopts "Mismatch of types." t1 t2
@@ -2020,7 +2024,7 @@ inferBlock cname blockpos ctx ty (stmts, lastexpr) = do
 -- assorted messiness and technical debt. Eventually we'll get it into
 -- a state where we can always just typecheck immediately after
 -- parsing (including incrementally from the repl) but we're some
--- distance from that. In the meantime the first step is to get it to
+-- distance from that.) In the meantime the first step is to get it to
 -- typecheck one statement at a time without special-casing any of
 -- them, and this is how it does that.
 --

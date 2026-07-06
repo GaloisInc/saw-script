@@ -1,6 +1,6 @@
 Loading file "err016.saw"
 err016.saw:12:13-12:14: Type mismatch.
-    Mismatch of types.
+    Mismatch of types. Perhaps a function was not given enough arguments?
     err016.saw:12:11-12:12: The type Int arises from the type of this term
     err016.saw:12:13-12:14: The type Int -> t.1 arises from the context of the term
 
