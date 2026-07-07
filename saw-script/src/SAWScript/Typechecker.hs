@@ -767,24 +767,20 @@ resolveUnificationVar i t2 =
 mgu :: PPS.Opts -> Pos -> [(Type, Type)] -> Type -> Type -> TI Subst
 mgu ppopts pos encs t1 t2 =
     -- | Fail with expected/found types
-    let reject msg = do
+    let reject msg more = do
           let tyexp = t1
               tyfound = t2
           let (posexp, tyexp') = prettyTypeDetails ppopts tyexp
               (posfound, tyfound') = prettyTypeDetails ppopts tyfound
-              encs' = prettyEnclosing ppopts ((tyexp, tyfound) : encs)
-          recordError pos $ PP.vsep [
-              "Type mismatch.",
-              PP.indent 4 $ PP.vsep [
-                  msg,
+              body = PP.vsep $ more ++ [
                   -- XXX the error infrastructure is supposed to be what knows
                   -- how to print positions
                   prettyPosition posexp <> ":" <+> tyexp',
                   prettyPosition posfound <> ":" <+> tyfound',
                   "",
-                  encs'
-              ]
-           ]
+                  prettyEnclosing ppopts ((tyexp, tyfound) : encs)
+               ]
+          recordError pos $ msg <> PP.line <> PP.indent 4 body
           pure emptySubst
     in
     case (t1, t2) of
@@ -799,9 +795,11 @@ mgu ppopts pos encs t1 t2 =
                 Nothing -> do
                     let t1' = prettyType ppopts t1
                         t2' = prettyType ppopts t2
-                    reject $ "Occurs check failure: cannot unify" <+> t1' <+>
-                             "with" <+> t2' <+> "because" <+> t1' <+>
-                             "appears within" <+> t2'
+                    reject "Occurs check failure." [
+                        "Cannot unify" <+> t1' <+>
+                        "with" <+> t2' <+> "because" <+> t1' <+>
+                        "appears within" <+> t2' <> "."
+                     ]
 
         (_, TyUnifyVar _ i) ->
             -- the other side is a unification var, resolve it
@@ -810,9 +808,11 @@ mgu ppopts pos encs t1 t2 =
                 Nothing -> do
                     let t1' = prettyType ppopts t1
                         t2' = prettyType ppopts t2
-                    reject $ "Occurs check failure: cannot unify" <+> t1' <+>
-                             "with" <+> t2' <+> "because" <+> t2' <+>
-                             "appears within" <+> t1'
+                    reject "Occurs check failure." [
+                        "Cannot unify" <+> t1' <+>
+                        "with" <+> t2' <+> "because" <+> t2' <+>
+                        "appears within" <+> t1' <> "."
+                     ]
 
         (TyFunc pos1 _ params1 namedParams1 ret1,
          TyFunc pos2 _ params2 namedParams2 ret2) -> do
@@ -847,7 +847,7 @@ mgu ppopts pos encs t1 t2 =
                         missing1' = prettyMissingList t1' $ Map.toList missing1
                         missing2' = prettyMissingList t2' $ Map.toList missing2
                         missing' = missing1' ++ missing2'
-                    reject $ PP.vsep ("Mismatched named parameters:" : missing')
+                    reject "Mismatched named parameters." missing'
 
                 else do
                     -- In principle when you have checked that the keys
@@ -915,7 +915,7 @@ mgu ppopts pos encs t1 t2 =
         (TyRecord _ ts1, TyRecord _ ts2)
           | Map.keys ts1 /= Map.keys ts2 ->
             -- records with different keys
-            reject "Record field names mismatch."
+            reject "Record field names do not match." []
 
           | otherwise ->
             -- records with the same field names, try unifying the field types
@@ -932,12 +932,12 @@ mgu ppopts pos encs t1 t2 =
         (_, TyFunc{}) ->
             -- If we expected a scalar and found a function, speculate that
             -- someone forgot a function argument earlier.
-            reject $ "Mismatch of types." <+>
-                     "Perhaps a function was not given enough arguments?"
+            reject "Type mismatch."
+                ["Perhaps a function was not given enough arguments?"]
 
         (_, _) ->
             -- Did not work
-            reject "Mismatch of types."
+            reject "Type mismatch." []
 
 -- | Run `mgu` on two lists of types.
 mgus :: PPS.Opts -> Pos -> [(Type, Type)] -> [Type] -> [Type] -> TI Subst

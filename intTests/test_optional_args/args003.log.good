@@ -1,6 +1,5 @@
 Loading file "args003.saw"
-args003.saw:7:6-7:29: Type mismatch.
-    Mismatched named parameters:
+args003.saw:7:6-7:29: Mismatched named parameters.
     Missing from Int -> a?Int -> Int:
        b : Int
     Missing from Int -> b?Int -> Int:

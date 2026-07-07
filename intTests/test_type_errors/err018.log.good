@@ -1,7 +1,6 @@
 Loading file "err018.saw"
 Type errors:
   err018.saw:26:11-26:12: Type mismatch.
-    Mismatch of types.
     err018.saw:16:14-16:20: The type String arises from this type annotation
     err018.saw:23:25-23:26: The type Int arises from the type of this term
 
@@ -22,7 +21,6 @@ Type errors:
        }
 
   err018.saw:26:11-26:12: Type mismatch.
-    Mismatch of types.
     err018.saw:17:15-17:21: The type String arises from this type annotation
     err018.saw:23:38-23:39: The type Int arises from the type of this term
 
@@ -43,7 +41,6 @@ Type errors:
        }
 
   err018.saw:26:11-26:12: Type mismatch.
-    Mismatch of types.
     err018.saw:18:14-18:20: The type String arises from this type annotation
     err018.saw:23:50-23:51: The type Int arises from the type of this term
 
@@ -64,7 +61,6 @@ Type errors:
        }
 
   err018.saw:26:11-26:12: Type mismatch.
-    Mismatch of types.
     err018.saw:19:15-19:21: The type String arises from this type annotation
     err018.saw:23:63-23:64: The type Int arises from the type of this term
 
