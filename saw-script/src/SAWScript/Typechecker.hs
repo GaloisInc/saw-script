@@ -400,6 +400,16 @@ runTI ppopts avail varenv tyenv m =
         [] -> (Right result, warns)
         _ -> (Left errs, warns)
 
+-- | Run a speculative sub-action in the `TI` monad. Throw away
+--   whatever it does, and return `True` if it succeeds (does
+--   not generate new errors).
+speculateTI :: TI a -> TI Bool
+speculateTI m = do
+    rw <- get
+    ro <- ask
+    let (_result, rw') = runState (runReaderT (unTI m) ro) rw
+    pure $ length (tiErrors rw') == length (tiErrors rw)
+
 
 ------------------------------------------------------------
 -- TI monad ops
@@ -747,6 +757,17 @@ resolveUnificationVar i t2 =
         Just _otherpos -> Nothing
         Nothing -> Just $ singletonSubst i t2
 
+-- | Post an error that occurs during unification. This is the way it
+--   is to avoid behavioral changes while rearranging code; it should
+--   get simplified away later. (XXX)
+unifyError :: Pos -> PPS.Doc -> TI ()
+unifyError pos msg = do
+    let msg' = PP.vsep [
+            "Type mismatch.",
+            PP.indent 4 msg
+         ]
+    recordError pos msg'
+
 -- | Guts of unification.
 --
 --   "mgu" stands for "most general unifier".
@@ -754,8 +775,8 @@ resolveUnificationVar i t2 =
 --   Given two types, produce either a failure report or a substitution
 --   (to add to the cumulative substitution we build up) that makes them
 --   the same.
-mgu :: PPS.Opts -> [(Type, Type)] -> Type -> Type -> Either PPS.Doc Subst
-mgu ppopts encs t1 t2 =
+mgu :: PPS.Opts -> Pos -> [(Type, Type)] -> Type -> Type -> TI Subst
+mgu ppopts pos encs t1 t2 =
     -- | Fail with expected/found types
     let reject msg = do
           let tyexp = t1
@@ -763,7 +784,7 @@ mgu ppopts encs t1 t2 =
           let (posexp, tyexp') = prettyTypeDetails ppopts tyexp
               (posfound, tyfound') = prettyTypeDetails ppopts tyfound
               encs' = prettyEnclosing ppopts ((tyexp, tyfound) : encs)
-          Left $ PP.vsep [
+          unifyError pos $ PP.vsep [
               msg,
               -- XXX the error infrastructure is supposed to be what knows
               -- how to print positions
@@ -772,6 +793,7 @@ mgu ppopts encs t1 t2 =
               "",
               encs'
            ]
+          pure emptySubst
     in
     case (t1, t2) of
         (TyUnifyVar _ i, TyUnifyVar _ j) | i == j ->
@@ -802,8 +824,6 @@ mgu ppopts encs t1 t2 =
 
         (TyFunc pos1 _ params1 namedParams1 ret1,
          TyFunc pos2 _ params2 namedParams2 ret2) -> do
-            -- Run in the either monad for convenience
-
             -- First, unify the named parameters and get the substitution
             -- that induces.
             --
@@ -846,7 +866,7 @@ mgu ppopts encs t1 t2 =
                     let namedParamsAll =
                             Map.intersectionWith (\a b -> (a, b)) namedParams1 namedParams2
                         (np1, np2) = unzip $ Map.elems namedParamsAll
-                    mgus ppopts ((t1, t2) : encs) np1 np2
+                    mgus ppopts pos ((t1, t2) : encs) np1 np2
 
             -- Apply that substitution to the positional parameters
             -- and the return value. We do the named parameters first
@@ -865,37 +885,29 @@ mgu ppopts encs t1 t2 =
             let n1 = length params1'
                 n2 = length params2'
             (substP, remainder1, remainder2) <- do
-                if n1 < n2 then
+                if n1 < n2 then do
                     let encs' = (t1, t2) : encs
                         params2l' = take n1 params2'
                         params2r' = drop n1 params2'
-                    in
-                    case mgus ppopts encs' params1' params2l' of
-                        Left msgs -> Left msgs
-                        Right result ->
-                            -- we've used up params1'.
-                            let ty' = TyFunc pos2 noNames params2r' Map.empty ret2' in
-                            Right (result, ret1', ty')
-                else if n1 > n2 then
+                    result <- mgus ppopts pos encs' params1' params2l'
+                    -- we've used up params1'.
+                    let ty' = TyFunc pos2 noNames params2r' Map.empty ret2'
+                    pure (result, ret1', ty')
+                else if n1 > n2 then do
                     -- unfortunately we need two copies of this because
                     -- left vs. right side is semantically significant :-(
                     let encs' = (t1, t2) : encs
                         params1l' = take n2 params1'
                         params1r' = drop n2 params1'
-                    in
-                    case mgus ppopts encs' params1l' params2' of
-                        Left msgs -> Left msgs
-                        Right result ->
-                            -- we've used up params2'.
-                            let ty' = TyFunc pos1 noNames params1r' Map.empty ret1' in
-                            Right (result, ty', ret2')
-                else
-                    let encs' = (t1, t2) : encs in
-                    case mgus ppopts encs' params1' params2' of
-                        Left msgs -> Left msgs
-                        Right result ->
-                            -- we've used up both params1' and params2'.
-                            Right (result, ret1', ret2')
+                    result <- mgus ppopts pos encs' params1l' params2'
+                    -- we've used up params2'.
+                    let ty' = TyFunc pos1 noNames params1r' Map.empty ret1'
+                    pure (result, ty', ret2')
+                else do
+                    let encs' = (t1, t2) : encs
+                    result <- mgus ppopts pos encs' params1' params2'
+                    -- we've used up both params1' and params2'.
+                    pure (result, ret1', ret2')
 
             -- apply the positional substitution to the remainders
             let remainder1' = appSubst substP remainder1
@@ -903,7 +915,7 @@ mgu ppopts encs t1 t2 =
 
             -- now unify the remainders / return types
             substR <-
-                mgu ppopts ((t1, t2) : encs) remainder1' remainder2'
+                mgu ppopts pos ((t1, t2) : encs) remainder1' remainder2'
 
             -- return all substitutions
             pure $ mergeSubst substR (mergeSubst substP substN)
@@ -915,12 +927,12 @@ mgu ppopts encs t1 t2 =
 
           | otherwise ->
             -- records with the same field names, try unifying the field types
-            mgus ppopts ((t1, t2) : encs) (Map.elems ts1) (Map.elems ts2)
+            mgus ppopts pos ((t1, t2) : encs) (Map.elems ts1) (Map.elems ts2)
 
         (TyCon _ tc1 ts1, TyCon _ tc2 ts2)
           | tc1 == tc2 ->
             -- same type constructor, unify the args
-            mgus ppopts ((t1, t2) : encs) ts1 ts2
+            mgus ppopts pos ((t1, t2) : encs) ts1 ts2
 
           | otherwise ->
             -- Wrong type constructors
@@ -946,17 +958,17 @@ mgu ppopts encs t1 t2 =
             reject "Mismatch of types."
 
 -- | Run `mgu` on two lists of types.
-mgus :: PPS.Opts -> [(Type, Type)] -> [Type] -> [Type] -> Either PPS.Doc Subst
-mgus ppopts encs t1s t2s = case (t1s, t2s) of
+mgus :: PPS.Opts -> Pos -> [(Type, Type)] -> [Type] -> [Type] -> TI Subst
+mgus ppopts pos encs t1s t2s = case (t1s, t2s) of
     ([], []) ->
         return emptySubst
     (t1 : t1s', t2 : t2s') -> do
         -- unify the first types
-        s <- mgu ppopts encs t1 t2
+        s <- mgu ppopts pos encs t1 t2
         -- apply that substitution and then recurse
-        s' <- mgus ppopts encs (map (appSubst s) t1s') (map (appSubst s) t2s')
+        s' <- mgus ppopts pos encs (map (appSubst s) t1s') (map (appSubst s) t2s')
         return (mergeSubst s' s)
-    (_, _) ->
+    (_, _) -> do
         -- XXX this is no good, it will always print one of the lengths as 0!
         -- (also, note that this is only reachable for type constructor args
         -- and not function args)
@@ -981,8 +993,8 @@ mgus ppopts encs t1s t2s = case (t1s, t2s) of
             msg = "Wrong number of arguments. Expected" <+> t1s' <+>
                   "but got" <+> t2s'
             encs' = prettyEnclosing ppopts encs
-        in
-        Left $ PP.vsep [msg, encs']
+        unifyError pos $ PP.vsep [msg, encs']
+        pure $ emptySubst
 
 --
 -- Unify two types.
@@ -1027,14 +1039,8 @@ unify t1 pos t2 = do
     -- should be good enough if expandFully croaks. (Hopefully.)
     t1' <- expandFully pos t1
     t2' <- expandFully pos t2
-    case mgu ppopts [] t1' t2' of
-        Right s -> modify $ \rw -> rw { tiSubst = mergeSubst s $ tiSubst rw }
-        Left msg -> do
-            let msg' = PP.vsep [
-                    "Type mismatch.",
-                    PP.indent 4 msg
-                 ]
-            recordError pos msg'
+    s <- mgu ppopts pos [] t1' t2'
+    modify $ \rw -> rw { tiSubst = mergeSubst s $ tiSubst rw }
 
 -- Check if two types match but don't actually unify them
 -- (that is, on success throw away the substitution and on error
@@ -1044,15 +1050,14 @@ unify t1 pos t2 = do
 -- which unifications to attempt to avoid failures on things we don't
 -- want to make fatal just yet. It should be removed when no longer
 -- needed.
-matches :: Type -> Type -> TI Bool
-matches t1 t2 = do
+matches :: Pos -> Type -> Type -> TI Bool
+matches pos t1 t2 = do
     ppopts <- asks tiPPOpts
 
     t1' <- expandMostly t1
     t2' <- expandMostly t2
-    case mgu ppopts [] t1' t2' of
-        Right _ -> return True
-        Left _ -> return False
+    result <- speculateTI $ mgu ppopts pos [] t1' t2'
+    pure result
 
 
 ------------------------------------------------------------
@@ -1947,7 +1952,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
                 if not atSyntacticTopLevel then
                     restrictToCorrect
                 else do
-                    ok <- matches (tBlock blockpos ctx pty) ty
+                    ok <- matches blockpos (tBlock blockpos ctx pty) ty
                     if ok then
                         restrictToCorrect
                     else
@@ -2574,7 +2579,7 @@ typesMatch ppopts avail tenv schema'found schema'expected =
         -- Unpack the schemas and check if they match
         ty'found <- unpack schema'found
         ty'expected <- unpack schema'expected
-        matches ty'found ty'expected
+        matches (Pos.getPos ty'found) ty'found ty'expected
   in
   case runTI ppopts avail ScopedMap.empty tenv match of
       (Left _errors, _warnings) -> False        -- not actually reachable
