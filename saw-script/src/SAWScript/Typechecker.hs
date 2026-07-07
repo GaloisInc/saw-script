@@ -411,14 +411,14 @@ popScope = do
       tyenv' = ScopedMap.pop tyenv
   modify (\rw -> rw { tiVarEnv = varenv', tiTyEnv = tyenv' })
 
--- Get a fresh unification var number.
+-- | Get a fresh unification var number.
 getFreshTypeIndex :: TI TypeIndex
 getFreshTypeIndex = do
   next <- gets tiNextTypeIndex
   modify $ (\rw -> rw { tiNextTypeIndex = next + 1 })
   return next
 
--- Construct a fresh type variable.
+-- | Construct a fresh type variable.
 --
 -- Collect the position that prompted us to make it; for example, if
 -- we're the element type of an empty list we get the position of the
@@ -430,23 +430,23 @@ getFreshTypeIndex = do
 getFreshTyVar :: Pos -> TI Type
 getFreshTyVar pos = TyUnifyVar (PosInferred InfFresh pos) <$> getFreshTypeIndex
 
--- Construct a new type variable to use as a placeholder after an
--- error occurs. For now this is the same as other fresh type
--- variables, but I've split it out in case we want to distinguish it
--- in the future.
+-- | Construct a new type variable to use as a placeholder after an
+--   error occurs. For now this is the same as other fresh type
+--   variables, but I've split it out in case we want to distinguish
+--   it in the future.
 getErrorTyVar :: Pos -> TI Type
 getErrorTyVar pos = getFreshTyVar pos
 
--- Add an error message.
+-- | Add an error message.
 recordError :: Pos -> PPS.Doc -> TI ()
 recordError pos err = do
     modify $ \rw -> rw { tiErrors = (pos, err) : tiErrors rw }
 
--- Add an error message. Variant meant for use with ppTypeDetails'.
+-- | Add an error message. Variant meant for use with prettyTypeDetails.
 recordError' :: (Pos, PPS.Doc) -> TI ()
 recordError' (pos, err) = recordError pos err
 
--- Add a warning message.
+-- | Add a warning message.
 recordWarning :: Pos -> PPS.Doc -> TI ()
 recordWarning pos msg = do
     modify $ \rw -> rw { tiWarnings = (pos, msg) : tiWarnings rw }
@@ -455,16 +455,16 @@ recordWarning pos msg = do
 ------------------------------------------------------------
 -- Resolution 
 
--- Apply the current substitution with appSubst.
+-- | Apply the current substitution with appSubst.
 applyCurrentSubst :: AppSubst t => t -> TI t
 applyCurrentSubst t = do
     s <- gets tiSubst
     return $ appSubst s t
 
--- Apply the current typedef collection with `Util.substituteTyVars`.
+-- | Apply the current typedef collection with `Util.substituteTyVars`.
 --
--- The type t has already been checked, so it's ok to panic if it refers
--- to something in the typedef collection that's not visible.
+--   The type t has already been checked, so it's ok to panic if it
+--   refers to something in the typedef collection that's not visible.
 resolveCurrentTypedefs :: Type -> TI Type
 resolveCurrentTypedefs t = do
     avail <- asks tiPrimsAvail
@@ -536,8 +536,8 @@ expandMostly t = do
 ------------------------------------------------------------
 -- Further extraction / support logic
 
--- Get the unification vars that are used in the current variable typing
--- and named type environments.
+-- | Get the unification vars that are used in the current variable typing
+--   and named type environments.
 --
 -- FIXME: This function may miss type variables that occur in the type
 -- of a binding that has been shadowed by another value with the same
@@ -570,14 +570,14 @@ unifyVarsInEnvs = do
     ttys <- mapM applyCurrentSubst $ ScopedMap.allElems tenv
     return $ Map.unionWith Pos.choosePos (unifyVars vtys) (unifyVars ttys)
 
--- Get the named type vars that occur as keys in the current type name
--- environment.
+-- | Get the named type vars that occur as keys in the current type name
+--   environment.
 namedVarDefinitions :: TI (Set Name)
 namedVarDefinitions = do
     env <- gets tiTyEnv
     return $ ScopedMap.allKeysSet env
 
--- Get all the bindings in a pattern.
+-- | Get all the bindings in a pattern.
 patternBindings :: Pattern -> [(Name, Pos, Maybe Type)]
 patternBindings pat =
   case pat of
@@ -585,8 +585,8 @@ patternBindings pat =
     PVar _ xpos x mt -> [(x, xpos, mt)]
     PTuple _ ps -> concatMap patternBindings ps
 
--- Get all the bindings in a pattern, using a separate passed-in
--- schema to get the types. Ignore the types in the pattern.
+-- | Get all the bindings in a pattern, using a separate passed-in
+--   schema to get the types. Ignore the types in the pattern.
 --
 -- XXX: is that reasonable? Should probably assert that the schema
 -- matches the types in the pattern, unless the pattern hasn't already
@@ -655,7 +655,7 @@ patternBindingsWithSchema pat sch =
 -- `prettyEnclosing`).
 --
 
--- print a list of enclosing types
+-- | Print a list of enclosing types.
 prettyEnclosing :: PPS.Opts -> [(Type, Type)] -> PPS.Doc
 prettyEnclosing ppopts tys =
     let once (tyexp, tyfound) =
@@ -674,7 +674,8 @@ prettyEnclosing ppopts tys =
     in
     PP.vsep $ map once tys
 
--- logic for showing details of a type
+-- | Print details of a type. This prints the provenance info
+--   we carry in type positions.
 prettyTypeDetails :: PPS.Opts -> Type -> (Pos, PPS.Doc)
 prettyTypeDetails ppopts ty =
     let (pos, what) = case Pos.getPos ty of
@@ -711,30 +712,7 @@ prettyTypeDetails ppopts ty =
     in
     (pos, msg)
 
--- fail with expected/found types
-failMGU :: PPS.Opts -> PPS.Doc -> Type -> Type -> [(Type, Type)] -> Either PPS.Doc a
-failMGU ppopts start tyexp tyfound encs =
-    let (posexp, tyexp') = prettyTypeDetails ppopts tyexp
-        (posfound, tyfound') = prettyTypeDetails ppopts tyfound
-        encs' = prettyEnclosing ppopts ((tyexp, tyfound) : encs)
-    in
-    Left $ PP.vsep [
-        start,
-        -- XXX the error infrastructure is supposed to be what knows
-        -- how to print positions
-        prettyPosition posexp <> ":" <+> tyexp',
-        prettyPosition posfound <> ":" <+> tyfound',
-        "",
-        encs'
-    ]
-
--- fail with no types
-failMGU' :: PPS.Opts -> [(Type, Type)] -> PPS.Doc -> Either PPS.Doc a
-failMGU' ppopts encs start =
-    let encs' = prettyEnclosing ppopts encs in
-    Left $ PP.vsep [start, encs']
-
--- We've found a substitution for unification var i.
+-- | We've found a substitution for unification var i.
 --
 -- Create the substitution, but first check that this doesn't result
 -- in an invalid type. If it does, return Nothing. The caller handles
@@ -754,7 +732,7 @@ resolveUnificationVar i t2 =
      Just _otherpos -> Nothing
      Nothing -> Just $ singletonSubst i t2
 
--- Guts of unification.
+-- | Guts of unification.
 --
 -- "mgu" stands for "most general unifier".
 --
@@ -762,8 +740,25 @@ resolveUnificationVar i t2 =
 -- (to add to the cumulative substitution we build up) that makes them
 -- the same.
 mgu :: PPS.Opts -> [(Type, Type)] -> Type -> Type -> Either PPS.Doc Subst
-mgu ppopts encs t1 t2 = case (t1, t2) of
-
+mgu ppopts encs t1 t2 =
+ -- | Fail with expected/found types
+ let reject msg = do
+       let tyexp = t1
+           tyfound = t2
+       let (posexp, tyexp') = prettyTypeDetails ppopts tyexp
+           (posfound, tyfound') = prettyTypeDetails ppopts tyfound
+           encs' = prettyEnclosing ppopts ((tyexp, tyfound) : encs)
+       Left $ PP.vsep [
+           msg,
+           -- XXX the error infrastructure is supposed to be what knows
+           -- how to print positions
+           prettyPosition posexp <> ":" <+> tyexp',
+           prettyPosition posfound <> ":" <+> tyfound',
+           "",
+           encs'
+        ]
+ in
+ case (t1, t2) of
   (TyUnifyVar _ i, TyUnifyVar _ j) | i == j ->
       -- same unification var, nothing to do
       return emptySubst
@@ -775,10 +770,9 @@ mgu ppopts encs t1 t2 = case (t1, t2) of
           Nothing -> do
               let t1' = prettyType ppopts t1
                   t2' = prettyType ppopts t2
-              let msg = "Occurs check failure: cannot unify" <+> t1' <+>
-                        "with" <+> t2' <+> "because" <+> t1' <+>
-                        "appears within" <+> t2'
-              failMGU ppopts msg t1 t2 encs
+              reject $ "Occurs check failure: cannot unify" <+> t1' <+>
+                       "with" <+> t2' <+> "because" <+> t1' <+>
+                       "appears within" <+> t2'
 
   (_, TyUnifyVar _ i) ->
       -- the other side is a unification var, resolve it
@@ -787,10 +781,9 @@ mgu ppopts encs t1 t2 = case (t1, t2) of
           Nothing -> do
               let t1' = prettyType ppopts t1
                   t2' = prettyType ppopts t2
-              let msg = "Occurs check failure: cannot unify" <+> t1' <+>
-                        "with" <+> t2' <+> "because" <+> t2' <+>
-                        "appears within" <+> t1'
-              failMGU ppopts msg t1 t2 encs
+              reject $ "Occurs check failure: cannot unify" <+> t1' <+>
+                       "with" <+> t2' <+> "because" <+> t2' <+>
+                       "appears within" <+> t1'
 
   (TyFunc pos1 _ params1 namedParams1 ret1, TyFunc pos2 _ params2 namedParams2 ret2) -> do
       -- Run in the either monad for convenience
@@ -823,8 +816,8 @@ mgu ppopts encs t1 t2 = case (t1, t2) of
                   missing1' = prettyMissingList t1' missing1
                   missing2' = prettyMissingList t2' missing2
                   missing' = missing1' ++ missing2'
-                  msg = PP.vsep ("Mismatched named parameters:" : missing')
-              failMGU ppopts msg t1 t2 encs
+              reject $ PP.vsep ("Mismatched named parameters:" : missing')
+
           else do
               -- In principle when you have checked that the keys
               -- match, you can do zip (Map.toList namedParams1)
@@ -886,7 +879,7 @@ mgu ppopts encs t1 t2 = case (t1, t2) of
   (TyRecord _ ts1, TyRecord _ ts2)
     | Map.keys ts1 /= Map.keys ts2 ->
       -- records with different keys
-      failMGU ppopts "Record field names mismatch." t1 t2 encs
+      reject "Record field names mismatch."
 
     | otherwise ->
       -- records with the same field names, try unifying the field types
@@ -900,13 +893,11 @@ mgu ppopts encs t1 t2 = case (t1, t2) of
     | otherwise ->
       -- Wrong type constructors
       case tc1 of
-        _ ->
+        _ -> do
           let tc1' = prettyTyCon tc1
               tc2' = prettyTyCon tc2
-              msg = "Mismatch of type constructors. Expected:" <+> tc1' <+>
-                    "but got" <+> tc2'
-          in
-          failMGU ppopts msg t1 t2 encs
+          reject $ "Mismatch of type constructors. Expected:" <+> tc1' <+>
+                   "but got" <+> tc2'
 
   (TyVar _ a, TyVar _ b) | a == b ->
       -- Same named variable
@@ -915,12 +906,12 @@ mgu ppopts encs t1 t2 = case (t1, t2) of
   (_, TyFunc{}) ->
       -- If we expected a scalar and found a function, speculate that
       -- someone forgot a function argument earlier.
-      failMGU ppopts "Mismatch of types. Perhaps a function was not given enough arguments?" t1 t2 encs
+      reject "Mismatch of types. Perhaps a function was not given enough arguments?"
   (_, _) ->
       -- Did not work
-      failMGU ppopts "Mismatch of types." t1 t2 encs
+      reject "Mismatch of types."
 
--- Run mgu on two lists of types.
+-- | Run `mgu` on two lists of types.
 mgus :: PPS.Opts -> [(Type, Type)] -> [Type] -> [Type] -> Either PPS.Doc Subst
 mgus ppopts encs t1s t2s = case (t1s, t2s) of
     ([], []) ->
@@ -955,8 +946,9 @@ mgus ppopts encs t1s t2s = case (t1s, t2s) of
           t2s' = PP.viaShow $ length t2s
           msg = "Wrong number of arguments. Expected" <+> t1s' <+>
                 "but got" <+> t2s'
+          encs' = prettyEnclosing ppopts encs
       in
-      failMGU' ppopts encs msg
+      Left $ PP.vsep [msg, encs']
 
 --
 -- Unify two types.
@@ -1160,7 +1152,7 @@ type OutStmt = Stmt
 -- Expressions
 --
 
--- Take a struct field binding (name and expression) and return the
+-- | Take a struct field binding (name and expression) and return the
 -- updated binding as well as the member entry for the enclosing
 -- struct type.
 inferField :: (Name, Expr) -> TI ((Name, OutExpr), (Name, Type))
@@ -1168,18 +1160,18 @@ inferField (n,e) = do
     (e', t) <- inferExpr e
     return ((n, e'), (n, t))
 
--- Add x with type ty to the environment.
+-- | Add x with type ty to the environment.
 addVar :: Name -> Pos -> Rebindable -> Schema -> TI ()
 addVar x pos rb ty = do
     env <- gets tiVarEnv
     let env' = ScopedMap.insert x (pos, Current, rb, ty) env
     modify (\rw -> rw { tiVarEnv = env' })
 
--- Add xs with type tys to the environment.
+-- | Add xs with type tys to the environment.
 addVars :: Rebindable -> [(Name, Pos, Schema)] -> TI ()
 addVars rb bindings = mapM_ (\(x, pos, ty) -> addVar x pos rb ty) bindings
 
--- Add all the vars in a pattern to the environment.
+-- | Add all the vars in a pattern to the environment.
 --
 -- (Note that the pattern should have already been processed so it
 -- contains types; hence the irrefutable Just t.)
@@ -1187,8 +1179,8 @@ addPattern :: Pattern -> TI ()
 addPattern pat = addVars ReadOnlyVar bindings
   where bindings = [ (x, pos, tMono t) | (x, pos, Just t) <- patternBindings pat ]
 
--- Add all the vars in a list of patterns to the environment, while
--- running m.
+-- | Add all the vars in a list of patterns to the environment, while
+--   running m.
 --
 -- (Note that the patterns should have already been processed so they
 -- contain types; hence the irrefutable Just t.)
@@ -1198,7 +1190,7 @@ addPatterns pats = addVars ReadOnlyVar allbindings
      bindings pat = [ (x, pos, tMono t) | (x, pos, Just t) <- patternBindings pat ]
      allbindings = concatMap bindings pats
 
--- Add all the vars in a pattern to the environment.
+-- | Add all the vars in a pattern to the environment.
 --
 -- Variant version that uses the passed-in schema to produce the types
 -- and ignoring the types already loaded into the pattern.
@@ -1206,7 +1198,7 @@ addPatternSchema :: Pattern -> Rebindable -> Schema -> TI ()
 addPatternSchema pat rb ty = addVars rb bindings
   where bindings = patternBindingsWithSchema pat ty
 
--- Add all the vars in a declaration to the environment.
+-- | Add all the vars in a declaration to the environment.
 --
 -- Do nothing if there's no type schema in this declaration yet.
 -- XXX: is that reasonable? shouldn't it panic?
@@ -1214,12 +1206,12 @@ addDecl :: Rebindable -> Decl -> TI ()
 addDecl _rb (Decl _ _ Nothing _) = return ()
 addDecl rb (Decl _ p (Just s) _) = addPatternSchema p rb s
 
--- Add all the vars in a declaration to the environment, while running m.
+-- | Add all the vars in a declaration group to the environment.
 addDeclGroup :: Rebindable -> DeclGroup -> TI ()
 addDeclGroup rb (NonRecursive d) = addDecl rb d
 addDeclGroup rb (Recursive ds) = mapM_ (addDecl rb) ds
 
--- Add some abstract type variables.
+-- | Add some abstract type variables.
 addAbstractTyVars :: Map Name (Pos, Kind) -> TI ()
 addAbstractTyVars vars = do
     let insertOne x (_pos, kind) tyenv =
@@ -1230,8 +1222,7 @@ addAbstractTyVars vars = do
     let tyenv' = insertAll tyenv
     modify (\rw -> rw { tiTyEnv = tyenv' })
 
---
--- Infer the type for an expression.
+-- | Infer the type for an expression.
 --
 inferExpr :: Expr -> TI (OutExpr, Type)
 inferExpr expr = case expr of
@@ -1638,9 +1629,8 @@ inferExpr expr = case expr of
       e3' <- checkExpr e3 t
       return (IfThenElse pos e1' e2' e3', t)
 
---
--- Check the type of an expr, by inferring and then unifying the
--- result.
+-- | Check the type of an expr, by inferring and then unifying the
+--   result.
 --
 checkExpr :: Expr -> Type -> TI OutExpr
 checkExpr e t = do
@@ -1652,7 +1642,7 @@ checkExpr e t = do
 -- patterns
 --
 
--- Infer types for a pattern, producing fresh type variables as needed.
+-- | Infer types for a pattern, producing fresh type variables as needed.
 --
 -- There may already be types in the pattern if there were explicit
 -- type annotations in the input; if so don't throw them away.
@@ -1723,8 +1713,8 @@ inferPattern rebindable pat = do
       do (ts, ps') <- unzip <$> mapM (inferPattern rebindable) ps
          return (tTuple (PosInferred InfTerm pos) ts, PTuple pos ps')
 
--- Check the type of a pattern, by inferring and then unifying the
--- result.
+-- | Check the type of a pattern, by inferring and then unifying the
+--   result.
 checkPattern :: Rebindable -> Type -> Pattern -> TI Pattern
 checkPattern rebindable t pat = do
      (pt, pat') <- inferPattern rebindable pat
@@ -1735,7 +1725,7 @@ checkPattern rebindable t pat = do
 -- statements
 --
 
--- Add a typedef binding to the type environment.
+-- | Add a typedef binding to the type environment.
 --
 -- The expansion (t) has been checked, so it's ok to panic if it
 -- refers to something not visible in the environment.
@@ -1747,7 +1737,7 @@ addTypedef a ty = do
         env' = ScopedMap.insert a (Current, ConcreteType ty') env
     modify (\rw -> rw { tiTyEnv = env' })
 
--- break a monadic type down into its monad and value types, if it is one
+-- | Break a monadic type down into its monad and value types, if it is one.
 --
 --    monadType (TopLevel Int) gives Just (TopLevel, Int)
 --    monadType Int gives Nothing
@@ -1775,7 +1765,7 @@ monadType ty = case ty of
     isMonad "MIRSetup" = True
     isMonad _ = False
 
--- wrap an expression in "return"
+-- | Wrap an expression in @return@
 wrapReturn :: Expr -> Expr
 wrapReturn e =
     let ePos = Pos.getPos e
@@ -1784,13 +1774,13 @@ wrapReturn e =
     in
     Application ePos ret [(Nothing, e)]
 
--- type inference for a single statement
+-- | Type inference for a single statement.
 --
--- the boolean is whether we're at the syntactic top level, which is used
--- for workaround logic for issue #2162
+-- The boolean is whether we're at the syntactic top level, which is used
+-- for workaround logic for issue #2162.
 --
--- the passed-in position should be the position associated with the monad type
--- the first type argument (ctx) is the monad type for any binds that occur
+-- The passed-in position should be the position associated with the monad type
+-- the first type argument (ctx) is the monad type for any binds that occur.
 --
 -- Updates the environment and returns an updated statement.
 inferStmt :: Bool -> Pos -> Type -> Stmt -> TI Stmt
@@ -1965,7 +1955,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
         StmtPopdir _spos ->
             return s
 
--- Inference for a do-block.
+-- | Inference for a do-block.
 --
 -- The passed-in position should be the position for the whole
 -- statement block.
@@ -1990,7 +1980,7 @@ inferBlock blockpos ctx ty (stmts, lastexpr) = do
 
     return (stmts', lastexpr')
 
--- Wrapper around inferStmt suitable for checking one statement at a
+-- | Wrapper around inferStmt suitable for checking one statement at a
 -- time. This is temporary scaffolding for the interpreter while
 -- fixing it. (Currently the interpreter typechecks one statement at a
 -- time when executing, even when not at the repl, and this involves
@@ -2019,8 +2009,8 @@ inferSingleStmt pos ctx s = do
 -- decls
 --
 
--- Create a type schema for a list of mutually referential
--- declarations out of their free vars.
+-- | Create a type schema for a list of mutually referential
+--   declarations out of their free vars.
 --
 -- (This creates names for any remaining unification vars, so
 -- potentially updates the expression.)
@@ -2116,7 +2106,7 @@ generalize foralls pats0 es0 ts0 = do
     return $ zipWith3 mk pats es ts
 
 
--- Check that a type is a function and isn't a plain value, in order
+-- | Check that a type is a function and isn't a plain value, in order
 -- to reject recursive values in "rec" definitions. Otherwise they
 -- crash the interpreter downstream. See issue #2203.
 --
@@ -2251,13 +2241,13 @@ inferRecDecls ds = do
 
     return ds'
 
--- Type inference for a decl group.
+-- | Type inference for a decl group.
 inferDeclGroup :: Rebindable -> DeclGroup -> TI DeclGroup
-inferDeclGroup rebindable (NonRecursive d) = do
+inferDeclGroup rebindable dg = case dg of
+  NonRecursive d -> do
     d' <- inferDecl rebindable d
     return (NonRecursive d')
-
-inferDeclGroup rebindable (Recursive ds) = do
+  Recursive ds -> do
     -- The parser doesn't accept "rec rebindable" so panic if it appears.
     when (rebindable == RebindableVar) $
         panic "inferDeclGroup" [
@@ -2270,8 +2260,8 @@ inferDeclGroup rebindable (Recursive ds) = do
 -- types
 --
 
--- Look up a type constructor (in our fixed environment of hardcoded
--- types) and return its params as a list of kinds.
+-- | Look up a type constructor (in our fixed environment of hardcoded
+--   types) and return its params as a list of kinds.
 lookupTyCon :: TyCon -> [Kind]
 lookupTyCon tycon = case tycon of
     TupleCon n -> genericTake n (repeat kindStar)
@@ -2289,8 +2279,8 @@ lookupTyCon tycon = case tycon of
     MIRSpecCon -> []
     ContextCon _ctx -> [kindStar]
 
--- Check a type for validity and also for having the
--- correct kinding.
+-- | Check a type for validity and also for having the
+--   correct kinding.
 checkType :: Kind -> Type -> TI Type
 checkType kind ty = case ty of
   TyCon pos tycon args -> do
