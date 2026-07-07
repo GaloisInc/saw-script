@@ -1,13 +1,15 @@
 Loading file "err013.saw"
-err013.saw:9:33-9:35: Occurs check failure.
+Type errors:
+  err013.saw:9:33-9:35: Error: Occurs check failure.
     Cannot unify t.1 with [t.1] because t.1 appears within [t.1].
-    <type of concat>:1:2-1:3: The type t.1 arises from a fresh type variable introduced here
-    <type of concat>:1:5-1:8: The type [t.1] arises from this type annotation
-
     Expected: t.1
     Found:    [t.1]
 
     Expected: [t.1]
     Found:    [[t.1]]
+
+  <type of concat>:1:2-1:3: Note: The type t.1 arises from a fresh type variable introduced here
+  <type of concat>:1:5-1:8: Note: The type [t.1] arises from this type annotation
+
 
 FAILED

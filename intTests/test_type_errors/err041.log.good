@@ -1,12 +1,14 @@
 Loading file "err041.saw"
-err041.saw:9:11-9:14: Type mismatch.
-    err041.saw:7:25-7:28: The type Int arises from this type annotation
-    err041.saw:5:31-5:37: The type String arises from this type annotation
-
+Type errors:
+  err041.saw:9:11-9:14: Error: Type mismatch.
     Expected: Int
     Found:    String
 
     Expected: Int -> Int -> Int -> Int
     Found:    Int -> Int -> String -> Int
+
+  err041.saw:7:25-7:28: Note: The type Int arises from this type annotation
+  err041.saw:5:31-5:37: Note: The type String arises from this type annotation
+
 
 FAILED

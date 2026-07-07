@@ -1,9 +1,11 @@
 Loading file "err007.saw"
-err007.saw:2:1-2:4: Type mismatch.
-    err007.saw:2:1-2:4: The type TopLevel t.0 arises from this type annotation
-    err007.saw:2:1-2:4: The type [Int] arises from the type of this term
-
+Type errors:
+  err007.saw:2:1-2:4: Error: Type mismatch.
     Expected: TopLevel t.0
     Found:    [Int]
+
+  err007.saw:2:1-2:4: Note: The type TopLevel t.0 arises from this type annotation
+  err007.saw:2:1-2:4: Note: The type [Int] arises from the type of this term
+
 
 FAILED
