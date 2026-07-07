@@ -66,7 +66,9 @@ type TyEnv = ScopedMap Name (PrimitiveLifecycle, NamedType)
 --   This could also perhaps be called intersectionWithM, but
 --   since it doesn't actually compute a resultant map that seems
 --   misleading.
-zipByKeyWithM_ :: (Ord k, Monad m) => (a -> b -> m ()) -> Map k a -> Map k b -> m ()
+zipByKeyWithM_ :: (Ord k, Monad m) =>
+      (a -> b -> m ()) -> Map k a -> Map k b ->
+      m ()
 zipByKeyWithM_ f xs ys =
     let xys = Map.intersectionWith (\x y -> (x, y)) xs ys in
     mapM_ (\(x, y) -> f x y) (Map.elems xys)
@@ -110,7 +112,8 @@ instance UnifyVars Type where
                 namedVars = unifyVars namedParams
                 retVars = unifyVars ret
             in
-            Map.unionWith Pos.choosePos (Map.unionWith Pos.choosePos paramsVars namedVars) retVars
+            let vars1 = Map.unionWith Pos.choosePos paramsVars namedVars in
+            Map.unionWith Pos.choosePos vars1 retVars
         TyRecord _ tm     -> unifyVars tm
         TyVar _ _         -> Map.empty
         TyUnifyVar pos i  -> Map.singleton i pos
@@ -253,9 +256,12 @@ instance AppSubst Expr where
                 body' = appSubst s body
             in
             Lambda pos mname pats' ppats' body'
-        Application pos f v    -> Application pos (appSubst s f) (appSubst s v)
-        Let pos dg e           -> Let pos (appSubst s dg) (appSubst s e)
-        IfThenElse pos e e2 e3 -> IfThenElse pos (appSubst s e) (appSubst s e2) (appSubst s e3)
+        Application pos f v    ->
+            Application pos (appSubst s f) (appSubst s v)
+        Let pos dg e           ->
+            Let pos (appSubst s dg) (appSubst s e)
+        IfThenElse pos e e2 e3 ->
+            IfThenElse pos (appSubst s e) (appSubst s e2) (appSubst s e3)
 
 instance AppSubst Pattern where
     appSubst s pat = case pat of
@@ -270,16 +276,19 @@ instance AppSubst Stmt where
         StmtCode allpos spos str -> StmtCode allpos spos str
         StmtImport pos imp       -> StmtImport pos imp
         StmtInclude pos file once -> StmtInclude pos file once
-        StmtTypedef allpos apos a ty -> StmtTypedef allpos apos a (appSubst s ty)
+        StmtTypedef allpos apos a ty ->
+            StmtTypedef allpos apos a (appSubst s ty)
         StmtPushdir pos dir      -> StmtPushdir pos dir
         StmtPopdir pos           -> StmtPopdir pos
 
 instance AppSubst DeclGroup where
-    appSubst s (Recursive ds) = Recursive (appSubst s ds)
-    appSubst s (NonRecursive d) = NonRecursive (appSubst s d)
+    appSubst s dg = case dg of
+        Recursive ds -> Recursive (appSubst s ds)
+        NonRecursive d -> NonRecursive (appSubst s d)
 
 instance AppSubst Decl where
-    appSubst s (Decl pos p mt e) = Decl pos (appSubst s p) (appSubst s mt) (appSubst s e)
+    appSubst s (Decl pos p mt e) =
+        Decl pos (appSubst s p) (appSubst s mt) (appSubst s e)
 
 instance AppSubst Type where
     appSubst s t = case t of
@@ -297,7 +306,8 @@ instance AppSubst Type where
             Nothing -> t
 
 instance AppSubst Schema where
-    appSubst s (Forall ns t) = Forall ns (appSubst s t)
+    appSubst s (Forall ns t) =
+        Forall ns (appSubst s t)
 
 instance AppSubst NamedType where
     appSubst s nt = case nt of
@@ -366,7 +376,8 @@ type Result a = (Either MsgList a, MsgList)
 --   manifestation of the unhealthy codependent relationship with the
 --   interpreter.
 --
-runTI :: PPS.Opts -> Set PrimitiveLifecycle -> VarEnv -> TyEnv -> TI a -> Result a
+runTI :: PPS.Opts -> Set PrimitiveLifecycle -> VarEnv -> TyEnv -> TI a ->
+         Result a
 runTI ppopts avail varenv tyenv m =
     let rw = RW {
             tiVarEnv = varenv,
@@ -502,8 +513,8 @@ condenseFunctions errPos ty = case ty of
                         condenseFunctions errPos ty'
                     False -> do
                         let dups' = PP.hsep $ map PP.pretty $ Map.keys dups
-                        recordError errPos $ "Function has duplicate parameter names:" <+>
-                                             dups'
+                        recordError errPos $ "Function has duplicate" <+>
+                                             "parameter names:" <+> dups'
                         getErrorTyVar pos1
             _ ->
                 pure ty
@@ -579,8 +590,7 @@ namedVarDefinitions = do
 
 -- | Get all the bindings in a pattern.
 patternBindings :: Pattern -> [(Name, Pos, Maybe Type)]
-patternBindings pat =
-  case pat of
+patternBindings pat = case pat of
     PWild _ _mt -> []
     PVar _ xpos x mt -> [(x, xpos, mt)]
     PTuple _ ps -> concatMap patternBindings ps
@@ -602,15 +612,16 @@ patternBindings pat =
 -- probably just be removed.
 --
 patternBindingsWithSchema :: Pattern -> Schema -> [(Name, Pos, Schema)]
-patternBindingsWithSchema pat sch =
-  case pat of
+patternBindingsWithSchema pat sch = case pat of
     PWild _ _ -> []
     PVar _ xpos x _ -> [(x, xpos, sch)]
     PTuple _ ps ->
       case sch of
         Forall vs t -> case t of
             TyCon _pos (TupleCon _) ts' ->
-                let once pat' t' = patternBindingsWithSchema pat' (Forall vs t') in
+                let once pat' t' =
+                      patternBindingsWithSchema pat' (Forall vs t')
+                in
                 concat $ zipWith once ps ts'
             _ -> []
 
@@ -679,10 +690,14 @@ prettyEnclosing ppopts tys =
 prettyTypeDetails :: PPS.Opts -> Type -> (Pos, PPS.Doc)
 prettyTypeDetails ppopts ty =
     let (pos, what) = case Pos.getPos ty of
-           PosInferred InfFresh p -> (p, "a fresh type variable introduced here")
-           PosInferred InfTerm p -> (p, "the type of this term")
-           PosInferred InfContext p -> (p, "the context of the term")
-           p -> (p, "this type annotation")
+           PosInferred InfFresh p ->
+               (p, "a fresh type variable introduced here")
+           PosInferred InfTerm p ->
+               (p, "the type of this term")
+           PosInferred InfContext p ->
+               (p, "the context of the term")
+           p ->
+               (p, "this type annotation")
     in
     let ty' = prettyType ppopts ty
         what' = "arises from" <+> what
@@ -785,7 +800,8 @@ mgu ppopts encs t1 t2 =
                              "with" <+> t2' <+> "because" <+> t2' <+>
                              "appears within" <+> t1'
 
-        (TyFunc pos1 _ params1 namedParams1 ret1, TyFunc pos2 _ params2 namedParams2 ret2) -> do
+        (TyFunc pos1 _ params1 namedParams1 ret1,
+         TyFunc pos2 _ params2 namedParams2 ret2) -> do
             -- Run in the either monad for convenience
 
             -- First, unify the named parameters and get the substitution
@@ -802,8 +818,8 @@ mgu ppopts encs t1 t2 =
                 if names1 /= names2 then do
                     let t1' = prettyType ppopts t1
                         t2' = prettyType ppopts t2
-                        missing1 = Map.toList $ Map.difference namedParams2 namedParams1
-                        missing2 = Map.toList $ Map.difference namedParams1 namedParams2
+                        missing1 = Map.difference namedParams2 namedParams1
+                        missing2 = Map.difference namedParams1 namedParams2
                         prettyMissing (name, ty) =
                             let ty' = prettyType ppopts ty in
                             PP.pretty name <+> ":" <+> ty'
@@ -811,10 +827,13 @@ mgu ppopts encs t1 t2 =
                             [] ->
                                 []
                             _ ->
-                                let ms' = PP.indent 3 $ PP.vsep $ map prettyMissing ms in
-                                ["Missing from" <+> fty' <> ":" <> PP.line <> ms']
-                        missing1' = prettyMissingList t1' missing1
-                        missing2' = prettyMissingList t2' missing2
+                                let ms' = PP.vsep $ map prettyMissing ms
+                                    line1 = "Missing from" <+> fty' <> ":"
+                                    lines2 = PP.indent 3 ms'
+                                in
+                                [line1 <> PP.line <> lines2]
+                        missing1' = prettyMissingList t1' $ Map.toList missing1
+                        missing2' = prettyMissingList t2' $ Map.toList missing2
                         missing' = missing1' ++ missing2'
                     reject $ PP.vsep ("Mismatched named parameters:" : missing')
 
@@ -824,13 +843,15 @@ mgu ppopts encs t1 t2 =
                     -- (Map.toList namedParams2) and have things match up
                     -- correctly, but it makes me nervous, so do it like
                     -- this instead.
-                    let namedParamsAll = Map.intersectionWith (\a b -> (a, b)) namedParams1 namedParams2
+                    let namedParamsAll =
+                            Map.intersectionWith (\a b -> (a, b)) namedParams1 namedParams2
                         (np1, np2) = unzip $ Map.elems namedParamsAll
                     mgus ppopts ((t1, t2) : encs) np1 np2
 
-            -- Apply that substitution to the positional parameters and the return
-            -- value. We do the named parameters first because because they don't
-            -- carry into the return value like curried positional parameters.
+            -- Apply that substitution to the positional parameters
+            -- and the return value. We do the named parameters first
+            -- because because they don't carry into the return value
+            -- like curried positional parameters.
             let params1' = appSubst substN params1
                 params2' = appSubst substN params2
                 ret1' = appSubst substN ret1
@@ -845,27 +866,38 @@ mgu ppopts encs t1 t2 =
                 n2 = length params2'
             (substP, remainder1, remainder2) <- do
                 if n1 < n2 then
-                    case mgus ppopts ((t1, t2) : encs) params1' (take n1 params2') of
+                    let encs' = (t1, t2) : encs
+                        params2l' = take n1 params2'
+                        params2r' = drop n1 params2'
+                    in
+                    case mgus ppopts encs' params1' params2l' of
                         Left msgs -> Left msgs
                         Right result ->
                             -- we've used up params1'.
-                            Right (result, ret1', TyFunc pos2 noNames (drop n1 params2') Map.empty ret2')
+                            let ty' = TyFunc pos2 noNames params2r' Map.empty ret2' in
+                            Right (result, ret1', ty')
                 else if n1 > n2 then
                     -- unfortunately we need two copies of this because
                     -- left vs. right side is semantically significant :-(
-                    case mgus ppopts ((t1, t2) : encs) (take n2 params1') params2' of
+                    let encs' = (t1, t2) : encs
+                        params1l' = take n2 params1'
+                        params1r' = drop n2 params1'
+                    in
+                    case mgus ppopts encs' params1l' params2' of
                         Left msgs -> Left msgs
                         Right result ->
                             -- we've used up params2'.
-                            Right (result, TyFunc pos1 noNames (drop n2 params1') Map.empty ret1', ret2')
+                            let ty' = TyFunc pos1 noNames params1r' Map.empty ret1' in
+                            Right (result, ty', ret2')
                 else
-                    case mgus ppopts ((t1, t2) : encs) params1' params2' of
+                    let encs' = (t1, t2) : encs in
+                    case mgus ppopts encs' params1' params2' of
                         Left msgs -> Left msgs
                         Right result ->
                             -- we've used up both params1' and params2'.
                             Right (result, ret1', ret2')
 
-            -- apply the positional substitution remaindersk and to the named parameters
+            -- apply the positional substitution to the remainders
             let remainder1' = appSubst substP remainder1
                 remainder2' = appSubst substP remainder2
 
@@ -906,7 +938,8 @@ mgu ppopts encs t1 t2 =
         (_, TyFunc{}) ->
             -- If we expected a scalar and found a function, speculate that
             -- someone forgot a function argument earlier.
-            reject "Mismatch of types. Perhaps a function was not given enough arguments?"
+            reject $ "Mismatch of types." <+>
+                     "Perhaps a function was not given enough arguments?"
 
         (_, _) ->
             -- Did not work
@@ -1100,7 +1133,9 @@ inspectParamsFTVs pats =
     Map.unions <$> mapM inspectPatternFTVs pats
 
 -- Get the free type variables found in a named parameter list.
-inspectNamedParamsFTVs :: Map Text (Pos, (Pos, Expr, Pattern)) -> TI (Map Name (Pos, Kind))
+inspectNamedParamsFTVs ::
+      Map Text (Pos, (Pos, Expr, Pattern)) ->
+      TI (Map Name (Pos, Kind))
 inspectNamedParamsFTVs params =
     --
     -- Note: it's possible we should also allow type variables to
@@ -1177,8 +1212,10 @@ addVars rb bindings = mapM_ (\(x, pos, ty) -> addVar x pos rb ty) bindings
 -- (Note that the pattern should have already been processed so it
 -- contains types; hence the irrefutable Just t.)
 addPattern :: Pattern -> TI ()
-addPattern pat = addVars ReadOnlyVar bindings
-    where bindings = [ (x, pos, tMono t) | (x, pos, Just t) <- patternBindings pat ]
+addPattern pat = do
+    let bindings =
+          [ (x, pos, tMono t) | (x, pos, Just t) <- patternBindings pat ]
+    addVars ReadOnlyVar bindings
 
 -- | Add all the vars in a list of patterns to the environment, while
 --   running m.
@@ -1186,10 +1223,11 @@ addPattern pat = addVars ReadOnlyVar bindings
 --   (Note that the patterns should have already been processed so they
 --   contain types; hence the irrefutable Just t.)
 addPatterns :: [Pattern] -> TI ()
-addPatterns pats = addVars ReadOnlyVar allbindings
-    where
-        bindings pat = [ (x, pos, tMono t) | (x, pos, Just t) <- patternBindings pat ]
+addPatterns pats = do
+    let bindings pat =
+          [ (x, pos, tMono t) | (x, pos, Just t) <- patternBindings pat ]
         allbindings = concatMap bindings pats
+    addVars ReadOnlyVar allbindings
 
 -- | Add all the vars in a pattern to the environment.
 --
@@ -1204,13 +1242,15 @@ addPatternSchema pat rb ty = addVars rb bindings
 -- Do nothing if there's no type schema in this declaration yet.
 -- XXX: is that reasonable? shouldn't it panic?
 addDecl :: Rebindable -> Decl -> TI ()
-addDecl _rb (Decl _ _ Nothing _) = return ()
-addDecl rb (Decl _ p (Just s) _) = addPatternSchema p rb s
+addDecl rb d = case d of
+    Decl _ _ Nothing _ -> return ()
+    Decl _ p (Just s) _ -> addPatternSchema p rb s
 
 -- | Add all the vars in a declaration group to the environment.
 addDeclGroup :: Rebindable -> DeclGroup -> TI ()
-addDeclGroup rb (NonRecursive d) = addDecl rb d
-addDeclGroup rb (Recursive ds) = mapM_ (addDecl rb) ds
+addDeclGroup rb dg = case dg of
+    NonRecursive d -> addDecl rb d
+    Recursive ds -> mapM_ (addDecl rb) ds
 
 -- | Add some abstract type variables.
 addAbstractTyVars :: Map Name (Pos, Kind) -> TI ()
@@ -1266,7 +1306,9 @@ inferExpr expr = case expr of
         (ar',at) <- inferExpr ar
         ix'      <- checkExpr ix (tInt (PosInferred InfContext (Pos.getPos ix)))
         t        <- getFreshTyVar (Pos.getPos ix')
-        unify (tArray (PosInferred InfContext (Pos.getPos ar')) t) (Pos.getPos ar') at
+        let pos'ar = Pos.getPos ar'
+            pos'ty = PosInferred InfContext pos'ar
+        unify (tArray pos'ty t) pos'ar at
         return (Index pos ar' ix', t)
 
     Lookup pos e n -> do
@@ -1317,7 +1359,8 @@ inferExpr expr = case expr of
             _ -> do
                 ppopts <- asks tiPPOpts
                 let t1' = prettyType ppopts t1
-                recordError pos $ "Tuple lookup on non-tuple value of type" <+> t1'
+                recordError pos $ "Tuple lookup on non-tuple value of type" <+>
+                                  t1'
                 getErrorTyVar pos
         return (TLookup pos e1 i, elTy)
 
@@ -1349,9 +1392,11 @@ inferExpr expr = case expr of
                   return (Var pos x, t')
               | otherwise -> do
                   recordError pos $ "Inaccessible variable:" <+> x'
-                  let how = if lc == HideDeprecated then "deprecated" else "experimental"
+                  let how = if lc == HideDeprecated then "deprecated"
+                            else "experimental"
                       cmd = "`enable_" <> how <> "`."
-                  recordError pos $ "This command is available only after running" <+> cmd
+                  recordError pos $ "This command is available only" <+>
+                                    "after running" <+> cmd
 
                   t' <- getFreshTyVar pos
                   return (Var pos x, t')
@@ -1370,13 +1415,15 @@ inferExpr expr = case expr of
               e' <- checkExpr e paramty
               addPattern param'
               pure ((name, paramty), (name, (namepos, (allpos, e', param'))))
-        (namedParamtys, namedParams') <- unzip <$> mapM oneNamed (Map.toList namedParams)
+        (namedParamtys, namedParams') <-
+            unzip <$> mapM oneNamed (Map.toList namedParams)
 
         (body', tybody) <- inferExpr body
         popScope
 
         when (null params' && not (null namedParams')) $ do
-            recordError pos "Functions may not have only named parameters; add ()"
+            recordError pos $ "Functions may not have only named" <+>
+                              "parameters; add ()"
 
         -- XXX neither InfContext nor InfTerm is quite right here, but
         -- InfContext is what we were using before. Properly the
@@ -1393,7 +1440,9 @@ inferExpr expr = case expr of
         -- Note: we generate [] for the namelist field of the function
         -- type because we're downstream of the only thing that uses it.
         let e' = Lambda pos mname params' (Map.fromList namedParams') body'
-            ty = tFun (PosInferred InfContext (Pos.getPos body')) noNames paramtys (Map.fromList namedParamtys) tybody
+            pos'ty = PosInferred InfContext (Pos.getPos body')
+            namedParamtys' = Map.fromList namedParamtys
+            ty = tFun pos'ty noNames paramtys namedParamtys' tybody
         return (e', ty)
 
     Application pos f args0 -> do
@@ -1521,7 +1570,11 @@ inferExpr expr = case expr of
                   --
                   let callpos =
                         let ps1 = map (\(arg, _ty) -> Pos.getPos arg) arginfo
-                            ps2 = map (\(_name, (namepos, arg, _ty)) -> Pos.spanPos namepos (Pos.getPos arg)) (Map.toList namedArginfo)
+                            ps2 =
+                              let once (_name, (namepos, arg, _ty)) =
+                                    Pos.spanPos namepos (Pos.getPos arg)
+                              in
+                              map once (Map.toList namedArginfo)
                         in
                         Pos.maxSpan (ps1 ++ ps2)
 
@@ -1541,19 +1594,25 @@ inferExpr expr = case expr of
                   let argpos = case arginfo of
                         (arg, _) : _ -> Pos.getPos arg
                         [] -> case Map.toList namedArginfo of
-                            (_, (_, arg, _)) : _ -> Pos.getPos arg
-                            [] -> panic "checkExpr / Application" ["Call with empty arg list"]
+                            (_, (_, arg, _)) : _ ->
+                                Pos.getPos arg
+                            [] -> panic "checkExpr / Application" [
+                                "Call with empty arg list"
+                             ]
                   if isFirst then do
                       -- The value we got didn't accept any arguments at
                       -- all, so use the position of the function value
                       -- to complain that it isn't a function.
                       let ty' = prettyType ppopts ty
-                      let nargs' = case length arginfo + length (Map.toList namedArginfo) of
+                      let nNamed = length (Map.toList namedArginfo)
+                          nargs' = case length arginfo + nNamed of
                             1 -> "one argument"
                             n -> PP.viaShow n <+> "arguments"
-                      recordError (Pos.getPos f) $ "This expression is not a function (type is"
-                                               <+> ty' <> ")"
-                      recordError pos $ "but is applied here to" <+> nargs' <> "."
+                      recordError (Pos.getPos f) $ "This expression is not" <+>
+                                                   "a function (type is" <+>
+                                                   ty' <> ")"
+                      recordError pos $ "but is applied here to" <+>
+                                        nargs' <> "."
                       recordError' $ prettyTypeDetails ppopts ty
                   else do
                       -- We already absorbed some arguments so we have
@@ -1561,16 +1620,20 @@ inferExpr expr = case expr of
                       -- Use the position of the first excess argument
                       -- to complain.
                       let origTy' = prettyType ppopts origTy
-                          -- Abuse the prettyprinter to keep it from inserting extra
-                          -- unwanted line breaks. Compare the code in `prettyTypeDetails`.
-                          -- XXX.
+                          -- Abuse the prettyprinter to keep it from
+                          -- inserting extra unwanted line
+                          -- breaks. Compare the code in
+                          -- `prettyTypeDetails`.  XXX.
                           origTy'' =
-                            case map PP.pretty $ Text.lines $ PPS.renderText ppopts origTy' of
-                                [t] -> t
-                                ts -> PP.nest 3 $ PP.vsep ts
-                      recordError argpos $ "Too many arguments to function of type" <+> origTy''
+                            case Text.lines $ PPS.renderText ppopts origTy' of
+                                [t] -> PP.pretty t
+                                ts -> PP.nest 3 $ PP.vsep $ map PP.pretty ts
+                      recordError argpos $ "Too many arguments to function" <+>
+                                           "of type" <+> origTy''
                       recordError' $ prettyTypeDetails ppopts origTy
-                  when (Pos.differentLines (Pos.trailingPos argpos) (Pos.leadingPos pos)) $
+                  let trailing = Pos.trailingPos argpos
+                      leading = Pos.leadingPos pos
+                  when (Pos.differentLines trailing leading) $
                       recordError argpos "Did you forget a semicolon?"
                   -- Return a fresh tyvar as an error placeholder.
                   getFreshTyVar pos
@@ -1591,12 +1654,14 @@ inferExpr expr = case expr of
                           pure ((arg, ty) : pa, na)
                       Just (namepos, name) ->
                           case Map.lookup name na of
-                              Nothing ->
-                                  pure (pa, Map.insert name (namepos, arg, ty) na)
+                              Nothing -> do
+                                  let na' = Map.insert name (namepos, arg, ty) na
+                                  pure (pa, na')
                               Just _ -> do
-                                  -- maybe we should have this check upstream like
-                                  -- lambdas do...
-                                  recordError namepos $ "Duplicate named argument" <+>
+                                  -- maybe we should have this check
+                                  -- upstream like lambdas do...
+                                  recordError namepos $ "Duplicate named" <+>
+                                                        "argument" <+>
                                                         PP.pretty name
                                   pure (pa, na)
             (pa, na) <- foldM once ([], Map.empty) arginfo
@@ -1606,7 +1671,11 @@ inferExpr expr = case expr of
         ty'result <- checkCall True ty'f' ty'f' arginfo' namedArginfo'
 
         let args' = map (\(arg, _ty) -> (Nothing, arg)) arginfo'
-        let namedArgs' = map (\(name, (namepos, arg, _ty)) -> (Just (namepos, name), arg)) (Map.toList namedArginfo')
+        let namedArgs' =
+              let once (name, (namepos, arg, _ty)) =
+                    (Just (namepos, name), arg)
+              in
+              map once $ Map.toList namedArginfo'
         return (Application pos f' (args' ++ namedArgs'), ty'result)
 
     Let pos dg body -> do
@@ -1659,18 +1728,19 @@ inferPattern rebindable pat = do
           Just t -> checkType kindStar t
 
     case pat of
-        PWild pos mt ->
-         do t <- resolveType pos mt
+        PWild pos mt -> do
+            t <- resolveType pos mt
             return (t, PWild pos (Just t))
-        PVar allpos xpos x mt ->
-         do t <- resolveType allpos mt
+        PVar allpos xpos x mt -> do
+            t <- resolveType allpos mt
             env <- gets tiVarEnv
             case ScopedMap.lookup x env of
                 Nothing -> pure ()
                 Just (prevpos, lc, prevrb, tyscheme) -> case rebindable of
                     RebindableVar -> do
                         let croak msg =
-                              recordError xpos $ "Cannot rebind" <+> PP.pretty x <>
+                              recordError xpos $ "Cannot rebind" <+>
+                                                 PP.pretty x <>
                                                  ":" <+> msg
                         avail <- asks tiPrimsAvail
                         when (not $ Set.member lc avail) $
@@ -1710,8 +1780,8 @@ inferPattern rebindable pat = do
                         recordWarning xpos $ "Redeclaration of" <+> PP.pretty x
                         recordWarning prevpos $ "Previous declaration was here"
             return (t, PVar allpos xpos x (Just t))
-        PTuple pos ps ->
-         do (ts, ps') <- unzip <$> mapM (inferPattern rebindable) ps
+        PTuple pos ps -> do
+            (ts, ps') <- unzip <$> mapM (inferPattern rebindable) ps
             return (tTuple (PosInferred InfTerm pos) ts, PTuple pos ps')
 
 -- | Check the type of a pattern, by inferring and then unifying the
@@ -1903,8 +1973,8 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
             return s'
         StmtLet spos rebindable dg -> do
             when (rebindable == RebindableVar && not atSyntacticTopLevel) $ do
-                recordError spos $ "Invalid use of 'rebindable'"
-                recordError spos $ "It is only allowed at the syntactic top level"
+                recordError spos "Invalid use of 'rebindable'"
+                recordError spos "It is only allowed at the syntactic top level"
             dg' <- inferDeclGroup rebindable dg
             let s' = StmtLet spos rebindable dg'
             addDeclGroup rebindable dg'
@@ -2331,7 +2401,8 @@ checkType kind ty = case ty of
             params' <- mapM (checkType kindStar) params
             namedParams' <- mapM (checkType kindStar) namedParams
             when (null params' && not (null namedParams')) $ do
-                recordError pos "Functions may not have only named parameters; add ()"
+                recordError pos $ "Functions may not have only named" <+>
+                                  "parameters; add ()"
             ret' <- checkType kindStar ret
             return $ TyFunc pos nameinfo params' namedParams' ret'
 
@@ -2395,10 +2466,11 @@ checkType kind ty = case ty of
               | otherwise -> do
                   let x' = PP.dquotes (PP.pretty x)
                   recordError pos $ "Inaccessible type:" <+> x'
-                  let how = if lc == HideDeprecated then "deprecated" else "experimental"
+                  let how = if lc == HideDeprecated then "deprecated"
+                            else "experimental"
                       cmd = "`enable_" <> how <> "`"
-                  recordError pos $ "This type is available only after running" <+>
-                                    cmd <> "."
+                  recordError pos $ "This type is available only after" <+>
+                                    "running" <+> cmd <> "."
                   t' <- getFreshTyVar pos
                   return t'
 
@@ -2421,7 +2493,14 @@ checkType kind ty = case ty of
 --
 --   The third is a current position, and the fourth is the
 --   context/monad type associated with the execution.
-checkStmt :: PPS.Opts -> Set PrimitiveLifecycle -> VarEnv -> TyEnv -> Context -> Stmt -> Result Stmt
+checkStmt ::
+      PPS.Opts ->
+      Set PrimitiveLifecycle ->
+      VarEnv ->
+      TyEnv ->
+      Context ->
+      Stmt ->
+      Result Stmt
 checkStmt ppopts avail env tenv ctx stmt =
     -- XXX: we shouldn't need this position here.
     -- The position is used for the following things:
@@ -2458,7 +2537,13 @@ checkStmt ppopts avail env tenv ctx stmt =
 --
 --   The first two arguments are the starting variable and typedef
 --   environments to use.
-checkDecl :: PPS.Opts -> Set PrimitiveLifecycle -> VarEnv -> TyEnv -> Decl -> Result Decl
+checkDecl ::
+      PPS.Opts ->
+      Set PrimitiveLifecycle ->
+      VarEnv ->
+      TyEnv ->
+      Decl ->
+      Result Decl
 checkDecl ppopts avail env tenv decl =
     runTI ppopts avail env tenv (inferDecl ReadOnlyVar decl)
 
@@ -2468,7 +2553,13 @@ checkDecl ppopts avail env tenv decl =
 --   Both types are schemes because that's what we need upstream.
 --
 --   (This is an external interface.)
-typesMatch :: PPS.Opts -> Set PrimitiveLifecycle -> TyEnv -> Schema -> Schema -> Bool
+typesMatch ::
+      PPS.Opts ->
+      Set PrimitiveLifecycle ->
+      TyEnv ->
+      Schema ->
+      Schema ->
+      Bool
 typesMatch ppopts avail tenv schema'found schema'expected =
   let unpack (Forall as ty) = do
         -- Generate unification vars for all the forall-bindings
@@ -2486,8 +2577,8 @@ typesMatch ppopts avail tenv schema'found schema'expected =
         matches ty'found ty'expected
   in
   case runTI ppopts avail ScopedMap.empty tenv match of
-      (Left _errors, _warnings) -> False          -- not actually reachable
-      (Right b, _warnings) -> b                   -- return match success/failure
+      (Left _errors, _warnings) -> False        -- not actually reachable
+      (Right b, _warnings) -> b                 -- return match success/failure
 
 -- | Check a schema (type) as used when constructing the builtins
 --   table. (This is an external interface.)
@@ -2518,7 +2609,12 @@ typesMatch ppopts avail tenv schema'found schema'expected =
 --   deprecated types; experimental objects can see experimental types;
 --   everything can see current types.
 --
-checkSchema :: PPS.Opts -> PrimitiveLifecycle -> TyEnv -> Schema -> Result Schema
+checkSchema ::
+      PPS.Opts ->
+      PrimitiveLifecycle ->
+      TyEnv ->
+      Schema ->
+      Result Schema
 checkSchema ppopts contextLC tyenv schema = do
     let check = do
           let Forall tyvars ty = schema
@@ -2549,7 +2645,12 @@ checkSchema ppopts contextLC tyenv schema = do
 --
 --   Returns a possibly updated pattern.
 --
-checkSchemaPattern :: Set PrimitiveLifecycle -> VarEnv -> TyEnv -> SchemaPattern -> Result SchemaPattern
+checkSchemaPattern ::
+      Set PrimitiveLifecycle ->
+      VarEnv ->
+      TyEnv ->
+      SchemaPattern ->
+      Result SchemaPattern
 checkSchemaPattern _avail _env _tenv pat =
     -- For the time being, do nothing -- we specifically don't want it
     -- to reject unbound/free type variables (see Search.hs for a
