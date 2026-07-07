@@ -1,17 +1,18 @@
-{- |
-Module      : SAWScript.Typechecker
-Description : SAW-Script type checking.
-License     : BSD3
-Maintainer  : diatchki
-Stability   : provisional
--}
-
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
 -- See Note [-Wincomplete-uni-patterns and irrefutable patterns]
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
+
+{- |
+Module      : SAWScript.Typechecker
+Description : SAWScript type checking.
+License     : BSD3
+Maintainer  : saw@galois.com
+Stability   : provisional
+
+This module contains the typechecker for SAWScript.
+-}
 
 module SAWScript.Typechecker
        ( checkDecl
@@ -28,10 +29,10 @@ import Control.Monad.Identity (Identity)
 import qualified Data.Text as Text
 import Data.Text (Text)
 import Data.List (genericTake, genericLength)
-import qualified Data.Map as Map
-import Data.Map (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
+import qualified Data.Map as Map
+import Data.Map (Map)
 
 import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
@@ -41,10 +42,11 @@ import SAWSupport.Position
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
 
+import SAWCentral.Position (Inference(..), Pos(..), Positioned(..), choosePos, differentLines, leadingPos, trailingPos, spanPos, maxSpan)
 import SAWCentral.AST
 import SAWCentral.ASTUtil (namedTyVars, SubstituteTyVars(..), SubstituteTyVars'(..), isDeprecated)
+
 import SAWScript.Panic (panic)
-import SAWCentral.Position (Inference(..), Pos(..), Positioned(..), choosePos, differentLines, leadingPos, trailingPos, spanPos, maxSpan)
 
 
 -- short names for the environment types we use
