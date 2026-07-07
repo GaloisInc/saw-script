@@ -1,9 +1,11 @@
 Loading file "unify008.saw"
-unify008.saw:15:6-15:12: Type mismatch.
-    unify008.saw:15:16-15:21: The type String arises from the type of this term
-    unify008.saw:15:9-15:12: The type Int arises from this type annotation
-
+Type errors:
+  unify008.saw:15:6-15:12: Error: Type mismatch.
     Expected: String
     Found:    Int
+
+  unify008.saw:15:16-15:21: Note: The type String arises from the type of this term
+  unify008.saw:15:9-15:12: Note: The type Int arises from this type annotation
+
 
 FAILED

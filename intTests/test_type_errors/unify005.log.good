@@ -1,9 +1,11 @@
 Loading file "unify005.saw"
-unify005.saw:10:15-10:25: Type mismatch.
-    unify005.saw:10:9-10:12: The type Int arises from this type annotation
-    unify005.saw:9:13-9:15: The type () arises from the type of this term
-
+Type errors:
+  unify005.saw:10:15-10:25: Error: Type mismatch.
     Expected: Int
     Found:    ()
+
+  unify005.saw:10:9-10:12: Note: The type Int arises from this type annotation
+  unify005.saw:9:13-9:15: Note: The type () arises from the type of this term
+
 
 FAILED

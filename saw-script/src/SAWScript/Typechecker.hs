@@ -38,7 +38,6 @@ import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
 import qualified SAWSupport.Pretty as PPS
-import SAWSupport.Position
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
 
@@ -773,14 +772,14 @@ mgu ppopts pos encs t1 t2 =
           let (posexp, tyexp') = prettyTypeDetails ppopts tyexp
               (posfound, tyfound') = prettyTypeDetails ppopts tyfound
               body = PP.vsep $ more ++ [
-                  -- XXX the error infrastructure is supposed to be what knows
-                  -- how to print positions
-                  prettyPosition posexp <> ":" <+> tyexp',
-                  prettyPosition posfound <> ":" <+> tyfound',
-                  "",
                   prettyEnclosing ppopts ((tyexp, tyfound) : encs)
                ]
-          recordError pos $ msg <> PP.line <> PP.indent 4 body
+          recordError pos $ "Error:" <+> msg <> PP.line <> PP.indent 4 body
+          recordError posexp $ "Note:" <+> tyexp'
+          -- Attach a blank line to this message so there's a separator
+          -- between it and the next type error. XXX: we should have a
+          -- less ad hoc way to do this.
+          recordError posfound $ "Note:" <+> tyfound' <> PP.hardline <> ""
           pure emptySubst
     in
     case (t1, t2) of

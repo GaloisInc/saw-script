@@ -1,13 +1,15 @@
 Loading file "args006.saw"
 plop quack
 plop honk
-args006.saw:13:13-13:17: Mismatched named parameters.
+Type errors:
+  args006.saw:13:13-13:17: Error: Mismatched named parameters.
     Missing from String -> String:
        t : String
-    args006.saw:4:14-4:30: The type String -> String arises from this type annotation
-    args006.saw:6:25-6:39: The type String -> t?String -> String arises from the context of the term
-
     Expected: String -> String
     Found:    String -> t?String -> String
+
+  args006.saw:4:14-4:30: Note: The type String -> String arises from this type annotation
+  args006.saw:6:25-6:39: Note: The type String -> t?String -> String arises from the context of the term
+
 
 FAILED
