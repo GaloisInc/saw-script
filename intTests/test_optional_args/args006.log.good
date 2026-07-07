@@ -1,8 +1,7 @@
 Loading file "args006.saw"
 plop quack
 plop honk
-args006.saw:13:13-13:17: Type mismatch.
-    Mismatched named parameters:
+args006.saw:13:13-13:17: Mismatched named parameters.
     Missing from String -> String:
        t : String
     args006.saw:4:14-4:30: The type String -> String arises from this type annotation

@@ -1,7 +1,6 @@
 Loading file "err015.saw"
 Type errors:
-  err015.saw:65:14-65:15: Type mismatch.
-    Record field names mismatch.
+  err015.saw:65:14-65:15: Record field names do not match.
     err015.saw:18:15-22:2: The type { amethyst : Int, moonstone : Int, obsidian : Int } arises from this type annotation
     err015.saw:55:14-55:74: The type {
           amethyst : Int,
@@ -19,8 +18,7 @@ Type errors:
           turquoise : Int
        }
 
-  err015.saw:65:21-65:22: Type mismatch.
-    Record field names mismatch.
+  err015.saw:65:21-65:22: Record field names do not match.
     err015.saw:25:15-31:2: The type {
           amethyst : Int,
           moonstone : Int,
@@ -51,8 +49,7 @@ Type errors:
           turquoise : Int
        }
 
-  err015.saw:65:28-65:29: Type mismatch.
-    Record field names mismatch.
+  err015.saw:65:28-65:29: Record field names do not match.
     err015.saw:34:15-39:2: The type {
           amethyst : Int,
           moonstone : Int,
@@ -81,8 +78,7 @@ Type errors:
           turquoise : Int
        }
 
-  err015.saw:65:35-65:36: Type mismatch.
-    Record field names mismatch.
+  err015.saw:65:35-65:36: Record field names do not match.
     err015.saw:42:15-45:2: The type { amethyst : Int, obsidian : Int } arises from this type annotation
     err015.saw:55:14-55:74: The type {
           amethyst : Int,
@@ -100,8 +96,7 @@ Type errors:
           turquoise : Int
        }
 
-  err015.saw:65:41-65:42: Type mismatch.
-    Record field names mismatch.
+  err015.saw:65:41-65:42: Record field names do not match.
     err015.saw:48:14-53:2: The type { anise : Int, cinnamon : Int, sage : Int, tarragon : Int } arises from this type annotation
     err015.saw:55:14-55:74: The type {
           amethyst : Int,

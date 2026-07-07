@@ -1,6 +1,5 @@
 Loading file "file001.saw"
 file001.saw:2:1-2:2: Type mismatch.
-    Mismatch of types.
     file001.saw:2:1-2:2: The type TopLevel t.0 arises from this type annotation
     file001.saw:2:1-2:2: The type Int arises from the type of this term
 
