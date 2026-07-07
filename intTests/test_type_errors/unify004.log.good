@@ -1,6 +1,6 @@
 Loading file "unify004.saw"
 unify004.saw:9:11-9:13: Type mismatch.
-    Mismatch of type constructors. Expected: Int but got ()
+    Mismatch of types.
     unify004.saw:8:11-8:14: The type Int arises from this type annotation
     unify004.saw:9:11-9:13: The type () arises from the type of this term
 

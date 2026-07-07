@@ -921,19 +921,9 @@ mgu ppopts pos encs t1 t2 =
             -- records with the same field names, try unifying the field types
             mgus ppopts pos ((t1, t2) : encs) (Map.elems ts1) (Map.elems ts2)
 
-        (TyCon _ tc1 ts1, TyCon _ tc2 ts2)
-          | tc1 == tc2 ->
+        (TyCon _ tc1 ts1, TyCon _ tc2 ts2) | tc1 == tc2 ->
             -- same type constructor, unify the args
             mgus ppopts pos ((t1, t2) : encs) ts1 ts2
-
-          | otherwise ->
-            -- Wrong type constructors
-            case tc1 of
-              _ -> do
-                let tc1' = prettyTyCon tc1
-                    tc2' = prettyTyCon tc2
-                reject $ "Mismatch of type constructors. Expected:" <+> tc1' <+>
-                         "but got" <+> tc2'
 
         (TyVar _ a, TyVar _ b) | a == b ->
             -- Same named variable
