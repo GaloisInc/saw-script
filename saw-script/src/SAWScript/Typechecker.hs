@@ -757,17 +757,6 @@ resolveUnificationVar i t2 =
         Just _otherpos -> Nothing
         Nothing -> Just $ singletonSubst i t2
 
--- | Post an error that occurs during unification. This is the way it
---   is to avoid behavioral changes while rearranging code; it should
---   get simplified away later. (XXX)
-unifyError :: Pos -> PPS.Doc -> TI ()
-unifyError pos msg = do
-    let msg' = PP.vsep [
-            "Type mismatch.",
-            PP.indent 4 msg
-         ]
-    recordError pos msg'
-
 -- | Guts of unification.
 --
 --   "mgu" stands for "most general unifier".
@@ -784,14 +773,17 @@ mgu ppopts pos encs t1 t2 =
           let (posexp, tyexp') = prettyTypeDetails ppopts tyexp
               (posfound, tyfound') = prettyTypeDetails ppopts tyfound
               encs' = prettyEnclosing ppopts ((tyexp, tyfound) : encs)
-          unifyError pos $ PP.vsep [
-              msg,
-              -- XXX the error infrastructure is supposed to be what knows
-              -- how to print positions
-              prettyPosition posexp <> ":" <+> tyexp',
-              prettyPosition posfound <> ":" <+> tyfound',
-              "",
-              encs'
+          recordError pos $ PP.vsep [
+              "Type mismatch.",
+              PP.indent 4 $ PP.vsep [
+                  msg,
+                  -- XXX the error infrastructure is supposed to be what knows
+                  -- how to print positions
+                  prettyPosition posexp <> ":" <+> tyexp',
+                  prettyPosition posfound <> ":" <+> tyfound',
+                  "",
+                  encs'
+              ]
            ]
           pure emptySubst
     in
@@ -969,32 +961,29 @@ mgus ppopts pos encs t1s t2s = case (t1s, t2s) of
         s' <- mgus ppopts pos encs (map (appSubst s) t1s') (map (appSubst s) t2s')
         return (mergeSubst s' s)
     (_, _) -> do
-        -- XXX this is no good, it will always print one of the lengths as 0!
-        -- (also, note that this is only reachable for type constructor args
-        -- and not function args)
+        -- This case is unreachable.
         --
-        -- dholland 20250106: I believe this is currently unreachable.
-        -- mgus is called from two places above (record fields and type
-        -- constructor arguments); the record fields case always passes
-        -- lists of the same length. The situation with type constructor
-        -- arguments is murkier. However, there are only a handful of
-        -- builtin types whose constructors take arguments at all:
-        -- tuples, lists, functions, and monads/contexts/blocks. The
-        -- parser special-cases the syntax for all of these, so that you
-        -- apparently can't produce partially applied instances for
-        -- any. (And for tuples, the arity is part of the constructor,
-        -- so tuples of different arity won't get as far as trying to
-        -- unify the arguments.)
+        -- Of the calls to `mgus` above, the only one that doesn't
+        -- have a length check directly guarding it is the case for
+        -- type constructors. However, note that every distinct type
+        -- constructor has a definite arity (tuples of different
+        -- lengths are not the same type constructor) and every type
+        -- is supposed to pass `checkType` before we do anything more
+        -- significant with it; that does a kind check, and on failure
+        -- produces a fresh unification var that can't cause further
+        -- trouble.
         --
-        -- Update 20260410: the parser is no longer so restricted; we
-        -- should check if this is live and fix it if so.
-        let t1s' = PP.viaShow $ length t1s
-            t2s' = PP.viaShow $ length t2s
-            msg = "Wrong number of arguments. Expected" <+> t1s' <+>
-                  "but got" <+> t2s'
-            encs' = prettyEnclosing ppopts encs
-        unifyError pos $ PP.vsep [msg, encs']
-        pure $ emptySubst
+        -- Therefore, if we get here, something's broked and we should
+        -- panic. Note that by the time we trip here one of the lists
+        -- will always be empty.
+        --
+        let t1s' = map (\t -> "   " <> ppType ppopts t) t1s
+            t2s' = map (\t -> "   " <> ppType ppopts t) t2s
+        let n1' = Text.pack $ show $ length t1s
+            n2' = Text.pack $ show $ length t2s
+            heading = "Mismatched type lists: expected " <> n1' <>
+                      ", found " <> n2'
+        panic "mgus" (heading : "Leftovers are:" : t1s' ++ t2s')
 
 --
 -- Unify two types.
