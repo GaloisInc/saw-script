@@ -87,6 +87,7 @@ import           Data.Void (Void)
 import           Data.Set(Set)
 import qualified Prettyprinter as PPL
 import qualified Text.LLVM.AST as L
+import           Text.LLVM.Combine ( llvmModuleCombine )
 import qualified Text.LLVM.PP as L
 import qualified Text.PrettyPrint.HughesPJ as PP
 
@@ -105,7 +106,6 @@ import           SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.Setup.Value as Setup
 
 import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
-import           SAWCentral.Crucible.LLVM.Setup.LLVMCombine ( llvmModuleCombine )
 
 import           SAWCentral.Proof (TheoremAnnotation)
 
