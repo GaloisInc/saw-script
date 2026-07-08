@@ -132,74 +132,8 @@ instance UnifyVars NamedType where
 -- Subst is the type of a substitution map for unification vars.
 newtype Subst = Subst { unSubst :: Map TypeIndex Type } deriving (Show)
 
--- Merge two substitution maps.
---
--- XXX: this knows that in the uses below the right substitution (m1)
--- is the older/preexisting one. That probably shouldn't be silently
--- baked in.
---
--- We apply the left substitution (m2) into the types in the right
--- substitution (m1). That is, any new substitutions are applied into
--- the existing ones. I expect this in pursuit of an invariant where
--- any unification variables existing in the right-hand sides of the
--- substitution aren't themselves defined by the substitution, so we
--- don't have to recurse into the right-hand sides later when applying
--- the substitution.
---
--- XXX: However, this assumes that whatever is on the left-hand side
--- doesn't already violate this invariant. We can check this with
--- reasonable accuracy since we have right here all the ways to create
--- a Subst (and we can check that there aren't any others hidden
--- below)... and we find that while emptySubst is obviously ok, and
--- singletonSubst is ok (an attempt to create a singleton substitution
--- that refers to itself will fail the occurs check right before
--- calling singletonSubst), there doesn't seem to be any such
--- assurance for substFromList. I'm not sure if this is actually a
--- problem or not but it should probably be looked into at some point.
---
--- XXX: we should probably crosscheck the key space of the maps. Note
--- that the ordering of the Map.union args means that if there are
--- duplicated keys we prefer the right substitution (m1), namely the
--- preexisting one. Given that this choice seems to be explicit, it
--- must have been for a reason, but I'm not sure what that reason
--- would be. Ordinarily in this kind of typechecker you might update a
--- substitution you've already made, but only when replacing a weak
--- substitution (one unification var for another, like a1 -> a2) with
--- a strong one (involving a real type, like a1 -> Int)... but if so
--- it would always be the _new_ substitution you'd want to keep.
--- However, in this particular code we always apply the existing
--- substitution before doing further unification, so once we have any
--- substitution for a given unification var we shouldn't get another.
--- (Unless I guess if the intended invariant above is violated, but if
--- that happens we should probably panic, not chug along.)
---
--- XXX: also it isn't clear that anything below guarantees that we
--- won't just derive multiple inconsistent substitutions (e.g. from
--- disjoint subexpressions) and combine them incoherently. This should
--- really be looked into further.
---
--- XXX: and _furthermore_ it's not clear that we can't get cyclic
--- substitutions. If we already have a substitution a1 -> a2, and we
--- add a2 -> a1, we'll resolve the existing substitution to a1 -> a1
--- rather than going directly into an infinite loop. That's not
--- necessarily preferable though. Normally in this kind of typechecker
--- one also wants some kind of acyclicity-oriented invariant, like
--- aN resolves to aM only if N > M (otherwise you substitute the other
--- way) but we don't do anything like that.
---
--- When all the above issues get clarified we should consider coming
--- up with a different name that indicates that this operation isn't
--- commutative. Unless it actually can be.
-mergeSubst :: Subst -> Subst -> Subst
-mergeSubst s2@(Subst m2) (Subst m1) = Subst $ m1' `Map.union` m2
-    where
-        m1' = fmap (appSubst s2) m1
-
 emptySubst :: Subst
 emptySubst = Subst Map.empty
-
-singletonSubst :: TypeIndex -> Type -> Subst
-singletonSubst tv t = Subst $ Map.singleton tv t
 
 substFromList :: [(TypeIndex, Type)] -> Subst
 substFromList entries = Subst $ Map.fromList entries
@@ -543,15 +477,6 @@ expandFully pos t = do
     t'' <- applyCurrentSubst t'
     condenseFunctions pos t''
 
--- | Like `expandFully`, but don't do the `condenseFunctions` step.
---   Used from a context where we shouldn't generate failures, and
---   where if we'd generate an invalid function type somewhere else
---   also will.
-expandMostly :: Type -> TI Type
-expandMostly t = do
-    t' <- resolveCurrentTypedefs t
-    applyCurrentSubst t'
-
 
 ------------------------------------------------------------
 -- Further extraction / support logic
@@ -736,15 +661,34 @@ prettyTypeDetails ppopts ty =
     in
     (pos, msg)
 
+-- | Resolve a unification var: add a mapping in the table we're
+--   carrying around.
+resolveVar :: TypeIndex -> Type -> TI ()
+resolveVar i ty = do
+    Subst subst <- gets tiSubst
+    let subst' = Subst $ Map.insert i ty subst
+    modify (\rw -> rw { tiSubst = subst' })
+
 -- | Guts of unification.
 --
 --   "mgu" stands for "most general unifier".
 --
---   Given two types, produce either a failure report or a substitution
---   (to add to the cumulative substitution we build up) that makes them
---   the same.
-mgu :: PPS.Opts -> Pos -> [(Type, Type)] -> Type -> Type -> TI Subst
-mgu ppopts pos encs t1 t2 =
+--   Given two types, either fail or resolve unification vars so aso
+--   to make them the same.
+mgu :: PPS.Opts -> Pos -> [(Type, Type)] -> Type -> Type -> TI ()
+mgu ppopts pos encsbase t1base t2base = do
+    -- Use pos as the failure position for either type; they're the
+    -- same type after all, and any position that gives rise to it
+    -- should be good enough if expandFully croaks. (Hopefully.)
+    t1 <- expandFully pos t1base
+    t2 <- expandFully pos t2base
+    encs <- do
+        let once (t1x, t2x) = do
+              t1x' <- expandFully pos t1x
+              t2x' <- expandFully pos t2x
+              pure (t1x', t2x')
+        mapM once encsbase
+
     -- | Fail with expected/found types
     let reject msg more = do
           let tyexp = t1
@@ -760,8 +704,6 @@ mgu ppopts pos encs t1 t2 =
           -- between it and the next type error. XXX: we should have a
           -- less ad hoc way to do this.
           recordError posfound $ "Note:" <+> tyfound' <> PP.hardline <> ""
-          pure emptySubst
-    in
 
     -- | We would like to resolve unification var @i@ to type @ty@.
     --   Make sure this is well formed.
@@ -786,12 +728,11 @@ mgu ppopts pos encs t1 t2 =
                       "appears within" <+> ty' <> "."
                    ]
                   getErrorTyVar pos'i
-    in
 
     case (t1, t2) of
         (TyUnifyVar _ i, TyUnifyVar _ j) | i == j ->
             -- same unification var, nothing to do
-            return emptySubst
+            pure ()
 
         (TyUnifyVar _ i, _) -> do
             -- one side is a unification var, resolve it
@@ -801,7 +742,7 @@ mgu ppopts pos encs t1 t2 =
             -- to be any logic to prohibit also resolving TyUnifyVar j
             -- to TyUnifyVar i and creating cycles.
             t2' <- checkOccurs (Pos.getPos t2) i t2
-            pure $ singletonSubst i t2'
+            resolveVar i t2'
 
         (_, TyUnifyVar _ i) -> do
             -- the other side is a unification var, resolve it
@@ -811,12 +752,15 @@ mgu ppopts pos encs t1 t2 =
             -- to be any logic to prohibit also resolving TyUnifyVar j
             -- to TyUnifyVar i and creating cycles.
             t1' <- checkOccurs (Pos.getPos t1) i t1
-            pure $ singletonSubst i t1'
+            resolveVar i t1'
 
         (TyFunc pos1 _ params1 namedParams1 ret1,
          TyFunc pos2 _ params2 namedParams2 ret2) -> do
-            -- First, unify the named parameters and get the substitution
-            -- that induces.
+            -- First, unify the named parameters.
+            --
+            -- (We handle the named parameters first because because
+            -- they don't carry into the return value like curried
+            -- positional parameters.)
             --
             -- XXX: should we insist that both sides have the same named
             -- parameters, or take the union of them? Allowing functions to
@@ -825,91 +769,74 @@ mgu ppopts pos encs t1 t2 =
             -- to match exactly.
             let names1 = Map.keysSet namedParams1
                 names2 = Map.keysSet namedParams2
-            substN <-
-                if names1 /= names2 then do
-                    let t1' = prettyType ppopts t1
-                        t2' = prettyType ppopts t2
-                        missing1 = Map.difference namedParams2 namedParams1
-                        missing2 = Map.difference namedParams1 namedParams2
-                        prettyMissing (name, ty) =
-                            let ty' = prettyType ppopts ty in
-                            PP.pretty name <+> ":" <+> ty'
-                        prettyMissingList fty' ms = case ms of
-                            [] ->
-                                []
-                            _ ->
-                                let ms' = PP.vsep $ map prettyMissing ms
-                                    line1 = "Missing from" <+> fty' <> ":"
-                                    lines2 = PP.indent 3 ms'
-                                in
-                                [line1 <> PP.line <> lines2]
-                        missing1' = prettyMissingList t1' $ Map.toList missing1
-                        missing2' = prettyMissingList t2' $ Map.toList missing2
-                        missing' = missing1' ++ missing2'
-                    reject "Mismatched named parameters." missing'
+            if names1 /= names2 then do
+                let t1' = prettyType ppopts t1
+                    t2' = prettyType ppopts t2
+                    missing1 = Map.difference namedParams2 namedParams1
+                    missing2 = Map.difference namedParams1 namedParams2
+                    prettyMissing (name, ty) =
+                        let ty' = prettyType ppopts ty in
+                        PP.pretty name <+> ":" <+> ty'
+                    prettyMissingList fty' ms = case ms of
+                        [] ->
+                            []
+                        _ ->
+                            let ms' = PP.vsep $ map prettyMissing ms
+                                line1 = "Missing from" <+> fty' <> ":"
+                                lines2 = PP.indent 3 ms'
+                            in
+                            [line1 <> PP.line <> lines2]
+                    missing1' = prettyMissingList t1' $ Map.toList missing1
+                    missing2' = prettyMissingList t2' $ Map.toList missing2
+                    missing' = missing1' ++ missing2'
+                reject "Mismatched named parameters." missing'
 
-                else do
-                    -- In principle when you have checked that the keys
-                    -- match, you can do zip (Map.toList namedParams1)
-                    -- (Map.toList namedParams2) and have things match up
-                    -- correctly, but it makes me nervous, so do it like
-                    -- this instead.
-                    let namedParamsAll =
-                            Map.intersectionWith (\a b -> (a, b)) namedParams1 namedParams2
-                        (np1, np2) = unzip $ Map.elems namedParamsAll
-                    mgus ppopts pos ((t1, t2) : encs) np1 np2
+            else do
+                -- In principle when you have checked that the keys
+                -- match, you can do zip (Map.toList namedParams1)
+                -- (Map.toList namedParams2) and have things match up
+                -- correctly, but it makes me nervous, so do it like
+                -- this instead.
+                let namedParamsAll =
+                        Map.intersectionWith (\a b -> (a, b)) namedParams1 namedParams2
+                    (np1, np2) = unzip $ Map.elems namedParamsAll
+                mgus ppopts pos ((t1, t2) : encs) np1 np2
 
-            -- Apply that substitution to the positional parameters
-            -- and the return value. We do the named parameters first
-            -- because because they don't carry into the return value
-            -- like curried positional parameters.
-            let params1' = appSubst substN params1
-                params2' = appSubst substN params2
-                ret1' = appSubst substN ret1
-                ret2' = appSubst substN ret2
+            -- Now unify as many positional params as possible. This
+            -- also produces the remainder types, basically the return
+            -- type. If one function is a -> b, and the other function
+            -- is a -> c -> d, the remainder types are b and c -> d
+            -- respectively.
 
-            -- Now unify as many positional params as possible and get another
-            -- substitution. This also produces the remainder types, basically
-            -- the return type. If one function is a -> b, and the other is
-            -- a -> c -> d, the remainder types are b and c -> d respectively.
-
-            let n1 = length params1'
-                n2 = length params2'
-            (substP, remainder1, remainder2) <- do
+            let n1 = length params1
+                n2 = length params2
+            (remainder1, remainder2) <- do
                 if n1 < n2 then do
                     let encs' = (t1, t2) : encs
-                        params2l' = take n1 params2'
-                        params2r' = drop n1 params2'
-                    result <- mgus ppopts pos encs' params1' params2l'
-                    -- we've used up params1'.
-                    let ty' = TyFunc pos2 noNames params2r' Map.empty ret2'
-                    pure (result, ret1', ty')
+                        params2l = take n1 params2
+                        params2r = drop n1 params2
+                    mgus ppopts pos encs' params1 params2l
+                    -- we've used up params1.
+                    let ty' = TyFunc pos2 noNames params2r Map.empty ret2
+                    pure (ret1, ty')
                 else if n1 > n2 then do
                     -- unfortunately we need two copies of this because
                     -- left vs. right side is semantically significant :-(
                     let encs' = (t1, t2) : encs
-                        params1l' = take n2 params1'
-                        params1r' = drop n2 params1'
-                    result <- mgus ppopts pos encs' params1l' params2'
+                        params1l = take n2 params1
+                        params1r = drop n2 params1
+                    mgus ppopts pos encs' params1l params2
                     -- we've used up params2'.
-                    let ty' = TyFunc pos1 noNames params1r' Map.empty ret1'
-                    pure (result, ty', ret2')
+                    let ty' = TyFunc pos1 noNames params1r Map.empty ret1
+                    pure (ty', ret2)
                 else do
                     let encs' = (t1, t2) : encs
-                    result <- mgus ppopts pos encs' params1' params2'
-                    -- we've used up both params1' and params2'.
-                    pure (result, ret1', ret2')
-
-            -- apply the positional substitution to the remainders
-            let remainder1' = appSubst substP remainder1
-                remainder2' = appSubst substP remainder2
+                    mgus ppopts pos encs' params1 params2
+                    -- we've used up both params1 and params2.
+                    pure (ret1, ret2)
 
             -- now unify the remainders / return types
-            substR <-
-                mgu ppopts pos ((t1, t2) : encs) remainder1' remainder2'
-
-            -- return all substitutions
-            pure $ mergeSubst substR (mergeSubst substP substN)
+            mgu ppopts pos ((t1, t2) : encs) remainder1 remainder2
 
         (TyRecord _ ts1, TyRecord _ ts2)
           | Map.keys ts1 /= Map.keys ts2 ->
@@ -925,8 +852,8 @@ mgu ppopts pos encs t1 t2 =
             mgus ppopts pos ((t1, t2) : encs) ts1 ts2
 
         (TyVar _ a, TyVar _ b) | a == b ->
-            -- Same named variable
-            return emptySubst
+            -- Same named variable, nothing to do
+            pure ()
 
         (_, TyFunc{}) ->
             -- If we expected a scalar and found a function, speculate that
@@ -939,16 +866,15 @@ mgu ppopts pos encs t1 t2 =
             reject "Type mismatch." []
 
 -- | Run `mgu` on two lists of types.
-mgus :: PPS.Opts -> Pos -> [(Type, Type)] -> [Type] -> [Type] -> TI Subst
+mgus :: PPS.Opts -> Pos -> [(Type, Type)] -> [Type] -> [Type] -> TI ()
 mgus ppopts pos encs t1s t2s = case (t1s, t2s) of
     ([], []) ->
-        return emptySubst
+        pure ()
     (t1 : t1s', t2 : t2s') -> do
         -- unify the first types
-        s <- mgu ppopts pos encs t1 t2
-        -- apply that substitution and then recurse
-        s' <- mgus ppopts pos encs (map (appSubst s) t1s') (map (appSubst s) t2s')
-        return (mergeSubst s' s)
+        mgu ppopts pos encs t1 t2
+        -- recurse on the rest
+        mgus ppopts pos encs t1s' t2s'
     (_, _) -> do
         -- This case is unreachable.
         --
@@ -1011,14 +937,7 @@ mgus ppopts pos encs t1s t2s = case (t1s, t2s) of
 unify :: Type -> Pos -> Type -> TI ()
 unify t1 pos t2 = do
     ppopts <- asks tiPPOpts
-
-    -- Use pos as the failure position for either type; they're the
-    -- same type after all, and any position that gives rise to it
-    -- should be good enough if expandFully croaks. (Hopefully.)
-    t1' <- expandFully pos t1
-    t2' <- expandFully pos t2
-    s <- mgu ppopts pos [] t1' t2'
-    modify $ \rw -> rw { tiSubst = mergeSubst s $ tiSubst rw }
+    mgu ppopts pos [] t1 t2
 
 -- Check if two types match but don't actually unify them
 -- (that is, on success throw away the substitution and on error
@@ -1031,10 +950,7 @@ unify t1 pos t2 = do
 matches :: Pos -> Type -> Type -> TI Bool
 matches pos t1 t2 = do
     ppopts <- asks tiPPOpts
-
-    t1' <- expandMostly t1
-    t2' <- expandMostly t2
-    result <- speculateTI $ mgu ppopts pos [] t1' t2'
+    result <- speculateTI $ mgu ppopts pos [] t1 t2
     pure result
 
 
