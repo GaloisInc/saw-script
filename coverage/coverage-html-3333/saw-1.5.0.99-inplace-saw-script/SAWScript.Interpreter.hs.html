@@ -8285,226 +8285,227 @@ span.spaces    { background: white }
 <span class="lineno"> 8266 </span><span class="spaces">    </span><span class="istickedoff">(pureVal (mir_set_exception_context . ECCLimited))</span>
 <span class="lineno"> 8267 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
 <span class="lineno"> 8268 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;When reporting MIR-related exceptions, include exactly N frames of&quot;</span></span>
-<span class="lineno"> 8269 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;call-stack-related context, where N in the supplied Int.&quot;</span></span>
-<span class="lineno"> 8270 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 8271 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 8272 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_set_exception_context_no_limit&quot; &quot;TopLevel ()&quot;</span>
-<span class="lineno"> 8273 </span><span class="spaces">    </span><span class="istickedoff">(pureVal (mir_set_exception_context ECCNoLimit))</span>
-<span class="lineno"> 8274 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 8275 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;When reporting MIR-related exceptions, include the full call stack as&quot;</span></span>
-<span class="lineno"> 8276 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;context.&quot;</span></span>
-<span class="lineno"> 8277 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 8278 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 8279 </span><span class="spaces">    </span><span class="istickedoff">------------------------------------------------------------</span>
-<span class="lineno"> 8280 </span><span class="spaces">    </span><span class="istickedoff">-- Additional Crucible-related bits</span>
-<span class="lineno"> 8281 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 8282 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;llvm_setup_with_tag&quot; &quot;String -&gt; LLVMSetup () -&gt; LLVMSetup ()&quot;</span>
-<span class="lineno"> 8283 </span><span class="spaces">    </span><span class="istickedoff">(pureVal llvm_setup_with_tag)</span>
-<span class="lineno"> 8284 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 8285 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;All conditions (e.g., from points-to or assert statements)&quot;</span></span>
-<span class="lineno"> 8286 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;executed in the scope of the given setup block will have the&quot;</span></span>
-<span class="lineno"> 8287 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;first argument string attached as a tag that can later be&quot;</span></span>
-<span class="lineno"> 8288 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;filtered by proof tactics.&quot;</span></span>
-<span class="lineno"> 8289 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 8290 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 8291 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;jvm_setup_with_tag&quot; &quot;String -&gt; JVMSetup () -&gt; JVMSetup ()&quot;</span>
-<span class="lineno"> 8292 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal jvm_setup_with_tag)</span></span>
-<span class="lineno"> 8293 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
-<span class="lineno"> 8294 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;All conditions (e.g., from points-to or assert statements)&quot;</span></span>
-<span class="lineno"> 8295 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;executed in the scope of the given setup block will have the&quot;</span></span>
-<span class="lineno"> 8296 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;first argument string attached as a tag that can later be&quot;</span></span>
-<span class="lineno"> 8297 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;filtered by proof tactics.&quot;</span></span>
-<span class="lineno"> 8298 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 8299 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 8300 </span><span class="spaces">  </span><span class="istickedoff">] ++</span>
-<span class="lineno"> 8301 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">unint_help =</span></span>
-<span class="lineno"> 8302 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Keep the given Cryptol/SAWCore names opaque during symbolic&quot;</span></span>
-<span class="lineno"> 8303 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;simulation. The command should be used before symbolic execution&quot;</span></span>
-<span class="lineno"> 8304 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;begins (i.e., in the pre-condition of the specification). This&quot;</span></span>
-<span class="lineno"> 8305 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;command does not affect the ProofScript---to keep names opaque&quot;</span></span>
-<span class="lineno"> 8306 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;while discharging goals, you still need to provide them as&quot;</span></span>
-<span class="lineno"> 8307 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;explicit arguments to the relevant proof tactics.&quot;</span></span>
-<span class="lineno"> 8308 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 8309 </span><span class="spaces">    </span><span class="istickedoff">in</span>
-<span class="lineno"> 8310 </span><span class="spaces">  </span><span class="istickedoff">[ prim &quot;llvm_unint&quot; &quot;[String] -&gt; LLVMSetup ()&quot;</span>
-<span class="lineno"> 8311 </span><span class="spaces">    </span><span class="istickedoff">(pureVal llvm_unint) Current <span class="nottickedoff">unint_help</span></span>
-<span class="lineno"> 8312 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 8313 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;jvm_unint&quot; &quot;[String] -&gt; JVMSetup ()&quot;</span>
-<span class="lineno"> 8314 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal jvm_unint)</span> Current <span class="nottickedoff">unint_help</span></span>
-<span class="lineno"> 8315 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 8316 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_unint&quot; &quot;[String] -&gt; MIRSetup ()&quot;</span>
-<span class="lineno"> 8317 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal mir_unint)</span> Current <span class="nottickedoff">unint_help</span></span>
-<span class="lineno"> 8318 </span><span class="spaces">  </span><span class="istickedoff">]</span>
-<span class="lineno"> 8319 </span><span class="spaces">  </span><span class="istickedoff">++</span>
-<span class="lineno"> 8320 </span><span class="spaces">  </span><span class="istickedoff">[</span>
-<span class="lineno"> 8321 </span><span class="spaces">    </span><span class="istickedoff">------------------------------------------------------------</span>
-<span class="lineno"> 8322 </span><span class="spaces">    </span><span class="istickedoff">-- Other miscellaneous features</span>
-<span class="lineno"> 8323 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 8324 </span><span class="spaces">    </span><span class="istickedoff">prim &quot;auto_match&quot; &quot;String -&gt; String -&gt; TopLevel ()&quot;</span>
-<span class="lineno"> 8325 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal do_auto_match)</span></span>
-<span class="lineno"> 8326 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
-<span class="lineno"> 8327 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Interactively decides how to align two modules of potentially&quot;</span></span>
-<span class="lineno"> 8328 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;heterogeneous language and prints the result.&quot;</span></span>
-<span class="lineno"> 8329 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 8330 </span><span class="spaces">  </span><span class="istickedoff">]</span>
-<span class="lineno"> 8331 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 8332 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 8333 </span><span class="spaces">    </span><span class="istickedoff">prim :: Text -&gt; Text -&gt; (SS.Type -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value) -&gt; PrimitiveLifecycle -&gt; [Text]</span>
-<span class="lineno"> 8334 </span><span class="spaces">         </span><span class="istickedoff">-&gt; (SS.Name, Primitive)</span>
-<span class="lineno"> 8335 </span><span class="spaces">    </span><span class="istickedoff">prim name ty fn lc doc = (name, Primitive</span>
-<span class="lineno"> 8336 </span><span class="spaces">                                     </span><span class="istickedoff">{ primitiveType = ty'</span>
-<span class="lineno"> 8337 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveRawType = ty</span>
-<span class="lineno"> 8338 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveDoc  = doc</span>
-<span class="lineno"> 8339 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveFn   = fn ty'' name</span>
-<span class="lineno"> 8340 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveLife = lc</span>
-<span class="lineno"> 8341 </span><span class="spaces">                                     </span><span class="istickedoff">})</span>
-<span class="lineno"> 8342 </span><span class="spaces">      </span><span class="istickedoff">where</span>
-<span class="lineno"> 8343 </span><span class="spaces">        </span><span class="istickedoff">-- Beware: errors in the type will only be detected when the</span>
-<span class="lineno"> 8344 </span><span class="spaces">        </span><span class="istickedoff">-- type is actually looked at by something, like :env, :t,</span>
-<span class="lineno"> 8345 </span><span class="spaces">        </span><span class="istickedoff">-- :search, or a direct use of the builtin. This is one of the</span>
-<span class="lineno"> 8346 </span><span class="spaces">        </span><span class="istickedoff">-- reasons we have a :env call in the test suite, even though</span>
-<span class="lineno"> 8347 </span><span class="spaces">        </span><span class="istickedoff">-- it requires maintenance for every change to the builtin</span>
-<span class="lineno"> 8348 </span><span class="spaces">        </span><span class="istickedoff">-- table. Otherwise these panics can go unnoticed.</span>
-<span class="lineno"> 8349 </span><span class="spaces">        </span><span class="istickedoff">fakeFileName = Text.unpack $ &quot;&lt;type of &quot; &lt;&gt; name &lt;&gt; &quot;&gt;&quot;</span>
-<span class="lineno"> 8350 </span><span class="spaces">        </span><span class="istickedoff">ty' = Loader.readSchemaPure fakeFileName lc primNamedTypeEnv ty</span>
-<span class="lineno"> 8351 </span><span class="spaces">        </span><span class="istickedoff">ty'' = case ty' of</span>
-<span class="lineno"> 8352 </span><span class="spaces">            </span><span class="istickedoff">SS.Forall _ t -&gt; t</span>
-<span class="lineno"> 8353 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 8354 </span><span class="spaces">    </span><span class="istickedoff">pureVal :: forall t. IsValue t =&gt; t -&gt; SS.Type -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 8355 </span><span class="spaces">    </span><span class="istickedoff">pureVal x ty name _ _ = toValue ty name x</span>
-<span class="lineno"> 8356 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 8357 </span><span class="spaces">    </span><span class="istickedoff">-- pureVal can be used for anything with an IsValue instance,</span>
-<span class="lineno"> 8358 </span><span class="spaces">    </span><span class="istickedoff">-- including functions. However, functions in TopLevel need to use</span>
-<span class="lineno"> 8359 </span><span class="spaces">    </span><span class="istickedoff">-- funVal* instead; the IsValue instances capture incorrectly and</span>
-<span class="lineno"> 8360 </span><span class="spaces">    </span><span class="istickedoff">-- you get a function that returns a VTopLevel instead of executing</span>
-<span class="lineno"> 8361 </span><span class="spaces">    </span><span class="istickedoff">-- in TopLevel. (There isn't a special-case IsValue instance for</span>
-<span class="lineno"> 8362 </span><span class="spaces">    </span><span class="istickedoff">-- a -&gt; TopLevel t, because that would require overlapping instances;</span>
-<span class="lineno"> 8363 </span><span class="spaces">    </span><span class="istickedoff">-- but there is an IsValue instance for TopLevel t by itself (that</span>
-<span class="lineno"> 8364 </span><span class="spaces">    </span><span class="istickedoff">-- produces VTopLevel) so use of pureVal matches that and the</span>
-<span class="lineno"> 8365 </span><span class="spaces">    </span><span class="istickedoff">-- generic IsValue instance for a -&gt; t.)</span>
-<span class="lineno"> 8366 </span><span class="spaces">    </span><span class="istickedoff">--</span>
-<span class="lineno"> 8367 </span><span class="spaces">    </span><span class="istickedoff">-- XXX: rename these to e.g. monadVal1/2/3 so this is clearer?</span>
-<span class="lineno"> 8368 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 8369 </span><span class="spaces">    </span><span class="istickedoff">funVal1 :: forall a t. (FromValue a, IsValue t) =&gt; (a -&gt; TopLevel t)</span>
-<span class="lineno"> 8370 </span><span class="spaces">               </span><span class="istickedoff">-&gt; SS.Type -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 8371 </span><span class="spaces">    </span><span class="istickedoff">funVal1 f ty name _ _ =</span>
-<span class="lineno"> 8372 </span><span class="spaces">      </span><span class="istickedoff">let ty' = case ty of</span>
-<span class="lineno"> 8373 </span><span class="spaces">            </span><span class="istickedoff">SS.TyFunc _pos (SS.NamedParamInfo 1 []) [_param] _namedParams ret -&gt; ret</span>
-<span class="lineno"> 8374 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;funVal1&quot; [name &lt;&gt; &quot;: Wrong type signature&quot;]</span></span>
-<span class="lineno"> 8375 </span><span class="spaces">      </span><span class="istickedoff">in</span>
-<span class="lineno"> 8376 </span><span class="spaces">      </span><span class="istickedoff">VBuiltin name <span class="nottickedoff">Seq.empty</span> Map.empty $</span>
-<span class="lineno"> 8377 </span><span class="spaces">        </span><span class="istickedoff">OneMorePositionalArg $ \a -&gt;</span>
-<span class="lineno"> 8378 </span><span class="spaces">          </span><span class="istickedoff">toValue ty' <span class="nottickedoff">name</span> &lt;$&gt; f (fromValue FromArgument a)</span>
-<span class="lineno"> 8379 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 8380 </span><span class="spaces">    </span><span class="istickedoff">funVal2 :: forall a b t. (FromValue a, FromValue b, IsValue t) =&gt; (a -&gt; b -&gt; TopLevel t)</span>
-<span class="lineno"> 8381 </span><span class="spaces">               </span><span class="istickedoff">-&gt; SS.Type -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 8382 </span><span class="spaces">    </span><span class="istickedoff">funVal2 f ty name _ _ =</span>
-<span class="lineno"> 8383 </span><span class="spaces">      </span><span class="istickedoff">let ty' = case ty of</span>
-<span class="lineno"> 8384 </span><span class="spaces">            </span><span class="istickedoff">SS.TyFunc _pos (SS.NamedParamInfo 2 []) [_p1, _p2] _namedParams ret -&gt; ret</span>
-<span class="lineno"> 8385 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;funVal2&quot; [name &lt;&gt; &quot;: Wrong type signature&quot;]</span></span>
-<span class="lineno"> 8386 </span><span class="spaces">      </span><span class="istickedoff">in</span>
-<span class="lineno"> 8387 </span><span class="spaces">      </span><span class="istickedoff">VBuiltin name <span class="nottickedoff">Seq.empty</span> Map.empty $</span>
-<span class="lineno"> 8388 </span><span class="spaces">        </span><span class="istickedoff">ManyMorePositionalArgs $ \a -&gt; return $</span>
-<span class="lineno"> 8389 </span><span class="spaces">        </span><span class="istickedoff">OneMorePositionalArg $ \b -&gt;</span>
-<span class="lineno"> 8390 </span><span class="spaces">          </span><span class="istickedoff">toValue ty' <span class="nottickedoff">name</span> &lt;$&gt; f (fromValue <span class="nottickedoff">FromArgument</span> a) (fromValue <span class="nottickedoff">FromArgument</span> b)</span>
-<span class="lineno"> 8391 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 8392 </span><span class="spaces">    </span><span class="istickedoff">funVal3 :: forall a b c t. (FromValue a, FromValue b, FromValue c, IsValue t) =&gt; (a -&gt; b -&gt; c -&gt; TopLevel t)</span>
-<span class="lineno"> 8393 </span><span class="spaces">               </span><span class="istickedoff">-&gt; SS.Type -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 8394 </span><span class="spaces">    </span><span class="istickedoff">funVal3 f ty name _ _ =</span>
-<span class="lineno"> 8395 </span><span class="spaces">      </span><span class="istickedoff">let ty' = case ty of</span>
-<span class="lineno"> 8396 </span><span class="spaces">            </span><span class="istickedoff">SS.TyFunc _pos (SS.NamedParamInfo 3 []) [_p1, _p2, _p3] _namedParams ret -&gt; ret</span>
-<span class="lineno"> 8397 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;funVal3&quot; [name &lt;&gt; &quot;: Wrong type signature&quot;]</span></span>
-<span class="lineno"> 8398 </span><span class="spaces">      </span><span class="istickedoff">in</span>
-<span class="lineno"> 8399 </span><span class="spaces">      </span><span class="istickedoff">VBuiltin name <span class="nottickedoff">Seq.empty</span> Map.empty $</span>
-<span class="lineno"> 8400 </span><span class="spaces">        </span><span class="istickedoff">ManyMorePositionalArgs $ \a -&gt; return $</span>
-<span class="lineno"> 8401 </span><span class="spaces">        </span><span class="istickedoff">ManyMorePositionalArgs $ \b -&gt; return $</span>
-<span class="lineno"> 8402 </span><span class="spaces">        </span><span class="istickedoff">OneMorePositionalArg $ \c -&gt;</span>
-<span class="lineno"> 8403 </span><span class="spaces">          </span><span class="istickedoff">toValue ty' <span class="nottickedoff">name</span> &lt;$&gt; f (fromValue <span class="nottickedoff">FromArgument</span> a) (fromValue <span class="nottickedoff">FromArgument</span> b) (fromValue <span class="nottickedoff">FromArgument</span> c)</span>
-<span class="lineno"> 8404 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 8405 </span><span class="spaces">    </span><span class="istickedoff">scVal :: forall t. IsValue t =&gt;</span>
-<span class="lineno"> 8406 </span><span class="spaces">             </span><span class="istickedoff">(SharedContext -&gt; t) -&gt; SS.Type -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 8407 </span><span class="spaces">    </span><span class="istickedoff">scVal f ty name _ bic = toValue ty <span class="nottickedoff">name</span> (f (biSharedContext bic))</span>
-<span class="lineno"> 8408 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 8409 </span><span class="spaces">    </span><span class="istickedoff">scVal' :: forall t. IsValue t =&gt;</span>
-<span class="lineno"> 8410 </span><span class="spaces">             </span><span class="istickedoff">(SharedContext -&gt; Options -&gt; t) -&gt; SS.Type -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 8411 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">scVal' f ty name opts bic = toValue ty name (f (biSharedContext bic) opts)</span></span>
-<span class="lineno"> 8412 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 8413 </span><span class="spaces">    </span><span class="istickedoff">bicVal :: forall t. IsValue t =&gt;</span>
-<span class="lineno"> 8414 </span><span class="spaces">              </span><span class="istickedoff">(BuiltinContext -&gt; Options -&gt; t) -&gt; SS.Type -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
-<span class="lineno"> 8415 </span><span class="spaces">    </span><span class="istickedoff">bicVal f ty name opts bic = toValue ty name (f bic opts)</span></span>
-<span class="lineno"> 8416 </span>
+<span class="lineno"> 8269 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;call-stack-related context, where N is the supplied Int.&quot;</span></span>
+<span class="lineno"> 8270 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;This is the default, with a limit of 10.&quot;</span></span>
+<span class="lineno"> 8271 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 8272 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 8273 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_set_exception_context_no_limit&quot; &quot;TopLevel ()&quot;</span>
+<span class="lineno"> 8274 </span><span class="spaces">    </span><span class="istickedoff">(pureVal (mir_set_exception_context ECCNoLimit))</span>
+<span class="lineno"> 8275 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 8276 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;When reporting MIR-related exceptions, include the full call stack as&quot;</span></span>
+<span class="lineno"> 8277 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;context.&quot;</span></span>
+<span class="lineno"> 8278 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 8279 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 8280 </span><span class="spaces">    </span><span class="istickedoff">------------------------------------------------------------</span>
+<span class="lineno"> 8281 </span><span class="spaces">    </span><span class="istickedoff">-- Additional Crucible-related bits</span>
+<span class="lineno"> 8282 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 8283 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;llvm_setup_with_tag&quot; &quot;String -&gt; LLVMSetup () -&gt; LLVMSetup ()&quot;</span>
+<span class="lineno"> 8284 </span><span class="spaces">    </span><span class="istickedoff">(pureVal llvm_setup_with_tag)</span>
+<span class="lineno"> 8285 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 8286 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;All conditions (e.g., from points-to or assert statements)&quot;</span></span>
+<span class="lineno"> 8287 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;executed in the scope of the given setup block will have the&quot;</span></span>
+<span class="lineno"> 8288 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;first argument string attached as a tag that can later be&quot;</span></span>
+<span class="lineno"> 8289 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;filtered by proof tactics.&quot;</span></span>
+<span class="lineno"> 8290 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 8291 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 8292 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;jvm_setup_with_tag&quot; &quot;String -&gt; JVMSetup () -&gt; JVMSetup ()&quot;</span>
+<span class="lineno"> 8293 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal jvm_setup_with_tag)</span></span>
+<span class="lineno"> 8294 </span><span class="spaces">    </span><span class="istickedoff">Experimental</span>
+<span class="lineno"> 8295 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;All conditions (e.g., from points-to or assert statements)&quot;</span></span>
+<span class="lineno"> 8296 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;executed in the scope of the given setup block will have the&quot;</span></span>
+<span class="lineno"> 8297 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;first argument string attached as a tag that can later be&quot;</span></span>
+<span class="lineno"> 8298 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;filtered by proof tactics.&quot;</span></span>
+<span class="lineno"> 8299 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 8300 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 8301 </span><span class="spaces">  </span><span class="istickedoff">] ++</span>
+<span class="lineno"> 8302 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">unint_help =</span></span>
+<span class="lineno"> 8303 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Keep the given Cryptol/SAWCore names opaque during symbolic&quot;</span></span>
+<span class="lineno"> 8304 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;simulation. The command should be used before symbolic execution&quot;</span></span>
+<span class="lineno"> 8305 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;begins (i.e., in the pre-condition of the specification). This&quot;</span></span>
+<span class="lineno"> 8306 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;command does not affect the ProofScript---to keep names opaque&quot;</span></span>
+<span class="lineno"> 8307 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;while discharging goals, you still need to provide them as&quot;</span></span>
+<span class="lineno"> 8308 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">, &quot;explicit arguments to the relevant proof tactics.&quot;</span></span>
+<span class="lineno"> 8309 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 8310 </span><span class="spaces">    </span><span class="istickedoff">in</span>
+<span class="lineno"> 8311 </span><span class="spaces">  </span><span class="istickedoff">[ prim &quot;llvm_unint&quot; &quot;[String] -&gt; LLVMSetup ()&quot;</span>
+<span class="lineno"> 8312 </span><span class="spaces">    </span><span class="istickedoff">(pureVal llvm_unint) Current <span class="nottickedoff">unint_help</span></span>
+<span class="lineno"> 8313 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 8314 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;jvm_unint&quot; &quot;[String] -&gt; JVMSetup ()&quot;</span>
+<span class="lineno"> 8315 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal jvm_unint)</span> Current <span class="nottickedoff">unint_help</span></span>
+<span class="lineno"> 8316 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 8317 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;mir_unint&quot; &quot;[String] -&gt; MIRSetup ()&quot;</span>
+<span class="lineno"> 8318 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal mir_unint)</span> Current <span class="nottickedoff">unint_help</span></span>
+<span class="lineno"> 8319 </span><span class="spaces">  </span><span class="istickedoff">]</span>
+<span class="lineno"> 8320 </span><span class="spaces">  </span><span class="istickedoff">++</span>
+<span class="lineno"> 8321 </span><span class="spaces">  </span><span class="istickedoff">[</span>
+<span class="lineno"> 8322 </span><span class="spaces">    </span><span class="istickedoff">------------------------------------------------------------</span>
+<span class="lineno"> 8323 </span><span class="spaces">    </span><span class="istickedoff">-- Other miscellaneous features</span>
+<span class="lineno"> 8324 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 8325 </span><span class="spaces">    </span><span class="istickedoff">prim &quot;auto_match&quot; &quot;String -&gt; String -&gt; TopLevel ()&quot;</span>
+<span class="lineno"> 8326 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal do_auto_match)</span></span>
+<span class="lineno"> 8327 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
+<span class="lineno"> 8328 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Interactively decides how to align two modules of potentially&quot;</span></span>
+<span class="lineno"> 8329 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;heterogeneous language and prints the result.&quot;</span></span>
+<span class="lineno"> 8330 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 8331 </span><span class="spaces">  </span><span class="istickedoff">]</span>
+<span class="lineno"> 8332 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 8333 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 8334 </span><span class="spaces">    </span><span class="istickedoff">prim :: Text -&gt; Text -&gt; (SS.Type -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value) -&gt; PrimitiveLifecycle -&gt; [Text]</span>
+<span class="lineno"> 8335 </span><span class="spaces">         </span><span class="istickedoff">-&gt; (SS.Name, Primitive)</span>
+<span class="lineno"> 8336 </span><span class="spaces">    </span><span class="istickedoff">prim name ty fn lc doc = (name, Primitive</span>
+<span class="lineno"> 8337 </span><span class="spaces">                                     </span><span class="istickedoff">{ primitiveType = ty'</span>
+<span class="lineno"> 8338 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveRawType = ty</span>
+<span class="lineno"> 8339 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveDoc  = doc</span>
+<span class="lineno"> 8340 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveFn   = fn ty'' name</span>
+<span class="lineno"> 8341 </span><span class="spaces">                                     </span><span class="istickedoff">, primitiveLife = lc</span>
+<span class="lineno"> 8342 </span><span class="spaces">                                     </span><span class="istickedoff">})</span>
+<span class="lineno"> 8343 </span><span class="spaces">      </span><span class="istickedoff">where</span>
+<span class="lineno"> 8344 </span><span class="spaces">        </span><span class="istickedoff">-- Beware: errors in the type will only be detected when the</span>
+<span class="lineno"> 8345 </span><span class="spaces">        </span><span class="istickedoff">-- type is actually looked at by something, like :env, :t,</span>
+<span class="lineno"> 8346 </span><span class="spaces">        </span><span class="istickedoff">-- :search, or a direct use of the builtin. This is one of the</span>
+<span class="lineno"> 8347 </span><span class="spaces">        </span><span class="istickedoff">-- reasons we have a :env call in the test suite, even though</span>
+<span class="lineno"> 8348 </span><span class="spaces">        </span><span class="istickedoff">-- it requires maintenance for every change to the builtin</span>
+<span class="lineno"> 8349 </span><span class="spaces">        </span><span class="istickedoff">-- table. Otherwise these panics can go unnoticed.</span>
+<span class="lineno"> 8350 </span><span class="spaces">        </span><span class="istickedoff">fakeFileName = Text.unpack $ &quot;&lt;type of &quot; &lt;&gt; name &lt;&gt; &quot;&gt;&quot;</span>
+<span class="lineno"> 8351 </span><span class="spaces">        </span><span class="istickedoff">ty' = Loader.readSchemaPure fakeFileName lc primNamedTypeEnv ty</span>
+<span class="lineno"> 8352 </span><span class="spaces">        </span><span class="istickedoff">ty'' = case ty' of</span>
+<span class="lineno"> 8353 </span><span class="spaces">            </span><span class="istickedoff">SS.Forall _ t -&gt; t</span>
+<span class="lineno"> 8354 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 8355 </span><span class="spaces">    </span><span class="istickedoff">pureVal :: forall t. IsValue t =&gt; t -&gt; SS.Type -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 8356 </span><span class="spaces">    </span><span class="istickedoff">pureVal x ty name _ _ = toValue ty name x</span>
+<span class="lineno"> 8357 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 8358 </span><span class="spaces">    </span><span class="istickedoff">-- pureVal can be used for anything with an IsValue instance,</span>
+<span class="lineno"> 8359 </span><span class="spaces">    </span><span class="istickedoff">-- including functions. However, functions in TopLevel need to use</span>
+<span class="lineno"> 8360 </span><span class="spaces">    </span><span class="istickedoff">-- funVal* instead; the IsValue instances capture incorrectly and</span>
+<span class="lineno"> 8361 </span><span class="spaces">    </span><span class="istickedoff">-- you get a function that returns a VTopLevel instead of executing</span>
+<span class="lineno"> 8362 </span><span class="spaces">    </span><span class="istickedoff">-- in TopLevel. (There isn't a special-case IsValue instance for</span>
+<span class="lineno"> 8363 </span><span class="spaces">    </span><span class="istickedoff">-- a -&gt; TopLevel t, because that would require overlapping instances;</span>
+<span class="lineno"> 8364 </span><span class="spaces">    </span><span class="istickedoff">-- but there is an IsValue instance for TopLevel t by itself (that</span>
+<span class="lineno"> 8365 </span><span class="spaces">    </span><span class="istickedoff">-- produces VTopLevel) so use of pureVal matches that and the</span>
+<span class="lineno"> 8366 </span><span class="spaces">    </span><span class="istickedoff">-- generic IsValue instance for a -&gt; t.)</span>
+<span class="lineno"> 8367 </span><span class="spaces">    </span><span class="istickedoff">--</span>
+<span class="lineno"> 8368 </span><span class="spaces">    </span><span class="istickedoff">-- XXX: rename these to e.g. monadVal1/2/3 so this is clearer?</span>
+<span class="lineno"> 8369 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 8370 </span><span class="spaces">    </span><span class="istickedoff">funVal1 :: forall a t. (FromValue a, IsValue t) =&gt; (a -&gt; TopLevel t)</span>
+<span class="lineno"> 8371 </span><span class="spaces">               </span><span class="istickedoff">-&gt; SS.Type -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 8372 </span><span class="spaces">    </span><span class="istickedoff">funVal1 f ty name _ _ =</span>
+<span class="lineno"> 8373 </span><span class="spaces">      </span><span class="istickedoff">let ty' = case ty of</span>
+<span class="lineno"> 8374 </span><span class="spaces">            </span><span class="istickedoff">SS.TyFunc _pos (SS.NamedParamInfo 1 []) [_param] _namedParams ret -&gt; ret</span>
+<span class="lineno"> 8375 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;funVal1&quot; [name &lt;&gt; &quot;: Wrong type signature&quot;]</span></span>
+<span class="lineno"> 8376 </span><span class="spaces">      </span><span class="istickedoff">in</span>
+<span class="lineno"> 8377 </span><span class="spaces">      </span><span class="istickedoff">VBuiltin name <span class="nottickedoff">Seq.empty</span> Map.empty $</span>
+<span class="lineno"> 8378 </span><span class="spaces">        </span><span class="istickedoff">OneMorePositionalArg $ \a -&gt;</span>
+<span class="lineno"> 8379 </span><span class="spaces">          </span><span class="istickedoff">toValue ty' <span class="nottickedoff">name</span> &lt;$&gt; f (fromValue FromArgument a)</span>
+<span class="lineno"> 8380 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 8381 </span><span class="spaces">    </span><span class="istickedoff">funVal2 :: forall a b t. (FromValue a, FromValue b, IsValue t) =&gt; (a -&gt; b -&gt; TopLevel t)</span>
+<span class="lineno"> 8382 </span><span class="spaces">               </span><span class="istickedoff">-&gt; SS.Type -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 8383 </span><span class="spaces">    </span><span class="istickedoff">funVal2 f ty name _ _ =</span>
+<span class="lineno"> 8384 </span><span class="spaces">      </span><span class="istickedoff">let ty' = case ty of</span>
+<span class="lineno"> 8385 </span><span class="spaces">            </span><span class="istickedoff">SS.TyFunc _pos (SS.NamedParamInfo 2 []) [_p1, _p2] _namedParams ret -&gt; ret</span>
+<span class="lineno"> 8386 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;funVal2&quot; [name &lt;&gt; &quot;: Wrong type signature&quot;]</span></span>
+<span class="lineno"> 8387 </span><span class="spaces">      </span><span class="istickedoff">in</span>
+<span class="lineno"> 8388 </span><span class="spaces">      </span><span class="istickedoff">VBuiltin name <span class="nottickedoff">Seq.empty</span> Map.empty $</span>
+<span class="lineno"> 8389 </span><span class="spaces">        </span><span class="istickedoff">ManyMorePositionalArgs $ \a -&gt; return $</span>
+<span class="lineno"> 8390 </span><span class="spaces">        </span><span class="istickedoff">OneMorePositionalArg $ \b -&gt;</span>
+<span class="lineno"> 8391 </span><span class="spaces">          </span><span class="istickedoff">toValue ty' <span class="nottickedoff">name</span> &lt;$&gt; f (fromValue <span class="nottickedoff">FromArgument</span> a) (fromValue <span class="nottickedoff">FromArgument</span> b)</span>
+<span class="lineno"> 8392 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 8393 </span><span class="spaces">    </span><span class="istickedoff">funVal3 :: forall a b c t. (FromValue a, FromValue b, FromValue c, IsValue t) =&gt; (a -&gt; b -&gt; c -&gt; TopLevel t)</span>
+<span class="lineno"> 8394 </span><span class="spaces">               </span><span class="istickedoff">-&gt; SS.Type -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 8395 </span><span class="spaces">    </span><span class="istickedoff">funVal3 f ty name _ _ =</span>
+<span class="lineno"> 8396 </span><span class="spaces">      </span><span class="istickedoff">let ty' = case ty of</span>
+<span class="lineno"> 8397 </span><span class="spaces">            </span><span class="istickedoff">SS.TyFunc _pos (SS.NamedParamInfo 3 []) [_p1, _p2, _p3] _namedParams ret -&gt; ret</span>
+<span class="lineno"> 8398 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;funVal3&quot; [name &lt;&gt; &quot;: Wrong type signature&quot;]</span></span>
+<span class="lineno"> 8399 </span><span class="spaces">      </span><span class="istickedoff">in</span>
+<span class="lineno"> 8400 </span><span class="spaces">      </span><span class="istickedoff">VBuiltin name <span class="nottickedoff">Seq.empty</span> Map.empty $</span>
+<span class="lineno"> 8401 </span><span class="spaces">        </span><span class="istickedoff">ManyMorePositionalArgs $ \a -&gt; return $</span>
+<span class="lineno"> 8402 </span><span class="spaces">        </span><span class="istickedoff">ManyMorePositionalArgs $ \b -&gt; return $</span>
+<span class="lineno"> 8403 </span><span class="spaces">        </span><span class="istickedoff">OneMorePositionalArg $ \c -&gt;</span>
+<span class="lineno"> 8404 </span><span class="spaces">          </span><span class="istickedoff">toValue ty' <span class="nottickedoff">name</span> &lt;$&gt; f (fromValue <span class="nottickedoff">FromArgument</span> a) (fromValue <span class="nottickedoff">FromArgument</span> b) (fromValue <span class="nottickedoff">FromArgument</span> c)</span>
+<span class="lineno"> 8405 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 8406 </span><span class="spaces">    </span><span class="istickedoff">scVal :: forall t. IsValue t =&gt;</span>
+<span class="lineno"> 8407 </span><span class="spaces">             </span><span class="istickedoff">(SharedContext -&gt; t) -&gt; SS.Type -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 8408 </span><span class="spaces">    </span><span class="istickedoff">scVal f ty name _ bic = toValue ty <span class="nottickedoff">name</span> (f (biSharedContext bic))</span>
+<span class="lineno"> 8409 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 8410 </span><span class="spaces">    </span><span class="istickedoff">scVal' :: forall t. IsValue t =&gt;</span>
+<span class="lineno"> 8411 </span><span class="spaces">             </span><span class="istickedoff">(SharedContext -&gt; Options -&gt; t) -&gt; SS.Type -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 8412 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">scVal' f ty name opts bic = toValue ty name (f (biSharedContext bic) opts)</span></span>
+<span class="lineno"> 8413 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 8414 </span><span class="spaces">    </span><span class="istickedoff">bicVal :: forall t. IsValue t =&gt;</span>
+<span class="lineno"> 8415 </span><span class="spaces">              </span><span class="istickedoff">(BuiltinContext -&gt; Options -&gt; t) -&gt; SS.Type -&gt; Text -&gt; Options -&gt; BuiltinContext -&gt; Value</span>
+<span class="lineno"> 8416 </span><span class="spaces">    </span><span class="istickedoff">bicVal f ty name opts bic = toValue ty name (f bic opts)</span></span>
 <span class="lineno"> 8417 </span>
 <span class="lineno"> 8418 </span>
-<span class="lineno"> 8419 </span>-- FUTURE: extract here is now functionally a nop, so if things don't
-<span class="lineno"> 8420 </span>-- change going forward we should consider simplifying so primTypes
-<span class="lineno"> 8421 </span>-- uses the same type as the interpreter environment this function
-<span class="lineno"> 8422 </span>-- seeds, instead of its own.
-<span class="lineno"> 8423 </span>primNamedTypeEnv :: ScopedMap SS.Name (PrimitiveLifecycle, SS.NamedType)
-<span class="lineno"> 8424 </span><span class="decl"><span class="istickedoff">primNamedTypeEnv = ScopedMap.seed $ fmap extract primTypes</span>
-<span class="lineno"> 8425 </span><span class="spaces">   </span><span class="istickedoff">where extract pt = (primTypeLife pt, primTypeType pt)</span></span>
-<span class="lineno"> 8426 </span>
-<span class="lineno"> 8427 </span>-- | Initial value environment for the interpreter.
-<span class="lineno"> 8428 </span>--
-<span class="lineno"> 8429 </span>--   Contains the lifecycle state, the type, the value, and the
-<span class="lineno"> 8430 </span>--   documentation for each builtin.
-<span class="lineno"> 8431 </span>--
-<span class="lineno"> 8432 </span>--   Note: all builtins have documentation; the environment type
-<span class="lineno"> 8433 </span>--   includes a Maybe for the documentation so it can also be used for
-<span class="lineno"> 8434 </span>--   user definitions.
-<span class="lineno"> 8435 </span>--
-<span class="lineno"> 8436 </span>--   FUTURE: extract here is now functionally a nop, so we should
-<span class="lineno"> 8437 </span>--   consider simplifying so `primitives` uses the same type as the
-<span class="lineno"> 8438 </span>--   interpreter environment this function seeds, instead of its own.
-<span class="lineno"> 8439 </span>--
-<span class="lineno"> 8440 </span>primValueEnv ::
-<span class="lineno"> 8441 </span>   Options -&gt;
-<span class="lineno"> 8442 </span>   BuiltinContext -&gt;
-<span class="lineno"> 8443 </span>   Map SS.Name (SS.Pos, PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
-<span class="lineno"> 8444 </span><span class="decl"><span class="istickedoff">primValueEnv opts bic = Map.mapWithKey extract primitives</span>
-<span class="lineno"> 8445 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno"> 8446 </span><span class="spaces">      </span><span class="istickedoff">header = [</span>
-<span class="lineno"> 8447 </span><span class="spaces">          </span><span class="istickedoff">&quot;Description&quot;,</span>
-<span class="lineno"> 8448 </span><span class="spaces">          </span><span class="istickedoff">&quot;-----------&quot;,</span>
-<span class="lineno"> 8449 </span><span class="spaces">          </span><span class="istickedoff">&quot;&quot;</span>
-<span class="lineno"> 8450 </span><span class="spaces">       </span><span class="istickedoff">]</span>
-<span class="lineno"> 8451 </span><span class="spaces">      </span><span class="istickedoff">tag p = case primitiveLife p of</span>
-<span class="lineno"> 8452 </span><span class="spaces">          </span><span class="istickedoff">Current -&gt; []</span>
-<span class="lineno"> 8453 </span><span class="spaces">          </span><span class="istickedoff">WarnDeprecated -&gt; <span class="nottickedoff">[&quot;DEPRECATED AND WILL WARN&quot;, &quot;&quot;]</span></span>
-<span class="lineno"> 8454 </span><span class="spaces">          </span><span class="istickedoff">HideDeprecated -&gt; <span class="nottickedoff">[&quot;DEPRECATED AND UNAVAILABLE BY DEFAULT&quot;, &quot;&quot;]</span></span>
-<span class="lineno"> 8455 </span><span class="spaces">          </span><span class="istickedoff">Experimental -&gt; <span class="nottickedoff">[&quot;EXPERIMENTAL&quot;, &quot;&quot;]</span></span>
-<span class="lineno"> 8456 </span><span class="spaces">      </span><span class="istickedoff">name n p = [</span>
-<span class="lineno"> 8457 </span><span class="spaces">          </span><span class="istickedoff">-- Use the raw (original text) version of the type, so any</span>
-<span class="lineno"> 8458 </span><span class="spaces">          </span><span class="istickedoff">-- optional parameters print where they were strategically</span>
-<span class="lineno"> 8459 </span><span class="spaces">          </span><span class="istickedoff">-- placed by hand, and in the original order, not all</span>
-<span class="lineno"> 8460 </span><span class="spaces">          </span><span class="istickedoff">-- shifted to the end or the beginning and sorted</span>
-<span class="lineno"> 8461 </span><span class="spaces">          </span><span class="istickedoff">-- alphabetically. (Currently the printer prints them all at</span>
-<span class="lineno"> 8462 </span><span class="spaces">          </span><span class="istickedoff">-- the end; all at the beginning is easy, anything else is a</span>
-<span class="lineno"> 8463 </span><span class="spaces">          </span><span class="istickedoff">-- lot more complicated, and we lose the original order</span>
-<span class="lineno"> 8464 </span><span class="spaces">          </span><span class="istickedoff">-- regardless.)</span>
-<span class="lineno"> 8465 </span><span class="spaces">          </span><span class="istickedoff">&quot;    &quot; &lt;&gt; n &lt;&gt; &quot; : &quot; &lt;&gt; (primitiveRawType p),</span>
-<span class="lineno"> 8466 </span><span class="spaces">          </span><span class="istickedoff">&quot;&quot;</span>
-<span class="lineno"> 8467 </span><span class="spaces">       </span><span class="istickedoff">]</span>
-<span class="lineno"> 8468 </span><span class="spaces">      </span><span class="istickedoff">doc n p =</span>
-<span class="lineno"> 8469 </span><span class="spaces">          </span><span class="istickedoff">header &lt;&gt; tag p &lt;&gt; name n p &lt;&gt; primitiveDoc p</span>
-<span class="lineno"> 8470 </span><span class="spaces">      </span><span class="istickedoff">extract n p =</span>
-<span class="lineno"> 8471 </span><span class="spaces">          </span><span class="istickedoff">let pos = SS.PosInternal &quot;&lt;&lt;builtin&gt;&gt;&quot; in</span>
-<span class="lineno"> 8472 </span><span class="spaces">          </span><span class="istickedoff">(pos, primitiveLife p, primitiveType p,</span>
-<span class="lineno"> 8473 </span><span class="spaces">           </span><span class="istickedoff">(primitiveFn p) opts bic, Just $ doc n p)</span></span>
-<span class="lineno"> 8474 </span>
-<span class="lineno"> 8475 </span>primEnviron :: Options -&gt; BuiltinContext -&gt; CryptolEnvStack -&gt; Environ
-<span class="lineno"> 8476 </span><span class="decl"><span class="istickedoff">primEnviron opts bic cryenvs =</span>
-<span class="lineno"> 8477 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 8478 </span><span class="spaces">    </span><span class="istickedoff">-- Do a scope push so the builtins live by themselves in their own</span>
-<span class="lineno"> 8479 </span><span class="spaces">    </span><span class="istickedoff">-- scope layer. This has the result of separating them from the</span>
-<span class="lineno"> 8480 </span><span class="spaces">    </span><span class="istickedoff">-- user's variables in the :env output (which is now grouped by</span>
-<span class="lineno"> 8481 </span><span class="spaces">    </span><span class="istickedoff">-- scope) and, because the builtin layer is readonly, might be</span>
-<span class="lineno"> 8482 </span><span class="spaces">    </span><span class="istickedoff">-- marginally more efficient as the user's globals are added.</span>
-<span class="lineno"> 8483 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 8484 </span><span class="spaces">    </span><span class="istickedoff">let tyenv = ScopedMap.push primNamedTypeEnv</span>
-<span class="lineno"> 8485 </span><span class="spaces">        </span><span class="istickedoff">varenv = ScopedMap.push $ ScopedMap.seed $ primValueEnv opts bic</span>
-<span class="lineno"> 8486 </span><span class="spaces">    </span><span class="istickedoff">in</span>
-<span class="lineno"> 8487 </span><span class="spaces">    </span><span class="istickedoff">Environ varenv tyenv cryenvs</span></span>
-<span class="lineno"> 8488 </span>
+<span class="lineno"> 8419 </span>
+<span class="lineno"> 8420 </span>-- FUTURE: extract here is now functionally a nop, so if things don't
+<span class="lineno"> 8421 </span>-- change going forward we should consider simplifying so primTypes
+<span class="lineno"> 8422 </span>-- uses the same type as the interpreter environment this function
+<span class="lineno"> 8423 </span>-- seeds, instead of its own.
+<span class="lineno"> 8424 </span>primNamedTypeEnv :: ScopedMap SS.Name (PrimitiveLifecycle, SS.NamedType)
+<span class="lineno"> 8425 </span><span class="decl"><span class="istickedoff">primNamedTypeEnv = ScopedMap.seed $ fmap extract primTypes</span>
+<span class="lineno"> 8426 </span><span class="spaces">   </span><span class="istickedoff">where extract pt = (primTypeLife pt, primTypeType pt)</span></span>
+<span class="lineno"> 8427 </span>
+<span class="lineno"> 8428 </span>-- | Initial value environment for the interpreter.
+<span class="lineno"> 8429 </span>--
+<span class="lineno"> 8430 </span>--   Contains the lifecycle state, the type, the value, and the
+<span class="lineno"> 8431 </span>--   documentation for each builtin.
+<span class="lineno"> 8432 </span>--
+<span class="lineno"> 8433 </span>--   Note: all builtins have documentation; the environment type
+<span class="lineno"> 8434 </span>--   includes a Maybe for the documentation so it can also be used for
+<span class="lineno"> 8435 </span>--   user definitions.
+<span class="lineno"> 8436 </span>--
+<span class="lineno"> 8437 </span>--   FUTURE: extract here is now functionally a nop, so we should
+<span class="lineno"> 8438 </span>--   consider simplifying so `primitives` uses the same type as the
+<span class="lineno"> 8439 </span>--   interpreter environment this function seeds, instead of its own.
+<span class="lineno"> 8440 </span>--
+<span class="lineno"> 8441 </span>primValueEnv ::
+<span class="lineno"> 8442 </span>   Options -&gt;
+<span class="lineno"> 8443 </span>   BuiltinContext -&gt;
+<span class="lineno"> 8444 </span>   Map SS.Name (SS.Pos, PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
+<span class="lineno"> 8445 </span><span class="decl"><span class="istickedoff">primValueEnv opts bic = Map.mapWithKey extract primitives</span>
+<span class="lineno"> 8446 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 8447 </span><span class="spaces">      </span><span class="istickedoff">header = [</span>
+<span class="lineno"> 8448 </span><span class="spaces">          </span><span class="istickedoff">&quot;Description&quot;,</span>
+<span class="lineno"> 8449 </span><span class="spaces">          </span><span class="istickedoff">&quot;-----------&quot;,</span>
+<span class="lineno"> 8450 </span><span class="spaces">          </span><span class="istickedoff">&quot;&quot;</span>
+<span class="lineno"> 8451 </span><span class="spaces">       </span><span class="istickedoff">]</span>
+<span class="lineno"> 8452 </span><span class="spaces">      </span><span class="istickedoff">tag p = case primitiveLife p of</span>
+<span class="lineno"> 8453 </span><span class="spaces">          </span><span class="istickedoff">Current -&gt; []</span>
+<span class="lineno"> 8454 </span><span class="spaces">          </span><span class="istickedoff">WarnDeprecated -&gt; <span class="nottickedoff">[&quot;DEPRECATED AND WILL WARN&quot;, &quot;&quot;]</span></span>
+<span class="lineno"> 8455 </span><span class="spaces">          </span><span class="istickedoff">HideDeprecated -&gt; <span class="nottickedoff">[&quot;DEPRECATED AND UNAVAILABLE BY DEFAULT&quot;, &quot;&quot;]</span></span>
+<span class="lineno"> 8456 </span><span class="spaces">          </span><span class="istickedoff">Experimental -&gt; <span class="nottickedoff">[&quot;EXPERIMENTAL&quot;, &quot;&quot;]</span></span>
+<span class="lineno"> 8457 </span><span class="spaces">      </span><span class="istickedoff">name n p = [</span>
+<span class="lineno"> 8458 </span><span class="spaces">          </span><span class="istickedoff">-- Use the raw (original text) version of the type, so any</span>
+<span class="lineno"> 8459 </span><span class="spaces">          </span><span class="istickedoff">-- optional parameters print where they were strategically</span>
+<span class="lineno"> 8460 </span><span class="spaces">          </span><span class="istickedoff">-- placed by hand, and in the original order, not all</span>
+<span class="lineno"> 8461 </span><span class="spaces">          </span><span class="istickedoff">-- shifted to the end or the beginning and sorted</span>
+<span class="lineno"> 8462 </span><span class="spaces">          </span><span class="istickedoff">-- alphabetically. (Currently the printer prints them all at</span>
+<span class="lineno"> 8463 </span><span class="spaces">          </span><span class="istickedoff">-- the end; all at the beginning is easy, anything else is a</span>
+<span class="lineno"> 8464 </span><span class="spaces">          </span><span class="istickedoff">-- lot more complicated, and we lose the original order</span>
+<span class="lineno"> 8465 </span><span class="spaces">          </span><span class="istickedoff">-- regardless.)</span>
+<span class="lineno"> 8466 </span><span class="spaces">          </span><span class="istickedoff">&quot;    &quot; &lt;&gt; n &lt;&gt; &quot; : &quot; &lt;&gt; (primitiveRawType p),</span>
+<span class="lineno"> 8467 </span><span class="spaces">          </span><span class="istickedoff">&quot;&quot;</span>
+<span class="lineno"> 8468 </span><span class="spaces">       </span><span class="istickedoff">]</span>
+<span class="lineno"> 8469 </span><span class="spaces">      </span><span class="istickedoff">doc n p =</span>
+<span class="lineno"> 8470 </span><span class="spaces">          </span><span class="istickedoff">header &lt;&gt; tag p &lt;&gt; name n p &lt;&gt; primitiveDoc p</span>
+<span class="lineno"> 8471 </span><span class="spaces">      </span><span class="istickedoff">extract n p =</span>
+<span class="lineno"> 8472 </span><span class="spaces">          </span><span class="istickedoff">let pos = SS.PosInternal &quot;&lt;&lt;builtin&gt;&gt;&quot; in</span>
+<span class="lineno"> 8473 </span><span class="spaces">          </span><span class="istickedoff">(pos, primitiveLife p, primitiveType p,</span>
+<span class="lineno"> 8474 </span><span class="spaces">           </span><span class="istickedoff">(primitiveFn p) opts bic, Just $ doc n p)</span></span>
+<span class="lineno"> 8475 </span>
+<span class="lineno"> 8476 </span>primEnviron :: Options -&gt; BuiltinContext -&gt; CryptolEnvStack -&gt; Environ
+<span class="lineno"> 8477 </span><span class="decl"><span class="istickedoff">primEnviron opts bic cryenvs =</span>
+<span class="lineno"> 8478 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 8479 </span><span class="spaces">    </span><span class="istickedoff">-- Do a scope push so the builtins live by themselves in their own</span>
+<span class="lineno"> 8480 </span><span class="spaces">    </span><span class="istickedoff">-- scope layer. This has the result of separating them from the</span>
+<span class="lineno"> 8481 </span><span class="spaces">    </span><span class="istickedoff">-- user's variables in the :env output (which is now grouped by</span>
+<span class="lineno"> 8482 </span><span class="spaces">    </span><span class="istickedoff">-- scope) and, because the builtin layer is readonly, might be</span>
+<span class="lineno"> 8483 </span><span class="spaces">    </span><span class="istickedoff">-- marginally more efficient as the user's globals are added.</span>
+<span class="lineno"> 8484 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 8485 </span><span class="spaces">    </span><span class="istickedoff">let tyenv = ScopedMap.push primNamedTypeEnv</span>
+<span class="lineno"> 8486 </span><span class="spaces">        </span><span class="istickedoff">varenv = ScopedMap.push $ ScopedMap.seed $ primValueEnv opts bic</span>
+<span class="lineno"> 8487 </span><span class="spaces">    </span><span class="istickedoff">in</span>
+<span class="lineno"> 8488 </span><span class="spaces">    </span><span class="istickedoff">Environ varenv tyenv cryenvs</span></span>
+<span class="lineno"> 8489 </span>
 
 </pre>
 </body>
