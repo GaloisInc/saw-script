@@ -1096,7 +1096,7 @@ rwModifyCryptolEnv f rw =
     let Environ varenv tyenv cryenvs = rwEnviron rw
         CryptolEnvStack ce ces = cryenvs
         ce' = f ce
-        cryenvs' = CryptolEnvStack ce' ces 
+        cryenvs' = CryptolEnvStack ce' ces
     in
     rw { rwEnviron = Environ varenv tyenv cryenvs' }
 
@@ -1410,7 +1410,7 @@ getJavaCodebase =
         else pure (Opt.jarList opts)
       JSS.loadCodebase jars (Opt.classPath opts) (Opt.javaBinDirs opts)
 
-          
+
 
 
 getTheoremDB :: TopLevel TheoremDB

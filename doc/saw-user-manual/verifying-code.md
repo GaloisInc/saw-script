@@ -391,7 +391,7 @@ practice it isn't useful.)
 <!--
    This is not a great place to put this but there's not much choice
    in the current layout.
---> 
+-->
 
 In all three backends the type construction for arrays requires a
 concrete SAWScript integer.
@@ -1682,7 +1682,7 @@ The control value may be symbolic.
    We previously had this example of `mir_enum_value`, which I think
    is not needed, and would be difficult to wedge in above, but I'm
    not prepared to throw away quite yet.
-   
+
 
 Here is an example of using `mir_enum_value` in practice:
 
@@ -2485,7 +2485,7 @@ Where:
 (compositional-verification)=
 ## Compositional Verification
 
-As mentioned briefly above, SAW's specification scheme for code 
+As mentioned briefly above, SAW's specification scheme for code
 allows for compositional reasoning.
 That is,
 when proving properties of a given method or function, we can make use
@@ -2590,7 +2590,7 @@ See [The SAWScript Language](#sawscript).)
    an override, we treat it as meaning the value is unchanged. This is
    inconsistent, and it's the inconsistency that's unsound, and at
    some point it should get fixed.
--->   
+-->
 
 A common pitfall when using compositional verification is to reuse a
 specification that underspecifies the value of a mutable allocation. In

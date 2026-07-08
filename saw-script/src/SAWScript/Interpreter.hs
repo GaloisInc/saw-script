@@ -316,7 +316,7 @@ pushdir dir = do
     modify (\rw -> rw { rwDirStack = dirstack' })
     -- The directories we pushdir with are relative to the original
     -- startup dir, not the current dir.
-    origdir <- asks roInitWorkDir    
+    origdir <- asks roInitWorkDir
     liftIO $ setCurrentDirectory (origdir </> dir)
 
 popdir :: TopLevel ()
@@ -2809,12 +2809,12 @@ set_solver_cache_path pathtxt = do
   let path :: FilePath = Text.unpack pathtxt
   rw <- getTopLevelRW
   case (rwSolverCache rw, Text.null pathtxt) of
-    (Just _, True) -> 
+    (Just _, True) ->
       putTopLevelRW rw { rwSolverCache = Nothing }
     (Just _, False) ->
       onSolverCache (setSolverCachePath path)
     (Nothing, True) -> return ()
-    (Nothing, False) -> do 
+    (Nothing, False) -> do
       cache <- io $ openSolverCache path
       putTopLevelRW rw { rwSolverCache = Just cache }
 
