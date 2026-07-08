@@ -118,6 +118,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#assertions-in-the-mir-backend">Assertions in the MIR Backend</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#loading-mir-modules">Loading MIR Modules</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#mir-verification">MIR Verification</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#mir-error-messages">MIR error messages</a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#compositional-verification">Compositional Verification</a><ul>
@@ -526,7 +527,7 @@ practice it isn’t useful.)</p>
 <!--
    This is not a great place to put this but there's not much choice
    in the current layout.
---> 
+-->
 <p>In all three backends the type construction for arrays requires a
 concrete SAWScript integer.
 Proof results are thus dependent on the array size being as indicated,
@@ -1645,7 +1646,7 @@ The control value may be symbolic.</p>
    We previously had this example of `mir_enum_value`, which I think
    is not needed, and would be difficult to wedge in above, but I'm
    not prepared to throw away quite yet.
-   
+
 
 Here is an example of using `mir_enum_value` in practice:
 
@@ -2358,6 +2359,47 @@ It fails if the polymorphic function or the given
 instantiation are not found.</p>
 </li>
 </ul>
+</section>
+<section id="mir-error-messages">
+<h3>MIR error messages<a class="headerlink" href="#mir-error-messages" title="Link to this heading"></a></h3>
+<p>SAW includes call stacks when reporting certain classes of MIR-related error
+messages that arise during symbolic execution. For instance, if you write a SAW
+specification for the <code class="docutils literal notranslate"><span class="pre">g</span></code> function:</p>
+<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="n">pub</span><span class="w"> </span><span class="n">fn</span><span class="w"> </span><span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">:</span><span class="w"> </span><span class="o">*</span><span class="n">const</span><span class="w"> </span><span class="n">u32</span><span class="p">)</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="n">u32</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">unsafe</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="o">*</span><span class="n">x</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">pub</span><span class="w"> </span><span class="n">fn</span><span class="w"> </span><span class="n">g</span><span class="p">()</span><span class="w"> </span><span class="ow">-&gt;</span><span class="w"> </span><span class="n">u32</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="p">:</span><span class="w"> </span><span class="o">*</span><span class="n">const</span><span class="w"> </span><span class="n">u32</span><span class="w"> </span><span class="ow">=</span><span class="w"> </span><span class="n">std</span><span class="p">::</span><span class="n">ptr</span><span class="p">::</span><span class="n">null</span><span class="p">();</span>
+<span class="w">    </span><span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Then symbolic execution will fail when it attempts to dereference a null
+pointer while simulating the <code class="docutils literal notranslate"><span class="pre">f</span></code> function. By default, this error message will
+look something like the following:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Symbolic</span> <span class="n">execution</span> <span class="n">failed</span><span class="o">.</span>
+<span class="n">Abort</span> <span class="n">due</span> <span class="n">to</span> <span class="n">assertion</span> <span class="n">failure</span><span class="p">:</span>
+  <span class="n">test</span><span class="o">.</span><span class="n">rs</span><span class="p">:</span><span class="mi">2</span><span class="p">:</span><span class="mi">14</span><span class="p">:</span> <span class="mi">2</span><span class="p">:</span><span class="mi">16</span><span class="p">:</span> <span class="n">error</span><span class="p">:</span> <span class="ow">in</span> <span class="n">test</span><span class="o">/</span><span class="mi">11</span><span class="n">acf56f</span><span class="p">::</span><span class="n">f</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+  <span class="n">attempted</span> <span class="n">to</span> <span class="n">read</span> <span class="n">empty</span> <span class="n">mux</span> <span class="n">tree</span>
+  <span class="n">Context</span><span class="p">:</span>
+    <span class="n">test</span><span class="o">.</span><span class="n">rs</span><span class="p">:</span><span class="mi">2</span><span class="p">:</span><span class="mi">14</span><span class="p">:</span> <span class="mi">2</span><span class="p">:</span><span class="mi">16</span><span class="p">:</span> <span class="n">test</span><span class="o">/</span><span class="mi">11</span><span class="n">acf56f</span><span class="p">::</span><span class="n">f</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">test</span><span class="o">.</span><span class="n">rs</span><span class="p">:</span><span class="mi">8</span><span class="p">:</span><span class="mi">5</span><span class="p">:</span> <span class="mi">8</span><span class="p">:</span><span class="mi">9</span><span class="p">:</span> <span class="n">test</span><span class="o">/</span><span class="mi">11</span><span class="n">acf56f</span><span class="p">::</span><span class="n">g</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Note that the <code class="docutils literal notranslate"><span class="pre">Context:</span></code> includes both <code class="docutils literal notranslate"><span class="pre">f</span></code> and <code class="docutils literal notranslate"><span class="pre">g</span></code>. Call stacks can be helpful
+for determining what path through the program is used to reach an error,
+although they come with the tradeoff that they make error messages longer. SAW
+offers the following configuration options for tweaking these error messages:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_set_exception_context_none</span> <span class="pre">:</span> <span class="pre">TopLevel</span> <span class="pre">()</span></code>: Call stacks are not displayed
+at all.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_set_exception_context_limited</span> <span class="pre">:</span> <span class="pre">Int</span> <span class="pre">-&gt;</span> <span class="pre">TopLevel</span> <span class="pre">()</span></code>: Call stacks are
+displayed up to a limited number, where the supplied <code class="docutils literal notranslate"><span class="pre">Int</span></code> is the limit.
+This option is the default setting, where the default limit is 10.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mir_set_exception_context_unlimited</span> <span class="pre">:</span> <span class="pre">TopLevel</span> <span class="pre">()</span></code>: Call stacks are
+displayed, and the full call stack is always printed.</p></li>
+</ul>
 <!-- ------------------------------------------------------------ -->
 </section>
 </section>
@@ -2454,7 +2496,7 @@ See <a class="reference internal" href="the-sawscript-language.html#sawscript"><
    an override, we treat it as meaning the value is unchanged. This is
    inconsistent, and it's the inconsistency that's unsound, and at
    some point it should get fixed.
--->   
+-->
 <p>A common pitfall when using compositional verification is to reuse a
 specification that underspecifies the value of a mutable allocation. In
 general, doing so can lead to unsound verification, so SAW goes to great

@@ -391,7 +391,7 @@ practice it isn't useful.)
 <!--
    This is not a great place to put this but there's not much choice
    in the current layout.
---> 
+-->
 
 In all three backends the type construction for arrays requires a
 concrete SAWScript integer.
@@ -1682,7 +1682,7 @@ The control value may be symbolic.
    We previously had this example of `mir_enum_value`, which I think
    is not needed, and would be difficult to wedge in above, but I'm
    not prepared to throw away quite yet.
-   
+
 
 Here is an example of using `mir_enum_value` in practice:
 
@@ -2478,6 +2478,51 @@ Where:
   It fails if the polymorphic function or the given
   instantiation are not found.
 
+### MIR error messages
+
+SAW includes call stacks when reporting certain classes of MIR-related error
+messages that arise during symbolic execution. For instance, if you write a SAW
+specification for the `g` function:
+
+:::{code-block} sawscript
+pub fn f(x: *const u32) -> u32 {
+    unsafe { *x }
+}
+
+pub fn g() -> u32 {
+    let x: *const u32 = std::ptr::null();
+    f(x)
+}
+:::
+
+Then symbolic execution will fail when it attempts to dereference a null
+pointer while simulating the `f` function. By default, this error message will
+look something like the following:
+
+:::{code-block}
+Symbolic execution failed.
+Abort due to assertion failure:
+  test.rs:2:14: 2:16: error: in test/11acf56f::f[0]
+  attempted to read empty mux tree
+  Context:
+    test.rs:2:14: 2:16: test/11acf56f::f[0]
+    test.rs:8:5: 8:9: test/11acf56f::g[0]
+:::
+
+Note that the `Context:` includes both `f` and `g`. Call stacks can be helpful
+for determining what path through the program is used to reach an error,
+although they come with the tradeoff that they make error messages longer. SAW
+offers the following configuration options for tweaking these error messages:
+
+* `mir_set_exception_context_none : TopLevel ()`: Call stacks are not displayed
+  at all.
+
+* `mir_set_exception_context_limited : Int -> TopLevel ()`: Call stacks are
+  displayed up to a limited number, where the supplied `Int` is the limit.
+  This option is the default setting, where the default limit is 10.
+
+* `mir_set_exception_context_unlimited : TopLevel ()`: Call stacks are
+  displayed, and the full call stack is always printed.
 
 <!-- ------------------------------------------------------------ -->
 
@@ -2485,7 +2530,7 @@ Where:
 (compositional-verification)=
 ## Compositional Verification
 
-As mentioned briefly above, SAW's specification scheme for code 
+As mentioned briefly above, SAW's specification scheme for code
 allows for compositional reasoning.
 That is,
 when proving properties of a given method or function, we can make use
@@ -2590,7 +2635,7 @@ See [The SAWScript Language](#sawscript).)
    an override, we treat it as meaning the value is unchanged. This is
    inconsistent, and it's the inconsistency that's unsound, and at
    some point it should get fixed.
--->   
+-->
 
 A common pitfall when using compositional verification is to reuse a
 specification that underspecifies the value of a mutable allocation. In
