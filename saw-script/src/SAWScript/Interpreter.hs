@@ -57,6 +57,7 @@ import qualified Cryptol.TypeCheck.AST as Cryptol
 
 import qualified Lang.Crucible.JVM as CJ
 import Lang.Crucible.LLVM.ArraySizeProfile (FunctionProfile)
+import Lang.Crucible.Simulator (ExceptionContextConfig(..))
 import Mir.Intrinsics (MIR)
 import qualified Mir.Generator as MIR (RustModule)
 import qualified Mir.Mir as MIR
@@ -316,7 +317,7 @@ pushdir dir = do
     modify (\rw -> rw { rwDirStack = dirstack' })
     -- The directories we pushdir with are relative to the original
     -- startup dir, not the current dir.
-    origdir <- asks roInitWorkDir    
+    origdir <- asks roInitWorkDir
     liftIO $ setCurrentDirectory (origdir </> dir)
 
 popdir :: TopLevel ()
@@ -1565,6 +1566,7 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
                    , rwLaxPointerOrdering = False
                    , rwLaxLoadsAndStores = False
                    , rwLLVMGlobalAllocMode = LLVMAllocConstantGlobals
+                   , rwMIRExceptionContext = ECCLimited 10
                    , rwDebugIntrinsics = True
                    , rwWhat4HashConsing = False
                    , rwWhat4HashConsingX86 = False
@@ -2804,17 +2806,22 @@ llvm_set_global_alloc_mode mode = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLLVMGlobalAllocMode = mode }
 
+mir_set_exception_context :: ExceptionContextConfig -> TopLevel ()
+mir_set_exception_context ecc = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwMIRExceptionContext = ecc }
+
 set_solver_cache_path :: Text -> TopLevel ()
 set_solver_cache_path pathtxt = do
   let path :: FilePath = Text.unpack pathtxt
   rw <- getTopLevelRW
   case (rwSolverCache rw, Text.null pathtxt) of
-    (Just _, True) -> 
+    (Just _, True) ->
       putTopLevelRW rw { rwSolverCache = Nothing }
     (Just _, False) ->
       onSolverCache (setSolverCachePath path)
     (Nothing, True) -> return ()
-    (Nothing, False) -> do 
+    (Nothing, False) -> do
       cache <- io $ openSolverCache path
       putTopLevelRW rw { rwSolverCache = Just cache }
 
@@ -8246,6 +8253,28 @@ primitives = Map.fromList $
     Current
     [ "Return a MIRSpec corresponding to a MIRSetup block, as would be"
     , "returned by mir_verify but without performing any verification."
+    ]
+
+  , prim "mir_set_exception_context_none" "TopLevel ()"
+    (pureVal (mir_set_exception_context ECCNone))
+    Experimental
+    [ "When reporting MIR-related exceptions, do not include any"
+    , "call-stack-related context."
+    ]
+
+  , prim "mir_set_exception_context_limited" "Int -> TopLevel ()"
+    (pureVal (mir_set_exception_context . ECCLimited))
+    Experimental
+    [ "When reporting MIR-related exceptions, include exactly N frames of"
+    , "call-stack-related context, where N is the supplied Int."
+    , "This is the default, with a limit of 10."
+    ]
+
+  , prim "mir_set_exception_context_no_limit" "TopLevel ()"
+    (pureVal (mir_set_exception_context ECCNoLimit))
+    Experimental
+    [ "When reporting MIR-related exceptions, include the full call stack as"
+    , "context."
     ]
 
     ------------------------------------------------------------

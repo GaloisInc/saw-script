@@ -299,6 +299,7 @@ import qualified CryptolSAWCore.Pretty as CryPP
 
 import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
+import qualified Lang.Crucible.Simulator as Crucible (ExceptionContextConfig)
 
 import           Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.JVM as CJ
@@ -1096,7 +1097,7 @@ rwModifyCryptolEnv f rw =
     let Environ varenv tyenv cryenvs = rwEnviron rw
         CryptolEnvStack ce ces = cryenvs
         ce' = f ce
-        cryenvs' = CryptolEnvStack ce' ces 
+        cryenvs' = CryptolEnvStack ce' ces
     in
     rw { rwEnviron = Environ varenv tyenv cryenvs' }
 
@@ -1201,6 +1202,7 @@ data TopLevelRW =
   , rwLaxPointerOrdering :: Bool
   , rwDebugIntrinsics :: Bool
   , rwLLVMGlobalAllocMode :: LLVMGlobalAllocMode
+  , rwMIRExceptionContext :: Crucible.ExceptionContextConfig
 
   -- FIXME: These might be better split into "simulator hash-consing" and "tactic hash-consing"
   , rwWhat4HashConsing :: Bool
@@ -1410,7 +1412,7 @@ getJavaCodebase =
         else pure (Opt.jarList opts)
       JSS.loadCodebase jars (Opt.classPath opts) (Opt.javaBinDirs opts)
 
-          
+
 
 
 getTheoremDB :: TopLevel TheoremDB
