@@ -299,6 +299,7 @@ import qualified CryptolSAWCore.Pretty as CryPP
 
 import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
+import qualified Lang.Crucible.Simulator as Crucible (ExceptionContextConfig)
 
 import           Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.JVM as CJ
@@ -1201,6 +1202,7 @@ data TopLevelRW =
   , rwLaxPointerOrdering :: Bool
   , rwDebugIntrinsics :: Bool
   , rwLLVMGlobalAllocMode :: LLVMGlobalAllocMode
+  , rwMIRExceptionContext :: Crucible.ExceptionContextConfig
 
   -- FIXME: These might be better split into "simulator hash-consing" and "tactic hash-consing"
   , rwWhat4HashConsing :: Bool

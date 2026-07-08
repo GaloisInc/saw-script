@@ -2276,10 +2276,12 @@ setupCrucibleContext rustMod =
                             (Crucible.cfgHandle cfg)
                             (Crucible.UseCFG cfg (Crucible.postdomInfo cfg))) $
                     Map.elems cfgMap
+     mirExceptionContext <- gets rwMIRExceptionContext
      let simctx0 = Crucible.initSimContext bak
                      intrinsics halloc stdout
                      bindings Mir.mirExtImpl
                      SAWCruciblePersonality
+                 & Crucible.exceptionContextConfig .~ mirExceptionContext
      let globals0 = Crucible.emptyGlobals
      let setupGlobals = Crucible.regValue <$> Crucible.callCFG staticInitCfg Crucible.emptyRegMap
      -- Step (1) in Note [Translating MIR statics in SAW]

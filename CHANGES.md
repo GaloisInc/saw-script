@@ -69,6 +69,11 @@ This release supports [version
   allocation occurs *before* the `LLVMSetup` operation for `llvm_verify`, so the
   global allocation disposition must be set as a `TopLevel` operation.
 
+* Add `mir_set_exception_context_{none,limited,no_limit}`, which configures
+  how much call-stack-related context to include when displaying MIR-related
+  exceptions. The default setting is `mir_set_exception_context_limited 10`
+  (i.e., 10 call stack frames).
+
 ## Bug Fixes
 
 * Fix bug in the `rme` solver causing the `<` operator to be treated as `<=`.
