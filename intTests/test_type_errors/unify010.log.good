@@ -4,7 +4,7 @@ Type errors:
     Expected: Int
     Found:    String
 
-    Expected: t.0 Int
+    Expected: t.2 Int
     Found:    t.2 String
 
   unify010.saw:9:9-9:12: Note: The type Int arises from this type annotation
