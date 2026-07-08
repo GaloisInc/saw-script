@@ -736,26 +736,6 @@ prettyTypeDetails ppopts ty =
     in
     (pos, msg)
 
--- | We've found a substitution for unification var i.
---
---   Create the substitution, but first check that this doesn't result
---   in an invalid type. If it does, return Nothing. The caller handles
---   reporting the problem because we don't quite have enough context
---   here to do an adequate job.
---
---   Does not handle the case where t _is_ TyUnifyVar i; the caller
---   handles that.
---
---   XXX: we can resolve TyUnifyVar i to TyUnifyVar j here, which is
---   fine as far as it goes but there doesn't seem to be any logic to
---   prohibit also resolving TyUnifyVar j to TyUnifyVar i and creating
---   cycles.
-resolveUnificationVar :: TypeIndex -> Type -> Maybe Subst
-resolveUnificationVar i t2 =
-    case Map.lookup i $ unifyVars t2 of
-        Just _otherpos -> Nothing
-        Nothing -> Just $ singletonSubst i t2
-
 -- | Guts of unification.
 --
 --   "mgu" stands for "most general unifier".
@@ -782,36 +762,56 @@ mgu ppopts pos encs t1 t2 =
           recordError posfound $ "Note:" <+> tyfound' <> PP.hardline <> ""
           pure emptySubst
     in
+
+    -- | We would like to resolve unification var @i@ to type @ty@.
+    --   Make sure this is well formed.
+    --
+    --   Does not handle the case where t _is_ TyUnifyVar i; there's
+    --   a separate case for that.
+    --
+    let checkOccurs pos'i i ty =
+          -- Collect the unification vars in ty, and check for an appearance
+          -- of i.
+          case Map.lookup i $ unifyVars ty of
+              Nothing -> pure ty
+              Just _otherpos -> do
+                  let t1' = prettyType ppopts t1
+                      t2' = prettyType ppopts t2
+                      i' = prettyType ppopts $ TyUnifyVar pos'i i
+                      ty' = prettyType ppopts ty
+
+                  _ <- reject "Occurs check failure." [
+                      "Cannot unify" <+> t1' <+>
+                      "with" <+> t2' <+> "because" <+> i' <+>
+                      "appears within" <+> ty' <> "."
+                   ]
+                  getErrorTyVar pos'i
+    in
+
     case (t1, t2) of
         (TyUnifyVar _ i, TyUnifyVar _ j) | i == j ->
             -- same unification var, nothing to do
             return emptySubst
 
-        (TyUnifyVar _ i, _) ->
+        (TyUnifyVar _ i, _) -> do
             -- one side is a unification var, resolve it
-            case resolveUnificationVar i t2 of
-                Just someSubst -> return someSubst
-                Nothing -> do
-                    let t1' = prettyType ppopts t1
-                        t2' = prettyType ppopts t2
-                    reject "Occurs check failure." [
-                        "Cannot unify" <+> t1' <+>
-                        "with" <+> t2' <+> "because" <+> t1' <+>
-                        "appears within" <+> t2' <> "."
-                     ]
+            --
+            -- XXX: we can resolve TyUnifyVar i to TyUnifyVar j here,
+            -- which is fine as far as it goes but there doesn't seem
+            -- to be any logic to prohibit also resolving TyUnifyVar j
+            -- to TyUnifyVar i and creating cycles.
+            t2' <- checkOccurs (Pos.getPos t2) i t2
+            pure $ singletonSubst i t2'
 
-        (_, TyUnifyVar _ i) ->
+        (_, TyUnifyVar _ i) -> do
             -- the other side is a unification var, resolve it
-            case resolveUnificationVar i t1 of
-                Just someSubst -> return someSubst
-                Nothing -> do
-                    let t1' = prettyType ppopts t1
-                        t2' = prettyType ppopts t2
-                    reject "Occurs check failure." [
-                        "Cannot unify" <+> t1' <+>
-                        "with" <+> t2' <+> "because" <+> t2' <+>
-                        "appears within" <+> t1' <> "."
-                     ]
+            --
+            -- XXX: we can resolve TyUnifyVar i to TyUnifyVar j here,
+            -- which is fine as far as it goes but there doesn't seem
+            -- to be any logic to prohibit also resolving TyUnifyVar j
+            -- to TyUnifyVar i and creating cycles.
+            t1' <- checkOccurs (Pos.getPos t1) i t1
+            pure $ singletonSubst i t1'
 
         (TyFunc pos1 _ params1 namedParams1 ret1,
          TyFunc pos2 _ params2 namedParams2 ret2) -> do
