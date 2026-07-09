@@ -236,7 +236,16 @@ doc for per-slice regression fences and bounded validation commands):
     positions are correct-by-parity but likely dormant until Slice 4 routes
     more callee arguments through conventions — most helper function formals
     are non-dependent by construction; the dependent family mostly flows
-    through the still-legacy generic Lambda case.
+    through the still-legacy generic Lambda case. (3b corpus trace sweep:
+    33 live conventions, all non-dependent, zero inconsistent.)
+  - [x] 3c — recursor motives at a declared `MotiveConvention` (per-binder
+    positions: indices `RawIndexPosition`, scrutinee
+    `StructuralRecursorFieldPosition`; result mode drives the type-level
+    `wrapExcept`, per calculus §Recursors' "motive binder/result position"
+    fields). `translateMotiveAtConvention` replaces the where-local
+    `translateRecursorMotive` and its blanket `skipBinderWrap True` — one
+    flag site deleted. Byte-identical incl. re-emitted Stream.rec /
+    RecordType.rec driver rows; motive trace live on `conformance_stream`.
 - [ ] **Slice 4** — real callee conventions for every callee; retire
   `CalleeTransitional`; decompose `originalDispatchWithShape` into a convention
   interpreter + table.

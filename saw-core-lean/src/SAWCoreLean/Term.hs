@@ -144,6 +144,30 @@ data FunctionConvention = FunctionConvention
   }
   deriving (Eq, Show)
 
+-- | What a recursor motive's body computes (plan Slice 3c; calculus
+-- §Recursors — "motive result position" is a declared convention
+-- field). This is deliberately NOT a 'FunctionConvention' result
+-- position: a motive's body is a TYPE-level expression, and a
+-- value-computing motive wraps its body type in @Except String@
+-- ('wrapExcept') — never a 'Pure.pure' value lift.
+data MotiveResultMode
+  = MotiveComputesRuntimeValueType
+    -- ^ Phase-β value motive: the body type wraps
+    -- (@… → Except String T@).
+  | MotiveComputesRawType
+    -- ^ Type/proof/function motive: the body type stays raw.
+  deriving (Eq, Show)
+
+-- | Declared convention for a recursor motive: per-binder positions
+-- (datatype indices, then the eliminated scrutinee) and the result
+-- mode. Produced by the recursor dispatch, consumed by
+-- 'translateMotiveAtConvention'.
+data MotiveConvention = MotiveConvention
+  { mcBinderPositions :: [ExpectedPosition]
+  , mcResultMode      :: MotiveResultMode
+  }
+  deriving (Eq, Show)
+
 data EqualitySubjectRep
   = EqualitySubjectRuntimeValue
   | EqualitySubjectRaw RawReason
@@ -3784,7 +3808,8 @@ translateRecursorAppWithShape crec args = do
          (\i a -> if i < nParams
                      then pure (paramTrans !! i)
                      else if i == nParams
-                       then translateRecursorMotive motiveReturnsRaw a
+                       then translateMotiveAtConvention
+                              (motiveConventionFor nIndices motiveReturnsRaw a) a
                        else if isCasePos i
                          then translateCaseHandler
                                 motiveReturnsRaw
@@ -3984,24 +4009,6 @@ translateRecursorAppWithShape crec args = do
           Variable vn _ ->
             findIndex (== vn) ctorParamNames
           _ -> Nothing
-
-    translateRecursorMotive ::
-      TermTranslationMonad m => Bool -> Term -> m Lean.Term
-    translateRecursorMotive motiveReturnsRaw motiveTerm =
-      case asLambdaList motiveTerm of
-        ([], _) -> translateTerm motiveTerm
-        (params, body) -> do
-          surroundingSkipWrap <- view skipBinderWrap <$> askTR
-          phase <- phaseBetaEnabled
-          localTR (set skipBinderWrap True) $
-            translateBinders params $ \paramTerms ->
-              localTR (set skipBinderWrap surroundingSkipWrap) $ do
-                bodyLean <- translateTermLet body
-                let bodyWrapped =
-                      if phase && not motiveReturnsRaw
-                         then wrapExcept bodyLean
-                         else bodyLean
-                pure (Lean.Lambda paramTerms bodyWrapped)
 
 -- | Translate a recursor case-handler argument. The handler is
 -- typically a 'Lambda' chain whose initial binders bind the
@@ -4826,6 +4833,64 @@ translateLambdaAtConvention conv t = do
            let lam = Lean.Lambda (concatMap bindTransToBinder bts) bodyLean
            pure (TranslatedTermAt lam BindingFunction
                    (Just (ExpectFunctionPosition (Just conv))))
+
+-- | The declared convention for a recursor's motive argument (plan
+-- Slice 3c). Binders are the datatype's indices followed by the
+-- eliminated scrutinee; both are raw. The scrutinee reuses
+-- 'StructuralRecursorFieldPosition' (the calculus's "structural
+-- field" raw reason); indices are 'RawIndexPosition'. Neither is
+-- 'RawTypePosition' even for sort-typed index binders — motive
+-- binders keep the surrounding 'sortBinderMode', unlike the
+-- type-binder slots of value-lambda conventions.
+motiveConventionFor :: Int -> Bool -> Term -> MotiveConvention
+motiveConventionFor nIndices motiveReturnsRaw motiveTerm =
+  let (params, _) = asLambdaList motiveTerm
+      positions =
+        [ if ix < nIndices
+             then ExpectRaw RawIndexPosition
+             else ExpectRaw StructuralRecursorFieldPosition
+        | (ix, _) <- zip [0 :: Int ..] params
+        ]
+  in MotiveConvention positions
+       (if motiveReturnsRaw
+           then MotiveComputesRawType
+           else MotiveComputesRuntimeValueType)
+
+-- | Translate a recursor motive at its declared convention (plan
+-- Slice 3c; calculus §Recursors / §Eq.rec: motive binder positions
+-- and motive result position are convention fields, not local
+-- rediscovery). Binders introduce at their declared raw positions via
+-- 'translateBinderAt' — replacing the blanket @skipBinderWrap True@
+-- flag the legacy motive path set — and the TYPE-level body wraps in
+-- @Except String@ exactly when the convention says the motive
+-- computes a runtime value type. Non-lambda motives (no binders to
+-- declare) keep the generic translation.
+translateMotiveAtConvention ::
+  TermTranslationMonad m => MotiveConvention -> Term -> m Lean.Term
+translateMotiveAtConvention conv motiveTerm =
+  case asLambdaList motiveTerm of
+    ([], _) -> translateTerm motiveTerm
+    (params, body) -> do
+      phase <- phaseBetaEnabled
+      let introduce [] [] k = k []
+          introduce (rho : rhos) ((vn, ty) : rest) k =
+            translateBinderAt (Just rho) vn ty $ \bnd ->
+              introduce rhos rest $ \bnds -> k (bnd : bnds)
+          introduce _ _ _ =
+            Except.throwError (RejectedPrimitive "recursor motive"
+              "internal contract: motive convention arity does not \
+              \match the motive lambda's binder count")
+      introduce (mcBinderPositions conv) params $ \bts -> do
+        bodyLean <- translateTermLet body
+        let bodyWrapped =
+              if phase && mcResultMode conv == MotiveComputesRuntimeValueType
+                 then wrapExcept bodyLean
+                 else bodyLean
+            lam = Lean.Lambda (concatMap bindTransToBinder bts) bodyWrapped
+        tracePositionAt (ExpectRaw RawMotivePosition) motiveTerm
+          (TranslatedTermAt lam BindingFunction
+             (Just (ExpectRaw RawMotivePosition)))
+        pure lam
 
 -- | Unshared translation with the expected position threaded (see
 -- 'translateSharedAt'). Case arms consume @mrho@ as Slice 3 migrates
