@@ -465,6 +465,7 @@ writeRocqTerm ::
   TopLevel ()
 writeRocqTerm name notations skips path t = do
   let configuration =
+        withImportCryptolPrimitivesForSAWCoreExtra $
         withImportCryptolPrimitivesForSAWCore $
         withImportSAWCorePrelude $
         rocqTranslationConfiguration notations skips
