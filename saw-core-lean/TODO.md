@@ -121,245 +121,99 @@ emission strategy. Therefore:
 
 ## Current State
 
-The Phase-beta expected-shape migration has reached a useful checkpoint:
+The Phase-beta expected-shape migration is in place: `BindingShape` tracks
+raw/wrapped/function bindings, result shapes are carried by translation paths
+(not rediscovered from emitted Lean), the old result-shape classifier and
+broadly-defaulting stream helpers are gone, and `fix`/`MkStream` lower through
+generic proof-carrying obligations rather than Haskell-side productivity
+assumptions. The auto-emitted SAWCore Prelude path has an explicit
+raw-vs-wrapped declaration convention.
 
-- `BindingShape` now tracks raw, wrapped, and function-shaped local bindings.
-- Result shapes are carried by translation paths instead of rediscovered from
-  emitted Lean syntax.
-- The old general Lean result-shape classifier has been removed.
-- Ordinary applications, shared `let`s, recursor case fields, and many wrapped
-  helper calls now use explicit shape information.
-- The old broadly defaulting stream helpers have been removed from the support
-  library.
-- `fix` lowerings now use checked helpers with emitted productivity obligations
-  rather than hidden Haskell-side productivity assumptions.
-- Unsupported `fix` shapes now fall back to a generic Lean obligation requiring
-  existence and uniqueness of a fixed point, instead of being silently lowered
-  or rejected solely because Haskell lacks a shape-specific productivity proof.
-- The long-term direction is to retire most or all semantic Haskell classifiers
-  for recursion/productivity/totality. Haskell should emit the ordinary
-  translated term plus an explicit Lean contract; Lean theorems and tactics
-  should recognize and discharge common patterns.
-- A Haskell classifier can still be useful as an optional proof producer: if it
-  recognizes a shape, it may emit a Lean lemma/proof script intended to
-  discharge the regular obligation. The classifier result is not trusted unless
-  the emitted Lean evidence kernel-checks.
-- Direct `MkStream` construction with residual per-index effects now emits a
-  pointwise-totality obligation rather than defaulting those effects.
-- The auto-emitted SAWCore Prelude path now has an explicit raw-vs-wrapped
-  declaration convention and elaborates under the focused driver test.
-- 2026-07-02 position/callee checkpoint: the proof-transport regressions in
-  rows such as `obligations/proof_add_nat_assoc` show that the current
-  wrapping migration is still missing a first-class expected-position /
-  callee-convention abstraction. `RecursorConvention` is a useful local
-  instance, but raw logical callees such as `Eq__rec` must not be translated
-  through the ordinary Phase-beta value application path. Working design note:
-  `doc/2026-07-02_position-callee-conventions-design.md`. Semantic contract:
-  `doc/2026-07-02_position-callee-calculus.md`.
+The 2026-07-02 position/callee work established the semantic contract
+(`doc/2026-07-02_position-callee-calculus.md`) and implemented the first
+raw-logical slice (`Eq`/`Refl`/`Eq.rec`). The key finding from that work: the
+translator is still bottom-up — it translates naturally and repairs shape with
+syntactic predicates — while the calculus is top-down (position pushed from
+context). Closing that gap is the current operative priority; see below.
 
-The backend is not yet complete for arbitrary accepted SAWCore or for the full
-Rocq feature surface. The current audit changes the immediate ordering:
-regression results must become trustworthy before more backend rows are
-promoted. After that, the next priority is emission quality: every emitted Lean
-file should either elaborate with explicit proof obligations or fail at SAW
+The backend is not yet complete for arbitrary accepted SAWCore or the full Rocq
+feature surface. The next priority is emission quality: every emitted Lean file
+should either elaborate with explicit proof obligations or fail at SAW
 translation with a clear, principled diagnostic.
 
-Current execution order after the 2026-07-03 position/callee checkpoint:
+The 2026-07-02/03 slices (raw-logical `Eq`/`Refl`/`Eq.rec`, raw/wrapped
+recursor and dictionary convention, fold-family value-function convention,
+direct-vector fallback review, prefix-partial checked-access) are landed and no
+longer active blockers. Their design docs remain useful references:
+`doc/2026-07-02_raw-wrapped-recursor-dictionary-plan.md`,
+`doc/2026-07-03_higher-order-function-conventions-goal.md`,
+`doc/2026-07-03_higher-order-proof-carrying-wrappers-goal.md`.
 
-1. **P0: position/callee convention design gate.**
-   The theory review has converged on
-   `doc/2026-07-02_position-callee-calculus.md` as the semantic contract for the
-   next implementation slice. Execute
-   `doc/2026-07-02_position-callee-conventions-goal.md`: add explicit
-   expected-position/callee/definition conventions, make equality subject
-   representations explicit, promote the raw logical proof-transport rows, and
-   classify rather than patch all adjacent surfaces. Do not patch `Eq__rec`,
-   `Nat`, or the failing proof fixtures locally; use them as load-bearing
-   examples for the accepted convention. Treat the first checkpoint as narrow:
-   dispatch classification plus `Eq`/`Refl`/`Eq.rec` raw logical handling, with
-   Lean-elaborating positive proof-transport rows before any broader migration.
-   2026-07-03 checkpoint: the first raw-logical slice is implemented and
-   focused validation passes. The five Nat proof-transport rows
-   (`proof_add_nat_assoc`, `proof_eq_nat_add_0`, `proof_eq_nat_add_s`,
-   `proof_eq_nat_add_comm`, `proof_equal_nat_to_eq_nat`) now elaborate as
-   positive obligation rows, and artifact review shows raw `Eq.rec` motives
-   returning `Nat`, not `Except String Nat`. The new
-   `obligations/proof_transport_runtime_subject` row pins the opposite case:
-   equality over runtime computations uses the wrapped carrier
-   `Except String Bool`. The implementation still deliberately rejects
-   function-carrier equality in this slice; that is a follow-up convention
-   problem, not a reason to rawify functions or infer from Lean syntax.
+The remaining pinned surfaces (stream/productivity, direct recursors, proof
+primitives, large crypto/LLVM stress) are tracked in Priorities 1–5 below. The
+detailed priority sections that follow preserve the 2026-07-01 audit's ordering
+for reference, but the operative next work is the position-directed refactor
+described in the section immediately below.
 
-   Current broad-sweep classification after this checkpoint:
-   - 2026-07-03 follow-up: `differential/cryptol_ec_fold_scan` and
-     `differential/vector_fold` have been promoted to true differential rows by
-     the higher-order value-function convention. The `vector_fold` row also
-     covers the residual bitvector partial-application shape (`bvAdd 4`) that
-     previously blocked `drivers/sequences.t18`.
-     Validation for this fold-family checkpoint:
-     `git diff --check`, focused `differential/vector_fold`, focused
-     `differential/cryptol_ec_fold_scan`,
-     `make -C otherTests/saw-core-lean conformance`, and
-     `cabal test saw-core-lean-smoketest` all passed. A focused
-     `drivers/sequences` run still reports only stale checked-bounds golden
-     diffs; no `*.fail` artifacts were produced, and `test_sequences.t18.lean`
-     elaborates.
-   - Audit note: unsupported residual partial applications should continue to
-     fail clearly at SAW translation where possible. The current fold fix did
-     not add a confirmed unsound path, generated-Lean recognizer, or fixture
-     special case, but future higher-order convention work should keep the
-     generic partial-application eta path aligned with the explicit
-     wrapped-helper value-slot predicate so diagnostics stay principled.
-   - `differential/stream_helpers` is a pinned stream/productivity gap whose
-     expected diagnostic has been updated: the artifact now elaborates only
-     with proof stubs, and true differential tests correctly reject reliance on
-     `sorry`. Treat this as stream proof-carrying/productivity work, not as
-     raw-logical equality work.
-   - `drivers/sawcore_prelude_auto_emit` exposes function-shaped equality
-     subjects in auto-emitted Prelude code. The current raw-logical convention
-     rejects these conservatively; a future slice needs a principled
-     function-carrier equality convention or proof obligation.
-   - The remaining full `test` failures are stale broad goldens/proof-driver
-     artifacts from explicit-universe `@Eq.{u}` output, checked
-     bounds/index/helper changes such as `genWithBoundsM`/`atWithProof_checkedM`,
-     stream/core recursor boundaries, and known higher-order example gaps.
-     Refresh only after artifact review; do not treat those diffs as evidence
-     against the raw-logical slice.
-   - 2026-07-03 verification: `cabal build exe:saw`,
-     `cabal test saw-core-lean-smoketest`, `git diff --check`, and
-     `make -C otherTests/saw-core-lean conformance` pass. The required
-     `make -C otherTests/saw-core-lean test` sweep reports 34 failures, all in
-     broad `drivers/*` or `proofs/*` rows. The focused raw-logical,
-     runtime-subject equality, recursor, and dictionary rows pass as positive
-     rows; the 34 broad failures remain classified as stale golden/proof-driver
-     drift, stream/core recursor boundaries, checked-bounds golden churn, or
-     higher-order proof-carrying/function-convention gaps.
+## Operative Priority: Position-Directed Translation
 
-2. **P1: raw/wrapped recursor and dictionary convention.**
-   2026-07-02 checkpoint: the core wrapped-dictionary portion is implemented.
-   `differential/unit_recursor_raw_scrutinee`,
-   `differential/cryptol_vector_eq_dictionary`,
-   `drivers/cryptol_module_simple`, and
-   `drivers/cryptol_polymorphic_class_dict` now pass focused validation. The
-   convention is explicit: wrapped value scrutinees are sequenced with
-   `Bind.bind`; value-producing function recursors either bind after
-   eta-expansion or, when post-scrutinee function arguments are already present,
-   bind the scrutinee around the fully applied recursor call; raw/proof results
-   reject at SAW translation.
-   Remaining former P0 witnesses are now classified as separate work:
-   `differential/stream_helpers` needs stream-recursion/productivity design, and
-   the former `drivers/sequences.t18` mismatch is closed by the P2 fold-family
-   value-function convention below. Do not rawify dictionaries/streams/functions
-   by default, inspect emitted Lean syntax, or special-case `PEqSeq`,
-   `RecordType.rec`, or `Stream.rec`.
-   Working plan: `doc/2026-07-02_raw-wrapped-recursor-dictionary-plan.md`.
+Full execution plan: `doc/2026-07-08_position-directed-translation-plan.md`.
 
-3. **P2: higher-order value-function conventions for wrapped helpers.**
-   Goal document:
-   `doc/2026-07-03_higher-order-function-conventions-goal.md`.
-   2026-07-03 checkpoint: implemented for the fold-family slice.
-   `differential/vector_fold` and `differential/cryptol_ec_fold_scan` now pass
-   as true differential rows. The implementation uses a declared wrapped-helper
-   value-function convention, not recognition of `+`, `addNat`, generated Lean
-   syntax, or fixture paths. `drivers/sequences.t18` now elaborates; the
-   remaining `drivers/sequences` failure is stale checked-bounds golden drift,
-   not a fold-function convention blocker.
+This is the current top technical focus. The goal is to make the position/callee
+calculus (`doc/2026-07-02_position-callee-calculus.md`) the *implementation* of
+the term translator rather than a document it approximates. Today the translator
+is bottom-up (translate naturally, repair shape with syntactic predicates such
+as `shouldWrapBinder`, `isVariableHead`, `natValueResult`, `typeArgPositions`,
+and — worst — `bindingShapeOfTerm`, which inspects the emitted Lean AST). The
+calculus is top-down: expected position `ρ` is pushed from context and a term's
+representation is a function of `(ρ, source term)`.
 
-4. **P3: direct vector fallback/defaulting review.**
-   2026-07-03 checkpoint: reviewed and refreshed
-   `drivers/conformance_vector` and `drivers/conformance_vector_zip`.
-   The visible `atWithDefaultM` calls in those artifacts are faithful emissions
-   of source-level `atWithDefault`, including explicit default behavior, not
-   legacy fallback/defaulting from checked indexing. No `saw_throw_error`
-   default, unchecked checked-helper bypass, or Lean elaboration failure remains
-   in these rows. Keep future direct-vector fixes under the checked
-   bounds/index contract discipline; do not reintroduce fallback/defaulting for
-   proof-carrying vector helpers.
+Why this is the deep priority: emission correctness is currently defended by
+"Lean's typechecker rejects a wrong shape". That is sound for shape mistakes but
+*not* for the surfaces where both representations typecheck — equality subject
+representation, `Eq.rec` proof transport, and recursor constructor order — which
+are silent-unsoundness risks the bottom-up heuristics cannot reason about.
 
-5. **P4: higher-order proof-carrying wrappers.**
-   Goal document:
-   `doc/2026-07-03_higher-order-proof-carrying-wrappers-goal.md`.
-   2026-07-03 checkpoint: implemented the prefix-partial checked-access slice.
-   `obligations/vector_at_partial_bare` and
-   `obligations/vector_at_partial_function` pin bare `at` and `at n a xs` as
-   functions over the missing ordinary arguments that emit the same `i < n`
-   obligation and consume `atWithProof_checkedM`. Dependent-prefix forms such
-   as `at n` and `at n a` are pinned as boundary rejections until a
-   substitution-aware higher-order convention is designed. `drivers/implRev4`
-   now elaborates after a reviewed golden refresh. The implementation keeps
-   unsupported missing proof/function argument shapes rejected; it does not
-   restore raw/defaulting fallback behavior.
+SAW-side proof replay (`offline_lean` marking goals solved without invoking
+Lean) is deliberately NOT part of this work. It is bounded end-game plumbing —
+the test harness already implements the required checks (exact goal type,
+`#print axioms` minus `sorryAx`, axiom allowlist) — and is tracked in
+Priority 5.
 
-6. **P5: core SAWCore representation gaps.**
-   These block full Rocq parity and complete SAWCore coverage: direct recursors,
-   user datatypes, `ListSort`/`FunsTo`, loaded primitive/axiom declarations,
-   and injected Lean code policy. They are broad design tasks; keep them pinned
-   in differential/obligation/boundary rows until each has a checked
-   realization or proof-carrying contract.
+Slices (each emitted-Lean-diff-reviewed and green before commit; see the plan
+doc for per-slice regression fences and bounded validation commands):
 
-7. **P6: remaining proof-primitive obligations.**
-   Many representative proof primitives now emit exact obligations, but rows
-   such as `proof_coerce_eq`, `proof_bv_eq_to_eq_nat`, `proof_prove_le_nat`,
-   `proof_nat_compare_le`, vector/fold lemmas, and order bridges remain known
-   gaps. Promote these only through exact emitted obligations or axiom-clean
-   Lean theorem realizations.
+- [ ] **Slice 0** — instrument a `translateAt ρ t` seam + position trace,
+  behavior-inert (migration safety net / oracle).
+- [ ] **Slice 1** — enrich `Γ` and `TranslatedTerm` to the full calculus record
+  (source type, Lean ident, bound position, representation, exact Lean type);
+  stop collapsing raw-value/index/proof/motive into one `BindingRaw`.
+- [ ] **Slice 2** — make `adaptTo` the single adaptation chokepoint; delete
+  `bindingShapeOfTerm`/`bindingShapeOfLeanTermM` (emitted-AST inspection).
+- [ ] **Slice 3** (3a–3d) — push position through `Pi`/`Lambda`/`let`; demote
+  `shouldWrapBinder`, `isVariableHead`, `natValueResult`, `phaseBetaResultShape`
+  from position authorities to convention-internal helpers.
+- [ ] **Slice 4** — real callee conventions for every callee; retire
+  `CalleeTransitional`; decompose `originalDispatchWithShape` into a convention
+  interpreter + table.
+- [ ] **Slice 5** — equality subject representation & `Eq.rec` proof transport
+  declared (never inferred from type names). Load-bearing positive rows:
+  `obligations/proof_add_nat_assoc`, `proof_eq_nat_add_0`, `proof_eq_nat_add_s`,
+  `proof_eq_nat_add_comm`, `proof_equal_nat_to_eq_nat`, and
+  `proof_transport_runtime_subject`; wrapped-value equality must not regress.
+- [ ] **Slice 6** — recursors as a position/callee instance; close the
+  `@Foo.rec`-by-name constructor-order trust hole (bridges to the separately
+  tracked direct-recursor / `PosRep` work in
+  `doc/2026-07-03_direct-recursor-semantics-design.md`).
+- [ ] **Slice 7** — delete the demoted heuristics; add an anti-regression lint
+  (no `bindingShapeOfTerm`, no `CalleeTransitional`, no emitted-AST shape
+  inspection); sync `STATUS.md`, the Priority 2 items below, and the calculus
+  doc's "Current Rough Edges".
 
-8. **P7: proof ergonomics and large stress proofs.**
-   Derived bounds proofs, recurrence proofs, BV-heavy crypto, SHA512, and
-   broad tactic support are important but not the backend-completion gate.
-   They should remain explicit proof gaps or stress items until the emitted
-   contracts are stable. Do not add Lean automation in the Haskell emitter and
-   do not use `bv_decide`/native-evaluation proof artifacts as accepted proof
-   discharge.
-
-9. **P8: final SAW-side proof replay UX.**
-   Integrated `offline_lean` proof checking, import isolation, provenance
-   manifests, and user-facing replay ergonomics are required before a final
-   soundness claim. They remain behind emission correctness and conformance
-   guardrails.
-
-The 2026-07-01 audit's original ordering is preserved below in the detailed
-priority sections. After the 2026-07-03 checkpoints, the raw-logical,
-recursor/dictionary, fold-family value-function, direct-vector fallback review,
-broad `sequences` golden-drift, and prefix-partial checked-access slices are no
-longer active blockers. The next highest-impact backend design task is now the
-remaining core representation/proof surfaces: stream/productivity, direct
-recursors, proof primitives, and other pinned conformance gaps.
-
-2026-07-02 example-refresh checkpoint:
-
-- The default example sweep now has 18 classified driver failures and reports
-  87 pinned known-gap/proof-gap/stress inventory rows; every `proofs/*` and
-  `support-proofs/*` row passes in the current harness.
-- `drivers/cryptol_module_rec_ones` and
-  `drivers/cryptol_module_stream_fibs` are current-emission smoke tests for
-  stream/fix proof-carrying output. They elaborate with explicit
-  `saw_mkStream_total_exists` and `saw_fix_unique_exists` obligations, but
-  they are not proof-discharge examples because the generated local
-  obligations are still placeholders.
-- The live blocking rows are now stream/productivity design, higher-order
-  checked index wrappers, recurrence proof gaps, and large crypto/LLVM stress
-  examples. Preserve those failures until each has a principled emission,
-  proof-support path, or reviewed current-emission refresh.
-- 2026-07-03 update: the wrapped dictionary / raw recursor convention has been
-  promoted for `cryptol_module_simple`, `cryptol_polymorphic_class_dict`, and
-  `cryptol_vector_eq_dictionary`. `stream_helpers` and `sequences.t18` are
-  separate design gaps, not evidence that dictionary recursor emission is still
-  ad hoc. The `sequences.t18` fold-function blocker is now covered by promoted
-  differential rows in `differential/vector_fold` and
-  `differential/cryptol_ec_fold_scan`. The broad `sequences` driver now passes
-  after reviewed checked-bounds golden refresh; it remains current-emission
-  smoke, not proof discharge.
-- 2026-07-03 proof/example audit: every current `proofs/*` example passes
-  against tracked emitted artifacts, and `make -C otherTests/saw-core-lean
-  gaps` reports the expected proof-gap/stress inventory. Probing the preserved
-  `proof-gaps/*/proof.lean` attempts did not reveal an obvious promotable
-  proof: E4/E5 are still blocked by visible bounds obligations, crypto/LLVM
-  gaps remain proof-support or scalability work, and
-  `cryptol_chacha20_core_iterate` also exposes stale large-artifact drift
-  around checked Nat div/mod helper names. Do not update examples merely to
-  hide these obligations; promote a gap only when the current emitted artifact
-  has a checked proof without forbidden automation.
+Guardrails (from the calculus §Stop Conditions): no new Lean axioms; no `sorry`
+as evidence; never classify by fixture name or emitted Lean AST; never use
+`DefPreserveRaw` as a use-site proxy; when a slice cannot classify a case,
+reject and pin a fixture rather than widen a heuristic.
 
 ## Priority 0: Test Harness Integrity
 
@@ -1088,216 +942,22 @@ recursors, proof primitives, and other pinned conformance gaps.
     - non-conformance regression/support/integration coverage.
   - Do not count a Lean-only proof, golden diff, or elaboration-only check as
     semantic conformance.
-  - 2026-06-29 correction: added `differential/*` and changed `make
-    conformance` to exclude legacy `drivers/conformance_*` and
-    `support-proofs/conformance_*`. Added the first tiny true-differential Boolean
-    litmus. Next work is to migrate existing small legacy litmus candidates
-    into this shape without adding large examples.
-  - 2026-06-29 checkpoint: the active true differential suite now includes
-    focused litmus tests for Boolean primitives, closed lambda/application,
-    `id`/`sawLet`, unreachable `error` branches, algebraic/control recursors,
-    Nat/Int/IntMod/Rational scalars, string primitives including
-    `bytesToString`, tuple and record projection/update, bitvector literals,
-    bitvector conversions, bitvector arithmetic, bitwise/shift operations,
-    order/extension/counting operations, and finite vector literals. All
-    positive cases compare SAW-observed output against Lean-observed output
-    from the emitted artifact.
-  - 2026-06-29 checkpoint: expanded true differential coverage for SAWCore
-    parser `let` and type ascription, string empty/escape cases, vector
-    empty/singleton/nested literals, Cryptol sequence take/drop/update/map/zip,
-    and Cryptol bitvector rotates. These all passed as real SAW-vs-emitted-Lean
-    observations.
-  - 2026-06-29 checkpoint: expanded scalar/algebraic coverage with defined Nat
-    arithmetic, Int division/modulus, IntMod add/neg, and Maybe
-    constructors/recursor. Added pinned differential known gaps for SAW-side
-    evaluator panics on Pos-backed observations (`pos_values` and
-    `nat_pos_recursor_eval`); these fail before Lean can observe an emitted
-    artifact, so they are conformance-harness/backend-input findings rather
-    than Lean backend fixes.
-  - 2026-06-29 checkpoint: `differential/*/.known-gap` support now pins real
-    differential failures with required diagnostic substrings. The first such
-    cases were `vector_gen_at`, `vector_shift_rotate`, and `vector_fold`.
-    2026-07-01 update: `vector_fold` now has positive differential coverage;
-    the remaining vector known gaps are proof-support/bounds issues rather
-    than the raw-function-to-wrapped-helper adaptation gap.
-  - 2026-06-29 checkpoint: added the first bitvector conformance pair for
-    defined division/remainder, signed division/remainder, arithmetic shift,
-    and `bvLg2`. Added a scalar conformance pair for Nat, Int, IntMod, and a
-    small rational smoke case. A generated-output proof of whole emitted
-    conjunctions was too expensive in the current literal-vector/normalization
-    shape; keep that as a harness improvement target, not a reason to drop
-    differential coverage.
-  - 2026-06-29 checkpoint: expanded bitvector conformance to cover arithmetic
-    wraparound, shifts, bitwise operations, unsigned/signed comparisons,
-    extension, popcount, leading/trailing zeros, and the existing defined
-    division/log cases. Added defined `divModNat` quotient/remainder coverage
-    to the scalar pair. These are support-library conformance checks, not new
-    Haskell-side recognizers.
-  - 2026-06-29 checkpoint: added vector-helper conformance for `gen`,
-    `atWithDefault`, `shiftL`, `shiftR`, `rotateL`, `rotateR`, `foldr`, and
-    `foldl`. This exposed a higher-order wrapper adaptation gap. 2026-07-01
-    update: the gap is closed by the explicit `UseArgFunction` convention for
-    wrapped helper formals; the row is now a positive differential test.
-  - 2026-06-29 checkpoint: added tuple conformance for concrete pair
-    construction/projection and nested tuple projection. This pins the
-    `PairType ... UnitType` representation used by emitted SAW tuples and by
-    helper results such as `divModNat`.
-  - 2026-06-29 checkpoint: added record and string conformance pairs. Record
-    coverage checks concrete construction, projection, nested projection, and
-    update semantics against the Lean `RecordType` realization. String coverage
-    checks `appendString` / `equalString` behavior used by Cryptol error-message
-    plumbing.
-  - 2026-06-29 checkpoint: added algebraic/control conformance for concrete
-    `Either`, `UnitType`, `EmptyType`, and `ite` behavior. The driver proves
-    the source facts in SAW; the paired Lean proof pins the support-library
-    constructors, recursor behavior, and `iteM` branch order.
-    2026-07-01 audit follow-up: added
-    `differential/unit_recursor_raw_scrutinee` as a pinned known gap. It emits
-    a value-producing `UnitType#rec` function and applies it in the observer,
-    catching the raw-scrutinee convention bug where a wrapped source variable
-    is passed to Lean's raw `UnitType.rec`.
-  - 2026-06-29 checkpoint: drafted stream conformance for `Stream#rec`,
-    `MkStream`, `streamIdx`, and `streamScanl`. This exposed a recursor
-    result-shape convention gap: a wrapped scrutinee can feed a recursor whose
-    motive returns a raw value such as `Nat`, while the surrounding value-domain
-    flow expects `Except String Nat`. Do not patch this with local
-    "already-wrapped" predicates; resolve it through an explicit recursor
-    convention/adaptation design.
-    2026-07-01 update: the focused wrapping migration did not safely close the
-    stream-helper row. Wrapped `MkStream`/helper results still flow into raw
-    `Stream.rec` positions; solving this needs separate proof-carrying
-    stream/recursor design, not another local wrapping patch.
-  - 2026-06-29 checkpoint: added focused true-differential coverage for a
-    finite `MkStream`/`Stream#rec` projection. This small projection now
-    compares SAW and emitted-Lean observations directly; the larger legacy
-    `streamScanl`/helper surface still needs focused litmus migration.
-  - 2026-06-29 checkpoint: added Boolean conformance for `not`, `and`, `or`,
-    `xor`, and `boolEq`. The paired Lean proof pins the checked `xor`/`boolEq`
-    facades without adding any Haskell-side special reasoning.
-  - 2026-06-29 checkpoint: added bitvector conversion conformance for
-    `bvToNat`, `bvToInt`, `sbvToInt`, `bvNat`, and `intToBv`.
-  - 2026-06-29 checkpoint: added core control conformance for `id` and
-    `sawLet`.
-  - 2026-06-29 checkpoint: added unreachable-error conformance. SAW proves
-    closed Cryptol facts where the `error "boom"` branch is unreachable, while
-    the paired Lean proof pins `saw_throw_error` and `iteM` branch selection.
-  - 2026-06-29 checkpoint: added scalar-extra conformance for defined Nat
-    arithmetic (`addNat`, `mulNat`, `minNat`, `maxNat`, `expNat`,
-    `doubleNat`, `pred`, `ltNat`), Int arithmetic/comparison/conversion,
-    `fromIntMod`, `intModSub`, `intModMul`, and nonzero Rational arithmetic.
-    `leNat` is not in this differential fixture because SAW's current `w4`
-    path panics while evaluating the closed source term `leNat 4 4`; track it
-    as a SAW-side conformance-harness blocker, not a Lean backend fix.
-  - 2026-06-29 checkpoint: added `bytesToString` conformance for a concrete
-    ASCII byte vector.
-  - 2026-06-29 checkpoint: added direct SAWCore `zip` conformance for unequal
-    input lengths, truncation to `minNat`, pair projection, and defaulted
-    out-of-bounds access. This exposes the same raw function-result adaptation
-    gap as the existing `genM` vector fixture.
-  - 2026-06-29 checkpoint: added parser/module differential coverage for
-    explicit `Pi`/`sort 0` binders and a loaded `.sawcore` module with local
-    and qualified ordinary-definition references. Added Cryptol.sawcore
-    differential coverage for `const`, `compose`, finite append, reverse, join,
-    and split.
-  - 2026-06-29 checkpoint: expanded the parser/module coverage with a
-    cross-module import/qualified-name litmus and explicit `isort`/`qsort`
-    parser-surface coverage. Added a small Cryptol.sawcore `Num` litmus for
-    `TCNum`, `TCInf`, `tcFin`, and `getFinNat`.
-  - 2026-06-29 checkpoint: added a positive import-hiding litmus for loaded
-    `.sawcore` modules. It checks that a non-hidden import resolves
-    unqualified while a hidden declaration is still available by qualified
-    name. A stricter local-shadowing probe exposed SAW-side ambiguity, so that
-    should be treated separately if we decide it is an input-language boundary
-    worth pinning.
-  - 2026-06-29 checkpoint: added a direct user-defined SAWCore datatype
-    boundary fixture. A closed datatype computation can reduce away before
-    Lean emission, which is not enough to prove datatype emission support; the
-    new fixture forces the datatype to remain in the term and pins the current
-    rejection as a known gap.
-  - 2026-06-29 checkpoint: added focused direct-result partial-operation
-    boundary fixtures for `divNat`, `divModNat`, `intDiv`, `bvUDiv`,
-    `bvSDiv`, `ratio`, and `rationalRecip` at zero divisors/denominators.
-    2026-06-30 update: scalar Nat/Int/Rational, direct bitvector, and Cryptol
-    zero-divisor wrapper fixtures now emit proof-carrying obligations and
-    checked helpers. Remaining work is proof ergonomics for executable replay
-    of nonzero examples.
-  - 2026-06-29 checkpoint: added a focused finite-observation stream-helper
-    differential known gap for `streamGet`, `streamMap`, shifts, and
-    `streamScanl`. SAW evaluates the closed Boolean, but emitted Lean still
-    mixes wrapped stream construction with raw `Stream.rec` positions. The true
-    differential harness correctly refuses to count it as executable
-    conformance.
-  - 2026-06-29 checkpoint: expanded Cryptol.sawcore dictionary and entry-point
-    coverage. Positive true-differential rows now cover type-level `tc*`
-    arithmetic, Bool/Integer/word/pair equality and comparison dictionaries,
-    signed word comparison, zero/logic/ring dictionaries, and defined
-    integral/field entry points (`ecDiv`, `ecMod`, `ecRecip`, `ecFieldDiv`).
-    2026-07-01 update: the focused wrapper-adaptation gaps for
-    `updFst`/`updSnd` updater lambdas and `ecFoldl`/`ecFoldlPrime` are now
-    positive true-differential rows. `ecAt`'s finite
-    bounds surface has since moved to checked `Prelude.at` obligations, and
-    generated-vector `ecAt` examples now replay through `genWithBoundsM`.
-  - 2026-06-29 checkpoint: added true-differential coverage for ordinary
-    literal dictionaries and rounding entry points (`ecNumber`, `ecFraction`,
-    `ecFromInteger`, Rational floor/ceiling/truncate/rounding), plus
-    deterministic effect-like Cryptol entry points (`ecTrace`, `ecDeepseq`) and
-    finite `ecParmap`. Added a focused float known gap: `TCFloat` and its
-    dictionaries are in the backend surface, but Cryptol.sawcore currently routes
-    representative operations through runtime `error`.
-  - 2026-06-29 checkpoint: added higher-universe sort binder coverage,
-    sort-1 `PairType1` coverage, safe `coerce`/`rcoerce` coverage, direct
-    `Num_rec` coverage, additional finite/infinite `tc*` arithmetic coverage,
-    finite observations of infinite sequences, finite Cryptol sequence
-    generator wrappers, additional Rational/IntMod/Unit/sequence dictionaries,
-    and more BV `ec*` wrappers. New pinned gaps: residual `ZtoNat`, reachable
-    `Prelude.error`/`ecRandom` runtime errors pending an error-outcome observer,
-    Suite-B crypto primitives implemented as runtime `error`, and residual
-    `natCase` in `ecSShiftR`/`ecSExt` wrappers.
-  - 2026-06-29 checkpoint: added record and empty-tuple/empty-record dictionary
-    coverage, a message-specific `ecError` runtime-error known gap, a
-    representative projective-helper runtime-error known gap, and a direct
-    Cryptol.sawcore sequence-helper known gap. Later generated-index evidence
-    promotes the direct sequence fixture; remaining sequence gaps involve
-    derived-index arithmetic or other helper-specific proof obligations.
-  - 2026-06-29 checkpoint: added positive true-differential coverage for
-    `tcWidth`, function dictionaries, stream dictionaries, and additional
-    deterministic `ec*` comparison/logic/ring wrappers. Added focused known gaps
-    for `ecFoldl`/`ecFoldlPrime` wrapper adaptation and `ecScanl` reaching the
-    deliberately rejected bounded-vector `Prelude.scanl` primitive. 2026-07-01
-    update: `ecFoldl`/`ecFoldlPrime` now have positive differential coverage;
-    `ecScanl` remains separate because it reaches the rejected bounded-vector
-    `Prelude.scanl` primitive.
-  - 2026-06-29 checkpoint: expanded direct Cryptol.sawcore `ec*` coverage with
-    positive true-differential tests for finite `ecCat`/`ecTake`/`ecDrop`/
-    `ecJoin`/`ecSplit`, `ecTranspose`, `ecAtBack`, `ecUpdate`, `ecUpdateEnd`,
-    `ecShiftL`/`ecShiftR`, and `toSignedInteger`. Added focused known gaps for
-    `ecSDiv`/`ecSMod` leaving residual `Nat__rec`, `ecExp` leaving residual
-    `expByNat`, and GF2 polynomial operations leaving residual proof lemmas.
-    2026-07-01 update: the Nat arithmetic proof lemmas now emit obligations;
-    the GF2 polynomial fixture gets further and now pins residual `Nat__rec`.
-  - 2026-06-29 checkpoint: added positive direct coverage for the remaining
-    finite range producers `ecFromToByLessThan` and
-    `ecFromToDownByGreaterThan`, plus direct finite `ecReverse`.
-  - 2026-06-29 checkpoint: added direct Cryptol.sawcore entry coverage for
-    IntMod literal dictionaries, `ecArray*`, `ecFp*`, and SHA2 primitives.
-    IntMod and IntModNum literals are true SAW-vs-emitted-Lean differential
-    conformance. The array, FP, and SHA rows are pinned known gaps with real
-    diagnostics from the SAW producer path: unsupported SMT-array translation
-    and Cryptol.sawcore runtime `error` implementations.
-  - 2026-06-29 checkpoint: added a true differential litmus for an
-    under-applied/function-valued SAWCore term. SAW observes the same lambda
-    application after applying it to a concrete argument; Lean imports the
-    emitted function artifact and applies that artifact. This closes the main
-    `App`/`Lambda` function-valued coverage hole without reconstructing the
-    term by hand in the observer.
-  - 2026-06-29 checkpoint: tightened existing positive coverage by adding a
-    non-`Nat` Bool type-ascription observation and `zipWith` to the small
-    sequence litmus. These are still tiny differential tests, not broad
-    examples.
-  - 2026-06-29 checkpoint: added a direct `List`/`ListSort`/`FunsTo`
-    differential known gap. SAW evaluates the closed observation to true, but
-    Lean emission deliberately rejects residual `ListSort` because the
-    algebraic-enum support encoding has no checked Lean realization yet.
+  - Status (2026-07-03): the true-differential suite is broad — 104
+    `differential/*` rows spanning Boolean/scalar/bitvector/vector/tuple/record/
+    string primitives, algebraic/control recursors, parser/module constructs,
+    and most Cryptol.sawcore dictionary and `ec*` entry points, all comparing a
+    SAW observation against an observation of the emitted Lean. ~39 rows are
+    pinned `.known-gap`s (stream helpers, direct recursors, floats, SMT arrays,
+    residual runtime-`error` crypto primitives, derived-index bounds). The live
+    coverage matrix, not this list, is authoritative: `otherTests/saw-core-lean/CONFORMANCE.md`.
+  - Remaining conformance work: (1) deepen observers — most rows collapse to a
+    single Bool that is essentially always `true`, so a mistranslation that
+    still reduces to `Except.ok true` escapes; observe full result values /
+    multiple distinct outcomes / error outcomes (this is the fidelity-oracle
+    upgrade referenced by the position-directed plan's Slice-fence reviews);
+    (2) promote known-gap families as their backend surfaces land; (3) migrate
+    any remaining useful `drivers/conformance_*` litmus candidates into
+    `differential/*`.
 
 - [x] Add obligation-shape tests for proof-carrying boundaries.
   - Current planning note:
@@ -1758,117 +1418,49 @@ recursors, proof primitives, and other pinned conformance gaps.
     generated `by sorry` are emission/elaboration tests only. They must not be
     counted as checked proof-discharge regressions.
 
-## Audit Findings: 2026-06-28
+## Audit History
 
-Immediate priority from the comprehensive adversarial audit:
+Three adversarial audits shaped the current priorities. Full reports:
+`doc/2026-06-28_clever-legacy-path-audit.md`,
+`doc/2026-06-29_comprehensive-audit.md`, and the 2026-07-01 audit summary. Most
+of their immediate blockers are resolved: `classifyPolyStreamIterate`,
+`FixShapes`, and `rawifyExceptToRaw` are removed; the `bvLg2` ceiling-log and
+bitvector zero-divisor semantics are fixed (routed through proof-carrying
+checked helpers); the harness-validity issues that were Priority 0 (ignored
+differential observers, stale-artifact inspection, completed-proof drift,
+known-gaps-look-green) are closed. The convergence signal the audits called for
+— reducing known-gap *families* through declarative contract tables rather than
+patching individual examples — remains the correct measure of progress.
 
-- Remove or demote Haskell semantic shortcuts. The first target was
-  `classifyPolyStreamIterate`, which has now been removed; the next targets are
-  the remaining dead or live clever paths cataloged in
-  `doc/2026-06-28_clever-legacy-path-audit.md`.
-- Finish deleting backup/legacy paths. The `FixShapes`/`rawifyExceptToRaw`
-  cleanup is complete; continue applying the same rule to the remaining
-  cataloged paths.
-- Continue the expected-shape migration. Fix known wrong-shape cases before
-  investing further in proof automation.
-- Keep rawification under scrutiny. Where Haskell rewrites `Except` structure
-  into raw terms, either the rewrite must be syntactically trivial and
-  obviously correct or the semantic preservation proof must move to Lean.
-- Rework generic axiom/primitive emission, imported-name realization, numeric
-  macro collapse, and global raw-value lifting so that they either become
-  literal syntactic emission or proof-carrying Lean-checked contracts.
-- Fix prototype false-validation risks: `completed.lean` goal drift and
-  driver-level `sorry` acceptance should not be able to make a broken emission
-  strategy look green.
-- Keep the generic wrapped `fix` contract pinned with regression probes: it now
-  rejects bodies where a successful fixed point coexists with an `Except.error`
-  fixed point.
-- Later cleanup: prove or further isolate the two Vec/BitVec round-trip axioms,
-  update stale README/STATUS/examples, and implement SAW-side proof replay.
+Still-live items carried into the priorities above and the operative plan:
 
-## Audit Findings: 2026-06-29
+- Silent-unsoundness surfaces (the deep focus): equality subject representation,
+  `Eq.rec` proof transport, and recursor constructor-order trust — Operative
+  Priority (position-directed translation).
+- TCB shrink: prove or isolate the two Vec/BitVec round-trip axioms; replace or
+  make proof-carrying `scLiteralFold`; decide whether imported realizations need
+  semantic theorems beyond type-checking — Priority 2.
+- Raw Lean injection policy: `InjectCodeDecl "Lean"` must not remain an ordinary
+  untrusted path to arbitrary emitted Lean — Priority 2.
+- SAW-side `offline_lean` replay (emit-and-admit today): deferred end-game
+  plumbing — Priority 5.
 
-Fresh adversarial audit reference:
-`doc/2026-06-29_comprehensive-audit.md`.
+Known-gap backlog triage (still current):
 
-Validated immediate blockers:
-
-- Fix SAW-vs-Lean bitvector semantic mismatches for division by zero and
-  `bvLg2`.
-- Prove or remove the two Vec/BitVec round-trip axioms.
-- Keep generated files with local `by sorry` obligations classified as
-  incomplete outlines. They may elaborate, but they are not checked discharges.
-- Treat `offline_lean` as emit-stage behavior until a real Lean replay command
-  exists.
-
-Architecture follow-ups:
-
-- Decide whether raw `InjectCodeDecl "Lean"` is rejected in sound mode or only
-  allowed as an explicitly trusted support-library mechanism.
-- Decide whether imported realizations need semantic realization theorems for
-  the parity milestone, or remain explicit trusted assumptions.
-- Replace or make proof-carrying the remaining Haskell semantic routing:
-  `scLiteralFold`, opaque-builtin discovery, and transitional raw/wrapped
-  classifiers.
-- Classify tests as emission/golden, elaborates-with-open-obligations, or
-  checked discharge.
-- Scrub docs after the immediate semantic fixes so current behavior is not
-  confused with the intended final proof-discharge workflow.
-
-## Audit Findings: 2026-07-01
-
-Fresh adversarial audit summary:
-
-- The project is converging, not merely patching examples. The strongest sign
-  is the move toward declarative contract tables for partial operations,
-  bounds/index evidence, and proof primitives. Keep measuring progress by
-  reducing known-gap families through principled contracts, not by making
-  individual examples pass.
-- The immediate blocker is harness validity. Most differential observers are
-  currently ignored/untracked, producer harnesses can inspect stale emitted
-  `.lean` files, completed proof tests are coupled to tracked goldens more than
-  fresh producer output, and known gaps can be mistaken for green conformance.
-  These issues threaten our ability to validate all later backend work, so they
-  are now Priority 0.
-- `offline_lean` remains an important final trust boundary, but it is not the
-  current top priority. Until the emission and harness layers stabilize, treat
-  `offline_lean` as an emit-stage workflow. Do not spend this phase building
-  final SAW-side replay UX unless a test-harness issue requires it.
-- Continue the proof-carrying-emission path next: remaining proof primitives,
-  raw/wrapped proof-value interfaces, direct recursors, user datatypes,
-  `ListSort`/`FunsTo`, and loaded primitive/axiom declarations.
-- Decide the raw Lean injection policy before claiming a sound module-emission
-  story. `InjectCodeDecl "Lean"` cannot remain an ordinary untrusted path to
-  arbitrary emitted Lean in the final backend.
-- Keep shrinking the TCB: prove or isolate the Vec/BitVec round-trip axioms,
-  replace or make proof-carrying `scLiteralFold`, and decide whether imported
-  realizations need semantic theorem obligations beyond type checking.
-
-Backlog triage from the current 79 known-gap entries:
-
-- High priority after harness repair:
-  - obligation known gaps for proof primitives:
-    `proof_coerce_eq`, `proof_bv_eq_to_eq_nat`, `proof_prove_le_nat`,
-    `proof_nat_compare_le`, BV/order bridges, vector/fold lemmas, and
-    conditional-congruence lemmas;
-  - direct recursor and datatype/list surfaces:
-    `recursor_*`, `user_datatype_recursor`, `list_sort_funs_to`, and
-    `cryptol_algebraic_enum`;
-  - loaded custom primitive/axiom declarations and injected Lean code policy.
-- Medium priority:
-  - executable differential rows that already expose correct obligations but
-    wait on Lean-side proof support for bounds, branch-guard reflection,
-    direct constant vector/literal bounds, Rational/BV nonzero evidence, or
-    derived index arithmetic;
-  - stream-helper executable replay, now blocked on separate proof-carrying
-    stream/recursor design for wrapped construction flowing into raw
-    `Stream.rec` positions.
-- Low priority / not a feature-completion gate:
-  - full SHA512 and large BV-heavy crypto proofs;
-  - broad proof automation and proof-cookbook polish;
-  - final SAW-side `offline_lean` proof replay UX, import isolation, and
-    provenance manifests. These remain required before a final soundness claim,
-    but not before the emission/conformance milestone.
+- High priority: proof-primitive obligations (`proof_coerce_eq`,
+  `proof_bv_eq_to_eq_nat`, `proof_prove_le_nat`, `proof_nat_compare_le`,
+  BV/order bridges, vector/fold lemmas, conditional-congruence); direct
+  recursor / datatype / list surfaces (`recursor_*`, `user_datatype_recursor`,
+  `list_sort_funs_to`, `cryptol_algebraic_enum`); loaded custom primitive/axiom
+  declarations and injected-Lean-code policy.
+- Medium priority: differential rows that already expose correct obligations but
+  await Lean-side proof support (bounds, branch-guard reflection, constant/
+  literal vector bounds, Rational/BV nonzero evidence, derived-index
+  arithmetic); stream-helper executable replay (blocked on proof-carrying
+  stream/recursor design).
+- Low priority / not a completion gate: full SHA512 and BV-heavy crypto proofs;
+  broad proof automation and cookbook polish; final SAW-side replay UX, import
+  isolation, provenance manifests.
 
 ## Decision Log
 
@@ -1908,6 +1500,8 @@ Backlog triage from the current 79 known-gap entries:
 
 ## References
 
+- `doc/2026-07-08_position-directed-translation-plan.md` (operative plan)
+- `doc/2026-07-03_direct-recursor-semantics-design.md`
 - `doc/2026-06-26_phase-beta-expected-shape.md`
 - `doc/2026-06-26_expected-shape-todo.md`
 - `doc/2026-07-01_complete-wrapping-migration-goal.md`
