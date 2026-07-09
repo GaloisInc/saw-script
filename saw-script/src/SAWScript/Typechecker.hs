@@ -742,8 +742,8 @@ resolveVar pos'i i ty = do
 --
 --   Given two types, either fail or resolve unification vars so aso
 --   to make them the same.
-mgu :: PPS.Opts -> Pos -> [(Type, Type)] -> Type -> Type -> TI ()
-mgu ppopts pos encsbase t1base t2base = do
+mgu :: Pos -> [(Type, Type)] -> Type -> Type -> TI ()
+mgu pos encsbase t1base t2base = do
     -- Use pos as the failure position for either type; they're the
     -- same type after all, and any position that gives rise to it
     -- should be good enough if expandFully croaks. (Hopefully.)
@@ -758,6 +758,7 @@ mgu ppopts pos encsbase t1base t2base = do
 
     -- | Fail with expected/found types
     let reject msg more = do
+          ppopts <- asks tiPPOpts
           let tyexp = t1
               tyfound = t2
           let (posexp, tyexp') = prettyTypeDetails ppopts tyexp
@@ -784,6 +785,7 @@ mgu ppopts pos encsbase t1base t2base = do
           case Map.lookup i $ unifyVars ty of
               Nothing -> pure ty
               Just _otherpos -> do
+                  ppopts <- asks tiPPOpts
                   let t1' = prettyType ppopts t1
                       t2' = prettyType ppopts t2
                       i' = prettyType ppopts $ TyUnifyVar pos'i i
@@ -827,6 +829,7 @@ mgu ppopts pos encsbase t1base t2base = do
             let names1 = Map.keysSet namedParams1
                 names2 = Map.keysSet namedParams2
             if names1 /= names2 then do
+                ppopts <- asks tiPPOpts
                 let t1' = prettyType ppopts t1
                     t2' = prettyType ppopts t2
                     missing1 = Map.difference namedParams2 namedParams1
@@ -857,7 +860,7 @@ mgu ppopts pos encsbase t1base t2base = do
                 let namedParamsAll =
                         Map.intersectionWith (\a b -> (a, b)) namedParams1 namedParams2
                     (np1, np2) = unzip $ Map.elems namedParamsAll
-                mgus ppopts pos ((t1, t2) : encs) np1 np2
+                mgus pos ((t1, t2) : encs) np1 np2
 
             -- Now unify as many positional params as possible. This
             -- also produces the remainder types, basically the return
@@ -872,7 +875,7 @@ mgu ppopts pos encsbase t1base t2base = do
                     let encs' = (t1, t2) : encs
                         params2l = take n1 params2
                         params2r = drop n1 params2
-                    mgus ppopts pos encs' params1 params2l
+                    mgus pos encs' params1 params2l
                     -- we've used up params1.
                     let ty' = TyFunc pos2 noNames params2r Map.empty ret2
                     pure (ret1, ty')
@@ -882,18 +885,18 @@ mgu ppopts pos encsbase t1base t2base = do
                     let encs' = (t1, t2) : encs
                         params1l = take n2 params1
                         params1r = drop n2 params1
-                    mgus ppopts pos encs' params1l params2
+                    mgus pos encs' params1l params2
                     -- we've used up params2'.
                     let ty' = TyFunc pos1 noNames params1r Map.empty ret1
                     pure (ty', ret2)
                 else do
                     let encs' = (t1, t2) : encs
-                    mgus ppopts pos encs' params1 params2
+                    mgus pos encs' params1 params2
                     -- we've used up both params1 and params2.
                     pure (ret1, ret2)
 
             -- now unify the remainders / return types
-            mgu ppopts pos ((t1, t2) : encs) remainder1 remainder2
+            mgu pos ((t1, t2) : encs) remainder1 remainder2
 
         (TyRecord _ ts1, TyRecord _ ts2)
           | Map.keys ts1 /= Map.keys ts2 ->
@@ -902,7 +905,7 @@ mgu ppopts pos encsbase t1base t2base = do
 
           | otherwise ->
             -- records with the same field names, try unifying the field types
-            mgus ppopts pos ((t1, t2) : encs) (Map.elems ts1) (Map.elems ts2)
+            mgus pos ((t1, t2) : encs) (Map.elems ts1) (Map.elems ts2)
 
         (TyCon _ tc1 ts1, TyCon _ tc2 ts2) | tc1 == tc2 -> do
             -- same type constructor, unify the args
@@ -920,6 +923,7 @@ mgu ppopts pos encsbase t1base t2base = do
                 -- Therefore, if we get here, something's broked and we should
                 -- panic.
                 --
+                ppopts <- asks tiPPOpts
                 let ts1' = "LHS:" : map (\t -> "   " <> ppType ppopts t) ts1
                     ts2' = "RHS:" : map (\t -> "   " <> ppType ppopts t) ts2
                 let n1' = Text.pack $ show $ length ts1
@@ -928,7 +932,7 @@ mgu ppopts pos encsbase t1base t2base = do
                               "expected " <> n1' <> ", found " <> n2'
                 panic "mgu" (heading : ts1' ++ ts2')
 
-            mgus ppopts pos ((t1, t2) : encs) ts1 ts2
+            mgus pos ((t1, t2) : encs) ts1 ts2
 
         (TyVar _ a, TyVar _ b) | a == b ->
             -- Same named variable, nothing to do
@@ -945,9 +949,9 @@ mgu ppopts pos encsbase t1base t2base = do
             reject "Type mismatch." []
 
 -- | Run `mgu` on two lists of types.
-mgus :: PPS.Opts -> Pos -> [(Type, Type)] -> [Type] -> [Type] -> TI ()
-mgus ppopts pos encs t1s t2s =
-    zipWithM_ (mgu ppopts pos encs) t1s t2s
+mgus :: Pos -> [(Type, Type)] -> [Type] -> [Type] -> TI ()
+mgus pos encs t1s t2s =
+    zipWithM_ (mgu pos encs) t1s t2s
 
 --
 -- Unify two types.
@@ -984,23 +988,19 @@ mgus ppopts pos encs t1s t2s =
 -- future given more clarity.
 --
 unify :: Type -> Pos -> Type -> TI ()
-unify t1 pos t2 = do
-    ppopts <- asks tiPPOpts
-    mgu ppopts pos [] t1 t2
+unify t1 pos t2 =
+    mgu pos [] t1 t2
 
 -- Check if two types match but don't actually unify them
--- (that is, on success throw away the substitution and on error
--- throw away the complaints)
+-- (that is, throw away any changes or diagnostics that appear)
 --
 -- This is inelegant, and used for some workaround logic to decide
 -- which unifications to attempt to avoid failures on things we don't
 -- want to make fatal just yet. It should be removed when no longer
 -- needed.
 matches :: Pos -> Type -> Type -> TI Bool
-matches pos t1 t2 = do
-    ppopts <- asks tiPPOpts
-    result <- speculateTI $ mgu ppopts pos [] t1 t2
-    pure result
+matches pos t1 t2 =
+    speculateTI $ unify t1 pos t2
 
 
 ------------------------------------------------------------
