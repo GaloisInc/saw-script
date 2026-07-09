@@ -129,14 +129,21 @@ instance UnifyVars NamedType where
 ------------------------------------------------------------
 -- Substitutions
 
--- Subst is the type of a substitution map for unification vars.
-newtype Subst = Subst { unSubst :: Map TypeIndex Type } deriving (Show)
-
-emptySubst :: Subst
-emptySubst = Subst Map.empty
-
-substFromList :: [(TypeIndex, Type)] -> Subst
-substFromList entries = Subst $ Map.fromList entries
+-- | Subst is the type of a substitution map for unification vars.
+--
+--   For the substitution we accumulate in the `TI` context while
+--   working, we maintain the following invariant:
+--
+--      If one unification var @b@ points to another unification
+--      var @a@, @a < b@. That is, entries in the map that point
+--      to other entries always point downwards. This prevents
+--      generating cycles.
+--
+--   This does not apply to the smaller transient substitutions
+--   we use in `generalize`, whose entries always map unification
+--   vars to named vars.
+--
+type Subst = Map TypeIndex Type
 
 --
 -- appSubst is a type-class-polymorphic function for applying a
@@ -234,7 +241,7 @@ instance AppSubst Type where
             TyFunc pos ninfo params' namedParams' ret'
         TyRecord pos fs -> TyRecord pos (appSubst s fs)
         TyVar _ _  -> t
-        TyUnifyVar _ i -> case Map.lookup i (unSubst s) of
+        TyUnifyVar _ i -> case Map.lookup i s of
             Just t' -> t'
             Nothing -> t
 
@@ -316,7 +323,7 @@ runTI ppopts avail varenv tyenv m =
             tiVarEnv = varenv,
             tiTyEnv = tyenv,
             tiNextTypeIndex = 0,
-            tiSubst = emptySubst,
+            tiSubst = Map.empty,
             tiErrors = [],
             tiWarnings = []
         }
@@ -661,13 +668,73 @@ prettyTypeDetails ppopts ty =
     in
     (pos, msg)
 
--- | Resolve a unification var: add a mapping in the table we're
---   carrying around.
-resolveVar :: TypeIndex -> Type -> TI ()
-resolveVar i ty = do
-    Subst subst <- gets tiSubst
-    let subst' = Subst $ Map.insert i ty subst
+-- | Insert an entry in the substitution we're carrying around. Raw
+--   version; everyone except `resolveVar` should call `resolveVar`
+--   instead.
+addResolution :: TypeIndex -> Type -> TI ()
+addResolution i ty = do
+    subst <- gets tiSubst
+    let subst' = Map.insert i ty subst
     modify (\rw -> rw { tiSubst = subst' })
+
+-- | Resolve a unification var: update the table we're carrying around
+--   to hold the new definition for @i@.
+resolveVar :: Pos -> TypeIndex -> Type -> TI ()
+resolveVar pos'i i ty = do
+    -- Check if we should prefer using t1 to t2 as an expansion.
+    -- Return the unification variable ID inside t2.
+    let prefer t1 t2 = case (t1, t2) of
+          (TyUnifyVar _ j, TyUnifyVar pos'k k)
+              | j < k -> Just (pos'k, k) -- prefer t1/j
+              | otherwise -> Nothing
+          (TyUnifyVar{}, _) -> Nothing
+          (_, TyUnifyVar pos'j j) -> Just (pos'j, j) -- prefer t1
+          (_, _) ->
+              -- We should only ever get here for convertible types;
+              -- we could check that; but we don't have an easy way
+              -- to at the moment, so don't bother.
+              Nothing
+
+    -- Insert the new result. Shuffle around what's already there
+    -- as needed to preserve the ordering invariant.
+    case ty of
+        TyUnifyVar pos'j j | j > i ->
+            -- Maintain the ordering invariant for unification vars
+            -- pointing at each other.
+            resolveVar pos'j j (TyUnifyVar pos'i i)
+        _ -> do
+            -- Check what's in slot i.
+            subst <- gets tiSubst
+            case Map.lookup i subst of
+                Nothing ->
+                    -- Nothing already there, resolve to what we've got
+                    addResolution i ty
+                Just ty'already ->
+                    -- There's already a type there. Check if it's a
+                    -- unification var we should replace.
+                    case prefer ty ty'already of
+                        Nothing ->
+                            -- There's a type already there, and we
+                            -- shouldn't replace it with @ty@. If @ty@
+                            -- is a unification var, resolve @ty@ to
+                            -- the type already there. Otherwise, both
+                            -- types are real types. We could assert
+                            -- that they're convertible, but we don't
+                            -- have an easy way to do that. There is
+                            -- no need to do anything else.
+                            case ty of
+                                TyUnifyVar pos'j j ->
+                                    resolveVar pos'j j ty'already
+                                _ ->
+                                    pure ()
+                        Just (pos'j, j) -> do
+                            -- There's a type already there, and we
+                            -- should replace it because it's a
+                            -- unification var. Do that, then resolve
+                            -- its unification var too.
+                            addResolution i ty
+                            resolveVar pos'j j ty
+                                
 
 -- | Guts of unification.
 --
@@ -734,25 +801,15 @@ mgu ppopts pos encsbase t1base t2base = do
             -- same unification var, nothing to do
             pure ()
 
-        (TyUnifyVar _ i, _) -> do
+        (TyUnifyVar pos'i i, _) -> do
             -- one side is a unification var, resolve it
-            --
-            -- XXX: we can resolve TyUnifyVar i to TyUnifyVar j here,
-            -- which is fine as far as it goes but there doesn't seem
-            -- to be any logic to prohibit also resolving TyUnifyVar j
-            -- to TyUnifyVar i and creating cycles.
             t2' <- checkOccurs (Pos.getPos t2) i t2
-            resolveVar i t2'
+            resolveVar pos'i i t2'
 
-        (_, TyUnifyVar _ i) -> do
+        (_, TyUnifyVar pos'i i) -> do
             -- the other side is a unification var, resolve it
-            --
-            -- XXX: we can resolve TyUnifyVar i to TyUnifyVar j here,
-            -- which is fine as far as it goes but there doesn't seem
-            -- to be any logic to prohibit also resolving TyUnifyVar j
-            -- to TyUnifyVar i and creating cycles.
             t1' <- checkOccurs (Pos.getPos t1) i t1
-            resolveVar i t1'
+            resolveVar pos'i i t1'
 
         (TyFunc pos1 _ params1 namedParams1 ret1,
          TyFunc pos2 _ params2 namedParams2 ret2) -> do
@@ -2060,7 +2117,7 @@ generalize foralls pats0 es0 ts0 = do
     let is3 = [ (i, adjustPos pos, "a." <> Text.pack (show i)) | (i, pos) <- is2 ]
 
     -- build a substitution
-    let s = substFromList [ (i, TyVar pos n) | (i, pos, n) <- is3 ]
+    let s = Map.fromList [ (i, TyVar pos n) | (i, pos, n) <- is3 ]
 
     -- get the names for the Forall
     let inames = [ (pos, n) | (_i, pos, n) <- is3 ]
