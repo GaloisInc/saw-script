@@ -904,8 +904,30 @@ mgu ppopts pos encsbase t1base t2base = do
             -- records with the same field names, try unifying the field types
             mgus ppopts pos ((t1, t2) : encs) (Map.elems ts1) (Map.elems ts2)
 
-        (TyCon _ tc1 ts1, TyCon _ tc2 ts2) | tc1 == tc2 ->
+        (TyCon _ tc1 ts1, TyCon _ tc2 ts2) | tc1 == tc2 -> do
             -- same type constructor, unify the args
+            when (length ts1 /= length ts2) $ do
+                -- This case is unreachable.
+                --
+                -- Every distinct type constructor has a definite
+                -- arity (tuples of different lengths are not the same
+                -- type constructor) and every type is supposed to
+                -- pass `checkType` before we do anything more
+                -- significant with it; that does a kind check, and on
+                -- failure produces a fresh unification var that can't
+                -- cause further trouble.
+                --
+                -- Therefore, if we get here, something's broked and we should
+                -- panic.
+                --
+                let ts1' = "LHS:" : map (\t -> "   " <> ppType ppopts t) ts1
+                    ts2' = "RHS:" : map (\t -> "   " <> ppType ppopts t) ts2
+                let n1' = Text.pack $ show $ length ts1
+                    n2' = Text.pack $ show $ length ts2
+                    heading = "Mismatched type constructor arguments: " <>
+                              "expected " <> n1' <> ", found " <> n2'
+                panic "mgu" (heading : ts1' ++ ts2')
+
             mgus ppopts pos ((t1, t2) : encs) ts1 ts2
 
         (TyVar _ a, TyVar _ b) | a == b ->
@@ -924,38 +946,8 @@ mgu ppopts pos encsbase t1base t2base = do
 
 -- | Run `mgu` on two lists of types.
 mgus :: PPS.Opts -> Pos -> [(Type, Type)] -> [Type] -> [Type] -> TI ()
-mgus ppopts pos encs t1s t2s = case (t1s, t2s) of
-    ([], []) ->
-        pure ()
-    (t1 : t1s', t2 : t2s') -> do
-        -- unify the first types
-        mgu ppopts pos encs t1 t2
-        -- recurse on the rest
-        mgus ppopts pos encs t1s' t2s'
-    (_, _) -> do
-        -- This case is unreachable.
-        --
-        -- Of the calls to `mgus` above, the only one that doesn't
-        -- have a length check directly guarding it is the case for
-        -- type constructors. However, note that every distinct type
-        -- constructor has a definite arity (tuples of different
-        -- lengths are not the same type constructor) and every type
-        -- is supposed to pass `checkType` before we do anything more
-        -- significant with it; that does a kind check, and on failure
-        -- produces a fresh unification var that can't cause further
-        -- trouble.
-        --
-        -- Therefore, if we get here, something's broked and we should
-        -- panic. Note that by the time we trip here one of the lists
-        -- will always be empty.
-        --
-        let t1s' = map (\t -> "   " <> ppType ppopts t) t1s
-            t2s' = map (\t -> "   " <> ppType ppopts t) t2s
-        let n1' = Text.pack $ show $ length t1s
-            n2' = Text.pack $ show $ length t2s
-            heading = "Mismatched type lists: expected " <> n1' <>
-                      ", found " <> n2'
-        panic "mgus" (heading : "Leftovers are:" : t1s' ++ t2s')
+mgus ppopts pos encs t1s t2s =
+    zipWithM_ (mgu ppopts pos encs) t1s t2s
 
 --
 -- Unify two types.
