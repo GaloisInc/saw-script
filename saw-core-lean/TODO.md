@@ -190,9 +190,15 @@ doc for per-slice regression fences and bounded validation commands):
   call sites; byte-diff oracle: `support/emitted-lean-snapshot.sh`
   (`snapshot`/`diff` against `.snapshots/<name>`, "emitted" = untracked
   `*.lean`).
-- [ ] **Slice 1** — enrich `Γ` and `TranslatedTerm` to the full calculus record
+- [x] **Slice 1** — enrich `Γ` and `TranslatedTerm` to the full calculus record
   (source type, Lean ident, bound position, representation, exact Lean type);
   stop collapsing raw-value/index/proof/motive into one `BindingRaw`.
+  `BindingInfo` record in `_bindingEnv`; `TranslatedTerm` carries
+  `ttProducedAt :: Maybe ExpectedPosition` (bidirectional `TranslatedTerm`
+  pattern = greppable not-yet-position-declared marker). Positions recorded
+  only where unambiguous today (sort/wrapped/recursor-field/shadow/let-RHS);
+  `skipBinderWrap`-conflated cases stay `Nothing` until Slice 3. Emitted Lean
+  byte-identical to the Slice 0 baseline (snapshot oracle, 151 files).
 - [ ] **Slice 2** — make `adaptTo` the single adaptation chokepoint; delete
   `bindingShapeOfTerm`/`bindingShapeOfLeanTermM` (emitted-AST inspection).
 - [ ] **Slice 3** (3a–3d) — push position through `Pi`/`Lambda`/`let`; demote
