@@ -743,35 +743,34 @@ resolveVar pos'i i ty = do
 --   Given two types, either fail or resolve unification vars so aso
 --   to make them the same.
 mgu :: Pos -> [(Type, Type)] -> Type -> Type -> TI ()
-mgu pos encs t1base t2base = do
+mgu pos encs expectBase foundBase = do
     -- Use pos as the failure position for either type; they're the
     -- same type after all, and any position that gives rise to it
     -- should be good enough if expandFully croaks. (Hopefully.)
-    t1 <- expandFully pos t1base
-    t2 <- expandFully pos t2base
+    expect <- expandFully pos expectBase
+    found <- expandFully pos foundBase
 
     -- | Fail with expected/found types
     let reject msg more = do
           ppopts <- asks tiPPOpts
-          let tyexp = t1
-              tyfound = t2
           encs' <- do
-              let once (t1x, t2x) = do
-                    t1x' <- expandFully pos t1x
-                    t2x' <- expandFully pos t2x
-                    pure (t1x', t2x')
+              let once (t1, t2) = do
+                    t1' <- expandFully pos t1
+                    t2' <- expandFully pos t2
+                    pure (t1', t2')
               mapM once encs
-          let (posexp, tyexp') = prettyTypeDetails ppopts tyexp
-              (posfound, tyfound') = prettyTypeDetails ppopts tyfound
-              body = PP.vsep $ more ++ [
-                  prettyEnclosing ppopts ((tyexp, tyfound) : encs')
+          let body = PP.vsep $ more ++ [
+                  prettyEnclosing ppopts ((expect, found) : encs')
                ]
           recordError pos $ "Error:" <+> msg <> PP.line <> PP.indent 4 body
-          recordError posexp $ "Note:" <+> tyexp'
+
+          let (pos'expect, expect') = prettyTypeDetails ppopts expect
+              (pos'found, found') = prettyTypeDetails ppopts found
+          recordError pos'expect $ "Note:" <+> expect'
           -- Attach a blank line to this message so there's a separator
           -- between it and the next type error. XXX: we should have a
           -- less ad hoc way to do this.
-          recordError posfound $ "Note:" <+> tyfound' <> PP.hardline <> ""
+          recordError pos'found $ "Note:" <+> found' <> PP.hardline <> ""
 
     -- | We would like to resolve unification var @i@ to type @ty@.
     --   Make sure this is well formed.
@@ -786,35 +785,35 @@ mgu pos encs t1base t2base = do
               Nothing -> pure ty
               Just _otherpos -> do
                   ppopts <- asks tiPPOpts
-                  let t1' = prettyType ppopts t1
-                      t2' = prettyType ppopts t2
+                  let expect' = prettyType ppopts expect
+                      found' = prettyType ppopts found
                       i' = prettyType ppopts $ TyUnifyVar pos'i i
                       ty' = prettyType ppopts ty
 
                   _ <- reject "Occurs check failure." [
-                      "Cannot unify" <+> t1' <+>
-                      "with" <+> t2' <+> "because" <+> i' <+>
+                      "Cannot unify" <+> expect' <+>
+                      "with" <+> found' <+> "because" <+> i' <+>
                       "appears within" <+> ty' <> "."
                    ]
                   getErrorTyVar pos'i
 
-    case (t1, t2) of
+    case (expect, found) of
         (TyUnifyVar _ i, TyUnifyVar _ j) | i == j ->
             -- same unification var, nothing to do
             pure ()
 
         (TyUnifyVar pos'i i, _) -> do
             -- one side is a unification var, resolve it
-            t2' <- checkOccurs (Pos.getPos t2) i t2
-            resolveVar pos'i i t2'
+            found' <- checkOccurs (Pos.getPos found) i found
+            resolveVar pos'i i found'
 
         (_, TyUnifyVar pos'i i) -> do
             -- the other side is a unification var, resolve it
-            t1' <- checkOccurs (Pos.getPos t1) i t1
-            resolveVar pos'i i t1'
+            expect' <- checkOccurs (Pos.getPos expect) i expect
+            resolveVar pos'i i expect'
 
-        (TyFunc pos1 _ params1 namedParams1 ret1,
-         TyFunc pos2 _ params2 namedParams2 ret2) -> do
+        (TyFunc pos'expect _ expParams expNamedParams expRet,
+         TyFunc pos'found _ foundParams foundNamedParams foundRet) -> do
             -- First, unify the named parameters.
             --
             -- (We handle the named parameters first because because
@@ -826,14 +825,14 @@ mgu pos encs t1base t2base = do
             -- grow extra named (thus optional) parameters they ignore is
             -- sound, but possibly unexpected/weird, so for now require them
             -- to match exactly.
-            let names1 = Map.keysSet namedParams1
-                names2 = Map.keysSet namedParams2
-            if names1 /= names2 then do
+            let expNames = Map.keysSet expNamedParams
+                foundNames = Map.keysSet foundNamedParams
+            if expNames /= foundNames then do
                 ppopts <- asks tiPPOpts
-                let t1' = prettyType ppopts t1
-                    t2' = prettyType ppopts t2
-                    missing1 = Map.difference namedParams2 namedParams1
-                    missing2 = Map.difference namedParams1 namedParams2
+                let expect' = prettyType ppopts expect
+                    found' = prettyType ppopts found
+                    expMissing = Map.difference foundNamedParams expNamedParams
+                    foundMissing = Map.difference expNamedParams foundNamedParams
                     prettyMissing (name, ty) =
                         let ty' = prettyType ppopts ty in
                         PP.pretty name <+> ":" <+> ty'
@@ -846,9 +845,9 @@ mgu pos encs t1base t2base = do
                                 lines2 = PP.indent 3 ms'
                             in
                             [line1 <> PP.line <> lines2]
-                    missing1' = prettyMissingList t1' $ Map.toList missing1
-                    missing2' = prettyMissingList t2' $ Map.toList missing2
-                    missing' = missing1' ++ missing2'
+                    expMissing' = prettyMissingList expect' $ Map.toList expMissing
+                    foundMissing' = prettyMissingList found' $ Map.toList foundMissing
+                    missing' = expMissing' ++ foundMissing'
                 reject "Mismatched named parameters." missing'
 
             else do
@@ -857,10 +856,10 @@ mgu pos encs t1base t2base = do
                 -- (Map.toList namedParams2) and have things match up
                 -- correctly, but it makes me nervous, so do it like
                 -- this instead.
-                let namedParamsAll =
-                        Map.intersectionWith (\a b -> (a, b)) namedParams1 namedParams2
-                    (np1, np2) = unzip $ Map.elems namedParamsAll
-                mgus pos ((t1, t2) : encs) np1 np2
+                let allNamedParams =
+                        Map.intersectionWith (,) expNamedParams foundNamedParams
+                    (expNP, foundNP) = unzip $ Map.elems allNamedParams
+                mgus pos ((expect, found) : encs) expNP foundNP
 
             -- Now unify as many positional params as possible. This
             -- also produces the remainder types, basically the return
@@ -868,48 +867,48 @@ mgu pos encs t1base t2base = do
             -- is a -> c -> d, the remainder types are b and c -> d
             -- respectively.
 
-            let n1 = length params1
-                n2 = length params2
-            (remainder1, remainder2) <- do
-                if n1 < n2 then do
-                    let encs' = (t1, t2) : encs
-                        params2l = take n1 params2
-                        params2r = drop n1 params2
-                    mgus pos encs' params1 params2l
-                    -- we've used up params1.
-                    let ty' = TyFunc pos2 noNames params2r Map.empty ret2
-                    pure (ret1, ty')
-                else if n1 > n2 then do
+            let nExp = length expParams
+                nFound = length foundParams
+            (expRemainder, foundRemainder) <- do
+                if nExp < nFound then do
+                    let encs' = (expect, found) : encs
+                        foundParamsL = take nExp foundParams
+                        foundParamsR = drop nExp foundParams
+                    mgus pos encs' expParams foundParamsL
+                    -- we've used up expParams.
+                    let ty' = TyFunc pos'found noNames foundParamsR Map.empty foundRet
+                    pure (expRet, ty')
+                else if nFound > nExp then do
                     -- unfortunately we need two copies of this because
                     -- left vs. right side is semantically significant :-(
-                    let encs' = (t1, t2) : encs
-                        params1l = take n2 params1
-                        params1r = drop n2 params1
-                    mgus pos encs' params1l params2
-                    -- we've used up params2'.
-                    let ty' = TyFunc pos1 noNames params1r Map.empty ret1
-                    pure (ty', ret2)
+                    let encs' = (expect, found) : encs
+                        expParamsL = take nFound expParams
+                        expParamsR = drop nFound expParams
+                    mgus pos encs' expParamsL foundParams
+                    -- we've used up foundParams.
+                    let ty' = TyFunc pos'expect noNames expParamsR Map.empty expRet
+                    pure (ty', foundRet)
                 else do
-                    let encs' = (t1, t2) : encs
-                    mgus pos encs' params1 params2
-                    -- we've used up both params1 and params2.
-                    pure (ret1, ret2)
+                    let encs' = (expect, found) : encs
+                    mgus pos encs' expParams foundParams
+                    -- we've used up both expParams and foundParams.
+                    pure (expRet, foundRet)
 
             -- now unify the remainders / return types
-            mgu pos ((t1, t2) : encs) remainder1 remainder2
+            mgu pos ((expect, found) : encs) expRemainder foundRemainder
 
-        (TyRecord _ ts1, TyRecord _ ts2)
-          | Map.keys ts1 /= Map.keys ts2 ->
+        (TyRecord _ expFields, TyRecord _ foundFields)
+          | Map.keys expFields /= Map.keys foundFields ->
             -- records with different keys
             reject "Record field names do not match." []
 
           | otherwise ->
             -- records with the same field names, try unifying the field types
-            mgus pos ((t1, t2) : encs) (Map.elems ts1) (Map.elems ts2)
+            mgus pos ((expect, found) : encs) (Map.elems expFields) (Map.elems foundFields)
 
-        (TyCon _ tc1 ts1, TyCon _ tc2 ts2) | tc1 == tc2 -> do
+        (TyCon _ expTC expTS, TyCon _ foundTC foundTS) | expTC == foundTC -> do
             -- same type constructor, unify the args
-            when (length ts1 /= length ts2) $ do
+            when (length expTS /= length foundTS) $ do
                 -- This case is unreachable.
                 --
                 -- Every distinct type constructor has a definite
@@ -924,15 +923,15 @@ mgu pos encs t1base t2base = do
                 -- panic.
                 --
                 ppopts <- asks tiPPOpts
-                let ts1' = "LHS:" : map (\t -> "   " <> ppType ppopts t) ts1
-                    ts2' = "RHS:" : map (\t -> "   " <> ppType ppopts t) ts2
-                let n1' = Text.pack $ show $ length ts1
-                    n2' = Text.pack $ show $ length ts2
+                let expTS'   = "LHS:" : map (\t -> "   " <> ppType ppopts t) expTS
+                    foundTS' = "RHS:" : map (\t -> "   " <> ppType ppopts t) foundTS
+                let nexpect'   = Text.pack $ show $ length expTS
+                    nfound' = Text.pack $ show $ length foundTS
                     heading = "Mismatched type constructor arguments: " <>
-                              "expected " <> n1' <> ", found " <> n2'
-                panic "mgu" (heading : ts1' ++ ts2')
+                              "expected " <> nexpect' <> ", found " <> nfound'
+                panic "mgu" (heading : expTS' ++ foundTS')
 
-            mgus pos ((t1, t2) : encs) ts1 ts2
+            mgus pos ((expect, found) : encs) expTS foundTS
 
         (TyVar _ a, TyVar _ b) | a == b ->
             -- Same named variable, nothing to do
@@ -950,8 +949,8 @@ mgu pos encs t1base t2base = do
 
 -- | Run `mgu` on two lists of types.
 mgus :: Pos -> [(Type, Type)] -> [Type] -> [Type] -> TI ()
-mgus pos encs t1s t2s =
-    zipWithM_ (mgu pos encs) t1s t2s
+mgus pos encs expect found =
+    zipWithM_ (mgu pos encs) expect found
 
 --
 -- Unify two types.
