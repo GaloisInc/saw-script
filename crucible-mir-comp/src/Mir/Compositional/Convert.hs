@@ -42,13 +42,12 @@ import qualified What4.Partial as W4
 import qualified What4.SWord as W4 (SWord(..))
 
 import qualified SAWCore.Name as SAW
-import qualified SAWCore.Recognizer as SAW
 import qualified SAWCore.SharedTerm as SAW
 import qualified SAWCore.Simulator.MonadLazy as SAW
 import qualified SAWCore.Simulator.Value as SAW
 import SAWCoreWhat4.What4 (SValue)
 import qualified SAWCoreWhat4.What4 as SAW
-import qualified SAWCoreWhat4.ReturnTrip as SAW (toSC)
+import qualified SAWCoreWhat4.ReturnTrip as SAW
 
 import SAWCentral.Crucible.MIR.TypeShape
 
@@ -291,23 +290,22 @@ termToType sym term = do
 exprToTerm :: forall sym t fs tp m.
     (IsSymInterface sym, sym ~ MirSym t fs, MonadIO m, MonadFail m) =>
     sym ->
-    IORef (IntMap (Some (W4.Expr t))) ->
     W4.Expr t tp ->
     m SAW.Term
-exprToTerm sym w4VarMapRef expr = liftIO $ do
-    visitCache <- W4.newIdxCache
-    visitExprVars visitCache expr $ \var -> do
-        let varExpr = W4.BoundVarExpr var
-        varTerm <- eval varExpr
-        varName <- case SAW.asVariable varTerm of
-            Just (vn, _) -> pure vn
-            Nothing -> error "eval on BoundVarExpr produced non-Variable?"
-        modifyIORef w4VarMapRef $ IntMap.insert (SAW.vnIndex varName) (Some varExpr)
-    eval expr
-    where
-        eval :: forall tp'. W4.Expr t tp' -> IO SAW.Term
-        eval = SAW.toSC sym (mirSAWCoreState (sym ^. W4.userState))
-
+exprToTerm sym val = liftIO $
+  do
+    let st = mirSAWCoreState (sym ^. W4.userState)
+        sc = SAW.saw_sc st
+    v <- W4.idxCacheEval (SAW.saw_elt_cache st) val $
+      do
+        ty <- SAW.baseSCType sym sc (W4.exprType val)
+        vn <- SAW.scFreshVarName sc "w4expr"
+        modifyIORef (SAW.saw_elt_cache_r st) (IntMap.insert (SAW.vnIndex vn) (Some val))
+        term <- SAW.scVariable sc vn ty
+        return (SAW.SAWExpr term)
+    case v of
+      SAW.SAWExpr e -> pure e
+      _ -> fail "exprToTerm: expected SAWExpr"
 
 -- | Try to convert a Crucible register value into a SAW core `Term`, using
 -- a `CryTermAdaptor` to validate and convert references to slices.
@@ -321,12 +319,11 @@ regToTermWithAdapt :: forall m p sym t fs tp0 rtp args ret.
     sym ->
     SAW.SharedContext ->
     String ->
-    IORef (IntMap (Some (W4.Expr t))) ->
     CryTermAdaptor Integer ->
     TypeShape tp0 ->
     RegValue sym tp0 ->
     m SAW.Term
-regToTermWithAdapt sym sc name w4VarMapRef ada0 shp0 rv0 = go ada0 shp0 rv0
+regToTermWithAdapt sym sc name ada0 shp0 rv0 = go ada0 shp0 rv0
   where
     go :: forall tp.
         CryTermAdaptor Integer ->
@@ -335,7 +332,7 @@ regToTermWithAdapt sym sc name w4VarMapRef ada0 shp0 rv0 = go ada0 shp0 rv0
         m SAW.Term
     go ada shp rv =
       case (ada, shp, rv) of
-        (NoAdapt, _, _) -> regToTerm sym sc name w4VarMapRef shp rv
+        (NoAdapt, _, _) -> regToTerm sym sc name shp rv
         (AdaptTuple as, TupleShape _ elems, ag) -> do
             terms <- accessMirAggregate' sym elems as ag $ \_off _sz shp' rv' a -> go a shp' rv'
             liftIO $ SAW.scTuple sc terms
@@ -384,18 +381,17 @@ regToTerm :: forall sym t fs tp0 m.
     sym ->
     SAW.SharedContext ->
     String ->
-    IORef (IntMap (Some (W4.Expr t))) ->
     TypeShape tp0 ->
     RegValue sym tp0 ->
     m SAW.Term
-regToTerm sym sc name w4VarMapRef shp0 rv0 = go shp0 rv0
+regToTerm sym sc name shp0 rv0 = go shp0 rv0
   where
     go :: forall tp.
         TypeShape tp ->
         RegValue sym tp ->
         m SAW.Term
     go shp rv = case (shp, rv) of
-        (PrimShape _ _, expr) -> exprToTerm sym w4VarMapRef expr
+        (PrimShape _ _, expr) -> exprToTerm sym expr
         (TupleShape _ elems, ag) -> do
             terms <- accessMirAggregate sym elems ag $ \_off _sz shp' rv' -> go shp' rv'
             liftIO $ SAW.scTuple sc terms
