@@ -904,35 +904,53 @@ translateBinderAt mrho vn ty f = do
   -- @\.{u_n}@ levels at uses of polymorphic Lean targets.
   (ty', mUniv) <- case asSort ty of
     Just s -> do
-      -- Body and type walks may both encounter this binder. Memoize
-      -- on 'vn' so we allocate one universe per logical SAWCore
-      -- variable, not one per syntactic occurrence.
-      memo <- view universeBinderAssignments <$> get
-      case Map.lookup vn memo of
-        Just uname ->
-          do mode <- view sortBinderMode <$> askTR
-             let sort' = case mode of
-                   SortBinderAsSort -> Lean.SortVar uname
-                   SortBinderAsType -> Lean.TypeVar uname
-                 lvl = case mode of
-                   SortBinderAsSort -> Lean.LevelVar uname
-                   SortBinderAsType -> Lean.LevelSucc (Lean.LevelVar uname)
-             pure (Lean.Sort sort', Just lvl)
-        Nothing -> do
-          mode <- view sortBinderMode <$> askTR
-          let ctx = case mode of
-                SortBinderAsSort -> BinderPos
-                SortBinderAsType -> TypeCarrierPos
-          leanSort <- translateSort ctx s
-          case leanSort of
-            Lean.SortVar name -> do
-              modify (over universeBinderAssignments (Map.insert vn name))
-              pure (Lean.Sort leanSort, Just (Lean.LevelVar name))
-            Lean.TypeVar name -> do
-              modify (over universeBinderAssignments (Map.insert vn name))
-              pure (Lean.Sort leanSort, Just (Lean.LevelSucc (Lean.LevelVar name)))
-            _ ->
-              pure (Lean.Sort leanSort, Nothing)
+      -- When the surrounding function convention declares this
+      -- sort-typed binder a TYPE position ('RawTypePosition' — the
+      -- @a@ in @\(a : sort 0) (x : a) -> …@), the universe it
+      -- allocates must use the same 'sortBinderMode' the legacy
+      -- 'translateBindersSelective' index-binder path sets: Phase-β
+      -- enters a type binder as 'SortBinderAsType', otherwise
+      -- 'SortBinderAsSort'. Scoped to THIS binder's type translation
+      -- only — the continuation 'f' runs under the surrounding
+      -- reader, matching the legacy per-binder reset. For every other
+      -- @ρ@ (and 'Nothing', the legacy 'translateBinder'' callers) the
+      -- surrounding 'sortBinderMode' is read unchanged.
+      phase <- phaseBetaEnabled
+      let applyMode = case mrho of
+            Just (ExpectRaw RawTypePosition) ->
+              localTR (set sortBinderMode
+                         (if phase then SortBinderAsType else SortBinderAsSort))
+            _ -> id
+      applyMode $ do
+        -- Body and type walks may both encounter this binder. Memoize
+        -- on 'vn' so we allocate one universe per logical SAWCore
+        -- variable, not one per syntactic occurrence.
+        memo <- view universeBinderAssignments <$> get
+        case Map.lookup vn memo of
+          Just uname ->
+            do mode <- view sortBinderMode <$> askTR
+               let sort' = case mode of
+                     SortBinderAsSort -> Lean.SortVar uname
+                     SortBinderAsType -> Lean.TypeVar uname
+                   lvl = case mode of
+                     SortBinderAsSort -> Lean.LevelVar uname
+                     SortBinderAsType -> Lean.LevelSucc (Lean.LevelVar uname)
+               pure (Lean.Sort sort', Just lvl)
+          Nothing -> do
+            mode <- view sortBinderMode <$> askTR
+            let ctx = case mode of
+                  SortBinderAsSort -> BinderPos
+                  SortBinderAsType -> TypeCarrierPos
+            leanSort <- translateSort ctx s
+            case leanSort of
+              Lean.SortVar name -> do
+                modify (over universeBinderAssignments (Map.insert vn name))
+                pure (Lean.Sort leanSort, Just (Lean.LevelVar name))
+              Lean.TypeVar name -> do
+                modify (over universeBinderAssignments (Map.insert vn name))
+                pure (Lean.Sort leanSort, Just (Lean.LevelSucc (Lean.LevelVar name)))
+              _ ->
+                pure (Lean.Sort leanSort, Nothing)
     Nothing -> do
       skipWrap <- view skipBinderWrap <$> askTR
       inRecCase <- view inRecursorCaseBinder <$> askTR
@@ -1333,42 +1351,41 @@ translateFunctionWithWrappedResult t = do
             then translateTerm t
             else do
               let typeIxs = typeArgPositionsBinders params
-                  hasSortBinder = any (isJust . asSort . snd) params
-              -- Slice 3a: non-dependent value index function with no
-              -- sort binders — declare the convention ONCE and push it
-              -- down through 'translateAt'. Dependent (typeIxs ≠ []) and
-              -- sort-binder cases stay on the legacy binder machinery
-              -- (Slice 3b).
-              if null typeIxs && not hasSortBinder
-                 then do
-                   inRecCase <- view inRecursorCaseBinder <$> askTR
-                   -- Convention-internal use of 'shouldWrapBinder'
-                   -- (plan Slice 3.4): the position of each binder is
-                   -- exactly the wrap decision 'translateBinder'' would
-                   -- make here — a raw @Nat@ index binder is
-                   -- 'ExpectRaw', a value binder is 'ExpectRuntimeValue'.
-                   let mkPos ty
-                         | shouldWrapBinder ty
-                             && not surroundingCtx && not inRecCase
-                         = ExpectRuntimeValue
-                         | otherwise = ExpectRaw RawValuePosition
-                       conv = FunctionConvention
-                                (map (mkPos . snd) params) ExpectRuntimeValue
-                       rho = ExpectFunctionPosition (Just conv)
-                   -- Translate in place (never via the sharing lookup):
-                   -- the legacy path destructured this lambda inline, so
-                   -- stamping/tracing the unshared translation preserves
-                   -- byte-identical output even for shared terms.
-                   result <- translateTermUnsharedWithShapeAt (Just rho) t
-                   tracePositionAt rho t result
-                   pure (ttLean result)
-                 else
-                   translateBindersSelective typeIxs params $ \bts ->
-                     localTR (set skipBinderWrap surroundingCtx
-                            . set inRecursorCaseBinder False) $ do
-                       bodyResult <- translateTermLetWithShape body
-                       bodyLean <- adaptToRuntime bodyResult
-                       pure (Lean.Lambda (concatMap bindTransToBinder bts) bodyLean)
+              inRecCase <- view inRecursorCaseBinder <$> askTR
+              -- Slice 3b: declare the convention ONCE and push it down
+              -- through 'translateAt' — the dependent index/type
+              -- binders join the non-dependent value binders migrated in
+              -- 3a, so no guard remains (this reproduces the legacy
+              -- 'translateBindersSelective' path by construction, moving
+              -- authority to the declared convention).
+              --
+              -- Convention-internal use of 'shouldWrapBinder' (plan
+              -- Slice 3.4): the position of each binder is exactly the
+              -- decision the legacy path would make here — an index
+              -- binder (in 'typeIxs') is 'ExpectRaw RawIndexPosition', a
+              -- sort-typed index binder is 'ExpectRaw RawTypePosition',
+              -- a wrap-worthy value binder is 'ExpectRuntimeValue', and
+              -- any other value binder stays 'ExpectRaw RawValuePosition'.
+              let mkPos ix ty
+                    | ix `elem` typeIxs, isJust (asSort ty)
+                    = ExpectRaw RawTypePosition
+                    | ix `elem` typeIxs
+                    = ExpectRaw RawIndexPosition
+                    | shouldWrapBinder ty
+                        && not surroundingCtx && not inRecCase
+                    = ExpectRuntimeValue
+                    | otherwise = ExpectRaw RawValuePosition
+                  conv = FunctionConvention
+                           [ mkPos ix ty | (ix, (_, ty)) <- zip [0 ..] params ]
+                           ExpectRuntimeValue
+                  rho = ExpectFunctionPosition (Just conv)
+              -- Translate in place (never via the sharing lookup): the
+              -- legacy path destructured this lambda inline, so
+              -- stamping/tracing the unshared translation preserves
+              -- byte-identical output even for shared terms.
+              result <- translateTermUnsharedWithShapeAt (Just rho) t
+              tracePositionAt rho t result
+              pure (ttLean result)
        _ -> translateTerm t
 
 functionConventionValueSlot :: [Int] -> Int -> Term -> Bool
@@ -1474,37 +1491,34 @@ translateFunctionToWrappedFormal primitiveName fnTerm =
          then Except.throwError (RejectedPrimitive primitiveName
                 "wrapped helper expected a value-level function argument with a value result")
          else do
-           let hasSortBinder = any (isJust . asSort . snd) params
-           -- Slice 3a: non-dependent value helper argument with no sort
-           -- binders — declare the convention ONCE and push it down.
-           -- Dependent (typeIxs ≠ []) and sort-binder cases stay on the
-           -- legacy binder machinery (Slice 3b).
-           if null typeIxs && not hasSortBinder
-              then do
-                -- Convention-internal use of 'wrappedHelperFunctionValueSlot'
-                -- (plan Slice 3.4): the position of each slot is exactly
-                -- the wrap decision the legacy path would make — value
-                -- slots (including @Nat@) wrap, others stay raw.
-                let mkPos ix ty
-                      | wrappedHelperFunctionValueSlot typeIxs ix ty
-                      = ExpectRuntimeValue
-                      | otherwise = ExpectRaw RawValuePosition
-                    conv = FunctionConvention
-                             [ mkPos ix ty | (ix, (_, ty)) <- zip [0 ..] params ]
-                             ExpectRuntimeValue
-                    rho = ExpectFunctionPosition (Just conv)
-                -- Translate in place (never via the sharing lookup): the
-                -- legacy path destructured this lambda inline.
-                result <- translateTermUnsharedWithShapeAt (Just rho) fnTerm
-                tracePositionAt rho fnTerm result
-                pure (ttLean result)
-              else
-                translateFunctionConventionBindersWith
-                  wrappedHelperFunctionValueSlot typeIxs params $
-                    \binders _args -> do
-                      bodyResult <- translateTermLetWithShape body
-                      bodyLean <- adaptToRuntime bodyResult
-                      pure (Lean.Lambda binders bodyLean)
+           -- Slice 3b: declare the convention ONCE and push it down —
+           -- the dependent index/type binders join the non-dependent
+           -- value slots migrated in 3a, so no guard remains.
+           --
+           -- Convention-internal use of 'wrappedHelperFunctionValueSlot'
+           -- (plan Slice 3.4): the position of each slot is exactly the
+           -- decision the legacy path would make — an index binder (in
+           -- 'typeIxs') is 'ExpectRaw RawIndexPosition', a sort-typed
+           -- index binder is 'ExpectRaw RawTypePosition', a value slot
+           -- (including @Nat@) is 'ExpectRuntimeValue', and any other
+           -- binder stays 'ExpectRaw RawValuePosition'.
+           let mkPos ix ty
+                 | ix `elem` typeIxs, isJust (asSort ty)
+                 = ExpectRaw RawTypePosition
+                 | ix `elem` typeIxs
+                 = ExpectRaw RawIndexPosition
+                 | wrappedHelperFunctionValueSlot typeIxs ix ty
+                 = ExpectRuntimeValue
+                 | otherwise = ExpectRaw RawValuePosition
+               conv = FunctionConvention
+                        [ mkPos ix ty | (ix, (_, ty)) <- zip [0 ..] params ]
+                        ExpectRuntimeValue
+               rho = ExpectFunctionPosition (Just conv)
+           -- Translate in place (never via the sharing lookup): the
+           -- legacy path destructured this lambda inline.
+           result <- translateTermUnsharedWithShapeAt (Just rho) fnTerm
+           tracePositionAt rho fnTerm result
+           pure (ttLean result)
     _ ->
       case termSortOrType fnTerm of
         Right fty

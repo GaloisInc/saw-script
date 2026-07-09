@@ -226,6 +226,17 @@ doc for per-slice regression fences and bounded validation commands):
     (`typeIxs ≠ []`) and sort-binder lambdas stay legacy until 3b.
     Byte-identical to baseline; new path live (traced on
     `obligations/mkstream_total`).
+  - [x] 3b — dependent binders join the convention path: index binders declare
+    `ExpectRaw RawIndexPosition`, sort-typed type binders `ExpectRaw
+    RawTypePosition` (driving the legacy `SortBinderAsType` universe mode
+    inside `translateBinderAt`); both producers drop their non-dependent
+    guards, so every lambda they accept goes through
+    `translateLambdaAtConvention`. Byte-identical across the full driver
+    corpus (~150 rows incl. llvm/salsa20 all golden-green). The dependent
+    positions are correct-by-parity but likely dormant until Slice 4 routes
+    more callee arguments through conventions — most helper function formals
+    are non-dependent by construction; the dependent family mostly flows
+    through the still-legacy generic Lambda case.
 - [ ] **Slice 4** — real callee conventions for every callee; retire
   `CalleeTransitional`; decompose `originalDispatchWithShape` into a convention
   interpreter + table.
