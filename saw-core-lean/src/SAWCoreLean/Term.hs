@@ -4828,7 +4828,9 @@ translateLambdaAtConvention conv t = do
        introduce (fcArgPositions conv) params $ \bts ->
          localTR (set skipBinderWrap surroundingCtx
                 . set inRecursorCaseBinder False) $ do
-           bodyResult <- translateTermLetWithShape body
+           -- Slice 3d: the body inherits the convention's declared
+           -- result position through the let-sharing entry.
+           bodyResult <- translateTermLetAt (Just (fcResultPosition conv)) body
            bodyLean <- ttLean <$> adaptTo (fcResultPosition conv) bodyResult
            let lam = Lean.Lambda (concatMap bindTransToBinder bts) bodyLean
            pure (TranslatedTermAt lam BindingFunction
@@ -5043,7 +5045,21 @@ translateTermLet :: TermTranslationMonad m => Term -> m Lean.Term
 translateTermLet t = ttLean <$> translateTermLetWithShape t
 
 translateTermLetWithShape :: TermTranslationMonad m => Term -> m TranslatedTerm
-translateTermLetWithShape t = do
+translateTermLetWithShape = translateTermLetAt Nothing
+
+-- | The let-sharing entry with the expected position threaded (plan
+-- Slice 3d; calculus §Definitions "local let"). Each shared RHS
+-- translates at its own natural position and Γ records its exact
+-- representation (Slices 1–2); the BODY — whose value the let-chain
+-- delivers — translates at the demanded position. A shared RHS
+-- demanded at an incompatible position at a use site fails loudly in
+-- 'adaptTo' ('ForbiddenAdaptation'); emitting separate bindings for
+-- genuinely position-polymorphic shares is future work, pinned only
+-- if a real fixture demands it.
+translateTermLetAt ::
+  TermTranslationMonad m =>
+  Maybe ExpectedPosition -> Term -> m TranslatedTerm
+translateTermLetAt mrho t = do
   let occMap = scTermCount False t
       -- Skip subterms that are themselves types (their @stAppType@ is
       -- @Left Sort{}@). Lean's elaborator does not always unfold
@@ -5073,7 +5089,7 @@ translateTermLetWithShape t = do
           ]
     localTR (over bindingEnv
                (\m -> foldr (uncurry Map.insert) m letInfos)) $ do
-      body <- translateTermWithShape t
+      body <- translateSharedAt mrho t
       pure (TranslatedTermAt
               (foldr mkLet (ttLean body) (zip names defs))
               (ttShape body)

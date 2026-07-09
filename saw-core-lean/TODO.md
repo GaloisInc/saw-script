@@ -238,6 +238,13 @@ doc for per-slice regression fences and bounded validation commands):
     are non-dependent by construction; the dependent family mostly flows
     through the still-legacy generic Lambda case. (3b corpus trace sweep:
     33 live conventions, all non-dependent, zero inconsistent.)
+  - [x] 3d — let-sharing threads the demanded position:
+    `translateTermLetAt` (legacy entry = `Nothing` specialization); the body
+    inherits the surrounding convention's declared result position;
+    convention consumers pass it. Shared-RHS Γ records and loud
+    incompatible-position failure were already in place from Slices 1–2;
+    emitting separate bindings for position-polymorphic shares is deferred
+    until a fixture demands it.
   - [x] 3c — recursor motives at a declared `MotiveConvention` (per-binder
     positions: indices `RawIndexPosition`, scrutinee
     `StructuralRecursorFieldPosition`; result mode drives the type-level
