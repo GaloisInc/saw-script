@@ -743,28 +743,28 @@ resolveVar pos'i i ty = do
 --   Given two types, either fail or resolve unification vars so aso
 --   to make them the same.
 mgu :: Pos -> [(Type, Type)] -> Type -> Type -> TI ()
-mgu pos encsbase t1base t2base = do
+mgu pos encs t1base t2base = do
     -- Use pos as the failure position for either type; they're the
     -- same type after all, and any position that gives rise to it
     -- should be good enough if expandFully croaks. (Hopefully.)
     t1 <- expandFully pos t1base
     t2 <- expandFully pos t2base
-    encs <- do
-        let once (t1x, t2x) = do
-              t1x' <- expandFully pos t1x
-              t2x' <- expandFully pos t2x
-              pure (t1x', t2x')
-        mapM once encsbase
 
     -- | Fail with expected/found types
     let reject msg more = do
           ppopts <- asks tiPPOpts
           let tyexp = t1
               tyfound = t2
+          encs' <- do
+              let once (t1x, t2x) = do
+                    t1x' <- expandFully pos t1x
+                    t2x' <- expandFully pos t2x
+                    pure (t1x', t2x')
+              mapM once encs
           let (posexp, tyexp') = prettyTypeDetails ppopts tyexp
               (posfound, tyfound') = prettyTypeDetails ppopts tyfound
               body = PP.vsep $ more ++ [
-                  prettyEnclosing ppopts ((tyexp, tyfound) : encs)
+                  prettyEnclosing ppopts ((tyexp, tyfound) : encs')
                ]
           recordError pos $ "Error:" <+> msg <> PP.line <> PP.indent 4 body
           recordError posexp $ "Note:" <+> tyexp'
