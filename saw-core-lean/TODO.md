@@ -208,16 +208,24 @@ doc for per-slice regression fences and bounded validation commands):
   to baseline — no current row exercises a forbidden path. Note:
   `bindingShapeOfType` (emitted-*type* classification at binder sites) remains;
   it is a Slice 3/4 demotion target.
-- [ ] **Pre-existing (not from this refactor):** `drivers/arithmetic` and
-  `drivers/conformance_stream` goldens are stale since the position-callee-
-  conventions work of 2026-07-03 (`55e4fe099`, `429452873`): unsafeAssert
-  obligations now emit `@Eq.{1}` (explicit universe) and stream recursor
-  emissions moved the `Pure.pure` lift into case handlers. Verified failing at
-  the pre-refactor commit `89a6cef06`. Decide whether the new emissions are
-  intended and refresh with `bash test.sh good` (per-row, after review).
+- [x] **Pre-existing (not from this refactor):** `drivers/arithmetic` and
+  `drivers/conformance_stream` goldens were stale since the position-callee-
+  conventions work of 2026-07-03 (`55e4fe099`, `429452873`). Every diff hunk
+  reviewed (only `@Eq.{1}` explicit universes and the stream `Pure.pure`-in-
+  case-handler/`Except String Nat` motive change); goldens refreshed per-row
+  2026-07-09, both rows green.
 - [ ] **Slice 3** (3a–3d) — push position through `Pi`/`Lambda`/`let`; demote
   `shouldWrapBinder`, `isVariableHead`, `natValueResult`, `phaseBetaResultShape`
   from position authorities to convention-internal helpers.
+  - [x] 3a — `ExpectFunctionPosition` carries `Maybe FunctionConvention`
+    (arg positions + result position); `translateLambdaAtConvention` +
+    `translateBinderAt` consume it; producers: MkStream index functions
+    (`translateFunctionWithWrappedResult`) and non-dependent `UseArgFunction`
+    helper lambdas (`translateFunctionToWrappedFormal`) declare conventions
+    once (predicates now convention-internal at those sites). Dependent
+    (`typeIxs ≠ []`) and sort-binder lambdas stay legacy until 3b.
+    Byte-identical to baseline; new path live (traced on
+    `obligations/mkstream_total`).
 - [ ] **Slice 4** — real callee conventions for every callee; retire
   `CalleeTransitional`; decompose `originalDispatchWithShape` into a convention
   interpreter + table.

@@ -127,7 +127,21 @@ data RawReason
 data ExpectedPosition
   = ExpectRuntimeValue
   | ExpectRaw RawReason
-  | ExpectFunctionPosition
+  | ExpectFunctionPosition (Maybe FunctionConvention)
+    -- ^ A function position. 'Nothing' means "function position,
+    -- convention not yet declared" — a tracked transitional bridge
+    -- (Slice 4 shrinks it); @'Just' c@ carries the declared
+    -- convention that drives binder/result positions (Slice 3).
+  deriving (Eq, Show)
+
+-- | Calculus §Positions: a function position recursively assigns a
+-- position to each binder and to the result. 'fcArgPositions' is
+-- outermost-first and must cover every binder of the lambda it is
+-- applied to (translation rejects otherwise — no silent padding).
+data FunctionConvention = FunctionConvention
+  { fcArgPositions   :: [ExpectedPosition]
+  , fcResultPosition :: ExpectedPosition
+  }
   deriving (Eq, Show)
 
 data EqualitySubjectRep
@@ -841,7 +855,40 @@ isTypeProducing t
 
 translateBinder' :: TermTranslationMonad m => VarName -> Term ->
                     (BindTrans -> m a) -> m a
-translateBinder' vn ty f = do
+translateBinder' = translateBinderAt Nothing
+
+-- | Introduce a SAW binder, optionally at a position declared by the
+-- surrounding function convention (plan Slice 3). @'Nothing'@
+-- reproduces the historical flag-driven behaviour EXACTLY
+-- ('translateBinder''). @'Just' ρ@ overrides only the outer wrap
+-- decision and the recorded Γ position:
+--
+--   * 'ExpectRuntimeValue'          → wrap the binder type in
+--     @Except String@;
+--   * 'ExpectRaw' / 'ExpectFunctionPosition' → keep the binder type
+--     raw (a function type never wraps its outer arrow).
+--
+-- A sort-typed binder always takes the universe-allocating sort path
+-- regardless of ρ; a convention that demands a runtime value for a
+-- sort binder is a contradiction and throws 'ForbiddenAdaptation'
+-- (never wrap a sort).
+translateBinderAt :: TermTranslationMonad m =>
+                     Maybe ExpectedPosition -> VarName -> Term ->
+                     (BindTrans -> m a) -> m a
+translateBinderAt mrho vn ty f = do
+  -- The convention override, if any, collapses to a single wrap
+  -- decision applied in place of the flag-driven legacy predicate.
+  let mOverrideWrap = case mrho of
+        Nothing                         -> Nothing
+        Just ExpectRuntimeValue         -> Just True
+        Just (ExpectRaw _)              -> Just False
+        Just (ExpectFunctionPosition _) -> Just False
+  case (asSort ty, mrho) of
+    (Just _, Just ExpectRuntimeValue) ->
+      Except.throwError (ForbiddenAdaptation
+        (Text.pack (show ExpectRuntimeValue))
+        (Text.pack "sort-typed binder (a sort never wraps in Except String)"))
+    _ -> pure ()
   -- If the binder type is bare 'Sort k' at @k ≥ 1@, take the
   -- BinderPos path so 'translateSort' allocates a fresh universe
   -- variable for this occurrence. Otherwise fall through to
@@ -906,7 +953,8 @@ translateBinder' vn ty f = do
       -- values via a 'let'-shadow chain emitted by
       -- 'translateCaseHandler'.
       phase <- phaseBetaEnabled
-      let t' = if phase && shouldWrapBinder ty && not skipWrap && not inRecCase
+      let legacyWrap = phase && shouldWrapBinder ty && not skipWrap && not inRecCase
+          t' = if fromMaybe legacyWrap mOverrideWrap
                   then wrapExcept t
                   else t
       pure (t', Nothing)
@@ -917,20 +965,20 @@ translateBinder' vn ty f = do
   skipWrap <- view skipBinderWrap <$> askTR
   inRecCase <- view inRecursorCaseBinder <$> askTR
   phase <- phaseBetaEnabled
-  let binderWrapped =
+  let legacyBinderWrap = phase && shouldWrapBinder ty && not skipWrap && not inRecCase
+      binderWrapped =
         isNothing (asSort ty)
-        && phase
-        && shouldWrapBinder ty
-        && not skipWrap
-        && not inRecCase
-  -- Γ record (plan Slice 1): the bound position is recorded only
-  -- where today's flags determine it unambiguously. 'skipBinderWrap'
+        && fromMaybe legacyBinderWrap mOverrideWrap
+  -- Γ record (plan Slice 1): when a convention declared ρ, record it
+  -- verbatim. Otherwise the bound position is recorded only where
+  -- today's flags determine it unambiguously — 'skipBinderWrap'
   -- conflates motive and index binders, and an unwrapped value type
-  -- (raw Nat) conflates value and index — those stay Nothing until
-  -- Slice 3 pushes the real ρ down.
+  -- (raw Nat) conflates value and index, so those stay Nothing until
+  -- a later slice pushes the real ρ down.
   let repr = if binderWrapped then BindingWrapped else bindingShapeOfType ty'
       boundPos
         | isJust (asSort ty) = Just (ExpectRaw RawTypePosition)
+        | Just rho <- mrho   = Just rho
         | binderWrapped      = Just ExpectRuntimeValue
         | inRecCase          = Just (ExpectRaw StructuralRecursorFieldPosition)
         | otherwise          = Nothing
@@ -1285,12 +1333,42 @@ translateFunctionWithWrappedResult t = do
             then translateTerm t
             else do
               let typeIxs = typeArgPositionsBinders params
-              translateBindersSelective typeIxs params $ \bts ->
-                localTR (set skipBinderWrap surroundingCtx
-                       . set inRecursorCaseBinder False) $ do
-                  bodyResult <- translateTermLetWithShape body
-                  bodyLean <- adaptToRuntime bodyResult
-                  pure (Lean.Lambda (concatMap bindTransToBinder bts) bodyLean)
+                  hasSortBinder = any (isJust . asSort . snd) params
+              -- Slice 3a: non-dependent value index function with no
+              -- sort binders — declare the convention ONCE and push it
+              -- down through 'translateAt'. Dependent (typeIxs ≠ []) and
+              -- sort-binder cases stay on the legacy binder machinery
+              -- (Slice 3b).
+              if null typeIxs && not hasSortBinder
+                 then do
+                   inRecCase <- view inRecursorCaseBinder <$> askTR
+                   -- Convention-internal use of 'shouldWrapBinder'
+                   -- (plan Slice 3.4): the position of each binder is
+                   -- exactly the wrap decision 'translateBinder'' would
+                   -- make here — a raw @Nat@ index binder is
+                   -- 'ExpectRaw', a value binder is 'ExpectRuntimeValue'.
+                   let mkPos ty
+                         | shouldWrapBinder ty
+                             && not surroundingCtx && not inRecCase
+                         = ExpectRuntimeValue
+                         | otherwise = ExpectRaw RawValuePosition
+                       conv = FunctionConvention
+                                (map (mkPos . snd) params) ExpectRuntimeValue
+                       rho = ExpectFunctionPosition (Just conv)
+                   -- Translate in place (never via the sharing lookup):
+                   -- the legacy path destructured this lambda inline, so
+                   -- stamping/tracing the unshared translation preserves
+                   -- byte-identical output even for shared terms.
+                   result <- translateTermUnsharedWithShapeAt (Just rho) t
+                   tracePositionAt rho t result
+                   pure (ttLean result)
+                 else
+                   translateBindersSelective typeIxs params $ \bts ->
+                     localTR (set skipBinderWrap surroundingCtx
+                            . set inRecursorCaseBinder False) $ do
+                       bodyResult <- translateTermLetWithShape body
+                       bodyLean <- adaptToRuntime bodyResult
+                       pure (Lean.Lambda (concatMap bindTransToBinder bts) bodyLean)
        _ -> translateTerm t
 
 functionConventionValueSlot :: [Int] -> Int -> Term -> Bool
@@ -1395,13 +1473,38 @@ translateFunctionToWrappedFormal primitiveName fnTerm =
          else if not resultIsValue
          then Except.throwError (RejectedPrimitive primitiveName
                 "wrapped helper expected a value-level function argument with a value result")
-         else
-           translateFunctionConventionBindersWith
-             wrappedHelperFunctionValueSlot typeIxs params $
-               \binders _args -> do
-                 bodyResult <- translateTermLetWithShape body
-                 bodyLean <- adaptToRuntime bodyResult
-                 pure (Lean.Lambda binders bodyLean)
+         else do
+           let hasSortBinder = any (isJust . asSort . snd) params
+           -- Slice 3a: non-dependent value helper argument with no sort
+           -- binders — declare the convention ONCE and push it down.
+           -- Dependent (typeIxs ≠ []) and sort-binder cases stay on the
+           -- legacy binder machinery (Slice 3b).
+           if null typeIxs && not hasSortBinder
+              then do
+                -- Convention-internal use of 'wrappedHelperFunctionValueSlot'
+                -- (plan Slice 3.4): the position of each slot is exactly
+                -- the wrap decision the legacy path would make — value
+                -- slots (including @Nat@) wrap, others stay raw.
+                let mkPos ix ty
+                      | wrappedHelperFunctionValueSlot typeIxs ix ty
+                      = ExpectRuntimeValue
+                      | otherwise = ExpectRaw RawValuePosition
+                    conv = FunctionConvention
+                             [ mkPos ix ty | (ix, (_, ty)) <- zip [0 ..] params ]
+                             ExpectRuntimeValue
+                    rho = ExpectFunctionPosition (Just conv)
+                -- Translate in place (never via the sharing lookup): the
+                -- legacy path destructured this lambda inline.
+                result <- translateTermUnsharedWithShapeAt (Just rho) fnTerm
+                tracePositionAt rho fnTerm result
+                pure (ttLean result)
+              else
+                translateFunctionConventionBindersWith
+                  wrappedHelperFunctionValueSlot typeIxs params $
+                    \binders _args -> do
+                      bodyResult <- translateTermLetWithShape body
+                      bodyLean <- adaptToRuntime bodyResult
+                      pure (Lean.Lambda binders bodyLean)
     _ ->
       case termSortOrType fnTerm of
         Right fty
@@ -2358,7 +2461,7 @@ checkedApplicationHelperArgsFor ident modes0 args0 = go [] modes0 args0
 checkedArgDeclaredPosition ::
   CheckedApplicationArgMode -> Maybe ExpectedPosition
 checkedArgDeclaredPosition CheckedArgWrapped  = Just ExpectRuntimeValue
-checkedArgDeclaredPosition CheckedArgFunction = Just ExpectFunctionPosition
+checkedArgDeclaredPosition CheckedArgFunction = Just (ExpectFunctionPosition Nothing)
 checkedArgDeclaredPosition _                  = Nothing
 
 checkedApplicationArgTerm ::
@@ -2372,7 +2475,7 @@ checkedApplicationArgTerm _ CheckedArgRaw translated =
 checkedApplicationArgTerm _ CheckedArgWrapped translated =
   adaptToRuntime translated
 checkedApplicationArgTerm _ CheckedArgFunction translated =
-  ttLean <$> adaptTo ExpectFunctionPosition translated
+  ttLean <$> adaptTo (ExpectFunctionPosition Nothing) translated
 checkedApplicationArgTerm ident CheckedArgFunctionWithNatLt{} _ =
   Except.throwError (RejectedPrimitive (Text.pack (identName ident))
     "checked-application proof-function argument must be translated from the source term")
@@ -4309,10 +4412,10 @@ adaptTo rho result =
     (ExpectRaw RawMotivePosition, BindingFunction) ->
       deliver (ttLean result) BindingFunction
     (ExpectRaw _, _)                      -> forbidden
-    (ExpectFunctionPosition, BindingFunction) ->
+    (ExpectFunctionPosition _, BindingFunction) ->
       deliver (ttLean result) BindingFunction
-    (ExpectFunctionPosition, BindingRaw)  -> deliver (ttLean result) BindingRaw
-    (ExpectFunctionPosition, BindingWrapped) -> forbidden
+    (ExpectFunctionPosition _, BindingRaw)  -> deliver (ttLean result) BindingRaw
+    (ExpectFunctionPosition _, BindingWrapped) -> forbidden
 
 -- | 'adaptTo' at runtime-value position, projected to the Lean term —
 -- the common shape at bind-chain and wrapped-formal sites.
@@ -4341,7 +4444,7 @@ shapeConsistentWithPosition rho shape = case rho of
   ExpectRuntimeValue          -> shape /= BindingFunction
   ExpectRaw RawMotivePosition -> shape /= BindingWrapped
   ExpectRaw _                 -> shape == BindingRaw
-  ExpectFunctionPosition      -> shape /= BindingWrapped
+  ExpectFunctionPosition _    -> shape /= BindingWrapped
 
 -- | One-shot read of @SAW_LEAN_TRACE_POSITIONS@. Debug instrumentation
 -- only: translation is pure ('TranslationMonad' has no IO), so the
@@ -4673,6 +4776,43 @@ translateTermUnsharedWithShape ::
   TermTranslationMonad m => Term -> m TranslatedTerm
 translateTermUnsharedWithShape = translateTermUnsharedWithShapeAt Nothing
 
+-- | Translate a value-level lambda at a fully-declared function
+-- convention (plan Slice 3a). The convention's per-binder positions
+-- drive each binder's wrap decision ('translateBinderAt') and its
+-- result position drives the body adaptation — the binder/body
+-- machinery no longer re-derives them from 'shouldWrapBinder'.
+-- Rejects (never pads) when the declared arity does not match the
+-- lambda's binder count.
+translateLambdaAtConvention ::
+  TermTranslationMonad m => FunctionConvention -> Term -> m TranslatedTerm
+translateLambdaAtConvention conv t = do
+  let (params, body) = asLambdaList t
+  if length (fcArgPositions conv) /= length params
+     then Except.throwError (RejectedPrimitive "value lambda convention"
+            "internal contract: declared function convention arity does \
+            \not match the lambda's binder count (no silent padding)")
+     else do
+       -- Clear 'skipBinderWrap'/'inRecursorCaseBinder' for the body
+       -- exactly as the legacy value-lambda paths do: both flags are
+       -- scoped to binder-type translation, and internal Pis in the
+       -- body wrap according to their own context.
+       surroundingCtx <- view skipBinderWrap <$> askTR
+       let introduce [] [] k = k []
+           introduce (rho : rhos) ((vn, ty) : rest) k =
+             translateBinderAt (Just rho) vn ty $ \bnd ->
+               introduce rhos rest $ \bnds -> k (bnd : bnds)
+           introduce _ _ _ =
+             Except.throwError (RejectedPrimitive "value lambda convention"
+               "internal contract: convention/binder length mismatch")
+       introduce (fcArgPositions conv) params $ \bts ->
+         localTR (set skipBinderWrap surroundingCtx
+                . set inRecursorCaseBinder False) $ do
+           bodyResult <- translateTermLetWithShape body
+           bodyLean <- ttLean <$> adaptTo (fcResultPosition conv) bodyResult
+           let lam = Lean.Lambda (concatMap bindTransToBinder bts) bodyLean
+           pure (TranslatedTermAt lam BindingFunction
+                   (Just (ExpectFunctionPosition (Just conv))))
+
 -- | Unshared translation with the expected position threaded (see
 -- 'translateSharedAt'). Case arms consume @mrho@ as Slice 3 migrates
 -- them family by family; unmigrated arms ignore it and translate
@@ -4680,8 +4820,15 @@ translateTermUnsharedWithShape = translateTermUnsharedWithShapeAt Nothing
 translateTermUnsharedWithShapeAt ::
   TermTranslationMonad m =>
   Maybe ExpectedPosition -> Term -> m TranslatedTerm
-translateTermUnsharedWithShapeAt _mrho t =
+translateTermUnsharedWithShapeAt mrho t =
   case unwrapTermF t of
+    -- Position-directed value lambda (plan Slice 3a): a lambda entered
+    -- at a fully-declared function convention consumes it rather than
+    -- re-deriving binder/body wrap decisions locally. Lambdas without a
+    -- declared convention (Nothing, or 'ExpectFunctionPosition Nothing')
+    -- fall through to the legacy generic path below.
+    Lambda {} | Just (ExpectFunctionPosition (Just conv)) <- mrho ->
+      translateLambdaAtConvention conv t
     App {} -> do
       let (f, args) = asApplyAll t
       case asGlobalDef f of
