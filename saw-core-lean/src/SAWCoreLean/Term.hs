@@ -631,17 +631,11 @@ bindingShapeOfType ty
   | isLeanPiType ty       = BindingFunction
   | otherwise             = BindingRaw
 
-bindingShapeOfTerm :: Lean.Term -> BindingShape
-bindingShapeOfTerm tm
-  | Lean.Lambda{} <- tm = BindingFunction
-  | otherwise           = BindingRaw
-
-bindingShapeOfLeanTermM :: TermTranslationMonad m => Lean.Term -> m BindingShape
-bindingShapeOfLeanTermM tm = case tm of
-  Lean.Var ident -> do
-    env <- view bindingEnv <$> askTR
-    pure (maybe (bindingShapeOfTerm tm) biRepr (Map.lookup ident env))
-  _ -> pure (bindingShapeOfTerm tm)
+-- NOTE: 'bindingShapeOfTerm' / 'bindingShapeOfLeanTermM' (shape
+-- guessed from the emitted Lean term AST) are deleted per plan
+-- Slice 2. Shape is an output of translation ('TranslatedTerm') or a
+-- record in Γ ('BindingInfo') — never re-derived from generated
+-- syntax. Do not reintroduce them.
 
 isWrappedShape :: BindingShape -> Bool
 isWrappedShape BindingWrapped = True
@@ -2953,9 +2947,14 @@ originalDispatchWithShape i args = do
     -- 'liftArgIfNeeded' helper inserts a 'pure' for the latter so
     -- the bind chain typechecks uniformly.
     applied :: TermTranslationMonad m => Lean.Term -> [Term] -> m TranslatedTerm
-    applied f [] = do
-      shape <- bindingShapeOfLeanTermM f
-      pure (TranslatedTerm f shape)
+    applied f [] =
+      -- Bare (zero-arg) reference to a global head. The old code
+      -- guessed the shape from the emitted Lean, which for a global
+      -- 'Var'/'ExplVar' head always resolved to 'BindingRaw'; state
+      -- that outcome explicitly instead of inspecting the AST. The
+      -- honest shape is the callee's convention (a bare 'bvAdd' is
+      -- function-shaped) — Slice 4 declares it per callee.
+      pure (TranslatedTerm f BindingRaw)
     applied f args' = do
       argResults <- mapM translateTermWithShape args'
       let argTerms = map ttLean argResults
@@ -3093,9 +3092,11 @@ originalDispatchWithShape i args = do
           let tm = Lean.App f argTerms
           pure (TranslatedTerm tm (phaseBetaResultShape fty (length args')))
         Nothing -> do
+          -- No SAWCore type for the callee. A 'Lean.App' is neither
+          -- a lambda nor a variable, so the old AST guess was
+          -- constantly 'BindingRaw'; state that explicitly.
           let tm = Lean.App f argTerms
-          shape <- bindingShapeOfLeanTermM tm
-          pure (TranslatedTerm tm shape)
+          pure (TranslatedTerm tm BindingRaw)
 
     apply :: TermTranslationMonad m =>
              Bool -> Lean.Ident -> UseSiteTreatment -> m TranslatedTerm
@@ -3385,16 +3386,22 @@ translateConstantWithType nm sawType
 
 translateConstantWithShape ::
   TermTranslationMonad m => Name -> Either Sort Term -> m TranslatedTerm
-translateConstantWithShape nm sawType = do
-  tm <- translateConstantWithType nm sawType
-  shape <- case nameInfo nm of
-    ModuleIdentifier{} -> bindingShapeOfLeanTermM tm
-    ImportedName{} -> case sawType of
-      Right ty
-        | isJust (asPi ty) -> pure BindingFunction
-        | shouldWrapBinder ty -> pure BindingWrapped
-      _ -> bindingShapeOfLeanTermM tm
-  pure (TranslatedTerm tm shape)
+translateConstantWithShape nm sawType = case nameInfo nm of
+  -- The ident dispatch already computes the shape; use its result
+  -- directly instead of re-guessing from the emitted Lean (old
+  -- 'bindingShapeOfLeanTermM' behavior, deleted in plan Slice 2).
+  ModuleIdentifier ident -> translateIdentWithArgsWithShape ident []
+  ImportedName{} -> do
+    tm <- translateConstantWithType nm sawType
+    -- Imported realizations emit a 'Lean.Var' alias; the shape comes
+    -- from the constant's SAWCore type. A sort-typed constant is a
+    -- type (raw); a non-Pi, non-value type (Nat, Num, …) is raw.
+    let shape = case sawType of
+          Right ty
+            | isJust (asPi ty)    -> BindingFunction
+            | shouldWrapBinder ty -> BindingWrapped
+          _                       -> BindingRaw
+    pure (TranslatedTerm tm shape)
 
 emitImportedRealizationAlias ::
   TermTranslationMonad m =>
@@ -4391,9 +4398,15 @@ translateTermWithShape t =
           case Map.lookup ident env of
             Just info ->
               pure (TranslatedTermAt tm (biRepr info) (biBoundPosition info))
-            Nothing -> do
-              shape <- bindingShapeOfLeanTermM tm
-              pure (TranslatedTerm tm shape)
+            Nothing ->
+              -- A shared name is bound in Γ before anything can
+              -- reference it ('translateSharedDefs' extends Γ in
+              -- dependency order; subterms precede superterms).
+              -- Reaching this branch means the sharing invariant
+              -- broke — reject loudly rather than guess a shape.
+              Except.throwError (RejectedPrimitive "shared let"
+                "internal error: shared subterm referenced before its \
+                \binding was recorded in the translation environment")
         Nothing -> translateTermUnsharedWithShape t
 
 -- | Translate a 'Term' WITHOUT consulting the 'sharedNames' map at the
@@ -4663,23 +4676,40 @@ translateTermUnsharedWithShape t =
               Constant _ ->
                 case termSortOrType f of
                   Right fty -> applyKnownFunctionWithShape fty f' args
-                  Left _    -> do
-                    let tm = Lean.App f' args'
-                    shape <- bindingShapeOfLeanTermM tm
-                    pure (TranslatedTerm tm shape)
-              _ -> do
-                let tm = Lean.App f' args'
-                shape <- bindingShapeOfLeanTermM tm
-                pure (TranslatedTerm tm shape)
+                  Left _    ->
+                    -- Sort-typed head applied to args: a type
+                    -- application, raw by construction (and a
+                    -- 'Lean.App' never matched the old AST guess's
+                    -- lambda/variable cases anyway).
+                    pure (TranslatedTerm (Lean.App f' args') BindingRaw)
+              _ ->
+                pure (TranslatedTerm (Lean.App f' args') BindingRaw)
     _ -> do
       case unwrapTermF t of
         Constant nm -> translateConstantWithShape nm (termSortOrType t)
         _ -> do
           tm <- translateTermUnshared t
+          -- Shape from the SOURCE term form, not the emitted Lean
+          -- (plan Slice 2: 'bindingShapeOfTerm' is deleted):
+          --   * non-empty ArrayValue emits a vecSequenceM value —
+          --     wrapped;
+          --   * a Lambda emits a Lean lambda — function;
+          --   * a Variable's shape lives in Γ (its introduction
+          --     site recorded it; absent = never bound here, keep
+          --     the historical raw default);
+          --   * sorts, Pis (function *types*), string literals,
+          --     empty vectors, and bare recursor heads are raw.
           shape <- case unwrapTermF t of
             FTermF (ArrayValue _ vec)
               | not (null (toList vec)) -> pure BindingWrapped
-            _ -> bindingShapeOfLeanTermM tm
+            Lambda{} -> pure BindingFunction
+            Variable vn _ -> do
+              nenv <- view namedEnvironment <$> askTR
+              env  <- view bindingEnv <$> askTR
+              pure $ case (`Map.lookup` env) =<< Map.lookup vn nenv of
+                Just info -> biRepr info
+                Nothing   -> BindingRaw
+            _ -> pure BindingRaw
           pure (TranslatedTerm tm shape)
 
 applyKnownFunctionWithShape ::

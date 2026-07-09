@@ -199,8 +199,22 @@ doc for per-slice regression fences and bounded validation commands):
   only where unambiguous today (sort/wrapped/recursor-field/shadow/let-RHS);
   `skipBinderWrap`-conflated cases stay `Nothing` until Slice 3. Emitted Lean
   byte-identical to the Slice 0 baseline (snapshot oracle, 151 files).
-- [ ] **Slice 2** — make `adaptTo` the single adaptation chokepoint; delete
+- [x] **Slice 2** — make `adaptTo` the single adaptation chokepoint; delete
   `bindingShapeOfTerm`/`bindingShapeOfLeanTermM` (emitted-AST inspection).
+  `adaptTo` implements exactly the allowed adapters; forbidden adaptations
+  throw `ForbiddenAdaptation` (new `TranslationError`); the emitted-AST
+  inspectors are deleted (variables read Γ, other shapes come from the source
+  term form or the dispatch that computed them). Emitted Lean byte-identical
+  to baseline — no current row exercises a forbidden path. Note:
+  `bindingShapeOfType` (emitted-*type* classification at binder sites) remains;
+  it is a Slice 3/4 demotion target.
+- [ ] **Pre-existing (not from this refactor):** `drivers/arithmetic` and
+  `drivers/conformance_stream` goldens are stale since the position-callee-
+  conventions work of 2026-07-03 (`55e4fe099`, `429452873`): unsafeAssert
+  obligations now emit `@Eq.{1}` (explicit universe) and stream recursor
+  emissions moved the `Pure.pure` lift into case handlers. Verified failing at
+  the pre-refactor commit `89a6cef06`. Decide whether the new emissions are
+  intended and refresh with `bash test.sh good` (per-row, after review).
 - [ ] **Slice 3** (3a–3d) — push position through `Pi`/`Lambda`/`let`; demote
   `shouldWrapBinder`, `isVariableHead`, `natValueResult`, `phaseBetaResultShape`
   from position authorities to convention-internal helpers.
