@@ -27,14 +27,16 @@ Proof.
   induction x; induction y; simpl; congruence.
 Defined.
 
+(* NOTE: minNat is now defined as Rocq min, so this is trivial *)
 Theorem minNat_min : forall x y, minNat x y = min x y.
 Proof.
-  induction x; induction y; simpl; auto.
+  reflexivity.
 Defined.
 
+(* NOTE: maxNat is now defined as Rocq max, so this is trivial *)
 Theorem maxNat_max : forall x y, maxNat x y = max x y.
 Proof.
-  induction x; induction y; simpl; auto.
+  reflexivity.
 Defined.
 
 (* NOTE: addNat is now defined as Rocq plus, so this is trivial *)
