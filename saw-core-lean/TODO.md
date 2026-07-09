@@ -183,8 +183,13 @@ Priority 5.
 Slices (each emitted-Lean-diff-reviewed and green before commit; see the plan
 doc for per-slice regression fences and bounded validation commands):
 
-- [ ] **Slice 0** — instrument a `translateAt ρ t` seam + position trace,
-  behavior-inert (migration safety net / oracle).
+- [x] **Slice 0** — instrument a `translateAt ρ t` seam + position trace,
+  behavior-inert (migration safety net / oracle). `translateAt` +
+  `shapeConsistentWithPosition` + `SAW_LEAN_TRACE_POSITIONS` trace in Term.hs;
+  checked-application/proof-primitive wrapped args are the first declared-ρ
+  call sites; byte-diff oracle: `support/emitted-lean-snapshot.sh`
+  (`snapshot`/`diff` against `.snapshots/<name>`, "emitted" = untracked
+  `*.lean`).
 - [ ] **Slice 1** — enrich `Γ` and `TranslatedTerm` to the full calculus record
   (source type, Lean ident, bound position, representation, exact Lean type);
   stop collapsing raw-value/index/proof/motive into one `BindingRaw`.

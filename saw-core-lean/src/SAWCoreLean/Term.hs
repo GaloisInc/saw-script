@@ -32,6 +32,7 @@ module SAWCoreLean.Term
   , translateTerm
   , translateTermLet
   , translateTermLetWithShape
+  , translateAt
   , TranslatedTerm
   , translatedTermLean
   , translatedTermAsWrapped
@@ -61,8 +62,11 @@ import           Data.Maybe                   (fromMaybe, isJust, isNothing,
 import qualified Data.Set                     as Set
 import           Data.Set                     (Set)
 import qualified Data.Text                    as Text
+import qualified Debug.Trace
 import           Prelude                      hiding (fail)
 import           Prettyprinter                (Doc, hardline, vcat)
+import           System.Environment           (lookupEnv)
+import           System.IO.Unsafe             (unsafePerformIO)
 import           Text.Encoding.Z              (zEncodeString)
 
 import qualified Language.Lean.AST            as Lean
@@ -2277,12 +2281,25 @@ checkedApplicationHelperArgsFor ident modes0 args0 = go [] modes0 args0
           Except.throwError (RejectedPrimitive (Text.pack (identName ident))
             "checked-application proof-function argument referenced a missing Nat bound")
     go acc (mode : modes) (arg : rest) = do
-      translated <- translateTermWithShape arg
+      translated <- case checkedArgDeclaredPosition mode of
+        Just rho -> translateAt rho arg
+        Nothing  -> translateTermWithShape arg
       helperArg <- checkedApplicationArgTerm ident mode translated
       go (helperArg : acc) modes rest
     go _ _ _ =
       Except.throwError (RejectedPrimitive (Text.pack (identName ident))
         "checked-application contract argument table did not match source arity")
+
+-- | The expected positions the checked-application arg modes already
+-- declare unambiguously. 'CheckedArgRaw' mixes index, type, and
+-- raw-Nat-value reasons in one bucket today; it gets a declared
+-- position when Slice 4 lifts these tables into full callee
+-- conventions — do not guess a 'RawReason' for it here.
+checkedArgDeclaredPosition ::
+  CheckedApplicationArgMode -> Maybe ExpectedPosition
+checkedArgDeclaredPosition CheckedArgWrapped  = Just ExpectRuntimeValue
+checkedArgDeclaredPosition CheckedArgFunction = Just ExpectFunctionPosition
+checkedArgDeclaredPosition _                  = Nothing
 
 checkedApplicationArgTerm ::
   TermTranslationMonad m =>
@@ -2377,7 +2394,7 @@ lowerProofPrimitiveContract contract args = do
         ProofArgRaw ->
           withRawTranslationMode (translateTerm arg)
         ProofArgWrapped ->
-          translatedTermAsWrapped <$> translateTermWithShape arg
+          translatedTermAsWrapped <$> translateAt ExpectRuntimeValue arg
       (translated :) <$> proofPrimitiveArgs modes rest
     proofPrimitiveArgs _ _ =
       Except.throwError (RejectedPrimitive "proof primitive"
@@ -4155,6 +4172,90 @@ translateFTermF ftf = case ftf of
 -- Salsa20. Ported from @SAWCoreRocq.Term.translateTerm@.
 translateTerm :: TermTranslationMonad m => Term -> m Lean.Term
 translateTerm t = ttLean <$> translateTermWithShape t
+
+-- | Seam for the position-directed translation refactor
+-- (doc/2026-07-08_position-directed-translation-plan.md, Slice 0):
+-- translate a term at a declared expected position ρ — the calculus
+-- judgment
+--
+-- >  Γ ⊢ e : τ  ⟹_ρ  L : R(ρ, τ)
+--
+-- Transitional implementation: run the existing bottom-up translation
+-- unchanged and observe whether the shape it produced is consistent
+-- with ρ. Behavior-identical to 'translateTermWithShape'; later slices
+-- move the dispatch itself under ρ. Call sites migrate here only as
+-- their expected position becomes explicit — the ρ must be declared by
+-- the surrounding convention (a contract-table arg mode, a callee
+-- convention), never guessed to make a site migrate.
+--
+-- With @SAW_LEAN_TRACE_POSITIONS@ set, logs
+-- @(ρ, term head, produced shape)@ per call and flags productions
+-- inconsistent with ρ — the migration's differential oracle.
+translateAt ::
+  TermTranslationMonad m => ExpectedPosition -> Term -> m TranslatedTerm
+translateAt rho t = do
+  result <- translateTermWithShape t
+  tracePositionAt rho t result
+  pure result
+
+-- | Is the shape the bottom-up translator produced consistent with the
+-- demanded position? Consistent = exactly the representation @R(ρ, τ)@
+-- prescribes, or one an allowed adapter reaches from it (raw → runtime
+-- via 'Pure.pure'; a non-lambda term standing at function position,
+-- since 'BindingShape' cannot distinguish a function-typed variable
+-- from a raw value). A runtime ('Except') value at a raw or function
+-- position is inconsistent: reaching it needs an error-preserving
+-- 'Bind.bind' context, which only the adaptation chokepoint (Slice 2's
+-- @adaptTo@) may build. Slice 0 only observes this relation via the
+-- position trace; translation must never branch on it.
+shapeConsistentWithPosition :: ExpectedPosition -> BindingShape -> Bool
+shapeConsistentWithPosition rho shape = case rho of
+  ExpectRuntimeValue          -> shape /= BindingFunction
+  ExpectRaw RawMotivePosition -> shape /= BindingWrapped
+  ExpectRaw _                 -> shape == BindingRaw
+  ExpectFunctionPosition      -> shape /= BindingWrapped
+
+-- | One-shot read of @SAW_LEAN_TRACE_POSITIONS@. Debug instrumentation
+-- only: translation is pure ('TranslationMonad' has no IO), so the
+-- flag is read once at module load and the trace goes through
+-- 'Debug.Trace.traceM'. Nothing downstream may depend on it.
+positionTraceEnabled :: Bool
+positionTraceEnabled =
+  unsafePerformIO (isJust <$> lookupEnv "SAW_LEAN_TRACE_POSITIONS")
+{-# NOINLINE positionTraceEnabled #-}
+
+tracePositionAt ::
+  TermTranslationMonad m => ExpectedPosition -> Term -> TranslatedTerm -> m ()
+tracePositionAt rho t result
+  | not positionTraceEnabled = pure ()
+  | otherwise =
+      Debug.Trace.traceM $
+        "[translateAt] rho=" ++ show rho
+        ++ " head=" ++ termHeadLabel t
+        ++ " shape=" ++ show (ttShape result)
+        ++ (if shapeConsistentWithPosition rho (ttShape result)
+              then ""
+              else " INCONSISTENT")
+
+-- | Compact head label for the position trace.
+termHeadLabel :: Term -> String
+termHeadLabel t =
+  case asApplyAll t of
+    (hd, args@(_ : _)) -> atomLabel hd ++ "@" ++ show (length args)
+    _                  -> atomLabel t
+  where
+    atomLabel u = case unwrapTermF u of
+      FTermF (Recursor rec) ->
+        "Recursor:"
+        ++ Text.unpack (toShortName (nameInfo (recursorDataType rec)))
+      FTermF Sort{}       -> "Sort"
+      FTermF ArrayValue{} -> "ArrayValue"
+      FTermF StringLit{}  -> "StringLit"
+      App{}               -> "App"
+      Lambda{}            -> "Lambda"
+      Pi{}                -> "Pi"
+      Constant nm         -> Text.unpack (toShortName (nameInfo nm))
+      Variable vn _       -> "$" ++ Text.unpack (vnName vn)
 
 translateTermWithShape :: TermTranslationMonad m => Term -> m TranslatedTerm
 translateTermWithShape t =

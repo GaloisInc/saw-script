@@ -20,3 +20,7 @@
 # When Test.hs runs us, it overrides HOME to this directory; elan
 # tries to bootstrap a toolchain config here. Drop the leftover.
 .elan/
+
+# Emitted-Lean baselines captured by support/emitted-lean-snapshot.sh
+# (the position-directed-refactor byte-diff oracle). Local dev state.
+.snapshots/
