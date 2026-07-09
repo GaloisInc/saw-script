@@ -242,8 +242,8 @@ instance AppSubst Type where
         TyRecord pos fs -> TyRecord pos (appSubst s fs)
         TyVar _ _  -> t
         TyUnifyVar _ i -> case Map.lookup i s of
-            Just t' -> t'
             Nothing -> t
+            Just t' -> appSubst s t'
 
 instance AppSubst Schema where
     appSubst s (Forall ns t) =
