@@ -90,6 +90,18 @@ data TranslationError
     --   is preferable to letting an unmapped reference reach Lean
     --   and surface as an opaque "unknown identifier" error there.
   | RejectedPrimitive Text Text
+    -- | The adaptation chokepoint (@adaptTo@ in "SAWCoreLean.Term")
+    --   was asked to move a translated term to a position no allowed
+    --   adapter reaches — e.g. a runtime 'Except' value demanded at a
+    --   raw type/proof position, or a function demanded as a wrapped
+    --   runtime value. The first 'Text' describes the demanded
+    --   position, the second the shape the term actually has.
+    --   Position/callee-calculus §Adaptation makes these adaptations
+    --   unrepresentable rather than silently defaulted; reaching this
+    --   error means a convention declared an impossible position and
+    --   must be fixed, never worked around by wrapping/unwrapping at
+    --   the call site.
+  | ForbiddenAdaptation Text Text
 
 ppTranslationError :: SharedContext -> TranslationError -> IO Text
 ppTranslationError sc err = case err of
@@ -153,6 +165,23 @@ ppTranslationError sc err = case err of
       "SAWCentral.Prover.Exporter) so the\n" <>
       "    referring definition stays opaque, or supply a handwritten " <>
       "recursor wrapper."
+  ForbiddenAdaptation rho shape ->
+    pure $
+      "Translator internal contract violation: a term of shape " <> shape <>
+      " was demanded at position " <> rho <> ",\n" <>
+      "and no allowed adapter connects the two.\n" <>
+      "\n" <>
+      "What this means: the position/callee calculus (saw-core-lean/doc/\n" <>
+      "2026-07-02_position-callee-calculus.md, §Adaptation) permits exactly:\n" <>
+      "  raw → runtime value (Pure.pure), identity at the same position,\n" <>
+      "  and error-preserving Bind.bind contexts built by the translator.\n" <>
+      "Everything else (wrapping a function, a proof, a type, or silently\n" <>
+      "dropping an error case) is unsound and deliberately unrepresentable.\n" <>
+      "\n" <>
+      "This error is a translator bug, not a user error: some callee\n" <>
+      "convention or dispatch branch declared a position its argument's\n" <>
+      "translation cannot soundly meet. Please file with the goal that\n" <>
+      "produced it. Do NOT work around it by pre-wrapping the term."
   RejectedPrimitive name reason ->
     pure $
       "Refusing to translate primitive " <> name <> ".\n" <>

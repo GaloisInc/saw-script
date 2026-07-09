@@ -34,9 +34,12 @@ module SAWCoreLean.Term
   , translateTermLet
   , translateTermLetWithShape
   , translateAt
+  , adaptTo
+  , adaptToRuntime
+  , ExpectedPosition(..)
+  , RawReason(..)
   , TranslatedTerm
   , translatedTermLean
-  , translatedTermAsWrapped
   , translateDefDoc
   , withRawTranslationMode
     -- * Decl construction
@@ -48,6 +51,7 @@ module SAWCoreLean.Term
   ) where
 
 import           Control.Lens                 (makeLenses, over, set, view)
+import           Control.Monad                (zipWithM)
 import qualified Control.Monad.Except         as Except
 import           Control.Monad.Reader         (MonadReader(local), asks)
 import           Control.Monad.State          (get, modify)
@@ -192,19 +196,6 @@ pattern TranslatedTerm tm shape <- TranslatedTermAt tm shape _
 
 translatedTermLean :: TranslatedTerm -> Lean.Term
 translatedTermLean = ttLean
-
--- | Adapt a translated value to an @Except String@ formal using the
--- translator's shape metadata, not Lean-AST recognition. Raw terms are
--- successful values; wrapped terms are already in the monad.
-translatedTermAsWrapped :: TranslatedTerm -> Lean.Term
-translatedTermAsWrapped (TranslatedTerm tm BindingWrapped) = tm
-translatedTermAsWrapped (TranslatedTerm tm _) =
-  Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [tm]
-
-adaptWrappedFormal :: Bool -> TranslatedTerm -> TranslatedTerm
-adaptWrappedFormal True result =
-  TranslatedTerm (translatedTermAsWrapped result) BindingWrapped
-adaptWrappedFormal False result = result
 
 -- | Per-binding record for the calculus's Γ (plan Slice 1). The old
 -- environment collapsed every binding to a 3-way 'BindingShape';
@@ -1155,7 +1146,8 @@ buildLifted head_ pureWrap shouldBind argResults =
       let lam = Lean.Lambda
                   [Lean.Binder Lean.Explicit bname Nothing]
                   rest'
-      pure (Lean.App bindVar [translatedTermAsWrapped t, lam])
+      bound <- adaptToRuntime t
+      pure (Lean.App bindVar [bound, lam])
     -- 'shouldBind' is padded with 'False' to match 'argTerms'
     -- length at the call site (see 'applied' in
     -- 'originalDispatch'), so this final pattern is unreachable.
@@ -1303,7 +1295,7 @@ translateFunctionWithWrappedResult t = do
                 localTR (set skipBinderWrap surroundingCtx
                        . set inRecursorCaseBinder False) $ do
                   bodyResult <- translateTermLetWithShape body
-                  let bodyLean = translatedTermAsWrapped bodyResult
+                  bodyLean <- adaptToRuntime bodyResult
                   pure (Lean.Lambda (concatMap bindTransToBinder bts) bodyLean)
        _ -> translateTerm t
 
@@ -1414,7 +1406,8 @@ translateFunctionToWrappedFormal primitiveName fnTerm =
              wrappedHelperFunctionValueSlot typeIxs params $
                \binders _args -> do
                  bodyResult <- translateTermLetWithShape body
-                 pure (Lean.Lambda binders (translatedTermAsWrapped bodyResult))
+                 bodyLean <- adaptToRuntime bodyResult
+                 pure (Lean.Lambda binders bodyLean)
     _ ->
       case termSortOrType fnTerm of
         Right fty
@@ -1460,8 +1453,8 @@ translateFunctionWithNatLtWrappedResult primitiveName nLean expectsSourceProof f
                   let proofBinder =
                         Lean.Binder Lean.Explicit proofName (Just proofTy)
                   bodyResult <- translateTermLetWithShape body
-                  pure (Lean.Lambda [idxBinder, proofBinder]
-                    (translatedTermAsWrapped bodyResult))
+                  bodyLean <- adaptToRuntime bodyResult
+                  pure (Lean.Lambda [idxBinder, proofBinder] bodyLean)
         ((idxName, _) : (proofName, _) : [], body)
           | expectsSourceProof ->
               translateBinderWithLeanType idxName (Lean.Var (Lean.Ident "Nat")) $
@@ -1471,8 +1464,8 @@ translateFunctionWithNatLtWrappedResult primitiveName nLean expectsSourceProof f
                   in translateBinderWithLeanType proofName proofTy $
                     \proofBinder -> do
                       bodyResult <- translateTermLetWithShape body
-                      pure (Lean.Lambda [idxBinder, proofBinder]
-                        (translatedTermAsWrapped bodyResult))
+                      bodyLean <- adaptToRuntime bodyResult
+                      pure (Lean.Lambda [idxBinder, proofBinder] bodyLean)
         _ ->
           Except.throwError (RejectedPrimitive primitiveName
             (if expectsSourceProof
@@ -2172,8 +2165,8 @@ buildWrappedProofCarryingApplication ::
   PartialOpContract ->
   m TranslatedTerm
 buildWrappedProofCarryingApplication head_ argModes argResults contract = do
-  let helperArgs = zipWith partialOpArgTerm argModes argResults
-      prop = pocBuildProp contract helperArgs
+  helperArgs <- zipWithM partialOpArgTerm argModes argResults
+  let prop = pocBuildProp contract helperArgs
   unavailable <- view unavailableIdents <$> askTR
   let proofIdents = Set.union (leanTermIdents prop) unavailable
   tm <- withLocalProofObligationUsing
@@ -2184,8 +2177,8 @@ buildWrappedProofCarryingApplication head_ argModes argResults contract = do
               pure (Lean.App head_ (helperArgs ++ [proof]))
   pure (TranslatedTerm tm BindingWrapped)
   where
-    partialOpArgTerm PartialOpArgRaw = ttLean
-    partialOpArgTerm PartialOpArgWrapped = translatedTermAsWrapped
+    partialOpArgTerm PartialOpArgRaw = pure . ttLean
+    partialOpArgTerm PartialOpArgWrapped = adaptToRuntime
 
 buildRawProofCarryingApplication ::
   TermTranslationMonad m =>
@@ -2236,7 +2229,8 @@ buildRawProofCarryingApplication resultShape head_ pureWrap shouldBind argResult
       let lam = Lean.Lambda
                   [Lean.Binder Lean.Explicit bname Nothing]
                   rest'
-      pure (Lean.App bindVar [translatedTermAsWrapped t, lam])
+      bound <- adaptToRuntime t
+      pure (Lean.App bindVar [bound, lam])
     go pos (_ : rest) [] subs =
       go (pos + 1) rest [] subs
 
@@ -2382,13 +2376,9 @@ checkedApplicationArgTerm ::
 checkedApplicationArgTerm _ CheckedArgRaw translated =
   pure (ttLean translated)
 checkedApplicationArgTerm _ CheckedArgWrapped translated =
-  pure (translatedTermAsWrapped translated)
-checkedApplicationArgTerm ident CheckedArgFunction translated =
-  case ttShape translated of
-    BindingWrapped ->
-      Except.throwError (RejectedPrimitive (Text.pack (identName ident))
-        "checked-application contract expected a function argument, but the translated actual was an Except value")
-    _ -> pure (ttLean translated)
+  adaptToRuntime translated
+checkedApplicationArgTerm _ CheckedArgFunction translated =
+  ttLean <$> adaptTo ExpectFunctionPosition translated
 checkedApplicationArgTerm ident CheckedArgFunctionWithNatLt{} _ =
   Except.throwError (RejectedPrimitive (Text.pack (identName ident))
     "checked-application proof-function argument must be translated from the source term")
@@ -2469,7 +2459,7 @@ lowerProofPrimitiveContract contract args = do
         ProofArgRaw ->
           withRawTranslationMode (translateTerm arg)
         ProofArgWrapped ->
-          translatedTermAsWrapped <$> translateAt ExpectRuntimeValue arg
+          translateAt ExpectRuntimeValue arg >>= adaptToRuntime
       (translated :) <$> proofPrimitiveArgs modes rest
     proofPrimitiveArgs _ _ =
       Except.throwError (RejectedPrimitive "proof primitive"
@@ -2678,9 +2668,10 @@ subjectCarrier :: EqualitySubjectRep -> Lean.Term -> Lean.Term
 subjectCarrier EqualitySubjectRuntimeValue ty = wrapExcept ty
 subjectCarrier (EqualitySubjectRaw _) ty = ty
 
-subjectTerm :: EqualitySubjectRep -> TranslatedTerm -> Lean.Term
-subjectTerm EqualitySubjectRuntimeValue = translatedTermAsWrapped
-subjectTerm (EqualitySubjectRaw _) = ttLean
+subjectTerm ::
+  TermTranslationMonad m => EqualitySubjectRep -> TranslatedTerm -> m Lean.Term
+subjectTerm EqualitySubjectRuntimeValue = adaptToRuntime
+subjectTerm (EqualitySubjectRaw r)      = fmap ttLean . adaptTo (ExpectRaw r)
 
 equalityPropositionAtSubjectRep ::
   TermTranslationMonad m =>
@@ -2697,11 +2688,10 @@ equalityPropositionAtSubjectRep who rep aArg xArg yArg = do
           Except.throwError (RejectedPrimitive who
             "raw logical equality over function-shaped subjects is not \
             \implemented in this slice")
-        [] -> pure (Lean.App eqHead
-          [ wrapExcept aLean
-          , translatedTermAsWrapped xTrans
-          , translatedTermAsWrapped yTrans
-          ])
+        [] -> do
+          xLean <- adaptToRuntime xTrans
+          yLean <- adaptToRuntime yTrans
+          pure (Lean.App eqHead [wrapExcept aLean, xLean, yLean])
     EqualitySubjectRaw _ -> do
       xLean <- withRawTranslationMode (translateTerm xArg)
       yLean <- withRawTranslationMode (translateTerm yArg)
@@ -2724,23 +2714,19 @@ lowerRawLogicalCallee RawLogicalEq _ [aArg, xArg, yArg] = do
   yTrans <- translateTermWithShape yArg
   rep <- subjectRepFromTranslatedOperands "Eq" [xTrans, yTrans]
   eqHead <- explicitCoreNameAtArgUniverse (Lean.Ident "Eq") aArg
+  xLean <- subjectTerm rep xTrans
+  yLean <- subjectTerm rep yTrans
   pure (TranslatedTerm
-    (Lean.App eqHead
-      [ subjectCarrier rep aLean
-      , subjectTerm rep xTrans
-      , subjectTerm rep yTrans
-      ])
+    (Lean.App eqHead [subjectCarrier rep aLean, xLean, yLean])
     BindingRaw)
 lowerRawLogicalCallee RawLogicalRefl _ [aArg, xArg] = do
   aLean <- withRawTranslationMode (translateTerm aArg)
   xTrans <- translateTermWithShape xArg
   rep <- subjectRepFromTranslatedOperands "Refl" [xTrans]
   reflHead <- explicitCoreNameAtArgUniverse (Lean.Ident "Eq.refl") aArg
+  xLean <- subjectTerm rep xTrans
   pure (TranslatedTerm
-    (Lean.App reflHead
-      [ subjectCarrier rep aLean
-      , subjectTerm rep xTrans
-      ])
+    (Lean.App reflHead [subjectCarrier rep aLean, xLean])
     BindingRaw)
 lowerRawLogicalCallee RawLogicalEqRec _ [aArg, xArg, motiveArg, branchArg, yArg, eqProofArg] = do
   aLean <- withRawTranslationMode (translateTerm aArg)
@@ -2858,12 +2844,12 @@ translateIdentWithArgsWithShape i args
       let xLean = ttLean xTrans
           yLean = ttLean yTrans
       if shouldWrapBinder aArg
-         then pure (TranslatedTerm
+         then do
+           xWrapped <- adaptToRuntime xTrans
+           yWrapped <- adaptToRuntime yTrans
+           pure (TranslatedTerm
                 (Lean.App (Lean.Var (Lean.Ident "if0NatM"))
-                  [ aLean, nLean
-                  , translatedTermAsWrapped xTrans
-                  , translatedTermAsWrapped yTrans
-                  ])
+                  [aLean, nLean, xWrapped, yWrapped])
                 BindingWrapped)
          else pure (TranslatedTerm
                 (Lean.App (Lean.Var (Lean.Ident "if0NatRaw"))
@@ -3224,8 +3210,7 @@ originalDispatchWithShape i args = do
                 zipWith (\expectsWrapped isWrappedActual ->
                            not expectsWrapped && isWrappedActual)
                         expectedWrapped actualWrapped
-              adapted =
-                zipWith adaptWrappedFormal expectedWrapped argResults
+          adapted <- zipWithM adaptWrappedFormal expectedWrapped argResults
           helperApp <- buildLifted (Lean.Var target) False shouldBindRaw adapted
           if null rest
              then pure (TranslatedTerm helperApp BindingWrapped)
@@ -3260,8 +3245,7 @@ originalDispatchWithShape i args = do
                    zipWith (\expectsWrapped isWrappedActual ->
                               not expectsWrapped && isWrappedActual)
                            expectedWrapped actualWrapped
-                 adapted =
-                   zipWith adaptWrappedFormal expectedWrapped argResults
+             adapted <- zipWithM adaptWrappedFormal expectedWrapped argResults
              tm <- if null args
                      then pure (Lean.Var target)
                      else buildLifted (Lean.Var target) False shouldBindRaw adapted
@@ -3685,7 +3669,7 @@ translateRecursorAppWithShape crec args = do
                          else translateTerm a)
          [0..] preScrut)
        postResults <- traverse translateTermWithShape postScrut
-       let postTrans = recursorPostArgs motiveBody postResults
+       postTrans <- recursorPostArgs motiveBody postResults
        let recCallWith scrutTerm =
              Lean.App recHead (preTrans ++ [scrutTerm] ++ postTrans)
        case (recScrutineeMode convention, recResultMode convention) of
@@ -3795,15 +3779,17 @@ translateRecursorAppWithShape crec args = do
       where
         (binders, retTy) = asPiList fty
 
-    recursorPostArgs :: Term -> [TranslatedTerm] -> [Lean.Term]
+    recursorPostArgs ::
+      TermTranslationMonad m => Term -> [TranslatedTerm] -> m [Lean.Term]
     recursorPostArgs fty argResults =
-      [ case drop ix binders of
-          (_, bty) : _
-            | functionConventionValueSlot typeIxs ix bty ->
-                translatedTermAsWrapped result
-          _ -> ttLean result
-      | (ix, result) <- zip [0..] argResults
-      ]
+      sequence
+        [ case drop ix binders of
+            (_, bty) : _
+              | functionConventionValueSlot typeIxs ix bty ->
+                  adaptToRuntime result
+            _ -> pure (ttLean result)
+        | (ix, result) <- zip [0..] argResults
+        ]
       where
         (binders, _) = asPiList fty
         typeIxs = typeArgPositions fty
@@ -3968,9 +3954,9 @@ translateCaseHandler motiveReturnsRaw expectedWrappedResult casePlan caseTerm = 
                  then translateTermLet body
                  else do
                    bodyResult <- translateTermLetWithShape body
-                   pure $ if expectedWrappedResult
-                             then translatedTermAsWrapped bodyResult
-                             else ttLean bodyResult
+                   if expectedWrappedResult
+                      then adaptToRuntime bodyResult
+                      else pure (ttLean bodyResult)
             -- Shadow raw constructor fields only for value-producing motives.
             -- Type/proof motives must keep constructor fields raw; wrapping a
             -- Nat index there feeds `Except String Nat` into type constructors
@@ -4090,11 +4076,11 @@ translateCaseHandler motiveReturnsRaw expectedWrappedResult casePlan caseTerm = 
       TermTranslationMonad m => Bool -> Term -> m Lean.Term
     adaptBareCaseHandler expectedWrapped caseTerm' = do
       caseResult <- translateTermWithShape caseTerm'
-      let caseLean =
+      caseLean <-
             case ttShape caseResult of
-              BindingFunction -> ttLean caseResult
-              _ | expectedWrapped -> translatedTermAsWrapped caseResult
-              _ -> ttLean caseResult
+              BindingFunction -> pure (ttLean caseResult)
+              _ | expectedWrapped -> adaptToRuntime caseResult
+              _ -> pure (ttLean caseResult)
       mFty <- functionTypeOfTerm caseTerm'
       case mFty of
         Just fty -> etaExpandWrappedFunctionResult fty caseLean
@@ -4227,9 +4213,9 @@ translateFTermF ftf = case ftf of
        then pure (Lean.List [])
        else do
          elTyLean <- translateTerm elTyTerm
-         let liftedElems = map translatedTermAsWrapped elemResults
-             n          = length elemResults
-             vecLit     = Lean.List liftedElems
+         liftedElems <- traverse adaptToRuntime elemResults
+         let n      = length elemResults
+             vecLit = Lean.List liftedElems
          pure $ Lean.App (Lean.Var (Lean.Ident "vecSequenceM"))
                   [Lean.NatLit (toInteger n), elTyLean, vecLit]
 
@@ -4277,6 +4263,62 @@ translateAt rho t = do
   tracePositionAt rho t result
   pure result { ttProducedAt = Just rho }
 
+-- | The adaptation chokepoint (plan Slice 2): move a translated term
+-- to the position a convention demands, using exactly the adapters the
+-- calculus allows (§Adaptation):
+--
+--   * identity at the same position;
+--   * raw → runtime value via 'Pure.pure';
+--   * a non-lambda term standing at function position ('BindingShape'
+--     cannot distinguish a function-typed variable from a raw value,
+--     so 'BindingRaw' is accepted there — Lean's typechecker still
+--     guards the arity).
+--
+-- Everything else — wrapping a function, demanding a runtime 'Except'
+-- value at a raw type/proof/motive position without an error-
+-- preserving bind context, wrapping a motive — throws
+-- 'ForbiddenAdaptation'. It must never be caught and defaulted: it
+-- means the demanding convention is wrong, not the term.
+--
+-- Runtime → raw is deliberately absent. The only sound way to consume
+-- a wrapped value at a raw position is a 'Bind.bind' continuation that
+-- preserves the error case, and those are built by the translator's
+-- bind-chain emitters, not by point adaptation.
+adaptTo ::
+  TermTranslationMonad m => ExpectedPosition -> TranslatedTerm -> m TranslatedTerm
+adaptTo rho result =
+  let deliver tm shape = pure (TranslatedTermAt tm shape (Just rho))
+      forbidden =
+        Except.throwError (ForbiddenAdaptation
+          (Text.pack (show rho))
+          (Text.pack (show (ttShape result))))
+  in case (rho, ttShape result) of
+    (ExpectRuntimeValue, BindingWrapped)  -> deliver (ttLean result) BindingWrapped
+    (ExpectRuntimeValue, BindingRaw)      ->
+      deliver (Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [ttLean result])
+              BindingWrapped
+    (ExpectRuntimeValue, BindingFunction) -> forbidden
+    (ExpectRaw _, BindingRaw)             -> deliver (ttLean result) BindingRaw
+    (ExpectRaw RawMotivePosition, BindingFunction) ->
+      deliver (ttLean result) BindingFunction
+    (ExpectRaw _, _)                      -> forbidden
+    (ExpectFunctionPosition, BindingFunction) ->
+      deliver (ttLean result) BindingFunction
+    (ExpectFunctionPosition, BindingRaw)  -> deliver (ttLean result) BindingRaw
+    (ExpectFunctionPosition, BindingWrapped) -> forbidden
+
+-- | 'adaptTo' at runtime-value position, projected to the Lean term —
+-- the common shape at bind-chain and wrapped-formal sites.
+adaptToRuntime :: TermTranslationMonad m => TranslatedTerm -> m Lean.Term
+adaptToRuntime = fmap ttLean . adaptTo ExpectRuntimeValue
+
+-- | Adapt an argument whose formal the convention declares wrapped;
+-- leave other formals untouched.
+adaptWrappedFormal ::
+  TermTranslationMonad m => Bool -> TranslatedTerm -> m TranslatedTerm
+adaptWrappedFormal True  = adaptTo ExpectRuntimeValue
+adaptWrappedFormal False = pure
+
 -- | Is the shape the bottom-up translator produced consistent with the
 -- demanded position? Consistent = exactly the representation @R(ρ, τ)@
 -- prescribes, or one an allowed adapter reaches from it (raw → runtime
@@ -4284,9 +4326,9 @@ translateAt rho t = do
 -- since 'BindingShape' cannot distinguish a function-typed variable
 -- from a raw value). A runtime ('Except') value at a raw or function
 -- position is inconsistent: reaching it needs an error-preserving
--- 'Bind.bind' context, which only the adaptation chokepoint (Slice 2's
--- @adaptTo@) may build. Slice 0 only observes this relation via the
--- position trace; translation must never branch on it.
+-- 'Bind.bind' context, which only the adaptation chokepoint 'adaptTo'
+-- may build. Slice 0 only observes this relation via the position
+-- trace; translation must never branch on it.
 shapeConsistentWithPosition :: ExpectedPosition -> BindingShape -> Bool
 shapeConsistentWithPosition rho shape = case rho of
   ExpectRuntimeValue          -> shape /= BindingFunction
@@ -4664,8 +4706,6 @@ applyKnownFunctionWithShape fty f args = do
                expectedWrapped
                expectedFunction
                actualWrapped
-           adapted =
-             zipWith adaptWrappedFormal expectedWrapped argResults
            targetReturnsWrapped = isExceptStringType retType
            sourceResultShape = phaseBetaResultShape fty (length args)
            pureWrap =
@@ -4675,6 +4715,7 @@ applyKnownFunctionWithShape fty f args = do
              if targetReturnsWrapped || pureWrap
                 then BindingWrapped
                 else sourceResultShape
+       adapted <- zipWithM adaptWrappedFormal expectedWrapped argResults
        buildLiftedWithShape resultShape f pureWrap
          (take (length adapted) (shouldBindRaw ++ repeat False))
          adapted
@@ -4835,18 +4876,25 @@ translateDefDoc ::
   Lean.Ident -> Term -> Term ->
   Either TranslationError (Doc ann)
 translateDefDoc configuration mm name body tp = do
-  ((bodyResult, tp'), state) <-
-    runTermTranslationMonad configuration Nothing mm [] [name] $
+  let wrapType = shouldWrapBinder tp
+  ((bodyLean, tp'), state) <-
+    runTermTranslationMonad configuration Nothing mm [] [name] $ do
       -- P-1 (2026-05-06): use 'translateTermLet' on the body so
       -- shared subterms are emitted as let-bound variables rather
       -- than re-translated. Without this, hash-consed inputs with
       -- N levels of aliasing blow up exponentially (~100 GB on
       -- Salsa20). Type-side rarely shares; plain 'translateTerm'
       -- is enough there.
-      (,) <$> translateTermLetWithShape body <*> translateTerm tp
+      bodyResult <- translateTermLetWithShape body
+      -- If the top-level type wraps, the body stands at
+      -- runtime-value position and adapts through the chokepoint.
+      bodyLean <- if wrapType
+                     then adaptToRuntime bodyResult
+                     else pure (ttLean bodyResult)
+      tpLean <- translateTerm tp
+      pure (bodyLean, tpLean)
   let auxDecls = reverse (view topLevelDeclarations state)
       univs    = view universeVars state
-      body'    = ttLean bodyResult
       -- Wrap a top-level closed type in 'Except String' if it's a
       -- value-domain type. The translated body lives at
       -- 'Except String τ' (Phase β); without this wrap the def's
@@ -4856,13 +4904,8 @@ translateDefDoc configuration mm name body tp = do
       -- happens inside the Pi case of 'translateTermUnshared';
       -- this fixup only fires on closed-value top-level defs
       -- whose type expression is a bare 'Vec' / 'Bool' / etc.
-      wrapType = shouldWrapBinder tp
       tp'' = if wrapType then wrapExcept tp' else tp'
-      -- If the type wrapped, the body must too. Use the translated
-      -- body's shape metadata, not Lean-AST recognition, to decide
-      -- whether a 'Pure.pure' lift is needed.
-      body'' = if wrapType then translatedTermAsWrapped bodyResult else body'
-      mainDecl = mkDefinitionWith Lean.Noncomputable univs name body'' tp''
+      mainDecl = mkDefinitionWith Lean.Noncomputable univs name bodyLean tp''
       -- Each 'prettyDecl' already ends with 'hardline'; 'vcat' adds
       -- another between elements, yielding one blank line between
       -- decls.

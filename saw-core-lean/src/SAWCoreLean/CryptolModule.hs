@@ -64,9 +64,9 @@ translateTypedTermMap = mapM translateAndRegisterEntry
           tpTrans' = if wrapType
                         then TermTranslation.wrapExcept tpTrans
                         else tpTrans
-          tTrans'  = if wrapType
-                        then TermTranslation.translatedTermAsWrapped tResult
-                        else TermTranslation.translatedTermLean tResult
+      tTrans' <- if wrapType
+                    then TermTranslation.adaptToRuntime tResult
+                    else pure (TermTranslation.translatedTermLean tResult)
       -- Every translated def can transitively reference @coerce@ /
       -- @unsafeAssert@ / @error@ — all noncomputable axioms. Emit the
       -- user decl as @noncomputable def@ so Lean's code generator
