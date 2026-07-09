@@ -4266,7 +4266,7 @@ translateTerm t = ttLean <$> translateTermWithShape t
 translateAt ::
   TermTranslationMonad m => ExpectedPosition -> Term -> m TranslatedTerm
 translateAt rho t = do
-  result <- translateTermWithShape t
+  result <- translateSharedAt (Just rho) t
   tracePositionAt rho t result
   pure result { ttProducedAt = Just rho }
 
@@ -4386,7 +4386,20 @@ termHeadLabel t =
       Variable vn _       -> "$" ++ Text.unpack (vnName vn)
 
 translateTermWithShape :: TermTranslationMonad m => Term -> m TranslatedTerm
-translateTermWithShape t =
+translateTermWithShape = translateSharedAt Nothing
+
+-- | The shared-term walk with the expected position threaded through
+-- as an explicit parameter — 'Nothing' for legacy call sites that do
+-- not declare one, @'Just' ρ@ when entered via 'translateAt'. The
+-- position applies to THIS term only; recursive descent into subterms
+-- passes its own (usually 'Nothing' until the corresponding Slice 3/4
+-- step migrates the case arm). Never a reader field: an inherited
+-- position that silently leaks one level too deep is exactly the
+-- stale-context bug the calculus exists to kill.
+translateSharedAt ::
+  TermTranslationMonad m =>
+  Maybe ExpectedPosition -> Term -> m TranslatedTerm
+translateSharedAt mrho t =
   case t of
     STApp { stAppIndex = i } -> do
       shared <- view sharedNames <$> askTR
@@ -4407,7 +4420,7 @@ translateTermWithShape t =
               Except.throwError (RejectedPrimitive "shared let"
                 "internal error: shared subterm referenced before its \
                 \binding was recorded in the translation environment")
-        Nothing -> translateTermUnsharedWithShape t
+        Nothing -> translateTermUnsharedWithShapeAt mrho t
 
 -- | Translate a 'Term' WITHOUT consulting the 'sharedNames' map at the
 -- top level. Used by 'translateTermLet' to emit the right-hand side of
@@ -4658,7 +4671,16 @@ translateTermUnshared t =
 
 translateTermUnsharedWithShape ::
   TermTranslationMonad m => Term -> m TranslatedTerm
-translateTermUnsharedWithShape t =
+translateTermUnsharedWithShape = translateTermUnsharedWithShapeAt Nothing
+
+-- | Unshared translation with the expected position threaded (see
+-- 'translateSharedAt'). Case arms consume @mrho@ as Slice 3 migrates
+-- them family by family; unmigrated arms ignore it and translate
+-- bottom-up as before.
+translateTermUnsharedWithShapeAt ::
+  TermTranslationMonad m =>
+  Maybe ExpectedPosition -> Term -> m TranslatedTerm
+translateTermUnsharedWithShapeAt _mrho t =
   case unwrapTermF t of
     App {} -> do
       let (f, args) = asApplyAll t
