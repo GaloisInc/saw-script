@@ -129,6 +129,6 @@ noncomputable def TestArith_ZeroExtend : Except String (Vec
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro))))) Bool)) x__
-  (let h_unsafeAssert_obligation_ : (Prop) := (@Eq Num x__ x__);
+  (let h_unsafeAssert_obligation_ : (Prop) := (@Eq.{1} Num x__ x__);
   let h_unsafeAssert_ : (h_unsafeAssert_obligation_) := ((by sorry));
   h_unsafeAssert_)) v_0))
