@@ -734,261 +734,251 @@ resolveVar pos'i i ty = do
                             -- its unification var too.
                             addResolution i ty
                             resolveVar pos'j j ty
-                                
-
--- | Guts of unification.
---
---   "mgu" stands for "most general unifier".
---
---   Given two types, either fail or resolve unification vars so aso
---   to make them the same.
-mgu :: Pos -> [(Type, Type)] -> Type -> Type -> TI ()
-mgu pos encs expectBase foundBase = do
-    -- Use pos as the failure position for either type; they're the
-    -- same type after all, and any position that gives rise to it
-    -- should be good enough if expandFully croaks. (Hopefully.)
-    expect <- expandFully pos expectBase
-    found <- expandFully pos foundBase
-
-    -- | Fail with expected/found types
-    let reject msg more = do
-          ppopts <- asks tiPPOpts
-          encs' <- do
-              let once (t1, t2) = do
-                    t1' <- expandFully pos t1
-                    t2' <- expandFully pos t2
-                    pure (t1', t2')
-              mapM once encs
-          let body = PP.vsep $ more ++ [
-                  prettyEnclosing ppopts ((expect, found) : encs')
-               ]
-          recordError pos $ "Error:" <+> msg <> PP.line <> PP.indent 4 body
-
-          let (pos'expect, expect') = prettyTypeDetails ppopts expect
-              (pos'found, found') = prettyTypeDetails ppopts found
-          recordError pos'expect $ "Note:" <+> expect'
-          -- Attach a blank line to this message so there's a separator
-          -- between it and the next type error. XXX: we should have a
-          -- less ad hoc way to do this.
-          recordError pos'found $ "Note:" <+> found' <> PP.hardline <> ""
-
-    -- | We would like to resolve unification var @i@ to type @ty@.
-    --   Make sure this is well formed.
-    --
-    --   Does not handle the case where t _is_ TyUnifyVar i; there's
-    --   a separate case for that.
-    --
-    let checkOccurs pos'i i ty =
-          -- Collect the unification vars in ty, and check for an appearance
-          -- of i.
-          case Map.lookup i $ unifyVars ty of
-              Nothing -> pure ty
-              Just _otherpos -> do
-                  ppopts <- asks tiPPOpts
-                  let expect' = prettyType ppopts expect
-                      found' = prettyType ppopts found
-                      i' = prettyType ppopts $ TyUnifyVar pos'i i
-                      ty' = prettyType ppopts ty
-
-                  _ <- reject "Occurs check failure." [
-                      "Cannot unify" <+> expect' <+>
-                      "with" <+> found' <+> "because" <+> i' <+>
-                      "appears within" <+> ty' <> "."
-                   ]
-                  getErrorTyVar pos'i
-
-    case (expect, found) of
-        (TyUnifyVar _ i, TyUnifyVar _ j) | i == j ->
-            -- same unification var, nothing to do
-            pure ()
-
-        (TyUnifyVar pos'i i, _) -> do
-            -- one side is a unification var, resolve it
-            found' <- checkOccurs (Pos.getPos found) i found
-            resolveVar pos'i i found'
-
-        (_, TyUnifyVar pos'i i) -> do
-            -- the other side is a unification var, resolve it
-            expect' <- checkOccurs (Pos.getPos expect) i expect
-            resolveVar pos'i i expect'
-
-        (TyFunc pos'expect _ expParams expNamedParams expRet,
-         TyFunc pos'found _ foundParams foundNamedParams foundRet) -> do
-            -- First, unify the named parameters.
-            --
-            -- (We handle the named parameters first because because
-            -- they don't carry into the return value like curried
-            -- positional parameters.)
-            --
-            -- XXX: should we insist that both sides have the same named
-            -- parameters, or take the union of them? Allowing functions to
-            -- grow extra named (thus optional) parameters they ignore is
-            -- sound, but possibly unexpected/weird, so for now require them
-            -- to match exactly.
-            let expNames = Map.keysSet expNamedParams
-                foundNames = Map.keysSet foundNamedParams
-            if expNames /= foundNames then do
-                ppopts <- asks tiPPOpts
-                let expect' = prettyType ppopts expect
-                    found' = prettyType ppopts found
-                    expMissing = Map.difference foundNamedParams expNamedParams
-                    foundMissing = Map.difference expNamedParams foundNamedParams
-                    prettyMissing (name, ty) =
-                        let ty' = prettyType ppopts ty in
-                        PP.pretty name <+> ":" <+> ty'
-                    prettyMissingList fty' ms = case ms of
-                        [] ->
-                            []
-                        _ ->
-                            let ms' = PP.vsep $ map prettyMissing ms
-                                line1 = "Missing from" <+> fty' <> ":"
-                                lines2 = PP.indent 3 ms'
-                            in
-                            [line1 <> PP.line <> lines2]
-                    expMissing' = prettyMissingList expect' $ Map.toList expMissing
-                    foundMissing' = prettyMissingList found' $ Map.toList foundMissing
-                    missing' = expMissing' ++ foundMissing'
-                reject "Mismatched named parameters." missing'
-
-            else do
-                -- In principle when you have checked that the keys
-                -- match, you can do zip (Map.toList namedParams1)
-                -- (Map.toList namedParams2) and have things match up
-                -- correctly, but it makes me nervous, so do it like
-                -- this instead.
-                let allNamedParams =
-                        Map.intersectionWith (,) expNamedParams foundNamedParams
-                    (expNP, foundNP) = unzip $ Map.elems allNamedParams
-                mgus pos ((expect, found) : encs) expNP foundNP
-
-            -- Now unify as many positional params as possible. This
-            -- also produces the remainder types, basically the return
-            -- type. If one function is a -> b, and the other function
-            -- is a -> c -> d, the remainder types are b and c -> d
-            -- respectively.
-
-            let nExp = length expParams
-                nFound = length foundParams
-            (expRemainder, foundRemainder) <- do
-                if nExp < nFound then do
-                    let encs' = (expect, found) : encs
-                        foundParamsL = take nExp foundParams
-                        foundParamsR = drop nExp foundParams
-                    mgus pos encs' expParams foundParamsL
-                    -- we've used up expParams.
-                    let ty' = TyFunc pos'found noNames foundParamsR Map.empty foundRet
-                    pure (expRet, ty')
-                else if nFound > nExp then do
-                    -- unfortunately we need two copies of this because
-                    -- left vs. right side is semantically significant :-(
-                    let encs' = (expect, found) : encs
-                        expParamsL = take nFound expParams
-                        expParamsR = drop nFound expParams
-                    mgus pos encs' expParamsL foundParams
-                    -- we've used up foundParams.
-                    let ty' = TyFunc pos'expect noNames expParamsR Map.empty expRet
-                    pure (ty', foundRet)
-                else do
-                    let encs' = (expect, found) : encs
-                    mgus pos encs' expParams foundParams
-                    -- we've used up both expParams and foundParams.
-                    pure (expRet, foundRet)
-
-            -- now unify the remainders / return types
-            mgu pos ((expect, found) : encs) expRemainder foundRemainder
-
-        (TyRecord _ expFields, TyRecord _ foundFields)
-          | Map.keys expFields /= Map.keys foundFields ->
-            -- records with different keys
-            reject "Record field names do not match." []
-
-          | otherwise ->
-            -- records with the same field names, try unifying the field types
-            mgus pos ((expect, found) : encs) (Map.elems expFields) (Map.elems foundFields)
-
-        (TyCon _ expTC expTS, TyCon _ foundTC foundTS) | expTC == foundTC -> do
-            -- same type constructor, unify the args
-            when (length expTS /= length foundTS) $ do
-                -- This case is unreachable.
-                --
-                -- Every distinct type constructor has a definite
-                -- arity (tuples of different lengths are not the same
-                -- type constructor) and every type is supposed to
-                -- pass `checkType` before we do anything more
-                -- significant with it; that does a kind check, and on
-                -- failure produces a fresh unification var that can't
-                -- cause further trouble.
-                --
-                -- Therefore, if we get here, something's broked and we should
-                -- panic.
-                --
-                ppopts <- asks tiPPOpts
-                let expTS'   = "LHS:" : map (\t -> "   " <> ppType ppopts t) expTS
-                    foundTS' = "RHS:" : map (\t -> "   " <> ppType ppopts t) foundTS
-                let nexpect'   = Text.pack $ show $ length expTS
-                    nfound' = Text.pack $ show $ length foundTS
-                    heading = "Mismatched type constructor arguments: " <>
-                              "expected " <> nexpect' <> ", found " <> nfound'
-                panic "mgu" (heading : expTS' ++ foundTS')
-
-            mgus pos ((expect, found) : encs) expTS foundTS
-
-        (TyVar _ a, TyVar _ b) | a == b ->
-            -- Same named variable, nothing to do
-            pure ()
-
-        (_, TyFunc{}) ->
-            -- If we expected a scalar and found a function, speculate that
-            -- someone forgot a function argument earlier.
-            reject "Type mismatch."
-                ["Perhaps a function was not given enough arguments?"]
-
-        (_, _) ->
-            -- Did not work
-            reject "Type mismatch." []
-
--- | Run `mgu` on two lists of types.
-mgus :: Pos -> [(Type, Type)] -> [Type] -> [Type] -> TI ()
-mgus pos encs expect found =
-    zipWithM_ (mgu pos encs) expect found
 
 --
--- Unify two types.
+-- | Unify two types.
 --
-
--- When typechecking an expression the first type argument (t1) should
--- be the type expected from the context, and the second (t2) should
--- be the type found in the expression appearing in that context. For
--- example, when checking the second argument of a function application
--- (Application _pos e1 e2) checking e1 gives rise to an expected type
--- for e2, so when unifying that with the result of checking e2 the
--- t1 argument should be the expected type arising from e1, the t2
--- argument should be the type returned by checking e2, and the position
--- argument should be the position of e2 (not the position of the
--- enclosing apply node). If it doesn't work, the message generated
--- will be of the form "pos: found t2, expected t1".
+-- When typechecking an expression the first type argument (@exp@)
+-- should be the type expected from the context, and the second
+-- (@found@) should be the type found in the expression appearing in
+-- that context. The position argument should be the position at which
+-- any error should be reported, typically the position of the program
+-- element whose type is t2.
 --
--- Other cases should pass the arguments analogously. As of this
--- writing some are definitely backwards.
+-- If it doesn't work, the message generated will be of the form "pos:
+-- found t2, expected t1".
 --
--- Further notes on error messages:
+-- For example, when checking the second argument of a function
+-- application (Application _pos e1 e2) checking e1 gives rise to an
+-- expected type for e2. So when unifying that with the result of
+-- checking e2,
+--    - the t1 argument should be the expected type arising from e1,
+--    - the t2 argument should be the type returned by checking e2,
+--    - and the position argument should be the position of e2, not
+--      the position of the enclosing apply node.
 --
--- The error message returned by mgu already prints the types at some
--- length, so we don't need to print any of that again.
+-- Other cases should pass the arguments analogously. Some may still be
+-- backwards.
 --
--- Indent all but the first line by four spaces because the first line
--- ends up indented by two when it ultimately gets printed (or at
--- least sometimes it does) and we want the grouping to be clearly
+-- Error messages are indented (all but the first line) by four spaces
+-- because the first line sometimes ends up indented by two when it
+-- ultimately gets printed, and we want the grouping to be clearly
 -- recognizable.
 --
--- It's not clear that this is always the case, so in turn it's not
--- entirely clear that it's always useless and I'm hesitant to remove
--- it entirely, but that seems like a reasonable thing to do in the
--- future given more clarity.
---
 unify :: Type -> Pos -> Type -> TI ()
-unify t1 pos t2 =
-    mgu pos [] t1 t2
+unify exp0 pos found0 = visit [] exp0 found0
+  where
+    visit :: [(Type, Type)] -> Type -> Type -> TI ()
+    visit encs expectBase foundBase = do
+        -- Use pos as the failure position for either type; they're the
+        -- same type after all, and any position that gives rise to it
+        -- should be good enough if expandFully croaks. (Hopefully.)
+        expect <- expandFully pos expectBase
+        found <- expandFully pos foundBase
+
+        -- | Fail with expected/found types
+        let reject msg more = do
+              ppopts <- asks tiPPOpts
+              encs' <- do
+                  let once (t1, t2) = do
+                        t1' <- expandFully pos t1
+                        t2' <- expandFully pos t2
+                        pure (t1', t2')
+                  mapM once encs
+              let body = PP.vsep $ more ++ [
+                      prettyEnclosing ppopts ((expect, found) : encs')
+                   ]
+              recordError pos $ "Error:" <+> msg <> PP.line <> PP.indent 4 body
+
+              let (pos'expect, expect') = prettyTypeDetails ppopts expect
+                  (pos'found, found') = prettyTypeDetails ppopts found
+              recordError pos'expect $ "Note:" <+> expect'
+              -- Attach a blank line to this message so there's a separator
+              -- between it and the next type error. XXX: we should have a
+              -- less ad hoc way to do this.
+              recordError pos'found $ "Note:" <+> found' <> PP.hardline <> ""
+
+        -- | We would like to resolve unification var @i@ to type @ty@.
+        --   Make sure this is well formed.
+        --
+        --   Does not handle the case where t _is_ TyUnifyVar i; there's
+        --   a separate case for that.
+        --
+        let checkOccurs pos'i i ty =
+              -- Collect the unification vars in ty, and check for an appearance
+              -- of i.
+              case Map.lookup i $ unifyVars ty of
+                  Nothing -> pure ty
+                  Just _otherpos -> do
+                      ppopts <- asks tiPPOpts
+                      let expect' = prettyType ppopts expect
+                          found' = prettyType ppopts found
+                          i' = prettyType ppopts $ TyUnifyVar pos'i i
+                          ty' = prettyType ppopts ty
+
+                      _ <- reject "Occurs check failure." [
+                          "Cannot unify" <+> expect' <+>
+                          "with" <+> found' <+> "because" <+> i' <+>
+                          "appears within" <+> ty' <> "."
+                       ]
+                      getErrorTyVar pos'i
+
+        -- recurse into one nested type
+        let recOnce exp' found' =
+              visit ((expect, found) : encs) exp' found'
+
+        -- recurse into a list of types
+        let recList exps' founds' =
+              zipWithM_ (visit ((expect, found) : encs)) exps' founds'
+
+
+        case (expect, found) of
+            (TyUnifyVar _ i, TyUnifyVar _ j) | i == j ->
+                -- same unification var, nothing to do
+                pure ()
+
+            (TyUnifyVar pos'i i, _) -> do
+                -- one side is a unification var, resolve it
+                found' <- checkOccurs (Pos.getPos found) i found
+                resolveVar pos'i i found'
+
+            (_, TyUnifyVar pos'i i) -> do
+                -- the other side is a unification var, resolve it
+                expect' <- checkOccurs (Pos.getPos expect) i expect
+                resolveVar pos'i i expect'
+
+            (TyFunc pos'expect _ expParams expNamedParams expRet,
+             TyFunc pos'found _ foundParams foundNamedParams foundRet) -> do
+                -- First, unify the named parameters.
+                --
+                -- (We handle the named parameters first because because
+                -- they don't carry into the return value like curried
+                -- positional parameters.)
+                --
+                -- XXX: should we insist that both sides have the same named
+                -- parameters, or take the union of them? Allowing functions to
+                -- grow extra named (thus optional) parameters they ignore is
+                -- sound, but possibly unexpected/weird, so for now require them
+                -- to match exactly.
+                let expNames = Map.keysSet expNamedParams
+                    foundNames = Map.keysSet foundNamedParams
+                if expNames /= foundNames then do
+                    ppopts <- asks tiPPOpts
+                    let expect' = prettyType ppopts expect
+                        found' = prettyType ppopts found
+                        expMissing = Map.difference foundNamedParams expNamedParams
+                        foundMissing = Map.difference expNamedParams foundNamedParams
+                        prettyMissing (name, ty) =
+                            let ty' = prettyType ppopts ty in
+                            PP.pretty name <+> ":" <+> ty'
+                        prettyMissingList fty' ms = case ms of
+                            [] ->
+                                []
+                            _ ->
+                                let ms' = PP.vsep $ map prettyMissing ms
+                                    line1 = "Missing from" <+> fty' <> ":"
+                                    lines2 = PP.indent 3 ms'
+                                in
+                                [line1 <> PP.line <> lines2]
+                        expMissing' = prettyMissingList expect' $ Map.toList expMissing
+                        foundMissing' = prettyMissingList found' $ Map.toList foundMissing
+                        missing' = expMissing' ++ foundMissing'
+                    reject "Mismatched named parameters." missing'
+
+                else do
+                    -- In principle when you have checked that the keys
+                    -- match, you can do zip (Map.toList namedParams1)
+                    -- (Map.toList namedParams2) and have things match up
+                    -- correctly, but it makes me nervous, so do it like
+                    -- this instead.
+                    let allNamedParams =
+                            Map.intersectionWith (,) expNamedParams foundNamedParams
+                        (expNP, foundNP) = unzip $ Map.elems allNamedParams
+                    recList expNP foundNP
+
+                -- Now unify as many positional params as possible. This
+                -- also produces the remainder types, basically the return
+                -- type. If one function is a -> b, and the other function
+                -- is a -> c -> d, the remainder types are b and c -> d
+                -- respectively.
+
+                let nExp = length expParams
+                    nFound = length foundParams
+                (expRemainder, foundRemainder) <- do
+                    if nExp < nFound then do
+                        let foundParamsL = take nExp foundParams
+                            foundParamsR = drop nExp foundParams
+                        recList expParams foundParamsL
+                        -- we've used up expParams.
+                        let ty' = TyFunc pos'found noNames foundParamsR Map.empty foundRet
+                        pure (expRet, ty')
+                    else if nFound > nExp then do
+                        -- unfortunately we need two copies of this because
+                        -- left vs. right side is semantically significant :-(
+                        let expParamsL = take nFound expParams
+                            expParamsR = drop nFound expParams
+                        recList expParamsL foundParams
+                        -- we've used up foundParams.
+                        let ty' = TyFunc pos'expect noNames expParamsR Map.empty expRet
+                        pure (ty', foundRet)
+                    else do
+                        recList expParams foundParams
+                        -- we've used up both expParams and foundParams.
+                        pure (expRet, foundRet)
+
+                -- now unify the remainders / return types
+                recOnce expRemainder foundRemainder
+
+            (TyRecord _ expFields, TyRecord _ foundFields)
+              | Map.keys expFields /= Map.keys foundFields ->
+                -- records with different keys
+                reject "Record field names do not match." []
+
+              | otherwise ->
+                -- records with the same field names, try unifying the field types
+                recList (Map.elems expFields) (Map.elems foundFields)
+
+            (TyCon _ expTC expTS, TyCon _ foundTC foundTS) | expTC == foundTC -> do
+                -- same type constructor, unify the args
+                when (length expTS /= length foundTS) $ do
+                    -- This case is unreachable.
+                    --
+                    -- Every distinct type constructor has a definite
+                    -- arity (tuples of different lengths are not the same
+                    -- type constructor) and every type is supposed to
+                    -- pass `checkType` before we do anything more
+                    -- significant with it; that does a kind check, and on
+                    -- failure produces a fresh unification var that can't
+                    -- cause further trouble.
+                    --
+                    -- Therefore, if we get here, something's broked and we should
+                    -- panic.
+                    --
+                    ppopts <- asks tiPPOpts
+                    let expTS'   = "LHS:" : map (\t -> "   " <> ppType ppopts t) expTS
+                        foundTS' = "RHS:" : map (\t -> "   " <> ppType ppopts t) foundTS
+                    let nexpect'   = Text.pack $ show $ length expTS
+                        nfound' = Text.pack $ show $ length foundTS
+                        heading = "Mismatched type constructor arguments: " <>
+                                  "expected " <> nexpect' <> ", found " <> nfound'
+                    panic "unify" (heading : expTS' ++ foundTS')
+
+                recList expTS foundTS
+
+            (TyVar _ a, TyVar _ b) | a == b ->
+                -- Same named variable, nothing to do
+                pure ()
+
+            (_, TyFunc{}) ->
+                -- If we expected a scalar and found a function, speculate that
+                -- someone forgot a function argument earlier.
+                reject "Type mismatch."
+                    ["Perhaps a function was not given enough arguments?"]
+
+            (_, _) ->
+                -- Did not work
+                reject "Type mismatch." []
+
 
 -- Check if two types match but don't actually unify them
 -- (that is, throw away any changes or diagnostics that appear)
