@@ -4,8 +4,8 @@ Type errors:
     Expected: Int
     Found:    String
 
-    Expected: t.2 Int
-    Found:    t.2 String
+    Expected: t.0 Int
+    Found:    t.0 String
 
   unify010.saw:9:9-9:12: Note: The type Int arises from this type annotation
   unify010.saw:9:24-9:29: Note: The type String arises from the type of this term
