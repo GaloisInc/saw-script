@@ -243,7 +243,16 @@ instance AppSubst Type where
         TyVar _ _  -> t
         TyUnifyVar _ i -> case Map.lookup i s of
             Nothing -> t
-            Just t' -> appSubst s t'
+            Just t' ->
+                -- Apply any further substitutions needed in the
+                -- expansion of i.
+                --
+                -- This will always terminate because the expansion of
+                -- i cannot refer to i; the correctness arguments for
+                -- checkOccurs ensure that. They do in turn depend on
+                -- full expansion of existing substitutions, which
+                -- in general requires this call.
+                appSubst s t'
 
 instance AppSubst Schema where
     appSubst s (Forall ns t) =
@@ -808,8 +817,28 @@ unify exp0 pos found0 = visit [] exp0 found0
         --   a separate case for that.
         --
         let checkOccurs pos'i i ty =
-              -- Collect the unification vars in ty, and check for an appearance
-              -- of i.
+              -- Collect the unification vars in ty, and check for an
+              -- appearance of i. This is sufficient because ty has
+              -- been fully expanded (it is either expect or found,
+              -- and both were expanded above) so it cannot contain
+              -- typedefs and all unification vars it contains are so
+              -- far unresolved.
+              --
+              -- It is possible for some such unification var j to
+              -- later be resolved to something that includes
+              -- i. However, that will trigger this check then:
+              -- because we've resolved i, it will check the candidate
+              -- resolution of j for occurrences of j. That will
+              -- contain the expansion of i, and by hypothesis there
+              -- is an occurrence of j in the expansion of i.
+              --
+              -- It's thus impossible to get cycles of unification
+              -- var references that bypass this check. This argument
+              -- depends critically on every resolution attempt being
+              -- able to see the complete set of previous resolutions
+              -- in `tiSubst`, and on `expandFully` applying them all
+              -- everywhere in ty, including recursively.
+              --
               case Map.lookup i $ unifyVars ty of
                   Nothing -> pure ty
                   Just _otherpos -> do
