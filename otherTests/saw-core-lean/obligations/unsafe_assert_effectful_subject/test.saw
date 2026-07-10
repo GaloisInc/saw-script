@@ -1,0 +1,10 @@
+enable_experimental;
+
+// unsafeAssert's equality obligation must follow the operands' domain (the
+// same faithful-rep rule as the standalone equality convention). Over an
+// effectful operand the obligation compares the wrapped runtime computations
+// at the Except carrier — the goal's own carrier — never a raw-mode
+// re-reading that drops the effect structure (which produced an obligation
+// that could not stand at the goal's type).
+let probe = parse_core "unsafeAssert Bool (coerce Bool Bool (Refl (sort 0) Bool) True) True";
+write_lean_term "UnsafeAssertEffectfulProbe" [] [] "emitted.lean" probe;

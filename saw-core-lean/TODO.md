@@ -378,9 +378,19 @@ doc for per-slice regression fences and bounded validation commands):
     `y` binder in Γ drives the inner standalone classification), the
     `Pure.pure`-lifted branch, and the wrapped result. Pinned by
     `obligations/proof_transport_runtime_eqrec` (elaborates in Lean,
-    `#print axioms` clean). A proof produced at a mismatched rep (e.g. a
-    raw-declared unsafeAssert feeding a runtime-subject transport) fails
+    `#print axioms` clean). A proof produced at a mismatched rep fails
     loudly at Lean elaboration — the carrier types differ; nothing coerces.
+  - [x] 5-followup (2026-07-10, design review): the operand-domain rule is
+    the UNIVERSAL semantic definition of ρ_eq, not a standalone-case
+    fallback — a surround may only "declare" ρ_eq when its own slot
+    contracts pin the operand domain. unsafeAssert's did not: its
+    unconditional declared-raw dropped effect structure over effectful
+    operands and produced an obligation that could not stand at the goal's
+    wrapped carrier. It now classifies through
+    `standaloneEqualitySubjectRep` in ambient mode (raw pipeline in raw
+    mode); byte-identical for all pure-operand emissions; pinned by
+    `obligations/unsafe_assert_effectful_subject` (faithful wrapped
+    obligation, discharged by `rfl` in the probe).
   - [x] 5c (2026-07-10) — function-carrier equality decided:
     `EqualitySubjectRawFunction` with the carrier translated in the CURRENT
     mode — raw logical content compares functions at the raw `a -> b` it

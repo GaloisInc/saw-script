@@ -3085,10 +3085,33 @@ translateRawErrorObligation resultTy = do
 translateUnsafeAssertObligation ::
   TermTranslationMonad m => Term -> Term -> Term -> m TranslatedTerm
 translateUnsafeAssertObligation aArg xArg yArg = do
-  prop <- equalityPropositionAtSubjectRep
-            "unsafeAssert"
-            (EqualitySubjectRaw RawProofPosition)
-            aArg xArg yArg
+  -- The subject representation follows the operands' domain — the
+  -- same faithful-rep rule as the standalone equality convention.
+  -- unsafeAssert's operands are arbitrary values, so an unconditional
+  -- "declared raw" here was miscalibrated: over an effectful operand
+  -- it rebuilt the proposition at a raw reading that dropped the
+  -- effect structure, and the resulting obligation could not stand at
+  -- the goal's wrapped carrier (a loud Lean carrier mismatch, but the
+  -- right emission is the faithful wrapped obligation). In raw
+  -- translation mode the raw pipeline applies for the same reason it
+  -- does in 'lowerRawLogicalCalleeRawMode'.
+  phase <- phaseBetaEnabled
+  prop <-
+    if not phase
+       then equalityPropositionAtSubjectRep
+              "unsafeAssert"
+              (EqualitySubjectRaw RawProofPosition)
+              aArg xArg yArg
+       else do
+         aLean <- withRawTranslationMode (translateTerm aArg)
+         xTrans <- translateTermWithShape xArg
+         yTrans <- translateTermWithShape yArg
+         rep <- standaloneEqualitySubjectRep "unsafeAssert" [xTrans, yTrans]
+         eqHead <- explicitCoreNameAtArgUniverse (Lean.Ident "Eq") aArg
+         carrier <- subjectCarrierAt rep aArg aLean
+         xLean <- subjectTerm rep xTrans
+         yLean <- subjectTerm rep yTrans
+         pure (Lean.App eqHead [carrier, xLean, yLean])
   tm <- withLocalProofObligation
           (Lean.Ident "h_unsafeAssert_")
           prop
