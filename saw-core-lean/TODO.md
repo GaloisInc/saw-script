@@ -312,6 +312,22 @@ doc for per-slice regression fences and bounded validation commands):
     non-dependent by the helpers' types, so SAWCore's typechecker rejects
     any dependent lambda upstream of the producers. The fixture rides the
     first dependent `FunctionArg` convention (4c/Slice-5-era work).
+  - [ ] **Deliberate emission-quality debts (2026-07-10, user-reviewed;
+    parity-preserved on purpose, fix as a dedicated slice after Slice 5 so
+    the oracle baselines stay sharp through the equality work). Each lives
+    at exactly ONE marked chokepoint (grep SUSPECT in Term.hs):**
+    - `phaseBetaBindFromMode`: `RawValueArg` binds RAW actuals too
+      (pure-lift-then-bind — identity but monadic noise). Fix:
+      bind-iff-wrapped, reviewed emitted-Lean diff + one golden refresh
+      round.
+    - `phaseBetaArgModesFor`: a var-headed formal falling past the
+      Pi-instantiation lookup is ASSUMED value-domain (sound for every
+      instantiation, but an assumption). Fix: instantiation-directed modes
+      with the dependent `FunctionArg` convention work.
+    The two-family asymmetry itself (raw-formal external targets with
+    call-site sequencing vs wrapped-formal translated function values) is
+    NOT a debt — it is forced: propositions need raw operands; partial
+    application over computed prefixes needs effectful closure interfaces.
   - Original 4b design notes from the 2026-07-09 analysis (implemented):
     (i) the convention derivation must take the SUPPLIED TYPE ACTUALS, not
     just the callee Pi type — `argumentBindPlanFromWrapped`'s

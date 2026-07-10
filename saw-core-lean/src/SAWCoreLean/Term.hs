@@ -1415,6 +1415,13 @@ phaseBetaArgModesFor fty srcArgs =
       -- wrapped Num actual; the legacy plan never did.)
       | isCryptolNumType bty = TypeArg
       | isJust (asNatType bty) = IndexArg
+      -- SUSPECT (tracked, TODO "Deliberate emission-quality debts"):
+      -- a var-headed formal falling through here is ASSUMED
+      -- instantiated at a value-domain type (sound for every
+      -- instantiation — binding is identity-or-correct — but an
+      -- assumption, not a lookup). The honest endpoint is
+      -- instantiation-directed modes via the dependent 'FunctionArg'
+      -- convention work.
       | otherwise = RawValueArg
 
 -- | The bind discipline each mode implies on the raw-formal
@@ -1423,6 +1430,12 @@ phaseBetaBindFromMode :: Int -> [Int] -> ArgMode -> Bool -> Bool
 phaseBetaBindFromMode ix typeIxs mode actualWrapped
   | ix `elem` typeIxs = False
   | otherwise = case mode of
+      -- SUSPECT (tracked, TODO "Deliberate emission-quality debts"):
+      -- binding a RAW actual pure-lifts it first
+      -- (@Bind.bind (Pure.pure x) …@) — semantically identity but
+      -- monadic noise. Parity-preserved from the legacy plan; the
+      -- intended fix is bind-iff-wrapped (@actualWrapped@, like
+      -- 'IndexArg') as a dedicated reviewed-diff slice after Slice 5.
       RawValueArg -> True
       IndexArg    -> actualWrapped
       _           -> False
@@ -5248,33 +5261,22 @@ applyKnownFunctionWithShape fty f args = do
   phase <- phaseBetaEnabled
   if phase
      then do
-       let (expectedTypes, retType) = peelLeanPiTypes (length args) ftyLean
+       -- Plan Slice 4c: the declared function-value convention drives
+       -- the formal expectations; equivalence with the historical
+       -- 'peelLeanPiTypes'/'isExceptStringType' inspection was proven
+       -- corpus-wide by the inert oracle before this swap. The
+       -- RESULT-type peel ('targetReturnsWrapped' below) is the one
+       -- remaining type self-mirror on this path, tracked with
+       -- 'bindingShapeOfType' for demotion.
+       let (_, retType) = peelLeanPiTypes (length args) ftyLean
+           fnModes = phaseBetaFunctionValueModesFor fty
            expectedWrapped =
-             take (length argTerms) (map isExceptStringType expectedTypes ++ repeat False)
-           expectedFunction =
-             take (length argTerms) (map isLeanPiType expectedTypes ++ repeat False)
-       -- Plan Slice 4c step 1 (inert oracle): the derived
-       -- function-value convention must reproduce the emitted-type
-       -- peel exactly before it replaces it.
-       let fnModes = phaseBetaFunctionValueModesFor fty
-           derivedWrapped =
              take (length argTerms)
                ([ m == RawValueArg | m <- fnModes ] ++ repeat False)
-           derivedFunction =
+           expectedFunction =
              take (length argTerms)
                ([ case m of FunctionArg _ -> True; _ -> False
                 | m <- fnModes ] ++ repeat False)
-       if derivedWrapped /= expectedWrapped
-            || derivedFunction /= expectedFunction
-          then Except.throwError (RejectedPrimitive "known function application"
-                 ("internal (plan Slice 4c): derived function-value \
-                  \convention disagrees with the emitted-type peel: \
-                  \peel wrapped " <> Text.pack (show expectedWrapped)
-                  <> " derived " <> Text.pack (show derivedWrapped)
-                  <> " peel function " <> Text.pack (show expectedFunction)
-                  <> " derived " <> Text.pack (show derivedFunction)
-                  <> " modes " <> Text.pack (show fnModes)))
-          else pure ()
        let actualWrapped =
              map (isWrappedShape . ttShape) argResults
            shouldBindRaw =
