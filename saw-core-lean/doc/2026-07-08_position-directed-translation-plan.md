@@ -293,27 +293,69 @@ call the syntactic value-type predicates as authorities.
 Goal: `calleeConventionForIdent` returns a real convention for every callee, and
 `originalDispatchWithShape` becomes a thin interpreter of conventions.
 
-1. Give each existing dispatch branch in `originalDispatchWithShape` a named
-   `CalleeConvention` value with explicit argument modes and result mode
-   (`ArgMode`/`ResultMode` from the calculus §Callee Conventions). The existing
-   `PartialOpContract`, `CheckedApplicationContract`, `ProofPrimitiveContract`,
-   and `UseMapsToWrapped` tables already encode most of this — lift them into
-   the unified `CalleeConvention` shape rather than rewriting them.
-2. The Phase-beta ordinary-definition path (the `funType`/`retTypeOfFun`
-   lift-decision at 2849–2946) becomes `CalleePhaseBetaDefinition` with argument
-   positions read from the callee's SAWCore Pi type: index binders →
-   `IndexArg`/`TypeArg`, value binders → `RuntimeArg`, result → `RuntimeResult`
-   or `RawResult`. This replaces the inline `typeArgPositions`/`shouldLift`
-   logic with a per-callee convention derived once from its type.
+Restructured 2026-07-09 into sub-slices (4a–4c), after Slices 0–3 landed fully
+byte-identical: the behavioral risk the plan spread across Slices 2–4 is
+actually concentrated here, so Slice 4 takes the same sub-slice discipline as
+Slice 3. Slice 4a is the first step whose fence is a *reviewed diff* rather
+than an empty one — it fixes a live specimen.
+
+### 4a — Checked-application conventions + the wrapped-index fix
+
+1. Introduce the calculus's convention vocabulary as data
+   (`ArgMode ::= TypeArg | IndexArg | RuntimeArg | RawValueArg | ProofArg |
+   PropositionArg | MotiveArg | StructuralField | FunctionArg
+   FunctionConvention`; `ResultMode ::= RuntimeResult | RawResult reason |
+   FunctionResult FunctionConvention`) and re-express the
+   `CheckedApplicationContract` arg tables in it — the `at`-family's
+   `CheckedArgRaw` bucket splits into its true `IndexArg` (n, i) and
+   `TypeArg` (a) slots.
+2. The convention interpreter adapts each actual per its declared mode:
+   `RuntimeArg` → `adaptTo ExpectRuntimeValue`; `IndexArg` with a *wrapped*
+   actual → an error-preserving `Bind.bind` binding the index to a fresh raw
+   variable consumed by BOTH the bounds proposition and the checked helper
+   (sequenced in application order, calculus §Callee Conventions); `IndexArg`
+   with a function actual and `TypeArg` with a wrapped actual → forbidden
+   (loud). This fixes the live specimen `drivers/llvm_chacha20_core_verify`
+   (today `CheckedArgRaw` passes a wrapped shared index raw into `LT.lt` and
+   `atWithProof_checkedM`, which does not elaborate).
+3. Pin fixtures: a small obligations row with a runtime-computed (wrapped)
+   index into `at` (the specimen's minimal shape), so the fix is fenced by a
+   fast row and not only by the heavyweight LLVM row.
+
+Fence: emitted Lean byte-identical EXCEPT rows whose checked applications
+previously received wrapped actuals at raw slots (those were ill-typed; each
+diff reviewed). `llvm_chacha20_core_verify` goes green including elaboration;
+the new fixture row is green; `obligations/vector_*_with_proof` and
+`obligations/cryptol_ec_*` contracts unchanged.
+
+### 4b — Phase-beta ordinary definitions + partial-op unification
+
+1. The Phase-beta ordinary-definition path (the `funType`/`retTypeOfFun`
+   lift-decision) becomes `CalleePhaseBetaDefinition` with argument positions
+   read once from the callee's SAWCore Pi type: index binders →
+   `IndexArg`/`TypeArg`, value binders → `RuntimeArg`, result →
+   `RuntimeResult`/`RawResult`. Replaces the inline
+   `typeArgPositions`/`shouldLift` logic.
+2. Lift `PartialOpContract` / `ProofPrimitiveContract` / `UseMapsToWrapped`
+   argument tables into the same `ArgMode` vocabulary (they already encode it
+   informally; the partial-op bind plan becomes the interpreter's generic
+   wrapped-at-raw-index rule).
 3. `applyKnownFunctionWithShape` and the partial-application path adapt each
    supplied prefix arg through the convention (calculus §"For partial
-   application"), never by binding all args to raw first.
-4. Shrink `CalleeTransitional` usage to zero. Track the count in the commit
-   message of each step; it only goes down.
+   application"), never by binding all args to raw first. This is also where
+   3b's dormant dependent-lambda conventions go live — pin a dependent
+   higher-order fixture here.
 
-Regression fence: `bash test.sh conformance` — differential + obligations +
-saw-boundary all at prior status or better. The proof-carrying obligation rows
-(`obligations/partial_*`, `obligations/cryptol_ec_*`,
+### 4c — Retire `CalleeTransitional`; decompose the dispatch
+
+`calleeConventionForIdent` returns a real convention for every callee;
+`originalDispatchWithShape` becomes a thin interpreter over the convention
+table. Shrink `CalleeTransitional` to zero — track the count per commit; it
+only goes down.
+
+Regression fence (all sub-slices): `bash test.sh conformance` — differential +
+obligations + saw-boundary all at prior status or better. The proof-carrying
+obligation rows (`obligations/partial_*`, `obligations/cryptol_ec_*`,
 `obligations/vector_*_with_proof`) must keep emitting identical contracts.
 
 Deliverable: application is table-driven by conventions with explicit modes;
