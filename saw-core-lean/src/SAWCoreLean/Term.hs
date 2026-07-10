@@ -1344,37 +1344,118 @@ argumentBindPlan fty argResults =
     argTerms = map ttLean argResults
     wrappedActuals = map (isWrappedShape . ttShape) argResults
 
+-- | Is the formal at position @ix@ a polymorphic ('Variable'-headed)
+-- formal whose instantiating type actual (an EARLIER supplied
+-- argument) already carries the runtime/function representation the
+-- calculus would demand? If so the actual is consumed as-is (no
+-- bind).
+--
+-- NOTE (plan Slice 4b): this inspects the EMITTED Lean type of the
+-- instantiating actual (`isExceptStringType`/`isLeanPiType`) — the
+-- last emitted-AST-inspection class in the translator. The
+-- 'CalleePhaseBetaDefinition' swap replaces it with a declared
+-- instantiation lookup; until then it is quarantined here with both
+-- consumers ('argumentBindPlanFromWrapped' and the derived-convention
+-- assert) reading the same predicate.
+polymorphicFormalInstantiatedExpected ::
+  [(VarName, Term)] -> [Lean.Term] -> Int -> Term -> Bool
+polymorphicFormalInstantiatedExpected binders argTerms ix bty =
+  case unwrapTermF bty of
+    Variable vn _ ->
+      case findIndex (\(vn', _) -> vn' == vn) binders of
+        Just paramIx
+          | paramIx < ix
+          , paramIx < length argTerms ->
+              let actualTy = argTerms !! paramIx
+              in isExceptStringType actualTy || isLeanPiType actualTy
+        _ -> False
+    _ -> False
+
 argumentBindPlanFromWrapped :: Term -> [Lean.Term] -> [Bool] -> [Bool]
 argumentBindPlanFromWrapped fty argTerms wrappedActuals =
   let (binders, _) = asPiList fty
       typeIxs = typeArgPositions fty
-      paramActualFor ix bty = case unwrapTermF bty of
-        Variable vn _ ->
-          case findIndex (\(vn', _) -> vn' == vn) binders of
-            Just paramIx
-              | paramIx < ix
-              , paramIx < length argTerms -> Just (argTerms !! paramIx)
-            _ -> Nothing
-        _ -> Nothing
-      paramActualAlreadyExpected ix bty =
-        case paramActualFor ix bty of
-          Just actualTy ->
-               isExceptStringType actualTy
-            || isLeanPiType actualTy
-          Nothing -> False
       bindable ix bty actualWrapped =
            ix `notElem` typeIxs
         && not (isJust (asSort bty))
         && not (isJust (asEq bty))
         && not (isJust (asPi bty))
         && not (isCryptolNumType bty)
-        && not (paramActualAlreadyExpected ix bty)
+        && not (polymorphicFormalInstantiatedExpected binders argTerms ix bty)
         && (isNothing (asNatType bty) || actualWrapped)
   in
   [ bindable ix bty actualWrapped
   | (ix, ((_, bty), actualWrapped)) <-
       zip [0..] (zip binders wrappedActuals)
   ]
+
+-- | The source-based replacement for
+-- 'polymorphicFormalInstantiatedExpected' (plan Slice 4b): the
+-- predicate is TRUE only when the instantiating type actual is
+-- LITERALLY the representation the formal would otherwise be adapted
+-- to — a Pi (function) instantiation, whose translation is Pi-headed.
+-- A concrete value-domain instantiation (PairValue's @α := Vec 8
+-- Bool@) stays FALSE: the raw-formal Lean target consumes the raw
+-- value, so the wrapped actual binds. (First candidate used
+-- 'shouldWrapBinder' here and the inert oracle rejected it on the
+-- smoketest — value-domain instantiation is NOT the same question as
+-- wrapped-representation instantiation. The 'isExceptStringType' half
+-- of the emitted predicate has no source-level trigger; the oracle
+-- verifies it is dead across the corpus before the swap.)
+polymorphicFormalInstantiatedExpectedSrc ::
+  [(VarName, Term)] -> [Term] -> Int -> Term -> Bool
+polymorphicFormalInstantiatedExpectedSrc binders srcArgs ix bty =
+  case unwrapTermF bty of
+    Variable vn _ ->
+      case findIndex (\(vn', _) -> vn' == vn) binders of
+        Just paramIx
+          | paramIx < ix
+          , paramIx < length srcArgs ->
+              isJust (asPi (srcArgs !! paramIx))
+        _ -> False
+    _ -> False
+
+-- | Derive the ordinary Phase-β definition convention's argument
+-- modes from the callee's SAWCore Pi type plus the supplied actuals
+-- (calculus §Callee Conventions: a convention maps "a callee plus
+-- already known type information" to argument positions). The callees
+-- on this path are RAW-formal Lean targets (bvAdd-family primitives),
+-- so the modes' bind disciplines are ('phaseBetaBindFromMode'):
+--
+--   * 'RawValueArg' (concrete value formals): uniform bind chain —
+--     wrapped actuals bind, raw actuals pure-lift then bind;
+--   * 'IndexArg' (Nat/Num formals, index binders): bind only a
+--     wrapped (runtime-computed) actual;
+--   * 'RuntimeArg' (polymorphic formals instantiated at a wrapped or
+--     function type): the actual is consumed as-is;
+--   * types, propositions, function formals: splice raw, never bind.
+phaseBetaArgModesFor :: Term -> [Lean.Term] -> [ArgMode]
+phaseBetaArgModesFor fty argTerms =
+  [ modeFor ix bty | (ix, (_, bty)) <- zip [0 :: Int ..] binders ]
+  where
+    (binders, _) = asPiList fty
+    typeIxs = typeArgPositions fty
+    modeFor ix bty
+      | ix `elem` typeIxs =
+          if isJust (asSort bty) then TypeArg else IndexArg
+      | isJust (asSort bty) = TypeArg
+      | isJust (asEq bty) = PropositionArg
+      | isJust (asPi bty) = FunctionArg Nothing
+      | polymorphicFormalInstantiatedExpected binders argTerms ix bty =
+          RuntimeArg
+      | isCryptolNumType bty = IndexArg
+      | isJust (asNatType bty) = IndexArg
+      | otherwise = RawValueArg
+
+-- | The bind discipline each mode implies on the raw-formal
+-- ordinary-definition path. See 'phaseBetaArgModesFor'.
+phaseBetaBindFromMode :: Int -> [Int] -> ArgMode -> Bool -> Bool
+phaseBetaBindFromMode ix typeIxs mode actualWrapped
+  | ix `elem` typeIxs = False
+  | otherwise = case mode of
+      RawValueArg -> True
+      IndexArg    -> actualWrapped
+      _           -> False
 
 -- | A raw SAW function whose return type is Nat can still be a
 -- value-domain computation under Phase beta when it consumes a non-index
@@ -3292,6 +3373,52 @@ originalDispatchWithShape i args = do
               -- helpers such as 'iteM' use 'UseMapsToWrapped', so no
               -- double-wrap concern there.
               let shouldBind = argumentBindPlan fty argResults
+              -- Plan Slice 4b (inert oracle step): the declared
+              -- CalleePhaseBetaDefinition convention must reproduce
+              -- the legacy bind plan exactly before it replaces it.
+              -- Derive the modes, recompute the plan from them, and
+              -- fail LOUDLY on any divergence — the corpus fence is
+              -- the proof of equivalence. The legacy plan remains the
+              -- one actually used until the swap.
+              let derivedModes = phaseBetaArgModesFor fty argTerms
+                  typeIxsFor   = typeArgPositions fty
+                  derivedBind  =
+                    [ phaseBetaBindFromMode ix typeIxsFor mode wrapped
+                    | (ix, (mode, wrapped)) <-
+                        zip [0 :: Int ..]
+                          (zip derivedModes
+                               (map (isWrappedShape . ttShape) argResults))
+                    ]
+              if take (length derivedBind) shouldBind /= derivedBind
+                 then Except.throwError (RejectedPrimitive
+                        (Text.pack (identName i))
+                        ("internal (plan Slice 4b): derived phase-beta \
+                         \convention disagrees with the legacy bind plan: \
+                         \legacy " <> Text.pack (show shouldBind)
+                         <> " derived " <> Text.pack (show derivedBind)
+                         <> " modes " <> Text.pack (show derivedModes)))
+                 else pure ()
+              -- Second inert oracle: the source-based instantiation
+              -- classifier must agree with the emitted-type predicate
+              -- it will replace.
+              let (bindersFor, _) = asPiList fty
+                  polyDisagree =
+                    [ ix
+                    | (ix, (_, bty)) <- zip [0 :: Int ..] bindersFor
+                    , ix < length args'
+                    , polymorphicFormalInstantiatedExpected
+                        bindersFor argTerms ix bty
+                        /= polymorphicFormalInstantiatedExpectedSrc
+                             bindersFor args' ix bty
+                    ]
+              if null polyDisagree
+                 then pure ()
+                 else Except.throwError (RejectedPrimitive
+                        (Text.pack (identName i))
+                        ("internal (plan Slice 4b): source-based \
+                         \instantiation classifier disagrees with the \
+                         \emitted-type predicate at argument positions "
+                         <> Text.pack (show polyDisagree)))
               let (binders, _) = asPiList fty
                   ret = retTypeOfFun fty
                   fullyApplied = length args' >= length binders
