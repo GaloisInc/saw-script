@@ -299,10 +299,20 @@ doc for per-slice regression fences and bounded validation commands):
     `phaseBetaArgModesFor` over source actuals is authoritative on the
     full-application path. Legacy plan + the emitted-type predicate remain
     ONLY on the eta/partial path and `PartialOpRaw`, quarantined.
-  - [ ] 4b remainder — eta/partial-application path (deletes the final
-    emitted-AST inspection `polymorphicFormalInstantiatedExpected`);
-    `PartialOpRaw` fold-in; dependent higher-order fixture. Original design
-    notes from the 2026-07-09 analysis:
+  - [x] 4b step 4 — legacy bind plan DELETED; conventions drive all paths
+    (eta/partial-application, `etaExpandWrappedFunctionResult`,
+    `PartialOpRaw`). `polymorphicFormalInstantiatedExpected` (the last
+    emitted-Lean-TERM inspection) deleted with it; Num reclassified
+    `TypeArg` (exactly-legacy never-bind). Two type-classification
+    self-mirrors remain (`bindingShapeOfType`, `applyKnownFunctionWithShape`
+    peel) — 4c demotion targets. Byte-identical corpus-wide.
+  - [x] 4b fixture item RECLASSIFIED: the 3b dependent-lambda conventions
+    are structurally UNREACHABLE today, not dormant — the only function
+    slots (`foldr`/`foldl` formals `a → b → b`, MkStream `Nat → a`) are
+    non-dependent by the helpers' types, so SAWCore's typechecker rejects
+    any dependent lambda upstream of the producers. The fixture rides the
+    first dependent `FunctionArg` convention (4c/Slice-5-era work).
+  - Original 4b design notes from the 2026-07-09 analysis (implemented):
     (i) the convention derivation must take the SUPPLIED TYPE ACTUALS, not
     just the callee Pi type — `argumentBindPlanFromWrapped`'s
     `paramActualAlreadyExpected` handles polymorphic formals by inspecting
