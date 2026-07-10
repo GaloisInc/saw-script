@@ -219,16 +219,12 @@ data RawLogicalCallee
   | RawLogicalEqRec
   deriving (Eq, Show)
 
-data CalleeConvention
-  = CalleePhaseBetaDefinition
-  | CalleeRawLeanTarget
-  | CalleeRawLogical RawLogicalCallee
-  | CalleeWrappedHelper
-  | CalleeProofObligation
-  | CalleeMacro
-  | CalleeReject
-  | CalleeTransitional Text.Text
-  deriving (Eq, Show)
+-- NOTE (plan Slice 4c): the old 'CalleeConvention' enum — including
+-- its 'CalleeTransitional' constructor — is DELETED, not filled in.
+-- Only its raw-logical arm was ever consumed; the dispatch's real
+-- classifier is the declarative guard chain over the contract tables
+-- ('translateIdentWithArgsWithShape') with declared 'ArgMode' slots.
+-- 'CalleeTransitional' count: zero, permanently.
 
 data RecursorScrutineeMode
   = RecursorScrutineeRaw
@@ -3050,24 +3046,21 @@ translateUnsafeAssertObligation aArg xArg yArg = do
 translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Lean.Term
 translateIdentWithArgs i args = ttLean <$> translateIdentWithArgsWithShape i args
 
-calleeConventionForIdent :: Ident -> CalleeConvention
-calleeConventionForIdent i
-  | isPreludeIdent "Eq" i =
-      CalleeRawLogical RawLogicalEq
-  | isPreludeIdent "Refl" i =
-      CalleeRawLogical RawLogicalRefl
-  | isPreludeIdent "Eq__rec" i =
-      CalleeRawLogical RawLogicalEqRec
-  | otherwise =
-      CalleeTransitional "classified by existing dispatch branch"
+-- | The raw-logical callee classifier (Eq / Refl / Eq__rec). All
+-- other callees classify through the contract tables and named
+-- branches of 'translateIdentWithArgsWithShape'.
+rawLogicalCalleeForIdent :: Ident -> Maybe RawLogicalCallee
+rawLogicalCalleeForIdent i
+  | isPreludeIdent "Eq" i      = Just RawLogicalEq
+  | isPreludeIdent "Refl" i    = Just RawLogicalRefl
+  | isPreludeIdent "Eq__rec" i = Just RawLogicalEqRec
+  | otherwise                  = Nothing
 
-calleeConventionForRecursor :: CompiledRecursor -> CalleeConvention
-calleeConventionForRecursor rec
+rawLogicalCalleeForRecursor :: CompiledRecursor -> Maybe RawLogicalCallee
+rawLogicalCalleeForRecursor rec
   | ModuleIdentifier ident <- nameInfo (recursorDataType rec)
-  , isPreludeIdent "Eq" ident =
-      CalleeRawLogical RawLogicalEqRec
-  | otherwise =
-      CalleeTransitional "classified by existing recursor dispatch branch"
+  , isPreludeIdent "Eq" ident = Just RawLogicalEqRec
+  | otherwise                 = Nothing
 
 isPreludeIdent :: String -> Ident -> Bool
 isPreludeIdent baseName i =
@@ -3215,7 +3208,7 @@ translateIdentWithArgsWithShape ::
 translateIdentWithArgsWithShape i args
   | Just contract <- findProofPrimitiveContract i (length args)
   = lowerProofPrimitiveContract contract args
-  | CalleeRawLogical callee <- calleeConventionForIdent i
+  | Just callee <- rawLogicalCalleeForIdent i
   = lowerRawLogicalCallee callee i args
   | Just contract <- findCheckedApplicationContract i (length args)
   = lowerCheckedApplicationContract contract i args
@@ -4073,7 +4066,7 @@ translateRecursorApp crec args = ttLean <$> translateRecursorAppWithShape crec a
 translateRecursorAppWithShape :: TermTranslationMonad m =>
                         CompiledRecursor -> [Term] -> m TranslatedTerm
 translateRecursorAppWithShape crec args
-  | CalleeRawLogical RawLogicalEqRec <- calleeConventionForRecursor crec =
+  | Just RawLogicalEqRec <- rawLogicalCalleeForRecursor crec =
       lowerRawLogicalCallee
         RawLogicalEqRec
         (mkIdent (mkModuleName ["Prelude"]) "Eq__rec")
