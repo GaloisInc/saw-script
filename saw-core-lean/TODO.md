@@ -291,8 +291,18 @@ doc for per-slice regression fences and bounded validation commands):
     (widths `IndexArg` with the bind protection); shared
     `lowerProofCarryingActuals` lowering. Proof-primitive relabel deferred
     to 4c (raw-logical translation, no behavioral content in a relabel).
-  - [ ] 4b remainder — `CalleePhaseBetaDefinition` for the ordinary-def
-    path (`applied`). Design notes from the 2026-07-09 analysis:
+  - [x] 4b steps 2–3 — the two-oracle inert step proved the derived
+    convention equivalent to the legacy bind plan across the whole corpus
+    (oracle 2 rejected the first source-based classifier candidate on the
+    smoketest: value-domain instantiation ≠ wrapped-representation
+    instantiation; corrected to Pi-instantiation-only), then the swap:
+    `phaseBetaArgModesFor` over source actuals is authoritative on the
+    full-application path. Legacy plan + the emitted-type predicate remain
+    ONLY on the eta/partial path and `PartialOpRaw`, quarantined.
+  - [ ] 4b remainder — eta/partial-application path (deletes the final
+    emitted-AST inspection `polymorphicFormalInstantiatedExpected`);
+    `PartialOpRaw` fold-in; dependent higher-order fixture. Original design
+    notes from the 2026-07-09 analysis:
     (i) the convention derivation must take the SUPPLIED TYPE ACTUALS, not
     just the callee Pi type — `argumentBindPlanFromWrapped`'s
     `paramActualAlreadyExpected` handles polymorphic formals by inspecting
