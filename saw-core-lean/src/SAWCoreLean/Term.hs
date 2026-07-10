@@ -3077,18 +3077,51 @@ isPreludeIdent baseName i =
   where
     preludeModule = mkModuleName ["Prelude"]
 
-subjectRepFromTranslatedOperands ::
+-- | The standalone-proposition convention (calculus §Raw Logical
+-- Callees, plan Slice 5a): when @Eq@ / @Refl@ / @Eq__rec@ is reached
+-- through ident or recursor dispatch with no equality-aware
+-- surrounding convention, the declared subject representation is the
+-- joint produced domain of the source operands under the current
+-- translation mode — 'EqualitySubjectRuntimeValue' iff any operand's
+-- declared production record ('ttShape', stamped by producers, never
+-- read off emitted Lean AST) is wrapped, raw otherwise.
+-- Function-shaped subjects reject until the function-carrier
+-- convention (plan Slice 5c) decides them. The carrier type name
+-- never participates: @Bool@ and @Nat@ equalities are raw in proof
+-- lemmas and runtime over value-domain computations, and only the
+-- operand domain distinguishes them.
+--
+-- This is one convention among several, not a universal authority.
+-- A surround that knows its ρ_eq (e.g. 'unsafeAssert', declared raw)
+-- calls 'equalityPropositionAtSubjectRep' with it directly and never
+-- falls through to this function.
+standaloneEqualitySubjectRep ::
   TermTranslationMonad m =>
   Text.Text -> [TranslatedTerm] -> m EqualitySubjectRep
-subjectRepFromTranslatedOperands who operands
+standaloneEqualitySubjectRep who operands
   | any ((== BindingFunction) . ttShape) operands =
       Except.throwError (RejectedPrimitive who
         "raw logical equality over function-shaped subjects is not \
         \implemented in this slice")
-  | any (isWrappedShape . ttShape) operands =
-      pure EqualitySubjectRuntimeValue
+  | otherwise = do
+      let rep | any (isWrappedShape . ttShape) operands =
+                  EqualitySubjectRuntimeValue
+              | otherwise = EqualitySubjectRaw RawLogicalPosition
+      traceSubjectRep who operands rep
+      pure rep
+
+-- | Subject-representation decisions join the position trace so every
+-- ρ_eq choice is auditable alongside the per-term position log.
+traceSubjectRep ::
+  TermTranslationMonad m =>
+  Text.Text -> [TranslatedTerm] -> EqualitySubjectRep -> m ()
+traceSubjectRep who operands rep
+  | not positionTraceEnabled = pure ()
   | otherwise =
-      pure (EqualitySubjectRaw RawLogicalPosition)
+      Debug.Trace.traceM $
+        "[subjectRep] who=" ++ Text.unpack who
+        ++ " operands=" ++ show (map ttShape operands)
+        ++ " rep=" ++ show rep
 
 subjectCarrier :: EqualitySubjectRep -> Lean.Term -> Lean.Term
 subjectCarrier EqualitySubjectRuntimeValue ty = wrapExcept ty
@@ -3099,6 +3132,22 @@ subjectTerm ::
 subjectTerm EqualitySubjectRuntimeValue = adaptToRuntime
 subjectTerm (EqualitySubjectRaw r)      = fmap ttLean . adaptTo (ExpectRaw r)
 
+-- | Build an equality proposition at a DECLARED subject
+-- representation (calculus §Raw Logical Callees). This is the entry
+-- point for every surround that knows its ρ_eq — today
+-- 'translateUnsafeAssertObligation' (declared raw) — as opposed to
+-- the standalone dispatch path ('lowerRawLogicalCallee'), which owns
+-- its translated operands and classifies them via
+-- 'standaloneEqualitySubjectRep'.
+--
+-- Documented seam (plan Slice 5b reconciles it via the Eq.rec field
+-- set): the raw branch here translates operands UNDER raw mode
+-- ('withRawTranslationMode'), while the standalone path translates
+-- them in the ambient mode and demands raw of the results through
+-- 'adaptTo'. For the same source operands these are different
+-- pipelines. A declared-rep mismatch between a proof producer (e.g.
+-- unsafeAssert) and a consumer (e.g. a runtime-subject @Eq__rec@)
+-- must reject, never coerce.
 equalityPropositionAtSubjectRep ::
   TermTranslationMonad m =>
   Text.Text -> EqualitySubjectRep -> Term -> Term -> Term -> m Lean.Term
@@ -3131,6 +3180,18 @@ explicitCoreNameAtArgUniverse target arg = do
     Just lvl -> Lean.ExplVarUniv target [lvl]
     Nothing  -> Lean.ExplVar target
 
+-- | Lower the standalone raw-logical callees (@Eq@ / @Refl@ /
+-- @Eq__rec@ reached through ident or recursor dispatch with no
+-- equality-aware surround). Subject representation comes from the
+-- declared standalone convention ('standaloneEqualitySubjectRep');
+-- operands then move to the declared position only through the
+-- 'adaptTo' chokepoint ('subjectTerm').
+--
+-- The @Eq__rec@ arm currently demands the all-raw subset (raw
+-- operands, raw branch, raw-mode motive) and rejects everything else;
+-- the full declared field set — operand ρ_eq, carrier, motive binder
+-- and result positions, branch position, proof position, final result
+-- position, universe class — arrives with plan Slice 5b.
 lowerRawLogicalCallee ::
   TermTranslationMonad m =>
   RawLogicalCallee -> Ident -> [Term] -> m TranslatedTerm
@@ -3138,7 +3199,7 @@ lowerRawLogicalCallee RawLogicalEq _ [aArg, xArg, yArg] = do
   aLean <- withRawTranslationMode (translateTerm aArg)
   xTrans <- translateTermWithShape xArg
   yTrans <- translateTermWithShape yArg
-  rep <- subjectRepFromTranslatedOperands "Eq" [xTrans, yTrans]
+  rep <- standaloneEqualitySubjectRep "Eq" [xTrans, yTrans]
   eqHead <- explicitCoreNameAtArgUniverse (Lean.Ident "Eq") aArg
   xLean <- subjectTerm rep xTrans
   yLean <- subjectTerm rep yTrans
@@ -3148,7 +3209,7 @@ lowerRawLogicalCallee RawLogicalEq _ [aArg, xArg, yArg] = do
 lowerRawLogicalCallee RawLogicalRefl _ [aArg, xArg] = do
   aLean <- withRawTranslationMode (translateTerm aArg)
   xTrans <- translateTermWithShape xArg
-  rep <- subjectRepFromTranslatedOperands "Refl" [xTrans]
+  rep <- standaloneEqualitySubjectRep "Refl" [xTrans]
   reflHead <- explicitCoreNameAtArgUniverse (Lean.Ident "Eq.refl") aArg
   xLean <- subjectTerm rep xTrans
   pure (TranslatedTerm

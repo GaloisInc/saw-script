@@ -404,35 +404,103 @@ This is where getting it wrong is a **silent** soundness bug (both `Nat` and
 `Except String Nat` carriers can typecheck), so it depends on Slices 1–4 being
 in place (precise `Γ`, centralized `adaptTo`, real conventions).
 
-1. Implement `SubjectRep(a, ρ_eq) = R(ρ_eq, a)` explicitly. Every convention
-   that emits/consumes an equality (`Eq`, `Refl`, `Eq.rec`, `coerce`, proof
-   primitives) declares its `ρ_eq`. The translator must not read `Nat` and
-   decide raw.
-2. Record the full `Eq.rec` field set the calculus requires (operand position,
-   carrier, motive binder positions, motive result position, branch position,
-   proof position, final result position, universe class) in the
-   `RawLogicalEqRec` convention. `Γ` (Slice 1) preserves the exact
-   proposition/proof Lean type for proof variables.
-3. Load-bearing regression rows (must go green *as positive rows*, not gaps):
-   `obligations/proof_add_nat_assoc`, `proof_eq_nat_add_0`, `proof_eq_nat_add_s`,
-   `proof_eq_nat_add_comm`, `proof_equal_nat_to_eq_nat`, and the
-   runtime-subject counterpart `obligations/proof_transport_runtime_subject`.
-   The already-passing runtime-value equality rows must NOT regress to raw
-   (guard: an `Eq` over a `bvToNat`-style runtime computation still compares
-   `Except String Nat`).
-4. Function-carrier equality (currently rejected) stays a pinned rejection until
-   its convention is designed — do not rawify functions to make a row pass.
-   Promote `obligations/proof_coerce_eq`, `proof_bv_eq_to_eq_nat`,
-   `proof_prove_le_nat`, `proof_nat_compare_le` only via exact obligations or
-   axiom-clean theorems.
+**Status update (2026-07-10, entering the slice):** the six load-bearing rows
+listed below (`proof_add_nat_assoc`, `proof_eq_nat_add_0/_s/_comm`,
+`proof_equal_nat_to_eq_nat`, `proof_transport_runtime_subject`) are ALREADY
+green positives — the working raw-logical slice fixed them before this plan's
+Slice 5 began. They are therefore this slice's **regression fence**, not its
+target. The remaining work is architectural: the subject representation is
+still *inferred bottom-up* (`subjectRepFromTranslatedOperands` inspects
+translated operand shapes) rather than *declared* by the surrounding
+convention, the `Eq.rec` convention records none of the calculus's required
+field set (it demands all-raw and rejects everything else), and the
+function-carrier decision is unmade (blanket rejection; keeps
+`drivers/sawcore_prelude_auto_emit` red). Corpus survey of the 626-file
+baseline confirms the calculus's warning empirically: `Bool` and `Nat`
+carriers appear both raw (`@Eq Nat`, `@Eq.{1} Bool Bool.true`) and runtime
+(`@Eq.{1} (Except String Bool …)`, `@Eq (Except String Int …)`) — the carrier
+type name cannot decide ρ_eq; the operand domain does.
 
-Regression fence: the five Nat proof-transport rows are positive; the
-runtime-subject row is positive; no wrapped-value equality row regressed. Verify
-with `lean_verify`/`#print axioms` that promoted rows are axiom-clean.
+Sub-slices (mirroring the Slice 4 restructure):
+
+### 5a — declared subject representation; kill the universal bottom-up authority
+
+1. `equalityPropositionAtSubjectRep` becomes the single entry point for every
+   surround that KNOWS its ρ_eq (today: `unsafeAssert`, declared raw — its
+   fixtures pin raw `@Eq.{2} Type` / `@Eq.{1} Nat` carriers). No such surface
+   may fall through to re-inference.
+2. The standalone-proposition convention (top-level `Eq`/`Refl`/`Eq__rec`
+   reached through ident/recursor dispatch with no equality-aware surround) is
+   DEFINED and documented: ρ_eq := the joint produced domain of the source
+   operands under the current translation mode — `RuntimeValue` iff any
+   operand's declared production record (`ttShape`, stamped by producers since
+   Slice 1/2, never read off emitted Lean AST) is wrapped, raw otherwise,
+   function-carrier rejected until 5c. This is byte-for-byte the legacy
+   result, so 5a is a byte-parity slice; what changes is its STATUS — from
+   universal inference to one convention among several, bypassed wherever a
+   surround declares ρ_eq — and its auditability (subject-rep decisions traced
+   under `SAW_LEAN_TRACE_POSITIONS`). Rename
+   `subjectRepFromTranslatedOperands` → `standaloneEqualitySubjectRep` with
+   the convention contract in its doc comment.
+3. Operands then translate/adapt AT the declared position through the
+   `adaptTo` chokepoint (as today: raw→runtime via `Pure.pure` only; a
+   runtime operand demanded raw is `ForbiddenAdaptation`, never unwrapped).
+
+Fence: byte-identical emissions vs the slice0 baseline; smoketest;
+conformance exit 0.
+
+### 5b — the full `Eq.rec` field set
+
+1. Record the calculus's required fields in an `EqRecConvention`: operand
+   position ρ_eq, carrier `SubjectRep(a, ρ_eq)`, motive binder positions,
+   motive result position (reuse `MotiveConvention` from 3c), branch position,
+   proof position, final result position, universe class. `Γ` (Slice 1)
+   preserves the exact proposition/proof Lean type for proof variables.
+2. The point of the field set is **consistency by construction**: the motive's
+   inner `Eq` occurrence, the branch, and the transported proof all receive
+   the SAME declared ρ_eq. Today that consistency holds only by mode
+   coincidence (motives translate raw-mode, so inner-Eq inference happens to
+   agree with the all-raw operand demand) — which is exactly why
+   runtime-subject transports are currently rejected wholesale.
+3. Generalize the lowering beyond all-raw: a standalone `Eq__rec` whose
+   declared ρ_eq is `RuntimeValue` (wrapped operands) becomes expressible,
+   with motive binder `y : Except String T`, inner proposition over the
+   wrapped carrier, and branch position derived from the motive result mode.
+   Add a fixture row pinning one such transport. Surfaces the declared-rep
+   reconciliation question (e.g. an `unsafeAssert`-produced proof feeding a
+   runtime-subject `Eq__rec` must agree on the carrier — reject on mismatch,
+   never coerce).
+4. Function-carrier operands stay rejected (5c). If the fields cannot be
+   determined uniquely, reject; never guess.
+
+Fence: the six load-bearing rows stay green; no wrapped-value equality row
+regresses to raw (guard: an `Eq` over a `bvToNat`-style runtime computation
+still compares `Except String Nat`); new-capability rows via exact obligations
+and `lean_verify`/`#print axioms` axiom-cleanliness; NOT byte-parity (new
+emissions), reviewed diff instead.
+
+### 5c — the function-carrier equality decision
+
+Function-carrier equality (currently a blanket rejection) gets its convention
+decided deliberately: the leading candidate is raw `@Eq` over the *translated
+effectful* function type (`V(α) → V(β)`, i.e. `T(α) → Except String (T(β))`),
+which compares the functions SAW actually denotes — never a rawified
+value-level signature invented to make a row pass. Expected to fix the
+pre-existing red `drivers/sawcore_prelude_auto_emit` (a prelude lemma's
+function-carrier equality rejects since `55e4fe099`). Promote
+`obligations/proof_coerce_eq`, `proof_bv_eq_to_eq_nat`, `proof_prove_le_nat`,
+`proof_nat_compare_le` only via exact obligations or axiom-clean theorems —
+these are optional promotions, not slice-blocking.
+
+Fence: `sawcore_prelude_auto_emit` green with reviewed diff and Lean
+elaboration; conformance exit 0; the six rows stay green.
 
 Deliverable: proof transport is sound by construction from the declared subject
-representation. This closes the `proof_add_nat_assoc`-class failures at the root
-instead of by local patch.
+representation — every equality-emitting surface either declares ρ_eq or is the
+documented standalone convention; `Eq.rec` carries the full field set; the
+function-carrier question is decided, not deferred by rejection. (The
+`proof_add_nat_assoc`-class failures closed before this slice; the slice makes
+their fix principled and keeps them closed.)
 
 ---
 
