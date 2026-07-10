@@ -1,0 +1,20 @@
+// A more complicated occurs check failure.
+//
+
+// This creates an empty list e with type [t] (note that it must be
+// <-, otherwise you get a polymorphic value), inserts it into two
+// slots of a record, creates another record based on xs, then forces
+// the unification of the two record types by including them in a
+// list.
+//
+// See also err013. (If anyone ever renumbers the test dir, it might
+// make sense to group these two together.)
+
+
+let foo xs = do {
+   e <- return [];
+   let q = { a = e, b = e };
+   let r = { a = xs, b = head xs };
+   return [q, r];
+};
+   

@@ -1,6 +1,6 @@
 Loading file "err013.saw"
 Type errors:
-  err013.saw:9:33-9:35: Error: Occurs check failure.
+  err013.saw:12:33-12:35: Error: Occurs check failure.
     Cannot unify t.1 with [t.1] because t.1 appears within [t.1].
     Expected: t.1
     Found:    [t.1]
