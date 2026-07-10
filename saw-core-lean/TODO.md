@@ -281,6 +281,27 @@ doc for per-slice regression fences and bounded validation commands):
     bind-chain shape. Everything else byte-identical (only the specimen row
     changed, diff reviewed). First reviewed-diff (non-empty) fence of the
     migration.
+  - [x] 4b step 1 — wrapped partial-op contracts lifted to `ArgMode`
+    (widths `IndexArg` with the bind protection); shared
+    `lowerProofCarryingActuals` lowering. Proof-primitive relabel deferred
+    to 4c (raw-logical translation, no behavioral content in a relabel).
+  - [ ] 4b remainder — `CalleePhaseBetaDefinition` for the ordinary-def
+    path (`applied`). Design notes from the 2026-07-09 analysis:
+    (i) the convention derivation must take the SUPPLIED TYPE ACTUALS, not
+    just the callee Pi type — `argumentBindPlanFromWrapped`'s
+    `paramActualAlreadyExpected` handles polymorphic formals by inspecting
+    the emitted Lean type of the instantiating actual
+    (`isExceptStringType`/`isLeanPiType`), which is the last
+    emitted-AST-inspection class in the translator and must become a
+    declared instantiation lookup; (ii) legacy bind semantics: value
+    formals bind ALWAYS (raw actuals pure-lift then bind — uniform
+    chains), Nat formals bind iff the actual is wrapped (IndexArg
+    semantics), typeIx/sort/Eq/Pi/Num formals never bind; (iii) migration
+    path: implement `phaseBetaArgModesFor fty typeActuals` PURE, first
+    land it behavior-inert with a loud equivalence assert against
+    `argumentBindPlan` across the corpus (Slice-0 oracle pattern), then
+    swap and delete the legacy plan; (iv) prefix partial application and
+    the dependent higher-order fixture (3b dormancy) ride this step.
 - [ ] **Slice 5** — equality subject representation & `Eq.rec` proof transport
   declared (never inferred from type names). Load-bearing positive rows:
   `obligations/proof_add_nat_assoc`, `proof_eq_nat_add_0`, `proof_eq_nat_add_s`,
