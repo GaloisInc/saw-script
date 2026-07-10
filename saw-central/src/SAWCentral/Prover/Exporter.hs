@@ -465,6 +465,7 @@ writeRocqTerm ::
   TopLevel ()
 writeRocqTerm name notations skips path t = do
   let configuration =
+        withImportCryptolPrimitivesForSAWCoreExtra $
         withImportCryptolPrimitivesForSAWCore $
         withImportSAWCorePrelude $
         rocqTranslationConfiguration notations skips
@@ -556,7 +557,7 @@ writeRocqSAWCorePrelude outputFile notations skips = do
   mm  <- scGetModuleMap sc
   m   <- scFindModule sc nameOfSAWCorePrelude
   let configuration = rocqTranslationConfiguration notations skips
-  m'  <- Rocq.translateSAWModule sc configuration mm m 
+  m'  <- Rocq.translateSAWModule sc configuration mm m
   let doc = vcat [ Rocq.preamble configuration, m']
   case outputFile of
     ""  -> print doc
@@ -579,7 +580,7 @@ writeRocqCryptolPrimitivesForSAWCore cryFile notations skips = do
         withImportSAWCorePreludeExtra $
         withImportSAWCorePrelude $
         rocqTranslationConfiguration notations skips
-  m' <- Rocq.translateSAWModule sc configuration mm m 
+  m' <- Rocq.translateSAWModule sc configuration mm m
   let doc = vcat [ Rocq.preamble configuration, m']
   case cryFile of
     ""  -> print doc
