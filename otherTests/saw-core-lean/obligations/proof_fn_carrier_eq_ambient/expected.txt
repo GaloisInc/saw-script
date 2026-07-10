@@ -1,0 +1,6 @@
+contains:Except String Bool -> Except String Bool
+contains:Pure.pure Bool.true
+contains:@Eq
+absent:(Bool -> Bool)
+absent:Except.ok
+absent:Except.get

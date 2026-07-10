@@ -1,0 +1,11 @@
+enable_experimental;
+
+// Function-carrier equality litmus, ambient Phase-β side (plan Slice 5c):
+// equality between value-domain function computations must use the raw @Eq
+// proposition over the TRANSLATED EFFECTFUL function type (the functions SAW
+// actually denotes in this mode) — never a rawified value-level signature
+// invented to make the proposition look simpler. The raw-content side of the
+// convention is pinned by drivers/sawcore_prelude_auto_emit
+// (inverse_eta_rule keeps its raw `a -> b` carrier).
+let probe = parse_core "Eq (Bool -> Bool) (\\ (x : Bool) -> x) (\\ (x : Bool) -> not x)";
+write_lean_term "ProofFnCarrierEqAmbientProbe" [] [] "emitted.lean" probe;

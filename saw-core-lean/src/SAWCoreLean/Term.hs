@@ -211,6 +211,18 @@ data ResultMode
 data EqualitySubjectRep
   = EqualitySubjectRuntimeValue
   | EqualitySubjectRaw RawReason
+  | EqualitySubjectRawFunction
+    -- ^ Function-carrier equality (plan Slice 5c): the subjects are
+    -- function-shaped and the carrier is the CURRENT-mode translation
+    -- of the source function type — in raw logical content (e.g. the
+    -- auto-emitted Prelude's @inverse_eta_rule@) that is the raw
+    -- @a -> b@ the lemma quantifies over; in Phase-β value content it
+    -- is the translated effectful type. Never a rawified value-level
+    -- signature: the carrier compares the functions SAW actually
+    -- denotes in that mode. Subjects deliver structurally (a function
+    -- undergoes no representation change); a wrapped operand mixed
+    -- with a function subject rejects — the carrier would not be
+    -- uniquely determined.
   deriving (Eq, Show)
 
 data RawLogicalCallee
@@ -3131,12 +3143,18 @@ standaloneEqualitySubjectRep ::
   TermTranslationMonad m =>
   Text.Text -> [TranslatedTerm] -> m EqualitySubjectRep
 standaloneEqualitySubjectRep who operands
-  | any ((== BindingFunction) . ttShape) operands =
+  | any ((== BindingFunction) . ttShape) operands
+  , any (isWrappedShape . ttShape) operands =
       Except.throwError (RejectedPrimitive who
-        "raw logical equality over function-shaped subjects is not \
-        \implemented in this slice")
+        "raw logical equality with a function-shaped subject on one \
+        \side and a wrapped runtime computation on the other does not \
+        \determine a carrier uniquely; this signals an upstream \
+        \classification bug, so the backend rejects instead of \
+        \coercing either side")
   | otherwise = do
-      let rep | any (isWrappedShape . ttShape) operands =
+      let rep | any ((== BindingFunction) . ttShape) operands =
+                  EqualitySubjectRawFunction
+              | any (isWrappedShape . ttShape) operands =
                   EqualitySubjectRuntimeValue
               | otherwise = EqualitySubjectRaw RawLogicalPosition
       traceSubjectRep who operands rep
@@ -3203,6 +3221,24 @@ eqRecConventionForStandalone aArg operands = do
           , ercProofPosition  = RawProofPosition
           , ercResultShape    = BindingWrapped
           }
+        -- Function-carrier transport (plan Slice 5c), e.g. the
+        -- auto-emitted Prelude's @inverse_eta_rule@: the subject
+        -- binder and the branch stand at function positions (a
+        -- function-shaped branch is the norm — the motive result is
+        -- typically a Pi over the function's domain), the motive is
+        -- raw logical content, and the transported result is raw.
+        EqualitySubjectRawFunction -> EqRecConvention
+          { ercSubjectRep     = rep
+          , ercCarrierLevel   = mLvl
+          , ercMotive         = MotiveConvention
+              [ ExpectFunctionPosition Nothing
+              , ExpectRaw RawProofPosition
+              ]
+              MotiveComputesRawType
+          , ercBranchPosition = ExpectFunctionPosition Nothing
+          , ercProofPosition  = RawProofPosition
+          , ercResultShape    = BindingRaw
+          }
   traceEqRecConvention conv
   pure conv
 
@@ -3260,11 +3296,31 @@ translateEqRecMotiveAtConvention conv motiveTerm =
 subjectCarrier :: EqualitySubjectRep -> Lean.Term -> Lean.Term
 subjectCarrier EqualitySubjectRuntimeValue ty = wrapExcept ty
 subjectCarrier (EqualitySubjectRaw _) ty = ty
+subjectCarrier EqualitySubjectRawFunction ty = ty
+
+-- | The carrier type at the declared subject representation. Raw and
+-- runtime subjects reuse the raw translation of the source type the
+-- caller already produced — callers translate it FIRST, before the
+-- operands, because let-share and universe names allocate in
+-- translation order and the legacy emission order must not shift.
+-- The function carrier instead translates the source type in the
+-- CURRENT mode (this arm only runs where the legacy path rejected, so
+-- the extra translation cannot perturb existing emissions): raw
+-- logical content gets the raw @a -> b@ it quantifies over, Phase-β
+-- value content the translated effectful function type its operands
+-- actually inhabit.
+subjectCarrierAt ::
+  TermTranslationMonad m =>
+  EqualitySubjectRep -> Term -> Lean.Term -> m Lean.Term
+subjectCarrierAt EqualitySubjectRawFunction aArg _aLeanRaw = translateTerm aArg
+subjectCarrierAt rep _aArg aLeanRaw = pure (subjectCarrier rep aLeanRaw)
 
 subjectTerm ::
   TermTranslationMonad m => EqualitySubjectRep -> TranslatedTerm -> m Lean.Term
 subjectTerm EqualitySubjectRuntimeValue = adaptToRuntime
 subjectTerm (EqualitySubjectRaw r)      = fmap ttLean . adaptTo (ExpectRaw r)
+subjectTerm EqualitySubjectRawFunction  =
+  fmap ttLean . adaptTo (ExpectFunctionPosition Nothing)
 
 -- | Build an equality proposition at a DECLARED subject
 -- representation (calculus §Raw Logical Callees). This is the entry
@@ -3305,6 +3361,13 @@ equalityPropositionAtSubjectRep who rep aArg xArg yArg = do
       xLean <- withRawTranslationMode (translateTerm xArg)
       yLean <- withRawTranslationMode (translateTerm yArg)
       pure (Lean.App eqHead [aLean, xLean, yLean])
+    EqualitySubjectRawFunction -> do
+      carrier <- translateTerm aArg
+      xTrans <- translateTermWithShape xArg
+      yTrans <- translateTermWithShape yArg
+      xLean <- ttLean <$> adaptTo (ExpectFunctionPosition Nothing) xTrans
+      yLean <- ttLean <$> adaptTo (ExpectFunctionPosition Nothing) yTrans
+      pure (Lean.App eqHead [carrier, xLean, yLean])
 
 explicitCoreNameAtArgUniverse ::
   TermTranslationMonad m => Lean.Ident -> Term -> m Lean.Term
@@ -3316,40 +3379,98 @@ explicitCoreNameAtArgUniverse target arg = do
 
 -- | Lower the standalone raw-logical callees (@Eq@ / @Refl@ /
 -- @Eq__rec@ reached through ident or recursor dispatch with no
--- equality-aware surround). Subject representation comes from the
--- declared standalone convention ('standaloneEqualitySubjectRep');
--- operands then move to the declared position only through the
--- 'adaptTo' chokepoint ('subjectTerm').
---
--- The @Eq__rec@ arm currently demands the all-raw subset (raw
--- operands, raw branch, raw-mode motive) and rejects everything else;
--- the full declared field set — operand ρ_eq, carrier, motive binder
--- and result positions, branch position, proof position, final result
--- position, universe class — arrives with plan Slice 5b.
+-- equality-aware surround). The current translation mode selects the
+-- declared interpreter: raw mode content is raw throughout
+-- ('lowerRawLogicalCalleeRawMode'); ambient Phase-β content
+-- classifies its subjects through the standalone convention and the
+-- 'adaptTo' chokepoint ('lowerRawLogicalCalleeAmbient').
 lowerRawLogicalCallee ::
   TermTranslationMonad m =>
   RawLogicalCallee -> Ident -> [Term] -> m TranslatedTerm
-lowerRawLogicalCallee RawLogicalEq _ [aArg, xArg, yArg] = do
+lowerRawLogicalCallee callee ident args = do
+  phase <- phaseBetaEnabled
+  if phase
+     then lowerRawLogicalCalleeAmbient callee ident args
+     else lowerRawLogicalCalleeRawMode callee ident args
+
+-- | Raw-logical callees inside raw translation mode (auto-emitted raw
+-- Prelude content, motives, proof-primitive proof/proposition slots):
+-- the surrounding raw convention supplies ρ_eq = raw for every piece
+-- — there ARE no runtime values in raw content. Shape records of
+-- raw-mode translations are deliberately not consulted: value-domain
+-- result classification still stamps some raw-mode applications
+-- wrapped (the documented var-headed 4c debt, TODO "Deliberate
+-- emission-quality debts"), and steering the carrier by a false
+-- record wrapped @coerce__def_trans@'s equality in @Except String@
+-- around raw terms.
+lowerRawLogicalCalleeRawMode ::
+  TermTranslationMonad m =>
+  RawLogicalCallee -> Ident -> [Term] -> m TranslatedTerm
+lowerRawLogicalCalleeRawMode RawLogicalEq _ [aArg, xArg, yArg] = do
+  aLean <- translateTerm aArg
+  xLean <- translateTerm xArg
+  yLean <- translateTerm yArg
+  eqHead <- explicitCoreNameAtArgUniverse (Lean.Ident "Eq") aArg
+  traceSubjectRep "Eq(rawMode)" [] (EqualitySubjectRaw RawLogicalPosition)
+  pure (TranslatedTerm
+    (Lean.App eqHead [aLean, xLean, yLean])
+    BindingRaw)
+lowerRawLogicalCalleeRawMode RawLogicalRefl _ [aArg, xArg] = do
+  aLean <- translateTerm aArg
+  xLean <- translateTerm xArg
+  reflHead <- explicitCoreNameAtArgUniverse (Lean.Ident "Eq.refl") aArg
+  traceSubjectRep "Refl(rawMode)" [] (EqualitySubjectRaw RawLogicalPosition)
+  pure (TranslatedTerm
+    (Lean.App reflHead [aLean, xLean])
+    BindingRaw)
+lowerRawLogicalCalleeRawMode RawLogicalEqRec _
+    [aArg, xArg, motiveArg, branchArg, yArg, eqProofArg] = do
+  aLean <- translateTerm aArg
+  xLean <- translateTerm xArg
+  yLean <- translateTerm yArg
+  branchLean <- translateTerm branchArg
+  motiveLean <- translateTerm motiveArg
+  eqProofLean <- translateTerm eqProofArg
+  traceSubjectRep "Eq__rec(rawMode)" [] (EqualitySubjectRaw RawLogicalPosition)
+  pure (TranslatedTerm
+    (Lean.App (Lean.ExplVar (Lean.Ident "Eq.rec"))
+      [aLean, xLean, motiveLean, branchLean, yLean, eqProofLean])
+    BindingRaw)
+lowerRawLogicalCalleeRawMode callee ident _ =
+  Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+    ("raw logical callee "
+     <> Text.pack (show callee)
+     <> " was used at an unsupported arity"))
+
+-- | Raw-logical callees in ambient Phase-β mode: the standalone
+-- convention classifies the subjects and everything moves through the
+-- 'adaptTo' chokepoint at declared positions.
+lowerRawLogicalCalleeAmbient ::
+  TermTranslationMonad m =>
+  RawLogicalCallee -> Ident -> [Term] -> m TranslatedTerm
+lowerRawLogicalCalleeAmbient RawLogicalEq _ [aArg, xArg, yArg] = do
   aLean <- withRawTranslationMode (translateTerm aArg)
   xTrans <- translateTermWithShape xArg
   yTrans <- translateTermWithShape yArg
   rep <- standaloneEqualitySubjectRep "Eq" [xTrans, yTrans]
   eqHead <- explicitCoreNameAtArgUniverse (Lean.Ident "Eq") aArg
+  carrier <- subjectCarrierAt rep aArg aLean
   xLean <- subjectTerm rep xTrans
   yLean <- subjectTerm rep yTrans
   pure (TranslatedTerm
-    (Lean.App eqHead [subjectCarrier rep aLean, xLean, yLean])
+    (Lean.App eqHead [carrier, xLean, yLean])
     BindingRaw)
-lowerRawLogicalCallee RawLogicalRefl _ [aArg, xArg] = do
+lowerRawLogicalCalleeAmbient RawLogicalRefl _ [aArg, xArg] = do
   aLean <- withRawTranslationMode (translateTerm aArg)
   xTrans <- translateTermWithShape xArg
   rep <- standaloneEqualitySubjectRep "Refl" [xTrans]
   reflHead <- explicitCoreNameAtArgUniverse (Lean.Ident "Eq.refl") aArg
+  carrier <- subjectCarrierAt rep aArg aLean
   xLean <- subjectTerm rep xTrans
   pure (TranslatedTerm
-    (Lean.App reflHead [subjectCarrier rep aLean, xLean])
+    (Lean.App reflHead [carrier, xLean])
     BindingRaw)
-lowerRawLogicalCallee RawLogicalEqRec _ [aArg, xArg, motiveArg, branchArg, yArg, eqProofArg] = do
+lowerRawLogicalCalleeAmbient RawLogicalEqRec _ [aArg, xArg, motiveArg, branchArg, yArg, eqProofArg] = do
   aLean <- withRawTranslationMode (translateTerm aArg)
   xTrans <- translateTermWithShape xArg
   yTrans <- translateTermWithShape yArg
@@ -3372,9 +3493,15 @@ lowerRawLogicalCallee RawLogicalEqRec _ [aArg, xArg, motiveArg, branchArg, yArg,
   eqProofLean <- case rep of
     EqualitySubjectRaw _        -> withRawTranslationMode (translateTerm eqProofArg)
     EqualitySubjectRuntimeValue -> translateTerm eqProofArg
+    -- Function-carrier proofs translate in the current mode for the
+    -- same reason the carrier does: raw logical content is already in
+    -- raw mode, and ambient content rebuilds any inner equality at
+    -- the same mode its declared carrier came from.
+    EqualitySubjectRawFunction  -> translateTerm eqProofArg
+  carrier <- subjectCarrierAt rep aArg aLean
   pure (TranslatedTerm
     (Lean.App (Lean.ExplVar (Lean.Ident "Eq.rec"))
-      [ subjectCarrier rep aLean
+      [ carrier
       , xLean
       , motiveLean
       , branchLean
@@ -3382,7 +3509,7 @@ lowerRawLogicalCallee RawLogicalEqRec _ [aArg, xArg, motiveArg, branchArg, yArg,
       , eqProofLean
       ])
     (ercResultShape conv))
-lowerRawLogicalCallee callee ident _ =
+lowerRawLogicalCalleeAmbient callee ident _ =
   Except.throwError (RejectedPrimitive (Text.pack (identName ident))
     ("raw logical callee "
      <> Text.pack (show callee)

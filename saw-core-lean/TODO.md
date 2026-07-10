@@ -224,13 +224,12 @@ doc for per-slice regression fences and bounded validation commands):
   restore a translation path for the ChaCha20-shape stream comprehensions
   (the `saw_self_ref_comp_iterate` parametric-bridge family) or migrate the
   rows to an expected-rejection category. Not a golden-format issue — do not
-  refresh. ALSO `drivers/sawcore_prelude_auto_emit` (found 2026-07-10,
-  bisect-verified pre-existing at `89a6cef06`): `write_lean_sawcore_prelude`
-  rejects on a function-carrier equality in a prelude lemma ("raw logical
-  equality over function-shaped subjects", from `55e4fe099`) while its golden
-  expects successful emission. Likely RESOLVED by Slice 5.4 (function-carrier
-  equality convention) rather than an upstream decision — re-check after
-  Slice 5; do not refresh.
+  refresh. (`drivers/sawcore_prelude_auto_emit`, formerly also listed here,
+  was RESOLVED 2026-07-10 by Slice 5c: the function-carrier equality
+  convention plus the raw-mode raw-logical pipeline un-rejected the prelude;
+  golden refreshed after per-hunk review — the only delta vs the
+  pre-regression golden was the `Eq__rec` → `@Eq.rec` head — and the full
+  emission elaborates with zero errors.)
 - [ ] **Slice 3** (3a–3d) — push position through `Pi`/`Lambda`/`let`; demote
   `shouldWrapBinder`, `isVariableHead`, `natValueResult`, `phaseBetaResultShape`
   from position authorities to convention-internal helpers.
@@ -356,7 +355,7 @@ doc for per-slice regression fences and bounded validation commands):
     `argumentBindPlan` across the corpus (Slice-0 oracle pattern), then
     swap and delete the legacy plan; (iv) prefix partial application and
     the dependent higher-order fixture (3b dormancy) ride this step.
-- [ ] **Slice 5** (5a–5c, see plan doc) — equality subject representation &
+- [x] **Slice 5** (5a–5c, see plan doc) — equality subject representation &
   `Eq.rec` proof transport declared (never inferred from type names). The six
   load-bearing rows (`obligations/proof_add_nat_assoc`, `proof_eq_nat_add_0`,
   `proof_eq_nat_add_s`, `proof_eq_nat_add_comm`, `proof_equal_nat_to_eq_nat`,
@@ -382,9 +381,28 @@ doc for per-slice regression fences and bounded validation commands):
     `#print axioms` clean). A proof produced at a mismatched rep (e.g. a
     raw-declared unsafeAssert feeding a runtime-subject transport) fails
     loudly at Lean elaboration — the carrier types differ; nothing coerces.
-  - [ ] 5c — function-carrier equality convention (raw `@Eq` over the
-    translated effectful function type); expected to fix the pre-existing red
-    `drivers/sawcore_prelude_auto_emit`.
+  - [x] 5c (2026-07-10) — function-carrier equality decided:
+    `EqualitySubjectRawFunction` with the carrier translated in the CURRENT
+    mode — raw logical content compares functions at the raw `a -> b` it
+    quantifies over (`inverse_eta_rule`), ambient Phase-β content at the
+    translated effectful type (`Except String Bool -> Except String Bool`,
+    pinned by `obligations/proof_fn_carrier_eq_ambient`, axiom-clean); a
+    wrapped operand mixed with a function subject rejects (carrier not
+    uniquely determined). ALSO: raw-translation-mode raw-logical callees now
+    interpret through the raw pipeline (`lowerRawLogicalCalleeRawMode`) —
+    shape records of raw-mode translations are not consulted, because the
+    documented 4c var-headed debt stamps some raw-mode applications wrapped
+    and a false record was steering `coerce__def_trans`'s carrier into
+    `Except String` around raw terms. Byte-identical for every pre-existing
+    artifact; `drivers/sawcore_prelude_auto_emit` un-rejected (golden
+    refreshed per-hunk: only the `Eq__rec` → `@Eq.rec` head changed; full
+    prelude elaborates with zero errors).
+
+  **Slice 5 exit fence (2026-07-10):** smoketest 54/54; conformance exit 0
+  (191 OK, +2 fixture rows over the slice); the six load-bearing rows green;
+  both new fixtures' artifacts elaborate and depend on no axioms; baseline
+  snapshot 316 artifacts (313 untouched byte-for-byte across the slice + 2
+  new fixture emissions + the un-rejected auto-emitted prelude).
 - [ ] **Slice 6** — recursors as a position/callee instance; close the
   `@Foo.rec`-by-name constructor-order trust hole (bridges to the separately
   tracked direct-recursor / `PosRep` work in

@@ -39,17 +39,17 @@ noncomputable def Eq__rec.{u0, u1} (t : Sort u0) (x : t) (p : (y : t) ->
 -- uip was skipped (mapped to a hand-library equivalent)
 noncomputable def eq_cong.{u0, u1} (t : Sort u0) (x : t) (y : t) (eq : @Eq.{u0}
   t x y) (u : Sort u1) (f : t -> u) : @Eq.{u1} u (f x) (f y) :=
-  Eq__rec t x (fun (y' : t) (eq' : @Eq.{u0} t x y') => @Eq.{u1} u (f x) (f y'))
+  @Eq.rec t x (fun (y' : t) (eq' : @Eq.{u0} t x y') => @Eq.{u1} u (f x) (f y'))
   (@Eq.refl.{u1} u (f x)) y eq
 
 noncomputable def sym.{u0} (a : Sort u0) (x : a) (y : a) (eq : @Eq.{u0} a x
   y) : @Eq.{u0} a y x :=
-  Eq__rec a x (fun (y' : a) (eq' : @Eq.{u0} a x y') => @Eq.{u0} a y' x)
+  @Eq.rec a x (fun (y' : a) (eq' : @Eq.{u0} a x y') => @Eq.{u0} a y' x)
   (@Eq.refl.{u0} a x) y eq
 
 noncomputable def trans.{u0} (a : Sort u0) (x : a) (y : a) (z : a) (eq1 : @Eq.{u0}
   a x y) (eq2 : @Eq.{u0} a y z) : @Eq.{u0} a x z :=
-  Eq__rec a y (fun (y' : a) (eq' : @Eq.{u0} a y y') => @Eq.{u0} a x y') eq1 z
+  @Eq.rec a y (fun (y' : a) (eq' : @Eq.{u0} a y y') => @Eq.{u0} a x y') eq1 z
   eq2
 
 noncomputable def trans2.{u0} (a : Sort u0) (x : a) (y : a) (z : a) (eq1 : @Eq.{u0}
@@ -72,7 +72,7 @@ noncomputable def eq_inv_map.{u0, u1} (a : Sort u0) (b : Sort u1) (a1 : a) (a2 :
 noncomputable def inverse_eta_rule.{u0, u1} : (a : Sort u0) -> (b : Sort u1) ->
   (f : a -> b) -> (g : a -> b) -> @Eq.{(imax u0 u1)} (a -> b) f g -> (x : a) ->
   @Eq.{u1} b (f x) (g x) :=
-  fun a b f g H => Eq__rec (a -> b) f (fun (g' : a ->
+  fun a b f g H => @Eq.rec (a -> b) f (fun (g' : a ->
   b) (H' : @Eq.{(imax u0 u1)} (a -> b) f g') => (x : a) -> @Eq.{u1} b (f x) (g'
   x)) (fun (x : a) => @Eq.refl.{u1} b (f x)) g H
 
@@ -80,14 +80,14 @@ noncomputable def inverse_eta_rule.{u0, u1} : (a : Sort u0) -> (b : Sort u1) ->
 -- coerce was skipped (mapped to a hand-library equivalent)
 noncomputable def coerce__def (a : Type) (b : Type) (eq : @Eq.{2} Type a
   b) (x : a) : b :=
-  Eq__rec Type a (fun (b' : Type) (eq' : @Eq.{2} Type a b') => b') x b eq
+  @Eq.rec Type a (fun (b' : Type) (eq' : @Eq.{2} Type a b') => b') x b eq
 
 -- coerce__eq was skipped (mapped to a hand-library equivalent)
 -- coerce_same was skipped (mapped to a hand-library equivalent)
 noncomputable def coerce__def_trans (a : Type) (b : Type) (c : Type) (pf1 : @Eq.{2}
   Type a b) (pf2 : @Eq.{2} Type b c) (x : a) : @Eq.{1} c (coerce__def b c pf2
   (coerce__def a b pf1 x)) (coerce__def a c (trans Type a b c pf1 pf2) x) :=
-  Eq__rec Type b (fun (c' : Type) (pf2' : @Eq.{2} Type b c') => @Eq.{1} c'
+  @Eq.rec Type b (fun (c' : Type) (pf2' : @Eq.{2} Type b c') => @Eq.{1} c'
   (coerce__def b c' pf2' (coerce__def a b pf1 x)) (coerce__def a c' (trans Type
   a b c' pf1 pf2') x)) (@Eq.refl.{1} b (coerce__def a b pf1 x)) c pf2
 
@@ -101,12 +101,12 @@ noncomputable def rcoerce : (a : Type) -> (b : Type) -> @Eq.{2} Type a b ->
 -- unsafeCoerce_same was skipped (mapped to a hand-library equivalent)
 noncomputable def piCong0 (r : Type) (x : Type) (y : Type) (eq : @Eq.{2} Type x
   y) : @Eq.{2} Type ((_' : x) -> r) ((_' : y) -> r) :=
-  Eq__rec Type x (fun (y' : Type) (eq' : @Eq.{2} Type x y') => @Eq.{2} Type
+  @Eq.rec Type x (fun (y' : Type) (eq' : @Eq.{2} Type x y') => @Eq.{2} Type
   (x -> r) (y' -> r)) (@Eq.refl.{2} Type (x -> r)) y eq
 
 noncomputable def piCong1 (r : Type) (x : Type) (y : Type) (eq : @Eq.{2} Type x
   y) : @Eq.{2} Type ((_' : r) -> x) ((_' : r) -> y) :=
-  Eq__rec Type x (fun (y' : Type) (eq' : @Eq.{2} Type x y') => @Eq.{2} Type
+  @Eq.rec Type x (fun (y' : Type) (eq' : @Eq.{2} Type x y') => @Eq.{2} Type
   (r -> x) (r -> y')) (@Eq.refl.{2} Type (r -> x)) y eq
 
 -- PairValue_fst_snd was skipped (mapped to a hand-library equivalent)
