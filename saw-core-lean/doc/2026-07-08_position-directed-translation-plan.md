@@ -353,6 +353,36 @@ the new fixture row is green; `obligations/vector_*_with_proof` and
 table. Shrink `CalleeTransitional` to zero — track the count per commit; it
 only goes down.
 
+2026-07-10 survey (post-4b): `translateIdentWithArgsWithShape` is already a
+declarative guard chain (contract tables + name/arity patterns → explicit
+lowerers; fallback = the UseSiteTreatment interpreter + the now
+convention-driven phase-beta path). Step order for the remaining semantic
+content:
+
+1. **`applyKnownFunctionWithShape` peel demotion — own oracle cycle.** A
+   DIFFERENT convention family from `applied`'s raw-formal targets: these
+   callees are phase-β function VALUES whose emitted formals are wrapped, so
+   value formals expect wrapped actuals (`expectedWrapped` = peeled
+   `isExceptStringType`). Derivation candidate: expectedWrapped ⟺ mode
+   `RawValueArg` — EXCEPT dependent/var-headed formals, where the peel sees
+   the un-substituted Lean variable (never Except-headed → False) while a
+   naive source classification says value formal (True). The candidate must
+   map var-headed formals without a Pi instantiation to raw (peel-mirror);
+   the inert assert adjudicates, same pattern as 4b steps 2–3.
+2. **Proof-primitive table relabel** with SAWCore signatures in hand (raw
+   slots are raw-LOGICAL `withRawTranslationMode` translations; the relabel
+   documents Index/Type/Value/Proof slots without changing interpretation).
+3. **`UseMapsToWrapped` arg table → `ArgMode`** (`UseArgRaw` splits into its
+   true Index/Type slots, as 4a did for the checked contracts).
+4. **Classifier-as-data + `CalleeTransitional` → 0**: fold the guard chain
+   into a payload-carrying classified-callee type (note:
+   `ProofPrimitiveContract` has rank-2 fields, so the classified type cannot
+   derive Eq/Show), then delete `CalleeTransitional` and add the Slice 7
+   anti-regression lint hook.
+5. **`bindingShapeOfType` demotion** at binder sites — the remaining type
+   self-mirror; the position that CHOSE the binder type (recorded since
+   Slices 3a–3c) becomes the authority.
+
 Regression fence (all sub-slices): `bash test.sh conformance` — differential +
 obligations + saw-boundary all at prior status or better. The proof-carrying
 obligation rows (`obligations/partial_*`, `obligations/cryptol_ec_*`,
