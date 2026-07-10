@@ -699,6 +699,14 @@ peelLeanPiTypes n (Lean.Pi (Lean.PiBinder _ _ bty : rest) body) =
   in (bty : tys, ret)
 peelLeanPiTypes _ ty = ([], ty)
 
+-- | CONVENTION-INTERNAL helper (plan Slice 3.4 / 4c): classifies a
+-- binder type that the CALLING FUNCTION ITSELF just emitted from a
+-- known wrap decision — a deterministic self-mirror, not a position
+-- authority. Legal inputs are types built in the same function
+-- (`wrapExcept t` / raw `t`); never classify types that arrived from
+-- elsewhere, and never use this to infer a position. (The forbidden
+-- emitted-AST inspection class — shape from emitted TERMS — was
+-- deleted in Slices 2/4b.)
 bindingShapeOfType :: Lean.Type -> BindingShape
 bindingShapeOfType ty
   | isExceptStringType ty = BindingWrapped

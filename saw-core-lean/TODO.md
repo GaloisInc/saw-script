@@ -270,9 +270,21 @@ doc for per-slice regression fences and bounded validation commands):
     `translateRecursorMotive` and its blanket `skipBinderWrap True` — one
     flag site deleted. Byte-identical incl. re-emitted Stream.rec /
     RecordType.rec driver rows; motive trace live on `conformance_stream`.
-- [ ] **Slice 4** (4a–4c, see plan doc) — real callee conventions for every
+- [x] **Slice 4** (4a–4c, see plan doc) — real callee conventions for every
   callee; retire `CalleeTransitional`; decompose `originalDispatchWithShape`
-  into a convention interpreter + table.
+  into a convention interpreter + table. COMPLETE 2026-07-10. 4c closing
+  steps: function-value conventions swapped in (oracle-proven;
+  `applyKnownFunctionWithShape`'s per-arg peel deleted, result-type peel
+  documented convention-internal); proof-primitive contracts declare true
+  slot roles from the SAWCore signatures (raw-logical interpretation
+  unchanged); `CalleeTransitional` retired BY DELETION (the old
+  `CalleeConvention` enum was vestigial — only its raw-logical arm was ever
+  consumed; the real classifier is the declarative guard chain over the
+  contract tables with declared `ArgMode` slots, now documented as such);
+  `bindingShapeOfType` documented as a convention-internal self-mirror
+  (legal inputs: types the calling function itself just built);
+  `UseArgShape` stays table-local (its interpreter already binds wrapped
+  actuals at raw slots — no 4a hazard).
   - [x] 4a — calculus `ArgMode`/`ResultMode` vocabulary as data; checked-
     application contracts re-expressed (`CheckedArgRaw` split into true
     `IndexArg`/`TypeArg` slots per the helpers' Lean signatures); the
