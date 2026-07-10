@@ -224,7 +224,13 @@ doc for per-slice regression fences and bounded validation commands):
   restore a translation path for the ChaCha20-shape stream comprehensions
   (the `saw_self_ref_comp_iterate` parametric-bridge family) or migrate the
   rows to an expected-rejection category. Not a golden-format issue — do not
-  refresh.
+  refresh. ALSO `drivers/sawcore_prelude_auto_emit` (found 2026-07-10,
+  bisect-verified pre-existing at `89a6cef06`): `write_lean_sawcore_prelude`
+  rejects on a function-carrier equality in a prelude lemma ("raw logical
+  equality over function-shaped subjects", from `55e4fe099`) while its golden
+  expects successful emission. Likely RESOLVED by Slice 5.4 (function-carrier
+  equality convention) rather than an upstream decision — re-check after
+  Slice 5; do not refresh.
 - [ ] **Slice 3** (3a–3d) — push position through `Pi`/`Lambda`/`let`; demote
   `shouldWrapBinder`, `isVariableHead`, `natValueResult`, `phaseBetaResultShape`
   from position authorities to convention-internal helpers.
