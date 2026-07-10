@@ -347,8 +347,11 @@ speculateTI :: TI a -> TI Bool
 speculateTI m = do
     rw <- get
     ro <- ask
-    let (_result, rw') = runState (runReaderT (unTI m) ro) rw
-    pure $ length (tiErrors rw') == length (tiErrors rw)
+    -- Micro-optimization: speculate with an empty error list, so we
+    -- don't need to iterate over any existing errors afterwards to
+    -- check for success.
+    let (_result, rw') = runState (runReaderT (unTI m) ro) (rw {tiErrors = []})
+    pure $ null (tiErrors rw')
 
 
 ------------------------------------------------------------
