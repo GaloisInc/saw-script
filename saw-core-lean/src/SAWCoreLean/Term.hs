@@ -1684,11 +1684,13 @@ data PartialOpContract = PartialOpContract
 
 data PartialOpConvention
   = PartialOpRaw Lean.Ident
-  | PartialOpWrapped Lean.Ident [PartialOpArgMode]
-
-data PartialOpArgMode
-  = PartialOpArgRaw
-  | PartialOpArgWrapped
+    -- ^ Raw checked helper (divNat-family); argument binds are driven
+    -- by 'argumentBindPlan' until Slice 4b/4c fold this into
+    -- 'CalleePhaseBetaDefinition'.
+  | PartialOpWrapped Lean.Ident [ArgMode]
+    -- ^ Wrapped checked helper with declared per-argument modes
+    -- (plan Slice 4a/4b): bitvector widths are 'IndexArg', value
+    -- operands 'RuntimeArg'.
 
 data CheckedApplicationContract = CheckedApplicationContract
   { cacModule     :: ModuleName
@@ -1731,7 +1733,7 @@ partialOpContracts =
   , PartialOpContract preludeModule "rationalRecip" 1
       (wrappedNonzeroArg (Lean.Var (Lean.Ident "Rational")) 0)
       (PartialOpWrapped (Lean.Ident "rationalRecip_checkedM")
-        [PartialOpArgWrapped])
+        [RuntimeArg])
   , bvBinaryPartial "bvUDiv" "bvUDiv_checkedM"
   , bvBinaryPartial "bvURem" "bvURem_checkedM"
   , bvSignedBinaryPartial "bvSDiv" "bvSDiv_checkedM"
@@ -1752,22 +1754,22 @@ partialOpContracts =
         (wrappedBinary target)
     wrappedBinary target =
       PartialOpWrapped (Lean.Ident target)
-        [PartialOpArgWrapped, PartialOpArgWrapped]
+        [RuntimeArg, RuntimeArg]
     bvBinaryPartial source target =
       PartialOpContract preludeModule source 3
         (bvNonzeroArg 0 2)
         (PartialOpWrapped (Lean.Ident target)
-          [PartialOpArgRaw, PartialOpArgWrapped, PartialOpArgWrapped])
+          [IndexArg, RuntimeArg, RuntimeArg])
     bvSignedBinaryPartial source target =
       PartialOpContract preludeModule source 3
         (bvSignedNonzeroArg 0 2)
         (PartialOpWrapped (Lean.Ident target)
-          [PartialOpArgRaw, PartialOpArgWrapped, PartialOpArgWrapped])
+          [IndexArg, RuntimeArg, RuntimeArg])
     cryptolSignedBVPartial source target =
       PartialOpContract cryptolModule source 3
         (cryptolSignedBVNonzeroArg 0 2)
         (PartialOpWrapped (Lean.Ident target)
-          [PartialOpArgRaw, PartialOpArgWrapped, PartialOpArgWrapped])
+          [IndexArg, RuntimeArg, RuntimeArg])
 
 -- The old three-way 'CheckedArgRaw' bucket is split into its true
 -- modes (plan Slice 4a): the width/index Nats are 'IndexArg', the
@@ -2337,25 +2339,38 @@ lowerPartialOpContract contract ident args = do
 buildWrappedProofCarryingApplication ::
   TermTranslationMonad m =>
   Lean.Term ->
-  [PartialOpArgMode] ->
+  [ArgMode] ->
   [TranslatedTerm] ->
   PartialOpContract ->
   m TranslatedTerm
 buildWrappedProofCarryingApplication head_ argModes argResults contract = do
-  helperArgs <- zipWithM partialOpArgTerm argModes argResults
-  let prop = pocBuildProp contract helperArgs
-  unavailable <- view unavailableIdents <$> askTR
-  let proofIdents = Set.union (leanTermIdents prop) unavailable
-  tm <- withLocalProofObligationUsing
+  actuals <- zipWithM partialOpActual argModes argResults
+  tm <- lowerProofCarryingActuals
           (Lean.Ident "h_nonzero_")
-          prop
-          (`partialOpProofScript` proofIdents)
-          $ \proof ->
-              pure (Lean.App head_ (helperArgs ++ [proof]))
+          partialOpProofScript
+          (Just (pocBuildProp contract))
+          head_
+          actuals
   pure (TranslatedTerm tm BindingWrapped)
   where
-    partialOpArgTerm PartialOpArgRaw = pure . ttLean
-    partialOpArgTerm PartialOpArgWrapped = adaptToRuntime
+    -- The wrapped partial-op convention shares the checked-application
+    -- interpretation: runtime slots adapt, and a WRAPPED actual at an
+    -- index slot (a runtime-computed bitvector width) is sequenced
+    -- through the error-preserving bind chain rather than escaping raw.
+    partialOpActual RuntimeArg result =
+      CheckedDirect <$> adaptToRuntime result
+    partialOpActual IndexArg result = case ttShape result of
+      BindingRaw      -> pure (CheckedDirect (ttLean result))
+      BindingWrapped  -> pure (CheckedBindIndex (ttLean result))
+      BindingFunction ->
+        Except.throwError (ForbiddenAdaptation
+          "IndexArg (raw index position)"
+          "BindingFunction")
+    partialOpActual mode _ =
+      Except.throwError (RejectedPrimitive "partial operation"
+        ("wrapped partial-op contract used argument mode "
+         <> Text.pack (show mode)
+         <> " outside its interpreter"))
 
 buildRawProofCarryingApplication ::
   TermTranslationMonad m =>
@@ -2504,22 +2519,31 @@ checkedActualTerm :: CheckedActual -> Lean.Term
 checkedActualTerm (CheckedDirect tm)    = tm
 checkedActualTerm (CheckedBindIndex tm) = tm
 
--- | Build the checked application over interpreted actuals: an
+-- | Build a proof-carrying application over interpreted actuals: an
 -- error-preserving bind chain for every 'CheckedBindIndex' (in
 -- application order — calculus §Callee Conventions sequencing), then
--- the bounds obligation and the helper call over the final (raw)
--- argument terms. With no bound indices this reduces exactly to the
--- historical emission.
-lowerCheckedApplicationHelperArgs ::
+-- the declared obligation and the helper call over the final (raw)
+-- argument terms. Shared by the checked-application and wrapped
+-- partial-op conventions; with no bound indices it reduces exactly to
+-- the historical emissions.
+lowerProofCarryingActuals ::
   TermTranslationMonad m =>
-  CheckedApplicationContract ->
+  Lean.Ident ->
+    -- ^ obligation name stem (@h_bounds_@, @h_nonzero_@, …)
+  (Lean.Ident -> Set Lean.Ident -> Lean.Term) ->
+    -- ^ proof-script builder for the obligation
+  Maybe ([Lean.Term] -> Lean.Term) ->
+    -- ^ proposition over the final argument terms, if any
+  Lean.Term ->
+    -- ^ helper head
   [CheckedActual] ->
   m Lean.Term
-lowerCheckedApplicationHelperArgs contract actuals = go 0 actuals []
+lowerProofCarryingActuals obligName script mBuildProp head_ actuals =
+  go 0 actuals []
   where
     bindVar = Lean.Var (Lean.Ident "Bind.bind")
     argTerms = map checkedActualTerm actuals
-    avoidIdents = Set.unions (map leanTermIdents argTerms)
+    avoidIdents = Set.unions (leanTermIdents head_ : map leanTermIdents argTerms)
 
     go _ [] subs = do
       let finalArgs =
@@ -2528,20 +2552,19 @@ lowerCheckedApplicationHelperArgs contract actuals = go 0 actuals []
                 Nothing    -> tm
             | (pos, tm) <- zip [0 :: Int ..] argTerms
             ]
-      case cacBuildProp contract of
+      case mBuildProp of
         Nothing ->
-          pure (Lean.App (Lean.Var (cacHelperName contract)) finalArgs)
+          pure (Lean.App head_ finalArgs)
         Just buildProp -> do
           let prop = buildProp finalArgs
           unavailable <- view unavailableIdents <$> askTR
           let proofIdents = Set.union (leanTermIdents prop) unavailable
           withLocalProofObligationUsing
-            (Lean.Ident "h_bounds_")
+            obligName
             prop
-            (`boundsProofScript` proofIdents)
+            (`script` proofIdents)
             $ \proof ->
-                pure (Lean.App (Lean.Var (cacHelperName contract))
-                  (finalArgs ++ [proof]))
+                pure (Lean.App head_ (finalArgs ++ [proof]))
     go pos (CheckedDirect _ : rest) subs = go (pos + 1) rest subs
     go pos (CheckedBindIndex tm : rest) subs = do
       bname <- freshVariantAvoiding avoidIdents
@@ -2549,6 +2572,18 @@ lowerCheckedApplicationHelperArgs contract actuals = go 0 actuals []
       rest' <- go (pos + 1) rest ((pos, bname) : subs)
       let lam = Lean.Lambda [Lean.Binder Lean.Explicit bname Nothing] rest'
       pure (Lean.App bindVar [tm, lam])
+
+lowerCheckedApplicationHelperArgs ::
+  TermTranslationMonad m =>
+  CheckedApplicationContract ->
+  [CheckedActual] ->
+  m Lean.Term
+lowerCheckedApplicationHelperArgs contract =
+  lowerProofCarryingActuals
+    (Lean.Ident "h_bounds_")
+    boundsProofScript
+    (cacBuildProp contract)
+    (Lean.Var (cacHelperName contract))
 
 checkedApplicationHelperArgsFor ::
   TermTranslationMonad m =>
