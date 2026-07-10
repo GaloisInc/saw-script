@@ -60,7 +60,6 @@ import qualified SAWSupport.Pretty as PPS
 import qualified CryptolSAWCore.CryptolEnv as SAW
 import qualified SAWCore.SharedTerm as SAW
 import qualified CryptolSAWCore.TypedTerm as SAW
-import qualified SAWCoreWhat4.ReturnTrip as SAW
 
 import SAWCentral.Crucible.MIR.TypeShape
 
@@ -290,8 +289,6 @@ cryptolRun name (CryFunArgs (CryFunArgs' tpArgs ctrs normArgs)) retShp funcTerm 
 
     sym <- getSymInterface
 
-    let w4VarMapRef = SAW.saw_elt_cache_r (mirSAWCoreState (sym ^. W4.userState))
-
     RegMap argsCtx <- getOverrideArgs
     let sc = mirSharedContext (sym ^. W4.userState)
     let
@@ -336,21 +333,17 @@ cryptolRun name (CryFunArgs (CryFunArgs' tpArgs ctrs normArgs)) retShp funcTerm 
 
     let allTerms = tpTerms ++ argTerms
     appTerm  <- liftIO (SAW.scApplyAll sc funcTerm allTerms)
-    w4VarMap <- liftIO (readIORef w4VarMapRef)
-    liftIO $ termToReg sym w4VarMap appTerm retShp
+    liftIO $ termToReg sym appTerm retShp
 
 munge :: forall sym t fs tp0.
     (IsSymInterface sym, sym ~ MirSym t fs) =>
     sym -> TypeShape tp0 -> RegValue sym tp0 -> IO (RegValue sym tp0)
 munge sym shp0 rv0 = do
-    let w4VarMapRef = SAW.saw_elt_cache_r (mirSAWCoreState (sym ^. W4.userState))
 
     let eval :: forall tp. W4.Expr t tp -> IO SAW.Term
         eval = exprToTerm sym
         uneval :: TypeShape (BaseToType btp) -> SAW.Term -> IO (W4.Expr t btp)
-        uneval shp t = do
-            w4VarMap <- readIORef w4VarMapRef
-            termToReg sym w4VarMap t shp
+        uneval shp t = termToReg sym t shp
 
     let go :: forall tp. TypeShape tp -> RegValue sym tp -> IO (RegValue sym tp)
         go shp@(PrimShape _ _) expr = eval expr >>= uneval shp

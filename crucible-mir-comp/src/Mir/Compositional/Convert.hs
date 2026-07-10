@@ -27,6 +27,7 @@ import Data.Parameterized.Some
 import Data.Parameterized.TraversableFC
 import Data.Set (Set)
 import qualified Data.Set as Set
+import qualified Data.Text as Text
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import GHC.Stack (HasCallStack)
@@ -54,6 +55,7 @@ import SAWCentral.Crucible.MIR.TypeShape
 import Mir.Intrinsics
 import qualified Mir.Mir as M
 import Mir.Compositional.State
+import Mir.Compositional.Panic(panic)
 import Lang.Crucible.Simulator
 
 
@@ -84,7 +86,7 @@ visitRegValueExprs _sym tpr_ v_ f = go tpr_ v_
     -- is offset from the first by a symbolic integer value, then we'd need to
     -- visit exprs from some suffix of each MirReference.
     go MirReferenceRepr _ = return ()
-    go tpr _ = error $ "visitRegValueExprs: unsupported: " ++ show tpr
+    go tpr _ = panic "visitRegValueExprs" [ "unsupported: " <> showText tpr ]
 
 forMWithRepr_ :: forall ctx m f. Monad m =>
     CtxRepr ctx -> Assignment f ctx -> (forall tp. TypeRepr tp -> f tp -> m ()) -> m ()
@@ -113,9 +115,9 @@ visitExprVars cache e0 f = go Set.empty e0
             W4.Forall v e' -> go (Set.insert (Some v) bound) e'
             W4.Exists v e' -> go (Set.insert (Some v) bound) e'
             W4.Annotation _ _ e' -> go bound e'
-            W4.ArrayFromFn _ -> error "unexpected ArrayFromFn"
-            W4.MapOverArrays _ _ _ -> error "unexpected MapOverArrays"
-            W4.ArrayTrueOnEntries _ _ -> error "unexpected ArrayTrueOnEntries"
+            W4.ArrayFromFn _ -> panic "visitExprVars" ["unexpected ArrayFromFn"]
+            W4.MapOverArrays _ _ _ -> panic "visitExprVars" ["unexpected MapOverArrays"]
+            W4.ArrayTrueOnEntries _ _ -> panic "visitExprVars" ["unexpected ArrayTrueOnEntries"]
             W4.FnApp _ es -> traverseFC_ (go bound) es
         W4.AppExpr ae ->
             void $ W4.traverseApp (\e' -> go bound e' >> return e') $ W4.appExprApp ae
@@ -136,7 +138,7 @@ termToExpr sym varMap term = do
     sv <- termToSValue sym varMap term
     case SAW.valueToSymExpr sv of
         Just x -> return x
-        Nothing -> error $ "termToExpr: failed to convert SValue"
+        Nothing -> panic "termToExpr" ["failed to convert SValue"]
 
 -- | Convert a `SAW.Term` into a Crucible `RegValue`.  Requires a `TypeShape`
 -- giving the expected MIR/Crucible type in order to distinguish cases like
@@ -144,11 +146,11 @@ termToExpr sym varMap term = do
 termToReg :: forall sym t fs tp.
     (IsSymInterface sym, sym ~ MirSym t fs, HasCallStack) =>
     sym ->
-    IntMap (Some (W4.Expr t)) ->
     SAW.Term ->
     TypeShape tp ->
     IO (RegValue sym tp)
-termToReg sym varMap term shp0 = do
+termToReg sym term shp0 = do
+    varMap <- readIORef (SAW.saw_elt_cache_r (mirSAWCoreState (sym ^. W4.userState)))
     sv <- termToSValue sym varMap term
     go shp0 sv
   where
@@ -161,8 +163,12 @@ termToReg sym varMap term shp0 = do
           | intValue w == fromIntegral (V.length v) -> do
             bits <- forM v $ SAW.force >=> \x -> case x of
                 SAW.VBool b -> return b
-                _ -> fail $ "termToReg: type error: need to produce " ++ show (shapeType shp) ++
-                    ", but simulator returned a vector containing " ++ show x
+                _ ->
+                  panic "termToReg"
+                    [ "type error"
+                    , "  - need to produce " <> showText (shapeType shp)
+                    , "  - but simulator returned a vector containing " <> showText x
+                    ]
             buildBitVector w bits
         (TupleShape _ [], SAW.VCtorApp 0 _ []) -> mirAggregate_zstIO
         (TupleShape _ elems, _) -> do
@@ -170,9 +176,12 @@ termToReg sym varMap term shp0 = do
             buildMirAggregate sym elems svs $ \_ _ shp' sv' -> go shp' sv'
         (ArrayShape _ _ sz shp' len, SAW.VVector thunks) -> do
             svs <- mapM SAW.force $ toList thunks
-            when (length svs /= fromIntegral len) $ fail $
-                "termToReg: type error: expected an array of length " ++ show len ++
-                    ", but simulator returned " ++ show (length svs) ++ " elements"
+            when (length svs /= fromIntegral len) $
+              panic "termToRec"
+                [ "type error:"
+                , "  - expected an array of length " <> showText len
+                , "  - but simulator returned " <> showText (length svs) <> " elements"
+                ]
             buildMirAggregateArray sym sz shp' len svs $ \_ sv' -> go shp' sv'
         -- Special case: saw-core/cryptol doesn't distinguish bitvectors from
         -- vectors of booleans, so it may return `VWord` (bitvector) where an
@@ -184,8 +193,12 @@ termToReg sym varMap term shp0 = do
             generateMirAggregateArray sym sz shp' len $ \i ->
               -- Cryptol bitvectors are MSB-first, but What4 uses LSB-first.
               liftIO $ W4.testBitBV sym (fromIntegral $ len - i - 1) e
-        _ -> error $ "termToReg: type error: need to produce " ++ show (shapeType shp) ++
-            ", but simulator returned " ++ show sv
+        _ ->
+          panic "termToReg"
+            [ "type error:"
+            , "  - need to produce " <> showText (shapeType shp)
+            , "  - simulator returned " <> showText sv
+            ]
 
     -- | Convert an `SValue` tuple (built from nested `VPair`s) into a list of
     -- the inner `SValue`s, in reverse order.
@@ -195,8 +208,11 @@ termToReg sym varMap term shp0 = do
         x' <- SAW.force x
         xs' <- SAW.force xs
         tupleToListRev (n - 1) (x' : acc) xs'
-    tupleToListRev n _ v = error $ "termToReg: expected tuple of " ++ show n ++
-        " elements, but got " ++ show v
+    tupleToListRev n _ v = panic "termToReg"
+                             [ "type error:"
+                             , "  - expected tuple of " <> showText n <> " elements,"
+                             , "  - but got " <> showText v
+                             ]
 
     -- | Build a bitvector from a vector of bits.  The length of the vector is
     -- required to match `tw`.
@@ -205,13 +221,16 @@ termToReg sym varMap term shp0 = do
     buildBitVector tw v = do
         bvs <- mapM (\b -> W4.bvFill sym (knownNat @1) b) $ toList v
         case bvs of
-            [] -> error $ "buildBitVector: expected " ++ show tw ++ " bits, but got 0"
+            [] -> panic "buildBitVector" [ "expected " <> showText tw <> " bits, but got 0" ]
             (bv : bvs') -> do
                 Some bv' <- goBV (knownNat @1) bv bvs'
                 Refl <- case testEquality (W4.exprType bv') (BaseBVRepr tw) of
                     Just x -> return x
-                    Nothing -> error $ "buildBitVector: expected " ++ show (BaseBVRepr tw) ++
-                        ", but got " ++ show (W4.exprType bv')
+                    Nothing -> panic "buildBitVector"
+                                 [ "type error:"
+                                 , "  - expected " <> showText (BaseBVRepr tw)
+                                 , "  - but got " <> showText (W4.exprType bv')
+                                 ]
                 return bv'
       where
         goBV :: forall iw. (1 <= iw) =>
@@ -235,8 +254,8 @@ termToSValue :: forall sym t fs.
 termToSValue sym varMap term = do
     let convert (Some expr) = case SAW.symExprToValue (W4.exprType expr) expr of
             Just x -> return x
-            Nothing -> error $ "termToExpr: failed to convert var  of what4 type " ++
-                show (W4.exprType expr)
+            Nothing -> panic "termToExpr" ["failed to convert var of what4 type " <>
+                                                    showText (W4.exprType expr)]
     ecMap <- mapM convert varMap
     let mirState = sym ^. W4.userState
     let sc  = mirSharedContext mirState
@@ -258,7 +277,7 @@ termToPred sym varMap term = do
     Some expr <- termToExpr sym varMap term
     case W4.exprType expr of
         BaseBoolRepr -> return expr
-        btpr -> error $ "termToPred: got result of type " ++ show btpr ++ ", not BaseBoolRepr"
+        btpr -> panic "termToPred" ["got result of type " <> showText btpr <> ", not BaseBoolRepr"]
 
 -- | Convert a `SAW.Term` representing a type to a `W4.BaseTypeRepr`.
 termToType :: forall sym t fs.
@@ -272,21 +291,23 @@ termToType sym term = do
     sv <- SAW.w4SolveBasic sym sc mempty mempty ref mempty term
     tv <- case sv of
         SAW.TValue tv -> return tv
-        _ -> error $ "termToType: bad SValue"
+        _ -> panic "termToType" ["bad SValue"]
     case tv of
         SAW.VBoolType -> return $ Some BaseBoolRepr
         SAW.VVecType w SAW.VBoolType -> do
             Some w' <- return $ mkNatRepr w
             LeqProof <- case testLeq (knownNat @1) w' of
                 Just x -> return x
-                Nothing -> error "termToPred: zero-width bitvector"
+                Nothing -> panic "termToPred" ["zero-width bitvector"]
             return $ Some $ BaseBVRepr w'
-        _ -> error $ "termToType: bad SValue"
+        _ -> panic "termToType" ["bad SValue"]
 
 
--- | Convert the `W4.Expr` into a `SAW.Term`, recording in @w4VarMapRef@'s map
--- the new `SAW.Variable`s that were created to represent free variables in the
--- provided expression.
+-- | Convert the `W4.Expr` into a `SAW.Term`. This is lazy, in that
+-- the SAW terms are just variables, and we record their association with
+-- the `W4.Expr` in the simulator's state (so they can be properly evaluated
+-- later.  The translation is also cached to avoid redundant work if we
+-- encounter expressions we've seen before.
 exprToTerm :: forall sym t fs tp m.
     (IsSymInterface sym, sym ~ MirSym t fs, MonadIO m, MonadFail m) =>
     sym ->
@@ -305,7 +326,7 @@ exprToTerm sym val = liftIO $
         return (SAW.SAWExpr term)
     case v of
       SAW.SAWExpr e -> pure e
-      _ -> fail "exprToTerm: expected SAWExpr"
+      _             -> panic "exprToTerm" ["expected SAWExpr"]
 
 -- | Try to convert a Crucible register value into a SAW core `Term`, using
 -- a `CryTermAdaptor` to validate and convert references to slices.
@@ -347,15 +368,15 @@ regToTermWithAdapt sym sc name ada0 shp0 rv0 = go ada0 shp0 rv0
         (AdaptDerefSlice col n elAda, SliceShape _ty elT M.Immut tpr, Ctx.Empty Ctx.:> RV mirPtr Ctx.:> RV lenExpr) ->
           case BV.asUnsigned <$> W4.asBV lenExpr of
             Nothing ->
-              fail "Slice length is not statically known"
+              panic "regToTermWithAdapt" ["Slice length is not statically known"]
 
             Just n1
               | n /= n1 ->
-                fail (unlines [
-                  "Slice length mismatch:",
-                  "  Expected: " ++ show n,
-                  "  Actual  : " ++ show n1
-                ])
+                panic "regToTermWithAdapt"
+                  [ "Slice length mismatch:"
+                  , "  Expected: " <> showText n
+                  , "  Actual  : " <> showText n1
+                  ]
               | otherwise ->
                 do
                   let elShp = tyToShapeEq col elT tpr
@@ -372,8 +393,11 @@ regToTermWithAdapt sym sc name ada0 shp0 rv0 = go ada0 shp0 rv0
 
 
 
-        _ -> fail $
-            "type error: " ++ name ++ " got argument of unsupported type " ++ show (shapeType shp)
+        _ ->
+          panic "regToTermWithAdapt"
+            [ "type error:"
+            , "  - " <> Text.pack name <> " got argument of unsupported type " <> showText (shapeType shp)
+            ]
 
 
 regToTerm :: forall sym t fs tp0 m.
@@ -399,5 +423,11 @@ regToTerm sym sc name shp0 rv0 = go shp0 rv0
             terms <- accessMirAggregateArray sym sz shp' len ag $ \_off rv' -> go shp' rv'
             tyTerm <- shapeToTerm sc shp'
             liftIO $ SAW.scVector sc tyTerm terms
-        _ -> fail $
-            "type error: " ++ name ++ " got argument of unsupported type " ++ show (shapeType shp)
+        _ ->
+          panic "regToTerm"
+            [ "type error: "
+            , "  - " <> Text.pack name <> " got argument of unsupported type " <> showText (shapeType shp)
+            ]
+
+showText :: Show a => a -> Text.Text
+showText = Text.pack . show
