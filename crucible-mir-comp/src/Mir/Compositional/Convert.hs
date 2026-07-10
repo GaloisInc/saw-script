@@ -163,12 +163,8 @@ termToReg sym term shp0 = do
           | intValue w == fromIntegral (V.length v) -> do
             bits <- forM v $ SAW.force >=> \x -> case x of
                 SAW.VBool b -> return b
-                _ ->
-                  panic "termToReg"
-                    [ "type error"
-                    , "  - need to produce " <> showText (shapeType shp)
-                    , "  - but simulator returned a vector containing " <> showText x
-                    ]
+                _ -> typeError  "termToReg" (show (shapeType shp))
+                                            ("a vector containing " <> show x)
             buildBitVector w bits
         (TupleShape _ [], SAW.VCtorApp 0 _ []) -> mirAggregate_zstIO
         (TupleShape _ elems, _) -> do
@@ -177,11 +173,10 @@ termToReg sym term shp0 = do
         (ArrayShape _ _ sz shp' len, SAW.VVector thunks) -> do
             svs <- mapM SAW.force $ toList thunks
             when (length svs /= fromIntegral len) $
-              panic "termToRec"
-                [ "type error:"
-                , "  - expected an array of length " <> showText len
-                , "  - but simulator returned " <> showText (length svs) <> " elements"
-                ]
+              typeError "termToReg"    
+                ("an array of length " <> show len)
+                (show (length svs) <> " elements")
+            
             buildMirAggregateArray sym sz shp' len svs $ \_ sv' -> go shp' sv'
         -- Special case: saw-core/cryptol doesn't distinguish bitvectors from
         -- vectors of booleans, so it may return `VWord` (bitvector) where an
@@ -193,12 +188,7 @@ termToReg sym term shp0 = do
             generateMirAggregateArray sym sz shp' len $ \i ->
               -- Cryptol bitvectors are MSB-first, but What4 uses LSB-first.
               liftIO $ W4.testBitBV sym (fromIntegral $ len - i - 1) e
-        _ ->
-          panic "termToReg"
-            [ "type error:"
-            , "  - need to produce " <> showText (shapeType shp)
-            , "  - simulator returned " <> showText sv
-            ]
+        _ -> typeError "termToReg" (show (shapeType shp)) (show sv)
 
     -- | Convert an `SValue` tuple (built from nested `VPair`s) into a list of
     -- the inner `SValue`s, in reverse order.
@@ -208,11 +198,9 @@ termToReg sym term shp0 = do
         x' <- SAW.force x
         xs' <- SAW.force xs
         tupleToListRev (n - 1) (x' : acc) xs'
-    tupleToListRev n _ v = panic "termToReg"
-                             [ "type error:"
-                             , "  - expected tuple of " <> showText n <> " elements,"
-                             , "  - but got " <> showText v
-                             ]
+    tupleToListRev n _ v = typeError "termToReg"
+                             ("tuple of " <> show n <> " elements")
+                             (show v)
 
     -- | Build a bitvector from a vector of bits.  The length of the vector is
     -- required to match `tw`.
@@ -221,16 +209,12 @@ termToReg sym term shp0 = do
     buildBitVector tw v = do
         bvs <- mapM (\b -> W4.bvFill sym (knownNat @1) b) $ toList v
         case bvs of
-            [] -> panic "buildBitVector" [ "expected " <> showText tw <> " bits, but got 0" ]
+            [] -> typeError "buildBitVector" (show tw <> " bits") "0 bits"
             (bv : bvs') -> do
                 Some bv' <- goBV (knownNat @1) bv bvs'
                 Refl <- case testEquality (W4.exprType bv') (BaseBVRepr tw) of
                     Just x -> return x
-                    Nothing -> panic "buildBitVector"
-                                 [ "type error:"
-                                 , "  - expected " <> showText (BaseBVRepr tw)
-                                 , "  - but got " <> showText (W4.exprType bv')
-                                 ]
+                    Nothing -> typeError "buildBitVector" (show (BaseBVRepr tw)) (show (W4.exprType bv'))
                 return bv'
       where
         goBV :: forall iw. (1 <= iw) =>
@@ -277,7 +261,7 @@ termToPred sym varMap term = do
     Some expr <- termToExpr sym varMap term
     case W4.exprType expr of
         BaseBoolRepr -> return expr
-        btpr -> panic "termToPred" ["got result of type " <> showText btpr <> ", not BaseBoolRepr"]
+        btpr -> typeError "termToPred" "BaseBooRepr" (show btpr)
 
 -- | Convert a `SAW.Term` representing a type to a `W4.BaseTypeRepr`.
 termToType :: forall sym t fs.
@@ -367,15 +351,14 @@ regToTermWithAdapt sym sc name ada0 shp0 rv0 = go ada0 shp0 rv0
                 go elAda elShp r
         (AdaptDerefSlice col n elAda, SliceShape _ty elT M.Immut tpr, Ctx.Empty Ctx.:> RV mirPtr Ctx.:> RV lenExpr) ->
           case BV.asUnsigned <$> W4.asBV lenExpr of
-            Nothing ->
-              panic "regToTermWithAdapt" ["Slice length is not statically known"]
+            Nothing -> fail "Slice length is not statically known"
 
             Just n1
               | n /= n1 ->
-                panic "regToTermWithAdapt"
+                fail $ unlines
                   [ "Slice length mismatch:"
-                  , "  Expected: " <> showText n
-                  , "  Actual  : " <> showText n1
+                  , "  Expected: " <> show n
+                  , "  Actual  : " <> show n1
                   ]
               | otherwise ->
                 do
@@ -391,14 +374,8 @@ regToTermWithAdapt sym sc name ada0 shp0 rv0 = go ada0 shp0 rv0
                   elTyTerm <- shapeToTerm' sc elAda elShp
                   liftIO (SAW.scVector sc elTyTerm vals)
 
-
-
-        _ ->
-          panic "regToTermWithAdapt"
-            [ "type error:"
-            , "  - " <> Text.pack name <> " got argument of unsupported type " <> showText (shapeType shp)
-            ]
-
+        _ -> liftIO (typeError "regToTermWithAdapt" "supported type" (show (shapeType shp)))
+          
 
 regToTerm :: forall sym t fs tp0 m.
     (IsSymInterface sym, sym ~ MirSym t fs, MonadIO m, MonadFail m) =>
@@ -423,11 +400,15 @@ regToTerm sym sc name shp0 rv0 = go shp0 rv0
             terms <- accessMirAggregateArray sym sz shp' len ag $ \_off rv' -> go shp' rv'
             tyTerm <- shapeToTerm sc shp'
             liftIO $ SAW.scVector sc tyTerm terms
-        _ ->
-          panic "regToTerm"
-            [ "type error: "
-            , "  - " <> Text.pack name <> " got argument of unsupported type " <> showText (shapeType shp)
-            ]
-
+        _ -> liftIO (typeError "regToTerm" ("supported type in call to " ++ name) (show (shapeType shp)))
+          
 showText :: Show a => a -> Text.Text
 showText = Text.pack . show
+
+typeError :: String -> String -> String -> IO a
+typeError txt e a =
+  fail $ unlines
+    [ txt <> ": type error"
+    , "  Expected: " <> e
+    , "  Actual  : " <> a
+    ]
