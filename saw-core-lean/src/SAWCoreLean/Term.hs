@@ -1429,8 +1429,8 @@ polymorphicFormalInstantiatedExpectedSrc binders srcArgs ix bty =
 --   * 'RuntimeArg' (polymorphic formals instantiated at a wrapped or
 --     function type): the actual is consumed as-is;
 --   * types, propositions, function formals: splice raw, never bind.
-phaseBetaArgModesFor :: Term -> [Lean.Term] -> [ArgMode]
-phaseBetaArgModesFor fty argTerms =
+phaseBetaArgModesFor :: Term -> [Term] -> [ArgMode]
+phaseBetaArgModesFor fty srcArgs =
   [ modeFor ix bty | (ix, (_, bty)) <- zip [0 :: Int ..] binders ]
   where
     (binders, _) = asPiList fty
@@ -1441,7 +1441,7 @@ phaseBetaArgModesFor fty argTerms =
       | isJust (asSort bty) = TypeArg
       | isJust (asEq bty) = PropositionArg
       | isJust (asPi bty) = FunctionArg Nothing
-      | polymorphicFormalInstantiatedExpected binders argTerms ix bty =
+      | polymorphicFormalInstantiatedExpectedSrc binders srcArgs ix bty =
           RuntimeArg
       | isCryptolNumType bty = IndexArg
       | isJust (asNatType bty) = IndexArg
@@ -3372,53 +3372,23 @@ originalDispatchWithShape i args = do
               -- this rule doesn't pure-wrap them. Explicit wrapped
               -- helpers such as 'iteM' use 'UseMapsToWrapped', so no
               -- double-wrap concern there.
-              let shouldBind = argumentBindPlan fty argResults
-              -- Plan Slice 4b (inert oracle step): the declared
-              -- CalleePhaseBetaDefinition convention must reproduce
-              -- the legacy bind plan exactly before it replaces it.
-              -- Derive the modes, recompute the plan from them, and
-              -- fail LOUDLY on any divergence — the corpus fence is
-              -- the proof of equivalence. The legacy plan remains the
-              -- one actually used until the swap.
-              let derivedModes = phaseBetaArgModesFor fty argTerms
+              -- Plan Slice 4b: the declared CalleePhaseBetaDefinition
+              -- convention IS the bind plan on the full-application
+              -- path. The modes derive once from the callee's SAWCore
+              -- Pi type + the supplied source actuals; equivalence
+              -- with the legacy 'argumentBindPlan' was proven by the
+              -- inert two-oracle sweep across the whole corpus before
+              -- this swap. The eta/partial path below still uses the
+              -- legacy plan until its own step.
+              let derivedModes = phaseBetaArgModesFor fty args'
                   typeIxsFor   = typeArgPositions fty
-                  derivedBind  =
+                  shouldBind   =
                     [ phaseBetaBindFromMode ix typeIxsFor mode wrapped
                     | (ix, (mode, wrapped)) <-
                         zip [0 :: Int ..]
                           (zip derivedModes
                                (map (isWrappedShape . ttShape) argResults))
                     ]
-              if take (length derivedBind) shouldBind /= derivedBind
-                 then Except.throwError (RejectedPrimitive
-                        (Text.pack (identName i))
-                        ("internal (plan Slice 4b): derived phase-beta \
-                         \convention disagrees with the legacy bind plan: \
-                         \legacy " <> Text.pack (show shouldBind)
-                         <> " derived " <> Text.pack (show derivedBind)
-                         <> " modes " <> Text.pack (show derivedModes)))
-                 else pure ()
-              -- Second inert oracle: the source-based instantiation
-              -- classifier must agree with the emitted-type predicate
-              -- it will replace.
-              let (bindersFor, _) = asPiList fty
-                  polyDisagree =
-                    [ ix
-                    | (ix, (_, bty)) <- zip [0 :: Int ..] bindersFor
-                    , ix < length args'
-                    , polymorphicFormalInstantiatedExpected
-                        bindersFor argTerms ix bty
-                        /= polymorphicFormalInstantiatedExpectedSrc
-                             bindersFor args' ix bty
-                    ]
-              if null polyDisagree
-                 then pure ()
-                 else Except.throwError (RejectedPrimitive
-                        (Text.pack (identName i))
-                        ("internal (plan Slice 4b): source-based \
-                         \instantiation classifier disagrees with the \
-                         \emitted-type predicate at argument positions "
-                         <> Text.pack (show polyDisagree)))
               let (binders, _) = asPiList fty
                   ret = retTypeOfFun fty
                   fullyApplied = length args' >= length binders
