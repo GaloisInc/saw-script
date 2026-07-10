@@ -168,6 +168,46 @@ data MotiveConvention = MotiveConvention
   }
   deriving (Eq, Show)
 
+-- | Calculus §Callee Conventions: the explicit per-argument mode of a
+-- callee convention (plan Slice 4a). An 'ArgMode' declares what the
+-- callee's formal IS, and the convention interpreter derives from it
+-- both the actual's expected position and the allowed adaptation:
+--
+--   * 'RuntimeArg' actuals adapt to runtime values ('Pure.pure' lift
+--     of raws);
+--   * 'IndexArg' actuals must arrive raw; a *wrapped* runtime-computed
+--     index is sequenced through an error-preserving 'Bind.bind'
+--     ahead of the application (never opened, never defaulted), and a
+--     function-shaped actual is forbidden;
+--   * 'TypeArg' / 'RawValueArg' / proof-family actuals must arrive
+--     raw; anything else is forbidden;
+--   * 'ProofArg' marks a source proof argument that is dropped at
+--     emission and re-proved as a Lean obligation;
+--   * 'FunctionWithNatLtArg' is a tracked transitional convention for
+--     proof-carrying generator functions whose index is bounded by
+--     the helper argument at the given (post-drop) position; it folds
+--     into 'FunctionArg' with an explicit proof binder when Slice
+--     4b/4c unify the tables.
+data ArgMode
+  = TypeArg
+  | IndexArg
+  | RuntimeArg
+  | RawValueArg
+  | ProofArg
+  | PropositionArg
+  | MotiveArg
+  | StructuralFieldArg
+  | FunctionArg (Maybe FunctionConvention)
+  | FunctionWithNatLtArg Int
+  deriving (Eq, Show)
+
+-- | Calculus §Callee Conventions: a convention's declared result mode.
+data ResultMode
+  = RuntimeResult
+  | RawResult RawReason
+  | FunctionResult FunctionConvention
+  deriving (Eq, Show)
+
 data EqualitySubjectRep
   = EqualitySubjectRuntimeValue
   | EqualitySubjectRaw RawReason
@@ -1656,15 +1696,14 @@ data CheckedApplicationContract = CheckedApplicationContract
   , cacArity      :: Int
   , cacBuildProp  :: Maybe ([Lean.Term] -> Lean.Term)
   , cacHelperName :: Lean.Ident
-  , cacArgModes   :: [CheckedApplicationArgMode]
+  , cacArgModes   :: [ArgMode]
+    -- ^ Declared per-argument modes (calculus §Callee Conventions,
+    -- plan Slice 4a). 'ProofArg' entries are dropped from the helper
+    -- argument list; 'cacBuildProp' indexes into the POST-drop list.
+  , cacResultMode :: ResultMode
+    -- ^ Always 'RuntimeResult' for the current checked helpers: the
+    -- helper returns @Except String T@.
   }
-
-data CheckedApplicationArgMode
-  = CheckedArgRaw
-  | CheckedArgWrapped
-  | CheckedArgFunction
-  | CheckedArgFunctionWithNatLt Int
-  | CheckedArgIgnoredProof
 
 data ProofPrimitiveContract = ProofPrimitiveContract
   { ppcModule    :: ModuleName
@@ -1730,37 +1769,38 @@ partialOpContracts =
         (PartialOpWrapped (Lean.Ident target)
           [PartialOpArgRaw, PartialOpArgWrapped, PartialOpArgWrapped])
 
+-- The old three-way 'CheckedArgRaw' bucket is split into its true
+-- modes (plan Slice 4a): the width/index Nats are 'IndexArg', the
+-- element type is 'TypeArg', matching the checked helpers' Lean
+-- signatures (SAWCorePrimitives.lean).
 checkedApplicationContracts :: [CheckedApplicationContract]
 checkedApplicationContracts =
   [ vecIndexContract
       "at"
       4
       (Lean.Ident "atWithProof_checkedM")
-      [CheckedArgRaw, CheckedArgRaw, CheckedArgWrapped, CheckedArgRaw]
+      [IndexArg, TypeArg, RuntimeArg, IndexArg]
       0
       3
   , vecIndexContract
       "atWithProof"
       5
       (Lean.Ident "atWithProof_checkedM")
-      [CheckedArgRaw, CheckedArgRaw, CheckedArgWrapped, CheckedArgRaw,
-       CheckedArgIgnoredProof]
+      [IndexArg, TypeArg, RuntimeArg, IndexArg, ProofArg]
       0
       3
   , vecIndexContract
       "updWithProof"
       6
       (Lean.Ident "updWithProof_checkedM")
-      [CheckedArgRaw, CheckedArgRaw, CheckedArgWrapped, CheckedArgRaw,
-       CheckedArgWrapped, CheckedArgIgnoredProof]
+      [IndexArg, TypeArg, RuntimeArg, IndexArg, RuntimeArg, ProofArg]
       0
       3
   , vecSliceContract
       "sliceWithProof"
       6
       (Lean.Ident "sliceWithProof_checkedM")
-      [CheckedArgRaw, CheckedArgRaw, CheckedArgRaw, CheckedArgRaw,
-       CheckedArgIgnoredProof, CheckedArgWrapped]
+      [TypeArg, IndexArg, IndexArg, IndexArg, ProofArg, RuntimeArg]
       1
       2
       3
@@ -1768,15 +1808,15 @@ checkedApplicationContracts =
       "updSliceWithProof"
       7
       (Lean.Ident "updSliceWithProof_checkedM")
-      [CheckedArgRaw, CheckedArgRaw, CheckedArgRaw, CheckedArgRaw,
-       CheckedArgIgnoredProof, CheckedArgWrapped, CheckedArgWrapped]
+      [TypeArg, IndexArg, IndexArg, IndexArg, ProofArg, RuntimeArg, RuntimeArg]
       1
       2
       3
   , CheckedApplicationContract preludeModule "genWithProof" 3
       Nothing
       (Lean.Ident "genWithProof_checkedM")
-      [CheckedArgRaw, CheckedArgRaw, CheckedArgFunctionWithNatLt 0]
+      [IndexArg, TypeArg, FunctionWithNatLtArg 0]
+      RuntimeResult
   ]
   where
     preludeModule = mkModuleName ["Prelude"]
@@ -1785,6 +1825,7 @@ checkedApplicationContracts =
         (Just (\helperArgs -> natLt (helperArgs !! iIdx) (helperArgs !! nIdx)))
         helper
         argModes
+        RuntimeResult
     vecSliceContract source arity helper argModes nIdx offIdx lenIdx =
       CheckedApplicationContract preludeModule source arity
         (Just (\helperArgs ->
@@ -1794,6 +1835,7 @@ checkedApplicationContracts =
             (helperArgs !! nIdx)))
         helper
         argModes
+        RuntimeResult
 
 proofPrimitiveContracts :: [ProofPrimitiveContract]
 proofPrimitiveContracts =
@@ -2382,7 +2424,13 @@ lowerCheckedApplicationContract ::
 lowerCheckedApplicationContract contract ident args = do
   helperArgs <- checkedApplicationHelperArgs (cacArgModes contract) args
   tm <- lowerCheckedApplicationHelperArgs contract helperArgs
-  pure (TranslatedTerm tm BindingWrapped)
+  -- The result shape is the contract's DECLARED result mode, not a
+  -- hardcoded assumption.
+  let shape = case cacResultMode contract of
+        RuntimeResult    -> BindingWrapped
+        RawResult _      -> BindingRaw
+        FunctionResult _ -> BindingFunction
+  pure (TranslatedTerm tm shape)
   where
     checkedApplicationHelperArgs =
       checkedApplicationHelperArgsFor ident
@@ -2433,98 +2481,154 @@ lowerPartialCheckedApplicationContract contract ident args = do
          (drop suppliedCount argModes)
          missingSourceBinders
          $ \lambdaBinders missingHelperArgs -> do
+             -- Missing args become lambda binders already emitted at
+             -- their declared representation; they never need a bind.
              body <- lowerCheckedApplicationHelperArgs contract
-                       (suppliedHelperArgs ++ missingHelperArgs)
+                       (suppliedHelperArgs ++ map CheckedDirect missingHelperArgs)
              pure (TranslatedTerm (Lean.Lambda lambdaBinders body) BindingFunction)
 
+-- | The per-actual verdict of interpreting a checked-application
+-- argument at its declared 'ArgMode' (plan Slice 4a).
+-- 'CheckedBindIndex' is the calculus's error-preserving adapter for a
+-- runtime-computed index demanded raw: the wrapped actual is
+-- sequenced through 'Bind.bind' ahead of the bounds obligation, and
+-- the bound raw variable is what BOTH the proposition and the checked
+-- helper consume. The wrapped value is never opened and never
+-- defaulted; its error case propagates through the surrounding
+-- 'Except' result.
+data CheckedActual
+  = CheckedDirect Lean.Term
+  | CheckedBindIndex Lean.Term
+
+checkedActualTerm :: CheckedActual -> Lean.Term
+checkedActualTerm (CheckedDirect tm)    = tm
+checkedActualTerm (CheckedBindIndex tm) = tm
+
+-- | Build the checked application over interpreted actuals: an
+-- error-preserving bind chain for every 'CheckedBindIndex' (in
+-- application order — calculus §Callee Conventions sequencing), then
+-- the bounds obligation and the helper call over the final (raw)
+-- argument terms. With no bound indices this reduces exactly to the
+-- historical emission.
 lowerCheckedApplicationHelperArgs ::
   TermTranslationMonad m =>
   CheckedApplicationContract ->
-  [Lean.Term] ->
+  [CheckedActual] ->
   m Lean.Term
-lowerCheckedApplicationHelperArgs contract helperArgs = do
-  tm <- case cacBuildProp contract of
-          Nothing ->
-            pure (Lean.App (Lean.Var (cacHelperName contract)) helperArgs)
-          Just buildProp -> do
-            let prop = buildProp helperArgs
-            unavailable <- view unavailableIdents <$> askTR
-            let proofIdents = Set.union (leanTermIdents prop) unavailable
-            withLocalProofObligationUsing
-              (Lean.Ident "h_bounds_")
-              prop
-              (`boundsProofScript` proofIdents)
-              $ \proof ->
-                  pure (Lean.App (Lean.Var (cacHelperName contract))
-                    (helperArgs ++ [proof]))
-  pure tm
+lowerCheckedApplicationHelperArgs contract actuals = go 0 actuals []
+  where
+    bindVar = Lean.Var (Lean.Ident "Bind.bind")
+    argTerms = map checkedActualTerm actuals
+    avoidIdents = Set.unions (map leanTermIdents argTerms)
+
+    go _ [] subs = do
+      let finalArgs =
+            [ case lookup pos subs of
+                Just bname -> Lean.Var bname
+                Nothing    -> tm
+            | (pos, tm) <- zip [0 :: Int ..] argTerms
+            ]
+      case cacBuildProp contract of
+        Nothing ->
+          pure (Lean.App (Lean.Var (cacHelperName contract)) finalArgs)
+        Just buildProp -> do
+          let prop = buildProp finalArgs
+          unavailable <- view unavailableIdents <$> askTR
+          let proofIdents = Set.union (leanTermIdents prop) unavailable
+          withLocalProofObligationUsing
+            (Lean.Ident "h_bounds_")
+            prop
+            (`boundsProofScript` proofIdents)
+            $ \proof ->
+                pure (Lean.App (Lean.Var (cacHelperName contract))
+                  (finalArgs ++ [proof]))
+    go pos (CheckedDirect _ : rest) subs = go (pos + 1) rest subs
+    go pos (CheckedBindIndex tm : rest) subs = do
+      bname <- freshVariantAvoiding avoidIdents
+                 (Lean.Ident ("v_idx_" ++ show pos))
+      rest' <- go (pos + 1) rest ((pos, bname) : subs)
+      let lam = Lean.Lambda [Lean.Binder Lean.Explicit bname Nothing] rest'
+      pure (Lean.App bindVar [tm, lam])
 
 checkedApplicationHelperArgsFor ::
   TermTranslationMonad m =>
   Ident ->
-  [CheckedApplicationArgMode] ->
+  [ArgMode] ->
   [Term] ->
-  m [Lean.Term]
+  m [CheckedActual]
 checkedApplicationHelperArgsFor ident modes0 args0 = go [] modes0 args0
   where
     go acc [] [] = pure (reverse acc)
-    go acc (CheckedArgIgnoredProof : modes) (_ : rest) =
+    go acc (ProofArg : modes) (_ : rest) =
+      -- Source proof argument: dropped at emission, re-proved as a
+      -- Lean obligation by the contract's proposition.
       go acc modes rest
-    go acc (CheckedArgFunctionWithNatLt nIdx : modes) (arg : rest)
-      | nIdx < length acc = do
-          helperArg <- translateFunctionWithNatLtWrappedResult
-            (Text.pack (identName ident))
-            (reverse acc !! nIdx)
-            True
-            arg
-          go (helperArg : acc) modes rest
+    go acc (FunctionWithNatLtArg nIdx : modes) (arg : rest)
+      | nIdx < length acc =
+          case reverse acc !! nIdx of
+            CheckedDirect bound -> do
+              helperArg <- translateFunctionWithNatLtWrappedResult
+                (Text.pack (identName ident))
+                bound
+                True
+                arg
+              go (CheckedDirect helperArg : acc) modes rest
+            CheckedBindIndex{} ->
+              Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+                "proof-carrying generator bound is a runtime-computed index; \
+                \a bound-in-bind generator convention is not implemented")
       | otherwise =
           Except.throwError (RejectedPrimitive (Text.pack (identName ident))
             "checked-application proof-function argument referenced a missing Nat bound")
     go acc (mode : modes) (arg : rest) = do
-      translated <- case checkedArgDeclaredPosition mode of
-        Just rho -> translateAt rho arg
-        Nothing  -> translateTermWithShape arg
-      helperArg <- checkedApplicationArgTerm ident mode translated
-      go (helperArg : acc) modes rest
+      actual <- checkedApplicationActual ident mode arg
+      go (actual : acc) modes rest
     go _ _ _ =
       Except.throwError (RejectedPrimitive (Text.pack (identName ident))
         "checked-application contract argument table did not match source arity")
 
--- | The expected positions the checked-application arg modes already
--- declare unambiguously. 'CheckedArgRaw' mixes index, type, and
--- raw-Nat-value reasons in one bucket today; it gets a declared
--- position when Slice 4 lifts these tables into full callee
--- conventions — do not guess a 'RawReason' for it here.
-checkedArgDeclaredPosition ::
-  CheckedApplicationArgMode -> Maybe ExpectedPosition
-checkedArgDeclaredPosition CheckedArgWrapped  = Just ExpectRuntimeValue
-checkedArgDeclaredPosition CheckedArgFunction = Just (ExpectFunctionPosition Nothing)
-checkedArgDeclaredPosition _                  = Nothing
-
-checkedApplicationArgTerm ::
-  TermTranslationMonad m =>
-  Ident ->
-  CheckedApplicationArgMode ->
-  TranslatedTerm ->
-  m Lean.Term
-checkedApplicationArgTerm _ CheckedArgRaw translated =
-  pure (ttLean translated)
-checkedApplicationArgTerm _ CheckedArgWrapped translated =
-  adaptToRuntime translated
-checkedApplicationArgTerm _ CheckedArgFunction translated =
-  ttLean <$> adaptTo (ExpectFunctionPosition Nothing) translated
-checkedApplicationArgTerm ident CheckedArgFunctionWithNatLt{} _ =
-  Except.throwError (RejectedPrimitive (Text.pack (identName ident))
-    "checked-application proof-function argument must be translated from the source term")
-checkedApplicationArgTerm ident CheckedArgIgnoredProof _ =
-  Except.throwError (RejectedPrimitive (Text.pack (identName ident))
-    "checked-application contract attempted to translate an ignored proof argument")
+-- | Interpret one checked-application actual at its declared mode.
+checkedApplicationActual ::
+  TermTranslationMonad m => Ident -> ArgMode -> Term -> m CheckedActual
+checkedApplicationActual ident mode arg = case mode of
+  RuntimeArg ->
+    CheckedDirect <$> (translateAt ExpectRuntimeValue arg >>= adaptToRuntime)
+  TypeArg -> do
+    translated <- translateTermWithShape arg
+    CheckedDirect . ttLean <$> adaptTo (ExpectRaw RawTypePosition) translated
+  IndexArg -> do
+    translated <- translateTermWithShape arg
+    case ttShape translated of
+      BindingRaw      -> pure (CheckedDirect (ttLean translated))
+      -- A runtime-computed index: legal via the error-preserving
+      -- bind chain built by 'lowerCheckedApplicationHelperArgs'.
+      BindingWrapped  -> pure (CheckedBindIndex (ttLean translated))
+      BindingFunction ->
+        Except.throwError (ForbiddenAdaptation
+          "IndexArg (raw index position)"
+          "BindingFunction")
+  FunctionArg mconv -> do
+    translated <- translateTermWithShape arg
+    CheckedDirect . ttLean <$> adaptTo (ExpectFunctionPosition mconv) translated
+  RawValueArg -> do
+    translated <- translateTermWithShape arg
+    CheckedDirect . ttLean <$> adaptTo (ExpectRaw RawValuePosition) translated
+  ProofArg -> internalModeError
+  FunctionWithNatLtArg{} -> internalModeError
+  PropositionArg -> internalModeError
+  MotiveArg -> internalModeError
+  StructuralFieldArg -> internalModeError
+  where
+    internalModeError =
+      Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+        ("checked-application contract used argument mode "
+         <> Text.pack (show mode)
+         <> " outside its interpreter"))
 
 withMissingCheckedApplicationBinders ::
   TermTranslationMonad m =>
   Ident ->
-  [CheckedApplicationArgMode] ->
+  [ArgMode] ->
   [(VarName, Term)] ->
   ([Lean.Binder] -> [Lean.Term] -> m a) ->
   m a
@@ -2535,27 +2639,43 @@ withMissingCheckedApplicationBinders ident modes0 binders0 k =
       k (reverse binders) (reverse helperArgs)
     go binders helperArgs (mode : modes) ((vn, ty) : rest) =
       case mode of
-        CheckedArgRaw ->
-          bindMissing False binders helperArgs modes (vn, ty) rest
-        CheckedArgWrapped ->
-          bindMissing True binders helperArgs modes (vn, ty) rest
-        CheckedArgIgnoredProof ->
+        RuntimeArg ->
+          bindMissing True (Just ExpectRuntimeValue)
+            binders helperArgs modes (vn, ty) rest
+        IndexArg ->
+          bindMissing False (Just (ExpectRaw RawIndexPosition))
+            binders helperArgs modes (vn, ty) rest
+        TypeArg ->
+          bindMissing False (Just (ExpectRaw RawTypePosition))
+            binders helperArgs modes (vn, ty) rest
+        RawValueArg ->
+          bindMissing False (Just (ExpectRaw RawValuePosition))
+            binders helperArgs modes (vn, ty) rest
+        ProofArg ->
           Except.throwError (RejectedPrimitive (Text.pack (identName ident))
             "missing source proof arguments need an explicit higher-order proof-carrying convention")
-        CheckedArgFunction ->
+        FunctionArg{} ->
           Except.throwError (RejectedPrimitive (Text.pack (identName ident))
             "missing function arguments need an explicit higher-order proof-carrying convention")
-        CheckedArgFunctionWithNatLt{} ->
+        FunctionWithNatLtArg{} ->
           Except.throwError (RejectedPrimitive (Text.pack (identName ident))
             "missing proof-function arguments need an explicit higher-order proof-carrying convention")
+        PropositionArg ->
+          Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+            "checked-application contract used PropositionArg for a missing argument")
+        MotiveArg ->
+          Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+            "checked-application contract used MotiveArg for a missing argument")
+        StructuralFieldArg ->
+          Except.throwError (RejectedPrimitive (Text.pack (identName ident))
+            "checked-application contract used StructuralFieldArg for a missing argument")
     go _ _ _ _ =
       Except.throwError (RejectedPrimitive (Text.pack (identName ident))
         "checked-application partial argument table did not match source arity")
 
-    bindMissing wrapped binders helperArgs modes (vn, ty) rest = do
+    bindMissing wrapped boundPos binders helperArgs modes (vn, ty) rest = do
       tyLean <- localTR (set skipBinderWrap False) (translateTerm ty)
       let binderTy = if wrapped then wrapExcept tyLean else tyLean
-          boundPos = if wrapped then Just ExpectRuntimeValue else Nothing
       ident' <-
         if vnName vn == "_"
            then freshVariant (Lean.Ident ("η_checked_arg_" ++ show (length binders)))

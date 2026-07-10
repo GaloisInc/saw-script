@@ -1,0 +1,12 @@
+enable_experimental;
+
+// A runtime-computed (Except-wrapped) index reaching a checked vector
+// access. Pins the Slice 4a convention: the wrapped index is sequenced
+// through an error-preserving Bind.bind, and the BOUND RAW variable is
+// what both the bounds proposition and the checked helper consume.
+// Regression fence for the llvm_chacha20_core_verify emission bug
+// (wrapped shared index passed raw into LT.lt / atWithProof_checkedM).
+let probe =
+  parse_core "\\(x : Vec 4 Bool) -> \\(y : Vec 4 Bool) -> at 8 Bool (bvNat 8 180) (bvToNat 4 (bvAdd 4 x y))";
+
+write_lean_term "AtRuntimeIndexProbe" [] [] "emitted.lean" probe;

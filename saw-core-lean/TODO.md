@@ -264,21 +264,23 @@ doc for per-slice regression fences and bounded validation commands):
     `translateRecursorMotive` and its blanket `skipBinderWrap True` — one
     flag site deleted. Byte-identical incl. re-emitted Stream.rec /
     RecordType.rec driver rows; motive trace live on `conformance_stream`.
-- [ ] **Slice 4** — real callee conventions for every callee; retire
-  `CalleeTransitional`; decompose `originalDispatchWithShape` into a convention
-  interpreter + table.
-  - **Live specimen (found 2026-07-09):** `drivers/llvm_chacha20_core_verify`
-    fails Lean elaboration because the checked-access contract feeds a
-    *wrapped* shared index (`x__… : Except String Nat`, a let-bound runtime
-    computation) raw into both the `LT.lt` bounds proposition and
-    `atWithProof_checkedM` — `CheckedArgRaw` takes `ttLean` with no
-    adaptation, so a wrapped actual escapes into raw positions (pre-existing
-    from the 2026-07-03 checked-access work; goldens deliberately NOT
-    refreshed — they pin the last elaborating emission). Slice 4's checked-
-    application convention must declare the index arg position and bind
-    wrapped actuals through an error-preserving `Bind.bind` before the
-    proposition/helper consume them, or reject. This is the first live
-    instance of the forbidden-adaptation class the calculus kills.
+- [ ] **Slice 4** (4a–4c, see plan doc) — real callee conventions for every
+  callee; retire `CalleeTransitional`; decompose `originalDispatchWithShape`
+  into a convention interpreter + table.
+  - [x] 4a — calculus `ArgMode`/`ResultMode` vocabulary as data; checked-
+    application contracts re-expressed (`CheckedArgRaw` split into true
+    `IndexArg`/`TypeArg` slots per the helpers' Lean signatures); the
+    interpreter returns per-actual verdicts and a *wrapped* actual at an
+    `IndexArg` slot is sequenced through an error-preserving `Bind.bind`
+    with the bound RAW variable consumed by both the bounds proposition and
+    the checked helper (application order). **Fixes the live specimen**
+    `drivers/llvm_chacha20_core_verify` (previously: wrapped shared index
+    passed raw into `LT.lt`/`atWithProof_checkedM`, did not elaborate) —
+    now green end-to-end; goldens refreshed to the corrected emission.
+    New fast fence row `obligations/vector_at_runtime_index` pins the
+    bind-chain shape. Everything else byte-identical (only the specimen row
+    changed, diff reviewed). First reviewed-diff (non-empty) fence of the
+    migration.
 - [ ] **Slice 5** — equality subject representation & `Eq.rec` proof transport
   declared (never inferred from type names). Load-bearing positive rows:
   `obligations/proof_add_nat_assoc`, `proof_eq_nat_add_0`, `proof_eq_nat_add_s`,
