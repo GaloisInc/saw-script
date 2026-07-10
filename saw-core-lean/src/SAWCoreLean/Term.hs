@@ -1309,17 +1309,22 @@ etaExpandWrappedFunctionResult fty fn = do
              | etaName <- etaNames
              ]
            typeIxs = typeArgPositions fty
+           -- Plan Slice 4b: eta formals at the convention's declared
+           -- representations. No source actuals are supplied here, so
+           -- the polymorphic-instantiation lookup never fires — every
+           -- variable-headed formal is a raw value formal. A Nat
+           -- 'IndexArg' formal stays raw ('shouldWrapBinder Nat' was
+           -- always False on this path).
+           etaModes = phaseBetaArgModesFor fty []
            expectedWrapped =
-             [ ix `notElem` typeIxs
-               && isNothing (asSort bty)
-               && isNothing (asEq bty)
-               && isNothing (asPi bty)
-               && not (isCryptolNumType bty)
-               && (isNothing (asNatType bty) || shouldWrapBinder bty)
-             | (ix, (_, bty)) <- zip [0..] binders
+             [ mode == RawValueArg
+             | mode <- etaModes
              ]
            shouldBind =
-             argumentBindPlanFromWrapped fty etaTerms expectedWrapped
+             [ phaseBetaBindFromMode ix typeIxs mode wrapped
+             | (ix, (mode, wrapped)) <-
+                 zip [0 :: Int ..] (zip etaModes expectedWrapped)
+             ]
            etaResults =
              [ TranslatedTerm tm
                  (if wrapped then BindingWrapped else BindingRaw)
@@ -1337,57 +1342,18 @@ etaExpandWrappedFunctionResult fty fn = do
 -- stays raw, but a Nat produced by a value computation (for example
 -- @bvToNat x@) is wrapped. For a Nat formal we bind only when the actual
 -- translated argument is known to be wrapped.
-argumentBindPlan :: Term -> [TranslatedTerm] -> [Bool]
-argumentBindPlan fty argResults =
-  argumentBindPlanFromWrapped fty argTerms wrappedActuals
-  where
-    argTerms = map ttLean argResults
-    wrappedActuals = map (isWrappedShape . ttShape) argResults
-
--- | Is the formal at position @ix@ a polymorphic ('Variable'-headed)
--- formal whose instantiating type actual (an EARLIER supplied
--- argument) already carries the runtime/function representation the
--- calculus would demand? If so the actual is consumed as-is (no
--- bind).
---
--- NOTE (plan Slice 4b): this inspects the EMITTED Lean type of the
--- instantiating actual (`isExceptStringType`/`isLeanPiType`) — the
--- last emitted-AST-inspection class in the translator. The
--- 'CalleePhaseBetaDefinition' swap replaces it with a declared
--- instantiation lookup; until then it is quarantined here with both
--- consumers ('argumentBindPlanFromWrapped' and the derived-convention
--- assert) reading the same predicate.
-polymorphicFormalInstantiatedExpected ::
-  [(VarName, Term)] -> [Lean.Term] -> Int -> Term -> Bool
-polymorphicFormalInstantiatedExpected binders argTerms ix bty =
-  case unwrapTermF bty of
-    Variable vn _ ->
-      case findIndex (\(vn', _) -> vn' == vn) binders of
-        Just paramIx
-          | paramIx < ix
-          , paramIx < length argTerms ->
-              let actualTy = argTerms !! paramIx
-              in isExceptStringType actualTy || isLeanPiType actualTy
-        _ -> False
-    _ -> False
-
-argumentBindPlanFromWrapped :: Term -> [Lean.Term] -> [Bool] -> [Bool]
-argumentBindPlanFromWrapped fty argTerms wrappedActuals =
-  let (binders, _) = asPiList fty
-      typeIxs = typeArgPositions fty
-      bindable ix bty actualWrapped =
-           ix `notElem` typeIxs
-        && not (isJust (asSort bty))
-        && not (isJust (asEq bty))
-        && not (isJust (asPi bty))
-        && not (isCryptolNumType bty)
-        && not (polymorphicFormalInstantiatedExpected binders argTerms ix bty)
-        && (isNothing (asNatType bty) || actualWrapped)
-  in
-  [ bindable ix bty actualWrapped
-  | (ix, ((_, bty), actualWrapped)) <-
-      zip [0..] (zip binders wrappedActuals)
-  ]
+-- NOTE: the legacy 'argumentBindPlan' / 'argumentBindPlanFromWrapped'
+-- and the emitted-Lean-type instantiation predicate
+-- ('polymorphicFormalInstantiatedExpected') are deleted (plan Slice
+-- 4b). The bind plan derives from the declared convention
+-- ('phaseBetaArgModesFor' + 'phaseBetaBindFromMode'); equivalence was
+-- proven corpus-wide by the two-oracle inert step before the swap.
+-- No shape or bind decision is inferred from emitted Lean TERMS any
+-- more. Two type-classification self-mirrors remain
+-- ('bindingShapeOfType' at binder sites; the Except/Pi peel in
+-- 'applyKnownFunctionWithShape') — they classify types the translator
+-- itself just emitted from known source types, and are 4c demotion
+-- targets. Do not add new consumers of either.
 
 -- | The source-based replacement for
 -- 'polymorphicFormalInstantiatedExpected' (plan Slice 4b): the
@@ -1443,7 +1409,11 @@ phaseBetaArgModesFor fty srcArgs =
       | isJust (asPi bty) = FunctionArg Nothing
       | polymorphicFormalInstantiatedExpectedSrc binders srcArgs ix bty =
           RuntimeArg
-      | isCryptolNumType bty = IndexArg
+      -- Num is Cryptol's singleton width/index CLASSIFIER, not a
+      -- value-domain computation (see 'shouldWrapBinder') — the
+      -- type-argument family, never bound. ('IndexArg' would bind a
+      -- wrapped Num actual; the legacy plan never did.)
+      | isCryptolNumType bty = TypeArg
       | isJust (asNatType bty) = IndexArg
       | otherwise = RawValueArg
 
@@ -2393,9 +2363,19 @@ lowerPartialOpContract contract ident args = do
       pureWrap =
            phase
         && (shouldWrapBinder retTy || isVariableHead retTy || natValueResult fty)
+      -- Plan Slice 4b: bind plan from the derived convention (the
+      -- raw checked helpers are ordinary raw-formal targets).
+      derivedModes = phaseBetaArgModesFor fty args
+      typeIxsFor = typeArgPositions fty
       shouldBind =
         if phase
-           then take (length args) (argumentBindPlan fty argResults ++ repeat False)
+           then take (length args)
+                  ([ phaseBetaBindFromMode ix typeIxsFor mode wrapped
+                   | (ix, (mode, wrapped)) <-
+                       zip [0 :: Int ..]
+                         (zip derivedModes
+                              (map (isWrappedShape . ttShape) argResults))
+                   ] ++ repeat False)
            else replicate (length args) False
       resultShape = phaseBetaResultShape fty (length args)
   if length args /= length binders
@@ -3453,14 +3433,19 @@ originalDispatchWithShape i args = do
                             shouldWrapBinder ret
                          || isVariableHead ret
                          || natValueResult fty
-                       typeIxs = typeArgPositions fty
+                       -- Plan Slice 4b: the eta formals present the
+                       -- convention's declared representations — a
+                       -- missing 'RawValueArg' formal is wrapped
+                       -- (phase-β shape at missing positions), a
+                       -- missing Nat 'IndexArg' formal is wrapped and
+                       -- re-bound, types/props/functions stay raw.
+                       missingModes = drop (length args') derivedModes
+                       etaFormalWrapped ix mode =
+                            (mode == RawValueArg
+                             || (mode == IndexArg && ix `notElem` typeIxsFor))
                        missingWrapped =
-                         [ ix `notElem` typeIxs
-                           && isNothing (asSort bty)
-                           && isNothing (asEq bty)
-                           && isNothing (asPi bty)
-                         | (ix, (_, bty)) <-
-                             zip [length args'..] missingBinders
+                         [ etaFormalWrapped ix mode
+                         | (ix, mode) <- zip [length args'..] missingModes
                          ]
                    let suppliedWrapped =
                          map (isWrappedShape . ttShape) argResults
@@ -3471,8 +3456,12 @@ originalDispatchWithShape i args = do
                          | (etaName, wrapped) <- zip etaNames missingWrapped
                          ]
                    let shouldBindEta =
-                         argumentBindPlanFromWrapped fty etaArgTerms
-                           (suppliedWrapped ++ missingWrapped)
+                         [ phaseBetaBindFromMode ix typeIxsFor mode wrapped
+                         | (ix, (mode, wrapped)) <-
+                             zip [0 :: Int ..]
+                               (zip derivedModes
+                                    (suppliedWrapped ++ missingWrapped))
+                         ]
                    let pureWrapEta = pureWrap || any id shouldBindEta
                    body <- buildLifted f pureWrapEta
                              (take (length etaArgTerms)
