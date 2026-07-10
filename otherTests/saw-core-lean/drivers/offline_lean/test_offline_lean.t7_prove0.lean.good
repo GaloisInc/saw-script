@@ -10,7 +10,7 @@ open CryptolToLean.SAWCorePreludeProofs
 
 noncomputable def goal : Prop :=
   (a : Bool) -> (b : Bool) -> (c : Bool) -> let a := (Pure.pure a);
-  let b := (Pure.pure b); let c := (Pure.pure c); @Eq (Except String Bool)
+  let b := (Pure.pure b); let c := (Pure.pure c); @Eq.{1} (Except String Bool)
   (CryptolToLean.SAWCorePreludeExtra.iteM Bool
   (CryptolToLean.SAWCorePreludeExtra.iteM Bool
   (CryptolToLean.SAWCorePreludeExtra.iteM Bool a b (Pure.pure Bool.true))

@@ -13,7 +13,7 @@ noncomputable def goal : Prop :=
   let b := (Pure.pure b); let c := (Pure.pure c);
   let x__ := (CryptolToLean.SAWCorePreludeExtra.iteM Bool a
   (CryptolToLean.SAWCorePreludeExtra.iteM Bool b (Pure.pure Bool.true) c)
-  (Pure.pure Bool.false)); @Eq (Except String Bool)
+  (Pure.pure Bool.false)); @Eq.{1} (Except String Bool)
   (CryptolToLean.SAWCorePreludeExtra.iteM Bool
   (CryptolToLean.SAWCorePreludeExtra.iteM Bool
   (CryptolToLean.SAWCorePreludeExtra.iteM Bool a b (Pure.pure Bool.false))

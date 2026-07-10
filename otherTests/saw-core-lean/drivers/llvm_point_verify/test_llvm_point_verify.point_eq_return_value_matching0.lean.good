@@ -41,7 +41,7 @@ noncomputable def goal : Prop :=
   let Op_p2zix := (Pure.pure Op_p2zix); let Op_p2ziy := (Pure.pure Op_p2ziy);
   let x__ := (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
   CryptolToLean.SAWCorePrimitives.one_macro)
-  CryptolToLean.SAWCorePrimitives.zero_macro)); @Eq (Except String Bool)
+  CryptolToLean.SAWCorePrimitives.zero_macro)); @Eq.{1} (Except String Bool)
   (Bind.bind (CryptolToLean.SAWCorePreludeExtra.iteM (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   CryptolToLean.SAWCorePrimitives.one_macro) Bool) (Bind.bind Op_p2zix

@@ -256,6 +256,18 @@ doc for per-slice regression fences and bounded validation commands):
 - [ ] **Slice 4** — real callee conventions for every callee; retire
   `CalleeTransitional`; decompose `originalDispatchWithShape` into a convention
   interpreter + table.
+  - **Live specimen (found 2026-07-09):** `drivers/llvm_chacha20_core_verify`
+    fails Lean elaboration because the checked-access contract feeds a
+    *wrapped* shared index (`x__… : Except String Nat`, a let-bound runtime
+    computation) raw into both the `LT.lt` bounds proposition and
+    `atWithProof_checkedM` — `CheckedArgRaw` takes `ttLean` with no
+    adaptation, so a wrapped actual escapes into raw positions (pre-existing
+    from the 2026-07-03 checked-access work; goldens deliberately NOT
+    refreshed — they pin the last elaborating emission). Slice 4's checked-
+    application convention must declare the index arg position and bind
+    wrapped actuals through an error-preserving `Bind.bind` before the
+    proposition/helper consume them, or reject. This is the first live
+    instance of the forbidden-adaptation class the calculus kills.
 - [ ] **Slice 5** — equality subject representation & `Eq.rec` proof transport
   declared (never inferred from type names). Load-bearing positive rows:
   `obligations/proof_add_nat_assoc`, `proof_eq_nat_add_0`, `proof_eq_nat_add_s`,

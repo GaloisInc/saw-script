@@ -19,7 +19,7 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) -> let b := (Pure.pure b);
-  let x := (Pure.pure x); let y := (Pure.pure y); @Eq (Except String Bool)
+  let x := (Pure.pure x); let y := (Pure.pure y); @Eq.{1} (Except String Bool)
   (Bind.bind (CryptolToLean.SAWCorePreludeExtra.iteM (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro

@@ -13,7 +13,7 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro))) Bool) -> let bits := (Pure.pure
-  bits); @Eq (Except String Bool) (Bind.bind (foldlM Bool (Vec
+  bits); @Eq.{1} (Except String Bool) (Bind.bind (foldlM Bool (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   CryptolToLean.SAWCorePrimitives.one_macro)) Bool)

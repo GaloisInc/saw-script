@@ -443,7 +443,7 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)) := (Pure.pure x); x)
-  scrut_)); @Eq (Except String Bool) (CryptolToLean.SAWCorePreludeExtra.iteM
+  scrut_)); @Eq.{1} (Except String Bool) (CryptolToLean.SAWCorePreludeExtra.iteM
   Bool (Bind.bind (Bind.bind x__'''''' (fun v_1 => Bind.bind x__'''''''''
   (fun v_2 => Pure.pure (bvAdd (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
