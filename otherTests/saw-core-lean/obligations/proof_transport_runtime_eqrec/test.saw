@@ -1,0 +1,10 @@
+enable_experimental;
+
+// Runtime-subject Eq__rec litmus (plan Slice 5b): transporting along an
+// equality whose subjects are value-domain computations must use the wrapped
+// carrier (Except String Bool) consistently in the proof binder's
+// proposition, the motive's subject binder and inner proposition, the
+// lifted branch, and the transport result — never a silently rawified
+// Bool carrier.
+let probe = parse_core "\\ (p : Eq Bool (coerce Bool Bool (Refl (sort 0) Bool) True) True) -> Eq__rec Bool (coerce Bool Bool (Refl (sort 0) Bool) True) (\\ (y : Bool) -> \\ (h : Eq Bool (coerce Bool Bool (Refl (sort 0) Bool) True) y) -> Bool) True True p";
+write_lean_term "ProofTransportRuntimeEqRecProbe" [] [] "emitted.lean" probe;

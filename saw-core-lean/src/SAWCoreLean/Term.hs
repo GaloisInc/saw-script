@@ -219,6 +219,38 @@ data RawLogicalCallee
   | RawLogicalEqRec
   deriving (Eq, Show)
 
+-- | The full @Eq.rec@ field set the calculus requires (§Raw Logical
+-- Callees, plan Slice 5b): every position a proof transport touches
+-- is a declared field, so the operands, the motive's binders and
+-- result, the branch, the proof, and the final result are consistent
+-- BY CONSTRUCTION — never by translation-mode coincidence.
+--
+-- All fields derive from the declared subject representation ρ_eq at
+-- convention-construction time ('eqRecConventionForStandalone'); the
+-- lowering consumes only the record and never re-inspects operands.
+data EqRecConvention = EqRecConvention
+  { ercSubjectRep    :: EqualitySubjectRep
+    -- ^ Operand position ρ_eq: the representation @x@ and @y@ stand at.
+  , ercCarrierLevel  :: Maybe Lean.UnivLevel
+    -- ^ Universe class of the carrier @SubjectRep(a, ρ_eq)@. Recorded
+    -- for the trace/audit record; @Eq.rec@ itself is emitted without
+    -- explicit universes (Lean elaborates them from the motive), and
+    -- the motive's inner equality proposition emits its own @.{k}@
+    -- through the standalone path.
+  , ercMotive        :: MotiveConvention
+    -- ^ Motive binder positions (@y@ at ρ_eq, the equality proof at a
+    -- raw proof position) and the motive result mode.
+  , ercBranchPosition :: ExpectedPosition
+    -- ^ Branch position: the motive result at @y := x@.
+  , ercProofPosition :: RawReason
+    -- ^ Proof position (always a raw proof; its interpreter follows
+    -- ρ_eq so equality nodes INSIDE the proof term classify their
+    -- subjects consistently with the declared carrier).
+  , ercResultShape   :: BindingShape
+    -- ^ Final result position, as the shape the surround adapts.
+  }
+  deriving (Show)
+
 -- NOTE (plan Slice 4c): the old 'CalleeConvention' enum — including
 -- its 'CalleeTransitional' constructor — is DELETED, not filled in.
 -- Only its raw-logical arm was ever consumed; the dispatch's real
@@ -3123,6 +3155,108 @@ traceSubjectRep who operands rep
         ++ " operands=" ++ show (map ttShape operands)
         ++ " rep=" ++ show rep
 
+-- | Construct the declared @Eq.rec@ convention for the standalone
+-- dispatch path (no equality-aware surround): ρ_eq comes from the
+-- standalone subject convention, and every other field derives from
+-- it —
+--
+--   * raw subject: raw motive binders, raw motive result, raw branch,
+--     raw result (the classic proof-transport shape, e.g. transporting
+--     a raw @Nat@ along @addNat@ equations);
+--   * runtime subject: the @y@ binder binds the wrapped carrier, the
+--     motive result is a runtime value type (@Except String T@), the
+--     branch adapts to a runtime value, and the transport produces a
+--     wrapped result.
+--
+-- The standalone rule deliberately ties the motive result mode to
+-- ρ_eq (raw-in-raw, value-in-value). The record keeps the fields
+-- separate so a surround that knows better can someday declare them
+-- independently — but the standalone convention never guesses a
+-- mixed transport.
+eqRecConventionForStandalone ::
+  TermTranslationMonad m => Term -> [TranslatedTerm] -> m EqRecConvention
+eqRecConventionForStandalone aArg operands = do
+  rep <- standaloneEqualitySubjectRep "Eq__rec" operands
+  mLvl <- levelOfArg aArg
+  let conv = case rep of
+        EqualitySubjectRaw _ -> EqRecConvention
+          { ercSubjectRep     = rep
+          , ercCarrierLevel   = mLvl
+          , ercMotive         = MotiveConvention
+              [ ExpectRaw RawLogicalPosition
+              , ExpectRaw RawProofPosition
+              ]
+              MotiveComputesRawType
+          , ercBranchPosition = ExpectRaw RawLogicalPosition
+          , ercProofPosition  = RawProofPosition
+          , ercResultShape    = BindingRaw
+          }
+        EqualitySubjectRuntimeValue -> EqRecConvention
+          { ercSubjectRep     = rep
+          , ercCarrierLevel   = mLvl
+          , ercMotive         = MotiveConvention
+              [ ExpectRuntimeValue
+              , ExpectRaw RawProofPosition
+              ]
+              MotiveComputesRuntimeValueType
+          , ercBranchPosition = ExpectRuntimeValue
+          , ercProofPosition  = RawProofPosition
+          , ercResultShape    = BindingWrapped
+          }
+  traceEqRecConvention conv
+  pure conv
+
+traceEqRecConvention ::
+  TermTranslationMonad m => EqRecConvention -> m ()
+traceEqRecConvention conv
+  | not positionTraceEnabled = pure ()
+  | otherwise =
+      Debug.Trace.traceM ("[eqRecConvention] " ++ show conv)
+
+-- | Translate an @Eq.rec@ motive at its declared convention.
+--
+-- The all-raw convention keeps the legacy-exact interpretation: the
+-- whole motive translates under raw logical mode, which realizes
+-- \"every binder raw, result raw, every nested equality raw\" in one
+-- stroke and preserves the emitted corpus byte-for-byte.
+--
+-- The runtime-subject convention introduces the binders positionally:
+-- @y@ binds the wrapped carrier ('ExpectRuntimeValue'), the equality
+-- proof binder stays a raw proof whose TYPE translates in the ambient
+-- mode — so its inner @Eq@ node classifies its subjects from the same
+-- Γ the declared carrier came from ('standaloneEqualitySubjectRep'
+-- sees the wrapped-bound @y@), keeping the motive's proposition and
+-- the convention's carrier consistent by construction. The body is a
+-- TYPE-level expression and wraps in @Except String@ per the declared
+-- result mode.
+translateEqRecMotiveAtConvention ::
+  TermTranslationMonad m => EqRecConvention -> Term -> m Lean.Term
+translateEqRecMotiveAtConvention conv motiveTerm =
+  case mcResultMode (ercMotive conv) of
+    MotiveComputesRawType ->
+      withRawTranslationMode (translateTerm motiveTerm)
+    MotiveComputesRuntimeValueType ->
+      case (asLambda motiveTerm, mcBinderPositions (ercMotive conv)) of
+        (Just (yv, yty, rest), [yPos, hPos])
+          | Just (hv, hty, body) <- asLambda rest ->
+              translateBinderAt (Just yPos) yv yty $ \ybnd ->
+                translateBinderAt (Just hPos) hv hty $ \hbnd -> do
+                  bodyLean <- translateTermLet body
+                  let bodyWrapped = wrapExcept bodyLean
+                      lam = Lean.Lambda
+                              (concatMap bindTransToBinder [ybnd, hbnd])
+                              bodyWrapped
+                  tracePositionAt (ExpectRaw RawMotivePosition) motiveTerm
+                    (TranslatedTermAt lam BindingFunction
+                       (Just (ExpectRaw RawMotivePosition)))
+                  pure lam
+        _ ->
+          Except.throwError (RejectedPrimitive "Eq__rec"
+            "a runtime-subject Eq__rec motive must be a two-binder \
+            \lambda (subject, then equality proof) so its binder \
+            \positions can be declared; other motive forms do not \
+            \determine the convention's fields uniquely")
+
 subjectCarrier :: EqualitySubjectRep -> Lean.Term -> Lean.Term
 subjectCarrier EqualitySubjectRuntimeValue ty = wrapExcept ty
 subjectCarrier (EqualitySubjectRaw _) ty = ty
@@ -3219,26 +3353,35 @@ lowerRawLogicalCallee RawLogicalEqRec _ [aArg, xArg, motiveArg, branchArg, yArg,
   aLean <- withRawTranslationMode (translateTerm aArg)
   xTrans <- translateTermWithShape xArg
   yTrans <- translateTermWithShape yArg
+  -- Translation order (a, x, y, branch, motive, proof) is the legacy
+  -- order: translation allocates fresh names and universe variables,
+  -- so reordering would perturb unrelated emissions.
   branchTrans <- translateTermWithShape branchArg
-  case filter ((/= BindingRaw) . ttShape) [xTrans, yTrans, branchTrans] of
-    bad : _ ->
-      Except.throwError (RejectedPrimitive "Eq__rec"
-        ("raw logical Eq__rec expected raw equality operands and a raw \
-        \branch in this slice, but saw "
-        <> Text.pack (show (ttShape bad))))
-    [] -> pure ()
-  motiveLean <- withRawTranslationMode (translateTerm motiveArg)
-  eqProofLean <- withRawTranslationMode (translateTerm eqProofArg)
+  conv <- eqRecConventionForStandalone aArg [xTrans, yTrans]
+  let rep = ercSubjectRep conv
+  xLean <- subjectTerm rep xTrans
+  yLean <- subjectTerm rep yTrans
+  branchLean <- ttLean <$> adaptTo (ercBranchPosition conv) branchTrans
+  motiveLean <- translateEqRecMotiveAtConvention conv motiveArg
+  -- The proof stands at a raw proof position either way; its
+  -- interpreter follows ρ_eq so that equality/reflexivity nodes
+  -- INSIDE the proof term classify their subjects from the same Γ
+  -- and mode the declared carrier came from (a raw-mode proof over a
+  -- wrapped carrier would rebuild the proposition at the wrong
+  -- representation).
+  eqProofLean <- case rep of
+    EqualitySubjectRaw _        -> withRawTranslationMode (translateTerm eqProofArg)
+    EqualitySubjectRuntimeValue -> translateTerm eqProofArg
   pure (TranslatedTerm
     (Lean.App (Lean.ExplVar (Lean.Ident "Eq.rec"))
-      [ aLean
-      , ttLean xTrans
+      [ subjectCarrier rep aLean
+      , xLean
       , motiveLean
-      , ttLean branchTrans
-      , ttLean yTrans
+      , branchLean
+      , yLean
       , eqProofLean
       ])
-    BindingRaw)
+    (ercResultShape conv))
 lowerRawLogicalCallee callee ident _ =
   Except.throwError (RejectedPrimitive (Text.pack (identName ident))
     ("raw logical callee "

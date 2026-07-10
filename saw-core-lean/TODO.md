@@ -356,11 +356,35 @@ doc for per-slice regression fences and bounded validation commands):
     `argumentBindPlan` across the corpus (Slice-0 oracle pattern), then
     swap and delete the legacy plan; (iv) prefix partial application and
     the dependent higher-order fixture (3b dormancy) ride this step.
-- [ ] **Slice 5** — equality subject representation & `Eq.rec` proof transport
-  declared (never inferred from type names). Load-bearing positive rows:
-  `obligations/proof_add_nat_assoc`, `proof_eq_nat_add_0`, `proof_eq_nat_add_s`,
-  `proof_eq_nat_add_comm`, `proof_equal_nat_to_eq_nat`, and
-  `proof_transport_runtime_subject`; wrapped-value equality must not regress.
+- [ ] **Slice 5** (5a–5c, see plan doc) — equality subject representation &
+  `Eq.rec` proof transport declared (never inferred from type names). The six
+  load-bearing rows (`obligations/proof_add_nat_assoc`, `proof_eq_nat_add_0`,
+  `proof_eq_nat_add_s`, `proof_eq_nat_add_comm`, `proof_equal_nat_to_eq_nat`,
+  `proof_transport_runtime_subject`) were already green entering the slice —
+  they are the fence; wrapped-value equality must not regress.
+  - [x] 5a (2026-07-10) — standalone-proposition convention named, documented,
+    and traced (`standaloneEqualitySubjectRep`, `[subjectRep]` trace lines);
+    `equalityPropositionAtSubjectRep` is the declared-surround entry point
+    (unsafeAssert = raw); byte-identical to baseline.
+  - [x] 5b (2026-07-10) — full `Eq.rec` field set as `EqRecConvention`
+    (operand ρ_eq, carrier universe class, motive binder/result positions via
+    `MotiveConvention`, branch position, proof position, result shape),
+    constructed once by `eqRecConventionForStandalone`, consumed by the
+    lowering with no operand re-inspection. All-raw subset byte-identical
+    (raw-mode motive interpretation is the declared interpreter for
+    `MotiveComputesRawType`). NEW capability: runtime-subject `Eq__rec`
+    transports (previously blanket-rejected) — the wrapped carrier flows
+    consistently into the proof binder's proposition, the motive's subject
+    binder and inner proposition (consistency BY CONSTRUCTION: the wrapped
+    `y` binder in Γ drives the inner standalone classification), the
+    `Pure.pure`-lifted branch, and the wrapped result. Pinned by
+    `obligations/proof_transport_runtime_eqrec` (elaborates in Lean,
+    `#print axioms` clean). A proof produced at a mismatched rep (e.g. a
+    raw-declared unsafeAssert feeding a runtime-subject transport) fails
+    loudly at Lean elaboration — the carrier types differ; nothing coerces.
+  - [ ] 5c — function-carrier equality convention (raw `@Eq` over the
+    translated effectful function type); expected to fix the pre-existing red
+    `drivers/sawcore_prelude_auto_emit`.
 - [ ] **Slice 6** — recursors as a position/callee instance; close the
   `@Foo.rec`-by-name constructor-order trust hole (bridges to the separately
   tracked direct-recursor / `PosRep` work in
