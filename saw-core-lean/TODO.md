@@ -324,9 +324,20 @@ doc for per-slice regression fences and bounded validation commands):
     any dependent lambda upstream of the producers. The fixture rides the
     first dependent `FunctionArg` convention (4c/Slice-5-era work).
   - [ ] **Deliberate emission-quality debts (2026-07-10, user-reviewed;
-    parity-preserved on purpose, fix as a dedicated slice after Slice 5 so
-    the oracle baselines stay sharp through the equality work). Each lives
-    at exactly ONE marked chokepoint (grep SUSPECT in Term.hs):**
+    parity-preserved on purpose through Slice 5 so the oracle baselines
+    stayed sharp through the equality work). REORDERED 2026-07-10 after
+    Slice 5 design review, with user: this slice now runs BEFORE Slice 6,
+    because (a) it is the source of the false raw-mode production records —
+    already forced two mode-guard workarounds (`lowerRawLogicalCalleeRawMode`
+    and unsafeAssert's raw-mode arm) that truthful records may collapse;
+    (b) Slice 6.1's recursor classification consumes exactly these inputs
+    and must not be built on known-false records or grow a third guard;
+    (c) the equality subject rule's semantic justification rests on
+    production records being the translator's single source of truth.
+    Slice 6's ctor-order hole is a guard against FUTURE drift (current
+    families match Lean's order and have behavioral differential rows), so
+    it tolerates the delay. Each debt lives at exactly ONE marked
+    chokepoint (grep SUSPECT in Term.hs):**
     - `phaseBetaBindFromMode`: `RawValueArg` binds RAW actuals too
       (pure-lift-then-bind — identity but monadic noise). Fix:
       bind-iff-wrapped, reviewed emitted-Lean diff + one golden refresh

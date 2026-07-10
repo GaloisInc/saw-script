@@ -574,6 +574,18 @@ be emitted-Lean-inert (strong safety). Slice 3 is the largest behavioral change
 (do it in 3a–3d sub-steps). Slice 5 is the deepest correctness payoff and
 depends on 1–4. Slice 6 sets up the separately-tracked direct-recursor work.
 
+**Reorder (2026-07-10, post-Slice-5 design review, with user):** the
+emission-quality debts slice (TODO §Deliberate emission-quality debts:
+bind-iff-wrapped `RawValueArg`; instantiation-directed var-headed modes) runs
+**between 5 and 6**. Rationale: the debts are the source of the false
+raw-mode production records that already forced two mode-guard workarounds in
+Slice 5; Slice 6.1's recursor classification consumes those same records and
+must get truthful inputs rather than a third guard; and the declared equality
+subject rule is semantically justified by records being the translator's
+single source of truth. Slice 6's constructor-order hole guards against
+future drift (current families match Lean's order and carry behavioral
+differential rows), so it tolerates the delay.
+
 Each slice is one or a few commits, each with: `git diff --check`, `cabal build
 exe:saw`, `cabal test saw-core-lean-smoketest`, `bash test.sh conformance`, and
 a reviewed emitted-Lean diff on the slice's regression fence. Commit only on a
