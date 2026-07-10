@@ -1427,6 +1427,41 @@ phaseBetaBindFromMode ix typeIxs mode actualWrapped
       IndexArg    -> actualWrapped
       _           -> False
 
+-- | Argument modes for a phase-β FUNCTION VALUE callee (plan Slice 4c
+-- step 1) — a bound variable or constant whose own emitted type
+-- carries phase-β formals. A DIFFERENT family from
+-- 'phaseBetaArgModesFor''s raw-formal Lean targets: here a
+-- 'RawValueArg' mode means the emitted formal is WRAPPED (the value
+-- formal of a phase-β function), and dependent/var-headed formals
+-- mirror the un-substituted emitted type — raw, adapting by binding
+-- only wrapped actuals ('IndexArg' discipline). This is deliberately
+-- the exact source-level mirror of the historical
+-- 'peelLeanPiTypes'/'isExceptStringType' inspection it will replace;
+-- the inert assert in 'applyKnownFunctionWithShape' adjudicates
+-- equivalence across the corpus before any swap.
+phaseBetaFunctionValueModesFor :: Term -> [ArgMode]
+phaseBetaFunctionValueModesFor fty =
+  [ modeFor ix bty | (ix, (_, bty)) <- zip [0 :: Int ..] binders ]
+  where
+    (binders, _) = asPiList fty
+    typeIxs = typeArgPositions fty
+    modeFor ix bty
+      | ix `elem` typeIxs =
+          if isJust (asSort bty) then TypeArg else IndexArg
+      | isJust (asSort bty) = TypeArg
+      | isJust (asEq bty) = PropositionArg
+      | isJust (asPi bty) = FunctionArg Nothing
+      | isCryptolNumType bty = TypeArg
+      | isJust (asNatType bty) = IndexArg
+      -- Var-headed formals: this family's emitted Pi WRAPS them
+      -- ('shouldWrapBinder' is True for variables — the function
+      -- value's formal is a phase-β value slot), unlike the
+      -- raw-target family where they bind. First candidate special-
+      -- cased them raw and the oracle rejected it on the smoketest
+      -- (fix/iterate shapes peel Except at var-headed slots).
+      | shouldWrapBinder bty = RawValueArg
+      | otherwise = IndexArg
+
 -- | A raw SAW function whose return type is Nat can still be a
 -- value-domain computation under Phase beta when it consumes a non-index
 -- value argument. Examples: @bvToNat : Vec n Bool -> Nat@ and
@@ -5218,7 +5253,29 @@ applyKnownFunctionWithShape fty f args = do
              take (length argTerms) (map isExceptStringType expectedTypes ++ repeat False)
            expectedFunction =
              take (length argTerms) (map isLeanPiType expectedTypes ++ repeat False)
-           actualWrapped =
+       -- Plan Slice 4c step 1 (inert oracle): the derived
+       -- function-value convention must reproduce the emitted-type
+       -- peel exactly before it replaces it.
+       let fnModes = phaseBetaFunctionValueModesFor fty
+           derivedWrapped =
+             take (length argTerms)
+               ([ m == RawValueArg | m <- fnModes ] ++ repeat False)
+           derivedFunction =
+             take (length argTerms)
+               ([ case m of FunctionArg _ -> True; _ -> False
+                | m <- fnModes ] ++ repeat False)
+       if derivedWrapped /= expectedWrapped
+            || derivedFunction /= expectedFunction
+          then Except.throwError (RejectedPrimitive "known function application"
+                 ("internal (plan Slice 4c): derived function-value \
+                  \convention disagrees with the emitted-type peel: \
+                  \peel wrapped " <> Text.pack (show expectedWrapped)
+                  <> " derived " <> Text.pack (show derivedWrapped)
+                  <> " peel function " <> Text.pack (show expectedFunction)
+                  <> " derived " <> Text.pack (show derivedFunction)
+                  <> " modes " <> Text.pack (show fnModes)))
+          else pure ()
+       let actualWrapped =
              map (isWrappedShape . ttShape) argResults
            shouldBindRaw =
              zipWith3
