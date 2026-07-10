@@ -1810,14 +1810,17 @@ data ProofPrimitiveContract = ProofPrimitiveContract
   { ppcModule    :: ModuleName
   , ppcName      :: String
   , ppcArity     :: Int
-  , ppcArgModes  :: [ProofPrimitiveArgMode]
+  , ppcArgModes  :: [ArgMode]
+    -- ^ Declared per-argument modes (plan Slice 4c). Interpretation
+    -- is raw-LOGICAL for every raw-family mode: 'TypeArg',
+    -- 'IndexArg', 'RawValueArg', and 'ProofArg' actuals all translate
+    -- under 'withRawTranslationMode' (proof primitives state
+    -- propositions over raw logical terms); 'RuntimeArg' actuals
+    -- adapt to wrapped runtime values. The labels document the true
+    -- slot roles per the SAWCore signatures.
   , ppcBuildProp :: forall m. TermTranslationMonad m => [Lean.Term] -> m Lean.Term
   , ppcUseProof  :: forall m. TermTranslationMonad m => [Lean.Term] -> Lean.Term -> m Lean.Term
   }
-
-data ProofPrimitiveArgMode
-  = ProofArgRaw
-  | ProofArgWrapped
 
 partialOpContracts :: [PartialOpContract]
 partialOpContracts =
@@ -1939,55 +1942,62 @@ checkedApplicationContracts =
         RuntimeResult
 
 proofPrimitiveContracts :: [ProofPrimitiveContract]
+-- Slot roles per the SAWCore Prelude signatures (plan Slice 4c):
+-- widths are 'IndexArg', equality subjects at raw-logical positions
+-- are 'RawValueArg', source proof terms are 'ProofArg', wrapped
+-- runtime operands are 'RuntimeArg', carriers are 'TypeArg'.
 proofPrimitiveContracts =
   [ bvAssertion "unsafeAssertBVULt" "bvult"
   , bvAssertion "unsafeAssertBVULe" "bvule"
+    -- uip : (t : sort 1) -> (x y : t) -> (pf1 pf2 : Eq t x y) -> …
   , ProofPrimitiveContract preludeModule "uip" 5
-      [ProofArgRaw, ProofArgRaw, ProofArgRaw, ProofArgRaw, ProofArgRaw]
+      [TypeArg, RawValueArg, RawValueArg, ProofArg, ProofArg]
       uipContract
       (\_ proof -> pure proof)
+    -- equalNatToEqNat : (m n : Nat) -> Eq Bool (equalNat m n) True -> …
   , ProofPrimitiveContract preludeModule "equalNatToEqNat" 3
-      [ProofArgRaw, ProofArgRaw, ProofArgRaw]
+      [RawValueArg, RawValueArg, ProofArg]
       equalNatToEqNatContract
       applyLastArg
+    -- bvEqToEq : (n : Nat) -> (v1 v2 : Vec n Bool) -> Eq Bool … -> …
   , ProofPrimitiveContract preludeModule "bvEqToEq" 4
-      [ProofArgRaw, ProofArgWrapped, ProofArgWrapped, ProofArgRaw]
+      [IndexArg, RuntimeArg, RuntimeArg, ProofArg]
       bvEqToEqContract
       applyLastArg
   , ProofPrimitiveContract preludeModule "bvEq_refl" 2
-      [ProofArgRaw, ProofArgWrapped]
+      [IndexArg, RuntimeArg]
       bvEqReflContract
       (\_ proof -> pure proof)
   , ProofPrimitiveContract preludeModule "not_bvult_zero" 2
-      [ProofArgRaw, ProofArgWrapped]
+      [IndexArg, RuntimeArg]
       notBvultZeroContract
       (\_ proof -> pure proof)
   , ProofPrimitiveContract preludeModule "bvAddZeroL" 2
-      [ProofArgRaw, ProofArgWrapped]
+      [IndexArg, RuntimeArg]
       (bvAddZeroContract True)
       (\_ proof -> pure proof)
   , ProofPrimitiveContract preludeModule "bvAddZeroR" 2
-      [ProofArgRaw, ProofArgWrapped]
+      [IndexArg, RuntimeArg]
       (bvAddZeroContract False)
       (\_ proof -> pure proof)
   , ProofPrimitiveContract preludeModule "bvNat_bvToNat" 2
-      [ProofArgRaw, ProofArgWrapped]
+      [IndexArg, RuntimeArg]
       bvNatBvToNatContract
       (\_ proof -> pure proof)
   , ProofPrimitiveContract preludeModule "eqNatAdd0" 1
-      [ProofArgRaw]
+      [RawValueArg]
       eqNatAdd0Contract
       (\_ proof -> pure proof)
   , ProofPrimitiveContract preludeModule "eqNatAddS" 2
-      [ProofArgRaw, ProofArgRaw]
+      [RawValueArg, RawValueArg]
       eqNatAddSContract
       (\_ proof -> pure proof)
   , ProofPrimitiveContract preludeModule "eqNatAddComm" 2
-      [ProofArgRaw, ProofArgRaw]
+      [RawValueArg, RawValueArg]
       eqNatAddCommContract
       (\_ proof -> pure proof)
   , ProofPrimitiveContract preludeModule "addNat_assoc" 3
-      [ProofArgRaw, ProofArgRaw, ProofArgRaw]
+      [RawValueArg, RawValueArg, RawValueArg]
       addNatAssocContract
       (\_ proof -> pure proof)
   ]
@@ -1995,7 +2005,7 @@ proofPrimitiveContracts =
     preludeModule = mkModuleName ["Prelude"]
     bvAssertion source op =
       ProofPrimitiveContract preludeModule source 3
-        [ProofArgRaw, ProofArgWrapped, ProofArgWrapped]
+        [IndexArg, RuntimeArg, RuntimeArg]
         (bvComparisonEqM (Lean.Ident op) (Lean.Ident "Bool.true"))
         (\_ proof -> pure proof)
 
@@ -2855,10 +2865,26 @@ lowerProofPrimitiveContract contract args = do
     proofPrimitiveArgs [] [] = pure []
     proofPrimitiveArgs (mode : modes) (arg : rest) = do
       translated <- case mode of
-        ProofArgRaw ->
-          withRawTranslationMode (translateTerm arg)
-        ProofArgWrapped ->
+        -- Raw-family modes: proof primitives state their
+        -- propositions over raw LOGICAL terms — all of these
+        -- translate in raw mode ('ppcArgModes' doc).
+        TypeArg        -> withRawTranslationMode (translateTerm arg)
+        IndexArg       -> withRawTranslationMode (translateTerm arg)
+        RawValueArg    -> withRawTranslationMode (translateTerm arg)
+        ProofArg       -> withRawTranslationMode (translateTerm arg)
+        PropositionArg -> withRawTranslationMode (translateTerm arg)
+        MotiveArg      -> withRawTranslationMode (translateTerm arg)
+        RuntimeArg ->
           translateAt ExpectRuntimeValue arg >>= adaptToRuntime
+        StructuralFieldArg ->
+          Except.throwError (RejectedPrimitive "proof primitive"
+            "proof-primitive contracts do not take structural-field arguments")
+        FunctionArg{} ->
+          Except.throwError (RejectedPrimitive "proof primitive"
+            "proof-primitive contracts do not take function arguments yet")
+        FunctionWithNatLtArg{} ->
+          Except.throwError (RejectedPrimitive "proof primitive"
+            "proof-primitive contracts do not take proof-function arguments")
       (translated :) <$> proofPrimitiveArgs modes rest
     proofPrimitiveArgs _ _ =
       Except.throwError (RejectedPrimitive "proof primitive"
