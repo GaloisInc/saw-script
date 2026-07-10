@@ -213,7 +213,18 @@ doc for per-slice regression fences and bounded validation commands):
   conventions work of 2026-07-03 (`55e4fe099`, `429452873`). Every diff hunk
   reviewed (only `@Eq.{1}` explicit universes and the stream `Pure.pure`-in-
   case-handler/`Except String Nat` motive change); goldens refreshed per-row
-  2026-07-09, both rows green.
+  2026-07-09, both rows green. Full 18-row `@Eq` sweep completed 2026-07-09:
+  `@Eq.{k}` class and all elaborating bounds-overhaul rows refreshed;
+  `llvm_chacha20_core_verify` kept red as the Slice 4 specimen (see below).
+- [ ] **Pre-existing upstream regressions (verified failing at pre-refactor
+  commit `89a6cef06`):** `drivers/cryptol_chacha20_core_iterate` and
+  `drivers/cryptol_chacha20_iround_zero` reject with `Refusing to translate
+  primitive Prelude::Stream@core` (wrapped-scrutinee recursor convention);
+  their goldens expect successful translation. Needs an upstream decision:
+  restore a translation path for the ChaCha20-shape stream comprehensions
+  (the `saw_self_ref_comp_iterate` parametric-bridge family) or migrate the
+  rows to an expected-rejection category. Not a golden-format issue — do not
+  refresh.
 - [ ] **Slice 3** (3a–3d) — push position through `Pi`/`Lambda`/`let`; demote
   `shouldWrapBinder`, `isVariableHead`, `natValueResult`, `phaseBetaResultShape`
   from position authorities to convention-internal helpers.
