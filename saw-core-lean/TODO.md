@@ -364,8 +364,10 @@ doc for per-slice regression fences and bounded validation commands):
     is the proof the operand-domain rule is mode-uniform. Records are now
     the translator's single source of truth going into Slice 6. Remaining
     known-false stamp: none found; the recursor-convention stamp at
-    `recursorConvention`/`classifyRecursorResult` is Slice 6 territory
-    and was left untouched. Each fixed debt lived at ONE marked
+    `recursorConvention`/`classifyRecursorResult` was Slice 6 territory
+    and was left untouched (since reworked by Slice 6.1, `2000c7719`:
+    `classifyRecursorResult` deleted, the convention now derives from the
+    declared `recursorMotiveResultPosition`). Each fixed debt lived at ONE marked
     chokepoint (grep SUSPECT in Term.hs — all markers now resolved):**
     - [x] `phaseBetaBindFromMode`: `RawValueArg` bound RAW actuals too
       (pure-lift-then-bind — identity but monadic noise). FIXED 2026-07-10:
@@ -492,10 +494,50 @@ doc for per-slice regression fences and bounded validation commands):
   both new fixtures' artifacts elaborate and depend on no axioms; baseline
   snapshot 316 artifacts (313 untouched byte-for-byte across the slice + 2
   new fixture emissions + the un-rejected auto-emitted prelude).
-- [ ] **Slice 6** — recursors as a position/callee instance; close the
+- [x] **Slice 6** — recursors as a position/callee instance; close the
   `@Foo.rec`-by-name constructor-order trust hole (bridges to the separately
   tracked direct-recursor / `PosRep` work in
   `doc/2026-07-03_direct-recursor-semantics-design.md`).
+  **COMPLETE (2026-07-10, commits `2000c7719` + `133f2cd69`).**
+  - **6.1 (`2000c7719`, emission-inert — corpus byte-identical):** the
+    recursor convention DERIVES from a declared motive result position.
+    New shared classifier `recursorMotiveResultPosition` (same domain
+    analysis as the argument-mode tables; two declared refinements:
+    non-Prop Nat elimination computes a runtime value, var-headed type
+    families stay raw) and `recursorMotiveFunctionConvention` (binder
+    positions from `functionConventionValueSlot`, result position
+    mirroring the Pi translator's body-wrap rule — the type the emitted
+    call actually inhabits). `RecursorConvention` gains
+    `recMotiveResultPosition`; `recResultMode`/`recFinalShape` derive
+    from it; `motiveConventionFor` consumes the position (Bool arg
+    gone); `classifyRecursorResult`/`recursorDirectResultIsValue`
+    deleted; `recursorPostArgs` and
+    `recursorFunctionResultCanPropagate` read the declared convention;
+    the recursor's `phaseBetaResultShape` call is gone (one fewer
+    standalone authority ahead of Slice 7).
+  - **6.2 (`133f2cd69`, emission-changing — additive, diffs reviewed):**
+    Lean-checked constructor-order assertions. Support-library command
+    `saw_ctor_order Foo [Foo.A, …]` (CryptolToLean/SAWCoreCtorOrder.lean)
+    fails elaboration unless the inductive declares exactly those
+    constructors in that order; positive + `#guard_msgs` negative
+    self-tests run at every lake build. The translator records a
+    `CtorOrderAssertion` decl (from `recursorCtorOrder`, fully-qualified
+    names — command-level resolution can't type-disambiguate
+    core-colliding short names like `Stream`/`Either`) whenever it emits
+    a recursor head; both drift directions (Lean library reorder, SAWCore
+    prelude reorder) now fail loudly. SAWModule's bridge drains
+    `topLevelDeclarations` instead of dropping them. `Eq.rec` is out of
+    scope by design (declared `EqRecConvention` onto Lean-core `Eq`).
+    Driver-golden refresh trued up 11 recursor drivers (all pass test
+    mode), also picking up the debts-slice emission those goldens had
+    missed. Six gated families (Nat/Pos/Z/Bool/AccessibleNat/
+    AccessiblePos) stay rejected.
+
+  **Slice 6 exit fence (2026-07-10):** lake build green (incl.
+  self-tests); smoketest 55/55; conformance 193 OK exit 0 with
+  assertions elaborating in every recursor row;
+  `recursor_raw_scrutinee_effectful_value` pins the assertion emission;
+  snapshot re-baselined at 318 artifacts, diff clean.
 - [ ] **Slice 7** — delete the demoted heuristics; add an anti-regression lint
   (no `bindingShapeOfTerm`, no `CalleeTransitional`, no emitted-AST shape
   inspection); sync `STATUS.md`, the Priority 2 items below, and the calculus

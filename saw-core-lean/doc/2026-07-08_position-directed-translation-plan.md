@@ -598,6 +598,29 @@ including the auto-emitted raw prelude. `equalityPropositionAtSubjectRep`
 anymore; every equality surround classifies from production records. Slice 6
 starts from truthful records and zero mode-guards.
 
+**Slice 6 COMPLETE (2026-07-10, commits `2000c7719` + `133f2cd69`; TODO
+carries the full record).** 6.1 landed emission-inert (corpus
+byte-identical): the recursor convention derives from a declared
+`recursorMotiveResultPosition` — the shared domain analysis plus two
+declared refinements (non-Prop Nat elimination computes a runtime value;
+var-headed type families stay raw) — and a function motive carries a full
+`FunctionConvention` whose result position mirrors the Pi translator's
+body-wrap rule; `classifyRecursorResult` and the recursor's
+`phaseBetaResultShape` call are gone. 6.2 chose mechanism (a),
+generated-at-emission assertions, over source-shaped support recursors:
+option (b) leaves same-payload constructors silently swappable under
+constant motives when the *SAWCore* side reorders, while the emitted
+`saw_ctor_order` command (support library `SAWCoreCtorOrder.lean`, with
+positive and `#guard_msgs`-negative self-tests at every lake build)
+carries SAWCore's declared order into the file and catches both drift
+directions. Assertion names are fully qualified — command-level
+resolution has no expected type to disambiguate core-colliding short
+names (`Stream`, `Either`). `Eq.rec` is out of scope by design (declared
+`EqRecConvention` onto Lean-core `Eq`, single constructor, no
+support-library inductive to drift). The six gated families stay
+rejected. Slice 7 starts with the recursor family fully on the shared
+model and zero unchecked constructor-order trust.
+
 Each slice is one or a few commits, each with: `git diff --check`, `cabal build
 exe:saw`, `cabal test saw-core-lean-smoketest`, `bash test.sh conformance`, and
 a reviewed emitted-Lean diff on the slice's regression fence. Commit only on a
