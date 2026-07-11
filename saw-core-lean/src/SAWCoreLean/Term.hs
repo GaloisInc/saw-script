@@ -1436,10 +1436,9 @@ polymorphicFormalInstantiatedExpectedSrc binders srcArgs ix bty =
 -- on this path are RAW-formal Lean targets (bvAdd-family primitives),
 -- so the modes' bind disciplines are ('phaseBetaBindFromMode'):
 --
---   * 'RawValueArg' (concrete value formals): uniform bind chain —
---     wrapped actuals bind, raw actuals pure-lift then bind;
---   * 'IndexArg' (Nat/Num formals, index binders): bind only a
---     wrapped (runtime-computed) actual;
+--   * 'RawValueArg' (concrete value formals) and 'IndexArg'
+--     (Nat/Num formals, index binders): bind only a wrapped
+--     (runtime-computed) actual — a raw actual splices directly;
 --   * 'RuntimeArg' (polymorphic formals instantiated at a wrapped or
 --     function type): the actual is consumed as-is;
 --   * types, propositions, function formals: splice raw, never bind.
@@ -1478,13 +1477,13 @@ phaseBetaBindFromMode :: Int -> [Int] -> ArgMode -> Bool -> Bool
 phaseBetaBindFromMode ix typeIxs mode actualWrapped
   | ix `elem` typeIxs = False
   | otherwise = case mode of
-      -- SUSPECT (tracked, TODO "Deliberate emission-quality debts"):
-      -- binding a RAW actual pure-lifts it first
-      -- (@Bind.bind (Pure.pure x) …@) — semantically identity but
-      -- monadic noise. Parity-preserved from the legacy plan; the
-      -- intended fix is bind-iff-wrapped (@actualWrapped@, like
-      -- 'IndexArg') as a dedicated reviewed-diff slice after Slice 5.
-      RawValueArg -> True
+      -- Bind-iff-wrapped (debts slice): a raw actual at a raw Lean
+      -- formal splices directly; only a wrapped (runtime-computed)
+      -- actual binds. The eta paths are unaffected — they DECLARE
+      -- their missing formals wrapped, so @actualWrapped@ is True
+      -- there by construction. (The legacy plan bound raw actuals
+      -- too, pure-lift-then-bind — identity, but monadic noise.)
+      RawValueArg -> actualWrapped
       IndexArg    -> actualWrapped
       _           -> False
 

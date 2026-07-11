@@ -338,10 +338,20 @@ doc for per-slice regression fences and bounded validation commands):
     families match Lean's order and have behavioral differential rows), so
     it tolerates the delay. Each debt lives at exactly ONE marked
     chokepoint (grep SUSPECT in Term.hs):**
-    - `phaseBetaBindFromMode`: `RawValueArg` binds RAW actuals too
-      (pure-lift-then-bind — identity but monadic noise). Fix:
-      bind-iff-wrapped, reviewed emitted-Lean diff + one golden refresh
-      round.
+    - [x] `phaseBetaBindFromMode`: `RawValueArg` bound RAW actuals too
+      (pure-lift-then-bind — identity but monadic noise). FIXED 2026-07-10:
+      bind-iff-wrapped (`RawValueArg -> actualWrapped`, same discipline as
+      `IndexArg`). Eta paths unaffected by construction (they DECLARE
+      missing formals wrapped, so `actualWrapped` is True there). Emission
+      diff reviewed: 13 artifacts (12 differential + stream_scanl_totality),
+      every hunk a disappearing `Bind.bind (Pure.pure <raw>) (fun v_i => …)`
+      splice plus fresh-name prime shifts; no wrapped actual lost its bind;
+      NO driver artifacts changed (no golden refresh needed). Differential
+      rows verify the changed emissions end-to-end (Lean evaluation ==
+      SAW evaluation); stream_scanl_totality elaborated explicitly.
+      Smoketest 54/54 (one substring assertion switched to squashed —
+      shorter output moved a line-wrap point), conformance 192 OK exit 0,
+      snapshot re-baselined (317).
     - `phaseBetaArgModesFor`: a var-headed formal falling past the
       Pi-instantiation lookup is ASSUMED value-domain (sound for every
       instantiation, but an assumption). Fix: instantiation-directed modes

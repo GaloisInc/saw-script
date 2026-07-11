@@ -870,12 +870,12 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       out <- translateOrFail sc "recordFunctionField" recordVal
       assertContains "record constructor emitted"
                      "@RecordType.RecordValue" out
-      assertContains "function field first arg is wrapped"
-                     "fun (x : Except String" out
-      assertContains "function field second arg is wrapped"
-                     "(y : Except String" out
-      assertNotContains "function field is not bound as an Except value"
-                        "Bind.bind (fun (x : Except String Bool)" out
+      assertContainsSquashed "function field first arg is wrapped"
+                             "fun (x : Except String" out
+      assertContainsSquashed "function field second arg is wrapped"
+                             "(y : Except String" out
+      assertNotContainsSquashed "function field is not bound as an Except value"
+                                "Bind.bind (fun (x : Except String Bool)" out
 
   , testCase "Eq.rec proof supplied to coerce stays raw" $ do
       typeSort <- scSort sc (mkSort 0)
