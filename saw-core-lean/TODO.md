@@ -341,21 +341,32 @@ doc for per-slice regression fences and bounded validation commands):
     non-dependent by the helpers' types, so SAWCore's typechecker rejects
     any dependent lambda upstream of the producers. The fixture rides the
     first dependent `FunctionArg` convention (4c/Slice-5-era work).
-  - [ ] **Deliberate emission-quality debts (2026-07-10, user-reviewed;
-    parity-preserved on purpose through Slice 5 so the oracle baselines
-    stayed sharp through the equality work). REORDERED 2026-07-10 after
-    Slice 5 design review, with user: this slice now runs BEFORE Slice 6,
-    because (a) it is the source of the false raw-mode production records —
-    already forced two mode-guard workarounds (`lowerRawLogicalCalleeRawMode`
-    and unsafeAssert's raw-mode arm) that truthful records may collapse;
-    (b) Slice 6.1's recursor classification consumes exactly these inputs
-    and must not be built on known-false records or grow a third guard;
-    (c) the equality subject rule's semantic justification rests on
-    production records being the translator's single source of truth.
-    Slice 6's ctor-order hole is a guard against FUTURE drift (current
-    families match Lean's order and have behavioral differential rows), so
-    it tolerates the delay. Each debt lives at exactly ONE marked
-    chokepoint (grep SUSPECT in Term.hs):**
+  - [x] **Deliberate emission-quality debts — COMPLETE 2026-07-10
+    (commits `4cf6e8106` part 1, `7a566afa6` part 2, `a899c6ccd` part 3).
+    Original rationale (user-reviewed; parity-preserved on purpose through
+    Slice 5 so the oracle baselines stayed sharp through the equality
+    work; REORDERED before Slice 6 after the Slice 5 design review, with
+    user): (a) source of the false raw-mode production records that forced
+    two mode-guard workarounds; (b) Slice 6.1's recursor classification
+    consumes exactly these inputs; (c) the equality subject rule rests on
+    record truthfulness. OUTCOME: all three held. Part 3 (not in the
+    original list — the false-record mechanism turned out to be raw-mode
+    stamping with `phaseBetaResultShape`, a third site, not the two debts
+    themselves): `rawModeResultShape` stamps raw-mode applications
+    truthfully (landed emission-inert, corpus byte-identical), after which
+    BOTH mode-guards collapsed byte-identically — `lowerRawLogicalCallee`
+    is the single mode-uniform pipeline (`lowerRawLogicalCalleeRawMode`
+    deleted), unsafeAssert's raw-mode arm deleted, and
+    `equalityPropositionAtSubjectRep` (the declared-rep entry point)
+    deleted with it: no surround declares a rep anymore — every equality
+    surround classifies from the operands' production records. The
+    collapse being byte-identical INCLUDING the auto-emitted raw prelude
+    is the proof the operand-domain rule is mode-uniform. Records are now
+    the translator's single source of truth going into Slice 6. Remaining
+    known-false stamp: none found; the recursor-convention stamp at
+    `recursorConvention`/`classifyRecursorResult` is Slice 6 territory
+    and was left untouched. Each fixed debt lived at ONE marked
+    chokepoint (grep SUSPECT in Term.hs — all markers now resolved):**
     - [x] `phaseBetaBindFromMode`: `RawValueArg` bound RAW actuals too
       (pure-lift-then-bind — identity but monadic noise). FIXED 2026-07-10:
       bind-iff-wrapped (`RawValueArg -> actualWrapped`, same discipline as
@@ -454,7 +465,9 @@ doc for per-slice regression fences and bounded validation commands):
     `standaloneEqualitySubjectRep` in ambient mode (raw pipeline in raw
     mode); byte-identical for all pure-operand emissions; pinned by
     `obligations/unsafe_assert_effectful_subject` (faithful wrapped
-    obligation, discharged by `rfl` in the probe).
+    obligation, discharged by `rfl` in the probe). (The raw-mode arm
+    described here was since collapsed by the debts slice part 3 —
+    classification is now mode-uniform.)
   - [x] 5c (2026-07-10) — function-carrier equality decided:
     `EqualitySubjectRawFunction` with the carrier translated in the CURRENT
     mode — raw logical content compares functions at the raw `a -> b` it
@@ -470,7 +483,9 @@ doc for per-slice regression fences and bounded validation commands):
     `Except String` around raw terms. Byte-identical for every pre-existing
     artifact; `drivers/sawcore_prelude_auto_emit` un-rejected (golden
     refreshed per-hunk: only the `Eq__rec` → `@Eq.rec` head changed; full
-    prelude elaborates with zero errors).
+    prelude elaborates with zero errors). (`lowerRawLogicalCalleeRawMode`
+    was since deleted by the debts slice part 3: truthful raw-mode records
+    made the mode-uniform pipeline reduce to it byte-identically.)
 
   **Slice 5 exit fence (2026-07-10):** smoketest 54/54; conformance exit 0
   (191 OK, +2 fixture rows over the slice); the six load-bearing rows green;

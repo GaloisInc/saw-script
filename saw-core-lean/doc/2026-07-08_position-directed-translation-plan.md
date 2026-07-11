@@ -586,6 +586,18 @@ single source of truth. Slice 6's constructor-order hole guards against
 future drift (current families match Lean's order and carry behavioral
 differential rows), so it tolerates the delay.
 
+**Debts slice COMPLETE (2026-07-10; TODO §Deliberate emission-quality debts
+carries the full record).** All three predictions of the reorder rationale
+held. Notably, the false-record mechanism turned out to be a third site (the
+raw-mode application paths stamped `phaseBetaResultShape` over raw
+emissions), and once `rawModeResultShape` made raw-mode records truthful,
+BOTH Slice 5 mode-guards collapsed into the single mode-uniform
+`lowerRawLogicalCallee` pipeline byte-identically across the corpus —
+including the auto-emitted raw prelude. `equalityPropositionAtSubjectRep`
+(the declared-rep entry point) went with them: no surround declares a ρ_eq
+anymore; every equality surround classifies from production records. Slice 6
+starts from truthful records and zero mode-guards.
+
 Each slice is one or a few commits, each with: `git diff --check`, `cabal build
 exe:saw`, `cabal test saw-core-lean-smoketest`, `bash test.sh conformance`, and
 a reviewed emitted-Lean diff on the slice's regression fence. Commit only on a
