@@ -15,13 +15,11 @@ Stability   : provisional
 module SAWCentral.Position (
     Inference(..),
     Pos(..),
-    fmtPos,
     differentLines,
     leadingPos,
     trailingPos,
     spanPos,
     choosePos,
-    fmtPoss,
     posRelativeToCurrentDirectory,
     posRelativeTo,
     routePathThroughPos,
@@ -37,7 +35,6 @@ module SAWCentral.Position (
 
 import Control.Lens
 import Data.Data (Data)
-import Data.List (intercalate)
 import GHC.Generics (Generic)
 import System.Directory (makeRelativeToCurrentDirectory)
 import System.FilePath (makeRelative, isAbsolute, (</>), takeDirectory)
@@ -126,10 +123,6 @@ data Pos = Range !FilePath -- file
          | PosREPL
          | PosInferred Inference Pos
   deriving (Data, Generic, Eq)
-
-fmtPos :: Pos -> String -> String
-fmtPos p m = show p ++ ":\n" ++ m'
-  where m' = intercalate "\n" . map ("  " ++) . lines $ m
 
 -- | Check if two positions are on different source lines. This is
 --   used to guide certain hints in the SAWScript typechecker. It
@@ -296,11 +289,6 @@ choosePos p1 p2 = case comparePosQuality p1 p2 of
    LT -> p2
    GT -> p1
    EQ -> p1
-
-fmtPoss :: [Pos] -> String -> String
-fmtPoss [] m = fmtPos (PosInternal "saw-script internal") m
-fmtPoss ps m = "[" ++ intercalate ",\n " (map show ps) ++ "]:\n" ++ m'
-  where m' = intercalate "\n" . map ("  " ++) . lines $ m
 
 posRelativeToCurrentDirectory :: Pos -> IO Pos
 posRelativeToCurrentDirectory (Range f sl sc el ec) = makeRelativeToCurrentDirectory f >>= \f' -> return (Range f' sl sc el ec)
