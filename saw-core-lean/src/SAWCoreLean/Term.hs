@@ -284,6 +284,12 @@ data RecursorResultMode
 data RecursorConvention = RecursorConvention
   { recScrutineeMode :: RecursorScrutineeMode
   , recResultMode    :: RecursorResultMode
+  , recMotiveResultPosition :: ExpectedPosition
+    -- ^ The declared motive result position (plan Slice 6.1;
+    -- calculus §Recursors): the single source
+    -- 'recursorMotiveResultPosition' computes and from which
+    -- 'recResultMode' and 'recFinalShape' DERIVE. Consumed directly
+    -- by 'motiveConventionFor' for the motive's result mode.
   , recFinalShape    :: BindingShape
   }
   deriving (Eq, Show)
@@ -1647,6 +1653,80 @@ functionConventionResultIsValue ty =
   && isNothing (asPi ty)
   && not (isCryptolNumType ty)
   && (shouldWrapBinder ty || isVariableHead ty)
+
+-- | Calculus §Recursors (plan Slice 6.1): the declared position of a
+-- fully-applied recursor's result — the single field
+-- 'recursorConvention' derives its result mode and final shape from,
+-- and the position the motive convention consumes. Classified from
+-- the recursor motive's body TYPE by the same domain analysis the
+-- argument-mode tables apply to formal/instantiating types
+-- ('phaseBetaArgModesFor' / 'instantiationMode'), with the two
+-- refinements the recursor convention declares:
+--
+--   * a Nat-typed motive body is a runtime VALUE when the recursor
+--     eliminates into a non-Prop sort: the recursor COMPUTES that Nat
+--     from a runtime scrutinee (the recursor instance of the
+--     'natValueResult' rule), it does not stand in an index slot.
+--     Prop-sort elimination keeps Nat raw with the rest of the
+--     logical family.
+--   * a var-headed type-family application (@p y pf@ where @p@'s type
+--     returns a Sort) stays raw: Haskell cannot know whether the
+--     family instantiates to a value-domain type, a proposition, or a
+--     higher universe — commit to nothing and let Lean check the
+--     motive.
+--
+-- A Pi motive body is a function position that always carries its
+-- declared convention ('recursorMotiveFunctionConvention') — never
+-- @ExpectFunctionPosition Nothing@.
+recursorMotiveResultPosition :: Sort -> Term -> ExpectedPosition
+recursorMotiveResultPosition elimSort motiveBody
+  | Just _ <- asSort motiveBody = ExpectRaw RawTypePosition
+  | Just _ <- asEq motiveBody = ExpectRaw RawPropositionPosition
+  | Just _ <- asPi motiveBody =
+      ExpectFunctionPosition
+        (Just (recursorMotiveFunctionConvention motiveBody))
+  | isCryptolNumType motiveBody = ExpectRaw RawTypePosition
+  | Just _ <- asNatType motiveBody =
+      if elimSort /= propSort
+         then ExpectRuntimeValue
+         else ExpectRaw RawIndexPosition
+  | isVariableHeadTypeFamily motiveBody = ExpectRaw RawValuePosition
+  | otherwise = ExpectRuntimeValue
+
+-- | The declared function convention of a function-motive recursor
+-- (plan Slice 6.1): binder positions from the same value-slot
+-- analysis every function convention uses
+-- ('functionConventionValueSlot'), result position mirroring the Pi
+-- type translator's body-wrap rule (gamma.8's @valueBody@: a
+-- value-domain or var-headed body wraps, and a Nat body wraps when
+-- the function consumes a value input — 'natValueResult', both
+-- convention-internal predicates here, not standalone authorities).
+-- The emitted recursor call inhabits the translated motive Pi type,
+-- so this convention is the truthful record of what a fully-applied
+-- function-motive recursor produces.
+recursorMotiveFunctionConvention :: Term -> FunctionConvention
+recursorMotiveFunctionConvention fty =
+  FunctionConvention
+    [ binderPos ix bty | (ix, (_, bty)) <- zip [0 :: Int ..] binders ]
+    resultPos
+  where
+    (binders, ret) = asPiList fty
+    typeIxs = typeArgPositions fty
+    binderPos ix bty
+      | ix `elem` typeIxs =
+          if isJust (asSort bty)
+             then ExpectRaw RawTypePosition
+             else ExpectRaw RawIndexPosition
+      | functionConventionValueSlot typeIxs ix bty = ExpectRuntimeValue
+      | otherwise = ExpectRaw RawValuePosition
+    resultPos
+      | Just _ <- asSort ret = ExpectRaw RawTypePosition
+      | Just _ <- asEq ret = ExpectRaw RawPropositionPosition
+      | isCryptolNumType ret = ExpectRaw RawTypePosition
+      | shouldWrapBinder ret || isVariableHead ret || natValueResult fty =
+          ExpectRuntimeValue
+      | Just _ <- asNatType ret = ExpectRaw RawIndexPosition
+      | otherwise = ExpectRaw RawValuePosition
 
 wrappedHelperFunctionValueSlot :: [Int] -> Int -> Term -> Bool
 wrappedHelperFunctionValueSlot typeIxs ix ty =
@@ -4408,7 +4488,8 @@ translateRecursorAppWithShape crec args = do
                      then pure (paramTrans !! i)
                      else if i == nParams
                        then translateMotiveAtConvention
-                              (motiveConventionFor nIndices motiveReturnsRaw a) a
+                              (motiveConventionFor nIndices
+                                (recMotiveResultPosition convention) a) a
                        else if isCasePos i
                          then translateCaseHandler
                                 motiveReturnsRaw
@@ -4454,6 +4535,13 @@ translateRecursorAppWithShape crec args = do
          (RecursorScrutineeWrapped, _) ->
            rejectWrappedRawRecursor crec convention
   where
+    -- Plan Slice 6.1: the convention DERIVES from the declared
+    -- motive result position ('recursorMotiveResultPosition' — the
+    -- shared domain analysis) instead of local classification
+    -- predicates. RecursorReturnsWrappedValue iff the position is
+    -- 'ExpectRuntimeValue'; a function-motive final shape reads the
+    -- declared function convention's arity and result position (the
+    -- record 'phaseBetaResultShape' used to re-derive here).
     recursorConvention ::
       TermTranslationMonad m =>
       CompiledRecursor -> Bool -> Term -> Int -> m RecursorConvention
@@ -4462,15 +4550,27 @@ translateRecursorAppWithShape crec args = do
             if scrutWrapped'
                then RecursorScrutineeWrapped
                else RecursorScrutineeRaw
-          resultMode = classifyRecursorResult rec motiveBody
-          finalShape = case resultMode of
-            RecursorReturnsWrappedValue   -> BindingWrapped
-            RecursorReturnsRawTypeOrProof -> BindingRaw
-            RecursorReturnsFunction       ->
-              phaseBetaResultShape motiveBody nPostArgs
-          convention = RecursorConvention
+          motivePos =
+            recursorMotiveResultPosition (recursorSort rec) motiveBody
+          resultMode = case motivePos of
+            ExpectRuntimeValue       -> RecursorReturnsWrappedValue
+            ExpectFunctionPosition _ -> RecursorReturnsFunction
+            ExpectRaw _              -> RecursorReturnsRawTypeOrProof
+      finalShape <- case motivePos of
+        ExpectRuntimeValue -> pure BindingWrapped
+        ExpectRaw _        -> pure BindingRaw
+        ExpectFunctionPosition (Just conv)
+          | nPostArgs < length (fcArgPositions conv) -> pure BindingFunction
+          | fcResultPosition conv == ExpectRuntimeValue -> pure BindingWrapped
+          | otherwise -> pure BindingRaw
+        ExpectFunctionPosition Nothing ->
+          Except.throwError (RejectedPrimitive "recursor motive"
+            "internal contract: a recursor motive's function position \
+            \must carry its declared convention")
+      let convention = RecursorConvention
             { recScrutineeMode = scrutMode
             , recResultMode    = resultMode
+            , recMotiveResultPosition = motivePos
             , recFinalShape    = finalShape
             }
       case (scrutMode, resultMode) of
@@ -4484,21 +4584,6 @@ translateRecursorAppWithShape crec args = do
              then pure convention
              else rejectWrappedRawRecursor rec convention
         _ -> pure convention
-
-    classifyRecursorResult :: CompiledRecursor -> Term -> RecursorResultMode
-    classifyRecursorResult rec motiveBody
-      | recursorDirectResultIsValue rec motiveBody
-      , not (isVariableHeadTypeFamily motiveBody) =
-          RecursorReturnsWrappedValue
-      | Just _ <- asPi motiveBody =
-          RecursorReturnsFunction
-      | otherwise =
-          RecursorReturnsRawTypeOrProof
-
-    recursorDirectResultIsValue :: CompiledRecursor -> Term -> Bool
-    recursorDirectResultIsValue rec motiveBody =
-         functionConventionResultIsValue motiveBody
-      || (recursorSort rec /= propSort && isJust (asNatType motiveBody))
 
     rejectWrappedRawRecursor ::
       TermTranslationMonad m =>
@@ -4520,27 +4605,32 @@ translateRecursorAppWithShape crec args = do
     recursorResultDescription RecursorReturnsFunction =
       "function result"
 
+    -- Convention read (plan Slice 6.1): a wrapped scrutinee may be
+    -- sequenced through an eta-expanded function result only when the
+    -- declared motive function convention's result position is a
+    -- runtime value — i.e. the emitted Pi's body wraps, so the eta
+    -- body's @Bind.bind@ typechecks and errors propagate.
     recursorFunctionResultCanPropagate :: Term -> Bool
     recursorFunctionResultCanPropagate fty =
-      not (null binders) &&
-      (functionConventionResultIsValue retTy || natValueResult fty)
+      not (null (fcArgPositions conv)) &&
+      fcResultPosition conv == ExpectRuntimeValue
       where
-        (binders, retTy) = asPiList fty
+        conv = recursorMotiveFunctionConvention fty
 
+    -- Post-scrutinee actuals adapt at the declared motive function
+    -- convention's binder positions (plan Slice 6.1): runtime-value
+    -- slots lift, every raw slot splices.
     recursorPostArgs ::
       TermTranslationMonad m => Term -> [TranslatedTerm] -> m [Lean.Term]
     recursorPostArgs fty argResults =
       sequence
-        [ case drop ix binders of
-            (_, bty) : _
-              | functionConventionValueSlot typeIxs ix bty ->
-                  adaptToRuntime result
-            _ -> pure (ttLean result)
+        [ case drop ix positions of
+            ExpectRuntimeValue : _ -> adaptToRuntime result
+            _                      -> pure (ttLean result)
         | (ix, result) <- zip [0..] argResults
         ]
       where
-        (binders, _) = asPiList fty
-        typeIxs = typeArgPositions fty
+        positions = fcArgPositions (recursorMotiveFunctionConvention fty)
 
     etaExpandWrappedScrutineeFunctionResult ::
       TermTranslationMonad m =>
@@ -5443,8 +5533,8 @@ translateLambdaAtConvention conv t = do
 -- 'RawTypePosition' even for sort-typed index binders — motive
 -- binders keep the surrounding 'sortBinderMode', unlike the
 -- type-binder slots of value-lambda conventions.
-motiveConventionFor :: Int -> Bool -> Term -> MotiveConvention
-motiveConventionFor nIndices motiveReturnsRaw motiveTerm =
+motiveConventionFor :: Int -> ExpectedPosition -> Term -> MotiveConvention
+motiveConventionFor nIndices motiveResultPos motiveTerm =
   let (params, _) = asLambdaList motiveTerm
       positions =
         [ if ix < nIndices
@@ -5453,9 +5543,9 @@ motiveConventionFor nIndices motiveReturnsRaw motiveTerm =
         | (ix, _) <- zip [0 :: Int ..] params
         ]
   in MotiveConvention positions
-       (if motiveReturnsRaw
-           then MotiveComputesRawType
-           else MotiveComputesRuntimeValueType)
+       (if motiveResultPos == ExpectRuntimeValue
+           then MotiveComputesRuntimeValueType
+           else MotiveComputesRawType)
 
 -- | Translate a recursor motive at its declared convention (plan
 -- Slice 3c; calculus §Recursors / §Eq.rec: motive binder positions
