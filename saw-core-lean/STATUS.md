@@ -1,6 +1,6 @@
 # saw-core-lean status
 
-Last updated: 2026-06-28
+Last updated: 2026-07-11
 
 ## Purpose
 
@@ -16,64 +16,82 @@ the emitted artifact should remain inspectable and replayable.
 
 ## Current Strategy
 
-The current active design is Phase beta: value-domain SAW expressions
-translate to Lean expressions at `Except String T`, where `T` is the
-Lean translation of the SAW type. Type-level expressions translate raw.
+The active design is Phase beta, implemented by the position/callee
+calculus (`doc/2026-07-02_position-callee-calculus.md`): value-domain
+SAW expressions translate to Lean expressions at `Except String T`,
+where `T` is the Lean translation of the SAW type; type-level
+expressions translate raw. As of the position-directed translation
+refactor (`doc/2026-07-08_position-directed-translation-plan.md`,
+Slices 0–7 complete), the calculus IS the implementation:
 
-Informally:
-
-- If `e : tau` and `tau : sort 0`, then `e` emits as
-  `Except String [[tau]]`.
-- If `e` is a type expression, sort expression, motive, or proposition,
-  it emits raw.
-- Function application binds wrapped value arguments with `Bind.bind`,
-  passes type/index arguments raw, and wraps value results with
-  `Pure.pure`.
-- Recursor scrutinees are unwrapped before elimination when the recursor
-  produces a value; recursor case binders stay raw because Lean's
-  recursor signatures require raw constructor arguments.
-- SAW `error` routes to `saw_throw_error`, preserving user-visible
-  errors.
-- `Prelude.fix` routes through generic proof-carrying obligations.
-  Shape-specific direct helpers and unreachable defaults have been
-  removed; recurrence-specific automation must be supplied as
-  Lean-checked proof code.
-
-This is the intended soundness shape. Any implementation exception should
-be documented as either a type-position exception, a Lean signature
-adapter, or an explicit residual-trust item.
+- Every translation is directed by a declared expected position
+  (`ExpectedPosition`); callees carry declared argument-mode
+  conventions (`ArgMode` tables); adaptation between representations
+  happens at a single chokepoint (`adaptTo`) where forbidden
+  adaptations are unrepresentable.
+- Producers stamp `TranslatedTermAt` production records (shape +
+  position); records are the translator's single source of truth.
+  Shape is never re-derived from emitted Lean terms — that inspection
+  class is deleted and a source lint in the smoketest keeps it deleted.
+- Equality subjects classify by the operand-domain rule
+  (`standaloneEqualitySubjectRep`); no surround declares a
+  representation. `Eq.rec` transports run at a fully declared
+  `EqRecConvention`.
+- Recursors run at a declared `RecursorConvention` derived from the
+  motive result position; every directly-emitted `@Foo.rec` carries a
+  Lean-checked constructor-order assertion (`saw_ctor_order`), so a
+  reordered Lean support inductive or a reordered SAWCore declaration
+  fails the emitted file loudly.
+- SAW `error` routes to `saw_throw_error`; `Prelude.fix` and partial
+  operations route through proof-carrying obligations with
+  Lean-checked evidence.
 
 ## Known State
 
-Passing:
+Passing (the standing fences):
 
-- The handwritten Lean support library builds with `lake build`.
-- `cabal test saw-core-lean-smoketest` passes.
-- The support-library negative shape probes reject as intended.
-- The old direct fix-shape helper surface has been deleted from the
-  support library and proof examples.
+- Lean support library: `lake build` green, including the
+  `saw_ctor_order` positive/negative self-tests.
+- `cabal test saw-core-lean-smoketest`: 57 tests, including the
+  Slice 7 anti-regression source lint.
+- `otherTests/saw-core-lean`: `make conformance` exit 0 — 193 rows
+  (differential SAW-vs-Lean evaluation, obligation shape, pinned known
+  gaps), with emitted artifacts elaborated.
+- Emitted-Lean byte-diff oracle:
+  `support/emitted-lean-snapshot.sh diff .snapshots/slice0-baseline`
+  clean at 318 artifacts.
+- Driver rows (`bash test.sh` per-driver, `lean-driver-test.sh`) green,
+  including the ChaCha20 core verify and prelude auto-emit drivers.
 
-Not yet passing:
+Known holes, all loud or pinned:
 
-- The full `otherTests/saw-core-lean` suite still fails broadly.
-- Many `.lean.good` files predate Phase beta and need regeneration after
-  emitted Lean elaborates.
-- Some proof scripts are still written against raw or obsolete helper-era
-  goals and need replacement with examples over the generic obligation
-  surface.
-- Focused stream and ChaCha generated Lean now elaborates after the Nat
-  value-position and stream constructor/lambda repairs. Their `.lean.good`
-  files are still stale.
-- Some emitted Lean still does not elaborate. The main remaining semantic
-  gap is variable-headed value types around `Eq.rec` / `coerce`; proof
-  scripts also need to be ported to Phase-beta `Except String` goals.
+- One deliberate red pair: `drivers/cryptol_chacha20_{core_iterate,
+  iround_zero}` (`Prelude::Stream@core` rejection vs goldens expecting
+  success) — parked pending a user decision between the
+  parametric-bridge translation path and an expected-rejection
+  category. Do not refresh those goldens.
+- Direct recursors for Nat/Pos/Z/Bool/AccessibleNat/AccessiblePos are
+  gated with specific diagnostics (constructor order / representation
+  mismatches); the design for lifting the gate is
+  `doc/2026-07-03_direct-recursor-semantics-design.md` (PosRep
+  inductive + source-shaped checked realizations), tracked separately.
+- User-datatype recursors and datatype auto-emission reject with
+  diagnostics (pinned by `saw-boundary/user_datatype_rejection`).
+- Filed pre-existing gaps (TODO.md): top-level `write_lean_term` of a
+  runtime-computed Nat annotates a raw `: Nat` against a wrapped body;
+  `PairValue` at a Prop instantiation emits a carrier the
+  `PairType : Type -> Type -> Type` realization cannot take. Both fail
+  loudly at elaboration.
+- Two Vec/BitVec round-trip axioms remain in the support library TCB
+  (cheap, separately tracked proof task).
 
-## Next Repair Order
+## Next Work
 
-1. Fix emitted Lean elaboration before refreshing golden files.
-2. Revisit variable-headed value-type wrapping now that Nat value
-   positions and stream constructor/lambda adapters are in place.
-3. Add proof-side simp lemmas for the Phase-beta helpers.
-4. Rebuild proof examples against the generic proof-carrying obligation
-   shape and regenerate `.lean.good` files.
-5. Re-sync architecture and trust docs to the implementation.
+1. The direct-recursor / `PosRep` program
+   (`doc/2026-07-03_direct-recursor-semantics-design.md`) — now
+   tractable on the position-driven recursor convention.
+2. The two filed emission gaps above (both have clear fixes: annotate
+   from the produced record's shape; reject or universe-generalize the
+   Prop-instantiated pair).
+3. Resolve the parked Stream@core pair decision.
+4. SAW-side `offline_lean` replay plumbing (deferred by design).

@@ -803,6 +803,13 @@ withBindingInfo ident info =
 --   * Pi types (function types): the outer wrap stays off, but
 --     the function's argument and result types still wrap via
 --     recursive translation (translating the inner Pi structure).
+--
+-- CONVENTION-INTERNAL predicate (plan Slice 7): this is the
+-- value-domain test the convention DERIVATIONS consult (binder
+-- positions in the lambda/Pi/quantifier conventions,
+-- 'phaseBetaResultIsValue', 'functionConventionValueSlot') — never a
+-- standalone position authority at use sites. Positions come from
+-- declared conventions and production records.
 shouldWrapBinder :: Term -> Bool
 shouldWrapBinder ty
   | Just _ <- asSort ty       = False
@@ -818,7 +825,12 @@ isCryptolNumType ty = case asGlobalDef ty of
          && identModule i == mkModuleName ["Cryptol"]
   Nothing -> False
 
--- | True for terms whose head is a SAW 'Variable' — i.e. the term
+-- | Convention-internal predicate (plan Slice 7): consulted by the
+-- convention derivations ('phaseBetaResultIsValue',
+-- 'functionConventionValueSlot'/'functionConventionResultIsValue') —
+-- never a standalone position authority.
+--
+-- True for terms whose head is a SAW 'Variable' — i.e. the term
 -- is a (possibly applied) type-variable. Examples:
 --   * @t@ where @t : sort 1@ — the binder is at the type
 --     variable itself.
@@ -1382,9 +1394,8 @@ buildLiftedWithShape resultShape head_ pureWrap shouldBind argResults = do
 etaExpandWrappedFunctionResult ::
   TermTranslationMonad m => Term -> Lean.Term -> m Lean.Term
 etaExpandWrappedFunctionResult fty fn = do
-  let (binders, retTy) = asPiList fty
-      pureWrap = functionConventionResultIsValue retTy
-              || natValueResult fty
+  let (binders, _) = asPiList fty
+      pureWrap = phaseBetaResultIsValue fty
   if null binders || not pureWrap
      then pure fn
      else do
@@ -1579,7 +1590,9 @@ phaseBetaFunctionValueModesFor fty =
       | shouldWrapBinder bty = RawValueArg
       | otherwise = IndexArg
 
--- | A raw SAW function whose return type is Nat can still be a
+-- | Convention-internal predicate (plan Slice 7), consulted ONLY by
+-- 'phaseBetaResultIsValue' — never a standalone position authority.
+-- A raw SAW function whose return type is Nat can still be a
 -- value-domain computation under Phase beta when it consumes a non-index
 -- value argument. Examples: @bvToNat : Vec n Bool -> Nat@ and
 -- @intToNat : Int -> Nat@. Their Lean results must be @Pure.pure@-lifted.
@@ -1593,11 +1606,34 @@ natValueResult fty =
          ix `notElem` typeIxs
       && shouldWrapBinder bty
 
+-- | Calculus §Callee Conventions: THE value-domain result rule of the
+-- ordinary Phase-β convention family — a callee's (fully applied)
+-- result is a runtime value, and therefore Except-wrapped, iff its
+-- source return type is value-domain ('shouldWrapBinder'), var-headed
+-- (a polymorphic result instantiated by the caller), or a Nat computed
+-- from a value input ('natValueResult'). This is the single authority;
+-- every consumer (the application paths, partial-op contracts, eta
+-- expansion, the Pi type translator's body wrap, the recursor motive
+-- convention) reads it rather than restating the disjunction (plan
+-- Slice 7 centralization — the disjuncts are convention-internal
+-- predicates, not position authorities).
+phaseBetaResultIsValue :: Term -> Bool
+phaseBetaResultIsValue fty =
+  shouldWrapBinder ret || isVariableHead ret || natValueResult fty
+  where
+    (_, ret) = asPiList fty
+
+-- | The result-shape stamp of the ordinary Phase-β definition
+-- convention ('phaseBetaArgModesFor' family) — convention-internal
+-- (plan Slice 7): consulted only where that convention is the
+-- declared one (the ordinary application paths and the partial-op
+-- contracts), never as a free-floating shape oracle. Function iff
+-- partially applied or Pi result; wrapped iff
+-- 'phaseBetaResultIsValue'; raw otherwise.
 phaseBetaResultShape :: Term -> Int -> BindingShape
 phaseBetaResultShape fty nApplied
   | nApplied < length binders = BindingFunction
-  | shouldWrapBinder ret || isVariableHead ret || natValueResult fty =
-      BindingWrapped
+  | phaseBetaResultIsValue fty = BindingWrapped
   | isJust (asPi ret) = BindingFunction
   | otherwise = BindingRaw
   where
@@ -1671,6 +1707,13 @@ translateFunctionWithWrappedResult t = do
               pure (ttLean result)
        _ -> translateTerm t
 
+-- | Convention-internal (plan Slice 7): the value-slot test of the
+-- function-convention derivations ('recursorMotiveFunctionConvention',
+-- 'translateFunctionConventionBinders', 'recursorPostArgs' via the
+-- declared convention) — a binder is a runtime-value slot iff it is
+-- not a type index and its type is value-domain (var-headed counts as
+-- value: the instantiation is the caller's). Not a standalone
+-- position authority.
 functionConventionValueSlot :: [Int] -> Int -> Term -> Bool
 functionConventionValueSlot typeIxs ix ty =
      ix `notElem` typeIxs
@@ -1680,6 +1723,14 @@ functionConventionValueSlot typeIxs ix ty =
   && not (isCryptolNumType ty)
   && (shouldWrapBinder ty || isVariableHead ty)
 
+-- | Convention-internal (plan Slice 7): the type-domain test "is this
+-- SAW type a value-domain type" with var-headed types counting as
+-- value. Consulted by the structural-recursor-field convention (case
+-- handler field shadows: which constructor fields get the
+-- @Pure.pure@ let-shadow and the wrapped let annotation). Despite
+-- the name, the argument is a TYPE, not a function; the function
+-- RESULT rule is 'phaseBetaResultIsValue'. Not a standalone position
+-- authority.
 functionConventionResultIsValue :: Term -> Bool
 functionConventionResultIsValue ty =
      isNothing (asSort ty)
@@ -1757,8 +1808,7 @@ recursorMotiveFunctionConvention fty =
       | Just _ <- asSort ret = ExpectRaw RawTypePosition
       | Just _ <- asEq ret = ExpectRaw RawPropositionPosition
       | isCryptolNumType ret = ExpectRaw RawTypePosition
-      | shouldWrapBinder ret || isVariableHead ret || natValueResult fty =
-          ExpectRuntimeValue
+      | phaseBetaResultIsValue fty = ExpectRuntimeValue
       | Just _ <- asNatType ret = ExpectRaw RawIndexPosition
       | otherwise = ExpectRaw RawValuePosition
 
@@ -2611,10 +2661,8 @@ lowerPartialOpContract contract ident args = do
     Nothing ->
       Except.throwError (RejectedPrimitive (Text.pack (identName ident))
         "partial-operation contract could not find the SAWCore source type")
-  let (binders, retTy) = asPiList fty
-      pureWrap =
-           phase
-        && (shouldWrapBinder retTy || isVariableHead retTy || natValueResult fty)
+  let (binders, _) = asPiList fty
+      pureWrap = phase && phaseBetaResultIsValue fty
       -- Plan Slice 4b: bind plan from the derived convention (the
       -- raw checked helpers are ordinary raw-formal targets).
       derivedModes = phaseBetaArgModesFor fty args
@@ -3853,9 +3901,7 @@ originalDispatchWithShape i args = do
                    let shouldBindForArgs =
                          take (length args') (shouldBind ++ repeat False)
                        pureWrap =
-                            shouldWrapBinder ret
-                         || isVariableHead ret
-                         || natValueResult fty
+                            phaseBetaResultIsValue fty
                          || any id shouldBindForArgs
                        resultShape =
                          if pureWrap
@@ -3897,10 +3943,7 @@ originalDispatchWithShape i args = do
                          | name <- etaNames
                          ]
                        etaArgTerms = argTerms ++ map Lean.Var etaNames
-                       pureWrap =
-                            shouldWrapBinder ret
-                         || isVariableHead ret
-                         || natValueResult fty
+                       pureWrap = phaseBetaResultIsValue fty
                        -- Plan Slice 4b: the eta formals present the
                        -- convention's declared representations — a
                        -- missing 'RawValueArg' formal is wrapped
@@ -5377,12 +5420,11 @@ translateTermUnshared t =
       -- those positions; 'translateBindersSelective' applies
       -- 'skipBinderWrap' transiently at each.
       phase <- phaseBetaEnabled
-      let valueBody =
-            phase &&
-            ( shouldWrapBinder body
-              || isVariableHead body
-              || natValueResult t
-            )
+      -- gamma.8: the Pi body wraps iff the convention's value-domain
+      -- result rule says the function computes a runtime value —
+      -- @body@ is 'asPiList'-peeled above, exactly the ret the rule
+      -- inspects.
+      let valueBody = phase && phaseBetaResultIsValue t
           -- A Pi with a Prop or Eq body is a /quantifier/
           -- ('∀ x, P x') — its binders are universally-quantified
           -- value inputs that should wrap (so the body's

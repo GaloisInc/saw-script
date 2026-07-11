@@ -538,10 +538,39 @@ doc for per-slice regression fences and bounded validation commands):
   assertions elaborating in every recursor row;
   `recursor_raw_scrutinee_effectful_value` pins the assertion emission;
   snapshot re-baselined at 318 artifacts, diff clean.
-- [ ] **Slice 7** — delete the demoted heuristics; add an anti-regression lint
+- [x] **Slice 7** — delete the demoted heuristics; add an anti-regression lint
   (no `bindingShapeOfTerm`, no `CalleeTransitional`, no emitted-AST shape
   inspection); sync `STATUS.md`, the Priority 2 items below, and the calculus
   doc's "Current Rough Edges".
+  **COMPLETE (2026-07-11).** The value-domain result rule centralized in
+  `phaseBetaResultIsValue` (single authority; the trio
+  `shouldWrapBinder ret || isVariableHead ret || natValueResult fty` was
+  restated at 7 sites — application full/eta paths, partial-op
+  contracts, `etaExpandWrappedFunctionResult`, the Pi body wrap, the
+  recursor motive convention — all now read the one function;
+  corpus byte-identical). `natValueResult` demoted to a
+  convention-internal predicate of that rule; `phaseBetaResultShape`
+  reduced to the documented result-shape stamp of the ordinary Phase-β
+  convention; `shouldWrapBinder`/`isVariableHead`/
+  `functionConventionValueSlot`/`functionConventionResultIsValue`
+  carry convention-internal doc contracts. `bindingShapeOfTerm`,
+  emitted-TERM inspection, and `CalleeTransitional` confirmed gone.
+  Anti-regression lint added to the smoketest (2 cases): a
+  forbidden-name check over ten deleted heuristics (comment tombstones
+  exempt; validated to FIRE via a string-literal canary) and ceiling
+  gates on the allow-listed emitted-TYPE self-mirrors
+  (`bindingShapeOfType` 7, `isExceptStringType` 5, `peelLeanPiTypes`
+  6 non-comment lines — do not add consumers; the
+  `applyKnownFunctionWithShape` result peel needs its own inert-oracle
+  step to demote, NOT attempted here because the source mirror can
+  diverge under `inRecursorCaseBinder`-suppressed type wraps).
+  `STATUS.md` rewritten (was stale since 2026-06-28); Priority 2 items
+  "promote design to explicit data types", "centralize adaptation",
+  "replace transitional local policy" marked complete; the calculus doc
+  gained an "Implementation Status (2026-07-11)" section recording that
+  the calculus IS the implementation and the remaining rough edges.
+  Exit fence: smoketest 57/57 (55 + 2 lint), conformance 193 OK exit 0,
+  emitted Lean byte-identical to the slice0 baseline.
 
 Guardrails (from the calculus §Stop Conditions): no new Lean axioms; no `sorry`
 as evidence; never classify by fixture name or emitted Lean AST; never use
@@ -1114,8 +1143,19 @@ reject and pin a fixture rather than widen a heuristic.
     instance of the general rule: representation choices belong in Lean-side
     realizations or proof-carrying contracts, not ad hoc Haskell rewrites.
 
-- [ ] Promote the design from scattered policy to explicit data types.
-  - Add first-class equivalents of:
+- [x] Promote the design from scattered policy to explicit data types.
+  - **COMPLETE (2026-07-11, via the position-directed refactor Slices
+    1–6):** `ExpectedPosition` + `RawReason` (positions),
+    `ArgMode`/`ResultMode` contract tables and `FunctionConvention` /
+    `MotiveConvention` / `EqRecConvention` / `RecursorConvention`
+    (callee conventions), and `TranslatedTermAt` production records
+    (shape + produced-at position) are the shape abstractions.
+    `CalleeConvention` was deliberately DELETED rather than filled in
+    (Slice 4c): the dispatch's real classifier is the declarative guard
+    chain over the contract tables. `BindingShape` remains the Γ-record
+    representation (`BindingInfo` carries position and source type
+    alongside it).
+  - Original targets, for the record:
     - `ExpectedShape`
     - `RawReason`
     - `CalleeConvention`
@@ -1140,7 +1180,13 @@ reject and pin a fixture rather than widen a heuristic.
     argument's SAWCore sort (`Bool`/`Vec n Bool` -> level 1, `sort k` literals
     -> their next Lean sort), and rejects if a required level is still unknown.
 
-- [ ] Centralize adaptation.
+- [x] Centralize adaptation.
+  - **COMPLETE (2026-07-11):** `adaptTo` is the single adaptation
+    chokepoint (Slice 2); positions are inputs (`translateAt`), so
+    translation is position-directed rather than translate-then-repair;
+    forbidden adaptations throw `ForbiddenAdaptation` — unrepresentable,
+    never defaulted. The allowed/forbidden lists below are enforced by
+    the chokepoint's type of allowed moves.
   - Target operation:
     - translate naturally and return a shape
     - adapt exactly once to an expected shape
@@ -1157,8 +1203,26 @@ reject and pin a fixture rather than widen a heuristic.
     binder-position universe generalization where a value-position concrete
     sort literal is intended. Add focused tests before changing this path.
 
-- [ ] Replace transitional local policy.
-  - Audit and migrate uses of:
+- [x] Replace transitional local policy.
+  - **COMPLETE (2026-07-11, Slice 7 closing the refactor):**
+    `shouldWrapBinder`, `isVariableHead`, `natValueResult`,
+    `typeArgPositions`, and the `functionConvention*` predicates are
+    documented CONVENTION-INTERNAL predicates consulted only by the
+    convention derivations; the value-domain result rule is centralized
+    in `phaseBetaResultIsValue` (single authority — application paths,
+    partial-op contracts, eta expansion, the Pi body wrap, and the
+    recursor motive convention all read it). `Eq`/`Eq.rec` run at the
+    declared standalone-equality and `EqRecConvention` conventions
+    (Slice 5); recursors at the declared `RecursorConvention`
+    (Slice 6); `fix` and partial ops at proof-carrying contracts.
+    `skipBinderWrap` / `inRecursorCaseBinder` survive as documented
+    convention-scoped context flags, per the stated target ("not zero
+    local cases"). The smoketest's Slice 7 anti-regression lint keeps
+    the deleted heuristics deleted and caps the allow-listed
+    emitted-type self-mirrors (`bindingShapeOfType`,
+    `isExceptStringType`/`peelLeanPiTypes` in
+    `applyKnownFunctionWithShape`) at their current consumer counts.
+  - Original audit list, for the record:
     - `skipBinderWrap`
     - `inRecursorCaseBinder`
     - `shouldWrapBinder`

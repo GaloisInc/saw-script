@@ -621,6 +621,24 @@ support-library inductive to drift). The six gated families stay
 rejected. Slice 7 starts with the recursor family fully on the shared
 model and zero unchecked constructor-order trust.
 
+**Slice 7 COMPLETE (2026-07-11) — THE PLAN IS DONE.** The value-domain
+result rule centralized in `phaseBetaResultIsValue` (seven restatements
+of the `shouldWrapBinder || isVariableHead || natValueResult`
+disjunction collapsed byte-identically); `natValueResult` and
+`phaseBetaResultShape` demoted to documented convention-internal
+helpers; the smoketest gained the anti-regression source lint
+(forbidden-name check over the ten deleted heuristics, validated to
+fire; ceiling gates on the two allow-listed emitted-TYPE self-mirrors).
+`STATUS.md`, the TODO Priority 2 items, and the calculus doc's new
+"Implementation Status" section record the end state. One deliberate
+non-goal: the `applyKnownFunctionWithShape` result peel keeps its
+self-mirror — the source-derived swap can diverge under
+`inRecursorCaseBinder`-suppressed type wraps and needs its own
+inert-oracle step; the lint caps it instead. Definition of done:
+`translateAt` is the core recursion, `adaptTo` the only adaptation
+site, forbidden adaptations unrepresentable, emitted-AST inspection
+deleted and lint-gated.
+
 Each slice is one or a few commits, each with: `git diff --check`, `cabal build
 exe:saw`, `cabal test saw-core-lean-smoketest`, `bash test.sh conformance`, and
 a reviewed emitted-Lean diff on the slice's regression fence. Commit only on a

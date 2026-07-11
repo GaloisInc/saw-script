@@ -16,6 +16,48 @@ implementation plan. Its job is to make the design reviewable:
 This is not a full formalization of SAWCore. It is the contract the Haskell
 emitter must satisfy so that later Lean-side proof work has a sound target.
 
+## Implementation Status (2026-07-11)
+
+The calculus is now the implementation, not an approximation of it
+(position-directed translation plan, Slices 0–7 complete):
+
+- Positions are `ExpectedPosition`/`RawReason` values; callee
+  conventions are `ArgMode`/`ResultMode` contract tables plus the
+  declared `FunctionConvention`, `MotiveConvention`, `EqRecConvention`,
+  and `RecursorConvention` records; production records
+  (`TranslatedTermAt`) are the single source of truth for what a
+  translation produced.
+- Adaptation happens only at the `adaptTo` chokepoint; the forbidden
+  adaptations below are unrepresentable (`ForbiddenAdaptation`), never
+  defaulted.
+- Equality subjects classify by the operand-domain rule
+  (`standaloneEqualitySubjectRep`); no surround declares a subject
+  representation.
+- The value-domain result rule has a single authority
+  (`phaseBetaResultIsValue`); the value-domain predicates
+  (`shouldWrapBinder`, `isVariableHead`, `natValueResult`) are
+  documented convention-internal helpers, not position authorities.
+- Every directly-emitted `@Foo.rec` carries a Lean-checked
+  constructor-order assertion (`saw_ctor_order`).
+- A source lint in the smoketest keeps the deleted heuristic families
+  deleted (emitted-term shape inspection, transitional callee escape
+  hatches, mode-guards) and caps the two documented emitted-TYPE
+  self-mirrors at their current consumer counts.
+
+Remaining rough edges, all documented and loud:
+
+- Two emitted-TYPE self-mirrors survive with lint ceilings:
+  `bindingShapeOfType` (binder-site classification of types the caller
+  itself just emitted) and the `peelLeanPiTypes`/`isExceptStringType`
+  result peel in `applyKnownFunctionWithShape` (the function-value
+  family's result shape). Demoting the latter needs its own
+  inert-oracle step; do not add consumers.
+- `skipBinderWrap` and `inRecursorCaseBinder` survive as documented
+  convention-scoped context flags.
+- The gap/rejection families listed at the end of this note remain
+  rejection boundaries (direct recursors for the six gated families,
+  user datatypes, floats, etc.).
+
 ## Two Translations
 
 The design separates raw type translation from runtime value representation.

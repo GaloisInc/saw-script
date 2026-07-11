@@ -9,7 +9,7 @@ emission) so a failure's cause is obvious from the test name.
 
 module Main (main) where
 
-import           Data.List           (isInfixOf)
+import           Data.List           (isInfixOf, isPrefixOf)
 import qualified Data.Text           as Text
 import qualified Language.Lean.AST   as Lean
 import qualified Language.Lean.Pretty as Lean
@@ -1203,6 +1203,93 @@ goalEmissionTests sc = testGroup "SAWCoreLean.Lean.translateGoalAsDeclImports"
   ]
 
 --------------------------------------------------------------------------------
+-- Anti-regression source lint (plan Slice 7)
+--------------------------------------------------------------------------------
+
+-- | Backend source files the lint sweeps.
+lintSourceFiles :: [FilePath]
+lintSourceFiles =
+  map ("saw-core-lean/src/" ++)
+    [ "SAWCoreLean/Term.hs"
+    , "SAWCoreLean/Monad.hs"
+    , "SAWCoreLean/SAWModule.hs"
+    , "SAWCoreLean/CryptolModule.hs"
+    , "SAWCoreLean/SpecialTreatment.hs"
+    , "SAWCoreLean/Lean.hs"
+    , "Language/Lean/AST.hs"
+    , "Language/Lean/Pretty.hs"
+    ]
+
+-- | Names of deleted heuristics that must never reappear in CODE
+-- (comment lines — tombstone NOTEs — are exempt). Each entry names
+-- the slice that deleted it.
+lintForbiddenNames :: [(String, String)]
+lintForbiddenNames =
+  [ ("bindingShapeOfTerm",       "Slice 2: shape guessed from emitted Lean term AST")
+  , ("bindingShapeOfLeanTermM",  "Slice 2: monadic emitted-AST shape guess")
+  , ("translatedTermAsWrapped",  "Slice 2: wrap-status read off the emitted term")
+  , ("CalleeTransitional",       "Slice 4c: the undeclared-convention escape hatch")
+  , ("argumentBindPlan",         "Slice 4b: bind plan from emitted types, not declared modes")
+  , ("polymorphicFormalInstantiatedExpected", "Slice 4b/debts: Pi-only instantiation predicate")
+  , ("lowerRawLogicalCalleeRawMode", "debts slice: mode-guard over false raw-mode records")
+  , ("equalityPropositionAtSubjectRep", "debts slice: surround-declared rho_eq entry point")
+  , ("subjectRepFromTranslatedOperands", "Slice 5a: renamed to standaloneEqualitySubjectRep")
+  , ("classifyRecursorResult",   "Slice 6.1: local recursor classification predicates")
+  ]
+
+-- | Allow-listed emitted-TYPE self-mirrors (documented
+-- convention-internal classifiers of types the translator itself just
+-- emitted). The ceiling is the current number of non-comment source
+-- LINES mentioning the name; growing it means a NEW consumer was
+-- added, which the plan forbids ("do not add new consumers").
+-- Shrinking is always fine — lower the ceiling when you demote a use.
+lintSelfMirrorCeilings :: [(String, Int)]
+lintSelfMirrorCeilings =
+  [ ("bindingShapeOfType", 7)   -- definition + binder-site Γ records
+  , ("isExceptStringType", 5)   -- definition + bindingShapeOfType
+                                -- + applyKnownFunctionWithShape result peel
+  , ("peelLeanPiTypes",    6)   -- definition + the same result peel
+  ]
+
+-- | Non-comment source lines of a file (drops whole-line @--@
+-- comments; block comments in these sources are file headers that
+-- never mention the linted names).
+lintCodeLines :: String -> [String]
+lintCodeLines source =
+  [ l | l <- lines source
+      , not ("--" `isPrefixOf` dropWhile (== ' ') l) ]
+
+antiRegressionLintTests :: TestTree
+antiRegressionLintTests = testGroup "anti-regression source lint (Slice 7)"
+  [ testCase "deleted heuristics stay deleted" $ do
+      sources <- mapM readFile lintSourceFiles
+      let hits =
+            [ (file, name, why)
+            | (file, source) <- zip lintSourceFiles sources
+            , (name, why) <- lintForbiddenNames
+            , any (name `isInfixOf`) (lintCodeLines source)
+            ]
+      assertBool
+        ("resurrected deleted heuristic(s) — positions come from declared \
+         \conventions and production records, never from emitted Lean: "
+         ++ show hits)
+        (null hits)
+  , testCase "emitted-type self-mirrors gain no new consumers" $ do
+      sources <- mapM readFile lintSourceFiles
+      let allCode = concatMap lintCodeLines sources
+          counts =
+            [ (name, ceiling_, length (filter (name `isInfixOf`) allCode))
+            | (name, ceiling_) <- lintSelfMirrorCeilings
+            ]
+          over_ = [ c | c@(_, ceil_, n) <- counts, n > ceil_ ]
+      assertBool
+        ("emitted-type self-mirror gained a consumer (name, ceiling, found): "
+         ++ show over_ ++ " — classify from source types or declared \
+         \conventions instead, or (if you demoted a use) lower the ceiling")
+        (null over_)
+  ]
+
+--------------------------------------------------------------------------------
 -- Entry point
 --------------------------------------------------------------------------------
 
@@ -1214,4 +1301,5 @@ main = do
     [ prettyPrinterTests
     , translatorTests sc
     , goalEmissionTests sc
+    , antiRegressionLintTests
     ]
