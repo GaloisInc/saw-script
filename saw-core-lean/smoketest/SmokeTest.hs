@@ -877,6 +877,30 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertNotContainsSquashed "function field is not bound as an Except value"
                                 "Bind.bind (fun (x : Except String Bool)" out
 
+  , testCase "partial ctor eta formals are instantiation-directed" $ do
+      -- Debts slice: a var-headed formal's mode follows the SUPPLIED
+      -- type actual ('instantiationMode'), not a blanket value-domain
+      -- assumption. Partially apply PairValue at a := Bool -> Bool,
+      -- b := Bool: the missing x-slot eta formal is a FUNCTION —
+      -- spliced structurally into the ctor, never Bind.bind-bound as
+      -- an Except value — while the missing y-slot eta formal is the
+      -- phase-beta wrapped representation and binds. (The residual
+      -- assumption would declare BOTH wrapped, emitting Bind.bind
+      -- over a function — malformed Lean. Top-level partial
+      -- applications never elaborate — eta binders are unannotated —
+      -- so this pin lives here, not in an obligations row.)
+      boolTy <- scBoolType sc
+      bName <- scFreshVarName sc "b"
+      fnTy <- scPi sc bName boolTy boolTy
+      pairPartial <- scGlobalApply sc "Prelude.PairValue" [fnTy, boolTy]
+      out <- translateOrFail sc "pairPartialFnInst" pairPartial
+      assertContainsSquashed "value-slot eta formal binds"
+                             "Bind.bind η_1" out
+      assertContainsSquashed "function-slot eta formal splices raw"
+                             "Bool η_0 v_3" out
+      assertNotContainsSquashed "function-slot eta formal is not bound"
+                                "Bind.bind η_0" out
+
   , testCase "Eq.rec proof supplied to coerce stays raw" $ do
       typeSort <- scSort sc (mkSort 0)
       boolTy <- scBoolType sc

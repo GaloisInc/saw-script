@@ -1403,31 +1403,41 @@ etaExpandWrappedFunctionResult fty fn = do
 -- itself just emitted from known source types, and are 4c demotion
 -- targets. Do not add new consumers of either.
 
--- | The source-based replacement for
--- 'polymorphicFormalInstantiatedExpected' (plan Slice 4b): the
--- predicate is TRUE only when the instantiating type actual is
--- LITERALLY the representation the formal would otherwise be adapted
--- to — a Pi (function) instantiation, whose translation is Pi-headed.
--- A concrete value-domain instantiation (PairValue's @α := Vec 8
--- Bool@) stays FALSE: the raw-formal Lean target consumes the raw
--- value, so the wrapped actual binds. (First candidate used
--- 'shouldWrapBinder' here and the inert oracle rejected it on the
--- smoketest — value-domain instantiation is NOT the same question as
--- wrapped-representation instantiation. The 'isExceptStringType' half
--- of the emitted predicate has no source-level trigger; the oracle
--- verifies it is dead across the corpus before the swap.)
-polymorphicFormalInstantiatedExpectedSrc ::
-  [(VarName, Term)] -> [Term] -> Int -> Term -> Bool
-polymorphicFormalInstantiatedExpectedSrc binders srcArgs ix bty =
+-- | For a formal whose declared type is a bare parameter variable
+-- (@x : α@ with @α@ bound earlier in the same telescope), look up the
+-- SUPPLIED type actual instantiating that parameter. 'Nothing' when
+-- the actual is not supplied (partial application cut before the type
+-- argument) or the formal's type is not a bare telescope variable
+-- (var-headed applications like @α x@ stay residual-assumed).
+varHeadedInstantiation ::
+  [(VarName, Term)] -> [Term] -> Int -> Term -> Maybe Term
+varHeadedInstantiation binders srcArgs ix bty =
   case unwrapTermF bty of
-    Variable vn _ ->
-      case findIndex (\(vn', _) -> vn' == vn) binders of
-        Just paramIx
-          | paramIx < ix
-          , paramIx < length srcArgs ->
-              isJust (asPi (srcArgs !! paramIx))
-        _ -> False
-    _ -> False
+    Variable vn _ -> do
+      paramIx <- findIndex (\(vn', _) -> vn' == vn) binders
+      if paramIx < ix && paramIx < length srcArgs
+         then Just (srcArgs !! paramIx)
+         else Nothing
+    _ -> Nothing
+
+-- | Direct a var-headed formal's mode by the domain of its
+-- INSTANTIATING type actual — the same domain analysis 'modeFor'
+-- applies to a concrete formal type, applied to the actual instead
+-- (debts slice; generalizes the Pi-only
+-- @polymorphicFormalInstantiatedExpectedSrc@ predicate of plan Slice
+-- 4b). The actual's variables belong to the CALLER's context, so it
+-- is classified by head form only — never re-looked-up in this
+-- callee's telescope. A variable actual (nested polymorphism, the
+-- caller's own type parameter) lands in the value-domain residual,
+-- the same assumption the un-supplied case carries.
+instantiationMode :: Term -> ArgMode
+instantiationMode inst
+  | isJust (asSort inst) = TypeArg
+  | isJust (asEq inst) = PropositionArg
+  | isJust (asPi inst) = FunctionArg Nothing
+  | isCryptolNumType inst = TypeArg
+  | isJust (asNatType inst) = IndexArg
+  | otherwise = RawValueArg
 
 -- | Derive the ordinary Phase-β definition convention's argument
 -- modes from the callee's SAWCore Pi type plus the supplied actuals
@@ -1437,11 +1447,22 @@ polymorphicFormalInstantiatedExpectedSrc binders srcArgs ix bty =
 -- so the modes' bind disciplines are ('phaseBetaBindFromMode'):
 --
 --   * 'RawValueArg' (concrete value formals) and 'IndexArg'
---     (Nat/Num formals, index binders): bind only a wrapped
+--     (Nat formals, index binders): bind only a wrapped
 --     (runtime-computed) actual — a raw actual splices directly;
---   * 'RuntimeArg' (polymorphic formals instantiated at a wrapped or
---     function type): the actual is consumed as-is;
 --   * types, propositions, function formals: splice raw, never bind.
+--
+-- A var-headed formal (@x : α@) is INSTANTIATION-DIRECTED (debts
+-- slice): when the type actual instantiating @α@ is supplied, the
+-- mode is the actual's own domain ('instantiationMode' — a Pi
+-- instantiation is a function position, a Nat instantiation an index
+-- position, and so on). Only when the instantiation is genuinely
+-- unavailable (type actual not supplied, or the formal's type is a
+-- var-headed APPLICATION rather than a bare parameter) does the
+-- value-domain residual assumption apply — sound for every
+-- instantiation at supplied positions (bind-iff-wrapped keys off the
+-- actual's recorded shape, and function values deliver structurally,
+-- never wrapped), an assumption only for the eta-declared
+-- representation of MISSING formals in partial applications.
 phaseBetaArgModesFor :: Term -> [Term] -> [ArgMode]
 phaseBetaArgModesFor fty srcArgs =
   [ modeFor ix bty | (ix, (_, bty)) <- zip [0 :: Int ..] binders ]
@@ -1454,21 +1475,17 @@ phaseBetaArgModesFor fty srcArgs =
       | isJust (asSort bty) = TypeArg
       | isJust (asEq bty) = PropositionArg
       | isJust (asPi bty) = FunctionArg Nothing
-      | polymorphicFormalInstantiatedExpectedSrc binders srcArgs ix bty =
-          RuntimeArg
       -- Num is Cryptol's singleton width/index CLASSIFIER, not a
       -- value-domain computation (see 'shouldWrapBinder') — the
       -- type-argument family, never bound. ('IndexArg' would bind a
       -- wrapped Num actual; the legacy plan never did.)
       | isCryptolNumType bty = TypeArg
       | isJust (asNatType bty) = IndexArg
-      -- SUSPECT (tracked, TODO "Deliberate emission-quality debts"):
-      -- a var-headed formal falling through here is ASSUMED
-      -- instantiated at a value-domain type (sound for every
-      -- instantiation — binding is identity-or-correct — but an
-      -- assumption, not a lookup). The honest endpoint is
-      -- instantiation-directed modes via the dependent 'FunctionArg'
-      -- convention work.
+      -- Var-headed formals: instantiation-directed where the type
+      -- actual is supplied (see the function doc); the value-domain
+      -- residual otherwise.
+      | Just inst <- varHeadedInstantiation binders srcArgs ix bty =
+          instantiationMode inst
       | otherwise = RawValueArg
 
 -- | The bind discipline each mode implies on the raw-formal

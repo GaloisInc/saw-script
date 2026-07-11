@@ -230,6 +230,24 @@ doc for per-slice regression fences and bounded validation commands):
   golden refreshed after per-hunk review — the only delta vs the
   pre-regression golden was the `Eq__rec` → `@Eq.rec` head — and the full
   emission elaborates with zero errors.)
+- [ ] **Pre-existing gaps found while probing the debts slice (2026-07-10,
+  both LOUD — the emitted Lean fails elaboration — neither caused by the
+  debts changes; verified by reasoning against the untouched code paths):**
+  - Top-level `write_lean_term` of a runtime-computed Nat (probe:
+    `parse_core "bvToNat 8 (bvNat 8 3)"` shapes) annotates the def
+    `: Nat` (the raw TYPE translation of Nat, index domain) while the
+    body is the wrapped VALUE (`Bind.bind … : Except String Nat` via
+    `natValueResult`). Annotation/body carrier mismatch — the def cannot
+    elaborate. The result-type annotation path needs the same
+    position/shape awareness as the value: annotate from the produced
+    term's recorded shape, not from a bare type translation.
+  - `PairValue` instantiated at a proposition (probe: `parse_core
+    "PairValue (Eq Bool True True) Bool …"`) emits `PairType (@Eq.{1}
+    Bool …)` where the Lean `PairType : Type -> Type -> Type`
+    realization cannot take a `Prop`. Independent of argument modes (the
+    carrier translation, not the bind plan). Either reject prop
+    instantiations of pair/record carriers loudly at translation time or
+    universe-generalize the realizations.
 - [ ] **Slice 3** (3a–3d) — push position through `Pi`/`Lambda`/`let`; demote
   `shouldWrapBinder`, `isVariableHead`, `natValueResult`, `phaseBetaResultShape`
   from position authorities to convention-internal helpers.
@@ -352,10 +370,35 @@ doc for per-slice regression fences and bounded validation commands):
       Smoketest 54/54 (one substring assertion switched to squashed —
       shorter output moved a line-wrap point), conformance 192 OK exit 0,
       snapshot re-baselined (317).
-    - `phaseBetaArgModesFor`: a var-headed formal falling past the
-      Pi-instantiation lookup is ASSUMED value-domain (sound for every
-      instantiation, but an assumption). Fix: instantiation-directed modes
-      with the dependent `FunctionArg` convention work.
+    - [x] `phaseBetaArgModesFor`: a var-headed formal falling past the
+      Pi-instantiation lookup was ASSUMED value-domain. FIXED 2026-07-10:
+      instantiation-directed modes — `varHeadedInstantiation` looks up the
+      supplied type actual for a bare-parameter formal type, and
+      `instantiationMode` classifies it by the SAME domain analysis
+      `modeFor` applies to concrete formal types (Pi → `FunctionArg
+      Nothing`, Nat → IndexArg, Num/sort → TypeArg, Eq → PropositionArg,
+      value-domain → RawValueArg). Subsumes and deletes
+      `polymorphicFormalInstantiatedExpectedSrc` (its RuntimeArg is
+      behaviorally identical to `FunctionArg Nothing` at every consumer).
+      The value-domain RESIDUAL survives only where the instantiation is
+      genuinely unavailable (type actual not supplied; var-headed
+      APPLICATION formal types) — sound at supplied positions post
+      bind-iff-wrapped (the actual's recorded shape directs the bind;
+      functions deliver structurally, never wrapped); an assumption only
+      for eta-declared MISSING formals in partial applications. The
+      dependent `FunctionArg (Just conv)` machinery was NOT needed:
+      external raw-formal targets take the translated Pi type actual
+      as-is, and dependent function slots remain structurally unreachable
+      (see the 4b reclassification above). Corpus byte-identical (the
+      directed cases only diverge at missing positions with no corpus
+      witness). Coverage: smoketest "partial ctor eta formals are
+      instantiation-directed" (partial `PairValue (Bool -> Bool) Bool`:
+      function-slot eta formal splices raw, value-slot binds — top-level
+      partial applications never elaborate, so this pin cannot be an
+      obligations row) + obligations/polymorphic_inst_function_slot (full
+      application: lambda delivers structurally at the phase-β function
+      carrier, elaborates). Smoketest 55/55, conformance 193 OK exit 0,
+      snapshot re-baselined (318).
     The two-family asymmetry itself (raw-formal external targets with
     call-site sequencing vs wrapped-formal translated function values) is
     NOT a debt — it is forced: propositions need raw operands; partial

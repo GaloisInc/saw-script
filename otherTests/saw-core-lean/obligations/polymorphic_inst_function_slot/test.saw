@@ -1,0 +1,11 @@
+enable_experimental;
+
+// A var-headed formal instantiated at a FUNCTION type (a := Bool ->
+// Bool) is a function position: the lambda actual delivers
+// structurally into the constructor — never Bind.bind-bound, never
+// Pure.pure-wrapped as a value — and the emitted carrier is the
+// phase-beta function interface (Except String Bool -> Except String
+// Bool). The concrete Bool slot's raw actual (True) splices directly
+// (bind-iff-wrapped), so the whole pair is a single Pure.pure literal.
+let probe = parse_core "PairValue (Bool -> Bool) Bool (\\(x:Bool) -> x) True";
+write_lean_term "PairFnInst" [] [] "emitted.lean" probe;
