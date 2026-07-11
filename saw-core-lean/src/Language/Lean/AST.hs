@@ -192,4 +192,16 @@ data Decl
   | Definition Noncomputable [String] Ident [Binder] (Maybe Type) Term
   | InductiveDecl Inductive
   | Namespace Ident [Decl]
+  | CtorOrderAssertion Ident [Ident]
+    -- ^ A @saw_ctor_order Foo [Foo.A, Foo.B]@ command (support
+    -- library @CryptolToLean.SAWCoreCtorOrder@): Lean refuses to
+    -- elaborate the file unless the named inductive declares exactly
+    -- these constructors in this order. Emitted once per datatype
+    -- whose @Foo.rec@ the translator emits with SAWCore's positional
+    -- argument order; the list is SAWCore's declared constructor
+    -- order, so a drifted declaration on either side fails loudly
+    -- instead of silently swapping recursor case handlers. Both
+    -- identifiers must be fully qualified — command-level resolution
+    -- has no expected type to disambiguate short names that collide
+    -- with Lean core (e.g. @Stream@).
   deriving (Show)

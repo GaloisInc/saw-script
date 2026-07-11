@@ -51,7 +51,7 @@ module SAWCoreLean.Term
   ) where
 
 import           Control.Lens                 (makeLenses, over, set, view)
-import           Control.Monad                (zipWithM)
+import           Control.Monad                (unless, zipWithM)
 import qualified Control.Monad.Except         as Except
 import           Control.Monad.Reader         (MonadReader(local), asks)
 import           Control.Monad.State          (get, modify)
@@ -1258,6 +1258,40 @@ translateIdentToIdent i = do
     UseMacro{}        -> pure Nothing
     UseMapsToWrapped{} -> pure Nothing
     UseReject reason  ->
+      Except.throwError
+        (RejectedPrimitive (Text.pack (identName i)) reason)
+
+-- | Like 'translateIdentToIdent' but always FULLY QUALIFIED — the
+-- implicitly-opened-module shortening is deliberately skipped.
+-- Term-position short names are safe because Lean's term elaborator
+-- disambiguates colliding interpretations by type (and errors loudly
+-- on ties), but COMMAND-position references (the constructor-order
+-- assertions, plan Slice 6.2) have no expected type to disambiguate
+-- with: a short @Stream@ is ambiguous against Lean core's @Stream@
+-- at command level. Qualification names the support-library constant
+-- the assertion pins, unambiguously.
+translateIdentToQualifiedIdent ::
+  TermTranslationMonad m => Ident -> m (Maybe Lean.Ident)
+translateIdentToQualifiedIdent i = do
+  treatment <- atUseSite <$> findSpecialTreatment i
+  case treatment of
+    UsePreserve -> do
+      mm <- view sawModuleMap <$> askTR
+      let short = escapeIdent (Lean.Ident (identName i))
+          scopedShort = case resolveNameInMap mm i of
+            Just (ResolvedCtor c) ->
+              let dtShort =
+                    Text.unpack (toShortName (nameInfo (ctorDataType c)))
+              in Lean.Ident (dtShort ++ "." ++ identName i)
+            _ -> short
+      pure (Just (qualify (translateModuleName (identModule i)) scopedShort))
+    UseRename mTargetMod targetName _ ->
+      pure $ Just $ maybe targetName (`qualify` targetName) mTargetMod
+    UseRenameUniv mTargetMod targetName _ ->
+      pure $ Just $ maybe targetName (`qualify` targetName) mTargetMod
+    UseMacro{}         -> pure Nothing
+    UseMapsToWrapped{} -> pure Nothing
+    UseReject reason   ->
       Except.throwError
         (RejectedPrimitive (Text.pack (identName i)) reason)
 
@@ -4332,6 +4366,8 @@ usedUniversesInDecl d = case d of
       , Set.unions [ usedUniversesInTerm t | Lean.Constructor _ t <- ctors ]
       ]
   Lean.Namespace _ ds -> Set.unions (map usedUniversesInDecl ds)
+  -- A constructor-order assertion mentions only constant names.
+  Lean.CtorOrderAssertion _ _ -> Set.empty
 
 usedUniversesInBinder :: Lean.Binder -> Set String
 usedUniversesInBinder (Lean.Binder _ _ mty) =
@@ -4919,6 +4955,49 @@ translateCaseHandler motiveReturnsRaw expectedWrappedResult casePlan caseTerm = 
               _                       -> Nothing
       _ -> pure Nothing
 
+-- | Record a constructor-order assertion for a datatype whose
+-- @Foo.rec@ head is being emitted with SAWCore's positional argument
+-- order (plan Slice 6.2). The assertion — a @saw_ctor_order@ command
+-- the support library's @CryptolToLean.SAWCoreCtorOrder@ elaborates —
+-- carries SAWCore's declared constructor order (translated to
+-- fully-qualified Lean names), so the emitted file refuses to
+-- elaborate if EITHER side drifts: a reordered Lean support-library
+-- inductive or a reordered SAWCore datatype declaration. Same-payload
+-- constructors make such drift typecheck while swapping every case
+-- handler — this is the only silent (typechecks-but-wrong) recursor
+-- risk, and the assertion closes it.
+--
+-- One assertion per datatype per translation run, deduplicated
+-- against 'topLevelDeclarations'. A constructor without a fixed
+-- fully-qualified Lean identifier rejects loudly: emitting the
+-- recursor without its order assertion would reopen the hole.
+recordCtorOrderAssertion ::
+  TermTranslationMonad m => CompiledRecursor -> m ()
+recordCtorOrderAssertion crec = do
+  dtQual <- qualifiedIdentFor (recursorDataType crec)
+  ctorQuals <- traverse qualifiedIdentFor (recursorCtorOrder crec)
+  decls <- view topLevelDeclarations <$> get
+  let already = any (\d -> case d of
+        Lean.CtorOrderAssertion dt' _ -> dt' == dtQual
+        _                             -> False) decls
+  unless already $
+    modify (over topLevelDeclarations
+      (Lean.CtorOrderAssertion dtQual ctorQuals :))
+  where
+    qualifiedIdentFor nm = case nameInfo nm of
+      ModuleIdentifier ident -> do
+        mq <- translateIdentToQualifiedIdent ident
+        maybe (refuse nm) pure mq
+      ImportedName{} -> refuse nm
+    refuse nm = Except.throwError (RejectedPrimitive
+      (toAbsoluteName (nameInfo (recursorDataType crec)))
+      ("cannot emit the constructor-order assertion for this \
+       \recursor: " <> toAbsoluteName (nameInfo nm)
+       <> " has no fixed fully-qualified Lean identifier. Emitting \
+          \@Foo.rec with SAWCore's positional case order but without \
+          \the Lean-checked order assertion would reopen the silent \
+          \branch-swap hole; add a fixed SpecialTreatment mapping."))
+
 -- | Translate a 'FlatTermF' (atomic constructs of the SAWCore AST).
 translateFTermF :: TermTranslationMonad m => FlatTermF Term -> m Lean.Term
 translateFTermF ftf = case ftf of
@@ -5004,7 +5083,11 @@ translateFTermF ftf = case ftf of
       ModuleIdentifier ident -> translateIdentToIdent ident
       ImportedName{}         -> pure Nothing
     case maybeDIdent of
-      Just (Lean.Ident i) ->
+      Just (Lean.Ident i) -> do
+        -- Slice 6.2: no @Foo.rec@ leaves the translator with
+        -- unchecked constructor-order trust — record the
+        -- Lean-checked assertion alongside the head.
+        recordCtorOrderAssertion crec
         pure $ Lean.ExplVar (Lean.Ident (i ++ ".rec"))
       Nothing -> do
         let dName = Text.unpack (toAbsoluteName dInfo)

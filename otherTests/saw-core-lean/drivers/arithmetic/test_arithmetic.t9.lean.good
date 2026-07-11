@@ -12,8 +12,7 @@ noncomputable def TestArith_ShiftLeft : Except String (Vec
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) :=
-  Bind.bind (Pure.pure Bool.false) (fun v_2 => Bind.bind (Pure.pure (bvNat
-  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  Bind.bind (Pure.pure (bvNat (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -27,7 +26,7 @@ noncomputable def TestArith_ShiftLeft : Except String (Vec
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool v_2 v_3
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool Bool.false v_3
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))
+  CryptolToLean.SAWCorePrimitives.one_macro))))

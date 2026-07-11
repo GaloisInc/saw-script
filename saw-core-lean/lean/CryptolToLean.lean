@@ -9,5 +9,6 @@ import CryptolToLean.SAWCoreVectors
 import CryptolToLean.SAWCoreBitvectors
 import CryptolToLean.SAWCorePreludeExtra
 import CryptolToLean.SAWCorePrimitives
+import CryptolToLean.SAWCoreCtorOrder
 import CryptolToLean.SAWCoreBitvectors_proofs
 import CryptolToLean.SAWCorePrelude_proofs

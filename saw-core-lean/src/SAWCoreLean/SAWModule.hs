@@ -34,6 +34,7 @@ import qualified Control.Monad.Except         as Except
 import           Control.Monad.Reader         (asks)
 import qualified Data.Text                    as Text
 import           Prettyprinter                (Doc, pretty, (<+>))
+import qualified Prettyprinter
 
 import qualified Language.Lean.AST            as Lean
 import qualified Language.Lean.Pretty         as Lean
@@ -65,16 +66,24 @@ runModuleTranslationMonad configuration modName mm =
 -- universe variables allocated inside the action are local to it,
 -- which matches the per-decl semantics (each Lean def has its own
 -- universe-binder list).
+--
+-- Auxiliary declarations the action pushed to 'topLevelDeclarations'
+-- (currently only the Slice-6.2 constructor-order assertions a
+-- recursor emission records) are returned in emission order and MUST
+-- be emitted ahead of the translated decl — dropping them would
+-- reopen the silent branch-swap hole the assertions close.
 liftTermTranslationMonad ::
   (forall n. TermTranslation.TermTranslationMonad n => n a) ->
-  (forall m. ModuleTranslationMonad m => m (a, [String]))
+  (forall m. ModuleTranslationMonad m => m (a, [String], [Lean.Decl]))
 liftTermTranslationMonad action = do
   configuration <- asks M.translationConfiguration
   (modname, mm) <- asks M.otherConfiguration
   let r = TermTranslation.runTermTranslationMonad configuration modname mm [] [] action
   case r of
     Left  e        -> Except.throwError e
-    Right (a, st)  -> pure (a, view universeVars st)
+    Right (a, st)  ->
+      pure (a, view universeVars st,
+            reverse (view TermTranslation.topLevelDeclarations st))
 
 skippedComment :: NameInfo -> Doc ann
 skippedComment nmi =
@@ -111,12 +120,12 @@ translateDef Def{..} = do
           Except.throwError $ RejectedPrimitive shortName $
             "NoQualifier def has no body — SAWCore internal contract violation"
         Just body -> do
-          ((body', tp'), univs) <- liftTermTranslationMonad $ mode $ do
+          ((body', tp'), univs, auxDecls) <- liftTermTranslationMonad $ mode $ do
             b <- TermTranslation.translateTerm body
             t <- TermTranslation.translateTerm defType
             pure (b, t)
           let decl = mkDefinitionWith Lean.Noncomputable univs name body' tp'
-          pure (Lean.prettyDecl decl)
+          pure (Prettyprinter.vcat (map Lean.prettyDecl (auxDecls ++ [decl])))
       AxiomQualifier -> rejectAxiomOrPrimitive name
       PrimQualifier  -> rejectAxiomOrPrimitive name
 

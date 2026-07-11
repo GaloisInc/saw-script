@@ -273,6 +273,10 @@ prettyDecl decl = case decl of
         footer = "end" <+> nm'
     in
     vsep $ [header] ++ ds' ++ [footer]
+  CtorOrderAssertion dt ctors ->
+    "saw_ctor_order" <+> prettyIdent dt <+>
+      brackets (hsep (punctuate comma (map prettyIdent ctors))) <>
+      hardline
 
 prettyConstructor :: Constructor -> Doc ann
 prettyConstructor (Constructor {..}) =
