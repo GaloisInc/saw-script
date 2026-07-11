@@ -1563,6 +1563,22 @@ phaseBetaResultShape fty nApplied
   where
     (binders, ret) = asPiList fty
 
+-- | The TRUTHFUL result stamp for a raw-mode application (debts
+-- slice). Raw translation mode never Except-wraps anything, so the
+-- only honest shapes are function (partial application or Pi result)
+-- and raw. Stamping 'phaseBetaResultShape' here — as the raw-mode
+-- application path historically did — produced records claiming
+-- 'BindingWrapped' for bare raw applications, the stamp/emission
+-- divergence that forced the raw-mode pipeline guards
+-- ('lowerRawLogicalCalleeRawMode', unsafeAssert's raw-mode arm).
+rawModeResultShape :: Term -> Int -> BindingShape
+rawModeResultShape fty nApplied
+  | nApplied < length binders = BindingFunction
+  | isJust (asPi ret) = BindingFunction
+  | otherwise = BindingRaw
+  where
+    (binders, ret) = asPiList fty
+
 translateFunctionWithWrappedResult ::
   TermTranslationMonad m => Term -> m Lean.Term
 translateFunctionWithWrappedResult t = do
@@ -2499,7 +2515,10 @@ lowerPartialOpContract contract ident args = do
                               (map (isWrappedShape . ttShape) argResults))
                    ] ++ repeat False)
            else replicate (length args) False
-      resultShape = phaseBetaResultShape fty (length args)
+      resultShape =
+        if phase
+           then phaseBetaResultShape fty (length args)
+           else rawModeResultShape fty (length args)
   if length args /= length binders
      then Except.throwError (RejectedPrimitive (Text.pack (identName ident))
             "partial-operation contracts currently require a fully applied direct primitive")
@@ -3108,26 +3127,21 @@ translateUnsafeAssertObligation aArg xArg yArg = do
   -- it rebuilt the proposition at a raw reading that dropped the
   -- effect structure, and the resulting obligation could not stand at
   -- the goal's wrapped carrier (a loud Lean carrier mismatch, but the
-  -- right emission is the faithful wrapped obligation). In raw
-  -- translation mode the raw pipeline applies for the same reason it
-  -- does in 'lowerRawLogicalCalleeRawMode'.
-  phase <- phaseBetaEnabled
-  prop <-
-    if not phase
-       then equalityPropositionAtSubjectRep
-              "unsafeAssert"
-              (EqualitySubjectRaw RawProofPosition)
-              aArg xArg yArg
-       else do
-         aLean <- withRawTranslationMode (translateTerm aArg)
-         xTrans <- translateTermWithShape xArg
-         yTrans <- translateTermWithShape yArg
-         rep <- standaloneEqualitySubjectRep "unsafeAssert" [xTrans, yTrans]
-         eqHead <- explicitCoreNameAtArgUniverse (Lean.Ident "Eq") aArg
-         carrier <- subjectCarrierAt rep aArg aLean
-         xLean <- subjectTerm rep xTrans
-         yLean <- subjectTerm rep yTrans
-         pure (Lean.App eqHead [carrier, xLean, yLean])
+  -- right emission is the faithful wrapped obligation). The rule is
+  -- MODE-UNIFORM (debts slice): raw-mode operands carry truthful raw
+  -- production records ('rawModeResultShape'), so the classification
+  -- reduces to the raw reading inside raw content without a separate
+  -- raw-mode arm.
+  prop <- do
+    aLean <- withRawTranslationMode (translateTerm aArg)
+    xTrans <- translateTermWithShape xArg
+    yTrans <- translateTermWithShape yArg
+    rep <- standaloneEqualitySubjectRep "unsafeAssert" [xTrans, yTrans]
+    eqHead <- explicitCoreNameAtArgUniverse (Lean.Ident "Eq") aArg
+    carrier <- subjectCarrierAt rep aArg aLean
+    xLean <- subjectTerm rep xTrans
+    yLean <- subjectTerm rep yTrans
+    pure (Lean.App eqHead [carrier, xLean, yLean])
   tm <- withLocalProofObligation
           (Lean.Ident "h_unsafeAssert_")
           prop
@@ -3361,53 +3375,6 @@ subjectTerm (EqualitySubjectRaw r)      = fmap ttLean . adaptTo (ExpectRaw r)
 subjectTerm EqualitySubjectRawFunction  =
   fmap ttLean . adaptTo (ExpectFunctionPosition Nothing)
 
--- | Build an equality proposition at a DECLARED subject
--- representation (calculus §Raw Logical Callees). This is the entry
--- point for every surround that knows its ρ_eq — today
--- 'translateUnsafeAssertObligation' (declared raw) — as opposed to
--- the standalone dispatch path ('lowerRawLogicalCallee'), which owns
--- its translated operands and classifies them via
--- 'standaloneEqualitySubjectRep'.
---
--- Documented seam (plan Slice 5b reconciles it via the Eq.rec field
--- set): the raw branch here translates operands UNDER raw mode
--- ('withRawTranslationMode'), while the standalone path translates
--- them in the ambient mode and demands raw of the results through
--- 'adaptTo'. For the same source operands these are different
--- pipelines. A declared-rep mismatch between a proof producer (e.g.
--- unsafeAssert) and a consumer (e.g. a runtime-subject @Eq__rec@)
--- must reject, never coerce.
-equalityPropositionAtSubjectRep ::
-  TermTranslationMonad m =>
-  Text.Text -> EqualitySubjectRep -> Term -> Term -> Term -> m Lean.Term
-equalityPropositionAtSubjectRep who rep aArg xArg yArg = do
-  aLean <- withRawTranslationMode (translateTerm aArg)
-  eqHead <- explicitCoreNameAtArgUniverse (Lean.Ident "Eq") aArg
-  case rep of
-    EqualitySubjectRuntimeValue -> do
-      xTrans <- translateTermWithShape xArg
-      yTrans <- translateTermWithShape yArg
-      case filter ((== BindingFunction) . ttShape) [xTrans, yTrans] of
-        _ : _ ->
-          Except.throwError (RejectedPrimitive who
-            "raw logical equality over function-shaped subjects is not \
-            \implemented in this slice")
-        [] -> do
-          xLean <- adaptToRuntime xTrans
-          yLean <- adaptToRuntime yTrans
-          pure (Lean.App eqHead [wrapExcept aLean, xLean, yLean])
-    EqualitySubjectRaw _ -> do
-      xLean <- withRawTranslationMode (translateTerm xArg)
-      yLean <- withRawTranslationMode (translateTerm yArg)
-      pure (Lean.App eqHead [aLean, xLean, yLean])
-    EqualitySubjectRawFunction -> do
-      carrier <- translateTerm aArg
-      xTrans <- translateTermWithShape xArg
-      yTrans <- translateTermWithShape yArg
-      xLean <- ttLean <$> adaptTo (ExpectFunctionPosition Nothing) xTrans
-      yLean <- ttLean <$> adaptTo (ExpectFunctionPosition Nothing) yTrans
-      pure (Lean.App eqHead [carrier, xLean, yLean])
-
 explicitCoreNameAtArgUniverse ::
   TermTranslationMonad m => Lean.Ident -> Term -> m Lean.Term
 explicitCoreNameAtArgUniverse target arg = do
@@ -3418,76 +3385,18 @@ explicitCoreNameAtArgUniverse target arg = do
 
 -- | Lower the standalone raw-logical callees (@Eq@ / @Refl@ /
 -- @Eq__rec@ reached through ident or recursor dispatch with no
--- equality-aware surround). The current translation mode selects the
--- declared interpreter: raw mode content is raw throughout
--- ('lowerRawLogicalCalleeRawMode'); ambient Phase-β content
--- classifies its subjects through the standalone convention and the
--- 'adaptTo' chokepoint ('lowerRawLogicalCalleeAmbient').
+-- equality-aware surround). MODE-UNIFORM (debts slice): the standalone
+-- convention classifies the subjects from their production records and
+-- everything moves through the 'adaptTo' chokepoint at declared
+-- positions. Inside raw translation mode every operand carries a
+-- truthful raw record ('rawModeResultShape' — the false wrapped stamps
+-- that once steered @coerce__def_trans@'s carrier into @Except String@
+-- are gone), so the classification reduces to ρ_eq = raw for raw
+-- content without a separate raw-mode pipeline.
 lowerRawLogicalCallee ::
   TermTranslationMonad m =>
   RawLogicalCallee -> Ident -> [Term] -> m TranslatedTerm
-lowerRawLogicalCallee callee ident args = do
-  phase <- phaseBetaEnabled
-  if phase
-     then lowerRawLogicalCalleeAmbient callee ident args
-     else lowerRawLogicalCalleeRawMode callee ident args
-
--- | Raw-logical callees inside raw translation mode (auto-emitted raw
--- Prelude content, motives, proof-primitive proof/proposition slots):
--- the surrounding raw convention supplies ρ_eq = raw for every piece
--- — there ARE no runtime values in raw content. Shape records of
--- raw-mode translations are deliberately not consulted: value-domain
--- result classification still stamps some raw-mode applications
--- wrapped (the documented var-headed 4c debt, TODO "Deliberate
--- emission-quality debts"), and steering the carrier by a false
--- record wrapped @coerce__def_trans@'s equality in @Except String@
--- around raw terms.
-lowerRawLogicalCalleeRawMode ::
-  TermTranslationMonad m =>
-  RawLogicalCallee -> Ident -> [Term] -> m TranslatedTerm
-lowerRawLogicalCalleeRawMode RawLogicalEq _ [aArg, xArg, yArg] = do
-  aLean <- translateTerm aArg
-  xLean <- translateTerm xArg
-  yLean <- translateTerm yArg
-  eqHead <- explicitCoreNameAtArgUniverse (Lean.Ident "Eq") aArg
-  traceSubjectRep "Eq(rawMode)" [] (EqualitySubjectRaw RawLogicalPosition)
-  pure (TranslatedTerm
-    (Lean.App eqHead [aLean, xLean, yLean])
-    BindingRaw)
-lowerRawLogicalCalleeRawMode RawLogicalRefl _ [aArg, xArg] = do
-  aLean <- translateTerm aArg
-  xLean <- translateTerm xArg
-  reflHead <- explicitCoreNameAtArgUniverse (Lean.Ident "Eq.refl") aArg
-  traceSubjectRep "Refl(rawMode)" [] (EqualitySubjectRaw RawLogicalPosition)
-  pure (TranslatedTerm
-    (Lean.App reflHead [aLean, xLean])
-    BindingRaw)
-lowerRawLogicalCalleeRawMode RawLogicalEqRec _
-    [aArg, xArg, motiveArg, branchArg, yArg, eqProofArg] = do
-  aLean <- translateTerm aArg
-  xLean <- translateTerm xArg
-  yLean <- translateTerm yArg
-  branchLean <- translateTerm branchArg
-  motiveLean <- translateTerm motiveArg
-  eqProofLean <- translateTerm eqProofArg
-  traceSubjectRep "Eq__rec(rawMode)" [] (EqualitySubjectRaw RawLogicalPosition)
-  pure (TranslatedTerm
-    (Lean.App (Lean.ExplVar (Lean.Ident "Eq.rec"))
-      [aLean, xLean, motiveLean, branchLean, yLean, eqProofLean])
-    BindingRaw)
-lowerRawLogicalCalleeRawMode callee ident _ =
-  Except.throwError (RejectedPrimitive (Text.pack (identName ident))
-    ("raw logical callee "
-     <> Text.pack (show callee)
-     <> " was used at an unsupported arity"))
-
--- | Raw-logical callees in ambient Phase-β mode: the standalone
--- convention classifies the subjects and everything moves through the
--- 'adaptTo' chokepoint at declared positions.
-lowerRawLogicalCalleeAmbient ::
-  TermTranslationMonad m =>
-  RawLogicalCallee -> Ident -> [Term] -> m TranslatedTerm
-lowerRawLogicalCalleeAmbient RawLogicalEq _ [aArg, xArg, yArg] = do
+lowerRawLogicalCallee RawLogicalEq _ [aArg, xArg, yArg] = do
   aLean <- withRawTranslationMode (translateTerm aArg)
   xTrans <- translateTermWithShape xArg
   yTrans <- translateTermWithShape yArg
@@ -3499,7 +3408,7 @@ lowerRawLogicalCalleeAmbient RawLogicalEq _ [aArg, xArg, yArg] = do
   pure (TranslatedTerm
     (Lean.App eqHead [carrier, xLean, yLean])
     BindingRaw)
-lowerRawLogicalCalleeAmbient RawLogicalRefl _ [aArg, xArg] = do
+lowerRawLogicalCallee RawLogicalRefl _ [aArg, xArg] = do
   aLean <- withRawTranslationMode (translateTerm aArg)
   xTrans <- translateTermWithShape xArg
   rep <- standaloneEqualitySubjectRep "Refl" [xTrans]
@@ -3509,7 +3418,7 @@ lowerRawLogicalCalleeAmbient RawLogicalRefl _ [aArg, xArg] = do
   pure (TranslatedTerm
     (Lean.App reflHead [carrier, xLean])
     BindingRaw)
-lowerRawLogicalCalleeAmbient RawLogicalEqRec _ [aArg, xArg, motiveArg, branchArg, yArg, eqProofArg] = do
+lowerRawLogicalCallee RawLogicalEqRec _ [aArg, xArg, motiveArg, branchArg, yArg, eqProofArg] = do
   aLean <- withRawTranslationMode (translateTerm aArg)
   xTrans <- translateTermWithShape xArg
   yTrans <- translateTermWithShape yArg
@@ -3548,7 +3457,7 @@ lowerRawLogicalCalleeAmbient RawLogicalEqRec _ [aArg, xArg, motiveArg, branchArg
       , eqProofLean
       ])
     (ercResultShape conv))
-lowerRawLogicalCalleeAmbient callee ident _ =
+lowerRawLogicalCallee callee ident _ =
   Except.throwError (RejectedPrimitive (Text.pack (identName ident))
     ("raw logical callee "
      <> Text.pack (show callee)
@@ -3916,8 +3825,12 @@ originalDispatchWithShape i args = do
                            (Lean.Lambda etaBindersLean body)
                            BindingFunction)
         Just fty -> do
+          -- Raw mode (the phase-guarded alternative above matched
+          -- every ambient case): the emission is a bare application;
+          -- stamp what raw mode actually produced, not the phase-β
+          -- shape ('rawModeResultShape' doc).
           let tm = Lean.App f argTerms
-          pure (TranslatedTerm tm (phaseBetaResultShape fty (length args')))
+          pure (TranslatedTerm tm (rawModeResultShape fty (length args')))
         Nothing -> do
           -- No SAWCore type for the callee. A 'Lean.App' is neither
           -- a lambda nor a variable, so the old AST guess was
