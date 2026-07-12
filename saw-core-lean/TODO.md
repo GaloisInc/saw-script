@@ -155,11 +155,67 @@ detailed priority sections that follow preserve the 2026-07-01 audit's ordering
 for reference, but the operative next work is the position-directed refactor
 described in the section immediately below.
 
-## Operative Priority: Position-Directed Translation
+## Operative Priority: Obligation Placement & Satisfiability
+
+Full design: `doc/2026-07-12_obligation-placement-design.md`.
+
+This is the current top technical focus, set by the 2026-07-12
+release-candidate assessment. The position-directed refactor made the
+translator's representation decisions sound; the remaining defects all
+live one layer up, in the proof-carrying obligation layer, and share one
+root cause: **the backend embeds obligations at positions where they
+cannot be proved.** Three instances, one principle:
+
+1. Evidence chains for derivable side conditions are too weak — the
+   emitted `(first | assumption | skip); all_goals sorry` cannot close
+   derived-index or constant bounds that a checked
+   normalize-then-`omega` step closes; 19 of the 39 differential known
+   gaps pin on exactly this `sorry`.
+2. Eta-expanded checked-access wrappers fabricate evidence in-lambda
+   (`fun (η : Nat) => let h : η < n := (by …); …`) — a universal claim
+   that is false for general `Nat` and unprovable at that position.
+3. `saw_fix_unique_exists` quantifies uniqueness over all `Except`
+   values, but errors are always fixed points of strict bodies, so the
+   contract is unsatisfiable for the entire recurrence class it exists
+   to support (kernel-checked counterexample; see the 2026-07-12 entry
+   under Priority 1).
+
+Slices (each emitted-Lean-diff-reviewed and green before commit):
+
+- [ ] **Slice OP-1** — checked evidence chains: teach
+  `boundsProofScript`/`partialOpProofScript` the
+  `assumption | normalize; omega` step and the unsafeAssert script a
+  `rfl` step; review the corpus diff; refresh goldens; re-run each
+  `sorry`-pinned differential known-gap row and un-gap those that become
+  true differential coverage.
+- [ ] **Slice OP-2** — evidence-less checked access: positions whose
+  bound is not derivable at emission (the eta-wrapper family) must not
+  fabricate evidence; route them through a runtime-checked accessor
+  with `Except.error` out-of-bounds semantics (SAWCore's own `at`
+  partiality), keeping `atWithProof_checkedM` for positions with real
+  evidence. Restores dischargeability of the saw-lean-example goals.
+- [ ] **Slice OP-3** — wrapped-fix revision, POST-AUDIT SHAPE (the
+  2026-07-12 Opus audit refuted the unconditional pure-uniqueness
+  contract with the witness `fix Bool (\b -> ite b True True)`: unique
+  pure fixed point `true`, SAW meaning divergent — see the design doc's
+  audit record): a productivity recognizer gates the fix lowering;
+  recognized bounded-vec-fold / stream-corec shapes lower structurally
+  (preferred) or through the pure-uniqueness contract (sound UNDER the
+  gate, resting on the documented Cryptol-productivity trust links);
+  every unrecognized fix shape REJECTS with a named diagnostic and a
+  litmus row (including the Bool witness verbatim). Acceptance test =
+  `proof-gaps/cryptol_running_sum_verify` closes end-to-end.
+- [ ] **OP-2 rider (audit action)** — verify every in-corpus
+  `h_raw_error_ : False` position is genuinely unreachable-with-context;
+  a REACHABLE raw `Prelude.error` must reject per the calculus rather
+  than emit an undischargeable `False`.
+
+## Operative Priority (COMPLETE 2026-07-11): Position-Directed Translation
 
 Full execution plan: `doc/2026-07-08_position-directed-translation-plan.md`.
 
-This is the current top technical focus. The goal is to make the position/callee
+This was the top technical focus through 2026-07-11; all eight slices
+are complete and the records below are historical. The goal is to make the position/callee
 calculus (`doc/2026-07-02_position-callee-calculus.md`) the *implementation* of
 the term translator rather than a document it approximates. Today the translator
 is bottom-up (translate naturally, repair shape with syntactic predicates such
