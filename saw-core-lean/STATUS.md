@@ -88,6 +88,17 @@ Known holes, all loud or pinned:
   examples (running sum, popcount, rec_ones, stream_fibs, ChaCha20
   iterate) emit obligations that elaborate but can never be discharged.
   Sound but unusable; needs a contract revision design doc.
+- Filed 2026-07-12 (TODO.md, same family): eta-expanded checked-access
+  wrappers embed a `η < n` bounds evidence position that is unprovable
+  in place (the lambda claims a universal bound), so `implRev`-shaped
+  indexing goals (saw-lean-example invol/eq_spec) can never be
+  discharged sorry-free. The wrapper must receive evidence instead of
+  fabricating it.
+- Filed 2026-07-12 (pinned `saw-boundary/polymorphic_seq_module_rejection`):
+  whole-module translation of polymorphic indexing comprehensions
+  rejects at `Prelude::Either@core` — same recursor-convention hole as
+  the parked Stream@core pair; blocks the saw-lean-example
+  `write_lean_cryptol_module` step.
 - Two Vec/BitVec round-trip axioms remain in the support library TCB
   (cheap, separately tracked proof task).
 

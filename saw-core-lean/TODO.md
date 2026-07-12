@@ -273,6 +273,38 @@ doc for per-slice regression fences and bounded validation commands):
   y = x`) plus an explicit soundness argument tying the unique pure fixed
   point to SAWCore's `fix` semantics; must go through a design doc and the
   soundness-contract review, not a quiet edit.
+- [ ] **Eta-expanded checked-access wrappers embed bounds evidence that is
+  unprovable at its position (found 2026-07-12 while refreshing
+  saw-lean-example; same "sound but undischargeable" family as the fix
+  contract above).** The prefix-partial checked-access convention emits
+  `fun (η_checked_arg_0 : Nat) => let h_bounds_ : η_checked_arg_0 < n :=
+  (by …); atWithProof_checkedM … η_checked_arg_0 h_bounds_` — the lambda
+  claims a universal bound that is false for general `Nat`, so no
+  completed-outline tactic can close it; only the emitted `sorry` inhabits
+  it. In the demo's `implRev` goals the wrapper is consumed by an
+  `Either.rec` over an Int sign-split (`xs @ ` computes the index via
+  `natToInt`/`intSub`/`intToNat`), so the true bound is a non-local
+  arithmetic fact. Consequence: `offline_lean` goals for `implRev`-shaped
+  indexing (saw-lean-example invol/eq_spec) emit, elaborate (with
+  `sorryAx` inside the goal statement), and can never be discharged
+  sorry-free. Fix direction: the wrapper must RECEIVE evidence rather than
+  fabricate it — either the dependent form `(i : Nat) → i < n → …` with
+  call sites supplying the proof (they sit under `genWithBoundsM` binders
+  or concrete indices that know the bound), or hoist the obligation to the
+  goal boundary. Related pins: `obligations/vector_at_partial_function`,
+  `drivers/implRev4` ("do not count local by-sorry bounds obligations as
+  proof discharge").
+- [ ] **Whole-module translation of polymorphic indexing comprehensions
+  rejects at `Prelude::Either@core` (found 2026-07-12; blocks
+  saw-lean-example `write_lean_cryptol_module "rev.cry"`).** With symbolic
+  `fin n`, the `[0 .. < n]` enumeration/indexing machinery reaches the
+  Either recursor with a raw result demanded from an Except-wrapped
+  scrutinee — the same recursor-convention hole as the parked
+  `Prelude::Stream@core` pair, and material to that parked decision.
+  Monomorphic instances translate fine (the demo's `implRev4` term and the
+  litmus's `Either.rec` sign-split emit). Polymorphic `reverse` (specRev)
+  also translates; the comprehension is the trigger. Pinned:
+  `saw-boundary/polymorphic_seq_module_rejection`.
 - [ ] **Slice 3** (3a–3d) — push position through `Pi`/`Lambda`/`let`; demote
   `shouldWrapBinder`, `isVariableHead`, `natValueResult`, `phaseBetaResultShape`
   from position authorities to convention-internal helpers.

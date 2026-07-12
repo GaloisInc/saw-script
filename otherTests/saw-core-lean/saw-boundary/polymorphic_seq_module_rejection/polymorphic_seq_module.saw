@@ -1,0 +1,13 @@
+import "Rev.cry";
+
+// Whole-module translation of a polymorphic indexing comprehension
+// ([ xs @ (`n-1-i) | i <- [0 .. < n] ] with symbolic fin n) is
+// currently rejected: the enumeration/indexing machinery reaches an
+// Either recursor whose raw result would have to come from an
+// Except-wrapped scrutinee (same convention hole as the parked
+// Prelude::Stream@core family). Polymorphic reverse translates fine.
+// This pins the rejection so the gap is loud until a sound recursor
+// convention or a rejection category lands. Found 2026-07-12 when
+// saw-lean-example/demo.saw step 3 (write_lean_cryptol_module
+// "rev.cry") regressed against the position-directed translator.
+write_lean_cryptol_module "Rev.cry" "polymorphic_seq_module.lean" [] [];
