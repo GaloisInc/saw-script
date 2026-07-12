@@ -248,6 +248,31 @@ doc for per-slice regression fences and bounded validation commands):
     carrier translation, not the bind plan). Either reject prop
     instantiations of pair/record carriers loudly at translation time or
     universe-generalize the realizations.
+- [ ] **`saw_fix_unique_exists` is unsatisfiable for every strict wrapped fix
+  body (found 2026-07-12 while pushing `proof-gaps/cryptol_running_sum_verify`;
+  design gap, needs a contract revision doc before any code change).** The
+  contract's uniqueness clause quantifies over all `z : Except String α`
+  (`∀ z, body z = z → z = pure x`), but any emitted body that actually
+  consumes its recursive argument — every real self-referential comprehension,
+  e.g. `[0] # [ s + x | s <- sums | x <- xs ]` — propagates `Except.error`
+  through the element binds, so `body (Except.error e) = Except.error e` for
+  every `e`: errors are always fixed points and uniqueness is refutable.
+  Kernel-checked counterexample (2-element analogue of the running-sum body):
+  `¬ saw_fix_unique_exists (Vec 2 Nat) tinyBody` proves by exhibiting the
+  error fixed point via `Vector.ofFnM_succ/zero` unfolding. Consequences:
+  the recurrence-class examples (`cryptol_running_sum_verify`,
+  `offline_lean_popcount32`, `cryptol_module_rec_ones`,
+  `cryptol_module_stream_fibs`, the ChaCha20 iterate pair) emit obligations
+  that elaborate but can never be discharged — sound (SAW never claims the
+  goal) but unusable. The doc comment on the primitive ("an `Except.error`
+  fixed point is not ignored") contemplated error fixed points as a safety
+  feature without noticing they always exist for strict bodies.
+  `saw_mkStream_total_exists` (pointwise totality) and the raw fix contract
+  do not have this defect. Candidate revision: uniqueness among *pure* fixed
+  points (`∃ x, body (pure x) = pure x ∧ ∀ y : α, body (pure y) = pure y →
+  y = x`) plus an explicit soundness argument tying the unique pure fixed
+  point to SAWCore's `fix` semantics; must go through a design doc and the
+  soundness-contract review, not a quiet edit.
 - [ ] **Slice 3** (3a–3d) — push position through `Pi`/`Lambda`/`let`; demote
   `shouldWrapBinder`, `isVariableHead`, `natValueResult`, `phaseBetaResultShape`
   from position authorities to convention-internal helpers.
@@ -1694,6 +1719,22 @@ reject and pin a fixture rather than widen a heuristic.
     scalability problems, and `cryptol_chacha20_core_iterate` should not be
     promoted until its current large artifact is refreshed/reviewed and the
     Nat div/mod checked-helper drift is reduced or otherwise tracked.
+  - 2026-07-12 E4/E5 promotion checkpoint: `proof-gaps/E4_map_id` and
+    `proof-gaps/E5_littleendian` are closed and promoted to `proofs/` via the
+    completed-outline workflow. Each row stages a `completed.lean` whose
+    embedded `h_bounds_` evidence is discharged with checked tactics
+    (`assumption` for direct `genWithBoundsM` binder bounds; for E5's derived
+    `subNat 3 i` indices, `simp only` macro/`subNat`/`Nat.sub_eq`
+    normalization plus `omega`); the harness def-eq-checks the completed goal
+    against the generated goal, and both outer proofs pass the axiom audit
+    with no new automation and no support-library changes. Two findings for
+    later work: (a) the emitted evidence tactic
+    `(first | assumption | skip); all_goals sorry` cannot close derived-index
+    bounds, so raw artifacts with derived indices carry `sorryAx` inside the
+    goal statement until a user completes the outline — consider teaching the
+    emitted chain the same checked normalization+`omega` step; (b) `omega`
+    does not recognize bare `Nat.sub` applications (from reducible `subNat`),
+    so `Nat.sub_eq` is the required bridge rewrite.
 
 - [ ] Refresh generated goldens and proof examples after proof-carrying
   emission changes.

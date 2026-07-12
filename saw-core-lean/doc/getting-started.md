@@ -27,9 +27,11 @@ prove_print (offline_lean "distrib")
 
 Run `saw distrib.saw`. SAW emits `distrib_prove0.lean` (the `prove0`
 suffix names the proof obligation; a script with multiple proofs
-gets `prove0`, `prove1`, …) before attempting its own proof. The
-proof attempt itself exits non-zero — that's the SAW prover's
-proof script failing, not the file emission. Don't worry about it.
+gets `prove0`, `prove1`, …) and then treats the goal as discharged by
+the export — the same admission semantics as `offline_rocq` and the
+offline SMT exporters (`SolverEvidence "offline: <path>"`). SAW is
+trusting you to actually check the emitted file in Lean; until you
+do (steps 2–3 below), nothing has been proved.
 
 The emitted file looks roughly like:
 

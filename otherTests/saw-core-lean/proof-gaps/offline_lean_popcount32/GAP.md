@@ -13,6 +13,11 @@ width 32 without native proof shortcuts.
 
 Current status:
 
+- 2026-07-12: the emitted `saw_fix_unique_exists` obligation for this
+  recurrence shape is currently unsatisfiable — errors are always fixed
+  points of the strict wrapped body. See the 2026-07-12 TODO.md design-gap
+  entry and `proof-gaps/cryptol_running_sum_verify/GAP.md`; the contract
+  must be revised before this proof is attemptable at any width.
 - The default driver remains failing and is classified as stress/proof gap.
 - The example must not be made green with `bv_decide`, `bv_check`, native
   proof artifacts, heartbeat inflation, or generated Haskell proof logic.
@@ -21,6 +26,6 @@ Current status:
 
 Linked rows:
 
-- `proof-gaps/E5_littleendian`
+- `proofs/E5_littleendian` (promoted from `proof-gaps/` 2026-07-12)
 - `obligations/fix_wrapped_unique`
 - `differential/sequence_append_reverse`

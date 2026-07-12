@@ -15,6 +15,11 @@
 !obligations/**/lean-observe.lean
 # Discharge probes are tracked, even though they match *.lean above.
 !proofs/**/proof.lean
+# Completed generated outlines (the edit-outline-and-replay workflow in
+# lean-proof-test.sh) are hand-maintained sources, not generated artifacts.
+!proofs/**/completed.lean
+!support-proofs/**/proof.lean
+!support-proofs/**/completed.lean
 !shape/**/*.shouldfail.lean
 
 # When Test.hs runs us, it overrides HOME to this directory; elan

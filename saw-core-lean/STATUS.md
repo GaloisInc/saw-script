@@ -1,6 +1,6 @@
 # saw-core-lean status
 
-Last updated: 2026-07-11
+Last updated: 2026-07-12
 
 ## Purpose
 
@@ -82,6 +82,12 @@ Known holes, all loud or pinned:
   `PairValue` at a Prop instantiation emits a carrier the
   `PairType : Type -> Type -> Type` realization cannot take. Both fail
   loudly at elaboration.
+- Filed 2026-07-12 (TODO.md, design gap): `saw_fix_unique_exists` is
+  unsatisfiable for every strict wrapped fix body — errors are always
+  fixed points of eager `Except` bodies, so the recurrence-class
+  examples (running sum, popcount, rec_ones, stream_fibs, ChaCha20
+  iterate) emit obligations that elaborate but can never be discharged.
+  Sound but unusable; needs a contract revision design doc.
 - Two Vec/BitVec round-trip axioms remain in the support library TCB
   (cheap, separately tracked proof task).
 
