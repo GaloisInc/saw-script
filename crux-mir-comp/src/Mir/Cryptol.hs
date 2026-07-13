@@ -139,7 +139,7 @@ cryptolOverrides _symOnline cs name cfg
 
         sym <- getSymInterface
         RegMap (Empty :> RegEntry _ rv) <- getOverrideArgs
-        liftIO $ munge sym shp rv
+        liftIO $ munge (cs ^. collection) sym shp rv
 
   | otherwise = Nothing
   where
@@ -254,7 +254,7 @@ loadCryptolFunc col sig modulePath name = do
 
     let fnName = "cryptol_" <> modulePath <> "_" <> name
     return $ LoadedCryptolFunc argShps retShp $
-        cryptolRun (Text.unpack fnName) args retShp (SAW.ttTerm tt)
+        cryptolRun col (Text.unpack fnName) args retShp (SAW.ttTerm tt)
 
   where
     listToCtx :: forall k0 (f0 :: k0 -> Kind.Type). [Some f0] -> Some (Assignment f0)
@@ -276,12 +276,13 @@ loadCryptolFunc col sig modulePath name = do
 cryptolRun ::
     forall sym p t fs rtp r args ret .
     (IsSymInterface sym, sym ~ MirSym t fs) =>
+    M.Collection ->
     String ->
     CryFunArgs args ->
     TypeShape ret ->
     SAW.Term ->
     OverrideSim (p sym) sym MIR rtp args r (RegValue sym ret)
-cryptolRun name (CryFunArgs (CryFunArgs' tpArgs ctrs normArgs)) retShp funcTerm = do
+cryptolRun col name (CryFunArgs (CryFunArgs' tpArgs ctrs normArgs)) retShp funcTerm = do
     let tpArgsSize      = Ctx.size tpArgs
         normArgsSize    = Ctx.size normArgs
 
@@ -331,17 +332,17 @@ cryptolRun name (CryFunArgs (CryFunArgs' tpArgs ctrs normArgs)) retShp funcTerm 
 
     let allTerms = tpTerms ++ argTerms
     appTerm  <- liftIO (SAW.scApplyAll sc funcTerm allTerms)
-    liftIO $ termToReg sym appTerm retShp
+    liftIO $ termToReg col sym appTerm retShp
 
 munge :: forall sym t fs tp0.
     (IsSymInterface sym, sym ~ MirSym t fs) =>
-    sym -> TypeShape tp0 -> RegValue sym tp0 -> IO (RegValue sym tp0)
-munge sym shp0 rv0 = do
+    M.Collection -> sym -> TypeShape tp0 -> RegValue sym tp0 -> IO (RegValue sym tp0)
+munge col sym shp0 rv0 = do
 
     let eval :: forall tp. W4.Expr t tp -> IO SAW.Term
         eval = exprToTerm sym
         uneval :: TypeShape (BaseToType btp) -> SAW.Term -> IO (W4.Expr t btp)
-        uneval shp t = termToReg sym t shp
+        uneval shp t = termToReg col sym t shp
 
     let go :: forall tp. TypeShape tp -> RegValue sym tp -> IO (RegValue sym tp)
         go shp@(PrimShape _ _) expr = eval expr >>= uneval shp

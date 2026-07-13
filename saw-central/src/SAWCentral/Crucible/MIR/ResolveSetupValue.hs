@@ -249,12 +249,13 @@ prettyMIRVal sym (MIRVal shp val) =
 buildMirAggregateWithVal ::
   (HasCallStack, Monad m, MonadFail m) =>
   Sym ->
+  Word ->
   [AgElemShape] ->
   [MIRVal] ->
   (forall tp. Word -> Word -> TypeShape tp -> RegValue Sym tp -> m (RegValue Sym tp)) ->
   m (Mir.MirAggregate Sym)
-buildMirAggregateWithVal sym elems vals f =
-  buildMirAggregate sym elems vals $
+buildMirAggregateWithVal sym totalSize elems vals f =
+  buildMirAggregate sym totalSize elems vals $
     \off sz shp (MIRVal shp' rv) ->
       case W4.testEquality shp shp' of
         Just Refl -> f off sz shp rv
@@ -662,12 +663,13 @@ resolveSetupVal mcc env tyenv nameEnv val =
 
           -- Finally, construct a MIRVal of the appropriate shape.
           let mirTy = mirAdtToTy adt
+          let structSz = tySize col mirTy
           Some (structShp :: TypeShape tp) <- pure $ tyToShape col mirTy
           (elems :: [AgElemShape], Refl :: tp :~: Mir.MirAggregateType) <- case structShp of
             StructShape _ elems -> return (elems, Refl)
             _ -> panic "resolveSetupVal"
               ["TyAdt Struct produced non-StructShape", Text.pack $ show structShp]
-          ag <- buildMirAggregateWithVal sym elems flds' $ \_off _sz _shp rv -> return rv
+          ag <- buildMirAggregateWithVal sym structSz elems flds' $ \_off _sz _shp rv -> return rv
           pure $ MIRVal structShp ag
         Mir.Adt nm (Mir.Enum _) _ _ _ _ _ ->
           panic "resolveSetupVal" [
@@ -832,12 +834,13 @@ resolveSetupVal mcc env tyenv nameEnv val =
       flds' <- traverse (resolveSetupVal mcc env tyenv nameEnv) flds
       let fldMirTys = map (\(MIRVal shp _) -> shapeMirTy shp) flds'
       let mirTy = Mir.TyTuple fldMirTys
+      let tupleSz = tySize col mirTy
       Some (tupleShp :: TypeShape tp) <- pure $ tyToShape col mirTy
       (elems :: [AgElemShape], Refl :: tp :~: Mir.MirAggregateType) <- case tupleShp of
         TupleShape _ elems -> return (elems, Refl)
         _ -> panic "resolveSetupVal"
           ["TyTuple produced non-TupleShape", Text.pack $ show tupleShp]
-      ag <- buildMirAggregateWithVal sym elems flds' $ \_off _sz _shp rv -> return rv
+      ag <- buildMirAggregateWithVal sym tupleSz elems flds' $ \_off _sz _shp rv -> return rv
       pure $ MIRVal tupleShp ag
     MS.SetupSlice slice ->
       case slice of
@@ -1268,12 +1271,13 @@ resolveSAWTerm mcc tp tm =
       vals <- zipWithM (resolveSAWTerm mcc) tps tms
       let mirTys = map (\(MIRVal shp _) -> shapeMirTy shp) vals
       let mirTupleTy = Mir.TyTuple mirTys
+      let tupleSz = tySize col mirTupleTy
       Some (tupleShp :: TypeShape tp) <- pure $ tyToShape col mirTupleTy
       (elems :: [AgElemShape], Refl :: tp :~: Mir.MirAggregateType) <- case tupleShp of
         TupleShape _ elems -> return (elems, Refl)
         _ -> panic "resolveSAWTerm"
           ["TyTuple produced non-TupleShape", Text.pack $ show tupleShp]
-      ag <- buildMirAggregateWithVal sym elems vals $ \_off _sz _shp rv -> return rv
+      ag <- buildMirAggregateWithVal sym tupleSz elems vals $ \_off _sz _shp rv -> return rv
       pure $ MIRVal tupleShp ag
     Cryptol.TVRec _flds ->
       fail "resolveSAWTerm: unsupported record type"

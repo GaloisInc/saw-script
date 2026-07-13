@@ -373,7 +373,7 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak -> do
     w4VarMap <- liftIO $ readIORef w4VarMapRef
     let termSub = os ^. MS.termSub
     retVal <- case ms ^. MS.csRetValue of
-        Just sv -> liftIO $ setupToReg sym termSub w4VarMap allocMap retShp sv
+        Just sv -> liftIO $ setupToReg sym col termSub w4VarMap allocMap retShp sv
         Nothing ->
           -- We know that the returned value is (), so assert that the type
           -- representation is MirAggregateRepr (which is how all tuples are
@@ -408,7 +408,7 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak -> do
         forM_ (zip svs [0 .. len - 1]) $ \(sv, i) -> do
             iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
             ref' <- mirRef_offsetSim (ptr ^. mpRef) iSym elemSize
-            rv <- liftIO $ setupToReg sym termSub w4VarMap allocMap shp sv
+            rv <- liftIO $ setupToReg sym col termSub w4VarMap allocMap shp sv
             writeMirRefSim (ptr ^. mpType) ref' (M.Width elemSize) rv
 
     -- Clobber all globals.  We don't yet support mentioning globals in specs.
@@ -568,6 +568,7 @@ matchArg sym ppopts eval col allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
 setupToReg :: forall sym t fs tp0.
     (IsSymInterface sym, sym ~ MirSym t fs, HasCallStack) =>
     sym ->
+    M.Collection ->
     -- | `termSub`: maps `VarIndex`es in the MethodSpec's namespace to `Term`s
     -- in the context's namespace.
     IntMap SAW.Term ->
@@ -578,7 +579,7 @@ setupToReg :: forall sym t fs tp0.
     TypeShape tp0 ->
     MS.SetupValue MIR ->
     IO (RegValue sym tp0)
-setupToReg sym termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
+setupToReg sym col termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
   where
     go :: forall tp. TypeShape tp -> MS.SetupValue MIR -> IO (RegValue sym tp)
     go (PrimShape _ btpr) (MS.SetupTerm tt) = do
@@ -590,12 +591,14 @@ setupToReg sym termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
             Nothing -> error $ "setupToReg: expected " ++ show btpr ++ ", but got " ++
                 show (W4.exprType expr)
         return expr
-    go (TupleShape _ elems) (MS.SetupTuple _ svs) =
-        buildMirAggregate sym elems svs $ \_off _sz shp sv -> go shp sv
+    go (TupleShape tupleTy elems) (MS.SetupTuple _ svs) = do
+        let tupleSz = tySize col tupleTy
+        buildMirAggregate sym tupleSz elems svs $ \_off _sz shp sv -> go shp sv
     go (ArrayShape _ _ sz shp len) (MS.SetupArray _ svs) = do
         buildMirAggregateArray sym sz shp len svs $ \_off sv -> go shp sv
-    go (StructShape _ elems) (MS.SetupStruct _ svs) =
-        buildMirAggregate sym elems svs $ \_off _sz shp sv -> go shp sv
+    go (StructShape structTy elems) (MS.SetupStruct _ svs) = do
+        let structSz = tySize col structTy
+        buildMirAggregate sym structSz elems svs $ \_off _sz shp sv -> go shp sv
     go (TransparentShape _ shp) sv = go shp sv
     go (RefShape _ _ _ tpr) (MS.SetupVar alloc) = case Map.lookup alloc allocMap of
         Just (Some ptr) -> case testEquality tpr (ptr ^. mpType) of

@@ -567,13 +567,13 @@ buildMirAggregate ::
   forall a m sym.
   (HasCallStack, IsSymInterface sym, Monad m, MonadFail m) =>
   sym ->
+  Word ->
   [AgElemShape] ->
   [a] ->
   (forall tp. Word -> Word -> TypeShape tp -> a -> m (RegValue sym tp)) ->
   m (MirAggregate sym)
-buildMirAggregate sym elems xs f = do
+buildMirAggregate sym totalSize elems xs f = do
   agCheckLengthsEq "buildMirAggregate" elems xs
-  let totalSize = maximum (0 : [off + sz | AgElemShape off sz _ <- elems])
   let emptyAg = MirAggregate totalSize mempty
   foldM insert emptyAg (zip elems xs)
   where
@@ -752,7 +752,7 @@ buildMirAggregateArray ::
 buildMirAggregateArray sym elemSz elemShp len xs f = do
   agArrayCheckLengthsEq "buildMirAggregateArray" len xs
   let elems = arrayAgElemShapes elemSz elemShp len
-  buildMirAggregate sym elems xs $
+  buildMirAggregate sym (elemSz * len) elems xs $
     \off _sz shp x -> do
       Refl <- case testEquality (shapeType shp) (shapeType elemShp) of
         Just pf -> return pf
