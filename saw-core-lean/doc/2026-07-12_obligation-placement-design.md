@@ -18,6 +18,17 @@ OP-3 section below is the post-audit revision; the pre-audit text
 uniqueness quantifier removes no safety") is superseded. The audit also
 added the obligation-site scope table at the end.
 
+**Second audit record (2026-07-12, after OP-1 shipped, before OP-2
+implementation):** the OP-2 decision-rule amendment (interval
+entailment) was audited adversarially. Faithfulness and obligation
+placement SOUND; the draft interval propagation set REFUTED
+(`minNat`/`maxNat` and variable×variable `mulNat` are omega-atomized —
+kernel-checked witnesses in the amendment subsection) and corrected;
+two further binding conditions added (decision attached to the `at`
+contract entry only; error string bare with nothing interpolated — the
+original accessor sketch in this doc interpolated the index and was a
+silent-unsoundness trap, now corrected in place).
+
 ## Principle
 
 Every obligation the backend embeds inside an emitted term must be
@@ -221,8 +232,15 @@ atRuntimeCheckedM (n : Nat) (α : Type)
     (xs : Except String (Vec n α)) (i : Nat) : Except String α :=
   do let vec ← xs
      if h : i < n then pure vec[i]
-     else throw ("at: index " ++ … ++ " out of bounds")
+     else throw "at: index out of bounds"
 ```
+
+(The error string is the bare Prelude message, byte-for-byte — audit
+condition 2 below. An earlier sketch here interpolated the index into
+the message; the 2026-07-12 amendment audit flagged that as silently
+unsound: SAW yields the SAME `error "at: index out of bounds"` for two
+different out-of-range indices, so index-bearing messages would let
+Lean prove inequalities SAW rejects. Do not interpolate anything.)
 
 This is not the banned defaulting fallback: SAWCore's `at` is partial
 and its out-of-range meaning IS an error — audit-verified against the
@@ -265,11 +283,112 @@ eta-expanded formal or any other evidence-less position lowers
 runtime-checked. No emitted-term inspection: the decision reads the
 production record / binder environment, per the calculus.
 
+**Decision-rule amendment (2026-07-12, AUDITED — second adversarial
+Opus audit, same-day; supersedes the paragraph above's coarser rule).**
+Audit verdicts: faithfulness of the runtime-checked lowering under
+`iteM` SOUND (verified in the emitter — `UseMapsToWrapped` passes both
+branches as direct arguments, never pre-bound, and
+`iteM = Bool.rec`-selection never forces the untaken branch);
+obligation relocation SOUND (the runtime accessor encodes the FULL
+Prelude disjunction `i < n ∨ error`, so the obligation resurfaces at
+the goal, not vanishes); the draft interval propagation set REFUTED
+(corrected below); two binding conditions added (end of this
+subsection). OP-1 exposed two families the original positional rule
+mis-decides:
+
+- *Guard-dependent branch bounds*: `i < 4` emitted inside the true
+  branch of `iteM (ltNat i 4 …)` under a binder carrying only
+  `h_gen_bounds_ : i < 8`. The binder DOES carry evidence — for the
+  wrong bound. The original rule ("binder carries evidence →
+  proof-carrying") would emit an unprovable obligation: safe (loud
+  `sorry`) but permanently pinned, failing this slice's purpose.
+  (Pinned rows: cryptol_bv_entrypoints, cryptol_ec_sequence_split,
+  sequence_append_reverse.)
+- *Value-dependent bounds*: `0 < x__…` where the vector length is a
+  runtime bvToNat-derived Nat — no evidence at all
+  (bitvector_order_width).
+
+Amended rule: **an index slot lowers proof-carrying iff the binder
+environment interval-entails the emitted bound; otherwise it lowers
+runtime-checked.** Interval entailment is a sound under-approximation
+of the OP-1 chain, computed on the index production record (no Lean at
+emission time): each binder variable gets the interval `[0, n)` from
+its `h_gen_bounds_` hypothesis (or `[0, ∞)` with none); intervals
+propagate through the OMEGA-CLOSABLE operation set (audit-corrected,
+see below) — `addNat`, `subNat` (Nat monus: `ub(a∸b) = ub(a) ∸ lb(b)`,
+`lb(a∸b) = lb(a) ∸ ub(b)`), `mulNat` with a CONSTANT operand,
+`divNat_checked`/`divNat`/`modNat_checked`/`modNat` by a constant, and
+the numeral macros — and the slot lowers proof-carrying iff
+`ub(index) < bound-constant` (resp. the obligation's comparison) is
+numerically true. Every corpus shape OP-1 closed is interval-entailed
+(`4+i < 8` under `i<4`; `i∸4 < 4` under `i<8`; `i/2 < 4` under `i<8`;
+`3∸(3∸i) < 4` under `i<4`), so OP-1's un-gapped rows keep their static
+proof-carrying form; the guard-dependent and value-dependent families
+fail entailment and lower runtime-checked.
+
+**Audit correction (REFUTED as first drafted; kernel-checked
+witnesses).** The draft propagated intervals through `minNat`/`maxNat`
+and unrestricted `mulNat`, mirroring the OP-1 simp set. Both are
+omega-atomized after the simp normalization, so the draft rule was NOT
+an under-approximation of the chain:
+
+- `example (i j : Nat) (hi : i < 4) : Nat.min i j < 4 := by omega`
+  FAILS — omega atomizes `Nat.min`/`Nat.max` (and `Nat.min_def` +
+  omega also fails: omega does not split the produced `if`). The OP-1
+  simp set lists `minNat, maxNat`, but that rewrite only reaches the
+  alias, not closure — the draft's claim that these were "handled" was
+  an internal contradiction.
+- `example (i j : Nat) (hi : i < 4) (hj : j < 4) : i * j < 16 := by
+  omega` FAILS — omega multiplies only by literal coefficients.
+
+A greenlit-but-unclosable slot re-pins its row forever (loud, not
+unsound — but it defeats the slice). Corrected rule: `minNat`,
+`maxNat`, and variable×variable `mulNat` propagate to `[0, ∞)`
+(→ runtime-checked). They may return to the entailment set only
+together with a chain strengthening that demonstrably closes them.
+
+The rule's precision is a *refinement* knob, not a soundness knob.
+Both mis-decisions are safe — emitting proof-carrying where the chain
+cannot close yields a loud `sorry` (caught by every fence); emitting
+runtime-checked where a proof existed is still the faithful Prelude
+`at` semantics. Interval entailment must remain an UNDER-approximation
+of the chain as the corpus evolves: it may only answer "provable" when
+the OP-1 chain genuinely closes the obligation.
+
+**Binding conditions added by the amendment audit:**
+
+3. **The lowering decision attaches to the `at`
+   `CheckedApplicationContract` entry, gated on primitive identity —
+   never to the shared `IndexArg` machinery.** The checked table
+   routes index slots for six primitives; only `at` has error-default
+   Prelude semantics. Wiring the error-else decision into the shared
+   index handling could reach `updWithProof`/`sliceWithProof`/
+   `genWithProof` (whose out-of-range meaning is not this error) or —
+   worst — `atWithDefaultM`, where replacing a genuine caller default
+   with an error would let Lean certify statements SAW rejects.
+4. **The accessor's error string is the bare Prelude message with
+   nothing interpolated** (see the corrected sketch above; an
+   index-bearing message would make Lean distinguish two out-of-range
+   accesses SAW deems equal — silent unsoundness).
+
+Faithfulness note (guard-dependent case): the runtime-checked branch
+needs no relationship between the guard and the bound to be faithful.
+`iteM b x y = b >>= fun b' => if b' then x else y` selects between the
+branch *computations*; the untaken branch's error value is never
+forced into the result. If the source indexes out of range under a
+true guard, SAW's own meaning is `error "at: index out of bounds"` and
+the runtime-checked accessor produces exactly that.
+
 **Acceptance.** saw-lean-example invol/eq_spec goals emit sorry-free,
 and their proofs (the reduction recipe already written in
 `saw-lean-example/proof/*/proof.lean`) discharge; the
 `obligations/vector_at_partial_function` pin updates to the new shape;
-no `η_checked` lambda in the corpus contains an evidence `sorry`.
+no `η_checked` lambda in the corpus contains an evidence `sorry`;
+the four OP-1-surviving bound rows (cryptol_bv_entrypoints,
+cryptol_ec_sequence_split, sequence_append_reverse,
+bitvector_order_width) un-gap into true differential coverage, and
+OP-1's nine un-gapped rows keep their proof-carrying form (no
+runtime-check regression on interval-entailed slots).
 
 ## Instance 3: the wrapped-fix contract must be satisfiable (OP-3)
 

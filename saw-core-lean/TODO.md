@@ -209,7 +209,16 @@ Slices (each emitted-Lean-diff-reviewed and green before commit):
   sequence_append_reverse pins), plus the value-dependent cousin
   `0 < runtime-Nat` (bitvector_order_width pin). The runtime-checked
   accessor resolves all four rows; acceptance should include
-  un-gapping them.
+  un-gapping them. DECISION RULE (audited 2026-07-12, second Opus
+  audit — see the design doc's amendment subsection): proof-carrying
+  iff interval entailment over the binder `h_gen_bounds_` environment,
+  propagating ONLY through the omega-closable set (addNat, subNat,
+  mulNat-by-constant, divNat/modNat-by-constant, numeral macros;
+  minNat/maxNat/var×var-mulNat go to [0,∞) — kernel-checked omega
+  atomization witnesses). FOUR binding conditions: at-contract only;
+  Prelude-exact error string; decision attached to the `at` contract
+  entry (never shared IndexArg machinery); nothing interpolated into
+  the error message.
 - [ ] **Slice OP-3** — wrapped-fix revision, POST-AUDIT SHAPE (the
   2026-07-12 Opus audit refuted the unconditional pure-uniqueness
   contract with the witness `fix Bool (\b -> ite b True True)`: unique
