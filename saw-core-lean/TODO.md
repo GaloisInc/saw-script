@@ -223,20 +223,31 @@ Slices (each emitted-Lean-diff-reviewed and green before commit):
   calculus vs. keep the loud undischargeable `False`, and whether
   eliminator case-handler positions count as reachable. Needs its own
   audited design note before implementation.
-- [ ] **Slice OP-3** — ENTRY DECISION (2026-07-12): STRUCTURAL-FIRST.
-  Rationale: acceptance is closing `cryptol_running_sum_verify`
-  end-to-end including the discharge proof; the structural lowering is
-  productive by construction and definitionally reduces (proofs go
-  through simp/rfl as in the OP-2 demo discharges), while the gated
-  contract leaves an opaque `Classical.choose` the goal proof can only
-  consume through the uniqueness spec. The May fragility that shelved
-  the structural design is what the position calculus has since
-  removed. The productivity recognizer + rejection gate (b) is
-  mandatory and comes first in either variant; the gated contract
-  remains the recorded fallback if a recognized shape resists the
-  structural construction. Design amendment (recognizer definition +
-  emitted construction) gets the audit-first treatment BEFORE
-  implementation. Original post-audit shape follows:
+- [ ] **Slice OP-3** — ENTRY DECISION (2026-07-12): STRUCTURAL-FIRST;
+  first structural draft REFUTED by the third Opus audit
+  (2026-07-12, `doc/2026-07-12_op3-structural-fix-design.md` — kept
+  as the rejected-candidate record). Key audit facts for the
+  successor design: real normalized bodies reference the recursive
+  vector through `at (zip … rec xs) idx` and the nested
+  `at (gen K (\i'' -> …)) (i-1)` `#`-append shape (NOT bare
+  `at rec j`); SAW's lazy `at (gen K g) j = g j` must be reproduced —
+  any strict intermediate gen/zip build forces later-index references
+  and errors on every productive element (kernel-checked); the
+  recursive handle must be the full wrapped vector; `atWithDefault`
+  defaults must be preserved (OP-2 condition 1); novel error strings
+  violate OP-2 condition 2 outside the divergence region; rec_ones /
+  stream_fibs are wrapped-contract Stream rows that hard-reject if
+  the wrapped contract is deleted without a stream story, and
+  ChaCha20-iterate is on the RAW fix path (not unblocked by any
+  wrapped-only design). Candidate directions the audit left open:
+  whole-vector bounded iteration (Kleene: `body^n` from a seed —
+  revisit the May parametric bridges `saw_self_ref_comp_iterate` /
+  `foldl_eq_natRec_atWithDefault`, fully proved and retired) with a
+  lazy-selection faithfulness argument, or hand-realized recurrence
+  combinators matched at the `zip`-comprehension level. Next concrete
+  step: successor design draft against the audit's six minimum
+  conditions, then a fourth audit, BEFORE touching Term.hs. Original
+  post-audit contract analysis follows:
   wrapped-fix revision, POST-AUDIT SHAPE (the
   2026-07-12 Opus audit refuted the unconditional pure-uniqueness
   contract with the witness `fix Bool (\b -> ite b True True)`: unique
