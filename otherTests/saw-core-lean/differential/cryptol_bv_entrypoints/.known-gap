@@ -1,8 +1,0 @@
-OP-1 checked evidence discharges the addNat/subNat derived bounds
-this row used to pin on. The surviving obligation is guard-dependent:
-`i < 4` emitted inside the true branch of `iteM (ltNat i 4 …)` under
-only `h_gen_bounds_ : i < 8` — the branch guard is not available as
-evidence at the obligation site, so the bound is unprovable in place.
-Guarded evidence-less access is Slice OP-2's surface (the
-runtime-checked accessor makes the branch error-faithful).
-True differential tests may not rely on `sorry`.

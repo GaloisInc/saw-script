@@ -390,6 +390,47 @@ bitvector_order_width) un-gap into true differential coverage, and
 OP-1's nine un-gapped rows keep their proof-carrying form (no
 runtime-check regression on interval-entailed slots).
 
+**Implementation record (2026-07-12, OP-2 SHIPPED).**
+
+- Support library: `atRuntimeCheckedM` (bare Prelude error string) plus
+  the bridge `atRuntimeCheckedM_eq_checked` (with the bound in hand,
+  the runtime check IS the checked accessor — lets goal proofs recover
+  the static reading; kernel-clean, propext/Quot.sound only).
+- Emitter: `_natBoundsEnv` in Γ records each `h_gen_bounds_` binder's
+  bound at its introduction (`translateFunctionWithNatLtWrappedResult`,
+  both arms); `natIntervalOf`/`atBoundsEntailed` implement the audited
+  interval rule; `lowerCheckedHelperArgsDecided` gates the two
+  lowerings on the `at` contract identity (audit condition 3) and
+  serves both the full-application and prefix-partial (eta) paths — an
+  eta formal has no bound fact, so it routes runtime-checked without a
+  special case.
+- All four target rows un-gapped (census 68→64) with SAW/Lean
+  differential observations MATCHING through the runtime accessor —
+  the guard-dependent branch shape now executes faithfully. OP-1's
+  nine rows kept their proof-carrying form (spot-verified: transpose
+  still emits five `atWithProof_checkedM`, zero runtime checks).
+- saw-lean-example invol AND eq_spec discharge end-to-end from the RAW
+  emitted artifacts (only the `goal_holds` stub is replaced). The
+  reduction recipe needed the runtime accessor + Int sign-split
+  unfolds and explicit `((k : Fin 4) : Nat) = k` rfl-equations (simp
+  does not rewrite those numeral casts in place).
+- `obligations/cryptol_ec_at_oob_bounds` re-pinned to the new
+  contract: a statically out-of-bounds literal access lowers
+  runtime-checked (its error IS the SAW meaning) instead of emitting a
+  FALSE proof-carrying obligation.
+- **Rider census (h_raw_error_ : False positions in the corpus):**
+  three constructed litmus probes (`obligations/raw_error_{nat,prop,
+  function}` — top-level bare `error` at raw types; they deliberately
+  PIN the loud-False contract) and one real position (the `Num.rec`
+  TCInf case handler in the pinned `polynomial_literal_rejection`
+  golden — dead for every finite `Num` instantiation, reachable only
+  if a caller supplies `TCInf`). No silently-reachable position found.
+  The disposition question — reject reachable raw errors vs. keep the
+  loud undischargeable `False` (and whether case-handler positions
+  under an eliminator count as reachable) — is a design decision that
+  gets the audit-first treatment; deferred to its own slice entry in
+  TODO.md rather than flipped silently here.
+
 ## Instance 3: the wrapped-fix contract must be satisfiable (OP-3)
 
 **Defect.** `saw_fix_unique_exists`

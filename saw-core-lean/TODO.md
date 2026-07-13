@@ -196,29 +196,33 @@ Slices (each emitted-Lean-diff-reviewed and green before commit):
   true coverage (census 77→68). Completed outlines in
   `proofs/{E4,E5,t6}` kept — the proof harness's staging scan is
   textual and the chain embeds a loud `sorry` fallback by design.
-- [ ] **Slice OP-2** — evidence-less checked access: positions whose
-  bound is not derivable at emission (the eta-wrapper family) must not
-  fabricate evidence; route them through a runtime-checked accessor
-  with `Except.error` out-of-bounds semantics (SAWCore's own `at`
-  partiality), keeping `atWithProof_checkedM` for positions with real
-  evidence. Restores dischargeability of the saw-lean-example goals.
-  SCOPE ADDITION (OP-1 implementation finding, 2026-07-12):
-  **guard-dependent branch obligations** — `iteM (ltNat i k …)`
-  branches emit `i < k` bounds without the guard as evidence
-  (cryptol_bv_entrypoints, cryptol_ec_sequence_split,
-  sequence_append_reverse pins), plus the value-dependent cousin
-  `0 < runtime-Nat` (bitvector_order_width pin). The runtime-checked
-  accessor resolves all four rows; acceptance should include
-  un-gapping them. DECISION RULE (audited 2026-07-12, second Opus
-  audit — see the design doc's amendment subsection): proof-carrying
-  iff interval entailment over the binder `h_gen_bounds_` environment,
-  propagating ONLY through the omega-closable set (addNat, subNat,
-  mulNat-by-constant, divNat/modNat-by-constant, numeral macros;
-  minNat/maxNat/var×var-mulNat go to [0,∞) — kernel-checked omega
-  atomization witnesses). FOUR binding conditions: at-contract only;
-  Prelude-exact error string; decision attached to the `at` contract
-  entry (never shared IndexArg machinery); nothing interpolated into
-  the error message.
+- [x] **Slice OP-2 (DONE 2026-07-12)** — evidence-less checked access:
+  `atRuntimeCheckedM` (bare Prelude error string) + interval-entailment
+  decision (`natBoundsEnv` in Γ, `lowerCheckedHelperArgsDecided` gated
+  on the `at` contract identity) per the audited amendment. Eta
+  formals, guard-dependent branch bounds, and value-dependent runtime
+  bounds all lower runtime-checked; interval-entailed slots keep the
+  proof-carrying form (OP-1's nine rows unchanged). FOUR more rows
+  un-gapped (census 68→64: cryptol_bv_entrypoints,
+  cryptol_ec_sequence_split, sequence_append_reverse,
+  bitvector_order_width) with matching SAW/Lean differential
+  observations; `cryptol_ec_at_oob_bounds` re-pinned to the new
+  contract (out-of-bounds literal → runtime error, not a FALSE
+  obligation); saw-lean-example invol AND eq_spec discharge end-to-end
+  from raw artifacts. Binding conditions honored: at-contract only;
+  Prelude-exact error string, nothing interpolated; decision attached
+  to the `at` contract entry, never shared IndexArg machinery;
+  interval set = omega-closable operations only (minNat/maxNat/
+  var×var-mulNat unbounded per the audit witnesses).
+- [ ] **OP-2 follow-up (design decision, audit-first): reachable raw
+  `error` disposition.** Rider census done 2026-07-12 (see design doc
+  OP-2 implementation record): three litmus probes deliberately pin
+  the loud-False contract; one real position (polynomial t1 `Num.rec`
+  TCInf handler) is dead for finite `Num` but reachable if a caller
+  instantiates `TCInf`. Decide: reject reachable raw errors per the
+  calculus vs. keep the loud undischargeable `False`, and whether
+  eliminator case-handler positions count as reachable. Needs its own
+  audited design note before implementation.
 - [ ] **Slice OP-3** — wrapped-fix revision, POST-AUDIT SHAPE (the
   2026-07-12 Opus audit refuted the unconditional pure-uniqueness
   contract with the witness `fix Bool (\b -> ite b True True)`: unique

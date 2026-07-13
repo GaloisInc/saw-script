@@ -405,6 +405,15 @@ data TranslationReader = TranslationReader
     -- calculus's binding record (plan Slice 1); they are recorded
     -- but not yet consulted — Slices 2–5 make them the authority
     -- for adaptation and proof transport.
+  , _natBoundsEnv :: Map Lean.Ident Lean.Term
+    -- ^ Exclusive Nat upper-bound facts in scope: binder identifiers
+    -- introduced with an @h_gen_bounds_ : i < n@ hypothesis, mapped
+    -- to their bound term @n@. Consulted by the @at@ contract's
+    -- interval-entailment decision (OP-2,
+    -- doc/2026-07-12_obligation-placement-design.md): the
+    -- proof-carrying lowering fires only when these facts entail the
+    -- emitted bound; otherwise the runtime-checked accessor is the
+    -- honest form.
   , _boundUniverses    :: Map VarName Lean.UnivLevel
     -- ^ For SAWCore variables whose binder type is @sort k@ at @k ≥ 1@,
     -- the universe variable that 'translateSort' allocated for the
@@ -1970,7 +1979,12 @@ translateFunctionWithNatLtWrappedResult primitiveName nLean expectsSourceProof f
                     (Lean.Ident "h_gen_bounds_")
                   let proofBinder =
                         Lean.Binder Lean.Explicit proofName (Just proofTy)
-                  bodyResult <- translateTermLetWithShape body
+                  -- Record the binder's bound (i < n) in Γ's Nat-bounds
+                  -- environment so downstream at-contract obligations
+                  -- can interval-entail against it (OP-2).
+                  bodyResult <-
+                    localTR (over natBoundsEnv (Map.insert idxLean nLean))
+                      (translateTermLetWithShape body)
                   bodyLean <- adaptToRuntime bodyResult
                   pure (Lean.Lambda [idxBinder, proofBinder] bodyLean)
         ((idxName, _) : (proofName, _) : [], body)
@@ -1981,7 +1995,9 @@ translateFunctionWithNatLtWrappedResult primitiveName nLean expectsSourceProof f
                       proofTy = natLt idxTerm nLean
                   in translateBinderWithLeanType proofName proofTy $
                     \proofBinder -> do
-                      bodyResult <- translateTermLetWithShape body
+                      bodyResult <-
+                        localTR (over natBoundsEnv (Map.insert idxLean nLean))
+                          (translateTermLetWithShape body)
                       bodyLean <- adaptToRuntime bodyResult
                       pure (Lean.Lambda [idxBinder, proofBinder] bodyLean)
         _ ->
@@ -2814,6 +2830,146 @@ buildRawProofCarryingApplication resultShape head_ pureWrap shouldBind argResult
 -- The source proof arguments are intentionally ignored: Haskell only emits
 -- the corresponding Lean proposition and passes a proof variable checked by
 -- Lean. It does not inspect the index arithmetic or trust SAW proof terms.
+-- | Nat interval @[lo, hi]@ over an emitted index expression; @hi@ of
+-- 'Nothing' means unbounded. OP-2's entailment domain
+-- (doc/2026-07-12_obligation-placement-design.md, amended + audited).
+data NatInterval = NatInterval Integer (Maybe Integer)
+
+unboundedNat :: NatInterval
+unboundedNat = NatInterval 0 Nothing
+
+-- | The final dot-component of an emitted identifier. Arithmetic
+-- helpers emit unqualified (artifacts @open@ the primitives
+-- namespace) while the numeral macros emit fully qualified; matching
+-- the base name covers both spellings of the same helper.
+leanBaseName :: Lean.Ident -> String
+leanBaseName (Lean.Ident s) =
+  case break (== '.') s of
+    (_, '.' : rest) -> leanBaseName (Lean.Ident rest)
+    (chunk, _)      -> chunk
+
+-- | Evaluate an emitted constant Nat expression (numeral macros and
+-- literals) to its value.
+evalNatConst :: Lean.Term -> Maybe Integer
+evalNatConst tm = case tm of
+  Lean.NatLit k | k >= 0 -> Just k
+  Lean.IntLit k | k >= 0 -> Just k
+  Lean.Var v -> case leanBaseName v of
+    "zero_macro" -> Just 0
+    "one_macro"  -> Just 1
+    _            -> Nothing
+  Lean.App (Lean.Var v) [a] -> case leanBaseName v of
+    "natPos_macro" -> evalNatConst a
+    "succ_macro"   -> (+ 1) <$> evalNatConst a
+    "bit0_macro"   -> (* 2) <$> evalNatConst a
+    "bit1_macro"   -> (\k -> 2 * k + 1) <$> evalNatConst a
+    _              -> Nothing
+  _ -> Nothing
+
+-- | Interval of an emitted Nat index expression under the recorded
+-- binder bounds. Propagates ONLY through the omega-closable operation
+-- set fixed by the 2026-07-12 amendment audit: addNat, subNat (Nat
+-- monus), mulNat with a constant operand, divNat/modNat (checked or
+-- not) by a positive constant, and the numeral macros. minNat,
+-- maxNat, and variable-times-variable mulNat are deliberately
+-- unbounded — omega atomizes @Nat.min@/@Nat.max@ and nonlinear
+-- products (kernel-checked audit witnesses), so treating them as
+-- bounded would greenlight obligations the emitted evidence chain
+-- cannot close. This must remain an UNDER-approximation of the chain.
+natIntervalOf :: Map Lean.Ident Lean.Term -> Lean.Term -> NatInterval
+natIntervalOf bounds = go
+  where
+    go tm
+      | Just k <- evalNatConst tm = NatInterval k (Just k)
+    go (Lean.Var v)
+      | Just boundTm <- Map.lookup v bounds
+      , Just n <- evalNatConst boundTm
+      , n > 0 = NatInterval 0 (Just (n - 1))
+    go (Lean.Let _ _ _ _ body) = go body
+    go (Lean.App (Lean.Var v) as) = case (leanBaseName v, as) of
+      ("addNat", [a, b]) ->
+        let NatInterval la ha = go a
+            NatInterval lb hb = go b
+        in NatInterval (la + lb) ((+) <$> ha <*> hb)
+      ("subNat", [a, b]) ->
+        let NatInterval la ha = go a
+            NatInterval lb hb = go b
+        in NatInterval (maybe 0 (\ub -> max 0 (la - ub)) hb)
+             ((\ua -> max 0 (ua - lb)) <$> ha)
+      ("mulNat", [a, b])
+        | Just k <- evalNatConst b ->
+            let NatInterval la ha = go a
+            in NatInterval (la * k) ((* k) <$> ha)
+        | Just k <- evalNatConst a ->
+            let NatInterval lb hb = go b
+            in NatInterval (lb * k) ((* k) <$> hb)
+      ("divNat", [a, b])
+        | Just k <- evalNatConst b, k > 0 ->
+            let NatInterval la ha = go a
+            in NatInterval (la `div` k) ((`div` k) <$> ha)
+      ("divNat_checked", [a, b, _pf])
+        | Just k <- evalNatConst b, k > 0 ->
+            let NatInterval la ha = go a
+            in NatInterval (la `div` k) ((`div` k) <$> ha)
+      ("modNat", [_a, b])
+        | Just k <- evalNatConst b, k > 0 -> NatInterval 0 (Just (k - 1))
+      ("modNat_checked", [_a, b, _pf])
+        | Just k <- evalNatConst b, k > 0 -> NatInterval 0 (Just (k - 1))
+      _ -> unboundedNat
+    go _ = unboundedNat
+
+-- | Does the recorded binder-bounds environment interval-entail the
+-- @at@ contract's bound @i < n@? Both the length and index must be
+-- 'CheckedDirect' (a wrapped actual is a runtime value with no static
+-- interval), the length must be a constant, and the index's upper
+-- bound must fall below it.
+atBoundsEntailed ::
+  Map Lean.Ident Lean.Term -> [CheckedActual] -> Bool
+atBoundsEntailed bounds helperArgs = case helperArgs of
+  (CheckedDirect nTm : _ty : _xs : CheckedDirect iTm : _)
+    | Just nVal <- evalNatConst nTm
+    , NatInterval _ (Just hi) <- natIntervalOf bounds iTm
+    -> hi < nVal
+  _ -> False
+
+isAtIndexContract :: CheckedApplicationContract -> Bool
+isAtIndexContract contract =
+  cacModule contract == mkModuleName ["Prelude"]
+    && cacName contract == "at"
+
+-- | OP-2's two-lowering decision for the @at@ contract's index slot
+-- (doc/2026-07-12_obligation-placement-design.md, amended + audited).
+-- Interval-entailed positions keep the proof-carrying refinement
+-- (atWithProof_checkedM + the OP-1 evidence chain, which provably
+-- closes everything the interval rule admits); every other position —
+-- eta formals, guard-dependent branch indices, runtime values —
+-- lowers through 'atRuntimeCheckedM', whose out-of-range result is
+-- SAWCore's own @at@ error semantics (@Prelude.sawcore:1563@:
+-- @at n a v i = atWithDefault n a (error a "at: index out of bounds") v i@).
+-- Binding audit conditions: this decision is gated on the @at@
+-- contract identity and must NEVER move into the shared IndexArg
+-- machinery (upd/slice/genWithProof have different out-of-range
+-- meanings; atWithDefaultM keeps a genuine caller default), and the
+-- accessor's error message is the bare Prelude string with nothing
+-- interpolated.
+lowerCheckedHelperArgsDecided ::
+  TermTranslationMonad m =>
+  CheckedApplicationContract ->
+  [CheckedActual] ->
+  m Lean.Term
+lowerCheckedHelperArgsDecided contract helperArgs
+  | isAtIndexContract contract = do
+      bounds <- view natBoundsEnv <$> askTR
+      if atBoundsEntailed bounds helperArgs
+        then lowerCheckedApplicationHelperArgs contract helperArgs
+        else lowerProofCarryingActuals
+               (Lean.Ident "h_bounds_")
+               boundsProofScript
+               Nothing
+               (Lean.Var (Lean.Ident "atRuntimeCheckedM"))
+               helperArgs
+  | otherwise = lowerCheckedApplicationHelperArgs contract helperArgs
+
 lowerCheckedApplicationContract ::
   TermTranslationMonad m =>
   CheckedApplicationContract ->
@@ -2822,7 +2978,7 @@ lowerCheckedApplicationContract ::
   m TranslatedTerm
 lowerCheckedApplicationContract contract ident args = do
   helperArgs <- checkedApplicationHelperArgs (cacArgModes contract) args
-  tm <- lowerCheckedApplicationHelperArgs contract helperArgs
+  tm <- lowerCheckedHelperArgsDecided contract helperArgs
   -- The result shape is the contract's DECLARED result mode, not a
   -- hardcoded assumption.
   let shape = case cacResultMode contract of
@@ -2882,7 +3038,11 @@ lowerPartialCheckedApplicationContract contract ident args = do
          $ \lambdaBinders missingHelperArgs -> do
              -- Missing args become lambda binders already emitted at
              -- their declared representation; they never need a bind.
-             body <- lowerCheckedApplicationHelperArgs contract
+             -- For the at contract, an eta-bound index formal carries
+             -- no bound fact, so the OP-2 decision routes it through
+             -- the runtime-checked accessor instead of fabricating
+             -- in-lambda evidence.
+             body <- lowerCheckedHelperArgsDecided contract
                        (suppliedHelperArgs ++ map CheckedDirect missingHelperArgs)
              pure (TranslatedTerm (Lean.Lambda lambdaBinders body) BindingFunction)
 
@@ -5989,6 +6149,7 @@ runTermTranslationMonad configuration mname mm globals localEnv =
        , _skipBinderWrap        = False
        , _inRecursorCaseBinder  = False
        , _bindingEnv            = Map.empty
+       , _natBoundsEnv          = Map.empty
        , _boundUniverses    = Map.empty
        , _unavailableIdents = Set.unions [ reservedIdents
                                          , Set.fromList globals

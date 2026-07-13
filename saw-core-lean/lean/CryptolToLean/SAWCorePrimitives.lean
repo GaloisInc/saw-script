@@ -756,6 +756,33 @@ def atWithProof_checkedM (n : Nat) (α : Type)
   let vec ← xs
   pure vec[i]
 
+/-- Runtime-checked realization of SAWCore's `at` for index positions
+whose bound is NOT derivable at the emission site (OP-2,
+doc/2026-07-12_obligation-placement-design.md). Faithful, not a
+fallback: Prelude defines
+`at n a v i = atWithDefault n a (error a "at: index out of bounds") v i`,
+so an out-of-range access MEANS this error. The message must stay
+byte-for-byte the Prelude string with nothing interpolated — the
+`Except String` carrier compares messages, and SAW yields the SAME
+error for every out-of-range index, so an index-bearing message would
+let Lean distinguish computations SAW deems equal. Where the bound IS
+derivable, emission prefers 'atWithProof_checkedM' (the proof-carrying
+refinement); this accessor is the honest form everywhere else. -/
+def atRuntimeCheckedM (n : Nat) (α : Type)
+    (xs : Except String (Vec n α)) (i : Nat) : Except String α := do
+  let vec ← xs
+  if _h : i < n then pure vec[i]
+  else throw "at: index out of bounds"
+
+/-- Bridge to the proof-carrying form: with the bound in hand, the
+runtime check reduces to the checked accessor. Lets goal-level proofs
+recover the static reading of runtime-checked positions. -/
+theorem atRuntimeCheckedM_eq_checked (n : Nat) (α : Type)
+    (xs : Except String (Vec n α)) (i : Nat) (h : i < n) :
+    atRuntimeCheckedM n α xs i = atWithProof_checkedM n α xs i h := by
+  unfold atRuntimeCheckedM atWithProof_checkedM
+  simp [h]
+
 def genWithProof_checkedM (n : Nat) (α : Type)
     (f : (i : Nat) → i < n → Except String α) :
     Except String (Vec n α) :=

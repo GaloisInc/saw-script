@@ -838,15 +838,8 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1)))
-  (fun v_idx_3 => let h_bounds_obligation_ : (Prop) := (LT.lt v_idx_3
+  (fun v_idx_3 => atRuntimeCheckedM
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))));
-  let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | omega | (simp only [natPos_macro, bit0_macro, bit1_macro, one_macro, zero_macro, succ_macro, subNat, addNat, mulNat, minNat, maxNat, divNat_eq_div, modNat_eq_mod, divNat_checked_eq_div, modNat_checked_eq_mod, Nat.sub_eq, Nat.add_eq, Nat.mul_eq] at *; omega) | skip); all_goals sorry));
-  atWithProof_checkedM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -858,8 +851,8 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3
-  h_bounds_), Bind.bind (Bind.bind (Pure.pure (bvNat
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state
+  v_idx_3), Bind.bind (Bind.bind (Pure.pure (bvNat
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -878,15 +871,8 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1)))
-  (fun v_idx_3 => let h_bounds_obligation_ : (Prop) := (LT.lt v_idx_3
+  (fun v_idx_3 => atRuntimeCheckedM
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))));
-  let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | omega | (simp only [natPos_macro, bit0_macro, bit1_macro, one_macro, zero_macro, succ_macro, subNat, addNat, mulNat, minNat, maxNat, divNat_eq_div, modNat_eq_mod, divNat_checked_eq_div, modNat_checked_eq_mod, Nat.sub_eq, Nat.add_eq, Nat.mul_eq] at *; omega) | skip); all_goals sorry));
-  atWithProof_checkedM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -898,8 +884,8 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3
-  h_bounds_), Bind.bind (Bind.bind (Pure.pure (bvNat
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state
+  v_idx_3), Bind.bind (Bind.bind (Pure.pure (bvNat
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -919,15 +905,8 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1)))
-  (fun v_idx_3 => let h_bounds_obligation_ : (Prop) := (LT.lt v_idx_3
+  (fun v_idx_3 => atRuntimeCheckedM
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))));
-  let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | omega | (simp only [natPos_macro, bit0_macro, bit1_macro, one_macro, zero_macro, succ_macro, subNat, addNat, mulNat, minNat, maxNat, divNat_eq_div, modNat_eq_mod, divNat_checked_eq_div, modNat_checked_eq_mod, Nat.sub_eq, Nat.add_eq, Nat.mul_eq] at *; omega) | skip); all_goals sorry));
-  atWithProof_checkedM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -939,17 +918,9 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3
-  h_bounds_), Bind.bind x__''''''''''''
-  (fun v_idx_3 => let h_bounds_obligation_ : (Prop) := (LT.lt v_idx_3
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state
+  v_idx_3), Bind.bind x__'''''''''''' (fun v_idx_3 => atRuntimeCheckedM
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))));
-  let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | omega | (simp only [natPos_macro, bit0_macro, bit1_macro, one_macro, zero_macro, succ_macro, subNat, addNat, mulNat, minNat, maxNat, divNat_eq_div, modNat_eq_mod, divNat_checked_eq_div, modNat_checked_eq_mod, Nat.sub_eq, Nat.add_eq, Nat.mul_eq] at *; omega) | skip); all_goals sorry));
-  atWithProof_checkedM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -961,8 +932,7 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3
-  h_bounds_)]);
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3)]);
   let x__'''''''''''''' := (let h_bounds_obligation_ : (Prop) := (LT.lt
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   CryptolToLean.SAWCorePrimitives.one_macro)
@@ -1293,15 +1263,8 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1)))
-  (fun v_idx_3 => let h_bounds_obligation_ : (Prop) := (LT.lt v_idx_3
+  (fun v_idx_3 => atRuntimeCheckedM
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))));
-  let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | omega | (simp only [natPos_macro, bit0_macro, bit1_macro, one_macro, zero_macro, succ_macro, subNat, addNat, mulNat, minNat, maxNat, divNat_eq_div, modNat_eq_mod, divNat_checked_eq_div, modNat_checked_eq_mod, Nat.sub_eq, Nat.add_eq, Nat.mul_eq] at *; omega) | skip); all_goals sorry));
-  atWithProof_checkedM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -1313,8 +1276,8 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3
-  h_bounds_), Bind.bind (Bind.bind (Pure.pure (bvNat
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state
+  v_idx_3), Bind.bind (Bind.bind (Pure.pure (bvNat
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -1333,15 +1296,8 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1)))
-  (fun v_idx_3 => let h_bounds_obligation_ : (Prop) := (LT.lt v_idx_3
+  (fun v_idx_3 => atRuntimeCheckedM
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))));
-  let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | omega | (simp only [natPos_macro, bit0_macro, bit1_macro, one_macro, zero_macro, succ_macro, subNat, addNat, mulNat, minNat, maxNat, divNat_eq_div, modNat_eq_mod, divNat_checked_eq_div, modNat_checked_eq_mod, Nat.sub_eq, Nat.add_eq, Nat.mul_eq] at *; omega) | skip); all_goals sorry));
-  atWithProof_checkedM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -1353,17 +1309,10 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3
-  h_bounds_), Bind.bind x__''''''''''''''''''''''
-  (fun v_idx_3 => let h_bounds_obligation_ : (Prop) := (LT.lt v_idx_3
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state
+  v_idx_3), Bind.bind x__''''''''''''''''''''''
+  (fun v_idx_3 => atRuntimeCheckedM
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))));
-  let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | omega | (simp only [natPos_macro, bit0_macro, bit1_macro, one_macro, zero_macro, succ_macro, subNat, addNat, mulNat, minNat, maxNat, divNat_eq_div, modNat_eq_mod, divNat_checked_eq_div, modNat_checked_eq_mod, Nat.sub_eq, Nat.add_eq, Nat.mul_eq] at *; omega) | skip); all_goals sorry));
-  atWithProof_checkedM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -1375,17 +1324,9 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3
-  h_bounds_), Bind.bind x__''''''''''''
-  (fun v_idx_3 => let h_bounds_obligation_ : (Prop) := (LT.lt v_idx_3
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state
+  v_idx_3), Bind.bind x__'''''''''''' (fun v_idx_3 => atRuntimeCheckedM
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))));
-  let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | omega | (simp only [natPos_macro, bit0_macro, bit1_macro, one_macro, zero_macro, succ_macro, subNat, addNat, mulNat, minNat, maxNat, divNat_eq_div, modNat_eq_mod, divNat_checked_eq_div, modNat_checked_eq_mod, Nat.sub_eq, Nat.add_eq, Nat.mul_eq] at *; omega) | skip); all_goals sorry));
-  atWithProof_checkedM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -1397,8 +1338,7 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3
-  h_bounds_)]);
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3)]);
   let x__'''''''''''''''''''''''' := (let h_bounds_obligation_ : (Prop) := (LT.lt
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   CryptolToLean.SAWCorePrimitives.one_macro)
@@ -1733,15 +1673,8 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1)))
-  (fun v_idx_3 => let h_bounds_obligation_ : (Prop) := (LT.lt v_idx_3
+  (fun v_idx_3 => atRuntimeCheckedM
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))));
-  let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | omega | (simp only [natPos_macro, bit0_macro, bit1_macro, one_macro, zero_macro, succ_macro, subNat, addNat, mulNat, minNat, maxNat, divNat_eq_div, modNat_eq_mod, divNat_checked_eq_div, modNat_checked_eq_mod, Nat.sub_eq, Nat.add_eq, Nat.mul_eq] at *; omega) | skip); all_goals sorry));
-  atWithProof_checkedM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -1753,17 +1686,10 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3
-  h_bounds_), Bind.bind x__''''''''''''''''''''''''''''''''
-  (fun v_idx_3 => let h_bounds_obligation_ : (Prop) := (LT.lt v_idx_3
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state
+  v_idx_3), Bind.bind x__''''''''''''''''''''''''''''''''
+  (fun v_idx_3 => atRuntimeCheckedM
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))));
-  let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | omega | (simp only [natPos_macro, bit0_macro, bit1_macro, one_macro, zero_macro, succ_macro, subNat, addNat, mulNat, minNat, maxNat, divNat_eq_div, modNat_eq_mod, divNat_checked_eq_div, modNat_checked_eq_mod, Nat.sub_eq, Nat.add_eq, Nat.mul_eq] at *; omega) | skip); all_goals sorry));
-  atWithProof_checkedM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -1775,17 +1701,10 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3
-  h_bounds_), Bind.bind x__''''''''''''''''''''''
-  (fun v_idx_3 => let h_bounds_obligation_ : (Prop) := (LT.lt v_idx_3
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state
+  v_idx_3), Bind.bind x__''''''''''''''''''''''
+  (fun v_idx_3 => atRuntimeCheckedM
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))));
-  let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | omega | (simp only [natPos_macro, bit0_macro, bit1_macro, one_macro, zero_macro, succ_macro, subNat, addNat, mulNat, minNat, maxNat, divNat_eq_div, modNat_eq_mod, divNat_checked_eq_div, modNat_checked_eq_mod, Nat.sub_eq, Nat.add_eq, Nat.mul_eq] at *; omega) | skip); all_goals sorry));
-  atWithProof_checkedM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -1797,17 +1716,9 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3
-  h_bounds_), Bind.bind x__''''''''''''
-  (fun v_idx_3 => let h_bounds_obligation_ : (Prop) := (LT.lt v_idx_3
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state
+  v_idx_3), Bind.bind x__'''''''''''' (fun v_idx_3 => atRuntimeCheckedM
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))));
-  let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | omega | (simp only [natPos_macro, bit0_macro, bit1_macro, one_macro, zero_macro, succ_macro, subNat, addNat, mulNat, minNat, maxNat, divNat_eq_div, modNat_eq_mod, divNat_checked_eq_div, modNat_checked_eq_mod, Nat.sub_eq, Nat.add_eq, Nat.mul_eq] at *; omega) | skip); all_goals sorry));
-  atWithProof_checkedM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -1819,8 +1730,7 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3
-  h_bounds_)]);
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3)]);
   let x__'''''''''''''''''''''''''''''''''' := (let h_bounds_obligation_ : (Prop) := (LT.lt
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   CryptolToLean.SAWCorePrimitives.one_macro)
@@ -2140,15 +2050,8 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) #v[Bind.bind
   x__''''''''''''''''''''''''''''''''''''''''''
-  (fun v_idx_3 => let h_bounds_obligation_ : (Prop) := (LT.lt v_idx_3
+  (fun v_idx_3 => atRuntimeCheckedM
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))));
-  let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | omega | (simp only [natPos_macro, bit0_macro, bit1_macro, one_macro, zero_macro, succ_macro, subNat, addNat, mulNat, minNat, maxNat, divNat_eq_div, modNat_eq_mod, divNat_checked_eq_div, modNat_checked_eq_mod, Nat.sub_eq, Nat.add_eq, Nat.mul_eq] at *; omega) | skip); all_goals sorry));
-  atWithProof_checkedM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -2160,17 +2063,10 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3
-  h_bounds_), Bind.bind x__''''''''''''''''''''''''''''''''
-  (fun v_idx_3 => let h_bounds_obligation_ : (Prop) := (LT.lt v_idx_3
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state
+  v_idx_3), Bind.bind x__''''''''''''''''''''''''''''''''
+  (fun v_idx_3 => atRuntimeCheckedM
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))));
-  let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | omega | (simp only [natPos_macro, bit0_macro, bit1_macro, one_macro, zero_macro, succ_macro, subNat, addNat, mulNat, minNat, maxNat, divNat_eq_div, modNat_eq_mod, divNat_checked_eq_div, modNat_checked_eq_mod, Nat.sub_eq, Nat.add_eq, Nat.mul_eq] at *; omega) | skip); all_goals sorry));
-  atWithProof_checkedM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -2182,17 +2078,10 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3
-  h_bounds_), Bind.bind x__''''''''''''''''''''''
-  (fun v_idx_3 => let h_bounds_obligation_ : (Prop) := (LT.lt v_idx_3
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state
+  v_idx_3), Bind.bind x__''''''''''''''''''''''
+  (fun v_idx_3 => atRuntimeCheckedM
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))));
-  let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | omega | (simp only [natPos_macro, bit0_macro, bit1_macro, one_macro, zero_macro, succ_macro, subNat, addNat, mulNat, minNat, maxNat, divNat_eq_div, modNat_eq_mod, divNat_checked_eq_div, modNat_checked_eq_mod, Nat.sub_eq, Nat.add_eq, Nat.mul_eq] at *; omega) | skip); all_goals sorry));
-  atWithProof_checkedM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -2204,17 +2093,9 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3
-  h_bounds_), Bind.bind x__''''''''''''
-  (fun v_idx_3 => let h_bounds_obligation_ : (Prop) := (LT.lt v_idx_3
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state
+  v_idx_3), Bind.bind x__'''''''''''' (fun v_idx_3 => atRuntimeCheckedM
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))));
-  let h_bounds_ : (h_bounds_obligation_) := ((by (try unfold h_bounds_obligation_); (first | assumption | omega | (simp only [natPos_macro, bit0_macro, bit1_macro, one_macro, zero_macro, succ_macro, subNat, addNat, mulNat, minNat, maxNat, divNat_eq_div, modNat_eq_mod, divNat_checked_eq_div, modNat_checked_eq_mod, Nat.sub_eq, Nat.add_eq, Nat.mul_eq] at *; omega) | skip); all_goals sorry));
-  atWithProof_checkedM (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -2226,8 +2107,7 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3
-  h_bounds_)]);
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) state v_idx_3)]);
   let x__'''''''''''''''''''''''''''''''''''''''''''' := (let h_bounds_obligation_ : (Prop) := (LT.lt
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   CryptolToLean.SAWCorePrimitives.one_macro)

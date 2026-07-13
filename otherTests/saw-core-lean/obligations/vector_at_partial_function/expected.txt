@@ -1,6 +1,6 @@
-contains:h_bounds_obligation_
-contains:h_bounds_
-contains:LT.lt
-contains:atWithProof_checkedM
+contains:atRuntimeCheckedM
+contains:η_checked_arg_
+absent:h_bounds_obligation_
+absent:sorry
 absent:atWithDefault
 absent:saw_throw_error

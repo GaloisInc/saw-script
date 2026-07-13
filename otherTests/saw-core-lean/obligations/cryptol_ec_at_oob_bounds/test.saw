@@ -1,8 +1,9 @@
 enable_experimental;
 
-// Obligation-shape litmus: out-of-bounds finite Cryptol ecAt must still emit
-// the exact vector bounds obligation. The obligation is intentionally false
-// for this closed term; proof discharge is a separate phase.
+// Obligation-shape litmus (OP-2): a statically out-of-bounds finite Cryptol
+// ecAt has no derivable bound, so it must lower through the runtime-checked
+// accessor — whose error IS the SAW meaning of this closed term — never a
+// proof-carrying form with a false obligation, never a defaulting fallback.
 let probe =
   parse_core "ecAt (TCNum 4) Bool Integer PIntegralInteger 0b1010 (natToInt 4)";
 

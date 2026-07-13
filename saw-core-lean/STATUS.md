@@ -89,12 +89,10 @@ Known holes, all loud or pinned:
   examples (running sum, popcount, rec_ones, stream_fibs, ChaCha20
   iterate) emit obligations that elaborate but can never be discharged.
   Sound but unusable; needs a contract revision design doc.
-- Filed 2026-07-12 (TODO.md, same family): eta-expanded checked-access
-  wrappers embed a `η < n` bounds evidence position that is unprovable
-  in place (the lambda claims a universal bound), so `implRev`-shaped
-  indexing goals (saw-lean-example invol/eq_spec) can never be
-  discharged sorry-free. The wrapper must receive evidence instead of
-  fabricating it.
+- RESOLVED 2026-07-12 by Slice OP-2 (was: eta-expanded checked-access
+  wrappers fabricated unprovable `η < n` evidence): evidence-less
+  positions now route through `atRuntimeCheckedM`, and the
+  saw-lean-example invol/eq_spec goals discharge.
 - Shipped 2026-07-12 (Slice OP-1): emitted evidence chains gained the
   checked `assumption | omega | normalize; omega` step (plus `rfl` for
   unsafeAssert and the div/mod bridging lemmas); nine differential
@@ -103,6 +101,13 @@ Known holes, all loud or pinned:
   guard-dependent `iteM (ltNat i k)` branch bounds emitted without the
   guard as evidence, and value-dependent bounds over runtime Nats
   (details in the design doc's OP-1 implementation record).
+- Shipped 2026-07-12 (Slice OP-2, second Opus audit folded in):
+  evidence-less `at` positions lower through `atRuntimeCheckedM`
+  (Prelude-exact error semantics) decided by interval entailment over
+  the binder bounds environment; interval-entailed slots keep the
+  proof-carrying form. Four more rows un-gapped (census 68→64), and
+  the saw-lean-example invol/eq_spec goals now discharge end-to-end
+  from raw emitted artifacts — the eta-wrapper hole is closed.
 - Filed 2026-07-12 (pinned `saw-boundary/polymorphic_seq_module_rejection`):
   whole-module translation of polymorphic indexing comprehensions
   rejects at `Prelude::Either@core` — same recursor-convention hole as
@@ -113,11 +118,12 @@ Known holes, all loud or pinned:
 
 ## Next Work
 
-1. Slice OP-2 (obligation-placement program,
-   `doc/2026-07-12_obligation-placement-design.md`): runtime-checked
-   `at` accessor for evidence-less positions — the eta-wrapper family,
-   the guard-dependent branch bounds, and the `h_raw_error_`
-   reachability rider. Then Slice OP-3 (productivity-gated fix).
+1. Slice OP-3 (obligation-placement program,
+   `doc/2026-07-12_obligation-placement-design.md`): productivity-gated
+   wrapped-fix revision — acceptance is
+   `proof-gaps/cryptol_running_sum_verify` closing end-to-end. Plus
+   the OP-2 follow-up design decision on reachable raw `error`
+   disposition (TODO.md).
 2. The direct-recursor / `PosRep` program
    (`doc/2026-07-03_direct-recursor-semantics-design.md`) — now
    tractable on the position-driven recursor convention.
