@@ -145,11 +145,12 @@ termToExpr sym varMap term = do
 -- `(A, (B, C))` vs `(A, B, C)` (these are the same type in saw-core).
 termToReg :: forall sym t fs tp.
     (IsSymInterface sym, sym ~ MirSym t fs, HasCallStack) =>
+    M.Collection ->
     sym ->
     SAW.Term ->
     TypeShape tp ->
     IO (RegValue sym tp)
-termToReg sym term shp0 = do
+termToReg col sym term shp0 = do
     varMap <- readIORef (SAW.saw_elt_cache_r (mirSAWCoreState (sym ^. W4.userState)))
     sv <- termToSValue sym varMap term
     go shp0 sv
@@ -167,9 +168,10 @@ termToReg sym term shp0 = do
                                             ("a vector containing " <> show x)
             buildBitVector w bits
         (TupleShape _ [], SAW.VCtorApp 0 _ []) -> mirAggregate_zstIO
-        (TupleShape _ elems, _) -> do
+        (TupleShape ty elems, _) -> do
+            let tupleSz = tySize col ty
             svs <- reverse <$> tupleToListRev (length elems) [] sv
-            buildMirAggregate sym elems svs $ \_ _ shp' sv' -> go shp' sv'
+            buildMirAggregate sym tupleSz elems svs $ \_ _ shp' sv' -> go shp' sv'
         (ArrayShape _ _ sz shp' len, SAW.VVector thunks) -> do
             svs <- mapM SAW.force $ toList thunks
             when (length svs /= fromIntegral len) $
