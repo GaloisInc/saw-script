@@ -223,7 +223,21 @@ Slices (each emitted-Lean-diff-reviewed and green before commit):
   calculus vs. keep the loud undischargeable `False`, and whether
   eliminator case-handler positions count as reachable. Needs its own
   audited design note before implementation.
-- [ ] **Slice OP-3** — wrapped-fix revision, POST-AUDIT SHAPE (the
+- [ ] **Slice OP-3** — ENTRY DECISION (2026-07-12): STRUCTURAL-FIRST.
+  Rationale: acceptance is closing `cryptol_running_sum_verify`
+  end-to-end including the discharge proof; the structural lowering is
+  productive by construction and definitionally reduces (proofs go
+  through simp/rfl as in the OP-2 demo discharges), while the gated
+  contract leaves an opaque `Classical.choose` the goal proof can only
+  consume through the uniqueness spec. The May fragility that shelved
+  the structural design is what the position calculus has since
+  removed. The productivity recognizer + rejection gate (b) is
+  mandatory and comes first in either variant; the gated contract
+  remains the recorded fallback if a recognized shape resists the
+  structural construction. Design amendment (recognizer definition +
+  emitted construction) gets the audit-first treatment BEFORE
+  implementation. Original post-audit shape follows:
+  wrapped-fix revision, POST-AUDIT SHAPE (the
   2026-07-12 Opus audit refuted the unconditional pure-uniqueness
   contract with the witness `fix Bool (\b -> ite b True True)`: unique
   pure fixed point `true`, SAW meaning divergent — see the design doc's
