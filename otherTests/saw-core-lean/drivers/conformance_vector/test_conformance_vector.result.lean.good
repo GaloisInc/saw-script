@@ -87,9 +87,8 @@ noncomputable def VectorConformance : Except String Bool :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))))) (Bind.bind (Pure.pure
-  CryptolToLean.SAWCorePrimitives.zero_macro) (fun v_2 => Bind.bind
-  (genWithBoundsM (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))))))) (Bind.bind (genWithBoundsM
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro))) Nat
@@ -103,9 +102,10 @@ noncomputable def VectorConformance : Except String Bool :=
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))) Nat v_2 v_3
+  CryptolToLean.SAWCorePrimitives.one_macro))) Nat
+  CryptolToLean.SAWCorePrimitives.zero_macro v_3
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))
+  CryptolToLean.SAWCorePrimitives.one_macro))))
   CryptolToLean.SAWCorePrimitives.zero_macro) (fun v_0 => Pure.pure (equalNat
   v_0 (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -121,9 +121,8 @@ noncomputable def VectorConformance : Except String Bool :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))))) (Bind.bind (Pure.pure
-  CryptolToLean.SAWCorePrimitives.zero_macro) (fun v_2 => Bind.bind
-  (genWithBoundsM (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))))))) (Bind.bind (genWithBoundsM
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro))) Nat
@@ -137,9 +136,10 @@ noncomputable def VectorConformance : Except String Bool :=
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))) Nat v_2 v_3
+  CryptolToLean.SAWCorePrimitives.one_macro))) Nat
+  CryptolToLean.SAWCorePrimitives.zero_macro v_3
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))
+  CryptolToLean.SAWCorePrimitives.one_macro))))
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   CryptolToLean.SAWCorePrimitives.one_macro))) (fun v_0 => Pure.pure (equalNat
@@ -157,9 +157,8 @@ noncomputable def VectorConformance : Except String Bool :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))))) (Bind.bind (Pure.pure
-  CryptolToLean.SAWCorePrimitives.zero_macro) (fun v_2 => Bind.bind
-  (genWithBoundsM (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))))))) (Bind.bind (genWithBoundsM
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro))) Nat
@@ -173,9 +172,10 @@ noncomputable def VectorConformance : Except String Bool :=
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))) Nat v_2 v_3
+  CryptolToLean.SAWCorePrimitives.one_macro))) Nat
+  CryptolToLean.SAWCorePrimitives.zero_macro v_3
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))
+  CryptolToLean.SAWCorePrimitives.one_macro))))
   CryptolToLean.SAWCorePrimitives.zero_macro) (fun v_0 => Pure.pure (equalNat
   v_0 CryptolToLean.SAWCorePrimitives.zero_macro))) (Bind.bind (atWithDefaultM
   (CryptolToLean.SAWCorePrimitives.natPos_macro
@@ -189,9 +189,8 @@ noncomputable def VectorConformance : Except String Bool :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))))) (Bind.bind (Pure.pure
-  CryptolToLean.SAWCorePrimitives.zero_macro) (fun v_2 => Bind.bind
-  (genWithBoundsM (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))))))) (Bind.bind (genWithBoundsM
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro))) Nat
@@ -205,9 +204,10 @@ noncomputable def VectorConformance : Except String Bool :=
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))) Nat v_2 v_3
+  CryptolToLean.SAWCorePrimitives.one_macro))) Nat
+  CryptolToLean.SAWCorePrimitives.zero_macro v_3
   (CryptolToLean.SAWCorePrimitives.natPos_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))
+  CryptolToLean.SAWCorePrimitives.one_macro))))
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   CryptolToLean.SAWCorePrimitives.one_macro))) (fun v_0 => Pure.pure (equalNat

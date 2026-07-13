@@ -1,1 +1,6 @@
-Generated-index evidence now discharges direct `i < n` bounds, but this row still exposes derived bounds such as shifted/subtracted indices that the current Lean proof outline does not discharge. True differential tests may not rely on `sorry`.
+OP-1 checked evidence discharges the derived-index bounds this row
+used to pin on. The surviving obligation is value-dependent: a
+`0 < x__…` bound where the length is a runtime (bvToNat-derived)
+let-bound Nat inside an `iteM` branch, with no local hypothesis to
+discharge it. Evidence-less checked access is Slice OP-2's surface.
+True differential tests may not rely on `sorry`.

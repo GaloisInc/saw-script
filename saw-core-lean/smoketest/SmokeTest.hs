@@ -271,8 +271,8 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
         "@Eq.{1} Bool Bool.true Bool.false" s
       assertNotContains "proof obligation does not invent wrapped carrier"
         "Except String Bool" s
-      assertContains "placeholder proof"
-        "by sorry" s
+      assertContains "rfl-first evidence script with loud sorry fallback"
+        "by (first | rfl | skip); all_goals sorry" s
       assertNotContains "does not hide assertion in tactic"
         "saw_unsafeAssert" s
 

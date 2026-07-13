@@ -137,6 +137,59 @@ differential rows; no artifact in the corpus contains an evidence
 `sorry` whose obligation is closed by the new chain's tactics when run
 manually.
 
+**Implementation record (2026-07-12, OP-1 SHIPPED).**
+
+- The chain landed as specified plus one validated extension: `omega`
+  atomizes bare `Nat.div`/`Nat.mod` exactly as it atomizes `Nat.sub`
+  (it recognizes division/modulus by a constant only through the
+  `HDiv.hDiv`/`HMod.hMod` spelling), and core Lean has no
+  `Nat.sub_eq`-style bridge for them. Four `rfl` bridging lemmas were
+  added to `SAWCorePrimitives.lean` (`divNat_eq_div`, `modNat_eq_mod`,
+  `divNat_checked_eq_div`, `modNat_checked_eq_mod`) and joined the simp
+  set. Kernel-validated on the emitted term-level `let` structure
+  (`#print axioms` = propext, Quot.sound only). This closes
+  checked-division index shapes (`divNat_checked i 2 h < 4` under
+  `i < 8`), which un-gapped `differential/cryptol_ec_transpose`.
+- Nine differential rows un-gapped into true coverage (census 77→68):
+  cryptol_ec_at_literal_branches, cryptol_ec_reverse,
+  cryptol_ec_sequence_update, cryptol_ec_transpose, cryptol_indexing,
+  sequence_map_zip, sequence_take_drop_update, vector_literal,
+  vector_literal_edges.
+- **New named surface for OP-2 — guard-dependent branch obligations.**
+  Three surviving rows (cryptol_bv_entrypoints, cryptol_ec_sequence_split,
+  sequence_append_reverse) pin on bounds of the shape `i < k` emitted
+  inside the true branch of `iteM (ltNat i k …)` under only a weaker
+  binder hypothesis (`i < n`, `k < n`). The guard semantically
+  justifies the bound, but the branch emission does not receive it as
+  evidence, so the obligation is unprovable in place — exactly the
+  Instance-2 defect in a second costume. OP-2's runtime-checked
+  accessor resolves it (guard true ⇒ index in range ⇒ no error; the
+  strict `iteM` discards the untaken branch's value, so error-faithful
+  lowering preserves SAW's value-or-error meaning). Any OP-2
+  alternative that keeps proof-carrying access here must instead
+  thread the guard into the branch as a hypothesis.
+  `differential/bitvector_order_width` is the value-dependent cousin
+  (`0 < x__…` over a runtime bvToNat-derived Nat) — same remit.
+  `differential/bitvector_division` stays pinned on concrete-vector
+  nonzero facts (`bvNonzeroM` on literal vectors behind shared lets),
+  which is the parked crypto-BV automation policy, not an OP-1/OP-2
+  matter.
+- **Completed-outline redundancy decision: keep them.** The proof
+  harness's staging scan is textual, and the OP-1 chain deliberately
+  embeds `all_goals sorry` as its loud last resort even when the chain
+  closes — so every obligation-bearing artifact still routes through
+  `completed.lean`. Making raw artifacts eligible would need a
+  `sorryAx`-based scan (elaborate and inspect, as the differential
+  harness already does); noted as optional follow-up, not blocking.
+- Golden refresh note: the sweep also caught up ~40 rows of latent
+  drift from the Slice-7 value-domain rule (pure unit/pair values no
+  longer sequenced through `Bind.bind`). The previous conformance fence
+  had been run against a stale binary that predated Slice 7's final
+  committed state, so the goldens matched the binary but not HEAD;
+  verified by rebuilding clean HEAD without the OP-1 edit and
+  reproducing the same structural diff. All catch-up hunks correspond
+  to committed, reviewed translator changes and re-elaborated green.
+
 ## Instance 2: evidence-less checked access must not fabricate (OP-2)
 
 **Defect.** The prefix-partial checked-access convention eta-expands a

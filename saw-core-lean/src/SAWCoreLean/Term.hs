@@ -2623,21 +2623,41 @@ natLe :: Lean.Term -> Lean.Term -> Lean.Term
 natLe lhs rhs =
   Lean.App (Lean.Var (Lean.Ident "LE.le")) [lhs, rhs]
 
+-- | The checked arithmetic evidence chain shared by the side-condition
+-- scripts (doc/2026-07-12_obligation-placement-design.md, OP-1).
+-- `assumption` closes bounds present verbatim as binder hypotheses;
+-- `omega` closes derived index arithmetic; the simp alternative first
+-- normalizes the reducible numeral macros and Nat aliases that omega
+-- otherwise atomizes — `Nat.sub_eq`/`Nat.add_eq`/`Nat.mul_eq` are
+-- mandatory because omega does not recognize the bare
+-- `Nat.sub`/`Nat.add`/`Nat.mul` applications the aliases unfold to.
+-- `simp only … at *` errors when it makes no progress, hence the bare
+-- `omega` alternative before it. The div/mod bridges (support-library
+-- rfl lemmas) rewrite the SAW aliases and their proof-carrying checked
+-- forms to the `/`/`%` operator spelling, the only one omega's
+-- division-by-constant support recognizes. The trailing `sorry` is the
+-- loud last resort for obligations that are genuinely not local
+-- arithmetic (runtime-symbolic divisors, eta positions pending OP-2);
+-- the check stage still rejects artifacts where it survives.
+checkedEvidenceScript :: Lean.Ident -> Lean.Term
+checkedEvidenceScript (Lean.Ident propName) =
+  Lean.Tactic $
+    "(try unfold " ++ propName ++ "); " ++
+    "(first | assumption | omega | " ++
+    "(simp only [natPos_macro, bit0_macro, bit1_macro, one_macro, " ++
+    "zero_macro, succ_macro, subNat, addNat, mulNat, minNat, maxNat, " ++
+    "divNat_eq_div, modNat_eq_mod, divNat_checked_eq_div, " ++
+    "modNat_checked_eq_mod, Nat.sub_eq, Nat.add_eq, Nat.mul_eq] " ++
+    "at *; omega) | skip); " ++
+    "all_goals sorry"
+
 partialOpProofScript :: Lean.Ident -> Set Lean.Ident -> Lean.Term
 partialOpProofScript propName _proofIdents =
-  Lean.Tactic $
-    unfoldProp propName ++
-    "(first | assumption | skip); all_goals sorry"
-  where
-    unfoldProp (Lean.Ident name) = "(try unfold " ++ name ++ "); "
+  checkedEvidenceScript propName
 
 boundsProofScript :: Lean.Ident -> Set Lean.Ident -> Lean.Term
 boundsProofScript propName _proofIdents =
-  Lean.Tactic $
-    unfoldProp propName ++
-    "(first | assumption | skip); all_goals sorry"
-  where
-    unfoldProp (Lean.Ident name) = "(try unfold " ++ name ++ "); "
+  checkedEvidenceScript propName
 
 -- | Lower direct partial primitives through proof-carrying helpers.
 -- Haskell constructs the visible nonzero contract and wires the checked
@@ -3207,6 +3227,15 @@ proofObligationPlaceholder =
   -- artifacts that still contain this `sorry`.
   Lean.Tactic "sorry"
 
+-- | Evidence script for @h_unsafeAssert_@ obligations (OP-1). The
+-- shapes SAW actually emits are reflexive @Eq Num x x@ instances, so
+-- `rfl` (through the let-bound Prop, which whnf unfolds) closes them;
+-- a genuinely non-reflexive assertion stays a loud `sorry` — correct,
+-- it is a real obligation the user must discharge.
+unsafeAssertProofScript :: Lean.Term
+unsafeAssertProofScript =
+  Lean.Tactic "(first | rfl | skip); all_goals sorry"
+
 withLocalProofObligationUsing ::
   TermTranslationMonad m =>
   Lean.Ident ->
@@ -3276,9 +3305,9 @@ translateRawErrorObligation resultTy = do
 -- explicit local Lean proof obligation. Haskell only reconstructs the
 -- literal equality proposition from the SAW arguments; it does not
 -- fabricate a proof or erase the assertion. Emitted proof outlines use
--- the standard placeholder, so a completed artifact must replace it
--- with a Lean-checked proof (possibly using @saw_unsafeAssert@ or a
--- stronger domain-specific tactic).
+-- 'unsafeAssertProofScript' (rfl-first), so reflexive assertions close
+-- at emission and anything else stays a loud `sorry` a completed
+-- artifact must replace with a Lean-checked proof.
 translateUnsafeAssertObligation ::
   TermTranslationMonad m => Term -> Term -> Term -> m TranslatedTerm
 translateUnsafeAssertObligation aArg xArg yArg = do
@@ -3304,9 +3333,10 @@ translateUnsafeAssertObligation aArg xArg yArg = do
     xLean <- subjectTerm rep xTrans
     yLean <- subjectTerm rep yTrans
     pure (Lean.App eqHead [carrier, xLean, yLean])
-  tm <- withLocalProofObligation
+  tm <- withLocalProofObligationUsing
           (Lean.Ident "h_unsafeAssert_")
           prop
+          (const unsafeAssertProofScript)
           pure
   pure (TranslatedTerm tm BindingRaw)
 

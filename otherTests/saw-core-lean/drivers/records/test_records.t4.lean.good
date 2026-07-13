@@ -33,15 +33,15 @@ noncomputable def TestRec_MixedWidth : Except String (RecordType "x" (Vec
   CryptolToLean.SAWCorePrimitives.one_macro)))))
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) (fun v_3 => Bind.bind (Pure.pure
-  EmptyType.Empty) (fun v_4 => Pure.pure (@RecordType.RecordValue "y" (Vec
+  CryptolToLean.SAWCorePrimitives.one_macro)))) (fun v_3 => Pure.pure
+  (@RecordType.RecordValue "y" (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))) Bool) EmptyType v_3 v_4))))
-  (fun v_4' => Pure.pure (@RecordType.RecordValue "x" (Vec
+  CryptolToLean.SAWCorePrimitives.one_macro))))) Bool) EmptyType v_3
+  EmptyType.Empty))) (fun v_4 => Pure.pure (@RecordType.RecordValue "x" (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -52,4 +52,4 @@ noncomputable def TestRec_MixedWidth : Except String (RecordType "x" (Vec
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro))))) Bool) EmptyType) v_3' v_4')))
+  CryptolToLean.SAWCorePrimitives.one_macro))))) Bool) EmptyType) v_3' v_4)))

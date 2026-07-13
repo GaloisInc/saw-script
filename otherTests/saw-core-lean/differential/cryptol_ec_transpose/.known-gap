@@ -1,1 +1,0 @@
-Generated-index evidence now discharges direct `i < n` bounds, but transpose still exposes derived nested-index bounds and nonzero arithmetic obligations that the current Lean proof outline does not discharge. True differential tests may not rely on `sorry`.

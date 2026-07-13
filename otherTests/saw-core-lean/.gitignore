@@ -5,6 +5,8 @@
 **/*.rawlog
 **/*.log
 **/*.diff
+**/*.observed
+**/known-gap.actual
 **/*.lean.elaboration
 **/*.lean.elaboration.fail
 **/*.lean

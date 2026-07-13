@@ -1,1 +1,0 @@
-Generated-index evidence now discharges direct `i < n` bounds, but take/drop/update still expose derived bounds over offsets and branch-specific indices that the current Lean proof outline does not discharge. True differential tests may not rely on `sorry`.

@@ -170,7 +170,10 @@ cannot be proved.** Three instances, one principle:
    emitted `(first | assumption | skip); all_goals sorry` cannot close
    derived-index or constant bounds that a checked
    normalize-then-`omega` step closes; 19 of the 39 differential known
-   gaps pin on exactly this `sorry`.
+   gaps pinned on exactly this `sorry`. [RESOLVED by Slice OP-1,
+   2026-07-12: nine rows un-gapped; the survivors pin on
+   guard-dependent / value-dependent bounds (→ OP-2 scope addition)
+   or concrete-vector nonzero facts (→ parked crypto-BV policy).]
 2. Eta-expanded checked-access wrappers fabricate evidence in-lambda
    (`fun (η : Nat) => let h : η < n := (by …); …`) — a universal claim
    that is false for general `Nat` and unprovable at that position.
@@ -182,18 +185,31 @@ cannot be proved.** Three instances, one principle:
 
 Slices (each emitted-Lean-diff-reviewed and green before commit):
 
-- [ ] **Slice OP-1** — checked evidence chains: teach
+- [x] **Slice OP-1 (DONE 2026-07-12)** — checked evidence chains: taught
   `boundsProofScript`/`partialOpProofScript` the
-  `assumption | normalize; omega` step and the unsafeAssert script a
-  `rfl` step; review the corpus diff; refresh goldens; re-run each
-  `sorry`-pinned differential known-gap row and un-gap those that become
-  true differential coverage.
+  `assumption | omega | normalize; omega` step and the unsafeAssert
+  script a `rfl` step; added the four `rfl` div/mod bridging lemmas
+  (`divNat_eq_div` family — omega atomizes bare `Nat.div`/`Nat.mod`)
+  to `SAWCorePrimitives.lean` and the simp set; corpus goldens
+  refreshed (including the Slice-7 stale-binary catch-up, see design
+  doc implementation record); NINE differential rows un-gapped into
+  true coverage (census 77→68). Completed outlines in
+  `proofs/{E4,E5,t6}` kept — the proof harness's staging scan is
+  textual and the chain embeds a loud `sorry` fallback by design.
 - [ ] **Slice OP-2** — evidence-less checked access: positions whose
   bound is not derivable at emission (the eta-wrapper family) must not
   fabricate evidence; route them through a runtime-checked accessor
   with `Except.error` out-of-bounds semantics (SAWCore's own `at`
   partiality), keeping `atWithProof_checkedM` for positions with real
   evidence. Restores dischargeability of the saw-lean-example goals.
+  SCOPE ADDITION (OP-1 implementation finding, 2026-07-12):
+  **guard-dependent branch obligations** — `iteM (ltNat i k …)`
+  branches emit `i < k` bounds without the guard as evidence
+  (cryptol_bv_entrypoints, cryptol_ec_sequence_split,
+  sequence_append_reverse pins), plus the value-dependent cousin
+  `0 < runtime-Nat` (bitvector_order_width pin). The runtime-checked
+  accessor resolves all four rows; acceptance should include
+  un-gapping them.
 - [ ] **Slice OP-3** — wrapped-fix revision, POST-AUDIT SHAPE (the
   2026-07-12 Opus audit refuted the unconditional pure-uniqueness
   contract with the witness `fix Bool (\b -> ite b True True)`: unique

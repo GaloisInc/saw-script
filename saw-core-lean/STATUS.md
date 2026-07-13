@@ -57,9 +57,10 @@ Passing (the standing fences):
 - `otherTests/saw-core-lean`: `make conformance` exit 0 — 193 rows
   (differential SAW-vs-Lean evaluation, obligation shape, pinned known
   gaps), with emitted artifacts elaborated.
-- Emitted-Lean byte-diff oracle:
-  `support/emitted-lean-snapshot.sh diff .snapshots/slice0-baseline`
-  clean at 318 artifacts.
+- Emitted-Lean byte-diff oracle: baseline re-cut 2026-07-12 after the
+  Slice OP-1 evidence-chain refresh —
+  `support/emitted-lean-snapshot.sh diff .snapshots/op1-baseline`
+  clean at 634 artifacts (the slice0 baseline is superseded).
 - Driver rows (`bash test.sh` per-driver, `lean-driver-test.sh`) green,
   including the ChaCha20 core verify and prelude auto-emit drivers.
 
@@ -94,6 +95,14 @@ Known holes, all loud or pinned:
   indexing goals (saw-lean-example invol/eq_spec) can never be
   discharged sorry-free. The wrapper must receive evidence instead of
   fabricating it.
+- Shipped 2026-07-12 (Slice OP-1): emitted evidence chains gained the
+  checked `assumption | omega | normalize; omega` step (plus `rfl` for
+  unsafeAssert and the div/mod bridging lemmas); nine differential
+  known-gap rows un-gapped into true coverage (census 77→68). The
+  surviving `sorry`-pinned rows expose two named surfaces for OP-2:
+  guard-dependent `iteM (ltNat i k)` branch bounds emitted without the
+  guard as evidence, and value-dependent bounds over runtime Nats
+  (details in the design doc's OP-1 implementation record).
 - Filed 2026-07-12 (pinned `saw-boundary/polymorphic_seq_module_rejection`):
   whole-module translation of polymorphic indexing comprehensions
   rejects at `Prelude::Either@core` — same recursor-convention hole as
@@ -104,11 +113,16 @@ Known holes, all loud or pinned:
 
 ## Next Work
 
-1. The direct-recursor / `PosRep` program
+1. Slice OP-2 (obligation-placement program,
+   `doc/2026-07-12_obligation-placement-design.md`): runtime-checked
+   `at` accessor for evidence-less positions — the eta-wrapper family,
+   the guard-dependent branch bounds, and the `h_raw_error_`
+   reachability rider. Then Slice OP-3 (productivity-gated fix).
+2. The direct-recursor / `PosRep` program
    (`doc/2026-07-03_direct-recursor-semantics-design.md`) — now
    tractable on the position-driven recursor convention.
-2. The two filed emission gaps above (both have clear fixes: annotate
+3. The two filed emission gaps above (both have clear fixes: annotate
    from the produced record's shape; reject or universe-generalize the
    Prop-instantiated pair).
-3. Resolve the parked Stream@core pair decision.
-4. SAW-side `offline_lean` replay plumbing (deferred by design).
+4. Resolve the parked Stream@core pair decision.
+5. SAW-side `offline_lean` replay plumbing (deferred by design).

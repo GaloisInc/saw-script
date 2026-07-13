@@ -37,14 +37,14 @@ noncomputable def TestRec_Nested : Except String (RecordType "inner" (RecordType
   CryptolToLean.SAWCorePrimitives.one_macro))))
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) (fun v_3 => Bind.bind (Pure.pure
-  EmptyType.Empty) (fun v_4 => Pure.pure (@RecordType.RecordValue "y" (Vec
+  CryptolToLean.SAWCorePrimitives.one_macro)))) (fun v_3 => Pure.pure
+  (@RecordType.RecordValue "y" (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) EmptyType v_3 v_4))))
-  (fun v_4' => Pure.pure (@RecordType.RecordValue "x" (Vec
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) EmptyType v_3
+  EmptyType.Empty))) (fun v_4 => Pure.pure (@RecordType.RecordValue "x" (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -54,7 +54,7 @@ noncomputable def TestRec_Nested : Except String (RecordType "inner" (RecordType
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) EmptyType) v_3' v_4'))))
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) EmptyType) v_3' v_4))))
   (fun v_3'' => Bind.bind (Bind.bind (Pure.pure (bvNat
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -63,15 +63,15 @@ noncomputable def TestRec_Nested : Except String (RecordType "inner" (RecordType
   CryptolToLean.SAWCorePrimitives.one_macro))))
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) (fun v_3 => Bind.bind (Pure.pure
-  EmptyType.Empty) (fun v_4 => Pure.pure (@RecordType.RecordValue "z" (Vec
+  CryptolToLean.SAWCorePrimitives.one_macro)))) (fun v_3 => Pure.pure
+  (@RecordType.RecordValue "z" (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) EmptyType v_3 v_4))))
-  (fun v_4'' => Pure.pure (@RecordType.RecordValue "inner" (RecordType "x" (Vec
-  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) EmptyType v_3
+  EmptyType.Empty))) (fun v_4' => Pure.pure (@RecordType.RecordValue "inner"
+  (RecordType "x" (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -85,4 +85,4 @@ noncomputable def TestRec_Nested : Except String (RecordType "inner" (RecordType
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) EmptyType) v_3'' v_4'')))
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) EmptyType) v_3'' v_4')))

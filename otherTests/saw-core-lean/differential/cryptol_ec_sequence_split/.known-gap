@@ -1,1 +1,8 @@
-Generated-index evidence now discharges direct `i < n` bounds, but split still exposes derived bounds over offsets and subtracted indices that the current Lean proof outline does not discharge. True differential tests may not rely on `sorry`.
+OP-1 checked evidence discharges the subtracted-index and checked-
+division bounds this row used to pin on. The surviving obligation is
+guard-dependent: `i < 2` emitted inside the true branch of
+`iteM (ltNat i 2 …)` under only `h_gen_bounds_ : i < 4` — the branch
+guard is not available as evidence at the obligation site, so the
+bound is unprovable in place. Guarded evidence-less access is Slice
+OP-2's surface (the runtime-checked accessor makes the branch
+error-faithful). True differential tests may not rely on `sorry`.

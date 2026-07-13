@@ -27,19 +27,18 @@ noncomputable def TupleConformance : Except String Bool :=
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))); let x__'''' := (Bind.bind x__''
-  (fun v_2' => Bind.bind (Bind.bind x__''' (fun v_2 => Bind.bind (Pure.pure
-  UnitType.Unit) (fun v_3 => Pure.pure (@PairType.PairValue (Vec
+  (fun v_2' => Bind.bind (Bind.bind x__''' (fun v_2 => Pure.pure
+  (@PairType.PairValue (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  (CryptolToLean.SAWCorePrimitives.bit0_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) UnitType v_2
+  UnitType.Unit))) (fun v_3 => Pure.pure (@PairType.PairValue Int (PairType (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) UnitType v_2 v_3))))
-  (fun v_3' => Pure.pure (@PairType.PairValue Int (PairType (Vec
-  (CryptolToLean.SAWCorePrimitives.natPos_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) UnitType) v_2' v_3'))));
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) UnitType) v_2' v_3))));
   let x__''''' := (Pure.pure (bvNat
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -50,15 +49,14 @@ noncomputable def TupleConformance : Except String Bool :=
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   CryptolToLean.SAWCorePrimitives.one_macro))));
   CryptolToLean.SAWCorePreludeExtra.iteM Bool (Bind.bind (Bind.bind (Bind.bind
-  x__ (fun v_2' => Bind.bind (Bind.bind x__' (fun v_2 => Bind.bind (Pure.pure
-  UnitType.Unit) (fun v_3 => Pure.pure (@PairType.PairValue Int UnitType v_2
-  v_3)))) (fun v_3' => Pure.pure (@PairType.PairValue (Vec
-  (CryptolToLean.SAWCorePrimitives.natPos_macro
+  x__ (fun v_2' => Bind.bind (Bind.bind x__' (fun v_2 => Pure.pure
+  (@PairType.PairValue Int UnitType v_2 UnitType.Unit))) (fun v_3 => Pure.pure
+  (@PairType.PairValue (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) (PairType Int UnitType)
-  v_2' v_3')))) (fun v_2'' => Pure.pure (Pair_fst (Vec
+  v_2' v_3)))) (fun v_2'' => Pure.pure (Pair_fst (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -93,15 +91,15 @@ noncomputable def TupleConformance : Except String Bool :=
   (Bind.bind (Bind.bind x__'''' (fun v_2' => Bind.bind (Bind.bind (Pure.pure
   (natToInt (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) (fun v_2 => Bind.bind (Pure.pure
-  UnitType.Unit) (fun v_3 => Pure.pure (@PairType.PairValue Int UnitType v_2
-  v_3)))) (fun v_3' => Pure.pure (@PairType.PairValue (PairType Int (PairType
-  (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) (fun v_2 => Pure.pure
+  (@PairType.PairValue Int UnitType v_2 UnitType.Unit))) (fun v_3 => Pure.pure
+  (@PairType.PairValue (PairType Int (PairType (Vec
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) UnitType)) (PairType Int
-  UnitType) v_2' v_3')))) (fun v_2'' => Pure.pure (Pair_fst (PairType Int
+  UnitType) v_2' v_3)))) (fun v_2'' => Pure.pure (Pair_fst (PairType Int
   (PairType (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -126,22 +124,22 @@ noncomputable def TupleConformance : Except String Bool :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))) v_1 v_2''''')))) (Bind.bind
   (Bind.bind (Bind.bind (Bind.bind (Bind.bind x__'' (fun v_2' => Bind.bind
-  (Bind.bind x__' (fun v_2 => Bind.bind (Pure.pure UnitType.Unit)
-  (fun v_3 => Pure.pure (@PairType.PairValue Int UnitType v_2 v_3))))
-  (fun v_3' => Pure.pure (@PairType.PairValue Int (PairType Int UnitType) v_2'
-  v_3')))) (fun v_2'' => Bind.bind (Bind.bind x__''''' (fun v_2 => Bind.bind
-  (Pure.pure UnitType.Unit) (fun v_3 => Pure.pure (@PairType.PairValue (Vec
+  (Bind.bind x__' (fun v_2 => Pure.pure (@PairType.PairValue Int UnitType v_2
+  UnitType.Unit))) (fun v_3 => Pure.pure (@PairType.PairValue Int (PairType Int
+  UnitType) v_2' v_3)))) (fun v_2'' => Bind.bind (Bind.bind x__'''''
+  (fun v_2 => Pure.pure (@PairType.PairValue (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) UnitType v_2 v_3))))
-  (fun v_3'' => Pure.pure (@PairType.PairValue (PairType Int (PairType Int
-  UnitType)) (PairType (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) UnitType v_2
+  UnitType.Unit))) (fun v_3' => Pure.pure (@PairType.PairValue (PairType Int
+  (PairType Int UnitType)) (PairType (Vec
+  (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) UnitType) v_2'' v_3''))))
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) UnitType) v_2'' v_3'))))
   (fun v_2''' => Pure.pure (Pair_snd (PairType Int (PairType Int UnitType))
   (PairType (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro

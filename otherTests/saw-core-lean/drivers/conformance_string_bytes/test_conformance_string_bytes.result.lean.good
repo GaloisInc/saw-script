@@ -34,5 +34,5 @@ noncomputable def StringBytesConformance : Except String Bool :=
   Bool.false, Pure.pure Bool.true]))) (fun v_1 => Pure.pure (bytesToString
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)) v_1))) (fun v_0 => Bind.bind
-  (Pure.pure "Hi") (fun v_1' => Pure.pure (equalString v_0 v_1')))
+  CryptolToLean.SAWCorePrimitives.one_macro)) v_1))) (fun v_0 => Pure.pure
+  (equalString v_0 "Hi"))

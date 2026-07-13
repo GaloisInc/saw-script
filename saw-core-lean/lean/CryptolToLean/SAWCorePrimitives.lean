@@ -281,6 +281,19 @@ Returns (quotient, remainder). -/
     PairType Nat (PairType Nat UnitType) :=
   divModNat x y
 
+/-- Bridging lemmas for `omega`: it recognizes `x / k` / `x % k` only
+through the `HDiv.hDiv` / `HMod.hMod` spelling and atomizes bare
+`Nat.div` / `Nat.mod` applications (the same way it atomizes
+`Nat.sub`), so the emitted evidence chains rewrite the SAW aliases —
+including the proof-carrying checked forms — to the operator spelling
+before running `omega`. All are definitional. -/
+theorem divNat_eq_div (x y : Nat) : divNat x y = x / y := rfl
+theorem modNat_eq_mod (x y : Nat) : modNat x y = x % y := rfl
+theorem divNat_checked_eq_div (x y : Nat) (h : Not (y = 0)) :
+    divNat_checked x y h = x / y := rfl
+theorem modNat_checked_eq_mod (x y : Nat) (h : Not (y = 0)) :
+    modNat_checked x y h = x % y := rfl
+
 /-- SAWCore Prelude `if0Nat α n x y`: returns `x` when `n = 0` and
 `y` otherwise. SAW defines this with `Nat#rec` over its binary Nat
 encoding; after the translator maps SAW Nat to Lean Nat, the same

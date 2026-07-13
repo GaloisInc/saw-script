@@ -216,8 +216,7 @@ namespace SHASigma
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro))))))) v_1 v_2'))))
-    (fun v_1' => Bind.bind (Bind.bind (Pure.pure Bool.false)
-    (fun v_2 => Bind.bind x (fun v_3 => Pure.pure (shiftR
+    (fun v_1' => Bind.bind (Bind.bind x (fun v_3 => Pure.pure (shiftR
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -225,11 +224,11 @@ namespace SHASigma
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro))))))) Bool v_2 v_3
+    CryptolToLean.SAWCorePrimitives.one_macro))))))) Bool Bool.false v_3
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit1_macro
     (CryptolToLean.SAWCorePrimitives.bit1_macro
-    CryptolToLean.SAWCorePrimitives.one_macro))))))) (fun v_2'' => Pure.pure
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) (fun v_2'' => Pure.pure
     (bvXor (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -295,8 +294,7 @@ namespace SHASigma
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro))))))) v_1 v_2'))))
-    (fun v_1' => Bind.bind (Bind.bind (Pure.pure Bool.false)
-    (fun v_2 => Bind.bind x (fun v_3 => Pure.pure (shiftR
+    (fun v_1' => Bind.bind (Bind.bind x (fun v_3 => Pure.pure (shiftR
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -304,11 +302,11 @@ namespace SHASigma
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro))))))) Bool v_2 v_3
+    CryptolToLean.SAWCorePrimitives.one_macro))))))) Bool Bool.false v_3
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit1_macro
-    CryptolToLean.SAWCorePrimitives.one_macro))))))) (fun v_2'' => Pure.pure
+    CryptolToLean.SAWCorePrimitives.one_macro)))))) (fun v_2'' => Pure.pure
     (bvXor (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro

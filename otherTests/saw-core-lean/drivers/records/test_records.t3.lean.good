@@ -44,14 +44,14 @@ noncomputable def TestRec_Three : Except String (RecordType "a" (Vec
   CryptolToLean.SAWCorePrimitives.one_macro))))
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) (fun v_3 => Bind.bind (Pure.pure
-  EmptyType.Empty) (fun v_4 => Pure.pure (@RecordType.RecordValue "c" (Vec
+  CryptolToLean.SAWCorePrimitives.one_macro)))) (fun v_3 => Pure.pure
+  (@RecordType.RecordValue "c" (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) EmptyType v_3 v_4))))
-  (fun v_4' => Pure.pure (@RecordType.RecordValue "b" (Vec
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) EmptyType v_3
+  EmptyType.Empty))) (fun v_4 => Pure.pure (@RecordType.RecordValue "b" (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -61,8 +61,8 @@ noncomputable def TestRec_Three : Except String (RecordType "a" (Vec
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) EmptyType) v_3' v_4'))))
-  (fun v_4'' => Pure.pure (@RecordType.RecordValue "a" (Vec
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) EmptyType) v_3' v_4))))
+  (fun v_4' => Pure.pure (@RecordType.RecordValue "a" (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -77,4 +77,4 @@ noncomputable def TestRec_Three : Except String (RecordType "a" (Vec
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) EmptyType)) v_3'' v_4'')))
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) EmptyType)) v_3'' v_4')))
