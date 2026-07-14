@@ -1,7 +1,7 @@
 //
 // Exercise failure of the unify call in the TSig (type signature)
-// case of inferExpr. This is the unification of the array value's
-// type with (Array t).
+// case of inferExpr. This is the unification of the type annotation
+// with the inferred type of the expression under it.
 //
 
 
