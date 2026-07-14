@@ -21,16 +21,27 @@ import SAWCentral.Panic
 import SAWCentral.Position
 import SAWCentral.AST
 
+
 ------------------------------------------------------------
 -- NamedTyVars
 
---
--- namedTyVars is a type-class-polymorphic function for extracting named
+-- | namedTyVars is a type-class-polymorphic function for extracting named
 -- type variables from a type or type schema. It returns a set of Name
 -- (Name is just Text) manifested as a map from those Names to their
--- positions/provenance.
+-- positions.
 --
-
+-- We take the first position we see. The calls to `Map.union` are
+-- organized accordingly (it favors its left argument).
+--
+-- When we find a `TyVar`, we extract the position from the provenance
+-- with `getPos`. This is valid because we are called only from the
+-- typechecker's @generalize@ operation, which collects names from the
+-- bodies of polymorphic functions. Those names were all written by
+-- the user and have `TypeExplicit` provenance.
+--
+-- FUTURE: given that we're now specific to being called from the
+-- typechecker, maybe this should get moved back to Typechecker.hs.
+--
 class NamedTyVars t where
   namedTyVars :: t -> Map Name Pos
 
@@ -38,7 +49,7 @@ instance (Ord k, NamedTyVars a) => NamedTyVars (Map k a) where
   namedTyVars = namedTyVars . Map.elems
 
 instance (NamedTyVars a) => NamedTyVars [a] where
-  namedTyVars = Map.unionsWith choosePos . map namedTyVars
+  namedTyVars ts = Map.unions $ map namedTyVars ts
 
 instance (NamedTyVars a) => NamedTyVars (Pos, a) where
   namedTyVars (_pos, x) = namedTyVars x
@@ -51,7 +62,7 @@ instance NamedTyVars Type where
             namedParamVars = namedTyVars namedParams
             retVars = namedTyVars ret
         in
-        Map.unionWith choosePos (Map.unionWith choosePos paramVars namedParamVars) retVars
+        Map.unions [paramVars, namedParamVars, retVars]
     TyRecord _ tm     -> namedTyVars tm
     TyVar pos n       -> Map.singleton n pos
     TyUnifyVar _ _    -> Map.empty
