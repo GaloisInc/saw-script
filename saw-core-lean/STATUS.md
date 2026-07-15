@@ -79,8 +79,8 @@ Passing (the standing fences):
 - Emitted-Lean byte-diff oracle: `.snapshots/op2-baseline`, re-cut
   2026-07-15 after the full suite ran exit-0 on the release binary —
   `support/emitted-lean-snapshot.sh diff .snapshots/op2-baseline`
-  clean at 297 artifacts (re-cut post-restructure: workflow rows
-  moved, legacy litmus retired, two differential rows added). (The earlier "1267" count was inflated by
+  clean at 303 artifacts (re-cut 2026-07-15 after the worked-example
+  slate landed: seq-surgery and Z-n workflow artifacts added). (The earlier "1267" count was inflated by
   a scan bug that swallowed retired baselines' frozen copies —
   fixed: the scan now excludes `.snapshots/` wholesale. History: the
   stale op1-baseline's 32 diffs were per-hunk reviewed — all the
