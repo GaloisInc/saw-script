@@ -269,3 +269,52 @@ Binding amendments:
 
 Implementation may begin only with amendments A-F incorporated into
 the slice plan; A and D are load-bearing.
+
+---
+
+## Implementation slice plan (post-audit, amendments A-F binding)
+
+Each slice is emitted-Lean-diff-reviewed and fence-green before
+commit, per house rules.
+
+- **Slice R0 (inert recognizer).** The productivity recognizer as a
+  classifier + trace only (`SAW_LEAN_TRACE_FIX_CLASS`): classifies
+  every wrapped-fix body Class F / Class S-single / Class S-paired /
+  UNRECOGNIZED per the amended rules (constant -1 lookback pinned,
+  rec zip-slot pinned, seed length 1 verified — amendments B/C);
+  emission unchanged (byte-identical corpus). Trace sweep must
+  classify all 8 wrapped-contract goldens as expected (running_sum,
+  popcount32, E6, module popcount F; rec_ones S-single; stream_fibs
+  S-paired; fix_wrapped_unique F; + the smoketest shapes).
+- **Slice R1 (library).** `saw_fix_bounded` + the count lemma
+  (n applications stabilize element n-1) + L1/L2 with `H_prod`
+  stated as the PER-INSTANCE obligation interface (amendment A) +
+  `#guard_msgs` self-tests. SAME COMMIT: obsolete-helper-scan
+  reconciliation (the scan's list gains a comment naming
+  `saw_fix_bounded`/`saw_stream_unfold` as the SANCTIONED successors
+  under amendment-A mitigation; residual-trust §3.2 re-opened as
+  live with the new mitigation recorded — amendments E/F).
+- **Slice R2 (Class F swap + acceptance).** Emission flips for
+  Class F: `saw_fix_bounded` + the emitted per-instance `H_prod`
+  obligation replaces the contract emission. Goldens re-pin
+  per-hunk (running_sum, popcount32, E6/e_series, module popcount,
+  fix_wrapped_unique re-pins as structural row). ACCEPTANCE GATE:
+  `proof-gaps/cryptol_running_sum_verify` discharges end-to-end
+  (H_prod by unfolding + elementwise gen-of-pure lemmas + unrolled
+  bvAdd spec side) and moves to `proofs/`. If the discharge stalls
+  on heartbeats, the slice does NOT land (no-heartbeat-bump rule) —
+  back to lemma design.
+- **Slice R3 (Class S).** `saw_stream_unfold` + rec_ones emission
+  flip + the iterate family; **stream_fibs: explicit REJECT with
+  named diagnostic + its module row re-pinned as a boundary**
+  (amendment D — paired-stream lowering is a separate later design,
+  not smuggled in here).
+- **Slice R4 (retirement).** `saw_fix_unique_exists` + choose
+  lemmas deleted (no emitter remains); smoketest fix cases
+  re-pointed; TODO/STATUS/CONFORMANCE sync; the OP-3 census tier
+  updated. Litmus negative rows (Bool witness, two-step lookback,
+  same-index, computed-index, rec-outside-append) land in R0/R2 as
+  their gates activate.
+- **After R4** (separate program): the Stream@core/Either@core
+  recursor-convention re-open (ladder step 5) and the rev.cry
+  module-translation acceptance (step 6).
