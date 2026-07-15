@@ -82,6 +82,27 @@ Passing (the standing fences):
 - Driver rows (`bash test.sh` per-driver, `lean-driver-test.sh`) green,
   including the ChaCha20 core verify and prelude auto-emit drivers.
 
+Known-gap census (release 0.01 posture — 64 pinned gaps in
+conformance scope, three tiers):
+
+1. **Sound-but-undischargeable** (the top documented limitation):
+   the wrapped-fix recurrence class — running sum, popcount,
+   rec_ones, stream_fibs, ChaCha20 iterate — emits obligations that
+   elaborate but cannot be discharged (`saw_fix_unique_exists` is
+   unsatisfiable for strict bodies). SAW never claims these goals;
+   the OP-3 successor design is the 0.02 headline.
+2. **Clean rejections** (named diagnostics, pinned boundary rows):
+   Stream@core / Either@core comprehensions, direct recursors
+   (Nat/Pos/Z/Bool/Accessible*), user datatypes, proof-primitive
+   realization families, SMT-array/enum/polynomial surfaces,
+   raw-position `error`, Prop-instantiated pair carriers.
+3. **Workflow scope**: `offline_lean` is emission-only — SAW leaves
+   punted goals unsolved and never claims them; SAW-side replay
+   (`offline_lean_replay`) is registered but disabled until 0.02+.
+   Remaining differential gaps are proof-support ergonomics
+   (starter tactics not yet closing concrete-vector/rational facts)
+   and SAW-simulator `Unimplemented` stubs, all pinned.
+
 Known holes, all loud or pinned:
 
 - RESOLVED 2026-07-14 (release 0.01 decision): the former deliberate

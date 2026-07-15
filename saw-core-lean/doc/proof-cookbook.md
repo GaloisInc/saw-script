@@ -204,6 +204,9 @@ and `foldrM_pure_eq_foldr` / `foldlM_pure_eq_foldl` require a checked pure-step
 equation. These lemmas intentionally do not hide `Except.error` or pretend that
 eager helpers are lazy.
 
+End-to-end test for the bridge-lemma patterns:
+`otherTests/saw-core-lean/support-proofs/cookbook/proof.lean`.
+
 ## Lifting SAW-typed goals to `BitVec`
 
 There is no convenience-tactic module today (a `CryptolToLean.Tactics`

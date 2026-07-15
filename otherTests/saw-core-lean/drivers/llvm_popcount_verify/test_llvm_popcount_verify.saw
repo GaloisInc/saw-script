@@ -37,9 +37,13 @@ let pop_cryptol_check = do {
      llvm_return ( llvm_term {{ popCount x }} );
 };
 
-// LEAN DISCHARGE STEP. Emits the popCount equivalence obligation
-// as test_llvm_popcount_verify.<goalType>0.lean. The discharge
-// lives in proofs/llvm_popcount_eq/proof.lean.
+// LEAN EMISSION STEP. Emits the popCount equivalence obligation
+// as test_llvm_popcount_verify.<goalType>0.lean. NO DISCHARGE
+// EXISTS: the Cryptol spec is the self-referential comprehension,
+// so the obligation carries saw_fix_unique_exists — the
+// recurrence-class release-0.01 limitation (OP-3 scope). Pinned by
+// proof-gaps/llvm_popcount_eq/GAP.md; this row's value today is the
+// emit-shape pin plus the Crucible-goal wiring.
 fails (llvm_verify m "pop_count" [] true
     pop_cryptol_check
     (offline_lean "test_llvm_popcount_verify.pop_count"));
