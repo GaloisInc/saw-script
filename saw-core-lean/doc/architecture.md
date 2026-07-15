@@ -23,7 +23,13 @@ Three SAWScript primitives drive the backend:
   `.cry` file as a Lean `namespace` block of `def`s.
 - `offline_lean : String -> ProofScript ()` — emit a SAW proof
   obligation as a `def goal : Prop := ...; theorem goal_holds : goal
-  := by sorry` stub the user discharges.
+  := by sorry` stub the user discharges. EMISSION-ONLY: the goal is
+  left unsolved on the SAW side (wrap in `fails` to continue a
+  script); SAW never claims a goal on the strength of an export.
+- `offline_lean_replay : String -> ProofScript ()` — reserved
+  SAW-side discharge (kernel-check the completed proof, then admit).
+  Registered but disabled in this release; always fails with a
+  diagnostic.
 
 ## Translation pipeline
 

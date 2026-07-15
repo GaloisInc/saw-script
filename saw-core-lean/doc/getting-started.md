@@ -20,18 +20,23 @@ Write a small SAWScript that calls `offline_lean`:
 
 ```saw
 // distrib.saw
-prove_print (offline_lean "distrib")
+fails (prove_print (offline_lean "distrib")
   {{ \(a : Bit) (b : Bit) (c : Bit) ->
-       (a && b) || (a && c) == a && (b || c) }};
+       (a && b) || (a && c) == a && (b || c) }});
 ```
 
 Run `saw distrib.saw`. SAW emits `distrib_prove0.lean` (the `prove0`
 suffix names the proof obligation; a script with multiple proofs
-gets `prove0`, `prove1`, …) and then treats the goal as discharged by
-the export — the same admission semantics as `offline_rocq` and the
-offline SMT exporters (`SolverEvidence "offline: <path>"`). SAW is
-trusting you to actually check the emitted file in Lean; until you
-do (steps 2–3 below), nothing has been proved.
+gets `prove0`, `prove1`, …) and — because `offline_lean` is
+EMISSION-ONLY — leaves the goal unsolved: the inner `prove_print`
+fails with `1 unsolved subgoal(s)`, which the `fails` wrapper
+converts back to success so the script continues. SAW never claims a
+goal on the strength of an export (this deliberately differs from
+`offline_rocq` and the offline SMT exporters, which admit on
+emission). The proof happens in Lean, in steps 2–3 below; a future
+`offline_lean_replay` will let SAW check the completed proof file
+itself and only then admit the goal (the command exists but is
+disabled in this release).
 
 The emitted file looks roughly like:
 

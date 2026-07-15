@@ -1,6 +1,7 @@
 # saw-core-lean status
 
-Last updated: 2026-07-12
+Last updated: 2026-07-14 (release 0.01 hardening;
+`doc/2026-07-14_release-plan.md`)
 
 ## Purpose
 
@@ -66,15 +67,15 @@ Passing (the standing fences):
 - `otherTests/saw-core-lean`: `make conformance` exit 0 — 193 rows
   (differential SAW-vs-Lean evaluation, obligation shape, pinned known
   gaps), with emitted artifacts elaborated.
-- Emitted-Lean byte-diff oracle: STALE as of 2026-07-14 —
-  `.snapshots/op1-baseline` (cut after Slice OP-1) was never re-cut
-  after Slice OP-2, so `support/emitted-lean-snapshot.sh diff
-  .snapshots/op1-baseline` reports 32 changed artifacts. All 32 were
-  reviewed 2026-07-14 as the expected OP-2 shape (fabricated
-  in-lambda `h_bounds_` evidence → `atRuntimeCheckedM`; driver
-  goldens WERE refreshed in the OP-2 commit — only the oracle
-  baseline lagged). Re-cut as `.snapshots/op2-baseline` is a 0.01
-  hygiene item (`doc/2026-07-14_release-plan.md`).
+- Emitted-Lean byte-diff oracle: `.snapshots/op2-baseline`, cut
+  2026-07-14 after the full suite ran green on the release binary —
+  `support/emitted-lean-snapshot.sh diff .snapshots/op2-baseline`
+  clean at 1267 artifacts. (The stale op1-baseline's 32 diffs were
+  per-hunk reviewed — all the expected OP-2 `atRuntimeCheckedM`
+  migration; the only further 2026-07-14 deltas were this release
+  work's own footprint: two new pin artifacts, the reviewed
+  polynomial t1 rule-1 lowering, and the three retired raw_error
+  emissions.)
 - Driver rows (`bash test.sh` per-driver, `lean-driver-test.sh`) green,
   including the ChaCha20 core verify and prelude auto-emit drivers.
 
@@ -93,11 +94,18 @@ Known holes, all loud or pinned:
   inductive + source-shaped checked realizations), tracked separately.
 - User-datatype recursors and datatype auto-emission reject with
   diagnostics (pinned by `saw-boundary/user_datatype_rejection`).
-- Filed pre-existing gaps (TODO.md): top-level `write_lean_term` of a
-  runtime-computed Nat annotates a raw `: Nat` against a wrapped body;
-  `PairValue` at a Prop instantiation emits a carrier the
-  `PairType : Type -> Type -> Type` realization cannot take. Both fail
-  loudly at elaboration.
+- RESOLVED 2026-07-14 (both formerly-filed loud gaps): top-level
+  `write_lean_term` annotates from the produced body's production
+  record (pinned `obligations/write_term_runtime_nat`); pair carriers
+  at a Prop component reject with a named diagnostic (pinned
+  `saw-boundary/pair_prop_component_rejection`).
+- RESOLVED 2026-07-14 (audited,
+  `doc/2026-07-14_reachable-raw-error-disposition.md`): the
+  `h_raw_error_ : False` contract is retired. Function-typed
+  `Prelude.error` with a value-domain result lowers to the
+  constant-error function (message preserved; polynomial t1 now
+  elaborates sorry-free); all other raw-position error rejects with
+  a named diagnostic (pinned `saw-boundary/raw_error_rejection`).
 - Filed 2026-07-12 (TODO.md, design gap): `saw_fix_unique_exists` is
   unsatisfiable for every strict wrapped fix body — errors are always
   fixed points of eager `Except` bodies, so the recurrence-class
@@ -133,17 +141,22 @@ Known holes, all loud or pinned:
 
 ## Next Work
 
+Release 0.01 posture (`doc/2026-07-14_release-plan.md`): the
+remaining items below are 0.02+ coverage work, shipped in 0.01 as
+documented limitations or pinned rejections.
+
 1. Slice OP-3 (obligation-placement program,
-   `doc/2026-07-12_obligation-placement-design.md`): productivity-gated
-   wrapped-fix revision — acceptance is
-   `proof-gaps/cryptol_running_sum_verify` closing end-to-end. Plus
-   the OP-2 follow-up design decision on reachable raw `error`
-   disposition (TODO.md).
+   `doc/2026-07-12_obligation-placement-design.md`): successor design
+   against the third audit's six minimum conditions, then a fourth
+   audit — acceptance is `proof-gaps/cryptol_running_sum_verify`
+   closing end-to-end. The Stream@core / Either@core
+   recursor-convention translation paths (now pinned expected
+   rejections) fold into this design.
 2. The direct-recursor / `PosRep` program
    (`doc/2026-07-03_direct-recursor-semantics-design.md`) — now
    tractable on the position-driven recursor convention.
-3. The two filed emission gaps above (both have clear fixes: annotate
-   from the produced record's shape; reject or universe-generalize the
-   Prop-instantiated pair).
-4. Resolve the parked Stream@core pair decision.
-5. SAW-side `offline_lean` replay plumbing (deferred by design).
+3. SAW-side `offline_lean_replay` (the command is registered and
+   disabled; the semantics are already scoped in the docs).
+4. Universe-generalized pair/record carriers (would lift the
+   pair-at-Prop rejection), proof-primitive realization families,
+   user datatypes — example-driven coverage.
