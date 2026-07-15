@@ -1,8 +1,8 @@
 // Width-32 popcount discharge via the §4.1 bridge. Same shape as
 // E6 (width 4) but at the realistic Cryptol target width. Tests
-// whether the bridge approach scales — and whether the recently
-// added @[simp] peelers (coerce_id, atWithDefault_lt) keep the
-// per-case reduction tractable.
+// whether the bridge approach scales — and whether the @[simp]
+// peeler layer (e.g. atWithDefault_lt) keeps the per-case
+// reduction tractable.
 
 let {{
   popCount_fold : [32] -> [32]

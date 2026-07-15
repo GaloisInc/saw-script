@@ -87,15 +87,6 @@ fail. -/
   | Except.ok v => Bool.rec y x v
   | Except.error msg => Except.error msg
 
-@[simp] theorem iteM_pure_true.{u} (a : Type u) (x y : Except String a) :
-    iteM a (Except.ok true) x y = x := rfl
-
-@[simp] theorem iteM_pure_false.{u} (a : Type u) (x y : Except String a) :
-    iteM a (Except.ok false) x y = y := rfl
-
-@[simp] theorem iteM_error.{u} (a : Type u) (msg : String) (x y : Except String a) :
-    iteM a (Except.error msg) x y = Except.error msg := rfl
-
 /-! ## Wrapped Prelude facades
 
 These are support-library realizations for Prelude definitions whose literal
@@ -109,14 +100,6 @@ Lean injection: the backend only maps the SAW name to this checked declaration.
   match x with
   | Except.ok value => f value
   | Except.error msg => Except.error msg
-
-@[simp] theorem sawLet_ok.{u, v} (α : Type u) (β : Type v)
-    (x : α) (f : α -> Except String β) :
-    sawLet α β (Except.ok x) f = f x := rfl
-
-@[simp] theorem sawLet_error.{u, v} (α : Type u) (β : Type v)
-    (msg : String) (f : α -> Except String β) :
-    sawLet α β (Except.error msg) f = Except.error msg := rfl
 
 @[reducible] noncomputable def xor (b1 : Except String Bool)
     (b2 : Except String Bool) : Except String Bool :=

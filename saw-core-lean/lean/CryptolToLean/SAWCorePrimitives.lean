@@ -112,43 +112,6 @@ SAWCore tuples are right-nested `PairType` chains terminating at
 inductive PairType (α β : Type) : Type where
   | PairValue : α → β → PairType α β
 
-/-! ### `Inhabited` instances for SAW-custom types
-
-Historical rationale: these were added when `error.{u}` required
-`[Inhabited α]`. That def is deleted and the emitter no longer
-injects `[Inhabited]` binders, so nothing in the emitter/golden/
-proof consumer classes is known to resolve these instances (audit
-2026-07-14). Kept pending the removal-and-rebuild verification the
-audit recommends — instance resolution is grep-invisible. -/
-
-instance instInhabitedStream {α : Type} [Inhabited α] : Inhabited (Stream α) :=
-  ⟨Stream.MkStream (fun _ => default)⟩
-instance instInhabitedUnitType : Inhabited UnitType := ⟨UnitType.Unit⟩
-instance instInhabitedEmptyType : Inhabited EmptyType := ⟨EmptyType.Empty⟩
-instance instInhabitedPairType {α β : Type} [Inhabited α] [Inhabited β] :
-    Inhabited (PairType α β) := ⟨PairType.PairValue default default⟩
-instance instInhabitedRecordType {s : String} {α β : Type}
-    [Inhabited α] [Inhabited β] : Inhabited (RecordType s α β) :=
-  ⟨RecordType.RecordValue default default⟩
-
-/-- `Either α β` is inhabited via the left injection when `α` is.
-The right-injection variant lives below; both are needed because
-the translator may select either side depending on the residual
-trace. Only one is required at any given call site, so providing
-both as `instance` is fine — Lean's resolution picks whichever
-discharges the goal first. -/
-instance instInhabitedEitherLeft {α β : Type} [Inhabited α] :
-    Inhabited (Either α β) := ⟨Either.Left default⟩
-instance instInhabitedEitherRight {α β : Type} [Inhabited β] :
-    Inhabited (Either α β) := ⟨Either.Right default⟩
-
-/-- Stream-endofunction inhabitedness via identity. Required for
-the `(a : Type) → Stream a → Stream a` shape that appears in
-Cryptol's typeclass-elaboration dead branches; identity is sound
-without needing `[Inhabited a]`. -/
-instance instInhabitedStreamEndo : Inhabited ((α : Type) → Stream α → Stream α) :=
-  ⟨fun _ s => s⟩
-
 /-- Projection from a SAWCore pair. Phase 8: structural def
 matching SAWCore's `Pair_fst = Pair__rec α β (\\_ => α) (\\x _ => x)`.
 SAWCore Prelude's `Pair_fst` is the user-facing name and the
@@ -202,8 +165,6 @@ is reciprocal. -/
 @[reducible] def Rational : Type := Rat
 @[reducible] def rationalZero : Rational := 0
 @[reducible] def ratio : Int → Int → Rational := fun a b => (a : Rat) / (b : Rat)
-@[reducible] def ratio_checked (a b : Int) (_h : Not (b = 0)) : Rational :=
-  ratio a b
 @[reducible] def ratio_checkedM (a b : Except String Int)
     (_h : Not (b = Pure.pure 0)) : Except String Rational := do
   let a' ← a
@@ -217,9 +178,6 @@ is reciprocal. -/
 @[reducible] def rationalMul : Rational → Rational → Rational := fun a b => a * b
 @[reducible] def rationalNeg : Rational → Rational := fun a => -a
 @[reducible] def rationalRecip : Rational → Rational := fun a => a⁻¹
-@[reducible] def rationalRecip_checked (a : Rational)
-    (_h : Not (a = 0)) : Rational :=
-  rationalRecip a
 @[reducible] def rationalRecip_checkedM (a : Except String Rational)
     (_h : Not (a = Pure.pure 0)) : Except String Rational := do
   let a' ← a
@@ -336,16 +294,12 @@ NOT `Int.div` / `Int.mod` (which are truncated). -/
 @[reducible] def intSub : Int → Int → Int := fun a b => a - b
 @[reducible] def intMul : Int → Int → Int := fun a b => a * b
 @[reducible] def intDiv : Int → Int → Int := Int.fdiv
-@[reducible] def intDiv_checked (x y : Int) (_h : Not (y = 0)) : Int :=
-  intDiv x y
 @[reducible] def intDiv_checkedM (x y : Except String Int)
     (_h : Not (y = Pure.pure 0)) : Except String Int := do
   let x' ← x
   let y' ← y
   Pure.pure (intDiv x' y')
 @[reducible] def intMod : Int → Int → Int := Int.fmod
-@[reducible] def intMod_checked (x y : Int) (_h : Not (y = 0)) : Int :=
-  intMod x y
 @[reducible] def intMod_checkedM (x y : Except String Int)
     (_h : Not (y = Pure.pure 0)) : Except String Int := do
   let x' ← x
@@ -466,9 +420,6 @@ noncomputable def bvNeg (n : Nat) (x : Vec n Bool) : Vec n Bool :=
   bitVecToVec (- (vecToBitVec x))
 noncomputable def bvUDiv (n : Nat) (x y : Vec n Bool) : Vec n Bool :=
   bitVecToVec ((vecToBitVec x).udiv (vecToBitVec y))
-noncomputable def bvUDiv_checked (n : Nat) (x y : Vec n Bool)
-    (_h : bvNonzero n y) : Vec n Bool :=
-  bvUDiv n x y
 noncomputable def bvUDiv_checkedM (n : Nat)
     (x y : Except String (Vec n Bool)) (_h : bvNonzeroM n y) :
     Except String (Vec n Bool) := do
@@ -477,9 +428,6 @@ noncomputable def bvUDiv_checkedM (n : Nat)
   Pure.pure (bvUDiv n x' y')
 noncomputable def bvURem (n : Nat) (x y : Vec n Bool) : Vec n Bool :=
   bitVecToVec ((vecToBitVec x).umod (vecToBitVec y))
-noncomputable def bvURem_checked (n : Nat) (x y : Vec n Bool)
-    (_h : bvNonzero n y) : Vec n Bool :=
-  bvURem n x y
 noncomputable def bvURem_checkedM (n : Nat)
     (x y : Except String (Vec n Bool)) (_h : bvNonzeroM n y) :
     Except String (Vec n Bool) := do
@@ -489,9 +437,6 @@ noncomputable def bvURem_checkedM (n : Nat)
 
 noncomputable def bvSDiv (n : Nat) (x y : Vec (n + 1) Bool) : Vec (n + 1) Bool :=
   bitVecToVec ((vecToBitVec x).sdiv (vecToBitVec y))
-noncomputable def bvSDiv_checked (n : Nat) (x y : Vec (n + 1) Bool)
-    (_h : bvNonzero (n + 1) y) : Vec (n + 1) Bool :=
-  bvSDiv n x y
 noncomputable def bvSDiv_checkedM (n : Nat)
     (x y : Except String (Vec (n + 1) Bool)) (_h : bvNonzeroM (n + 1) y) :
     Except String (Vec (n + 1) Bool) := do
@@ -500,9 +445,6 @@ noncomputable def bvSDiv_checkedM (n : Nat)
   Pure.pure (bvSDiv n x' y')
 noncomputable def bvSRem (n : Nat) (x y : Vec (n + 1) Bool) : Vec (n + 1) Bool :=
   bitVecToVec ((vecToBitVec x).srem (vecToBitVec y))
-noncomputable def bvSRem_checked (n : Nat) (x y : Vec (n + 1) Bool)
-    (_h : bvNonzero (n + 1) y) : Vec (n + 1) Bool :=
-  bvSRem n x y
 noncomputable def bvSRem_checkedM (n : Nat)
     (x y : Except String (Vec (n + 1) Bool)) (_h : bvNonzeroM (n + 1) y) :
     Except String (Vec (n + 1) Bool) := do
@@ -536,18 +478,6 @@ noncomputable def ecSMod_checkedM (n : Num)
   | Num.TCNum 0 => False.elim h
   | Num.TCNum (Nat.succ w) => bvSRem_checkedM w x y h
   | Num.TCInf => False.elim h
-
-theorem ecSDiv_checkedM_TCNum_succ (w : Nat)
-    (x y : Except String (seqBool (Num.TCNum (Nat.succ w))))
-    (h : ecSignedBVNonzeroM (Num.TCNum (Nat.succ w)) y) :
-    ecSDiv_checkedM (Num.TCNum (Nat.succ w)) x y h =
-      bvSDiv_checkedM w x y h := rfl
-
-theorem ecSMod_checkedM_TCNum_succ (w : Nat)
-    (x y : Except String (seqBool (Num.TCNum (Nat.succ w))))
-    (h : ecSignedBVNonzeroM (Num.TCNum (Nat.succ w)) y) :
-    ecSMod_checkedM (Num.TCNum (Nat.succ w)) x y h =
-      bvSRem_checkedM w x y h := rfl
 
 noncomputable def bvShl (w : Nat) (x : Vec w Bool) (i : Nat) : Vec w Bool :=
   bitVecToVec ((vecToBitVec x) <<< i)
@@ -683,12 +613,6 @@ operation requires a proof `i < n`, supplied by the if-discriminator. -/
 def atWithDefault (n : Nat) (α : Type) (d : α) (v : Vec n α) (i : Nat) : α :=
   if h : i < n then v[i] else d
 
-/-- Default-free vector indexing for translator-proved in-bounds accesses.
-The Lean backend emits this only when it has a syntactic proof that the
-default branch of `atWithDefaultM` is unreachable. -/
-def atInBounds (n : Nat) (α : Type) (v : Vec n α) (i : Nat) (h : i < n) : α :=
-  v[i]
-
 /-- SAWCore `foldr a b n f z v = f v[0] (f v[1] (... (f v[n-1] z))).
 Right-associative; matches Lean's `Vector.foldr` modulo arg-order. -/
 def foldr (α β : Type) (n : Nat) (f : α → β → β) (z : β) (v : Vec n α) : β :=
@@ -774,15 +698,6 @@ def atRuntimeCheckedM (n : Nat) (α : Type)
   let vec ← xs
   if _h : i < n then pure vec[i]
   else throw "at: index out of bounds"
-
-/-- Bridge to the proof-carrying form: with the bound in hand, the
-runtime check reduces to the checked accessor. Lets goal-level proofs
-recover the static reading of runtime-checked positions. -/
-theorem atRuntimeCheckedM_eq_checked (n : Nat) (α : Type)
-    (xs : Except String (Vec n α)) (i : Nat) (h : i < n) :
-    atRuntimeCheckedM n α xs i = atWithProof_checkedM n α xs i h := by
-  unfold atRuntimeCheckedM atWithProof_checkedM
-  simp [h]
 
 def genWithProof_checkedM (n : Nat) (α : Type)
     (f : (i : Nat) → i < n → Except String α) :

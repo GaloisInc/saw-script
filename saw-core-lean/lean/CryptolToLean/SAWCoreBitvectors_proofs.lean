@@ -168,12 +168,6 @@ theorem bvEq_eq_true_imp_eq
     bvEq w a b = Bool.true → a = b :=
   fun h => (bvEq_iff w a b).mp h
 
-/-- The other direction. -/
-theorem eq_imp_bvEq_eq_true
-    (w : Nat) (a b : Vec w Bool) :
-    a = b → bvEq w a b = Bool.true :=
-  fun h => h ▸ bvEq_refl w a
-
 /-! ## Reduction shortcuts for `bvEq` scrutinee
 
 The translator emits `iteDep (...) (bvEq w x y) trueBranch
@@ -219,20 +213,6 @@ def isBvsle (w : Nat) (a b : Vec w Bool) : Prop := bvsle w a b = true
 def isBvslt (w : Nat) (a b : Vec w Bool) : Prop := bvslt w a b = true
 def isBvule (w : Nat) (a b : Vec w Bool) : Prop := bvule w a b = true
 def isBvult (w : Nat) (a b : Vec w Bool) : Prop := bvult w a b = true
-
-/-! ### Equivalences between Bool and Prop forms
-
-The "_def" lemmas are Rocq's reflexivity proofs; ours are `rfl`
-since the Prop wrappers unfold to the Bool equation by definition. -/
-
-theorem isBvsle_def (w : Nat) (a b : Vec w Bool) :
-    bvsle w a b = true ↔ isBvsle w a b := Iff.rfl
-theorem isBvslt_def (w : Nat) (a b : Vec w Bool) :
-    bvslt w a b = true ↔ isBvslt w a b := Iff.rfl
-theorem isBvule_def (w : Nat) (a b : Vec w Bool) :
-    bvule w a b = true ↔ isBvule w a b := Iff.rfl
-theorem isBvult_def (w : Nat) (a b : Vec w Bool) :
-    bvult w a b = true ↔ isBvult w a b := Iff.rfl
 
 /-! ### Cross-comparison theorems
 
@@ -423,11 +403,6 @@ theorem vecToBitVec_intToBv (w : Nat) (k : Int) :
     vecToBitVec (intToBv w k) = BitVec.ofInt w k := by
   unfold intToBv; rw [vecToBitVec_bitVecToVec]
 
-/-- `vecToBitVec ∘ bvNat` is `BitVec.ofNat`. -/
-theorem vecToBitVec_bvNat (w : Nat) (k : Nat) :
-    vecToBitVec (bvNat w k) = BitVec.ofNat w k := by
-  unfold bvNat; rw [vecToBitVec_bitVecToVec]
-
 /-- `vecToBitVec ∘ bvAdd` distributes over BitVec.add. -/
 theorem vecToBitVec_bvAdd (w : Nat) (a b : Vec w Bool) :
     vecToBitVec (bvAdd w a b) = vecToBitVec a + vecToBitVec b := by
@@ -447,18 +422,6 @@ theorem vecToBitVec_bvSub (w : Nat) (a b : Vec w Bool) :
     equivalences live in this Lean library
     as theorems, not as translator-side rewrites. -/
 
-/-- `vecToBitVec ∘ bvMul` distributes over BitVec.mul. -/
-@[simp]
-theorem vecToBitVec_bvMul (w : Nat) (a b : Vec w Bool) :
-    vecToBitVec (bvMul w a b) = vecToBitVec a * vecToBitVec b := by
-  unfold bvMul; rw [vecToBitVec_bitVecToVec]
-
-/-- `vecToBitVec ∘ bvNeg` distributes over BitVec.neg. -/
-@[simp]
-theorem vecToBitVec_bvNeg (w : Nat) (a : Vec w Bool) :
-    vecToBitVec (bvNeg w a) = - vecToBitVec a := by
-  unfold bvNeg; rw [vecToBitVec_bitVecToVec]
-
 /-- `vecToBitVec ∘ bvShl` distributes over BitVec shift-left. -/
 @[simp]
 theorem vecToBitVec_bvShl (w : Nat) (a : Vec w Bool) (i : Nat) :
@@ -471,12 +434,6 @@ theorem vecToBitVec_bvShr (w : Nat) (a : Vec w Bool) (i : Nat) :
     vecToBitVec (bvShr w a i) = vecToBitVec a >>> i := by
   unfold bvShr; rw [vecToBitVec_bitVecToVec]
 
-/-- `vecToBitVec ∘ bvAnd` distributes over BitVec AND. -/
-@[simp]
-theorem vecToBitVec_bvAnd (w : Nat) (a b : Vec w Bool) :
-    vecToBitVec (bvAnd w a b) = vecToBitVec a &&& vecToBitVec b := by
-  unfold bvAnd; rw [vecToBitVec_bitVecToVec]
-
 /-- `vecToBitVec ∘ bvOr` distributes over BitVec OR. -/
 @[simp]
 theorem vecToBitVec_bvOr (w : Nat) (a b : Vec w Bool) :
@@ -488,18 +445,6 @@ theorem vecToBitVec_bvOr (w : Nat) (a b : Vec w Bool) :
 theorem vecToBitVec_bvXor (w : Nat) (a b : Vec w Bool) :
     vecToBitVec (bvXor w a b) = vecToBitVec a ^^^ vecToBitVec b := by
   unfold bvXor; rw [vecToBitVec_bitVecToVec]
-
-/-- `vecToBitVec ∘ bvNot` distributes over BitVec complement. -/
-@[simp]
-theorem vecToBitVec_bvNot (w : Nat) (a : Vec w Bool) :
-    vecToBitVec (bvNot w a) = ~~~ vecToBitVec a := by
-  unfold bvNot; rw [vecToBitVec_bitVecToVec]
-
-/-- `bvEq` agrees with BitVec equality on the bridge. The Eq Bool
-    output side is convenient for goals shaped as `bvEq … = true`. -/
-theorem bvEq_eq_BitVec_beq (w : Nat) (a b : Vec w Bool) :
-    bvEq w a b = (vecToBitVec a == vecToBitVec b) := by
-  unfold bvEq; rfl
 
 /-- `bvEq … = true` collapses to BitVec equality. Useful as a
     rewriting target for goals of the form `bvEq w a b = true`. -/

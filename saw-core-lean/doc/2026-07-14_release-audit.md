@@ -1,8 +1,9 @@
 # Release 0.01 comprehensive audit — drift & removal candidates
 
-**Date**: 2026-07-14. **Status**: FINDINGS FOR DISCUSSION — nothing
-here has been removed or changed; every item awaits explicit sign-off
-(user instruction: "don't kill anything until we've discussed it").
+**Date**: 2026-07-14. **Status**: EXECUTED 2026-07-14/15 after user
+sign-off (scope: inside the repo; outer-root items left alone).
+Execution record at the end of this doc; per-slice commits reference
+the sections they implement.
 
 **Method**: four independent read-only audit passes (Haskell source +
 smoketest; Lean support library cross-referenced against the emitter's
@@ -212,3 +213,38 @@ or a deliberate tombstone/guard; `@Eq.rec` heads everywhere (no
 `.known-gap` corpus accurate apart from the wording items above;
 offline_lean rows fully emission-only-coherent; the Rocq example tree
 is an intentional frozen mirror; census 64 == disk == STATUS.
+
+---
+
+## Execution record (2026-07-14/15, user-approved scope: in-repo)
+
+- **§A/§B/§E — doc fixes + guard extension**: landed in full (commit
+  "audit cleanup slice 1"). The fossil guard also gained
+  `h_raw_error_obligation_` beyond the audit's four names. The five
+  `Unimplemented`-stub gap rewordings were verified against the
+  actual rawlog (`Unimplemented: processSHA2_256`).
+- **§C — Haskell**: landed in full except ResultMode, whose
+  unproduced arms are KEPT deliberately as the calculus's declared
+  vocabulary (decision recorded at the type). The export trim let
+  `-Werror=unused-top-binds` flush one further dead combinator
+  (`mapsToCoreExpl`). Gates: build, smoketest 57/57, conformance
+  exit 0, emitted Lean byte-identical to op2-baseline (commit
+  "audit cleanup slice 2").
+- **§D — Lean library**: Tiers 1–4 executed (8 + 21 + 34 + 8 items
+  removed). ONE kept-by-gate: `ofFnM_except_ok` — removing it broke
+  `proofs/E4_map_id` and `proofs/E5_littleendian`, whose simp calls
+  rely on it implicitly; restored verbatim. `coerce_id`'s deletion
+  held (the popcount32 driver comment naming it was stale and is
+  fixed). All 8 Inhabited instances went without fallout. Gates:
+  lake build per tier, proofs+support-proofs 32/32, demo
+  `make invol eq`, full conformance.
+- **§F — litter**: intTestsProbe stale hand-probes and demoProbe
+  staging copies deleted file-by-file; superseded snapshot baselines
+  retired REVERSIBLY to `.snapshots/superseded/` (user call — no
+  bulk deletion).
+- **§G — structural**: position-directed plan doc archived, pointers
+  updated. `lean-reverse-example/` and other outer-root items:
+  out of scope per user decision. NOT DONE (tracked as 0.02-adjacent
+  test-gap work, not cleanup): goldens for the 11 emitter-wired
+  zero-coverage helpers; in-library #guard_msgs fences for
+  atRuntimeCheckedM / saw_throw_error.
