@@ -1,15 +1,23 @@
-// Case Study A — LLVM Point verify with Lean discharge.
+// Case Study A — LLVM Point: the MIXED-SOLVER FLAGSHIP workflow.
 //
 // Adapted from exercises/functional-correctness/point/solution.saw.
-// The original solution uses (w4_unint_z3 []) to close every
-// llvm_verify goal via SMT. Here we replace ONE of those closers
-// with `offline_lean` so the corresponding obligation is emitted
-// as a Lean .lean file that we then discharge with a tactic
-// proof. This is the canonical SAW workflow exercise the Lean
-// backend is meant to support: LLVM impl ↔ Cryptol spec
-// equivalence, with Lean as the prover for one step.
+// This is the release 0.01 flagship (release-plan workstream 7,
+// item 1): one SAWScript verification using BOTH solvers, every
+// obligation honestly accounted for, and the Lean-punted goal
+// ACTUALLY DISCHARGED in Lean's kernel:
 //
-// Pinned by workflows/llvm_point_verify/ (this directory) +
+//   1. w4 (SMT) verifies point_eq, point_new, point_copy — and
+//      point_add compositionally through all three verified
+//      overrides (real verifications, not assume_spec).
+//   2. The SAME point_eq obligation is punted to Lean via
+//      emission-only offline_lean (goal left unsolved on the SAW
+//      side, fails-wrapped) — and its tactic discharge is GREEN:
+//      proofs/llvm_point_eq proves goal_closed sorry-free under the
+//      axiom audit.
+//
+// So: SMT eats the routine goals, Lean kernel-checks the punted
+// one, one script, both solvers cooperating. Pinned by
+// workflows/llvm_point_verify/ (this directory) +
 // proofs/llvm_point_eq/ (the discharge).
 //
 // Sources: this dir contains only the .saw script and the
@@ -49,13 +57,67 @@ let point_eq_spec = do {
     llvm_return (llvm_term {{ [p1 == p2] }});
 };
 
-// THE LEAN DISCHARGE STEP.
-//
-// Instead of (w4_unint_z3 []) we use (offline_lean "...") which
-// emits the proof obligation as
-//   workflows/llvm_point_verify/test_llvm_point_verify.point_eq_prove0.lean
-// containing a `goal : Prop` def + a `theorem ... := by sorry`
-// stub. The discharge lives in proofs/llvm_point_eq/proof.lean.
+// SMT SIDE: the compositional ladder from the original solution,
+// all closed by w4. point_add's verification consumes all three
+// verified overrides — including point_eq's.
+point_eq_ov <- llvm_verify m "point_eq" [] true point_eq_spec w4;
+
+let alloc_assign_point p = do {
+    p_ptr <- llvm_alloc (llvm_alias "struct.point");
+    llvm_points_to p_ptr
+      (llvm_struct_value [ llvm_term {{ p.x }}, llvm_term {{ p.y }}]);
+    return p_ptr;
+};
+
+let point_new_spec = do {
+    p_x <- llvm_fresh_var "p_x" (llvm_int 32);
+    p_y <- llvm_fresh_var "p_y" (llvm_int 32);
+
+    llvm_execute_func [ llvm_term p_x, llvm_term p_y ];
+
+    ret_ptr <- alloc_assign_point {{ {x = p_x, y = p_y } }};
+    llvm_return ret_ptr;
+};
+
+point_new_ov <- llvm_verify m "point_new" [] true point_new_spec w4;
+
+let point_copy_spec = do {
+    (p, p_ptr) <- fresh_point_readonly "p";
+
+    llvm_execute_func [p_ptr];
+
+    ret_ptr <- alloc_assign_point p;
+    llvm_return ret_ptr;
+};
+
+point_copy_ov <- llvm_verify m "point_copy" [point_new_ov] true
+    point_copy_spec w4;
+
+let point_add_spec = do {
+    let zero_term = llvm_term {{ 0 : [32] }};
+    llvm_alloc_global "ZERO";
+    llvm_points_to (llvm_global "ZERO")
+                   (llvm_struct_value [zero_term, zero_term]);
+
+    (p1, p1_ptr) <- fresh_point_readonly "p1";
+    (p2, p2_ptr) <- fresh_point_readonly "p2";
+
+    llvm_execute_func [p1_ptr, p2_ptr];
+
+    res_ptr <- alloc_assign_point {{ point_add p1 p2 }};
+    llvm_return res_ptr;
+};
+
+llvm_verify m "point_add"
+    [point_new_ov, point_copy_ov, point_eq_ov]
+    true
+    point_add_spec
+    w4;
+
+// LEAN SIDE: the same point_eq obligation, emitted for offline
+// discharge. Emission-only, so the goal stays unsolved on the SAW
+// side (fails-wrapped); the kernel-checked discharge is
+// proofs/llvm_point_eq/proof.lean (green, sorry-free, axiom-audited).
 fails (llvm_verify m "point_eq" [] true
     point_eq_spec
     (offline_lean "test_llvm_point_verify.point_eq"));

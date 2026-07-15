@@ -111,16 +111,25 @@ In execution order (TODO.md tracks per-item state):
    in honest state — 33 live discharging rows, 7 pinned proof-gaps
    with accurate GAP.md notes (5 recurrence-class, 2 BV-trust-
    policy), no dead pointers. The slate, in release-narrative order:
-   1. **Mixed-solver flagship**: one `llvm_verify` script where most
-      obligations close via SMT (`w4`) and one hard goal is punted
-      to `offline_lean` and discharged in Lean — the honest 0.1
-      product story ("Lean where SMT struggles, SMT elsewhere, one
-      script"). No current row shows the mixed workflow.
-   2. **Wide-bitvector algebraic property** (`[256]`+/`[384]`):
-      painful for bit-blasting, closed in Lean by named lemmas
-      under the trust policy (no `bv_decide`). Doubles as progress
-      toward unparking the two BV-policy proof-gaps
-      (`llvm_{chacha20,salsa20}_q_eq`).
+   1. **Mixed-solver flagship — DONE 2026-07-15.**
+      `workflows/llvm_point_verify` is the complete story: w4
+      verifies point_eq/point_new/point_copy and point_add
+      compositionally through all three VERIFIED overrides, while
+      the same point_eq obligation is punted to Lean and its
+      kernel-checked discharge is green (`proofs/llvm_point_eq`,
+      sorry-free, axiom-audited). `workflows/llvm_salsa20_q_verify`
+      is the second mixed row (w4 qround + rowround composition;
+      Lean punt gap-tracked under the BV policy). Direction note:
+      SMT-verified-callee → Lean-punted-caller composition works in
+      0.01; the reverse needs 0.02 replay.
+   2. **Wide-bitvector algebraic property — SATISFIED BY PROMOTION.**
+      `proofs/E7_wide_assoc` already discharges 256-bit addition
+      associativity via named lemmas under the trust policy (no
+      `bv_decide`); the release narrative should feature it. (The
+      BV-policy proof-gaps remain the harder shape: quarterround's
+      mixed rotate/xor/add equations, plus the newly characterized
+      `proof-gaps/llvm_eq_u128` memory-model tower with its two
+      named missing-lemma families.)
    3. **Memory-safety exercise port** (from `exercises/
       memory-safety`): a points-to goal through `offline_lean`,
       discharged — the Crucible→Lean path on teaching material.
