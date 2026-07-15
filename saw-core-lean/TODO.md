@@ -376,24 +376,24 @@ doc for per-slice regression fences and bounded validation commands):
   golden refreshed after per-hunk review — the only delta vs the
   pre-regression golden was the `Eq__rec` → `@Eq.rec` head — and the full
   emission elaborates with zero errors.)
-- [ ] **Pre-existing gaps found while probing the debts slice (2026-07-10,
-  both LOUD — the emitted Lean fails elaboration — neither caused by the
-  debts changes; verified by reasoning against the untouched code paths):**
-  - Top-level `write_lean_term` of a runtime-computed Nat (probe:
-    `parse_core "bvToNat 8 (bvNat 8 3)"` shapes) annotates the def
-    `: Nat` (the raw TYPE translation of Nat, index domain) while the
-    body is the wrapped VALUE (`Bind.bind … : Except String Nat` via
-    `natValueResult`). Annotation/body carrier mismatch — the def cannot
-    elaborate. The result-type annotation path needs the same
-    position/shape awareness as the value: annotate from the produced
-    term's recorded shape, not from a bare type translation.
-  - `PairValue` instantiated at a proposition (probe: `parse_core
-    "PairValue (Eq Bool True True) Bool …"`) emits `PairType (@Eq.{1}
-    Bool …)` where the Lean `PairType : Type -> Type -> Type`
-    realization cannot take a `Prop`. Independent of argument modes (the
-    carrier translation, not the bind plan). Either reject prop
-    instantiations of pair/record carriers loudly at translation time or
-    universe-generalize the realizations.
+- [x] **Pre-existing gaps found while probing the debts slice (2026-07-10,
+  both LOUD; BOTH FIXED 2026-07-14 as release 0.01 workstream 5):**
+  - FIXED — top-level `write_lean_term` of a runtime-computed Nat:
+    `translateDefDoc` now annotates from the produced body's
+    production record (a `BindingWrapped` body at a non-wrapping type
+    wraps the annotation to the carrier it actually inhabits), never
+    from a bare type translation alone. Pinned by
+    `obligations/write_term_runtime_nat` (`def RuntimeNatProbe :
+    Except String Nat`, elaborates).
+  - FIXED — `PairValue` instantiated at a proposition: pair/tuple
+    carrier family (`PairType`/`PairValue`/`PairType1`/`PairValue1`/
+    `Pair_fst`/`Pair_snd`) rejects at translation with a named
+    diagnostic when a type slot is a proposition (same `asEq`
+    authority as the argument-mode domain analysis) instead of
+    emitting `PairType (@Eq.{1} …)` that fails Lean elaboration
+    downstream. Universe-generalizing the support inductive is 0.02
+    candidate coverage work. Pinned by
+    `saw-boundary/pair_prop_component_rejection`.
 - [ ] **`saw_fix_unique_exists` is unsatisfiable for every strict wrapped fix
   body (found 2026-07-12 while pushing `proof-gaps/cryptol_running_sum_verify`;
   design gap, needs a contract revision doc before any code change).** The

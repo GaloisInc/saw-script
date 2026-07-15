@@ -1,0 +1,13 @@
+enable_experimental;
+
+// Top-level write_lean_term of a RUNTIME-COMPUTED Nat. The body
+// translates at the wrapped Nat-value convention (Except String Nat,
+// via bvToNat over a runtime bitvector), so the def's annotation must
+// be the wrapped carrier too — the annotation follows the body's
+// production record, never a bare type translation. Regression fence
+// for the 2026-07-12 filed gap where the def was annotated `: Nat`
+// raw against a Bind.bind body and could not elaborate (fixed
+// 2026-07-14).
+let probe = parse_core "bvToNat 8 (bvNat 8 3)";
+
+write_lean_term "RuntimeNatProbe" [] [] "emitted.lean" probe;

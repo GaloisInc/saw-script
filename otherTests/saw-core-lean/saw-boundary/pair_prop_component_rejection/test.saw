@@ -1,0 +1,12 @@
+// Pair/tuple carriers instantiated at a PROPOSITION reject at
+// translation time (filed 2026-07-12, fixed 2026-07-14). The Lean
+// realization is `PairType : Type -> Type -> Type`; a Prop component
+// (SAWCore pairs of proofs) cannot inhabit it, and emitting
+// `PairType (@Eq.{1} Bool …) …` only to fail Lean elaboration
+// downstream violates the reject-before-emitting contract. Faithful
+// support needs a reviewed universe-generalization of the support
+// inductive — release 0.02 candidate coverage work.
+let probe = parse_core
+  "PairValue (Eq Bool True True) Bool (Refl Bool True) True";
+
+write_lean_term "PairPropProbe" [] [] "emitted.lean" probe;

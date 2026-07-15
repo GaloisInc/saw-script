@@ -3964,6 +3964,29 @@ translateIdentWithArgsWithShape i args = originalDispatchWithShape i args
 originalDispatchWithShape ::
   TermTranslationMonad m => Ident -> [Term] -> m TranslatedTerm
 originalDispatchWithShape i args = do
+  -- Pair/tuple carriers instantiated at a PROPOSITION reject at
+  -- translation time. The Lean realization is
+  -- @PairType : Type -> Type -> Type@; a Prop component (SAWCore
+  -- pairs of proofs, e.g. @PairValue (Eq Bool True True) …@) cannot
+  -- inhabit it, and without a reviewed universe-generalization of the
+  -- support inductive (release 0.02 candidate work) the only faithful
+  -- move is a loud, named refusal here instead of a downstream Lean
+  -- elaboration failure. Proposition recognition uses the same
+  -- 'asEq' authority as the argument-mode domain analysis.
+  let pairCarrierTypeSlots
+        | identName i `elem` [ "PairType", "PairValue"
+                             , "PairType1", "PairValue1"
+                             , "Pair_fst", "Pair_snd" ] = take 2 args
+        | otherwise = []
+  case filter (isJust . asEq) pairCarrierTypeSlots of
+    (_propComponent : _) ->
+      Except.throwError $ RejectedPrimitive (Text.pack (identName i))
+        ("pair carrier instantiated at a proposition (an Eq component): "
+         <> "the Lean PairType realization takes Type components; "
+         <> "Prop-instantiated SAWCore pairs have no faithful "
+         <> "realization until the support inductive is "
+         <> "universe-generalized")
+    [] -> pure ()
   specialTreatment <- findSpecialTreatment i
   qualifiedIdent   <- defaultIdentTarget i
   mm               <- view sawModuleMap <$> askTR
@@ -6187,7 +6210,7 @@ translateDefDoc ::
   Either TranslationError (Doc ann)
 translateDefDoc configuration mm name body tp = do
   let wrapType = shouldWrapBinder tp
-  ((bodyLean, tp'), state) <-
+  ((bodyLean, bodyShape, tp'), state) <-
     runTermTranslationMonad configuration Nothing mm [] [name] $ do
       -- P-1 (2026-05-06): use 'translateTermLet' on the body so
       -- shared subterms are emitted as let-bound variables rather
@@ -6202,19 +6225,26 @@ translateDefDoc configuration mm name body tp = do
                      then adaptToRuntime bodyResult
                      else pure (ttLean bodyResult)
       tpLean <- translateTerm tp
-      pure (bodyLean, tpLean)
+      pure (bodyLean, ttShape bodyResult, tpLean)
   let auxDecls = reverse (view topLevelDeclarations state)
       univs    = view universeVars state
-      -- Wrap a top-level closed type in 'Except String' if it's a
-      -- value-domain type. The translated body lives at
-      -- 'Except String τ' (Phase β); without this wrap the def's
-      -- declared type stays at 'τ' raw, which fails to elaborate.
-      -- For Pi-shaped types (function defs like
-      -- @addOne : Vec 8 Bool → Vec 8 Bool@) the wrap already
-      -- happens inside the Pi case of 'translateTermUnshared';
-      -- this fixup only fires on closed-value top-level defs
-      -- whose type expression is a bare 'Vec' / 'Bool' / etc.
-      tp'' = if wrapType then wrapExcept tp' else tp'
+      -- The def's declared type must be the carrier the produced body
+      -- actually inhabits, so the annotation follows the body's
+      -- production record, not a bare type translation:
+      --
+      --   * value-domain types ('shouldWrapBinder') wrap and the body
+      --     adapts to runtime — the Phase-β convention;
+      --   * a WRAPPED body at a non-wrapping type (e.g. a
+      --     runtime-computed Nat: SAW type @Nat@, body at
+      --     @Except String Nat@ via the Nat-value convention) wraps
+      --     the annotation to match — annotating such a def @: Nat@
+      --     raw cannot elaborate (filed 2026-07-12, fixed 2026-07-14);
+      --   * raw/function bodies at non-wrapping types stay raw (Pi
+      --     types already carry their internal wraps from the Pi
+      --     translator).
+      tp'' = if wrapType || bodyShape == BindingWrapped
+               then wrapExcept tp'
+               else tp'
       mainDecl = mkDefinitionWith Lean.Noncomputable univs name bodyLean tp''
       -- Each 'prettyDecl' already ends with 'hardline'; 'vcat' adds
       -- another between elements, yielding one blank line between
