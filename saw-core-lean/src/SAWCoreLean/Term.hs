@@ -30,15 +30,11 @@ module SAWCoreLean.Term
   , topLevelDeclarations
   , universeVars
     -- * Translation
+    -- (Export list trimmed by the 2026-07-14 release audit to the
+    -- names external modules actually consume.)
   , translateTerm
-  , translateTermLet
   , translateTermLetWithShape
-  , translateAt
-  , adaptTo
   , adaptToRuntime
-  , ExpectedPosition(..)
-  , RawReason(..)
-  , TranslatedTerm
   , translatedTermLean
   , translateDefDoc
   , withRawTranslationMode
@@ -120,7 +116,6 @@ data RawReason
   | RawProofPosition
   | RawMotivePosition
   | RawLogicalPosition
-  | RawLeanFormalPosition
   | StructuralRecursorFieldPosition
   deriving (Eq, Show)
 
@@ -128,10 +123,12 @@ data ExpectedPosition
   = ExpectRuntimeValue
   | ExpectRaw RawReason
   | ExpectFunctionPosition (Maybe FunctionConvention)
-    -- ^ A function position. 'Nothing' means "function position,
-    -- convention not yet declared" — a tracked transitional bridge
-    -- (Slice 4 shrinks it); @'Just' c@ carries the declared
-    -- convention that drives binder/result positions (Slice 3).
+    -- ^ A function position. @'Just' c@ carries the declared
+    -- convention that drives binder/result positions. 'Nothing' is a
+    -- PERMANENT production, not a migration bridge: some surrounds
+    -- (e.g. Eq.rec branch/carrier transport) legitimately demand "a
+    -- function delivered structurally" without constraining its
+    -- binder positions — Lean's typechecker guards the arity.
   deriving (Eq, Show)
 
 -- | Calculus §Positions: a function position recursively assigns a
@@ -183,11 +180,12 @@ data MotiveConvention = MotiveConvention
 --     raw; anything else is forbidden;
 --   * 'ProofArg' marks a source proof argument that is dropped at
 --     emission and re-proved as a Lean obligation;
---   * 'FunctionWithNatLtArg' is a tracked transitional convention for
+--   * 'FunctionWithNatLtArg' is the PERMANENT convention for
 --     proof-carrying generator functions whose index is bounded by
---     the helper argument at the given (post-drop) position; it folds
---     into 'FunctionArg' with an explicit proof binder when Slice
---     4b/4c unify the tables.
+--     the helper argument at the given (post-drop) position (e.g.
+--     'genWithBoundsM' callbacks receiving @i < n@ evidence). A
+--     once-planned fold into 'FunctionArg' never proved necessary —
+--     the evidence-threading slot is what distinguishes it.
 data ArgMode
   = TypeArg
   | IndexArg
@@ -202,6 +200,11 @@ data ArgMode
   deriving (Eq, Show)
 
 -- | Calculus §Callee Conventions: a convention's declared result mode.
+-- Today every checked-application contract declares 'RuntimeResult';
+-- the 'RawResult'/'FunctionResult' arms are the calculus's declared
+-- vocabulary, kept so a future contract with a raw or function result
+-- states its mode in the table rather than growing a side channel
+-- (release audit 2026-07-14: declared-but-unproduced, deliberate).
 data ResultMode
   = RuntimeResult
   | RawResult RawReason
@@ -294,63 +297,37 @@ data RecursorConvention = RecursorConvention
   }
   deriving (Eq, Show)
 
-data TranslatedTerm = TranslatedTermAt
-  { ttLean       :: Lean.Term
-  , ttShape      :: BindingShape
-  , ttProducedAt :: Maybe ExpectedPosition
-    -- ^ The position this term was translated at, when the producer
-    -- declared one ('translateAt' stamps it; position-aware
-    -- introduction sites may set it directly). 'Nothing' means the
-    -- term came from a bottom-up "natural" translation — honest
-    -- ignorance, never a default to branch on. Slices 2–4 of the
-    -- position-directed plan shrink the 'Nothing' productions to zero.
+-- | A translated term plus its Phase-β representation. Expected
+-- positions are DEMANDED, not stored: ρ flows through the explicit
+-- parameter of 'translateSharedAt' / 'translateAt' and the declared
+-- conventions, and consistency is checked at production time
+-- ('tracePositionAt' / 'shapeConsistentWithPosition'). A stored
+-- produced-at stamp existed during the position-directed migration
+-- but was a write-only ghost — nothing ever branched on it — and was
+-- removed by the 2026-07-14 release audit.
+data TranslatedTerm = TranslatedTerm
+  { ttLean  :: Lean.Term
+  , ttShape :: BindingShape
   }
   deriving Show
-
--- | Compatibility constructor/pattern for producers that do not yet
--- declare the position they translate at. Deliberately greppable:
--- every construction through 'TranslatedTerm' (rather than
--- 'TranslatedTermAt') marks a site the position-directed migration
--- still has to visit.
-pattern TranslatedTerm :: Lean.Term -> BindingShape -> TranslatedTerm
-pattern TranslatedTerm tm shape <- TranslatedTermAt tm shape _
-  where TranslatedTerm tm shape = TranslatedTermAt tm shape Nothing
-
-{-# COMPLETE TranslatedTerm #-}
 
 translatedTermLean :: TranslatedTerm -> Lean.Term
 translatedTermLean = ttLean
 
--- | Per-binding record for the calculus's Γ (plan Slice 1). The old
--- environment collapsed every binding to a 3-way 'BindingShape';
--- equality-subject and proof-transport decisions (Slice 5) need the
--- binder's position and exact types, so introduction sites record
--- everything they actually know. Fields are 'Maybe' where today's
--- introduction machinery cannot determine the value unambiguously —
--- a 'Nothing' is honest ignorance and must never be defaulted or
--- guessed around; Slice 3 threads the real positions.
-data BindingInfo = BindingInfo
-  { biRepr          :: BindingShape
-    -- ^ Phase-β representation of the bound Lean identifier (the old
-    -- environment's whole payload; still the projection use sites
-    -- consult for raw/wrapped adaptation).
-  , biBoundPosition :: Maybe ExpectedPosition
-    -- ^ The position the binder was bound at. 'Nothing' when the
-    -- current flag machinery conflates cases (e.g. 'skipBinderWrap'
-    -- covers both motive binders and index binders, and a raw @Nat@
-    -- binder may be a value or an index).
-  , biSourceType    :: Maybe Term
-    -- ^ SAWCore type of the binder, when the introduction site has it.
-  , biLeanType      :: Maybe Lean.Type
-    -- ^ The exact emitted Lean type, when one was emitted.
+-- | Per-binding record for the calculus's Γ. Today its payload is
+-- the binder's Phase-β representation — the one thing every
+-- adaptation use site consults. The Slice-1 migration provisionally
+-- carried richer fields (bound position, source type, emitted Lean
+-- type) as a landing pad for consumers that were expected in
+-- Slices 2/5; those consumers were ultimately served by declared
+-- conventions instead and the write-only fields were removed by the
+-- 2026-07-14 release audit. Re-enrich this record (rather than
+-- adding side tables) if a future consumer genuinely needs more of
+-- Γ per binder.
+newtype BindingInfo = BindingInfo
+  { biRepr :: BindingShape
+    -- ^ Phase-β representation of the bound Lean identifier.
   }
-
--- | 'biSourceType' / 'biLeanType' are recorded now but first read by
--- the adaptation chokepoint (Slice 2) and proof transport (Slice 5).
--- This underscore binding marks the accessors used until then; delete
--- it with the first real consumer.
-_gammaFieldsPendingUse :: BindingInfo -> (Maybe Term, Maybe Lean.Type)
-_gammaFieldsPendingUse info = (biSourceType info, biLeanType info)
 
 data ValueTranslationMode
   = WrappedValueMode
@@ -1110,8 +1087,8 @@ translateBinderAt mrho vn ty f = do
       -- values via a 'let'-shadow chain emitted by
       -- 'translateCaseHandler'.
       phase <- phaseBetaEnabled
-      let legacyWrap = phase && shouldWrapBinder ty && not skipWrap && not inRecCase
-          t' = if fromMaybe legacyWrap mOverrideWrap
+      let ambientWrap = phase && shouldWrapBinder ty && not skipWrap && not inRecCase
+          t' = if fromMaybe ambientWrap mOverrideWrap
                   then wrapExcept t
                   else t
       pure (t', Nothing)
@@ -1122,27 +1099,17 @@ translateBinderAt mrho vn ty f = do
   skipWrap <- view skipBinderWrap <$> askTR
   inRecCase <- view inRecursorCaseBinder <$> askTR
   phase <- phaseBetaEnabled
-  let legacyBinderWrap = phase && shouldWrapBinder ty && not skipWrap && not inRecCase
+  let ambientBinderWrap = phase && shouldWrapBinder ty && not skipWrap && not inRecCase
       binderWrapped =
         isNothing (asSort ty)
-        && fromMaybe legacyBinderWrap mOverrideWrap
-  -- Γ record (plan Slice 1): when a convention declared ρ, record it
-  -- verbatim. Otherwise the bound position is recorded only where
-  -- today's flags determine it unambiguously — 'skipBinderWrap'
-  -- conflates motive and index binders, and an unwrapped value type
-  -- (raw Nat) conflates value and index, so those stay Nothing until
-  -- a later slice pushes the real ρ down.
+        && fromMaybe ambientBinderWrap mOverrideWrap
+  -- Γ record: the binder's Phase-β representation. (A declared ρ from
+  -- 'mrho' governs the wrap decision above; positions are demanded
+  -- through conventions, not stored per binder.)
   let repr = if binderWrapped then BindingWrapped else bindingShapeOfType ty'
-      boundPos
-        | isJust (asSort ty) = Just (ExpectRaw RawTypePosition)
-        | Just rho <- mrho   = Just rho
-        | binderWrapped      = Just ExpectRuntimeValue
-        | inRecCase          = Just (ExpectRaw StructuralRecursorFieldPosition)
-        | otherwise          = Nothing
   localTR bindUniv $
     withSAWVar vn $ \n' ->
-      localTR (withBindingInfo n'
-                 (BindingInfo repr boundPos (Just ty) (Just ty'))) $
+      localTR (withBindingInfo n' (BindingInfo repr)) $
         f (BindTrans n' ty')
 
 -- | Introduce a SAW binder whose Lean type has already been determined
@@ -1155,10 +1122,8 @@ translateBinderWithLeanType ::
   VarName -> Lean.Type -> (Lean.Binder -> m a) -> m a
 translateBinderWithLeanType vn ty f =
   withSAWVar vn $ \n' ->
-    -- Position deliberately unrecorded: callers range over index
-    -- binders, bounds-proof binders, and recursor case fields.
     localTR (withBindingInfo n'
-               (BindingInfo (bindingShapeOfType ty) Nothing Nothing (Just ty))) $
+               (BindingInfo (bindingShapeOfType ty))) $
       f (Lean.Binder Lean.Explicit n' (Just ty))
 
 translateBinders' :: TermTranslationMonad m => [(VarName, Term)] ->
@@ -1855,19 +1820,14 @@ translateFunctionConventionBindersWith valueSlot typeIxs params0 k =
         if vnName vn == "_"
            then freshVariant (Lean.Ident ("η_arg_" ++ show ix))
            else translateLocalIdent (vnName vn)
-      -- Wrapped formals stand at runtime-value position; the raw
-      -- slots conflate index/type/raw-value reasons and stay
-      -- position-less until the convention declares them (Slice 4).
-      let boundPos = if wrapped then Just ExpectRuntimeValue else Nothing
       withUsedLeanIdent ident $
         localTR ( over namedEnvironment (Map.insert vn ident)
                 . withBindingInfo ident
-                    (BindingInfo (bindingShapeOfType binderTy) boundPos
-                                 (Just ty) (Just binderTy))) $ do
+                    (BindingInfo (bindingShapeOfType binderTy))) $ do
           let binder = Lean.Binder Lean.Explicit ident (Just binderTy)
           let argShape = if wrapped then BindingWrapped
                                     else bindingShapeOfType binderTy
-              arg = TranslatedTermAt (Lean.Var ident) argShape boundPos
+              arg = TranslatedTerm (Lean.Var ident) argShape
           go (ix + 1) (binder : binders) (arg : args) rest
 
 translateFunctionConventionBinders ::
@@ -3219,16 +3179,16 @@ withMissingCheckedApplicationBinders ident modes0 binders0 k =
     go binders helperArgs (mode : modes) ((vn, ty) : rest) =
       case mode of
         RuntimeArg ->
-          bindMissing True (Just ExpectRuntimeValue)
+          bindMissing True
             binders helperArgs modes (vn, ty) rest
         IndexArg ->
-          bindMissing False (Just (ExpectRaw RawIndexPosition))
+          bindMissing False
             binders helperArgs modes (vn, ty) rest
         TypeArg ->
-          bindMissing False (Just (ExpectRaw RawTypePosition))
+          bindMissing False
             binders helperArgs modes (vn, ty) rest
         RawValueArg ->
-          bindMissing False (Just (ExpectRaw RawValuePosition))
+          bindMissing False
             binders helperArgs modes (vn, ty) rest
         ProofArg ->
           Except.throwError (RejectedPrimitive (Text.pack (identName ident))
@@ -3252,7 +3212,7 @@ withMissingCheckedApplicationBinders ident modes0 binders0 k =
       Except.throwError (RejectedPrimitive (Text.pack (identName ident))
         "checked-application partial argument table did not match source arity")
 
-    bindMissing wrapped boundPos binders helperArgs modes (vn, ty) rest = do
+    bindMissing wrapped binders helperArgs modes (vn, ty) rest = do
       tyLean <- localTR (set skipBinderWrap False) (translateTerm ty)
       let binderTy = if wrapped then wrapExcept tyLean else tyLean
       ident' <-
@@ -3262,8 +3222,7 @@ withMissingCheckedApplicationBinders ident modes0 binders0 k =
       withUsedLeanIdent ident' $
         localTR ( over namedEnvironment (Map.insert vn ident')
                 . withBindingInfo ident'
-                    (BindingInfo (bindingShapeOfType binderTy) boundPos
-                                 (Just ty) (Just binderTy))) $ do
+                    (BindingInfo (bindingShapeOfType binderTy))) $ do
           let binder = Lean.Binder Lean.Explicit ident' (Just binderTy)
               helperArg = Lean.Var ident'
           go (binder : binders) (helperArg : helperArgs) modes rest
@@ -3732,8 +3691,7 @@ translateEqRecMotiveAtConvention conv motiveTerm =
                               (concatMap bindTransToBinder [ybnd, hbnd])
                               bodyWrapped
                   tracePositionAt (ExpectRaw RawMotivePosition) motiveTerm
-                    (TranslatedTermAt lam BindingFunction
-                       (Just (ExpectRaw RawMotivePosition)))
+                    (TranslatedTerm lam BindingFunction)
                   pure lam
         _ ->
           Except.throwError (RejectedPrimitive "Eq__rec"
@@ -5093,9 +5051,8 @@ translateCaseHandler motiveReturnsRaw expectedWrappedResult casePlan caseTerm = 
               , functionConventionResultIsValue sawTy
               ]
             -- The let-shadow chain rebinds these fields as wrapped
-            -- runtime values, so record that position for the body.
+            -- runtime values.
             shadowInfo = BindingInfo BindingWrapped
-                           (Just ExpectRuntimeValue) Nothing Nothing
             markValueShadows =
               if motiveReturnsRaw
                  then id
@@ -5464,7 +5421,7 @@ translateAt ::
 translateAt rho t = do
   result <- translateSharedAt (Just rho) t
   tracePositionAt rho t result
-  pure result { ttProducedAt = Just rho }
+  pure result
 
 -- | The adaptation chokepoint (plan Slice 2): move a translated term
 -- to the position a convention demands, using exactly the adapters the
@@ -5490,7 +5447,7 @@ translateAt rho t = do
 adaptTo ::
   TermTranslationMonad m => ExpectedPosition -> TranslatedTerm -> m TranslatedTerm
 adaptTo rho result =
-  let deliver tm shape = pure (TranslatedTermAt tm shape (Just rho))
+  let deliver tm shape = pure (TranslatedTerm tm shape)
       forbidden =
         Except.throwError (ForbiddenAdaptation
           (Text.pack (show rho))
@@ -5606,7 +5563,7 @@ translateSharedAt mrho t =
           env <- view bindingEnv <$> askTR
           case Map.lookup ident env of
             Just info ->
-              pure (TranslatedTermAt tm (biRepr info) (biBoundPosition info))
+              pure (TranslatedTerm tm (biRepr info))
             Nothing ->
               -- A shared name is bound in Γ before anything can
               -- reference it ('translateSharedDefs' extends Γ in
@@ -5745,10 +5702,7 @@ translateTermUnshared t =
                           ( set skipBinderWrap surroundingSkipWrap
                           . over bindingEnv
                               (\m -> foldr
-                                (`Map.insert`
-                                   BindingInfo BindingWrapped
-                                     (Just ExpectRuntimeValue)
-                                     Nothing Nothing) m
+                                (`Map.insert` BindingInfo BindingWrapped) m
                                 shadowedNames))
                           (k pbs)))
             | otherwise =
@@ -5904,8 +5858,7 @@ translateLambdaAtConvention conv t = do
            bodyResult <- translateTermLetAt (Just (fcResultPosition conv)) body
            bodyLean <- ttLean <$> adaptTo (fcResultPosition conv) bodyResult
            let lam = Lean.Lambda (concatMap bindTransToBinder bts) bodyLean
-           pure (TranslatedTermAt lam BindingFunction
-                   (Just (ExpectFunctionPosition (Just conv))))
+           pure (TranslatedTerm lam BindingFunction)
 
 -- | The declared convention for a recursor's motive argument (plan
 -- Slice 3c). Binders are the datatype's indices followed by the
@@ -5961,8 +5914,7 @@ translateMotiveAtConvention conv motiveTerm =
                  else bodyLean
             lam = Lean.Lambda (concatMap bindTransToBinder bts) bodyWrapped
         tracePositionAt (ExpectRaw RawMotivePosition) motiveTerm
-          (TranslatedTermAt lam BindingFunction
-             (Just (ExpectRaw RawMotivePosition)))
+          (TranslatedTerm lam BindingFunction)
         pure lam
 
 -- | Unshared translation with the expected position threaded (see
@@ -6166,27 +6118,26 @@ translateTermLetAt mrho t = do
     defResults <- translateSharedDefs [] names shareTms
     let defs = map ttLean defResults
         letInfos =
-          [ (name, sharedBindingInfo tm result)
-          | (name, (result, tm)) <- zip names (zip defResults shareTms)
+          [ (name, sharedBindingInfo result)
+          | (name, result) <- zip names defResults
           ]
     localTR (over bindingEnv
                (\m -> foldr (uncurry Map.insert) m letInfos)) $ do
       body <- translateSharedAt mrho t
-      pure (TranslatedTermAt
+      pure (TranslatedTerm
               (foldr mkLet (ttLean body) (zip names defs))
-              (ttShape body)
-              (ttProducedAt body))
+              (ttShape body))
   where
-    -- Γ record for a let-bound shared subterm: the binding stands at
-    -- whatever position its RHS was produced at.
-    sharedBindingInfo tm result =
-      BindingInfo (ttShape result) (ttProducedAt result) (Just tm) Nothing
+    -- Γ record for a let-bound shared subterm: the binding carries
+    -- its RHS's produced representation.
+    sharedBindingInfo result =
+      BindingInfo (ttShape result)
     translateSharedDefs _ [] [] = pure []
     translateSharedDefs known (name : ns) (tm : tms) = do
       result <- localTR (over bindingEnv
                  (\m -> foldr (uncurry Map.insert) m known)) $
                   translateTermUnsharedWithShape tm
-      let known' = (name, sharedBindingInfo tm result) : known
+      let known' = (name, sharedBindingInfo result) : known
       rest <- translateSharedDefs known' ns tms
       pure (result : rest)
     translateSharedDefs _ _ _ =

@@ -29,22 +29,16 @@ module SAWCoreLean.SpecialTreatment
   , findSpecialTreatment
   , specialTreatmentMap
   , escapeIdent
-  , unsupportedFixReason
     -- * Combinators for building 'IdentSpecialTreatment' values
+    -- (table-internal combinators and module names are no longer
+    -- exported — 2026-07-14 release audit export trim; consumers go
+    -- through the treatment lookup, not the combinators)
   , mapsTo
   , mapsToExpl
-  , mapsToCore
-  , mapsToCoreExpl
-  , mapsToCoreUniv
   , replace
-  , replaceDropArgs
   , skip
-  , autoEmit
     -- * Named target modules on the Lean side
-  , sawVectorsModule
-  , sawBitvectorsModule
   , sawCorePreludeExtraModule
-  , sawCorePrimitivesModule
     -- * Output-shape predicates
   , implicitlyOpenedModules
   , isImplicitlyOpened
@@ -255,15 +249,7 @@ mapsToCore :: Lean.Ident -> IdentSpecialTreatment
 mapsToCore targetName =
   IdentSpecialTreatment DefSkip (UseRename Nothing targetName False)
 
--- | Like 'mapsToCore' but emits @\@name@ at use sites, forcing all
--- implicit arguments to be supplied explicitly. Needed for names like
--- Lean's @Eq@ where the type parameter is implicit in Lean but
--- SAWCore supplies it explicitly.
-mapsToCoreExpl :: Lean.Ident -> IdentSpecialTreatment
-mapsToCoreExpl targetName =
-  IdentSpecialTreatment DefSkip (UseRename Nothing targetName True)
-
--- | Like 'mapsToCoreExpl' but also supplies explicit universe levels
+-- | Like 'mapsToCore' but also supplies explicit universe levels
 -- at the call site, by inferring them from the SAWCore arguments
 -- at the given indices. Each indexed argument must resolve to a
 -- known Lean universe level from a bound sort variable or from the

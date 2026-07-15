@@ -314,7 +314,7 @@ Slices (each emitted-Lean-diff-reviewed and green before commit):
 
 ## Operative Priority (COMPLETE 2026-07-11): Position-Directed Translation
 
-Full execution plan: `doc/2026-07-08_position-directed-translation-plan.md`.
+Full execution plan: `doc/archive/2026-07-08_position-directed-translation-plan.md`.
 
 This was the top technical focus through 2026-07-11; all eight slices
 are complete and the records below are historical. The goal is to make the position/callee
@@ -2133,7 +2133,7 @@ Known-gap backlog triage (still current):
 
 ## References
 
-- `doc/2026-07-08_position-directed-translation-plan.md` (operative plan)
+- `doc/archive/2026-07-08_position-directed-translation-plan.md` (operative plan)
 - `doc/2026-07-03_direct-recursor-semantics-design.md`
 - `doc/2026-06-26_phase-beta-expected-shape.md`
 - `doc/2026-06-26_expected-shape-todo.md`

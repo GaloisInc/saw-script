@@ -22,7 +22,7 @@ calculus (`doc/2026-07-02_position-callee-calculus.md`): value-domain
 SAW expressions translate to Lean expressions at `Except String T`,
 where `T` is the Lean translation of the SAW type; type-level
 expressions translate raw. As of the position-directed translation
-refactor (`doc/2026-07-08_position-directed-translation-plan.md`,
+refactor (`doc/archive/2026-07-08_position-directed-translation-plan.md`,
 Slices 0–7 complete), the calculus IS the implementation:
 
 - Every translation is directed by a declared expected position
@@ -30,10 +30,13 @@ Slices 0–7 complete), the calculus IS the implementation:
   conventions (`ArgMode` tables); adaptation between representations
   happens at a single chokepoint (`adaptTo`) where forbidden
   adaptations are unrepresentable.
-- Producers stamp `TranslatedTermAt` production records (shape +
-  position); records are the translator's single source of truth.
-  Shape is never re-derived from emitted Lean terms — that inspection
-  class is deleted and a source lint in the smoketest keeps it deleted.
+- Producers stamp `TranslatedTerm` production records (the produced
+  shape); records are the translator's single source of truth, and
+  demanded positions flow through explicit parameters/conventions
+  rather than stored stamps (the write-only produced-at stamp was
+  removed by the 2026-07-14 release audit). Shape is never re-derived
+  from emitted Lean terms — that inspection class is deleted and a
+  source lint in the smoketest keeps it deleted.
 - Equality subjects classify by the operand-domain rule
   (`standaloneEqualitySubjectRep`); no surround declares a
   representation. `Eq.rec` transports run at a fully declared
