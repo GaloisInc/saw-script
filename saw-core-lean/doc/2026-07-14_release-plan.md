@@ -126,9 +126,14 @@ In execution order (TODO.md tracks per-item state):
       mixed rotate/xor/add equations, plus the newly characterized
       `proof-gaps/llvm_eq_u128` memory-model tower with its two
       named missing-lemma families.)
-   3. **Memory-safety exercise port** (from `exercises/
-      memory-safety`): a points-to goal through `offline_lean`,
-      discharged — the Crucible→Lean path on teaching material.
+   3. **Memory-safety exercise port — DONE 2026-07-15.**
+      `workflows/llvm_swap_verify` (Case Study F, completing the
+      optional ladder rung): mixed-solver row over the swap/
+      selection_sort exercise whose Lean-punted goal is a Crucible
+      SAFETY ASSERTION (the swap-store bounds check) — a new goal
+      flavor for the corpus — discharged sorry-free via the
+      completed-outline mechanism (`proofs/llvm_swap_eq`, drift
+      check + axiom audit green).
    4. **Sequence-surgery property** (`update`/`slice` round-trip):
       deliberately routes the `updWithProof_checkedM`/
       `sliceWithProof_checkedM` family, closing part of the

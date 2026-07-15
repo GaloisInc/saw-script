@@ -1,0 +1,104 @@
+// Case Study F — LLVM Swap: memory-safety of the swap program, MIXED
+// solver, the selection-sort store-bounds obligation discharged in
+// Lean.
+//
+// Adapted from exercises/memory-safety/swap/solution.saw. This is
+// release 0.02 slate item 3 (the never-built Case Study F rung): one
+// SAWScript verification over the swap program using BOTH solvers,
+// with the interesting obligation ACTUALLY DISCHARGED in Lean's
+// kernel.
+//
+// Design note — WHY the Lean-punted goal is selection_sort's, not
+// swap's. The straight-line `swap` / `xor_swap` postconditions are
+// closed by SAW's own bitvector rewriter BEFORE any goal reaches the
+// prover: the XOR-swap identity (x^y)^(y^(x^y)) = y folds to `True`
+// during obligation generation, so offline_lean would receive — and
+// emit — nothing. The first residual obligation in this program is
+// the MEMORY-SAFETY one: inside `selection_sort`, the inlined swap
+// stores to `a + 4*(if a[1] < a[0] then 1 else 0)`, and SAW must show
+// that offset is in bounds (0 or 4 for a 2-element array). That IS a
+// genuine, non-folding goal — a branch on the comparison — and it is
+// the honest thing a user discharges in Lean here.
+//
+//   1. w4 (SMT) verifies the direct `swap` and the XOR `xor_swap`
+//      against a FUNCTIONAL swap spec — after swap(x,y), *x holds the
+//      old *y and *y holds the old *x. Routine for SMT: both fold to
+//      a trivial goal, w4 closes them.
+//
+//   2. `selection_sort` at size 2, verified for memory safety (the
+//      exercise's Part 5 spec: fresh output array), punted to Lean
+//      via emission-only offline_lean (goal left unsolved on the SAW
+//      side, fails-wrapped). The emitted obligation is the swap-store
+//      in-bounds check: `(0 == off) || (4 == off)` where
+//      `off = 4*(if a[1] < a[0] then 1 else 0)`. Its tactic discharge
+//      is GREEN: proofs/llvm_swap_eq proves goal_closed sorry-free
+//      under the axiom audit.
+//
+// So: SMT eats the straight-line swaps, Lean kernel-checks the
+// selection-sort store-bounds obligation, one script, both solvers
+// cooperating. Pinned by workflows/llvm_swap_verify/ (this directory)
+// + proofs/llvm_swap_eq/ (the discharge).
+//
+// Sources: this dir contains only the .saw script and the
+// pre-compiled swap.bc (LLVM bitcode is a build artifact). The
+// canonical swap.c lives under exercises/memory-safety/swap/ — we
+// rebuild swap.bc when needed via:
+//
+//   cd otherTests/saw-core-lean/workflows/llvm_swap_verify
+//   clang -c -g -O0 -emit-llvm \
+//     -o swap.bc \
+//     ../../../../exercises/memory-safety/swap/swap.c
+
+swapmod <- llvm_load_module "swap.bc";
+
+// Inlined ptr_to_fresh (from exercises/common/helpers.saw): fresh
+// var `x` of type `ty`, plus a pointer to freshly-allocated memory
+// storing it.
+let ptr_to_fresh n ty = do {
+    x <- llvm_fresh_var n ty;
+    p <- llvm_alloc ty;
+    llvm_points_to p (llvm_term x);
+    return (x, p);
+};
+
+// FUNCTIONAL swap spec: caller passes two distinct pointers; after
+// the call, the pointees are exchanged. The post-state pins *x to the
+// old *y and *y to the old *x.
+let swap_func_spec = do {
+    (x, xp) <- ptr_to_fresh "x" (llvm_int 32);
+    (y, yp) <- ptr_to_fresh "y" (llvm_int 32);
+
+    llvm_execute_func [xp, yp];
+
+    llvm_points_to xp (llvm_term y);
+    llvm_points_to yp (llvm_term x);
+};
+
+// SMT SIDE: both swap implementations against the functional spec.
+// The symbolic post-states fold to `True` under SAW's bitvector
+// rewriter, so these are trivial for w4 — the routine goals.
+llvm_verify swapmod "swap"     [] true swap_func_spec w4;
+llvm_verify swapmod "xor_swap" [] true swap_func_spec w4;
+
+// The exercise's Part 5 memory-safety spec for selection_sort: a
+// fresh input array of `len` 32-bit words, the length passed as a
+// 64-bit argument, and a fresh (unconstrained) output array — this is
+// a pure MEMORY-SAFETY contract, so the only residual obligations are
+// the in-bounds checks for the array accesses.
+let selection_sort_spec len = do {
+    (a, a_ptr) <- ptr_to_fresh "a" (llvm_array len (llvm_int 32));
+
+    llvm_execute_func [a_ptr, (llvm_term {{ `len : [64] }})];
+
+    a' <- llvm_fresh_var "a'" (llvm_array len (llvm_int 32));
+
+    llvm_points_to a_ptr (llvm_term a');
+};
+
+// LEAN SIDE: selection_sort at size 2, memory safety. Emission-only,
+// so the goal stays unsolved on the SAW side (fails-wrapped); the
+// kernel-checked discharge is proofs/llvm_swap_eq/proof.lean (green,
+// sorry-free, axiom-audited).
+fails (llvm_verify swapmod "selection_sort" [] true
+    (selection_sort_spec 2)
+    (offline_lean "test_llvm_swap_verify.selection_sort"));
