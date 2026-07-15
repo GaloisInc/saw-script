@@ -1,0 +1,25 @@
+// EXPECTED REJECTION (release 0.01 decision, 2026-07-14; formerly
+// drivers/cryptol_chacha20_core_iterate with goldens expecting
+// successful translation).
+//
+// `core x = blocked (x + iterate cdround x @ 10)` from the reference
+// `deps/cryptol-specs/.../chacha20.cry` reaches the chacha20 module's
+// private `iterate` (`{a} (a -> a) -> a -> [inf]a`), which lowers to
+// a SAWCore `Prelude.fix` over a spine ending in `Stream`, and the
+// wrapped-scrutinee recursor convention refuses
+// `Prelude::Stream@core` — the named diagnostic this row pins.
+//
+// This ChaCha20-shape stream comprehension is IN SCOPE long-term: the
+// translation path (the `saw_self_ref_comp_iterate` parametric-bridge
+// family / lazy selection) folds into the OP-3 successor design
+// (doc/2026-07-12_obligation-placement-design.md §Instance 3,
+// doc/2026-07-14_release-plan.md). Until that lands, translation must
+// reject loudly rather than emit semantically different Lean. The
+// retired success goldens live in git history (pre-2026-07-14) as the
+// reference for what the row looked like when the pre-refactor
+// translation path was live.
+
+import "../../../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Stream/chacha20.cry";
+
+prove_print (offline_lean "test_cryptol_chacha20_core_iterate.eq")
+  {{ \(x : [16][32]) -> core x == core x }};

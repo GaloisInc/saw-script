@@ -357,8 +357,11 @@ doc for per-slice regression fences and bounded validation commands):
   2026-07-09, both rows green. Full 18-row `@Eq` sweep completed 2026-07-09:
   `@Eq.{k}` class and all elaborating bounds-overhaul rows refreshed;
   `llvm_chacha20_core_verify` kept red as the Slice 4 specimen (see below).
-- [ ] **Stream@core pair — DECIDED 2026-07-14 (release plan): migrate to
-  expected rejection; implementation pending.** `drivers/
+- [x] **Stream@core pair — DECIDED 2026-07-14 (release plan): migrate to
+  expected rejection; DONE same day** (rows moved to
+  `saw-boundary/cryptol_chacha20_{core_iterate,iround_zero}` with
+  `.expect-fail` + rejection-diagnostic log goldens; success goldens
+  retired to git history; GAP.md twins updated). Original record: `drivers/
   cryptol_chacha20_core_iterate` and `drivers/cryptol_chacha20_iround_zero`
   reject with `Refusing to translate primitive Prelude::Stream@core`
   (wrapped-scrutinee recursor convention); their goldens expect successful

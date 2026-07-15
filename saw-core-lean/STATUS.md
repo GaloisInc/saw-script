@@ -80,11 +80,12 @@ Passing (the standing fences):
 
 Known holes, all loud or pinned:
 
-- One deliberate red pair: `drivers/cryptol_chacha20_{core_iterate,
-  iround_zero}` (`Prelude::Stream@core` rejection vs goldens expecting
-  success) — parked pending a user decision between the
-  parametric-bridge translation path and an expected-rejection
-  category. Do not refresh those goldens.
+- RESOLVED 2026-07-14 (release 0.01 decision): the former deliberate
+  red pair `drivers/cryptol_chacha20_{core_iterate,iround_zero}` is
+  reclassified to `saw-boundary/` as expected rejections pinning the
+  named `Prelude::Stream@core` diagnostic (success goldens retired to
+  git history). The translation path folds into the OP-3 successor
+  design. The driver suite has no deliberately-red rows anymore.
 - Direct recursors for Nat/Pos/Z/Bool/AccessibleNat/AccessiblePos are
   gated with specific diagnostics (constructor order / representation
   mismatches); the design for lifting the gate is

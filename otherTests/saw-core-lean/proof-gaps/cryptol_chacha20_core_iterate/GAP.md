@@ -1,7 +1,10 @@
 # Proof Gap: Cryptol ChaCha20 Core Iterate
 
 This directory preserves a large proof attempt for
-`drivers/cryptol_chacha20_core_iterate`. It is a stress/proof-ergonomics gap,
+`saw-boundary/cryptol_chacha20_core_iterate` (reclassified from drivers/ as an
+expected `Prelude::Stream@core` rejection per the 2026-07-14 release 0.01
+decision; the translation path folds into the OP-3 successor design). It is a
+stress/proof-ergonomics gap,
 not an accepted proof-backend regression.
 
 The emitted obligation is useful because it exercises a large whole-Cryptol
