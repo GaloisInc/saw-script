@@ -134,10 +134,19 @@ In execution order (TODO.md tracks per-item state):
       flavor for the corpus — discharged sorry-free via the
       completed-outline mechanism (`proofs/llvm_swap_eq`, drift
       check + axiom audit green).
-   4. **Sequence-surgery property** (`update`/`slice` round-trip):
-      deliberately routes the `updWithProof_checkedM`/
-      `sliceWithProof_checkedM` family, closing part of the
-      zero-coverage-helper gap as a side effect.
+   4. **Sequence-surgery property — DONE 2026-07-15, with a
+      coverage finding.** `workflows/cryptol_seq_surgery`: four
+      SAWCore-direct proof-carrying goals routing ALL FOUR
+      zero-coverage checked helpers (upd/slice/gen/updSlice
+      WithProof_checkedM), each discharged sorry-free via the
+      completed-outline mechanism
+      (`proofs/cryptol_seq_surgery_{upd,slice,gen,updslice}`).
+      FINDING: the *WithProof helpers are UNREACHABLE from Cryptol
+      surface syntax — `update`/`take`/`drop` unfold to gen+at+ite
+      before translation, so only `at` gets a checked contract;
+      the helpers' zero coverage was structural. Whether Cryptol
+      surface ops should someday route to the WithProof family is
+      a recorded 0.02+ design question, not assumed.
    5. **`Z n` / `IntMod` arithmetic property — DONE 2026-07-15.**
       `workflows/cryptol_zn_arith`: three `Z 7` properties
       (add-commutativity, mul-commutativity, add/neg cancellation)

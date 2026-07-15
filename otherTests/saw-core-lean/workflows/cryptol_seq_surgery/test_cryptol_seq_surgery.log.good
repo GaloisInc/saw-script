@@ -1,0 +1,37 @@
+Loading file "test_cryptol_seq_surgery.saw"
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_cryptol_seq_surgery.saw:61:8-61:71 in (callback)
+   (builtin) in fails
+   test_cryptol_seq_surgery.saw:61:1-61:71 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_cryptol_seq_surgery.saw:73:8-73:75 in (callback)
+   (builtin) in fails
+   test_cryptol_seq_surgery.saw:73:1-73:75 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_cryptol_seq_surgery.saw:82:8-82:71 in (callback)
+   (builtin) in fails
+   test_cryptol_seq_surgery.saw:82:1-82:71 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_cryptol_seq_surgery.saw:94:8-94:81 in (callback)
+   (builtin) in fails
+   test_cryptol_seq_surgery.saw:94:1-94:81 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+

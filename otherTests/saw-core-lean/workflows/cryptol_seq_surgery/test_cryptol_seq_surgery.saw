@@ -1,0 +1,94 @@
+// SEQUENCE-SURGERY workflow (release-plan slate item 4,
+// doc/2026-07-14_release-plan.md workstream 7).
+//
+// Goal of this row: deliberately route the proof-carrying vector
+// primitives whose Lean realizations
+// (`updWithProof_checkedM` / `sliceWithProof_checkedM` /
+//  `genWithProof_checkedM` / `updSliceWithProof_checkedM`,
+//  SAWCorePrimitives.lean) had ZERO discharge coverage, and close
+// each obligation in Lean's kernel (proofs/cryptol_seq_surgery_*).
+//
+// WHY these obligations are written in SAWCore, not Cryptol surface
+// syntax
+// ---------------------------------------------------------------
+// The Cryptol source operators one would reach for — `update`,
+// `updates`, `take`/`drop`/`@@` — do NOT lower to the `*WithProof`
+// primitives. `ecUpdate` lowers to `Prelude.upd`, and `upd`/`slice`/
+// `take`/`drop` are non-primitive Prelude defs that UNFOLD to
+// `gen` + `at` + `ite` (Prelude.sawcore:1573-1673). So a Cryptol
+// `update`/`slice` property emits only `genWithBoundsM` +
+// `atWithProof_checkedM` (verified empirically) — never the
+// `updWithProof`/`sliceWithProof` family. The proof-carrying
+// primitives are reached by SAWCore terms that name them directly,
+// so each property below is a `parse_core` goal that applies the
+// primitive with kernel-checked `IsLtNat`/`IsLeNat` evidence — the
+// exact bounds proof the SAW primitive demands. This is a faithful
+// SAW proof obligation over those primitives; the row is the honest
+// coverage for their Lean realizations.
+//
+// WHY these survive SAW-rewriter normalization (the swap-row lesson)
+// -----------------------------------------------------------------
+// A property SAW folds to `True` during obligation generation never
+// reaches offline_lean and its `fails(prove_print ...)` breaks
+// because prove_print SUCCEEDS. The `*WithProof` primitives are
+// opaque to SAW's rewriter (no unfolding rule fires on them), so each
+// goal stays a non-trivial checked-vector computation whose two sides
+// normalize to STRUCTURALLY DIFFERENT terms (an `Except`-monadic
+// vector read vs `Pure.pure true`). Each therefore reaches
+// offline_lean and emits — confirmed: every prefix below produces a
+// `*_prove0.lean` artifact and prove_print leaves the goal unsolved
+// (hence `fails`).
+//
+// offline_lean is emission-only: it writes the file and leaves the
+// goal UNSOLVED, so every prove_print here fails and is wrapped in
+// `fails`. The Lean-side discharge lives in proofs/.
+//
+// Prefixes are named so the emitted files
+// (`<prefix>_prove0.lean`) fit the driver harness pinning pattern
+// `${TEST}.<X>.lean.good` with ${TEST} = test_cryptol_seq_surgery.
+
+enable_experimental;
+
+// upd — updWithProof_checkedM. Write index 1 of a [4][8] with v, then
+// read index 1 back; the round-trip returns v. Bounds evidence:
+// IsLtNat 1 4 = IsLeNat 2 4. Artifact exercises: updWithProof_checkedM,
+// atWithProof_checkedM.
+let g_upd = parse_core
+  "\\ (xs : Vec 4 (Vec 8 Bool)) (v : Vec 8 Bool) -> \
+  \ bvEq 8 (at 4 (Vec 8 Bool) \
+  \   (updWithProof 4 (Vec 8 Bool) xs 1 v \
+  \      (IsLeNat_succ 2 3 (IsLeNat_succ 2 2 (IsLeNat_base 2)))) 1) v";
+fails (prove_print (offline_lean "test_cryptol_seq_surgery.upd") g_upd);
+
+// slice — sliceWithProof_checkedM. Slice offset 2, length 4 of a
+// [8][8]; element 0 of the slice is source element 2. Bounds
+// evidence: IsLeNat (addNat 2 4) 8 = IsLeNat 6 8. Artifact exercises:
+// sliceWithProof_checkedM, atWithProof_checkedM.
+let g_slice = parse_core
+  "\\ (xs : Vec 8 (Vec 8 Bool)) -> \
+  \ bvEq 8 (at 4 (Vec 8 Bool) \
+  \   (sliceWithProof (Vec 8 Bool) 8 2 4 \
+  \      (IsLeNat_succ 6 7 (IsLeNat_succ 6 6 (IsLeNat_base 6))) xs) 0) \
+  \   (at 8 (Vec 8 Bool) xs 2)";
+fails (prove_print (offline_lean "test_cryptol_seq_surgery.slice") g_slice);
+
+// gen — genWithProof_checkedM. Generate a length-4 constant-v vector;
+// element 0 is v. The generator ignores its index and in-range proof.
+// Artifact exercises: genWithProof_checkedM, atWithProof_checkedM.
+let g_gen = parse_core
+  "\\ (v : Vec 8 Bool) -> \
+  \ bvEq 8 (at 4 (Vec 8 Bool) \
+  \   (genWithProof 4 (Vec 8 Bool) (\\ (i : Nat) (pf : IsLtNat i 4) -> v)) 0) v";
+fails (prove_print (offline_lean "test_cryptol_seq_surgery.gen") g_gen);
+
+// updslice — updSliceWithProof_checkedM. Overwrite region [2,6) of a
+// [8][8] with a [4][8] patch ys; index 2 reads the patch's element 0.
+// Bounds evidence: IsLeNat (addNat 2 4) 8 = IsLeNat 6 8. Artifact
+// exercises: updSliceWithProof_checkedM, atWithProof_checkedM.
+let g_updslice = parse_core
+  "\\ (xs : Vec 8 (Vec 8 Bool)) (ys : Vec 4 (Vec 8 Bool)) -> \
+  \ bvEq 8 (at 8 (Vec 8 Bool) \
+  \   (updSliceWithProof (Vec 8 Bool) 8 2 4 \
+  \      (IsLeNat_succ 6 7 (IsLeNat_succ 6 6 (IsLeNat_base 6))) xs ys) 2) \
+  \   (at 4 (Vec 8 Bool) ys 0)";
+fails (prove_print (offline_lean "test_cryptol_seq_surgery.updslice") g_updslice);
