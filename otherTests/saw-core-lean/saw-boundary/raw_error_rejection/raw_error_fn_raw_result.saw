@@ -1,0 +1,13 @@
+enable_experimental;
+
+// Function-typed error whose FINAL RESULT is raw (Nat) REJECTS: the
+// constant-error-function lowering (rule 1 of
+// doc/2026-07-14_reachable-raw-error-disposition.md) applies only
+// when the final result is value-domain — a raw-Nat result has no
+// Except carrier to land the error in. Contrast the smoketest's
+// `error (Bool -> Bool)`, which lowers to
+// `fun _ => saw_throw_error Bool (Pure.pure "…")`. Formerly
+// obligations/raw_error_function (expected the False obligation).
+let probe = parse_core "error (Nat -> Nat) \"boom\"";
+
+write_lean_term "RawErrorFnRawResultProbe" [] [] "emitted.lean" probe;

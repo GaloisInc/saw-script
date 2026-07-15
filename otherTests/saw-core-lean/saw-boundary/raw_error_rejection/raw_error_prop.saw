@@ -1,0 +1,9 @@
+enable_experimental;
+
+// Proof-position error REJECTS (audited disposition,
+// doc/2026-07-14_reachable-raw-error-disposition.md): a proposition
+// has no Except carrier and no sound default. Formerly
+// obligations/raw_error_prop (expected the False obligation).
+let probe = parse_core "error (Eq Nat 0 0) \"boom\"";
+
+write_lean_term "RawErrorPropProbe" [] [] "emitted.lean" probe;

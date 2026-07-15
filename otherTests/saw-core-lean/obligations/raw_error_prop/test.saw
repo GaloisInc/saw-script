@@ -1,8 +1,0 @@
-enable_experimental;
-
-// Obligation-shape litmus: proof-position error should become an explicit
-// unreachability obligation. This fixture pins the current gap if the source
-// path cannot emit the artifact.
-let probe = parse_core "error (Eq Nat 0 0) \"boom\"";
-
-write_lean_term "RawErrorPropProbe" [] [] "emitted.lean" probe;

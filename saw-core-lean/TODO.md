@@ -241,15 +241,29 @@ Slices (each emitted-Lean-diff-reviewed and green before commit):
   to the `at` contract entry, never shared IndexArg machinery;
   interval set = omega-closable operations only (minNat/maxNat/
   var×var-mulNat unbounded per the audit witnesses).
-- [ ] **OP-2 follow-up (design decision, audit-first): reachable raw
-  `error` disposition.** Rider census done 2026-07-12 (see design doc
-  OP-2 implementation record): three litmus probes deliberately pin
-  the loud-False contract; one real position (polynomial t1 `Num.rec`
-  TCInf handler) is dead for finite `Num` but reachable if a caller
-  instantiates `TCInf`. Decide: reject reachable raw errors per the
-  calculus vs. keep the loud undischargeable `False`, and whether
-  eliminator case-handler positions count as reachable. Needs its own
-  audited design note before implementation.
+- [x] **OP-2 follow-up: reachable raw `error` disposition — DESIGNED,
+  ADVERSARIALLY AUDITED, AND IMPLEMENTED 2026-07-14**
+  (`doc/2026-07-14_reachable-raw-error-disposition.md`, audit record
+  inside). The audit sharpened the 2026-07-12 census in three ways:
+  the real census was FOUR emitters, not one (polynomial t1 plus
+  `obligations/raw_error_{nat,prop,function}`, whose pins live in
+  expected.txt directives); the t1 TCInf handler is REACHABLE (def
+  parameter scrutinee — eliminator case handlers count as reachable);
+  and a third option beats reject-vs-keep-False where it applies.
+  Implemented rules: (1) non-dependent Pi-typed error with a
+  value-domain final result lowers to the CONSTANT-ERROR FUNCTION
+  through the standard `saw_throw_error` route — SAW's own message
+  preserved (the old False contract silently dropped it), no
+  obligation, artifact completable (t1 golden refreshed, elaborates
+  sorry-free); (2) all other raw-position error REJECTS with a named
+  diagnostic (pinned by `saw-boundary/raw_error_rejection`, three
+  probes; the old obligations rows retired); (3)
+  `translateRawErrorObligation` DELETED — its remaining trigger is
+  never produced and not decidable at the handler position
+  (`rawErrorResultShape` stays; if0NatRaw/raw-fix consumers).
+  Accepted limitation (from the audit): a genuinely-dead branch
+  through a raw-result error now rejects the def where it previously
+  emitted-with-sorry; nothing completable is lost.
 - [ ] **Slice OP-3** — RELEASE POSTURE (2026-07-14): ships in 0.01 as the
   documented top limitation (sound-but-undischargeable; SAW never claims
   the goals); the successor design + fourth audit continue post-release
@@ -290,7 +304,10 @@ Slices (each emitted-Lean-diff-reviewed and green before commit):
   every unrecognized fix shape REJECTS with a named diagnostic and a
   litmus row (including the Bool witness verbatim). Acceptance test =
   `proof-gaps/cryptol_running_sum_verify` closes end-to-end.
-- [ ] **OP-2 rider (audit action)** — verify every in-corpus
+- [x] **OP-2 rider (audit action) — DONE 2026-07-14, folded into the
+  follow-up above** (the census found the one real position REACHABLE,
+  so the disposition redesign below/above replaced the False contract
+  entirely). Original text: verify every in-corpus
   `h_raw_error_ : False` position is genuinely unreachable-with-context;
   a REACHABLE raw `Prelude.error` must reject per the calculus rather
   than emit an undischargeable `False`.

@@ -813,7 +813,15 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertContains "uses MkStream chooser"
                      "saw_mkStream_choose Bool" out
 
-  , testCase "Prelude.error raw/type/proof/function results emit obligations" $ do
+  , testCase "Prelude.error raw results reject; wrapped-result functions lower" $ do
+      -- Audited disposition (2026-07-14,
+      -- doc/2026-07-14_reachable-raw-error-disposition.md): raw-result
+      -- error (Nat/index, sort, proof, raw-result Pi) REJECTS — the
+      -- retired h_raw_error_ : False contract was undischargeable at
+      -- every reachable position. A non-dependent Pi with a
+      -- value-domain final result lowers to the constant-error
+      -- function through the same saw_throw_error route as a
+      -- value-domain error, message preserved.
       boolTy <- scBoolType sc
       natTy <- scNatType sc
       typeSort <- scSort sc (mkSort 0)
@@ -824,40 +832,30 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       funTy <- scPi sc bName boolTy boolTy
 
       errNat <- mkErrorAt sc natTy "raw Nat error"
-      natOut <- translateOrFail sc "errorNatObligation" errNat
-      assertContains "Nat error has unreachable obligation"
-                     "h_raw_error_obligation_ : (Prop) := (False)" natOut
-      assertContains "Nat error uses False.elim"
-                     "@False.elim Nat" natOut
-      assertContains "Nat error uses obligation proof"
-                     "h_raw_error_" natOut
-      assertNotContains "Nat error is not wrapped Except"
-                        "saw_throw_error Nat" natOut
+      natMsg <- translateExpectReject sc "errorNatRejects" errNat
+      assertContains "Nat error rejects at the raw position"
+                     "demanded at a raw position" natMsg
 
       errType <- mkErrorAt sc typeSort "type error"
-      typeOut <- translateOrFail sc "errorTypeObligation" errType
-      assertContains "type error has unreachable obligation"
-                     "h_raw_error_obligation_ : (Prop) := (False)" typeOut
-      assertContains "type error uses False.elim"
-                     "@False.elim Type" typeOut
+      typeMsg <- translateExpectReject sc "errorTypeRejects" errType
+      assertContains "type error rejects at the raw position"
+                     "demanded at a raw position" typeMsg
 
       errProof <- mkErrorAt sc eqProp "proof error"
-      proofOut <- translateOrFail sc "errorProofObligation" errProof
-      assertContains "proof error has unreachable obligation"
-                     "h_raw_error_obligation_ : (Prop) := (False)" proofOut
-      assertContainsSquashed "proof error uses False.elim"
-                     "@False.elim (@Eq" proofOut
-      assertContainsSquashed "proof error proposition is preserved raw"
-                     "@Eq.{1} Bool Bool.true Bool.false" proofOut
+      proofMsg <- translateExpectReject sc "errorProofRejects" errProof
+      assertContains "proof error rejects at the raw position"
+                     "demanded at a raw position" proofMsg
 
       errFn <- mkErrorAt sc funTy "function error"
-      fnOut <- translateOrFail sc "errorFunctionObligation" errFn
-      assertContains "function error has unreachable obligation"
-                     "h_raw_error_obligation_ : (Prop) := (False)" fnOut
-      assertContains "function error uses False.elim"
-                     "@False.elim" fnOut
-      assertContains "function type is preserved"
-                     "((b : Except String Bool) -> Except String Bool)" fnOut
+      fnOut <- translateOrFail sc "errorFunctionConstant" errFn
+      assertContains "function error lowers via saw_throw_error"
+                     "saw_throw_error Bool" fnOut
+      assertContainsSquashed "constant-error function formal at wrapped carrier"
+                     "(η_err_arg_0 : Except String Bool)" fnOut
+      assertNotContains "no False obligation remains"
+                        "h_raw_error_" fnOut
+      assertContainsSquashed "message is preserved at the wrapped carrier"
+                     "(Pure.pure \"function error\")" fnOut
 
   , testCase "RecordValue function field keeps datatype-parameter shape" $ do
       boolTy <- scBoolType sc

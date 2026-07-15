@@ -3439,27 +3439,71 @@ rawErrorResultShape resultTy
   | isJust (asPi resultTy) = BindingFunction
   | otherwise              = BindingRaw
 
--- | Translate @Prelude.error@ when the expected result type is raw
--- (Nat/index, type, proof, or function). A raw Lean term cannot
--- preserve SAW's value-or-error semantics directly, and fabricating a
--- default would be unsound. Instead, emit the exact contract required
--- for this branch to be sound: the branch must be unreachable.
+-- | Translate @Prelude.error@ demanded at a raw position, per the
+-- audited disposition (doc/2026-07-14_reachable-raw-error-disposition.md):
 --
--- Emit-stage files may contain the placeholder proof. Completed
--- discharge must reject unresolved placeholders, so the only way to
--- use the produced raw value in a checked artifact is through a real
--- proof of 'False' in context.
-translateRawErrorObligation ::
-  TermTranslationMonad m => Term -> m TranslatedTerm
-translateRawErrorObligation resultTy = do
-  resultTyLean <- translateTerm resultTy
-  tm <- withLocalProofObligation
-    (Lean.Ident "h_raw_error_")
-    (Lean.Var (Lean.Ident "False"))
-    $ \proof ->
-        pure (Lean.App (Lean.ExplVar (Lean.Ident "False.elim"))
-          [resultTyLean, proof])
-  pure (TranslatedTerm tm (rawErrorResultShape resultTy))
+--   * RULE 1 — a non-dependent Pi type whose final result is
+--     value-domain lowers to the CONSTANT-ERROR FUNCTION: SAW only
+--     observes a function-typed @error@ by applying it (the evaluator
+--     raises on WHNF-forcing the applied error value; no @VFun@ is
+--     ever produced), and every application lands on the same
+--     wrapped 'saw_throw_error' route as a value-domain error, with
+--     SAW's own message preserved (the deleted False-obligation
+--     contract silently dropped the message). Binder carriers are
+--     position-directed: value-domain binders wrap, index/type/proof
+--     binders stay raw — the same rule the Pi type translator applies,
+--     so the lambda inhabits exactly the translated Pi type.
+--   * RULE 2 — everything else (Nat/index, sort, proof, dependent Pi,
+--     or a Pi whose final result is itself raw) has no error carrier;
+--     fabricating a default would be unsound and the retired
+--     @h_raw_error_ : False@ contract was undischargeable at every
+--     reachable position, so REJECT with a named diagnostic.
+translateRawPositionError ::
+  TermTranslationMonad m => Term -> Term -> m TranslatedTerm
+translateRawPositionError resultTy msgArg = do
+  mode <- view valueTranslationMode <$> askTR
+  case asPiList resultTy of
+    (binders@(_ : _), finalTy)
+      | shouldWrapBinder finalTy
+      , null (typeArgPositions resultTy)  -- fully non-dependent spine
+      , WrappedValueMode <- mode
+      -> do
+          finalRaw <- translateTerm finalTy
+          -- The message slot is UseArgWrapped in the value-domain
+          -- error lowering; adapt to the same wrapped carrier here.
+          msgLean  <- adaptToRuntime =<< translateTermWithShape msgArg
+          domTys   <- mapM (binderDomainCarrier . snd) binders
+          let body = Lean.App (Lean.Var (Lean.Ident "saw_throw_error"))
+                       [finalRaw, msgLean]
+              avoid = Set.union (leanTermIdents body)
+                                (Set.unions (map leanTermIdents domTys))
+          names <- mapM
+            (\ix -> freshVariantAvoiding avoid
+                      (Lean.Ident ("η_err_arg_" ++ show ix)))
+            [0 .. length binders - 1]
+          let lam = foldr
+                      (\(nm, dom) acc ->
+                        Lean.Lambda [Lean.Binder Lean.Explicit nm (Just dom)] acc)
+                      body
+                      (zip names domTys)
+          pure (TranslatedTerm lam BindingFunction)
+    _ ->
+      Except.throwError $ RejectedPrimitive "error"
+        ("Prelude.error demanded at a raw position (Nat/index, sort, \
+         \proof, dependent function, or a function whose final result \
+         \is raw). No Except carrier exists at this position, so a \
+         \faithful translation is impossible and a default would be \
+         \unsound; the retired False-obligation contract was \
+         \undischargeable at every reachable position (see \
+         \doc/2026-07-14_reachable-raw-error-disposition.md). \
+         \Function-typed error with a value-domain result lowers \
+         \soundly; other shapes reject until a checked design exists.")
+  where
+    -- The same carrier rule the Pi type translator applies to binder
+    -- domains: value-domain wraps, index/type/proof stays raw.
+    binderDomainCarrier dom = do
+      domLean <- translateTerm dom
+      pure (if shouldWrapBinder dom then wrapExcept domLean else domLean)
 
 -- | Lower SAWCore's proof-producing @unsafeAssert α x y@ to an
 -- explicit local Lean proof obligation. Haskell only reconstructs the
@@ -3873,9 +3917,9 @@ translateIdentWithArgsWithShape i args
   , [aArg, xArg, yArg] <- args
   = translateUnsafeAssertObligation aArg xArg yArg
   | i == "Prelude.error"
-  , (resultTy : _msg : _) <- args
+  , (resultTy : msgArg : _) <- args
   , not (shouldWrapBinder resultTy)
-  = translateRawErrorObligation resultTy
+  = translateRawPositionError resultTy msgArg
   | i == "Prelude.fix"
   , (typeArg : bodyArg : rest) <- args
   = do

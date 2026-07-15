@@ -1,0 +1,11 @@
+enable_experimental;
+
+// Raw Nat/index-position error REJECTS (audited disposition,
+// doc/2026-07-14_reachable-raw-error-disposition.md): no Except
+// carrier exists at an index position, a default Nat would be
+// unsound, and the retired h_raw_error_ : False obligation was
+// undischargeable at every reachable position. Formerly
+// obligations/raw_error_nat (expected the False obligation).
+let probe = parse_core "error Nat \"boom\"";
+
+write_lean_term "RawErrorNatProbe" [] [] "emitted.lean" probe;
