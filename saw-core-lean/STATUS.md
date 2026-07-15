@@ -70,15 +70,15 @@ Passing (the standing fences):
 - `otherTests/saw-core-lean`: `make conformance` exit 0 — 193 rows
   (differential SAW-vs-Lean evaluation, obligation shape, pinned known
   gaps), with emitted artifacts elaborated.
-- Emitted-Lean byte-diff oracle: `.snapshots/op2-baseline`, cut
-  2026-07-14 after the full suite ran green on the release binary —
+- Emitted-Lean byte-diff oracle: `.snapshots/op2-baseline`, re-cut
+  2026-07-15 after the full suite ran exit-0 on the release binary —
   `support/emitted-lean-snapshot.sh diff .snapshots/op2-baseline`
-  clean at 1267 artifacts. (The stale op1-baseline's 32 diffs were
-  per-hunk reviewed — all the expected OP-2 `atRuntimeCheckedM`
-  migration; the only further 2026-07-14 deltas were this release
-  work's own footprint: two new pin artifacts, the reviewed
-  polynomial t1 rule-1 lowering, and the three retired raw_error
-  emissions.)
+  clean at 315 artifacts. (The earlier "1267" count was inflated by
+  a scan bug that swallowed retired baselines' frozen copies —
+  fixed: the scan now excludes `.snapshots/` wholesale. History: the
+  stale op1-baseline's 32 diffs were per-hunk reviewed — all the
+  expected OP-2 `atRuntimeCheckedM` migration — plus this release
+  work's own reviewed footprint.)
 - Driver rows (`bash test.sh` per-driver, `lean-driver-test.sh`) green,
   including the ChaCha20 core verify and prelude auto-emit drivers.
 

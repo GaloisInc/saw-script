@@ -30,8 +30,13 @@ mode=${1:?usage: emitted-lean-snapshot.sh snapshot|diff <dir>}
 dir=${2:?usage: emitted-lean-snapshot.sh snapshot|diff <dir>}
 
 emitted() {
+  # Exclude the ENTIRE .snapshots tree, not just the baseline being
+  # diffed: stored baselines (and retired ones under superseded/) are
+  # frozen copies, not live emission. Before 2026-07-15 only "$dir"
+  # was excluded, so cutting a new baseline swallowed every OTHER
+  # baseline's copies and inflated the artifact count ~4x.
   comm -23 \
-    <(find . -name '*.lean' -not -path './.elan/*' -not -path "./${dir#./}/*" \
+    <(find . -name '*.lean' -not -path './.elan/*' -not -path './.snapshots/*' \
         | sed 's|^\./||' | sort) \
     <(git ls-files '*.lean' | sort)
 }
