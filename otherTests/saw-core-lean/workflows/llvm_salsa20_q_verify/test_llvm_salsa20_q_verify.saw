@@ -1,10 +1,17 @@
-// Case Study C — LLVM Salsa20 quarterround verify with Lean discharge.
+// Case Study C — LLVM Salsa20: MIXED-SOLVER workflow (SMT + Lean).
 //
-// Adapted from exercises/functional-correctness/salsa20/solution.saw,
-// which uses z3 to close every llvm_verify goal. Here we replace the
-// quarterround closer with offline_lean so the obligation is emitted
-// as a Lean .lean file for offline discharge in
-// proofs/llvm_salsa20_q_eq/proof.lean.
+// Adapted from exercises/functional-correctness/salsa20/solution.saw.
+// This row demonstrates both solvers cooperating in one script:
+//
+//   1. w4 (SMT) verifies s20_quarterround outright — green, and its
+//      spec composes as an override into...
+//   2. ...the w4 verification of s20_rowround (compositional SMT).
+//   3. The SAME quarterround obligation is then punted to Lean via
+//      emission-only offline_lean. Its policy-compliant discharge is
+//      an open gap (proof-gaps/llvm_salsa20_q_eq — bv_decide is
+//      barred by the trust policy), which is exactly the honest
+//      story: SMT closes this one today; the Lean artifact is there
+//      for kernel-checked replay when the BV proof strategy lands.
 //
 // quarterround is pure bv arithmetic — XOR, +, and rotate-left on
 // 32-bit words, no comprehension recursion. Per the long-term plan
@@ -44,9 +51,25 @@ let quarterround_setup = do {
     llvm_points_to p3 (llvm_term {{ zs@3 }});
 };
 
-// LEAN DISCHARGE STEP. Emits the quarterround equivalence obligation
-// as test_llvm_salsa20_q_verify.<goalType>0.lean. The discharge lives
-// in proofs/llvm_salsa20_q_eq/proof.lean.
+// SMT SIDE: quarterround closes under w4, and composes upward into
+// rowround (override provenance: a real verification, not an
+// assumption).
+let oneptr_update_func (ty : LLVMType) (name : String) (f : Term) = do {
+    (x, p) <- ptr_to_fresh name ty;
+    llvm_execute_func [p];
+    llvm_points_to p (llvm_term {{ f x }});
+};
+
+let rowround_setup =
+  oneptr_update_func (llvm_array 16 (llvm_int 32)) "y" {{ rowround }};
+
+qr <- llvm_verify m "s20_quarterround" [] true quarterround_setup w4;
+rr <- llvm_verify m "s20_rowround" [qr] true rowround_setup w4;
+
+// LEAN SIDE: the same quarterround obligation, emitted for offline
+// discharge. Emission-only, so the goal stays unsolved on the SAW
+// side (fails-wrapped); the policy-compliant Lean discharge is
+// tracked as proof-gaps/llvm_salsa20_q_eq.
 fails (llvm_verify m "s20_quarterround" [] true
     quarterround_setup
     (offline_lean "test_llvm_salsa20_q_verify.s20_quarterround"));

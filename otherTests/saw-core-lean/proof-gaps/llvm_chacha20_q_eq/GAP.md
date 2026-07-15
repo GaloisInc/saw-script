@@ -4,6 +4,13 @@ This directory preserves a proof attempt for
 `workflows/llvm_chacha20_q_verify`. It is a BV-heavy stress/proof gap, not an
 accepted proof-backend regression.
 
+SCOPE (extended 2026-07-15): this gap also covers the EIGHT qround
+obligations emitted by `workflows/llvm_chacha20_core_verify` — the
+same quarterround equation at eight concrete (a,b,c,d) index tuples,
+blocked by the identical bv_decide trust-policy constraint. One
+policy-compliant discharge strategy for the qround equation unparks
+all nine obligations at once.
+
 The proof compares the LLVM quarterround output with the Cryptol specification.
 The unchanged positions close by ordinary reflexive bitvector equality, but the
 four quarterround equations still use `bv_decide` in the preserved proof
