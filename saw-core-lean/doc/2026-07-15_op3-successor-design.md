@@ -1,7 +1,10 @@
 # OP-3 successor design: bounded-iteration lowering for productive fix
 
-**Date**: 2026-07-15. **Status**: PRE-AUDIT DRAFT — the audit-first
-process applies: fourth adversarial audit BEFORE any Term.hs change.
+**Date**: 2026-07-15. **Status**: AUDITED (fourth adversarial audit,
+2026-07-15): **implementable with named amendments** — the first
+OP-3 design to survive audit. The six amendments in the audit record
+below are BINDING on the implementation; amendments A and D are
+load-bearing.
 Successor to the REFUTED structural draft
 (`2026-07-12_op3-structural-fix-design.md`, kept as the
 rejected-candidate record); implements
@@ -94,9 +97,12 @@ def saw_fix_bounded (n : Nat) (α : Type) [Inhabited-free default d]
   Nat.rec (pure (Vector.replicate n d)) (fun _ acc => body acc) n
 ```
 
-(The default `d` comes from the SAME source the emitted body already
-carries — the comprehension's `atWithDefault` defaults, condition 4;
-the emitter passes it explicitly, no Inhabited machinery.)
+(AMENDED per fourth audit B: `d` is a DISCARDED iteration seed — a
+seed-independent placeholder, not an `atWithDefault` default; the
+real bodies read the recursive vector through checked/runtime-checked
+access, which has no default. Condition 4 is satisfied for free
+because the body is untouched. The emitter supplies any convenient
+total placeholder element explicitly; no Inhabited machinery.)
 
 Key properties, proved ONCE in Lean as library lemmas (this is the
 faithfulness core — the fourth audit should attack exactly here):
@@ -131,9 +137,12 @@ Emission: the translator emits `saw_fix_bounded n α d
 lowering produces as the contract's body argument (conditions 1-3
 free of charge: we never decompose it). NO obligation is emitted.
 Discharge of the acceptance goals then proceeds by unfolding
-`saw_fix_bounded` (a computable Nat.rec) plus the L-lemmas plus the
-existing `foldl_eq_natRec_atWithDefault` bridge (parked May lemma,
-revived as the spec-side connector).
+`saw_fix_bounded` (a computable Nat.rec) plus the L-lemmas.
+(AMENDED per fourth audit F: running_sum's spec side is an unrolled
+bvAdd chain, NOT a foldl — the parked `foldl_eq_natRec_atWithDefault`
+bridge is the wrong connector there; the discharge path is
+elementwise gen-of-pure characterization lemmas. The foldl bridge
+may still serve popcount's fold-side spec.)
 
 **Why this evades the third audit's refutations.** The refuted draft
 REBUILT the body as a strict per-element prefix construction —
@@ -149,7 +158,14 @@ prefix build).
 
 ## Part 3 — Class S lowering: streams
 
-`rec_ones`/`stream_fibs`/`iterate`: lower to
+(AMENDED per fourth audit D: `stream_fibs` emits a MUTUAL
+paired-stream fix — `fix (PairType (Stream X) (Stream X)) …` — and
+does NOT fit the single-stream form; it gets its OWN disposition:
+either a paired-stream extension of Class S in a later slice, or an
+explicit named REJECT with its module row re-pinned as a boundary
+until then. Do not pair it with rec_ones in the ladder.)
+
+`rec_ones`/`iterate`: lower to
 `MkStream (fun idx => <elementwise closed form via bounded lookback
 from index 0>)` — concretely `saw_stream_unfold : (α → α) → α →
 Stream α := fun f x => MkStream (fun n => Nat.rec x (fun _ a => f a) n)`
@@ -203,3 +219,53 @@ it.
    append-at-Stream shape the recognizer must treat separately?
 6. Trust-link honesty: does L3's argument add any trust NOT already
    in the residual catalog?
+
+
+---
+
+## Fourth-audit record (2026-07-15) — binding amendments
+
+Verdict: implementable with named amendments. Key confirmations: the
+pure-seed iteration of the untouched strict body IS sound for the
+running_sum/popcount class (hand-traced 2-element analogue; the
+third audit's error-poisoning cannot arise from a pure seed with
+total element functions); off-by-one is correct but zero-slack
+(element n-1 stabilizes exactly at iterate n).
+
+Binding amendments:
+
+- **A (soundness hinge).** `H_prod` — including element-function
+  TOTALITY over the seed — must be a PROVEN per-instance Lean
+  obligation, not a recognizer assertion. Witness: a body indexing
+  `xs` by the recursive VALUE (`ys = [1] # [ xs @ prev | prev <- ys
+  | x <- xs ]`) passes the syntactic single-step gate but errors
+  under iteration from a bad seed — loud, not unsound, but it
+  re-creates the undischargeable disease. Proving H_prod per
+  instance turns the retired residual-trust §3.2 silent-unsoundness
+  class into loud incompleteness.
+- **B.** Prove the count lemma (n applications stabilize element
+  n-1); recognizer verifies seed length = 1; the d-sourcing
+  narrative corrected in place (above).
+- **C (soundness).** The recognizer must pin the lookback shift to a
+  CONSTANT -1 (a same-index body would stabilize to a pure value
+  while SAW diverges — unsound) and pin the zip operand/projection
+  order to the rec slot; computed/unbounded indices reject.
+- **D (coverage, load-bearing).** stream_fibs disposition (above);
+  without it, retiring the contract strands that row with no
+  lowering.
+- **E (process).** Reconcile `saw_fix_bounded`/`saw_stream_unfold`
+  with the obsolete-helper scan in `lean-driver-test.sh` — they are
+  textually new but categorically the "structural fix helper" the
+  scan enforces the retirement of; the scan's list and the
+  residual-trust catalog must be updated TOGETHER with the design's
+  landing, not silently bypassed by the rename. Add
+  `cryptol_module_popcount` to the golden re-pin list (eight
+  wrapped-contract goldens total).
+- **F (trust honesty).** Residual-trust §3.2 must be RE-OPENED as a
+  live catalog item (this design deliberately revives a retired
+  strategy, with amendment A as the new mitigation); L3's SAW-link
+  is genuine live residual trust and is catalogued as such, not
+  claimed pre-existing.
+
+Implementation may begin only with amendments A-F incorporated into
+the slice plan; A and D are load-bearing.
