@@ -27,12 +27,8 @@ and the known limitations stated in one place.
   coverage means new declared conventions/contract-table entries
   plus Lean support lemmas, not translator re-architecture (a new
   example that requires emission changes is a coverage bug — see
-  TODO.md hard requirements). Spine, in value order: the OP-3
-  successor design (recurrence class), the Stream@core/Either@core
-  recursor-convention work it drags along (un-parks whole-module
-  translation including rev.cry), direct recursors (PosRep),
-  proof-primitive realization families. SAW-side replay lands when
-  sequencing favors product soundness over coverage.
+  TODO.md hard requirements). The committed 0.02 plan is the
+  section at the end of this doc.
 
 ## Decisions recorded (2026-07-14, user-confirmed)
 
@@ -173,3 +169,68 @@ otherwise.
 - Worked-example slate: at least the mixed-solver flagship
   discharged end-to-end (workstream 7); remaining slate items
   landed or explicitly rolled to 0.02.
+
+
+---
+
+## 0.02 plan (committed 2026-07-15, user-confirmed)
+
+Story: cover all our examples in a reasonable way, and close every
+gap that can reasonably be closed. Three workstreams; W1 leads.
+
+**W1 — Recurrence/stream program (the headline).** OP-3 successor
+design against the third audit's six minimum conditions → fourth
+adversarial audit → implementation. Acceptance ladder:
+`proof-gaps/cryptol_running_sum_verify` → `offline_lean_popcount32` +
+E6 → `llvm_popcount_eq` → the `rec_ones`/`stream_fibs` module rows →
+the Stream@core/Either@core translation path (un-parks the boundary
+rejections) → `rev.cry` whole-module translation works and the demo
+loses its `fails`-wrapped step 3. Closes 5 of the 9 proof-gaps, two
+boundary families, and the demo's visible limitation.
+
+**W2 — Proof-support library.** (a) A policy-compliant BV proof
+strategy for the quarterround equation class — unparks
+`llvm_salsa20_q_eq`, `llvm_chacha20_q_eq`, and chacha20-core's eight
+obligations at once. The `bv_decide` trust policy HOLDS for 0.02
+(decision 2026-07-15); revisit only if the lemma route proves
+genuinely intractable, as its own recorded decision. (b) The
+`llvm_eq_u128` unlock: emitted-shape reduction lemmas for the
+`genWithBoundsM`/`foldrM`/`atWithProof_checkedM` byte-loop towers,
+plus the byte-to-word `bvEq` decomposition bridge (memory-model
+examples generally need both). (c) Starter-tactic ergonomics for the
+concrete-vector/rational nonzero differential gaps. (d) The deferred
+hardening: realization theorems for the checked vector helpers,
+goldens for the 11 zero-coverage emitter-wired helpers, and
+`#guard_msgs` fences for `atRuntimeCheckedM`/`saw_throw_error`.
+
+**W3 — Example breadth + replay (the product story).**
+(a) Early/cheap: slate items 3-5 (memory-safety port,
+sequence-surgery via the checked helpers, `Z n`/IntMod) plus the
+coverage-matrix extras (fixed-bound C loop, Int workflow, signed-BV
+property). (b) `offline_lean_replay` IS IN 0.02 (decision
+2026-07-15): SAW invokes the pinned Lean toolchain on the exact
+emitted obligation + completed proof, admits only on a kernel-checked
+theorem of that exact type with no forbidden escape hatches — lands
+mid-cycle, after W1 stabilizes obligation shapes; flips
+`saw-boundary/offline_lean_export_only` into the replay-semantics
+row and unlocks the Lean-verified-callee composition direction.
+(c) Direct recursors via the PosRep design
+(`doc/2026-07-03_direct-recursor-semantics-design.md`). (d) The
+proof-primitive realization families as a mechanical batch.
+
+**OUT of 0.02 (recorded):** simulator `Unimplemented` differential
+gaps (blocked on SAW's evaluator upstream — not ours to close); user
+datatypes and SMT-array semantics (each needs its own design cycle;
+0.03 candidates unless an example forces one earlier);
+JVM/MIR backends; SHA512-at-scale; the lean-smt track (case rungs
+G/H); pair-at-Prop universe generalization (stays a rejection until
+an example hits it).
+
+**0.02 exit criteria:** `rev.cry` demo step 3 produces `Rev.lean`;
+`running_sum`, `popcount32`, and E6 discharge sorry-free; the
+quarterround gap family unparked (or explicitly re-parked with a new
+recorded reason); replay landed with the export-only row flipped;
+the workflow-accounting invariant maintained (every workflow row's
+Lean side discharged or precisely gap-documented); known-gap census
+delta stated in STATUS.md (target: the sound-but-undischargeable
+tier eliminated).
