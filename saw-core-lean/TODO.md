@@ -140,11 +140,11 @@ assumptions. The auto-emitted SAWCore Prelude path has an explicit
 raw-vs-wrapped declaration convention.
 
 The 2026-07-02 position/callee work established the semantic contract
-(`doc/2026-07-02_position-callee-calculus.md`) and implemented the first
-raw-logical slice (`Eq`/`Refl`/`Eq.rec`). The key finding from that work: the
-translator is still bottom-up — it translates naturally and repairs shape with
-syntactic predicates — while the calculus is top-down (position pushed from
-context). Closing that gap is the current operative priority; see below.
+(`doc/2026-07-02_position-callee-calculus.md`); the position-directed
+refactor that followed (Slices 0-7, COMPLETE 2026-07-11) closed the
+bottom-up/top-down gap that work identified — the calculus IS the
+implementation now (declared positions, declared conventions, single
+adaptation chokepoint; see STATUS.md's Current Strategy).
 
 The backend is not yet complete for arbitrary accepted SAWCore or the full Rocq
 feature surface. The next priority is emission quality: every emitted Lean file
@@ -332,8 +332,9 @@ Why this is the deep priority: emission correctness is currently defended by
 representation, `Eq.rec` proof transport, and recursor constructor order — which
 are silent-unsoundness risks the bottom-up heuristics cannot reason about.
 
-SAW-side proof replay (`offline_lean` marking goals solved without invoking
-Lean) is deliberately NOT part of this work. It is bounded end-game plumbing —
+SAW-side proof replay is deliberately NOT part of this work (at the time,
+`offline_lean` still marked goals solved without invoking Lean; since
+2026-07-14 it is emit-only). It is bounded end-game plumbing —
 the test harness already implements the required checks (exact goal type,
 `#print axioms` minus `sorryAx`, axiom allowlist) — and is tracked in
 Priority 5.
@@ -1215,7 +1216,11 @@ reject and pin a fixture rather than widen a heuristic.
     a local `False` obligation and produces the raw result through
     `False.elim`, rather than manufacturing a default or trying to use
     `Except.error` at a raw type.
-  - Polynomial literals now elaborate as an explicit obligation-emission case.
+  - Polynomial literals: SUPERSEDED 2026-07-14 by the audited raw-error
+    disposition — the TCInf handler now lowers to a constant-error function
+    (no obligation, sorry-free); raw-position error REJECTS. This item's
+    False-obligation description is the retired mechanism (see
+    `doc/2026-07-14_reachable-raw-error-disposition.md`).
   - Full SHA512 is no longer the acceptance criterion for this surface. It is a
     large stress probe for the same raw-error and proof-carrying-recursion
     contracts, and is tracked below as stretch scalability work.
@@ -1732,8 +1737,9 @@ reject and pin a fixture rather than widen a heuristic.
   - Added direct record update, tuple update, relative update, and nested-field
     update cases; focused driver test elaborates and passes with refreshed
     goldens.
-  - Added octal literal coverage; polynomial literals now emit an explicit
-    raw-error unreachable-branch obligation and elaborate.
+  - Added octal literal coverage. (Polynomial-literal disposition since
+    revised 2026-07-14: constant-error lowering, no obligation — see the
+    raw-error disposition doc.)
 
 - [ ] Add focused shape tests.
   - Datatype-parameter recursor fields where the actual parameter is
@@ -2042,11 +2048,12 @@ reject and pin a fixture rather than widen a heuristic.
   - This is important for final UX and end-to-end trust, but it comes after the
     emitted Lean shape is stable and after the prototype harness is strong enough
     to keep regression results honest.
-  - Audit triage: `offline_lean` currently behaves like Rocq's offline exporter
-    and marks the SAW goal solved after writing the file. For final proof
-    discharge this must become either emit-only or be paired with a real Lean
-    replay command. For the current prototype, treat this as a known UX/trust
-    gap, not as the next blocker ahead of emission correctness.
+  - Audit triage (RESOLVED 2026-07-14): `offline_lean` formerly behaved like
+    Rocq's offline exporter and marked the SAW goal solved after writing the
+    file. It is now EMIT-ONLY (`SolveUnknown`; goals stay unsolved; scripts
+    wrap in `fails`), and the reserved `offline_lean_replay` command fails
+    with a named diagnostic until real replay lands. The remaining Priority-5
+    work is the replay implementation itself, not the exporter semantics.
   - 2026-06-28 audit finding: driver tests that pin `Proof succeeded!` plus
     generated `by sorry` are emission/elaboration tests only. They must not be
     counted as checked proof-discharge regressions.
@@ -2075,8 +2082,9 @@ Still-live items carried into the priorities above and the operative plan:
   semantic theorems beyond type-checking — Priority 2.
 - Raw Lean injection policy: `InjectCodeDecl "Lean"` must not remain an ordinary
   untrusted path to arbitrary emitted Lean — Priority 2.
-- SAW-side `offline_lean` replay (emit-and-admit today): deferred end-game
-  plumbing — Priority 5.
+- SAW-side `offline_lean` replay (the exporter is emit-only since 2026-07-14;
+  `offline_lean_replay` is a registered, always-failing stub): deferred
+  end-game plumbing — Priority 5.
 
 Known-gap backlog triage (still current):
 

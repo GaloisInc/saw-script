@@ -5285,8 +5285,9 @@ primitives = Map.fromList $
     Current
     [ "Write out a representation of the current goal in Lean 4 syntax."
     , "The argument is a prefix to use for file names. The emitted file"
-    , "contains a 'theorem goal : <Prop> := by sorry' stub the user can"
-    , "then open in Lean and discharge."
+    , "contains a 'def goal : Prop := <Prop>' plus a"
+    , "'theorem goal_holds : goal := by sorry' stub the user can then"
+    , "open in Lean and discharge."
     , ""
     , "Emission-only: the goal is left UNSOLVED. SAW does not treat the"
     , "emitted file as evidence, so an enclosing prove_print fails with"

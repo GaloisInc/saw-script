@@ -82,8 +82,11 @@ Passing (the standing fences):
 - Driver rows (`bash test.sh` per-driver, `lean-driver-test.sh`) green,
   including the ChaCha20 core verify and prelude auto-emit drivers.
 
-Known-gap census (release 0.01 posture — 64 pinned gaps in
-conformance scope, three tiers):
+Known-gap census (release 0.01 posture): 64 pinned `.known-gap`
+rows in conformance scope (differential/obligations/saw-boundary —
+tiers 2-3 below), plus the 7 `proof-gaps/` rows and the stretch
+probe carried in the full-suite inventory (tier 1 lives there).
+Three tiers:
 
 1. **Sound-but-undischargeable** (the top documented limitation):
    the wrapped-fix recurrence class — running sum, popcount,

@@ -140,8 +140,13 @@ fi
 cp proof.lean "$PROBE_DIR/proof.lean"
 
 proof_targets() {
+    # Audit hardening (2026-07-15): a proof row that closes its goal
+    # via `lemma` (or `theorem`) must still get the #print axioms
+    # audit; matching only `theorem` would let a lemma-based proof
+    # skip the sorry/axiom check silently. (`example` is unnamed and
+    # cannot be audited — the row structure requires named closers.)
     awk '
-      /^[[:space:]]*theorem[[:space:]]+/ {
+      /^[[:space:]]*(theorem|lemma)[[:space:]]+/ {
         name = $2
         sub(/:.*/, "", name)
         if (name != "") print name

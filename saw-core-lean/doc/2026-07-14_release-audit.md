@@ -187,7 +187,7 @@ Instance resolution is grep-invisible: remove + full rebuild to verify.
   involvement; conceptual ancestor of the demo's specRev/implRev
   naming, referenced only by comments in the two `rev.cry` files.
   Keep as documented motivation or retire.
-- Archive candidate: `doc/2026-07-08_position-directed-translation-plan.md`
+- Archived (done in slice 2): `doc/archive/2026-07-08_position-directed-translation-plan.md`
   (all 8 slices complete; TODO no longer lists it active). Keep
   top-level: the calculus doc (canonical contract), the
   obligation-placement design (OP-3 open), the OP-3 refuted-candidate

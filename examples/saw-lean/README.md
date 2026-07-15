@@ -9,8 +9,11 @@ backend exposes:
 - `write_lean_cryptol_module` — translate every Cryptol top-level
   in a `.cry` source into a `namespace <Mod>` block of `def`s.
 - `offline_lean` — punt a SAWScript proof obligation to Lean as a
-  `theorem goal : <Prop> := by sorry` stub the user can open and
-  discharge.
+  `def goal : Prop := <Prop>` plus a
+  `theorem goal_holds : goal := by sorry` stub the user can open and
+  discharge. EMISSION-ONLY: the goal is left unsolved on the SAW
+  side (`demo.saw` wraps each `prove_print` in `fails`); SAW never
+  claims a goal on the strength of an export.
 
 ## Files
 
@@ -18,7 +21,8 @@ backend exposes:
   — a polymorphic reverse, `specRev` — its spec) and two `property`
   declarations (`revInvolutive`, `impl_eq_spec`).
 - `demo.saw` — the SAWScript driver. Translates two monomorphic
-  instances, the whole module, and both properties.
+  instances and both properties; the whole-module step is a
+  documented release-0.01 rejection (wrapped in `fails`, see below).
 - `out/` — generated `.lean` files (gitignored).
 - `proof/` — a small Lake project that `require`s the saw-core-lean
   support library via relative path and discharges the two emitted
@@ -43,10 +47,19 @@ The `out/` directory is created automatically. `saw` writes:
 out/
 ├── idBool.lean         # \(b : Bit) -> b           via write_lean_term
 ├── implRev.lean        # implRev`{4,[8]}           via write_lean_term
-├── Rev.lean            # whole rev.cry             via write_lean_cryptol_module
 ├── invol_prove0.lean   # revInvolutive proof goal  via offline_lean
 └── eq_spec_prove0.lean # impl_eq_spec proof goal   via offline_lean
 ```
+
+`out/Rev.lean` is NOT produced: whole-module translation of
+`rev.cry` rejects at SAW translation time — `specRev`'s built-in
+`reverse` reaches `Prelude.error` demanded at a raw position (the
+audited raw-error disposition), and the reduced module (implRev
+alone) rejects at `Prelude::Either@core`, pinned by
+`otherTests/saw-core-lean/saw-boundary/polymorphic_seq_module_rejection`.
+`demo.saw` wraps the step in `fails` so the run completes; the two
+`prove_print (offline_lean …)` steps are likewise `fails`-wrapped
+because emission leaves the goals unsolved by design.
 
 Every file imports `CryptolToLean` and elaborates against the
 support library shipped with `saw-core-lean/lean/`. The

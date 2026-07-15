@@ -5399,7 +5399,7 @@ translateTerm :: TermTranslationMonad m => Term -> m Lean.Term
 translateTerm t = ttLean <$> translateTermWithShape t
 
 -- | Seam for the position-directed translation refactor
--- (doc/2026-07-08_position-directed-translation-plan.md, Slice 0):
+-- (doc/archive/2026-07-08_position-directed-translation-plan.md, Slice 0):
 -- translate a term at a declared expected position ρ — the calculus
 -- judgment
 --

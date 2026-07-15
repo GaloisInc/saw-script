@@ -4,10 +4,11 @@
 //
 //   * idBool.lean        — a one-liner identity at Bool.
 //   * implRev.lean       — a single monomorphic instance of implRev.
-//   * Rev.lean           — the whole rev.cry module translated into
-//                          a `namespace Rev` block.
 //   * invol_prove0.lean  — proof goal for `revInvolutive` (by sorry).
 //   * eq_spec_prove0.lean — proof goal for `impl_eq_spec` (by sorry).
+//
+// (out/Rev.lean is NOT produced: whole-module translation is a
+// documented release-0.01 rejection — see step 3 below.)
 
 import "rev.cry";
 
@@ -20,14 +21,31 @@ let impl4 = {{ implRev`{4, [8]} }};
 write_lean_term "implRev4" [] [] "out/implRev.lean" impl4;
 
 // 3. Translate the whole Cryptol module.
-write_lean_cryptol_module "rev.cry" "out/Rev.lean" [] [];
+//    KNOWN REJECTION (release 0.01): the full module rejects at
+//    translation — `specRev`'s built-in `reverse` reaches
+//    `Prelude.error` demanded at a raw position (the audited
+//    raw-error disposition,
+//    saw-core-lean/doc/2026-07-14_reachable-raw-error-disposition.md);
+//    the reduced module (implRev alone) rejects at
+//    `Prelude::Either@core` instead, pinned by
+//    otherTests/saw-core-lean/saw-boundary/
+//    polymorphic_seq_module_rejection. Wrapped in `fails` so the
+//    demo runs end-to-end; out/Rev.lean is NOT produced.
+fails (write_lean_cryptol_module "rev.cry" "out/Rev.lean" [] []);
 
 // 4. Punt the two Cryptol `property` declarations to Lean as proof
-//    goals. `offline_lean` emits one file per goal containing
-//    `theorem goal : <Prop> := by sorry` — a stub the user can open in
-//    Lean and discharge.
-prove_print (offline_lean "out/invol")
-  {{ \(xs : [4][8]) -> implRev (implRev xs) == xs }};
+//    goals. `offline_lean` emits one file per goal containing a
+//    `def goal : Prop := <Prop>` plus a
+//    `theorem goal_holds : goal := by sorry` stub the user can open
+//    in Lean and discharge.
+//
+//    offline_lean is emission-only: it writes the file and leaves the
+//    goal UNSOLVED, so each prove_print fails and is wrapped in
+//    `fails`. SAW never claims these goals; the discharge lives in
+//    proof/Proofs/{Invol,Eq}.lean, checked by Lean. SAW-side replay
+//    (offline_lean_replay) is disabled in this release.
+fails (prove_print (offline_lean "out/invol")
+  {{ \(xs : [4][8]) -> implRev (implRev xs) == xs }});
 
-prove_print (offline_lean "out/eq_spec")
-  {{ \(xs : [4][8]) -> implRev xs == specRev xs }};
+fails (prove_print (offline_lean "out/eq_spec")
+  {{ \(xs : [4][8]) -> implRev xs == specRev xs }});
