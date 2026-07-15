@@ -6,7 +6,7 @@ open CryptolToLean.SAWCoreVectors
 noncomputable section
 
 /-!
-Lean half of `drivers/conformance_string_bytes`.
+standalone library-proof row (its former driver twin drivers/conformance_string_bytes was retired in the 2026-07-15 restructure; coverage lives in differential/).
 -/
 
 theorem bytesToString_hi_semantics :

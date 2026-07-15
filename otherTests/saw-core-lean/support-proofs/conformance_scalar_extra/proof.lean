@@ -5,7 +5,7 @@ open CryptolToLean.SAWCorePrimitives
 noncomputable section
 
 /-!
-Lean half of `drivers/conformance_scalar_extra`.
+standalone library-proof row (its former driver twin drivers/conformance_scalar_extra was retired in the 2026-07-15 restructure; coverage lives in differential/).
 
 These theorems pin scalar support-library realizations that are not covered by
 the older division-focused scalar conformance fixture.

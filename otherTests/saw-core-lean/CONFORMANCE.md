@@ -42,7 +42,7 @@ full backend conformance.
 | `obligations/*/.known-gap` | A soundness-sensitive surface is in scope, but the current backend does not yet emit the required visible obligation shape. | No. It records missing proof-carrying emission. |
 | `saw-boundary/*` | Expected rejection or obligation-boundary litmus. | Yes only for intended final boundaries. |
 | `saw-boundary/*/.known-gap` | Pinned current backend/library gap. | No. It records missing parity. |
-| `drivers/conformance_*` | Legacy litmus candidates using goldens/elaboration/support proofs. | No. Mine these into `differential/*`. |
+| `drivers/conformance_*` | RETIRED (2026-07-15 restructure): all 17 legacy litmus rows dispositioned — coverage absorbed by `differential/*`/`obligations/*` successors; unique residuals migrated as `differential/vector_zip_unequal` and `differential/nat_division_defined`. `support-proofs/conformance_*` library-proof rows remain (standalone). | — |
 | `support-proofs/*` | Lean support-library regression proofs. | No unless paired with emitted-artifact observation. |
 
 ## Proof-Carrying Obligation Surface
@@ -223,12 +223,7 @@ boundary, or known-gap rows.
 
 | Legacy path | Current finding | Required migration |
 | --- | --- | --- |
-| `drivers/conformance_bitvector` | Defined arithmetic/bitwise/order/count cases now have true differential rows; zero-divisor obligation churn remains. | Add partial-operation obligation rows for zero divisors and rotate-specific coverage. |
-| `drivers/conformance_scalar` | Defined Nat/Int/IntMod/Rational cases now have true differential rows; partial zero-divisor/denominator cases need principled obligations. | Add proof-obligation rows for zero divisors and zero denominators. |
-| `drivers/conformance_stream` | Finite `MkStream`/`Stream#rec` projection now has true differential coverage; stream-producing helper totality has obligation-shape coverage; `streamGet`/`streamMap`/shift/`streamScanl` finite observations are pinned as a focused differential known gap because wrapped stream construction still needs a principled stream/recursor convention. | Add proof-carrying stream-recursion design before promoting stream-helper executable replay. |
-| `drivers/conformance_vector` | Legacy smoke row passes after reviewed golden refresh. `genM`/`foldrM`/`foldlM` wrapper adaptation is covered by focused positive differential rows; source-level `atWithDefault` default behavior remains visible in this driver. | Keep adding focused vector rows only when a distinct helper shape appears. |
-| `drivers/conformance_vector_zip` | Legacy smoke row passes after reviewed golden refresh. Cryptol equal-length `zip` has true differential coverage, and this driver remains current-emission coverage for direct SAWCore unequal-length `zip` observed through source-level `atWithDefault`. | Add focused differential or obligation rows only if a distinct helper shape appears. |
-| `drivers/conformance_zero_divisor_obligations` | Direct-result zero-divisor/zero-denominator gaps are now pinned by focused `saw-boundary/partial_operation_obligations`; the legacy combined conjunction remains a broader regression probe. | Convert the pinned direct-result gaps to green obligation-shape boundary rows once emission is proof-carrying in all result positions. |
+| (retired legacy litmus family) | The six rows formerly tracked here (`conformance_{bitvector,scalar,stream,vector,vector_zip,zero_divisor_obligations}`) were retired 2026-07-15 with the rest of the family: bitvector/scalar/stream/vector coverage lives in the `differential/bitvector_*`, `differential/{nat,int,intmod,rational}_*`, `differential/stream_*`, and `differential/vector_*` rows; zero-divisor contracts in `obligations/partial_*` + `saw-boundary/partial_operation_obligations`; the two unique residuals became `differential/vector_zip_unequal` (unequal-length zip truncation) and `differential/nat_division_defined` (defined-value Nat division). | — |
 
 ## Immediate Coverage Priorities
 

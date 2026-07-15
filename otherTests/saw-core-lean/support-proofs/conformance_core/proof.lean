@@ -5,7 +5,7 @@ open CryptolToLean.SAWCorePreludeExtra
 noncomputable section
 
 /-!
-Lean half of `drivers/conformance_core`.
+standalone library-proof row (its former driver twin drivers/conformance_core was retired in the 2026-07-15 restructure; coverage lives in differential/).
 -/
 
 theorem lean_id_semantics :

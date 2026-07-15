@@ -6,7 +6,7 @@ open CryptolToLean.SAWCoreVectors
 noncomputable section
 
 /-!
-Lean half of `drivers/conformance_vector_zip`.
+standalone library-proof row (its former driver twin drivers/conformance_vector_zip was retired in the 2026-07-15 restructure; coverage lives in differential/).
 -/
 
 abbrev NatPair : Type := PairType Nat (PairType Nat UnitType)

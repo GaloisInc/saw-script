@@ -20,6 +20,13 @@ expected rejection — nothing is silently red.
 | `stretch/` | Large stress probes excluded from default gates. | …it's scalability evidence, not a fence. |
 | `support/` | The harness scripts themselves. | — |
 
+Choosing `drivers/` vs `obligations/` for an emission pin: use a
+DRIVER row when full byte-shape stability of the family matters
+(goldens over every artifact + the SAW log — catches any drift, at
+golden-refresh cost); use an OBLIGATIONS row when only the visible
+contract matters (`contains:`/`absent:` directives — survives benign
+drift, pins exactly the load-bearing lines).
+
 History note (2026-07-15 restructure): `workflows/` was split out of
 `drivers/`; the negative-probe category was renamed `shape/` →
 `attacks/`; the pre-differential-era `drivers/conformance_*` litmus

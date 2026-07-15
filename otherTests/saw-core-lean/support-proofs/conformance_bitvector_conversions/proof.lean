@@ -6,7 +6,7 @@ open CryptolToLean.SAWCoreVectors
 noncomputable section
 
 /-!
-Lean half of `drivers/conformance_bitvector_conversions`.
+standalone library-proof row (its former driver twin drivers/conformance_bitvector_conversions was retired in the 2026-07-15 restructure; coverage lives in differential/).
 -/
 
 theorem bvToNat_semantics :

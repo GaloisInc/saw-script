@@ -6,7 +6,7 @@ open CryptolToLean.SAWCorePrimitives
 noncomputable section
 
 /-!
-Lean half of `drivers/conformance_error`.
+standalone library-proof row (its former driver twin drivers/conformance_error was retired in the 2026-07-15 restructure; coverage lives in differential/).
 
 The driver checks SAW source semantics for unreachable Cryptol `error`
 branches. These theorems pin the checked `Except.error` helper and `iteM`

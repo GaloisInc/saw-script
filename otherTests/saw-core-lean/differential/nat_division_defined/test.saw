@@ -1,0 +1,17 @@
+// TRUE differential litmus for DEFINED-VALUE Nat division: divNat,
+// modNat, and both projections of divModNat at nonzero divisors.
+//
+// Added 2026-07-15 as the required residual of retiring the legacy
+// litmus drivers/conformance_scalar: the zero-divisor SHAPES are
+// pinned by obligations/partial_nat_{div,mod,divmod}_zero, but no
+// row pinned the defined results (7/2 = 3 rem 1; 9/3 = 3 rem 0)
+// with a real SAW-vs-Lean observed-outcome comparison.
+
+let observed = parse_core "and (equalNat (divNat 7 2) 3) (and (equalNat (modNat 7 2) 1) (and (equalNat (divNat 9 3) 3) (and (equalNat (modNat 9 3) 0) (and (equalNat (Pair_fst Nat (PairType Nat UnitType) (divModNat 7 2)) 3) (equalNat (Pair_fst Nat UnitType (Pair_snd Nat (PairType Nat UnitType) (divModNat 7 2))) 1)))))";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

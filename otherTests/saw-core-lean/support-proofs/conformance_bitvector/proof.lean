@@ -6,7 +6,7 @@ open CryptolToLean.SAWCoreVectors
 noncomputable section
 
 /-!
-Lean half of `drivers/conformance_bitvector`.
+standalone library-proof row (its former driver twin drivers/conformance_bitvector was retired in the 2026-07-15 restructure; coverage lives in differential/).
 
 The SAW driver proves the same concrete properties with SAW's `w4` backend and
 emits a Lean term for elaboration. This file pins the corresponding Lean

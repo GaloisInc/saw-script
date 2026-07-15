@@ -6,7 +6,7 @@ open CryptolToLean.SAWCorePreludeExtra
 noncomputable section
 
 /-!
-Lean half of `drivers/conformance_stream`.
+standalone library-proof row (its former driver twin drivers/conformance_stream was retired in the 2026-07-15 restructure; coverage lives in differential/).
 
 The SAW driver proves concrete `Stream#rec`, `MkStream`, and `streamScanl`
 facts with SAW's `w4` backend. This file pins the corresponding Lean

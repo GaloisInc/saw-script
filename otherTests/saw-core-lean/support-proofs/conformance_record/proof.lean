@@ -6,7 +6,7 @@ open CryptolToLean.SAWCoreVectors
 noncomputable section
 
 /-!
-Lean half of `drivers/conformance_record`.
+standalone library-proof row (its former driver twin drivers/conformance_record was retired in the 2026-07-15 restructure; coverage lives in differential/).
 
 The SAW driver proves concrete Cryptol record facts with SAW's `w4` backend
 and emits the same source property for Lean elaboration. This file pins the

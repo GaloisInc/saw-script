@@ -67,20 +67,29 @@ Passing (the standing fences):
   `saw_ctor_order` positive/negative self-tests.
 - `cabal test saw-core-lean-smoketest`: 57 tests, including the
   Slice 7 anti-regression source lint.
-- `otherTests/saw-core-lean`: `make conformance` exit 0 — 193 rows
+- `otherTests/saw-core-lean`: `make conformance` exit 0 — 195 rows
   (differential SAW-vs-Lean evaluation, obligation shape, pinned known
-  gaps), with emitted artifacts elaborated.
+  gaps), with emitted artifacts elaborated. Tree restructured
+  2026-07-15 (see otherTests/saw-core-lean/README.md): `workflows/`
+  split out of `drivers/` for the end-to-end SAWScript rows;
+  `shape/` renamed `attacks/`; the 17 legacy `drivers/conformance_*`
+  litmus rows dispositioned (15 retired against named successors,
+  2 unique residuals migrated as `differential/vector_zip_unequal`
+  and `differential/nat_division_defined`).
 - Emitted-Lean byte-diff oracle: `.snapshots/op2-baseline`, re-cut
   2026-07-15 after the full suite ran exit-0 on the release binary —
   `support/emitted-lean-snapshot.sh diff .snapshots/op2-baseline`
-  clean at 315 artifacts. (The earlier "1267" count was inflated by
+  clean at 297 artifacts (re-cut post-restructure: workflow rows
+  moved, legacy litmus retired, two differential rows added). (The earlier "1267" count was inflated by
   a scan bug that swallowed retired baselines' frozen copies —
   fixed: the scan now excludes `.snapshots/` wholesale. History: the
   stale op1-baseline's 32 diffs were per-hunk reviewed — all the
   expected OP-2 `atRuntimeCheckedM` migration — plus this release
   work's own reviewed footprint.)
-- Driver rows (`bash test.sh` per-driver, `lean-driver-test.sh`) green,
-  including the ChaCha20 core verify and prelude auto-emit drivers.
+- Driver + workflow rows (`bash test.sh` per-row,
+  `lean-driver-test.sh`) green, including the ChaCha20 core verify
+  workflow and the prelude auto-emit driver; full `make test` exit 0
+  on the restructured tree (72 gaps in full-suite inventory scope).
 
 Known-gap census (release 0.01 posture): 64 pinned `.known-gap`
 rows in conformance scope (differential/obligations/saw-boundary —

@@ -16,15 +16,6 @@
 #                          discharges tracked in proofs/ and honest gaps
 #                          in proof-gaps/. See README.md for the taxonomy.
 #
-#   drivers/conformance_*/ LEGACY LITMUS CANDIDATES, NOT TRUE DIFFERENTIAL
-#                          CONFORMANCE. These directories contain many useful
-#                          small terms, but most only combine SAW-side proof,
-#                          Lean elaboration, golden diffs, and separate Lean
-#                          support-library proofs. Do not add these to the
-#                          conformance verb unless they are migrated to
-#                          differential/ with a real SAW-vs-Lean observed
-#                          outcome comparison.
-#
 #   differential/<name>/   TRUE DIFFERENTIAL CONFORMANCE. Run SAW on a small
 #                          litmus, run Lean on the SAW-Lean emitted artifact,
 #                          and mechanically compare the observed outputs.
@@ -262,7 +253,6 @@ run_one() {
 # Iterate categories in a fixed order so the output is deterministic.
 iterate_drivers()       { for d in drivers/*/;       do run_one drivers       "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_workflows()     { for d in workflows/*/;     do run_one workflows     "$(basename "$d")" lean-driver-test.sh "$@"; done; }
-iterate_conformance_drivers() { for d in drivers/conformance_*/; do run_one drivers "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_differential()  { for d in differential/*/;  do run_one differential  "$(basename "$d")" lean-differential-test.sh "$@"; done; }
 iterate_obligations()   { for d in obligations/*/;   do run_one obligations   "$(basename "$d")" lean-obligation-test.sh "$@"; done; }
 iterate_saw_boundary()  { for d in saw-boundary/*/;  do run_one saw-boundary  "$(basename "$d")" lean-driver-test.sh "$@"; done; }
