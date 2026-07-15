@@ -2,63 +2,63 @@ Loading file "test_offline_lean_e_series.saw"
 == Anticipated failure message ==
 Stack trace:
    (builtin) in prove_print
-   test_offline_lean_e_series.saw:22:8-23:47 in (callback)
+   test_offline_lean_e_series.saw:28:8-29:47 in (callback)
    (builtin) in fails
-   test_offline_lean_e_series.saw:22:1-23:47 (at top level)
+   test_offline_lean_e_series.saw:28:1-29:47 (at top level)
 prove: 1 unsolved subgoal(s)
 Unfinished: 1 goals remaining
 
 == Anticipated failure message ==
 Stack trace:
    (builtin) in prove_print
-   test_offline_lean_e_series.saw:28:8-30:55 in (callback)
+   test_offline_lean_e_series.saw:34:8-36:55 in (callback)
    (builtin) in fails
-   test_offline_lean_e_series.saw:28:1-30:55 (at top level)
+   test_offline_lean_e_series.saw:34:1-36:55 (at top level)
 prove: 1 unsolved subgoal(s)
 Unfinished: 1 goals remaining
 
 == Anticipated failure message ==
 Stack trace:
    (builtin) in prove_print
-   test_offline_lean_e_series.saw:43:8-44:73 in (callback)
+   test_offline_lean_e_series.saw:49:8-50:73 in (callback)
    (builtin) in fails
-   test_offline_lean_e_series.saw:43:1-44:73 (at top level)
+   test_offline_lean_e_series.saw:49:1-50:73 (at top level)
 prove: 1 unsolved subgoal(s)
 Unfinished: 1 goals remaining
 
 == Anticipated failure message ==
 Stack trace:
    (builtin) in prove_print
-   test_offline_lean_e_series.saw:49:8-50:54 in (callback)
+   test_offline_lean_e_series.saw:55:8-56:54 in (callback)
    (builtin) in fails
-   test_offline_lean_e_series.saw:49:1-50:54 (at top level)
+   test_offline_lean_e_series.saw:55:1-56:54 (at top level)
 prove: 1 unsolved subgoal(s)
 Unfinished: 1 goals remaining
 
 == Anticipated failure message ==
 Stack trace:
    (builtin) in prove_print
-   test_offline_lean_e_series.saw:63:8-64:53 in (callback)
+   test_offline_lean_e_series.saw:69:8-70:53 in (callback)
    (builtin) in fails
-   test_offline_lean_e_series.saw:63:1-64:53 (at top level)
+   test_offline_lean_e_series.saw:69:1-70:53 (at top level)
 prove: 1 unsolved subgoal(s)
 Unfinished: 1 goals remaining
 
 == Anticipated failure message ==
 Stack trace:
    (builtin) in prove_print
-   test_offline_lean_e_series.saw:72:8-73:75 in (callback)
+   test_offline_lean_e_series.saw:78:8-79:75 in (callback)
    (builtin) in fails
-   test_offline_lean_e_series.saw:72:1-73:75 (at top level)
+   test_offline_lean_e_series.saw:78:1-79:75 (at top level)
 prove: 1 unsolved subgoal(s)
 Unfinished: 1 goals remaining
 
 == Anticipated failure message ==
 Stack trace:
    (builtin) in prove_print
-   test_offline_lean_e_series.saw:103:8-104:67 in (callback)
+   test_offline_lean_e_series.saw:110:8-111:67 in (callback)
    (builtin) in fails
-   test_offline_lean_e_series.saw:103:1-104:67 (at top level)
+   test_offline_lean_e_series.saw:110:1-111:67 (at top level)
 prove: 1 unsolved subgoal(s)
 Unfinished: 1 goals remaining
 

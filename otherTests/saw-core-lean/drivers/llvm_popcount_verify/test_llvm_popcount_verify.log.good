@@ -2,7 +2,7 @@ Loading file "test_llvm_popcount_verify.saw"
 Verifying pop_count...
 Simulating pop_count...
 Checking proof obligations pop_count...
-Subgoal failed: pop_count test_llvm_popcount_verify.saw:43:8: error: in _SAW_LLVM_withMethodSpec
+Subgoal failed: pop_count test_llvm_popcount_verify.saw:47:8: error: in _SAW_LLVM_withMethodSpec
 Literal equality postcondition
 Expected term: 
 popCount x
@@ -25,8 +25,8 @@ let { x`1 = bvNat 32 858993459;
 == Anticipated failure message ==
 Stack trace:
    (builtin) in llvm_verify
-   test_llvm_popcount_verify.saw:43:8-45:56 in (callback)
+   test_llvm_popcount_verify.saw:47:8-49:56 in (callback)
    (builtin) in fails
-   test_llvm_popcount_verify.saw:43:1-45:56 (at top level)
+   test_llvm_popcount_verify.saw:47:1-49:56 (at top level)
 Proof failed: 1 of 1 verification conditions unfinished.
 

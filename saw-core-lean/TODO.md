@@ -2133,7 +2133,8 @@ Known-gap backlog triage (still current):
 
 ## References
 
-- `doc/archive/2026-07-08_position-directed-translation-plan.md` (operative plan)
+- `doc/archive/2026-07-08_position-directed-translation-plan.md` (concluded
+  2026-07-11; the operative plan is `doc/2026-07-14_release-plan.md`)
 - `doc/2026-07-03_direct-recursor-semantics-design.md`
 - `doc/2026-06-26_phase-beta-expected-shape.md`
 - `doc/2026-06-26_expected-shape-todo.md`

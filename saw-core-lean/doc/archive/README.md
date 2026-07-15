@@ -13,9 +13,10 @@ the top-level `doc/` files:
 - `getting-started.md` — user walkthrough.
 - `contributing.md` — how to extend.
 - `2026-04-24_soundness-boundaries.md` — canonical trust contract.
-- `2026-05-05_long-term-plan.md` — current plan-of-record
-  (case-study-driven; supersedes the May-02 Phase-organized plans
-  archived here).
+- `2026-07-14_release-plan.md` — current plan-of-record (0.01
+  coherence / 0.02 coverage). The case-study-driven
+  `2026-05-05_long-term-plan.md` that preceded it is archived HERE,
+  as are the May-02 Phase-organized plans it superseded.
 
 If a claim in an archived doc conflicts with the current source
 code or with one of the top-level docs, **trust the current
