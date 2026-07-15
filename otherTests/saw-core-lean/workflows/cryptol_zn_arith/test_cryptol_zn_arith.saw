@@ -1,0 +1,47 @@
+// cryptol_zn_arith — first end-to-end workflow coverage of the
+// IntMod (`Z n`, SAWCore IntMod) surface: Cryptol modular-integer
+// arithmetic properties punted through emission-only `offline_lean`
+// and DISCHARGED in Lean (see proofs/cryptol_zn_add_comm,
+// proofs/cryptol_zn_mul_comm, proofs/cryptol_zn_neg_cancel).
+//
+// Like workflows/offline_lean, offline_lean is emission-only: it
+// writes the `def goal : Prop := ...; theorem goal_holds := by sorry`
+// file and leaves the goal UNSOLVED, so every prove_print here fails
+// and is wrapped in `fails`. The file pin is what this row tests;
+// SAW-side discharge lives in proofs/.
+//
+// Why these properties reach offline_lean at all: the SAW rewriter
+// has no ring/commutativity rules for IntMod's `intModAdd` /
+// `intModMul` / `intModNeg` primitives, so a property phrased over
+// SYMBOLIC `Z 7` variables does NOT fold to `True` during obligation
+// generation — the goal survives to the Lean emitter. (A property
+// SAW's rewriter can discharge, e.g. one over concrete literals,
+// would make prove_print SUCCEED and break the `fails` wrapper, so it
+// would never emit a file. Confirmed by probing: each property below
+// leaves "1 unsolved subgoal" and emits `<prefix>_prove0.lean`.)
+//
+// n = 7 is a small odd modulus (encoded bit1·bit1·one). The emitted
+// goals reduce to `Int.fmod` arithmetic; the discharges use core
+// Lean's `Int.fmod` lemma family (`Int.add_comm` / `Int.mul_comm`
+// under the `decide`, and `Int.dvd_fmod_sub_self` +
+// `Int.add_mul_fmod_self_left` for the additive-inverse cancellation).
+//
+// Prefixes are named `test_cryptol_zn_arith.<X>` so each emitted
+// `<prefix>_prove0.lean` matches the `${TEST}.<X>.lean.good` pinning
+// pattern with ${TEST} = test_cryptol_zn_arith.
+
+// Commutativity of Z n addition: x + y == y + x over Z 7.
+// Survives: no rewrite rule folds symbolic intModAdd commutativity.
+fails (prove_print (offline_lean "test_cryptol_zn_arith.addcomm")
+  {{ \(x : Z 7) (y : Z 7) -> x + y == y + x }});
+
+// Commutativity of Z n multiplication: x * y == y * x over Z 7.
+// Survives: no rewrite rule folds symbolic intModMul commutativity.
+fails (prove_print (offline_lean "test_cryptol_zn_arith.mulcomm")
+  {{ \(x : Z 7) (y : Z 7) -> x * y == y * x }});
+
+// Additive-inverse cancellation: x + (- x) == 0 over Z 7.
+// Survives: the symbolic `x + (- x)` is not rewritten to 0 for the
+// IntMod primitives, so the goal reaches Lean.
+fails (prove_print (offline_lean "test_cryptol_zn_arith.negcancel")
+  {{ \(x : Z 7) -> x + (- x) == 0 }});

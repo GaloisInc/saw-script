@@ -138,8 +138,14 @@ In execution order (TODO.md tracks per-item state):
       deliberately routes the `updWithProof_checkedM`/
       `sliceWithProof_checkedM` family, closing part of the
       zero-coverage-helper gap as a side effect.
-   5. **`Z n` / `IntMod` arithmetic property**: end-to-end coverage
-      for a surface that has emitter wiring but no worked example.
+   5. **`Z n` / `IntMod` arithmetic property — DONE 2026-07-15.**
+      `workflows/cryptol_zn_arith`: three `Z 7` properties
+      (add-commutativity, mul-commutativity, add/neg cancellation)
+      emitted and each discharged sorry-free
+      (`proofs/cryptol_zn_{add_comm,mul_comm,neg_cancel}` — targeted
+      `simp only` through the reducible `Int.fmod` realizations plus
+      the core `Int` lemmas; axiom audits clean). First end-to-end
+      workflow coverage of the IntMod surface.
    Definition of done per example: `.saw` script (emission-only,
    `fails`-wrapped), emitted artifact elaborates, `proof.lean`
    discharges sorry-free under the axiom policy, wired as a

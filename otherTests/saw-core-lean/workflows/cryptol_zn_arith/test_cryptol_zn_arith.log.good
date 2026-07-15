@@ -1,0 +1,28 @@
+Loading file "test_cryptol_zn_arith.saw"
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_cryptol_zn_arith.saw:35:8-36:47 in (callback)
+   (builtin) in fails
+   test_cryptol_zn_arith.saw:35:1-36:47 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_cryptol_zn_arith.saw:40:8-41:47 in (callback)
+   (builtin) in fails
+   test_cryptol_zn_arith.saw:40:1-41:47 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_cryptol_zn_arith.saw:46:8-47:37 in (callback)
+   (builtin) in fails
+   test_cryptol_zn_arith.saw:46:1-47:37 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
