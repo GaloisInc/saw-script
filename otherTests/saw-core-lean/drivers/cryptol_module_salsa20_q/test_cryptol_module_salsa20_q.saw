@@ -1,7 +1,8 @@
-// Phase 3c slice test — Salsa20 quarterround. Extracted from
+// Salsa20 quarterround module-translation row. Extracted from
 // exercises/functional-correctness/salsa20/Salsa20.cry; the full
-// Salsa20 module pulls in stream-recursion via fix (Phase 5
-// territory). The quarterround alone exercises the bit-
+// Salsa20 module pulls in stream-recursion via fix (the
+// recurrence-class surface, OP-3 scope). The quarterround alone
+// exercises the bit-
 // manipulation surface (xor, bvAdd, rotateL) on [4][32] without
 // triggering recursion.
 //

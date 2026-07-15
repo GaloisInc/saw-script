@@ -16,19 +16,12 @@ bitwise / comparison property in this file is a *theorem*
 proven from Lean's `BitVec` library plus those two coherence
 axioms.
 
-Some lemmas are still axiomatic. They fall into two categories:
-
-  - **Predicates over signed/unsigned bv inequalities** (e.g.
-    `isBvslt_to_isBvsle`, `isBvslt_antirefl`, `isBvule_zero_n`):
-    These mirror Rocq theorems proven via `holds_for_bits_up_to_3`
-    (3-bit exhaustion). Provable in principle from `BitVec.slt`
-    / `BitVec.sle` lemmas; deferred until needed.
-
-  - **Round-trip / bound axioms for `bvNat`/`bvToNat`** (e.g.
-    `bvNat_bvToNat_id`, `bvToNat_bounds`): Provable from
-    `BitVec.ofNat_toNat` and similar; deferred.
-
-Each remaining axiom is annotated with its Rocq counterpart for
+This file contains ZERO axiom declarations (audit 2026-07-14):
+every lemma — including the signed/unsigned inequality predicates
+(`isBvslt_to_isBvsle`, `isBvslt_antirefl`, `isBvule_zero_n`) and
+the `bvNat`/`bvToNat` round-trip/bound facts (`bvNat_bvToNat_id`,
+`bvToNat_bounds`) that were once deferred as axioms — is a proven
+theorem. Rocq-counterpart citations on individual lemmas remain as
 audit trail.
 -/
 

@@ -15,12 +15,12 @@ back to `proofs/` until the generated obligation or proof script checks
 reliably without heartbeat inflation, native-evaluation proof artifacts, or
 backend-added automation.
 
-2026-07-03 probe: the tracked large emitted artifact also fails to compile
-because it references stale checked Nat div/mod helper names
-`divNatChecked`/`modNatChecked`. That does not make this a proof-backend
-candidate; it means any future work on this stress example must first refresh
-and review the generated artifact, or reduce the helper-name drift to a small
-litmus before treating it as a backend priority.
+2026-07-14 note: the large emitted artifact this directory once tracked
+(and the 2026-07-03 probe's finding that it referenced stale helper
+names) is gone — the source row is now a `saw-boundary/` expected
+rejection, so there is no current emission to keep here. Any future
+work on this stress example starts by regenerating the artifact under
+the then-current translation path (OP-3 successor design).
 
 Next principled path: keep mining smaller emitted-obligation blockers into
 focused differential or obligation rows, and defer the large proof itself to a

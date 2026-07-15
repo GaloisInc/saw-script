@@ -189,14 +189,17 @@ support-library functions that were axioms are now defined:
   `div`/`mod`); the Lean-side aliases route through `Int.fdiv`
   / `Int.fmod`.
 
-- **`error` placeholders in goals.** Cryptol size-coercion
-  residuals sometimes emit `error _ "at: index out of bounds"`
-  inside terms. `error` is still axiomatic (faithful to SAW's
-  `isort 1` advisory-not-enforced semantics — see
-  `doc/2026-05-02_residual-trust.md` §1.2). These are unreachable
-  in well-typed code but they don't reduce. Your proof obligation
-  is to show the surrounding context guarantees the `error`
-  branch is never taken.
+- **`error` residuals in goals.** Value-domain `error` translates
+  to `saw_throw_error` (an `Except.error` rethrow of SAW's own
+  message — not an axiom), so error branches are ordinary `Except`
+  values your proof reasons about like any other; raw-position
+  `error` (index/type/proof) REJECTS at translation with a named
+  diagnostic, and function-typed `error` with a value-domain result
+  lowers to the constant-error function (see
+  `doc/2026-07-14_reachable-raw-error-disposition.md`). Your proof
+  obligation for a reachable error branch is to show the guard
+  condition routes execution away from it — the branch itself is a
+  first-class `Except.error`, not an unreducible wall.
 
 - **`@Bool.rec` walls in goals.** If you see direct `@Bool.rec`
   in your output, that's the L-16 swap bug — file an issue. After
@@ -224,10 +227,10 @@ The harder remaining cases:
 
 - `doc/2026-04-24_soundness-boundaries.md` — what the translator
   guarantees and what residual trust you inherit.
-- `doc/2026-05-05_long-term-plan.md` — the plan-of-record for
-  what's coming (case-study-driven). The proof-side tooling
-  thread is where this walkthrough generalizes from "one example"
-  to "a real proof library."
+- `doc/2026-07-14_release-plan.md` — the plan-of-record for what's
+  coming (0.01 coherence, 0.02 example-driven coverage). The
+  proof-ergonomics thread is where this walkthrough generalizes
+  from "one example" to "a real proof library."
 - `lean/CryptolToLean/` — the support library. Each axiom has a
   docstring explaining the SAWCore primitive it stands in for.
 - `otherTests/saw-core-lean/proofs/walkthrough/` — the regression test

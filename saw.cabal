@@ -1162,9 +1162,11 @@ test-suite saw-core-rocq-tests
   hs-source-dirs: otherTests/saw-core-rocq
   main-is: Test.hs
 
--- saw-core-lean has its own small test suite, mirroring the
--- saw-core-rocq one. Exercises monomorphic translation on small
--- Cryptol terms; pinned via @*.log.good@ and @*.lean.good@ files.
+-- saw-core-lean's integration suite (otherTests/saw-core-lean via
+-- test.sh): differential SAW-vs-Lean evaluation, obligation-shape
+-- rows, rejection boundaries, driver goldens, and proof replay;
+-- pinned via @*.log.good@ / @*.lean.good@ files plus known-gap
+-- inventory. Requires saw and lake on PATH.
 test-suite saw-core-lean-tests
   import: ghc-options
   import: ghc-options-executable

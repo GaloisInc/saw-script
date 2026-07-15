@@ -1,1 +1,1 @@
-fix_unfold is a SAWCore axiom/proof surface; current rejection pins missing proof-carrying emission.
+fix_unfold is SAWCore's unfolding lemma for Prelude.fix; it rejects as a primitive proof principle the backend must not trust directly (proof-carrying fix emission itself exists — the rejection is about the raw axiom surface, not missing fix support).

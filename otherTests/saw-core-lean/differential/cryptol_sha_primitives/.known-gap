@@ -1,2 +1,1 @@
-SHA2 Cryptol primitives are in scope, but Cryptol.sawcore currently defines
-representative SHA processing operations through runtime `error`.
+SHA2 Cryptol primitives are in scope, but SAW's evaluator currently stops at an Unimplemented primitive stub for representative SHA processing operations (simulator-level, distinct from a Cryptol `error` call).

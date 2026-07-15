@@ -1,3 +1,1 @@
-Direct Cryptol.sawcore floating-point entry points are in scope, but
-Cryptol.sawcore currently implements representative `ecFp*` operations with
-runtime `error`.
+Direct Cryptol.sawcore floating-point entry points are in scope, but SAW's evaluator currently stops at an Unimplemented primitive stub for representative ecFp* operations (simulator-level, distinct from a Cryptol `error` call).

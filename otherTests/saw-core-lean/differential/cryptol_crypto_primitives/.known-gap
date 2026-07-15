@@ -1,1 +1,1 @@
-Suite-B Cryptol primitives are in scope, but Cryptol.sawcore currently defines representative crypto operations through runtime `error`.
+Suite-B Cryptol primitives are in scope, but SAW's evaluator currently stops at an Unimplemented primitive stub for representative crypto operations (simulator-level, distinct from a Cryptol `error` call).

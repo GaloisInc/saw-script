@@ -144,8 +144,9 @@ discipline:
    probes.
 3. Document in `2026-04-24_soundness-boundaries.md` with a
    citation back to the test path.
-4. (For new lockdown items) update `2026-05-05_long-term-plan.md`
-   to record the gap and its closure.
+4. (For new lockdown items) record the gap and its closure in
+   `TODO.md` (the working roadmap; the historical L-series lives in
+   `doc/archive/2026-05-05_long-term-plan.md`).
 
 ## How to add an integration test
 
@@ -213,8 +214,8 @@ separate Lean proof.
 - **Comments explain WHY, not WHAT.** Most non-trivial decisions
   cite a doc or a commit. Keep that discipline.
 - **Soundness claims pin tests.** The lockdown principle (the
-  L-1..L-17 series captured in `2026-05-05_long-term-plan.md` and
-  the residual catalogue in `2026-05-02_residual-trust.md`) rejects
+  L-1..L-17 series captured in `doc/archive/2026-05-05_long-term-plan.md`
+  and the residual catalogue in `2026-05-02_residual-trust.md`) rejects
   comment-grade guarantees. If a comment says "X is safe because
   Y," there should be a test that fires if Y stops being true.
 - **Hand-maintained safety lists are last resorts.** Prefer

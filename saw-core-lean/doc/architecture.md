@@ -1,4 +1,4 @@
-# saw-core-lean: architecture (as of 2026-05-02)
+# saw-core-lean: architecture (as of 2026-07-14)
 
 A SAWCore→Lean 4 translation backend, sibling of `saw-core-rocq`.
 This doc is the **current** as-of-today reference. Trajectory
@@ -91,9 +91,9 @@ saw-core-lean/
 │   ├── getting-started.md    (Phase 2 walkthrough)
 │   ├── contributing.md       (how to extend)
 │   ├── 2026-04-24_soundness-boundaries.md   (canonical trust contract)
-│   ├── 2026-05-05_long-term-plan.md         (current plan-of-record)
-│   ├── audit/                (independent audit reports)
-│   └── archive/              (dated trajectory docs)
+│   ├── 2026-07-02_position-callee-calculus.md (canonical translation contract)
+│   ├── 2026-07-14_release-plan.md           (current plan-of-record)
+│   └── archive/              (dated trajectory docs + concluded plans/audits)
 ├── lean/CryptolToLean/       (handwritten Lean support library)
 │   ├── SAWCorePrimitives.lean         (axiom set: bv ops, Either, …)
 │   ├── SAWCorePreludeExtra.lean       (iteDep / ite wrappers)
@@ -188,22 +188,27 @@ See `getting-started.md` for a complete walkthrough.
 
 ## Strategic next steps
 
-The plan-of-record (`2026-05-05_long-term-plan.md`) defines:
+The plan-of-record (`2026-07-14_release-plan.md`: 0.01 coherence,
+0.02 coverage) defines the strategic posture:
 
-- **Recursion**: `Prelude.fix` is now a proof-carrying surface. The
+- **Recursion**: `Prelude.fix` is a proof-carrying surface. The
   backend emits generic fixed-point obligations and leaves recurrence
-  simplification to Lean-checked proof libraries. Full SHA-512 is
-  retained as a stretch scalability probe
-  (`stretch/sha512_full_module_probe/`), not as a parity blocker.
-  `fix_unfold` still rejects as a raw primitive.
-- **Phase 6**: Cryptol surface expansion — fill in primitives
-  as demos surface, with auto-detect-missing infrastructure.
-  See `doc/audit/2026-05-06_cryptol-coverage-gaps.md` for
-  current status.
-- **Phase 7**: proof-side tooling — does the saw-core-lean
-  project ship a proof library, or punt to downstream users?
+  simplification to Lean-checked proof libraries; the recurrence
+  class ships in 0.01 as the documented top limitation (OP-3
+  successor design pending). Full SHA-512 is retained as a stretch
+  scalability probe (`stretch/sha512_full_module_probe/`), not as a
+  parity blocker. `fix_unfold` still rejects as a raw primitive.
+- **Coverage expansion (0.02)**: example-driven — fill in primitives
+  and conventions as demos surface. Historical coverage inventory:
+  `doc/archive/2026-05-06_cryptol-coverage-gaps.md`; current
+  inventory: `otherTests/saw-core-lean/CONFORMANCE.md`.
+- **Proof-side tooling**: the support library ships checked lemmas;
+  broader tactic ergonomics remain a later layer
+  (`doc/proof-cookbook.md` documents the manual recipes).
 
-The `Lean.BitVec` binding (deferred Arc 3 / Phase 6 decision) is
-the strategic alternative to the axiomatic proof library — once
-`bvAdd` is bound to `BitVec.add`, the Phase 3b axioms become
-Mathlib theorems rather than transposed Rocq proofs.
+The `Lean.BitVec` binding LANDED (Phase 9): every `bv*` operation is
+a `noncomputable def` routing through native `BitVec` via the
+`vecToBitVec`/`bitVecToVec` round trip, and the former bv axioms are
+proven theorems. The trusted base is the two round-trip axioms
+(`SAWCorePrimitives.lean`), tracked as a separately-provable TCB
+item.

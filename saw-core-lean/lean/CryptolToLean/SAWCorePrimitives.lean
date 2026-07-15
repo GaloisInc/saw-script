@@ -114,11 +114,12 @@ inductive PairType (α β : Type) : Type where
 
 /-! ### `Inhabited` instances for SAW-custom types
 
-Phase 9 follow-up: tightening `error.{u}` to require `[Inhabited α]`
-(matching SAW's `isort 1` semantics) means every type the
-translator emits `error` at needs a Lean `Inhabited` instance.
-For inductive types with a constructor that takes only Inhabited
-arguments, we provide the obvious instance. -/
+Historical rationale: these were added when `error.{u}` required
+`[Inhabited α]`. That def is deleted and the emitter no longer
+injects `[Inhabited]` binders, so nothing in the emitter/golden/
+proof consumer classes is known to resolve these instances (audit
+2026-07-14). Kept pending the removal-and-rebuild verification the
+audit recommends — instance resolution is grep-invisible. -/
 
 instance instInhabitedStream {α : Type} [Inhabited α] : Inhabited (Stream α) :=
   ⟨Stream.MkStream (fun _ => default)⟩
@@ -1010,33 +1011,26 @@ macro_rules
                      Nat_min_succ_right]; first | rfl | omega | decide)
        | omega)
 
-/-! ### `error` / `error_unrestricted` — DELETED, NOT TRANSLATED
+/-! ### `error` — the retired axiomatic models (historical note)
 
-SAW declares `primitive error : (a : isort 1) → String → a`. The
-old two-tier design transcribed this as
-`axiom error_unrestricted.{u} : (α : Sort (u+1)) → String → α`,
-which is *unsound*: from `error_unrestricted Empty "" : Empty`
-one can derive `False`. Every Lean proof that depends on this
-axiom is meaningless under standard semantics.
+SAW declares `primitive error : (a : isort 1) → String → a`. Two
+earlier models are RETIRED:
 
-The principled model: Cryptol's semantic domain is "value or
-error", not "value". A Cryptol expression of type `α` should
-translate as `Option α` (or `Except String α` if we want to
-preserve messages), and `error msg` becomes `Option.none`. No
-axiom needed; soundness preserved.
+* `axiom error_unrestricted.{u} : (α : Sort (u+1)) → String → α`
+  was *unsound* (from `error_unrestricted Empty "" : Empty` one
+  derives `False`) and was deleted along with the user-facing
+  `error.{u}` def.
+* A blanket translation-time rejection of `Prelude.error` was the
+  interim stance while the monadic emission landed.
 
-That refactor (Cryptol monadic emission) is planned but not
-yet implemented. Until it lands:
-
-* The `error_unrestricted` axiom is removed.
-* The `error.{u}` user-facing `def` is also removed (Lean
-  discharges that need a partial-value model should use
-  `Option`/`Except` directly).
-* `SpecialTreatment` maps SAW's `Prelude.error` to @reject@;
-  SAW-emitted error paths fail loud at translation time.
-
-Refactor a Cryptol workflow that depends on error paths
-*before* trying to discharge it in Lean. -/
+The CURRENT model (Phase β + the 2026-07-14 audited raw-error
+disposition): value-domain `error` translates to `saw_throw_error`
+below — an ordinary `Except.error` rethrow of SAW's own message, no
+axiom involved; function-typed `error` whose final result is
+value-domain lowers to the constant-error function; raw-position
+`error` (index/type/proof) REJECTS at translation with a named
+diagnostic (see
+`doc/2026-07-14_reachable-raw-error-disposition.md`). -/
 
 /-! ## SAWCore error helper
 
@@ -1066,11 +1060,11 @@ primitives after Cryptol→SAWCore elaboration. The `error` itself
 routes to `saw_throw_error` (above), but its String argument is built
 via these ops.
 
-Audit (CG-4, 2026-05-07): pre-mapping these primitives were
-catalogued as `reject` SpecialTreatments — any Cryptol module
-using `error` would refuse to translate. With the mappings here,
-Cryptol error-message strings translate cleanly and just sit
-as opaque `String` values inside `error_unrestricted` calls.
+Audit (CG-4, 2026-05-07; wording refreshed 2026-07-14): pre-mapping
+these primitives were catalogued as `reject` SpecialTreatments — any
+Cryptol module using `error` would refuse to translate. With the
+mappings here, Cryptol error-message strings translate cleanly and
+flow into `saw_throw_error` as ordinary wrapped `String` values.
 -/
 
 /-- SAW Prelude `appendString`. Maps to Lean's `String.append`. -/

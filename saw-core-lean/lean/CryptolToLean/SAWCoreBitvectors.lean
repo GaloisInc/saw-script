@@ -11,11 +11,12 @@ to their `List Bool` counterparts). That would have made Lean-side
 proofs say something different from the SAWCore source — a
 soundness violation.
 
-If a future pass wants `BitVec` ergonomics, it must add a separate
-named abbreviation and document the (checked) coherence between
-`bitvector` and `BitVec` (typically via a `toBitVec : bitvector n ->
-BitVec n` function and proofs about its action on operations the
-user cares about).
+That coherence layer LANDED (Phase 9): `vecToBitVec` /
+`bitVecToVec` in `SAWCorePrimitives.lean` bridge the two types, the
+`bv*` operations route through native `BitVec` via that round trip,
+and the two round-trip axioms are the documented trusted base. The
+`bitvector` TYPE itself deliberately remains `Vec n Bool` for source
+fidelity.
 
 The decision to keep `Vec n Bool` (rather than bind directly to
 `Lean.BitVec n`) is documented at length in

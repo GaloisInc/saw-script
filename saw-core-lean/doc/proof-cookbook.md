@@ -14,23 +14,22 @@ read
 
 **Shape:** `bvAdd 8 (bvNat 8 5) (bvNat 8 3) = bvNat 8 8`
 
-**Discharge:** `by decide` or `by saw_bv`.
+**Discharge:** `by decide`.
 
 ```lean
 import CryptolToLean
 open CryptolToLean.SAWCorePrimitives
 
 example : bvAdd 8 (bvNat 8 5) (bvNat 8 3) = bvNat 8 8 := by decide
-example : bvSub 8 (bvNat 8 10) (bvNat 8 4) = bvNat 8 6 := by saw_bv
+example : bvSub 8 (bvNat 8 10) (bvNat 8 4) = bvNat 8 6 := by decide
 ```
 
 **Why it works.** Every bv op is a `noncomputable def` routing
 through `Lean.BitVec`. With concrete arguments, the whole
 expression reduces; `decide` checks the resulting proposition.
-The `saw_bv` macro (from `CryptolToLean.Tactics`) is a curated
-simp call that unfolds the SAW-named bv ops and applies the
-`vecToBitVec`/`bitVecToVec` round-trip rewrites — useful when
-`decide` stalls and you want simp-style progress.
+When `decide` stalls, `simp only` with the relevant `vecToBitVec_*`
+round-trip lemmas plus the op's defining equations makes simp-style
+progress (see Pattern 2).
 
 ## Pattern 2: bv arithmetic identities (symbolic)
 
@@ -205,25 +204,20 @@ and `foldrM_pure_eq_foldr` / `foldlM_pure_eq_foldl` require a checked pure-step
 equation. These lemmas intentionally do not hide `Except.error` or pretend that
 eager helpers are lazy.
 
-End-to-end test: `otherTests/saw-core-lean/proofs/cookbook/proof.lean`.
+## Lifting SAW-typed goals to `BitVec`
 
-## The `CryptolToLean.Tactics` convenience tactics
+There is no convenience-tactic module today (a `CryptolToLean.Tactics`
+layer is a candidate proof-ergonomics addition; audit 2026-07-14
+removed the description of one that never existed). The manual
+recipe that layer would package:
 
-Three macros in `CryptolToLean.Tactics` (automatically imported
-via `import CryptolToLean`):
-
-- **`saw_bv`** — simp with every bv-op unfolded and round-trip
-  rewrites applied. Closes concrete-input goals and reduces
-  symbolic goals to pure `BitVec` arithmetic.
-
-- **`saw_unfold`** — unfold the SAW-named bv primitives without
-  attempting to close. Useful for inspection before proceeding
-  manually.
-
-- **`saw_to_bitvec`** — `saw_unfold` followed by the round-trip
-  rewrites. Lifts a SAW-typed goal (`Vec n Bool` shape) to a
-  pure `BitVec n` goal so checked `BitVec` lemmas, `simp`, or
-  `grind` can attack it.
+1. `simp only [<the bv ops in your goal>]` to unfold the SAW-named
+   primitives to their `BitVec` routings;
+2. rewrite with the `vecToBitVec_*` round-trip lemmas
+   (`SAWCoreBitvectors_proofs.lean`) to reach a pure `BitVec n`
+   goal;
+3. attack with checked `BitVec` lemmas, `simp`, `omega`, or `grind`
+   under the trust policy below.
 
 ## Bitvector automation trust policy
 
@@ -251,7 +245,8 @@ If your goal doesn't match any pattern above:
    common rewrites.
 
 2. **Try checked automation.** For concrete-width or structurally simple
-   goals, lift to `BitVec` with `congrArg vecToBitVec` or `saw_to_bitvec`, then
+   goals, lift to `BitVec` with `congrArg vecToBitVec` and the
+   `vecToBitVec_*` round-trip lemmas, then
    try `simp`, `grind`, `omega`/`bv_omega`, and named `BitVec` lemmas. Avoid
    `bv_decide` in accepted backend proofs unless the project explicitly changes
    its trusted-base policy.

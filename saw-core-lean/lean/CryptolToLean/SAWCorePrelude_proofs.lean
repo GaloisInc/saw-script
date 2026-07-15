@@ -12,10 +12,11 @@ users might reach for.
 
 Some lemmas reduce by definitional equality (the `addNat = Nat.add`
 family below — our Lean-side `addNat` is `@[reducible] def addNat
-:= Nat.add`, so the equation is `rfl`). Others are axiomatic
-transpositions of Rocq theorems whose proofs depend on a `Vector
-α n` representation we don't expose. Each axiom cites its Rocq
-counterpart.
+:= Nat.add`, so the equation is `rfl`). The rest are proven
+theorems; this file contains ZERO axiom declarations (audit
+2026-07-14 — the former "axiomatic transpositions of Rocq
+theorems" have all been proved). Rocq-counterpart citations on
+individual lemmas remain as audit trail.
 -/
 
 import CryptolToLean.SAWCorePrimitives
@@ -749,7 +750,10 @@ theorem foldlM_pure_eq_foldl
 where each step indexes into the vector via `atWithDefault`. The default
 value `d` is unused since iteration only touches in-bounds indices.
 
-Together with `saw_self_ref_comp_iterate`, this lets us close popcount/
+Together with a recurrence-side bridge in the
+`saw_self_ref_comp_iterate` style (the retired May parametric-bridge
+family — a design-doc name, not a current library def; the OP-3
+successor design decides its revival), this lets us close popcount/
 ChaCha20-style equivalences by bridging both the SAW emission's foldl
 form (LHS) and the SAW emission's self-referential comprehension form
 (RHS) to the same `Nat.rec` shape. Concrete-width bitvector work still

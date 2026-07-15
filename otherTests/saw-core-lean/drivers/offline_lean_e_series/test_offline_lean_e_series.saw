@@ -80,8 +80,9 @@ fails (prove_print (offline_lean "test_offline_lean_e_series.E7")
 //
 // Stated at width 4 (not 32) to keep both the SAW translation
 // and the Lean discharge tractable. The width-4 form still
-// exercises the BoundedVecFold lowering (Phase 5 Slice B) on
-// the naive side and ordinary `foldl` on the spec side.
+// exercises the proof-carrying fixed-point lowering (the
+// recurrence-class obligation path) on the naive side and
+// ordinary `foldl` on the spec side.
 //
 // Discharge strategy: SMT can decide width-4 by enumeration; the
 // Lean proof either (a) closes by `decide`/`native_decide` if the

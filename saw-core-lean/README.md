@@ -37,10 +37,11 @@ What's punted (with diagnostics — translator refuses cleanly):
   diagnostic.
 - Universe-polymorphic terms (`(t : sort 1) → …`) — refused with
   `polymorphismResidual`.
-- Native `Lean.BitVec` binding (currently `bitvector n := Vec n
-  Bool`, with `bv*` operations as axioms; non-bv axioms like `gen`
-  / `atWithDefault` get structural definitions in Phase 8 per the
-  revised plan).
+- Native `Lean.BitVec` as the `bitvector` TYPE (currently
+  `bitvector n := Vec n Bool`; the `bv*` operations are real
+  `noncomputable def`s routing through `Lean.BitVec` via the
+  `vecToBitVec`/`bitVecToVec` round trip — the two round-trip
+  axioms are the documented trusted base).
 - **Class-dictionary primitives (`PCmp`, `PEq`, `PRing`,
   `PIntegral`, `PArith`, `PLogic`, …).** Cryptol's class
   dictionaries currently translate as bare SAWCore identifiers
@@ -67,13 +68,16 @@ Top-level docs are the **current** as-of-today reference:
   — auditor-facing index of inherited-trust assumptions (what
   the translator trusts but doesn't itself test, organized by
   category).
-- [`doc/2026-05-05_long-term-plan.md`](doc/2026-05-05_long-term-plan.md)
-  — current plan-of-record (case-study-driven). Supersedes the two
-  Phase-organized May-02 plans (`2026-05-02_post-audit-plan.md`
-  and `2026-05-02_revised-plan.md`), which remain in `doc/archive/`
-  as historical accounts of work shipped.
+- [`doc/2026-07-14_release-plan.md`](doc/2026-07-14_release-plan.md)
+  — current plan-of-record: the 0.01 (coherence) / 0.02 (coverage)
+  release plan. Earlier plans-of-record
+  (`2026-05-05_long-term-plan.md` and the two Phase-organized
+  May-02 plans) remain in `doc/archive/` as historical accounts of
+  work shipped.
 
-For independent audit reports, see [`doc/audit/`](doc/audit/).
+Historical audit reports live in `doc/archive/` alongside the plans
+they audited; the current audit is
+[`doc/2026-07-14_release-audit.md`](doc/2026-07-14_release-audit.md).
 
 For the trajectory of how the project got here (failed P4 / P6
 attempts, the specialization-mode pivot), see
