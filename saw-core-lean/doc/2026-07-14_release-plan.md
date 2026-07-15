@@ -104,10 +104,50 @@ In execution order (TODO.md tracks per-item state):
    CONFORMANCE.md inventory) with the 0.01 limitation statement in
    one place.
 
+7. **Worked-example slate (added 2026-07-15, user-directed):** show
+   that real SAWScript proofs usefully discharge through the Lean
+   backend — examples framed as verification workflows, not harness
+   fixtures. Precondition (DONE 2026-07-15): the existing corpus is
+   in honest state — 33 live discharging rows, 7 pinned proof-gaps
+   with accurate GAP.md notes (5 recurrence-class, 2 BV-trust-
+   policy), no dead pointers. The slate, in release-narrative order:
+   1. **Mixed-solver flagship**: one `llvm_verify` script where most
+      obligations close via SMT (`w4`) and one hard goal is punted
+      to `offline_lean` and discharged in Lean — the honest 0.1
+      product story ("Lean where SMT struggles, SMT elsewhere, one
+      script"). No current row shows the mixed workflow.
+   2. **Wide-bitvector algebraic property** (`[256]`+/`[384]`):
+      painful for bit-blasting, closed in Lean by named lemmas
+      under the trust policy (no `bv_decide`). Doubles as progress
+      toward unparking the two BV-policy proof-gaps
+      (`llvm_{chacha20,salsa20}_q_eq`).
+   3. **Memory-safety exercise port** (from `exercises/
+      memory-safety`): a points-to goal through `offline_lean`,
+      discharged — the Crucible→Lean path on teaching material.
+   4. **Sequence-surgery property** (`update`/`slice` round-trip):
+      deliberately routes the `updWithProof_checkedM`/
+      `sliceWithProof_checkedM` family, closing part of the
+      zero-coverage-helper gap as a side effect.
+   5. **`Z n` / `IntMod` arithmetic property**: end-to-end coverage
+      for a surface that has emitter wiring but no worked example.
+   Definition of done per example: `.saw` script (emission-only,
+   `fails`-wrapped), emitted artifact elaborates, `proof.lean`
+   discharges sorry-free under the axiom policy, wired as a
+   `proofs/` (or driver+proofs) row, plus a short section in a
+   worked-examples doc. An example that hits a coverage bug gets
+   pinned per the hard requirement and becomes named 0.02 backlog;
+   one that hits a documented rejection maps the fragment edge and
+   is reported as such.
+
 Explicitly NOT in 0.01: OP-3 implementation, Stream/Either
 translation paths, direct-recursor PosRep work, proof-primitive
 realizations, user datatypes, SAW-side `offline_lean` replay,
 SHA512 stretch. All tracked for 0.02+ in TODO.md.
+
+Slate sequencing default: item 1 (the mixed-solver flagship) is the
+minimum release bar for the "usefully discharges SAWScript proofs"
+claim; items 2–5 land as they succeed and roll into 0.02 backlog
+otherwise.
 
 ## 0.01 exit criteria
 
@@ -120,3 +160,7 @@ SHA512 stretch. All tracked for 0.02+ in TODO.md.
   State is literally true).
 - Known-gap census stated in STATUS.md with the tier breakdown
   (sound-but-undischargeable / clean rejections / workflow scope).
+  [DONE 2026-07-15.]
+- Worked-example slate: at least the mixed-solver flagship
+  discharged end-to-end (workstream 7); remaining slate items
+  landed or explicitly rolled to 0.02.
