@@ -1,4 +1,5 @@
-# Shared harness for otherTests/saw-core-lean/shape/*/ "shape" tests.
+# Shared harness for otherTests/saw-core-lean/attacks/*/ negative probes
+# (category renamed from "shape/" in the 2026-07-15 restructure).
 #
 # These exercise axiom-shape invariants by running Lean's elaborator
 # on small hand-written probes. File naming is the entire contract:

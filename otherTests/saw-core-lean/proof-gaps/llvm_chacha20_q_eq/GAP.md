@@ -1,7 +1,7 @@
 # Proof Gap: LLVM ChaCha20 Quarterround
 
 This directory preserves a proof attempt for
-`drivers/llvm_chacha20_q_verify`. It is a BV-heavy stress/proof gap, not an
+`workflows/llvm_chacha20_q_verify`. It is a BV-heavy stress/proof gap, not an
 accepted proof-backend regression.
 
 The proof compares the LLVM quarterround output with the Cryptol specification.

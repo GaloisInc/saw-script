@@ -1,7 +1,7 @@
 /-
 t6: two-element sequence equals reverse of the swapped pair over [2][8].
 
-Source: drivers/offline_lean/test_offline_lean.t6_prove0.lean
+Source: workflows/offline_lean/test_offline_lean.t6_prove0.lean
 Cryptol property: \(x : [8]) (y : [8]) -> [x, y] == reverse [y, x]
 
 Current proof-carrying emission: the reverse indexing goes through

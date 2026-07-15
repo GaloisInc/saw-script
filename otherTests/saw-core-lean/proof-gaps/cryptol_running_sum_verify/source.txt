@@ -1,1 +1,1 @@
-otherTests/saw-core-lean/drivers/cryptol_running_sum_verify/test_cryptol_running_sum_verify.eq_prove0.lean
+otherTests/saw-core-lean/workflows/cryptol_running_sum_verify/test_cryptol_running_sum_verify.eq_prove0.lean

@@ -1,6 +1,6 @@
 # Proof Gap: LLVM Popcount (Hacker's Delight vs recursive spec)
 
-The `drivers/llvm_popcount_verify` row emits the obligation comparing
+The `workflows/llvm_popcount_verify` row emits the obligation comparing
 the C bit-twiddling `pop_count` against the Cryptol `popCount` spec.
 The spec is the self-referential comprehension
 

@@ -530,7 +530,7 @@ doc for per-slice regression fences and bounded validation commands):
     `IndexArg` slot is sequenced through an error-preserving `Bind.bind`
     with the bound RAW variable consumed by both the bounds proposition and
     the checked helper (application order). **Fixes the live specimen**
-    `drivers/llvm_chacha20_core_verify` (previously: wrapped shared index
+    `workflows/llvm_chacha20_core_verify` (previously: wrapped shared index
     passed raw into `LT.lt`/`atWithProof_checkedM`, did not elaborate) —
     now green end-to-end; goldens refreshed to the corrected emission.
     New fast fence row `obligations/vector_at_runtime_index` pins the

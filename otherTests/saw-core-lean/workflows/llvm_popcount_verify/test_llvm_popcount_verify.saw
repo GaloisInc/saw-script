@@ -23,7 +23,7 @@
 // popcount.bc. Popcount.cry lives at exercises/.../popcount/ and
 // is referenced directly. Rebuild with:
 //
-//   cd otherTests/saw-core-lean/drivers/llvm_popcount_verify
+//   cd otherTests/saw-core-lean/workflows/llvm_popcount_verify
 //   clang -c -g -O0 -emit-llvm \
 //     -o popcount.bc \
 //     ../../../../exercises/functional-correctness/popcount/popcount.c

@@ -1,1 +1,1 @@
-otherTests/saw-core-lean/drivers/offline_lean_e_series/test_offline_lean_e_series.E3_prove0.lean
+otherTests/saw-core-lean/workflows/offline_lean_e_series/test_offline_lean_e_series.E3_prove0.lean

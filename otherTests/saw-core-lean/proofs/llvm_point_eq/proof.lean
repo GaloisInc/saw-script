@@ -8,11 +8,11 @@ Lean backend as the prover for one obligation:
        │
        │  llvm_verify against Cryptol's `point_eq`
        ▼
-  drivers/llvm_point_verify/test_llvm_point_verify.saw
+  workflows/llvm_point_verify/test_llvm_point_verify.saw
        │
        │  (offline_lean) emits the equivalence obligation
        ▼
-  drivers/llvm_point_verify/test_llvm_point_verify.point_eq_return_value_matching0.lean
+  workflows/llvm_point_verify/test_llvm_point_verify.point_eq_return_value_matching0.lean
        │
        │  this file imports Emitted and discharges
        ▼

@@ -9,7 +9,7 @@
 // backend is meant to support: LLVM impl ↔ Cryptol spec
 // equivalence, with Lean as the prover for one step.
 //
-// Pinned by drivers/llvm_point_verify/ (this directory) +
+// Pinned by workflows/llvm_point_verify/ (this directory) +
 // proofs/llvm_point_eq/ (the discharge).
 //
 // Sources: this dir contains only the .saw script and the
@@ -18,7 +18,7 @@
 // exercises/functional-correctness/point/ — we reference Point.cry
 // directly from there, and rebuild point.bc when needed via:
 //
-//   cd otherTests/saw-core-lean/drivers/llvm_point_verify
+//   cd otherTests/saw-core-lean/workflows/llvm_point_verify
 //   clang -c -g -O0 -emit-llvm \
 //     -o point.bc \
 //     ../../../../exercises/functional-correctness/point/point.c
@@ -53,7 +53,7 @@ let point_eq_spec = do {
 //
 // Instead of (w4_unint_z3 []) we use (offline_lean "...") which
 // emits the proof obligation as
-//   drivers/llvm_point_verify/test_llvm_point_verify.point_eq_prove0.lean
+//   workflows/llvm_point_verify/test_llvm_point_verify.point_eq_prove0.lean
 // containing a `goal : Prop` def + a `theorem ... := by sorry`
 // stub. The discharge lives in proofs/llvm_point_eq/proof.lean.
 fails (llvm_verify m "point_eq" [] true

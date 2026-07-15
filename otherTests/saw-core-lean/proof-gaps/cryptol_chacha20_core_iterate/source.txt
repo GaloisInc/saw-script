@@ -1,1 +1,1 @@
-otherTests/saw-core-lean/drivers/cryptol_chacha20_core_iterate/test_cryptol_chacha20_core_iterate.eq_prove0.lean
+otherTests/saw-core-lean/saw-boundary/cryptol_chacha20_core_iterate/test_cryptol_chacha20_core_iterate.eq_prove0.lean

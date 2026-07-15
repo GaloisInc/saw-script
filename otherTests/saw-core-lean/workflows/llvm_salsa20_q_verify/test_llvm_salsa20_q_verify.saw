@@ -19,7 +19,7 @@
 // exercises/functional-correctness/salsa20/ — we reference Salsa20.cry
 // and the common/helpers.saw helper directly. Rebuild salsa20.bc with:
 //
-//   cd otherTests/saw-core-lean/drivers/llvm_salsa20_q_verify
+//   cd otherTests/saw-core-lean/workflows/llvm_salsa20_q_verify
 //   clang -c -g -O0 -emit-llvm \
 //     -o salsa20.bc \
 //     ../../../../exercises/functional-correctness/salsa20/salsa20.c

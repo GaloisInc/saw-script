@@ -150,7 +150,7 @@ Instance resolution is grep-invisible: remove + full rebuild to verify.
 
 ## E. Corpus prose fossils (doc-only edits)
 
-- `drivers/offline_lean_e_series/….saw:83` "BoundedVecFold lowering
+- `workflows/offline_lean_e_series/….saw:83` "BoundedVecFold lowering
   (Phase 5 Slice B)" — era-1 names in a live comment.
 - `drivers/cryptol_module_salsa20_q/….saw:1,3` — era-1 phase
   numbering.

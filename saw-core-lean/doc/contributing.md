@@ -22,7 +22,7 @@ What it covers (all five steps must pass):
   2. Build the CryptolToLean Lean support library (`lake build`).
   3. Run Haskell-side translator invariants
      (`cabal test saw-core-lean-smoketest`) — pins L-1..L-17.
-  4. Run Lean-side driver/proof/shape/saw-boundary tests
+  4. Run Lean-side driver/workflow/proof/attack/saw-boundary tests
      (`cabal test saw-core-lean-tests`) — pins emission shape,
      proof discharges, axiom signatures.
   5. Run general SAW integration tests
@@ -62,16 +62,20 @@ Three pieces:
    , ("bvNewOp", mapsTo sawCorePrimitivesModule "bvNewOp")
    ```
 
-2. **A matching axiom or definition** in
+2. **A matching DEFINITION** in
    `saw-core-lean/lean/CryptolToLean/SAWCorePrimitives.lean`
-   (or a more specific support module). The axiom's signature
-   must exactly match SAW's. Cite the SAW Prelude line in a
-   docstring.
+   (or a more specific support module), semantically equivalent to
+   the SAWCore source, with the SAW Prelude line cited in a
+   docstring. The trusted base is exactly the two documented
+   Vec/BitVec round-trip axioms — a new `axiom` is a TCB expansion
+   and needs explicit sign-off plus a STATUS.md entry; every
+   current `bv*` op is a real def over `Lean.BitVec`.
 
    ```lean
    /-- SAWCore `bvNewOp w x y` — does <thing>.
    See Prelude.sawcore:NNN. -/
-   axiom bvNewOp : (w : Nat) → Vec w Bool → Vec w Bool → Vec w Bool
+   noncomputable def bvNewOp (w : Nat) (x y : Vec w Bool) : Vec w Bool :=
+     bitVecToVec (BitVec.newOp (vecToBitVec x) (vecToBitVec y))
    ```
 
 3. **Replace any explicit `reject` entry** in
@@ -173,10 +177,10 @@ file, the framework also runs `lake env lean` on each emitted
 `.lean`.
 
 **Lean-only** (for tests that exercise the support library
-directly, no SAW involvement): an `otherTests/saw-core-lean/{shape,proofs}/*`
+directly, no SAW involvement): an `otherTests/saw-core-lean/{attacks,proofs}/*`
 directory with a bespoke `test.sh` that runs `lake env lean` on
 probe files. Mirror the existing
-`otherTests/saw-core-lean/shape/error_prop/` or
+`otherTests/saw-core-lean/attacks/error_prop/` or
 `otherTests/saw-core-lean/proofs/walkthrough/`
 patterns.
 
@@ -188,7 +192,7 @@ walkthrough). For a regression test:
 
 1. Add `otherTests/saw-core-lean/proofs/offline_<name>/` with a
    `proof.lean` that copies the goal from
-   `otherTests/saw-core-lean/test_offline_lean.<name>_prove0.lean.good`
+   `otherTests/saw-core-lean/workflows/offline_lean/test_offline_lean.<name>_prove0.lean.good`
    verbatim and replaces the `by sorry` with a real tactic proof.
 2. The proof can use lemmas from
    `CryptolToLean.SAWCoreBitvectorsProofs` (bv axioms),

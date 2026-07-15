@@ -1,7 +1,7 @@
 /-
 t7: implication chain over Bit — (a ==> b) && (b ==> c) ==> (a ==> c).
 
-Source: drivers/offline_lean/test_offline_lean.t7_prove0.lean
+Source: workflows/offline_lean/test_offline_lean.t7_prove0.lean
 
 Finite Bool property emitted as nested `iteM` over pure booleans;
 case split on all three variables and reduce (the walkthrough pattern).

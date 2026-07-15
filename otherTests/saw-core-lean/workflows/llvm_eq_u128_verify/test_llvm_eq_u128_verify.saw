@@ -16,7 +16,7 @@
 // u128.bc. The canonical u128.c lives at exercises/.../u128/.
 // Rebuild u128.bc with:
 //
-//   cd otherTests/saw-core-lean/drivers/llvm_eq_u128_verify
+//   cd otherTests/saw-core-lean/workflows/llvm_eq_u128_verify
 //   clang -c -g -O0 -emit-llvm \
 //     -o u128.bc \
 //     ../../../../exercises/functional-correctness/u128/u128.c

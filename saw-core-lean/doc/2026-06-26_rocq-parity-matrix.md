@@ -43,7 +43,7 @@ top of the parity baseline; it must not blur whether Rocq parity itself is done.
 | `test_sequences.saw` | `drivers/sequences/test_sequences.saw` | Mirrored; update variants, comprehension, and transpose now elaborate and pass. | Keep under broad validation. |
 | `test_tuples.saw` | `drivers/tuples/test_tuples.saw` | Mirrored. | Keep under broad validation. |
 | `test_typelevel.saw` | `drivers/typelevel/test_typelevel.saw` | Mirrored. | Keep under broad validation. |
-| `test_offline_rocq.saw` | `drivers/offline_lean/test_offline_lean.saw` | Mirrored after adding Rocq reverse-vector and implication-chain properties; focused driver elaborates and passes. Lean also retains an extra tuple-projection proof-obligation case. | Keep under broad validation. |
+| `test_offline_rocq.saw` | `workflows/offline_lean/test_offline_lean.saw` | Mirrored after adding Rocq reverse-vector and implication-chain properties; focused driver elaborates and passes. Lean also retains an extra tuple-projection proof-obligation case. | Keep under broad validation. |
 | `test_prelude.saw` | `drivers/sawcore_prelude_auto_emit/test_sawcore_prelude_auto_emit.saw` | Mirrored for SAWCore Prelude emission and elaboration. | Keep as P0 validation. |
 | `test_cryptol_primitives.saw` | `drivers/cryptol_primitives_auto_emit/test_cryptol_primitives_auto_emit.saw` | Mirrored; emitted Lean elaborates. | Keep under broad validation. |
 | `test_cryptol_module_simple.saw` | `drivers/cryptol_module_simple/test_cryptol_module_simple.saw` | Mirrored and elaborated. | Keep under broad validation. |

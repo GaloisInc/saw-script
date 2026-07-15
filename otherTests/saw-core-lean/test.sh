@@ -9,6 +9,13 @@
 #                          CryptolToLean Lake project. Catches translator
 #                          regressions in shape AND in elaboration.
 #
+#   workflows/<name>/      Same harness as drivers/, but the rows are the
+#                          RELEASE STORY: end-to-end SAWScript verification
+#                          workflows (llvm_verify / prove_print punting
+#                          goals through emission-only offline_lean), with
+#                          discharges tracked in proofs/ and honest gaps
+#                          in proof-gaps/. See README.md for the taxonomy.
+#
 #   drivers/conformance_*/ LEGACY LITMUS CANDIDATES, NOT TRUE DIFFERENTIAL
 #                          CONFORMANCE. These directories contain many useful
 #                          small terms, but most only combine SAW-side proof,
@@ -54,7 +61,7 @@
 #                          verb inventory these directories so they cannot
 #                          become invisible skipped tests.
 #
-#   shape/<name>/          Hand-rolled NEGATIVE Lean probes
+#   attacks/<name>/        Hand-rolled NEGATIVE Lean probes
 #                          (*.shouldfail.lean) that pin support-library
 #                          axiom shapes. These exist because attacks
 #                          fundamentally require hand-rolled malicious
@@ -254,13 +261,14 @@ run_one() {
 
 # Iterate categories in a fixed order so the output is deterministic.
 iterate_drivers()       { for d in drivers/*/;       do run_one drivers       "$(basename "$d")" lean-driver-test.sh "$@"; done; }
+iterate_workflows()     { for d in workflows/*/;     do run_one workflows     "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_conformance_drivers() { for d in drivers/conformance_*/; do run_one drivers "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_differential()  { for d in differential/*/;  do run_one differential  "$(basename "$d")" lean-differential-test.sh "$@"; done; }
 iterate_obligations()   { for d in obligations/*/;   do run_one obligations   "$(basename "$d")" lean-obligation-test.sh "$@"; done; }
 iterate_saw_boundary()  { for d in saw-boundary/*/;  do run_one saw-boundary  "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_proofs()        { for d in proofs/*/;        do run_one proofs        "$(basename "$d")" lean-proof-test.sh   "$@"; done; }
 iterate_support_proofs() { for d in support-proofs/*/; do run_one support-proofs "$(basename "$d")" lean-proof-test.sh "$@"; done; }
-iterate_shape()         { for d in shape/*/;         do run_one shape         "$(basename "$d")" lean-shape-test.sh   "$@"; done; }
+iterate_attacks()       { for d in attacks/*/;       do run_one attacks       "$(basename "$d")" lean-shape-test.sh   "$@"; done; }
 
 record_gap_inventory_item() {
     local path="$1"
@@ -303,12 +311,13 @@ shopt -s nullglob
 case "$verb" in
     test|run)
         iterate_drivers
+        iterate_workflows
         iterate_differential
         iterate_obligations
         iterate_saw_boundary
         iterate_proofs
         iterate_support_proofs
-        iterate_shape
+        iterate_attacks
         iterate_gap_inventory
         print_summary_and_exit
         ;;
@@ -330,6 +339,7 @@ case "$verb" in
     good)
         # Refresh .good files. Only drivers and saw-boundary have them.
         iterate_drivers good
+        iterate_workflows good
         iterate_saw_boundary good
         print_summary_and_exit
         ;;
@@ -339,12 +349,13 @@ case "$verb" in
         ;;
     clean)
         iterate_drivers clean
+        iterate_workflows clean
         iterate_differential clean
         iterate_obligations clean
         iterate_saw_boundary clean
         iterate_proofs clean
         iterate_support_proofs clean
-        iterate_shape clean
+        iterate_attacks clean
         print_summary_and_exit
         ;;
     *)

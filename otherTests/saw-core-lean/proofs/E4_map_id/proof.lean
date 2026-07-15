@@ -1,7 +1,7 @@
 /-
 E4: map of (+0) is identity over [4][32].
 
-Source: drivers/offline_lean_e_series/test_offline_lean_e_series.E4_prove0.lean
+Source: workflows/offline_lean_e_series/test_offline_lean_e_series.E4_prove0.lean
 Cryptol property: \(xs : [4][32]) -> map (\x -> x + 0) xs == xs
 
 Current proof-carrying emission: the map and the equality fold both go

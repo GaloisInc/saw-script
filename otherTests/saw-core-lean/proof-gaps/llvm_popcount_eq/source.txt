@@ -1,1 +1,1 @@
-otherTests/saw-core-lean/drivers/llvm_popcount_verify/test_llvm_popcount_verify.pop_count_return_value_matching0.lean
+otherTests/saw-core-lean/workflows/llvm_popcount_verify/test_llvm_popcount_verify.pop_count_return_value_matching0.lean

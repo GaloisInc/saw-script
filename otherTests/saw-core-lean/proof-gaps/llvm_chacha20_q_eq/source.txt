@@ -1,1 +1,1 @@
-otherTests/saw-core-lean/drivers/llvm_chacha20_q_verify/test_llvm_chacha20_q_verify.chacha20_qround_LLVM_points-to0.lean
+otherTests/saw-core-lean/workflows/llvm_chacha20_q_verify/test_llvm_chacha20_q_verify.chacha20_qround_LLVM_points-to0.lean

@@ -1,7 +1,7 @@
 /-
 E5: vector reverse is self-inverse over [4][8] (littleendian shape).
 
-Source: drivers/offline_lean_e_series/test_offline_lean_e_series.E5_prove0.lean
+Source: workflows/offline_lean_e_series/test_offline_lean_e_series.E5_prove0.lean
 Cryptol property: \(xs : [4][8]) -> reverse (reverse xs) == xs
 
 Current proof-carrying emission: reverse indexing goes through

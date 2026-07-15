@@ -1,7 +1,7 @@
 # Proof Gap: LLVM Salsa20 Quarterround
 
 This directory preserves a proof attempt for
-`drivers/llvm_salsa20_q_verify`. It is a BV-heavy stress/proof gap, not an
+`workflows/llvm_salsa20_q_verify`. It is a BV-heavy stress/proof gap, not an
 accepted proof-backend regression.
 
 The proof uses checked bridge lemmas to reduce the emitted vector-side

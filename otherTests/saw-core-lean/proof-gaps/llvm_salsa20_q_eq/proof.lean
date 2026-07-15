@@ -9,7 +9,7 @@ native-evaluation axioms are not accepted for completed proof discharge.
 Pure-bv-arith case study (rotations + XOR + add over 32-bit
 words, no comprehension recursion). Discharges ONE of four
 emitted goals from
-  drivers/llvm_salsa20_q_verify/test_llvm_salsa20_q_verify.saw —
+  workflows/llvm_salsa20_q_verify/test_llvm_salsa20_q_verify.saw —
   specifically points-to3 (Cryptol-side index 0).
 
 The other three positions (points-to0/1/2) are the same shape

@@ -1,1 +1,1 @@
-otherTests/saw-core-lean/drivers/llvm_point_verify/test_llvm_point_verify.point_eq_return_value_matching0.lean
+otherTests/saw-core-lean/workflows/llvm_point_verify/test_llvm_point_verify.point_eq_return_value_matching0.lean

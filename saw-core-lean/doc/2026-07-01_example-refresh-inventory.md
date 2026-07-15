@@ -41,14 +41,14 @@ The current full-suite failures are:
 - `drivers/cryptol_module_salsa20_q`
 - `drivers/cryptol_module_simple`
 - `drivers/cryptol_polymorphic_class_dict`
-- `drivers/cryptol_running_sum_verify`
+- `workflows/cryptol_running_sum_verify`
 - `drivers/implRev4`
-- `drivers/llvm_chacha20_core_verify`
-- `drivers/llvm_chacha20_q_verify`
-- `drivers/llvm_eq_u128_verify`
-- `drivers/llvm_popcount_verify`
-- `drivers/llvm_salsa20_q_verify`
-- `drivers/offline_lean_popcount32`
+- `workflows/llvm_chacha20_core_verify`
+- `workflows/llvm_chacha20_q_verify`
+- `workflows/llvm_eq_u128_verify`
+- `workflows/llvm_popcount_verify`
+- `workflows/llvm_salsa20_q_verify`
+- `workflows/offline_lean_popcount32`
 - `drivers/sequences`
 
 Observed failure families:
@@ -124,22 +124,22 @@ the row is already handled or still needs refresh, reduction, or movement.
 | `drivers/cryptol_module_stream_fibs` | `current-emission` | Focused driver passes; current artifact elaborates with explicit stream totality and fixed-point uniqueness obligations. | `obligations/mkstream_total`, `obligations/fix_wrapped_unique`, stream totality rows. | Keep as proof-carrying stream/fix emission smoke. Do not count as proof discharge, and do not hide the remaining local proof placeholders. |
 | `drivers/cryptol_polymorphic_class_dict` | `current-emission` | Focused driver passes after the raw/wrapped recursor convention. | `differential/cryptol_vector_eq_dictionary`, `obligations/recursor_wrapped_scrutinee_function_result_error_propagates`. | Keep as target whole-module regression for polymorphic class dictionaries. |
 | `drivers/cryptol_primitives_auto_emit` | `current-emission` | Full suite passed. | Command-level Rocq parity. | Keep. |
-| `drivers/cryptol_running_sum_verify` | `proof-gap` | Full suite failed; explicit gap note exists. | `proof-gaps/cryptol_running_sum_verify`; generic fix/proof-carrying recurrence surface. | Keep as proof gap; do not restore deleted recurrence helpers. |
+| `workflows/cryptol_running_sum_verify` | `proof-gap` | Full suite failed; explicit gap note exists. | `proof-gaps/cryptol_running_sum_verify`; generic fix/proof-carrying recurrence surface. | Keep as proof gap; do not restore deleted recurrence helpers. |
 | `drivers/eqBool` | `current-emission` | Full suite passed. | Small proof-obligation emission. | Keep. |
 | `drivers/idBool` | `current-emission` | Full suite passed. | Small proof-obligation emission. | Keep. |
 | `drivers/implRev4` | `current-emission` | Focused driver passes after the prefix-partial checked-access convention. Current emission uses `genWithBoundsM`, eta-expanded partial `at` wrappers, visible `i < n` obligations, and `atWithProof_checkedM`; no raw/defaulting fallback remains. | `obligations/vector_at_partial_function`; higher-order proof-carrying wrapper slice. | Keep as current-emission proof-carrying smoke. Do not count local `by sorry` bounds obligations as proof discharge. |
 | `drivers/lambda` | `current-emission` | Full suite passed. | `differential/core_lambda`. | Keep. |
 | `drivers/literalNat` | `current-emission` | Full suite passed. | Nat literal/macro emission. | Keep. |
 | `drivers/literals` | `current-emission` | Full suite passed. | Literal rows. | Keep. |
-| `drivers/llvm_chacha20_core_verify` | `stress` | Full suite failed with large checked bounds diffs. | Proof gap/stress; no conformance-large promotion. | Keep stress; mine small blockers only. |
-| `drivers/llvm_chacha20_q_verify` | `stress` | Full suite failed; proof gap exists. | `proof-gaps/llvm_chacha20_q_eq`. | Keep stress/proof gap. |
-| `drivers/llvm_eq_u128_verify` | `stress` | Full suite failed with large checked bounds diffs. | Bounds proof support, not Haskell automation. | Keep stress unless small blocker extracted. |
-| `drivers/llvm_point_verify` | `current-proof` | Full suite passed; proof `llvm_point_eq` passed. | `proofs/llvm_point_eq`. | Keep as canonical proof-backend example. |
-| `drivers/llvm_popcount_verify` | `stress` | Full suite failed. | BV-heavy proof obligations. | Keep stress; no `bv_decide`. |
-| `drivers/llvm_salsa20_q_verify` | `stress` | Full suite failed; proof gap exists. | `proof-gaps/llvm_salsa20_q_eq`. | Keep stress/proof gap. |
-| `drivers/offline_lean` | `current-proof` | All seven properties have current proof examples. `t6` closed 2026-07-12 via the completed-outline workflow (derived `subNat` bounds evidence via `omega`); `t7` closed 2026-07-12 with the Bool case-split pattern. | `proofs/offline_t1`, `offline_t3`, `offline_t4`, `offline_t6`, `offline_t7`, `tuple_fst`, `walkthrough`; `differential/sequence_append_reverse`. | Keep. |
-| `drivers/offline_lean_e_series` | `current-emission` | Focused driver passes after reviewed golden refresh. E1/E2/E3/E4/E5/E7 pass as current proof examples (E4/E5 promoted 2026-07-12 via the completed-outline workflow); E6 remains current emission/stress coverage with fix and bounds obligations. | `proofs/E*_`; `differential/record_projection_binder`. | Keep. |
-| `drivers/offline_lean_popcount32` | `stress` | Full suite failed; explicit gap note exists. | `proof-gaps/offline_lean_popcount32`; BV-heavy popcount proof surface. | Keep stress/proof gap; no native-eval proof shortcuts. |
+| `workflows/llvm_chacha20_core_verify` | `stress` | Full suite failed with large checked bounds diffs. | Proof gap/stress; no conformance-large promotion. | Keep stress; mine small blockers only. |
+| `workflows/llvm_chacha20_q_verify` | `stress` | Full suite failed; proof gap exists. | `proof-gaps/llvm_chacha20_q_eq`. | Keep stress/proof gap. |
+| `workflows/llvm_eq_u128_verify` | `stress` | Full suite failed with large checked bounds diffs. | Bounds proof support, not Haskell automation. | Keep stress unless small blocker extracted. |
+| `workflows/llvm_point_verify` | `current-proof` | Full suite passed; proof `llvm_point_eq` passed. | `proofs/llvm_point_eq`. | Keep as canonical proof-backend example. |
+| `workflows/llvm_popcount_verify` | `stress` | Full suite failed. | BV-heavy proof obligations. | Keep stress; no `bv_decide`. |
+| `workflows/llvm_salsa20_q_verify` | `stress` | Full suite failed; proof gap exists. | `proof-gaps/llvm_salsa20_q_eq`. | Keep stress/proof gap. |
+| `workflows/offline_lean` | `current-proof` | All seven properties have current proof examples. `t6` closed 2026-07-12 via the completed-outline workflow (derived `subNat` bounds evidence via `omega`); `t7` closed 2026-07-12 with the Bool case-split pattern. | `proofs/offline_t1`, `offline_t3`, `offline_t4`, `offline_t6`, `offline_t7`, `tuple_fst`, `walkthrough`; `differential/sequence_append_reverse`. | Keep. |
+| `workflows/offline_lean_e_series` | `current-emission` | Focused driver passes after reviewed golden refresh. E1/E2/E3/E4/E5/E7 pass as current proof examples (E4/E5 promoted 2026-07-12 via the completed-outline workflow); E6 remains current emission/stress coverage with fix and bounds obligations. | `proofs/E*_`; `differential/record_projection_binder`. | Keep. |
+| `workflows/offline_lean_popcount32` | `stress` | Full suite failed; explicit gap note exists. | `proof-gaps/offline_lean_popcount32`; BV-heavy popcount proof surface. | Keep stress/proof gap; no native-eval proof shortcuts. |
 | `drivers/records` | `current-emission` | Full suite passed. | `differential/record_*`. | Keep. |
 | `drivers/sawcore_prelude_auto_emit` | `current-emission` | Focused driver passes after recursor motive-shape fix; no golden refresh needed. | Prelude auto-emit convention; opaque type-family motives stay raw. | Keep as regression for higher-sort recursor motives. |
 | `drivers/sequences` | `current-emission` | Focused driver passes after reviewed checked-bounds golden refresh. The former `t18` higher-order wrapped-function application failure in `foldl (+)` elaborates under the 2026-07-03 value-function convention; remaining changed artifacts expose `genWithBoundsM`, `atWithProof_checkedM`, and local bounds obligations as current proof-carrying emission. | `differential/sequence_*`, branch/derived-bounds gaps, `differential/vector_fold`. | Keep as current-emission smoke. Do not count local `by sorry` obligations as proof discharge. |
@@ -150,22 +150,22 @@ the row is already handled or still needs refresh, reduction, or movement.
 
 | Path | Classification | Evidence | Linked source | Action |
 | --- | --- | --- | --- | --- |
-| `proofs/E1_bvAdd_comm` | `current-proof` | Proof passed axiom audit. | `drivers/offline_lean_e_series/E1`. | Keep. |
-| `proofs/E2_iteDep_refl` | `current-proof` | Proof passed axiom audit. | `drivers/offline_lean_e_series/E2`. | Keep. |
-| `proofs/E3_point_commutes` | `current-proof` | Proof passed after the record-projection binder shape bug was reduced to and fixed under `differential/record_projection_binder`. | `drivers/offline_lean_e_series/E3`. | Keep. |
-| `proofs/E4_map_id` | `current-proof` | Promoted from `proof-gaps/` 2026-07-12. `completed.lean` closes the embedded direct `h_bounds_` evidence by `assumption`; the outer proof unfolds the checked helpers and passes the axiom audit. | `drivers/offline_lean_e_series/E4`. | Keep. |
-| `proofs/E5_littleendian` | `current-proof` | Promoted from `proof-gaps/` 2026-07-12. `completed.lean` closes derived `subNat 3 i` bounds evidence with `simp only [macros, subNat, Nat.sub_eq]; omega`; the outer proof collapses the double reverse and passes the axiom audit. | `drivers/offline_lean_e_series/E5`. | Keep. |
-| `proofs/E7_wide_assoc` | `current-proof` | Proof passed axiom audit. | `drivers/offline_lean_e_series/E7`. | Keep. |
-| `proofs/completed_outline_smoke` | `current-proof` | Proof passed axiom audit against generated-outline fixture. | `drivers/offline_lean/t1`. | Keep as harness smoke. |
-| `proofs/llvm_point_eq` | `current-proof` | Proof passed axiom audit. | `drivers/llvm_point_verify`. | Keep as canonical end-to-end proof example. |
-| `proofs/offline_t1` | `current-proof` | Proof passed axiom audit. | `drivers/offline_lean/t1`. | Keep. |
-| `proofs/offline_t3` | `current-proof` | Proof passed axiom audit. | `drivers/offline_lean/t3`. | Keep. |
-| `proofs/offline_t4` | `current-proof` | Proof passed axiom audit. | `drivers/offline_lean/t4`. | Keep. |
-| `proofs/offline_t6` | `current-proof` | Added 2026-07-12. Completed outline discharges derived `subNat` bounds evidence with `omega`; outer proof unfolds checked helpers and passes the axiom audit. | `drivers/offline_lean/t6`. | Keep. |
-| `proofs/offline_t7` | `current-proof` | Added 2026-07-12. Bool case-split pattern; passes the axiom audit. | `drivers/offline_lean/t7`. | Keep. |
+| `proofs/E1_bvAdd_comm` | `current-proof` | Proof passed axiom audit. | `workflows/offline_lean_e_series/E1`. | Keep. |
+| `proofs/E2_iteDep_refl` | `current-proof` | Proof passed axiom audit. | `workflows/offline_lean_e_series/E2`. | Keep. |
+| `proofs/E3_point_commutes` | `current-proof` | Proof passed after the record-projection binder shape bug was reduced to and fixed under `differential/record_projection_binder`. | `workflows/offline_lean_e_series/E3`. | Keep. |
+| `proofs/E4_map_id` | `current-proof` | Promoted from `proof-gaps/` 2026-07-12. `completed.lean` closes the embedded direct `h_bounds_` evidence by `assumption`; the outer proof unfolds the checked helpers and passes the axiom audit. | `workflows/offline_lean_e_series/E4`. | Keep. |
+| `proofs/E5_littleendian` | `current-proof` | Promoted from `proof-gaps/` 2026-07-12. `completed.lean` closes derived `subNat 3 i` bounds evidence with `simp only [macros, subNat, Nat.sub_eq]; omega`; the outer proof collapses the double reverse and passes the axiom audit. | `workflows/offline_lean_e_series/E5`. | Keep. |
+| `proofs/E7_wide_assoc` | `current-proof` | Proof passed axiom audit. | `workflows/offline_lean_e_series/E7`. | Keep. |
+| `proofs/completed_outline_smoke` | `current-proof` | Proof passed axiom audit against generated-outline fixture. | `workflows/offline_lean/t1`. | Keep as harness smoke. |
+| `proofs/llvm_point_eq` | `current-proof` | Proof passed axiom audit. | `workflows/llvm_point_verify`. | Keep as canonical end-to-end proof example. |
+| `proofs/offline_t1` | `current-proof` | Proof passed axiom audit. | `workflows/offline_lean/t1`. | Keep. |
+| `proofs/offline_t3` | `current-proof` | Proof passed axiom audit. | `workflows/offline_lean/t3`. | Keep. |
+| `proofs/offline_t4` | `current-proof` | Proof passed axiom audit. | `workflows/offline_lean/t4`. | Keep. |
+| `proofs/offline_t6` | `current-proof` | Added 2026-07-12. Completed outline discharges derived `subNat` bounds evidence with `omega`; outer proof unfolds checked helpers and passes the axiom audit. | `workflows/offline_lean/t6`. | Keep. |
+| `proofs/offline_t7` | `current-proof` | Added 2026-07-12. Bool case-split pattern; passes the axiom audit. | `workflows/offline_lean/t7`. | Keep. |
 | `proofs/point_shift_property` | `current-proof` | Focused proof harness passes against the current emitted `drivers/cryptol_module_record_update` module. | `drivers/cryptol_module_record_update`. | Keep as generated proof-backend example for record-update behavior. |
-| `proofs/tuple_fst` | `current-proof` | Proof passed axiom audit. | `drivers/offline_lean/t5`. | Keep. |
-| `proofs/walkthrough` | `current-proof` | Proof passed axiom audit. | `drivers/offline_lean/t2`. | Keep. |
+| `proofs/tuple_fst` | `current-proof` | Proof passed axiom audit. | `workflows/offline_lean/t5`. | Keep. |
+| `proofs/walkthrough` | `current-proof` | Proof passed axiom audit. | `workflows/offline_lean/t2`. | Keep. |
 
 ## Support-Proof Inventory
 
@@ -198,12 +198,12 @@ generated proof-backend discharge examples.
 | --- | --- | --- | --- | --- |
 | `proof-gaps/cryptol_chacha20_core_iterate` | `proof-gap` | Explicit local gap note; large crypto proof attempt exceeds practical checked-proof budget. 2026-07-03 probe also shows stale large-artifact drift around checked Nat div/mod helper names, so this is not promotable as a proof example. | `drivers/cryptol_chacha20_core_iterate`. | Keep pinned; no native-eval proof shortcut or heartbeat-only promotion. Refresh/review the large artifact only as stress work, or reduce the Nat div/mod helper drift into a focused litmus before treating it as a backend priority. |
 | `proof-gaps/cryptol_chacha20_iround_zero` | `proof-gap` | Explicit local gap note; large crypto recurrence proof attempt exceeds practical checked-proof budget. | `drivers/cryptol_chacha20_iround_zero`. | Keep pinned; no native-eval proof shortcut or heartbeat-only promotion. |
-| `proof-gaps/cryptol_running_sum_verify` | `proof-gap` | Explicit gap note for the small recurrence proof. | `drivers/cryptol_running_sum_verify`. | Keep pinned; close through later proof-support work for recurrence and bounds obligations. |
-| `proof-gaps/E4_map_id` | closed 2026-07-12 | Promoted to `proofs/E4_map_id` via the completed-outline workflow; gap directory removed. | `drivers/offline_lean_e_series/E4`. | Done. |
-| `proof-gaps/E5_littleendian` | closed 2026-07-12 | Promoted to `proofs/E5_littleendian` via the completed-outline workflow; gap directory removed. | `drivers/offline_lean_e_series/E5`. | Done. |
-| `proof-gaps/llvm_chacha20_q_eq` | `proof-gap` | Explicit local gap note; preserved proof attempt still uses `bv_decide` for quarterround BV equations. | `drivers/llvm_chacha20_q_verify`. | Keep pinned; mine only minimal blockers and do not promote while it depends on native-evaluation proof artifacts. |
-| `proof-gaps/llvm_salsa20_q_eq` | `proof-gap` | Explicit local gap note; preserved proof attempt still uses `bv_decide` for the final Salsa20 BV identity. | `drivers/llvm_salsa20_q_verify`. | Keep pinned; mine only minimal blockers and do not promote while it depends on native-evaluation proof artifacts. |
-| `proof-gaps/offline_lean_popcount32` | `proof-gap` | Explicit gap note for the width-32 popcount recurrence proof. | `drivers/offline_lean_popcount32`. | Keep pinned as stress/proof gap; no native proof shortcuts. |
+| `proof-gaps/cryptol_running_sum_verify` | `proof-gap` | Explicit gap note for the small recurrence proof. | `workflows/cryptol_running_sum_verify`. | Keep pinned; close through later proof-support work for recurrence and bounds obligations. |
+| `proof-gaps/E4_map_id` | closed 2026-07-12 | Promoted to `proofs/E4_map_id` via the completed-outline workflow; gap directory removed. | `workflows/offline_lean_e_series/E4`. | Done. |
+| `proof-gaps/E5_littleendian` | closed 2026-07-12 | Promoted to `proofs/E5_littleendian` via the completed-outline workflow; gap directory removed. | `workflows/offline_lean_e_series/E5`. | Done. |
+| `proof-gaps/llvm_chacha20_q_eq` | `proof-gap` | Explicit local gap note; preserved proof attempt still uses `bv_decide` for quarterround BV equations. | `workflows/llvm_chacha20_q_verify`. | Keep pinned; mine only minimal blockers and do not promote while it depends on native-evaluation proof artifacts. |
+| `proof-gaps/llvm_salsa20_q_eq` | `proof-gap` | Explicit local gap note; preserved proof attempt still uses `bv_decide` for the final Salsa20 BV identity. | `workflows/llvm_salsa20_q_verify`. | Keep pinned; mine only minimal blockers and do not promote while it depends on native-evaluation proof artifacts. |
+| `proof-gaps/offline_lean_popcount32` | `proof-gap` | Explicit gap note for the width-32 popcount recurrence proof. | `workflows/offline_lean_popcount32`. | Keep pinned as stress/proof gap; no native proof shortcuts. |
 
 ## Stretch Inventory
 
@@ -220,7 +220,7 @@ generated proof-backend discharge examples.
 
 ## Refresh Review Log
 
-### `drivers/offline_lean_e_series`
+### `workflows/offline_lean_e_series`
 
 Commands:
 
@@ -240,7 +240,7 @@ Reviewed result:
 - The refresh did not restore fallback/defaulting behavior, add Haskell
   arithmetic proof search, or add Lean automation to make the old proofs pass.
 
-### `drivers/offline_lean`
+### `workflows/offline_lean`
 
 Commands:
 
