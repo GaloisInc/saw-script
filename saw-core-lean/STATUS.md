@@ -1,7 +1,7 @@
 # saw-core-lean status
 
-Last updated: 2026-07-14 (release 0.01 hardening;
-`doc/2026-07-14_release-plan.md`)
+Last updated: 2026-07-15 (release 0.01 hardening + test-tree
+restructure; `doc/2026-07-14_release-plan.md`)
 
 ## Purpose
 
