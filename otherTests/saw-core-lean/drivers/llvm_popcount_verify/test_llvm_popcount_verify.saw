@@ -40,6 +40,6 @@ let pop_cryptol_check = do {
 // LEAN DISCHARGE STEP. Emits the popCount equivalence obligation
 // as test_llvm_popcount_verify.<goalType>0.lean. The discharge
 // lives in proofs/llvm_popcount_eq/proof.lean.
-llvm_verify m "pop_count" [] true
+fails (llvm_verify m "pop_count" [] true
     pop_cryptol_check
-    (offline_lean "test_llvm_popcount_verify.pop_count");
+    (offline_lean "test_llvm_popcount_verify.pop_count"));

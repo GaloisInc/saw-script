@@ -56,6 +56,6 @@ let point_eq_spec = do {
 //   drivers/llvm_point_verify/test_llvm_point_verify.point_eq_prove0.lean
 // containing a `goal : Prop` def + a `theorem ... := by sorry`
 // stub. The discharge lives in proofs/llvm_point_eq/proof.lean.
-llvm_verify m "point_eq" [] true
+fails (llvm_verify m "point_eq" [] true
     point_eq_spec
-    (offline_lean "test_llvm_point_verify.point_eq");
+    (offline_lean "test_llvm_point_verify.point_eq"));

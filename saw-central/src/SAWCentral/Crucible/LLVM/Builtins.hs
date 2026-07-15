@@ -817,10 +817,14 @@ verifyObligations cc mspec tactic assumes asserts =
                     useSequentGoals
           case res of
             ValidProof stats thm ->
-              return (stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))
+              return (Right (stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm)))
+            -- An unfinished proof fails the verification, but only
+            -- after every remaining condition has run its tactic:
+            -- emission-only tactics (offline_lean) must get to export
+            -- ALL obligations in one run, not abort at the first.
             UnfinishedProof pst ->
               do printOutLnTop Info $ Text.unpack $ "Subgoal failed: " <> nm <> " " <> msg'
-                 throwTopLevel $ "Proof failed " ++ show (length (psGoals pst)) ++ " goals remaining."
+                 return (Left (show (length (psGoals pst)) ++ " goals remaining"))
             InvalidProof stats vals _pst ->
               do printOutLnTop Info $ Text.unpack $ "Subgoal failed: " <> nm <> " " <> msg'
                  printOutLnTop Info $ Text.unpack (ppStats stats)
@@ -834,10 +838,14 @@ verifyObligations cc mspec tactic assumes asserts =
                    mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
                  printOutLnTop OnlyCounterExamples "----------------------------------"
                  throwTopLevel "Proof failed." -- Mirroring behavior of llvm_verify
-     printOutLnTop Info $ Text.unpack $ "Proof succeeded! " <> nm
+     let unfinished = [e | Left e <- outs]
+     if null unfinished
+       then printOutLnTop Info $ Text.unpack $ "Proof succeeded! " <> nm
+       else throwTopLevel $ "Proof failed: " ++ show (length unfinished) ++
+              " of " ++ show (length outs) ++ " verification conditions unfinished."
 
-     let stats = mconcat (map fst outs)
-     let vcstats = map snd outs
+     let stats = mconcat [s | Right (s, _) <- outs]
+     let vcstats = [v | Right (_, v) <- outs]
      return (stats, vcstats)
 
 throwMethodSpec :: MS.CrucibleMethodSpecIR (LLVM arch) -> String -> IO a

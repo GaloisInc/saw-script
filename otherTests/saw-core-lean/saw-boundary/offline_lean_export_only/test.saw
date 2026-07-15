@@ -1,0 +1,16 @@
+// offline_lean is EMISSION-ONLY: punting a goal to Lean does not
+// discharge it on the SAW side. This row pins that product-soundness
+// boundary with a false goal:
+//
+//   * SAW must still EMIT the obligation file (pinned via
+//     test.false_goal_prove0.lean.good — the emitted `goal : Prop` is
+//     `Bool.false = Bool.true`, and its `by sorry` stub elaborates).
+//   * SAW must EXIT NONZERO reporting an unsolved subgoal
+//     (test.expect-fail). If this row ever exits 0, offline_lean has
+//     become an admitting exporter again — a SAW "success" would then
+//     claim a FALSE goal on the strength of an unread export.
+//
+// SAW-side discharge is reserved for offline_lean_replay, which is
+// registered but disabled this release (it always fails with a
+// diagnostic; see saw-core-lean/doc/2026-07-14_release-plan.md).
+prove_print (offline_lean "test.false_goal") {{ False }};

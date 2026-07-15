@@ -1,1 +1,10 @@
 Loading file "test_popcount32.saw"
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_popcount32.saw:20:8-21:68 in (callback)
+   (builtin) in fails
+   test_popcount32.saw:20:1-21:68 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+

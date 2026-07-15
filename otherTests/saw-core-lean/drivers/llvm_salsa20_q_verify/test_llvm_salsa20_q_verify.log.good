@@ -3,4 +3,106 @@ Loading file "../../../../exercises/common/helpers.saw"
 Verifying s20_quarterround...
 Simulating s20_quarterround...
 Checking proof obligations s20_quarterround...
-Proof succeeded! s20_quarterround
+Subgoal failed: s20_quarterround test_llvm_salsa20_q_verify.saw:44:5: error: in llvm_points_to
+Literal equality postcondition
+Expected term: 
+let { x`1 = seq (TCNum 32) Bool;
+    }
+ in ecAt (TCNum 4) x`1 Integer PIntegralInteger
+      (quarterround [y0, y1, y2, y3])
+      (ecNumber (TCNum 3) Integer PLiteralInteger)
+Actual term:
+let { x`1 = bvAdd 32 y3 y0;
+      x`2 = bvXor 32
+              (bvOr 32 (bvShl 32 x`1 (bvToNat 32 (bvNat 32 7)))
+                 (bvShr 32 x`1 (bvToNat 32 (bvNat 32 25))))
+              y1;
+      x`3 = bvAdd 32 x`2 y0;
+      x`4 = bvAdd 32 x`2
+              (bvXor 32
+                 (bvOr 32 (bvShl 32 x`3 (bvToNat 32 (bvNat 32 9)))
+                    (bvShr 32 x`3 (bvToNat 32 (bvNat 32 23))))
+                 y2);
+    }
+ in bvXor 32
+      (bvOr 32 (bvShl 32 x`4 (bvToNat 32 (bvNat 32 13)))
+         (bvShr 32 x`4 (bvToNat 32 (bvNat 32 19))))
+      y3
+
+Subgoal failed: s20_quarterround test_llvm_salsa20_q_verify.saw:43:5: error: in llvm_points_to
+Literal equality postcondition
+Expected term: 
+let { x`1 = seq (TCNum 32) Bool;
+    }
+ in ecAt (TCNum 4) x`1 Integer PIntegralInteger
+      (quarterround [y0, y1, y2, y3])
+      (ecNumber (TCNum 2) Integer PLiteralInteger)
+Actual term:
+let { x`1 = bvAdd 32 y3 y0;
+      x`2 = bvAdd 32
+              (bvXor 32
+                 (bvOr 32 (bvShl 32 x`1 (bvToNat 32 (bvNat 32 7)))
+                    (bvShr 32 x`1 (bvToNat 32 (bvNat 32 25))))
+                 y1)
+              y0;
+    }
+ in bvXor 32
+      (bvOr 32 (bvShl 32 x`2 (bvToNat 32 (bvNat 32 9)))
+         (bvShr 32 x`2 (bvToNat 32 (bvNat 32 23))))
+      y2
+
+Subgoal failed: s20_quarterround test_llvm_salsa20_q_verify.saw:42:5: error: in llvm_points_to
+Literal equality postcondition
+Expected term: 
+let { x`1 = seq (TCNum 32) Bool;
+    }
+ in ecAt (TCNum 4) x`1 Integer PIntegralInteger
+      (quarterround [y0, y1, y2, y3])
+      (ecNumber (TCNum 1) Integer PLiteralInteger)
+Actual term:
+let { x`1 = bvAdd 32 y3 y0;
+    }
+ in bvXor 32
+      (bvOr 32 (bvShl 32 x`1 (bvToNat 32 (bvNat 32 7)))
+         (bvShr 32 x`1 (bvToNat 32 (bvNat 32 25))))
+      y1
+
+Subgoal failed: s20_quarterround test_llvm_salsa20_q_verify.saw:41:5: error: in llvm_points_to
+Literal equality postcondition
+Expected term: 
+let { x`1 = seq (TCNum 32) Bool;
+    }
+ in ecAt (TCNum 4) x`1 Integer PIntegralInteger
+      (quarterround [y0, y1, y2, y3])
+      (ecNumber (TCNum 0) Integer PLiteralInteger)
+Actual term:
+let { x`1 = bvAdd 32 y3 y0;
+      x`2 = bvXor 32
+              (bvOr 32 (bvShl 32 x`1 (bvToNat 32 (bvNat 32 7)))
+                 (bvShr 32 x`1 (bvToNat 32 (bvNat 32 25))))
+              y1;
+      x`3 = bvAdd 32 x`2 y0;
+      x`4 = bvXor 32
+              (bvOr 32 (bvShl 32 x`3 (bvToNat 32 (bvNat 32 9)))
+                 (bvShr 32 x`3 (bvToNat 32 (bvNat 32 23))))
+              y2;
+      x`5 = bvAdd 32 x`2 x`4;
+      x`6 = bvAdd 32 x`4
+              (bvXor 32
+                 (bvOr 32 (bvShl 32 x`5 (bvToNat 32 (bvNat 32 13)))
+                    (bvShr 32 x`5 (bvToNat 32 (bvNat 32 19))))
+                 y3);
+    }
+ in bvXor 32
+      (bvOr 32 (bvShl 32 x`6 (bvToNat 32 (bvNat 32 18)))
+         (bvShr 32 x`6 (bvToNat 32 (bvNat 32 14))))
+      y0
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in llvm_verify
+   test_llvm_salsa20_q_verify.saw:50:8-52:64 in (callback)
+   (builtin) in fails
+   test_llvm_salsa20_q_verify.saw:50:1-52:64 (at top level)
+Proof failed: 4 of 4 verification conditions unfinished.
+

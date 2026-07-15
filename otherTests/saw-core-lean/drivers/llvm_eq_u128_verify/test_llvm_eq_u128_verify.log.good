@@ -9,4 +9,60 @@ Matching 1 overrides of bcmp...
 Branching on 1 override variants of bcmp...
 Applied override! bcmp
 Checking proof obligations eq_u128...
-Proof succeeded! eq_u128
+Subgoal failed: eq_u128 test_llvm_eq_u128_verify.saw:44:8: error: in _SAW_LLVM_withMethodSpec
+Literal equality postcondition
+Expected term: 
+let { x`1 = TCNum 128;
+    }
+ in [ecEq (seq x`1 Bool) (PEqSeqBool x`1) x y]
+Actual term:
+let { x`1 = Vec 8 Bool;
+    }
+ in ite (Vec 1 Bool)
+      (bvEq 32 (bvNat 32 0)
+         (zext (TCNum 32) (TCNum 1)
+            [ not
+                ((PEqSeq (TCNum 16) x`1 (PEqSeqBool (TCNum 8))).eq
+                   [ slice Bool 120 8 0 x
+                   , slice Bool 112 8 8 x
+                   , slice Bool 104 8 16 x
+                   , slice Bool 96 8 24 x
+                   , slice Bool 88 8 32 x
+                   , slice Bool 80 8 40 x
+                   , slice Bool 72 8 48 x
+                   , slice Bool 64 8 56 x
+                   , slice Bool 56 8 64 x
+                   , slice Bool 48 8 72 x
+                   , slice Bool 40 8 80 x
+                   , slice Bool 32 8 88 x
+                   , slice Bool 24 8 96 x
+                   , slice Bool 16 8 104 x
+                   , slice Bool 8 8 112 x
+                   , slice Bool 0 8 120 x ]
+                   [ slice Bool 120 8 0 y
+                   , slice Bool 112 8 8 y
+                   , slice Bool 104 8 16 y
+                   , slice Bool 96 8 24 y
+                   , slice Bool 88 8 32 y
+                   , slice Bool 80 8 40 y
+                   , slice Bool 72 8 48 y
+                   , slice Bool 64 8 56 y
+                   , slice Bool 56 8 64 y
+                   , slice Bool 48 8 72 y
+                   , slice Bool 40 8 80 y
+                   , slice Bool 32 8 88 y
+                   , slice Bool 24 8 96 y
+                   , slice Bool 16 8 104 y
+                   , slice Bool 8 8 112 y
+                   , slice Bool 0 8 120 y ]) ]))
+      (bvNat 1 1)
+      (bvNat 1 0)
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in llvm_verify
+   test_llvm_eq_u128_verify.saw:44:8-46:53 in (callback)
+   (builtin) in fails
+   test_llvm_eq_u128_verify.saw:44:1-46:53 (at top level)
+Proof failed: 1 of 1 verification conditions unfinished.
+

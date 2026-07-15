@@ -2,4 +2,31 @@ Loading file "test_llvm_popcount_verify.saw"
 Verifying pop_count...
 Simulating pop_count...
 Checking proof obligations pop_count...
-Proof succeeded! pop_count
+Subgoal failed: pop_count test_llvm_popcount_verify.saw:43:8: error: in _SAW_LLVM_withMethodSpec
+Literal equality postcondition
+Expected term: 
+popCount x
+Actual term:
+let { x`1 = bvNat 32 858993459;
+      x`2 = bvAdd 32
+              (bvMul 32 (bvNat 32 4294967295)
+                 (bvAnd 32 (bvNat 32 1431655765)
+                    (bvShr 32 x (bvToNat 32 (bvNat 32 1)))))
+              x;
+      x`3 = bvAdd 32 (bvAnd 32 x`1 x`2)
+              (bvAnd 32 x`1 (bvShr 32 x`2 (bvToNat 32 (bvNat 32 2))));
+      x`4 = bvAnd 32 (bvNat 32 252645135)
+              (bvAdd 32 x`3 (bvShr 32 x`3 (bvToNat 32 (bvNat 32 4))));
+      x`5 = bvAdd 32 x`4 (bvShr 32 x`4 (bvToNat 32 (bvNat 32 8)));
+    }
+ in bvAnd 32 (bvNat 32 63)
+      (bvAdd 32 x`5 (bvShr 32 x`5 (bvToNat 32 (bvNat 32 16))))
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in llvm_verify
+   test_llvm_popcount_verify.saw:43:8-45:56 in (callback)
+   (builtin) in fails
+   test_llvm_popcount_verify.saw:43:1-45:56 (at top level)
+Proof failed: 1 of 1 verification conditions unfinished.
+

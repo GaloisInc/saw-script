@@ -1,1 +1,10 @@
 Loading file "test_cryptol_running_sum_verify.saw"
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_cryptol_running_sum_verify.saw:16:8-18:59 in (callback)
+   (builtin) in fails
+   test_cryptol_running_sum_verify.saw:16:1-18:59 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+

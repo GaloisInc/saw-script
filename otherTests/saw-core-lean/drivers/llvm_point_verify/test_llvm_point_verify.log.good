@@ -2,4 +2,31 @@ Loading file "test_llvm_point_verify.saw"
 Verifying point_eq...
 Simulating point_eq...
 Checking proof obligations point_eq...
-Proof succeeded! point_eq
+Subgoal failed: point_eq test_llvm_point_verify.saw:59:8: error: in _SAW_LLVM_withMethodSpec
+Literal equality postcondition
+Expected term: 
+let { x`1 = TCNum 32;
+      x`2 = seq x`1 Bool;
+      x`3 = #{y : x`2};
+      x`4 = PEqSeqBool x`1;
+    }
+ in [ ecEq #{x : x`2, y : x`2}
+        (PEqRecord "x" x`2 x`3 x`4 (PEqRecord "y" x`2 #{} x`4 PEqEmpty))
+        {x = !?"p1.x", y = !?"p1.y"}
+        {x = !?"p2.x", y = !?"p2.y"} ]
+Actual term:
+let { x`1 = Vec 1 Bool;
+      x`2 = bvNat 1 0;
+    }
+ in ite x`1 (bvEq 32 !?"p2.x" !?"p1.x")
+      (ite x`1 (bvEq 32 !?"p2.y" !?"p1.y") (bvNat 1 1) x`2)
+      x`2
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in llvm_verify
+   test_llvm_point_verify.saw:59:8-61:52 in (callback)
+   (builtin) in fails
+   test_llvm_point_verify.saw:59:1-61:52 (at top level)
+Proof failed: 1 of 1 verification conditions unfinished.
+

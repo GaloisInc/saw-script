@@ -70,24 +70,28 @@ let qround_spec a b c d = do {
 // chacha20.c:55-65` — column round (0,4,8,12 / 1,5,9,13 / 2,6,10,14 /
 // 3,7,11,15) followed by diagonal round (0,5,10,15 / 1,6,11,12 / 2,7,8,
 // 13 / 3,4,9,14).
-qr_c0 <- llvm_verify m "qround" [] true (qround_spec {{ 0 : [32] }} {{ 4  : [32] }} {{ 8  : [32] }} {{ 12 : [32] }})
-            (offline_lean "test_llvm_chacha20_core_verify.qround_c0");
-qr_c1 <- llvm_verify m "qround" [] true (qround_spec {{ 1 : [32] }} {{ 5  : [32] }} {{ 9  : [32] }} {{ 13 : [32] }})
-            (offline_lean "test_llvm_chacha20_core_verify.qround_c1");
-qr_c2 <- llvm_verify m "qround" [] true (qround_spec {{ 2 : [32] }} {{ 6  : [32] }} {{ 10 : [32] }} {{ 14 : [32] }})
-            (offline_lean "test_llvm_chacha20_core_verify.qround_c2");
-qr_c3 <- llvm_verify m "qround" [] true (qround_spec {{ 3 : [32] }} {{ 7  : [32] }} {{ 11 : [32] }} {{ 15 : [32] }})
-            (offline_lean "test_llvm_chacha20_core_verify.qround_c3");
-qr_d0 <- llvm_verify m "qround" [] true (qround_spec {{ 0 : [32] }} {{ 5  : [32] }} {{ 10 : [32] }} {{ 15 : [32] }})
-            (offline_lean "test_llvm_chacha20_core_verify.qround_d0");
-qr_d1 <- llvm_verify m "qround" [] true (qround_spec {{ 1 : [32] }} {{ 6  : [32] }} {{ 11 : [32] }} {{ 12 : [32] }})
-            (offline_lean "test_llvm_chacha20_core_verify.qround_d1");
-qr_d2 <- llvm_verify m "qround" [] true (qround_spec {{ 2 : [32] }} {{ 7  : [32] }} {{ 8  : [32] }} {{ 13 : [32] }})
-            (offline_lean "test_llvm_chacha20_core_verify.qround_d2");
-qr_d3 <- llvm_verify m "qround" [] true (qround_spec {{ 3 : [32] }} {{ 4  : [32] }} {{ 9  : [32] }} {{ 14 : [32] }})
-            (offline_lean "test_llvm_chacha20_core_verify.qround_d3");
+fails (llvm_verify m "qround" [] true (qround_spec {{ 0 : [32] }} {{ 4  : [32] }} {{ 8  : [32] }} {{ 12 : [32] }})
+            (offline_lean "test_llvm_chacha20_core_verify.qround_c0"));
+fails (llvm_verify m "qround" [] true (qround_spec {{ 1 : [32] }} {{ 5  : [32] }} {{ 9  : [32] }} {{ 13 : [32] }})
+            (offline_lean "test_llvm_chacha20_core_verify.qround_c1"));
+fails (llvm_verify m "qround" [] true (qround_spec {{ 2 : [32] }} {{ 6  : [32] }} {{ 10 : [32] }} {{ 14 : [32] }})
+            (offline_lean "test_llvm_chacha20_core_verify.qround_c2"));
+fails (llvm_verify m "qround" [] true (qround_spec {{ 3 : [32] }} {{ 7  : [32] }} {{ 11 : [32] }} {{ 15 : [32] }})
+            (offline_lean "test_llvm_chacha20_core_verify.qround_c3"));
+fails (llvm_verify m "qround" [] true (qround_spec {{ 0 : [32] }} {{ 5  : [32] }} {{ 10 : [32] }} {{ 15 : [32] }})
+            (offline_lean "test_llvm_chacha20_core_verify.qround_d0"));
+fails (llvm_verify m "qround" [] true (qround_spec {{ 1 : [32] }} {{ 6  : [32] }} {{ 11 : [32] }} {{ 12 : [32] }})
+            (offline_lean "test_llvm_chacha20_core_verify.qround_d1"));
+fails (llvm_verify m "qround" [] true (qround_spec {{ 2 : [32] }} {{ 7  : [32] }} {{ 8  : [32] }} {{ 13 : [32] }})
+            (offline_lean "test_llvm_chacha20_core_verify.qround_d2"));
+fails (llvm_verify m "qround" [] true (qround_spec {{ 3 : [32] }} {{ 4  : [32] }} {{ 9  : [32] }} {{ 14 : [32] }})
+            (offline_lean "test_llvm_chacha20_core_verify.qround_d3"));
 
-// NOTE: the full `core` verification using the eight overrides above
-// is the next step but currently stalls in SAW's normalizer at the
-// "Checking proof obligations core..." phase. Re-enable when the
-// SAW-side limitation is addressed.
+// NOTE: offline_lean is emission-only, so each llvm_verify above is
+// wrapped in `fails` (the goal stays unsolved on the SAW side; the
+// emitted obligation is what this row pins). The former qr_* override
+// bindings are gone with that: compositional `core` verification on
+// top of Lean-emitted qround obligations needs offline_lean_replay
+// (disabled this release) so SAW can actually admit the overrides.
+// (The `core` step also stalled in SAW's normalizer at "Checking
+// proof obligations core..." when last attempted.)

@@ -45,6 +45,15 @@ Slices 0–7 complete), the calculus IS the implementation:
 - SAW `error` routes to `saw_throw_error`; `Prelude.fix` and partial
   operations route through proof-carrying obligations with
   Lean-checked evidence.
+- `offline_lean` is EMISSION-ONLY (2026-07-14): it writes the goal
+  file and returns `SolveUnknown`, so the goal stays unsolved on the
+  SAW side and scripts wrap it in `fails`. SAW never claims a goal on
+  the strength of an export. `offline_lean_replay` is registered but
+  disabled (fails with a named diagnostic) until real SAW-side replay
+  lands. Pinned by `saw-boundary/offline_lean_export_only` and
+  `saw-boundary/offline_lean_replay_disabled`. The LLVM
+  `verifyObligations` loop runs every condition's tactic before
+  failing, so multi-obligation `llvm_verify` still emits all files.
 
 ## Known State
 
@@ -57,10 +66,15 @@ Passing (the standing fences):
 - `otherTests/saw-core-lean`: `make conformance` exit 0 — 193 rows
   (differential SAW-vs-Lean evaluation, obligation shape, pinned known
   gaps), with emitted artifacts elaborated.
-- Emitted-Lean byte-diff oracle: baseline re-cut 2026-07-12 after the
-  Slice OP-1 evidence-chain refresh —
-  `support/emitted-lean-snapshot.sh diff .snapshots/op1-baseline`
-  clean at 634 artifacts (the slice0 baseline is superseded).
+- Emitted-Lean byte-diff oracle: STALE as of 2026-07-14 —
+  `.snapshots/op1-baseline` (cut after Slice OP-1) was never re-cut
+  after Slice OP-2, so `support/emitted-lean-snapshot.sh diff
+  .snapshots/op1-baseline` reports 32 changed artifacts. All 32 were
+  reviewed 2026-07-14 as the expected OP-2 shape (fabricated
+  in-lambda `h_bounds_` evidence → `atRuntimeCheckedM`; driver
+  goldens WERE refreshed in the OP-2 commit — only the oracle
+  baseline lagged). Re-cut as `.snapshots/op2-baseline` is a 0.01
+  hygiene item (`doc/2026-07-14_release-plan.md`).
 - Driver rows (`bash test.sh` per-driver, `lean-driver-test.sh`) green,
   including the ChaCha20 core verify and prelude auto-emit drivers.
 

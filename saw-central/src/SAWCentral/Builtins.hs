@@ -130,6 +130,7 @@ module SAWCentral.Builtins (
     offline_cnf_external,
     offline_rocq,
     offline_lean,
+    offline_lean_replay,
     offline_extcore,
     offline_smtlib2,
     offline_w4_smtlib2,
@@ -1390,8 +1391,47 @@ offline_cnf_external path =
 offline_rocq :: FilePath -> ProofScript ()
 offline_rocq path = proveWithPropExporter (Prover.writeRocqProp "goal" [] []) path "_" ".v"
 
+-- | Emission-only variant of 'proveWithPropExporter': export the goal
+-- and then leave it UNSOLVED ('SolveUnknown'). The exported file is
+-- evidence of nothing by itself; a SAW success may only ever come from
+-- replaying a completed proof through the external checker, which is
+-- not implemented yet. Contrast 'proveWithPropExporter', which admits
+-- the goal on mere emission ('SolverEvidence') — the legacy semantics
+-- 'offline_rocq' retains.
+emitWithPropExporter ::
+  (FilePath -> Prop -> TopLevel a) ->
+  String ->
+  String ->
+  String ->
+  ProofScript ()
+emitWithPropExporter exporter path sep ext =
+  execTactic $ tacticSolve $ \g ->
+  do let sanitize = map (\c -> if c `elem` (" \t/\\:" :: String) then '_' else c)
+     let file = path ++ sep ++ sanitize (goalType g) ++ show (goalNum g) ++ ext
+     sc <- getSharedContext
+     p <- io $ sequentToProp sc (goalSequent g)
+     stats <- Prover.proveWithPropExporter exporter file p
+     return (stats, SolveUnknown)
+
 offline_lean :: FilePath -> ProofScript ()
-offline_lean path = proveWithPropExporter (Prover.writeLeanProp "goal" [] []) path "_" ".lean"
+offline_lean path = emitWithPropExporter (Prover.writeLeanProp "goal" [] []) path "_" ".lean"
+
+offline_lean_replay :: FilePath -> ProofScript ()
+offline_lean_replay _path =
+  execTactic $ tacticSolve $ \_g ->
+  fail $ unlines
+    [ "offline_lean_replay: replay is not available in this release."
+    , ""
+    , "offline_lean is emission-only: SAW writes the Lean proof obligation"
+    , "and leaves the goal unsolved; discharge happens in Lean. A future"
+    , "release will implement replay: SAW invokes the pinned Lean toolchain"
+    , "on the exact emitted obligation plus a completed proof file, and"
+    , "admits the goal only if Lean kernel-checks a theorem of that exact"
+    , "type with no forbidden escape hatches (sorry, unchecked axioms,"
+    , "import shadowing)."
+    , ""
+    , "See saw-core-lean/doc/2026-07-14_release-plan.md."
+    ]
 
 offline_extcore :: FilePath -> ProofScript ()
 offline_extcore path = proveWithPropExporter Prover.writeCoreProp path "." ".extcore"

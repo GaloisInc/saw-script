@@ -3,4 +3,91 @@ Loading file "../../../../exercises/common/helpers.saw"
 Verifying qround...
 Simulating qround...
 Checking proof obligations qround...
-Proof succeeded! qround
+Subgoal failed: qround test_llvm_chacha20_q_verify.saw:48:5: error: in llvm_points_to
+Literal equality postcondition
+Expected term: 
+let { x`1 = TCNum 4;
+      x`2 = ecNumber (TCNum 0) Integer PLiteralInteger;
+      x`3 = ecNumber (TCNum 1) Integer PLiteralInteger;
+      x`4 = seq (TCNum 32) Bool;
+      x`5 = TCNum 16;
+      x`6 = qround
+              [ ecAt x`5 x`4 Integer PIntegralInteger state x`2
+              , ecAt x`5 x`4 Integer PIntegralInteger state
+                  (ecNumber x`1 Integer PLiteralInteger)
+              , ecAt x`5 x`4 Integer PIntegralInteger state
+                  (ecNumber (TCNum 8) Integer PLiteralInteger)
+              , ecAt x`5 x`4 Integer PIntegralInteger state
+                  (ecNumber (TCNum 12) Integer PLiteralInteger) ];
+      x`7 = ecNumber (TCNum 2) Integer PLiteralInteger;
+      x`8 = ecNumber (TCNum 3) Integer PLiteralInteger;
+    }
+ in [ ecAt x`1 x`4 Integer PIntegralInteger x`6 x`2
+    , ecAt x`5 x`4 Integer PIntegralInteger state x`3
+    , ecAt x`5 x`4 Integer PIntegralInteger state x`7
+    , ecAt x`5 x`4 Integer PIntegralInteger state x`8
+    , ecAt x`1 x`4 Integer PIntegralInteger x`6 x`3
+    , ecAt x`5 x`4 Integer PIntegralInteger state
+        (ecNumber (TCNum 5) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state
+        (ecNumber (TCNum 6) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state
+        (ecNumber (TCNum 7) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`6 x`7
+    , ecAt x`5 x`4 Integer PIntegralInteger state
+        (ecNumber (TCNum 9) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state
+        (ecNumber (TCNum 10) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state
+        (ecNumber (TCNum 11) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`6 x`8
+    , ecAt x`5 x`4 Integer PIntegralInteger state
+        (ecNumber (TCNum 13) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state
+        (ecNumber (TCNum 14) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state
+        (ecNumber (TCNum 15) Integer PLiteralInteger) ]
+Actual term:
+let { x`1 = Vec 32 Bool;
+      x`2 = at 16 x`1 state 0;
+      x`3 = at 16 x`1 state 4;
+      x`4 = at 16 x`1 state 8;
+      x`5 = bvXor 32 (bvAdd 32 x`2 x`3) (at 16 x`1 state 12);
+      x`6 = bvToNat 32 (bvNat 32 16);
+      x`7 = bvOr 32 (bvShl 32 x`5 x`6) (bvShr 32 x`5 x`6);
+      x`8 = bvXor 32 (bvAdd 32 x`7 x`4) x`3;
+      x`9 = bvOr 32 (bvShl 32 x`8 (bvToNat 32 (bvNat 32 12)))
+              (bvShr 32 x`8 (bvToNat 32 (bvNat 32 20)));
+      x`10 = bvAdd 32 (bvAdd 32 x`9 x`2) x`3;
+      x`11 = bvXor 32 x`7 x`10;
+      x`12 = bvOr 32 (bvShl 32 x`11 (bvToNat 32 (bvNat 32 8)))
+               (bvShr 32 x`11 (bvToNat 32 (bvNat 32 24)));
+      x`13 = bvAdd 32 (bvAdd 32 x`7 x`12) x`4;
+      x`14 = bvXor 32 x`9 x`13;
+    }
+ in [ x`10
+    , at 16 x`1 state 1
+    , at 16 x`1 state 2
+    , at 16 x`1 state 3
+    , bvOr 32 (bvShl 32 x`14 (bvToNat 32 (bvNat 32 7)))
+        (bvShr 32 x`14 (bvToNat 32 (bvNat 32 25)))
+    , at 16 x`1 state 5
+    , at 16 x`1 state 6
+    , at 16 x`1 state 7
+    , x`13
+    , at 16 x`1 state 9
+    , at 16 x`1 state 10
+    , at 16 x`1 state 11
+    , x`12
+    , at 16 x`1 state 13
+    , at 16 x`1 state 14
+    , at 16 x`1 state 15 ]
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in llvm_verify
+   test_llvm_chacha20_q_verify.saw:51:8-53:64 in (callback)
+   (builtin) in fails
+   test_llvm_chacha20_q_verify.saw:51:1-53:64 (at top level)
+Proof failed: 1 of 1 verification conditions unfinished.
+

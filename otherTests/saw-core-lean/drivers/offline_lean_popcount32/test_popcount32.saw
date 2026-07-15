@@ -17,5 +17,5 @@ let {{
                  | elt <- bits
                  | prev <- ic ]
 }};
-prove_print (offline_lean "test_popcount32")
-  {{ \(bits : [32]) -> popCount_fold bits == popCount_naive bits }};
+fails (prove_print (offline_lean "test_popcount32")
+  {{ \(bits : [32]) -> popCount_fold bits == popCount_naive bits }});

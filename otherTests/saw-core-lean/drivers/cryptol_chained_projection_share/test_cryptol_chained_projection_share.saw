@@ -7,5 +7,5 @@
 
 import "ChainedProjectionShare.cry";
 
-prove_print (offline_lean "test_cryptol_chained_projection_share")
-  {{ \(xs : [4][32]) -> h xs == h xs }};
+fails (prove_print (offline_lean "test_cryptol_chained_projection_share")
+  {{ \(xs : [4][32]) -> h xs == h xs }});

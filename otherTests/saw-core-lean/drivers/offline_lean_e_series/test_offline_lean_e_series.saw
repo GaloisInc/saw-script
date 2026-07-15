@@ -10,23 +10,24 @@
 // otherTests/saw-core-lean/proofs/E<N>_*/ directory carries the
 // discharge.
 //
-// SAW's SMT prover will fail/succeed per usual on these — the
-// prove_print result is not what we test. What we test is:
+// offline_lean is emission-only: each prove_print leaves its goal
+// unsolved and fails, so every call is wrapped in `fails`. What we
+// test is:
 //   (1) SAW emits the .lean file with the expected shape (pinned
 //       via *.prove0.lean.good).
 //   (2) The Lean discharge in otherTests/saw-core-lean/proofs/E<N>_*/ closes cleanly.
 
 // E1 — bvAdd commutativity over [8]. Baseline one-liner via
 // bvAdd_comm. Tier 1.
-prove_print (offline_lean "test_offline_lean_e_series.E1")
-  {{ \(x : [8]) (y : [8]) -> x + y == y + x }};
+fails (prove_print (offline_lean "test_offline_lean_e_series.E1")
+  {{ \(x : [8]) (y : [8]) -> x + y == y + x }});
 
 // E2 — iteDep reflexivity. `(if b then x else y) == (if b then x
 // else y)` — same term on both sides. Exercises the SAW ite
 // wrapper and bvEq_refl. Tier 1.
-prove_print (offline_lean "test_offline_lean_e_series.E2")
+fails (prove_print (offline_lean "test_offline_lean_e_series.E2")
   {{ \(b : Bit) (x : [8]) (y : [8]) ->
-       (if b then x else y) == (if b then x else y) }};
+       (if b then x else y) == (if b then x else y) }});
 
 // E3 — Point record-field commutativity. Mirrors the
 // PointExercise.cry use case, but stated inline here so the
@@ -39,14 +40,14 @@ let {{
   point_add : Point -> Point -> Point
   point_add p1 p2 = { x = p1.x + p2.x, y = p1.y + p2.y }
 }};
-prove_print (offline_lean "test_offline_lean_e_series.E3")
-  {{ \(p1 : Point) (p2 : Point) -> point_add p1 p2 == point_add p2 p1 }};
+fails (prove_print (offline_lean "test_offline_lean_e_series.E3")
+  {{ \(p1 : Point) (p2 : Point) -> point_add p1 p2 == point_add p2 p1 }});
 
 // E4 — sequence-level bv identity: map of bvAdd-with-zero is the
 // identity. Exercises Cryptol `map`, @/atWithDefault indexing,
 // bvAdd_id_r per element, and sequence equality. Tier 2.
-prove_print (offline_lean "test_offline_lean_e_series.E4")
-  {{ \(xs : [4][32]) -> map (\x -> x + 0) xs == xs }};
+fails (prove_print (offline_lean "test_offline_lean_e_series.E4")
+  {{ \(xs : [4][32]) -> map (\x -> x + 0) xs == xs }});
 
 // E5 — reverse self-inverse. \(xs : [4][8]) -> reverse (reverse xs) == xs.
 // Vector rearrangement identity. Discharges via per-index
@@ -59,8 +60,8 @@ prove_print (offline_lean "test_offline_lean_e_series.E4")
 // split/join interaction. It's parked as a future tier-4
 // exercise — it requires a structural lemma library for split-
 // join round-trip that we haven't yet built.
-prove_print (offline_lean "test_offline_lean_e_series.E5")
-  {{ \(xs : [4][8]) -> reverse (reverse xs) == xs }};
+fails (prove_print (offline_lean "test_offline_lean_e_series.E5")
+  {{ \(xs : [4][8]) -> reverse (reverse xs) == xs }});
 
 // E7 — bvAdd associativity at a wide width (256). SMT bit-blasting
 // can handle this with effort, but Lean closes in one line via
@@ -68,8 +69,8 @@ prove_print (offline_lean "test_offline_lean_e_series.E5")
 // finds painful"; the real distinguishing case (universal
 // quantification over width via Cryptol type variables) requires
 // SAW-emission features beyond fixed-width. Tier 4.
-prove_print (offline_lean "test_offline_lean_e_series.E7")
-  {{ \(x : [256]) (y : [256]) (z : [256]) -> (x + y) + z == x + (y + z) }};
+fails (prove_print (offline_lean "test_offline_lean_e_series.E7")
+  {{ \(x : [256]) (y : [256]) (z : [256]) -> (x + y) + z == x + (y + z) }});
 
 // E6 — Two-implementations-of-popcount equivalence over [4].
 // Two definitions of bit-count that should agree pointwise:
@@ -99,5 +100,5 @@ let {{
                  | elt <- bits
                  | prev <- ic ]
 }};
-prove_print (offline_lean "test_offline_lean_e_series.E6")
-  {{ \(bits : [4]) -> popCount_fold bits == popCount_naive bits }};
+fails (prove_print (offline_lean "test_offline_lean_e_series.E6")
+  {{ \(bits : [4]) -> popCount_fold bits == popCount_naive bits }});

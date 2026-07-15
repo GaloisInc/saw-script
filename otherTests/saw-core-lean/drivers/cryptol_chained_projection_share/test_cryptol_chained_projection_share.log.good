@@ -1,1 +1,10 @@
 Loading file "test_cryptol_chained_projection_share.saw"
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_cryptol_chained_projection_share.saw:10:8-11:40 in (callback)
+   (builtin) in fails
+   test_cryptol_chained_projection_share.saw:10:1-11:40 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+

@@ -100,19 +100,29 @@ Lean automation policy for the current prototype:
 Near-term prototype priority is slightly different: we first need emitted Lean
 obligations that are semantically correct, elaboration-stable, and realistically
 provable. Several audit findings are "good-faith use of Lean" issues: a user can
-edit a generated file to prove a different theorem, import extra axioms, or ask
-the current `offline_lean` command to act like an admitting exporter. Those are
-real product soundness issues, but they are not the deepest technical blocker for
-the prototype unless they let our regression tests falsely validate a broken
-emission strategy. Therefore:
+edit a generated file to prove a different theorem or import extra axioms. Those
+are real product soundness issues, but they are not the deepest technical blocker
+for the prototype unless they let our regression tests falsely validate a broken
+emission strategy. (The worst instance — `offline_lean` acting as an ADMITTING
+exporter, claiming the goal on mere emission — was CLOSED 2026-07-14:
+`offline_lean` is now emission-only, returning `SolveUnknown` so the goal stays
+unsolved on the SAW side; `offline_lean_replay` is registered but fails with a
+named diagnostic until real replay lands. Pinned by
+`saw-boundary/offline_lean_export_only` (false goal must leave SAW unfinished
+while still emitting) and `saw-boundary/offline_lean_replay_disabled`. The LLVM
+`verifyObligations` loop now runs every verification condition's tactic before
+failing on unfinished proofs, so multi-obligation `llvm_verify` runs still emit
+ALL obligation files in one pass.) Therefore:
 
 - Prototype-critical harness checks should prevent stale artifacts, unrelated
   proofs, generated `sorry` dependencies, and unchecked axioms from making a
   regression look green.
 - `offline_lean` replay is a required final-product soundness boundary, but it
   is not the next blocker while the backend is still stabilizing its emitted
-  obligation shapes. Treat current `offline_lean` output as emit-stage evidence
-  only.
+  obligation shapes. Current `offline_lean` output is emit-stage evidence only,
+  and since 2026-07-14 the command's own semantics say so: the goal is left
+  unsolved (scripts wrap in `fails`), so SAW cannot claim a goal on the
+  strength of an unread export.
 - Full SAW-side proof replay, import isolation, provenance manifests, and
   final user-facing ergonomics remain required before the backend can be called
   a sound proof-discharge product. They come after the conformance harness is
@@ -154,6 +164,23 @@ primitives, large crypto/LLVM stress) are tracked in Priorities 1–5 below. The
 detailed priority sections that follow preserve the 2026-07-01 audit's ordering
 for reference, but the operative next work is the position-directed refactor
 described in the section immediately below.
+
+## Release Plan (2026-07-14)
+
+Full plan: `doc/2026-07-14_release-plan.md`. Decisions recorded there
+(user-confirmed 2026-07-14):
+
+- **0.01 (coherence)**: ship the current sound fragment with all
+  fences green on a clean checkout and docs literally true. The
+  Stream@core pair reclassifies as expected rejection; OP-3 ships as
+  the documented top limitation (sound-but-undischargeable);
+  `offline_lean` is scoped as emit-stage evidence.
+- **0.02 (coverage)**: example-driven — OP-3 successor design first,
+  then Stream/Either recursor-convention work, direct recursors
+  (PosRep), proof-primitive realizations.
+
+0.01 workstreams and exit criteria live in the plan doc; the items
+below track execution state as always.
 
 ## Operative Priority: Obligation Placement & Satisfiability
 
@@ -223,7 +250,11 @@ Slices (each emitted-Lean-diff-reviewed and green before commit):
   calculus vs. keep the loud undischargeable `False`, and whether
   eliminator case-handler positions count as reachable. Needs its own
   audited design note before implementation.
-- [ ] **Slice OP-3** — ENTRY DECISION (2026-07-12): STRUCTURAL-FIRST;
+- [ ] **Slice OP-3** — RELEASE POSTURE (2026-07-14): ships in 0.01 as the
+  documented top limitation (sound-but-undischargeable; SAW never claims
+  the goals); the successor design + fourth audit continue post-release
+  (see `doc/2026-07-14_release-plan.md`). ENTRY DECISION (2026-07-12):
+  STRUCTURAL-FIRST;
   first structural draft REFUTED by the third Opus audit
   (2026-07-12, `doc/2026-07-12_op3-structural-fix-design.md` — kept
   as the rejected-candidate record). Key audit facts for the
@@ -326,15 +357,17 @@ doc for per-slice regression fences and bounded validation commands):
   2026-07-09, both rows green. Full 18-row `@Eq` sweep completed 2026-07-09:
   `@Eq.{k}` class and all elaborating bounds-overhaul rows refreshed;
   `llvm_chacha20_core_verify` kept red as the Slice 4 specimen (see below).
-- [ ] **Pre-existing upstream regressions (verified failing at pre-refactor
-  commit `89a6cef06`):** `drivers/cryptol_chacha20_core_iterate` and
-  `drivers/cryptol_chacha20_iround_zero` reject with `Refusing to translate
-  primitive Prelude::Stream@core` (wrapped-scrutinee recursor convention);
-  their goldens expect successful translation. Needs an upstream decision:
-  restore a translation path for the ChaCha20-shape stream comprehensions
-  (the `saw_self_ref_comp_iterate` parametric-bridge family) or migrate the
-  rows to an expected-rejection category. Not a golden-format issue — do not
-  refresh. (`drivers/sawcore_prelude_auto_emit`, formerly also listed here,
+- [ ] **Stream@core pair — DECIDED 2026-07-14 (release plan): migrate to
+  expected rejection; implementation pending.** `drivers/
+  cryptol_chacha20_core_iterate` and `drivers/cryptol_chacha20_iround_zero`
+  reject with `Refusing to translate primitive Prelude::Stream@core`
+  (wrapped-scrutinee recursor convention); their goldens expect successful
+  translation (verified failing at pre-refactor commit `89a6cef06`, so this
+  predates the position-directed work). Decision: the rows become
+  expected-rejection rows pinning the named diagnostic; the translation
+  path (the `saw_self_ref_comp_iterate` parametric-bridge family / lazy
+  selection) folds into the OP-3 successor design post-0.01. The old
+  success goldens are retired with the reclassification, not refreshed. (`drivers/sawcore_prelude_auto_emit`, formerly also listed here,
   was RESOLVED 2026-07-10 by Slice 5c: the function-carrier equality
   convention plus the raw-mode raw-logical pipeline un-rejected the prelude;
   golden refreshed after per-hunk review — the only delta vs the

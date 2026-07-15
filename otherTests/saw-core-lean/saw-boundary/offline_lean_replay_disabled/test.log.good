@@ -1,0 +1,19 @@
+Loading file "test.saw"
+Stack trace:
+   (builtin) in offline_lean_replay
+   test.saw:10:14-10:52 in (callback)
+   (builtin) in prove_print
+   test.saw:10:1-10:64 (at top level)
+offline_lean_replay: replay is not available in this release.
+
+offline_lean is emission-only: SAW writes the Lean proof obligation
+and leaves the goal unsolved; discharge happens in Lean. A future
+release will implement replay: SAW invokes the pinned Lean toolchain
+on the exact emitted obligation plus a completed proof file, and
+admits the goal only if Lean kernel-checks a theorem of that exact
+type with no forbidden escape hatches (sorry, unchecked axioms,
+import shadowing).
+
+See saw-core-lean/doc/2026-07-14_release-plan.md.
+
+

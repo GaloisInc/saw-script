@@ -41,6 +41,6 @@ let eq_u128_spec = do {
 };
 
 // LEAN DISCHARGE STEP. Emits the eq_u128 obligation as a Lean .lean.
-llvm_verify m "eq_u128"
+fails (llvm_verify m "eq_u128"
     [bcmp_16_ov] true eq_u128_spec
-    (offline_lean "test_llvm_eq_u128_verify.eq_u128");
+    (offline_lean "test_llvm_eq_u128_verify.eq_u128"));

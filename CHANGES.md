@@ -6,6 +6,17 @@ This release supports [version
 
 ## New Features
 
+* `offline_lean` is now emission-only: it writes the Lean proof
+  obligation and leaves the goal UNSOLVED, so SAW never claims a goal
+  on the strength of an export (wrap in `fails` if the script should
+  continue). A new `offline_lean_replay` command reserves the future
+  SAW-side discharge interface; in this release it always fails with a
+  diagnostic. As part of this, LLVM verification now runs every
+  verification condition's proof tactic before failing on unfinished
+  proofs, so multi-obligation `llvm_verify` runs with offline
+  exporters emit all obligation files in one pass (invalid proofs with
+  counterexamples still abort immediately).
+
 * Add new SAWScript commands `timeout_handle` and `timeout` for adding
   time limits to scripts.
 

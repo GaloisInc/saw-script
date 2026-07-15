@@ -13,6 +13,6 @@
 
 import "RunningSum.cry";
 
-prove_print (offline_lean "test_cryptol_running_sum_verify.eq")
+fails (prove_print (offline_lean "test_cryptol_running_sum_verify.eq")
   {{ \(xs : [8][32]) ->
-       runningSumComprehension xs == runningSumNaive xs }};
+       runningSumComprehension xs == runningSumNaive xs }});

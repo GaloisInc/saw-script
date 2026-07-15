@@ -47,6 +47,6 @@ let quarterround_setup = do {
 // LEAN DISCHARGE STEP. Emits the quarterround equivalence obligation
 // as test_llvm_salsa20_q_verify.<goalType>0.lean. The discharge lives
 // in proofs/llvm_salsa20_q_eq/proof.lean.
-llvm_verify m "s20_quarterround" [] true
+fails (llvm_verify m "s20_quarterround" [] true
     quarterround_setup
-    (offline_lean "test_llvm_salsa20_q_verify.s20_quarterround");
+    (offline_lean "test_llvm_salsa20_q_verify.s20_quarterround"));

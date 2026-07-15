@@ -1,0 +1,7 @@
+Loading file "test.saw"
+Stack trace:
+   (builtin) in prove_print
+   test.saw:16:1-16:57 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+

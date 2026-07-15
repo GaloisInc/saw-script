@@ -1,1 +1,64 @@
 Loading file "test_offline_lean.saw"
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_offline_lean.saw:14:8-15:58 in (callback)
+   (builtin) in fails
+   test_offline_lean.saw:14:1-15:58 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_offline_lean.saw:17:8-19:48 in (callback)
+   (builtin) in fails
+   test_offline_lean.saw:17:1-19:48 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_offline_lean.saw:21:8-22:72 in (callback)
+   (builtin) in fails
+   test_offline_lean.saw:21:1-22:72 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_offline_lean.saw:24:8-26:56 in (callback)
+   (builtin) in fails
+   test_offline_lean.saw:24:1-26:56 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_offline_lean.saw:32:8-33:54 in (callback)
+   (builtin) in fails
+   test_offline_lean.saw:32:1-33:54 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_offline_lean.saw:35:8-36:57 in (callback)
+   (builtin) in fails
+   test_offline_lean.saw:35:1-36:57 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_offline_lean.saw:38:8-40:47 in (callback)
+   (builtin) in fails
+   test_offline_lean.saw:38:1-40:47 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+

@@ -48,6 +48,6 @@ let chacha20_qround_setup = do {
     llvm_points_to p_state (llvm_term post_state);
 };
 
-llvm_verify m "qround" [] true
+fails (llvm_verify m "qround" [] true
     chacha20_qround_setup
-    (offline_lean "test_llvm_chacha20_q_verify.chacha20_qround");
+    (offline_lean "test_llvm_chacha20_q_verify.chacha20_qround"));

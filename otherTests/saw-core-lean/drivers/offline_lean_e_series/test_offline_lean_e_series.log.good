@@ -1,1 +1,64 @@
 Loading file "test_offline_lean_e_series.saw"
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_offline_lean_e_series.saw:22:8-23:47 in (callback)
+   (builtin) in fails
+   test_offline_lean_e_series.saw:22:1-23:47 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_offline_lean_e_series.saw:28:8-30:55 in (callback)
+   (builtin) in fails
+   test_offline_lean_e_series.saw:28:1-30:55 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_offline_lean_e_series.saw:43:8-44:73 in (callback)
+   (builtin) in fails
+   test_offline_lean_e_series.saw:43:1-44:73 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_offline_lean_e_series.saw:49:8-50:54 in (callback)
+   (builtin) in fails
+   test_offline_lean_e_series.saw:49:1-50:54 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_offline_lean_e_series.saw:63:8-64:53 in (callback)
+   (builtin) in fails
+   test_offline_lean_e_series.saw:63:1-64:53 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_offline_lean_e_series.saw:72:8-73:75 in (callback)
+   (builtin) in fails
+   test_offline_lean_e_series.saw:72:1-73:75 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_offline_lean_e_series.saw:103:8-104:67 in (callback)
+   (builtin) in fails
+   test_offline_lean_e_series.saw:103:1-104:67 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+

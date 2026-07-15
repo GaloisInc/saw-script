@@ -2423,6 +2423,10 @@ do_offline_lean :: Text -> ProofScript ()
 do_offline_lean f =
   offline_lean (Text.unpack f)
 
+do_offline_lean_replay :: Text -> ProofScript ()
+do_offline_lean_replay f =
+  offline_lean_replay (Text.unpack f)
+
 do_write_lean_cryptol_module :: Text -> Text -> [(Text, Text)] -> [Text] -> TopLevel ()
 do_write_lean_cryptol_module infile outfile notations skips =
   writeLeanCryptolModule (Text.unpack infile) (Text.unpack outfile)
@@ -5284,7 +5288,22 @@ primitives = Map.fromList $
     , "contains a 'theorem goal : <Prop> := by sorry' stub the user can"
     , "then open in Lean and discharge."
     , ""
+    , "Emission-only: the goal is left UNSOLVED. SAW does not treat the"
+    , "emitted file as evidence, so an enclosing prove_print fails with"
+    , "unsolved subgoals (wrap in 'fails' if the script should continue)."
+    , "SAW-side discharge will arrive as 'offline_lean_replay'."
+    , ""
     , "May refuse to translate some goals (see 'write_lean_term')."
+    ]
+
+  , prim "offline_lean_replay" "String -> ProofScript ()"
+    (pureVal do_offline_lean_replay)
+    Current
+    [ "Reserved: check a completed Lean proof of the current goal and"
+    , "admit the goal on success. NOT AVAILABLE in this release — this"
+    , "command currently always fails with a diagnostic. Use"
+    , "'offline_lean' (emission-only) and discharge the obligation in"
+    , "Lean externally."
     ]
 
   , prim "write_lean_cryptol_module" ("String -> String -> " <>
