@@ -106,27 +106,27 @@ span.spaces    { background: white }
 <span class="lineno">   87 </span>import           Data.Set(Set)
 <span class="lineno">   88 </span>import qualified Prettyprinter as PPL
 <span class="lineno">   89 </span>import qualified Text.LLVM.AST as L
-<span class="lineno">   90 </span>import qualified Text.LLVM.PP as L
-<span class="lineno">   91 </span>import qualified Text.PrettyPrint.HughesPJ as PP
-<span class="lineno">   92 </span>
-<span class="lineno">   93 </span>import qualified Data.LLVM.BitCode as LLVM
-<span class="lineno">   94 </span>
-<span class="lineno">   95 </span>import           Data.Parameterized.Some (Some(Some))
-<span class="lineno">   96 </span>
-<span class="lineno">   97 </span>import           What4.ProgramLoc (ProgramLoc)
-<span class="lineno">   98 </span>
-<span class="lineno">   99 </span>import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
-<span class="lineno">  100 </span>import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible (SimContext)
-<span class="lineno">  101 </span>import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState)
-<span class="lineno">  102 </span>import qualified Lang.Crucible.LLVM.PrettyPrint as Crucible.LLVM
-<span class="lineno">  103 </span>
-<span class="lineno">  104 </span>import           SAWCentral.Crucible.Common
-<span class="lineno">  105 </span>import qualified SAWCentral.Crucible.Common.Setup.Value as Setup
-<span class="lineno">  106 </span>
-<span class="lineno">  107 </span>import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
-<span class="lineno">  108 </span>import           SAWCentral.Crucible.LLVM.Setup.LLVMCombine ( llvmModuleCombine )
+<span class="lineno">   90 </span>import           Text.LLVM.Combine ( llvmModuleCombine )
+<span class="lineno">   91 </span>import qualified Text.LLVM.PP as L
+<span class="lineno">   92 </span>import qualified Text.PrettyPrint.HughesPJ as PP
+<span class="lineno">   93 </span>
+<span class="lineno">   94 </span>import qualified Data.LLVM.BitCode as LLVM
+<span class="lineno">   95 </span>
+<span class="lineno">   96 </span>import           Data.Parameterized.Some (Some(Some))
+<span class="lineno">   97 </span>
+<span class="lineno">   98 </span>import           What4.ProgramLoc (ProgramLoc)
+<span class="lineno">   99 </span>
+<span class="lineno">  100 </span>import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
+<span class="lineno">  101 </span>import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible (SimContext)
+<span class="lineno">  102 </span>import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState)
+<span class="lineno">  103 </span>import qualified Lang.Crucible.LLVM.PrettyPrint as Crucible.LLVM
+<span class="lineno">  104 </span>
+<span class="lineno">  105 </span>import           SAWCentral.Crucible.Common
+<span class="lineno">  106 </span>import qualified SAWCentral.Crucible.Common.Setup.Value as Setup
+<span class="lineno">  107 </span>
+<span class="lineno">  108 </span>import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
 <span class="lineno">  109 </span>
-<span class="lineno">  110 </span>import           SAWCentral.Proof (TheoremNonce)
+<span class="lineno">  110 </span>import           SAWCentral.Proof (TheoremAnnotation)
 <span class="lineno">  111 </span>
 <span class="lineno">  112 </span>import           SAWCore.Rewriter (Simpset)
 <span class="lineno">  113 </span>import           SAWCore.SharedTerm
@@ -313,7 +313,7 @@ span.spaces    { background: white }
 <span class="lineno">  294 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_ccLLVMSimContext</span></span></span>  :: Crucible.SimContext (SAWCruciblePersonality Sym) Sym CL.LLVM
 <span class="lineno">  295 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_ccLLVMGlobals</span></span></span>     :: Crucible.SymGlobalState Sym
 <span class="lineno">  296 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_ccCryptolEnv</span></span></span>      :: Cry.CryptolEnv
-<span class="lineno">  297 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_ccBasicSS</span></span></span>         :: Simpset TheoremNonce
+<span class="lineno">  297 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_ccBasicSS</span></span></span>         :: Simpset TheoremAnnotation
 <span class="lineno">  298 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">_ccUninterp</span></span></span>        :: !(Set VarIndex)
 <span class="lineno">  299 </span>  }
 <span class="lineno">  300 </span>

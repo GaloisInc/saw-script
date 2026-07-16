@@ -621,109 +621,110 @@ span.spaces    { background: white }
 <span class="lineno">  602 </span><span class="decl"><span class="istickedoff">translateTermUnshared t =</span>
 <span class="lineno">  603 </span><span class="spaces">  </span><span class="istickedoff">-- traceTerm &quot;translateTerm&quot; t $</span>
 <span class="lineno">  604 </span><span class="spaces">  </span><span class="istickedoff">case unwrapTermF t of</span>
-<span class="lineno">  605 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  606 </span><span class="spaces">    </span><span class="istickedoff">FTermF ftf -&gt; <span class="nottickedoff">flatTermFToExpr ftf</span></span>
-<span class="lineno">  607 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  608 </span><span class="spaces">    </span><span class="istickedoff">Pi {} -&gt;</span>
-<span class="lineno">  609 </span><span class="spaces">      </span><span class="istickedoff">let (params, e) = asPiList t in</span>
-<span class="lineno">  610 </span><span class="spaces">      </span><span class="istickedoff">translatePi params e</span>
-<span class="lineno">  611 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  612 </span><span class="spaces">    </span><span class="istickedoff">Lambda {} -&gt;</span>
-<span class="lineno">  613 </span><span class="spaces">      </span><span class="istickedoff">let (params, e) = asLambdaList t in</span>
-<span class="lineno">  614 </span><span class="spaces">      </span><span class="istickedoff">localTR (set useImplicitBinders <span class="nottickedoff">False</span>) $</span>
-<span class="lineno">  615 </span><span class="spaces">        </span><span class="istickedoff">translateParams params $ \paramTerms -&gt;</span>
-<span class="lineno">  616 </span><span class="spaces">        </span><span class="istickedoff">do e' &lt;- translateTermLet e</span>
-<span class="lineno">  617 </span><span class="spaces">           </span><span class="istickedoff">return (Rocq.Lambda paramTerms e')</span>
-<span class="lineno">  618 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  619 </span><span class="spaces">    </span><span class="istickedoff">App {} -&gt;</span>
-<span class="lineno">  620 </span><span class="spaces">      </span><span class="istickedoff">-- asApplyAll: innermost argument first</span>
-<span class="lineno">  621 </span><span class="spaces">      </span><span class="istickedoff">let (f, args) = asApplyAll t</span>
-<span class="lineno">  622 </span><span class="spaces">      </span><span class="istickedoff">in</span>
-<span class="lineno">  623 </span><span class="spaces">      </span><span class="istickedoff">case f of</span>
-<span class="lineno">  624 </span><span class="spaces">      </span><span class="istickedoff">(asGlobalDef -&gt; Just i) -&gt;</span>
-<span class="lineno">  625 </span><span class="spaces">        </span><span class="istickedoff">case i of</span>
-<span class="lineno">  626 </span><span class="spaces">        </span><span class="istickedoff">&quot;Prelude.natToInt&quot; -&gt;</span>
-<span class="lineno">  627 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case args of</span></span>
-<span class="lineno">  628 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[n] -&gt; translateTerm n &gt;&gt;= \case</span></span>
-<span class="lineno">  629 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">Rocq.NatLit n' -&gt; pure $ Rocq.ZLit n'</span></span>
-<span class="lineno">  630 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; translateIdentWithArgs &quot;Prelude.natToInt&quot; [n]</span></span>
-<span class="lineno">  631 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; badTerm</span></span>
-<span class="lineno">  632 </span><span class="spaces">        </span><span class="istickedoff">&quot;Prelude.intNeg&quot; -&gt;</span>
-<span class="lineno">  633 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case args of</span></span>
-<span class="lineno">  634 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[z] -&gt; translateTerm z &gt;&gt;= \case</span></span>
-<span class="lineno">  635 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">Rocq.ZLit z' -&gt; pure $ Rocq.ZLit (-z')</span></span>
-<span class="lineno">  636 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; translateIdentWithArgs &quot;Prelude.intNeg&quot; [z]</span></span>
-<span class="lineno">  637 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; badTerm</span></span>
-<span class="lineno">  638 </span><span class="spaces">        </span><span class="istickedoff">&quot;Prelude.ite&quot; -&gt;</span>
-<span class="lineno">  639 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case args of</span></span>
-<span class="lineno">  640 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">-- `rest` can be non-empty in examples like:</span></span>
-<span class="lineno">  641 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">-- (if b then f else g) arg1 arg2</span></span>
-<span class="lineno">  642 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ty : c : tt : ft : rest -&gt; do</span></span>
-<span class="lineno">  643 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">ite &lt;- Rocq.If &lt;$&gt; translateTerm c &lt;*&gt; translateTerm tt &lt;*&gt; translateTerm ft</span></span>
-<span class="lineno">  644 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">case rest of</span></span>
-<span class="lineno">  645 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">[] -&gt; return ite</span></span>
-<span class="lineno">  646 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">_  -&gt; Rocq.App ite &lt;$&gt; mapM translateTerm rest</span></span>
-<span class="lineno">  647 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">-- When `ite` is partially applied (fewer than 4 args), fall</span></span>
-<span class="lineno">  648 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">-- through to `translateIdentWithArgs` to translate it as a</span></span>
-<span class="lineno">  649 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">-- normal function application instead of if-then-else syntax.</span></span>
-<span class="lineno">  650 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; translateIdentWithArgs i args</span></span>
-<span class="lineno">  651 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  652 </span><span class="spaces">        </span><span class="istickedoff">-- Refuse to translate any recursive value defined using Prelude.fix</span>
-<span class="lineno">  653 </span><span class="spaces">        </span><span class="istickedoff">&quot;Prelude.fix&quot; -&gt; <span class="nottickedoff">badTerm</span></span>
-<span class="lineno">  654 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  655 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; translateIdentWithArgs i args</span>
-<span class="lineno">  656 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Rocq.App &lt;$&gt; translateTerm f &lt;*&gt; traverse translateTerm args</span></span>
-<span class="lineno">  657 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  658 </span><span class="spaces">    </span><span class="istickedoff">-- Constants</span>
-<span class="lineno">  659 </span><span class="spaces">    </span><span class="istickedoff">Constant n -&gt; translateConstant n</span>
-<span class="lineno">  660 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  661 </span><span class="spaces">    </span><span class="istickedoff">Variable nm _tp -&gt;</span>
-<span class="lineno">  662 </span><span class="spaces">      </span><span class="istickedoff">do nenv &lt;- view namedEnvironment &lt;$&gt; askTR</span>
-<span class="lineno">  663 </span><span class="spaces">         </span><span class="istickedoff">case Map.lookup nm nenv of</span>
-<span class="lineno">  664 </span><span class="spaces">           </span><span class="istickedoff">Just ident -&gt; pure (Rocq.Var ident)</span>
-<span class="lineno">  665 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno">  666 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">do let nm_str = Text.unpack $ vnName nm</span></span>
-<span class="lineno">  667 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">let ident = escapeIdent $ Rocq.Ident $ nm_str</span></span>
-<span class="lineno">  668 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">pure (Rocq.Var ident)</span></span>
-<span class="lineno">  669 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  670 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  671 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">badTerm          = Except.throwError $ BadTerm t</span></span></span>
-<span class="lineno">  672 </span>
-<span class="lineno">  673 </span>-- | Translate a SAW core term along with its type to a Rocq term and its Rocq
-<span class="lineno">  674 </span>-- type, and pass the results to the supplied function
-<span class="lineno">  675 </span>translateTermToDocWith ::
-<span class="lineno">  676 </span>  TranslationConfiguration -&gt;
-<span class="lineno">  677 </span>  Maybe ModuleName -&gt;
-<span class="lineno">  678 </span>  ModuleMap -&gt;
-<span class="lineno">  679 </span>  [Rocq.Ident] -&gt; -- ^ globals that have already been translated
-<span class="lineno">  680 </span>  [Rocq.Ident] -&gt; -- ^ names of local variables in scope
-<span class="lineno">  681 </span>  (Rocq.Term -&gt; Rocq.Term -&gt; Doc ann) -&gt;
-<span class="lineno">  682 </span>  Term -&gt; Term -&gt;
-<span class="lineno">  683 </span>  Either TranslationError (Doc ann)
-<span class="lineno">  684 </span><span class="decl"><span class="istickedoff">translateTermToDocWith configuration r mm globalDecls localEnv f t tp_trm = do</span>
-<span class="lineno">  685 </span><span class="spaces">  </span><span class="istickedoff">((term, tp), state) &lt;-</span>
-<span class="lineno">  686 </span><span class="spaces">    </span><span class="istickedoff">runTermTranslationMonad <span class="nottickedoff">configuration</span> r <span class="nottickedoff">mm</span> <span class="nottickedoff">globalDecls</span> localEnv</span>
-<span class="lineno">  687 </span><span class="spaces">    </span><span class="istickedoff">((,) &lt;$&gt; translateTermLet t &lt;*&gt; translateTermLet tp_trm)</span>
-<span class="lineno">  688 </span><span class="spaces">  </span><span class="istickedoff">let decls = view topLevelDeclarations state</span>
-<span class="lineno">  689 </span><span class="spaces">  </span><span class="istickedoff">return $</span>
-<span class="lineno">  690 </span><span class="spaces">    </span><span class="istickedoff">vcat $</span>
-<span class="lineno">  691 </span><span class="spaces">    </span><span class="istickedoff">[ (vcat . intersperse <span class="nottickedoff">hardline</span> . map <span class="nottickedoff">Rocq.prettyDecl</span> . reverse) decls</span>
-<span class="lineno">  692 </span><span class="spaces">    </span><span class="istickedoff">, if <span class="tickonlytrue">null decls</span> then mempty else <span class="nottickedoff">hardline</span></span>
-<span class="lineno">  693 </span><span class="spaces">    </span><span class="istickedoff">, f term tp</span>
-<span class="lineno">  694 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
-<span class="lineno">  695 </span>
-<span class="lineno">  696 </span>-- | Translate a SAW core 'Term' and its type (given as a 'Term') to a Rocq
-<span class="lineno">  697 </span>-- definition with the supplied name
-<span class="lineno">  698 </span>translateDefDoc ::
-<span class="lineno">  699 </span>  TranslationConfiguration -&gt;
-<span class="lineno">  700 </span>  Maybe ModuleName -&gt;
-<span class="lineno">  701 </span>  ModuleMap -&gt;
-<span class="lineno">  702 </span>  [Rocq.Ident] -&gt;
-<span class="lineno">  703 </span>  Rocq.Ident -&gt; Term -&gt; Term -&gt;
-<span class="lineno">  704 </span>  Either TranslationError (Doc ann)
-<span class="lineno">  705 </span><span class="decl"><span class="istickedoff">translateDefDoc configuration r mm globalDecls name =</span>
-<span class="lineno">  706 </span><span class="spaces">  </span><span class="istickedoff">translateTermToDocWith <span class="nottickedoff">configuration</span> r <span class="nottickedoff">mm</span> <span class="nottickedoff">globalDecls</span> [name]</span>
-<span class="lineno">  707 </span><span class="spaces">  </span><span class="istickedoff">(\ t tp -&gt; Rocq.prettyDecl $ mkDefinition name t tp)</span></span>
+<span class="lineno">  605 </span><span class="spaces">    </span><span class="istickedoff">Label _ t1 -&gt; <span class="nottickedoff">translateTermUnshared t1</span></span>
+<span class="lineno">  606 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  607 </span><span class="spaces">    </span><span class="istickedoff">FTermF ftf -&gt; <span class="nottickedoff">flatTermFToExpr ftf</span></span>
+<span class="lineno">  608 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  609 </span><span class="spaces">    </span><span class="istickedoff">Pi {} -&gt;</span>
+<span class="lineno">  610 </span><span class="spaces">      </span><span class="istickedoff">let (params, e) = asPiList t in</span>
+<span class="lineno">  611 </span><span class="spaces">      </span><span class="istickedoff">translatePi params e</span>
+<span class="lineno">  612 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  613 </span><span class="spaces">    </span><span class="istickedoff">Lambda {} -&gt;</span>
+<span class="lineno">  614 </span><span class="spaces">      </span><span class="istickedoff">let (params, e) = asLambdaList t in</span>
+<span class="lineno">  615 </span><span class="spaces">      </span><span class="istickedoff">localTR (set useImplicitBinders <span class="nottickedoff">False</span>) $</span>
+<span class="lineno">  616 </span><span class="spaces">        </span><span class="istickedoff">translateParams params $ \paramTerms -&gt;</span>
+<span class="lineno">  617 </span><span class="spaces">        </span><span class="istickedoff">do e' &lt;- translateTermLet e</span>
+<span class="lineno">  618 </span><span class="spaces">           </span><span class="istickedoff">return (Rocq.Lambda paramTerms e')</span>
+<span class="lineno">  619 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  620 </span><span class="spaces">    </span><span class="istickedoff">App {} -&gt;</span>
+<span class="lineno">  621 </span><span class="spaces">      </span><span class="istickedoff">-- asApplyAll: innermost argument first</span>
+<span class="lineno">  622 </span><span class="spaces">      </span><span class="istickedoff">let (f, args) = asApplyAll t</span>
+<span class="lineno">  623 </span><span class="spaces">      </span><span class="istickedoff">in</span>
+<span class="lineno">  624 </span><span class="spaces">      </span><span class="istickedoff">case f of</span>
+<span class="lineno">  625 </span><span class="spaces">      </span><span class="istickedoff">(asGlobalDef -&gt; Just i) -&gt;</span>
+<span class="lineno">  626 </span><span class="spaces">        </span><span class="istickedoff">case i of</span>
+<span class="lineno">  627 </span><span class="spaces">        </span><span class="istickedoff">&quot;Prelude.natToInt&quot; -&gt;</span>
+<span class="lineno">  628 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case args of</span></span>
+<span class="lineno">  629 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[n] -&gt; translateTerm n &gt;&gt;= \case</span></span>
+<span class="lineno">  630 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">Rocq.NatLit n' -&gt; pure $ Rocq.ZLit n'</span></span>
+<span class="lineno">  631 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; translateIdentWithArgs &quot;Prelude.natToInt&quot; [n]</span></span>
+<span class="lineno">  632 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; badTerm</span></span>
+<span class="lineno">  633 </span><span class="spaces">        </span><span class="istickedoff">&quot;Prelude.intNeg&quot; -&gt;</span>
+<span class="lineno">  634 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case args of</span></span>
+<span class="lineno">  635 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[z] -&gt; translateTerm z &gt;&gt;= \case</span></span>
+<span class="lineno">  636 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">Rocq.ZLit z' -&gt; pure $ Rocq.ZLit (-z')</span></span>
+<span class="lineno">  637 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; translateIdentWithArgs &quot;Prelude.intNeg&quot; [z]</span></span>
+<span class="lineno">  638 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; badTerm</span></span>
+<span class="lineno">  639 </span><span class="spaces">        </span><span class="istickedoff">&quot;Prelude.ite&quot; -&gt;</span>
+<span class="lineno">  640 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case args of</span></span>
+<span class="lineno">  641 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">-- `rest` can be non-empty in examples like:</span></span>
+<span class="lineno">  642 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">-- (if b then f else g) arg1 arg2</span></span>
+<span class="lineno">  643 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ty : c : tt : ft : rest -&gt; do</span></span>
+<span class="lineno">  644 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">ite &lt;- Rocq.If &lt;$&gt; translateTerm c &lt;*&gt; translateTerm tt &lt;*&gt; translateTerm ft</span></span>
+<span class="lineno">  645 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">case rest of</span></span>
+<span class="lineno">  646 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">[] -&gt; return ite</span></span>
+<span class="lineno">  647 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">_  -&gt; Rocq.App ite &lt;$&gt; mapM translateTerm rest</span></span>
+<span class="lineno">  648 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">-- When `ite` is partially applied (fewer than 4 args), fall</span></span>
+<span class="lineno">  649 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">-- through to `translateIdentWithArgs` to translate it as a</span></span>
+<span class="lineno">  650 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">-- normal function application instead of if-then-else syntax.</span></span>
+<span class="lineno">  651 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; translateIdentWithArgs i args</span></span>
+<span class="lineno">  652 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  653 </span><span class="spaces">        </span><span class="istickedoff">-- Refuse to translate any recursive value defined using Prelude.fix</span>
+<span class="lineno">  654 </span><span class="spaces">        </span><span class="istickedoff">&quot;Prelude.fix&quot; -&gt; <span class="nottickedoff">badTerm</span></span>
+<span class="lineno">  655 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  656 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; translateIdentWithArgs i args</span>
+<span class="lineno">  657 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Rocq.App &lt;$&gt; translateTerm f &lt;*&gt; traverse translateTerm args</span></span>
+<span class="lineno">  658 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  659 </span><span class="spaces">    </span><span class="istickedoff">-- Constants</span>
+<span class="lineno">  660 </span><span class="spaces">    </span><span class="istickedoff">Constant n -&gt; translateConstant n</span>
+<span class="lineno">  661 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  662 </span><span class="spaces">    </span><span class="istickedoff">Variable nm _tp -&gt;</span>
+<span class="lineno">  663 </span><span class="spaces">      </span><span class="istickedoff">do nenv &lt;- view namedEnvironment &lt;$&gt; askTR</span>
+<span class="lineno">  664 </span><span class="spaces">         </span><span class="istickedoff">case Map.lookup nm nenv of</span>
+<span class="lineno">  665 </span><span class="spaces">           </span><span class="istickedoff">Just ident -&gt; pure (Rocq.Var ident)</span>
+<span class="lineno">  666 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  667 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">do let nm_str = Text.unpack $ vnName nm</span></span>
+<span class="lineno">  668 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">let ident = escapeIdent $ Rocq.Ident $ nm_str</span></span>
+<span class="lineno">  669 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">pure (Rocq.Var ident)</span></span>
+<span class="lineno">  670 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  671 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  672 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">badTerm          = Except.throwError $ BadTerm t</span></span></span>
+<span class="lineno">  673 </span>
+<span class="lineno">  674 </span>-- | Translate a SAW core term along with its type to a Rocq term and its Rocq
+<span class="lineno">  675 </span>-- type, and pass the results to the supplied function
+<span class="lineno">  676 </span>translateTermToDocWith ::
+<span class="lineno">  677 </span>  TranslationConfiguration -&gt;
+<span class="lineno">  678 </span>  Maybe ModuleName -&gt;
+<span class="lineno">  679 </span>  ModuleMap -&gt;
+<span class="lineno">  680 </span>  [Rocq.Ident] -&gt; -- ^ globals that have already been translated
+<span class="lineno">  681 </span>  [Rocq.Ident] -&gt; -- ^ names of local variables in scope
+<span class="lineno">  682 </span>  (Rocq.Term -&gt; Rocq.Term -&gt; Doc ann) -&gt;
+<span class="lineno">  683 </span>  Term -&gt; Term -&gt;
+<span class="lineno">  684 </span>  Either TranslationError (Doc ann)
+<span class="lineno">  685 </span><span class="decl"><span class="istickedoff">translateTermToDocWith configuration r mm globalDecls localEnv f t tp_trm = do</span>
+<span class="lineno">  686 </span><span class="spaces">  </span><span class="istickedoff">((term, tp), state) &lt;-</span>
+<span class="lineno">  687 </span><span class="spaces">    </span><span class="istickedoff">runTermTranslationMonad <span class="nottickedoff">configuration</span> r <span class="nottickedoff">mm</span> <span class="nottickedoff">globalDecls</span> localEnv</span>
+<span class="lineno">  688 </span><span class="spaces">    </span><span class="istickedoff">((,) &lt;$&gt; translateTermLet t &lt;*&gt; translateTermLet tp_trm)</span>
+<span class="lineno">  689 </span><span class="spaces">  </span><span class="istickedoff">let decls = view topLevelDeclarations state</span>
+<span class="lineno">  690 </span><span class="spaces">  </span><span class="istickedoff">return $</span>
+<span class="lineno">  691 </span><span class="spaces">    </span><span class="istickedoff">vcat $</span>
+<span class="lineno">  692 </span><span class="spaces">    </span><span class="istickedoff">[ (vcat . intersperse <span class="nottickedoff">hardline</span> . map <span class="nottickedoff">Rocq.prettyDecl</span> . reverse) decls</span>
+<span class="lineno">  693 </span><span class="spaces">    </span><span class="istickedoff">, if <span class="tickonlytrue">null decls</span> then mempty else <span class="nottickedoff">hardline</span></span>
+<span class="lineno">  694 </span><span class="spaces">    </span><span class="istickedoff">, f term tp</span>
+<span class="lineno">  695 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
+<span class="lineno">  696 </span>
+<span class="lineno">  697 </span>-- | Translate a SAW core 'Term' and its type (given as a 'Term') to a Rocq
+<span class="lineno">  698 </span>-- definition with the supplied name
+<span class="lineno">  699 </span>translateDefDoc ::
+<span class="lineno">  700 </span>  TranslationConfiguration -&gt;
+<span class="lineno">  701 </span>  Maybe ModuleName -&gt;
+<span class="lineno">  702 </span>  ModuleMap -&gt;
+<span class="lineno">  703 </span>  [Rocq.Ident] -&gt;
+<span class="lineno">  704 </span>  Rocq.Ident -&gt; Term -&gt; Term -&gt;
+<span class="lineno">  705 </span>  Either TranslationError (Doc ann)
+<span class="lineno">  706 </span><span class="decl"><span class="istickedoff">translateDefDoc configuration r mm globalDecls name =</span>
+<span class="lineno">  707 </span><span class="spaces">  </span><span class="istickedoff">translateTermToDocWith <span class="nottickedoff">configuration</span> r <span class="nottickedoff">mm</span> <span class="nottickedoff">globalDecls</span> [name]</span>
+<span class="lineno">  708 </span><span class="spaces">  </span><span class="istickedoff">(\ t tp -&gt; Rocq.prettyDecl $ mkDefinition name t tp)</span></span>
 
 </pre>
 </body>
