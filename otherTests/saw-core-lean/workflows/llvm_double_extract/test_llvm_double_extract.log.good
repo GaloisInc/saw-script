@@ -1,0 +1,10 @@
+Loading file "test_llvm_double_extract.saw"
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_llvm_double_extract.saw:55:8-55:65 in (callback)
+   (builtin) in fails
+   test_llvm_double_extract.saw:55:1-55:65 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+

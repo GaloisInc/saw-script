@@ -1,0 +1,55 @@
+// Workflow — LLVM double: the `llvm_extract` goal-delivery flavor.
+// A Term is pulled straight out of LLVM bitcode and proved as a
+// CRYPTOL-LEVEL equivalence, with NO Crucible spec, no points-to, no
+// llvm_execute_func. This is the mechanism the other workflow rows
+// don't show: llvm_verify rows deliver a memory-safety / postcondition
+// obligation through a spec; here the obligation is a plain algebraic
+// bitvector identity between two extracted functions.
+//
+// Adapted from doc/llvm-java-verification-with-saw/code/double.saw
+// (the SAW tutorial's `double` example), with Lean substituted for the
+// SMT backend. The tutorial proves the same theorem twice, with
+//
+//     r <- prove yices thm;
+//     r <- prove z3   thm;
+//
+// over `thm = {{ \x -> double_ref x == double_imp x }}`. We keep the
+// exact theorem and route it to Lean's kernel instead: emission-only
+// `offline_lean` writes the obligation to a `.lean` file and leaves it
+// UNSOLVED on the SAW side, so the prove_print fails and is wrapped in
+// `fails`. The discharge is proofs/llvm_double_eq/ (green, sorry-free,
+// axiom-audited).
+//
+// double_ref(x) = x * 2   and   double_imp(x) = x << 1, so the emitted
+// goal is the honest "multiply-by-two is shift-left-by-one" bitvector
+// identity, `bvMul 32 2 x = bvShl 32 x 1`. It does NOT fold on the SAW
+// side: SAW's bitvector rewriter leaves `x*2 == x<<1` as a residual
+// subgoal (probed 2026-07-15 — the prove_print genuinely emits, so the
+// `fails` wrapper is honest, not masking a pre-folded True), so Lean
+// receives a real obligation rather than nothing.
+//
+// Sources: this dir contains only the .saw script and the pre-compiled
+// double.bc (LLVM bitcode is a build artifact). The canonical double.c
+// lives under doc/llvm-java-verification-with-saw/code/. Rebuild
+// double.bc when needed via:
+//
+//   cd otherTests/saw-core-lean/workflows/llvm_double_extract
+//   clang -c -g -O0 -emit-llvm \
+//     -o double.bc \
+//     ../../../../doc/llvm-java-verification-with-saw/code/double.c
+
+l <- llvm_load_module "double.bc";
+
+// llvm_extract turns each C function into a SAWCore Term of type
+// [32] -> [32]. No spec, no allocation, no execute_func — just the
+// symbolic function body lifted out of the bitcode.
+double_ref <- llvm_extract l "double_ref";
+double_imp <- llvm_extract l "double_imp";
+
+// The tutorial's theorem, verbatim: the two extracted terms agree on
+// every 32-bit input (x*2 == x<<1). Punted to Lean via emission-only
+// offline_lean; the goal stays unsolved on the SAW side (fails-wrapped)
+// and is kernel-checked in proofs/llvm_double_eq/proof.lean.
+let thm = {{ \x -> double_ref x == double_imp x }};
+
+fails (prove_print (offline_lean "test_llvm_double_extract") thm);
