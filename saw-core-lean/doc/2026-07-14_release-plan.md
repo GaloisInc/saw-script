@@ -275,3 +275,20 @@ the first two-level test. NOTE the pattern's relation to the
 BV-policy gaps: it does NOT unpark them (standalone quarterround
 correctness still needs the W2 strategy) but shows compositional
 verification can route AROUND that wall entirely.
+
+**Extension result (2026-07-15, commits `9cecda1e2`/`42fa23783`):**
+columnround transferred verbatim (lemma library byte-identical to the
+rowround row; permutation invariance confirmed) — GREEN in
+`proofs/llvm_columnround_itp`. doubleround's two-level discharge is
+COMPLETE and axiom-clean but its tactic cost (core `simp` reduction +
+16 double-depth per-word `ac_rfl` closes, ~130-210 s across runs)
+does not robustly fit the harness's 120 s per-process cap; it lands
+as `proof-gaps/llvm_doubleround_itp` with the measured scaling law.
+Depth verdict: the OUTER composition is depth-invariant; the
+per-word arithmetic closes scale with inlined term size and cross
+the CI wall-clock cap at depth 2. Principled unlock (recorded in the
+GAP.md): split the monolithic obligation so the 16 per-word closes
+elaborate as independently-budgeted lemmas — packaging, not new
+mathematics. Independently re-verified end-to-end at
+`LAKE_TIMEOUT_SECS=500`: harness exit 0, checked theorem audit
+passed.
