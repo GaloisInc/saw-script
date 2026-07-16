@@ -335,13 +335,20 @@ typeInferCompleteTerm uterm =
 
     Un.Let _ [] t ->
       typeInferCompleteUTerm t
-    Un.Let p ( PosPair _ (qn, rhs, is_def) : bs) t -> do
-      rhs' <- typeInferCompleteUTerm rhs
+    Un.Let p ( PosPair _ (qn, rhs0, is_def) : bs) t -> do
+      sc <- askSharedContext
+      let basenm = QN.baseName qn
+      rhs1 <- typeInferCompleteUTerm rhs0
+      -- Attach a label if this is a definitional let-binding, and
+      -- the name is not prefixed with "_".
+      rhs2 <- if is_def && not ("_" `Text.isPrefixOf` basenm)
+        then liftIO $ scLabel sc basenm rhs1
+        else return rhs1
       mvn <- case is_def of
         True -> return Nothing
         False -> Just <$>
-          liftSCM (SC.scmFreshVarName (QN.baseName qn))
-      withVar' (QN.ppQualName qn) mvn rhs' $
+          liftSCM (SC.scmFreshVarName basenm)
+      withVar' (QN.ppQualName qn) mvn rhs2 $
         typeInferCompleteTerm $ Un.Let p bs t
 
     Un.Pi _ [] t ->

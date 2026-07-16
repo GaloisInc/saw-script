@@ -250,6 +250,9 @@ data TermF e
       -- ^ A global constant identified by its name.
     | Variable !VarName !e
       -- ^ A named variable with a type.
+    | Label !Text !e
+      -- ^ A term with a label, used for naming memoization variables.
+
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
 instance Hashable e => Hashable (TermF e) -- automatically derived
@@ -269,3 +272,4 @@ freesTermF tf =
     Pi nm lhs rhs -> IntSet.union lhs (IntSet.delete (vnIndex nm) rhs)
     Constant {} -> IntSet.empty
     Variable nm tp -> IntSet.insert (vnIndex nm) tp
+    Label _ t -> t

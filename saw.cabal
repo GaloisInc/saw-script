@@ -500,7 +500,7 @@ library saw-central
     galois-dwarf >= 0.2.2,
     jvm-parser,
     language-sally,
-    llvm-pretty >= 0.8,
+    llvm-pretty >= 0.14.0.0.101,
     llvm-pretty-bc-parser >= 0.1.3.1,
     lmdb-simple,
     macaw-base,
@@ -575,7 +575,6 @@ library saw-central
     SAWCentral.Crucible.LLVM.MethodSpecIR
     SAWCentral.Crucible.LLVM.ResolveSetupValue
     SAWCentral.Crucible.LLVM.Setup.Value
-    SAWCentral.Crucible.LLVM.Setup.LLVMCombine
     SAWCentral.Crucible.LLVM.Skeleton
     SAWCentral.Crucible.LLVM.Skeleton.Builtins
     SAWCentral.Crucible.LLVM.X86

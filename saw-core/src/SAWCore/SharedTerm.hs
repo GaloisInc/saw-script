@@ -77,6 +77,8 @@ module SAWCore.SharedTerm
   , scGetData
   , scUpdateData
   , scWithData
+  , scLabel
+  , unlabel
     -- * Term builders
   , scTermF
   , scFlatTermF
@@ -1161,12 +1163,19 @@ scSubtype sc t1 t2 = execSCM sc (scmSubtype t1 t2)
 scApplyBeta :: SharedContext -> Term -> Term -> IO Term
 scApplyBeta sc f arg = scApplyAllBeta sc f [arg]
 
+scApplyAppArgs :: SharedContext -> Term -> [AppArg] -> IO Term
+scApplyAppArgs sc f app = execSCM sc (scmApplyAppArgs f app)
+
+scApplyAppArgsBeta :: SharedContext -> Term -> [AppArg] -> IO Term
+scApplyAppArgsBeta sc f app = execSCM sc (scmApplyAppArgsBeta f app)
+
+
 -- | Internal function: Instantiate free variables within a term,
 -- apply it to a list of arguments, and beta-normalize the result.
 -- Precondition: All terms in the substitution map and the list of
 -- arguments are already in beta-normal form.
 scBetaNormalizeAux ::
-  SharedContext -> IntMap Term -> Term -> [Term] -> IO Term
+  SharedContext -> IntMap Term -> Term -> [AppArg] -> IO Term
 scBetaNormalizeAux sc sub t0 args0 =
   do let rangeVars = foldMap freeVars sub
      -- The cache memoizes the result of normalizing a given
@@ -1175,25 +1184,32 @@ scBetaNormalizeAux sc sub t0 args0 =
      cache <- newIntCache
      let memo :: Term -> IO Term
          memo t = useIntCache cache (termIndex t) (go t [])
-         go :: Term -> [Term] -> IO Term
+         go :: Term -> [AppArg] -> IO Term
          go t args =
            case unwrapTermF t of
              FTermF ftf ->
                do ftf' <- traverse memo ftf
                   t' <- scFlatTermF sc ftf'
-                  scApplyAll sc t' args
+                  scApplyAppArgs sc t' args
              App t1 t2 ->
                do t2' <- memo t2
-                  go t1 (t2' : args)
+                  go t1 (AppTerm t2':args)
              Lambda x t1 t2 ->
-               case args of
-                 arg : args' ->
+               -- 'nextAppTerm' skips any labels from 'args' to retrieve
+               -- the next real argument. These labels are dropped
+               -- because this step does not create an 'App' to attach
+               -- them to. Note that any labels on the argument 'Term'
+               -- itself are untouched. The labels that are dropped are
+               -- any that were attached to the partial application
+               -- itself.
+               case nextAppTerm args of
+                 Just (arg, args') ->
                    -- No possibility of capture here, as the binder is
                    -- going away. If x is already in the map,
                    -- overwriting that entry is what we want.
                    do let sub' = IntMap.insert (vnIndex x) arg sub
                       scBetaNormalizeAux sc sub' t2 args'
-                 [] ->
+                 Nothing ->
                    do t1' <- memo t1
                       -- Freshen bound variable if it can capture.
                       x' <-
@@ -1203,7 +1219,11 @@ scBetaNormalizeAux sc sub t0 args0 =
                       var <- scVariable sc x' t1'
                       let sub' = IntMap.insert (vnIndex x) var sub
                       t2' <- scBetaNormalizeAux sc sub' t2 []
-                      scLambda sc x' t1' t2'
+                      t3 <- scLambda sc x' t1' t2'
+                      -- Apply the context to re-attach any accumulated
+                      -- labels. Since 'nextAppArg' is 'Nothing',
+                      -- this will not apply any arguments.
+                      scApplyAppArgs sc t3 args
              Pi x t1 t2 ->
                -- Pi expressions may never be applied to arguments
                do t1' <- memo t1
@@ -1215,18 +1235,22 @@ scBetaNormalizeAux sc sub t0 args0 =
                   var <- scVariable sc x' t1'
                   let sub' = IntMap.insert (vnIndex x) var sub
                   t2' <- scBetaNormalizeAux sc sub' t2 []
-                  scPi sc x' t1' t2'
+                  t3 <- scPi sc x' t1' t2'
+                  -- Apply the context to re-attach any accumulated
+                  -- labels
+                  scApplyAppArgs sc t3 args
              Constant{} ->
-               scApplyAll sc t args
+               scApplyAppArgs sc t args
              Variable x _ ->
                -- All bound variables will be present in the map.
                -- To preserve term invariants, free variables must
                -- have their type annotations left unmodified.
                case IntMap.lookup (vnIndex x) sub of
                  Nothing ->
-                   scApplyAll sc t args
+                   scApplyAppArgs sc t args
                  Just t' ->
-                   scApplyAllBeta sc t' args
+                   scApplyAppArgsBeta sc t' args
+             Label lbl t1 -> go t1 (AppLabel lbl:args)
      go t0 args0
 
 -- | Beta-reduce a term to normal form.
@@ -2257,6 +2281,8 @@ scUnfoldConstantsBeta sc unfold t0 =
      let memo :: Term -> ChangeT IO Term
          memo t = useChangeCache tcache (termIndex t) (go t)
          go :: Term -> ChangeT IO Term
+         go t@(asLabel -> Just (tg,t1)) =
+          whenModified t (scLabel sc tg) (memo t1)
          go (asApplyAll -> (asConstant -> Just nm, args))
            | unfold nm, Just rhs <- getRhs nm =
                do args' <- traverse memo args
@@ -2324,7 +2350,7 @@ scNormalize sc unfold t0 =
                     _ ->
                       -- If it's not a redex, then create an application.
                       lift $ scApply sc t1' t2'
-
+             Label tg t1 -> whenModified t (scLabel sc tg) (memo t1)
      commitChangeT (memo t0)
 
 -- | Unfold one time fixpoint constants.
@@ -2390,3 +2416,6 @@ scTreeSizeAux = go
         Just sz' -> (sz + sz', seen)
         Nothing -> (sz + sz', Map.insert (termIndex t) sz' seen')
           where (sz', seen') = foldl' go (1, seen) (unwrapTermF t)
+
+scLabel :: SharedContext -> Text -> Term -> IO Term
+scLabel sc tg t = execSCM sc (scmLabel tg t)

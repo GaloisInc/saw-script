@@ -1,5 +1,5 @@
 let {{
-  // Output feedback cipher chaning mode
+  // Output feedback cipher chaining mode
 
   OFB_enc : {a, n} fin n => (a -> a) -> a -> [n]a -> [n]a
   OFB_enc enc iv pt = pt ^ keystream

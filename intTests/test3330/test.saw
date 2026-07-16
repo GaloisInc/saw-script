@@ -1,0 +1,18 @@
+enable_experimental;
+m <- mir_load_module "test.linked-mir.json";
+
+let g_spec = do {
+    mir_execute_func [];
+    mir_return (mir_term {{ 0 : [32] }});
+};
+
+let verify_it = mir_verify m "test::g" [] false g_spec z3;
+
+mir_set_exception_context_none;
+fails verify_it;
+
+mir_set_exception_context_limited 1;
+fails verify_it;
+
+mir_set_exception_context_no_limit;
+fails verify_it;

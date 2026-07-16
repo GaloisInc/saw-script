@@ -271,6 +271,12 @@ There are also the following derived types:
   Functions are curried, so a function of two arguments and a function
   of one argument that returns a function of one argument are the same
   type, and function types with multiple arguments have multiple arrows.
+  SAWScript supports named optional arguments; these arguments appear in
+  function types with the argument name and a question mark, like `a?Int`.
+  Functions with the same (by name and type) optional parameters are
+  the same type, regardless of the order the parameters appear in.
+  The implementation will print them in alphabetical order.
+  Note that functions are not allowed to have _only_ optional arguments.
 
 As already mentioned there are five monad types:
 
@@ -420,6 +426,16 @@ For example:
 let intPair (x: Int) (y: Int) = (x, y);
 :::
 
+Optional named parameters are declared by providing a default value with
+`?=`.
+This example allows passing either `x` or `y` by name, or both, and each
+defaults to zero if not passed explicitly.
+:::{code-block} sawscript
+let intPairOpt (x?=0 : Int) (y?=0 : Int) () = (x, y);
+:::
+An additional unit parameter is given because functions are not allowed
+to have _only_ optional arguments.
+
 Recursive functions can be written using the keyword `rec` in place of `let`.
 Groups of mutually recursive functions can be written using `rec` for the
 first function, and then `and` for each successive function, and then finally
@@ -434,6 +450,25 @@ the reserved variable name `_`.
 It is legal (but useless) to write a function and call it `_`.
 It is not legal to write a function that uses a tuple pattern in place
 of its name.
+
+By default the outward-facing and function-internal names of an
+optional parameter are the same.
+A different name can be used internally using the following syntax:
+:::{code-block} sawscript
+let intPairOpt (x@a ?= 0 : Int) (y@b ?= 0 : Int) () = (a, b);
+:::
+The right-hand side of the `@` can be any pattern, such as a tuple, or
+`_` to ignore a value.
+
+The default value of an optional parameter will normally be a
+constant; however, you can use any expression.
+Using functions that are effectful is not recommended, and the
+resulting observable behavior may not be consistent between different
+releases of SAW.
+Default values for optional parameters of recursive functions can call the
+function (or any function in the same group) recursively if needed.
+This too is not recommended, if only because it is confusing to reason
+about.
 
 Binding a variable name that already exists will, in general, create a
 new variable for the new value; the old value is left alone and
@@ -604,6 +639,26 @@ Tuple indexes are zero-based.
 
 Juxtaposition of expressions does function application, like in Haskell
 and ML: `f x` applies the function `f` to an argument `x`.
+Since functions are curried, applying some of the arguments to a
+function produces a function/closure that still expects the rest.
+(This is called _partial application_.)
+
+SAWScript supports optional named arguments; `f` `a=x` applies the
+function `f` to the argument `x`, treating it as the named argument
+with name `a`.
+If `x` is a complex expression that requires parentheses, you can
+extend the parentheses to include the argument name as well, for
+tidiness: `f` `(a=x)`.
+Optional arguments can be applied in any order (with respect to each
+other and to positional arguments), and, obviously, can be left off if
+desired.
+Functions with optional arguments can also be partially applied.
+However, the call site that applies the last positional argument
+completes the call.
+There can be further optional arguments after the last positional
+argument in that call site; however, once those are applied the
+call is done, any non-supplied optional arguments are set to their
+default values, and the function body is evaluated.
 
 There are no infix operators.
 Arithmetic (and computation on boolean values) is done in Cryptol blocks.
@@ -712,6 +767,9 @@ be useful for constructing more detailed messages later.
 
 - `str_concat : String -> String -> String` concatenates two `String`
 values, and can also be useful with `show`.
+
+- `str_concats : sep?String -> [String] -> String` concatenates a list
+of `String` values, taking an optional separator string as well.
 
 #### List Functions
 

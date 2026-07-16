@@ -54,7 +54,7 @@ module CryptolSAWCore.Cryptol
   , exportValueWithSchema
   ) where
 
-import Control.Monad (foldM, forM, zipWithM, join, unless)
+import Control.Monad (foldM, forM, zipWithM, join, unless, zipWithM)
 import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
@@ -540,9 +540,12 @@ provePropRec sc prop0 prop = do
                 scTuple sc ps
         -- instance (Zero a, Zero b, ...) => Zero { x : a, y : b, ... }
         (C.pIsZero -> Just (C.tIsRec -> Just fm))
-          -> do let fields = map (\(i, t) -> (C.identText i, t)) (C.canonicalFields fm)
-                fields' <- traverse (traverse (provePropRec sc prop0 . C.pZero)) fields
-                scRecordValue sc fields'
+          -> buildRecord C.pZero fm
+        -- Derived Zero instances
+        (C.pIsZero -> Just (C.tIsNominal -> Just (nt, ts)))
+          -- Newtypes
+          |  C.Struct con <- C.ntDef nt
+          -> buildRecord C.pZero (newtypeRecordFields nt ts con)
 
         -- instance Logic Bit
         (C.pIsLogic -> Just (C.tIsBit -> True))
@@ -575,7 +578,13 @@ provePropRec sc prop0 prop = do
                 scGlobalApply sc "Cryptol.PLogicPair" [a, b, pa, pb]
         -- instance (Logic a, Logic b, ...) => instance Logic { x : a, y : b, ... }
         (C.pIsLogic -> Just (C.tIsRec -> Just fm))
-          -> doRecord C.pLogic "Cryptol.PLogicEmpty" "Cryptol.PLogicRecord" fm
+          -> foldRecord C.pLogic "Cryptol.PLogicEmpty" "Cryptol.PLogicRecord" fm
+        -- Derived Logic instances
+        (C.pIsLogic -> Just (C.tIsNominal -> Just (nt, ts)))
+          -- Newtypes
+          |  C.Struct con <- C.ntDef nt
+          -> foldRecord C.pLogic "Cryptol.PLogicEmpty" "Cryptol.PLogicRecord"
+               (newtypeRecordFields nt ts con)
 
         -- instance Ring Integer
         (C.pIsRing -> Just (C.tIsInteger -> True))
@@ -620,7 +629,13 @@ provePropRec sc prop0 prop = do
                 scGlobalApply sc "Cryptol.PRingPair" [a, b, pa, pb]
         -- instance (Ring a, Ring b, ...) => instance Ring { x : a, y : b, ... }
         (C.pIsRing -> Just (C.tIsRec -> Just fm))
-          -> doRecord C.pRing "Cryptol.PRingEmpty" "Cryptol.PRingRecord" fm
+          -> foldRecord C.pRing "Cryptol.PRingEmpty" "Cryptol.PRingRecord" fm
+        -- Derived Ring instances
+        (C.pIsRing -> Just (C.tIsNominal -> Just (nt, ts)))
+          -- Newtypes
+          |  C.Struct con <- C.ntDef nt
+          -> foldRecord C.pRing "Cryptol.PRingEmpty" "Cryptol.PRingRecord"
+               (newtypeRecordFields nt ts con)
 
         -- instance Integral Integer
         (C.pIsIntegral -> Just (C.tIsInteger -> True))
@@ -692,7 +707,19 @@ provePropRec sc prop0 prop = do
                 scGlobalApply sc "Cryptol.PEqPair" [a, b, pa, pb]
         -- instance (Eq a, Eq b, ...) => instance Eq { x : a, y : b, ... }
         (C.pIsEq -> Just (C.tIsRec -> Just fm))
-          -> doRecord C.pEq "Cryptol.PEqEmpty" "Cryptol.PEqRecord" fm
+          -> foldRecord C.pEq "Cryptol.PEqEmpty" "Cryptol.PEqRecord" fm
+        -- Derived Eq instances
+        (C.pIsEq -> Just (C.tIsNominal -> Just (nt, ts)))
+          -- Newtypes
+          |  C.Struct con <- C.ntDef nt
+          -> foldRecord C.pEq "Cryptol.PEqEmpty" "Cryptol.PEqRecord"
+               (newtypeRecordFields nt ts con)
+          -- Enums
+          |  C.Enum cons <- C.ntDef nt
+          -> foldEnum C.pEq
+               "Cryptol.PEqVoid" "Cryptol.PEqEither"
+               "Cryptol.PEqUnit" "Cryptol.PEqPair"
+               (instantiatedEnumCons nt ts cons)
 
         -- instance Cmp Bit
         (C.pIsCmp -> Just (C.tIsBit -> True))
@@ -730,7 +757,19 @@ provePropRec sc prop0 prop = do
                 scGlobalApply sc "Cryptol.PCmpPair" [a, b, pa, pb]
         -- instance (Cmp a, Cmp b, ...) => instance Cmp { x : a, y : b, ... }
         (C.pIsCmp -> Just (C.tIsRec -> Just fm))
-          -> doRecord C.pCmp "Cryptol.PCmpEmpty" "Cryptol.PCmpRecord" fm
+          -> foldRecord C.pCmp "Cryptol.PCmpEmpty" "Cryptol.PCmpRecord" fm
+        -- Derived Cmp instances
+        (C.pIsCmp -> Just (C.tIsNominal -> Just (nt, ts)))
+          -- Newtypes
+          |  C.Struct con <- C.ntDef nt
+          -> foldRecord C.pCmp "Cryptol.PCmpEmpty" "Cryptol.PCmpRecord"
+               (newtypeRecordFields nt ts con)
+          -- Enums
+          |  C.Enum cons <- C.ntDef nt
+          -> foldEnum C.pCmp
+               "Cryptol.PCmpVoid" "Cryptol.PCmpEither"
+               "Cryptol.PCmpUnit" "Cryptol.PCmpPair"
+               (instantiatedEnumCons nt ts cons)
 
         -- instance (fin n) => SignedCmp [n]
         (C.pIsSignedCmp -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
@@ -754,7 +793,19 @@ provePropRec sc prop0 prop = do
                 scGlobalApply sc "Cryptol.PSignedCmpPair" [a, b, pa, pb]
         -- instance (SignedCmp a, SignedCmp b, ...) => instance SignedCmp { x : a, y : b, ... }
         (C.pIsSignedCmp -> Just (C.tIsRec -> Just fm))
-          -> doRecord C.pSignedCmp "Cryptol.PSignedCmpEmpty" "Cryptol.PSignedCmpRecord" fm
+          -> foldRecord C.pSignedCmp "Cryptol.PSignedCmpEmpty" "Cryptol.PSignedCmpRecord" fm
+        -- Derived SignedCmp instances
+        (C.pIsSignedCmp -> Just (C.tIsNominal -> Just (nt, ts)))
+          -- Newtypes
+          |  C.Struct con <- C.ntDef nt
+          -> foldRecord C.pSignedCmp "Cryptol.PSignedCmpEmpty" "Cryptol.PSignedCmpRecord"
+               (newtypeRecordFields nt ts con)
+          -- Enums
+          |  C.Enum cons <- C.ntDef nt
+          -> foldEnum C.pSignedCmp
+               "Cryptol.PSignedCmpVoid" "Cryptol.PSignedCmpEither"
+               "Cryptol.PSignedCmpUnit" "Cryptol.PSignedCmpPair"
+               (instantiatedEnumCons nt ts cons)
 
         -- Note that in the Literal/LiteralLessThan instances below, we
         -- intentionally do not translate the first argument.
@@ -833,8 +884,19 @@ provePropRec sc prop0 prop = do
                  ] ++ env'
             panic "proveProp" message
   where
-    doRecord :: (C.Type -> C.Type) -> Ident -> Ident -> C.RecordMap C.Ident C.Type -> IO Term
-    doRecord p nil cons fm = snd <$> go (C.canonicalFields fm)
+    -- Construct a record value. This is used to import Zero instances for
+    -- record types and newtypes.
+    buildRecord :: (C.Type -> C.Type) -> C.RecordMap C.Ident C.Type -> IO Term
+    buildRecord p fm =
+      do let fields = map (\(i, t) -> (C.identText i, t)) (C.canonicalFields fm)
+         fields' <- traverse (traverse (provePropRec sc prop0 . p)) fields
+         scRecordValue sc fields'
+
+    -- Fold over a record value field by field and return a value representing
+    -- a class instance (e.g., a @PEq@ value). This is used to import various
+    -- instances for record types and newtypes.
+    foldRecord :: (C.Type -> C.Type) -> Ident -> Ident -> C.RecordMap C.Ident C.Type -> IO Term
+    foldRecord p nil cons fm = snd <$> go (C.canonicalFields fm)
       where
         go :: [(C.Ident, C.Type)] -> IO (Term, Term)
         go [] =
@@ -848,6 +910,58 @@ provePropRec sc prop0 prop = do
              (b, pb) <- go ts
              c <- scGlobalApply sc "Prelude.RecordType" [s, a, b]
              pc <- scGlobalApply sc cons [s, a, b, pa, pb]
+             pure (c, pc)
+
+    -- Fold over an enum constructor by constructor, field by field, and return
+    -- a value representing a class instance (e.g., a @PEq@ value).
+    foldEnum ::
+      (C.Type -> C.Type) ->
+      -- | The SAWCore name of the instance to apply when there are no
+      -- constructors left (e.g., @PEqVoid@).
+      Ident ->
+      -- | The SAWCore name of the instance to apply for a single constructor
+      -- (e.g., @PEqEither@).
+      Ident ->
+      -- | The SAWCore name of the instance to apply when there are no fields
+      -- left (e.g., @PEqUnit@).
+      Ident ->
+      -- | The SAWCore name of the instance to apply for a single field (e.g.,
+      -- @PEqPair@).
+      Ident ->
+      [C.EnumCon] ->
+      IO Term
+    foldEnum p noConstructors addConstructor noFields addField = fmap snd . go
+      where
+        go :: [C.EnumCon] -> IO (Term, Term)
+        go [] =
+          do a <- scGlobalDef sc "Prelude.Void"
+             pa <- scGlobalDef sc noConstructors
+             pure (a, pa)
+        go (con : cons) =
+          do (a, pa) <- foldEnumCon p noFields addField (C.ecFields con)
+             (b, pb) <- go cons
+             c <- scGlobalApply sc "Prelude.Either" [a, b]
+             pc <- scGlobalApply sc addConstructor [a, b, pa, pb]
+             pure (c, pc)
+
+    -- Fold over an enum constructor, field by field. Return two things:
+    --
+    -- 1. A pair type comprising all of the fields' types.
+    -- 2. A class instance (e.g., @PEq@) for the pair type.
+    foldEnumCon :: (C.Type -> C.Type) -> Ident -> Ident -> [C.Type] -> IO (Term, Term)
+    foldEnumCon p nil cons = go
+      where
+        go :: [C.Type] -> IO (Term, Term)
+        go [] =
+          do a <- scUnitType sc
+             pa <- scGlobalDef sc nil
+             pure (a, pa)
+        go (t : ts) =
+          do a <- importType sc t
+             pa <- provePropRec sc prop0 (p t)
+             (b, pb) <- go ts
+             c <- scPairType sc a b
+             pc <- scGlobalApply sc cons [a, b, pa, pb]
              pure (c, pc)
 
 {-
@@ -1491,7 +1605,10 @@ importExpr' sc schema expr =
     C.ELocated _ e ->
       importExpr' sc schema e
 
-    C.ECase     {} -> fallback
+    C.ECase s alts dflt -> do
+      ty <- the "expected a mono schema in ECase" (C.isMono schema)
+      importCase sc ty s alts dflt
+
     C.EList     {} -> fallback
     C.ESel      {} -> fallback
     C.ESet      {} -> fallback
@@ -1789,7 +1906,9 @@ importDeclGroup declOpts sc (C.Recursive decls) =
                do nmi <- importName (C.dName d)
                   r' <- scAscribe sc r t
                   scDefineConstant sc nmi r'
-             NestedDeclGroup -> pure r
+             NestedDeclGroup -> do
+               let nm = C.identText $ C.nameIdent (C.dName d)
+               scLabel sc nm r
      rhss <- sequence (Map.fromList (zip (map C.dName decls) (zipWith3 mkRhs decls rs ts)))
 
      addToAllTerms sc rhss
@@ -1823,7 +1942,10 @@ importDeclGroup declOpts sc (C.NonRecursive decl) = do
       case declOpts of
         TopLevelDeclGroup _ ->
           importConstant sc (C.dName decl) (C.dSignature decl) rhs
-        NestedDeclGroup -> return rhs
+        NestedDeclGroup -> do
+          let nm = C.identText $ C.nameIdent (C.dName decl)
+          scLabel sc nm rhs
+
   addToAllTerms sc (Map.singleton (C.dName decl) rhs)
   addToAllVars sc (Map.singleton (C.dName decl) (C.dSignature decl))
 
@@ -2004,6 +2126,22 @@ newtypeRecordFields nt params con =
   let su = C.listParamSubst $ zip (C.ntParams nt) params in
   plainSubst su <$> C.ntFields con
 
+-- | Apply a substitution to the fields types of an enum's constructors.
+instantiatedEnumCons ::
+  -- | The enum definition.
+  NominalType ->
+  -- | The types used to instantiate the enum's parameters.
+  [C.Type] ->
+  -- | The enum's constructors.
+  [C.EnumCon] ->
+  [C.EnumCon]
+instantiatedEnumCons nt params = map instantiateEnumCon
+  where
+    su = C.listParamSubst $ zip (C.ntParams nt) params
+
+    instantiateEnumCon :: C.EnumCon -> C.EnumCon
+    instantiateEnumCon con =
+      con { C.ecFields = plainSubst su <$> C.ecFields con }
 
 -- | Deconstruct a Cryptol tuple type as a pair according to the
 -- SAWCore tuple type encoding.
@@ -2779,6 +2917,7 @@ importCase sc tyResult scrutinee altsMap mDfltAlt =
               "`case` expression scrutinee is not an Enum type",
               CryPP.pp scrutineeTy
           ]
+  let sub = C.listParamSubst (zip tyParams tyArgs)
 
   -- Create a sequential set of `C.CaseAlt`s that exactly match the
   -- constructors:
@@ -2796,7 +2935,7 @@ importCase sc tyResult scrutinee altsMap mDfltAlt =
       --     (the code cannot be shared as the arity and types for each constructor
       --     will be different).
 
-      useDefaultAlt :: HasCallStack => C.EnumCon -> IO C.CaseAlt
+      useDefaultAlt :: HasCallStack => C.EnumCon -> IO ([C.Type], C.CaseAlt)
       useDefaultAlt ctor = case mDfltAlt of
         Nothing ->
             panic "importCase" [
@@ -2806,8 +2945,7 @@ importCase sc tyResult scrutinee altsMap mDfltAlt =
             | nameIsUnusedPat nm' ->
                 do
                 -- NOTE nm' is unused Name
-                let sub  = C.listParamSubst (zip tyParams tyArgs)
-                    vts  = map
+                let vts  = map
                              (\ty-> (nm',plainSubst sub ty))
                              (C.ecFields ctor)
                   -- N.B.: to avoid extra name construction, we are
@@ -2818,7 +2956,7 @@ importCase sc tyResult scrutinee altsMap mDfltAlt =
                   --  we would want However, typechecking would
                   --  ascertain this.
 
-                return (C.CaseAlt vts dfltE)
+                return (map snd vts, C.CaseAlt vts dfltE)
 
             | otherwise ->
                 panic "importCase" [
@@ -2847,11 +2985,24 @@ importCase sc tyResult scrutinee altsMap mDfltAlt =
                     "(assumed) invariant is that exactly one variable pattern is allowed in the default CaseAlt"
             ] ++ nts'
 
-  -- now create one alternative ('CaseAlt') for each ctor:
-  alts <- forM ctors $ \ctor->
-            case Map.lookup (C.nameIdent $ C.ecName ctor) altsMap of
-              Just a  -> return a
-              Nothing -> useDefaultAlt ctor
+  -- For each constructor involved in the case expression, return two things:
+  --
+  -- 1. The types of the constructor's fields as determined by the type of the
+  --    scrutinee expression.
+  -- 2. A case alternative corresponding to each constructor.
+  --
+  -- Note that the types in (1) may not precisely correspond to the types of
+  -- the case alternative's field binders in (2). This is because Cryptol
+  -- sometimes simplifies numeric types in case alternatives (e.g., simplifying
+  -- `(n + 1) - 1` to `n`). It is not a big deal if such mismatches arise, as
+  -- we will make sure to insert coercions as needed when importing the case
+  -- alternatives later. (See `test3301` for an example of a program that
+  -- crucially relies on these coercions.)
+  fieldTysAndAlts :: [([C.Type], C.CaseAlt)] <-
+    forM ctors $ \ctor ->
+      case Map.lookup (C.nameIdent (C.ecName ctor)) altsMap of
+        Just a  -> return (plainSubst sub <$> C.ecFields ctor, a)
+        Nothing -> useDefaultAlt ctor
 
   {- |
   What we just did is, in terms of the running ETT example above, this:
@@ -2878,16 +3029,29 @@ importCase sc tyResult scrutinee altsMap mDfltAlt =
     >   scrutinee
   -}
 
-  -- translate each CaseAlt into a Cryptol function:
-  let funcs = map (\(C.CaseAlt xs body)->
-                      foldr (\(n,t) e-> C.EAbs n t e) body xs)
-                  alts
+  let funcTysAndFuncs :: [(C.Type, C.Expr)]
+      funcTysAndFuncs =
+        map
+          (\(fieldTys, C.CaseAlt xs body) ->
+            let funcTy = foldr C.tFun tyResult fieldTys in
+            let func = foldr (\(n,t) e -> C.EAbs n t e) body xs in
+            (funcTy, func))
+          fieldTysAndAlts
+
+      (funcTys, funcs) = unzip funcTysAndFuncs
 
   -- the Cryptol to SAWCore translations:
   tyArgs'    <- mapM (importType sc) tyArgs
   tyResult'  <- importType sc tyResult      -- type of whole case expr
   scrutinee' <- importExpr sc scrutinee
-  funcs'     <- mapM (importExpr sc) funcs
+  -- The deconstructors. Note that we import them with known types (using
+  -- importExpr') to resolve any type mismatches that arise between the
+  -- scrutinee type and the case alternatives' field binders. (See the comments
+  -- on `fieldTysAndAlts` above.)
+  funcs'     <- zipWithM
+                  (\funcTy func -> importExpr' sc (C.tMono funcTy) func)
+                  funcTys
+                  funcs
   caseExpr   <- scGlobalApply sc (identOfEnumCase nm) $
                   tyArgs'             -- case is expecting the type arguments
                                       --   that the enumtype is instantiated to

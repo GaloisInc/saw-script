@@ -60,7 +60,6 @@ import qualified Data.List as List
 import Data.List.Extra (nubOrd)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Set (Set)
 import qualified Data.Set as Set
 import Control.Monad.Trans.Writer.Strict
 import Numeric.Natural
@@ -157,7 +156,7 @@ firstOrderMatch ctxt pat term = match pat term IntMap.empty
     ixs = IntSet.fromList (map (vnIndex . fst) ctxt)
     match :: Term -> Term -> IntMap Term -> Maybe (IntMap Term)
     match x y m =
-      case (unwrapTermF x, unwrapTermF y) of
+      case (unwrapTermF (unlabel x), unwrapTermF (unlabel y)) of
         (Variable (vnIndex -> i) _, _) | IntSet.member i ixs ->
             case my' of
               Nothing -> Just m'
@@ -249,11 +248,11 @@ scMatch sc ctxt pat term =
     asVarPat locals = go []
       where
         go js t =
-          case unwrapTermF t of
+          case unwrapTermF (unlabel t) of
             Variable x _tp
               | IntSet.member (vnIndex x) ixs -> Just (vnIndex x, js)
               | otherwise  -> Nothing
-            App t1 (unwrapTermF -> Variable x _) ->
+            App t1 (R.asVariable -> Just (x, _)) ->
               case lookupVarCtx x locals of
                 Just j -> go (j : js) t1
                 Nothing -> Nothing
@@ -266,7 +265,7 @@ scMatch sc ctxt pat term =
     match ::
       VarCtx -> VarCtx -> [(VarName, Term)] ->
       Term -> Term -> MatchState -> MaybeT IO MatchState
-    match (VarCtx _ xm) (VarCtx _ ym) _ x y s
+    match (VarCtx _ xm) (VarCtx _ ym) _ (unlabel -> x) (unlabel -> y) s
       | termIndex x == termIndex y &&
         -- bound variables must also refer to the same de Bruijn indices
         IntMap.intersection xm (varTypes x) ==
@@ -299,7 +298,7 @@ scMatch sc ctxt pat term =
                Nothing -> return (MatchState m' cs)
                Just y3 -> if alphaEquiv y2 y3 then return (MatchState m' cs) else mzero
         Nothing ->
-          case (unwrapTermF x, unwrapTermF y) of
+          case (unwrapTermF (unlabel x), unwrapTermF (unlabel y)) of
             -- check that neither x nor y contains bound variables less than `depth`
             (FTermF xf, FTermF yf) ->
               case zipWithFlatTermF (match xenv yenv ybinds) xf yf of
@@ -319,9 +318,10 @@ scMatch sc ctxt pat term =
                 (Just xj, Just yj) | xj == yj -> pure s
                 (Nothing, Nothing) | xv == yv -> pure s
                 _ -> mzero
-            (_, _) ->
-              -- other possible matches include constants
-              if x == y then pure s else mzero
+            (_,_) | termIndex x == termIndex y -> pure s
+            (xf, yf) | xf == yf -> pure s
+            -- other possible matches include constants
+            _ -> mzero
 
 ----------------------------------------------------------------------
 -- Building rewrite rules
@@ -417,7 +417,7 @@ ruleOfProp sc term ann =
         (R.asGlobalApply arrayEqIdent -> Just [_, _, x, y]) -> eqRule x y
         (R.asGlobalApply intEqIdent -> Just [x, y]) -> eqRule x y
         (R.asGlobalApply intModEqIdent -> Just [_, x, y]) -> eqRule x y
-        (unwrapTermF -> Constant nm) ->
+        (R.asConstant -> Just nm) ->
           do mres <- lookupVarIndexInMap (nameIndex nm) <$> scGetModuleMap sc
              case mres of
                Just (ResolvedDef (defBody -> Just body)) -> ruleOfProp sc body ann
@@ -720,9 +720,9 @@ data Convertibility = AllRules | ConvertibleRulesOnly
 -- The second is for rewriting with 'ConvertibleRulesOnly'.
 type RewriterCaches = (IntCache IO Term, IntCache IO Term)
 
--- | Rewriter for shared terms.  The annotations of any used rules are collected
---   and returned in the result set.
-rewriteSharedTerm :: forall a. Ord a => SharedContext -> Simpset a -> Term -> IO (Set a, Term)
+-- | Rewriter for shared terms.
+-- The annotations of any used rules are combined and returned in the result set.
+rewriteSharedTerm :: forall a. Monoid a => SharedContext -> Simpset a -> Term -> IO (a, Term)
 rewriteSharedTerm sc ss1 t0 =
     do cache1 <- newIntCache
        cache2 <- newIntCache
@@ -737,7 +737,7 @@ rewriteSharedTerm sc ss1 t0 =
     ss2 = Net.filter (either convertible conversionIsSafe) ss1
 
     rewriteAll ::
-      (?caches :: RewriterCaches, ?annSet :: IORef (Set a)) =>
+      (?caches :: RewriterCaches, ?annSet :: IORef a) =>
       Convertibility -> Term  -> IO Term
     rewriteAll convertibleFlag t =
       useIntCache cache (termIndex t) $
@@ -754,7 +754,7 @@ rewriteSharedTerm sc ss1 t0 =
             ConvertibleRulesOnly -> snd ?caches
 
     rewriteTermF ::
-      (?caches :: RewriterCaches, ?annSet :: IORef (Set a)) =>
+      (?caches :: RewriterCaches, ?annSet :: IORef a) =>
       Convertibility -> TermF Term -> IO (TermF Term)
     rewriteTermF convertibleFlag tf =
         case tf of
@@ -762,11 +762,11 @@ rewriteSharedTerm sc ss1 t0 =
           App e1 e2 ->
               do t1 <- scTypeOf sc e1
                  t1' <- scWhnf sc t1
-                 case unwrapTermF t1' of
+                 case R.asPi t1' of
                    -- If type of e1 is not a dependent type, we can use any rule to rewrite e2
                    -- otherwise, we only rewrite using convertible rules
                    -- This prevents rewriting e2 from changing type of @App e1 e2@.
-                   Pi x _ t
+                   Just (x,_,t)
                      | IntSet.notMember (vnIndex x) (freeVars t) ->
                          App <$> rewriteAll convertibleFlag e1 <*> rewriteAll convertibleFlag e2
                    _ -> App <$> rewriteAll convertibleFlag e1 <*> rewriteAll ConvertibleRulesOnly e2
@@ -792,9 +792,10 @@ rewriteSharedTerm sc ss1 t0 =
                       scInstantiate sc (IntMap.singleton (vnIndex x) var) t2
                t2'' <- rewriteAll convertibleFlag t2'
                pure (Pi x t1' t2'')
+          Label i t1 -> Label i <$> rewriteAll convertibleFlag t1
 
     rewriteFTermF ::
-      (?caches :: RewriterCaches, ?annSet :: IORef (Set a)) =>
+      (?caches :: RewriterCaches, ?annSet :: IORef a) =>
       Convertibility -> FlatTermF Term -> IO (FlatTermF Term)
     rewriteFTermF convertibleFlag ftf =
         case ftf of
@@ -804,7 +805,7 @@ rewriteSharedTerm sc ss1 t0 =
           StringLit{}      -> return ftf
 
     rewriteTop ::
-      (?caches :: RewriterCaches, ?annSet :: IORef (Set a)) =>
+      (?caches :: RewriterCaches, ?annSet :: IORef a) =>
       Convertibility -> Term -> IO Term
     rewriteTop convertibleFlag t =
       do mt <- reduceSharedTerm sc t
@@ -818,12 +819,12 @@ rewriteSharedTerm sc ss1 t0 =
              in apply convertibleFlag rules t
            Just t' -> rewriteAll convertibleFlag t'
 
-    recordAnn :: (?annSet :: IORef (Set a)) => Maybe a -> IO ()
+    recordAnn :: (?annSet :: IORef a) => Maybe a -> IO ()
     recordAnn Nothing  = return ()
-    recordAnn (Just a) = modifyIORef' ?annSet (Set.insert a)
+    recordAnn (Just a) = modifyIORef' ?annSet (mappend a)
 
     apply ::
-      (?caches :: RewriterCaches, ?annSet :: IORef (Set a)) =>
+      (?caches :: RewriterCaches, ?annSet :: IORef a) =>
       Convertibility -> [Either (RewriteRule a) Conversion] -> Term -> IO Term
     apply _ [] t = return t
     apply convertibleFlag (Left (RewriteRule {ctxt, lhs, rhs, permutative, shallow, annotation}) : rules) t = do
@@ -868,12 +869,13 @@ rewriteSharedTerm sc ss1 t0 =
 
 -- FIXME: is there some way to have sensable term replacement in the presence of loose variables
 --  and/or under binders?
-replaceTerm :: Ord a =>
+replaceTerm ::
+  Monoid a =>
   SharedContext ->
   Simpset a    {- ^ A simpset of rewrite rules to apply along with the replacement -} ->
   (Term, Term) {- ^ (pat,repl) is a tuple of a pattern term to replace and a replacement term -} ->
   Term         {- ^ the term in which to perform the replacement -} ->
-  IO (Set a, Term)
+  IO (a, Term)
 replaceTerm sc ss (pat, repl) t = do
     let rule = ruleOfTerms pat repl
     let ss' = addRule rule ss
@@ -928,13 +930,13 @@ hoistIfs sc t = do
    splitConds sc ss (nubOrd $ map fst conds) t'
 
 
-splitConds :: Ord a => SharedContext -> Simpset a -> [Term] -> Term -> IO Term
+splitConds :: Monoid a => SharedContext -> Simpset a -> [Term] -> Term -> IO Term
 splitConds sc ss = go
  where
    go [] t = return t
    go (c:cs) t = go cs =<< splitCond sc ss c t
 
-splitCond :: Ord a => SharedContext -> Simpset a -> Term -> Term -> IO Term
+splitCond :: Monoid a => SharedContext -> Simpset a -> Term -> Term -> IO Term
 splitCond sc ss c t = do
    ty <- scTypeOf sc t
    trueTerm  <- scBool sc True
@@ -951,7 +953,8 @@ type HoistIfs s = (Term, [(Term, Map VarName Term)])
 orderTerms :: SharedContext -> [Term] -> IO [Term]
 orderTerms _sc xs = return $ List.sort xs
 
-doHoistIfs :: Ord a =>
+doHoistIfs ::
+  Monoid a =>
   SharedContext ->
   Simpset a ->
   IntCache IO (HoistIfs s) ->
@@ -992,6 +995,11 @@ doHoistIfs sc ss hoistCache = go
 
        goF _ (Lambda nm tp body) = goBinder scLambda nm tp body
        goF _ (Pi nm tp body) = goBinder scPi nm tp body
+
+       goF _ (Label tg t1) = do
+        (t1', conds) <- go t1
+        t1'' <- scLabel sc tg t1'
+        return (t1'', conds)
 
        goBinder close nm tp body =
           do (body'', conds) <- go body

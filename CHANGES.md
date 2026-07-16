@@ -6,6 +6,39 @@ This release supports [version
 
 ## New Features
 
+* SAWScript now supports optional named arguments.
+  These can be passed anywhere in a function application using the
+  syntax `name=val`.
+  If `val` requires parentheses you can also enclose the name in the
+  parentheses as well.
+  The syntax in a type signature is `name?type`.
+  The parameter syntax in a function declaration is either `name?=val`
+  or `name@alt?=val`, where `val` is the default value to use when
+  the caller doesn't provide one.
+  By default the `name` is both the external call name and the internal
+  variable name for the parameter.
+  If `alt` is present, it can be an identifier or a pattern, and specifies
+  a different name or names for internal use.
+  The alternate name, or parts of it, can be set to `_` if unused.
+
+* The builtin `str_concats` now accepts an optional argument `sep`
+  to use as a separator between the given strings.
+  For example, `str_concats ["a", "b"]` will produce `"ab"` as before,
+  but `str_concats sep=", " ["a", "b"]` produces `"a, b"`.
+
+* The SAWScript typechecker will now (sometimes, at least) guess when
+  you forgot a semicolon.
+
+* The new `subproof` builtin is similar to "bullets" in Rocq:
+  When there are multiple remaining proof goals, it runs the given
+  inner proof script on the first goal alone, and then checks that the
+  inner script completely proves the goal.
+
+* The SAW proof commands `prove` and `prove_print` now accept SAWCore
+  terms of type `Prop`, in addition to predicates returning `Bool`.
+  Previously this required a special proof command `prove_extcore`,
+  which is now deprecated in favor of `prove_print`.
+
 * The REPL once again accepts pure expressions as well as monadic
   statements.
   These are _not_ accepted in monadic contexts in SAWScript files, as
@@ -28,11 +61,18 @@ This release supports [version
 
 * Add basic support for Cryptol `Rational` values in SAWCore.
 
+* Add support for derived Cryptol instances in SAWCore.
+
 * Added `llvm_alloc_all_globals`, `llvm_alloc_constant_globals` and
   `llvm_alloc_no_globals` to determine the automatic allocation globals.
   Previously, only constant globals were allocated by default.  The globals
   allocation occurs *before* the `LLVMSetup` operation for `llvm_verify`, so the
   global allocation disposition must be set as a `TopLevel` operation.
+
+* Add `mir_set_exception_context_{none,limited,no_limit}`, which configures
+  how much call-stack-related context to include when displaying MIR-related
+  exceptions. The default setting is `mir_set_exception_context_limited 10`
+  (i.e., 10 call stack frames).
 
 ## Bug Fixes
 
@@ -49,6 +89,9 @@ This release supports [version
 * Don't raise spurious type errors when importing Cryptol record or tuple
   update expressions.
 
+* Don't raise spurious type errors when importing Cryptol `case` expressions
+  whose scrutinee types have sophisticated numeric types.
+
 * Fix a panic when importing Cryptol list patterns (e.g.,
   `(x, y) where [x, y] = [0x1, 0x2]`).
 
@@ -58,6 +101,9 @@ This release supports [version
 * SAW no longer panics when defining Cryptol functions using numeric
   constraint guards in `let {{ ... }}` blocks.
 
+* Fix a bug that would cause the `offline_w4_unint_yices` proof script to
+  always throw an error.
+
 ## Deprecations
 
 * The `assume_unsat` builtin has been deprecated, after five years' notice
@@ -65,6 +111,10 @@ This release supports [version
   Use `admit` instead.
 
 ## Other changes
+
+* The way the `:search` REPL command matches function types has been adjusted.
+  It should be more predictable and more useful now.
+  Feedback is welcome.
 
 * `crux-mir-comp` has been unbundled from the SAW release distribution
   in preparation for creating [a standalone Crux release](https://github.com/GaloisInc/crux).

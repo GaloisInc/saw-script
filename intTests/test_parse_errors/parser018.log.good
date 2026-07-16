@@ -1,0 +1,3 @@
+Loading file "parser018.saw"
+parser018.saw:2:35-2:38: Error: Parse error: invalid pattern type annotation
+FAILED

@@ -5,9 +5,9 @@ True
 Error: Cryptol: [error] at test03.saw:16:25--16:26
     Value not in scope: y
 Stack trace:
-   (builtin) in (callback)
-   (builtin) in fails
-   test03.saw:16:4-16:49 (at top level)
+   (builtin) (at top level)
+Attempt to register name with duplicate qualified name
+  x`4816@cryptol
 
 (Failure was expected, continuing)
 True

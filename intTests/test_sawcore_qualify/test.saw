@@ -145,7 +145,7 @@ let x_free_eq = parse_core "let { x@free : Bool; } in \\(x : Bool) -> EqTrue (bo
 let test = beta_reduce_term (term_apply x_free_eq [x_free]);
 print_term test;
 
-fails (prove_extcore z3 test);
+fails (prove_print z3 test);
 
 // if "fresh_symbolic" is given an invalid identifer, it is implicitly
 // quoted when creating the formal name
@@ -167,10 +167,10 @@ print (add_core_thms ["not_not"] empty_ss);
 // generated let-bindings never clash with bound variable names or each other
 let tt = parse_core (str_concats
    [ "let { x = (0,7);"
-   ,       "y = \\(x_5 : Bool) ->"
-   ,         "let { y = (x_5,x_5,x); } in (x_5,x_5,y,y);"
-   ,       "z = \\(x_ : Bool) ->"
-   ,         "let { a = (x_,x_); } in (a,a,y,y);"
+   ,       "y = \\(_x_4 : Bool) ->"
+   ,         "let { y = (_x_4,_x_4,x); } in (_x_4,_x_4,y,y);"
+   ,       "z = \\(_x_3 : Bool) ->"
+   ,         "let { a = (_x_3,_x_3); } in (a,a,y,y);"
    ,      "} "
    , "in (x,x,y,y,z,z)"
    ]);

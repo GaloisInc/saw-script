@@ -46,6 +46,7 @@ import qualified Data.AIG as AIG
 #endif
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, newHandleAllocator)
 import qualified Lang.Crucible.JVM as CJ
+import Lang.Crucible.Simulator (ExceptionContextConfig(..))
 import qualified Lang.JVM.Codebase as JSS
 import Mir.Generator (RustModule)
 import Mir.Intrinsics (MIR)
@@ -351,6 +352,7 @@ initialState readFileFn =
                 , rwProofs = []
                 , rwPreservedRegs = []
                 , rwLLVMGlobalAllocMode = LLVMAllocConstantGlobals
+                , rwMIRExceptionContext = ECCLimited 10
                 , rwAllocSymInitCheck = True
                 , rwWhat4PushMuxOps = False
                 , rwNoSatisfyingWriteFreshConstant = True

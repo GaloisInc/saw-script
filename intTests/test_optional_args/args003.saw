@@ -1,0 +1,8 @@
+// It is not only ok but required to repeat the argument names if also
+// providing an explicit type.
+
+// works
+let (f : a?Int -> Int -> Int) (a?=0 : Int) (x : Int) = x;
+// does not work
+let (g : b?Int -> Int -> Int) (a?=0 : Int) (x : Int) = x;
+let (h : Int -> Int -> Int) (a?=0 : Int) (x : Int) = x;

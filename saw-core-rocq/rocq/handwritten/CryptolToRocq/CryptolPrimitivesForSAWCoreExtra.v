@@ -49,14 +49,15 @@ Defined.
 Ltac solveUnsafeAssertStep :=
   match goal with
   | [ |- context [ Succ ] ] => unfold Succ
-  | [ |- context [ addNat _ _ ] ] => rewrite addNat_add
-  | [ |- context [ mulNat _ _ ] ] => rewrite mulNat_mul
-  | [ |- context [ subNat _ _ ] ] => rewrite subNat_sub
-  | [ |- context [ maxNat _ _ ] ] => rewrite maxNat_max
-  | [ |- context [ minNat _ _ ] ] => rewrite minNat_min
+  | [ |- context [ Eq ] ] => unfold Eq
+  | [ |- context [ addNat ?m ?n ] ] => rewrite (addNat_add m n)
+  | [ |- context [ mulNat ?m ?n ] ] => rewrite (mulNat_mul m n)
+  | [ |- context [ subNat ?m ?n ] ] => rewrite (subNat_sub m n)
+  | [ |- context [ maxNat ?m ?n ] ] => rewrite (maxNat_max m n)
+  | [ |- context [ minNat ?m ?n ] ] => rewrite (minNat_min m n)
   | [ n : Num |- _ ] => destruct n
-  | [ |- Eq Num (TCNum _) (TCNum _) ] => apply Eq_TCNum
-  | [ |- Eq Num _ _ ] => reflexivity
+  | [ |- @eq Num (TCNum _) (TCNum _) ] => apply Eq_TCNum
+  | [ |- @eq Num _ _ ] => reflexivity
   | [ |- min ?n ?n = _ ] => rewrite (min_nn n)
   | [ |- min ?n (S ?n) = _ ] => rewrite (min_nSn n)
   | [ |- min (S ?n) ?n = _ ] => rewrite (min_Snn n)

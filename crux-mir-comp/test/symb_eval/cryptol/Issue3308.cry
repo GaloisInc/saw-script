@@ -1,0 +1,16 @@
+module test::symb_eval::cryptol::Issue3308 where
+
+Ch : [32] -> [32] -> [32] -> [32]
+Ch x y z = (x && y) ^ (~x && z)
+
+Maj : [32] -> [32] -> [32] -> [32]
+Maj x y z = (x && y) ^ (x && z) ^ (y && z)
+
+SIGMA_0 : [32] -> [32]
+SIGMA_0 x = (x >>> 2) ^ (x >>> 13) ^ (x >>> 22)
+
+SIGMA_1 : [32] -> [32]
+SIGMA_1 x = (x >>> 6) ^ (x >>> 11) ^ (x >>> 25)
+
+S0 = SIGMA_0
+S1 = SIGMA_1

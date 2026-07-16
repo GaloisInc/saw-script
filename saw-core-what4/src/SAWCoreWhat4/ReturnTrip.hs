@@ -96,12 +96,12 @@ data SAWCoreState n
 
     , saw_elt_cache :: B.IdxCache n SAWExpr
       -- ^ cache mapping a What4 variable nonce to its corresponding SAWCore term.
+      -- We use this when mapping from What4 to SAWCore, to avoid redoing work.
 
     , saw_elt_cache_r :: IORef (IntMap (Some (B.Expr n)))
-      -- ^ reverse cache mapping a SAWCore TermIndex to its corresponding What4 variable.
-      -- 'saw_elt_cache' and 'saw_elt_cache_r' implement a bidirectional map between
-      -- SAWCore terms and What4 variables.
-
+      -- ^ Maps SAWCore TermIndex-es to a What expression corresponding to it.
+      -- We use this during symbolic simulation (when translating SAWCore to What4)
+      -- To deal with variables that have associated `What4` definitions.
     }
 
 data UninterpResult =

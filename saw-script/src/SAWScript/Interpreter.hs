@@ -9,10 +9,10 @@ Stability   : provisional
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE NondecreasingIndentation #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 -- See Note [-Wincomplete-uni-patterns and irrefutable patterns] in
 -- SAWScript.Typechecker
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
@@ -25,7 +25,7 @@ module SAWScript.Interpreter
   where
 
 import qualified Control.Exception as X
-import Control.Monad (unless, when)
+import Control.Monad (unless, when, foldM)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (asks, ask)
 import Control.Monad.State (gets, get, put, modify)
@@ -57,6 +57,7 @@ import qualified Cryptol.TypeCheck.AST as Cryptol
 
 import qualified Lang.Crucible.JVM as CJ
 import Lang.Crucible.LLVM.ArraySizeProfile (FunctionProfile)
+import Lang.Crucible.Simulator (ExceptionContextConfig(..))
 import Mir.Intrinsics (MIR)
 import qualified Mir.Generator as MIR (RustModule)
 import qualified Mir.Mir as MIR
@@ -64,7 +65,7 @@ import qualified Mir.Mir as MIR
 import SAWSupport.Position
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
-import qualified SAWSupport.Pretty as PPS (MemoStyle(..), Opts(..), renderStdout, defaultOpts)
+import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.FiniteValue (FirstOrderValue(..))
 
@@ -84,7 +85,7 @@ import SAWCentral.JavaExpr
 import SAWCentral.LLVMBuiltins
 import SAWCentral.Options
 import SAWScript.Typechecker (checkStmt, typesMatch)
-import SAWScript.Panic (panic)
+import SAWScript.Panic (HasCallStack, panic)
 import SAWCentral.TopLevel
 import SAWCentral.Utils
 import SAWCentral.Value
@@ -161,9 +162,22 @@ import qualified Lang.Crucible.FunctionHandle as Crucible
 -- at the top level, they also require rejection of polymorphic
 -- expressions in nested do-blocks that aren't inside functions, and
 -- it can and should all happen inside the typechecker.
+--
+-- Update: it seems the real issue here is that when you run the
+-- typechecker one line at a time, as we do to accomodate the REPL in
+-- the absence of a real incremental interface, it quite naturally
+-- leaks unification variables that it expects to be picked up by the
+-- generalize step of an enclosing let-binding, only there isn't one.
+-- There are various things a real incremental interface could do
+-- about that, but we don't have one, and the net result is that the
+-- the leaked unification variables can't ever be picked up anywhere
+-- or substituted if resolved on a later line; they just float out
+-- into the ether. So we have this hack to reject them.
 isPolymorphic :: SS.Type -> Bool
 isPolymorphic ty0 = case ty0 of
     SS.TyCon _pos _tycon args -> any isPolymorphic args
+    SS.TyFunc _pos _ params namedParams ret ->
+        any isPolymorphic params || any isPolymorphic namedParams || isPolymorphic ret
     SS.TyRecord _pos fields -> any isPolymorphic fields
     SS.TyVar _pos _a -> False
     SS.TyUnifyVar _pos _ix -> True
@@ -304,7 +318,7 @@ pushdir dir = do
     modify (\rw -> rw { rwDirStack = dirstack' })
     -- The directories we pushdir with are relative to the original
     -- startup dir, not the current dir.
-    origdir <- asks roInitWorkDir    
+    origdir <- asks roInitWorkDir
     liftIO $ setCurrentDirectory (origdir </> dir)
 
 popdir :: TopLevel ()
@@ -487,48 +501,282 @@ processTypeCheck (errs_or_output, warns) =
 ------------------------------------------------------------
 -- Interpreter core
 
--- | Apply an argument value to a function value.
---   v1 must have type a -> b; v2 must have type a.
---   The first (position) argument is the position where the
---   application happens.
---   The second (Text) argument is printed as part of the panic if v1
---   turns out not to be a function value.
+-- | Convenience function for the common case of applying a single
+--   (positional) value.
 applyValue :: SS.Pos -> Text -> Value -> Value -> TopLevel Value
 applyValue pos v1info v1 v2 =
+    applyValues pos v1info v1 [(Nothing, v2)]
+
+-- | Apply a list of argument values to a function value.
+--
+--   v1 must have type a1 -> a2 -> ... -> b; each arg must have the
+--   proper type a_i.
+--
+--   For a named parameter (one where the `Text` accompanying the
+--   value is not `Nothing`) the function must have a corresponding
+--   named parameter of the proper type.
+--
+--   The first (position) argument is the position where the
+--   application happens.
+--
+--   The second (Text) argument is printed as part of the panic if the
+--   function turns out not to be a function value, or is a function
+--   value without enough parameters.
+--
+applyValues :: SS.Pos -> Text -> Value -> [(Maybe Text, Value)] -> TopLevel Value
+applyValues pos funinfo fun args =
   let enter name = pushTraceFrame pos name
       leave = popTraceFrame
   in
-  case v1 of
-    VLambda env mname pat e -> do
+  case fun of
+    VLambda env mname params namedParams e -> do
         let name = fromMaybe "(lambda)" mname
         enter name
         r <- withEnviron env $ do
             pushScope
-            bindPattern SS.ReadOnlyVar pat Nothing v2
-            r' <- interpretExpr e
-            popScope
-            return r'
+
+            -- Apply a single argument, crossing off the parameters we
+            -- use up. If we get more args than we can apply,
+            -- accumulate them in `leftovers` to apply to the return
+            -- value.
+            let applyOne (params', namedParams', leftovers) (mbName, arg) = do
+                  let dobind param' =
+                        bindPattern SS.ReadOnlyVar param' Nothing arg
+                  case mbName of
+                      Nothing ->
+                          case params' of
+                              [] -> do
+                                  let leftovers' = (mbName, arg) : leftovers
+                                  pure (params', namedParams', leftovers')
+                              param' : more -> do
+                                  dobind param'
+                                  pure (more, namedParams', leftovers)
+                      Just argname ->
+                          case Map.lookup argname namedParams' of
+                              Nothing -> do
+                                  let leftovers' = (mbName, arg) : leftovers
+                                  pure (params', namedParams', leftovers')
+                              Just (_defl, param') -> do
+                                  dobind param'
+                                  let namedParams'' = Map.delete argname namedParams'
+                                  pure (params', namedParams'', leftovers)
+
+            -- Apply all the arguments.
+            (params', namedParams', leftovers) <-
+                foldM applyOne (params, namedParams, []) args
+
+            -- Because foldM is a foldl, leftovers is now backwards;
+            -- flip it.
+            --
+            -- Note that params' is _not_ backwards, because we've
+            -- been peeling from the front of it, not consing onto it.
+            let leftovers' = reverse leftovers
+
+            case params' of
+                [] -> do
+                    -- We have used up all the positional parameters.
+                    -- Assume there are not going to be any more
+                    -- optional arguments and bind the default values,
+                    -- for any remaining named parameters, then run
+                    -- the body.
+                    --
+                    -- Note: we eval the default argument here and not
+                    -- when we close over the lambda. This is because
+                    -- (a) evaluating it at that point for a recursive
+                    -- decl group seems to be impossible for Haskell
+                    -- reasons, and secondarily (b) it might never be
+                    -- used and (c) should normally be a constant
+                    -- anyway. So far the conclusion is that this is
+                    -- not ideal but it is ok in the absence of other
+                    -- realistic alternatives.
+                    let bindOneDefault (defl, pat) = do
+                          defl' <- interpretExpr defl
+                          bindPattern SS.ReadOnlyVar pat Nothing defl'
+                    mapM_ bindOneDefault $ Map.elems namedParams'
+
+                    -- Run the body.
+                    r' <- interpretExpr e
+
+                    -- If we have leftover argument values,
+                    -- e.g. because we hit a SAWScript function that
+                    -- returned a builtin, or a function that returned
+                    -- a function defined elsewhere with its own
+                    -- parameter list, apply the rest of the args to
+                    -- the value we got back.
+                    r'' <- case leftovers' of
+                        [] ->
+                            pure r'
+                        _ : _ ->
+                            applyValues pos funinfo r' leftovers'
+                    popScope
+                    pure r''
+
+                _ : _ -> do
+                    -- If we have positional parameters left, it's a
+                    -- partial application. Recapture the environment
+                    -- and generate a lambda with the remaining
+                    -- parameters. If there are also leftover args,
+                    -- something went wrong in the typechecker; panic.
+                    case leftovers' of
+                        [] -> pure ()
+                        _ : _ -> do
+                            let printit (mbName, arg) = do
+                                  sc <- getSharedContext
+                                  let mbName' = case mbName of
+                                          Nothing -> ""
+                                          Just n -> n <> ": "
+                                  arg' <- liftIO $ ppValue sc arg
+                                  pure $ "   " <> mbName' <> arg'
+                            leftovers'' <- mapM printit leftovers'
+                            panic "applyValues" ("Leftover values to apply" : leftovers'')
+                    env' <- gets rwEnviron
+                    popScope
+                    pure $ VLambda env' mname params' namedParams' e
         leave
         return $ insertRefChain pos name r
-    VBuiltin name args wf -> case wf of
-        OneMoreArg f -> do
-            setPosition pos
-            enter name
-            r <- f v2
-            leave
-            return $ insertRefChain pos name r
-        ManyMoreArgs f ->
-            -- f will still be partially applied after this, so it
-            -- won't do anything and there's no need to enter/leave.
-            VBuiltin name (args :|> v2) <$> f v2
+    VBuiltin name argsSoFar0 unappliedNamedArgs wf0 -> do
+        -- First split off all the named arguments.
+        -- We don't have to check for duplicates; the typechecker did that.
+        let (args0, namedArgs0) =
+              let once (mbArgname, arg) (args', namedArgs') =
+                      case mbArgname of
+                          Nothing -> (arg : args', namedArgs')
+                          Just argname -> (args', Map.insert argname arg namedArgs')
+              in
+              foldr once ([], unappliedNamedArgs) args
+
+        -- Apply positional arguments while there are ManyMore left.
+        --
+        -- Note that requiring named arguments to be last, which is
+        -- really for other reasons (basically, because we need to be
+        -- sure we have them all before we start applying any, because
+        -- they might be in any order) allows this logic to be simpler
+        -- than it otherwise would be.
+        (argsSoFar1, wf1, args1) <-
+            let once argsSoFar1 wf1 args1 = case (wf1, args1) of
+                  (ManyMorePositionalArgs f, arg : moreargs) -> do
+                      -- f will still be partially applied after this, so it
+                      -- won't do anything and there's no need to enter/leave.
+                      let argsSoFar1' = argsSoFar1 :|> (Nothing, Just arg)
+                      wf1' <- f arg
+                      once argsSoFar1' wf1' moreargs
+                  _ ->
+                      pure (argsSoFar1, wf1, args1)
+            in
+            once argsSoFar0 wf0 args0
+        -- unchanged
+        let namedArgs1 = namedArgs0
+
+        -- Now apply named arguments while there are ManyMore named
+        -- parameters left. Because we require named parameters to be
+        -- last, if there are any and we've reached their positions,
+        -- we must have applied all the positional arguments, so any
+        -- that aren't present can be assumed to have not been given
+        -- and can be fed `Nothing`.
+        (argsSoFar2, wf2, namedArgs2) <-
+            let once argsSoFar2 wf2 namedArgs2 = case wf2 of
+                  ManyMoreNamedArgs paramname f ->
+                      case Map.lookup paramname namedArgs2 of
+                          Nothing -> do
+                              -- f will still be partially applied
+                              -- after this, so it won't do anything
+                              -- and there's no need to enter/leave.
+                              let argsSoFar2' = argsSoFar2 :|> (Just paramname, Nothing)
+                              wf2' <- f NotGiven
+                              once argsSoFar2' wf2' namedArgs2
+                          Just arg -> do
+                              -- f will still be partially applied
+                              -- after this, so it won't do anything
+                              -- and there's no need to enter/leave.
+                              let argsSoFar2' = argsSoFar2 :|> (Just paramname, Just arg)
+                              wf2' <- f (Given arg)
+                              let namedArgs2' = Map.delete paramname namedArgs2
+                              once argsSoFar2' wf2' namedArgs2'
+                  _ ->
+                      pure (argsSoFar2, wf2, namedArgs2)
+            in
+            once argsSoFar1 wf1 namedArgs1
+        -- unchanged
+        let args2 = args1
+
+        -- Now check if we can apply the last argument.
+        --
+        -- As above, if we're on the last parameter and it's named, we
+        -- can assume that if we don't have an argument for it, it
+        -- hasn't been given and we should pass `Nothing`.
+        let (mbLast, args3, namedArgs3) = case wf2 of
+              OneMorePositionalArg f ->
+                  -- Positional argument expected
+                  case args2 of
+                      [] ->
+                          (Nothing, args2, namedArgs2)
+                      arg : moreargs ->
+                          -- In principle `mbLast` could have the type
+                          -- Maybe (forall t. (t -> TopLevel Value, t))
+                          -- but I can't get it to work.
+                          let f' NotGiven = panic "applyValues" ["Scrambled positional arg"]
+                              f' (Given a) = f a
+                          in
+                          (Just (f', Given arg), moreargs, namedArgs2)
+              OneMoreNamedArg paramname f ->
+                  -- Named argument expected
+                  case Map.lookup paramname namedArgs2 of
+                      Nothing -> (Just (f, NotGiven), args2, namedArgs2)
+                      Just arg -> (Just (f, Given arg), args2, Map.delete paramname namedArgs2)
+              _ ->
+                  (Nothing, args2, namedArgs2)
+
+        -- If we got the last arg, apply it. Otherwise return an
+        -- updated `VBuiltin`.
+        case mbLast of
+            Nothing -> do
+                -- We should have consumed all positional arguments we got.
+                -- Panic if we didn't.
+                case args3 of
+                    [] ->
+                        pure ()
+                    _ -> do
+                        sc <- getSharedContext
+                        let line1 = "Failed to consume positional arguments:"
+                        let printP v = do
+                              ppValue sc v
+                        args3' <- liftIO $ mapM printP args3
+                        panic "applyValues / builtin" (line1 : args3')
+
+                pure $ VBuiltin name argsSoFar2 namedArgs3 wf2
+            Just (f, arg) -> do
+                -- There are no builtins that return SAWScript functions and
+                -- we should never do such a horrible thing.
+                case (args3, null namedArgs3) of
+                    ([], True) ->
+                        pure ()
+                    _ -> do
+                        sc <- getSharedContext
+                        let line1 = "Too many arguments. Leftovers are:"
+                        let printP v = do
+                              ppValue sc v
+                        let printN (argname, v) = do
+                              let argname' = argname <> ": "
+                              v' <- ppValue sc v
+                              pure $ argname' <> v'
+                        args3' <- liftIO $ mapM printP args3
+                        namedArgs3' <- liftIO $ mapM printN $ Map.toList namedArgs3
+                        panic "applyValues / builtin" (line1 : args3' ++ namedArgs3')
+
+                setPosition pos
+                enter name
+                r <- f arg
+                leave
+                pure $ insertRefChain pos name r
+
     _ -> do
         sc <- getSharedContext
-        v1' <- liftIO $ ppValue sc v1
+        fun' <- liftIO $ ppValue sc fun
         panic "applyValue" [
             "Called object is not a function",
             "Call site: " <> Text.pack (show pos),
-            "Value found: " <> v1',
-            v1info
+            "Value found: " <> fun',
+            funinfo
          ]
 
 -- Eval an expression.
@@ -618,16 +866,22 @@ interpretExpr expr =
                       panic "interpretExpr" [
                            "Read of inaccessible variable " <> x
                       ]
-      SS.Lambda _pos mname pat e -> do
+      SS.Lambda _pos mname params namedParams e -> do
           env <- gets rwEnviron
-          return $ VLambda env mname pat e
-      SS.Application pos e1 e2 -> do
+          let namedParams' = Map.map (\(_, (_, d, p)) -> (d, p)) namedParams
+          return $ VLambda env mname params namedParams' e
+      SS.Application pos fun args -> do
           ppopts <- getPPOpts
-          let v1info = "Expression: " <> SS.ppExpr ppopts e1
-          v1 <- interpretExpr e1
-          v2 <- interpretExpr e2
-          let v2' = injectPositionIntoMonadicValue (SS.getPos e2) v2
-          applyValue pos v1info v1 v2'
+          let v1info = "Expression: " <> SS.ppExpr ppopts fun
+          funval <- interpretExpr fun
+          let once (mbName, arg) = do
+                -- Drop the name positions; we don't need them in `applyValues`
+                let mbName' = mbName >>= (\(_pos, name) -> Just name)
+                argval <- interpretExpr arg
+                let argval' = injectPositionIntoMonadicValue (SS.getPos arg) argval
+                pure (mbName', argval')
+          argvals <- mapM once args
+          applyValues pos v1info funval argvals
       SS.Let _ dg e -> do
           pushScope
           interpretDeclGroup SS.ReadOnlyVar dg
@@ -675,8 +929,9 @@ interpretDeclGroup rebindable dg = case dg of
             -- circular knot that can only be constructed in very
             -- specific ways.
             extractFunction x e0 = case e0 of
-                SS.Lambda _ mname pat e1 ->
-                    \env -> VLambda env mname pat e1
+                SS.Lambda _ mname params namedParams e1 ->
+                    let namedParams' = Map.map (\(_, (_, d, p)) -> (d, p)) namedParams in
+                    \env -> VLambda env mname params namedParams' e1
                 SS.TSig _ e1 _ ->
                     extractFunction x e1
                 _ ->
@@ -997,7 +1252,7 @@ processStmtBind printBinds pos pat expr = do
 
     -- Print function type if result was a function
     case ty of
-      SS.TyCon _ SS.FunCon _ -> liftTopLevel $ do
+      SS.TyFunc{} -> liftTopLevel $ do
         ppopts <- getPPOpts
         let ty' = SS.ppType ppopts ty
         printOutLnTop Info $ Text.unpack $ name <> " : " <> ty'
@@ -1043,7 +1298,7 @@ interpretTopStmt printBinds replTypingHacks stmt = do
                            SS.StmtBind spos (SS.PWild wpos wty) e ->
                                let epos = SS.getPos e
                                    ret = SS.Var epos "return"
-                                   e' = SS.Application epos ret e
+                                   e' = SS.Application epos ret [(Nothing, e)]
                                    rstmt = SS.StmtBind spos (SS.PWild wpos wty) e'
                                in
                                case checkStmt ppopts avail varenv3 tyenv ctx rstmt of
@@ -1305,6 +1560,7 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
                    , rwLaxPointerOrdering = False
                    , rwLaxLoadsAndStores = False
                    , rwLLVMGlobalAllocMode = LLVMAllocConstantGlobals
+                   , rwMIRExceptionContext = ECCLimited 10
                    , rwDebugIntrinsics = True
                    , rwWhat4HashConsing = False
                    , rwWhat4HashConsingX86 = False
@@ -1367,6 +1623,14 @@ processFile opts file scriptArgv tlhook pshook = do
 --   or similar. It would be much nicer to at least be able to print
 --   the name of the builtin hiding in the closure.
 --
+--   We would also like to have named parameters, and particularly
+--   named parameters for builtins, since historically we have a
+--   tendency to sprout large numbers of slightly different variant
+--   builtins. Basically every time someone wants a slightly different
+--   version, or an additional argument, or whatever, it had to be a
+--   new builtin because adding another parameter to an existing one
+--   would break all existing uses.
+--
 --   For all of these things, one wants additional info in the Value
 --   besides just the closure, and critically, that info needs to be
 --   carried over when an argument is applied. It is really ugly to do
@@ -1378,7 +1642,7 @@ processFile opts file scriptArgv tlhook pshook = do
 --   do.
 --
 --   Therefore, in July 2025, we added another type BuiltinWrapper to
---   hold the closure chain. There are two cases of BuiltinWrapper,
+--   hold the closure chain. BuiltinWrapper has two families of cases,
 --   one where you apply the last arg and get a Value back, and one
 --   where you apply something less than the last arg and get a new
 --   BuiltinWrapper back. Therefore, when applying an argument to a
@@ -1457,66 +1721,275 @@ processFile opts file scriptArgv tlhook pshook = do
 --   function values generated herein to behave that way, because
 --   there's no difference in the types to work from.
 --
+--   Optional named parameters (added in June 2026) add additional
+--   runtime machinery. We also have to map the named parameters down
+--   to positional Haskell parameters, since Haskell doesn't have its
+--   own named arguments. We do this by mapping the named parameters,
+--   in the order the names appear in the SAWScript type signature for
+--   the builtin, to the last N positional parameters of the Haskell
+--   function, which must have `Optional` type.
+--
+--   In order to support this, we now pass the SAWScript type to
+--   `toValue` and `toWrapper`. This is needed to get at the names
+--   of the named parameters. However, it also enables crosschecking
+--   the SAWScript types against the Haskell types at the time the
+--   builtin wrappers are constructed. Historically this has been
+--   unsafe, and a wrong SAWScript type signature would panic at
+--   runtime.
+--
 class IsValue a where
-    toValue :: Text -> a -> Value
+    toValue :: SS.Type -> Text -> a -> Value
     -- these will be overridden on the function instance
     isFunction :: a -> Bool
     isFunction _ = False
-    toWrapper :: Text -> a -> BuiltinWrapper
-    toWrapper _ _ = panic "toWrapper" ["Invalid call on base value"]
+    toWrapper :: SS.Type -> Text -> a -> BuiltinWrapper
+    toWrapper _ _ _ = panic "toWrapper" ["Invalid call on base value"]
 
 -- | Flag to indicate where/how fromValue was triggered.
 --   (Could be just a Bool, but having it be its own thing increases
 --   legibility and this whole set of arrangements is delicate.)
 data FromValueHow = FromInterpreter | FromArgument
 
+-- | Class for extracting Haskell values from SAWScript values.
+--   Dual of `ToValue`; mostly simpler.
+--
+--   Supporting optional named parameters requires treating arguments
+--   of `Optional` type differently. We use it specifically to label
+--   the named parameters, and pass `NotGiven` when the call provides
+--   no value.
+--
+--   The `isAnOptional` member should return `True` for the `Optional`
+--   instance and `False` otherwise. The `fromOptionalValue` member is
+--   a special-case version of `fromValue` that maps @Optional Value@
+--   to `a` (which is some @Optional a'@).
+--
 class FromValue a where
     fromValue :: FromValueHow -> Value -> a
+    -- | Hack to allow `toWrapper` to detect and special-case the
+    --   `Optional` type; is overridden in the `Optional` instance and
+    --   should not be touched otherwise.
+    isAnOptional :: a -> Bool
+    isAnOptional _ = False
+    fromOptionalValue :: FromValueHow -> Optional Value -> a
+    fromOptionalValue _ _ = panic "fromOptionalValue" ["not Optional"]
 
+
+-- | The `IsValue` instance for functions is what wraps the (typed)
+--   Haskell implementations of builtins into `Value`-based things the
+--   SAWScript interpreter can handle directly.
+--
+--   This is messy and a bit weird because we only get one function
+--   instance that has to handle all the cases, and it only gets to
+--   inspect one curried stage at a time.
+--
+--   The `toValue` method dispatches to `toWrapper` to construct the
+--   builtin wrapper chain for the entire function type (this is why
+--   `toWrapper` method exists...) and sticks that into an empty
+--   `VBuiltin`.
+--
+--   The `isFunction` method returns `True` so that we can check
+--   whether we're on the last argument by examining what it says
+--   about the type `b`.
+--
+--   The `toWrapper` method is where the real work happens. There are
+--   four cases, because we need to handle named parameters as well as
+--   positional parameters, and also need to distinguish the last
+--   argument (where applying it does something) from others (where it
+--   just generates a new closure).
+--
+--   Meanwhile, Haskell doesn't have named arguments, so we need to
+--   map the named parameters to Haskell positional parameters. These
+--   need, pragmatically, to be the last positional parameters, to
+--   make sure that at runtime we have the named arguments at the
+--   point they need to be applied. Also, we need to get the names for
+--   the named parameters from somewhere; we get them from the
+--   SAWScript type signature. However, we need to preserve the
+--   ordering (the AST doesn't by default) so we have an extra widget
+--   in the function type to hold that info. That makes for a nontrivial
+--   invariant on its elements, which we should make at least a token
+--   effort to check.
+--
+--   So the way this works is:
+--      - First, use the typeclass machinery to inspect properties of
+--        the Haskell type we're operating on. We are on the last
+--        parameter if and only if the `b` type is not a function; and
+--        we're on a named parameter if the `a` type is a `Optional`.
+--      - Second, extract the fields from the SAWScript type and use
+--        this opportunity to crosscheck the invariant.
+--      - Third, get the same info that we got from the Haskell types
+--        from the SAWScript type, and also construct the SAWScript
+--        type for `b` since we need it to process the result value.
+--      - Then match both sets of inspection results and accept only
+--        legal combinations.
+--
 instance (FromValue a, IsValue b) => IsValue (a -> b) where
-    toValue name f = VBuiltin name Seq.empty $ toWrapper name f
+    toValue ty fname f = VBuiltin fname Seq.empty Map.empty $ toWrapper ty fname f
     isFunction _ = True
-    toWrapper name f =
-        -- | isFunction needs a value of type b, which we don't have,
-        --   but doesn't look at it, so we can use a placeholder, and
-        --   it's ok for it to be a bomb.
-        let hook :: b = panic "toWrapper" ["isFunction must have used its argument"] in
-        if isFunction hook then
-          let f' v = return $ toWrapper name (f (fromValue FromArgument v)) in
-          ManyMoreArgs f'
-        else
-          let f' v = return $ toValue name (f (fromValue FromArgument v)) in
-          OneMoreArg f'
+    toWrapper ty fname f =
+        let croak msg = panic "toWrapper" [
+               msg,
+               "while wrapping " <> fname,
+               "type: " <> SS.ppType PPS.defaultOpts ty
+             ]
+        in
+
+        -- | isAnOptional needs a value of type a, and isFunction needs a
+        --   value of type b, which we don't have, but neither looks
+        --   at it. So we can use a placeholder, and it's ok for it to
+        --   be a bomb.
+        let ahook :: a = croak "isAnOptional must have used its argument" in
+        let bhook :: b = croak "isFunction must have used its argument" in
+
+        -- Check what we're doing based on the Haskell types we've
+        -- got. isAnOptional tells us if the argument type (a) is Optional t;
+        -- isFunction tells us if the result type (b) is itself a
+        -- function and therefore we are not on the last argument.
+        let hIsNamed = isAnOptional ahook in
+        let hIsLast = not (isFunction bhook) in
+
+        -- Extract the fields of the SAWScript type.
+        let (typos, posCount, pnames, params, namedParams, ret) = case ty of
+              SS.TyFunc p (SS.NamedParamInfo ct ns) pps nps r ->
+                  if ct /= length pps || Set.fromList ns /= Map.keysSet nps then
+                      croak "Function type is not self-consistent"
+                  else
+                      (p, ct, ns, pps, nps, r)
+              _ -> croak "Not a function"
+        in
+
+        -- Check what we're doing based on the SAWScript type.
+        let (sMbPName, sIsLast, ty') = case (posCount, pnames, params) of
+              (0, pname : [], []) ->
+                  -- Exactly one named argument left
+                  (Just pname, True, ret)
+              (0, pname : pname2 : pnames', []) ->
+                  -- More than one named argument left
+                  let nameinfo' = SS.NamedParamInfo 0 (pname2 : pnames')
+                      namedParams' = Map.delete pname namedParams
+                  in
+                  (Just pname, False, SS.TyFunc typos nameinfo' [] namedParams' ret)
+              (1, [], _param : []) ->
+                  -- Exactly one positional argument left
+                  (Nothing, True, ret)
+              (1, pname : pnames', _param : []) ->
+                  -- Exactly one positional argument left, but
+                  -- also at least one named argument
+                  let nameinfo' = SS.NamedParamInfo 0 (pname : pnames') in
+                  (Nothing, False, SS.TyFunc typos nameinfo' [] namedParams ret)
+              (_, _, _param : params') | posCount >= 2 ->
+                  -- More than one positional argument left
+                  -- (and maybe also named arguments)
+                  let nameinfo' = SS.NamedParamInfo (posCount - 1) pnames in
+                  (Nothing, False, SS.TyFunc typos nameinfo' params' namedParams ret)
+              _ ->
+                  -- This can happen if e.g. the named arguments aren't last
+                  croak "Malformed function type"
+        in
+
+        -- Now do it
+        case (hIsNamed, sMbPName, hIsLast, sIsLast) of
+            (False, Nothing, True, True) ->
+                let f' v =
+                      return $ toValue ty' fname (f (fromValue FromArgument v))
+                in
+                OneMorePositionalArg f'
+            (True, Just pname, True, True) ->
+                let f' mv =
+                      return $ toValue ty' fname (f (fromOptionalValue FromArgument mv))
+                in
+                OneMoreNamedArg pname f'
+            (False, Nothing, False, False) ->
+                let f' v =
+                      return $ toWrapper ty' fname (f (fromValue FromArgument v))
+                in
+                ManyMorePositionalArgs f'
+            (True, Just pname, False, False) ->
+                let f' mv =
+                      return $ toWrapper ty' fname (f (fromOptionalValue FromArgument mv))
+                in
+                ManyMoreNamedArgs pname f'
+            _ ->
+                croak "Mismatch between Haskell and SAWScript types"
+
+
+-- | Special-purpose instance for `Optional`. Parameters of builtins
+--   have `Optional` type when the corresponding SAWScript-level
+--   parameter is a SAWScript named optional parameter. (All optional
+--   parameters must be the last N positional parameters at the
+--   Haskell level, and they must come in the same order as the named
+--   optional parameters given in the builtin's SAWScript type
+--   signature.)
+--
+--   No ordinary value of `Optional` type should ever come through
+--   here.
+instance (FromValue a) => FromValue (Optional a) where
+    fromValue _how _x = panic "fromValue Optional" ["Plain value"]
+    isAnOptional _ = True
+    fromOptionalValue how mv = case mv of
+        NotGiven -> NotGiven
+        Given x -> Given $ fromValue how x
+
 
 instance FromValue Value where
     fromValue _ x = x
 
 instance IsValue Value where
-    toValue _name x = x
+    -- Note: this should specifically not check the type, because in
+    -- general it'll be a forall-bound type variable we don't have
+    -- access to the binding for. Providing that access isn't
+    -- worthwhile. Meanwhile in a couple places (e.g. the map builtin)
+    -- we pass a placeholder instead.
+    toValue _ty _name x = x
+
+
+-- | Panic wrapper for ordinary `ToValue` instances
+toValuePanic :: HasCallStack => Text -> SS.Type -> a
+toValuePanic what ty =
+    let ty' = SS.ppType PPS.defaultOpts ty in
+    panic ("toValue / " <> what) ["Invalid type: " <> ty']
+
 
 instance IsValue () where
-    toValue _name _ = VTuple []
+    toValue ty _name _ = case ty of
+        SS.TyCon _ (SS.TupleCon 0) [] ->
+            VTuple []
+        _ ->
+            toValuePanic "unit" ty
 
 instance FromValue () where
     fromValue _ _ = ()
 
+
+
 instance (IsValue a, IsValue b) => IsValue (a, b) where
-    toValue name (x, y) = VTuple [toValue name x, toValue name y]
+    toValue ty name (x, y) = case ty of
+        SS.TyCon _ (SS.TupleCon 2) [ty1, ty2] ->
+            VTuple [toValue ty1 name x, toValue ty2 name y]
+        _ ->
+            toValuePanic "pair" ty
 
 instance (FromValue a, FromValue b) => FromValue (a, b) where
     fromValue how (VTuple [x, y]) = (fromValue how x, fromValue how y)
     fromValue _ _ = error "fromValue (,)"
 
 instance (IsValue a, IsValue b, IsValue c) => IsValue (a, b, c) where
-    toValue name (x, y, z) = VTuple [toValue name x, toValue name y, toValue name z]
+    toValue ty name (x, y, z) = case ty of
+        SS.TyCon _ (SS.TupleCon 3) [ty1, ty2, ty3] ->
+            VTuple [toValue ty1 name x, toValue ty2 name y, toValue ty3 name z]
+        _ ->
+            toValuePanic "triple" ty
 
 instance (FromValue a, FromValue b, FromValue c) => FromValue (a, b, c) where
     fromValue how (VTuple [x, y, z]) = (fromValue how x, fromValue how y, fromValue how z)
     fromValue _ _ = error "fromValue (,,)"
 
-instance IsValue a => IsValue [a] where
-    toValue name xs = VArray (map (toValue name) xs)
 
+instance IsValue a => IsValue [a] where
+    toValue ty name xs = case ty of
+        SS.TyCon _ SS.ArrayCon [tyelt] ->
+            VArray (map (toValue tyelt name) xs)
+        _ ->
+            toValuePanic "array" ty
 
 instance FromValue a => FromValue [a] where
     fromValue how (VArray xs) = map (fromValue how) xs
@@ -1546,11 +2019,14 @@ preparePlainMonadicAction how pos chain action = do
   return ret
 
 instance IsValue a => IsValue (IO a) where
-    toValue name action = toValue name (io action)
+    toValue ty name action = toValue ty name (io action)
 
 instance IsValue a => IsValue (TopLevel a) where
-    toValue name action =
-      VTopLevel atRestPos [] (fmap (toValue name) action)
+    toValue ty name action = case ty of
+        SS.TyCon _ SS.BlockCon [SS.TyCon _ (SS.ContextCon SS.TopLevel) [], ty'a] ->
+            VTopLevel atRestPos [] (fmap (toValue ty'a name) action)
+        _ ->
+            toValuePanic "TopLevel" ty
 
 instance FromValue a => FromValue (TopLevel a) where
     fromValue how v = do
@@ -1564,8 +2040,11 @@ instance FromValue a => FromValue (TopLevel a) where
           ]
 
 instance IsValue a => IsValue (ProofScript a) where
-    toValue name m =
-      VProofScript atRestPos [] (fmap (toValue name) m)
+    toValue ty name m = case ty of
+        SS.TyCon _ SS.BlockCon [SS.TyCon _ (SS.ContextCon SS.ProofScript) [], ty'a] ->
+            VProofScript atRestPos [] (fmap (toValue ty'a name) m)
+        _ ->
+            toValuePanic "ProofScript" ty
 
 instance FromValue a => FromValue (ProofScript a) where
     fromValue how v = do
@@ -1579,8 +2058,11 @@ instance FromValue a => FromValue (ProofScript a) where
           ]
 
 instance IsValue a => IsValue (LLVMCrucibleSetupM a) where
-    toValue name m =
-      VLLVMCrucibleSetup atRestPos [] (fmap (toValue name) m)
+    toValue ty name m = case ty of
+        SS.TyCon _ SS.BlockCon [SS.TyVar _ "LLVMSetup", ty'a] ->
+            VLLVMCrucibleSetup atRestPos [] (fmap (toValue ty'a name) m)
+        _ ->
+            toValuePanic "LLVMSetup" ty
 
 instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
     fromValue how v = do
@@ -1594,8 +2076,11 @@ instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
           ]
 
 instance IsValue a => IsValue (JVMSetupM a) where
-    toValue name m =
-      VJVMSetup atRestPos [] (fmap (toValue name) m)
+    toValue ty name m = case ty of
+        SS.TyCon _ SS.BlockCon [SS.TyVar _ "JVMSetup", ty'a] ->
+            VJVMSetup atRestPos [] (fmap (toValue ty'a name) m)
+        _ ->
+            toValuePanic "JVMSetup" ty
 
 instance FromValue a => FromValue (JVMSetupM a) where
     fromValue how v = do
@@ -1609,8 +2094,11 @@ instance FromValue a => FromValue (JVMSetupM a) where
           ]
 
 instance IsValue a => IsValue (MIRSetupM a) where
-    toValue name m =
-      VMIRSetup atRestPos [] (fmap (toValue name) m)
+    toValue ty name m = case ty of
+        SS.TyCon _ SS.BlockCon [SS.TyVar _ "MIRSetup", ty'a] ->
+            VMIRSetup atRestPos [] (fmap (toValue ty'a name) m)
+        _ ->
+            toValuePanic "MIRSetup" ty
 
 instance FromValue a => FromValue (MIRSetupM a) where
     fromValue how v = do
@@ -1624,91 +2112,143 @@ instance FromValue a => FromValue (MIRSetupM a) where
           ]
 
 instance IsValue (CIR.AllLLVM CMS.SetupValue) where
-  toValue _name v = VLLVMCrucibleSetupValue v
+    toValue ty _name v = case ty of
+        SS.TyVar _ "LLVMValue" ->
+            VLLVMCrucibleSetupValue v
+        _ ->
+            toValuePanic "LLVMValue" ty
 
 instance FromValue (CIR.AllLLVM CMS.SetupValue) where
   fromValue _ (VLLVMCrucibleSetupValue v) = v
   fromValue _ _ = error "fromValue Crucible.SetupValue"
 
 instance IsValue (CMS.SetupValue CJ.JVM) where
-  toValue _name v = VJVMSetupValue v
+    toValue ty _name v = case ty of
+        SS.TyVar _ "JVMValue" ->
+            VJVMSetupValue v
+        _ ->
+            toValuePanic "JVMValue" ty
 
 instance FromValue (CMS.SetupValue CJ.JVM) where
   fromValue _ (VJVMSetupValue v) = v
   fromValue _ _ = error "fromValue Crucible.SetupValue"
 
 instance IsValue (CMS.SetupValue MIR) where
-  toValue _name v = VMIRSetupValue v
+    toValue ty _name v = case ty of
+        SS.TyVar _ "MIRValue" ->
+            VMIRSetupValue v
+        _ ->
+            toValuePanic "MIRValue" ty
 
 instance FromValue (CMS.SetupValue MIR) where
   fromValue _ (VMIRSetupValue v) = v
   fromValue _ _ = error "fromValue Crucible.SetupValue"
 
 instance IsValue SAW_CFG where
-    toValue _name t = VCFG t
+    toValue ty _name t = case ty of
+        SS.TyCon _ SS.CFGCon [] ->
+            VCFG t
+        _ ->
+            toValuePanic "CFG" ty
 
 instance FromValue SAW_CFG where
     fromValue _ (VCFG t) = t
     fromValue _ _ = error "fromValue CFG"
 
 instance IsValue (CIR.SomeLLVM CMS.ProvedSpec) where
-    toValue _name mir = VLLVMCrucibleMethodSpec mir
+    toValue ty _name mir = case ty of
+        SS.TyCon _ SS.LLVMSpecCon [] ->
+            VLLVMCrucibleMethodSpec mir
+        _ ->
+            toValuePanic "LLVMSpec" ty
 
 instance FromValue (CIR.SomeLLVM CMS.ProvedSpec) where
     fromValue _ (VLLVMCrucibleMethodSpec mir) = mir
     fromValue _ _ = error "fromValue ProvedSpec LLVM"
 
 instance IsValue (CMS.ProvedSpec CJ.JVM) where
-    toValue _name t = VJVMMethodSpec t
+    toValue ty _name t = case ty of
+        SS.TyCon _ SS.JVMSpecCon [] ->
+            VJVMMethodSpec t
+        _ ->
+            toValuePanic "JVMSpec" ty
 
 instance FromValue (CMS.ProvedSpec CJ.JVM) where
     fromValue _ (VJVMMethodSpec t) = t
     fromValue _ _ = error "fromValue ProvedSpec JVM"
 
 instance IsValue (CMS.ProvedSpec MIR) where
-    toValue _name t = VMIRMethodSpec t
+    toValue ty _name t = case ty of
+        SS.TyCon _ SS.MIRSpecCon [] ->
+            VMIRMethodSpec t
+        _ ->
+            toValuePanic "MIRSpec" ty
 
 instance FromValue (CMS.ProvedSpec MIR) where
     fromValue _ (VMIRMethodSpec t) = t
     fromValue _ _ = error "fromValue ProvedSpec MIR"
 
 instance IsValue ModuleSkeleton where
-    toValue _name s = VLLVMModuleSkeleton s
+    toValue ty _name s = case ty of
+        SS.TyVar _ "ModuleSkeleton" ->
+            VLLVMModuleSkeleton s
+        _ ->
+            toValuePanic "ModuleSkeleton" ty
 
 instance FromValue ModuleSkeleton where
     fromValue _ (VLLVMModuleSkeleton s) = s
     fromValue _ _ = error "fromValue ModuleSkeleton"
 
 instance IsValue FunctionSkeleton where
-    toValue _name s = VLLVMFunctionSkeleton s
+    toValue ty _name s = case ty of
+        SS.TyVar _ "FunctionSkeleton" ->
+            VLLVMFunctionSkeleton s
+        _ ->
+            toValuePanic "FunctionSkeleton" ty
 
 instance FromValue FunctionSkeleton where
     fromValue _ (VLLVMFunctionSkeleton s) = s
     fromValue _ _ = error "fromValue FunctionSkeleton"
 
 instance IsValue SkeletonState where
-    toValue _name s = VLLVMSkeletonState s
+    toValue ty _name s = case ty of
+        SS.TyVar _ "SkeletonState" ->
+            VLLVMSkeletonState s
+        _ ->
+            toValuePanic "SkeletonState" ty
 
 instance FromValue SkeletonState where
     fromValue _ (VLLVMSkeletonState s) = s
     fromValue _ _ = error "fromValue SkeletonState"
 
 instance IsValue FunctionProfile where
-    toValue _name s = VLLVMFunctionProfile s
+    toValue ty _name s = case ty of
+        SS.TyVar _ "FunctionProfile" ->
+            VLLVMFunctionProfile s
+        _ ->
+            toValuePanic "FunctionProfile" ty
 
 instance FromValue FunctionProfile where
     fromValue _ (VLLVMFunctionProfile s) = s
     fromValue _ _ = error "fromValue FunctionProfile"
 
 instance IsValue (AIGNetwork) where
-    toValue _name t = VAIG t
+    toValue ty _name t = case ty of
+        SS.TyCon _ SS.AIGCon [] ->
+            VAIG t
+        _ ->
+            toValuePanic "AIGNetwork" ty
 
 instance FromValue (AIGNetwork) where
     fromValue _ (VAIG t) = t
     fromValue _ _ = error "fromValue AIGNetwork"
 
 instance IsValue TypedTerm where
-    toValue _name t = VTerm t
+    toValue ty _name t = case ty of
+        SS.TyCon _ SS.TermCon [] ->
+            VTerm t
+        _ ->
+            toValuePanic "Term" ty
 
 instance FromValue TypedTerm where
     fromValue _ (VTerm t) = t
@@ -1719,28 +2259,44 @@ instance FromValue Term where
     fromValue _ _ = error "fromValue SharedTerm"
 
 instance IsValue Cryptol.Schema where
-    toValue _name s = VType s
+    toValue ty _name s = case ty of
+        SS.TyCon _ SS.TypeCon [] ->
+            VType s
+        _ ->
+            toValuePanic "Type" ty
 
 instance FromValue Cryptol.Schema where
     fromValue _ (VType s) = s
     fromValue _ _ = error "fromValue Schema"
 
 instance IsValue Text where
-    toValue _name n = VString n
+    toValue ty _name n = case ty of
+        SS.TyCon _ SS.StringCon [] ->
+            VString n
+        _ ->
+            toValuePanic "String" ty
 
 instance FromValue Text where
     fromValue _ (VString n) = n
     fromValue _ _ = error "fromValue Text"
 
 instance IsValue Integer where
-    toValue _name n = VInteger n
+    toValue ty _name n = case ty of
+        SS.TyCon _ SS.IntCon [] ->
+            VInteger n
+        _ ->
+            toValuePanic "Int (Integer)" ty
 
 instance FromValue Integer where
     fromValue _ (VInteger n) = n
     fromValue _ _ = error "fromValue Integer"
 
 instance IsValue Int where
-    toValue _name n = VInteger (toInteger n)
+    toValue ty _name n = case ty of
+        SS.TyCon _ SS.IntCon [] ->
+            VInteger (toInteger n)
+        _ ->
+            toValuePanic "Int (Int)" ty
 
 instance FromValue Int where
     fromValue _ (VInteger n)
@@ -1750,122 +2306,194 @@ instance FromValue Int where
     fromValue _ _ = error "fromValue Int"
 
 instance IsValue Bool where
-    toValue _name b = VBool b
+    toValue ty _name b = case ty of
+        SS.TyCon _ SS.BoolCon [] ->
+            VBool b
+        _ ->
+            toValuePanic "Bool" ty
 
 instance FromValue Bool where
     fromValue _ (VBool b) = b
     fromValue _ _ = error "fromValue Bool"
 
 instance IsValue SAWSimpset where
-    toValue _name ss = VSimpset ss
+    toValue ty _name ss = case ty of
+        SS.TyVar _ "Simpset" ->
+            VSimpset ss
+        _ ->
+            toValuePanic "Simpset" ty
 
 instance FromValue SAWSimpset where
     fromValue _ (VSimpset ss) = ss
     fromValue _ _ = error "fromValue Simpset"
 
 instance IsValue Theorem where
-    toValue _name t = VTheorem t
+    toValue ty _name t = case ty of
+        SS.TyVar _ "Theorem" ->
+            VTheorem t
+        _ ->
+            toValuePanic "Theorem" ty
 
 instance FromValue Theorem where
     fromValue _ (VTheorem t) = t
     fromValue _ _ = error "fromValue Theorem"
 
 instance IsValue BisimTheorem where
-    toValue _name = VBisimTheorem
+    toValue ty _name = case ty of
+        SS.TyVar _ "BisimTheorem" ->
+            VBisimTheorem
+        _ ->
+            toValuePanic "BisimTheorem" ty
 
 instance FromValue BisimTheorem where
     fromValue _ (VBisimTheorem t) = t
     fromValue _ _ = error "fromValue BisimTheorem"
 
 instance IsValue JavaType where
-    toValue _name t = VJavaType t
+    toValue ty _name t = case ty of
+        SS.TyVar _ "JavaType" ->
+            VJavaType t
+        _ ->
+            toValuePanic "JavaType" ty
 
 instance FromValue JavaType where
     fromValue _ (VJavaType t) = t
     fromValue _ _ = error "fromValue JavaType"
 
 instance IsValue LLVM.Type where
-    toValue _name t = VLLVMType t
+    toValue ty _name t = case ty of
+        SS.TyVar _ "LLVMType" ->
+            VLLVMType t
+        _ ->
+            toValuePanic "LLVMType" ty
 
 instance FromValue LLVM.Type where
     fromValue _ (VLLVMType t) = t
     fromValue _ _ = error "fromValue LLVMType"
 
 instance IsValue MIR.Ty where
-    toValue _name t = VMIRType t
+    toValue ty _name t = case ty of
+        SS.TyVar _ "MIRType" ->
+            VMIRType t
+        _ ->
+            toValuePanic "MIRType" ty
 
 instance FromValue MIR.Ty where
     fromValue _ (VMIRType t) = t
     fromValue _ _ = error "fromValue MIRType"
 
 instance IsValue CEnv.ExtCryptolModule where
-    toValue _name m = VCryptolModule m
+    toValue ty _name m = case ty of
+        SS.TyVar _ "CryptolModule" ->
+            VCryptolModule m
+        _ ->
+            toValuePanic "CryptolModule" ty
 
 instance FromValue CEnv.ExtCryptolModule where
     fromValue _ (VCryptolModule m) = m
     fromValue _ _ = error "fromValue CryptolModule"
 
 instance IsValue JSS.Class where
-    toValue _name c = VJavaClass c
+    toValue ty _name c = case ty of
+        SS.TyVar _ "JavaClass" ->
+            VJavaClass c
+        _ ->
+            toValuePanic "JavaClass" ty
 
 instance FromValue JSS.Class where
     fromValue _ (VJavaClass c) = c
     fromValue _ _ = error "fromValue JavaClass"
 
 instance IsValue (Some CIR.LLVMModule) where
-    toValue _name m = VLLVMModule m
+    toValue ty _name m = case ty of
+        SS.TyVar _ "LLVMModule" ->
+            VLLVMModule m
+        _ ->
+            toValuePanic "LLVMModule (1)" ty
 
 instance IsValue (CIR.LLVMModule arch) where
-    toValue _name m = VLLVMModule (Some m)
+    toValue ty _name m = case ty of
+        SS.TyVar _ "LLVMModule" ->
+            VLLVMModule (Some m)
+        _ ->
+            toValuePanic "LLVMModule (2)" ty
 
 instance FromValue (Some CIR.LLVMModule) where
     fromValue _ (VLLVMModule m) = m
     fromValue _ _ = error "fromValue LLVMModule"
 
 instance IsValue MIR.RustModule where
-    toValue _name m = VMIRModule m
+    toValue ty _name m = case ty of
+        SS.TyVar _ "MIRModule" ->
+            VMIRModule m
+        _ ->
+            toValuePanic "MIRModule" ty
 
 instance FromValue MIR.RustModule where
     fromValue _ (VMIRModule m) = m
     fromValue _ _ = error "fromValue RustModule"
 
 instance IsValue MIR.Adt where
-    toValue _name adt = VMIRAdt adt
+    toValue ty _name adt = case ty of
+        SS.TyVar _ "MIRAdt" ->
+            VMIRAdt adt
+        _ ->
+            toValuePanic "MIRAdt" ty
 
 instance FromValue MIR.Adt where
     fromValue _ (VMIRAdt adt) = adt
     fromValue _ _ = error "fromValue Adt"
 
 instance IsValue ProofResult where
-   toValue _name r = VProofResult r
+    toValue ty _name r = case ty of
+        SS.TyVar _ "ProofResult" ->
+            VProofResult r
+        _ ->
+            toValuePanic "ProofResult" ty
 
 instance FromValue ProofResult where
    fromValue _ (VProofResult r) = r
    fromValue _ v = error $ "fromValue ProofResult: " ++ Text.unpack (uglyValue v)
 
 instance IsValue SatResult where
-   toValue _name r = VSatResult r
+    toValue ty _name r = case ty of
+        SS.TyVar _ "SatResult" ->
+           VSatResult r
+        _ ->
+            toValuePanic "SatResult" ty
 
 instance FromValue SatResult where
    fromValue _ (VSatResult r) = r
    fromValue _ v = error $ "fromValue SatResult: " ++ Text.unpack (uglyValue v)
 
 instance IsValue CMS.GhostGlobal where
-  toValue _name x = VGhostVar x
+    toValue ty _name x = case ty of
+        SS.TyVar _ "Ghost" ->
+          VGhostVar x
+        _ ->
+            toValuePanic "Ghost" ty
 
 instance FromValue CMS.GhostGlobal where
   fromValue _ (VGhostVar r) = r
   fromValue _ v = error ("fromValue GhostVar: " ++ Text.unpack (uglyValue v))
 
 instance IsValue Yo.YosysSequential where
-  toValue _name ysq = VYosysSequential ysq
+    toValue ty _name ysq = case ty of
+        SS.TyVar _ "YosysSequential" ->
+          VYosysSequential ysq
+        _ ->
+            toValuePanic "YosysSequential" ty
 
 instance FromValue Yo.YosysSequential where
   fromValue _ (VYosysSequential s) = s
   fromValue _ v = error ("fromValue YosysSequential: " ++ Text.unpack (uglyValue v))
 
 instance IsValue Yo.YosysTheorem where
-  toValue _name yt = VYosysTheorem yt
+    toValue ty _name yt = case ty of
+        SS.TyVar _ "YosysTheorem" ->
+          VYosysTheorem yt
+        _ ->
+            toValuePanic "YosysTheorem" ty
 
 instance FromValue Yo.YosysTheorem where
   fromValue _ (VYosysTheorem thm) = thm
@@ -1915,7 +2543,8 @@ toplevelSubshell () = do
     rw' <- liftIO $ hook ro rw
     put rw'
     popScope
-    return $ toValue "subshell" ()
+    let ty = SS.tUnit (rwPosition rw)
+    return $ toValue ty "subshell" ()
 
 -- The proof_subshell command.
 --
@@ -1936,14 +2565,19 @@ proofScriptSubshell () = do
     scriptTopLevel $ do
         put rw'
         popScope
-    return $ toValue "proof_subshell" ()
+    let ty = SS.tUnit (rwPosition rw)
+    return $ toValue ty "proof_subshell" ()
 
 -- The "map" builtin.
 mapValue :: Value -> [Value] -> TopLevel Value
 mapValue f xs =
   do let pos = SS.PosInsideBuiltin
      let info = "(value was in a \"map\")"
-     toValue "map" <$> traverse (applyValue pos info f) xs
+     -- toValue will check the array type but not the element type,
+     -- since we already have Values here. So use unit as a
+     -- placeholder.
+     let ty = SS.tArray pos (SS.tUnit pos)
+     toValue ty "map" <$> traverse (applyValue pos info f) xs
 
 -- The "for" builtin.
 --
@@ -1979,9 +2613,23 @@ forValue (x : xs) f = do
    let pos = SS.PosInsideBuiltin
    m1 <- applyValue pos "(value was in a \"for\")" f x
    m2 <- forValue xs f
-   return $ VBindOnce pos [] m1 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v1 ->
-     return $ VBindOnce pos [] m2 $ VBuiltin "for" Seq.empty $ OneMoreArg $ \v2 ->
+   let builtin op = VBuiltin "for" Seq.empty Map.empty $ OneMorePositionalArg op
+   return $ VBindOnce pos [] m1 $ builtin $ \v1 ->
+     return $ VBindOnce pos [] m2 $ builtin $ \v2 ->
        return $ VReturn atRestPos [] (VArray (v1 : fromValue FromArgument v2))
+
+-- | The "str_concats" builtin. This now takes an optional named
+--   argument "sep"; if set, it's treated as a separator a la
+--   `Text.intercalate`. The optional argument is required to be last
+--   for implementation reasons. Note that it's last here but not last
+--   in the user-facing type signature; the builtin-wrapping logic
+--   implicitly shifts all the named parameters to the right so they
+--   can appear where they make most sense in the user-facing
+--   signature.
+str_concats :: [Text] -> Optional Text -> Text
+str_concats strs optSep = case optSep of
+  NotGiven -> Text.concat strs
+  Given sep -> Text.intercalate sep strs
 
 caseProofResultPrim ::
   ProofResult ->
@@ -2152,17 +2800,22 @@ llvm_set_global_alloc_mode mode = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLLVMGlobalAllocMode = mode }
 
+mir_set_exception_context :: ExceptionContextConfig -> TopLevel ()
+mir_set_exception_context ecc = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwMIRExceptionContext = ecc }
+
 set_solver_cache_path :: Text -> TopLevel ()
 set_solver_cache_path pathtxt = do
   let path :: FilePath = Text.unpack pathtxt
   rw <- getTopLevelRW
   case (rwSolverCache rw, Text.null pathtxt) of
-    (Just _, True) -> 
+    (Just _, True) ->
       putTopLevelRW rw { rwSolverCache = Nothing }
     (Just _, False) ->
       onSolverCache (setSolverCachePath path)
     (Nothing, True) -> return ()
-    (Nothing, False) -> do 
+    (Nothing, False) -> do
       cache <- io $ openSolverCache path
       putTopLevelRW rw { rwSolverCache = Just cache }
 
@@ -2330,6 +2983,10 @@ set_memoization_hash_incremental i =
 set_memoization_incremental :: TopLevel ()
 set_memoization_incremental =
   modifyPPOpts (\opts -> opts { PPS.ppMemoStyle = PPS.Incremental })
+
+set_memoization_label :: Bool -> TopLevel ()
+set_memoization_label b =
+  modifyPPOpts (\opts -> opts { PPS.ppMemoStyle = PPS.LabelIncremental b })
 
 print_value :: Value -> TopLevel ()
 print_value (VString s) = printOutLnTop Info (Text.unpack s)
@@ -2594,6 +3251,7 @@ data PrimType
 data Primitive
   = Primitive
     { primitiveType :: SS.Schema
+    , primitiveRawType :: Text
     , primitiveLife :: PrimitiveLifecycle
     , primitiveDoc  :: [Text]
     , primitiveFn   :: Options -> BuiltinContext -> Value
@@ -3088,10 +3746,13 @@ primitives = Map.fromList $
     Current
     [ "Concatenate two strings to yield a third." ]
 
-  , prim "str_concats"          "[String] -> String"
-    (pureVal Text.concat)
+  , prim "str_concats"          "sep?String -> [String] -> String"
+    (pureVal str_concats)
     Current
-    [ "Concatenate a list of strings together to yield a single string." ]
+    [ "Concatenate a list of strings together to yield a single string."
+    , "If the optional argument \"sep\" is given, it is inserted between"
+    , "each pair of list elements."
+    ]
 
     ------------------------------------------------------------
     -- File operations
@@ -3466,6 +4127,19 @@ primitives = Map.fromList $
     , "memoized. This is the default."
     ]
 
+  , prim "set_memoization_label" "Bool -> TopLevel ()"
+    (pureVal set_memoization_label)
+    Current
+    [ "'set_memoization_label b' changes the memoization"
+    , "strategy for terms: memoization identifiers will re-use names"
+    , "from let-bindings, and will always memoize terms that were"
+    , "previously let-bound. For all other terms, the memoization"
+    , "naming strategy is the same as 'incremental'."
+    , "If the 'b' argument is 'false', then names that must be escaped"
+    , "to be valid identifiers (i.e. string literal identifiers,"
+    , "prefixed with '!?') are hidden. Otherwise all names are printed."
+    ]
+
     ------------------------------------------------------------
     -- Solver cache
 
@@ -3597,8 +4271,23 @@ primitives = Map.fromList $
     , "ill-typed. Also see 'check_goal'."
     ]
 
+  , prim "term_labels"          "Term -> ([String], Term)"
+    (funVal1 term_labels)
+    Current
+    [ "Strip the labels of a term (from let-bindings or"
+    , "'label_term')."
+    ]
+
     ------------------------------------------------------------
     -- SAWCore term construction
+
+  , prim "label_term"          "String -> Term -> Term"
+    (funVal2 label_term)
+    Current
+    [ "Add a label to a term. Will be printed as a let-binding"
+    , "if the string is a valid identifier and 'set_memoization_label' "
+    , "is set."
+    ]
 
   , prim "fresh_symbolic"      "String -> Type -> TopLevel Term"
     (pureVal freshSymbolicPrim)
@@ -3858,11 +4547,15 @@ primitives = Map.fromList $
 
   , prim "prove_extcore"         "ProofScript () -> Term -> TopLevel Theorem"
     (pureVal provePropPrim)
-    Current
+    WarnDeprecated
     [ "Use the given proof script to attempt to prove that a term"
     , "representing a proposition is valid. This is useful for proving"
     , "goals obtained with 'offline_extcore' or 'parse_core'. Returns a"
     , "Theorem if successful, and fails if unsuccessful."
+    , ""
+    , "This function is deprecated: Use 'prove_print' instead."
+    , "Expected to be hidden by default in SAW 1.7."
+
     ]
 
   , prim "prove_core"         "ProofScript () -> String -> TopLevel Theorem"
@@ -3872,6 +4565,17 @@ primitives = Map.fromList $
     , "valid (true for all inputs). The term is specified as a String"
     , "containing SAWCore concrete syntax. Returns a Theorem if"
     , "successful, and fails if unsuccessful."
+    , ""
+    , "'prove_core t s' is equivalent to 'prove_print t (parse_core s)'."
+    ]
+
+  , prim "subproof"           "ProofScript () -> ProofScript ()"
+    (pureVal subProofScript)
+    Experimental
+    [ "Run the given proof script as a subproof starting from a state"
+    , "where only the first subgoal is visible. The inner proof script"
+    , "must discharge its goal, leaving no remaining subgoals; otherwise"
+    , "the proof fails."
     ]
 
   , prim "core_axiom"         "String -> Theorem"
@@ -3965,7 +4669,7 @@ primitives = Map.fromList $
     [ "Add a proved equality theorem to a simplification rule set."
     , "The rule is treated as a 'shallow' rewrite, which means that"
     , "further rewrite rules will not be applied to the result if this"
-    , "rule fires. Returns a new set.n"
+    , "rule fires. Returns a new set."
     ]
 
   , prim "addsimps"            "[Theorem] -> Simpset -> Simpset"
@@ -3981,7 +4685,7 @@ primitives = Map.fromList $
     [ "Merge two simplification sets into one." ]
 
   , prim "basic_ss"            "Simpset"
-    (bicVal $ \bic _ -> toValue "basic_ss" $ biBasicSS bic)
+    (bicVal $ \bic _ -> toValue (SS.TyVar SS.PosInsideBuiltin "Simpset") "basic_ss" $ biBasicSS bic)
     Current
     [ "A basic rewriting simplification set containing some boolean"
     , "identities and conversions relating to bitvectors, natural"
@@ -5162,7 +5866,7 @@ primitives = Map.fromList $
     , "   record of 'fixed' inputs, and a record of circuit outputs."
     , " - The fourth parameter is a list of strings specifying certain"
     , "   circuit inputs as fixed - these inputs are assumed to remain"
-    , "   unchanged across cycles, and are therefore accesible from the"
+    , "   unchanged across cycles, and are therefore accessible from the"
     , "   query function."
     ]
 
@@ -5985,7 +6689,7 @@ primitives = Map.fromList $
   , prim "crucible_points_to_untyped" "LLVMValue -> LLVMValue -> LLVMSetup ()"
     (pureVal (llvm_points_to False))
     WarnDeprecated
-    [ "Legacy alternative name for 'llvm_points_to'."
+    [ "Legacy alternative name for 'llvm_points_to_untyped'."
     , ""
     , "Expected to be hidden by default in SAW 1.6."
     ]
@@ -7545,6 +8249,28 @@ primitives = Map.fromList $
     , "returned by mir_verify but without performing any verification."
     ]
 
+  , prim "mir_set_exception_context_none" "TopLevel ()"
+    (pureVal (mir_set_exception_context ECCNone))
+    Experimental
+    [ "When reporting MIR-related exceptions, do not include any"
+    , "call-stack-related context."
+    ]
+
+  , prim "mir_set_exception_context_limited" "Int -> TopLevel ()"
+    (pureVal (mir_set_exception_context . ECCLimited))
+    Experimental
+    [ "When reporting MIR-related exceptions, include exactly N frames of"
+    , "call-stack-related context, where N is the supplied Int."
+    , "This is the default, with a limit of 10."
+    ]
+
+  , prim "mir_set_exception_context_no_limit" "TopLevel ()"
+    (pureVal (mir_set_exception_context ECCNoLimit))
+    Experimental
+    [ "When reporting MIR-related exceptions, include the full call stack as"
+    , "context."
+    ]
+
     ------------------------------------------------------------
     -- Additional Crucible-related bits
 
@@ -7599,23 +8325,29 @@ primitives = Map.fromList $
   ]
 
   where
-    prim :: Text -> Text -> (Text -> Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [Text]
+    prim :: Text -> Text -> (SS.Type -> Text -> Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [Text]
          -> (SS.Name, Primitive)
     prim name ty fn lc doc = (name, Primitive
                                      { primitiveType = ty'
+                                     , primitiveRawType = ty
                                      , primitiveDoc  = doc
-                                     , primitiveFn   = fn name
+                                     , primitiveFn   = fn ty'' name
                                      , primitiveLife = lc
                                      })
       where
         -- Beware: errors in the type will only be detected when the
         -- type is actually looked at by something, like :env, :t,
-        -- :search, or a direct use of the builtin.
-        ty' = Loader.readSchemaPure fakeFileName lc primNamedTypeEnv ty
+        -- :search, or a direct use of the builtin. This is one of the
+        -- reasons we have a :env call in the test suite, even though
+        -- it requires maintenance for every change to the builtin
+        -- table. Otherwise these panics can go unnoticed.
         fakeFileName = Text.unpack $ "<type of " <> name <> ">"
+        ty' = Loader.readSchemaPure fakeFileName lc primNamedTypeEnv ty
+        ty'' = case ty' of
+            SS.Forall _ t -> t
 
-    pureVal :: forall t. IsValue t => t -> Text -> Options -> BuiltinContext -> Value
-    pureVal x name _ _ = toValue name x
+    pureVal :: forall t. IsValue t => t -> SS.Type -> Text -> Options -> BuiltinContext -> Value
+    pureVal x ty name _ _ = toValue ty name x
 
     -- pureVal can be used for anything with an IsValue instance,
     -- including functions. However, functions in TopLevel need to use
@@ -7630,40 +8362,52 @@ primitives = Map.fromList $
     -- XXX: rename these to e.g. monadVal1/2/3 so this is clearer?
 
     funVal1 :: forall a t. (FromValue a, IsValue t) => (a -> TopLevel t)
-               -> Text -> Options -> BuiltinContext -> Value
-    funVal1 f name _ _ =
-      VBuiltin name Seq.empty $
-        OneMoreArg $ \a ->
-          toValue name <$> f (fromValue FromArgument a)
+               -> SS.Type -> Text -> Options -> BuiltinContext -> Value
+    funVal1 f ty name _ _ =
+      let ty' = case ty of
+            SS.TyFunc _pos (SS.NamedParamInfo 1 []) [_param] _namedParams ret -> ret
+            _ -> panic "funVal1" [name <> ": Wrong type signature"]
+      in
+      VBuiltin name Seq.empty Map.empty $
+        OneMorePositionalArg $ \a ->
+          toValue ty' name <$> f (fromValue FromArgument a)
 
     funVal2 :: forall a b t. (FromValue a, FromValue b, IsValue t) => (a -> b -> TopLevel t)
-               -> Text -> Options -> BuiltinContext -> Value
-    funVal2 f name _ _ =
-      VBuiltin name Seq.empty $
-        ManyMoreArgs $ \a -> return $
-        OneMoreArg $ \b ->
-          toValue name <$> f (fromValue FromArgument a) (fromValue FromArgument b)
+               -> SS.Type -> Text -> Options -> BuiltinContext -> Value
+    funVal2 f ty name _ _ =
+      let ty' = case ty of
+            SS.TyFunc _pos (SS.NamedParamInfo 2 []) [_p1, _p2] _namedParams ret -> ret
+            _ -> panic "funVal2" [name <> ": Wrong type signature"]
+      in
+      VBuiltin name Seq.empty Map.empty $
+        ManyMorePositionalArgs $ \a -> return $
+        OneMorePositionalArg $ \b ->
+          toValue ty' name <$> f (fromValue FromArgument a) (fromValue FromArgument b)
 
     funVal3 :: forall a b c t. (FromValue a, FromValue b, FromValue c, IsValue t) => (a -> b -> c -> TopLevel t)
-               -> Text -> Options -> BuiltinContext -> Value
-    funVal3 f name _ _ =
-      VBuiltin name Seq.empty $
-        ManyMoreArgs $ \a -> return $
-        ManyMoreArgs $ \b -> return $
-        OneMoreArg $ \c ->
-          toValue name <$> f (fromValue FromArgument a) (fromValue FromArgument b) (fromValue FromArgument c)
+               -> SS.Type -> Text -> Options -> BuiltinContext -> Value
+    funVal3 f ty name _ _ =
+      let ty' = case ty of
+            SS.TyFunc _pos (SS.NamedParamInfo 3 []) [_p1, _p2, _p3] _namedParams ret -> ret
+            _ -> panic "funVal3" [name <> ": Wrong type signature"]
+      in
+      VBuiltin name Seq.empty Map.empty $
+        ManyMorePositionalArgs $ \a -> return $
+        ManyMorePositionalArgs $ \b -> return $
+        OneMorePositionalArg $ \c ->
+          toValue ty' name <$> f (fromValue FromArgument a) (fromValue FromArgument b) (fromValue FromArgument c)
 
     scVal :: forall t. IsValue t =>
-             (SharedContext -> t) -> Text -> Options -> BuiltinContext -> Value
-    scVal f name _ bic = toValue name (f (biSharedContext bic))
+             (SharedContext -> t) -> SS.Type -> Text -> Options -> BuiltinContext -> Value
+    scVal f ty name _ bic = toValue ty name (f (biSharedContext bic))
 
     scVal' :: forall t. IsValue t =>
-             (SharedContext -> Options -> t) -> Text -> Options -> BuiltinContext -> Value
-    scVal' f name opts bic = toValue name (f (biSharedContext bic) opts)
+             (SharedContext -> Options -> t) -> SS.Type -> Text -> Options -> BuiltinContext -> Value
+    scVal' f ty name opts bic = toValue ty name (f (biSharedContext bic) opts)
 
     bicVal :: forall t. IsValue t =>
-              (BuiltinContext -> Options -> t) -> Text -> Options -> BuiltinContext -> Value
-    bicVal f name opts bic = toValue name (f bic opts)
+              (BuiltinContext -> Options -> t) -> SS.Type -> Text -> Options -> BuiltinContext -> Value
+    bicVal f ty name opts bic = toValue ty name (f bic opts)
 
 
 
@@ -7694,14 +8438,6 @@ primValueEnv ::
    Map SS.Name (SS.Pos, PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
 primValueEnv opts bic = Map.mapWithKey extract primitives
   where
-      -- XXX: This is evaluated at startup so the default options are
-      -- all we have. However, the result of this is that if the user
-      -- changes the print options, the types printed with the help
-      -- texts are not affected, which is not correct. We should
-      -- change this so the help text header is generated on the fly
-      -- when printed.
-      ppopts = PPS.defaultOpts
-
       header = [
           "Description",
           "-----------",
@@ -7713,7 +8449,15 @@ primValueEnv opts bic = Map.mapWithKey extract primitives
           HideDeprecated -> ["DEPRECATED AND UNAVAILABLE BY DEFAULT", ""]
           Experimental -> ["EXPERIMENTAL", ""]
       name n p = [
-          "    " <> n <> " : " <> SS.ppSchema ppopts (primitiveType p),
+          -- Use the raw (original text) version of the type, so any
+          -- optional parameters print where they were strategically
+          -- placed by hand, and in the original order, not all
+          -- shifted to the end or the beginning and sorted
+          -- alphabetically. (Currently the printer prints them all at
+          -- the end; all at the beginning is easy, anything else is a
+          -- lot more complicated, and we lose the original order
+          -- regardless.)
+          "    " <> n <> " : " <> (primitiveRawType p),
           ""
        ]
       doc n p =

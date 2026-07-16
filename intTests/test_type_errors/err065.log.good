@@ -1,0 +1,6 @@
+Loading file "err065.saw"
+Type errors:
+  err065.saw:7:13-7:14: Too many arguments to function of type t.0 -> (t.0, Int)
+  err065.saw:6:11-6:17: The type t.0 -> (t.0, Int) arises from the context of the term
+
+FAILED

@@ -287,8 +287,6 @@ cryptolRun name (CryFunArgs (CryFunArgs' tpArgs ctrs normArgs)) retShp funcTerm 
 
     sym <- getSymInterface
 
-    w4VarMapRef <- liftIO $ newIORef mempty
-
     RegMap argsCtx <- getOverrideArgs
     let sc = mirSharedContext (sym ^. W4.userState)
     let
@@ -323,7 +321,7 @@ cryptolRun name (CryFunArgs (CryFunArgs' tpArgs ctrs normArgs)) retShp funcTerm 
         OverrideSim (p sym) sym MIR rtp args r (Const SAW.Term ty)
       getNormArg (CryFunArg ada shp) (RegEntry _ val) =
         case traverse (Cry.tIsNum . Cry.apSubst su) ada of
-          Just adaI -> Const <$> regToTermWithAdapt sym sc name w4VarMapRef adaI shp val
+          Just adaI -> Const <$> regToTermWithAdapt sym sc name adaI shp val
           Nothing   -> fail "Invalid size parameter" -- Shouldn't happen
 
     argTerms <-
@@ -333,21 +331,17 @@ cryptolRun name (CryFunArgs (CryFunArgs' tpArgs ctrs normArgs)) retShp funcTerm 
 
     let allTerms = tpTerms ++ argTerms
     appTerm  <- liftIO (SAW.scApplyAll sc funcTerm allTerms)
-    w4VarMap <- liftIO (readIORef w4VarMapRef)
-    liftIO $ termToReg sym w4VarMap appTerm retShp
+    liftIO $ termToReg sym appTerm retShp
 
 munge :: forall sym t fs tp0.
     (IsSymInterface sym, sym ~ MirSym t fs) =>
     sym -> TypeShape tp0 -> RegValue sym tp0 -> IO (RegValue sym tp0)
 munge sym shp0 rv0 = do
-    w4VarMapRef <- newIORef mempty
 
     let eval :: forall tp. W4.Expr t tp -> IO SAW.Term
-        eval = exprToTerm sym w4VarMapRef
+        eval = exprToTerm sym
         uneval :: TypeShape (BaseToType btp) -> SAW.Term -> IO (W4.Expr t btp)
-        uneval shp t = do
-            w4VarMap <- readIORef w4VarMapRef
-            termToReg sym w4VarMap t shp
+        uneval shp t = termToReg sym t shp
 
     let go :: forall tp. TypeShape tp -> RegValue sym tp -> IO (RegValue sym tp)
         go shp@(PrimShape _ _) expr = eval expr >>= uneval shp

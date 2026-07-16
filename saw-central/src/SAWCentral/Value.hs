@@ -18,6 +18,7 @@ Stability   : provisional
 {-# LANGUAGE TemplateHaskell #-}
 
 module SAWCentral.Value (
+    Optional(..),
     BuiltinWrapper(..),
     Value(..),
 
@@ -183,6 +184,7 @@ module SAWCentral.Value (
     --    SAWCentral.Crucible.Common.Vacuity,
     --    SAWCentral.Bisimulation, SAWCentral.Builtins
     runProofScript,
+    subProofScript,
     -- used by SAWCentral.Builtins, SAWScript.Interpreter
     scriptTopLevel,
     llvmTopLevel,
@@ -288,6 +290,7 @@ import qualified CryptolSAWCore.Pretty as CryPP
 
 import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
+import qualified Lang.Crucible.Simulator as Crucible (ExceptionContextConfig)
 
 import           Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.JVM as CJ
@@ -304,9 +307,74 @@ import           What4.ProgramLoc (ProgramLoc(..))
 
 -- Values ----------------------------------------------------------------------
 
+-- | Type for Haskell implementations of builtins that take optional
+--   named arguments. This has the same shape as `Maybe` but is
+--   distinct because it has this very specific purpose.
+--
+--   Builtins that wish to take optional named arguments must do the
+--   following:
+--
+--      - The Haskell-level types of the optional parameters must be
+--        @Optional t@ for some @t@ in `IsValue`. Parameters not
+--        intended to be optional and named must not use the
+--        `Optional` type.
+--
+--      - The arguments that are named and optional at the SAWScript
+--        level must be, at the Haskell level, positionally after all
+--        the arguments that are positional at the SAWScript level.
+--
+--      - The names of the arguments come from the type signature in
+--        the builtins table. The optional arguments in the type
+--        signature must be in the same order as the corresponding
+--        Haskell-level positional parameters.  If they are not, the
+--        mechanism for matching them will not work properly and
+--        panics are likely.
+--
+--      - The builtin entry point (not the interpreter) is responsible
+--        for providing any default value needed when `NotGiven` is
+--        passed.
+data Optional a = NotGiven | Given a
+
+-- | Type that the interpreter uses at runtime to keep track of
+--   partially applied builtins. The @FromValue@/@IsValue@ typeclass
+--   mechanism (see Interpreter.hs) creates these as builtins are
+--   bound into the environment.
+--
+--   The `OneMorePositionalArg` and `OneMoreNamedArg` cases are for
+--   builtins that take one argument, or that have already been
+--   applied to all their arguments. These cases tell us that the
+--   function is going to run when another argument is applied; that
+--   requires different handling, and also has a different type
+--   because the function returns a `Value`.
+--
+--   The `ManyMorePositionalArgs` and `ManyMoreNamedArgs` cases are
+--   for builtins that take more than one argument. These produce a
+--   new `BuiltinWrapper` when applied.
+--
+--   For each builtin that takes more than one argument, we get a
+--   chain of `BuiltinWrapper` objects; the ones associated with later
+--   parameters are closed into the return values of the ones
+--   associated with earlier parameters. The last entry in the chain
+--   is always an instance of the @OneMore@ case.
+--
+--   In the absence of named arguments, we just apply one positional
+--   argument at a time until we get to the last one and the builtin
+--   runs. If there are named arguments, the named entries all come
+--   after the positional entries and the last entry is always
+--   `OneMoreNamedArg`. This is so we can make sure we've collected
+--   all the named arguments we're going to get before we try applying
+--   them, since we have to apply them in order at the Haskell level
+--   and they can come in any order from the SAWScript code.
+--
+--   Builtins that wish to take optional named arguments must use the
+--   `Optional` type above for them and must adhere to the restrictions
+--   documented therein.
+--
 data BuiltinWrapper
-  = OneMoreArg (Value -> TopLevel Value)
-  | ManyMoreArgs (Value -> TopLevel BuiltinWrapper)
+  = OneMorePositionalArg (Value -> TopLevel Value)
+  | OneMoreNamedArg SS.Name (Optional Value -> TopLevel Value)
+  | ManyMorePositionalArgs (Value -> TopLevel BuiltinWrapper)
+  | ManyMoreNamedArgs SS.Name (Optional Value -> TopLevel BuiltinWrapper)
 
 -- | A type to hold the chain of references to a value that arise
 --   during execution. This appears in the monadic value types
@@ -440,7 +508,7 @@ type RefChain = [(SS.Pos, SS.Name)]
 --   traces. FUTURE: VLambda should have this as well, but it doesn't
 --   make sense to make such a list separate from the variable
 --   environment handling, and that needs a through mucking-out of its
---   own first.
+--   own first. UPDATE: that's been done, this can be fixed now.
 --
 --   The flow for the position of last reference is as follows:
 --      (a) Builtins in the global environment are initialized with
@@ -525,7 +593,7 @@ type RefChain = [(SS.Pos, SS.Name)]
 --   default environment that exists when the VBuiltin values are
 --   constructed, or even the whole default environment, wouldn't
 --   serve any purpose.
-
+--
 --   Furthermore, VBuiltin is used to bind in Haskell functions, which
 --   don't themselves run in SAWScript and don't need or use the
 --   naming environment; they just need their arguments. The exception
@@ -533,7 +601,11 @@ type RefChain = [(SS.Pos, SS.Name)]
 --   inherit the SAWScript environment they're invoked in. Any
 --   otherwise pointless environment capturing we indulged in for
 --   uniformity's sake would break that behavior.
-
+--
+--   In addition to all the above VBuiltin now also contains a map
+--   from names to unapplied named arguments. This populates if
+--   builtin arguments are applied in an order other than the
+--   underlying native one.
 --
 data Value
   = VBool Bool
@@ -542,12 +614,13 @@ data Value
   | VArray [Value]
   | VTuple [Value]
   | VRecord (Map SS.Name Value)
-  | VLambda Environ (Maybe SS.Name) SS.Pattern SS.Expr
+  | VLambda Environ (Maybe SS.Name) [SS.Pattern] (Map Text (SS.Expr, SS.Pattern)) SS.Expr
     -- | Function-shaped value that's a Haskell-level function. This
     --   is how builtins appear. Includes the name of the builtin and
     --   the list of arguments applied so far, as a Seq to allow
-    --   appending to the end reasonably.
-  | VBuiltin SS.Name (Seq Value) BuiltinWrapper
+    --   appending to the end reasonably. FUTURE: is never (Nothing, Nothing),
+    --   consider defining a different type to exclude that case.
+  | VBuiltin SS.Name (Seq (Maybe SS.Name, Maybe Value)) (Map SS.Name Value) BuiltinWrapper
   | VTerm TypedTerm
   | VType Cryptol.Schema
     -- | Returned value in unspecified monad.
@@ -612,7 +685,7 @@ data Value
   | VYosysSequential YosysSequential
   | VYosysTheorem YosysTheorem
 
-type SAWSimpset = Simpset TheoremNonce
+type SAWSimpset = Simpset TheoremAnnotation
 
 data AIGNetwork where
   AIGNetwork :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Network l g -> AIGNetwork
@@ -690,15 +763,36 @@ prettyValue sc = visit (0 :: Int)
               body' = PP.flatAlt (PP.indent 3 body) body
           pure $ PP.group $ PP.braces (PP.line <> body' <> PP.line)
 
-      VLambda _env _mname pat e -> do
+      VLambda _env _mname params namedParams e -> do
           ppopts <- scGetPPOpts sc
-          let pat' = SS.prettyPattern ppopts pat
+          let onePositional p =
+                  "\\" <+> SS.prettyPattern ppopts p <+> "->"
+              params' = map onePositional params
+              oneNamed (n, (d, p)) =
+                  let n' = PP.pretty n
+                      p' = SS.prettyPattern ppopts p
+                      d' = SS.prettyExpr ppopts d
+                  in
+                  "\\" <+> n' <+> "@" <> p' <+> "?=" <> d' <+> "->"
+              namedParams' = map oneNamed $ Map.toList namedParams
               e' = SS.prettyExpr ppopts e
-              line1 = "\\" <+> pat' <+> "->"
-              line2 = PP.flatAlt (PP.indent 3 e') e'
-          pure $ PP.group (line1 <> PP.line <> line2)
+              lines_ = params' ++ namedParams' ++ [e']
+              -- Now indent each successive line by 3. As elsewhere,
+              -- this needs to be done using PP.flatAlt or it comes out
+              -- wrong.
+              indent line rest =
+                  PP.group (line <> PP.line <> PP.flatAlt (PP.indent 3 rest) rest)
+          -- This will print the last few arguments and the body
+          -- together on the last line if they fit, which matches the
+          -- older behavior. If we decide we don't like that, grouping
+          -- it again will apparently put each piece on its own line if
+          -- the whole thing doesn't fit on one.
+          --
+          -- Note: if you make changes here you probably want to make
+          -- matching changes to the Expr printer too.
+          pure $ foldr1 indent lines_
 
-      VBuiltin name _args _wrapper ->
+      VBuiltin name _args _unappliedNamedArgs _wrapper ->
           let name' = PP.pretty name in
           pure $ PP.sep ["<<", "builtin", name', ">>"]
 
@@ -728,7 +822,7 @@ prettyValue sc = visit (0 :: Int)
       VTheorem thm -> do
         nenv <- scGetNamingEnv sc
         ppopts <- scGetPPOpts sc
-        pure $ "Theorem" <+> PP.parens (prettyProp ppopts nenv (thmProp thm))
+        pure $ "Theorem" <+> PP.parens (prettyTheorem ppopts nenv thm)
       VBisimTheorem _ -> pure "<<Bisimulation theorem>>"
       VLLVMCrucibleSetup{} -> pure "<<LLVM Setup>>"
       VLLVMCrucibleSetupValue x -> CMS.prettySetupValue sc $ CMSLLVM.getAllLLVM x
@@ -1047,6 +1141,7 @@ data TopLevelRW =
   , rwLaxPointerOrdering :: Bool
   , rwDebugIntrinsics :: Bool
   , rwLLVMGlobalAllocMode :: LLVMGlobalAllocMode
+  , rwMIRExceptionContext :: Crucible.ExceptionContextConfig
 
   -- FIXME: These might be better split into "simulator hash-consing" and "tactic hash-consing"
   , rwWhat4HashConsing :: Bool
@@ -1256,7 +1351,7 @@ getJavaCodebase =
         else pure (Opt.jarList opts)
       JSS.loadCodebase jars (Opt.classPath opts) (Opt.javaBinDirs opts)
 
-          
+
 
 
 getTheoremDB :: TopLevel TheoremDB
@@ -1589,6 +1684,12 @@ runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
             putTheoremDB db'
             pure thmResult
 
+-- | Run the given 'ProofScript' as a subproof starting from a proof
+-- state where only the first subgoal is visible.
+-- The inner proof script must discharge its goal, leaving no
+-- remaining subgoals; otherwise the outer proof fails.
+subProofScript :: ProofScript () -> ProofScript ()
+subProofScript (ProofScript m) = ProofScript (subProof m)
 
 crucibleSetupTopLevel :: TopLevel a -> CrucibleSetup ext a
 crucibleSetupTopLevel m = lift (lift m)

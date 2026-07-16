@@ -1,11 +1,13 @@
 //
-// Exercise failure of the second unify call (via checkExpr) in the
-// Application case of inferExpr. This is the check of the function
-// argument against the function's argument type.
+// Exercise failure arising from using the unify call in the
+// TyUnifyVar case of the Application case of inferExpr. This is when
+// we don't have a function type in the environment, just a tyvar, so
+// we make up a function type up and unify it with that tyvar. The
+// unify call itself can't fail, but it can produce later errors.
 //
 
-let f (x : Int) = x;
-let x = f true;
+let f g = g ();
+let x : Int = f (\x -> x);
 
 
 

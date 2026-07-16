@@ -40,6 +40,8 @@ module SAWCore.Term.Certified
   , scmUpdateData
   , scUpdateData
   , scWithData
+  , scmLabel
+  , unlabel
     -- * Term building monad
   , TermError(..)
   , SCM
@@ -105,6 +107,11 @@ module SAWCore.Term.Certified
   , SharedContextCheckpoint
   , checkpointSharedContext
   , restoreSharedContext
+    -- * Label management for beta-reduction
+  , AppArg(..)
+  , scmApplyAppArgs
+  , scmApplyAppArgsBeta
+  , nextAppTerm
   ) where
 
 import Control.Applicative
@@ -520,6 +527,7 @@ scmTermF tf =
     Pi x t1 t2 -> scmPi x t1 t2
     Constant nm -> scmConst nm
     Variable x t1 -> scmVariable x t1
+    Label tg t1 -> scmLabel tg t1
 
 -- | Create a new term from a lower-level 'FlatTermF' term.
 scmFlatTermF :: FlatTermF Term -> SCM Term
@@ -568,6 +576,30 @@ scmApply t1 t2 =
                   }
             liftIO $ modifyIORef' (scAppCache sc) (insertAppTFM t1 t2 term)
             pure term
+
+-- | The result of deconstructing a term 'App' which may have a label.
+-- e.g. @let { f = g x; } in f y@ has the term structure
+-- @App (Label "f" (App g x)) y@, which is decomposed into:
+-- @[AppTerm x, AppLabel "f", AppTerm y]@
+data AppArg =
+    AppLabel Text
+  | AppTerm Term
+
+-- | Return the next term argument in the list, if it exists.
+nextAppTerm :: [AppArg] -> Maybe (Term, [AppArg])
+nextAppTerm (AppTerm t:apps) = Just (t, apps)
+nextAppTerm (AppLabel _:apps) = nextAppTerm apps
+nextAppTerm [] = Nothing
+
+-- | Same as 'scmApplyAll' with 'AppArg's, which may include labels
+-- for intermediate 'App's.
+scmApplyAppArgs :: Term -> [AppArg] -> SCM Term
+scmApplyAppArgs = foldlM go
+  where
+    go :: Term -> AppArg -> SCM Term
+    go f arg = case arg of
+      AppLabel lbl -> scmLabel lbl f
+      AppTerm t -> scmApply f t
 
 -- | Create a lambda term from a parameter name (as a 'VarName'),
 -- parameter type (as a 'Term'), and a body ('Term').
@@ -622,6 +654,13 @@ scmVariable x t =
      _s <- scmEnsureSortType t
      let mty = maybe (Right t) Left (asSort t)
      scmMakeTerm vt (Variable x t) mty
+
+-- | Wrap a term with a label. If the label is a valid identifier, it
+--   is used as the base name when generating a memoization variable 
+--   for this term. Labelled and printable terms are always memoized.
+scmLabel :: Text -> Term -> SCM Term
+scmLabel lbl t =
+  scmMakeTerm (stAppVarTypes t) (Label lbl t) (stAppType t)
 
 -- | Update the global metadata of type 'a'.
 
@@ -1418,6 +1457,7 @@ scmWhnf :: Term -> SCM Term
 scmWhnf t0 = go [] t0
   where
     go :: [WHNFElim] -> Term -> SCM Term
+    go xs                     (asLabel -> Just (tg, t1))        = scmLabel tg =<< go xs t1
     go xs                     (asApp            -> Just (t, x)) = go (ElimApp x : xs) t
     go (ElimApp x : xs)       (asLambda -> Just (vn, _, body))  = betaReduce xs [(vn, x)] body
     go xs                     r@(asRecursor -> Just crec)       | Just (params, ElimApp motive : xs1) <- splitApps (recursorNumParams crec) xs
@@ -1551,7 +1591,7 @@ scmConvertible tm1 tm2 = isJust <$> evalConvM (go tm1 tm2)
       liftIO $ modifyIORef' ref (EqRel.insert k1 k2)
     
     go :: Term -> Term -> ConvM ()
-    go t1 t2 = do
+    go (unlabel -> t1) (unlabel -> t2) = do
       c1 <- asks ceCtx1
       c2 <- asks ceCtx2
       let k1 = tKey c1 t1
@@ -1593,6 +1633,9 @@ scmConvertible tm1 tm2 = isJust <$> evalConvM (go tm1 tm2)
         (Nothing, Nothing) | x1 == x2 -> go t1 t2
         _ -> empty
 
+    goF (Label _ t1) t2 = goF (unwrapTermF t1) t2
+    goF t1 (Label _ t2) = goF t1 (unwrapTermF t2)
+
     -- final catch-all case
     goF _t1 _t2 = empty
 
@@ -1608,7 +1651,7 @@ scmSubtype t1 t2
        case (t1', t2') of
          (asSort -> Just s1, asSort -> Just s2) ->
            pure (s1 <= s2)
-         (unwrapTermF -> Pi x1 a1 b1, unwrapTermF -> Pi x2 a2 b2)
+         (asPi -> Just (x1,a1,b1), asPi -> Just (x2,a2,b2))
            | x1 == x2 ->
              (&&) <$> scmConvertible a1 a2 <*> scmSubtype b1 b2
            | otherwise ->
@@ -1664,35 +1707,37 @@ scmInstantiateBeta sub t0 =
          go t
            | IntSet.disjoint domainVars (freeVars t) = pure t
            | otherwise = goArgs t []
-         goArgs :: Term -> [Term] -> SCM Term
+         goArgs :: Term -> [AppArg] -> SCM Term
          goArgs t args =
            case unwrapTermF t of
              FTermF ftf ->
                do ftf' <- traverse memo ftf
                   t' <- scmFlatTermF ftf'
-                  scmApplyAll t' args
+                  scmApplyAppArgs t' args
              App t1 t2 ->
                do t2' <- memo t2
-                  goArgs t1 (t2' : args)
+                  goArgs t1 (AppTerm t2':args)
              Lambda x t1 t2 ->
                do t1' <- memo t1
                   (x', t2') <- goBinder x t1' t2
                   t' <- scmLambda x' t1' t2'
-                  scmApplyAll t' args
+                  scmApplyAppArgs t' args
              Pi x t1 t2 ->
                do t1' <- memo t1
                   (x', t2') <- goBinder x t1' t2
                   t' <- scmPi x' t1' t2'
-                  scmApplyAll t' args
+                  scmApplyAppArgs t' args
              Constant {} ->
-               scmApplyAll t args
+               scmApplyAppArgs t args
              Variable x t1 ->
                case IntMap.lookup (vnIndex x) sub of
-                 Just t' -> scmApplyAllBeta t' args
+                 Just t' ->
+                   scmApplyAppArgsBeta t' args
                  Nothing ->
                    do t1' <- memo t1
                       t' <- scmVariable x t1'
-                      scmApplyAll t' args
+                      scmApplyAppArgs t' args
+             Label lbl t1 -> goArgs t1 (AppLabel lbl:args)
          goBinder :: VarName -> Term -> Term -> SCM (VarName, Term)
          goBinder x@(vnIndex -> i) t body
            | IntSet.member i rangeVars =
@@ -1719,19 +1764,41 @@ scmInstantiateBeta sub t0 =
 -- If all input terms are in beta-normal form, then the result will
 -- also be beta-normal.
 scmApplyAllBeta :: Term -> [Term] -> SCM Term
-scmApplyAllBeta t0 [] = pure t0
-scmApplyAllBeta t0 (arg0 : args0) =
+scmApplyAllBeta t0 ts =
+  scmApplyAppArgsBeta t0 (map AppTerm ts)
+
+-- | Same as 'scmApplyAllBeta' with 'AppArg's, which may include
+-- labels for intermediate 'App's.
+-- 'AppLabel' arguments will apply labels to intermediate 'App's,
+-- discarding labels when reducing lambdas.
+scmApplyAppArgsBeta :: Term -> [AppArg] -> SCM Term
+scmApplyAppArgsBeta t0 [] = pure t0
+scmApplyAppArgsBeta t0 (AppLabel lbl:args) = do
+  t1 <- scmLabel lbl t0
+  scmApplyAppArgsBeta t1 args
+scmApplyAppArgsBeta t0 args0@(AppTerm arg0:args1) =
   case asLambda t0 of
-    Nothing -> scmApplyAll t0 (arg0 : args0)
-    Just (x, _, body) -> go (IntMap.singleton (vnIndex x) arg0) body args0
+    Nothing -> scmApplyAppArgs t0 args0
+    Just (x, _, body) -> go (IntMap.singleton (vnIndex x) arg0) body args1
   where
-    go :: IntMap Term -> Term -> [Term] -> SCM Term
-    go sub (asLambda -> Just (x, _, body)) (arg : args) =
+
+    go :: IntMap Term -> Term -> [AppArg] -> SCM Term
+    -- 'asLambda' will implicitly strip any labels from 't',
+    -- which is expected since it is being reduced.
+    -- Similarly, 'nextAppTerm' skips any labels that would
+    -- have been applied to the resulting 'App', which isn't created
+    -- here since it's being reduced instead.
+    -- Having this case before the 'AppLabel' case simply avoids
+    -- attaching labels to the lambda that would be immediately stripped
+    -- by the recursive call.
+    go sub (asLambda -> Just (x, _, body)) (nextAppTerm -> Just (arg,args)) =
       go (IntMap.insert (vnIndex x) arg sub) body args
+    go sub t (AppLabel lbl:args) = do
+      t' <- scmLabel lbl t
+      go sub t' args
     go sub t args =
       do t' <- scmInstantiateBeta sub t
-         scmApplyAllBeta t' args
-
+         scmApplyAppArgsBeta t' args
 
 --------------------------------------------------------------------------------
 -- Building shared terms
@@ -2054,6 +2121,7 @@ scmInstantiate vmap t0 =
                  case IntMap.lookup (vnIndex nm) vmap of
                    Just t' -> pure t'
                    Nothing -> scmVariable nm =<< memo tp
+               Label tg t1 -> scmLabel tg =<< go t1
          goBinder :: VarName -> Term -> Term -> SCM (VarName, Term)
          goBinder x@(vnIndex -> i) t body
            | IntSet.member i rangeVars =

@@ -20,11 +20,9 @@ import qualified What4.Expr as W4
 type MirSym t fs = W4.ExprBuilder t MirState fs
 
 data MirState t = MirState {
-  mirSharedContext   :: SAW.SharedContext,
-  -- ^ Shared context for building Cryptol terms
-
+  
   mirCryEnv           :: IORef SAW.CryptolEnv,
-  -- ^ Inforamtion about what terms are loaded
+  -- ^ Information about what terms are loaded
 
   mirKeepUninterp     :: IORef (Set Text),
   {- ^ Set of names we'd like to keep uninterpreted;
@@ -40,6 +38,9 @@ data MirState t = MirState {
   mirSAWCoreState :: SAW.SAWCoreState t
 }
 
+mirSharedContext :: MirState t -> SAW.SharedContext
+mirSharedContext = SAW.saw_sc . mirSAWCoreState
+
 newMirState :: IO (MirState t)
 newMirState =
   do
@@ -50,7 +51,6 @@ newMirState =
     unintRef <- newIORef mempty
     sawcoreState <- SAW.newSAWCoreState sc
     pure MirState {
-      mirSharedContext = sc,
       mirCryEnv = env,
       mirKeepUninterp = unintRef,
       mirSAWCoreState = sawcoreState

@@ -1,0 +1,241 @@
+enable_experimental;
+
+// Assert that the output of printing a term is exactly the given string.
+let assert_output t1 s1 = do {
+  let s2 = show_term t1;
+  b <- is_convertible {{ s1 }} {{ s2 }};
+  if b then return () else
+    fail (str_concats ["Unexpected output for term: actual: ", s2, " expected: ", s1]);
+};
+
+// check if terms are distinguishable when printed
+let exact_eq t1 t2 = do {
+  let st1 = show_term t1;
+  let st2 = show_term t2;
+  is_convertible {{ st1 }} {{ st2 }};
+};
+
+let assert_eq t1 t2 = do {
+  b <- exact_eq t1 t2;
+  if b then return () else fail "Expected exact term equality.";
+};
+
+let assert_beta_eq t1 t2 =
+  assert_eq (beta_reduce_term t1) (beta_reduce_term t2);
+
+let assert_neq t1 t2 = do {
+  b <- exact_eq t1 t2;
+  if b then fail "Unexpected exact term equality." else return ();
+};
+
+let assert_convertible t1 t2 = do {
+  b <- is_convertible t1 t2;
+  if b then return () else fail "Expected convertible terms.";
+};
+
+let x = parse_core "let { t1 = True; } in t1";
+
+assert_output x "True";
+
+// labels are stored regardless of the memoization mode
+set_memoization_label false;
+assert_output x "let { t1 = True; } in t1";
+
+let x2 = parse_core "let { _t1 = True; } in _t1";
+
+// names prefixed with "_" will not generate labels
+assert_output x2 "True";
+
+// Labels that need to be escaped to be valid identifiers
+// are saved, but not printed with 'set_memoization_label false'.
+
+let x3 = parse_core "let { !?\"$\" = True; } in !?\"$\"";
+assert_output x3 "True";
+
+set_memoization_label true;
+// 'x2' still has no labels
+assert_output x2 "True";
+// but 'x3' now shows the previously-hidden label
+assert_output x3 "let { !?\"$\" = True; } in !?\"$\"";
+
+set_memoization_label false;
+
+// labels do not affect convertibility
+assert_convertible
+  (parse_core "True")
+  (parse_core "let { t1 = True; } in t1");
+
+// but they are distinguishable when printing
+assert_neq
+  (parse_core "True")
+  (parse_core "let { t1 = True; } in t1");
+
+assert_neq
+  (parse_core "let { t1 = True; } in t1")
+  (parse_core "let { t2 = True; } in t2");
+
+// names are still implicitly pushed to the outermost scope
+// where they may be defined
+
+assert_eq
+  (parse_core "(let { t1 = True; } in t1, let { t1 = True; } in t1)")
+  (parse_core "let { t1 = True; } in (t1, t1)");
+
+// labels survive when the labelled term is
+// used for substitution during beta-normalization
+assert_beta_eq
+  (parse_core "(\\(x : Bool) -> ite Bool x True False) (let { t1 = True; } in t1)")
+  (parse_core "let { t1 = True;} in ite Bool t1 True False");
+
+assert_eq
+  (normalize_term (parse_core "let { t1 = True; } in ite Bool t1 t1 False"))
+  (parse_core "let { t1 = True; } in t1");
+
+// labels are lost once the exact original term no longer exists (replaced
+// here when 'ite' is evaluated)
+assert_eq
+  (normalize_term (parse_core "let { t1 = True; } in ite Bool t1 True False"))
+  (parse_core "True");
+
+  // We can use labels in both the lhs and rhs of a rewrite rule:
+// LHS: matching is agnostic of labels, terms are considered
+//   alpha-convertible regardless of labels
+// RHS: if the replacement term is labelled, this label will persist
+//   when the rule is applied
+and_True <- prove_core z3 "let { t1 = True; } in EqTrue (boolEq (and t1 t1) t1)";
+
+let simp = rewrite (addsimp and_True empty_ss);
+
+assert_eq
+ (simp (parse_core "and True True"))
+ (parse_core "let { t1 = True; } in t1");
+
+// rewriting will preserve labels on terms that are left unmodified
+assert_eq
+ (simp (parse_core "let { t2 = True; } in or (and True True) t2"))
+ (parse_core "let { t1 = True; t2 = True; } in or t1 t2");
+
+// the variable names are still indexed, allowing for disambiguation
+// in case of overlap
+assert_eq
+ (parse_core "let { t1 = True; } in (t1, let { t1 = False; } in t1)")
+ (parse_core "let { t1 = True; t1`1 = False; } in (t1, t1`1)");
+
+
+// beta-normalizing a named term will preserve the term name
+assert_beta_eq
+ (parse_core "let { t4 = (\\(x : Bool) -> (x,x)) True; } in t4")
+ (parse_core "let { t4 = (True,True); } in t4");
+
+  // however, labels attached to a function are dropped if that function
+ // is evaluated/reduced
+assert_beta_eq
+ (parse_core "let { f = \\(x : Bool) -> (x, x); } in f True")
+ (parse_core "(True, True)");
+
+
+let lbl1_t = label_term "lbl1" (parse_core "1");
+let lbl2_t = label_term "lbl2" lbl1_t;
+
+assert_output lbl1_t "let { lbl1 = 1; } in lbl1";
+assert_eq lbl2_t (parse_core "let { lbl1 = 1; lbl2 = lbl1; } in lbl2");
+
+// If the label is not a valid identifier, then it isn't used
+// as a memoization variable name with 'set_memoization_label false'
+let lbl3_t = label_term " lbl3" lbl1_t;
+
+assert_output lbl3_t "let { lbl1 = 1; } in lbl1";
+
+let lbl4_t = label_term "lbl4" lbl3_t;
+assert_eq lbl4_t (parse_core "let { lbl1 = 1; lbl4 = lbl1; } in lbl4");
+
+set_memoization_label true;
+
+// Recoverable via 'set_memoization_label true'
+assert_eq lbl4_t (parse_core 
+  "let { lbl1 = 1; !?\" lbl3\" = lbl1; lbl4 = !?\" lbl3\"; } in lbl4");
+
+let (lbls, unlabeled) = term_labels lbl4_t;
+
+let assert_streq s1 s2 = do {
+  b <- is_convertible {{ s1 }} {{ s2 }};
+  if b then return () else
+    fail (str_concats ["String mismatch. \n",s1,"\nvs.\n",s2]);
+};
+
+assert_streq (nth lbls 0) "lbl4";
+assert_streq (nth lbls 1) " lbl3";
+assert_streq (nth lbls 2) "lbl1";
+assert_streq (show (length lbls)) "3";
+
+assert_output unlabeled "1";
+
+set_memoization_label false;
+
+let assoc_term = parse_core "(x y z : Nat) -> let { z_lbl = z; } in Eq Nat (addNat x (addNat y z_lbl)) (addNat (addNat x y) z_lbl)";
+
+print_term assoc_term;
+
+assoc_rule <- prove_print (admit "test") assoc_term;
+
+let abc_test = parse_core "\\(a b c : Nat) -> let { a_lbl = a; c_lbl = c; } in addNat a_lbl (addNat b c_lbl)";
+
+print_term abc_test;
+// rewriting should preserve existing labels, matching should ignore labels,
+// and should introduce any labels from the rule
+print_term (rewrite (addsimp assoc_rule empty_ss) abc_test);
+
+let assoc_intro_term =
+  parse_core "(x y z w : Nat) -> let { z_lbl = z; } in (Eq Nat (addNat x (addNat y z_lbl)) w) -> Eq Nat (addNat (addNat x y) z_lbl) w";
+
+print_term assoc_intro_term;
+assoc_intro_rule <- prove_print (admit "test") assoc_intro_term;
+
+let tac = do {
+  goal_intro "a";
+  goal_intro "b";
+  goal_intro "c";
+  goal_apply assoc_intro_rule;
+  print_goal;
+  trivial;
+};
+
+prove_core tac "(a b c : Nat) -> let { a_lbl = a; c_lbl = c; } in Eq Nat (addNat (addNat a_lbl b) c_lbl) (addNat a_lbl (addNat b c_lbl))";
+
+
+g <- fresh_symbolic "g" {| Integer -> Integer -> Integer |};
+y <- fresh_symbolic "y" {| Integer |};
+w <- fresh_symbolic "w" {| Integer |};
+
+let fgxy =
+  parse_core "let { h = let { j = (\\(x : Integer) -> let { f = g x; } in f y); } in j w;} in h";
+
+print_term fgxy;
+
+// The label 'j' has disappeared during beta-reduction, but the other
+// labels are preserved on the reduced terms: 'f = g w' and 'h = f y'
+print_term (beta_reduce_term fgxy);
+
+load_sawcore_from_file "test.sawcore";
+
+/*
+primitive fxyNat : (x y : Nat) -> (f : Nat -> Nat -> Nat) ->
+  let { x_lbl = x; fx = f x_lbl; fy = f y; } in Eq Nat (fx y) (fy x_lbl);
+*/
+
+// The 'fx' and 'fy' labels are preserved if there is no more beta reduction
+// after the substitution. In this case, the only dropped label is 'g' because
+// the lambda was reduced, but 'h' was preserved as it was attached to
+// the body. It is duplicated to account for both occurrences, distinguished
+// by suffixing with the memoization variable index.
+
+print_type (parse_core "fxyNat 0 1 (let { g = (\\(a : Nat) -> let { h = addNat a;} in h);} in g)");
+
+// In contrast, this will result in 'fx' and 'fy' being dropped, as the partial
+// application is reduced after subsitution. The provided 'h' label still persists, however.
+print_type (parse_core "fxyNat 0 1 (let { g = (\\(a b : Nat) -> let { h = addNat a b;} in h);} in g)");
+
+// Labels attached to arguments are preserved along with labels attached to
+// the substituted variables
+
+print_type (parse_core "fxyNat (let { zero_lbl = 0;} in zero_lbl) (let { one_lbl = 1;} in one_lbl) addNat");

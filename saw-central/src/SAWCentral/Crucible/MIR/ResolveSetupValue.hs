@@ -915,8 +915,9 @@ resolveSetupVal mcc env tyenv nameEnv val =
                   Right x -> return x
                 i_sym <- usizeBvLit sym i
                 let elemSize = tySize col elemTy
+                elemOff <- W4.bvMul sym i_sym =<< usizeBvLit sym (fromIntegral elemSize)
                 MIRVal (RefShape elemPtrTy elemTy mutbl elemTpr) <$>
-                  Mir.subindexMirRefIO bak iTypes elemTpr xsVal i_sym elemSize
+                  Mir.mirRef_agElemIO bak iTypes elemOff elemSize elemTpr xsVal
               else do
                 let sc = sawCoreSharedContext sym
                 ppopts <- liftIO $ scGetPPOpts sc
@@ -1129,7 +1130,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
             Right x -> return x
           zeroBV <- usizeBvLit sym 0
           let elemSize = tySize col elemTy
-          refVal <- Mir.subindexMirRefIO bak iTypes elemTpr arrRefVal zeroBV elemSize
+          refVal <- Mir.mirRef_agElemIO bak iTypes zeroBV elemSize elemTpr arrRefVal
           let sliceShp = SliceShape (Mir.TyRef sliceTy mut) elemTy mut elemTpr
           pure $ SetupSliceFromArrayRef sliceShp refVal len
         _ -> do
@@ -1655,7 +1656,7 @@ doAlloc cc globals (Some ma) =
      globals' <- Mir.writeMirRefIO bak globals iTypes Mir.MirAggregateRepr ref ag
 
      zero <- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 0
-     ptr <- Mir.subindexMirRefIO bak iTypes tpr ref zero elemSize
+     ptr <- Mir.mirRef_agElemIO bak iTypes zero elemSize tpr ref
      let mirPtr = Some MirPointer
            { _mpType = tpr
            , _mpKind = ma^.maPtrKind

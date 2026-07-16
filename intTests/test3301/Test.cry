@@ -1,0 +1,13 @@
+f : {n} [n] -> [n + 1]
+f n = [0] # n
+
+g : {n} (1 <= n) => [n] -> Option [n - 1]
+g n = Some (tail n)
+
+h : {n} (fin n) => [n] -> Bit
+// NB: The type of `g (f n)` is `Option [(n + 1) - 1]`, but in the `Some n'`
+// case alternative, Cryptol will simplify the type of `n'` from
+// `[(n + 1) - 1]` to simply `[n]`. This was the root of the problem in #3301.
+h n = case g (f n) of
+        None -> True
+        Some n' -> n == n'

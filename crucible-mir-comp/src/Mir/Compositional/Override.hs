@@ -52,6 +52,7 @@ import qualified SAWCore.Name as SAW
 import qualified SAWCore.Recognizer as SAW
 import qualified SAWCore.SharedTerm as SAW
 import qualified CryptolSAWCore.TypedTerm as SAW
+import qualified SAWCoreWhat4.ReturnTrip as SAW
 
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import qualified SAWCentral.Crucible.Common.Override as MS
@@ -153,7 +154,8 @@ printSpec ms = ovrWithBackend $ \bak ->
         ag (zip [0..] byteVals)
     let agRef = newConstMirRef sym MirAggregateRepr ag'
     zero <- liftIO (W4.bvLit sym knownRepr (BV.zero knownRepr))
-    ptr <- subindexMirRefSim sym byteRepr agRef zero byteSize
+    ptr <- ovrWithBackend $ \_bak ->
+        modifyRefMuxSim (mirRef_agElemLeaf zero byteSize byteRepr) agRef
     return $ Empty :> RV ptr :> RV len
 
 -- | Enable a MethodSpec.  This installs an override, so for the remainder of
@@ -201,9 +203,9 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak -> do
     -- Later, we need to convert some SAWCore terms back to what4, so during
     -- this conversion, we also build up a mapping from SAWCore variables
     -- (`SAW.VarName`) to what4 ones (`W4.ExprBoundVar`).
-    w4VarMapRef <- liftIO $ newIORef mempty
+    let w4VarMapRef = SAW.saw_elt_cache_r (mirSAWCoreState (sym ^. W4.userState))
     let eval :: forall tp. W4.Expr t tp -> IO SAW.Term
-        eval x = exprToTerm sym w4VarMapRef x
+        eval x = exprToTerm sym x
 
     -- Generate fresh variables for use in postconditions and result.  The
     -- result, `postFreshTermSub`, maps MethodSpec `VarIndex`es to `Term`s
@@ -352,7 +354,8 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak -> do
         ag <- liftIO $ mirAggregate_uninitIO bak allocSize_sym
         writeMirRefSim MirAggregateRepr agRef ag
         zero <- liftIO $ W4.bvLit sym knownRepr $ BV.zero knownRepr
-        ref <- subindexMirRefSim sym (allocSpec ^. maType) agRef zero elemSize
+        ref <- ovrWithBackend $ \_bak ->
+            modifyRefMuxSim (mirRef_agElemLeaf zero elemSize (allocSpec ^. maType)) agRef
         return ( alloc
                , Some $ MirPointer (allocSpec ^. maType)
                                    (allocSpec ^. maPtrKind)

@@ -1,3 +1,5 @@
 *.rawlog
 *.log
 *.diff
+
+D.extcore

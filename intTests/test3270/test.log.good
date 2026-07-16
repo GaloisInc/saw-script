@@ -1,0 +1,28 @@
+Loading file "test.saw"
+An example of a correct proof that locally uses a false assumption
+Theorem (let { _x`1 = EqTrue False; } in _x`1 -> _x`1)
+An example of a correct proof that locally uses a variable of an empty type
+Theorem ((x : Void)
+-> EqTrue False)
+An ill-formed proof that improperly uses a local false assumption
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_core
+   test.saw:26:3-33:17 in (callback)
+   (builtin) in fails
+   test.saw:25:1-33:17 (at top level)
+Theorem depends on undischarged hypotheses:
+EqTrue False
+
+
+An ill-formed proof that improperly uses a variable of an empty type
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test.saw:40:3-48:14 in (callback)
+   (builtin) in fails
+   test.saw:39:1-48:14 (at top level)
+Theorem depends on undischarged hypotheses:
+Void
+
+

@@ -1,0 +1,6 @@
+// This should be accepted, because the two named parameters x don't
+// overlap.
+
+typedef q = x?Int -> () -> Int;
+
+let f x?=2 (g: q) = g x=x ();

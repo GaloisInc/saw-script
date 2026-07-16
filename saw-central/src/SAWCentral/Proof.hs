@@ -68,6 +68,7 @@ module SAWCentral.Proof
 
   , Theorem
   , thmProp
+  , thmHyps
   , thmStats
   , thmEvidence
   , thmLocation
@@ -79,6 +80,8 @@ module SAWCentral.Proof
   , thmSummary
   , TheoremNonce
   , TheoremSummary(..)
+  , TheoremAnnotation(..)
+  , prettyTheorem
 
   , admitTheorem
   , solverTheorem
@@ -121,6 +124,7 @@ module SAWCentral.Proof
   , ProofGoal(..)
   , startProof
   , finishProof
+  , subProof
 
   , CEX
   , ProofResult(..)
@@ -135,8 +139,11 @@ import           Control.Monad (foldM, forM_, unless)
 import qualified Control.Monad.Fail as F
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Except (ExceptT, MonadError(..), runExceptT)
+import           Control.Monad.State (MonadState(..))
 import           Control.Monad.Trans.Class (MonadTrans(..))
 import qualified Data.Foldable as Fold
+import           Data.HashSet (HashSet)
+import qualified Data.HashSet as HashSet
 import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
 import           Data.List (genericDrop, genericLength, genericSplitAt)
@@ -191,25 +198,28 @@ newtype Prop = Prop Term
 unProp :: Prop -> Term
 unProp (Prop tm) = tm
 
--- | Turn a saw-core term into a proposition under the type-as-propositions
---   regime.  The given term must be a type, which means that its own type
---   is a sort.
+-- | Turn a SAWCore term into a proposition.
+-- If it already has type @Prop@, then it is returned as is.
+-- If it has a function type of any arity with a return type of
+-- @Bool@, then convert the function arguments to universal
+-- quantifiers.
 termToProp :: SharedContext -> Term -> IO Prop
 termToProp sc tm =
-   do ty <- scWhnf sc =<< scTypeOf sc tm
-      case asSort ty of
-        Just s | s == propSort -> return (Prop tm)
-        _ -> do
-          tm' <- ppTerm sc tm
-          ty' <- ppTerm sc ty
-          case asLambda tm of
-            Just _ -> do
-              fail $ unlines [ "termToProp: Term is not a proposition."
-                             , "Note: the given term is a lambda; try using Pi terms instead."
-                             , tm', ty'
-                             ]
-            Nothing ->
-              fail $ unlines [ "termToProp: Term is not a proposition", tm', ty' ]
+  do ty <- scWhnf sc =<< scTypeOf sc tm
+     case asSort ty of
+       Just s | s == propSort -> pure (Prop tm)
+       -- If the term is not a Prop, then we check whether it is a
+       -- function that returns a Bool.
+       _ ->
+         case asBoolType (snd (asPiList ty)) of
+           Nothing ->
+             do ty' <- ppTerm sc ty
+                fail $ unlines $
+                  [ "Expected type Prop or function type returning Bool."
+                  , "Found type: " ++ ty'
+                  ]
+           Just () ->
+             predicateToProp sc Universal tm
 
 -- | Turn a saw-core term into a proposition under the type-as-propositions
 --   regime.  The given term must be a type, which means that its own type
@@ -397,18 +407,18 @@ unfoldFixOnceProp sc unints (Prop tm) =
      return (Prop tm')
 
 -- | Rewrite the proposition using the provided Simpset
-simplifyProp :: Ord a => SharedContext -> Simpset a -> Prop -> IO (Set a, Prop)
+simplifyProp :: Monoid a => SharedContext -> Simpset a -> Prop -> IO (a, Prop)
 simplifyProp sc ss (Prop tm) =
   do (a, tm') <- rewriteSharedTerm sc ss tm
      return (a, Prop tm')
 
 -- | Rewrite the propositions using the provided Simpset
-simplifyProps :: Ord a => SharedContext -> Simpset a -> [Prop] -> IO (Set a, [Prop])
+simplifyProps :: Monoid a => SharedContext -> Simpset a -> [Prop] -> IO (a, [Prop])
 simplifyProps _sc _ss [] = return (mempty, [])
 simplifyProps sc ss (p:ps) =
   do (a, p')  <- simplifyProp sc ss p
      (b, ps') <- simplifyProps sc ss ps
-     return (Set.union a b, p' : ps')
+     return (a <> b, p' : ps')
 
 -- | Add hypotheses from the given sequent as rewrite rules
 --   to the given simpset.
@@ -429,11 +439,11 @@ localHypSimpset sc sqt hs ss0 = Fold.foldlM processHyp ss0 nhyps
     hset = Set.fromList hs
 
 -- | Rewrite in the sequent using the provided Simpset
-simplifySequent :: Ord a => SharedContext -> Simpset a -> Sequent -> IO (Set a, Sequent)
+simplifySequent :: Monoid a => SharedContext -> Simpset a -> Sequent -> IO (a, Sequent)
 simplifySequent sc ss (UnfocusedSequent hs gs) =
   do (a, hs') <- simplifyProps sc ss hs
      (b, gs') <- simplifyProps sc ss gs
-     return (Set.union a b, UnfocusedSequent hs' gs')
+     return (a <> b, UnfocusedSequent hs' gs')
 simplifySequent sc ss (ConclFocusedSequent hs (FB gs1 g gs2)) =
   do (a, g') <- simplifyProp sc ss g
      return (a, ConclFocusedSequent hs (FB gs1 g' gs2))
@@ -525,6 +535,18 @@ ppProp opts nenv p = PPS.render opts (prettyProp opts nenv p)
 -- | Pretty print the given proposition as a @PPS.Doc@.
 prettyProp :: PPS.Opts -> DisplayNameEnv -> Prop -> PPS.Doc
 prettyProp opts nenv (Prop tm) = prettyTermWithEnv opts nenv tm
+
+-- | Pretty print the given theorem as a @PPS.Doc@.
+prettyTheorem :: PPS.Opts -> DisplayNameEnv -> Theorem -> PPS.Doc
+prettyTheorem opts nenv thm
+  | HashSet.null (thmHyps thm) = prettyProp opts nenv (thmProp thm)
+  | otherwise =
+    group $ vsep $
+    [ group $
+      encloseSep (flatAlt "{ " "{") (flatAlt " }" "}") ", " $
+      map (prettyTermWithEnv opts nenv) (HashSet.toList (thmHyps thm))
+    , "|-" <+> prettyProp opts nenv (thmProp thm)
+    ]
 
 -- TODO, I'd like to add metadata here
 type SequentBranch = Prop
@@ -888,6 +910,23 @@ checkProp sc (Prop t) =
           ty' <- ppTerm sc ty
           fail $ unlines ["Term is not a prop!", t', ty']
 
+-- | Type 'Hypotheses' represents a side condition on a theorem:
+-- It is a set of types that are all assumed to be inhabited.
+type Hypotheses = HashSet Term
+
+termHypotheses :: Term -> Hypotheses
+termHypotheses t = HashSet.fromList (IntMap.elems (varTypes t))
+
+propHypotheses :: Prop -> Hypotheses
+propHypotheses p = termHypotheses (unProp p)
+
+rawSequentHypotheses :: RawSequent Prop -> Hypotheses
+rawSequentHypotheses (RawSequent hs gs) =
+  Fold.foldMap propHypotheses (hs ++ gs)
+
+sequentHypotheses :: Sequent -> Hypotheses
+sequentHypotheses sqt = rawSequentHypotheses (sequentToRawSequent sqt)
+
 type TheoremNonce = Nonce GlobalNonceGenerator Theorem
 
 -- | A theorem is a proposition which has been wrapped in a
@@ -896,6 +935,7 @@ type TheoremNonce = Nonce GlobalNonceGenerator Theorem
 data Theorem =
   Theorem
   { _thmProp :: Prop
+  , _thmHyps :: Hypotheses -- ^ Types assumed to be inhabited.
   , _thmStats :: SolverStats
   , _thmEvidence :: Evidence
   , _thmLocation :: Pos
@@ -959,11 +999,14 @@ reachableTheorems db roots = Set.foldl' (loop (theoremMap db)) mempty roots
 validateTheorem :: SharedContext -> Bool -> TheoremDB -> Theorem -> IO ()
 
 validateTheorem sc what4PushMuxOps db Theorem{ _thmProp = p, _thmEvidence = e, _thmDepends = thmDep } =
-   do let hyps = Map.keysSet (theoremMap db)
-      (deps,_) <- checkEvidence sc what4PushMuxOps e p
-      unless (Set.isSubsetOf deps thmDep && Set.isSubsetOf thmDep hyps)
+   do let knownThms = Map.keysSet (theoremMap db)
+      (deps, _, hyps) <- checkEvidence sc what4PushMuxOps e p
+      unless (Set.isSubsetOf deps thmDep && Set.isSubsetOf thmDep knownThms)
              (fail $ unlines ["Theorem failed to declare its dependencies correctly"
                              , show deps, show thmDep ])
+      ppHyps <- traverse (ppTerm sc) (HashSet.toList hyps)
+      unless (HashSet.null hyps) $
+        fail $ unlines $ ["Theorem depends on undischarged hypotheses:"] ++ ppHyps
 
 data TheoremSummary
   = AdmittedTheorem Text
@@ -981,6 +1024,18 @@ instance Semigroup TheoremSummary where
   _ <> TestedTheorem y = TestedTheorem y
   ProvedTheorem s1 <> ProvedTheorem s2 = ProvedTheorem (s1<>s2)
 
+-- | When a 'Theorem' is converted to a rewrite rule, it is tagged
+-- with a 'TheoremAnnotation' that records dependencies that will be
+-- collected and combined as rewrite rules are applied.
+data TheoremAnnotation =
+  TheoremAnnotation (Set TheoremNonce) Hypotheses TheoremSummary
+
+instance Semigroup TheoremAnnotation where
+  TheoremAnnotation d1 h1 s1 <> TheoremAnnotation d2 h2 s2 =
+    TheoremAnnotation (d1 <> d2) (h1 <> h2) (s1 <> s2)
+
+instance Monoid TheoremAnnotation where
+  mempty = TheoremAnnotation mempty mempty mempty
 
 -- | This datatype records evidence for the truth of a proposition.
 data Evidence
@@ -1047,7 +1102,7 @@ data Evidence
     --   simpset; then the provided evidence is used to check the
     --   modified sequent. The list of integers indicate local
     --   hypotheses that should also be treated as rewrite rules.
-  | RewriteEvidence ![Integer] !(Simpset TheoremNonce) !Evidence
+  | RewriteEvidence ![Integer] !(Simpset TheoremAnnotation) !Evidence
 
     -- | This type of evidence is used to modify a sequent via unfolding
     --   constant definitions.  The sequent is modified by unfolding
@@ -1099,6 +1154,10 @@ data Evidence
 -- | The the proposition proved by a given theorem.
 thmProp :: Theorem -> Prop
 thmProp Theorem{ _thmProp = p } = p
+
+-- | The hypotheses assumed by a given theorem.
+thmHyps :: Theorem -> Hypotheses
+thmHyps Theorem{ _thmHyps = hyps } = hyps
 
 -- | Retrieve any solver stats from the proved theorem.
 thmStats :: Theorem -> SolverStats
@@ -1171,6 +1230,7 @@ proofByTerm sc db prf loc rsn =
      let thm =
           Theorem
           { _thmProp      = p
+          , _thmHyps      = termHypotheses prf
           , _thmStats     = mempty
           , _thmEvidence  = ProofTerm prf
           , _thmLocation  = loc
@@ -1200,11 +1260,12 @@ constructTheorem ::
   NominalDiffTime ->
   IO (Theorem, TheoremDB)
 constructTheorem sc what4PushMuxOps db p e loc ploc rsn elapsed =
-  do (deps,sy) <- checkEvidence sc what4PushMuxOps e p
+  do (deps, sy, hyps) <- checkEvidence sc what4PushMuxOps e p
      n  <- freshNonce globalNonceGenerator
      let thm =
           Theorem
           { _thmProp  = p
+          , _thmHyps = hyps
           , _thmStats = mempty
           , _thmEvidence = e
           , _thmLocation = loc
@@ -1264,6 +1325,7 @@ admitTheorem db msg p loc rsn =
      let thm =
           Theorem
           { _thmProp        = p
+          , _thmHyps        = propHypotheses p
           , _thmStats       = solverStats "ADMITTED" (propSize p)
           , _thmEvidence    = Admitted msg loc (propToSequent p)
           , _thmLocation    = loc
@@ -1291,6 +1353,7 @@ solverTheorem db p stats loc rsn elapsed =
      let thm =
           Theorem
           { _thmProp      = p
+          , _thmHyps      = propHypotheses p
           , _thmStats     = stats
           , _thmEvidence  = SolverEvidence stats (propToSequent p)
           , _thmLocation  = loc
@@ -1546,14 +1609,17 @@ normalizeConclBoolCommit sc b =
 
 
 -- | Verify that the given evidence in fact supports the given proposition.
---   Returns the identifiers of all the theorems depended on while checking evidence.
-checkEvidence :: SharedContext -> Bool -> Evidence -> Prop -> IO (Set TheoremNonce, TheoremSummary)
+--   Returns the identifiers of all the theorems depended on while checking evidence
+--   Also return the context of all types assumed to be inhabited.
+checkEvidence ::
+  SharedContext -> Bool -> Evidence -> Prop ->
+  IO (Set TheoremNonce, TheoremSummary, Hypotheses)
 checkEvidence sc what4PushMuxOps = \e p -> do
                               nenv <- scGetNamingEnv sc
                               check nenv e (propToSequent p)
 
   where
-    checkApply _nenv _mkSqt (Prop p) [] = return (mempty, mempty, p)
+    checkApply _nenv _mkSqt (Prop p) [] = return (mempty, mempty, p, termHypotheses p)
 
     -- Check a theorem applied to "Evidence".
     -- The given prop must be an implication
@@ -1562,9 +1628,9 @@ checkEvidence sc what4PushMuxOps = \e p -> do
     checkApply nenv mkSqt (Prop p) (Right e:es)
       | Just (lnm, tp, body) <- asPi p
       , IntSet.notMember (vnIndex lnm) (freeVars body)
-      = do (d1,sy1) <- check nenv e . mkSqt =<< termToProp sc tp
-           (d2,sy2,p') <- checkApply nenv mkSqt (Prop body) es
-           return (Set.union d1 d2, sy1 <> sy2, p')
+      = do (d1, sy1, hyps1) <- check nenv e . mkSqt =<< termToProp sc tp
+           (d2, sy2, p', hyps2) <- checkApply nenv mkSqt (Prop body) es
+           return (Set.union d1 d2, sy1 <> sy2, p', hyps1 <> hyps2)
       | otherwise = do
            p' <- ppTerm sc p
            fail $ unlines [
@@ -1575,14 +1641,15 @@ checkEvidence sc what4PushMuxOps = \e p -> do
     -- Check a theorem applied to a term. This explicitly instantiates
     -- a Pi binder with the given term.
     checkApply nenv mkSqt (Prop p) (Left tm:es) =
-      do p' <- reducePi sc p tm
-         checkApply nenv mkSqt (Prop p') es
+      do p1 <- reducePi sc p tm
+         (deps, sy, p2, hyps) <- checkApply nenv mkSqt (Prop p1) es
+         pure (deps, sy, p2, hyps <> termHypotheses tm)
 
     check ::
       DisplayNameEnv ->
       Evidence ->
       Sequent ->
-      IO (Set TheoremNonce, TheoremSummary)
+      IO (Set TheoremNonce, TheoremSummary, HashSet Term)
     check nenv e sqt = case e of
       ProofTerm tm ->
         case sequentState sqt of
@@ -1597,7 +1664,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                        ptm',
                        tm'
                     ]
-               return (mempty, ProvedTheorem mempty)
+               return (mempty, ProvedTheorem mempty, termHypotheses tm)
           _ -> fail "Sequent must be conclusion-focused for proof term evidence"
 
       SolverEvidence stats sqt' ->
@@ -1609,7 +1676,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                , prettySequent ppopts nenv sqt
                , prettySequent ppopts nenv sqt'
                ]
-           return (mempty, ProvedTheorem stats)
+           return (mempty, ProvedTheorem stats, sequentHypotheses sqt')
 
       Admitted msg pos sqt' ->
         do ok <- sequentSubsumes sc sqt' sqt
@@ -1622,7 +1689,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                , prettySequent ppopts nenv sqt
                , prettySequent ppopts nenv sqt'
                ]
-           return (mempty, AdmittedTheorem msg)
+           return (mempty, AdmittedTheorem msg, sequentHypotheses sqt')
 
       QuickcheckEvidence n sqt' ->
         do ok <- sequentSubsumes sc sqt' sqt
@@ -1633,7 +1700,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                , prettySequent ppopts nenv sqt
                , prettySequent ppopts nenv sqt'
                ]
-           return (mempty, TestedTheorem n)
+           return (mempty, TestedTheorem n, sequentHypotheses sqt')
 
       SplitEvidence e1 e2 ->
         splitSequent sc sqt >>= \case
@@ -1653,7 +1720,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
           ConclFocusedSequent hs (FB gs1 g gs2) ->
             case genericDrop n hs of
               (h:_) ->
-                do (d,sy,p') <- checkApply nenv (\g' -> ConclFocusedSequent hs (FB gs1 g' gs2)) h es
+                do (d, sy, p', hyps) <- checkApply nenv (\g' -> ConclFocusedSequent hs (FB gs1 g' gs2)) h es
                    ok <- scConvertible sc (unProp g) p'
                    unless ok $ do
                        g' <- ppTerm sc (unProp g)
@@ -1663,7 +1730,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                            g',
                            p''
                         ]
-                   return (d, sy)
+                   return (d, sy, hyps)
 
               _ -> do
                   ppopts <- scGetPPOpts sc
@@ -1681,7 +1748,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
       ApplyEvidence thm es ->
         case sequentState sqt of
           ConclFocus p mkSqt ->
-            do (d,sy,p') <- checkApply nenv mkSqt (thmProp thm) es
+            do (d, sy, p', hyps) <- checkApply nenv mkSqt (thmProp thm) es
                ok <- scConvertible sc (unProp p) p'
                unless ok $ do
                    sp <- ppTerm sc (unProp p)
@@ -1691,7 +1758,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                        sp,
                        sp'
                     ]
-               return (Set.insert (thmNonce thm) d, sy)
+               return (Set.insert (thmNonce thm) d, sy, thmHyps thm <> hyps)
           _ -> do
               ppopts <- scGetPPOpts sc
               fail $ PPS.render ppopts $ PP.vsep
@@ -1713,9 +1780,9 @@ checkEvidence sc what4PushMuxOps = \e p -> do
 
       RewriteEvidence hs ss e' ->
         do ss' <- localHypSimpset sc sqt hs ss
-           (d1,sqt') <- simplifySequent sc ss' sqt
-           (d2,sy) <- check nenv e' sqt'
-           return (Set.union d1 d2, sy)
+           (TheoremAnnotation d1 h1 s1, sqt') <- simplifySequent sc ss' sqt
+           (d2, s2, h2) <- check nenv e' sqt'
+           return (d1 <> d2, s1 <> s2, h1 <> h2)
 
       HoistIfsEvidence e' ->
         do sqt' <- traverseSequentWithFocus (hoistIfsInProp sc) sqt
@@ -1766,7 +1833,7 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                    "Sequent is not an instance of the sequent calculus axiom",
                    prettySequent ppopts nenv sqt
                 ]
-           return (mempty, ProvedTheorem mempty)
+           return (mempty, ProvedTheorem mempty, mempty)
 
       CutEvidence p ehyp egl ->
         do d1 <- check nenv ehyp (addHypothesis p sqt)
@@ -1806,7 +1873,9 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                         ]
                    x' <- scVariable sc x xty
                    body' <- scInstantiate sc (IntMap.singleton (vnIndex nm) x') body
-                   check nenv e' (mkSqt (Prop body'))
+                   (deps, sy, hyps) <- check nenv e' (mkSqt (Prop body'))
+                   let hyps' = HashSet.delete xty hyps
+                   pure (deps, sy, hyps')
 
 passthroughEvidence :: [Evidence] -> IO Evidence
 passthroughEvidence [e] = pure e
@@ -1866,12 +1935,19 @@ finishProof sc db conclProp
          let e' = if useSequentGoals
                    then NormalizeSequentEvidence concl e
                    else e
-         (deps,sy) <- checkEvidence sc what4PushMuxOps e' conclProp
+         (deps, sy, hyps) <- checkEvidence sc what4PushMuxOps e' conclProp
+         -- Fail if hyps includes any types that do not correspond to a
+         -- free variable in the conclusion
+         let extraHyps = HashSet.difference hyps (propHypotheses conclProp)
+         ppHyps <- traverse (ppTerm sc) (HashSet.toList extraHyps)
+         unless (HashSet.null extraHyps) $
+           fail $ unlines $ ["Theorem depends on undischarged hypotheses:"] ++ ppHyps
          n <- freshNonce globalNonceGenerator
          end <- getCurrentTime
          let theorem =
                    Theorem
                    { _thmProp = conclProp
+                   , _thmHyps = hyps
                    , _thmStats = stats
                    , _thmEvidence = e'
                    , _thmLocation = loc
@@ -1886,6 +1962,26 @@ finishProof sc db conclProp
          pure (ValidProof stats theorem, db')
     _ : _ ->
          pure (UnfinishedProof ps, db)
+
+-- | Run the given 'ProofScript' as a subproof starting from a proof
+-- state where only the first subgoal is visible.
+-- The inner proof script must discharge its goal, leaving no
+-- remaining subgoals; otherwise the outer proof fails.
+subProof :: (MonadFail m, MonadIO m, MonadState ProofState m) => m () -> m ()
+subProof action =
+  do ProofState goals concl stats timeout evidenceCont start <- get
+     case goals of
+       [] -> fail "subproof: No subgoals"
+       g1 : gs ->
+         do let substate = ProofState [g1] concl stats timeout passthroughEvidence start
+            put substate
+            action
+            ProofState unfinishedGoals _ _ _ cont _ <- get
+            unless (null unfinishedGoals) $
+              fail $ "subproof: Unfinished: " ++ show (length unfinishedGoals) ++ " goals remaining"
+            e <- liftIO $ cont []
+            let evidenceCont' es = evidenceCont (e : es)
+            put (ProofState gs concl stats timeout evidenceCont' start)
 
 -- | A type describing counterexamples.
 type CEX = [(VarName, FirstOrderValue)]
@@ -1908,7 +2004,7 @@ prettyCEX opts cex =
           let x' = PP.pretty $ vnName x
               v' = prettyFirstOrderValue opts v
           in
-          x' <+> "=" <+> v'
+          PP.nest 2 (x' <+> "=" <> PP.group (PP.line <> v'))
     in
     PP.vsep $ map once cex
 

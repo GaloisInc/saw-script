@@ -668,6 +668,27 @@ PEqEmpty = { eq = \ (x y : #{}) -> True };
 PEqRecord : (s : String) -> (a b : sort 0) -> PEq a -> PEq b -> PEq (RecordType s a b);
 PEqRecord s a b pa pb = { eq = recordEq s a b pa.eq pb.eq };
 
+PEqVoid : PEq Void;
+PEqVoid = { eq = elimVoid (Void -> Bool) };
+
+PEqEither : (a b : sort 0) -> PEq a -> PEq b -> PEq (Either a b);
+PEqEither a b pa pb =
+  { eq =
+      \ (e1 e2 : Either a b) ->
+        either a b Bool
+          (\ (x1 : a) ->
+            either a b Bool
+              (\ (x2 : a) -> pa.eq x1 x2)
+              (\ (_y2 : b) -> False)
+              e2)
+          (\ (y1 : b) ->
+            either a b Bool
+              (\ (_x2 : a) -> False)
+              (\ (y2 : b) -> pb.eq y1 y2)
+              e2)
+          e1
+  };
+
 
 -- Cmp class
 
@@ -736,6 +757,61 @@ PCmpRecord s a b pa pb =
   , lt = recordLt s a b pa.cmp pb.lt
   };
 
+PCmpVoid : PCmp Void;
+PCmpVoid =
+  { cmpEq = PEqVoid
+  , cmp = elimVoid (Void -> Bool -> Bool)
+  , le = elimVoid (Void -> Bool)
+  , lt = elimVoid (Void -> Bool)
+  };
+
+PCmpEither : (a b : sort 0) -> PCmp a -> PCmp b -> PCmp (Either a b);
+PCmpEither a b pa pb =
+  { cmpEq = PEqEither a b pa.cmpEq pb.cmpEq
+  , cmp =
+      \ (e1 e2 : Either a b) (k : Bool) ->
+        either a b Bool
+          (\ (x1 : a) ->
+            either a b Bool
+              (\ (x2 : a) -> pa.cmp x1 x2 k)
+              (\ (_y2 : b) -> True)
+              e2)
+          (\ (y1 : b) ->
+            either a b Bool
+              (\ (_x2 : a) -> False)
+              (\ (y2 : b) -> pb.cmp y1 y2 k)
+              e2)
+          e1
+  , le =
+      \ (e1 e2 : Either a b) ->
+        either a b Bool
+          (\ (x1 : a) ->
+            either a b Bool
+              (\ (x2 : a) -> pa.le x1 x2)
+              (\ (_y2 : b) -> True)
+              e2)
+          (\ (y1 : b) ->
+            either a b Bool
+              (\ (_x2 : a) -> False)
+              (\ (y2 : b) -> pb.le y1 y2)
+              e2)
+          e1
+  , lt =
+      \ (e1 e2 : Either a b) ->
+        either a b Bool
+          (\ (x1 : a) ->
+            either a b Bool
+              (\ (x2 : a) -> pa.lt x1 x2)
+              (\ (_y2 : b) -> True)
+              e2)
+          (\ (y1 : b) ->
+            either a b Bool
+              (\ (_x2 : a) -> False)
+              (\ (y2 : b) -> pb.lt y1 y2)
+              e2)
+          e1
+  };
+
 -- SignedCmp class
 
 -- `scmp x y k` computes `if k then sle x y else slt x y`
@@ -794,6 +870,61 @@ PSignedCmpRecord s a b pa pb =
   , scmp = recordCmp s a b pa.scmp pb.scmp
   , sle = recordLt s a b pa.scmp pb.sle
   , slt = recordLt s a b pa.scmp pb.slt
+  };
+
+PSignedCmpVoid : PSignedCmp Void;
+PSignedCmpVoid =
+  { signedCmpEq = PEqVoid
+  , scmp = elimVoid (Void -> Bool -> Bool)
+  , sle = elimVoid (Void -> Bool)
+  , slt = elimVoid (Void -> Bool)
+  };
+
+PSignedCmpEither : (a b : sort 0) -> PSignedCmp a -> PSignedCmp b -> PSignedCmp (Either a b);
+PSignedCmpEither a b pa pb =
+  { signedCmpEq = PEqEither a b pa.signedCmpEq pb.signedCmpEq
+  , scmp =
+      \ (e1 e2 : Either a b) (k : Bool) ->
+        either a b Bool
+          (\ (x1 : a) ->
+            either a b Bool
+              (\ (x2 : a) -> pa.scmp x1 x2 k)
+              (\ (_y2 : b) -> True)
+              e2)
+          (\ (y1 : b) ->
+            either a b Bool
+              (\ (_x2 : a) -> False)
+              (\ (y2 : b) -> pb.scmp y1 y2 k)
+              e2)
+          e1
+  , sle =
+      \ (e1 e2 : Either a b) ->
+        either a b Bool
+          (\ (x1 : a) ->
+            either a b Bool
+              (\ (x2 : a) -> pa.sle x1 x2)
+              (\ (_y2 : b) -> True)
+              e2)
+          (\ (y1 : b) ->
+            either a b Bool
+              (\ (_x2 : a) -> False)
+              (\ (y2 : b) -> pb.sle y1 y2)
+              e2)
+          e1
+  , slt =
+      \ (e1 e2 : Either a b) ->
+        either a b Bool
+          (\ (x1 : a) ->
+            either a b Bool
+              (\ (x2 : a) -> pa.slt x1 x2)
+              (\ (_y2 : b) -> True)
+              e2)
+          (\ (y1 : b) ->
+            either a b Bool
+              (\ (_x2 : a) -> False)
+              (\ (y2 : b) -> pb.slt y1 y2)
+              e2)
+          e1
   };
 
 
@@ -1779,7 +1910,7 @@ ecError a =
     );
 
 -- Random values
-ecRandom : (a : isort 0) -> Vec 32 Bool -> a;
+ecRandom : (a : isort 0) -> Vec 256 Bool -> a;
 ecRandom a _ = error a "Cryptol.random";
 
 -- Trace function; simply return the final argument

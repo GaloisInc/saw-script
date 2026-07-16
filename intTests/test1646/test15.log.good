@@ -187,6 +187,7 @@ jvm_verify :
    JVMSetup () ->
    ProofScript () ->
    TopLevel JVMSpec
+label_term : String -> Term -> Term
 lambda : Term -> Term -> Term
 lambdas : [Term] -> Term -> Term
 length : {a} [a] -> Int
@@ -414,6 +415,7 @@ set_color : Bool -> TopLevel ()
 set_memoization_hash : Int -> TopLevel ()
 set_memoization_hash_incremental : Int -> TopLevel ()
 set_memoization_incremental : TopLevel ()
+set_memoization_label : Bool -> TopLevel ()
 set_min_sharing : Int -> TopLevel ()
 set_solver_cache_path : String -> TopLevel ()
 set_solver_cache_timeout : Int -> TopLevel ()
@@ -426,11 +428,12 @@ simplify_local : [Int] -> Simpset -> ProofScript ()
 simpset_union : Simpset -> Simpset -> Simpset
 size_to_term : Type -> Term
 str_concat : String -> String -> String
-str_concats : [String] -> String
+str_concats : [String] -> sep?String -> String
 tail : {a} [a] -> [a]
 term_apply : Term -> [Term] -> Term
 term_eval : Term -> Term
 term_eval_unint : [String] -> Term -> Term
+term_labels : Term -> ([String], Term)
 term_size : Term -> Int
 term_tree_size : Term -> Int
 test_solver_cache_stats :

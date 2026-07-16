@@ -2,7 +2,7 @@ Loading file "test.saw"
 \(x : #(Bool, Bool)) -> x
 \(x : #(Bool, Bool, Bool)) -> x
 \(x : #(Bool, Bool, Bool, Bool)) -> x
-let { x`1 = #(Bool, Bool); } in \(x : #(x`1, x`1)) -> x
+let { _x`1 = #(Bool, Bool); } in \(x : #(_x`1, _x`1)) -> x
 \(x : #{a : Bool}) -> x
 \(x : #{a : Bool, b : Bool}) -> x
 \(x : #{a : Bool, b : Bool, c : Bool}) -> x

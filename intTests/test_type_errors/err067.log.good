@@ -1,0 +1,7 @@
+Loading file "err067.saw"
+Type errors:
+  err067.saw:7:1-7:2: Too many arguments to function of type t.1 -> t.2 -> TopLevel ()
+  err067.saw:3:13-3:25: The type t.1 -> t.2 -> TopLevel () arises from the context of the term
+  err067.saw:7:1-7:2: Did you forget a semicolon?
+
+FAILED

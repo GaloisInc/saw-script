@@ -46,6 +46,8 @@ print ("defgabc", str_concat "defg" "abc");
 // str_concats is what's usually called concat
 print ("", str_concats ["", "", ""]);
 print ("abc", str_concats ["a", "b", "c"]);
+print ("a, b, c", str_concats sep=", " ["a", "b", "c"]);
+print ("a, b, c", str_concats ["a", "b", "c"] sep=", ");
 
 // for
 print "*** for (empty) ***";

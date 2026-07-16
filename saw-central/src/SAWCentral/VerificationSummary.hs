@@ -191,13 +191,13 @@ prettyVerificationSummary ppOpts nenv vs@(VerificationSummary jspecs lspecs thms
              , subitem (verifStatus s)
              ]
       prettyTheorems ts =
-        sectionWithItems "Theorems Proved or Assumed" (item . prettyTheorem) ts
-      prettyTheorem t =
+        sectionWithItems "Theorems Proved or Assumed" (item . prettyThm) ts
+      prettyThm t =
         vsep [ case thmSummary t of
                  ProvedTheorem{}   -> "Theorem:"
                  TestedTheorem n   -> "Theorem (randomly tested on" <+> viaShow n <+> "samples):"
                  AdmittedTheorem{} -> "Axiom:"
-             , code (indent 2 (prettyProp ppOpts nenv (thmProp t)))
+             , code (indent 2 (prettyTheorem ppOpts nenv t))
              , ""
              ]
       prettySolvers ss =

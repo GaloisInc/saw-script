@@ -1,0 +1,5 @@
+Loading file "args015.saw"
+args015.saw:3:23-3:24: Warning: Redeclaration of x
+args015.saw:3:7-3:8: Warning: Previous declaration was here
+args015.saw:3:5-3:6: Function has duplicate parameter names: x
+FAILED

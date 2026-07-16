@@ -56,8 +56,6 @@ RUN cabal v2-update && cabal v2-build -j exe:saw-remote-api
 RUN mkdir -p /home/saw/rootfs/usr/local/bin
 RUN cp $(cabal -v0 list-bin exe:saw-remote-api) /home/saw/rootfs/usr/local/bin/saw-remote-api
 WORKDIR /home/saw//rootfs/usr/local/bin
-# The URL here is based on the same logic used to specify BUILD_TARGET_OS and
-# BUILD_TARGET_ARCH in `.github/workflow/ci.yml`, but specialized to Ubuntu.
 # If updating the snapshot version, update ci.yml and saw/Dockerfile too.
 RUN case ${TARGETPLATFORM} in \
       "linux/amd64") \
@@ -68,7 +66,7 @@ RUN case ${TARGETPLATFORM} in \
         printf "Unsupported architecture: %s\n" "${TARGETPLATFORM}" >&2 \
         exit 1 ;; \
     esac && \
-    curl -o solvers.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/snapshot-20260119/ubuntu-22.04-${WHAT4_SOLVERS_ARCH}-bin.zip"
+    curl -o solvers.zip -sL "https://github.com/GaloisInc/what4-solvers/releases/download/snapshot-20260622/ubuntu-22.04-${WHAT4_SOLVERS_ARCH}-bin.zip"
 RUN unzip solvers.zip && rm solvers.zip && chmod +x *
 USER root
 RUN chown -R root:root /home/saw/rootfs

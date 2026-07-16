@@ -1,0 +1,3 @@
+Loading file "args004.saw"
+args004.saw:5:8-5:23: Functions may not have only named parameters; add ()
+FAILED

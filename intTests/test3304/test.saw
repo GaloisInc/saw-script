@@ -1,0 +1,3 @@
+// A basic smoke test that the `offline_w4_unint_yices` proof script can run on
+// a simple example.
+prove_print (offline_w4_unint_yices [] "test") {{ \(x : [64]) -> x << 1 == x * 2 }};

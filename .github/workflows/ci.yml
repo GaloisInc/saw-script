@@ -39,7 +39,7 @@ env:
   # ./crux-mir-comp/Dockerfile
   # ./saw/Dockerfile
   # ./saw-remote-api/Dockerfile
-  SOLVER_PKG_VERSION: "snapshot-20260119"
+  SOLVER_PKG_VERSION: "snapshot-20260622"
 
 jobs:
   config:
@@ -55,7 +55,7 @@ jobs:
       is-stable-branch: ${{ steps.config.outputs.is-stable-branch }}
       retention-days: ${{ steps.config.outputs.retention-days }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -130,7 +130,7 @@ jobs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: |
            git submodule update --init
 
@@ -143,6 +143,19 @@ jobs:
           CRUX_NAME="${{ needs.config.outputs.crux-name }}-${{ matrix.os }}-${{ runner.arch }}"
           .github/ci.sh output crux-name $CRUX_NAME
           echo "CRUX_NAME=${{ needs.config.outputs.crux-name }}-${{ matrix.os }}-${{ runner.arch }}" >> $GITHUB_ENV
+
+      # On macOS, import the signing certificate, which we will use later to
+      # sign the binaries after they have been built.
+      # Do not run this step in forks, as this requires repo-specific secrets.
+      - name: Import signing certificate (macOS)
+        uses: apple-actions/import-codesign-certs@v7
+        if: runner.os == 'macOS' &&
+            github.event.pull_request.head.repo.fork == false &&
+            github.repository_owner == 'GaloisInc' &&
+            github.actor != 'dependabot[bot]'
+        with:
+          p12-file-base64: ${{ secrets.APPLE_P12_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_P12_PASSWORD }}
 
       - uses: haskell-actions/setup@v2
         id: setup-haskell
@@ -158,13 +171,17 @@ jobs:
           cabal user-config update -a "extra-include-dirs: \"\""
           cabal user-config update -a "extra-lib-dirs: \"\""
 
-      - shell: bash
-        run: .github/ci.sh install_system_deps
-        env:
-          BUILD_TARGET_OS: ${{ matrix.os }}
-          BUILD_TARGET_ARCH: ${{ runner.arch }}
+      - name: Download what4-solvers
+        uses: GaloisInc/what4-solvers@v1
+        with:
+          dest: bin
+          release: ${{ env.SOLVER_PKG_VERSION }}
 
-      - uses: actions/cache/restore@v4
+      - shell: bash
+        name: Add what4-solvers to GITHUB_PATH
+        run: echo "$PWD/bin" >> $GITHUB_PATH
+
+      - uses: actions/cache/restore@v6
         name: Restore cabal store cache
         with:
           path: |
@@ -221,6 +238,49 @@ jobs:
         run: .github/ci.sh setup_dist_bins
 
       - shell: bash
+        run: .github/ci.sh setup_crux_dist_bins dist-crux
+
+      # On macOS, code sign the binaries to verify that Galois is the author.
+      # Do not run this step in forks, as this requires repo-specific secrets.
+      - name: Sign binaries (macOS)
+        if: runner.os == 'macOS' &&
+            github.event.pull_request.head.repo.fork == false &&
+            github.repository_owner == 'GaloisInc' &&
+            github.actor != 'dependabot[bot]'
+        env:
+          IDENTITY_NAME: ${{ secrets.APPLE_P12_IDENTITY_NAME }}
+        run: |
+          codesign \
+            --force \
+            --options runtime \
+            --sign "$IDENTITY_NAME" \
+            dist/bin/* dist-crux/bin/*
+
+      # On macOS, notarize the binaries so that users can run them without
+      # needing to whitelist them. Note that Apple's documentation suggests
+      # that you shouldn't notarize more than 75 times in one day
+      # (https://developer.apple.com/documentation/security/customizing-the-notarization-workflow#Avoid-long-notarization-response-times-and-size-limits),
+      # so as a precaution, we only perform this step for scheduled events,
+      # workflow dispatches, or releases (and not in pull requests).
+      - name: Notarize binaries (macOS)
+        if: runner.os == 'macOS' &&
+            (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.is-stable-branch == 'true' || needs.config.outputs.tag == 'true') &&
+            github.repository_owner == 'GaloisInc' &&
+            github.actor != 'dependabot[bot]'
+        env:
+          KEY_ID: ${{ secrets.APPLE_P8_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPLE_P8_ISSUER_ID }}
+          API_KEY: ${{ secrets.APPLE_P8_API_KEY }}
+        run: |
+          zip binaries.zip dist/bin/* dist-crux/bin/*
+          echo "$API_KEY" > "AuthKey_$KEY_ID.p8"
+          xcrun notarytool submit binaries.zip \
+            --key "AuthKey_$KEY_ID.p8" \
+            --key-id "$KEY_ID" \
+            --issuer "$ISSUER_ID" \
+            --wait
+
+      - shell: bash
         run: .github/ci.sh bundle_files
 
       - shell: bash
@@ -228,9 +288,6 @@ jobs:
 
       - shell: bash
         run: .github/ci.sh zip_dist_with_solvers $NAME-with-solvers
-
-      - shell: bash
-        run: .github/ci.sh setup_crux_dist_bins dist-crux
 
       - shell: bash
         run: .github/ci.sh zip_dist $CRUX_NAME dist-crux
@@ -330,7 +387,7 @@ jobs:
           path: hpc.tar.gz
           name: ${{ matrix.os }}-hpc.tar.gz
 
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v6
         name: Save cabal store cache
         if: always()
         with:
@@ -357,7 +414,7 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: git submodule update --init
       - name: make-source-distribution
         shell: bash
@@ -384,10 +441,10 @@ jobs:
         os: [ubuntu-24.04]
     steps:
       - name: Check out repository (no submodules)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Cache Python environment
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: doc/.venv
           key: ${{ matrix.os }}-venv-${{ hashFiles('doc/scripts/requirements.txt') }}
@@ -441,7 +498,7 @@ jobs:
         os: [ubuntu-24.04]
     steps:
       - name: Check out repository (no submodules)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download HTML artifact
         uses: actions/download-artifact@v4
@@ -480,7 +537,7 @@ jobs:
         os: [ubuntu-24.04]
     steps:
       - name: Check out gh-pages
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: gh-pages
 
@@ -520,15 +577,19 @@ jobs:
         os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
+      - name: Download what4-solvers
+        uses: GaloisInc/what4-solvers@v1
+        with:
+          dest: bin
+          release: ${{ env.SOLVER_PKG_VERSION }}
+
       - shell: bash
-        run: .github/ci.sh install_system_deps
-        env:
-          BUILD_TARGET_OS: ${{ matrix.os }}
-          BUILD_TARGET_ARCH: ${{ runner.arch }}
+        name: Add what4-solvers to GITHUB_PATH
+        run: echo "$PWD/bin" >> $GITHUB_PATH
 
       - uses: actions/download-artifact@v4
         with:
@@ -574,7 +635,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repo and submodules
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -593,12 +654,15 @@ jobs:
           shared-key: "cargo-cache"
           workspaces: "deps/mir-json"
 
-      - name: Install system dependencies
-        shell: bash
-        run: .github/ci.sh install_system_deps
-        env:
-          BUILD_TARGET_OS: ${{ matrix.os }}
-          BUILD_TARGET_ARCH: ${{ runner.arch }}
+      - name: Download what4-solvers
+        uses: GaloisInc/what4-solvers@v1
+        with:
+          dest: bin
+          release: ${{ env.SOLVER_PKG_VERSION }}
+
+      - shell: bash
+        name: Add what4-solvers to GITHUB_PATH
+        run: echo "$PWD/bin" >> $GITHUB_PATH
 
       - name: Install mir-json
         working-directory: deps/mir-json
@@ -647,30 +711,34 @@ jobs:
             test: saw-remote-api/scripts/check_docs.sh
             os: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
+      - name: Download what4-solvers
+        uses: GaloisInc/what4-solvers@v1
+        with:
+          dest: bin
+          release: ${{ env.SOLVER_PKG_VERSION }}
+
       - shell: bash
-        run: .github/ci.sh install_system_deps
-        env:
-          BUILD_TARGET_OS: ${{ matrix.os }}
-          BUILD_TARGET_ARCH: ${{ runner.arch }}
+        name: Add what4-solvers to GITHUB_PATH
+        run: echo "$PWD/bin" >> $GITHUB_PATH
 
       - uses: actions/download-artifact@v4
         with:
           name: "${{ matrix.os }}-bins"
           path: dist/bin
 
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v6
         with:
           # Ensure that this matches saw-python/mypy.ini file
           # and that saw-python/pyproject.toml file is compatible with this version
           python-version: '3.12'
 
-      - uses: abatilo/actions-poetry@v2.0.0
+      - uses: abatilo/actions-poetry@v4
         with:
-          poetry-version: 1.4.2
+          poetry-version: 2.4.1
 
       - name: ${{ matrix.name }}
         shell: bash
@@ -711,15 +779,19 @@ jobs:
           # crux-mir-comp-tests job, which is defined separately.
           - suite: crux-mir-comp-tests
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
+      - name: Download what4-solvers
+        uses: GaloisInc/what4-solvers@v1
+        with:
+          dest: bin
+          release: ${{ env.SOLVER_PKG_VERSION }}
+
       - shell: bash
-        run: .github/ci.sh install_system_deps
-        env:
-          BUILD_TARGET_OS: ${{ matrix.os }}
-          BUILD_TARGET_ARCH: ${{ runner.arch }}
+        name: Add what4-solvers to GITHUB_PATH
+        run: echo "$PWD/bin" >> $GITHUB_PATH
 
       - uses: actions/download-artifact@v4
         with:
@@ -750,7 +822,7 @@ jobs:
           java-version: "8"
           java-package: jdk
 
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v6
         name: Restore SMT solver result cache
         if: "matrix.suite == 'integration-tests'"
         with:
@@ -770,10 +842,10 @@ jobs:
         continue-on-error: ${{ matrix.continue-on-error }}
         shell: bash
         run: |
-          export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
+          export PATH="$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
 
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v6
         name: Save SMT solver result cache
         if: "matrix.suite == 'integration-tests'"
         with:
@@ -802,7 +874,7 @@ jobs:
         os: [ubuntu-24.04]
     steps:
       # Need a copy of the source to generate coverage HTML
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -811,12 +883,15 @@ jobs:
         with:
           ghc-version: "9.6.7"
 
-      - name: Install system dependencies
-        shell: bash
-        run: .github/ci.sh install_system_deps
-        env:
-          BUILD_TARGET_OS: ${{ matrix.os }}
-          BUILD_TARGET_ARCH: ${{ runner.arch }}
+      - name: Download what4-solvers
+        uses: GaloisInc/what4-solvers@v1
+        with:
+          dest: bin
+          release: ${{ env.SOLVER_PKG_VERSION }}
+
+      - shell: bash
+        name: Add what4-solvers to GITHUB_PATH
+        run: echo "$PWD/bin" >> $GITHUB_PATH
 
       - uses: actions/download-artifact@v4
         with:
@@ -846,7 +921,7 @@ jobs:
       # `cabal-test` also runs the integration tests and uploads an updated
       # cache. Because the test suite is the same, the resulting cache files
       # would also be identical.
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v6
         name: Restore SMT solver result cache
         with:
           path: ${{ matrix.suite }}.cache
@@ -863,7 +938,7 @@ jobs:
       - name: Run integration tests
         shell: bash
         run: |
-          export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
+          export PATH="$PWD/dist/bin:$PATH"
           dist-tests/integration-tests
         env:
           ENABLE_HPC: true
@@ -921,7 +996,7 @@ jobs:
             image-repo: GaloisInc/crux
             image-tag: ${{ needs.config.outputs.crux-version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -986,16 +1061,16 @@ jobs:
           cache-to: type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }},mode=max
 
       - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v6
         with:
           # Ensure that this matches saw-python/mypy.ini file
           # and that saw-python/pyproject.toml file is compatible with this version
           python-version: '3.12'
 
       - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
-        uses: abatilo/actions-poetry@v2.0.0
+        uses: abatilo/actions-poetry@v4
         with:
-          poetry-version: 1.4.2
+          poetry-version: 2.4.1
 
       - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
         name: Test saw-remote-api
@@ -1036,7 +1111,7 @@ jobs:
         os: [ubuntu-24.04]
         ghc: ["9.6.7"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: |
           mkdir -p s2nTests/bin
 
@@ -1057,7 +1132,7 @@ jobs:
         working-directory: s2nTests
         run: docker compose build s2n
 
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v6
         name: Restore SMT solver result cache
         with:
           path: s2nTests/cache
@@ -1074,7 +1149,7 @@ jobs:
           chmod -R +rw cache
           make ${{ matrix.s2n-target }}
 
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v6
         name: Save SMT solver result cache
         if: always()
         with:
@@ -1090,7 +1165,7 @@ jobs:
         os: [ubuntu-24.04]
         ghc: ["9.6.7"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: |
           mkdir -p exercises/bin
 

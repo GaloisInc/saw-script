@@ -1,0 +1,3 @@
+Loading file "err069.saw"
+err069.saw:5:14-5:15: Duplicate named argument x
+FAILED

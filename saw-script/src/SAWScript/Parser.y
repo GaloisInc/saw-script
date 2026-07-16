@@ -1,5 +1,7 @@
 {
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+-- Beware: the Happy-generated output disables all compiler warnings
 module SAWScript.Parser
   ( parseModule
   , parseREPLText
@@ -12,8 +14,10 @@ module SAWScript.Parser
 
 import Control.Applicative
 import Control.Exception
-import Data.List
-import qualified Data.Map as Map (fromList)
+import Control.Monad (foldM)
+import Data.List hiding (unsnoc) -- FUTURE: don't need to do this for GHC 9.8+
+import Data.List.Extra (unsnoc)
+import qualified Data.Map as Map
 import qualified Data.Text as Text
 import Data.Text (Text, pack, unpack)
 
@@ -21,6 +25,7 @@ import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
 import qualified SAWSupport.Pretty as PPS
+import SAWScript.Panic (panic)
 import SAWScript.Token
 import SAWScript.Lexer
 import SAWCentral.AST
@@ -73,7 +78,7 @@ import qualified Cryptol.Utils.Ident as P (mkIdent, packModName)
   'Term'         { TReserved _ "Term"           }
   'Type'         { TReserved _ "Type"           }
   'AIG'          { TReserved _ "AIG"            }
-  'CFG'          { TReserved _ "CFG"		}
+  'CFG'          { TReserved _ "CFG"            }
   ';'            { TPunct    _ ";"              }
   '['            { TPunct    _ "["              }
   ']'            { TPunct    _ "]"              }
@@ -86,6 +91,8 @@ import qualified Cryptol.Utils.Ident as P (mkIdent, packModName)
   ','            { TPunct    _ ","              }
   '.'            { TPunct    _ "."              }
   '\\'           { TPunct    _ "\\"             }
+  '?'            { TPunct    _ "?"              }
+  '@'            { TPunct    _ "@"              }
   '='            { TPunct    _ "="              }
   '->'           { TPunct    _ "->"             }
   '<-'           { TPunct    _ "<-"             }
@@ -139,8 +146,8 @@ mbAs :: { (Maybe P.ModName, Pos) }
  | {- empty -}                          { (Nothing, Unknown) }
 
 mbImportSpec :: { (Maybe P.ImportSpec, Pos) }
- : '(' list(name) ')'                   { (Just $ P.Only   [ P.mkIdent (tokStr n) | n <- $2 ], maxSpan [tokPos $1, tokPos $3]) }
- | 'hiding' '(' list(name) ')'          { (Just $ P.Hiding [ P.mkIdent (tokStr n) | n <- $3 ], maxSpan [tokPos $1, tokPos $4]) }
+ : '(' sepList(name, ',') ')'           { (Just $ P.Only   [ P.mkIdent (tokStr n) | n <- $2 ], maxSpan [tokPos $1, tokPos $3]) }
+| 'hiding' '(' sepList(name, ',') ')'   { (Just $ P.Hiding [ P.mkIdent (tokStr n) | n <- $3 ], maxSpan [tokPos $1, tokPos $4]) }
  | {- empty -}                          { (Nothing, Unknown) }
 
 Stmt :: { Stmt }
@@ -156,23 +163,36 @@ Stmt :: { Stmt }
  | 'typedef' name '=' Type              { StmtTypedef (maxSpan [tokPos $1, getPos $4]) (tokPos $2) (tokStr $2) $4 }
 
 Declaration :: { Decl }
- : Arg list(Arg) '=' Expression         { Decl (maxSpan' $1 $4) $1 Nothing (buildFunction (Just $1) $2 $4) }
- | Arg list(Arg) ':' Type '=' Expression
-                                        { Decl (maxSpan' $1 $6) $1 Nothing (buildFunction (Just $1) $2 (TSig (maxSpan' $4 $6) $6 $4)) }
+ : PlainPattern list(PlainParam) '=' Expression          {% declFunc $1 $2 Nothing $4 }
+ | PlainPattern list(PlainParam) ':' Type '=' Expression {% declFunc $1 $2 (Just $4) $6 }
 
-Pattern :: { Pattern }
- : Arg                                  { $1 }
- | name ':' Type                        { buildPVar (maxSpan [tokPos $1, getPos $3]) (tokPos $1) (tokStr $1) (Just $3) }
+ParamName :: { (Pos, Text, Maybe Pattern, Expr) }
+ParamName
+ : name '?' '=' AExpr                   { (tokPos $1, tokStr $1, Nothing, $4) }
+ | name '@' PlainPattern '?' '=' AExpr  { (tokPos $1, tokStr $1, Just $3, $6) }
 
-Arg :: { Pattern }
- : name                                 { buildPVar (tokPos $1) (tokPos $1) (tokStr $1) Nothing }
+TypedParam :: { (Maybe ParamLabel, Pattern) }
+ : ParamName                            {% mkNamedParam $1 Nothing   }
+ | ParamName ':' Type                   {% mkNamedParam $1 (Just $3) }
+
+PlainParam :: { (Maybe ParamLabel, Pattern) }
+ : ParamName                            {% mkNamedParam $1 Nothing }
+ | '(' TypedParam ')'                   { $2 }
+ | PlainPattern                         { (Nothing, $1) }
+
+TypedPattern :: { Pattern }
+ : PlainPattern                         { $1 }
+ | name ':' Type                        { mkVarPattern (tokPos $1) (tokStr $1) (Just $3) }
+
+PlainPattern :: { Pattern }
+ : name                                 { mkVarPattern (tokPos $1) (tokStr $1) Nothing }
  | '(' ')'                              { PTuple (maxSpan [tokPos $1, tokPos $2]) [] }
- | '(' commas(Pattern) ')'              { case $2 of [p] -> p; _ -> PTuple (maxSpan [tokPos $1, tokPos $3]) $2 }
+ | '(' commas(TypedPattern) ')'         { mkTupleParam $1 $2 $3 }
 
 Expression :: { Expr }
  : IExpr                                { $1 }
  | IExpr ':' Type                       { TSig (maxSpan' $1 $3) $1 $3 }
- | '\\' list1(Arg) '->' Expression      { buildFunction Nothing $2 $4 }
+ | '\\' list1(PlainParam) '->' Expression {% buildFunction Nothing $2 $4 }
  | 'let' Declaration 'in' Expression    { Let (maxSpan [tokPos $1, getPos $4]) (NonRecursive $2) $4 }
  | 'rec' sepBy1(Declaration, 'and')
    'in' Expression                      { Let (maxSpan [tokPos $1, getPos $4]) (Recursive $2) $4 }
@@ -180,13 +200,18 @@ Expression :: { Expr }
                    'else' Expression    { IfThenElse (maxSpan [tokPos $1, getPos $6]) $2 $4 $6 }
 
 IExpr :: { Expr }
- : AExprs                               { $1 }
+ : Arguments                            { $1 }
 
-AExprs :: { Expr }
- : list1(AExpr)                         { buildApplication $1 }
+Arguments :: { Expr }
+ : AExpr list(ArgumentExpr)             { buildApplication $1 $2 }
+
+ArgumentExpr :: { (Maybe (Pos, Text), Expr) }
+ : AExpr                                { (Nothing, $1) }
+ | name '=' AExpr                       { (Just (tokPos $1, tokStr $1), $3) }
+ | '(' name '=' Expression ')'          { (Just (tokPos $2, tokStr $2), $4) }
 
 AExpr :: { Expr }
-: '(' ')'                               { Tuple (maxSpan [tokPos $1, tokPos $2]) [] }
+ : '(' ')'                              { Tuple (maxSpan [tokPos $1, tokPos $2]) [] }
  | '[' ']'                              { Array (maxSpan [tokPos $1, tokPos $2]) [] }
  | string                               { String (tokPos $1) (tokStr $1) }
  | code                                 { Code (tokPos $1) (tokStr $1) }
@@ -221,8 +246,14 @@ SchemaPattern :: { SchemaPattern }
  | '{' Names '}' BaseType list(BaseType) { SchemaPattern $2 ($4 : $5) }
 
 Type :: { Type }
- : AppliedType                          { $1                      }
- | AppliedType '->' Type                { tFun (maxSpan [$1, $3]) $1 $3 }
+ : AppliedType                          { $1 }
+ | AppliedType '->' FunctionType        {% mkFuncType ((Nothing, $1) : $3) }
+ | name '?' AppliedType '->' FunctionType {% mkFuncType ((Just $1, $3) : $5) }
+
+FunctionType :: { [(Maybe (Token Pos), Type)] }
+ : AppliedType                          { [(Nothing, $1)] }
+ | AppliedType '->' FunctionType        { (Nothing, $1) : $3 }
+ | name '?' AppliedType '->' FunctionType { (Just $1, $3) : $5 }
 
 AppliedType :: { Type }
  : BaseType                             { $1                            }
@@ -231,7 +262,8 @@ AppliedType :: { Type }
 -- special case of function type that can be followed by more base types
 -- without requiring parens
 BaseFunType :: { Type }
- : BaseType '->' Type                   { tFun (maxSpan [$1, $3]) $1 $3 }
+ : BaseType '->' FunctionType           {% mkFuncType ((Nothing, $1) : $3) }
+ | name '?' BaseType '->' FunctionType  {% mkFuncType ((Just $1, $3) : $5) }
 
 BaseType :: { Type }
  : name                                 { tVar (getPos $1) (tokStr $1)     }
@@ -289,15 +321,18 @@ list1(p) : rev_list1(p)   { reverse $1 }
 list(p) : {- empty -}    { [] }
         | list1(p)       { $1 }
 
--- A reversed list of at least 1 p's
-seprev_list(p,q) : seprev_list(p,q) p { $2 : $1 }
-                 | seprev_list(p,q) q { $1 }
-                 | {- empty -}    { [] }
+-- A reversed list of one or more p's, separated by q's
+sepRevList1(p,q) : p                    { [$1] }
+                 | sepRevList1(p,q) q p { $3 : $1 }
 
--- A potentially empty list of p's separated by zero or more qs (which are ignored).
-seplist(p,q) : seprev_list(p,q)  { reverse $1 }
+-- A reversed list of zero or more p's, separated by q's
+sepRevList(p,q) : {- empty -}      { [] }
+                | sepRevList1(p,q) { $1 }
 
--- A list of at least one 1 p's, separated by q's
+-- A potentially empty list of p's, separated by q's
+sepList(p,q) : sepRevList(p,q)  { reverse $1 }
+
+-- A list of at least one p, separated by q's
 sepBy1(p, q) : p list(snd(q, p)) { $1 : $2 }
 
 sepBy2(p, q) : p q sepBy1(p, q) { $1 : $3 }
@@ -329,6 +364,9 @@ commas2(p) : sepBy2(p, ',') { $1 }
 data ParseError
   = HappyError [Token Pos] [String]
   | InvalidPattern Pos Expr
+  | InvalidPatternAnnotation Pos
+  | InvalidNamedParam Pos
+  | DuplicateNamedParam Pos Text Pos
   | EmptyBlock Pos
   | InvalidBlock Pos
 
@@ -373,24 +411,33 @@ prettyParseError :: PPS.Opts -> Text -> ParseError -> (Maybe Pos, PPS.Doc)
 prettyParseError ppopts eofName pe = case pe of
     HappyError nextToks possibles ->
         let (optpos, tstr) = case nextToks of
-	      [] -> (Nothing, eofName)
-	      t : _ts -> (Just (tokPos t), tokStr t)
+              [] -> (Nothing, eofName)
+              t : _ts -> (Just (tokPos t), tokStr t)
             tstr' = PPS.squotesMatching $ PP.pretty tstr
-	    doc = case possibles of
-	      [] -> "Syntax error: unexpected" <+> tstr'
-	      [p] -> "Syntax error: missing" <+> PP.pretty p
-	      ps ->
+            doc = case possibles of
+              [] -> "Syntax error: unexpected" <+> tstr'
+              [p] -> "Syntax error: missing" <+> PP.pretty p
+              ps ->
                   let ps' =
                         "Some legal inputs at this point:" : map PP.pretty ps
                   in
-		  PP.vsep [
+                  PP.vsep [
                       "Syntax error: unexpected" <+> tstr',
-		      PP.nest 3 $ PP.group $ PP.fillSep $ ps'
-		  ]
+                      PP.nest 3 $ PP.group $ PP.fillSep $ ps'
+                  ]
         in
-	(optpos, doc)
+        (optpos, doc)
     InvalidPattern pos e ->
         (Just pos, "Parse error: invalid pattern" <+> prettyExpr ppopts e)
+    InvalidPatternAnnotation pos ->
+        (Just pos, "Parse error: invalid pattern type annotation")
+    InvalidNamedParam pos ->
+        (Just pos, "Invalid name for named parameter")
+    DuplicateNamedParam pos name _prevpos ->
+        (Just pos, "Duplicate named parameter" <+> PP.pretty name)
+        -- FUTURE: maybe add this sometime
+        -- (requires the ability to issue more than one message here)
+        -- (Just prevpos, "Previous instance was here")
     EmptyBlock pos ->
         (Just pos, "do block must include at least one expression")
     InvalidBlock pos ->
@@ -416,6 +463,14 @@ buildImport issub (modName, namePos) (mbAsName, asPos) (mbSpec, specPos) =
     iPos = maxSpan [namePos, asPos, specPos]
   }
 
+-- | Type for wrapping the name and default value of a named parameter.
+--   The first position is the overall position of all of it; the
+--   second position is the position of just the name.
+data ParamLabel = ParamLabel Pos Pos Text Expr
+
+instance Positioned ParamLabel where
+  getPos (ParamLabel allpos _xpos _x _e) = allpos
+
 -- | As seen by the parser, a "function name" is an arbitrary pattern.
 --   This is because we use the same syntax for function and value bindings:
 --   in "let (a, b) = e" the "(a, b)" can and should be an arbitrary pattern.
@@ -423,7 +478,7 @@ buildImport issub (modName, namePos) (mbAsName, asPos) (mbSpec, specPos) =
 --   name, as in "let f () = e". You can write "let (a, b) () = e" and the
 --   parser will accept it, but it won't typecheck.
 --
---   This function extracts the actual name, if any, for annotating
+--   This function extracts the actual name for annotating
 --   the lambda expressions we turn further arguments into. It will
 --   return Nothing if the name is something other than an actual
 --   name, which is fine for value bindings since the result won't be
@@ -431,26 +486,72 @@ buildImport issub (modName, namePos) (mbAsName, asPos) (mbSpec, specPos) =
 --   be rejected by the typechecker. The annotations in question are
 --   used only at eval time.
 --
---   Runs in the Maybe monad for convenience.
-fixFunctionName :: Maybe Pattern -> Maybe Text
-fixFunctionName mname = do
-  name <- mname
-  case name of
-      PWild {} -> Nothing
-      PVar _allpos _namepos name _ty -> Just name
-      PTuple {} -> Nothing
+fixFunctionName :: Pattern -> Maybe Text
+fixFunctionName = \case
+  PWild {} -> Nothing
+  PVar _allpos _namepos name _ty -> Just name
+  PTuple {} -> Nothing
 
-buildFunction :: Maybe Pattern -> [Pattern] -> Expr -> Expr
-buildFunction mname args e =
-  let mname' = fixFunctionName mname
-      once :: Pattern -> Expr -> Expr
-      once pat e = Lambda (maxSpan' pat e) mname' pat e
-  in
-  foldr once e args
+-- | Declare a whole function. This extracts positions, wraps any type
+--   signature around the body, and calls `buildFunction`.
+--
+--   Runs in the Either monad for convenience.
+declFunc :: Pattern -> [(Maybe ParamLabel, Pattern)] -> Maybe Type -> Expr ->
+      Either ParseError Decl
+declFunc fun params mbType e = do
+  let fun' = fixFunctionName fun
+      e' = case mbType of
+        Nothing -> e
+        Just ty -> TSig (maxSpan' ty e) e ty
+  e' <- buildFunction fun' params e'
+  Right $ Decl (maxSpan' fun e) fun Nothing e'
 
-buildApplication :: [Expr] -> Expr
-buildApplication es =
-  foldl1 (\e body -> Application (maxSpan' e body) e body) es
+-- | Construct a function body from a parameter list and base body
+--   expression. We store all functions as lambdas, so this takes the
+--   parameters and pushes them onto the body function as a lambda node.
+buildFunction :: Maybe Text -> [(Maybe ParamLabel, Pattern)] -> Expr ->
+      Either ParseError Expr
+buildFunction mname params e = case params of
+  [] ->
+      -- not actually a function, don't create a lambda node
+      Right e
+  _ -> do
+      -- Run this in the Either monad for convenience
+
+      -- Split off the named parameters so we can carry them
+      -- around separately.
+      let dosplit (mbName, param) (params', namedParams) =
+            case mbName of
+                Nothing -> (param : params', namedParams)
+                Just info -> (params', (info, param) : namedParams)
+          (params', namedParams) = foldr dosplit ([], []) params
+
+      -- Convert the namedParams list to a map.
+      let doadd namedParams' (ParamLabel allpos xpos x defval, param) =
+            case Map.lookup x namedParams' of
+                Nothing ->
+                    Right $ Map.insert x (xpos, (allpos, defval, param)) namedParams'
+                Just (prevxpos, _previnfo) ->
+                    Left $ DuplicateNamedParam xpos x prevxpos
+      namedParams' <- foldM doadd Map.empty namedParams
+
+      -- Figure out the overall pos
+      let pos = spanPos (maxSpan params) (getPos e)
+
+      Right $ Lambda pos mname params' namedParams' e
+
+buildApplication :: Expr -> [(Maybe (Pos, Text), Expr)] -> Expr
+buildApplication fun args = case args of
+    [] ->
+        -- One expression: just an expression, not an application
+        fun
+    _ ->
+        -- Function with args
+        let argpos (Nothing, e) = getPos e
+            argpos (Just (pos, _x), e) = maxSpan' pos e
+            pos = maxSpan' fun $ maxSpan $ map argpos args
+        in
+        Application pos fun args
 
 -- | Build a let-statement.
 buildLet :: Pos -> Decl -> Stmt
@@ -467,7 +568,47 @@ buildRec :: Pos -> [Decl] -> Stmt
 buildRec pos ds =
   StmtLet pos ReadOnlyVar (Recursive ds)
 
--- | Build a variable-pattern. Discard the variable if it's _.
+-- | Insert a type into a pattern, maybe.
+--
+--   Attaching more than one type annotation to the same pattern
+--   element is prohibited, even if they're the same (it is not our
+--   job here to know what "the same type" means) and if you want to
+--   annotate the type of a tuple pattern you're supposed to do it on
+--   the elements, not on the outside. Historically attempting the
+--   latter just produced a parse error; now because the pieces can be
+--   further apart it's accepted by the grammar in some cases and
+--   fails here instead.
+addTypeToPattern :: Pattern -> Maybe Type -> Either ParseError Pattern
+addTypeToPattern pat mbType = case mbType of
+  Nothing -> pure pat
+  Just ty -> case pat of
+      PWild pos Nothing ->
+          pure $ PWild pos (Just ty)
+      PVar allpos namepos name Nothing ->
+          pure $ PVar allpos namepos name (Just ty)
+      _ ->
+          Left $ InvalidPatternAnnotation (getPos ty)
+
+-- | Build a named parameter.
+mkNamedParam ::
+      (Pos, Text, Maybe Pattern, Expr) ->
+      Maybe Type ->
+      Either ParseError (Maybe ParamLabel, Pattern)
+mkNamedParam (xpos, x, mbPat, e) mbType = do
+  pat <- case mbPat of
+        Nothing -> pure $ mkVarPattern xpos x mbType
+        Just pat' -> addTypeToPattern pat' mbType
+
+  let allpos = case mbType of
+        Nothing -> spanPos xpos (getPos pat)
+        Just ty -> spanPos xpos (getPos ty)
+
+  if x == "_" then
+      Left $ InvalidNamedParam xpos
+  else
+      Right (Just (ParamLabel allpos xpos x e), pat)
+
+-- | Build a variable pattern, discarding the variable if it's _.
 --
 --   Note: it is probably more appropriate to discard all variables
 --   that _begin_ with an underscore; however, the traditional usage
@@ -476,11 +617,24 @@ buildRec pos ds =
 --   behind your back. That's wrong; however, SAWScript is not the
 --   place to fight this battle...
 --
-buildPVar :: Pos -> Pos -> Text -> Maybe Type -> Pattern
-buildPVar allpos xpos x mty =
+mkVarPattern :: Pos -> Text -> Maybe Type -> Pattern
+mkVarPattern xpos x mbType =
+  let allpos = case mbType of
+        Nothing -> xpos
+        Just ty -> maxSpan [xpos, getPos ty]
+  in
   case x of
-    "_" -> PWild allpos mty
-    _ -> PVar allpos xpos x mty
+      "_" -> PWild allpos mbType
+      _ -> PVar allpos xpos x mbType
+
+-- | Build a tuple parameter. Takes the left and right parentheses
+--   tokens as well as the pattern list, for position tracking.
+--   Single parenthesized parameters are just parameters, not
+--   monoples.
+mkTupleParam :: Token Pos -> [Pattern] -> Token Pos -> Pattern
+mkTupleParam lp pats rp = case pats of
+  [pat] -> pat
+  _ -> PTuple (spanPos (tokPos lp) (tokPos rp)) pats
 
 -- | Pop off the last statement in a do-block, which is required to
 --   be a plain expression, and unpack it to an expression.
@@ -498,11 +652,51 @@ toPattern expr =
   case expr of
     Tuple pos es ->
         PTuple pos `fmap` mapM toPattern es
-    TSig pos (Var xpos x) t ->
-        return (buildPVar pos xpos x (Just t))
-    Var pos x ->
-        return (buildPVar pos pos x Nothing)
+    TSig _pos (Var xpos x) t ->
+        pure $ mkVarPattern xpos x (Just t)
+    Var xpos x ->
+        pure $ mkVarPattern xpos x Nothing
     _ ->
         Left (InvalidPattern (getPos expr) expr)
+
+-- | Generate a function type from a list. This amounts to
+--   peeling off the return type from the end of the list,
+--   then splitting off the named parameters.
+mkFuncType :: [(Maybe (Token Pos), Type)] -> Either ParseError Type
+mkFuncType tys = do
+  let pos = maxSpan tys
+      (params, ret) = case reverse tys of
+          [] -> panic "mkFuncType" ["Empty type list"]
+          r : ps -> (reverse ps, r)
+
+  (numPositional, namedNames, posParams, namedParams) <- do
+      let once (count, names, pps, nps) (mbName, param) = case mbName of
+            Nothing ->
+                Right (count + 1, names, param : pps, nps)
+            Just tok -> do
+                let pos = tokPos tok
+                    name = tokStr tok
+                if name == "_" then
+                    Left $ InvalidNamedParam pos
+                else
+                    case Map.lookup name nps of
+                        Nothing ->
+                            Right (count, name : names, pps, Map.insert name param nps)
+                        Just prev ->
+                            Left $ DuplicateNamedParam pos name (getPos prev)
+      (count, names, pps, nps) <- foldM once (0, [], [], Map.empty) params
+      -- Because foldM is a foldl, we need to reverse names and pps
+      Right (count, reverse names, reverse pps, nps)
+
+  let nameinfo = NamedParamInfo numPositional namedNames
+
+  let ret' = case ret of
+        (Nothing, r) ->
+              r
+        (Just _, r) ->
+              -- This is not allowed by the grammar
+              panic "mkFuncType" ["Return value was named"]
+
+  Right $ tFun pos nameinfo posParams namedParams ret'
 
 }

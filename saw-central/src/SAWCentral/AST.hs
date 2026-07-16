@@ -23,6 +23,7 @@ module SAWCentral.AST
      , TypeIndex
      , Context(..)
      , TyCon(..)
+     , NamedParamInfo(..), noNames
      , Type(..)
      , Schema(..)
      , SchemaPattern(..)
@@ -152,7 +153,6 @@ data Context
 data TyCon
   = TupleCon Integer
   | ArrayCon
-  | FunCon
   | StringCon
   | TermCon
   | TypeCon
@@ -166,6 +166,42 @@ data TyCon
   | MIRSpecCon
   | ContextCon Context
   deriving (Eq, Ord, Show)
+
+-- | Information about the named parameters in a function type
+--   signature.
+--
+--   This form preserves the ordering of the names, though not their
+--   exact positions, and is used specifically to feed the builtin
+--   wrapping logic. (The builtin wrapping logic needs to map the
+--   named parameters onto the last N positional arguments of the
+--   underlying Haskell function; we must preserve the ordering or
+--   utter chaos results.)
+--
+--   The `Int` argument gives the number of positional arguments (all
+--   positional arguments come first in the underlying Haskell
+--   functions); the list argument gives the names of the named
+--   arguments.
+data NamedParamInfo = NamedParamInfo Int [Text]
+  deriving Show
+
+-- | Dummy `NamedParamInfo` for use where the information is not
+--   needed, such as the typechecker. The only consumer of the
+--   `NamedParamInfo` is the builtin wrapper logic, which is
+--   downstream only from the type signature parser. Elsewhere,
+--   updating or generating the information is not entirely trivial
+--   and there is in general no reason to bother.
+--
+--   FUTURE: a cleaner solution would be to parse to a parse tree
+--   first, which would preserve the ordering (and also generally be
+--   tidier) then pull the info out in the one case we care about it
+--   and discard it otherwise, before lowering to the AST.
+noNames :: NamedParamInfo
+noNames = NamedParamInfo 0 []
+
+-- | Allow splicing two `NamedParamInfo` values together with `<>`.
+instance Semigroup NamedParamInfo where
+    NamedParamInfo n1 nps1 <> NamedParamInfo n2 nps2 =
+        NamedParamInfo (n1 + n2) (nps1 ++ nps2)
 
 -- The position information in a type should be thought of as its
 -- provenance; for a type annotation in the input it'll be a concrete
@@ -186,8 +222,10 @@ data TyCon
 -- this writing most of that thought hasn't been put in yet and we
 -- just stuff the inference info into the Show instance output. See
 -- notes in Position.hs.
+--
 data Type
   = TyCon Pos TyCon [Type]
+  | TyFunc Pos NamedParamInfo [Type] (Map Name Type) Type
   | TyRecord Pos (Map Name Type)
   | TyVar Pos Name
   | TyUnifyVar Pos TypeIndex       -- ^ For internal typechecker use only
@@ -240,9 +278,21 @@ data Expr
   | Var Pos Name
   -- | All functions are handled as lambdas. We hang onto the name
   --   from the function declaration (if there was one) for use in
-  --   stack traces.
-  | Lambda Pos (Maybe Name) Pattern Expr
-  | Application Pos Expr Expr
+  --   stack traces. The list of patterns holdes the positional
+  --   parameters; the map from text holds the optional named
+  --   parameters. The elements of that map are:
+  --      - the position of the name text
+  --      - the overall position
+  --      - the pattern with the local-facing name (which might be different)
+  --        and any type
+  --      - the default value
+  --   The tuple nesting is supposed to make it possible to remember
+  --   which position is which: the one belonging to the map key is
+  --   the closest to it.
+  | Lambda Pos (Maybe Name) [Pattern] (Map Text (Pos, (Pos, Expr, Pattern))) Expr
+  -- | Function arguments come with an optional name; if present,
+  --   it includes the position of the name string.
+  | Application Pos Expr [(Maybe (Pos, Text), Expr)]
   -- Sugar
   | Let Pos DeclGroup Expr
   | TSig Pos Expr Type
@@ -319,6 +369,9 @@ data Stmt
 --   These appear in let expressions and statements; but _not_ in
 --   monad-bind position; those have only patterns and can't be
 --   polymorphic.
+--
+--   Note: the pattern here is the name (or names) we're binding. Any
+--   arguments are stuffed into the body as lambdas.
 data Decl
   = Decl { dPos :: Pos, dPat :: Pattern, dType :: Maybe Schema, dDef :: Expr }
   deriving Show
@@ -337,6 +390,7 @@ data DeclGroup
 
 instance Positioned Type where
   getPos (TyCon pos _ _) = pos
+  getPos (TyFunc pos _ _ _ _) = pos
   getPos (TyRecord pos _) = pos
   getPos (TyVar pos _) = pos
   getPos (TyUnifyVar pos _) = pos
@@ -355,7 +409,7 @@ instance Positioned Expr where
   getPos (Lookup pos _ _) = pos
   getPos (TLookup pos _ _) = pos
   getPos (Var pos _) = pos
-  getPos (Lambda pos _ _ _) = pos
+  getPos (Lambda pos _ _ _ _) = pos
   getPos (Application pos _ _) = pos
   getPos (Let pos _ _) = pos
   getPos (TSig pos _ _) = pos
@@ -407,7 +461,6 @@ prettyTyCon :: TyCon -> PP.Doc ann
 prettyTyCon tc = case tc of
     TupleCon n     -> PP.parens $ PPS.replicate (n - 1) $ PP.pretty ','
     ArrayCon       -> PP.parens $ PP.brackets $ PP.emptyDoc
-    FunCon         -> PP.parens $ "->"
     StringCon      -> "String"
     TermCon        -> "Term"
     TypeCon        -> "Type"
@@ -438,12 +491,6 @@ prettyType ppopts = PP.group . visit 0
                   PP.align $ PP.parens $ PP.fillSep $ PP.punctuate "," $ map (visit 0) args
           (ArrayCon, [ty1]) ->
               PP.brackets $ visit 0 ty1
-          (FunCon, [fun, arg]) ->
-              let fun' = visit 1 fun
-                  arg' = visit 0 arg
-                  body = fun' <+> "->" <> PP.line <> arg'
-              in
-              if prec > 0 then PP.parens (PP.group body) else body
           (BlockCon, [m, arg]) ->
               let m' = visit 1 m
                   arg' = visit 2 arg
@@ -451,7 +498,6 @@ prettyType ppopts = PP.group . visit 0
               in
               if prec > 1 then PP.parens body else body
           (ArrayCon, _) -> croak "array" 1 args
-          (FunCon, _) -> croak "function" 2 args
           (BlockCon, _) -> croak "block" 2 args
           (_, _) ->
               let ctor' = prettyTyCon ctor in
@@ -461,6 +507,14 @@ prettyType ppopts = PP.group . visit 0
                       let ctor'' = PPS.renderText ppopts ctor' in
                       croak ctor'' 0 args
 
+      TyFunc _ _ params namedParams ret ->
+              let params' = map (\p -> visit 1 p <+> "->") params
+                  oneNamed (n, p) = PP.pretty n <> "?" <> visit 1 p <+> "->"
+                  namedParams' = map oneNamed $ Map.toList namedParams
+                  ret' = visit 0 ret
+                  body = PP.vsep (params' ++ namedParams') <> PP.line <> ret'
+              in
+              if prec > 0 then PP.parens (PP.group body) else body
       TyRecord _ fields ->
           let prettyField (name, ty) =
                 let name' = PP.pretty name
@@ -567,19 +621,58 @@ prettyExpr ppopts expr0 = case expr0 of
         expr' <> PP.dot <> n'
     Var _ name ->
         PP.pretty name
-    Lambda _ _mname pat expr ->
-        let pat' = prettyPattern ppopts pat
+    Lambda _ _mname params namedParams expr ->
+        let onePositional pat =
+                let pat' = prettyPattern ppopts pat in
+                "\\" <+> pat' <+> "->"
+            oneNamed (name, (_namepos, (_pos, def, pat))) =
+                let name' = PP.pretty name
+                    def' = prettyExpr ppopts def
+                    pat' = prettyPattern ppopts pat
+                in
+                "\\" <+> name' <+> "@" <+> pat' <+> "?=" <> def' <+> "->"
+            params' = map onePositional params
+            namedParams' = map oneNamed $ Map.toList namedParams
             expr' = prettyExpr ppopts expr
-            line1 = "\\" <+> pat' <+> "->"
-            line2 = PP.flatAlt (PP.indent 3 expr') expr'
         in
-        PP.group $ line1 <> PP.line <> line2
-    Application _ f arg ->
+        let lines_ = params' ++ namedParams' ++ [expr']
+            -- Now indent each successive line by 3. As elsewhere,
+            -- this needs to be done using PP.flatAlt or it comes out
+            -- wrong.
+            indent line rest =
+                PP.group (line <> PP.line <> PP.flatAlt (PP.indent 3 rest) rest)
+        in
+        -- This will print the last few arguments and the body
+        -- together on the last line if they fit, which matches the
+        -- older behavior. If we decide we don't like that, grouping
+        -- it again will apparently put each piece on its own line if
+        -- the whole thing doesn't fit on one.
+        --
+        -- Note: if you make changes here you probably want to make
+        -- matching changes to the Value printer too.
+        foldr1 indent lines_
+    Application _ f args ->
         -- XXX FIXME: use precedence to minimize parentheses
         let f' = prettyExpr ppopts f
-            arg' = prettyExpr ppopts arg
+            once (mbName, arg) =
+                let arg' = prettyExpr ppopts arg in
+                case mbName of
+                    Nothing -> arg'
+                    Just (_pos, name) -> PP.pretty name <> "=" <> arg'
+            args' = map once args
         in
-        PP.parens f' <+> arg'
+        -- XXX: the following baloney is to avoid changing the behavior
+        -- while doing other much more subtle changes elsewhere and should
+        -- be simplified later.
+        --
+        -- Wrap f' in parens, then f' and the first arg, then that and the
+        -- second, etc. Except, not the last.
+        let pairify pieces = case pieces of
+                [] -> PP.emptyDoc
+                [a] -> a
+                a : b : more -> pairify ((PP.parens a <+> b) : more)
+        in
+        pairify (f' : args')
     Let _ (NonRecursive decl) expr ->
         let decl' = prettyDef ppopts decl
             expr' = prettyExpr ppopts expr
@@ -707,16 +800,27 @@ prettyStmt ppopts s0 = case s0 of
 
 prettyDef :: PPS.Opts -> Decl -> PPS.Doc
 prettyDef ppopts (Decl _ pat0 _ def) =
-   let dissectLambda :: Expr -> ([Pattern], Expr)
-       dissectLambda = \case
-          Lambda _pos _name pat (dissectLambda -> (pats, expr)) -> (pat : pats, expr)
-          expr -> ([], expr)
-       (args, body) = dissectLambda def
-       pats' = PP.align $ PP.sep $ map (prettyPattern ppopts) (pat0 : args)
+   let dissectLambda :: Expr -> ([Pattern], Map Text (Pos, (Pos, Expr, Pattern)), Expr)
+       dissectLambda e0 = case e0 of
+          Lambda _pos _name pats namedpats e1 ->
+              let (morepats, morenamedpats, e1') = dissectLambda e1 in
+              (pats ++ morepats, Map.union namedpats morenamedpats, e1')
+          _ ->
+              ([], Map.empty, e0)
+       (params, namedParams, body) = dissectLambda def
+       params' = map (prettyPattern ppopts) (pat0 : params)
+       oneNamed (x, (_xpos, (_pos, defExpr, pat))) =
+           let x' = PP.pretty x
+               defExpr' = prettyExpr ppopts defExpr
+               pat' = prettyPattern ppopts pat
+           in
+           x' <+> "@" <+> pat' <+> "?=" <> defExpr'
+       namedParams' = map oneNamed (Map.toList namedParams)
+       allParams' = PP.align $ PP.sep (params' ++ namedParams')
        body' = prettyExpr ppopts body
        body'' = PP.flatAlt (PP.indent 3 body') body'
    in
-   pats' <+> "=" <> PP.line <> body''
+   allParams' <+> "=" <> PP.line <> body''
 
 prettyWholeModule :: PPS.Opts -> [Stmt] -> PPS.Doc
 prettyWholeModule ppopts stmts =
@@ -736,8 +840,9 @@ tTuple pos ts = TyCon pos (TupleCon $ fromIntegral $ length ts) ts
 tArray :: Pos -> Type -> Type
 tArray pos t = TyCon pos ArrayCon [t]
 
-tFun :: Pos -> Type -> Type -> Type
-tFun pos f v = TyCon pos FunCon [f,v]
+-- | Create a function type a1 -> a2 -> ... -> b.
+tFun :: Pos -> NamedParamInfo -> [Type] -> Map Name Type -> Type -> Type
+tFun pos names params namedParams ret = TyFunc pos names params namedParams ret
 
 tString :: Pos -> Type
 tString pos = TyCon pos StringCon []

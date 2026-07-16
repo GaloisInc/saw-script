@@ -1,0 +1,7 @@
+// The function being declared is not available in its default
+// arguments.
+//
+// This should fail with f unbound.
+
+let f x?=(f x=0 ()) () = x;
+print (f ());
