@@ -328,7 +328,7 @@ span.spaces    { background: white }
 <span class="lineno">  309 </span><span class="decl"><span class="istickedoff">countUninterpreted scale count ty =</span>
 <span class="lineno">  310 </span><span class="spaces">  </span><span class="istickedoff">case ty of</span>
 <span class="lineno">  311 </span><span class="spaces">    </span><span class="istickedoff">VPiType {}      -&gt; count</span>
-<span class="lineno">  312 </span><span class="spaces">    </span><span class="istickedoff">VBoolType       -&gt; add BaseBoolRepr count</span>
+<span class="lineno">  312 </span><span class="spaces">    </span><span class="istickedoff">VBoolType       -&gt; <span class="nottickedoff">add BaseBoolRepr count</span></span>
 <span class="lineno">  313 </span><span class="spaces">    </span><span class="istickedoff">VIntType        -&gt; <span class="nottickedoff">add BaseIntegerRepr count</span></span>
 <span class="lineno">  314 </span><span class="spaces">    </span><span class="istickedoff">VIntModType {}  -&gt; <span class="nottickedoff">add BaseIntegerRepr count</span></span>
 <span class="lineno">  315 </span><span class="spaces">    </span><span class="istickedoff">VRationalType   -&gt; <span class="nottickedoff">add BaseIntegerRepr (add BaseIntegerRepr count)</span></span>
@@ -419,7 +419,7 @@ span.spaces    { background: white }
 <span class="lineno">  400 </span><span class="spaces">  </span><span class="istickedoff">suff :: BaseTypeRepr a -&gt; String</span>
 <span class="lineno">  401 </span><span class="spaces">  </span><span class="istickedoff">suff t =</span>
 <span class="lineno">  402 </span><span class="spaces">    </span><span class="istickedoff">case t of</span>
-<span class="lineno">  403 </span><span class="spaces">      </span><span class="istickedoff">BaseBoolRepr -&gt; &quot;_bool&quot;</span>
+<span class="lineno">  403 </span><span class="spaces">      </span><span class="istickedoff">BaseBoolRepr -&gt; <span class="nottickedoff">&quot;_bool&quot;</span></span>
 <span class="lineno">  404 </span><span class="spaces">      </span><span class="istickedoff">BaseIntegerRepr -&gt; <span class="nottickedoff">&quot;_int&quot;</span></span>
 <span class="lineno">  405 </span><span class="spaces">      </span><span class="istickedoff">BaseRealRepr -&gt; <span class="nottickedoff">&quot;_real&quot;</span></span>
 <span class="lineno">  406 </span><span class="spaces">      </span><span class="istickedoff">BaseComplexRepr -&gt; <span class="nottickedoff">&quot;_complex&quot;</span></span>
