@@ -3891,6 +3891,18 @@ translateIdentWithArgsWithShape i args
           FixClassF
             | shouldWrapBinder typeArg ->
                 lowerClassFBounded typeArg bodyArg
+          FixClassSSingle
+            | shouldWrapBinder typeArg ->
+                lowerClassSSingle typeArg bodyArg
+          FixClassSPaired ->
+            -- R3b, fifth-audit amendment D: mutual paired-stream
+            -- corecursion has its OWN disposition — an explicit
+            -- named rejection, never a smuggled lowering and never
+            -- the retired-contract fallback.
+            Except.throwError (RejectedPrimitive "Prelude.fix"
+              ("paired-stream mutual corecursion is not realized "
+               <> "(fifth-audit amendment D); a paired lowering is "
+               <> "a separate post-R4 design"))
           _ ->
             lowerFixProofObligation typeArg bodyArg
               "all Prelude.fix applications use proof-carrying emission"
@@ -4498,6 +4510,15 @@ classifyFixShape typeArg bodyArg
           | termMentionsVar recVn seedV ->
               FixUnrecognized
                 "recursive binder occurs in the stream seed"
+          -- R3b review finding F1: the gate must equal the lowering's
+          -- destructure exactly — the lowering extracts x0 from a
+          -- literal single-element ArrayValue, so a computed
+          -- length-1 seed (gen 1 …, a bound vector) must classify
+          -- Unrecognized here, not surface as an internal-invariant
+          -- error downstream. Reject-when-unsure direction.
+          | Nothing <- asSingletonArraySeed seedV ->
+              FixUnrecognized
+                "stream seed is not a literal single-element vector"
           | otherwise -> classifyStreamTail recVn iVn dflt
         _ ->
           FixUnrecognized
@@ -4712,6 +4733,16 @@ classifyFixShape typeArg bodyArg
           , asNat one == Just 1 -> True
         _ -> False
 
+-- | The one seed shape the Class S-single lowering can consume: a
+-- literal ArrayValue with exactly one element. This is the SHARED
+-- spelling of the seed guard — 'classifyStreamElem' (the gate) and
+-- 'lowerClassSSingle' (the lowering) both go through it, so the two
+-- can never drift apart on it again (R3b review finding F1).
+asSingletonArraySeed :: Term -> Maybe Term
+asSingletonArraySeed t = case asArrayValue t of
+  Just (_ty, [elt]) -> Just elt
+  _ -> Nothing
+
 termHeadName :: Term -> String
 termHeadName t = case asGlobalDef (fst (asApplyAll t)) of
   Just i  -> identName i
@@ -4837,6 +4868,77 @@ lowerClassFBounded typeArg bodyArg =
       Except.throwError (RejectedPrimitive "Prelude.fix"
         ("internal invariant violation: Class-F fix at a non-Vec type "
          <> "(recognizer/lowering disagreement)"))
+
+-- | Lower a RECOGNIZED Class S-single (identity-step stream
+-- corecursion) wrapped @Prelude.fix@ to the R3b realization:
+--
+-- > let stream_fn_ := (fun rec => <translated index function>);
+-- > let h_stream_prod_obligation_ : Prop :=
+-- >   saw_stream_single_productive α x0 (fun prev_ => prev_) stream_fn_;
+-- > let h_stream_prod_ : … := (by sorry);
+-- > saw_stream_realize α x0 (fun prev_ => prev_) stream_fn_ h_stream_prod_
+--
+-- ONE per-instance PROVEN obligation (faithful + lookback, fifth-audit
+-- amendments 2-3) replaces the old path's DOUBLE by-sorry stub
+-- (mkStream totality + fix uniqueness). The seed @x0@ is the
+-- recognized literal's single element and must translate raw (or be
+-- a syntactic @Pure.pure e@, which is stripped); a computed-wrapped
+-- seed rejects loudly — no unwrap is manufactured.
+lowerClassSSingle ::
+  TermTranslationMonad m =>
+  Term -> Term -> m TranslatedTerm
+lowerClassSSingle typeArg bodyArg
+  | Just [elemTyT] <- asGlobalApply "Prelude.Stream" typeArg
+  , Just (recVn, recTy, inner) <- asLambda bodyArg
+  , Just [_elemTyT2, idxF] <- asGlobalApply "Prelude.MkStream" inner
+  , Just (_iVn, _ity, fbody) <- asLambda idxF
+  , Just [_sLen, _ety, _dflt, seedV, _idx] <-
+      asGlobalApply "Prelude.atWithDefault" fbody
+  , Just seedElt <- asSingletonArraySeed seedV
+  = do
+      elemTyLean <- translateTerm elemTyT
+      seedTrans <- translateTermWithShape seedElt
+      x0Lean <- case (ttShape seedTrans, ttLean seedTrans) of
+        (BindingRaw, e) -> pure e
+        (BindingWrapped,
+         Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [e]) -> pure e
+        (_, _) ->
+          Except.throwError (RejectedPrimitive "Prelude.fix"
+            ("Class S-single stream seed element translates to a "
+             <> "computed wrapped or function-shaped value; the "
+             <> "realization requires a raw seed and manufactures "
+             <> "no unwrap"))
+      mkfnLean <- translateBinderAt (Just ExpectRuntimeValue)
+        recVn recTy $ \(BindTrans recIdent recTyLean) -> do
+          idxFLean <- translateFunctionWithWrappedResult idxF
+          pure (Lean.Lambda
+            [Lean.Binder Lean.Explicit recIdent (Just recTyLean)]
+            idxFLean)
+      let idStep = Lean.Lambda
+            [Lean.Binder Lean.Explicit (Lean.Ident "prev_") Nothing]
+            (Lean.Var (Lean.Ident "prev_"))
+      term <- withSharedLocalTerm
+        (Lean.Ident "stream_fn_")
+        (Set.union (leanTermIdents elemTyLean) (leanTermIdents x0Lean))
+        mkfnLean
+        $ \fnVar -> do
+            let prop =
+                  Lean.App
+                    (Lean.Var (Lean.Ident "saw_stream_single_productive"))
+                    [elemTyLean, x0Lean, idStep, fnVar]
+            withLocalProofObligation
+              (Lean.Ident "h_stream_prod_")
+              prop
+              $ \proof ->
+                  pure (Lean.App
+                    (Lean.Var (Lean.Ident "saw_stream_realize"))
+                    [elemTyLean, x0Lean, idStep, fnVar, proof])
+      pure (TranslatedTerm term BindingWrapped)
+  | otherwise =
+      Except.throwError (RejectedPrimitive "Prelude.fix"
+        ("internal invariant violation: Class S-single fix does not "
+         <> "match the recognized shape (recognizer/lowering "
+         <> "disagreement)"))
 
 lowerWrappedFixProofObligationLean ::
   TermTranslationMonad m =>

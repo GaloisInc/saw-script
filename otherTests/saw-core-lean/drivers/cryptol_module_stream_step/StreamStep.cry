@@ -1,0 +1,9 @@
+module StreamStep where
+
+// Iterate-family single-stream recurrence: the step is `+ 1`, NOT the
+// identity read. Sixth-audit rider on fifth-audit amendment 4: this
+// shape must NOT receive the Class S-single realization — the
+// recognizer's identity-step pin keeps it on the generic
+// proof-carrying contract path (R4 turns that into a named reject).
+counting : [inf][8]
+counting = [1] # [ p + 1 | p <- counting ]

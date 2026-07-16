@@ -317,8 +317,38 @@ if [ -n "$STAGED_EMITTED_ABS" ]; then
             echo "import Generated"
             echo "import Emitted"
             echo
-            echo "#check (show GeneratedHarness.goal = goal from rfl)"
+            if grep -qE '^[[:space:]]*(noncomputable[[:space:]]+)?def[[:space:]]+goal[[:space:]]*:' "$EMITTED_REF_ABS"; then
+                echo "#check (show GeneratedHarness.goal = goal from rfl)"
+            else
+                # Module-artifact row (R3b): no `def goal` — drift-check
+                # every top-level def instead, fully qualified through
+                # its namespace. Same rfl discipline: the completed
+                # outline may replace proof terms (proof irrelevance)
+                # but must not change any definition's value.
+                awk '
+                  /^[[:space:]]*namespace[[:space:]]+/ { ns = $2; next }
+                  /^[[:space:]]*end[[:space:]]+/ { ns = ""; next }
+                  /^[[:space:]]*(noncomputable[[:space:]]+)?def[[:space:]]+/ {
+                    name = ""
+                    for (i = 1; i <= NF; i++) if ($i == "def") { name = $(i+1); break }
+                    sub(/[:(].*/, "", name)
+                    if (name != "") {
+                      q = (ns != "" ? ns "." name : name)
+                      print "#check (show GeneratedHarness." q " = " q " from rfl)"
+                    }
+                  }
+                ' "$EMITTED_REF_ABS"
+            fi
         } > "$PROBE_DIR/completed-outline.check.lean"
+        # R3b review finding F2: an imports-only check file compiles
+        # cleanly and would PASS with zero checks performed. The
+        # drift gate must never be vacuous.
+        if ! grep -q '^#check' "$PROBE_DIR/completed-outline.check.lean"; then
+            echo "FAIL: completed-outline drift check emitted no #check lines"
+            echo "(no 'def goal' and no extractable top-level defs in $EMITTED_REF_ABS)"
+            rm -rf "$PROBE_DIR"
+            exit 1
+        fi
         drift_out=$( ( cd "$LAKE_DIR" && LEAN_PATH="intTestsProbe/$TEST_NAME:${LEAN_PATH:-}" \
                        $LAKE_TIMEOUT_CMD lake env lean \
                         "intTestsProbe/$TEST_NAME/completed-outline.check.lean" ) 2>&1 ) && \

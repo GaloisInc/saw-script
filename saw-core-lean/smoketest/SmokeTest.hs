@@ -1070,13 +1070,15 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertNotContains "no bare Prelude.fix in output" "Prelude.fix" s
       assertNotContains "no rejection leak" "RejectedPrimitive" s
 
-  , testCase "PairStreamCorec-shaped fix emits generic fixed-point obligation" $ do
+  , testCase "PairStreamCorec-shaped fix rejects with the amendment-D diagnostic" $ do
       -- Mutual-stream-shaped synthetic term:
       --   fix (PairType1 (Stream Bool) (Stream Bool))
       --       (\x -> PairValue1 _ _ (MkStream Bool (\i -> True))
       --                             (MkStream Bool (\i -> False)))
-      -- The translator emits the generic fixed-point contract plus
-      -- pointwise totality obligations for each nested MkStream.
+      -- R3b (fifth-audit amendment D): paired-stream mutual
+      -- corecursion has its own disposition — an explicit NAMED
+      -- rejection, never the retired-contract fallback and never a
+      -- smuggled lowering.
       boolTy       <- scBoolType sc
       true         <- scBool sc True
       false        <- scBool sc False
@@ -1094,17 +1096,9 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       xName        <- scFreshVarName sc "x"
       bodyLam      <- scLambda sc xName pairTy pairValue
       fixApp       <- scGlobalApply sc "Prelude.fix" [pairTy, bodyLam]
-      s <- translateOrFail sc "pairStreams" fixApp
-      assertContains "emits fixed-point contract" "saw_fix_unique_exists" s
-      assertContains "chooses fixed point from proof" "saw_fix_choose" s
-      assertContains "emits nested stream totality contract"
-                     "saw_mkStream_total_exists" s
-      assertContains "chooses stream from totality proof"
-                     "saw_mkStream_choose" s
-      assertNotContains "does not emit legacy pair-stream helper"
-                        "mkStreamFixPair" s
-      assertNotContains "no Prelude.fix leak" "Prelude.fix" s
-      assertNotContains "no rejection" "RejectedPrimitive" s
+      msg <- translateExpectReject sc "pairStreams" fixApp
+      assertContains "names the paired-stream disposition"
+                     "paired-stream mutual corecursion is not realized" msg
 
   , testCase "polymorphic stream iterate fix emits generic obligation" $ do
       typeSort <- scSort sc (mkSort 0)
@@ -1392,6 +1386,39 @@ fixClassifierTests sc = testGroup "classifyFixShape (Slice R0, inert)"
       body     <- scLambda sc recName streamTy mk
       assertUnrecognized "two-element stream seed"
         (classifyFixShape streamTy body)
+
+  , testCase "computed (non-literal) length-1 stream seed is Unrecognized" $ do
+      -- R3b review finding F1: the gate's seed guard must equal the
+      -- lowering's destructure (literal single-element ArrayValue).
+      -- A computed length-1 seed must classify Unrecognized at the
+      -- gate, never surface as an internal-invariant error.
+      boolTy   <- scBoolType sc
+      natTy    <- scNatType sc
+      n1       <- scNat sc 1
+      streamTy <- scGlobalApply sc "Prelude.Stream" [boolTy]
+      iName    <- scFreshVarName sc "i"
+      iVar     <- scVariable sc iName natTy
+      tt       <- scBool sc True
+      jName    <- scFreshVarName sc "j"
+      constF   <- scLambda sc jName natTy tt
+      seedGen  <- scGlobalApply sc "Prelude.gen" [n1, boolTy, constF]
+      elt      <- scGlobalApply sc "Prelude.atWithDefault"
+                    [n1, boolTy, tt, seedGen, iVar]
+      stepF    <- scLambda sc iName natTy elt
+      mk       <- scGlobalApply sc "Prelude.MkStream" [boolTy, stepF]
+      recName  <- scFreshVarName sc "rec"
+      body     <- scLambda sc recName streamTy mk
+      -- Pin the EXACT reason: the seed guard fires before the tail
+      -- check, so this fails if the F1 guard is removed (the reason
+      -- would flip to the tail diagnostic). assertUnrecognized alone
+      -- would stay green via the tail check — no regression value
+      -- (delta-review finding).
+      case classifyFixShape streamTy body of
+        FixUnrecognized reason ->
+          reason @?= "stream seed is not a literal single-element vector"
+        other ->
+          assertFailure ("computed length-1 seed: expected \
+            \FixUnrecognized, got " ++ show other)
 
   , testCase "stream selection at a non-binder index is Unrecognized" $ do
       boolTy   <- scBoolType sc
