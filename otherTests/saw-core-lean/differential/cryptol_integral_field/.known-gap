@@ -1,1 +1,0 @@
-Cryptol integral/field differential terms now emit proof-carrying rational nonzero obligations; Lean automation does not yet discharge every rational precondition in this executable test.

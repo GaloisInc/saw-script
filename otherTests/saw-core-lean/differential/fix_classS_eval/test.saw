@@ -1,0 +1,35 @@
+// Differential litmus: Class S-single stream fix realization at a
+// concrete prefix (evaluator-grounding pin, residual-trust 3.2a /
+// fragment-semantics Phase C).
+//
+// `ones = [True] # ones` lowers to a SAWCore `fix (Stream Bool) ...`
+// recognized as Class S-single; the Lean realization is
+// saw_stream_realize (computable stream unfold). This row observes a
+// concrete projection: ones @ 5 = True.
+//
+// KNOWN GAP (2026-07-16): the emitter leaves the per-instance stream
+// productivity obligation (`h_stream_prod_`) as a `by sorry`
+// placeholder — by design it is discharged in proof rows, not at
+// emission — and the differential harness correctly refuses parity
+// credit for artifacts that rely on proof stubs. The observational
+// agreement itself was verified manually on 2026-07-16: the emitted
+// artifact compiles (one sorry warning, the obligation placeholder)
+// and lean-observe.lean's standard #reduce prints LEAN_OBSERVED:
+// true, matching SAW_OBSERVED: true (saw_stream_realize ignores the
+// proof argument, so the projection reduces without it). Flipping
+// this row to a plain pass requires the emitter to discharge the
+// obligation per instance.
+
+let {{
+ones : [inf]
+ones = [True] # ones
+}};
+
+let observed = {{ ones @ 5 }};
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

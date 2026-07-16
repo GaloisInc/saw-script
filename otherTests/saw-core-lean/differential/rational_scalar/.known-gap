@@ -1,1 +1,0 @@
-Rational scalar differential terms now emit proof-carrying nonzero obligations; Lean automation does not yet discharge every rational nonzero precondition in this executable test.

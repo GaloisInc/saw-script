@@ -1,0 +1,40 @@
+// TRUE differential litmus for the named Boolean ops (not, and, or,
+// xor, boolEq) via the OPEN-TERM pattern.
+//
+// Closes the zone-1 census exposure "not, and, or, xor, boolEq":
+// every prior boolean row pre-folds to a constant before emission.
+// Here the body is OPEN in both arguments so nothing folds; the Lean
+// observer applies the emitted function at a = True, b = False and
+// the harness compares the Boolean outcome.
+//
+// At a = True, b = False every op is exercised non-trivially:
+//   and a b        = False
+//   not a          = False
+//   or (not a) b   = False
+//   xor _ _        = False
+//   boolEq False b = True
+//
+// WHAT SURVIVES (pinned honestly, 2026-07-16): even with an open
+// body, scNormalizeForLean unfolds the named ops into their Prelude
+// ite definitions, so the emitted artifact contains ONLY
+// SAWCorePreludeExtra.iteM chains — none of the five names appears
+// (as the census predicted: "symbolic uses route through iteM").
+// This row therefore differentially pins the iteM LOWERING of all
+// five ops at open arguments (the body is not a folded constant);
+// the named PreludeExtra realizations xor/boolEq remain unexercised
+// by any differential row.
+
+let observed =
+  parse_core
+    "\\(a : Bool) -> \\(b : Bool) -> boolEq (xor (and a b) (or (not a) b)) b";
+
+let saw_observed =
+  parse_core
+    "(\\(a : Bool) -> \\(b : Bool) -> boolEq (xor (and a b) (or (not a) b)) b) True False";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool saw_observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

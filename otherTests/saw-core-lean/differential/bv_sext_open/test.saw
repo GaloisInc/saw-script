@@ -1,0 +1,34 @@
+// TRUE differential litmus for bvSExt via the OPEN-TERM pattern.
+//
+// Closes the zone-1 census exposure "bvSExt" (top priority: never
+// observationally checked). scNormalizeForLean folds CLOSED bvSExt
+// applications before emission, so the emitted artifact is the OPEN
+// lambda; the Lean observer applies it to the same concrete argument
+// SAW evaluates here, and the harness compares the Boolean outcome.
+//
+// The input deliberately has a NEGATIVE MSB (0x8f), so the sign-
+// replication path is exercised: bvSExt 8 7 0x8f must be 0xff8f
+// (65423), not 0x008f.
+
+// WHAT SURVIVES (pinned honestly, 2026-07-16): bvSExt is a Prelude
+// def (append of a replicated msb), and scNormalizeForLean unfolds it
+// even in the open body. The emitted artifact contains the unfolded
+// machinery (genWithBoundsM / iteM / atRuntimeCheckedM / bvNat /
+// bvNot), not the name bvSExt. The row still differentially pins the
+// SEMANTICS of the emitted translation of `bvSExt 8 7 x` including
+// the sign-replication path; the named support-library realization
+// bvSExt (BitVec.signExtend) remains unexercised by any differential
+// row.
+
+let observed =
+  parse_core "\\(x : Vec 8 Bool) -> bvSExt 8 7 x";
+
+let saw_observed =
+  parse_core "bvEq 16 (bvSExt 8 7 (bvNat 8 143)) (bvNat 16 65423)";
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool saw_observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

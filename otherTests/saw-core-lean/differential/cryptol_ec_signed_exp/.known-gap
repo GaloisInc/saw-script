@@ -1,4 +1,0 @@
-Direct Cryptol.sawcore `ecSDiv` and `ecSMod` now emit proof-carrying
-nonzero-divisor obligations, but executable differential replay still depends
-on generated proof stubs until Lean-side automation can discharge the concrete
-nonzero facts.

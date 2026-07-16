@@ -1,0 +1,36 @@
+// Differential litmus (attempted): error-in-element inside a
+// recognized Class F fix (fragment-semantics Phase C corner:
+// error-in-element).
+//
+// The comprehension keeps the recognized recurrence shape
+// (`[seed] # [ body | s <- sums | x <- xs ]`) but its element body
+// indexes the external sequence out of range (`xs @ (x + 9)` with
+// xs : [4][8]), so forcing the observed element hits a runtime-
+// checked error on both sides.
+//
+// The artifact is emitted BEFORE the evaluation so the Lean side of
+// the corner stays inspectable even though SAW aborts.
+//
+// KNOWN GAP (2026-07-16): SAW's evaluator escapes with `Run-time
+// error: at: index out of bounds` before any SAW_OBSERVED line can be
+// printed (errors in SAW are escaping exceptions, not comparable
+// values), so a true differential comparison is not expressible in
+// the current harness. The LEAN side was verified manually
+// 2026-07-16: #reduce of the emitted artifact observes
+// `LEAN_OBSERVED: error: at: index out of bounds` — byte-identical
+// message, agreeing outcome, exactly the refinement recorded in
+// residual-trust 3.2a.
+
+let {{
+bad : [4][8] -> [5][8]
+bad xs = sums where sums = [0] # [ s + (xs @ (x + 9)) | s <- sums | x <- xs ]
+}};
+
+let observed = {{ bad [1, 2, 3, 4] ! 0 == 0 }};
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));

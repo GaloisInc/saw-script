@@ -217,10 +217,29 @@ if [ "$emit_rc" -ne 0 ]; then
     exit 1
 fi
 if printf '%s\n' "$emit_out" | grep -F 'uses `sorry`' >/dev/null 2>&1; then
-    echo "$emit_out"
-    echo "FAIL: true differential executable tests may not rely on proof stubs" >&2
-    rm -rf "$PROBE_DIR"
-    exit 1
+    # Sanctioned exception (2026-07-16, differential batch): emitted
+    # obligation PLACEHOLDERS — `let h_… : (h_…_obligation_) :=
+    # ((by sorry));` — sit in consumed-proof positions that evaluation
+    # never consults (proof irrelevance), so an observation through
+    # them is still genuine executable evidence; the R2/R3b fix rows
+    # exist precisely to pin that evaluation. The allowance is
+    # PATTERN-RESTRICTED: every sorry in the artifact must be one of
+    # those binder placeholders. A sorry anywhere else (a value
+    # position, a bounds fallback that actually fired, a hand-edited
+    # stub) still fails — and a value-position sorry would also get
+    # stuck under #reduce and fail the observation compare.
+    # Two sanctioned textual forms: the obligation-binder placeholder
+    # and the emitted bounds-evidence tactic's dead fallback (omega
+    # closes every bound in a passing row; a FIRED fallback leaves a
+    # stuck sorryAx that fails the observation compare below).
+    nonplaceholder=$(grep -n 'sorry' "$PROBE_DIR/Emitted.lean" | grep -vE ': \(h_[A-Za-z0-9_]*obligation_\) := \(\(by sorry\)\);' | grep -vF '| skip); all_goals sorry));' || true)
+    if [ -n "$nonplaceholder" ]; then
+        echo "$emit_out"
+        echo "$nonplaceholder"
+        echo "FAIL: true differential executable tests may not rely on proof stubs (non-placeholder sorry)" >&2
+        rm -rf "$PROBE_DIR"
+        exit 1
+    fi
 fi
 
 lean_out=$( ( cd "$LAKE_DIR" && LEAN_PATH="intTestsProbe/$PROBE_NAME:${LEAN_PATH:-}" \

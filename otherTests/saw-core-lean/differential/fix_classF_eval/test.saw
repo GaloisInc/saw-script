@@ -1,0 +1,34 @@
+// Differential litmus: Class F fix realization, concretely evaluated
+// (evaluator-grounding pin, residual-trust 3.2a / fragment-semantics
+// Phase C).
+//
+// The recurrence comprehension `sums = [0] # [ s + x | s <- sums |
+// x <- xs ]` lowers to a SAWCore `fix` whose Lean realization seeds
+// saw_fix_bounded_choose (a noncomputable Classical.choice seed).
+// Target claim: stabilized elements of that realization REDUCE to
+// the concrete value SAW computes: rs [1,2,3,4] ! 0 = 0+1+2+3+4 = 10.
+//
+// KNOWN GAP (2026-07-16): the emitter leaves the per-instance
+// productivity obligation H_prod (`h_fix_prod_`) as a `by sorry`
+// placeholder — by design it is discharged in proof rows, not at
+// emission — and the differential harness correctly refuses parity
+// credit for artifacts that rely on proof stubs. The observational
+// agreement itself was verified manually on 2026-07-16: the emitted
+// artifact compiles (one sorry warning, the H_prod placeholder) and
+// lean-observe.lean's #reduce prints LEAN_OBSERVED: true, matching
+// SAW_OBSERVED: true. Flipping this row to a plain pass requires the
+// emitter to discharge H_prod per instance.
+
+let {{
+rs : [4][8] -> [5][8]
+rs xs = sums where sums = [0] # [ s + x | s <- sums | x <- xs ]
+}};
+
+let observed = {{ rs [1, 2, 3, 4] ! 0 == 10 }};
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;
