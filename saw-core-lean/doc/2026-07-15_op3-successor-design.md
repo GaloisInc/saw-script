@@ -457,3 +457,56 @@ artifacts changed; conformance exit 0; smoketest 67/67; baseline
 re-cut at 311. Remaining R2 ladder (popcount32 + E6 → llvm_popcount_eq
 gap rows) proceeds on this recipe; then R3 (Class S) and R4
 (retirement of `saw_fix_unique_exists`).
+
+## Slice R3 pre-slice concretization (2026-07-15) — for audit before R3 lands
+
+Corpus facts (traced with `SAW_LEAN_TRACE_FIX_CLASS`):
+
+* **rec_ones (S-single).** Body =
+  `\rec -> MkStream Bool (fun i => atWithDefaultM 1 Bool
+  <rec-read through Stream.rec at (subNat i 1)>
+  (vecSequenceM 1 #v[pure true]) i)` — literal seed of length 1,
+  tail reads the recursive stream at the constant -1 shift, no
+  transformation applied (`f = id`). Today's emission carries a
+  DOUBLE by-sorry obligation (`saw_mkStream_total_exists` +
+  `saw_fix_unique_exists`) — the successor collapses both.
+* **stream_fibs (S-paired).** Fix at
+  `PairType1 (Stream (Vec 32 Bool)) (Stream (Vec 32 Bool))`, body a
+  `PairValue1` of two `MkStream`s each reading both components via
+  `PairType.rec`. Amendment D holds: own disposition, R3 REJECTS.
+
+R3 plan, in slice order:
+
+1. **R3a (recognizer hardening, inert).** `classifyStreamBody`
+   currently accepts ANY MkStream-headed body as S-single — too lax
+   to gate an emission flip. Extend to verify the canonical
+   single-step shape: seed literal of length exactly 1 (amendment B
+   analog), tail reads `rec` ONLY through the stream accessor at
+   `subNat i 1` (amendment C analog), any elementwise step function
+   captured syntactically as a RAW term. Anything else →
+   Unrecognized. Same gates as R0 (byte-identical emission, trace
+   sweep, smoketest cases incl. a two-step-lookback stream negative).
+2. **R3b (realization).** The recognized shape is productive BY
+   CONSTRUCTION: realize as
+   `MkStream a (fun n => Nat.rec x0 (fun _ prev => step prev) n)`
+   with `x0`/`step` from the recognized shape. ONE per-instance
+   PROVEN obligation replaces today's two: the emitted wrapped
+   element function at pure inputs equals `pure ∘` the raw
+   realization elementwise (amendment-A discipline — H_prod-stream).
+   The SAW link mirrors L1/L3: stream elements pinned by strong
+   induction on the index; uniqueness among realized streams is a
+   theorem. Acceptance gate: the rec_ones module row's obligations
+   close for real (no by-sorry residue in its discharge tier).
+3. **stream_fibs reject.** `FixClassSPaired` → named
+   `RejectedPrimitive` diagnostic ("paired-stream mutual corecursion
+   is not realized; amendment D"); module row re-pins as a
+   saw-boundary expected rejection.
+
+SCOPE NOTE for the auditor: R3b extracts a RAW step function from
+the wrapped element body. This is claimed ONLY for the corpus
+S-single shape (pure -1 lookback, rec_ones). Whether the extraction
+generalizes to the iterate family (ChaCha20-core's
+`saw_self_ref_comp_iterate` territory) is explicitly OUT of R3 —
+that question rides the post-R4 flagship, and a false generalization
+here would be the same silent-unsoundness class the third audit
+killed. Reject-when-unsure stands.
