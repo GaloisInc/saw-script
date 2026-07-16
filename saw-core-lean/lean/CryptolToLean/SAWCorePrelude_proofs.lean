@@ -651,60 +651,130 @@ conditional on the PER-INSTANCE obligation
 `saw_fix_bounded_productive` (H_prod) — these lemmas are proved once,
 H_prod is proved per concrete body at Slice R2 emission sites. -/
 
+/-- `genWithBoundsM` with elementwise-pure elements is pure — the
+bounds-carrying analog of `genM_eq_ok_gen`. This is the workhorse of
+per-instance H_prod discharges (Slice R2): it turns one application
+of a translated Class-F body on a pure input into a pure `ofFn`
+vector. -/
+theorem genWithBoundsM_eq_ok {α : Type} {n : Nat}
+    (f : (i : Nat) → i < n → Except String α)
+    (g : (i : Nat) → i < n → α)
+    (h : ∀ (i : Nat) (hi : i < n), f i hi = Except.ok (g i hi)) :
+    genWithBoundsM n α f =
+      Except.ok (Vector.ofFn (fun i : Fin n => g i.val i.isLt)) := by
+  unfold genWithBoundsM
+  have hf : (fun i : Fin n => f i.val i.isLt) =
+      (fun i : Fin n => Except.ok (g i.val i.isLt)) := by
+    funext i
+    exact h i.val i.isLt
+  rw [hf]
+  exact Vector.ofFnM_pure (m := Except String)
+    (f := fun i : Fin n => g i.val i.isLt)
+
+/-- Proof-carrying selection through an elementwise-pure
+bounds-carrying gen (composition form). -/
+theorem atWithProof_gen_ok {α : Type} {n : Nat}
+    (f : (i : Nat) → i < n → Except String α)
+    (g : (i : Nat) → i < n → α)
+    (i : Nat) (hsel : i < n)
+    (helem : ∀ (j : Nat) (hj : j < n), f j hj = Except.ok (g j hj)) :
+    atWithProof_checkedM n α (genWithBoundsM n α f) i hsel =
+      Except.ok (g i hsel) := by
+  rw [genWithBoundsM_eq_ok f g helem]
+  simp [atWithProof_checkedM, Pure.pure, Bind.bind, Except.bind,
+        Except.pure]
+
+/-- `iteM` on an already-pure `true` condition selects the then
+branch. -/
+theorem iteM_pure_true {α : Type} (T E : Except String α) :
+    CryptolToLean.SAWCorePreludeExtra.iteM α (Pure.pure true) T E = T :=
+  rfl
+
+/-- `iteM` on an already-pure `false` condition selects the else
+branch. -/
+theorem iteM_pure_false {α : Type} (T E : Except String α) :
+    CryptolToLean.SAWCorePreludeExtra.iteM α (Pure.pure false) T E = E :=
+  rfl
+
 /-- Every iterate from a pure seed is pure (given `H.total`). -/
+theorem saw_fix_bounded_iter_from_pure
+    (n : Nat) (α : Type) (s : Vec n α)
+    (body : Except String (Vec n α) → Except String (Vec n α))
+    (H : saw_fix_bounded_productive n α body) :
+    ∀ k : Nat, ∃ v : Vec n α,
+      saw_fix_bounded_iter_from n α s body k = Pure.pure v := by
+  intro k
+  induction k with
+  | zero => exact ⟨s, rfl⟩
+  | succ m ih =>
+    obtain ⟨u, hu⟩ := ih
+    obtain ⟨w, hw⟩ := H.total u
+    refine ⟨w, ?_⟩
+    show body (saw_fix_bounded_iter_from n α s body m) = Pure.pure w
+    rw [hu]
+    exact hw
+
+/-- Replicated-placeholder specialization of
+`saw_fix_bounded_iter_from_pure`. -/
 theorem saw_fix_bounded_iter_pure
     (n : Nat) (α : Type) (d : α)
     (body : Except String (Vec n α) → Except String (Vec n α))
     (H : saw_fix_bounded_productive n α body) :
     ∀ k : Nat, ∃ v : Vec n α,
-      saw_fix_bounded_iter n α d body k = Pure.pure v := by
-  intro k
-  induction k with
-  | zero => exact ⟨Vector.replicate n d, rfl⟩
-  | succ m ih =>
-    obtain ⟨u, hu⟩ := ih
-    obtain ⟨w, hw⟩ := H.total u
-    refine ⟨w, ?_⟩
-    show body (saw_fix_bounded_iter n α d body m) = Pure.pure w
-    rw [hu]
-    exact hw
+      saw_fix_bounded_iter n α d body k = Pure.pure v :=
+  saw_fix_bounded_iter_from_pure n α (Vector.replicate n d) body H
 
 /-- L1, master form (stabilization): element `i` of ANY iterate past
 `i` agrees with element `i` of any other iterate past `i`, even from
 a different seed. Strong induction on `i`: iterate `k+1`'s element
 `i` is determined (via `H.lookback`) by the prefix `< i` of iterate
 `k`, and that prefix is already stable by the induction hypothesis. -/
-theorem saw_fix_bounded_iter_stable
+theorem saw_fix_bounded_iter_from_stable
     (n : Nat) (α : Type)
     (body : Except String (Vec n α) → Except String (Vec n α))
     (H : saw_fix_bounded_productive n α body) :
-    ∀ (i : Nat) (hi : i < n) (d₁ d₂ : α) (k₁ k₂ : Nat),
+    ∀ (i : Nat) (hi : i < n) (s₁ s₂ : Vec n α) (k₁ k₂ : Nat),
       i < k₁ → i < k₂ →
       ∀ (v₁ v₂ : Vec n α),
-        saw_fix_bounded_iter n α d₁ body k₁ = Pure.pure v₁ →
-        saw_fix_bounded_iter n α d₂ body k₂ = Pure.pure v₂ →
+        saw_fix_bounded_iter_from n α s₁ body k₁ = Pure.pure v₁ →
+        saw_fix_bounded_iter_from n α s₂ body k₂ = Pure.pure v₂ →
         v₁[i] = v₂[i] := by
   intro i
   induction i using Nat.strongRecOn with
   | ind i IH =>
-    intro hi d₁ d₂ k₁ k₂ hk₁ hk₂ v₁ v₂ h₁ h₂
+    intro hi s₁ s₂ k₁ k₂ hk₁ hk₂ v₁ v₂ h₁ h₂
     obtain ⟨m₁, rfl⟩ : ∃ m, k₁ = m + 1 := ⟨k₁ - 1, by omega⟩
     obtain ⟨m₂, rfl⟩ : ∃ m, k₂ = m + 1 := ⟨k₂ - 1, by omega⟩
-    obtain ⟨u₁, hu₁⟩ := saw_fix_bounded_iter_pure n α d₁ body H m₁
-    obtain ⟨u₂, hu₂⟩ := saw_fix_bounded_iter_pure n α d₂ body H m₂
+    obtain ⟨u₁, hu₁⟩ := saw_fix_bounded_iter_from_pure n α s₁ body H m₁
+    obtain ⟨u₂, hu₂⟩ := saw_fix_bounded_iter_from_pure n α s₂ body H m₂
     have hb₁ : body (Pure.pure u₁) = Pure.pure v₁ := by
       rw [← hu₁]; exact h₁
     have hb₂ : body (Pure.pure u₂) = Pure.pure v₂ := by
       rw [← hu₂]; exact h₂
     refine H.lookback u₁ u₂ v₁ v₂ hb₁ hb₂ i hi ?_
     intro j hj hji
-    exact IH j hji (by omega) d₁ d₂ m₁ m₂ (by omega) (by omega)
+    exact IH j hji (by omega) s₁ s₂ m₁ m₂ (by omega) (by omega)
       u₁ u₂ hu₁ hu₂
 
-/-- L2 (pure survival): the realization succeeds — no error is
-manufactured from the pure seed. (That errors are also never DROPPED
-is `H.total`'s per-instance content: a body whose element computation
-errors on pure input has no `total` proof.) -/
+/-- Replicated-placeholder specialization (the R1 statement). -/
+theorem saw_fix_bounded_iter_stable
+    (n : Nat) (α : Type)
+    (body : Except String (Vec n α) → Except String (Vec n α))
+    (H : saw_fix_bounded_productive n α body)
+    (i : Nat) (hi : i < n) (d₁ d₂ : α) (k₁ k₂ : Nat)
+    (hk₁ : i < k₁) (hk₂ : i < k₂)
+    (v₁ v₂ : Vec n α)
+    (h₁ : saw_fix_bounded_iter n α d₁ body k₁ = Pure.pure v₁)
+    (h₂ : saw_fix_bounded_iter n α d₂ body k₂ = Pure.pure v₂) :
+    v₁[i] = v₂[i] :=
+  saw_fix_bounded_iter_from_stable n α body H i hi
+    (Vector.replicate n d₁) (Vector.replicate n d₂) k₁ k₂ hk₁ hk₂
+    v₁ v₂ h₁ h₂
+
+/-- L2 (pure survival), general-seed form: the realization succeeds —
+no error is manufactured from a pure seed. (That errors are also
+never DROPPED is `H.total`'s per-instance content: a body whose
+element computation errors on pure input has no `total` proof.) -/
 theorem saw_fix_bounded_pure
     (n : Nat) (α : Type) (d : α)
     (body : Except String (Vec n α) → Except String (Vec n α))
@@ -712,83 +782,126 @@ theorem saw_fix_bounded_pure
     ∃ v : Vec n α, saw_fix_bounded n α d body = Pure.pure v :=
   saw_fix_bounded_iter_pure n α d body H n
 
-/-- Condition-4 witness: the placeholder seed is genuinely discarded —
-any two seeds give the SAME realization. -/
-theorem saw_fix_bounded_seed_irrelevant
-    (n : Nat) (α : Type) (d₁ d₂ : α)
+/-- Condition-4 witness, strongest form: iteration to `n` from ANY
+two seed vectors gives the same result. -/
+theorem saw_fix_bounded_iter_from_seed_irrelevant
+    (n : Nat) (α : Type) (s₁ s₂ : Vec n α)
     (body : Except String (Vec n α) → Except String (Vec n α))
     (H : saw_fix_bounded_productive n α body) :
-    saw_fix_bounded n α d₁ body = saw_fix_bounded n α d₂ body := by
-  obtain ⟨v₁, h₁⟩ := saw_fix_bounded_pure n α d₁ body H
-  obtain ⟨v₂, h₂⟩ := saw_fix_bounded_pure n α d₂ body H
+    saw_fix_bounded_iter_from n α s₁ body n =
+      saw_fix_bounded_iter_from n α s₂ body n := by
+  obtain ⟨v₁, h₁⟩ := saw_fix_bounded_iter_from_pure n α s₁ body H n
+  obtain ⟨v₂, h₂⟩ := saw_fix_bounded_iter_from_pure n α s₂ body H n
   rw [h₁, h₂]
   have : v₁ = v₂ := by
     apply Vector.ext
     intro i hi
-    exact saw_fix_bounded_iter_stable n α body H i hi d₁ d₂ n n
+    exact saw_fix_bounded_iter_from_stable n α body H i hi s₁ s₂ n n
       hi hi v₁ v₂ h₁ h₂
   rw [this]
 
-/-- L3 (unfolding agreement — the SAW link): the realization IS a
-fixed point of the body. SAW's only spec for `fix` is `fix_unfold`
-(SAW's value is a fixed point); L1 pins every element of a
-bounded-lookback fixed point uniquely, so the SAW value and
-`saw_fix_bounded` coincide elementwise. -/
-theorem saw_fix_bounded_fixed_point
+/-- Condition-4 witness at replicated placeholders. -/
+theorem saw_fix_bounded_seed_irrelevant
+    (n : Nat) (α : Type) (d₁ d₂ : α)
+    (body : Except String (Vec n α) → Except String (Vec n α))
+    (H : saw_fix_bounded_productive n α body) :
+    saw_fix_bounded n α d₁ body = saw_fix_bounded n α d₂ body :=
+  saw_fix_bounded_iter_from_seed_irrelevant n α
+    (Vector.replicate n d₁) (Vector.replicate n d₂) body H
+
+/-- The emitted chooser computes: it equals the computable
+`saw_fix_bounded` at ANY placeholder element. This is the lemma a
+discharge uses to replace the emitted `saw_fix_bounded_choose … h`
+with a concrete evaluable iteration. -/
+theorem saw_fix_bounded_choose_eq_bounded
     (n : Nat) (α : Type) (d : α)
     (body : Except String (Vec n α) → Except String (Vec n α))
     (H : saw_fix_bounded_productive n α body) :
-    body (saw_fix_bounded n α d body) = saw_fix_bounded n α d body := by
+    saw_fix_bounded_choose n α body H = saw_fix_bounded n α d body :=
+  saw_fix_bounded_iter_from_seed_irrelevant n α
+    (Classical.choice H.seed) (Vector.replicate n d) body H
+
+/-- L3 (unfolding agreement — the SAW link), general-seed form: `n`
+iterates from any pure seed reach a fixed point of the body. SAW's
+only spec for `fix` is `fix_unfold` (SAW's value is a fixed point);
+L1 pins every element of a bounded-lookback fixed point uniquely, so
+the SAW value and this realization coincide elementwise. -/
+theorem saw_fix_bounded_iter_from_fixed_point
+    (n : Nat) (α : Type) (s : Vec n α)
+    (body : Except String (Vec n α) → Except String (Vec n α))
+    (H : saw_fix_bounded_productive n α body) :
+    body (saw_fix_bounded_iter_from n α s body n) =
+      saw_fix_bounded_iter_from n α s body n := by
+  obtain ⟨v, hv⟩ := saw_fix_bounded_iter_from_pure n α s body H n
+  obtain ⟨w, hw⟩ := saw_fix_bounded_iter_from_pure n α s body H (n + 1)
   have hstep :
-      body (saw_fix_bounded n α d body) =
-        saw_fix_bounded_iter n α d body (n + 1) := rfl
-  obtain ⟨v, hv⟩ := saw_fix_bounded_iter_pure n α d body H n
-  obtain ⟨w, hw⟩ := saw_fix_bounded_iter_pure n α d body H (n + 1)
-  show body (saw_fix_bounded n α d body) = saw_fix_bounded_iter n α d body n
+      body (saw_fix_bounded_iter_from n α s body n) =
+        saw_fix_bounded_iter_from n α s body (n + 1) := rfl
   rw [hstep, hv, hw]
   have : w = v := by
     apply Vector.ext
     intro i hi
-    exact saw_fix_bounded_iter_stable n α body H i hi d d (n + 1) n
-      (by omega) hi w v hw hv
+    exact saw_fix_bounded_iter_from_stable n α body H i hi s s
+      (n + 1) n (by omega) hi w v hw hv
   rw [this]
+
+/-- L3 at replicated placeholders. -/
+theorem saw_fix_bounded_fixed_point
+    (n : Nat) (α : Type) (d : α)
+    (body : Except String (Vec n α) → Except String (Vec n α))
+    (H : saw_fix_bounded_productive n α body) :
+    body (saw_fix_bounded n α d body) = saw_fix_bounded n α d body :=
+  saw_fix_bounded_iter_from_fixed_point n α (Vector.replicate n d)
+    body H
+
+/-- L3 for the emitted chooser. -/
+theorem saw_fix_bounded_choose_fixed_point
+    (n : Nat) (α : Type)
+    (body : Except String (Vec n α) → Except String (Vec n α))
+    (H : saw_fix_bounded_productive n α body) :
+    body (saw_fix_bounded_choose n α body H) =
+      saw_fix_bounded_choose n α body H :=
+  saw_fix_bounded_iter_from_fixed_point n α
+    (Classical.choice H.seed) body H
 
 /-- Uniqueness among PURE fixed points (the honest strengthening the
 retired `saw_fix_unique_exists` contract could not have: uniqueness
 here follows from bounded lookback, it is not an assumed side
 condition — and divergent bodies simply have no H_prod proof). Any
-pure fixed point of a productive body equals the realization. -/
-theorem saw_fix_bounded_unique_pure_fixed_point
-    (n : Nat) (α : Type) (d : α)
+pure fixed point of a productive body equals the `n`-th iterate from
+any pure seed. -/
+theorem saw_fix_bounded_iter_from_unique_pure_fixed_point
+    (n : Nat) (α : Type) (s : Vec n α)
     (body : Except String (Vec n α) → Except String (Vec n α))
     (H : saw_fix_bounded_productive n α body)
     (x : Vec n α) (hx : body (Pure.pure x) = Pure.pure x) :
-    Pure.pure x = saw_fix_bounded n α d body := by
-  obtain ⟨v, hv⟩ := saw_fix_bounded_pure n α d body H
+    Pure.pure x = saw_fix_bounded_iter_from n α s body n := by
+  obtain ⟨v, hv⟩ := saw_fix_bounded_iter_from_pure n α s body H n
   rw [hv]
-  -- `pure x` is its own iterate chain: seed it as a one-step
-  -- stabilized tower by strong induction on the element index.
+  -- `pure x` is its own iterate chain: compare elementwise against
+  -- the stabilized tower by strong induction on the element index.
   have hx_elem : ∀ (i : Nat) (hi : i < n), x[i] = v[i] := by
     intro i
     induction i using Nat.strongRecOn with
     | ind i IH =>
       intro hi
-      -- v = iterate n; x = body x's output at every index. Compare
+      -- v = iterate n; x = body's own output at every index. Compare
       -- via lookback: both are body-outputs of inputs agreeing < i.
-      obtain ⟨u, hu⟩ := saw_fix_bounded_iter_pure n α d body H (n - 1)
+      obtain ⟨u, hu⟩ := saw_fix_bounded_iter_from_pure n α s body H
+        (n - 1)
       have hv' : body (Pure.pure u) = Pure.pure v := by
-        have : saw_fix_bounded_iter n α d body ((n - 1) + 1) =
+        have hiter : saw_fix_bounded_iter_from n α s body ((n - 1) + 1) =
             Pure.pure v := by
           have hn : (n - 1) + 1 = n := by omega
           rw [hn]; exact hv
-        rw [← this, ← hu]
+        rw [← hiter, ← hu]
         rfl
       refine H.lookback x u x v hx hv' i hi ?_
       intro j hj hji
       -- x[j] = v[j] by IH; v[j] = u[j] by stabilization (j < n-1+1).
       have hxv : x[j] = v[j] := IH j hji hj
       have hvu : v[j] = u[j] :=
-        saw_fix_bounded_iter_stable n α body H j hj d d n (n - 1)
+        saw_fix_bounded_iter_from_stable n α body H j hj s s n (n - 1)
           (by omega) (by omega) v u hv hu
       rw [hxv, hvu]
   have : x = v := by
@@ -796,5 +909,25 @@ theorem saw_fix_bounded_unique_pure_fixed_point
     intro i hi
     exact hx_elem i hi
   rw [this]
+
+/-- Uniqueness at replicated placeholders (the R1 statement). -/
+theorem saw_fix_bounded_unique_pure_fixed_point
+    (n : Nat) (α : Type) (d : α)
+    (body : Except String (Vec n α) → Except String (Vec n α))
+    (H : saw_fix_bounded_productive n α body)
+    (x : Vec n α) (hx : body (Pure.pure x) = Pure.pure x) :
+    Pure.pure x = saw_fix_bounded n α d body :=
+  saw_fix_bounded_iter_from_unique_pure_fixed_point n α
+    (Vector.replicate n d) body H x hx
+
+/-- Uniqueness for the emitted chooser. -/
+theorem saw_fix_bounded_choose_unique_pure_fixed_point
+    (n : Nat) (α : Type)
+    (body : Except String (Vec n α) → Except String (Vec n α))
+    (H : saw_fix_bounded_productive n α body)
+    (x : Vec n α) (hx : body (Pure.pure x) = Pure.pure x) :
+    Pure.pure x = saw_fix_bounded_choose n α body H :=
+  saw_fix_bounded_iter_from_unique_pure_fixed_point n α
+    (Classical.choice H.seed) body H x hx
 
 end CryptolToLean.SAWCorePreludeProofs

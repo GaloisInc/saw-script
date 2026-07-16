@@ -851,18 +851,30 @@ elementwise values uniquely, so the SAW value and this realization
 coincide. Design + audit record:
 doc/2026-07-15_op3-successor-design.md.
 
-Slice R1 status: library only — no emitter targets these yet. The
-emission flip is Slice R2, gated on the running_sum end-to-end
-discharge. -/
+Emission (Slice R2) uses the noncomputable
+`saw_fix_bounded_choose`, whose seed is drawn from the obligation's
+own `Nonempty` witness — translated vector ELEMENTS are wrapped
+(`Except String α`), so no raw placeholder `d : α` is generically
+available at emission time (R2 amendment to the fourth-audit `d`
+parameter; the placeholder moves INSIDE the proven obligation). The
+computable `saw_fix_bounded` stays as the spec/self-test form; the
+seed-irrelevance lemma exchanges the two. -/
 
-/-- The `k`-th iterate of `body` from the pure discarded seed.
-`saw_fix_bounded` is the `n`-th iterate; the graded version exists so
-the stabilization lemma can speak about intermediate iterates. -/
-def saw_fix_bounded_iter (n : Nat) (α : Type) (d : α)
+/-- The `k`-th iterate of `body` from an arbitrary pure seed vector.
+The general-seed form exists so the stabilization lemma can compare
+iterates from DIFFERENT seeds (that is what makes the seed
+discardable). -/
+def saw_fix_bounded_iter_from (n : Nat) (α : Type) (s : Vec n α)
     (body : Except String (Vec n α) → Except String (Vec n α)) :
     Nat → Except String (Vec n α)
-  | 0 => Pure.pure (Vector.replicate n d)
-  | k + 1 => body (saw_fix_bounded_iter n α d body k)
+  | 0 => Pure.pure s
+  | k + 1 => body (saw_fix_bounded_iter_from n α s body k)
+
+/-- The `k`-th iterate from the replicated placeholder seed. -/
+def saw_fix_bounded_iter (n : Nat) (α : Type) (d : α)
+    (body : Except String (Vec n α) → Except String (Vec n α)) :
+    Nat → Except String (Vec n α) :=
+  saw_fix_bounded_iter_from n α (Vector.replicate n d) body
 
 /-- `n`-fold iteration of the untouched translated fix body from a
 pure placeholder seed. Element `i` stabilizes at iterate `i + 1`, so
@@ -873,10 +885,15 @@ def saw_fix_bounded (n : Nat) (α : Type) (d : α)
   saw_fix_bounded_iter n α d body n
 
 /-- H_prod: the per-instance productivity obligation for a Class-F
-lowering. BOTH fields are PROVEN per instance by unfolding the
+lowering. ALL fields are PROVEN per instance by unfolding the
 concrete body (fourth-audit amendment A — element totality is part of
 the obligation, not a trusted side condition):
 
+* `seed` — the carrier is inhabited, so an iteration seed exists to
+  be discarded (R2 amendment: the placeholder lives inside the
+  obligation because translated vector elements are wrapped, so no
+  raw `d : α` is available at emission time; trivial for `n = 0`
+  via `⟨#v[]⟩` and for every concrete bitvector element type);
 * `total` — the body maps every pure vector to a pure vector (its
   element computations neither manufacture errors on pure input nor
   drop them: if an element errored, the whole body application would,
@@ -888,6 +905,7 @@ the obligation, not a trusted side condition):
 structure saw_fix_bounded_productive (n : Nat) (α : Type)
     (body : Except String (Vec n α) → Except String (Vec n α)) :
     Prop where
+  seed : Nonempty (Vec n α)
   total : ∀ v : Vec n α, ∃ w : Vec n α,
     body (Pure.pure v) = Pure.pure w
   lookback : ∀ (v₁ v₂ w₁ w₂ : Vec n α),
@@ -896,6 +914,18 @@ structure saw_fix_bounded_productive (n : Nat) (α : Type)
     ∀ (i : Nat) (hi : i < n),
       (∀ (j : Nat) (hj : j < n), j < i → v₁[j] = v₂[j]) →
       w₁[i] = w₂[i]
+
+/-- The emitted realization (Slice R2): `n`-fold iteration of the
+untouched body from a seed drawn from the obligation's own `Nonempty`
+witness. Noncomputable exactly like the retired `saw_fix_choose`;
+`saw_fix_bounded_choose_eq_bounded` (SAWCorePreludeProofs) exchanges
+it for the computable `saw_fix_bounded` at any placeholder, which is
+how discharges actually compute. -/
+noncomputable def saw_fix_bounded_choose (n : Nat) (α : Type)
+    (body : Except String (Vec n α) → Except String (Vec n α))
+    (h : saw_fix_bounded_productive n α body) :
+    Except String (Vec n α) :=
+  saw_fix_bounded_iter_from n α (Classical.choice h.seed) body n
 
 /- Self-tests: a concrete -1-lookback recurrence
 (`out[0] = 1, out[i] = in[i-1] + 1`) stabilizes to `[1, 2, 3]` in

@@ -396,3 +396,64 @@ Library + lemmas landed; still NO emitter consumer (that is R2).
 * Amendment F: residual-trust §3.2 re-opened as LIVE with the
   proof-carrying mitigation recorded; remaining trust decomposes into
   `fix_unfold` + §3.3 normalization preservation — no new class.
+
+## Slice R2 implementation record (2026-07-15) — ACCEPTANCE GATE GREEN
+
+Emission flipped for Class F, and `cryptol_running_sum_verify`
+discharges END-TO-END: `proofs/cryptol_running_sum_verify` passes the
+full harness (drift-check against the generated goal, elaboration,
+sorry scan, axiom audit) in ~2.5 s wall clock — no heartbeat
+inflation, answering audit Question 1 affirmatively. The row
+graduates out of `proof-gaps/`; the census's
+sound-but-undischargeable tier loses its first member.
+
+**R2 amendment (placeholder location).** The fourth-audit `d : α`
+emitter-supplied placeholder is NOT generically obtainable at
+emission time: translated vector ELEMENTS are wrapped
+(`Except String α`), so no raw `α` value exists to hand the
+realization. The placeholder moves INSIDE the proven obligation:
+`saw_fix_bounded_productive` gains a `seed : Nonempty (Vec n α)`
+field, and emission targets the noncomputable
+`saw_fix_bounded_choose n α body h` (iterates from
+`Classical.choice h.seed`) — the same choice discipline as the
+retired `saw_fix_choose`, but from an obligation every field of
+which is PROVEN. `saw_fix_bounded_choose_eq_bounded` exchanges it
+for the computable iterate at any placeholder; seed-irrelevance is
+`saw_fix_bounded_iter_from_seed_irrelevant` (stabilization is proved
+over iterates from ARBITRARY seed vectors — the `iter_from` family).
+
+**Emission shape** (`lowerClassFBounded`, mirrors the retired
+contract emission exactly):
+`let fix_body_ := <body verbatim>; let h_fix_prod_obligation_ : Prop
+:= saw_fix_bounded_productive n α fix_body_; let h_fix_prod_ := (by
+sorry placeholder); saw_fix_bounded_choose n α fix_body_ h_fix_prod_`.
+Unrecognized shapes keep the OLD unique-contract emission untouched
+(R4 retires it).
+
+**Discharge pattern** (the reusable recipe, in
+`proofs/cryptol_running_sum_verify/completed.lean`):
+1. name the emitted body (`rsBody`, definitionally the emitted
+   lambda — drift-check-safe), state the one-step characterization
+   `rsBody (pure x) (pure v) = pure (rsStep x v)` via the NEW library
+   lemmas `genWithBoundsM_eq_ok` / `atWithProof_gen_ok` /
+   `iteM_pure_true/false` (SAWCorePreludeProofs);
+2. H_prod: `seed` by replicate; `total` by the characterization;
+   `lookback` by `Vector.getElem_ofFn` + the prefix hypothesis at
+   `i - 1`;
+3. closed form (`rsSol`, the prefix-sum chain) is a fixed point —
+   with concrete `n` this collapses DEFINITIONALLY (`congr 1`);
+4. `saw_fix_bounded_choose_unique_pure_fixed_point` pins the emitted
+   realization to `pure rsSol` — no 9-fold iteration in the proof;
+5. numeral normalization (`natPos_macro` chains → literals via
+   `Nat.reduceMul/Add` simprocs) BEFORE any simp-rewriting — the
+   discrimination trees cannot see through the macro chains;
+6. final seam: `bvAdd_id_l` (the spec's chain lacks the leading
+   `+ 0`) + `bvEq_refl`.
+
+Axioms: standard trio + the two vec↔BitVec round-trips only.
+Goldens re-pinned: running_sum, popcount32, e_series (E6), module
+popcount, llvm_popcount — snapshot diff confirmed exactly those five
+artifacts changed; conformance exit 0; smoketest 67/67; baseline
+re-cut at 311. Remaining R2 ladder (popcount32 + E6 → llvm_popcount_eq
+gap rows) proceeds on this recipe; then R3 (Class S) and R4
+(retirement of `saw_fix_unique_exists`).

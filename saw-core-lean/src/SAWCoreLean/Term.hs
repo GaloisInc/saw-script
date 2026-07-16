@@ -3886,8 +3886,14 @@ translateIdentWithArgsWithShape i args
   , (typeArg : bodyArg : rest) <- args
   = do
       traceFixClass typeArg bodyArg
-      fixedPoint <- lowerFixProofObligation typeArg bodyArg
-        "all Prelude.fix applications use proof-carrying emission"
+      fixedPoint <-
+        case classifyFixShape typeArg bodyArg of
+          FixClassF
+            | shouldWrapBinder typeArg ->
+                lowerClassFBounded typeArg bodyArg
+          _ ->
+            lowerFixProofObligation typeArg bodyArg
+              "all Prelude.fix applications use proof-carrying emission"
       if null rest
          then pure fixedPoint
          else applyKnownFunctionWithShape typeArg (ttLean fixedPoint) rest
@@ -4685,6 +4691,53 @@ lowerFixProofObligation typeArg bodyArg _reason = do
                    pure (Lean.App (Lean.Var (Lean.Ident "saw_fix_choose_raw"))
                      [typeLean, bodyVar, proof])
        pure (TranslatedTerm term (rawErrorResultShape typeArg))
+
+-- | Lower a RECOGNIZED Class-F (bounded-lookback) wrapped
+-- @Prelude.fix@ to the OP-3 successor realization (Slice R2):
+--
+-- > let fix_body_ := <translated body — UNTOUCHED>;
+-- > let h_fix_prod_obligation_ : Prop :=
+-- >   saw_fix_bounded_productive n α fix_body_;
+-- > let h_fix_prod_ : h_fix_prod_obligation_ := (by sorry);
+-- > saw_fix_bounded_choose n α fix_body_ h_fix_prod_
+--
+-- H_prod (seed nonemptiness + element totality + bounded lookback)
+-- is a PER-INSTANCE proof obligation, discharged in the proof row by
+-- unfolding the concrete body — never assumed (fourth-audit
+-- amendment A). A wrong recognizer verdict makes the obligation
+-- unprovable: loud failure, never a silently different value. The
+-- faithfulness core (stabilization/fixed-point/uniqueness lemmas,
+-- conditional only on H_prod) lives in SAWCorePreludeProofs.
+lowerClassFBounded ::
+  TermTranslationMonad m =>
+  Term -> Term -> m TranslatedTerm
+lowerClassFBounded typeArg bodyArg =
+  case asGlobalApply "Prelude.Vec" typeArg of
+    Just [nT, aT] -> do
+      nLean <- translateTerm nT
+      aLean <- translateTerm aT
+      bodyLean <- translateTerm bodyArg
+      term <- withSharedLocalTerm
+        (Lean.Ident "fix_body_")
+        (Set.union (leanTermIdents nLean) (leanTermIdents aLean))
+        bodyLean
+        $ \bodyVar -> do
+            let prop =
+                  Lean.App
+                    (Lean.Var (Lean.Ident "saw_fix_bounded_productive"))
+                    [nLean, aLean, bodyVar]
+            withLocalProofObligation
+              (Lean.Ident "h_fix_prod_")
+              prop
+              $ \proof ->
+                  pure (Lean.App
+                    (Lean.Var (Lean.Ident "saw_fix_bounded_choose"))
+                    [nLean, aLean, bodyVar, proof])
+      pure (TranslatedTerm term BindingWrapped)
+    _ ->
+      Except.throwError (RejectedPrimitive "Prelude.fix"
+        ("internal invariant violation: Class-F fix at a non-Vec type "
+         <> "(recognizer/lowering disagreement)"))
 
 lowerWrappedFixProofObligationLean ::
   TermTranslationMonad m =>

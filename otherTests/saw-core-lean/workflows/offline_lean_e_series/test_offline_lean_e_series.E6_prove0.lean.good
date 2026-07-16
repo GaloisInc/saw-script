@@ -198,22 +198,22 @@ noncomputable def goal : Prop :=
   CryptolToLean.SAWCorePrimitives.one_macro)) v_1 v_2)))) x__')) (subNat i'
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   CryptolToLean.SAWCorePrimitives.one_macro)) h_bounds_)));
-  let h_fix_unique_obligation_ : (Prop) := (saw_fix_unique_exists (Vec
+  let h_fix_prod_obligation_ : (Prop) := (saw_fix_bounded_productive
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro))) (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)) Bool)) fix_body_);
-  let h_fix_unique_ : (h_fix_unique_obligation_) := ((by sorry)); saw_fix_choose
-  (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+  CryptolToLean.SAWCorePrimitives.one_macro)) Bool) fix_body_);
+  let h_fix_prod_ : (h_fix_prod_obligation_) := ((by sorry));
+  saw_fix_bounded_choose (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro))) (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit1_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)) Bool)) fix_body_ h_fix_unique_)
+  CryptolToLean.SAWCorePrimitives.one_macro)) Bool) fix_body_ h_fix_prod_)
   (subNat (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
