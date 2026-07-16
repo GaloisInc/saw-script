@@ -22,6 +22,10 @@
 !proofs/**/completed.lean
 !support-proofs/**/proof.lean
 !support-proofs/**/completed.lean
+# Gap rows preserve their (partial or over-budget) discharge attempts as
+# tracked sources — the gap must be visible, not a silent skip.
+!proof-gaps/**/proof.lean
+!proof-gaps/**/completed.lean
 !shape/**/*.shouldfail.lean
 
 # When Test.hs runs us, it overrides HOME to this directory; elan
