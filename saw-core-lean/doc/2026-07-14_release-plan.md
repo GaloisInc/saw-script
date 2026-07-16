@@ -292,3 +292,14 @@ elaborate as independently-budgeted lemmas — packaging, not new
 mathematics. Independently re-verified end-to-end at
 `LAKE_TIMEOUT_SECS=500`: harness exit 0, checked theorem audit
 passed.
+
+## De-scoping decision (2026-07-16)
+
+W1-minimal close: finish R3b flip + R4 retirement (two states for
+wrapped fixes: proven realization or loud reject — nothing else), plus
+ONE bounded differential batch (bvUExt/bvSExt, boolean ops, Int
+comparisons — the census's value-carrying exposures). The fragment
+semantics program (Phase A/B/C, certificate tier, lux) is FROZEN as a
+scoping record with named revisit triggers; the zone anatomy /
+grounding record / census are documentation artifacts owing no
+follow-through. Then 0.02 proper resumes (replay, example breadth).

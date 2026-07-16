@@ -613,3 +613,57 @@ replaced by three hardened negatives: bare MkStream, two-element
 seed, constant selection index). Emission byte-identical
 (recognizer verdicts do not route emission until R3b); stream driver
 rows exit 0; conformance exit 0.
+
+## Sixth-audit record (2026-07-16) — strategy-level review; Finding 0 REPAIRED
+
+Adversarial review of the strategy framing itself (trusted translator
++ strong obligations + audited weakening descent + minimal runway).
+Overall: HOLDS-WITH-AMENDMENTS, one mandatory repair (landed:
+zip-slot scan hardening, commit f2db4aeef), one mandatory addition
+(fix/error differential rows — folded into the exposure batch).
+
+* **Finding 0 (repaired same day).** scanRecUses blessed entire
+  zip-operand spines; wrapped rec inside a zip slot (reverse/opaque
+  wrappers) classified Class F — the provable-obligation/wrong-value
+  class. The landed fused-shape Class-F grammar had never been
+  independently audited (R0 self-certified it); this was the cost.
+  Repair: zip operands admit exactly the bare recursive vector;
+  smoketest pins both directions; corpus-inert (verified).
+* **A (descent).** The descent's terminal soundness premise is the
+  RECOGNIZER, not the obligations: "a divergent body has no H_prod
+  proof" is false in general — forcing-invisible divergent bodies
+  have provable H_prod and are excluded only by the syntactic gate.
+  State it that way. Unaudited post-audit deltas are allowed only
+  when obligation-strengthening or lemma-exchanged (the R2
+  placeholder relocation set the precedent).
+* **B (layers).** Goal formation (prop → Pi-abstraction →
+  normalization → `def goal` fabrication) is a THIRD layer; its
+  dangerous direction (goal trivialization) is silent and
+  differentially untestable; the 0.01 admitting-exporter bug lived
+  there. Defenses: export-only boundary row, drift check, fails
+  plumbing pins — named, not loudness-protected.
+* **C (asymmetry).** Obligation strength and SAW-link sufficiency
+  are orthogonal axes; "too strong ⇒ visible" holds on the value
+  axis only — the forcing axis is guarded by the gate, whose bugs
+  are silent. Visibility is a property of the corpus PROCESS
+  (proofs tier + axiom audit), not of emission alone.
+* **D (runway).** "Two-state fix story" holds for WRAPPED fixes
+  only: the raw contract (saw_fix_unique_exists_raw) survives R4 by
+  design — believed corpus-unreachable, must stay census-checked.
+  R4's catch-all reject is designed, not yet implemented. Replay
+  (0.02 W3) must treat sanctioned in-goal `by sorry` placeholders
+  explicitly (defeq-modulo-placeholder-fill).
+* **E (triggers).** "Another seam audit finding" fired WITH THIS
+  AUDIT. The audit-scheduled trigger is otherwise structurally dead
+  post-R4; replacements that fire autonomously: fix/error
+  differential rows (land with the exposure batch) + an upstream
+  tripwire expectation on Simulator/Prims.hs fixOp and
+  Value.hs VVector (§3.2a says "re-verify if the simulator
+  changes"; the rows are the watcher). R3b/R4 flips get an
+  emitted-Lean-diff review by a non-implementer.
+* **F (history).** "Six theory bugs, all strategy-layer" is scoped
+  to the FIX PROGRAM; backend-wide, layer-(a) bugs exist
+  (pre-Phase-9 bvsmin/bvsmax under MSB-first, §1.4), historically
+  caught by proof effort, not differential rows — which is exactly
+  why the bvUExt/bvSExt exposure priority stands. Post-batch Zone-1
+  residue (~40 names) must be stated, not implied closed.

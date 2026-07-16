@@ -147,6 +147,24 @@ Known holes, all loud or pinned:
   unsatisfiable for every strict wrapped fix body — errors are always
   fixed points of eager `Except` bodies, so the recurrence-class
   examples (running sum, popcount, rec_ones, stream_fibs, ChaCha20
+- CLOSED 2026-07-16 (W1, slices R0-R4 — commits 93fb03617 through
+  d3aa53199): the OP-3 successor program landed end-to-end. Wrapped
+  fixes are TWO-STATE: recognized classes lower to PROVEN
+  realizations (Class F `saw_fix_bounded_choose` — running_sum,
+  popcount32, E6, module popcount discharged; Class S-single
+  `saw_stream_realize` — rec_ones discharged), everything else
+  rejects with a named diagnostic carrying the recognizer's reason.
+  The wrapped `saw_fix_unique_exists` contract is DELETED (raw
+  variant retained per Instance 3, census-checked); the
+  sound-but-undischargeable wrapped-fix tier is ELIMINATED. Paired
+  streams (stream_fibs) and the iterate family (stream_step) are
+  pinned boundary rejections; the Bool divergence witness is pinned
+  at `saw-boundary/fix_obligation` and can never emit again. Six
+  seam bugs were found and fixed across the arc — all by
+  audit/review before any emission depended on them; the recognizer
+  surface is FROZEN (growth requires the fragment reference
+  semantics first — see doc/2026-07-16_fragment-semantics-scoping.md
+  and the sixth-audit record in the successor design doc).
   iterate) emit obligations that elaborate but can never be discharged.
   Sound but unusable; needs a contract revision design doc.
 - RESOLVED 2026-07-12 by Slice OP-2 (was: eta-expanded checked-access

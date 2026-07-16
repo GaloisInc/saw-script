@@ -435,6 +435,54 @@ forbidden list when R2/R3 land).
 
 ---
 
+### 3.2a Evaluator grounding record (2026-07-16) — model commitments read against SAW's source
+
+The Lean model's load-bearing commitments about SAW's OPERATIONAL
+semantics, verified by reading the evaluator (dated; re-verify if the
+simulator changes):
+
+* **`fix` is lazy knot-tying.**
+  `saw-core/src/SAWCore/Simulator/Prims.hs:1662-1667`:
+  `fixOp = constFun $ strictFun $ \f -> Prim (force =<< mfix (\x ->
+  delay (apply f x)))` — Haskell `mfix` over a delayed thunk. The
+  recursive value unfolds on demand; divergent self-reference is
+  genuine nontermination (⊥). This is the lazy-least-fixed-point
+  reading every OP-3 audit assumed, now grounded in code. Crucially
+  the SAME `fixOp` serves ALL simulator instances (Concrete / What4 /
+  SBV / RME) through the `VMonadLazy l` class and the shared prim
+  table (`Prims.hs:394`) — there is no per-backend fix semantics to
+  diverge from.
+* **Vectors are elementwise-lazy.**
+  `saw-core/src/SAWCore/Simulator/Value.hs:110`:
+  `VVector !(Vector (Thunk l))` — elements are individual thunks, so
+  element `i` of a fix's value can be forced while element `j` is
+  still ⊥. This is the pointwise domain of the fragment-semantics
+  scoping doc (2026-07-16), structurally confirmed.
+* **`error` is a message-carrying escape, with the fixed `at`
+  message.** `Prims.hs:1479-1483` (`errorOp` raises
+  `Prim.userError msg`); `saw-core/prelude/Prelude.sawcore:1564`
+  (`at n a v i = atWithDefault n a (error a "at: index out of
+  bounds") v i`) — byte-identical to the message
+  `atRuntimeCheckedM` emits, confirming the message-identity
+  assumption recorded on that accessor. Errors in SAW are escaping
+  exceptions, not comparable first-class values; the Lean `Except`
+  model REFINES this (errors are values, message-distinguishable).
+  Agreement region: on all-success evaluations the two coincide, and
+  a forced erroring element fails loudly on both sides. The models
+  genuinely differ only in HOW MUCH is forced — the eager `Except`
+  carrier can surface an error a lazy evaluation never touches.
+  That difference is exactly the region the per-instance obligations
+  fence off (pure-survival / totality / faithfulness): translated
+  goals are equated only where all-success holds, and outside it the
+  obligations are unprovable, not wrong.
+
+Remaining UNREAD/UNPROVEN after this pass (unchanged): §3.3
+normalization preservation; the meaning link from SAW's proof
+pipeline to the emitted goal term; Cryptol elaboration. The
+fragment-semantics scoping doc's Phase C (fix/error differential
+rows) is the continuous empirical pin for this record — code reading
+is a snapshot, differential rows keep it honest as SAW evolves.
+
 ### 3.3 `scNormalizeForLean` semantics-preservation (Phase 5 Link 2)
 
 **Status:** Pending catalog acknowledgment (this entry); SAWCore
