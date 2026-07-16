@@ -1,0 +1,49 @@
+Loading file "test_llvm_goal_routing.saw"
+Verifying g...
+Simulating g...
+Checking proof obligations g...
+Proof succeeded! g
+Verifying h...
+Simulating h...
+Checking proof obligations h...
+Proof succeeded! h
+Verifying f...
+Simulating f...
+Registering overrides for `g`
+  variant `Symbol "g"`
+Registering overrides for `h`
+  variant `Symbol "h"`
+Matching 1 overrides of g...
+Branching on 1 override variants of g...
+Applied override! g
+Matching 1 overrides of h...
+Branching on 1 override variants of h...
+Applied override! h
+Symbolic simulation completed with side conditions.
+Checking proof obligations f...
+Subgoal failed: f test_llvm_goal_routing.saw:66:3: error: in llvm_points_to
+Literal equality postcondition
+Expected term: 
+let { x`1 = TCNum 64;
+      x`2 = seq x`1 Bool;
+    }
+ in ecMul x`2 (PRingSeqBool x`1)
+      (ecNumber (TCNum 6) x`2 (PLiteralSeqBool x`1))
+      x`5951
+Actual term:
+let { x`1 = Vec 64 Bool;
+      x`2 = TCNum 64;
+      x`3 = PRingSeqBool x`2;
+      x`4 = PLiteralSeqBool x`2;
+    }
+ in ecMul x`1 x`3 (ecNumber (TCNum 3) x`1 x`4)
+      (ecMul x`1 x`3 (ecNumber (TCNum 2) x`1 x`4) x`5951)
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in llvm_verify
+   test_llvm_goal_routing.saw:82:8-85:8 in (callback)
+   (builtin) in fails
+   test_llvm_goal_routing.saw:82:1-85:8 (at top level)
+Proof failed: 1 of 2 verification conditions unfinished.
+

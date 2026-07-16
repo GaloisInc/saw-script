@@ -1,0 +1,85 @@
+// Case Study — PER-GOAL SOLVER ROUTING: the finest-grained
+// mixed-solver workflow.
+//
+// Ported from intTests/test_goal_num_ite. `f` composes `g` (double)
+// and `h` (triple) so that f(x) = 6*x, verified compositionally
+// through the `g` and `h` overrides. The NOVELTY over the other
+// mixed rows (llvm_point_verify etc.) is WHERE the solver split
+// happens: those rows route at the `llvm_verify` level — one whole
+// verification to SMT, another whole verification to offline_lean.
+// Here a SINGLE `llvm_verify` of `f` produces TWO proof obligations
+// and SAWScript's goal-routing combinator `goal_num_ite` sends them
+// to DIFFERENT solvers per goal number:
+//
+//   goal 0 (h's override precondition `2*x > 1`, a safety assertion)
+//        →  w4 (SMT) discharges it, using f's precondition.
+//   goal 1 (f's postcondition `3*(2*x) == 6*x`, a bitvector-mul
+//           associativity/constant-fold fact)
+//        →  offline_lean EMITS it for kernel discharge in Lean.
+//
+// offline_lean is emission-only, so goal 1 stays UNSOLVED on the SAW
+// side and the whole `llvm_verify` fails — hence the `fails` wrapper.
+// The emitted goal
+//   test_llvm_goal_routing.f_postcond_LLVM_points-to1.lean
+// is discharged (green, sorry-free, axiom-audited) in
+//   proofs/llvm_goal_routing/proof.lean.
+//
+// So: within one verification, SMT eats the routine safety goal and
+// Lean's kernel checks the arithmetic goal — the per-goal analogue of
+// the llvm_point_verify flagship.
+//
+// route.bc is a build artifact compiled in-dir:
+//   cd otherTests/saw-core-lean/workflows/llvm_goal_routing
+//   clang -c -g -O0 -emit-llvm -o route.bc route.c
+
+m <- llvm_load_module "route.bc";
+
+// g doubles its argument; verified with SMT (green override).
+let g_spec = do {
+  xp <- llvm_alloc (llvm_int 64);
+  x <- llvm_fresh_var "x" (llvm_int 64);
+  llvm_points_to xp (llvm_term x);
+  llvm_execute_func [xp];
+  llvm_points_to xp (llvm_term {{ (2*x):[64] }});
+};
+
+// h triples its argument, but only when the input exceeds 1. This
+// precondition is what becomes goal 0 at f's call site (there the
+// pointed-to value is 2*x, so the obligation is `2*x > 1`).
+let h_spec = do {
+  xp <- llvm_alloc (llvm_int 64);
+  x <- llvm_fresh_var "x" (llvm_int 64);
+  llvm_points_to xp (llvm_term {{ x }});
+  llvm_precond {{ x > 1 }};
+  llvm_execute_func [xp];
+  llvm_points_to xp (llvm_term {{ (3*x):[64] }});
+};
+
+// f = h . g = 6*x. Its precondition (0 < x < 2^63) is exactly strong
+// enough to make h's precondition `2*x > 1` provable without overflow.
+let f_spec = do {
+  xp <- llvm_alloc (llvm_int 64);
+  x <- llvm_fresh_var "x" (llvm_int 64);
+  llvm_points_to xp (llvm_term x);
+  llvm_precond {{ x > 0 /\ x < 0x8000000000000000 }};
+  llvm_execute_func [xp];
+  llvm_points_to xp (llvm_term {{ 6*x }});
+};
+
+// SMT SIDE: g and h verified compositionally (green overrides).
+g_ov <- llvm_verify m "g" [] false g_spec z3;
+h_ov <- llvm_verify m "h" [] false h_spec z3;
+
+enable_experimental;
+
+// PER-GOAL ROUTING. `goal_num_ite n s1 s2` inspects the current
+// goal: if its number is `n`, run `s1`, else run `s2`. SAW runs the
+// script once per obligation, so this is a genuine per-goal split:
+//   goal 1 (f's postcondition)  → offline_lean (emit for Lean)
+//   goal 0 (h's precondition)   → w4 (SMT discharges)
+// Emission-only offline_lean leaves goal 1 open, so the verify fails
+// and is `fails`-wrapped; goal 1's kernel discharge is in proofs/.
+fails (llvm_verify m "f" [g_ov, h_ov] false f_spec
+  (goal_num_ite 1
+     (offline_lean "test_llvm_goal_routing.f_postcond")
+     w4));
