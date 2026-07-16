@@ -1357,7 +1357,10 @@ fixClassifierTests sc = testGroup "classifyFixShape (Slice R0, inert)"
       body   <- scLambda sc xName boolTy xVar
       assertUnrecognized "Bool fix" (classifyFixShape boolTy body)
 
-  , testCase "MkStream-headed Stream fix is Class S-single" $ do
+  , testCase "bare MkStream body without the seeded shape is Unrecognized" $ do
+      -- R3a hardening: an arbitrary MkStream-headed body must NOT
+      -- classify — only the canonical seeded single-step shape may
+      -- (the corpus positive is the rec_ones golden trace).
       boolTy   <- scBoolType sc
       natTy    <- scNatType sc
       n32      <- scNat sc 32
@@ -1370,7 +1373,43 @@ fixClassifierTests sc = testGroup "classifyFixShape (Slice R0, inert)"
       mk       <- scGlobalApply sc "Prelude.MkStream" [elemTy, stepF]
       recName  <- scFreshVarName sc "rec"
       body     <- scLambda sc recName streamTy mk
-      classifyFixShape streamTy body @?= FixClassSSingle
+      assertUnrecognized "bare MkStream" (classifyFixShape streamTy body)
+
+  , testCase "stream seed longer than 1 is Unrecognized" $ do
+      boolTy   <- scBoolType sc
+      natTy    <- scNatType sc
+      n2       <- scNat sc 2
+      streamTy <- scGlobalApply sc "Prelude.Stream" [boolTy]
+      iName    <- scFreshVarName sc "i"
+      iVar     <- scVariable sc iName natTy
+      tt       <- scBool sc True
+      seedV    <- scVector sc boolTy [tt, tt]
+      elt      <- scGlobalApply sc "Prelude.atWithDefault"
+                    [n2, boolTy, tt, seedV, iVar]
+      stepF    <- scLambda sc iName natTy elt
+      mk       <- scGlobalApply sc "Prelude.MkStream" [boolTy, stepF]
+      recName  <- scFreshVarName sc "rec"
+      body     <- scLambda sc recName streamTy mk
+      assertUnrecognized "two-element stream seed"
+        (classifyFixShape streamTy body)
+
+  , testCase "stream selection at a non-binder index is Unrecognized" $ do
+      boolTy   <- scBoolType sc
+      natTy    <- scNatType sc
+      n1       <- scNat sc 1
+      n0       <- scNat sc 0
+      streamTy <- scGlobalApply sc "Prelude.Stream" [boolTy]
+      iName    <- scFreshVarName sc "i"
+      tt       <- scBool sc True
+      seedV    <- scVector sc boolTy [tt]
+      elt      <- scGlobalApply sc "Prelude.atWithDefault"
+                    [n1, boolTy, tt, seedV, n0]
+      stepF    <- scLambda sc iName natTy elt
+      mk       <- scGlobalApply sc "Prelude.MkStream" [boolTy, stepF]
+      recName  <- scFreshVarName sc "rec"
+      body     <- scLambda sc recName streamTy mk
+      assertUnrecognized "constant selection index"
+        (classifyFixShape streamTy body)
 
   , testCase "PairType1 of two Streams is Class S-paired" $ do
       boolTy   <- scBoolType sc

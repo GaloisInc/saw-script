@@ -4463,15 +4463,101 @@ classifyFixShape typeArg bodyArg
       Just as -> Just as
       Nothing -> asGlobalApply "Prelude.PairType1" t
 
+    -- Class S-single (R3a hardening): a bare MkStream head is NOT
+    -- enough to gate an emission flip. The corpus's canonical
+    -- single-step shape (rec_ones) is
+    --   \rec -> MkStream a (\i -> atWithDefault 1 a
+    --                        <Stream.rec read of rec, using its
+    --                         index function only at (subNat i 1)>
+    --                        <rec-free literal seed of length 1> i)
+    -- Element 0 comes from the seed; element i reads the recursive
+    -- stream only at i-1. Anything looser stays Unrecognized until a
+    -- lowering for it is designed.
     classifyStreamBody = case asLambda bodyArg of
       Nothing -> FixUnrecognized "stream fix body is not a lambda"
-      Just (_vn, _ty, inner)
-        | isJust (asGlobalApply "Prelude.MkStream" inner) ->
-            FixClassSSingle
-        | otherwise ->
+      Just (recVn, _recTy, inner) ->
+        case asGlobalApply "Prelude.MkStream" inner of
+          Just [_elemTy, idxF] -> case asLambda idxF of
+            Just (iVn, _ity, fbody) ->
+              classifyStreamElem recVn iVn fbody
+            Nothing ->
+              FixUnrecognized "MkStream index function is not a lambda"
+          _ ->
             FixUnrecognized
               ("stream fix body head is not MkStream: "
                ++ termHeadName inner)
+
+    classifyStreamElem recVn iVn fbody =
+      case asGlobalApply "Prelude.atWithDefault" fbody of
+        Just [sLen, _elemTy, dflt, seedV, idx]
+          | asNat sLen /= Just 1 ->
+              FixUnrecognized "stream seed length is not the literal 1"
+          | not (isExactVar iVn idx) ->
+              FixUnrecognized
+                "stream atWithDefault index is not the MkStream binder"
+          | termMentionsVar recVn seedV ->
+              FixUnrecognized
+                "recursive binder occurs in the stream seed"
+          | otherwise -> classifyStreamTail recVn iVn dflt
+        _ ->
+          FixUnrecognized
+            ("stream element body is not the seeded atWithDefault "
+             ++ "form: " ++ termHeadName fbody)
+
+    -- The recursor value (recursor + params + motive + elims) is
+    -- applied to the scrutinee as an ordinary App; 'asRecursorApp'
+    -- recognizes only the former (Stream has no indices), so peel
+    -- the scrutinee first.
+    classifyStreamTail recVn iVn dflt
+      | Just (recFn, scrut) <- asApp dflt
+      , Just (crec, _params, motive, [caseFn], []) <-
+          asRecursorApp recFn
+      , ModuleIdentifier dtIdent <- nameInfo (recursorDataType crec)
+      , identName dtIdent == "Stream"
+      = if not (isExactVar recVn scrut)
+          then FixUnrecognized
+            "stream read scrutinee is not the recursive binder"
+        else if termMentionsVar recVn motive
+          then FixUnrecognized
+            "recursive binder occurs in the stream read motive"
+        else if termMentionsVar recVn caseFn
+          then FixUnrecognized
+            "recursive binder occurs outside the scrutinee \
+            \of the stream read"
+        else case asLambda caseFn of
+          Just (sVn, _sty, caseBody) ->
+            -- R3 audit amendment 1 (2026-07-15, load-bearing): the
+            -- case body must be EXACTLY the identity read
+            -- @s (subNat i 1)@. A wrapping transformation
+            -- (@f (s (i-1))@ — the iterate family) is raw at the
+            -- SAWCore layer this recognizer sees, but its Lean
+            -- translation may be Except-valued (checked indexing,
+            -- division, …), and the only validated R3 lowering is
+            -- the identity step. Accepting more would make the
+            -- gate broader than the sound lowering — the
+            -- structural draft's failure mode. The iterate
+            -- generalization is the post-R4 program.
+            if isIdentityStreamRead iVn sVn caseBody
+              then FixClassSSingle
+              else FixUnrecognized
+                "stream step is not the identity read \
+                \(iterate-family transformations are not realized)"
+          Nothing ->
+            FixUnrecognized "stream case function is not a lambda"
+      | otherwise =
+          FixUnrecognized
+            ("stream tail is not a Stream.rec read of the "
+             ++ "recursive stream: " ++ termHeadName dflt)
+
+    -- @caseBody@ must be the bare application of the stream index
+    -- function binder to the constant -1 shift of the MkStream
+    -- binder — nothing above it, nothing around it.
+    isIdentityStreamRead iVn sVn caseBody
+      | Just (fh, arg) <- asApp caseBody
+      , Just (vn, _) <- asVariable fh
+      , vnIndex vn == vnIndex sVn
+      = isShiftMinusOne iVn arg
+      | otherwise = False
 
     -- The corpus's normalized Class-F form is the FUSED gen/ite shape
     -- (scNormalizeForLean folds the Cryptol append into one gen):
@@ -4648,9 +4734,7 @@ traceFixClass typeArg bodyArg
       Debug.Trace.traceM $
         "[fixClass] type=" ++ termHeadName typeArg
         ++ " verdict=" ++ show (classifyFixShape typeArg bodyArg)
-        ++ (case classifyFixShape typeArg bodyArg of
-              FixUnrecognized _ -> " spine=" ++ termSpine 6 bodyArg
-              _ -> "")
+        ++ " spine=" ++ termSpine 8 bodyArg
 
 -- | Lower an otherwise-unsupported @Prelude.fix@ to an explicit Lean
 -- proof obligation rather than rejecting outright.

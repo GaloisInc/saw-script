@@ -545,3 +545,71 @@ Recipe deviations (binding on future discharges):
    applied through a `have` that restates the lambda with
    post-normalization literals; a local `Nat.rec = chain` induction
    (`rw [← ih]; rw [← atWithDefault_lt]`) closes the bridge.
+
+## Fifth-audit record (2026-07-15) — R3b Class-S concretization: implementable WITH AMENDMENTS
+
+Adversarial audit of the R3 pre-slice concretization (independent
+auditor; attacks 1-6). Verdict: the realization + single-obligation
+core is SOUND for the identity step (rec_ones); NOT implementable as
+written because the R3a recognizer as first coded was strictly looser
+than the validated lowering — the structural draft's
+gate-broader-than-lowering failure mode. BINDING amendments:
+
+1. **(Load-bearing; APPLIED in R3a before it landed.)** The stream
+   step must be the IDENTITY read exactly (`s (subNat i 1)`, nothing
+   around it). A wrapping transformation (`f (s (i-1))` — the iterate
+   family) is raw at the SAWCore layer the recognizer sees, but its
+   Lean translation may be Except-valued (`xs @ prev`, checked
+   division — the amendment-A witness class); no raw step exists to
+   extract. `isIdentityStreamRead` replaces the too-loose
+   `scanStreamStepUses`; iterate-family bodies reject with a named
+   diagnostic. The raw-total-whitelist + step-extraction
+   generalization is the post-R4 iterate program.
+2. **(Load-bearing.)** R3b's single obligation is
+   `∀ i, mkfn (pure (MkStream g)) i = pure (g i)` where `mkfn` is the
+   VERBATIM Except-valued emitted element function and
+   `g = Nat.rec x0 (fun _ prev => prev)` — never a raw-simplified
+   copy, and pinned at the realization input, not "pure inputs"
+   generically. NOTE for §3.2: the stream `total` analog is VACUOUS
+   (Stream sits raw inside Except; the element read is
+   unconditionally pure) — the loud-failure mitigation for Class S
+   rests on this elementwise equation alone, not on totality.
+3. Uniqueness must be stated among TOTAL realized streams by index
+   induction (not bare fixed-point existence); its SAW-total premise
+   is licensed only under amendment 1. The emitted value is the
+   realization DIRECTLY (no choose among fixed points), so error
+   fixed points of the wrapped body cannot infect it.
+4. Boundary regression: sha512_fix and the ChaCha iterate/iround
+   pair are confirmed rejected at EARLIER gates (their existing
+   boundary/stretch rows are the regression pins). The synthetic
+   `f≠id` negative cannot be unit-tested cheaply (recursor
+   construction) and is DEFERRED to R3b as an end-to-end
+   expected-rejection golden row (an iterate-shaped Cryptol module
+   pinning the "not the identity read" diagnostic through the real
+   pipeline) — stronger than a unit test, and only observable once
+   the flip makes the verdict live.
+5. `saw_mkStream_total_exists`/`saw_mkStream_choose` MUST survive
+   R3/R4: six non-fix MkStream sites emit them (module simple map ×2
+   + five obligations rows). rec_ones loses its mkStream obligation
+   under the flip; no blanket removal. (Audit also confirmed
+   rec_ones's current inner mkStream obligation is genuinely
+   unprovable as stated — quantified over error handles — which is
+   why the double stub exists; collapsing it is correct, not
+   cosmetic.)
+
+## Slice R3a implementation record (2026-07-15)
+
+Landed with amendment 1 already applied: `classifyStreamBody` now
+verifies the FULL canonical single-step shape (MkStream head → seeded
+`atWithDefault` with literal length-1 rec-free seed → selection at
+the MkStream binder → tail a `Stream.rec` elimination whose scrutinee
+is exactly the recursive binder, rec absent from motive/case →
+case body exactly the identity read at the constant -1 shift).
+API note: `asRecursorApp` does not include the applied scrutinee
+(Stream has zero indices) — peel the scrutinee App first. Trace
+sweep: rec_ones → S-single, stream_fibs → S-paired, all Class-F and
+Bool verdicts unchanged. Smoketest 69/69 (lax MkStream positive
+replaced by three hardened negatives: bare MkStream, two-element
+seed, constant selection index). Emission byte-identical
+(recognizer verdicts do not route emission until R3b); stream driver
+rows exit 0; conformance exit 0.
