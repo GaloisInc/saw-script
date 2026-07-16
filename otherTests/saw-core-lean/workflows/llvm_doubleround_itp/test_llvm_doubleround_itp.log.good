@@ -1,0 +1,181 @@
+Loading file "test_llvm_doubleround_itp.saw"
+Loading file "../../../../exercises/common/helpers.saw"
+Verifying s20_doubleround...
+Simulating s20_doubleround...
+Checking proof obligations s20_doubleround...
+Subgoal failed: s20_doubleround test_llvm_doubleround_itp.saw:53:5: error: in llvm_points_to
+Literal equality postcondition
+Expected term: 
+doubleround x
+Actual term:
+let { x`1 = Vec 32 Bool;
+      x`2 = at 16 x`1 x 0;
+      x`3 = at 16 x`1 x 1;
+      x`4 = at 16 x`1 x 2;
+      x`5 = at 16 x`1 x 3;
+      x`6 = at 16 x`1 x 4;
+      x`7 = at 16 x`1 x 5;
+      x`8 = at 16 x`1 x 6;
+      x`9 = at 16 x`1 x 7;
+      x`10 = at 16 x`1 x 8;
+      x`11 = at 16 x`1 x 9;
+      x`12 = at 16 x`1 x 10;
+      x`13 = at 16 x`1 x 11;
+      x`14 = at 16 x`1 x 12;
+      x`15 = at 16 x`1 x 13;
+      x`16 = at 16 x`1 x 14;
+      x`17 = at 16 x`1 x 15;
+      x`18 = bvAdd 32 x`2 x`14;
+      x`19 = bvToNat 32 (bvNat 32 7);
+      x`20 = bvToNat 32 (bvNat 32 25);
+      x`21 = bvOr 32 (bvShl 32 x`18 x`19) (bvShr 32 x`18 x`20);
+      x`22 = bvXor 32 x`21 x`6;
+      x`23 = bvAdd 32 x`22 x`2;
+      x`24 = bvToNat 32 (bvNat 32 9);
+      x`25 = bvToNat 32 (bvNat 32 23);
+      x`26 = bvOr 32 (bvShl 32 x`23 x`24) (bvShr 32 x`23 x`25);
+      x`27 = bvXor 32 x`26 x`10;
+      x`28 = bvAdd 32 x`22 x`27;
+      x`29 = bvToNat 32 (bvNat 32 13);
+      x`30 = bvToNat 32 (bvNat 32 19);
+      x`31 = bvOr 32 (bvShl 32 x`28 x`29) (bvShr 32 x`28 x`30);
+      x`32 = bvAdd 32 x`27 (bvXor 32 x`31 x`14);
+      x`33 = bvToNat 32 (bvNat 32 18);
+      x`34 = bvToNat 32 (bvNat 32 14);
+      x`35 = bvOr 32 (bvShl 32 x`32 x`33) (bvShr 32 x`32 x`34);
+      x`36 = bvAdd 32 x`8 x`12;
+      x`37 = bvOr 32 (bvShl 32 x`36 x`19) (bvShr 32 x`36 x`20);
+      x`38 = bvXor 32 x`37 x`16;
+      x`39 = bvAdd 32 x`38 x`12;
+      x`40 = bvOr 32 (bvShl 32 x`39 x`24) (bvShr 32 x`39 x`25);
+      x`41 = bvXor 32 x`35 x`2;
+      x`42 = bvAdd 32 x`3 x`7;
+      x`43 = bvOr 32 (bvShl 32 x`42 x`19) (bvShr 32 x`42 x`20);
+      x`44 = bvXor 32 x`43 x`11;
+      x`45 = bvAdd 32 x`44 x`7;
+      x`46 = bvOr 32 (bvShl 32 x`45 x`24) (bvShr 32 x`45 x`25);
+      x`47 = bvXor 32 x`46 x`15;
+      x`48 = bvAdd 32 x`44 x`47;
+      x`49 = bvOr 32 (bvShl 32 x`48 x`29) (bvShr 32 x`48 x`30);
+      x`50 = bvAdd 32 x`13 x`17;
+      x`51 = bvOr 32 (bvShl 32 x`50 x`19) (bvShr 32 x`50 x`20);
+      x`52 = bvXor 32 x`51 x`5;
+      x`53 = bvAdd 32 x`41 x`52;
+      x`54 = bvXor 32
+               (bvXor 32 x`49
+                  (bvOr 32 (bvShl 32 x`53 x`19) (bvShr 32 x`53 x`20)))
+               x`3;
+      x`55 = bvAdd 32 x`41 x`54;
+      x`56 = bvXor 32
+               (bvXor 32 x`40
+                  (bvOr 32 (bvShl 32 x`55 x`24) (bvShr 32 x`55 x`25)))
+               x`4;
+      x`57 = bvAdd 32 x`54 x`56;
+      x`58 = bvXor 32
+               (bvXor 32 x`51
+                  (bvOr 32 (bvShl 32 x`57 x`29) (bvShr 32 x`57 x`30)))
+               x`5;
+      x`59 = bvAdd 32 x`56 x`58;
+      x`60 = bvXor 32 x`40 x`4;
+      x`61 = bvAdd 32 x`38 x`60;
+      x`62 = bvOr 32 (bvShl 32 x`61 x`29) (bvShr 32 x`61 x`30);
+      x`63 = bvAdd 32 x`47 (bvXor 32 x`49 x`3);
+      x`64 = bvOr 32 (bvShl 32 x`63 x`33) (bvShr 32 x`63 x`34);
+      x`65 = bvXor 32 x`64 x`7;
+      x`66 = bvAdd 32 x`22 x`65;
+      x`67 = bvXor 32
+               (bvXor 32 x`62
+                  (bvOr 32 (bvShl 32 x`66 x`19) (bvShr 32 x`66 x`20)))
+               x`8;
+      x`68 = bvAdd 32 x`52 x`17;
+      x`69 = bvOr 32 (bvShl 32 x`68 x`24) (bvShr 32 x`68 x`25);
+      x`70 = bvAdd 32 x`65 x`67;
+      x`71 = bvXor 32
+               (bvXor 32 x`69
+                  (bvOr 32 (bvShl 32 x`70 x`24) (bvShr 32 x`70 x`25)))
+               x`9;
+      x`72 = bvAdd 32 x`67 x`71;
+      x`73 = bvXor 32
+               (bvXor 32 x`21
+                  (bvOr 32 (bvShl 32 x`72 x`29) (bvShr 32 x`72 x`30)))
+               x`6;
+      x`74 = bvAdd 32 x`71 x`73;
+      x`75 = bvAdd 32 x`60 (bvXor 32 x`62 x`8);
+      x`76 = bvOr 32 (bvShl 32 x`75 x`33) (bvShr 32 x`75 x`34);
+      x`77 = bvXor 32 x`76 x`12;
+      x`78 = bvXor 32 x`69 x`9;
+      x`79 = bvAdd 32 x`52 x`78;
+      x`80 = bvOr 32 (bvShl 32 x`79 x`29) (bvShr 32 x`79 x`30);
+      x`81 = bvAdd 32 x`44 x`77;
+      x`82 = bvXor 32
+               (bvXor 32 x`80
+                  (bvOr 32 (bvShl 32 x`81 x`19) (bvShr 32 x`81 x`20)))
+               x`13;
+      x`83 = bvAdd 32 x`77 x`82;
+      x`84 = bvXor 32
+               (bvXor 32 x`26
+                  (bvOr 32 (bvShl 32 x`83 x`24) (bvShr 32 x`83 x`25)))
+               x`10;
+      x`85 = bvAdd 32 x`82 x`84;
+      x`86 = bvXor 32
+               (bvXor 32 x`43
+                  (bvOr 32 (bvShl 32 x`85 x`29) (bvShr 32 x`85 x`30)))
+               x`11;
+      x`87 = bvAdd 32 x`84 x`86;
+      x`88 = bvAdd 32 x`78 (bvXor 32 x`80 x`13);
+      x`89 = bvOr 32 (bvShl 32 x`88 x`33) (bvShr 32 x`88 x`34);
+      x`90 = bvXor 32 x`89 x`17;
+      x`91 = bvAdd 32 x`38 x`90;
+      x`92 = bvXor 32
+               (bvXor 32 x`31
+                  (bvOr 32 (bvShl 32 x`91 x`19) (bvShr 32 x`91 x`20)))
+               x`14;
+      x`93 = bvAdd 32 x`90 x`92;
+      x`94 = bvXor 32
+               (bvXor 32 x`46
+                  (bvOr 32 (bvShl 32 x`93 x`24) (bvShr 32 x`93 x`25)))
+               x`15;
+      x`95 = bvAdd 32 x`92 x`94;
+      x`96 = bvXor 32
+               (bvXor 32 x`37
+                  (bvOr 32 (bvShl 32 x`95 x`29) (bvShr 32 x`95 x`30)))
+               x`16;
+      x`97 = bvAdd 32 x`94 x`96;
+    }
+ in [ bvXor 32
+        (bvXor 32 x`35
+           (bvOr 32 (bvShl 32 x`59 x`33) (bvShr 32 x`59 x`34)))
+        x`2
+    , x`54
+    , x`56
+    , x`58
+    , x`73
+    , bvXor 32
+        (bvXor 32 x`64
+           (bvOr 32 (bvShl 32 x`74 x`33) (bvShr 32 x`74 x`34)))
+        x`7
+    , x`67
+    , x`71
+    , x`84
+    , x`86
+    , bvXor 32
+        (bvXor 32 x`76
+           (bvOr 32 (bvShl 32 x`87 x`33) (bvShr 32 x`87 x`34)))
+        x`12
+    , x`82
+    , x`92
+    , x`94
+    , x`96
+    , bvXor 32
+        (bvXor 32 x`89
+           (bvOr 32 (bvShl 32 x`97 x`33) (bvShr 32 x`97 x`34)))
+        x`17 ]
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in llvm_verify
+   test_llvm_doubleround_itp.saw:62:8-64:58 in (callback)
+   (builtin) in fails
+   test_llvm_doubleround_itp.saw:62:1-64:58 (at top level)
+Proof failed: 1 of 1 verification conditions unfinished.
+

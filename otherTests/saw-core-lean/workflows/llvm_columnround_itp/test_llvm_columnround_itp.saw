@@ -1,0 +1,72 @@
+// Case Study — LLVM Salsa20 columnround: IN-ITP DECOMPOSITION,
+// PERMUTATION-TRANSFER extension of the rowround pilot.
+//
+// This row is the SECOND in-ITP decomposition case study. It is a
+// deliberate near-copy of workflows/llvm_rowround_itp: same setup, same
+// EMPTY override list, same emission-only offline_lean punt. The ONE
+// difference is the slice permutation — s20_columnround applies the same
+// four inlined C quarterrounds, but to the COLUMN index pattern
+//
+//     (0,4,8,12) (5,9,13,1) (10,14,2,6) (15,3,7,11)
+//
+// instead of rowround's ROW pattern. The Cryptol spec `columnround`
+// mirrors that permutation. The research question this row answers:
+//
+//     does the rowround discharge machinery transfer VERBATIM when only
+//     the slice permutation changes?
+//
+// The recipe (see proofs/llvm_columnround_itp/completed.lean):
+//
+//   * IN-ITP OVERRIDE (rotl_shlor_32): identical — every quarterround
+//     rotate is still the C shift-or lowering of a 32-bit `<<<`, and the
+//     kernel-checked `BitVec.rotateLeft_def` bridge closes it. The
+//     rotate constants (7,9,13,18) do not depend on the permutation, so
+//     rotl_7/9/13/18 are reused unchanged.
+//   * MONADIC SCAFFOLDING (seq4/seq16 + foldrM/ofFnM reductions):
+//     identical — the emitted goal is the same eager Except-monad fold
+//     over a [16][32] state regardless of which slices feed it.
+//   * PER-WORD CLOSE (foldr_ofFn_all_true + per-word BitVec push +
+//     ac_rfl): identical in FORM. Only the permutation of which input
+//     word lands in which output word changes; XOR/add remain AC, so
+//     ac_rfl still closes each of the 16 words.
+//
+// If the machinery transfers verbatim, the only edits between the two
+// completed.lean files are (a) the generated `def goal` body (different
+// index literals from the different permutation) and (b) nothing in the
+// lemma library or the goal_holds tactic script. That is the finding.
+//
+// Emission-only: offline_lean does not solve the goal, so the
+// llvm_verify is fails-wrapped. The point of this SAW run is to EMIT the
+// single inlined [16][32] columnround obligation.
+//
+// Sources: this dir contains the .saw script and a local copy of
+// salsa20.bc. The canonical Salsa20.cry and salsa20.c live under
+// exercises/functional-correctness/salsa20/. Rebuild salsa20.bc with:
+//
+//   cd otherTests/saw-core-lean/workflows/llvm_columnround_itp
+//   clang -c -g -O0 -emit-llvm \
+//     -o salsa20.bc \
+//     ../../../../exercises/functional-correctness/salsa20/salsa20.c
+
+include "../../../../exercises/common/helpers.saw";
+import "../../../../exercises/functional-correctness/salsa20/Salsa20.cry";
+
+m <- llvm_load_module "salsa20.bc";
+
+// One [16][32] pointer, updated in place by {{ columnround }}. Same
+// setup the classic exercise uses for columnround (oneptr_update_func
+// over the Cryptol spec), so the emitted RHS is exactly `columnround x`.
+let oneptr_update_func (ty : LLVMType) (name : String) (f : Term) = do {
+    (x, p) <- ptr_to_fresh name ty;
+    llvm_execute_func [p];
+    llvm_points_to p (llvm_term {{ f x }});
+};
+
+let columnround_setup =
+  oneptr_update_func (llvm_array 16 (llvm_int 32)) "x" {{ columnround }};
+
+// NO OVERRIDES: the empty list is the whole point. The four C
+// quarterround calls are inlined into one goal, emitted to Lean.
+fails (llvm_verify m "s20_columnround" [] true
+    columnround_setup
+    (offline_lean "test_llvm_columnround_itp.columnround"));

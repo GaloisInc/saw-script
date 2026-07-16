@@ -1,0 +1,64 @@
+// Case Study — LLVM Salsa20 doubleround: IN-ITP DECOMPOSITION,
+// TWO-LEVEL (double-depth) extension of the rowround pilot.
+//
+// This row is the THIRD in-ITP decomposition case study and the one that
+// probes SCALING. s20_doubleround is `s20_columnround` followed by
+// `s20_rowround`, i.e. EIGHT inlined C quarterrounds in two ladder
+// stages over one [16][32] state. Verified here with an EMPTY override
+// list, so BOTH the columnround stage and the rowround stage inline into
+// a SINGLE goal — no SAW-side composition at either level. Contrast:
+//
+//   * OVERRIDE COMPOSITION (the classic exercises/…/salsa20/solution.saw):
+//       verify quarterround, then rowround [qr] and columnround [qr],
+//       then doubleround [cr,rr]. Each level's proof reuses the level
+//       below as a registered override; only shallow leaves reach Lean.
+//
+//   * IN-ITP DECOMPOSITION (this row): NO overrides at any level. The
+//       whole two-stage, eight-quarterround computation is inlined into
+//       one obligation and the entire ladder is composed INSIDE Lean.
+//
+// The research question: does the staged discharge machinery from the
+// single-round rows (rowround/columnround) REUSE at double depth? The
+// per-word terms are now TWO rounds deep — each output word of
+// doubleround is a quarterround applied to words that are THEMSELVES
+// quarterround outputs — so the per-word `ac_rfl` close is the known
+// scaling risk. See proofs/llvm_doubleround_itp/ for the outcome
+// (completed.lean if it discharges; GAP.md naming the resisting
+// word/depth if it does not).
+//
+// Emission-only: offline_lean does not solve the goal, so the
+// llvm_verify is fails-wrapped. The point of this SAW run is to EMIT the
+// single inlined two-level [16][32] doubleround obligation.
+//
+// Sources: this dir contains the .saw script and a local copy of
+// salsa20.bc. The canonical Salsa20.cry and salsa20.c live under
+// exercises/functional-correctness/salsa20/. Rebuild salsa20.bc with:
+//
+//   cd otherTests/saw-core-lean/workflows/llvm_doubleround_itp
+//   clang -c -g -O0 -emit-llvm \
+//     -o salsa20.bc \
+//     ../../../../exercises/functional-correctness/salsa20/salsa20.c
+
+include "../../../../exercises/common/helpers.saw";
+import "../../../../exercises/functional-correctness/salsa20/Salsa20.cry";
+
+m <- llvm_load_module "salsa20.bc";
+
+// One [16][32] pointer, updated in place by {{ doubleround }}. Same setup
+// the classic exercise uses for doubleround (oneptr_update_func over the
+// Cryptol spec), so the emitted RHS is exactly `doubleround x`.
+let oneptr_update_func (ty : LLVMType) (name : String) (f : Term) = do {
+    (x, p) <- ptr_to_fresh name ty;
+    llvm_execute_func [p];
+    llvm_points_to p (llvm_term {{ f x }});
+};
+
+let doubleround_setup =
+  oneptr_update_func (llvm_array 16 (llvm_int 32)) "x" {{ doubleround }};
+
+// NO OVERRIDES: the empty list is the whole point. Both the columnround
+// and rowround stages (eight C quarterround calls) are inlined into one
+// goal, emitted to Lean.
+fails (llvm_verify m "s20_doubleround" [] true
+    doubleround_setup
+    (offline_lean "test_llvm_doubleround_itp.doubleround"));
