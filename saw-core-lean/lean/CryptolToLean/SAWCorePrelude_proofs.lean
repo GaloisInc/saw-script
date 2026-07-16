@@ -942,4 +942,74 @@ theorem saw_fix_bounded_choose_unique_pure_fixed_point
   saw_fix_bounded_iter_from_unique_pure_fixed_point n α
     (Classical.choice H.seed) body H x hx
 
+/-! ## `saw_stream_unfold` faithfulness core (OP-3 successor, R3b)
+
+The stream analog of the `saw_fix_bounded` lemmas, conditional only
+on the per-instance `saw_stream_single_productive` obligation. -/
+
+/-- The realization satisfies the elementwise equation the emitted
+element function defines — restated from `H.faithful` for symmetry
+with the uniqueness theorem's hypothesis. -/
+theorem saw_stream_unfold_faithful
+    (α : Type) (x0 : α) (step : α → α)
+    (mkfn : Except String (Stream α) → Nat → Except String α)
+    (H : saw_stream_single_productive α x0 step mkfn) :
+    ∀ i : Nat,
+      mkfn (Pure.pure (saw_stream_unfold α x0 step)) i =
+        Pure.pure (streamIdx α (saw_stream_unfold α x0 step) i) :=
+  H.faithful
+
+/-- Uniqueness among TOTAL streams (fifth-audit amendment 3): any
+raw stream whose elements satisfy the emitted element equation is
+the realization, elementwise — by strong induction on the index via
+`lookback`. SAW's `fix_unfold` says SAW's stream fix satisfies
+exactly that equation; this theorem pins its elements to the
+realization with no choice principle involved. -/
+theorem saw_stream_unfold_unique
+    (α : Type) (x0 : α) (step : α → α)
+    (mkfn : Except String (Stream α) → Nat → Except String α)
+    (H : saw_stream_single_productive α x0 step mkfn)
+    (t : Stream α)
+    (ht : ∀ i : Nat,
+      mkfn (Pure.pure t) i = Pure.pure (streamIdx α t i)) :
+    ∀ i : Nat,
+      streamIdx α t i = streamIdx α (saw_stream_unfold α x0 step) i := by
+  intro i
+  induction i using Nat.strongRecOn with
+  | ind i IH =>
+    have hsame :
+        mkfn (Pure.pure t) i =
+          mkfn (Pure.pure (saw_stream_unfold α x0 step)) i :=
+      H.lookback t (saw_stream_unfold α x0 step) i
+        (fun j hj => IH j hj)
+    have h1 := ht i
+    have h2 := H.faithful i
+    have :
+        Pure.pure (f := Except String) (streamIdx α t i) =
+          Pure.pure (streamIdx α (saw_stream_unfold α x0 step) i) := by
+      rw [← h1, hsame, h2]
+    exact congrArg (fun e => match e with
+      | Except.ok v => v
+      | Except.error _ => streamIdx α t i) this
+
+/-- Whole-stream form of uniqueness. -/
+theorem saw_stream_unfold_unique_stream
+    (α : Type) (x0 : α) (step : α → α)
+    (mkfn : Except String (Stream α) → Nat → Except String α)
+    (H : saw_stream_single_productive α x0 step mkfn)
+    (t : Stream α)
+    (ht : ∀ i : Nat,
+      mkfn (Pure.pure t) i = Pure.pure (streamIdx α t i)) :
+    t = saw_stream_unfold α x0 step := by
+  cases t with
+  | MkStream f =>
+    have h := saw_stream_unfold_unique α x0 step mkfn H
+      (Stream.MkStream f) ht
+    show Stream.MkStream f = saw_stream_unfold α x0 step
+    unfold saw_stream_unfold
+    have hf : f = fun n => Nat.rec x0 (fun _ prev => step prev) n := by
+      funext n
+      exact h n
+    rw [hf]
+
 end CryptolToLean.SAWCorePreludeProofs

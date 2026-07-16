@@ -951,6 +951,61 @@ manufactured one). -/
   (fun _ => Except.error "boom" : Except String (Vec 2 Nat) →
     Except String (Vec 2 Nat))
 
+/-! ### Class S-single stream `fix` realization (OP-3 successor, R3b)
+
+A recognized single-step stream corecursion (`classifyStreamBody`,
+SAWCoreLean.Term — identity read at the constant -1 shift from a
+literal seed, fifth-audit amendment 1) is productive BY CONSTRUCTION:
+its elements are pinned by index induction. `saw_stream_unfold`
+realizes it as a total Lean stream; the per-instance obligation
+`saw_stream_single_productive` (PROVEN at every emission site, never
+assumed) carries the two facts the faithfulness argument needs:
+
+* `faithful` — the VERBATIM Except-valued emitted element function,
+  fed the realization back at `Pure.pure`, reproduces the
+  realization elementwise (fifth-audit amendment 2: this equation is
+  the SOLE loud-failure discriminator for streams — the totality
+  analog is vacuous because `Stream` sits raw inside `Except`);
+* `lookback` — the element function's value at index `i` depends
+  only on the input stream's elements `< i` (the semantic -1-shift
+  fact; enables the uniqueness theorem, fifth-audit amendment 3).
+
+`saw_stream_unfold_unique` (SAWCorePreludeProofs) then pins ANY total
+stream satisfying the elementwise equation to the realization — the
+`fix_unfold` link, with no choice among fixed points: the emitted
+value IS the realization. -/
+
+/-- Total realization of a recognized single-step stream fix:
+element `n` is the `n`-fold step from the seed. R3 emits it with
+`step = fun prev => prev` (the identity read — the only validated
+lowering); the general `step` instantiation is reserved for the
+post-R4 iterate program. -/
+def saw_stream_unfold (α : Type) (x0 : α) (step : α → α) : Stream α :=
+  Stream.MkStream (fun n => Nat.rec x0 (fun _ prev => step prev) n)
+
+/-- H_prod for streams: the per-instance PROVEN obligation for a
+Class S-single lowering. See the section comment; both fields are
+established by unfolding the concrete emitted element function. -/
+structure saw_stream_single_productive (α : Type) (x0 : α)
+    (step : α → α)
+    (mkfn : Except String (Stream α) → Nat → Except String α) :
+    Prop where
+  faithful : ∀ i : Nat,
+    mkfn (Pure.pure (saw_stream_unfold α x0 step)) i =
+      Pure.pure (streamIdx α (saw_stream_unfold α x0 step) i)
+  lookback : ∀ (t₁ t₂ : Stream α) (i : Nat),
+    (∀ j : Nat, j < i → streamIdx α t₁ j = streamIdx α t₂ j) →
+    mkfn (Pure.pure t₁) i = mkfn (Pure.pure t₂) i
+
+/-- The emitted realization for a recognized Class S-single fix: the
+proof argument is consumed so an undischarged obligation is loud in
+the audit tier, exactly like `atWithProof_checkedM`'s bounds. -/
+def saw_stream_realize (α : Type) (x0 : α) (step : α → α)
+    (mkfn : Except String (Stream α) → Nat → Except String α)
+    (_h : saw_stream_single_productive α x0 step mkfn) :
+    Except String (Stream α) :=
+  Pure.pure (saw_stream_unfold α x0 step)
+
 /-! ### Proof-carrying `MkStream` totality contract
 
 SAW's `MkStream α f` produces a stream of raw `α` values. Under the
