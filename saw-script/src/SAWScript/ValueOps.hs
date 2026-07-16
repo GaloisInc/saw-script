@@ -158,7 +158,7 @@ restoreCheckpoint :: TopLevelCheckpoint -> TopLevel ()
 restoreCheckpoint (TopLevelCheckpoint chk'rw scc) = do
      now'rw <- getTopLevelRW
 
-     -- First, restore the SAWCore state.
+     -- Restore the SAWCore state.
      -- (The SharedContext handle doesn't change; it doesn't matter
      -- which reference to it we use.)
      let sc = rwSharedContext now'rw

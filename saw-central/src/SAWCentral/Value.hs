@@ -1462,7 +1462,7 @@ extendEnv pos name rb ty doc v = do
          modname = T.packModName [name]
 
      -- Update the SAWScript environment.
-     Environ varenv tyenv _ <- gets rwEnviron
+     Environ varenv tyenv ce <- gets rwEnviron
      rbenv <- gets rwRebindables
      let (varenv', rbenv') = case rb of
            SS.ReadOnlyVar ->
@@ -1481,7 +1481,6 @@ extendEnv pos name rb ty doc v = do
              (varenv, re')
 
      -- Mirror the value into the Cryptol environment if appropriate.
-     ce <- getCryptolEnv
      ce' <-
        io $ case v of
          VTerm t ->
