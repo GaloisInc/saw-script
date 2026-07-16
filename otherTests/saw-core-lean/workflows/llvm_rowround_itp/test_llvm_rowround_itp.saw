@@ -1,0 +1,67 @@
+// Case Study — LLVM Salsa20 rowround: IN-ITP DECOMPOSITION PILOT.
+//
+// This row demonstrates a NEW proof style. Contrast it with the
+// override-composition row (workflows/llvm_salsa20_q_verify):
+//
+//   * OVERRIDE COMPOSITION (the classic SAW way, that other row):
+//       verify s20_quarterround, then verify s20_rowround with the
+//       quarterround spec supplied as an OVERRIDE ([qr]). SAW replaces
+//       each of the four C quarterround calls by the verified spec at
+//       the SAW level; the composition happens SAW-side, and only the
+//       (already discharged) quarterround leaf ever reaches Lean.
+//
+//   * IN-ITP DECOMPOSITION (this row): verify s20_rowround with NO
+//       overrides (note the EMPTY list below). Symbolic execution
+//       therefore INLINES the four C quarterround calls into ONE goal
+//       over a single [16][32] state, and we do the composition
+//       INSIDE Lean instead:
+//         - prove one lemma characterizing the inlined-quarterround
+//           subterm shape (= the Cryptol-spec quarterround on its
+//           4-word slice), kernel-checked once;
+//         - discharge the whole rowround goal by rewriting with that
+//           lemma at each of the four index-permuted slices.
+//       The lemma IS the override, but it is proved in Lean's kernel
+//       and applied in-ITP. Nothing is replayed on the SAW side; SAW
+//       never learns quarterround's spec.
+//
+// Why this matters: it moves compositional structure that SAW would
+// normally manage (override registration + replay) into a checked Lean
+// lemma. The discharge lives in proofs/llvm_rowround_itp (or, if the
+// BV identity inside the lemma resists policy-compliant closing, in
+// proof-gaps/llvm_rowround_itp with a precise GAP.md).
+//
+// Emission-only: the offline_lean backend does not solve the goal, so
+// the llvm_verify is fails-wrapped. The point of this SAW run is to
+// EMIT the single inlined [16][32] rowround obligation.
+//
+// Sources: this dir contains the .saw script and a local copy of
+// salsa20.bc. The canonical Salsa20.cry and salsa20.c live under
+// exercises/functional-correctness/salsa20/. Rebuild salsa20.bc with:
+//
+//   cd otherTests/saw-core-lean/workflows/llvm_rowround_itp
+//   clang -c -g -O0 -emit-llvm \
+//     -o salsa20.bc \
+//     ../../../../exercises/functional-correctness/salsa20/salsa20.c
+
+include "../../../../exercises/common/helpers.saw";
+import "../../../../exercises/functional-correctness/salsa20/Salsa20.cry";
+
+m <- llvm_load_module "salsa20.bc";
+
+// One [16][32] pointer, updated in place by {{ rowround }}. Same setup
+// the classic exercise uses for rowround (oneptr_update_func over the
+// Cryptol spec), so the emitted RHS is exactly `rowround y`.
+let oneptr_update_func (ty : LLVMType) (name : String) (f : Term) = do {
+    (x, p) <- ptr_to_fresh name ty;
+    llvm_execute_func [p];
+    llvm_points_to p (llvm_term {{ f x }});
+};
+
+let rowround_setup =
+  oneptr_update_func (llvm_array 16 (llvm_int 32)) "y" {{ rowround }};
+
+// NO OVERRIDES: the empty list is the whole point. The four C
+// quarterround calls are inlined into one goal, emitted to Lean.
+fails (llvm_verify m "s20_rowround" [] true
+    rowround_setup
+    (offline_lean "test_llvm_rowround_itp.rowround"));

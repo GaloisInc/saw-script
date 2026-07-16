@@ -254,3 +254,24 @@ the workflow-accounting invariant maintained (every workflow row's
 Lean side discharged or precisely gap-documented); known-gap census
 delta stated in STATUS.md (target: the sound-but-undischargeable
 tier eliminated).
+
+
+## In-ITP decomposition pattern (wave-3 pilot result, 2026-07-16)
+
+`workflows/llvm_rowround_itp` + `proofs/llvm_rowround_itp`: salsa20's
+rowround verified with an EMPTY override list — SAW inlines all four
+quarterround calls into one 2695-line goal — and composed INSIDE
+Lean. Structural finding: SAW inlines quarterround on BOTH sides, so
+the honest override granularity is the ROTATE (`rotl_shlor_32`:
+C's shift-or form = spec's `rotateL`, proved via
+`BitVec.rotateLeft_def`), applied at all 16 sites; the two sides are
+then spec-vs-spec and the quarterround BV wall NEVER APPEARS — you
+never prove quarterround correct, only that C-inlining equals the
+spec's normal form. Method: staged rewriting (sequence-literal
+scaffolding → fold-to-16-per-word-goals → per-word BitVec push +
+`ac_rfl`; monolithic simp blows heartbeats, per-word is bounded).
+Extension: columnround is a near-copy; doubleround (~5K lines) is
+the first two-level test. NOTE the pattern's relation to the
+BV-policy gaps: it does NOT unpark them (standalone quarterround
+correctness still needs the W2 strategy) but shows compositional
+verification can route AROUND that wall entirely.

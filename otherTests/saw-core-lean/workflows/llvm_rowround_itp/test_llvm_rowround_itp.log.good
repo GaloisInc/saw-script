@@ -1,0 +1,110 @@
+Loading file "test_llvm_rowround_itp.saw"
+Loading file "../../../../exercises/common/helpers.saw"
+Verifying s20_rowround...
+Simulating s20_rowround...
+Checking proof obligations s20_rowround...
+Subgoal failed: s20_rowround test_llvm_rowround_itp.saw:57:5: error: in llvm_points_to
+Literal equality postcondition
+Expected term: 
+rowround y
+Actual term:
+let { x`1 = Vec 32 Bool;
+      x`2 = at 16 x`1 y 0;
+      x`3 = at 16 x`1 y 3;
+      x`4 = at 16 x`1 y 4;
+      x`5 = at 16 x`1 y 5;
+      x`6 = at 16 x`1 y 9;
+      x`7 = at 16 x`1 y 10;
+      x`8 = at 16 x`1 y 14;
+      x`9 = at 16 x`1 y 15;
+      x`10 = bvAdd 32 x`2 x`3;
+      x`11 = bvToNat 32 (bvNat 32 7);
+      x`12 = bvToNat 32 (bvNat 32 25);
+      x`13 = bvXor 32
+               (bvOr 32 (bvShl 32 x`10 x`11) (bvShr 32 x`10 x`12))
+               (at 16 x`1 y 1);
+      x`14 = bvAdd 32 x`13 x`2;
+      x`15 = bvToNat 32 (bvNat 32 9);
+      x`16 = bvToNat 32 (bvNat 32 23);
+      x`17 = bvXor 32
+               (bvOr 32 (bvShl 32 x`14 x`15) (bvShr 32 x`14 x`16))
+               (at 16 x`1 y 2);
+      x`18 = bvAdd 32 x`13 x`17;
+      x`19 = bvToNat 32 (bvNat 32 13);
+      x`20 = bvToNat 32 (bvNat 32 19);
+      x`21 = bvXor 32
+               (bvOr 32 (bvShl 32 x`18 x`19) (bvShr 32 x`18 x`20))
+               x`3;
+      x`22 = bvAdd 32 x`17 x`21;
+      x`23 = bvToNat 32 (bvNat 32 18);
+      x`24 = bvToNat 32 (bvNat 32 14);
+      x`25 = bvAdd 32 x`4 x`5;
+      x`26 = bvXor 32
+               (bvOr 32 (bvShl 32 x`25 x`11) (bvShr 32 x`25 x`12))
+               (at 16 x`1 y 6);
+      x`27 = bvAdd 32 x`26 x`5;
+      x`28 = bvXor 32
+               (bvOr 32 (bvShl 32 x`27 x`15) (bvShr 32 x`27 x`16))
+               (at 16 x`1 y 7);
+      x`29 = bvAdd 32 x`26 x`28;
+      x`30 = bvXor 32
+               (bvOr 32 (bvShl 32 x`29 x`19) (bvShr 32 x`29 x`20))
+               x`4;
+      x`31 = bvAdd 32 x`28 x`30;
+      x`32 = bvAdd 32 x`6 x`7;
+      x`33 = bvXor 32
+               (bvOr 32 (bvShl 32 x`32 x`11) (bvShr 32 x`32 x`12))
+               (at 16 x`1 y 11);
+      x`34 = bvAdd 32 x`33 x`7;
+      x`35 = bvXor 32
+               (bvOr 32 (bvShl 32 x`34 x`15) (bvShr 32 x`34 x`16))
+               (at 16 x`1 y 8);
+      x`36 = bvAdd 32 x`33 x`35;
+      x`37 = bvXor 32
+               (bvOr 32 (bvShl 32 x`36 x`19) (bvShr 32 x`36 x`20))
+               x`6;
+      x`38 = bvAdd 32 x`35 x`37;
+      x`39 = bvAdd 32 x`8 x`9;
+      x`40 = bvXor 32
+               (bvOr 32 (bvShl 32 x`39 x`11) (bvShr 32 x`39 x`12))
+               (at 16 x`1 y 12);
+      x`41 = bvAdd 32 x`40 x`9;
+      x`42 = bvXor 32
+               (bvOr 32 (bvShl 32 x`41 x`15) (bvShr 32 x`41 x`16))
+               (at 16 x`1 y 13);
+      x`43 = bvAdd 32 x`40 x`42;
+      x`44 = bvXor 32
+               (bvOr 32 (bvShl 32 x`43 x`19) (bvShr 32 x`43 x`20))
+               x`8;
+      x`45 = bvAdd 32 x`42 x`44;
+    }
+ in [ bvXor 32
+        (bvOr 32 (bvShl 32 x`22 x`23) (bvShr 32 x`22 x`24))
+        x`2
+    , x`13
+    , x`17
+    , x`21
+    , x`30
+    , bvXor 32 (bvOr 32 (bvShl 32 x`31 x`23) (bvShr 32 x`31 x`24))
+        x`5
+    , x`26
+    , x`28
+    , x`35
+    , x`37
+    , bvXor 32 (bvOr 32 (bvShl 32 x`38 x`23) (bvShr 32 x`38 x`24))
+        x`7
+    , x`33
+    , x`40
+    , x`42
+    , x`44
+    , bvXor 32 (bvOr 32 (bvShl 32 x`45 x`23) (bvShr 32 x`45 x`24))
+        x`9 ]
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in llvm_verify
+   test_llvm_rowround_itp.saw:65:8-67:52 in (callback)
+   (builtin) in fails
+   test_llvm_rowround_itp.saw:65:1-67:52 (at top level)
+Proof failed: 1 of 1 verification conditions unfinished.
+
