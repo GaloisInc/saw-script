@@ -1,0 +1,27 @@
+Loading file "test_llvm_tuple_swap.saw"
+Verifying swap...
+Simulating swap...
+Checking proof obligations swap...
+Subgoal failed: swap test_llvm_tuple_swap.saw:77:5: error: in llvm_points_to
+Literal equality postcondition
+Expected term: 
+swap_spec x
+Actual term:
+let { x`1 = Vec 8 Bool;
+      x`2 = x.0;
+    }
+ in ( [ at 4 x`1 x`2 3
+    , at 4 x`1 x`2 2
+    , at 4 x`1 x`2 1
+    , at 4 x`1 x`2 0 ]
+    , x.2
+    , x.1 )
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in llvm_verify
+   test_llvm_tuple_swap.saw:84:8-86:46 in (callback)
+   (builtin) in fails
+   test_llvm_tuple_swap.saw:84:1-86:46 (at top level)
+Proof failed: 1 of 1 verification conditions unfinished.
+

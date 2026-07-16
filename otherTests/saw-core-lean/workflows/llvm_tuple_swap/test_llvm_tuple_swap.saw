@@ -1,0 +1,86 @@
+// Case Study — LLVM Tuple Swap: a TUPLE/RECORD-STRUCTURED memory
+// postcondition discharged in Lean's kernel.
+//
+// Adapted from intTests/test_llvm_tuple/ (SAW issue #159: a
+// `llvm_points_to` on a struct pointer whose right-hand side is a
+// SINGLE Cryptol term of TUPLE type). This is the novelty no other
+// workflow row shows: the post-state of a multi-field struct pinned
+// by one nested-tuple Cryptol value, so the emitted obligation is a
+// componentwise equality over a nested `PairType` — not a scalar or a
+// flat vector.
+//
+// The program: `swap` takes `struct triple { uint8_t first[4];
+// uint16_t second; uint16_t third; }*` and performs an in-place
+// component exchange — it reverses the 4-byte `first` array and swaps
+// `second` with `third`. The functional spec expresses exactly that:
+//
+//   swap_spec (xs, y, z) = (reverse xs, z, y)
+//
+// PROPERTY (what the Lean goal asserts). With a fully symbolic struct
+// value `x : ([4][8], [16], [16])` in the pre-state, after `swap(p)`
+// the pointee equals `swap_spec x`. Because `x` is symbolic, the
+// obligation is a real, non-trivial equality between two nested
+// tuples: the C-computed post-state
+//   ( [x.0@3, x.0@2, x.0@1, x.0@0], x.2, x.1 )
+// and the spec value
+//   ( reverse x.0, x.2, x.1 ).
+//
+// FOLD FINDING. The scout flagged medium fold-risk on the concrete
+// `reverse`. Observed: the postcondition does NOT fold away — SAW's
+// rewriter does not prove the tuple equality during obligation
+// generation (it does not unfold `reverse x.0` into the literal-index
+// reindexing on the spec side), so the whole nested-tuple equality
+// reaches `offline_lean` and emits (see
+// test_llvm_tuple_swap.swap_LLVM_points-to0.lean, ~700 lines). Keeping
+// `x` symbolic is what preserves the reverse permutation as a genuine
+// goal; a concrete `x` would let SAW evaluate both sides to identical
+// byte literals and the goal would collapse to `True`. No sub-property
+// had to be substituted — the full multi-component postcondition
+// survives to Lean.
+//
+// The emitted obligation carries proof-carrying checked array indexing
+// (`atWithProof_checkedM` with in-definition bounds evidence), so the
+// discharge uses the COMPLETED-OUTLINE workflow: proofs/llvm_tuple_swap_eq
+// stages the emitted outline with its `sorry` fallbacks removed and
+// proves `goal_holds` sorry-free under the axiom audit (green).
+//
+// Emission-only offline_lean, so the goal is left unsolved on the SAW
+// side (fails-wrapped).
+//
+// Sources: this dir contains only the .saw script and the pre-compiled
+// tuple.bc (LLVM bitcode is a build artifact). The canonical test.c
+// lives under intTests/test_llvm_tuple/ — rebuild tuple.bc when needed
+// via:
+//
+//   cd otherTests/saw-core-lean/workflows/llvm_tuple_swap
+//   clang -c -g -O0 -emit-llvm \
+//     -o tuple.bc \
+//     ../../../../intTests/test_llvm_tuple/test.c
+
+m <- llvm_load_module "tuple.bc";
+
+// The functional swap spec from the original test: reverse the byte
+// array, swap the two 16-bit fields.
+let {{
+  swap_spec : ([4][8], [16], [16]) -> ([4][8], [16], [16])
+  swap_spec (xs, y, z) = (reverse xs, z, y)
+}};
+
+// A fresh, fully symbolic struct.triple; after the call the pointee is
+// pinned by the single tuple term `swap_spec x`.
+let swap_tuple_spec = do {
+    let t = llvm_alias "struct.triple";
+    p <- llvm_alloc t;
+    x <- llvm_fresh_var "x" t;
+    llvm_points_to p (llvm_term x);
+    llvm_execute_func [p];
+    llvm_points_to p (llvm_term {{ swap_spec x }});
+};
+
+// LEAN SIDE: the tuple-structured postcondition, emitted for offline
+// discharge. Emission-only, so the goal stays unsolved on the SAW side
+// (fails-wrapped); the kernel-checked discharge is
+// proofs/llvm_tuple_swap_eq/ (green, sorry-free, axiom-audited).
+fails (llvm_verify m "swap" [] false
+    swap_tuple_spec
+    (offline_lean "test_llvm_tuple_swap.swap"));
