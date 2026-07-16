@@ -4656,7 +4656,17 @@ classifyFixShape typeArg bodyArg
                        else Left "recursive binder used outside a zip slot"
                 else Right False
           | Just [_a, _b, _m, _k, xs, ys] <- asGlobalApply "Prelude.zip" t =
-              combine [go True xs, go True ys]
+              -- Sixth-audit Finding 0 (2026-07-16): a zip OPERAND
+              -- admits exactly the bare recursive vector — nothing
+              -- wrapped around it. Blessing the whole operand spine
+              -- (the previous `go True`) admitted index-permuting or
+              -- forcing-opaque wrappers one level down
+              -- (@zip … (reverse rec) xs@, @zip … (bvAnd rec m) xs@),
+              -- the same class the at-spine rule already rejects.
+              -- Any non-bare operand is scanned with the zip
+              -- blessing OFF, so a deeper rec must re-qualify
+              -- through the at/zip rules on its own.
+              combine [goZipSlot xs, goZipSlot ys]
           | Just [_n, _pty, vec, idx] <- asGlobalApply "Prelude.at" t
           , termMentionsVar recVn vec =
               -- inside the inner gen the -1 shift has already been
@@ -4682,6 +4692,11 @@ classifyFixShape typeArg bodyArg
         combine rs = case [e | Left e <- rs] of
           (e : _) -> Left e
           [] -> Right (or [b | Right b <- rs])
+
+        goZipSlot t
+          | Just (vn, _) <- asVariable t
+          , vnIndex vn == vnIndex recVn = Right True
+          | otherwise = go False t
 
     termMentionsVar vn t = vnIndex vn `IntSet.member` freeVars t
 

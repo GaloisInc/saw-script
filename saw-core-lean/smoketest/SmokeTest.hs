@@ -1471,6 +1471,68 @@ fixClassifierTests sc = testGroup "classifyFixShape (Slice R0, inert)"
         (\iVar -> pure iVar)
       assertUnrecognized "same-index tail" (classifyFixShape vecTy body)
 
+  , testCase "bare rec as a zip operand is Class F" $ do
+      (vecTy, body) <- mkFusedFixF sc
+        (\recVar i2Var -> do
+            n9 <- scNat sc 9
+            n8 <- scNat sc 8
+            boolTy <- scBoolType sc
+            n32 <- scNat sc 32
+            elemTy <- scGlobalApply sc "Prelude.Vec" [n32, boolTy]
+            unitTy <- scGlobalApply sc "Prelude.UnitType" []
+            sndTy  <- scGlobalApply sc "Prelude.PairType" [elemTy, unitTy]
+            xsName <- scFreshVarName sc "xsz"
+            xsVec  <- scGlobalApply sc "Prelude.Vec" [n8, elemTy]
+            _xsVar <- scVariable sc xsName xsVec
+            -- zip needs a second vector; a rec-free one — reuse a
+            -- replicate-like gen over the seed element
+            n0     <- scNat sc 0
+            bv0    <- scGlobalApply sc "Prelude.bvNat" [n32, n0]
+            jName  <- scFreshVarName sc "j"
+            natTy  <- scNatType sc
+            constF <- scLambda sc jName natTy bv0
+            othVec <- scGlobalApply sc "Prelude.gen" [n8, elemTy, constF]
+            zipped <- scGlobalApply sc "Prelude.zip"
+                        [elemTy, elemTy, n9, n8, recVar, othVec]
+            pairTy <- scGlobalApply sc "Prelude.PairType" [elemTy, sndTy]
+            sel    <- scGlobalApply sc "Prelude.at"
+                        [n8, pairTy, zipped, i2Var]
+            scGlobalApply sc "Prelude.Pair_fst" [elemTy, sndTy, sel])
+        (shiftMinusOne sc)
+      classifyFixShape vecTy body @?= FixClassF
+
+  , testCase "wrapped rec inside a zip operand is Unrecognized" $ do
+      -- Sixth-audit Finding 0: the zip blessing must not extend
+      -- below a bare rec operand — an index-permuting (or
+      -- forcing-opaque) wrapper inside the zip slot is the same
+      -- silent class as on the at-spine.
+      (vecTy, body) <- mkFusedFixF sc
+        (\recVar i2Var -> do
+            n9 <- scNat sc 9
+            n8 <- scNat sc 8
+            boolTy <- scBoolType sc
+            n32 <- scNat sc 32
+            elemTy <- scGlobalApply sc "Prelude.Vec" [n32, boolTy]
+            unitTy <- scGlobalApply sc "Prelude.UnitType" []
+            sndTy  <- scGlobalApply sc "Prelude.PairType" [elemTy, unitTy]
+            n0     <- scNat sc 0
+            bv0    <- scGlobalApply sc "Prelude.bvNat" [n32, n0]
+            jName  <- scFreshVarName sc "j"
+            natTy  <- scNatType sc
+            constF <- scLambda sc jName natTy bv0
+            othVec <- scGlobalApply sc "Prelude.gen" [n8, elemTy, constF]
+            revRec <- scGlobalApply sc "Prelude.reverse"
+                        [n9, elemTy, recVar]
+            zipped <- scGlobalApply sc "Prelude.zip"
+                        [elemTy, elemTy, n9, n8, revRec, othVec]
+            pairTy <- scGlobalApply sc "Prelude.PairType" [elemTy, sndTy]
+            sel    <- scGlobalApply sc "Prelude.at"
+                        [n8, pairTy, zipped, i2Var]
+            scGlobalApply sc "Prelude.Pair_fst" [elemTy, sndTy, sel])
+        (shiftMinusOne sc)
+      assertUnrecognized "wrapped rec in zip slot"
+        (classifyFixShape vecTy body)
+
   , testCase "index-permuting wrapper on the rec spine is Unrecognized" $ do
       -- @at (reverse rec) i2@ selects with the lookback direction
       -- FLIPPED — blessing the whole rec-containing spine as a zip
