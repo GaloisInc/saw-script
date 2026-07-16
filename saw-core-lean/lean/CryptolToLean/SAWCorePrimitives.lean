@@ -786,39 +786,22 @@ call. -/
 @[reducible] def streamIdx (α : Type) : Stream α → Nat → α
   | Stream.MkStream f, i => f i
 
-/-! ### Generic proof-carrying `fix` contract
+/-! ### Raw-position proof-carrying `fix` contract (post-R4)
 
-Every `Prelude.fix` is represented by a proof-carrying obligation. The
-backend emits the SAWCore fixed-point body literally and asks Lean to
-prove the semantic fact needed to choose a value.
+The WRAPPED unique-fixed-point contract (`saw_fix_unique_exists` /
+`saw_fix_choose`) is RETIRED: recognized wrapped fixes lower to
+proven realizations (`saw_fix_bounded_choose`, `saw_stream_realize`)
+and every other wrapped fix rejects with a named diagnostic — no
+emitter may produce the retired names again (the driver harness's
+obsolete-helper scan enforces this).
 
-For wrapped value-domain terms, the obligation says there exists a successful
-value `x` such that the translated body maps `Pure.pure x` back to
-`Pure.pure x`, and every wrapped fixed point is exactly `Pure.pure x`.
-Uniqueness is essential: SAW's `fix_unfold` principle tells us that SAW's fixed
-point is a fixed point of the body, so if Lean proves that there is only one
-wrapped fixed point, the chosen Lean witness is forced to coincide with the SAW
-value. In particular, an `Except.error` fixed point is not ignored. If no unique
-fixed point exists, the emitted obligation is unprovable and the backend cannot
-silently pick a convenient inhabitant.
-
-The raw variant covers raw result positions such as function-shaped values,
-proofs, and indices. It uses the same unique-fixed-point contract without the
-`Except` wrapper. -/
-def saw_fix_unique_contract.{u} (α : Type u)
-    (body : Except String α → Except String α) (x : α) : Prop :=
-  body (Pure.pure x) = Pure.pure x ∧
-    ∀ z : Except String α, body z = z → z = Pure.pure x
-
-def saw_fix_unique_exists.{u} (α : Type u)
-    (body : Except String α → Except String α) : Prop :=
-  ∃ x : α, saw_fix_unique_contract α body x
-
-noncomputable def saw_fix_choose.{u} (α : Type u)
-    (body : Except String α → Except String α)
-    (h : saw_fix_unique_exists α body) : Except String α :=
-  Pure.pure (Classical.choose h)
-
+What remains is the RAW variant, covering raw result positions
+(function-shaped values, proofs, indices), retained per Instance 3:
+the obligation says the raw body has a unique fixed point, which
+under SAW's `fix_unfold` forces the chosen witness to coincide with
+the SAW value; if no unique fixed point exists the obligation is
+unprovable. Believed corpus-unreachable for divergent shapes and
+census-checked. -/
 def saw_fix_unique_contract_raw.{u} (α : Sort u)
     (body : α → α) (x : α) : Prop :=
   body x = x ∧ ∀ y : α, body y = y → y = x

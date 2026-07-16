@@ -1,0 +1,8 @@
+module StreamStep where
+
+// Iterate-family single-stream recurrence: the step is `+ 1`, NOT the
+// identity read. Fifth-audit amendment 4: this shape must NOT receive
+// the Class S-single realization; post-R4 it is a named rejection
+// (the iterate generalization is the frozen post-R4 program).
+counting : [inf][8]
+counting = [1] # [ p + 1 | p <- counting ]

@@ -3903,9 +3903,25 @@ translateIdentWithArgsWithShape i args
               ("paired-stream mutual corecursion is not realized "
                <> "(fifth-audit amendment D); a paired lowering is "
                <> "a separate post-R4 design"))
-          _ ->
-            lowerFixProofObligation typeArg bodyArg
-              "all Prelude.fix applications use proof-carrying emission"
+          verdict
+            | shouldWrapBinder typeArg ->
+                -- R4: the wrapped unique-fixed-point contract is
+                -- RETIRED (no emitter may produce it — no fixed-point
+                -- predicate can express productivity, Instance 3).
+                -- Every wrapped fix is now two-state: a recognized
+                -- class with a proven realization, or this named
+                -- rejection carrying the recognizer's reason.
+                Except.throwError (RejectedPrimitive "Prelude.fix"
+                  ("unrecognized wrapped fix shape (the "
+                   <> "unique-fixed-point contract is retired): "
+                   <> Text.pack (fixVerdictReason verdict)))
+            | otherwise ->
+                -- Raw-position fixes (function/proof/index results)
+                -- keep the raw proof-carrying contract, explicitly
+                -- retained per Instance 3; believed corpus-unreachable
+                -- for divergent shapes and census-checked.
+                lowerFixProofObligation typeArg bodyArg
+                  "raw-position fix uses the raw proof-carrying contract"
       if null rest
          then pure fixedPoint
          else applyKnownFunctionWithShape typeArg (ttLean fixedPoint) rest
@@ -4449,6 +4465,17 @@ data FixClass
     -- Slice R2 activates rejection.
   deriving (Eq, Show)
 
+-- | The reason string a rejection carries for an unrecognized (or
+-- position-mismatched) wrapped fix verdict.
+fixVerdictReason :: FixClass -> String
+fixVerdictReason (FixUnrecognized r) = r
+fixVerdictReason FixClassF =
+  "Class F recognized at a non-wrapped position"
+fixVerdictReason FixClassSSingle =
+  "Class S-single recognized at a non-wrapped position"
+fixVerdictReason FixClassSPaired =
+  "paired-stream fix (rejected upstream)"
+
 -- | Classify a wrapped @Prelude.fix@ application from its SOURCE-side
 -- type and body terms — never from emitted Lean (calculus rule). The
 -- checks are deliberately narrow and syntactic; when in doubt the
@@ -4782,30 +4809,25 @@ traceFixClass typeArg bodyArg
         ++ " verdict=" ++ show (classifyFixShape typeArg bodyArg)
         ++ " spine=" ++ termSpine 8 bodyArg
 
--- | Lower an otherwise-unsupported @Prelude.fix@ to an explicit Lean
--- proof obligation rather than rejecting outright.
---
--- The obligation is intentionally semantic and strong: Lean must prove
--- that the translated body has a unique fixed point. For wrapped
--- value-domain results, uniqueness ranges over the whole
--- @Except String α@ fixed-point space, not only over successful
--- @Pure.pure@ values; otherwise an error fixed point could coexist
--- with the chosen successful value. Under SAW's @fix_unfold@
--- principle, uniqueness forces that Lean witness to be the SAW fixed
--- point. This is conservative for shapes whose productivity/boundedness
--- we do not recognize in Haskell: the generated file may be hard to
--- prove, but it cannot silently assign a different meaning to recursion.
+-- | Lower a RAW-POSITION @Prelude.fix@ (function/proof/index result)
+-- to the raw unique-fixed-point proof obligation. Post-R4 this is the
+-- ONLY caller of the unique-fixed-point contract family: the wrapped
+-- variant is retired (the dispatch rejects every unrecognized wrapped
+-- fix with a named diagnostic; recognized classes have proven
+-- realizations). The raw obligation is intentionally semantic and
+-- strong — uniqueness over the whole raw fixed-point space — and is
+-- retained per Instance 3; believed corpus-unreachable for divergent
+-- shapes and census-checked.
 lowerFixProofObligation ::
   TermTranslationMonad m =>
   Term -> Term -> Text.Text -> m TranslatedTerm
 lowerFixProofObligation typeArg bodyArg _reason = do
   typeLean <- translateTerm typeArg
   bodyLean <- translateTerm bodyArg
-  if shouldWrapBinder typeArg
-     then do
-       term <- lowerWrappedFixProofObligationLean typeLean bodyLean
-       pure (TranslatedTerm term BindingWrapped)
-     else do
+  -- R4: the wrapped branch is GONE — the dispatch rejects every
+  -- unrecognized wrapped fix before reaching here, so this lowering
+  -- serves raw result positions only (Instance 3 retention).
+  do
        term <- withSharedLocalTerm
          (Lean.Ident "fix_body_")
          (leanTermIdents typeLean)
@@ -4939,25 +4961,6 @@ lowerClassSSingle typeArg bodyArg
         ("internal invariant violation: Class S-single fix does not "
          <> "match the recognized shape (recognizer/lowering "
          <> "disagreement)"))
-
-lowerWrappedFixProofObligationLean ::
-  TermTranslationMonad m =>
-  Lean.Term -> Lean.Term -> m Lean.Term
-lowerWrappedFixProofObligationLean typeLean bodyLean = do
-  withSharedLocalTerm
-    (Lean.Ident "fix_body_")
-    (leanTermIdents typeLean)
-    bodyLean
-    $ \bodyVar -> do
-        let prop =
-              Lean.App (Lean.Var (Lean.Ident "saw_fix_unique_exists"))
-                [typeLean, bodyVar]
-        withLocalProofObligation
-          (Lean.Ident "h_fix_unique_")
-          prop
-          $ \proof ->
-              pure (Lean.App (Lean.Var (Lean.Ident "saw_fix_choose"))
-                [typeLean, bodyVar, proof])
 
 -- | Translate a SAWCore constant reference.
 --

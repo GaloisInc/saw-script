@@ -1,0 +1,11 @@
+// Fifth-audit amendment 4 golden (R3b), re-pinned at R4: an
+// iterate-shaped stream fix (step = +1, not the identity read) must
+// NOT be realized by saw_stream_realize. The recognizer rejects at
+// the tail gate ("stream tail is not a Stream.rec read": the +1
+// wraps the recursive read); post-R4 the unrecognized-wrapped-fix
+// path is a NAMED REJECTION (the retired contract may not be
+// emitted), so this row pins the rejection diagnostic — the
+// iterate family stays out of the realized surface either way.
+write_lean_cryptol_module
+  "StreamStep.cry"
+  "test_cryptol_module_stream_step.module.lean" [] [];

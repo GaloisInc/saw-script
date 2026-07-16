@@ -1,10 +1,10 @@
-Loading file "fix_term.saw"
+Loading file "test_cryptol_module_stream_step.saw"
 Stack trace:
-   (builtin) in write_lean_term
-   fix_term.saw:14:1-14:40 (at top level)
-Error translating: Refusing to translate primitive Prelude.fix.
+   (builtin) in write_lean_cryptol_module
+   test_cryptol_module_stream_step.saw:9:1-11:54 (at top level)
+Error translating Cryptol module: Refusing to translate primitive Prelude.fix.
 
-Reason: unrecognized wrapped fix shape (the unique-fixed-point contract is retired): fix at a type outside Vec/Stream/paired-Stream: Bool
+Reason: unrecognized wrapped fix shape (the unique-fixed-point contract is retired): stream tail is not a Stream.rec read of the recursive stream: bvAdd
 
 This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
 transposition for this primitive yet. If your Cryptol code specialised down to it,

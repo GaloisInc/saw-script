@@ -955,16 +955,11 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       recName      <- scFreshVarName sc "rec"
       bodyLam      <- scLambda sc recName streamBoolTy mkStreamApp
       fixApp       <- scGlobalApply sc "Prelude.fix" [streamBoolTy, bodyLam]
-      s <- translateOrFail sc "streamConst" fixApp
-      assertContains "emits fixed-point contract" "saw_fix_unique_exists" s
-      assertContains "chooses fixed point from proof" "saw_fix_choose" s
-      assertContains "emits nested stream totality contract"
-                     "saw_mkStream_total_exists" s
-      assertContains "chooses stream from totality proof"
-                     "saw_mkStream_choose" s
-      assertNotContains "does not emit legacy stream helper" "mkStreamFix" s
-      assertNotContains "no bare Prelude.fix in output" "Prelude.fix" s
-      assertNotContains "no bare error path leak" "RejectedPrimitive" s
+      msg <- translateExpectReject sc "streamConst" fixApp
+      assertContains "R4: unrecognized wrapped fix rejects"
+                     "unrecognized wrapped fix shape" msg
+      assertContains "carries the recognizer reason"
+                     "stream element body is not the seeded atWithDefault" msg
 
   , testCase "StreamCorec fix index-dependent Prelude.error branches emit unique-fix obligation" $ do
       boolTy <- scBoolType sc
@@ -982,13 +977,9 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       recName <- scFreshVarName sc "rec"
       bodyLam <- scLambda sc recName streamBoolTy mkStreamApp
       fixApp <- scGlobalApply sc "Prelude.fix" [streamBoolTy, bodyLam]
-      out <- translateOrFail sc "streamFixIndexErrorObligation" fixApp
-      assertContains "emits unique fixed-point obligation"
-                     "h_fix_unique_obligation_" out
-      assertContains "uses fixed-point chooser"
-                     "saw_fix_choose" out
-      assertContains "preserves error branch in obligation"
-                     "saw_throw_error Bool" out
+      msg <- translateExpectReject sc "streamFixIndexErrorObligation" fixApp
+      assertContains "R4: unrecognized wrapped fix rejects"
+                     "unrecognized wrapped fix shape" msg
 
   , testCase "Phase 6: Float / Double primitives covered (no L-14 miss)" $ do
       -- SAW Prelude declares Float and Double as opaque types with
@@ -1059,16 +1050,11 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       recName  <- scFreshVarName sc "rec"
       bodyLam  <- scLambda sc recName vec5Bool genApp
       fixApp   <- scGlobalApply sc "Prelude.fix" [vec5Bool, bodyLam]
-      s <- translateOrFail sc "vecFix" fixApp
-      assertContains "emits fixed-point contract" "saw_fix_unique_exists" s
-      assertContains "chooses fixed point from proof" "saw_fix_choose" s
-      assertContains "preserves wrapped vector body" "genWithBoundsM" s
-      assertContains "vector length remains a Lean helper chain"
-                     "CryptolToLean.SAWCorePrimitives.natPos_macro" s
-      assertNotContains "does not emit legacy vector helper" "genFixVecChecked" s
-      assertNotContains "does not emit legacy vector helper" "genFixMChecked" s
-      assertNotContains "no bare Prelude.fix in output" "Prelude.fix" s
-      assertNotContains "no rejection leak" "RejectedPrimitive" s
+      msg <- translateExpectReject sc "vecFix" fixApp
+      assertContains "R4: unrecognized wrapped fix rejects"
+                     "unrecognized wrapped fix shape" msg
+      assertContains "carries the recognizer reason"
+                     "gen element body is not an ite" msg
 
   , testCase "PairStreamCorec-shaped fix rejects with the amendment-D diagnostic" $ do
       -- Mutual-stream-shaped synthetic term:
@@ -1157,13 +1143,11 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       bVar    <- scVariable sc bName boolTy
       idLam   <- scLambda sc bName boolTy bVar
       fixApp  <- scGlobalApply sc "Prelude.fix" [boolTy, idLam]
-      out <- translateOrFail sc "fixIdObligation" fixApp
-      assertContains "emits unique fixed-point obligation"
-                     "h_fix_unique_obligation_" out
-      assertContains "contract is over Bool"
-                     "saw_fix_unique_exists Bool" out
-      assertContains "uses fixed-point chooser"
-                     "saw_fix_choose" out
+      msg <- translateExpectReject sc "fixIdObligation" fixApp
+      assertContains "R4: the Bool witness rejects by name"
+                     "unrecognized wrapped fix shape" msg
+      assertContains "carries the recognizer reason"
+                     "outside Vec/Stream/paired-Stream: Bool" msg
   ]
 
 --------------------------------------------------------------------------------

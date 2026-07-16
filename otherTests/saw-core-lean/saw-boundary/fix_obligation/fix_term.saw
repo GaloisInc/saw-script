@@ -2,11 +2,13 @@ enable_experimental;
 
 // Hand-construct a term containing SAWCore `Prelude.fix`.
 //
-// The Lean backend must not translate this by trusting a Haskell-side
-// productivity/semantic classifier. The proof-carrying path emits the ordinary
-// translated body plus an explicit unique-fixed-point obligation. This file is
-// an emit-stage boundary test: the output is allowed to contain a proof stub,
-// but a completed proof-discharge workflow must not accept that stub.
+// R4 litmus: this is the audits' Bool divergence witness (`fix Bool`
+// has SAW meaning ⊥ for any body that forces its argument; the
+// identity body's unique-fixed-point story was the retired
+// contract's soundness hole). Post-R4 the wrapped contract is
+// RETIRED: an unrecognized wrapped fix REJECTS with a named
+// diagnostic carrying the recognizer's reason. This row pins that
+// rejection — the witness must never again emit anything.
 let probe = parse_core "fix Bool (\\(b : Bool) -> b)";
 
 write_lean_term "probe" [] [] "-" probe;
