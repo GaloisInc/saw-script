@@ -362,3 +362,37 @@ module popcount, llvm_popcount → `FixClassF`; rec_ones →
 fix_wrapped_unique → `FixUnrecognized` (Bool witness). Gates:
 smoketest 67/67 (9 new classifier cases), corpus emission
 byte-identical vs `.snapshots/op2-baseline`, full conformance green.
+
+## Slice R1 implementation record (2026-07-15)
+
+Library + lemmas landed; still NO emitter consumer (that is R2).
+
+* Definitions (SAWCorePrimitives): `saw_fix_bounded_iter` (graded
+  iterates from the pure discarded seed), `saw_fix_bounded` (the
+  `n`-th iterate), `saw_fix_bounded_productive` (H_prod as a
+  two-field Prop structure: `total` + `lookback`, both PROVEN per
+  instance — amendment A). Three `#guard_msgs` self-tests: a
+  concrete -1-lookback recurrence stabilizes to `[1,2,3]` from seed
+  0 AND from seed 999 (condition 4 witnessed computationally), and
+  an erroring body propagates its OWN error string (condition 5).
+* Lemmas (SAWCorePreludeProofs), all conditional on H_prod only:
+  `saw_fix_bounded_iter_pure`; `saw_fix_bounded_iter_stable` (L1
+  master form: ANY two iterates past index `i`, even from different
+  seeds, agree at `i` — strong induction on `i`);
+  `saw_fix_bounded_pure` (L2); `saw_fix_bounded_seed_irrelevant`
+  (condition 4); `saw_fix_bounded_fixed_point` (L3, the SAW link);
+  PLUS `saw_fix_bounded_unique_pure_fixed_point` — uniqueness among
+  pure fixed points is now a THEOREM (strong induction via lookback),
+  which is exactly the honest strengthening the retired
+  `saw_fix_unique_exists` contract assumed as a side condition. The
+  audited hole (`project-op3-pure-uniqueness-hole`: divergent fixes
+  admitted by uniqueness-among-pure-fixed-points) is closed the right
+  way round: a divergent body simply has no H_prod proof.
+* Axiom audit: all five lemmas depend on `propext` (+`Quot.sound`)
+  only — no `Classical.choice`, no vec↔BitVec axioms.
+* Amendment E: the obsolete-helper scan in `lean-driver-test.sh`
+  now carries the sanctioned-successor comment (saw_fix_bounded /
+  saw_stream_unfold must NOT join the forbidden list at R2/R3).
+* Amendment F: residual-trust §3.2 re-opened as LIVE with the
+  proof-carrying mitigation recorded; remaining trust decomposes into
+  `fix_unfold` + §3.3 normalization preservation — no new class.

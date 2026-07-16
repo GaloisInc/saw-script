@@ -113,6 +113,14 @@ run-tests() {
             esac
         done
         if [ -n "$EMITTED_FILES" ]; then
+            # The names below are the RETIRED Phase-5 direct fix-lowering
+            # helpers (silent-trust surface; residual-trust catalog §3.2).
+            # The OP-3 successor's proof-carrying realizations —
+            # saw_fix_bounded (Slice R2) and saw_stream_unfold (Slice R3)
+            # — are the SANCTIONED replacements under the per-instance
+            # PROVEN H_prod obligation (design doc 2026-07-15, amendment
+            # A/E): do NOT add them to this list when their emission
+            # slices land.
             obsolete_pattern='(^|[^[:alnum:]_])(mkStreamM|mkStreamFix|mkStreamFixM|mkStreamFixPair|mkStreamFixPairM|cryptolIterateM|genFix|genFixM|genFixMChecked|genFixVecChecked|GenFixBodyProductive|GenFixVecBodySound|StreamBodyProductive|PairStreamComponentProductive|PairStreamBodyProductive|saw_unreachable_default|rawifyExceptToRaw|divNatChecked|modNatChecked|BoundedVecFold|h_raw_error_obligation_)([^[:alnum:]_]|$)'
             obsolete_hits=$(grep -nE "$obsolete_pattern" $EMITTED_FILES 2>/dev/null || true)
             if [ -n "$obsolete_hits" ]; then

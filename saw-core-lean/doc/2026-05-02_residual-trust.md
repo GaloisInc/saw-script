@@ -390,27 +390,48 @@ instead of silently re-ordering.
 
 ---
 
-### 3.2 Cryptol frontend productivity (retired direct-lowering trust)
+### 3.2 Cryptol frontend productivity (RE-OPENED 2026-07-15 — OP-3 successor)
 
-**Status:** Retired as a live backend trust item. The old Phase 5
-structural stream/vector fix helpers have been deleted.
+**Status:** LIVE again, with a proof-carrying mitigation the retired
+Phase 5 helpers never had. (Was: retired 2026-05; the old structural
+stream/vector fix helpers are still deleted and still forbidden.)
 
-**Former trust shape:** Earlier prototypes trusted Cryptol's source-level
-productivity check, then used Haskell classifiers to lower recognized
-`Prelude.fix` terms to structural Lean helper definitions. If the
-productivity claim was wrong or the classifier selected the wrong shape,
-Lean could compute a value that did not match SAW's denotational fixed
-point.
+**Former trust shape (Phase 5, refuted):** Earlier prototypes trusted
+Cryptol's source-level productivity check, then used Haskell
+classifiers to lower recognized `Prelude.fix` terms to structural Lean
+helper definitions. If the productivity claim was wrong or the
+classifier selected the wrong shape, Lean could compute a value that
+did not match SAW's denotational fixed point — SILENTLY.
 
-**Current contract:** The backend now emits proof-carrying fixed-point
-obligations such as `saw_fix_unique_exists`. Productivity or recurrence
-facts may still be useful proof lemmas, but they must be proved in Lean
-against the emitted body. They are no longer residual assumptions hidden
-inside a direct helper call.
+**Re-opened shape (OP-3 successor, amendments A/E/F —
+doc/2026-07-15_op3-successor-design.md):** the backend will again
+realize recognized fix shapes directly: Class F via `saw_fix_bounded`
+(Slice R2), Class S via `saw_stream_unfold` (Slice R3). The
+difference is WHERE a wrong claim lands:
+
+* the per-instance productivity obligation
+  (`saw_fix_bounded_productive` — totality AND bounded lookback) is
+  PROVEN in Lean against the emitted body at every emission site,
+  never assumed. A wrong recognizer verdict makes that obligation
+  UNPROVABLE — loud failure, not a wrong value;
+* the faithfulness core (`saw_fix_bounded_iter_stable` /
+  `_fixed_point` / `_unique_pure_fixed_point`,
+  SAWCorePrelude_proofs) is proved once, unconditionally in the
+  library, conditional only on the per-instance obligation; the
+  realization is provably the UNIQUE pure fixed point of the body.
+
+**Remaining live trust (named, not manufactured):** that SAW's `fix`
+denotes a pure fixed point of the translated body. This decomposes
+into `fix_unfold` (SAW's own spec for `fix`), §3.3
+(`scNormalizeForLean` preservation), and the value-domain translation
+itself — no NEW trust class beyond the catalog.
 
 **Regression expectation:** live code and emitted goldens must not
-reintroduce direct fix-helper names or unreachable defaults. The driver
-harness has an obsolete-helper scan for this surface.
+reintroduce the RETIRED direct fix-helper names or unreachable
+defaults; the driver harness's obsolete-helper scan enforces this and
+its list comments name `saw_fix_bounded` / `saw_stream_unfold` as the
+sanctioned proof-carrying successors (they are NOT to be added to the
+forbidden list when R2/R3 land).
 
 ---
 

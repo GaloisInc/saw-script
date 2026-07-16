@@ -830,6 +830,97 @@ noncomputable def saw_fix_choose_raw.{u} (α : Sort u) (body : α → α)
     (h : saw_fix_unique_exists_raw α body) : α :=
   Classical.choose h
 
+/-! ### Class F bounded-lookback `fix` realization (OP-3 successor)
+
+`saw_fix_bounded n α d body` realizes a `Prelude.fix` at `Vec n α`
+whose body the source-side recognizer (`classifyFixShape`,
+SAWCoreLean.Term) has classified as a bounded-lookback recurrence
+(Class F: element `i` of the output reads only elements `< i` of the
+recursive input). It is the `n`-fold iteration of the UNTOUCHED
+translated body from the pure placeholder seed
+`Vector.replicate n d`. Nothing about the body is decomposed or
+rebuilt, and the seed is DISCARDED: under the per-instance
+productivity obligation `saw_fix_bounded_productive` (H_prod, proved
+by unfolding the concrete body — never assumed), the result is
+seed-independent, pure, and a fixed point of the body — see
+`saw_fix_bounded_seed_irrelevant` / `saw_fix_bounded_pure` /
+`saw_fix_bounded_fixed_point` in SAWCorePreludeProofs. The fixed-point
+lemma is the SAW link: SAW's only spec for `fix` is `fix_unfold`, and
+for a bounded-lookback body the stabilization lemma pins the
+elementwise values uniquely, so the SAW value and this realization
+coincide. Design + audit record:
+doc/2026-07-15_op3-successor-design.md.
+
+Slice R1 status: library only — no emitter targets these yet. The
+emission flip is Slice R2, gated on the running_sum end-to-end
+discharge. -/
+
+/-- The `k`-th iterate of `body` from the pure discarded seed.
+`saw_fix_bounded` is the `n`-th iterate; the graded version exists so
+the stabilization lemma can speak about intermediate iterates. -/
+def saw_fix_bounded_iter (n : Nat) (α : Type) (d : α)
+    (body : Except String (Vec n α) → Except String (Vec n α)) :
+    Nat → Except String (Vec n α)
+  | 0 => Pure.pure (Vector.replicate n d)
+  | k + 1 => body (saw_fix_bounded_iter n α d body k)
+
+/-- `n`-fold iteration of the untouched translated fix body from a
+pure placeholder seed. Element `i` stabilizes at iterate `i + 1`, so
+`n` iterates fix every element of a `Vec n α`. -/
+def saw_fix_bounded (n : Nat) (α : Type) (d : α)
+    (body : Except String (Vec n α) → Except String (Vec n α)) :
+    Except String (Vec n α) :=
+  saw_fix_bounded_iter n α d body n
+
+/-- H_prod: the per-instance productivity obligation for a Class-F
+lowering. BOTH fields are PROVEN per instance by unfolding the
+concrete body (fourth-audit amendment A — element totality is part of
+the obligation, not a trusted side condition):
+
+* `total` — the body maps every pure vector to a pure vector (its
+  element computations neither manufacture errors on pure input nor
+  drop them: if an element errored, the whole body application would,
+  and `total` would be unprovable);
+* `lookback` — element `i` of the output depends only on elements
+  `< i` of a pure input (the semantic bounded-lookback fact; the
+  recognizer's syntactic constant `-1` shift check is the gate, this
+  is the proof). -/
+structure saw_fix_bounded_productive (n : Nat) (α : Type)
+    (body : Except String (Vec n α) → Except String (Vec n α)) :
+    Prop where
+  total : ∀ v : Vec n α, ∃ w : Vec n α,
+    body (Pure.pure v) = Pure.pure w
+  lookback : ∀ (v₁ v₂ w₁ w₂ : Vec n α),
+    body (Pure.pure v₁) = Pure.pure w₁ →
+    body (Pure.pure v₂) = Pure.pure w₂ →
+    ∀ (i : Nat) (hi : i < n),
+      (∀ (j : Nat) (hj : j < n), j < i → v₁[j] = v₂[j]) →
+      w₁[i] = w₂[i]
+
+/- Self-tests: a concrete -1-lookback recurrence
+(`out[0] = 1, out[i] = in[i-1] + 1`) stabilizes to `[1, 2, 3]` in
+`n = 3` iterations, from ANY seed (the placeholder is discarded), and
+a body that errors propagates its OWN error string (never a
+manufactured one). -/
+
+/-- info: Except.ok { toArray := #[1, 2, 3], size_toArray := _ } -/
+#guard_msgs in
+#eval saw_fix_bounded 3 Nat 0 (fun rec => do
+  let v ← rec
+  Pure.pure #v[1, v[0] + 1, v[1] + 1])
+
+/-- info: Except.ok { toArray := #[1, 2, 3], size_toArray := _ } -/
+#guard_msgs in
+#eval saw_fix_bounded 3 Nat 999 (fun rec => do
+  let v ← rec
+  Pure.pure #v[1, v[0] + 1, v[1] + 1])
+
+/-- info: Except.error "boom" -/
+#guard_msgs in
+#eval saw_fix_bounded 2 Nat 0
+  (fun _ => Except.error "boom" : Except String (Vec 2 Nat) →
+    Except String (Vec 2 Nat))
+
 /-! ### Proof-carrying `MkStream` totality contract
 
 SAW's `MkStream α f` produces a stream of raw `α` values. Under the
