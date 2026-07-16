@@ -510,3 +510,38 @@ generalizes to the iterate family (ChaCha20-core's
 that question rides the post-R4 flagship, and a false generalization
 here would be the same silent-unsoundness class the third audit
 killed. Reject-when-unsure stands.
+
+## R2 ladder record (2026-07-15) — popcount32 + E6 GREEN; llvm_popcount re-characterized
+
+`proofs/offline_lean_popcount32` (W=32/N=33) and
+`proofs/E6_popcount_bridge` (W=3/N=5) discharge end-to-end on the R2
+recipe + one new library lemma (`iteM_ok_ok`, the value-level-bit
+conditional). Axioms: propext/Classical.choice/Quot.sound only — the
+popcount rows do not even need the vec↔BitVec round-trips. Harness
+11 s / 5 s. `proof-gaps/offline_lean_popcount32` retired.
+`proof-gaps/llvm_popcount_eq` is NOT a recurrence gap anymore: its
+GAP.md now records that the fix side discharges by this recipe and
+the residue is the SWAR (Hacker's Delight) correctness theorem
+`bvEq 32 (swar x) (pcChain x 32)` for symbolic x — a W2
+masked-partial-sum lemma-family item, not an OP-3 item.
+
+Recipe deviations (binding on future discharges):
+
+1. Numerals-first applies INSIDE the body characterization lemmas
+   too, not only in `goal_holds` — keyed matching never sees through
+   the reducible macro chains.
+2. `zip` selection at K=32: `simp [zip, Vector.get]` whnf-times-out,
+   and `zip_getElem_lt` will not fire because its collection length
+   is `Nat.min m n` while the goal's getElem instance carries the
+   reduced literal. Pattern: a `have` restating the selection with
+   the literal-length `@GetElem.getElem` instance, proved by
+   defeq-coercion from `zip_getElem_lt`, then `rw`.
+3. The `congr 1` definitional close of the fixed-point lemma is
+   size-fragile (hit whnf heartbeats at N=33). The stable form is
+   `congrArg` + `Vector.ext` + per-index cases — use it by default
+   for N beyond single digits.
+4. foldl spec sides connect via `foldlM_pure_eq_foldl` (hStep =
+   `cases a <;> rfl`) and `foldl_eq_natRec_atWithDefault`, each
+   applied through a `have` that restates the lambda with
+   post-normalization literals; a local `Nat.rec = chain` induction
+   (`rw [← ih]; rw [← atWithDefault_lt]`) closes the bridge.

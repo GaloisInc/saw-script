@@ -696,6 +696,18 @@ theorem iteM_pure_false {α : Type} (T E : Except String α) :
     CryptolToLean.SAWCorePreludeExtra.iteM α (Pure.pure false) T E = E :=
   rfl
 
+/-- `iteM` on a pure but SYMBOLIC Boolean condition with pure branches
+is the pure `cond`. The popcount-family Class-F bodies (Slice R2)
+branch on a VALUE-LEVEL bit (`iteM` applied to `bits[i-1]`, not to a
+decidable `ltNat` test), so neither `iteM_pure_true` nor
+`iteM_pure_false` applies; this is the elementwise characterization
+those discharges rewrite with once both branches have been reduced to
+`Except.ok` values. -/
+theorem iteM_ok_ok {α : Type} (b : Bool) (t e : α) :
+    CryptolToLean.SAWCorePreludeExtra.iteM α (Except.ok b)
+      (Except.ok t) (Except.ok e) = Except.ok (bif b then t else e) := by
+  cases b <;> rfl
+
 /-- Every iterate from a pure seed is pure (given `H.total`). -/
 theorem saw_fix_bounded_iter_from_pure
     (n : Nat) (α : Type) (s : Vec n α)
