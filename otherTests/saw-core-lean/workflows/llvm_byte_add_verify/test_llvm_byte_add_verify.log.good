@@ -1,0 +1,206 @@
+Loading file "test_llvm_byte_add_verify.saw"
+Verifying mp_add...
+Simulating mp_add...
+Checking proof obligations mp_add...
+Subgoal failed: mp_add test_llvm_byte_add_verify.saw:33:8: error: in _SAW_LLVM_withMethodSpec
+Literal equality postcondition
+Expected term: 
+let { x`1 = TCNum 32;
+    }
+ in ecPlus (seq x`1 Bool) (PRingSeqBool x`1) a b
+Actual term:
+let { x`1 = Vec 8 Bool;
+      x`2 = Vec 16 Bool;
+      x`3 = bvNat 16 0;
+      x`4 = bvNat 32 1;
+      x`5 = bvNat 32 0;
+      x`6 = bvUExt 24 8 (slice Bool 0 8 24 a);
+      x`7 = bvUExt 24 8 (slice Bool 8 8 16 a);
+      x`8 = bvUExt 24 8 (slice Bool 16 8 8 a);
+      x`9 = bvNat 8 1;
+      x`10 = bvNat 8 2;
+      x`11 = bvNat 8 3;
+      x`12 = bvNat 8 4;
+      x`13 = bvUExt 24 8
+               (ite x`1 (bvEq 32 x`5 x`6)
+                  (ite x`1 (bvEq 32 x`5 x`7) (ite x`1 (bvEq 32 x`5 x`8) x`9 x`10)
+                     x`11)
+                  x`12);
+      x`14 = bvslt 32 x`4 x`13;
+      x`15 = bvUExt 24 8 (slice Bool 0 8 24 b);
+      x`16 = bvUExt 24 8 (slice Bool 8 8 16 b);
+      x`17 = bvUExt 24 8 (slice Bool 16 8 8 b);
+      x`18 = bvUExt 24 8
+               (ite x`1 (bvEq 32 x`5 x`15)
+                  (ite x`1 (bvEq 32 x`5 x`16)
+                     (ite x`1 (bvEq 32 x`5 x`17) x`9 x`10)
+                     x`11)
+                  x`12);
+      x`19 = bvslt 32 x`4 x`18;
+      x`20 = bvNat 32 254;
+      x`21 = bvNat 8 0;
+      x`22 = slice Bool 16 16 0
+               (bvAdd 32
+                  (bvUExt 16 16 (append 8 8 Bool x`21 (slice Bool 24 8 0 a)))
+                  (bvUExt 24 8 (slice Bool 24 8 0 b)));
+      x`23 = bvUExt 16 16 x`22;
+      x`24 = bvslt 32 x`20 x`23;
+      x`25 = bvNat 16 1;
+      x`26 = ite x`2 x`24 x`25 x`3;
+      x`27 = bvUExt 16 16 x`26;
+      x`28 = bvNat 32 2;
+      x`29 = bvslt 32 x`28 x`13;
+      x`30 = bvslt 32 x`28 x`18;
+      x`31 = ite x`2 x`14 (slice Bool 16 16 0 (bvAdd 32 x`27 x`8))
+               x`26;
+      x`32 = ite x`2 x`19
+               (slice Bool 16 16 0 (bvAdd 32 (bvUExt 16 16 x`31) x`17))
+               x`31;
+      x`33 = bvUExt 16 16 x`32;
+      x`34 = bvslt 32 x`20 x`33;
+      x`35 = ite x`2 x`34 x`25 x`3;
+      x`36 = bvUExt 16 16 x`35;
+      x`37 = bvNat 32 3;
+      x`38 = bvslt 32 x`37 x`13;
+      x`39 = bvslt 32 x`37 x`18;
+      x`40 = ite x`2 x`29 (slice Bool 16 16 0 (bvAdd 32 x`36 x`7))
+               x`35;
+      x`41 = ite x`2 x`30
+               (slice Bool 16 16 0 (bvAdd 32 (bvUExt 16 16 x`40) x`16))
+               x`40;
+      x`42 = bvUExt 16 16 x`41;
+      x`43 = bvslt 32 x`20 x`42;
+      x`44 = ite x`2 x`43 x`25 x`3;
+      x`45 = bvUExt 16 16 x`44;
+      x`46 = ite x`2 x`38 (slice Bool 16 16 0 (bvAdd 32 x`45 x`6))
+               x`44;
+      x`47 = ite x`2 x`39
+               (slice Bool 16 16 0 (bvAdd 32 (bvUExt 16 16 x`46) x`15))
+               x`46;
+      x`48 = bvUExt 16 16 x`47;
+      x`49 = bvslt 32 x`20 x`48;
+      x`50 = bvUExt 24 8
+               (ite x`1
+                  (Prelude::and (Prelude::and (not x`14) (not x`19))
+                     (bvEq 32 x`5 x`27))
+                  x`9
+                  (ite x`1
+                     (Prelude::and (Prelude::and (not x`29) (not x`30))
+                        (bvEq 32 x`5 x`36))
+                     x`10
+                     (ite x`1
+                        (Prelude::and (Prelude::and (not x`38) (not x`39))
+                           (bvEq 32 x`5 x`45))
+                        x`11
+                        (ite x`1 (bvEq 32 x`5 (bvUExt 16 16 (ite x`2 x`49 x`25 x`3)))
+                           x`12
+                           (bvNat 8 5)))));
+      x`51 = bvNat 32 4;
+      x`52 = bvslt 32 x`50 x`51;
+      x`53 = bvNat 32 255;
+      x`54 = slice Bool 8 8 0
+               (ite x`2 x`34 (slice Bool 16 16 0 (bvAnd 32 x`53 x`33)) x`32);
+      x`55 = bvUExt 24 8 (slice Bool 24 8 0 (bvAdd 32 x`4 x`50));
+      x`56 = bvslt 32 x`55 x`51;
+      x`57 = slice Bool 8 8 0
+               (ite x`2 x`43 (slice Bool 16 16 0 (bvAnd 32 x`53 x`42)) x`41);
+      x`58 = ite x`1 (bvEq 32 x`28 x`50) x`21 x`57;
+      x`59 = slice Bool 8 8 0
+               (ite x`2 x`49 (slice Bool 16 16 0 (bvAnd 32 x`53 x`48)) x`47);
+      x`60 = ite x`1 (bvEq 32 x`37 x`50) x`21 x`59;
+    }
+ in bvOr 32
+      (bvOr 32
+         (append 24 8 Bool
+            (append 16 8 Bool x`3
+               (ite x`1 x`52 (ite x`1 (bvEq 32 x`4 x`50) x`21 x`54) x`54))
+            (slice Bool 8 8 0
+               (ite x`2 x`24 (slice Bool 16 16 0 (bvAnd 32 x`53 x`23)) x`22)))
+         (bvShl 32
+            (bvUExt 24 8
+               (ite x`1 x`52
+                  (ite x`1 x`56 (ite x`1 (bvEq 32 x`28 x`55) x`21 x`58) x`58)
+                  x`57))
+            (bvToNat 32 (bvNat 32 16))))
+      (bvShl 32
+         (bvUExt 24 8
+            (ite x`1 x`52
+               (ite x`1 x`56
+                  (ite x`1
+                     (bvslt 32 (bvUExt 24 8 (... ... 24 8 0 (bvAdd 32 x`4 x`55)))
+                        x`51)
+                     x`21
+                     (ite x`1 (bvEq 32 x`37 x`55) x`21 x`60))
+                  x`60)
+               x`59))
+         (bvToNat 32 (bvNat 32 24)))
+
+Goal size 423. Provers used: W4 ->z3
+----------Counterexample----------
+  a: 1564211960
+  b: 7
+----------------------------------
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in w4
+   test_llvm_byte_add_verify.saw:33:56-33:58 in (callback)
+   (builtin) in llvm_verify
+   test_llvm_byte_add_verify.saw:33:8-33:58 in (callback)
+   (builtin) in fails
+   test_llvm_byte_add_verify.saw:33:1-33:58 (at top level)
+Proof failed.
+
+Verifying mp_add...
+Simulating mp_add...
+Checking proof obligations mp_add...
+Proof succeeded! mp_add
+Verifying mp_add_simple...
+Simulating mp_add_simple...
+Checking proof obligations mp_add_simple...
+Proof succeeded! mp_add_simple
+Verifying mp_add_simple...
+Simulating mp_add_simple...
+Checking proof obligations mp_add_simple...
+Subgoal failed: mp_add_simple test_llvm_byte_add_verify.saw:52:8: error: in _SAW_LLVM_withMethodSpec
+Literal equality postcondition
+Expected term: 
+let { x`1 = TCNum 32;
+    }
+ in ecPlus (seq x`1 Bool) (PRingSeqBool x`1) a`5961 b`5962
+Actual term:
+let { x`1 = bvToNat 32 (bvNat 32 8);
+      x`2 = bvAdd 32 (bvUExt 24 8 (slice Bool 24 8 0 a`5961))
+              (bvUExt 24 8 (slice Bool 24 8 0 b`5962));
+      x`3 = bvAdd 32
+              (bvAdd 32 (bvUExt 24 8 (slice Bool 16 8 8 a`5961))
+                 (bvUExt 24 8 (slice Bool 16 8 8 b`5962)))
+              (bvSShr 31 (bvUExt 16 16 (slice Bool 16 16 0 x`2)) x`1);
+      x`4 = bvAdd 32
+              (bvAdd 32 (bvUExt 24 8 (slice Bool 8 8 16 a`5961))
+                 (bvUExt 24 8 (slice Bool 8 8 16 b`5962)))
+              (bvSShr 31 (bvUExt 16 16 (slice Bool 16 16 0 x`3)) x`1);
+    }
+ in bvOr 32
+      (bvOr 32
+         (append 24 8 Bool
+            (append 16 8 Bool (bvNat 16 0) (slice Bool 24 8 0 x`3))
+            (slice Bool 24 8 0 x`2))
+         (bvShl 32 (bvUExt 24 8 (slice Bool 24 8 0 x`4))
+            (bvToNat 32 (bvNat 32 16))))
+      (bvShl 32
+         (bvUExt 24 8
+            (slice Bool 24 8 0
+               (bvAdd 32
+                  (bvAdd 32 (bvUExt 24 8 (slice Bool 0 8 24 a`5961))
+                     (bvUExt 24 8 (slice Bool 0 8 24 b`5962)))
+                  (bvSShr 31 (bvUExt 16 16 (slice Bool 16 16 0 x`4)) x`1))))
+         (bvToNat 32 (bvNat 32 24)))
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in llvm_verify
+   test_llvm_byte_add_verify.saw:52:8-53:44 in (callback)
+   (builtin) in fails
+   test_llvm_byte_add_verify.saw:52:1-53:44 (at top level)
+Proof failed: 1 of 1 verification conditions unfinished.
+

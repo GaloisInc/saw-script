@@ -1,0 +1,53 @@
+// 0.02-W2 opener: SV-COMP byte_add (multi-precision addition), the
+// scouted gentlest entry to the byte-decomposition BV lemma family
+// (add/carry/shl/trunc/zext — no rotates, no multiplies).
+//
+// Three acts:
+//   1. The ORIGINAL benchmark (examples/sv-comp/byte_add.bc,
+//      provenance: SV-COMP) mis-carries when a partial byte sum is
+//      exactly 255 (`partial_sum > 254` sets carry one too early) —
+//      w4 REFUTES mp_add == a+b with a concrete counterexample.
+//      That is the mixed-solver story's SMT half: the bug is caught
+//      before any Lean is involved.
+//   2. byte_add_fixed.c (local copy, single-character carry fix:
+//      `> 254` -> `> 255`; compiled with clang 19) VERIFIES under
+//      w4: mp_add == a+b.
+//   3. The SAME fixed obligation is punted to Lean via offline_lean
+//      (emission-only, fails-wrapped per the 0.01 convention); its
+//      kernel-checked discharge is the W2 lemma-family driver
+//      (proofs/ or proof-gaps/ tracks it).
+
+enable_experimental;
+
+m_orig <- llvm_load_module "byte_add.bc";
+m_fixed <- llvm_load_module "byte_add_fixed.bc";
+
+let mp_add_spec = do {
+  a <- llvm_fresh_var "a" (llvm_int 32);
+  b <- llvm_fresh_var "b" (llvm_int 32);
+  llvm_execute_func [llvm_term a, llvm_term b];
+  llvm_return (llvm_term {{ a + b }});
+};
+
+// Act 1: the seeded carry bug is refuted by SMT.
+fails (llvm_verify m_orig "mp_add" [] true mp_add_spec w4);
+
+// Act 2: the fix verifies by SMT.
+llvm_verify m_fixed "mp_add" [] true mp_add_spec w4;
+
+// Act 3: the byte-decomposition obligation, punted to Lean
+// (emission-only). Uses the straight-line carry-chain adder
+// (byte_add_simple.c) rather than the benchmark body: the na/nb
+// early-termination logic explodes symbolic execution into a
+// ~700K-line emitted goal, while the lemma-family content
+// (add/carry/shl/trunc/zext) is identical.
+m_simple <- llvm_load_module "byte_add_simple.bc";
+let mp_add_simple_spec = do {
+  a <- llvm_fresh_var "a" (llvm_int 32);
+  b <- llvm_fresh_var "b" (llvm_int 32);
+  llvm_execute_func [llvm_term a, llvm_term b];
+  llvm_return (llvm_term {{ a + b }});
+};
+llvm_verify m_simple "mp_add_simple" [] true mp_add_simple_spec w4;
+fails (llvm_verify m_simple "mp_add_simple" [] true mp_add_simple_spec
+  (offline_lean "test_llvm_byte_add_verify"));
