@@ -318,3 +318,47 @@ commit, per house rules.
 - **After R4** (separate program): the Stream@core/Either@core
   recursor-convention re-open (ladder step 5) and the rev.cry
   module-translation acceptance (step 6).
+
+## Slice R0 implementation record (2026-07-15)
+
+R0 landed as `classifyFixShape` in `SAWCoreLean.Term` (pure classifier
++ `SAW_LEAN_TRACE_FIX_CLASS` trace hook at the `Prelude.fix` dispatch;
+nothing in emission reads the verdict). Three findings from tracing
+the real corpus, binding on R1+:
+
+1. **The normalized Class-F shape is FUSED, not append-headed.** The
+   design above describes Class F as `\rec -> append [seed] (gen k
+   elt)`; `scNormalizeForLean` folds that append away. What actually
+   reaches the translator is
+   `\rec -> gen N a (\i -> ite a (ltNat i 1) <seed, rec-free>
+   (at K a (gen K a (\i2 -> elt)) (subNat i 1)))` — the constant -1
+   shift (amendment C) lives at the tail BRANCH, so inside `elt` the
+   recursive vector is read at the INNER binder exactly (`rec[j]`
+   with `j = i-1 < i`). The recognizer matches this fused form; all
+   five corpus Class-F goldens (running_sum, popcount32, e_series,
+   module popcount, llvm_popcount) classify F under it. R1's
+   `saw_fix_bounded` count lemma must be stated against the fused
+   shape.
+2. **Scan discipline tightened (audit-grade).** A rec-containing
+   `at`-selection admits ONLY the bare recursive vector or zip slots
+   beneath it — blessing the whole spine would classify
+   `at (reverse rec) i2`, which flips the lookback direction
+   (silently unsound if R2 activated it). Smoketest pins this
+   negative (`index-permuting wrapper on the rec spine`), plus
+   same-index tail, two-step lookback (`subNat i 2`), `atWithDefault`
+   (out-of-family selector), rec-free element, non-gen body, and the
+   Bool witness.
+3. **Corrections to the R0 golden expectations.** Paired-stream fixes
+   arrive at the sort-1 spelling `Prelude.PairType1` (not
+   `Prelude.PairType`) — stream_fibs classifies S-paired only with
+   both spellings accepted. And `obligations/fix_wrapped_unique` is a
+   **Bool-typed witness → UNRECOGNIZED** (the slice-plan line calling
+   it "F" was wrong); it is the litmus negative, exactly as the R2
+   structural re-pin expects.
+
+Verdict sweep (8/8 as amended): running_sum, popcount32, e_series,
+module popcount, llvm_popcount → `FixClassF`; rec_ones →
+`FixClassSSingle`; stream_fibs → `FixClassSPaired`;
+fix_wrapped_unique → `FixUnrecognized` (Bool witness). Gates:
+smoketest 67/67 (9 new classifier cases), corpus emission
+byte-identical vs `.snapshots/op2-baseline`, full conformance green.

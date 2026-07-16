@@ -31,6 +31,7 @@ import           SAWCentral.Prover.Exporter
 
 import           SAWCoreLean.Lean
 import           SAWCoreLean.SpecialTreatment (escapeIdent)
+import           SAWCoreLean.Term (FixClass(..), classifyFixShape)
 
 import           Control.Exception   (try, SomeException, evaluate)
 import qualified Data.Set            as Set
@@ -1288,6 +1289,192 @@ antiRegressionLintTests = testGroup "anti-regression source lint (Slice 7)"
   ]
 
 --------------------------------------------------------------------------------
+-- OP-3 successor recognizer (Slice R0 — inert; classification only)
+--------------------------------------------------------------------------------
+
+-- | Build the corpus's FUSED normalized Class-F body
+--
+-- > \rec -> gen 9 a (\i -> ite a (ltNat i 1)
+-- >                            <seed>
+-- >                            (at 8 a (gen 8 a (\i2 -> <elt i2>)) (subNat i 1)))
+--
+-- parameterized on the element function and the tail-selection index
+-- so the negative cases can perturb exactly one discipline at a time.
+-- Returns @(typeArg, bodyArg)@ for 'classifyFixShape'.
+mkFusedFixF ::
+  SharedContext ->
+  (Term {- rec -} -> Term {- i2 -} -> IO Term)  {- element body -} ->
+  (Term {- i -} -> IO Term)  {- tail-selection index -} ->
+  IO (Term, Term)
+mkFusedFixF sc mkElt mkTailIdx = do
+  boolTy <- scBoolType sc
+  natTy  <- scNatType sc
+  n32    <- scNat sc 32
+  n9     <- scNat sc 9
+  n8     <- scNat sc 8
+  n1     <- scNat sc 1
+  n0     <- scNat sc 0
+  elemTy <- scGlobalApply sc "Prelude.Vec" [n32, boolTy]
+  vecTy  <- scGlobalApply sc "Prelude.Vec" [n9, elemTy]
+
+  recName <- scFreshVarName sc "rec"
+  recVar  <- scVariable sc recName vecTy
+  iName   <- scFreshVarName sc "i"
+  iVar    <- scVariable sc iName natTy
+  i2Name  <- scFreshVarName sc "i2"
+  i2Var   <- scVariable sc i2Name natTy
+
+  elt      <- mkElt recVar i2Var
+  innerF   <- scLambda sc i2Name natTy elt
+  innerGen <- scGlobalApply sc "Prelude.gen" [n8, elemTy, innerF]
+  tailIdx  <- mkTailIdx iVar
+  tailB    <- scGlobalApply sc "Prelude.at" [n8, elemTy, innerGen, tailIdx]
+  seedB    <- scGlobalApply sc "Prelude.bvNat" [n32, n0]
+  cond     <- scGlobalApply sc "Prelude.ltNat" [iVar, n1]
+  iteB     <- scGlobalApply sc "Prelude.ite" [elemTy, cond, seedB, tailB]
+  genF     <- scLambda sc iName natTy iteB
+  outerGen <- scGlobalApply sc "Prelude.gen" [n9, elemTy, genF]
+  body     <- scLambda sc recName vecTy outerGen
+  pure (vecTy, body)
+
+shiftMinusOne :: SharedContext -> Term -> IO Term
+shiftMinusOne sc iVar = do
+  n1 <- scNat sc 1
+  scGlobalApply sc "Prelude.subNat" [iVar, n1]
+
+assertUnrecognized :: String -> FixClass -> IO ()
+assertUnrecognized label verdict = case verdict of
+  FixUnrecognized _ -> pure ()
+  other -> assertFailure (label ++ ": expected FixUnrecognized, got "
+                          ++ show other)
+
+fixClassifierTests :: SharedContext -> TestTree
+fixClassifierTests sc = testGroup "classifyFixShape (Slice R0, inert)"
+  [ testCase "Bool-typed fix witness is Unrecognized" $ do
+      boolTy <- scBoolType sc
+      xName  <- scFreshVarName sc "x"
+      xVar   <- scVariable sc xName boolTy
+      body   <- scLambda sc xName boolTy xVar
+      assertUnrecognized "Bool fix" (classifyFixShape boolTy body)
+
+  , testCase "MkStream-headed Stream fix is Class S-single" $ do
+      boolTy   <- scBoolType sc
+      natTy    <- scNatType sc
+      n32      <- scNat sc 32
+      n0       <- scNat sc 0
+      elemTy   <- scGlobalApply sc "Prelude.Vec" [n32, boolTy]
+      streamTy <- scGlobalApply sc "Prelude.Stream" [elemTy]
+      nName    <- scFreshVarName sc "n"
+      elemBv   <- scGlobalApply sc "Prelude.bvNat" [n32, n0]
+      stepF    <- scLambda sc nName natTy elemBv
+      mk       <- scGlobalApply sc "Prelude.MkStream" [elemTy, stepF]
+      recName  <- scFreshVarName sc "rec"
+      body     <- scLambda sc recName streamTy mk
+      classifyFixShape streamTy body @?= FixClassSSingle
+
+  , testCase "PairType1 of two Streams is Class S-paired" $ do
+      boolTy   <- scBoolType sc
+      n32      <- scNat sc 32
+      elemTy   <- scGlobalApply sc "Prelude.Vec" [n32, boolTy]
+      streamTy <- scGlobalApply sc "Prelude.Stream" [elemTy]
+      pairTy   <- scGlobalApply sc "Prelude.PairType1" [streamTy, streamTy]
+      recName  <- scFreshVarName sc "rec"
+      recVar   <- scVariable sc recName pairTy
+      body     <- scLambda sc recName pairTy recVar
+      classifyFixShape pairTy body @?= FixClassSPaired
+
+  , testCase "Vec fix with non-gen body is Unrecognized" $ do
+      boolTy  <- scBoolType sc
+      n9      <- scNat sc 9
+      vecTy   <- scGlobalApply sc "Prelude.Vec" [n9, boolTy]
+      recName <- scFreshVarName sc "rec"
+      recVar  <- scVariable sc recName vecTy
+      body    <- scLambda sc recName vecTy recVar
+      assertUnrecognized "non-gen Vec body" (classifyFixShape vecTy body)
+
+  , testCase "fused gen/ite recurrence is Class F" $ do
+      (vecTy, body) <- mkFusedFixF sc
+        (\recVar i2Var -> do
+            n9 <- scNat sc 9
+            boolTy <- scBoolType sc
+            n32 <- scNat sc 32
+            elemTy <- scGlobalApply sc "Prelude.Vec" [n32, boolTy]
+            scGlobalApply sc "Prelude.at" [n9, elemTy, recVar, i2Var])
+        (shiftMinusOne sc)
+      classifyFixShape vecTy body @?= FixClassF
+
+  , testCase "two-step lookback (subNat i 2) is Unrecognized" $ do
+      -- Amendment C pins the CONSTANT -1 shift; a -2 lookback is out
+      -- of the recognized class until a lowering for it is designed.
+      (vecTy, body) <- mkFusedFixF sc
+        (\recVar i2Var -> do
+            n9 <- scNat sc 9
+            boolTy <- scBoolType sc
+            n32 <- scNat sc 32
+            elemTy <- scGlobalApply sc "Prelude.Vec" [n32, boolTy]
+            scGlobalApply sc "Prelude.at" [n9, elemTy, recVar, i2Var])
+        (\iVar -> do
+            n2 <- scNat sc 2
+            scGlobalApply sc "Prelude.subNat" [iVar, n2])
+      assertUnrecognized "two-step lookback" (classifyFixShape vecTy body)
+
+  , testCase "same-index tail selection (no -1 shift) is Unrecognized" $ do
+      -- Amendment C's syntactic side: result[i] reading the recursive
+      -- vector at index i (instead of i-1) must NOT classify — it is
+      -- exactly the unsound self-reference the audits rejected.
+      (vecTy, body) <- mkFusedFixF sc
+        (\recVar i2Var -> do
+            n9 <- scNat sc 9
+            boolTy <- scBoolType sc
+            n32 <- scNat sc 32
+            elemTy <- scGlobalApply sc "Prelude.Vec" [n32, boolTy]
+            scGlobalApply sc "Prelude.at" [n9, elemTy, recVar, i2Var])
+        (\iVar -> pure iVar)
+      assertUnrecognized "same-index tail" (classifyFixShape vecTy body)
+
+  , testCase "index-permuting wrapper on the rec spine is Unrecognized" $ do
+      -- @at (reverse rec) i2@ selects with the lookback direction
+      -- FLIPPED — blessing the whole rec-containing spine as a zip
+      -- slot would classify it, so the scan admits only the bare
+      -- recursive vector or zip slots under an at-selection.
+      (vecTy, body) <- mkFusedFixF sc
+        (\recVar i2Var -> do
+            n9 <- scNat sc 9
+            boolTy <- scBoolType sc
+            n32 <- scNat sc 32
+            elemTy <- scGlobalApply sc "Prelude.Vec" [n32, boolTy]
+            revRec <- scGlobalApply sc "Prelude.reverse" [n9, elemTy, recVar]
+            scGlobalApply sc "Prelude.at" [n9, elemTy, revRec, i2Var])
+        (shiftMinusOne sc)
+      assertUnrecognized "reversed rec spine" (classifyFixShape vecTy body)
+
+  , testCase "rec use outside zip/at slots is Unrecognized" $ do
+      -- atWithDefault reads the same element as at, but it is not in
+      -- the recognized selector family — reject-when-unsure.
+      (vecTy, body) <- mkFusedFixF sc
+        (\recVar i2Var -> do
+            n9 <- scNat sc 9
+            boolTy <- scBoolType sc
+            n32 <- scNat sc 32
+            n0 <- scNat sc 0
+            elemTy <- scGlobalApply sc "Prelude.Vec" [n32, boolTy]
+            dflt <- scGlobalApply sc "Prelude.bvNat" [n32, n0]
+            scGlobalApply sc "Prelude.atWithDefault"
+              [n9, elemTy, dflt, recVar, i2Var])
+        (shiftMinusOne sc)
+      assertUnrecognized "atWithDefault rec use" (classifyFixShape vecTy body)
+
+  , testCase "rec-free element function is Unrecognized (not a recurrence)" $ do
+      (vecTy, body) <- mkFusedFixF sc
+        (\_recVar _i2Var -> do
+            n32 <- scNat sc 32
+            n0  <- scNat sc 0
+            scGlobalApply sc "Prelude.bvNat" [n32, n0])
+        (shiftMinusOne sc)
+      assertUnrecognized "rec-free element" (classifyFixShape vecTy body)
+  ]
+
+--------------------------------------------------------------------------------
 -- Entry point
 --------------------------------------------------------------------------------
 
@@ -1300,4 +1487,5 @@ main = do
     , translatorTests sc
     , goalEmissionTests sc
     , antiRegressionLintTests
+    , fixClassifierTests sc
     ]
