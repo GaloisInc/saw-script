@@ -177,7 +177,7 @@ span.spaces    { background: white }
 <span class="lineno">  158 </span><span class="decl"><span class="istickedoff">restoreCheckpoint (TopLevelCheckpoint chk'rw scc) = do</span>
 <span class="lineno">  159 </span><span class="spaces">     </span><span class="istickedoff">now'rw &lt;- getTopLevelRW</span>
 <span class="lineno">  160 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  161 </span><span class="spaces">     </span><span class="istickedoff">-- First, restore the SAWCore state.</span>
+<span class="lineno">  161 </span><span class="spaces">     </span><span class="istickedoff">-- Restore the SAWCore state.</span>
 <span class="lineno">  162 </span><span class="spaces">     </span><span class="istickedoff">-- (The SharedContext handle doesn't change; it doesn't matter</span>
 <span class="lineno">  163 </span><span class="spaces">     </span><span class="istickedoff">-- which reference to it we use.)</span>
 <span class="lineno">  164 </span><span class="spaces">     </span><span class="istickedoff">let sc = rwSharedContext now'rw</span>
