@@ -79,6 +79,7 @@ module SAWCentral.Proof
   , thmSummary
   , TheoremNonce
   , TheoremSummary(..)
+  , LeanReplayInfo(..)
 
   , admitTheorem
   , solverTheorem
@@ -968,6 +969,12 @@ validateTheorem sc what4PushMuxOps db Theorem{ _thmProp = p, _thmEvidence = e, _
 data TheoremSummary
   = AdmittedTheorem Text
   | TestedTheorem Integer
+  | LeanReplayedTheorem Text
+    -- ^ At least one subgoal was admitted on the authority of a Lean
+    --   kernel check via @offline_lean_replay@; the payload names the
+    --   pinned toolchain. Absorbing (like admission) so a mixed
+    --   Lean/SMT proof visibly carries the Lean-backed dependency —
+    --   seventh-audit amendment 4.
   | ProvedTheorem SolverStats
 
 instance Monoid TheoremSummary where
@@ -976,11 +983,25 @@ instance Monoid TheoremSummary where
 instance Semigroup TheoremSummary where
   AdmittedTheorem msg <> _ = AdmittedTheorem msg
   _ <> AdmittedTheorem msg = AdmittedTheorem msg
+  LeanReplayedTheorem t <> _ = LeanReplayedTheorem t
+  _ <> LeanReplayedTheorem t = LeanReplayedTheorem t
   TestedTheorem x <> TestedTheorem y = TestedTheorem (min x y)
   TestedTheorem x <> _ = TestedTheorem x
   _ <> TestedTheorem y = TestedTheorem y
   ProvedTheorem s1 <> ProvedTheorem s2 = ProvedTheorem (s1<>s2)
 
+
+-- | The audit record an @offline_lean_replay@ run leaves behind:
+-- the pinned toolchain, content hashes of the freshly-emitted goal
+-- and the user's proof files, and the closer's axiom list as
+-- reported by the checker. Documentation of a one-shot kernel check,
+-- not re-verifiable material.
+data LeanReplayInfo = LeanReplayInfo
+  { leanReplayToolchain :: Text
+  , leanReplayGoalHash  :: Text
+  , leanReplayProofHash :: Text
+  , leanReplayAxioms    :: [Text]
+  } deriving Show
 
 -- | This datatype records evidence for the truth of a proposition.
 data Evidence
@@ -1001,6 +1022,17 @@ data Evidence
     --   of quickcheck. The included number is the number of successfully
     --   passed test vectors.
   | QuickcheckEvidence !Integer !Sequent
+
+    -- | This type of evidence is produced when the given sequent's
+    --   emitted Lean goal was discharged by a user proof that the
+    --   factored replay checker kernel-verified (fresh emission,
+    --   drift, elaboration, closer type, sorry scan, axiom audit)
+    --   under the pinned toolchain. NON-RECHECKABLE trust token:
+    --   'checkEvidence' cannot re-run Lean; the recorded info
+    --   documents the run, it does not re-verify it (same standing
+    --   as 'SolverEvidence', unlike 'ProofTerm') — seventh-audit
+    --   amendment 4.
+  | LeanReplayEvidence !LeanReplayInfo !Sequent
 
     -- | This type of evidence is produced when the given sequent
     --   has been explicitly assumed without other evidence, at the
@@ -1610,6 +1642,17 @@ checkEvidence sc what4PushMuxOps = \e p -> do
                , prettySequent ppopts nenv sqt'
                ]
            return (mempty, ProvedTheorem stats)
+
+      LeanReplayEvidence info sqt' ->
+        do ok <- sequentSubsumes sc sqt' sqt
+           unless ok $ do
+             ppopts <- scGetPPOpts sc
+             fail $ PPS.render ppopts $ PP.vsep
+               [ "Lean replay evidence does not prove the required sequent"
+               , prettySequent ppopts nenv sqt
+               , prettySequent ppopts nenv sqt'
+               ]
+           return (mempty, LeanReplayedTheorem (leanReplayToolchain info))
 
       Admitted msg pos sqt' ->
         do ok <- sequentSubsumes sc sqt' sqt

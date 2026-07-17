@@ -62,13 +62,13 @@ primitive — code that SAW accepts would no longer translate. L-2
 explicitly rejected this widening attempt.
 
 **Manifestation if violated:** N/A — this *is* the residual.
-A user weaponizing it would derive `False`; SAW's documentation
+A user misusing it would derive `False`; SAW's documentation
 warns of this.
 
 **Adjacent test:**
-`otherTests/saw-core-lean/shape/unsafe_assert_prop/` — L-2 pins the
+`otherTests/saw-core-lean/negative/unsafe_assert_prop/` — L-2 pins the
 shape (uses at `Type 1` must fail; common translator-emitted shapes
-must succeed). The Prop attack is documented as the residual, not
+must succeed). The Prop Check is documented as the residual, not
 tested.
 
 ---
@@ -76,7 +76,7 @@ tested.
 ### 1.2 `error.{u}` two-tier design (revised 2026-05-04, was Phase 9)
 
 **Status:** Intentional residual on `error_unrestricted` (faithful
-to SAW); user-facing `error` is **closed** to the L-17 attack
+to SAW); user-facing `error` is **closed** to the L-17 risk
 class.
 
 **Where exercised:**
@@ -107,7 +107,7 @@ over `Stream a` for free `a`). The 2026-05-04 mitigation
 sidesteps that by splitting the surface — translator routes to
 `error_unrestricted` (no Inhabited constraint, free type
 variables work), users see `error` (constrained, blocks the
-attack class).
+Check class).
 
 **Manifestation of remaining residual:** A user who *explicitly*
 writes `error_unrestricted Empty "..."` can extract a fake
@@ -118,10 +118,10 @@ never emits `error_unrestricted` at uninhabited types (Cryptol's
 surface has no Empty type), so faithful translation is unaffected.
 
 **Adjacent test:**
-`otherTests/saw-core-lean/shape/error_prop/`:
-* `attack.shouldfail.lean` — `error False ""` (Prop) must fail.
-* `attack_empty.shouldfail.lean` — `error Empty ""` (uninhabited
-  Type) must fail at Inhabited synthesis (closes L-17 attack
+`otherTests/saw-core-lean/negative/error_prop/`:
+* `rejection.shouldfail.lean` — `error False ""` (Prop) must fail.
+* `rejection_empty.shouldfail.lean` — `error Empty ""` (uninhabited
+  Type) must fail at Inhabited synthesis (closes the L-17 risk
   class).
 
 ---
@@ -136,11 +136,11 @@ no longer an axiom — it's now a `@[reducible] def` defined as
 `Eq Type α β` proof. Lean's `cast` is exactly this. The combined
 `coerce + unsafeAssert` unsoundness path is preserved — fabricating
 a fake type-equality via `unsafeAssert (sort 0) α β` and feeding
-it to `coerce` still yields the SAW `unsafeCoerce` attack — but
+it to `coerce` still yields the SAW `unsafeCoerce` Check — but
 that lives entirely in `unsafeAssert`'s residual, not `coerce`'s.
 
 **Adjacent test:**
-`otherTests/saw-core-lean/shape/coerce/` — L-8 pins the
+`otherTests/saw-core-lean/negative/coerce/` — L-8 pins the
 universe shape (still applies to the def-form: rejects use at
 `Type 1`, accepts at `Type`).
 
@@ -483,6 +483,24 @@ fragment-semantics scoping doc's Phase C (fix/error differential
 rows) is the continuous empirical pin for this record — code reading
 is a snapshot, differential rows keep it honest as SAW evolves.
 
+### 3.2b Replayed-goal TCB (offline_lean_replay, 2026-07-17)
+
+For goals ADMITTED via `offline_lean_replay` (and only those), the
+trusted base extends beyond the standing catalog to: Lean's kernel;
+the pinned toolchain (lean-toolchain file, recorded in evidence);
+the staged CryptolToLean support library; the factored checker
+(`support/lean-check-core.sh`); AND — seventh-audit amendment 1 —
+the SAW-side emission pipeline itself (`propToTerm`, `scPiList`
+free-var abstraction, `scNormalizeForLean`): replay converts an
+emission bug into a false SAW theorem, so goal formation is
+soundness-critical on this path. Mitigations at admission time: the
+emitted goal must compile (dropped binders cannot), and an
+anti-trivialization probe rejects goals closable by rfl/trivial
+(over-reduction guard). LeanReplayEvidence is a NON-RECHECKABLE
+trust token: checkEvidence verifies sequent subsumption only; the
+recorded toolchain/hashes/axiom list document the one-shot kernel
+check and cannot re-verify it.
+
 ### 3.3 `scNormalizeForLean` semantics-preservation (Phase 5 Link 2)
 
 **Status:** Pending catalog acknowledgment (this entry); SAWCore
@@ -520,7 +538,7 @@ Pi and Lambda binders for sort `k ≥ 1`; pinned by the smoketest
 
 The Lambda-side check is defensive (post-`scNormalizeForLean`
 type terms shouldn't contain unreduced Lambdas), but covering
-hand-constructed SAW terms that bypass normalization or future
+hand-constructed SAW terms that circumvent normalization or future
 normalizer regressions is cheap insurance — three lines of
 walker code mirroring the Pi case.
 

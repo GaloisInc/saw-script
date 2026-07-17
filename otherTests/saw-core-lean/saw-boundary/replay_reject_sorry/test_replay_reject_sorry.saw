@@ -1,0 +1,7 @@
+// Replay reject pin: a sorry-containing discharge must never be
+// admitted. The factored checker names the check
+// (CHECK-FAIL: sorry-in-user-file); the axiom audit would catch the
+// resulting sorryAx even if the text scan were bypassed.
+enable_experimental;
+fails (prove_print (offline_lean_replay "rejected_proof")
+  {{ \(x : [8]) (y : [8]) -> x + y == y + x }});

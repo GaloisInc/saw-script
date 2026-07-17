@@ -1,0 +1,12 @@
+// Replay GREEN row, completed-outline path: SAW emits the
+// running_sum recurrence goal FRESH and admits it on the authority
+// of the committed completed-outline discharge
+// (proofs/cryptol_running_sum_verify). Exercises the LOAD-BEARING
+// drift check — the fresh emission is the Generated authority, the
+// user's completed.lean the staged goal; a mismatched proof would
+// fail drift (the self-comparison theater of the first draft is
+// gone). This is the Class-F fix realization admitted end-to-end.
+enable_experimental;
+import "RunningSum.cry";
+prove_print (offline_lean_replay "../../proofs/cryptol_running_sum_verify")
+  {{ \(xs : [8][32]) -> runningSumComprehension xs == runningSumNaive xs }};

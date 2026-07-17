@@ -134,6 +134,10 @@ theoremStatus summary = case summary of
         [ ("status"   .= ("assumed" :: String))
         , ("admitmsg" .= msg)
         ]
+      LeanReplayedTheorem toolchain ->
+        [ ("status"    .= ("verified-lean-replay" :: String))
+        , ("toolchain" .= toolchain)
+        ]
 
 plocToJSON :: ProgramLoc -> Value
 plocToJSON ploc = object
@@ -196,6 +200,7 @@ prettyVerificationSummary ppOpts nenv vs@(VerificationSummary jspecs lspecs thms
         vsep [ case thmSummary t of
                  ProvedTheorem{}   -> "Theorem:"
                  TestedTheorem n   -> "Theorem (randomly tested on" <+> viaShow n <+> "samples):"
+                 LeanReplayedTheorem{} -> "Theorem (Lean kernel replay):"
                  AdmittedTheorem{} -> "Axiom:"
              , code (indent 2 (prettyProp ppOpts nenv (thmProp t)))
              , ""

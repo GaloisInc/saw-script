@@ -1,0 +1,7 @@
+// Replay reject pin: axiom smuggling. A closer that routes through a
+// user-declared axiom is rejected by the fixed allowlist
+// (CHECK-FAIL: axiom-outside-allowlist) — the same gate that would
+// catch native_decide's Lean.ofReduceBool compiler-trust hatch.
+enable_experimental;
+fails (prove_print (offline_lean_replay "rejected_proof")
+  {{ \(x : [8]) (y : [8]) -> x + y == y + x }});

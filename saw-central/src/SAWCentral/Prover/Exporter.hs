@@ -96,7 +96,7 @@ import SAWCore.Name (VarName(..), mkModuleName,
                      toAbsoluteName,
                      identName, identModule)
 import SAWCore.Term.Functor (FlatTermF(..), recursorDataType)
-import SAWCore.Recognizer (asPi, asGlobalApply, asNat, asBool)
+import SAWCore.Recognizer (asPi, asPiList, asGlobalApply, asNat, asBool)
 import SAWCore.Prelude (preludeModule)
 import SAWCore.SATQuery
 import SAWCore.SharedTerm as SC
@@ -1319,11 +1319,31 @@ writeLeanProp name notations skips path t = do
             else SC.scPiList sc frees tmRaw
   tm' <- io $ scNormalizeForLean sc skips tm
   tp  <- io $ scTypeOf sc tm'
-  case Lean.translateGoalAsDeclImports configuration mm (Lean.Ident (Text.unpack name)) tm' tp of
+  -- Goal-telescope pin (replay design, seventh-audit amendment 1,
+  -- ratified 2026-07-17): the SAWCore-side quantifier count of the
+  -- goal statement, compared below against the emitted Lean goal's
+  -- Pi-spine arity. A mismatch means the translation dropped or
+  -- invented a quantifier — the unsoundness replay would
+  -- amplify — so emission REFUSES rather than producing a goal that
+  -- misrepresents the obligation. False positives (a legitimate
+  -- shape this count does not model) fail loudly here and are the
+  -- accepted cost.
+  let sawArity = length (fst (asPiList tm'))
+  case Lean.translateGoalAsDeclImportsWithArity configuration mm (Lean.Ident (Text.unpack name)) tm' tp of
     Left err -> do
       err' <- liftIO $ Lean.ppTranslationError sc err
       throwTopLevel $ "Error translating: " ++ Text.unpack err'
-    Right doc -> io $ case path of
+    Right (_doc, leanArity)
+      | leanArity /= sawArity ->
+          throwTopLevel $ unlines
+            [ "Refusing to emit Lean goal: quantifier telescope mismatch."
+            , "SAWCore goal binders: " ++ show sawArity
+              ++ "; emitted Lean goal binders: " ++ show leanArity
+            , "The emitted goal would misrepresent the proof obligation"
+            , "(goal-telescope pin; saw-core-lean replay design,"
+            , "seventh-audit amendment 1)."
+            ]
+    Right (doc, _) -> io $ case path of
       ""  -> print doc
       "-" -> print doc
       _   -> writeLeanFile path (show doc)

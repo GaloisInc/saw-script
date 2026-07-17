@@ -1,0 +1,16 @@
+Loading file "test_replay_reject_suffix_axiom.saw"
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in offline_lean_replay
+   test_replay_reject_suffix_axiom.saw:7:21-7:57 in (callback)
+   (builtin) in prove_print
+   test_replay_reject_suffix_axiom.saw:7:8-8:47 in (callback)
+   (builtin) in fails
+   test_replay_reject_suffix_axiom.saw:7:1-8:47 (at top level)
+offline_lean_replay: Lean check FAILED — goal not admitted.
+unsound_vecToBitVec_bitVecToVec
+CHECK-FAIL: axiom-outside-allowlist
+
+
+
+

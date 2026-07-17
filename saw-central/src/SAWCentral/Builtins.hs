@@ -231,6 +231,9 @@ import Control.Monad.State (MonadState(..), gets, modify)
 import qualified Control.Exception as Ex
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
+import Data.Bits (xor)
+import Data.Word (Word64)
+import Numeric (showHex)
 import Data.List (isPrefixOf, isInfixOf, sort, intersperse)
 import qualified Data.Map as Map
 import Data.Maybe (catMaybes)
@@ -249,9 +252,11 @@ import qualified System.Environment as Env
 import qualified System.Exit as Exit
 import qualified Data.Text.IO as TextIO
 import System.IO
-import System.IO.Temp (withSystemTempFile, emptySystemTempFile)
+import System.IO.Temp (withSystemTempFile, emptySystemTempFile,
+                       getCanonicalTemporaryDirectory, createTempDirectory)
 import System.FilePath (hasDrive, (</>))
 import System.Timeout (Timeout,timeout)
+import System.Exit (ExitCode(..))
 import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
@@ -1416,22 +1421,134 @@ emitWithPropExporter exporter path sep ext =
 offline_lean :: FilePath -> ProofScript ()
 offline_lean path = emitWithPropExporter (Prover.writeLeanProp "goal" [] []) path "_" ".lean"
 
+-- | Non-cryptographic content fingerprint (FNV-1a/64) for the replay
+-- evidence record. Documentation of what was checked, not
+-- verification material (the evidence is a non-recheckable trust
+-- token either way — seventh-audit amendment 4).
+leanReplayFingerprint :: String -> Text
+leanReplayFingerprint txt =
+  Text.pack ("fnv64:" ++ showHex h "")
+  where
+    h :: Word64
+    h = foldl (\acc c -> (acc `xor` fromIntegral (fromEnum c)) * 1099511628211)
+          14695981039346656037 txt
+
+-- | Admit the current goal iff a user-supplied Lean discharge
+-- kernel-checks against the goal SAW emits, under the factored trust
+-- kernel (support/lean-check-core.sh) that the CI proof harness also
+-- exercises. Design + binding amendments:
+-- saw-core-lean/doc/2026-07-16_replay-design.md.
+--
+-- The FRESH in-process emission is the authority: the user's copy of
+-- the artifact is never trusted, so a proof written against a stale
+-- or doctored emission fails the checks loudly. The trailing
+-- @goal_holds := by sorry@ stub is stripped at staging so every
+-- remaining sanctioned placeholder is in-statement and visible to
+-- the closer's axiom audit (amendment 3). One goal per call
+-- (goalNum-independent staging).
+--
+-- Deployment (v1): the checker and pinned library are located via
+-- the SAW_LEAN_ROOT environment variable (the saw-script checkout
+-- root). Packaging a relocatable installation is release work.
 offline_lean_replay :: FilePath -> ProofScript ()
-offline_lean_replay _path =
-  execTactic $ tacticSolve $ \_g ->
-  fail $ unlines
-    [ "offline_lean_replay: replay is not available in this release."
-    , ""
-    , "offline_lean is emission-only: SAW writes the Lean proof obligation"
-    , "and leaves the goal unsolved; discharge happens in Lean. A future"
-    , "release will implement replay: SAW invokes the pinned Lean toolchain"
-    , "on the exact emitted obligation plus a completed proof file, and"
-    , "admits the goal only if Lean kernel-checks a theorem of that exact"
-    , "type with no forbidden escape hatches (sorry, unchecked axioms,"
-    , "import shadowing)."
-    , ""
-    , "See saw-core-lean/doc/2026-07-14_release-plan.md."
-    ]
+offline_lean_replay proofDir =
+  execTactic $ tacticSolve $ \g ->
+  do sc <- getSharedContext
+     p <- io $ sequentToProp sc (goalSequent g)
+     mroot <- io $ Env.lookupEnv "SAW_LEAN_ROOT"
+     root <- case mroot of
+       Just r | not (null r) -> return r
+       _ -> fail $ unlines
+         [ "offline_lean_replay: SAW_LEAN_ROOT is not set."
+         , "Point it at the saw-script checkout root so replay can"
+         , "find the pinned Lean support library"
+         , "(saw-core-lean/lean) and the factored checker"
+         , "(otherTests/saw-core-lean/support/lean-check-core.sh)."
+         ]
+     let projRoot = root </> "saw-core-lean" </> "lean"
+         coreScript = root </> "otherTests" </> "saw-core-lean"
+                        </> "support" </> "lean-check-core.sh"
+     ok <- io $ doesFileExist coreScript
+     unless ok $ fail $
+       "offline_lean_replay: checker not found at " ++ coreScript
+     stage <- io $ do base <- getCanonicalTemporaryDirectory
+                      createTempDirectory base "saw-lean-replay"
+     -- Fresh emission (the authority), then strip the trailing
+     -- goal_holds stub (amendment 3: placeholders must be
+     -- in-statement so the axiom audit sees them).
+     Prover.writeLeanProp "goal" [] [] (stage </> "Emitted.lean") p
+     io $ do
+       txt <- readFile (stage </> "Emitted.lean")
+       let stub = "theorem goal_holds : goal := by\n  sorry"
+           stripped = Text.unpack
+             (Text.replace (Text.pack stub) (Text.pack "")
+               (Text.pack txt))
+       length stripped `seq` writeFile (stage </> "Emitted.lean") stripped
+     let userProof = proofDir </> "proof.lean"
+         userCompleted = proofDir </> "completed.lean"
+     haveProof <- io $ doesFileExist userProof
+     unless haveProof $ fail $
+       "offline_lean_replay: no proof.lean in " ++ proofDir
+     io $ copyFile userProof (stage </> "proof.lean")
+     -- Completed-outline path (mirrors the CI harness): the user's
+     -- completed.lean CARRIES the discharge (its own `def goal` +
+     -- proved `goal_holds`) and is staged AS the Emitted artifact
+     -- proof.lean imports. The Generated reference is the FRESH
+     -- in-process emission (the authority), so the drift check
+     -- (completed-goal ≡ fresh-goal) is a genuine defeq comparison —
+     -- not the fresh-vs-fresh self-comparison of the first draft.
+     haveCompleted <- io $ doesFileExist userCompleted
+     when haveCompleted $ io $ do
+       -- Generated = the fresh (stub-stripped) emission, wrapped.
+       etxt <- readFile (stage </> "Emitted.lean")
+       -- Insert the harness namespace AFTER the last import line
+       -- (the emitted file opens with a comment block, then imports,
+       -- then code) — mirrors the CI harness's write_generated_probe.
+       let ls = lines etxt
+           isImport l = "import " `isPrefixOf` dropWhile (== ' ') l
+           lastImp = case [ i | (i, l) <- zip [0 ..] ls, isImport l ] of
+                       [] -> -1
+                       is -> maximum is
+           (hd, tl) = splitAt (lastImp + 1) ls
+           gen = unlines (hd ++ ["", "namespace GeneratedHarness"]
+                             ++ tl ++ ["", "end GeneratedHarness"])
+       length gen `seq` writeFile (stage </> "Generated.lean") gen
+       -- Emitted (what proof.lean imports) becomes the user's
+       -- completed outline; drift then checks it against Generated.
+       copyFile userCompleted (stage </> "completed.lean")
+       copyFile userCompleted (stage </> "Emitted.lean")
+     (ec, out, errOut) <- io $
+       readProcessWithExitCode "bash" [coreScript, projRoot, stage] ""
+     case ec of
+       ExitSuccess -> do
+         toolchain <- io $ readFile (projRoot </> "lean-toolchain")
+         goalTxt <- io $ readFile (stage </> "Emitted.lean")
+         proofTxt <- io $ readFile (stage </> "proof.lean")
+         io $ removeDirectoryRecursive stage
+         let axLines = [ Text.pack l
+                       | l <- lines out
+                       , "CHECK-AXIOMS:" `isPrefixOf` l ]
+             info = LeanReplayInfo
+               { leanReplayToolchain =
+                   Text.strip (Text.pack toolchain)
+               , leanReplayGoalHash  = leanReplayFingerprint goalTxt
+               , leanReplayProofHash = leanReplayFingerprint proofTxt
+               , leanReplayAxioms    = axLines
+               }
+             stats = solverStats "LEAN-REPLAY"
+                       (sequentSharedSize (goalSequent g))
+         printOutLnTop Info $
+           "offline_lean_replay: Lean kernel check passed ("
+             ++ Text.unpack (leanReplayToolchain info) ++ ")"
+         return (stats, SolveSuccess
+           (LeanReplayEvidence info (goalSequent g)))
+       ExitFailure _ -> do
+         io $ removeDirectoryRecursive stage
+         fail $ unlines
+           [ "offline_lean_replay: Lean check FAILED — goal not admitted."
+           , out
+           , errOut
+           ]
 
 offline_extcore :: FilePath -> ProofScript ()
 offline_extcore path = proveWithPropExporter Prover.writeCoreProp path "." ".extcore"

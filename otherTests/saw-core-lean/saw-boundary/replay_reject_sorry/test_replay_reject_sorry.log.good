@@ -1,0 +1,16 @@
+Loading file "test_replay_reject_sorry.saw"
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in offline_lean_replay
+   test_replay_reject_sorry.saw:6:21-6:57 in (callback)
+   (builtin) in prove_print
+   test_replay_reject_sorry.saw:6:8-7:47 in (callback)
+   (builtin) in fails
+   test_replay_reject_sorry.saw:6:1-7:47 (at top level)
+offline_lean_replay: Lean check FAILED — goal not admitted.
+3:theorem goal_closed : goal := by sorry
+CHECK-FAIL: sorry-in-user-file
+
+
+
+

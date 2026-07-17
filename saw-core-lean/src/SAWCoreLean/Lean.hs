@@ -19,6 +19,7 @@ module SAWCoreLean.Lean
   , preamble
   , translateTermAsDeclImports
   , translateGoalAsDeclImports
+  , translateGoalAsDeclImportsWithArity
   , translateCryptolModule
   , translateSAWModule
   , moduleDeclName
@@ -105,19 +106,30 @@ translateTermAsDeclImports configuration mm name t tp = do
 translateGoalAsDeclImports ::
   TranslationConfiguration -> ModuleMap -> Lean.Ident -> Term -> Term ->
   Either TranslationError (Doc ann)
-translateGoalAsDeclImports configuration mm name@(Lean.Ident nameStr) t tp = do
-  doc <- TermTranslation.translateDefDoc configuration mm name t tp
+translateGoalAsDeclImports configuration mm name t tp =
+  fst <$> translateGoalAsDeclImportsWithArity configuration mm name t tp
+
+-- | 'translateGoalAsDeclImports' plus the emitted goal's Pi-spine
+-- arity, for the emission telescope pin (the caller compares it
+-- against the SAWCore-side count and refuses on mismatch).
+translateGoalAsDeclImportsWithArity ::
+  TranslationConfiguration -> ModuleMap -> Lean.Ident -> Term -> Term ->
+  Either TranslationError (Doc ann, Int)
+translateGoalAsDeclImportsWithArity configuration mm name@(Lean.Ident nameStr) t tp = do
+  (doc, arity) <- TermTranslation.translateDefDocWithArity configuration mm name t tp
   let stub =
         pretty ("theorem " <> nameStr <> "_holds : " <> nameStr <> " := by") <>
         hardline <> pretty ("  sorry" :: String)
   -- @doc@ already ends with a trailing hardline from @prettyDecl@; the
   -- vcat separator adds one more for the blank line before @stub@, so
   -- no additional leading hardline is needed on the stub.
-  pure $ vcat
-    [ preamble True configuration
-    , hardline <> doc
-    , stub
-    ]
+  pure
+    ( vcat
+        [ preamble True configuration
+        , hardline <> doc
+        , stub
+        ]
+    , arity )
 
 -- | Translate a Cryptol module to a Lean namespace block. Wraps the
 -- translated defs in @namespace nm … end nm@ so Cryptol users

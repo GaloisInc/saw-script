@@ -1,9 +1,11 @@
 # offline_lean_replay design (0.02-W3; audit-first, pre-implementation)
 
-**Date**: 2026-07-16. **Status**: DRAFT for adversarial audit before
-any implementation (house rule; this is the highest product-soundness
-surface in 0.02 — replay is the switch by which SAW ADMITS a goal on
-Lean's authority; the 0.01 admitting-exporter bug lived exactly here).
+**Date**: 2026-07-16. **Status**: IMPLEMENTED 2026-07-17 under the
+seventh-audit amendments (record below); implementation record with
+two recorded deviations at the end. (Originally: the highest
+product-soundness surface in 0.02 — replay is the switch by which
+SAW ADMITS a goal on Lean's authority; the 0.01 admitting-exporter
+bug lived exactly here.)
 
 ## Contract
 
@@ -65,7 +67,7 @@ principle is this design's load-bearing decision.
 
 replay-green (an existing discharged row replayed end-to-end);
 replay rejects: sorry in proof; wrong-type closer; new-axiom
-smuggling; import-shadowing attempt; stale-emission drift; vacuous
+introducing; import-shadowing attempt; stale-emission drift; vacuous
 module check. Each a named-diagnostic pin, same discipline as the
 fix-program boundaries.
 
@@ -78,7 +80,7 @@ doc events, not call-site options).
 
 ## Open questions for the auditor
 
-1. Is fresh-emission identity sufficient against all swap attacks,
+1. Is fresh-emission identity sufficient against all swap checks,
    or must the staged emission ALSO be content-hashed into the
    evidence to guard the window between check and admission?
 2. The factored checker runs under SAW's environment: does anything
@@ -142,3 +144,68 @@ and recorded: injected-but-unused axioms in completed.lean (inert;
 rfl drift unfoolable), unicode homoglyphs (sorry is an ASCII
 keyword; homoglyph axioms are off-allowlist; homoglyph closers fail
 resolution loudly).
+
+
+## Implementation record (2026-07-17)
+
+Landed: `support/lean-check-core.sh` (the factored trust kernel:
+non-degradable timeout; CLEARED ambient LEAN_PATH; per-call-unique
+gitignored in-root staging with trap cleanup — lake requires in-root
+inputs, so amendment 2's no-collision/no-pollution intent is met via
+uniqueness + cleanup; emitted-compile; placeholder policy;
+anti-trivialization probe; completed-outline drift with the
+no-vacuous assertion; user-file sorry scan; closer-type probe; axiom
+audit with multi-line-list parsing emitting CHECK-AXIOMS lines);
+`offline_lean_replay` in Builtins.hs (fresh in-process emission as
+authority; trailing goal_holds stub stripped at staging per
+amendment 3; SAW_LEAN_ROOT env-var deployment for v1 — packaging is
+release work; LeanReplayEvidence + LeanReplayInfo + absorbing
+LeanReplayedTheorem summary variant per amendment 4, JSON status
+"verified-lean-replay"); rows: workflows/replay_e1_verify (GREEN —
+the first goal SAW admits on Lean's authority) +
+saw-boundary/replay_reject_{sorry,axiom} pins.
+
+Post-review fixes (2026-07-17, non-implementer review):
+- **Axiom allowlist is EXACT-match** (was a `$`-anchored suffix
+  regex — a unsoundness: a user axiom named
+  `unsound_vecToBitVec_bitVecToVec` matched the suffix and was
+  admitted). Now byte-identical to the CI harness's four-string
+  exact list; `saw-boundary/replay_reject_suffix_axiom` pins it.
+- **Completed-outline drift is now LOAD-BEARING** (was fresh-vs-fresh
+  self-comparison theater): the user's completed.lean is staged as
+  the Emitted artifact proof.lean imports, and Generated is the
+  FRESH in-process emission, so the drift check
+  (completed-goal ≡ fresh-goal) genuinely rejects a mismatched or
+  stale proof. Verified both ways (matching property admits;
+  mismatched property → CHECK-FAIL: completed-outline-drift).
+  `workflows/replay_running_sum_verify` pins the green path.
+
+Recorded deviations for the reviewer:
+1. **RESOLVED (2026-07-17, user-ratified the stronger course):** the
+   Pi-telescope pin is IMPLEMENTED — and at the emission chokepoint
+   rather than replay-side, so it protects every emission
+   (offline_lean included), and on the Lean AST rather than text.
+   `writeLeanProp` compares the SAWCore goal's Pi count (`asPiList`)
+   against the translated body's Lean Pi-spine arity
+   (`leanPiSpineArity` via `translateGoalAsDeclImportsWithArity`)
+   and REFUSES to emit on mismatch with a named diagnostic. False
+   positives fail loudly and are the accepted cost (user decision:
+   robustness over convenience; silent unsoundness is the
+   unacceptable branch). Verified no false-fire across the emission
+   spectrum (E-series, running_sum, byte_add bit-blasted tower,
+   popcount32, both replay rows). Residual: a same-arity WRONG-TYPE
+   binder still passes this count pin; types-level telescope
+   comparison is the recorded hardening follow-up.
+2. **CI-harness rebase deferred.** The factored core exists and the
+   PRODUCT path runs it; lean-proof-test.sh still runs its original
+   implementation. Until the rebase lands, the single-checker
+   principle holds by construction discipline (checks are added to
+   the core), not by mechanism. Immediate follow-up.
+3. Reject-row v1 subset: sorry + axiom-introduce (the allowlist line
+   that also catches native_decide's ofReduceBool). Env-overriding,
+   stale-drift, timeout, and name-rebind rows deferred with the
+   harness rebase (the core's behavior for each is implemented;
+   rows pin them once row-level env control exists).
+Evidence hashes are FNV-1a/64 fingerprints, labeled as such —
+documentation, not verification (amendment 4's non-recheckable
+token stands regardless).

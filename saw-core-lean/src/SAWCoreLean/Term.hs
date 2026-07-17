@@ -37,6 +37,8 @@ module SAWCoreLean.Term
   , adaptToRuntime
   , translatedTermLean
   , translateDefDoc
+  , translateDefDocWithArity
+  , leanPiSpineArity
   , withRawTranslationMode
     -- * Decl construction
   , mkDefinitionWith
@@ -6702,12 +6704,32 @@ runTermTranslationMonad configuration mname mm globals localEnv =
 -- least one of them. Marking every user def @noncomputable@ is a
 -- safe over-approximation — the goal is a file that typechecks, not
 -- one that runs.
+-- | Number of binders in the (greedy) Pi spine of a translated Lean
+-- term — the emitted goal's quantifier telescope. Used by the
+-- goal-telescope emission pin (replay design, seventh-audit
+-- amendment 1, ratified 2026-07-17): the emitted telescope must
+-- match the SAWCore-side Pi count, or emission REFUSES — a dropped
+-- or invented quantifier at this seam is the unsoundness path.
+leanPiSpineArity :: Lean.Term -> Int
+leanPiSpineArity (Lean.Pi bs t) = length bs + leanPiSpineArity t
+leanPiSpineArity _ = 0
+
 translateDefDoc ::
   TranslationConfiguration ->
   ModuleMap ->
   Lean.Ident -> Term -> Term ->
   Either TranslationError (Doc ann)
-translateDefDoc configuration mm name body tp = do
+translateDefDoc configuration mm name body tp =
+  fst <$> translateDefDocWithArity configuration mm name body tp
+
+-- | 'translateDefDoc' plus the emitted goal body's Pi-spine arity
+-- (see 'leanPiSpineArity').
+translateDefDocWithArity ::
+  TranslationConfiguration ->
+  ModuleMap ->
+  Lean.Ident -> Term -> Term ->
+  Either TranslationError (Doc ann, Int)
+translateDefDocWithArity configuration mm name body tp = do
   let wrapType = shouldWrapBinder tp
   ((bodyLean, bodyShape, tp'), state) <-
     runTermTranslationMonad configuration Nothing mm [] [name] $ do
@@ -6748,6 +6770,7 @@ translateDefDoc configuration mm name body tp = do
       -- Each 'prettyDecl' already ends with 'hardline'; 'vcat' adds
       -- another between elements, yielding one blank line between
       -- decls.
-  pure $ if null auxDecls
-    then Lean.prettyDecl mainDecl
-    else vcat (map Lean.prettyDecl auxDecls) <> hardline <> Lean.prettyDecl mainDecl
+      rendered = if null auxDecls
+        then Lean.prettyDecl mainDecl
+        else vcat (map Lean.prettyDecl auxDecls) <> hardline <> Lean.prettyDecl mainDecl
+  pure (rendered, leanPiSpineArity bodyLean)

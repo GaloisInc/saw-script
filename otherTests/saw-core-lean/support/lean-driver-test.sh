@@ -27,6 +27,14 @@
 
 set -u
 
+# offline_lean_replay rows need the checkout root to locate the
+# factored checker + pinned library; default it from this script's
+# own location when the caller has not set it.
+if [ -z "${SAW_LEAN_ROOT:-}" ]; then
+    SAW_LEAN_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+fi
+export SAW_LEAN_ROOT
+
 # Pick up *.saw test scripts (same logic as test-and-diff.sh).
 TESTS=
 for SCRIPT in *.saw; do
