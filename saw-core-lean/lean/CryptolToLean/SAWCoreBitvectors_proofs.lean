@@ -931,37 +931,39 @@ theorem getElem_bvNat_zero (n i : Nat) (h : i < n) :
   rw [BitVec.getMsbD_eq_getLsbD, BitVec.getLsbD_ofNat]
   simp
 
-/-- MSB-first zero-padded window image: an ofFn vector that is zero at
-positions `< p` and reads `v` at positions `K + (i - p)` from `p` on
-packs to `(vecToBitVec v >>> (p - K)) &&& (2^(32-p) - 1)`.
+/-- MSB-first zero-padded window image at ARBITRARY total width `w`: an
+ofFn vector that is zero at positions `< p` and reads `v` at positions
+`K + (i - p)` from `p` on packs to
+`(vecToBitVec v >>> (p - K)) &&& (2^(w-p) - 1)`.
 
-Instances used by the byte_add discharge: `p = 24, K ∈ {24,16,8,0}`
-(the four `zext8_32` byte extractions, mask `0xff`, shifts
-`0/8/16/24`) and `p = 16, K = 16` (the fused truncate-to-16 /
-zero-extend-back mask, `x &&& 0xFFFF`, shift 0). -/
-theorem vecToBitVec_zeroPadWindow32 (v : Vec 32 Bool) (p K : Nat)
-    (hp : p ≤ 32) (hKp : K ≤ p) :
-    vecToBitVec (Vector.ofFn (fun i : Fin 32 =>
+Phase G generalization (2026-07-17) of the width-32 byte_add seed: the
+proof skeleton is unchanged (index bookkeeping over `getMsbD` /
+extensionality), with the literal `32`/`31` replaced by `w`/`w-1` and the
+omega side conditions re-derived from `hp : p ≤ w`, `hKp : K ≤ p`, and the
+position bound `hi : i < w`. -/
+theorem vecToBitVec_zeroPadWindow (w : Nat) (v : Vec w Bool) (p K : Nat)
+    (hp : p ≤ w) (hKp : K ≤ p) :
+    vecToBitVec (Vector.ofFn (fun i : Fin w =>
       if i.val < p then false
-      else atWithDefault 32 Bool false v (K + (i.val - p))))
-      = (vecToBitVec v >>> (p - K)) &&& BitVec.ofNat 32 (2 ^ (32 - p) - 1) := by
+      else atWithDefault w Bool false v (K + (i.val - p))))
+      = (vecToBitVec v >>> (p - K)) &&& BitVec.ofNat w (2 ^ (w - p) - 1) := by
   apply BitVec.eq_of_getMsbD_eq
   intro i hi
   rw [CryptolToLean.SAWCoreBitvectorsProofs.getMsbD_vecToBitVec_lt _ _ hi]
   rw [Vector.getElem_ofFn]
   rw [BitVec.getMsbD_and, BitVec.getMsbD_ushiftRight]
-  rw [BitVec.getMsbD_eq_getLsbD (BitVec.ofNat 32 (2 ^ (32 - p) - 1))]
+  rw [BitVec.getMsbD_eq_getLsbD (BitVec.ofNat w (2 ^ (w - p) - 1))]
   rw [BitVec.getLsbD_ofNat, Nat.testBit_two_pow_sub_one]
   by_cases hip : i < p
   · simp only [if_pos hip, hi, decide_true, Bool.true_and]
-    have hmask : ¬ (31 - i < 32 - p) := by omega
+    have hmask : ¬ (w - 1 - i < w - p) := by omega
     simp [hmask]
   · simp only [if_neg hip]
     have h1 : ¬ (i < p - K) := by omega
-    have h2 : 31 - i < 32 - p := by omega
-    have h3 : i - (p - K) < 32 := by omega
-    have h5 : K + (i - p) < 32 := by omega
-    have h6 : 32 - 1 - i < 32 := by omega
+    have h2 : w - 1 - i < w - p := by omega
+    have h3 : i - (p - K) < w := by omega
+    have h5 : K + (i - p) < w := by omega
+    have h6 : w - 1 - i < w := by omega
     simp only [hi, decide_true, Bool.true_and, h1, decide_false,
                Bool.not_false, h2, Bool.and_true]
     rw [CryptolToLean.SAWCoreBitvectorsProofs.getMsbD_vecToBitVec_lt _ _ h3]
@@ -969,11 +971,31 @@ theorem vecToBitVec_zeroPadWindow32 (v : Vec 32 Bool) (p K : Nat)
     simp only [h6, decide_true, Bool.and_true,
                show K + (i - p) = i - (p - K) from by omega]
 
+/-- Width-32 specialization of `vecToBitVec_zeroPadWindow`, kept so the
+byte_add discharge (`p = 24, K ∈ {24,16,8,0}` zext8 windows; `p = 16,
+K = 16` fused 0xFFFF mask) reads through the same statement it always
+did. -/
+theorem vecToBitVec_zeroPadWindow32 (v : Vec 32 Bool) (p K : Nat)
+    (hp : p ≤ 32) (hKp : K ≤ p) :
+    vecToBitVec (Vector.ofFn (fun i : Fin 32 =>
+      if i.val < p then false
+      else atWithDefault 32 Bool false v (K + (i.val - p))))
+      = (vecToBitVec v >>> (p - K)) &&& BitVec.ofNat 32 (2 ^ (32 - p) - 1) :=
+  vecToBitVec_zeroPadWindow 32 v p K hp hKp
+
 /-- MSB-first fused two-byte reassembly image: an ofFn vector that is
 zero at positions `< 16`, reads byte `24..31` of `s1` at positions
 `16..23` and byte `24..31` of `s0` at positions `24..31` packs to
 `((s1 &&& 0xff) <<< 8) ||| (s0 &&& 0xff)` — i.e. `r1:r0` of the
-byte_add carry chain, zero-extended to 32 bits. -/
+byte_add carry chain, zero-extended to 32 bits.
+
+Phase G scoping decision (2026-07-17): this fused two-window packing
+stays width-32-fixed. The Phase E `llvm_eq_u128` discharge does NOT need
+byte packing at all — its crux is a byte-decomposition of bitvector
+EQUALITY (comparison), proved by `getMsbD` extensionality, with no
+reassembly of bytes back into a word. So the only consumer of a packing
+lemma remains byte_add at width 32; an arbitrary-width/offset
+generalization is deferred until a discharge actually needs it. -/
 theorem vecToBitVec_bytePack32 (s1 s0 : Vec 32 Bool) :
     vecToBitVec (Vector.ofFn (fun i : Fin 32 =>
       if i.val < 24 then
@@ -1022,6 +1044,100 @@ theorem vecToBitVec_bytePack32 (s1 s0 : Vec 32 Bool) :
           CryptolToLean.SAWCorePreludeProofs.atWithDefault_lt _ _ _ hg]
       simp only [h6, decide_true, Bool.and_true,
                  show 24 + (i - 24) = i from by omega]
+
+/-! ### Phase E crux: byte-decomposition of 128-bit equality (2026-07-17)
+
+The `llvm_eq_u128` bcmp fold compares two 128-bit inputs byte-by-byte:
+each of the 16 bytes is `bvEq 8`-compared, and the 16 results are
+folded with AND. The crux ties that per-byte conjunction back to the
+whole-width `bvEq 128`. No byte PACKING is needed (this is comparison,
+not reassembly), so the discharge rests on `getMsbD` extensionality and
+the round-trip axioms alone. -/
+
+/-- MSB-first byte slice: the `K`-th byte (numbered from the
+least-significant end) of a 128-bit vector, i.e. Vec positions
+`8*(15-K) .. 8*(15-K)+7`. This is the pure image of the emitted per-byte
+extraction tower in the `eq_u128` bcmp fold (`byte 0` = bits 120..127,
+…, `byte 15` = bits 0..7). Guarded by `atWithDefault` so no bound proof
+is threaded; for `K < 16, j < 8` the index `8*(15-K)+j ≤ 127` is in
+range. -/
+def byteSlice128 (x : Vec 128 Bool) (K : Nat) : Vec 8 Bool :=
+  Vector.ofFn (fun j : Fin 8 =>
+    atWithDefault 128 Bool false x (8 * (15 - K) + j.val))
+
+/-- Elementwise readback of `byteSlice128`: byte `K`, position `j` reads
+Vec position `8*(15-K)+j`. -/
+theorem byteSlice128_getElem (x : Vec 128 Bool) (K j : Nat)
+    (hK : K < 16) (hj : j < 8) :
+    (byteSlice128 x K)[j]'hj = x[8 * (15 - K) + j]'(by omega) := by
+  unfold byteSlice128
+  rw [Vector.getElem_ofFn]
+  exact CryptolToLean.SAWCorePreludeProofs.atWithDefault_lt _ _ _ (by omega)
+
+/-- THE Phase-E crux: the foldr-AND over the 16 per-byte `bvEq 8`
+windows equals the whole-width `bvEq 128`. Both bools are reduced to
+the same truth condition `x = y`:
+- `bvEq 128 x y = true ↔ x = y` by `bvEq_true_iff_BitVec_eq` + round-trip
+  injectivity;
+- fold `= true ↔ ∀ byte, byte-eq` by `foldr_and_gen_eq_true_iff`, and
+  `∀ byte, byteSlice x = byteSlice y ↔ x = y` by `Vector.ext`: every bit
+  position `p < 128` is byte `15 - p/8` at intra-byte offset `p % 8`, so
+  a per-byte equality yields the per-bit equality and vice versa. -/
+theorem bvEq128_eq_foldr_byteEq (x y : Vec 128 Bool) :
+    CryptolToLean.SAWCorePrimitives.foldr Bool Bool 16
+      (fun b1 b2 => CryptolToLean.SAWCorePreludeExtra.ite Bool b1 b2 false)
+      Bool.true
+      (CryptolToLean.SAWCorePrimitives.gen 16 Bool
+        (fun i' => bvEq 8 (byteSlice128 x i') (byteSlice128 y i')))
+      = bvEq 128 x y := by
+  have key : ∀ (a b : Bool), (a = true ↔ b = true) → a = b := by
+    intro a b h; cases a <;> cases b <;> simp_all
+  -- RHS truth condition
+  have hR : (bvEq 128 x y = true) ↔ x = y := by
+    rw [bvEq_true_iff_BitVec_eq]
+    constructor
+    · intro h
+      have := congrArg bitVecToVec h
+      rwa [bitVecToVec_vecToBitVec, bitVecToVec_vecToBitVec] at this
+    · intro h; rw [h]
+  -- LHS truth condition
+  have hL :
+      (CryptolToLean.SAWCorePrimitives.foldr Bool Bool 16
+        (fun b1 b2 => CryptolToLean.SAWCorePreludeExtra.ite Bool b1 b2 false)
+        Bool.true
+        (CryptolToLean.SAWCorePrimitives.gen 16 Bool
+          (fun i' => bvEq 8 (byteSlice128 x i') (byteSlice128 y i'))) = Bool.true)
+      ↔ x = y := by
+    rw [CryptolToLean.SAWCorePreludeProofs.foldr_and_gen_eq_true_iff]
+    have cong : ∀ (v : Vec 128 Bool) (a b : Nat) (ha : a < 128) (hb : b < 128),
+        a = b → v[a]'ha = v[b]'hb := by
+      intro v a b ha hb hab; subst hab; rfl
+    constructor
+    · intro hall
+      apply Vector.ext
+      intro p hp
+      have hi' : 15 - p / 8 < 16 := by omega
+      have hj : p % 8 < 8 := by omega
+      have hidx : 8 * (15 - (15 - p / 8)) + p % 8 = p := by omega
+      have hbyte := hall (15 - p / 8) hi'
+      rw [bvEq_true_iff_BitVec_eq] at hbyte
+      have hveq :
+          byteSlice128 x (15 - p / 8) = byteSlice128 y (15 - p / 8) := by
+        have := congrArg bitVecToVec hbyte
+        rwa [bitVecToVec_vecToBitVec, bitVecToVec_vecToBitVec] at this
+      -- (byteSlice x K)[j] = (byteSlice y K)[j] from hveq
+      have hel : (byteSlice128 x (15 - p / 8))[p % 8]'hj
+               = (byteSlice128 y (15 - p / 8))[p % 8]'hj := by rw [hveq]
+      rw [byteSlice128_getElem x _ _ hi' hj,
+          byteSlice128_getElem y _ _ hi' hj] at hel
+      -- hel : x[8*(15-(15-p/8))+p%8] = y[...]; transport the index to p
+      rw [cong x _ p (by omega) hp hidx,
+          cong y _ p (by omega) hp hidx] at hel
+      exact hel
+    · intro hxy i' hi'
+      rw [hxy]
+      exact bvEq_refl 8 _
+  exact (key _ _ (by rw [hL, hR])).symm
 
 -- Boolean truth-table theorems (Rocq's boolEqb_eq, and_bool_eq_true,
 -- etc.) intentionally NOT mirrored here. They're properties of Lean's

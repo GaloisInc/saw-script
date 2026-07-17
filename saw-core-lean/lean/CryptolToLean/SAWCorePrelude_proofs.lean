@@ -643,6 +643,78 @@ theorem foldr_and_gen_eq_true_of_all
     show foldr Bool Bool k _ Bool.true (gen k Bool f) = true
     exact ih (fun i hi => h i (Nat.lt_succ_of_lt hi))
 
+/-- Seed-generalized foldr-AND characterization. `Vector.foldr_push` in
+this toolchain folds the pushed element into the ACCUMULATOR (not the
+head), so the induction must generalize the seed: the fold is `true` iff
+the seed is `true` AND every generated bit is `true`. -/
+theorem foldr_and_gen_seed
+    (n : Nat) (f : Nat → Bool) (s : Bool) :
+    foldr Bool Bool n
+      (fun b1 b2 => CryptolToLean.SAWCorePreludeExtra.ite Bool b1 b2 false)
+      s (gen n Bool f) = true
+      ↔ (s = true ∧ ∀ i, i < n → f i = true) := by
+  induction n generalizing s with
+  | zero =>
+    rw [foldr_zero]
+    constructor
+    · intro h; exact ⟨h, fun i hi => absurd hi (Nat.not_lt_zero i)⟩
+    · intro ⟨h, _⟩; exact h
+  | succ k ih =>
+    have h_split : (gen (k+1) Bool f) = (gen k Bool f).push (f k) := by
+      apply Vector.ext
+      intro i hi
+      unfold gen
+      simp only [Vector.getElem_ofFn]
+      by_cases hk : i < k
+      · simp [Vector.getElem_push_lt hk]
+      · have : i = k := by omega
+        subst this
+        simp
+    rw [h_split]
+    show Vector.foldr
+        (fun b1 b2 => CryptolToLean.SAWCorePreludeExtra.ite Bool b1 b2 false)
+        s (Vector.push (gen k Bool f) (f k)) = true ↔ _
+    rw [Vector.foldr_push]
+    show foldr Bool Bool k
+        (fun b1 b2 => CryptolToLean.SAWCorePreludeExtra.ite Bool b1 b2 false)
+        (CryptolToLean.SAWCorePreludeExtra.ite Bool (f k) s false)
+        (gen k Bool f) = true ↔ _
+    rw [ih]
+    constructor
+    · intro ⟨hite, hlt⟩
+      have hfk : f k = true := by
+        cases hh : f k with
+        | false =>
+          rw [hh, CryptolToLean.SAWCorePreludeExtra.ite_False] at hite
+          exact absurd hite (by simp)
+        | true => rfl
+      rw [hfk, CryptolToLean.SAWCorePreludeExtra.ite_True] at hite
+      refine ⟨hite, ?_⟩
+      intro i hi
+      by_cases hik : i < k
+      · exact hlt i hik
+      · have : i = k := by omega
+        subst this; exact hfk
+    · intro ⟨hs, hall⟩
+      have hfk : f k = true := hall k (Nat.lt_succ_self k)
+      refine ⟨?_, fun i hi => hall i (Nat.lt_succ_of_lt hi)⟩
+      rw [hfk, CryptolToLean.SAWCorePreludeExtra.ite_True]; exact hs
+
+/-- Bidirectional form of `foldr_and_gen_eq_true_of_all`: the foldr-AND
+over a `gen`-built Bool vector is `true` IFF every generated bit is
+`true`. The REVERSE direction (true → all) is what the byte-decomposition
+crux (`bvEq128_eq_foldr_byteEq`) needs: a successful 16-byte equality
+fold forces every per-byte equality, so a differing byte would falsify
+the fold. Special case of `foldr_and_gen_seed` at seed `true`. -/
+theorem foldr_and_gen_eq_true_iff
+    (n : Nat) (f : Nat → Bool) :
+    foldr Bool Bool n
+      (fun b1 b2 => CryptolToLean.SAWCorePreludeExtra.ite Bool b1 b2 false)
+      Bool.true (gen n Bool f) = Bool.true
+      ↔ ∀ i, i < n → f i = true := by
+  rw [foldr_and_gen_seed]
+  simp
+
 /-! ## `saw_fix_bounded` faithfulness core (OP-3 successor, Slice R1)
 
 The three L-lemmas of doc/2026-07-15_op3-successor-design.md Part 2,

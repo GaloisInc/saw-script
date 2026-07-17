@@ -698,3 +698,29 @@ byte-split/carry seed set. Deviations:
    mask suffice.
 5. Slice bodies via if-guarded `atWithDefault` (total) rather than
    dependent getElem dodge dite-motive friction throughout.
+
+## W2 record: eq_u128 discharged (2026-07-17) — drift-scaling finding binding
+
+`proofs/llvm_eq_u128` graduates (~9-18 s wall; axioms = trio + both
+round-trips). Phase G: `vecToBitVec_zeroPadWindow` generalized to
+arbitrary width (32-corollary preserved; bytePack kept at 32 by
+recorded scoping decision — equality decomposition needs no pack).
+Crux lemma landed: `bvEq128_eq_foldr_byteEq` (foldr-AND of 16
+per-byte compares = whole-width equality), via the new bidirectional
+`foldr_and_gen_eq_true_iff` (seed-generalized induction — this
+toolchain's `Vector.foldr_push` folds into the ACCUMULATOR) +
+getMsbD extensionality with bit p ↦ byte 15−p/8 offset p%8.
+
+**Drift-check scaling wall (new, binding on large goals):** the pure
+clean-restatement move (byte_add) hits a wall at 128-bit — the rfl
+reconciliation of a clean outline against the emitted macro/coerce/
+re-gen tower exceeds recursion then heartbeat budgets, even though
+both sides are genuinely defeq. Resolution — the HYBRID outline:
+keep `def goal` byte-identical stripped-verbatim (drift instant),
+then inside `goal_holds` do numerals-first simp + a `show` bridge to
+the named clean defs (a cheap local defeq) + the standard `_ok`
+characterization discharge. Clean restatement for goals the kernel
+can whole-tower-reconcile; hybrid above that. The GAP's historical
+full-tree-simp timeouts are confirmed as wrong-plan, not
+wrong-budget: the same goal discharges in seconds under the
+characterization route.
