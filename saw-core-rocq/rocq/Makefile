@@ -5,16 +5,25 @@ Makefile.rocq: _RocqProject
 
 include Makefile.rocq
 
-# Set the SAW variable to the appropriate command. Always look in the path
-# first, otherwise fall back on cabal run saw, unless running in CI because if
-# saw is not in the path in CI then something else is terribly wrong and that
-# should be an error
-SAW=$(shell which saw)
-ifeq ($(SAW),)
-  ifeq ($(CI),)
-	    SAW=cabal run exe:saw
-  else
-    $(error Could not find SAW executable; PATH = $(PATH))
+# If not in CI, find a SAW executable. (In CI, "saw" should always be
+# on the path. If it's not, something's wrong and we should let it
+# fail.
+#
+# Try actually running it to be sure.
+SAW=saw
+ifeq ($(CI),)
+  OK=$(shell $(SAW) -h 2>&1 | grep solver-cache >/dev/null && echo OK)
+  ifeq ($(OK),)
+    # The command line handling of "cabal run" does not conform to
+    # usual expectations. Plain words after exe:saw are interpreted as
+    # arguments for saw, but options as options for Cabal. The --
+    # tells cabal to stop looking for options. We also need -v0 to
+    # keep it from mixing its own output with SAW's.
+    SAW=cabal run -v0 exe:saw --
+    OK=$(shell $(SAW) -h 2>&1 | grep solver-cache >/dev/null && echo OK)
+    ifeq ($(OK),)
+      $(error Could not find SAW (including via cabal); PATH=$(PATH))
+    endif
   endif
 endif
 
