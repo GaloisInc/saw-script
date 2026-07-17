@@ -117,7 +117,7 @@ span.spaces    { background: white }
 <span class="lineno">   98 </span>  Maybe SC.TypedTerm -&gt;
 <span class="lineno">   99 </span>  SC.TypedTerm -&gt;
 <span class="lineno">  100 </span>  IO YosysTheorem
-<span class="lineno">  101 </span><span class="decl"><span class="istickedoff">buildTheorem sc env ymod newmod precond body = do</span>
+<span class="lineno">  101 </span><span class="decl"><span class="istickedoff">buildTheorem sc _env ymod newmod precond body = do</span>
 <span class="lineno">  102 </span><span class="spaces">  </span><span class="istickedoff">cty &lt;-</span>
 <span class="lineno">  103 </span><span class="spaces">    </span><span class="istickedoff">case SC.ttType ymod of</span>
 <span class="lineno">  104 </span><span class="spaces">      </span><span class="istickedoff">SC.TypedTermSchema (C.Forall [] [] cty) -&gt; pure cty</span>
@@ -126,8 +126,8 @@ span.spaces    { background: white }
 <span class="lineno">  107 </span><span class="spaces">    </span><span class="istickedoff">case cty of</span>
 <span class="lineno">  108 </span><span class="spaces">      </span><span class="istickedoff">C.TCon (C.TC C.TCFun) [ci, co] -&gt; pure (ci, co)</span>
 <span class="lineno">  109 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">yosysError YosysErrorInvalidOverrideTarget</span></span>
-<span class="lineno">  110 </span><span class="spaces">  </span><span class="istickedoff">inpTy &lt;- CSC.translateType sc <span class="nottickedoff">env</span> cinpTy</span>
-<span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">outTy &lt;- CSC.translateType sc <span class="nottickedoff">env</span> coutTy</span>
+<span class="lineno">  110 </span><span class="spaces">  </span><span class="istickedoff">inpTy &lt;- CSC.translateType sc cinpTy</span>
+<span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">outTy &lt;- CSC.translateType sc coutTy</span>
 <span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">nmi &lt;-</span>
 <span class="lineno">  113 </span><span class="spaces">    </span><span class="istickedoff">case reduceSelectors (SC.ttTerm ymod) of</span>
 <span class="lineno">  114 </span><span class="spaces">      </span><span class="istickedoff">(R.asConstant -&gt; Just (SC.Name _ nmi)) -&gt; pure nmi</span>

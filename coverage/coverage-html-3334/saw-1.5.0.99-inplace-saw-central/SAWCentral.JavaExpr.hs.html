@@ -284,11 +284,11 @@ span.spaces    { background: white }
 <span class="lineno">  265 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = Nothing</span></span>
 <span class="lineno">  266 </span>
 <span class="lineno">  267 </span>narrowTypeOfActual :: SharedContext -&gt; CryptolEnv -&gt; JavaActualType -&gt; IO (Maybe Term)
-<span class="lineno">  268 </span><span class="decl"><span class="nottickedoff">narrowTypeOfActual sc env at =</span>
+<span class="lineno">  268 </span><span class="decl"><span class="nottickedoff">narrowTypeOfActual sc _env at =</span>
 <span class="lineno">  269 </span><span class="spaces">  </span><span class="nottickedoff">case cryptolTypeOfActual at of</span>
 <span class="lineno">  270 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; return Nothing</span>
 <span class="lineno">  271 </span><span class="spaces">    </span><span class="nottickedoff">Just cty -&gt;</span>
-<span class="lineno">  272 </span><span class="spaces">      </span><span class="nottickedoff">do t &lt;- translateType sc env cty</span>
+<span class="lineno">  272 </span><span class="spaces">      </span><span class="nottickedoff">do t &lt;- translateType sc cty</span>
 <span class="lineno">  273 </span><span class="spaces">         </span><span class="nottickedoff">return (Just t)</span></span>
 <span class="lineno">  274 </span>
 <span class="lineno">  275 </span>cryptolTypeOfActual :: JavaActualType -&gt; Maybe Cryptol.Type
