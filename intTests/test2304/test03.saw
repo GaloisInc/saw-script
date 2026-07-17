@@ -1,12 +1,18 @@
 do {
    let {{ x = 3 : [8] }};
-   do {
+   let g = do {
       let {{ x = 4 : Integer }};
+      print {{ x == (4 : Integer) }};
       return ();
    };
+   g;
    do {
       let {{ x = 5 : Integer }};
+      let {{ y = x : Integer }};
+      print {{ x == (5 : Integer) }};
+      g;
       return ();
    };
+   fails (do { print {{ y == (5 : Integer) }}; });
    print {{ x == (3 : [8]) }};
 };

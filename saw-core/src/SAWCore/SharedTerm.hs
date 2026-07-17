@@ -76,6 +76,7 @@ module SAWCore.SharedTerm
   , IsMetadata(..)
   , scGetData
   , scUpdateData
+  , scWithData
   , scLabel
   , unlabel
     -- * Term builders
@@ -2415,13 +2416,6 @@ scTreeSizeAux = go
         Just sz' -> (sz + sz', seen)
         Nothing -> (sz + sz', Map.insert (termIndex t) sz' seen')
           where (sz', seen') = foldl' go (1, seen) (unwrapTermF t)
-
-scUpdateData ::
-  IsMetadata a => SharedContext -> (a -> a) -> IO ()
-scUpdateData sc f = execSCM sc (scmUpdateData f)
-
-scGetData :: IsMetadata a => SharedContext -> IO a
-scGetData sc = execSCM sc scmGetData
 
 scLabel :: SharedContext -> Text -> Term -> IO Term
 scLabel sc tg t = execSCM sc (scmLabel tg t)

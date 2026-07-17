@@ -17,7 +17,7 @@ module SAWServer.Yosys (
     yosysExtractSequentialDescr
   ) where
 
-import Control.Lens (view, (%=))
+import Control.Lens (view)
 
 import Control.Monad (forM)
 import Control.Monad.IO.Class (liftIO)
@@ -36,14 +36,14 @@ import qualified Argo.Doc as Doc
 
 import CryptolServer.Data.Expression (Expression(..), getCryptolExpr)
 
-import SAWServer.SAWServer (SAWState, ServerName (ServerName), sawTask, setServerVal, getYosysImport, getYosysTheorem, getYosysSequential, sawTopLevelRW)
+import SAWServer.SAWServer (SAWState, ServerName (ServerName), sawTask, setServerVal, getYosysImport, getYosysTheorem, getYosysSequential)
 import SAWServer.CryptolExpression (CryptolModuleException(..), getTypedTermOfCExp)
 import SAWServer.Exceptions (notAtTopLevel)
 import SAWServer.OK (OK, ok)
 import SAWServer.ProofScript (ProofScript, interpretProofScript)
 import SAWServer.TopLevel (tl)
 
-import SAWCentral.Value (getSharedContext, getTopLevelRW, rwGetCryptolEnv, rwModifyCryptolEnv)
+import SAWCentral.Value (getSharedContext, getTopLevelRW, rwGetCryptolEnv, getCryptolEnv, setCryptolEnv)
 import SAWCentral.Yosys (YosysImport(..), loadYosysIR, yosysIRToYosysImport, yosys_verify, yosys_import_sequential, yosys_extract_sequential)
 
 data YosysImportParams = YosysImportParams
@@ -137,11 +137,11 @@ yosysVerify params = do
         preconds <- forM precondExprs $ \pc -> do
           (eterm, warnings) <- liftIO $ getTypedTermOfCExp fileReader sc cenv pc
           case eterm of
-            Right (t, _) -> pure t
+            Right t -> pure t
             Left err -> throw $ CryptolModuleException err warnings
         (eterm, warnings) <- liftIO $ getTypedTermOfCExp fileReader sc cenv cexp
         specTerm <- case eterm of
-          Right (t, _) -> pure t
+          Right t -> pure t
           Left err -> throw $ CryptolModuleException err warnings
         yosys_verify modTerm preconds specTerm lemmas proofScript
       setServerVal (yosysVerifyLemmaName params) l
@@ -217,8 +217,11 @@ yosysExtractSequential params = do
       m <- getYosysSequential $ yosysExtractSequentialModule params
       s <- tl $ yosys_extract_sequential m (yosysExtractSequentialCycles params)
       let sn@(ServerName n) = yosysExtractSequentialServerName params
-          doBind cenv = CEnv.bindExtraVar (mkIdent n, s) cenv
-      sawTopLevelRW %= rwModifyCryptolEnv doBind
+      tl $ do
+        sc <- getSharedContext
+        cenv <- getCryptolEnv
+        cenv' <- liftIO $ CEnv.bindExtraVar sc (mkIdent n, s) cenv
+        setCryptolEnv cenv'
       setServerVal sn s
       ok
 

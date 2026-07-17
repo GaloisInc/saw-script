@@ -52,7 +52,6 @@ import Control.Monad (unless)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.State (gets, liftIO)
 import qualified Data.AIG as AIG
-import qualified Data.ByteString as BS
 import Data.Maybe (mapMaybe)
 import Data.Parameterized.Nonce (globalNonceGenerator)
 import Data.Parameterized.Some (Some(..))
@@ -79,8 +78,7 @@ import SAWCore.Recognizer (asPi)
 import SAWCore.SATQuery
 import SAWCore.SharedTerm as SC
 
-import CryptolSAWCore.Cryptol (refreshCryptolEnv)
-import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule)
+import CryptolSAWCore.CryptolEnv (loadCryptolModule)
 import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import CryptolSAWCore.TypedTerm
 
@@ -509,13 +507,10 @@ writeRocqCryptolModule inputFile outputFile notations skips = io $ do
   sc  <- mkSharedContext
   ()  <- scLoadPreludeModule sc
   ()  <- scLoadCryptolModule sc
-  let ?fileReader = BS.readFile
-  env <- initCryptolEnv sc
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
-  (cm, _) <- loadCryptolModule sc env inputFile
+  cm <- loadCryptolModule sc inputFile
                -- NOTE: implementation of loadCryptolModule, now uses this default:
                --   defaultPrimitiveOptions = ImportPrimitiveOptions{allowUnknownPrimitives=True}
-  import_env <- refreshCryptolEnv env
   mm <- scGetModuleMap sc
   let ?mm = mm
   let cryptolPreludeDecls =
@@ -528,7 +523,7 @@ writeRocqCryptolModule inputFile outputFile notations skips = io $ do
         withImportSAWCorePrelude $
         rocqTranslationConfiguration notations skips
   let nm = Rocq.Ident (takeBaseName inputFile)
-  res <- Rocq.translateCryptolModule sc import_env nm configuration cryptolPreludeDecls cm
+  res <- Rocq.translateCryptolModule sc nm configuration cryptolPreludeDecls cm
   case res of
     Left err -> do
       err' <- Rocq.ppTranslationError sc err

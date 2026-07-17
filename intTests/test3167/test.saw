@@ -1,0 +1,9 @@
+import "Foo.cry";
+
+let foo (m: CryptolModule) = do {
+   return {{ foo }};
+};
+
+bar <- cryptol_load "Bar.cry";
+
+foo bar;

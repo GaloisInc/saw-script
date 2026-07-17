@@ -25,6 +25,7 @@ import Control.Monad (unless)
 import Control.Monad.IO.Class
 import Data.Aeson (FromJSON(..), withObject, (.:))
 import Data.ByteString (ByteString)
+import Data.Foldable (foldrM)
 import Data.Map (Map)
 import qualified Data.Map as Map
 
@@ -119,7 +120,8 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
 
     setupState allocs (env, cenv) vars =
       do freshTerms <- mapM setupFresh vars
-         let cenv' = foldr (\(ServerName n, t) -> CEnv.bindExtraVar (mkIdent n, t)) cenv freshTerms
+         let sc = biSharedContext bic
+         cenv' <- LLVMCrucibleSetupM $ liftIO $ foldrM (\(ServerName n, t) -> CEnv.bindExtraVar sc (mkIdent n, t)) cenv freshTerms
          let env' = Map.union env $ Map.fromList $
                    [ (n, Val (CMS.anySetupTerm t)) | (n, t) <- freshTerms ] ++
                    [ (n, Val v) | (n, v) <- allocs ]
@@ -172,7 +174,7 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
     getTypedTerm cenv expr = LLVMCrucibleSetupM $
       do (res, warnings) <- liftIO $ getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
          case res of
-           Right (t, _) -> return t
+           Right t -> return t
            Left err -> throw $ CryptolModuleException err warnings
 
     getSetupVal ::

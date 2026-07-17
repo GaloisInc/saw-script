@@ -1,0 +1,5 @@
+x : Integer
+x = 3
+
+y : Integer
+y = 5

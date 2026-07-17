@@ -689,8 +689,7 @@ learnPointsTo opts sc cc spec prepost pt =
                 valueToSC sym md failMsg tval jval
 
          when (len > toInteger (maxBound :: Int)) $ fail "jvm_array_is: array length too long"
-         let cryenv = cc ^. jccCryptolEnv
-         ety_tm <- liftIO $ Cryptol.translateType sc cryenv ety
+         ety_tm <- liftIO $ Cryptol.translateType sc ety
          ts <- traverse load [0 .. fromInteger len - 1]
          realTerm <- liftIO $ scVector sc ety_tm ts
          matchTerm sc md prepost realTerm (ttTerm tt)
@@ -873,12 +872,12 @@ doEntireArrayStore bak glob ref vs = foldM store glob (zip [0..] vs)
 -- along with a list of its projected components. Return 'Nothing' if
 -- the 'TypedTerm' does not have a vector type.
 destVecTypedTerm :: SharedContext -> Cryptol.CryptolEnv -> TypedTerm -> IO (Maybe (Cryptol.Type, [TypedTerm]))
-destVecTypedTerm sc env (TypedTerm ttp t) =
+destVecTypedTerm sc _env (TypedTerm ttp t) =
   case asVec of
     Nothing -> pure Nothing
     Just (len, ety) ->
       do len_tm <- scNat sc (fromInteger len)
-         ty_tm <- Cryptol.translateType sc env ety
+         ty_tm <- Cryptol.translateType sc ety
          idxs <- traverse (scNat sc) (map fromInteger [0 .. len-1])
          ts <- traverse (scAt sc len_tm ty_tm t) idxs
          pure $ Just (ety, map (TypedTerm (TypedTermSchema (Cryptol.tMono ety))) ts)

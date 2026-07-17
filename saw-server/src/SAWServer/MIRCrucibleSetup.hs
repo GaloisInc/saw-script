@@ -17,6 +17,7 @@ import Control.Monad.State ( MonadState(..) )
 import Control.Monad.Trans ( MonadTrans(lift) )
 import Data.Aeson ( FromJSON(..), withObject, (.:) )
 import Data.ByteString (ByteString)
+import Data.Foldable (foldrM)
 import Data.Map (Map)
 import qualified Data.Map as Map
 
@@ -117,7 +118,8 @@ compileMIRContract fileReader bic ghostEnv cenv0 sawenv c =
          return (n, t)
     setupState allocs (env, cenv) vars =
       do freshTerms <- mapM (setupFresh cenv) vars
-         let cenv' = foldr (\(ServerName n, t) -> CEnv.bindExtraVar (mkIdent n, t)) cenv freshTerms
+         let sc = biSharedContext bic
+         cenv' <- MIRSetupM $ liftIO $ foldrM (\(ServerName n, t) -> CEnv.bindExtraVar sc (mkIdent n, t)) cenv freshTerms
          let env' = Map.union env $ Map.fromList $
                    [ (n, Val (MS.SetupTerm t)) | (n, t) <- freshTerms ] ++
                    [ (n, Val v) | (n, v) <- allocs ]
@@ -175,7 +177,7 @@ compileMIRContract fileReader bic ghostEnv cenv0 sawenv c =
     getTypedTerm cenv expr = MIRSetupM $
       do (res, warnings) <- liftIO $ getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
          case res of
-           Right (t, _) -> return t
+           Right t -> return t
            Left err -> throw $ CryptolModuleException err warnings
 
     getMirType ::

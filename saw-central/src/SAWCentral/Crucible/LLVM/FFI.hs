@@ -72,7 +72,7 @@ import           SAWCentral.LLVMBuiltins
 import           SAWCentral.Panic
 import           SAWCentral.Value
 import qualified CryptolSAWCore.Pretty as CryPP
-import           CryptolSAWCore.CryptolEnv
+import           CryptolSAWCore.GlobalCryptolEnv
 import           SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
 import           SAWCore.Name (Name(..))
 import           SAWCore.OpenTerm (OpenTerm)
@@ -143,9 +143,9 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
   let (funTerm, tyArgTerms) = asApplyAll appTerm
   sc <- lll getSharedContext
   let ?ctx = FFISetupCtx {..}
-  cryEnv <- lll getCryptolEnv
+  ffiTypes <- lio $ eFFITypes sc
   case asConstant funTerm of
-    Just nm -> case Map.lookup (nameInfo nm) (eFFITypes cryEnv) of
+    Just nm -> case Map.lookup (nameInfo nm) ffiTypes of
       Nothing -> do
         opts <- lll $ getPPOpts
         nm' <- lio $ ppName sc opts nm

@@ -44,19 +44,24 @@ import qualified SAWCentral.AST as AST
 import SAWCentral.Value (TopLevelRW(..), Environ(..))
 
 import SAWScript.REPL.Monad
+import Control.Monad.IO.Class (liftIO)
 
 
 -- | Get visible Cryptol variable names.
 getCryptolExprNames :: REPL [Text]
 getCryptolExprNames =
-  do fNames <- fmap getNamingEnv getCryptolEnv
+  do sc <- rwSharedContext <$> getTopLevelRW
+     cenv <- getCryptolEnv
+     fNames <- liftIO $ getNamingEnv sc cenv
      let keys = Map.keys (MN.namespaceMap NSValue fNames)
      return (map CryPP.pp keys)
 
 -- | Get visible Cryptol type names.
 getCryptolTypeNames :: REPL [Text]
-getCryptolTypeNames =
-  do fNames <- fmap getNamingEnv getCryptolEnv
+getCryptolTypeNames = 
+  do sc <- rwSharedContext <$> getTopLevelRW
+     cenv <- getCryptolEnv
+     fNames <- liftIO $ getNamingEnv sc cenv
      let keys = Map.keys (MN.namespaceMap NSType fNames)
      return (map CryPP.pp keys)
 

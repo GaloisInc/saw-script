@@ -49,9 +49,9 @@ Section Simple .
     CryptolPrimitivesForSAWCore.seqMap var__0 var__0 a (fun (ct : var__0) => let var__1   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
     CryptolPrimitivesForSAWCore.ecXor var__0 (CryptolPrimitivesForSAWCore.PLogicSeqBool var__1) ct key) ciphertext.
 
-  Definition roundtrip (u1321 : CryptolPrimitivesForSAWCore.Num) (k : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) Init.Datatypes.bool) (ip : CryptolPrimitivesForSAWCore.seq u1321 (CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) Init.Datatypes.bool)) : Init.Datatypes.bool :=
+  Definition roundtrip (u944 : CryptolPrimitivesForSAWCore.Num) (k : CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) Init.Datatypes.bool) (ip : CryptolPrimitivesForSAWCore.seq u944 (CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) Init.Datatypes.bool)) : Init.Datatypes.bool :=
     let var__0   := CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) in
     let var__1   := CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool in
-    CryptolPrimitivesForSAWCore.ecEq (CryptolPrimitivesForSAWCore.seq u1321 var__1) (CryptolPrimitivesForSAWCore.PEqSeq u1321 var__1 (CryptolPrimitivesForSAWCore.PEqSeqBool var__0)) (decrypt u1321 k (encrypt u1321 k ip)) ip.
+    CryptolPrimitivesForSAWCore.ecEq (CryptolPrimitivesForSAWCore.seq u944 var__1) (CryptolPrimitivesForSAWCore.PEqSeq u944 var__1 (CryptolPrimitivesForSAWCore.PEqSeqBool var__0)) (decrypt u944 k (encrypt u944 k ip)) ip.
 
 End Simple .

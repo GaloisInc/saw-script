@@ -1,0 +1,21 @@
+let {{ x = 4 : Integer }};
+
+let g z = return {{ `(z) + x == 6 }};
+let f z = do { return {{ `(z) + x == 6 }}; };
+
+import "test06.cry";
+// local binding takes precedence after import
+prove_print z3 {{ x == 4 }};
+prove_print z3 {{ y == 5 }};
+t <- f 2;
+prove_print z3 t;
+t2 <- g 2;
+prove_print z3 t2;
+
+import "test06.cry" as test06;
+
+// previous import is still available
+prove_print z3 {{ y == 5 }};
+prove_print z3 {{ test06::x == 3 }};
+
+print "Success";

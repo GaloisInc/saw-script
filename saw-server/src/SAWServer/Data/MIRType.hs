@@ -178,7 +178,7 @@ mirType fileReader bic cenv sawenv = go
       (res, warnings) <- liftIO $
         getTypedTermOfCExp fileReader (SV.biSharedContext bic) cenv val
       case res of
-        Right (val', _) -> mir_const ty' val'
+        Right val' -> mir_const ty' val'
         Left err -> X.throw $ CryptolModuleException err warnings
 
     go (JSONTyArray ty n) = Mir.TyArray <$> go ty <*> pure n
