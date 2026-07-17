@@ -43,8 +43,8 @@ with explicit universe binders (`def Eq__rec.{u₁, u₂} …`).
 
 ## L-2 shape tests stay valid
 
-`otherTests/saw-core-lean/shape/coerce/attack.shouldfail.lean` and
-`otherTests/saw-core-lean/shape/unsafe_assert_prop/` pin the
+`otherTests/saw-core-lean/negative/coerce/rejection.shouldfail.lean` and
+`otherTests/saw-core-lean/negative/unsafe_assert_prop/` pin the
 hand-library's monomorphic shapes. With this audit's conclusion
 (no hand-library changes), those tests stay valid as-is. They
 become *more* important post-Phase 3: they pin the asymmetry

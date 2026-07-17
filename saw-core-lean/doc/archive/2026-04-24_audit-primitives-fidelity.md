@@ -103,7 +103,7 @@ Does it matter today? The translator's sort-collapse means
 SAW-produced use sites have `α : Type`, instantiating Lean's
 `u = 1`. The translator never emits `error P ""` with `P : Prop`
 because SAW terms never have that shape post-specialization. So
-no SAW → Lean translation can exploit this.
+no SAW → Lean translation can unsound path this.
 
 The hole exists for *hand-written Lean proofs* that invoke
 `CryptolToLean.SAWCorePrimitives.error` directly. A user-authored
@@ -131,7 +131,7 @@ which excludes `u = 0` (α : Prop). This keeps polymorphism across
 `Type`, `Type 1`, … but not Prop.
 
 This isn't a *translator-reachable* soundness bug, but the
-handwritten library is the attack surface for any Lean user
+handwritten library is the exposure surface for any Lean user
 importing the module, and "the translator would never emit that"
 is a weaker guarantee than the axiom's shape itself implies.
 Worth tightening.

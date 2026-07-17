@@ -1,6 +1,6 @@
 # OP-3 successor design: bounded-iteration lowering for productive fix
 
-**Date**: 2026-07-15. **Status**: AUDITED (fourth adversarial audit,
+**Date**: 2026-07-15. **Status**: AUDITED (fourth independent audit,
 2026-07-15): **implementable with named amendments** — the first
 OP-3 design to survive audit. The six amendments in the audit record
 below are BINDING on the implementation; amendments A and D are
@@ -105,7 +105,7 @@ because the body is untouched. The emitter supplies any convenient
 total placeholder element explicitly; no Inhabited machinery.)
 
 Key properties, proved ONCE in Lean as library lemmas (this is the
-faithfulness core — the fourth audit should attack exactly here):
+faithfulness core — the fourth audit should scrutinize exactly here):
 
 - **L1 (stabilization).** For a body whose element `i` depends only
   on elements `< i` of its argument (stated semantically as a
@@ -196,7 +196,7 @@ it.
 - Litmus/negative rows land in the SAME slice as the recognizer
   (gate before lowering).
 
-## Questions the fourth audit should attack
+## Questions the fourth audit should scrutinize
 
 1. Is L1's per-instance `H_prod` discharge (`rfl`-class unfolding of
    the concrete body at each index) actually closable for the
@@ -228,7 +228,7 @@ it.
 Verdict: implementable with named amendments. Key confirmations: the
 pure-seed iteration of the untouched strict body IS sound for the
 running_sum/popcount class (hand-traced 2-element analogue; the
-third audit's error-poisoning cannot arise from a pure seed with
+third audit's error-overriding cannot arise from a pure seed with
 total element functions); off-by-one is correct but zero-slack
 (element n-1 stabilizes exactly at iterate n).
 
@@ -258,7 +258,7 @@ Binding amendments:
   textually new but categorically the "structural fix helper" the
   scan enforces the retirement of; the scan's list and the
   residual-trust catalog must be updated TOGETHER with the design's
-  landing, not silently bypassed by the rename. Add
+  landing, not silently circumvented by the rename. Add
   `cryptol_module_popcount` to the golden re-pin list (eight
   wrapped-contract goldens total).
 - **F (trust honesty).** Residual-trust §3.2 must be RE-OPENED as a
@@ -308,7 +308,7 @@ commit, per house rules.
   flip + the iterate family; **stream_fibs: explicit REJECT with
   named diagnostic + its module row re-pinned as a boundary**
   (amendment D — paired-stream lowering is a separate later design,
-  not smuggled in here).
+  not introduced in here).
 - **Slice R4 (retirement).** `saw_fix_unique_exists` + choose
   lemmas deleted (no emitter remains); smoketest fix cases
   re-pointed; TODO/STATUS/CONFORMANCE sync; the OP-3 census tier
@@ -548,8 +548,8 @@ Recipe deviations (binding on future discharges):
 
 ## Fifth-audit record (2026-07-15) — R3b Class-S concretization: implementable WITH AMENDMENTS
 
-Adversarial audit of the R3 pre-slice concretization (independent
-auditor; attacks 1-6). Verdict: the realization + single-obligation
+Independent audit of the R3 pre-slice concretization (independent
+auditor; checks 1-6). Verdict: the realization + single-obligation
 core is SOUND for the identity step (rec_ones); NOT implementable as
 written because the R3a recognizer as first coded was strictly looser
 than the validated lowering — the structural draft's
@@ -616,7 +616,7 @@ rows exit 0; conformance exit 0.
 
 ## Sixth-audit record (2026-07-16) — strategy-level review; Finding 0 REPAIRED
 
-Adversarial review of the strategy framing itself (trusted translator
+Independent review of the strategy framing itself (trusted translator
 + strong obligations + audited weakening descent + minimal runway).
 Overall: HOLDS-WITH-AMENDMENTS, one mandatory repair (landed:
 zip-slot scan hardening, commit f2db4aeef), one mandatory addition

@@ -153,7 +153,7 @@ but final soundness should not allow nonstandard support-library axioms.
 
 Next action: prove them in Lean and remove the proof-harness allowlist.
 
-### Raw Lean injection bypasses the support-library boundary
+### Raw Lean injection circumvents the support-library boundary
 
 `SAWModule.translateDecl` emits `InjectCodeDecl "Lean"` verbatim.
 
@@ -161,7 +161,7 @@ Reference:
 
 - `saw-core-lean/src/SAWCoreLean/SAWModule.hs:172`
 
-This bypasses the generic primitive/axiom rejection policy and can smuggle
+This circumvents the generic primitive/axiom rejection policy and can introduce
 arbitrary Lean declarations into generated module output if the SAWCore module
 is untrusted.
 
@@ -277,7 +277,7 @@ Reference:
 
 - `otherTests/saw-core-lean/support/lean-proof-test.sh:342`
 
-A malicious proof file could keep a namespace open and make appended unqualified
+A non-conforming proof file could keep a namespace open and make appended unqualified
 checks refer to local `goal` / `goal_closed`. This is acceptable for trusted
 regression fixtures, but not for a product proof checker.
 

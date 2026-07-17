@@ -16,7 +16,7 @@ expected rejection — nothing is silently red.
 | `proofs/` | Completed Lean discharges of emitted goals (sorry-free, axiom-audited every run). | …a workflow/driver goal has a real proof. |
 | `proof-gaps/` | Documented undischargeable or parked proofs (GAP.md states exactly why and what unblocks it). | …the obligation emits but cannot honestly be closed yet. |
 | `support-proofs/` | Standalone proofs ABOUT the Lean support library's realizations (no SAW run). | …you're verifying library semantics, not emission. |
-| `attacks/` | Hand-rolled NEGATIVE probes (`*.shouldfail.lean`) that must FAIL elaboration — soundness attacks on the support library. | …you're pinning that a malicious/wrong shape is rejected by Lean. |
+| `negative/` | Hand-rolled NEGATIVE probes (`*.shouldfail.lean`) that must FAIL elaboration — soundness checks on the support library. | …you're pinning that a non-conforming/wrong shape is rejected by Lean. |
 | `stretch/` | Large stress probes excluded from default gates. | …it's scalability evidence, not a fence. |
 | `support/` | The harness scripts themselves. | — |
 
@@ -29,7 +29,7 @@ drift, pins exactly the load-bearing lines).
 
 History note (2026-07-15 restructure): `workflows/` was split out of
 `drivers/`; the negative-probe category was renamed `shape/` →
-`attacks/`; the pre-differential-era `drivers/conformance_*` litmus
+`negative/`; the pre-differential-era `drivers/conformance_*` litmus
 family was dispositioned row-by-row (retired where coverage was
 duplicated, migrated where unique — see the release audit's
 execution record). `doc/archive/` docs cite pre-restructure paths;

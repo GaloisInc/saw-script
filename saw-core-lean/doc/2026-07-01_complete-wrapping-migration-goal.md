@@ -118,7 +118,7 @@ if it explains the source/target convention generally.
   proof scripts, broad simp bundles, `omega`/BV automation, or proof-library
   work whose purpose is to make obligations discharge.
 - Do not preserve fallback, backup, or legacy paths for erroneous behavior.
-  Old paths that bypass the explicit convention system are targets for removal,
+  Old paths that circumvent the explicit convention system are targets for removal,
   not compatibility requirements.
 
 ## In Scope
@@ -433,7 +433,7 @@ restart or revise the goal.
 10. Commit the checkpoint only after the code, docs, and tests tell a coherent
     story.
 
-## Anti-Cheat Rules
+## Anti-Shortcut Rules
 
 The following are explicitly forbidden even if they make tests pass:
 

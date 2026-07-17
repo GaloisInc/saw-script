@@ -313,7 +313,7 @@ Use this when the support library has a kernel-checked realization:
 The declaration must be a Lean `def`/`theorem`/`lemma` whose proof checks under
 the pinned toolchain. It must not be a Lean `axiom` added for this backend. The
 test must be able to audit the generated artifact for the checked declaration
-name and for absence of forbidden bypasses.
+name and for absence of forbidden circumvents.
 
 Candidate contract families:
 
@@ -354,7 +354,7 @@ The contract table should specify:
   - result proposition to be emitted as an obligation;
 - whether the positive path is a local obligation or checked realization;
 - checked Lean theorem/helper name, when one exists;
-- forbidden bypass names for tests.
+- forbidden circumvent names for tests.
 
 Acceptable Haskell responsibilities:
 
@@ -425,7 +425,7 @@ Each positive `expected.txt` must require:
 - evidence consumption by the emitted term;
 - the actual translated arguments appearing in the proposition or theorem
   application;
-- absence of forbidden bypasses such as raw proof primitive names, Lean
+- absence of forbidden circumvents such as raw proof primitive names, Lean
   `axiom`, `unsafe`, `admit`, obsolete rejection fallthrough, or unrelated
   totalizing helpers.
 

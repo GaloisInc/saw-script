@@ -17,7 +17,7 @@ under the no-excuses bar and concluded:
     isomorphic** — both are length-`n` tuples of `α`. Pattern-matching
     a `Vec` value via `Vector.mk` reveals the underlying `List α`,
     which is precisely what SAW's `Vec` IS. There is no semantic
-    divergence to exploit. A user "reaching through" the abstraction
+    divergence to rely on unsoundly. A user "reaching through" the abstraction
     learns the same facts SAW already exposes.
 
   - Lean's `Vector` lives in stdlib. Anyone with `import Std` (which

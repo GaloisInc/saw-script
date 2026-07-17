@@ -258,7 +258,7 @@ in:
   - `proofs/popcount32_via_bridge/proof.lean`
 - **19 driver `.lean.good` files** (will regenerate on rerun;
   not human-edited).
-- **1 shape `.shouldfail.lean`** (`shape/error_prop/attack_empty.shouldfail.lean`).
+- **1 shape `.shouldfail.lean`** (`negative/error_prop/attack_empty.shouldfail.lean`).
 
 **Recommended regression seed (9 short, wrap-clean proofs):**
 
@@ -275,7 +275,7 @@ in:
 | `proofs/E3_point_commutes/proof.lean` | 29 | record types |
 
 Plus all 9 `saw-boundary/` rejection tests (no wrap involvement)
-and the 4 `shape/*.shouldfail.lean` attack tests.
+and the 4 `shape/*.shouldfail.lean` Check tests.
 
 **Drivers (40 total)**: 21 are wrap-clean as-is; 19 reference
 `error_unrestricted` in their pinned `.lean.good` but the `.saw`

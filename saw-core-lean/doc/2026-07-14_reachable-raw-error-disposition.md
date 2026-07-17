@@ -1,6 +1,6 @@
 # Reachable raw `error` disposition (OP-2 rider audit + design note)
 
-**Date**: 2026-07-14. **Status**: IMPLEMENTED (same day) — adversarial
+**Date**: 2026-07-14. **Status**: IMPLEMENTED (same day) — independent
 audit (independent session) UPHELD all three rules with conditions;
 implementation followed the audit record exactly
 (`translateRawPositionError` in Term.hs; `translateRawErrorObligation`
@@ -11,7 +11,7 @@ the rule-1 message slot adapts through the wrapped carrier like every
 `2026-07-12_obligation-placement-design.md` (OP-2 implementation
 record's rider census, which this completes and corrects).
 
-## Audit record (2026-07-14, adversarial; verdicts folded in)
+## Audit record (2026-07-14, independent; verdicts folded in)
 
 - **Rule 1 UPHELD** — no force-without-apply witness exists in
   SAWCore: `errorOp` raises the moment the applied error value is

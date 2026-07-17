@@ -52,10 +52,10 @@
 #                          verb inventory these directories so they cannot
 #                          become invisible skipped tests.
 #
-#   attacks/<name>/        Hand-rolled NEGATIVE Lean probes
+#   negative/<name>/        Hand-rolled NEGATIVE Lean probes
 #                          (*.shouldfail.lean) that pin support-library
-#                          axiom shapes. These exist because attacks
-#                          fundamentally require hand-rolled malicious
+#                          axiom shapes. These exist because negative probes
+#                          fundamentally require hand-rolled non-conforming
 #                          Lean — there's no generator equivalent.
 #                          POSITIVE coverage of "translator-emitted
 #                          shapes elaborate" lives in drivers/, not here.
@@ -258,7 +258,7 @@ iterate_obligations()   { for d in obligations/*/;   do run_one obligations   "$
 iterate_saw_boundary()  { for d in saw-boundary/*/;  do run_one saw-boundary  "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_proofs()        { for d in proofs/*/;        do run_one proofs        "$(basename "$d")" lean-proof-test.sh   "$@"; done; }
 iterate_support_proofs() { for d in support-proofs/*/; do run_one support-proofs "$(basename "$d")" lean-proof-test.sh "$@"; done; }
-iterate_attacks()       { for d in attacks/*/;       do run_one attacks       "$(basename "$d")" lean-shape-test.sh   "$@"; done; }
+iterate_negative()       { for d in negative/*/;       do run_one negative       "$(basename "$d")" lean-shape-test.sh   "$@"; done; }
 
 record_gap_inventory_item() {
     local path="$1"
@@ -307,7 +307,7 @@ case "$verb" in
         iterate_saw_boundary
         iterate_proofs
         iterate_support_proofs
-        iterate_attacks
+        iterate_negative
         iterate_gap_inventory
         print_summary_and_exit
         ;;
@@ -345,7 +345,7 @@ case "$verb" in
         iterate_saw_boundary clean
         iterate_proofs clean
         iterate_support_proofs clean
-        iterate_attacks clean
+        iterate_negative clean
         print_summary_and_exit
         ;;
     *)

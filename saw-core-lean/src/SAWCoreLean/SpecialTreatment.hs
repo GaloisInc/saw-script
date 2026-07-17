@@ -459,7 +459,7 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     --
     -- Naively auto-emitting these as @axiom@s weakens soundness:
     -- every additional Lean axiom is a trusted assumption a
-    -- discharge could exploit. Until we have hand-library theorem
+    -- discharge could rely on unsoundly. Until we have hand-library theorem
     -- entries or proof obligations that emit a *proof* rather than a
     -- postulate, leave them rejected.
 

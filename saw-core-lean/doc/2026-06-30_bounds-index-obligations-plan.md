@@ -298,7 +298,7 @@ Each positive `expected.txt` must require:
 - a local evidence name, such as `h_bounds_`;
 - the exact proposition family (`<`, `<=`, or a named reducible predicate);
 - the checked helper name;
-- absence of forbidden unchecked bypasses such as `atWithDefault` with an
+- absence of forbidden unchecked circumvents such as `atWithDefault` with an
   arbitrary error default, direct rejected with-proof primitive names, raw
   proof-primitive reliance, or obsolete helper names.
 

@@ -5,7 +5,7 @@ priority (TODO.md). Successor program to the position-directed
 translation plan (`2026-07-08_position-directed-translation-plan.md`,
 complete).
 
-**Audit record (2026-07-12, adversarial Opus audit before any
+**Audit record (2026-07-12, independent Opus audit before any
 implementation):** OP-1 SOUND as written; OP-2 SOUND subject to two
 conditions now stated inline (runtime lowering restricted to `at`;
 Prelude-exact error string); the ORIGINAL OP-3 (uniqueness among pure
@@ -20,7 +20,7 @@ added the obligation-site scope table at the end.
 
 **Second audit record (2026-07-12, after OP-1 shipped, before OP-2
 implementation):** the OP-2 decision-rule amendment (interval
-entailment) was audited adversarially. Faithfulness and obligation
+entailment) was audited rigorously. Faithfulness and obligation
 placement SOUND; the draft interval propagation set REFUTED
 (`minNat`/`maxNat` and variable×variable `mulNat` are omega-atomized —
 kernel-checked witnesses in the amendment subsection) and corrected;
@@ -283,7 +283,7 @@ eta-expanded formal or any other evidence-less position lowers
 runtime-checked. No emitted-term inspection: the decision reads the
 production record / binder environment, per the calculus.
 
-**Decision-rule amendment (2026-07-12, AUDITED — second adversarial
+**Decision-rule amendment (2026-07-12, AUDITED — second independent
 Opus audit, same-day; supersedes the paragraph above's coarser rule).**
 Audit verdicts: faithfulness of the runtime-checked lowering under
 `iteM` SOUND (verified in the emitter — `UseMapsToWrapped` passes both

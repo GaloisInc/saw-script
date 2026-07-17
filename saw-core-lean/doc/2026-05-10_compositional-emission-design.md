@@ -159,7 +159,7 @@ ergonomic, or unsupported:
 
 3. **`error` as explicit partiality.** SAWCore's
    `error : (α : sort 1) → String → α` admits `α = Prop`, enabling
-   the L-17 attack class. The live backend does not transcribe that
+   the L-17 Check class. The live backend does not transcribe that
    primitive as an axiom. Value-position errors route through
    `Except`; raw/proof/type-position errors become explicit proof
    obligations or refusals.

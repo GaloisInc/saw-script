@@ -56,8 +56,8 @@ files plus 2 generated).
   diagnostic via a hand-built `Nat#rec` term.
 - `otherTests/saw-core-lean/saw-boundary/polymorphic/`: pinned
   `polymorphismResidual` diagnostic for a `sort 1` binder.
-- `otherTests/saw-core-lean/shape/error_prop/`: pure-Lean test that
-  the `error : Sort (u+1)` axiom rejects the Prop attack and accepts
+- `otherTests/saw-core-lean/negative/error_prop/`: pure-Lean test that
+  the `error : Sort (u+1)` axiom rejects the Prop Check and accepts
   legitimate uses.
 
 ### Demo working end-to-end

@@ -17,9 +17,9 @@ like. **Every claim below cites the regression test that pins it**
 — if the test went away, the claim is no longer trustworthy.
 
 For the cross-cutting view of "every known route a hostile prover
-could take to derive `False`", see the dedicated attack-surface
-inventory: [`2026-05-04_attack-surface.md`](2026-05-04_attack-surface.md).
-That doc is the place to add new attack vectors as they're found.
+could take to derive `False`", see the dedicated exposure-surface
+inventory: [`2026-05-04_exposure-surface.md`](2026-05-04_exposure-surface.md).
+That doc is the place to add new Check vectors as they're found.
 
 ## What the translator guarantees
 
@@ -68,7 +68,7 @@ load-bearing.
 ### Don't apply `error` outside the translator's emission
 
 **L-17 two-tier design (2026-05-04).** The support library exposes
-two `error` symbols, which together mitigate user-side attacks
+two `error` symbols, which together mitigate user-side checks
 while staying faithful to SAW emission:
 
   * `error_unrestricted.{u} : (α : Sort (u+1)) → String → α` — the
@@ -80,24 +80,24 @@ while staying faithful to SAW emission:
   * `error.{u} (α : Type u) [Inhabited α] (msg : String) : α` —
     the user-facing constrained `def`. This is what unqualified
     `error α msg` resolves to in user discharge proofs. The
-    `[Inhabited α]` constraint blocks the L-17 attack class
+    `[Inhabited α]` constraint blocks the L-17 Check class
     (`error Empty ""`, `error PEmpty ""`, `error (Inhabited Empty) ""`)
     at instance-synthesis time.
 
-Pinned by `otherTests/saw-core-lean/shape/error_prop/`:
-- `attack.shouldfail.lean` — `error False ""` must fail (Prop
+Pinned by `otherTests/saw-core-lean/negative/error_prop/`:
+- `rejection.shouldfail.lean` — `error False ""` must fail (Prop
   excluded by `Type u`).
 - `attack_empty.shouldfail.lean` — `error Empty ""` must fail
   (no `Inhabited Empty` instance).
 
 **Residual.** A determined user can still write
-`error_unrestricted Empty "boom"` to bypass the safety guard
+`error_unrestricted Empty "boom"` to circumvent the safety guard
 (then `Empty.elim` to `False`). This is an explicit opt-out — a
 user choosing the long unsafe name has consciously stepped past
 the constrained surface. Same residual class as `unsafeAssert`
 generic unsoundness (see below). Translator-emitted code is
 unaffected (Cryptol's surface has no Empty type, so emission
-never synthesizes the attack).
+never synthesizes the probe).
 
 ### Don't apply `unsafeAssert` to fabricate equalities
 
@@ -107,15 +107,15 @@ Inside SAWCore it's used as part of the `coerce`-via-equality
 dance for Cryptol size arithmetic; Lean-side, it's a load-bearing
 axiom you must not extend casually.
 
-The `α = Prop` attack vector (deriving `Eq Prop True False` and
+The `α = Prop` Check vector (deriving `Eq Prop True False` and
 transporting `True.intro` to `False`) is admitted under both SAW's
 shape and ours — this is a SAW-inherent residual trust, not a
 Lean-side widening. SAW Prelude itself uses
 `unsafeAssert (sort 0) a b` inside `unsafeCoerce`
 (`Prelude.sawcore:292`).
 
-Pinned by `otherTests/saw-core-lean/shape/unsafe_assert_prop/` —
-`attack.lean` (uses at `Type 1` must fail; the Prop attack is
+Pinned by `otherTests/saw-core-lean/negative/unsafe_assert_prop/` —
+`rejection.lean` (uses at `Type 1` must fail; the Prop Check is
 documented as faithful-but-trusted) and `non_prop.lean`
 (translator-emitted Num/Bool/Vec uses must succeed).
 
@@ -123,7 +123,7 @@ documented as faithful-but-trusted) and `non_prop.lean`
 
 `coerce : (α β : Type) → @Eq Type α β → α → β` matches SAW's
 `(a b : sort 0)` exactly. Pinned by
-`otherTests/saw-core-lean/shape/coerce/` — `attack.lean`
+`otherTests/saw-core-lean/negative/coerce/` — `rejection.lean`
 (uses at `Type 1` must fail) and `positive.lean` (translator-
 emitted Num/Vec uses must succeed). L-8 lockdown.
 

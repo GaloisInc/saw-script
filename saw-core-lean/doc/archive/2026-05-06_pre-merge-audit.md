@@ -317,7 +317,7 @@ The cuts audit identifies ~140-200 LOC of dead Haskell/Lean and
 - Support library reduced to 4 axioms (Vec↔BitVec round-trip × 2,
   `unsafeAssert`, `error_unrestricted`); zero `sorry` outside
   intentional emitted-goal stubs.
-- All five attack probes reject as designed (re-verified end-to-end).
+- All five Check probes reject as designed (re-verified end-to-end).
 - L-16 follow-up smoketest is real and tight (closes the
   comment-grade gap from the prior audit).
 - Phase 8 (axioms → defined) effectively shipped.

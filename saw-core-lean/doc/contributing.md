@@ -22,7 +22,7 @@ What it covers (all five steps must pass):
   2. Build the CryptolToLean Lean support library (`lake build`).
   3. Run Haskell-side translator invariants
      (`cabal test saw-core-lean-smoketest`) — pins L-1..L-17.
-  4. Run Lean-side driver/workflow/proof/attack/saw-boundary tests
+  4. Run Lean-side driver/workflow/proof/negative/saw-boundary tests
      (`cabal test saw-core-lean-tests`) — pins emission shape,
      proof discharges, axiom signatures.
   5. Run general SAW integration tests
@@ -144,7 +144,7 @@ discipline:
    `otherTests/saw-core-lean/saw-boundary/*` directory with a synthetic
    `.saw` driver that triggers the refusal. For
    support-library-level gates (e.g., the L-2 unsafeAssert axiom
-   shape), it's a Lean-only intTest with attack/positive `.lean`
+   shape), it's a Lean-only intTest with negative/positive `.lean`
    probes.
 3. Document in `2026-04-24_soundness-boundaries.md` with a
    citation back to the test path.
@@ -177,10 +177,10 @@ file, the framework also runs `lake env lean` on each emitted
 `.lean`.
 
 **Lean-only** (for tests that exercise the support library
-directly, no SAW involvement): an `otherTests/saw-core-lean/{attacks,proofs}/*`
+directly, no SAW involvement): an `otherTests/saw-core-lean/{checks,proofs}/*`
 directory with a bespoke `test.sh` that runs `lake env lean` on
 probe files. Mirror the existing
-`otherTests/saw-core-lean/attacks/error_prop/` or
+`otherTests/saw-core-lean/checks/error_prop/` or
 `otherTests/saw-core-lean/proofs/walkthrough/`
 patterns.
 
@@ -236,7 +236,7 @@ separate Lean proof.
 
 ## What NOT to do
 
-- Don't bypass `polymorphismResidual` or the `UnsoundRecursor`
+- Don't circumvent `polymorphismResidual` or the `UnsoundRecursor`
   guard. They're load-bearing for translator output to mean what
   SAW says it means.
 - Don't add `axiom` declarations to support library files

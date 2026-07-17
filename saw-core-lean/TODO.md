@@ -1391,7 +1391,7 @@ reject and pin a fixture rather than widen a heuristic.
     readability issues. Non-application translations such as non-empty
     `ArrayValue` can produce wrapped Lean terms (`vecSequenceM`) while fallback
     shape inference classifies the term as raw. Under-applied wrapped helpers
-    also bypass their explicit `UseArgRaw`/`UseArgWrapped`/`UseArgFunction`
+    also override their explicit `UseArgRaw`/`UseArgWrapped`/`UseArgFunction`
     conventions. These are the next migration targets because they can make
     later adaptation reason from the wrong shape.
   - 2026-06-28 checkpoint: fixed these concrete migration gaps. Non-empty

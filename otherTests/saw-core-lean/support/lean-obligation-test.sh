@@ -294,7 +294,7 @@ check_absent() {
     local literal="$1"
     local record="${2:-yes}"
     if grep -F "$literal" "$emitted" >/dev/null 2>&1; then
-        echo "FORBIDDEN OBLIGATION BYPASS PRESENT: absent:$literal" >&2
+        echo "FORBIDDEN OBLIGATION OMISSION PRESENT: absent:$literal" >&2
         status=1
     elif [ "$record" = "yes" ]; then
         echo "OBLIGATION_OBSERVED: absent:$literal" >>test.observed

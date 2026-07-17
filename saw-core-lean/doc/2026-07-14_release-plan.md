@@ -200,7 +200,7 @@ gap that can reasonably be closed. Three workstreams; W1 leads.
 
 **W1 — Recurrence/stream program (the headline).** OP-3 successor
 design against the third audit's six minimum conditions → fourth
-adversarial audit → implementation. Acceptance ladder:
+independent audit → implementation. Acceptance ladder:
 `proof-gaps/cryptol_running_sum_verify` → `offline_lean_popcount32` +
 E6 → `llvm_popcount_eq` → the `rec_ones`/`stream_fibs` module rows →
 the Stream@core/Either@core translation path (un-parks the boundary

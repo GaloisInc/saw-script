@@ -380,7 +380,7 @@ would produce a less-ergonomic structural copy.
 ### 4.2 Soundness-critical overrides (~10 entries)
 
 The L-* lockdowns demand that these *not* go through auto-emit. Each
-has a hand-tuned target that closes a specific attack class.
+has a hand-tuned target that closes a specific Check class.
 
 - `iteDep`, `iteDep_True`, `iteDep_False`, `ite` → hand-written
   versions in `SAWCorePreludeExtra` (L-16; Bool#rec case
@@ -686,7 +686,7 @@ The new architecture introduces two new trust boundaries:
 1. **Auto-regeneration is deterministic and CI-checked.** A user
    compiles against the committed `Auto/*.lean`; CI verifies
    `saw regenerate_auto.saw && diff` against the committed copy.
-   Trust failure: a malicious / buggy patch to the auto-emitter
+   Trust failure: a non-conforming / buggy patch to the auto-emitter
    could ship a different committed file. Mitigation: CI diff;
    reviewer attention on `Auto/*.lean` changes; per-file
    regeneration test in the soundness CI job.

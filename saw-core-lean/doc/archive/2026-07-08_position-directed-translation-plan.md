@@ -437,7 +437,7 @@ Sub-slices (mirroring the Slice 4 restructure):
    Slice 1/2, never read off emitted Lean AST) is wrapped, raw otherwise,
    function-carrier rejected until 5c. This is byte-for-byte the legacy
    result, so 5a is a byte-parity slice; what changes is its STATUS — from
-   universal inference to one convention among several, bypassed wherever a
+   universal inference to one convention among several, circumvented wherever a
    surround declares ρ_eq — and its auditability (subject-rep decisions traced
    under `SAW_LEAN_TRACE_POSITIONS`). Rename
    `subjectRepFromTranslatedOperands` → `standaloneEqualitySubjectRep` with

@@ -6,7 +6,7 @@ further audits find recognizer/lowering seam flaws.
 
 ## Why this exists
 
-Every adversarial audit of the fix program (third, fourth, fifth) has
+Every independent audit of the fix program (third, fourth, fifth) has
 attacked the same seam: the EAGER translated body vs SAW's LAZY
 elementwise evaluation of a fix. The design's answer so far is
 audit-hardened argument plus per-instance proven obligations (loud

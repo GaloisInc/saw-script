@@ -523,7 +523,7 @@ Correct response:
 
 Incorrect response:
 
-- bypass the drift check;
+- circumvent the drift check;
 - make the proof import a stale artifact;
 - delete the current emitted file to make the proof pass against old output.
 

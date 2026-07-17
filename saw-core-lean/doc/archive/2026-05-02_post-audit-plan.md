@@ -71,7 +71,7 @@ bearing — tested, not commented. Specifically:
    `SpecialTreatment` completeness — anywhere we can replace a
    list with auto-derivation, we do.
 4. **Loud failure beats silent containment.** A gate that's
-   bypassed today by accident-of-emission-shape is not a gate.
+   circumvented today by accident-of-emission-shape is not a gate.
 
 The Phase 1a catalog below operationalizes this. Each item is a
 specific gap, what closing it looks like, and the test that pins
@@ -169,7 +169,7 @@ imported names from `CryptolToLean.SAWCorePrimitives`.
 **L-12. `writeLeanCryptolModule` passes through every soundness
 gate.** Trace the code path. `writeLeanTerm` and `writeLeanProp`
 both invoke `polymorphismResidual`; confirm the module-walk path
-does too, and that no module-emitter shortcut bypasses any
+does too, and that no module-emitter shortcut circumventes any
 declared gate. Pin a regression: a Cryptol module containing a
 gating shape (polymorphic-over-Type def) is rejected at
 `write_lean_cryptol_module` time, not just at later

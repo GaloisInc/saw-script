@@ -15,7 +15,7 @@ comparison with `saw-core-rocq/`. Read-only audit. Citations are
   the term's type, missing nested `sort k≥1` binders (S-1).
 - `unsafeAssert` is faithful at every translator-emitted use, but the
   Lean axiom is universe-polymorphic where SAW's is `sort 1`-only.
-  Hand-written-Lean attack surface, not translator-emitted (S-2).
+  Hand-written-Lean exposure surface, not translator-emitted (S-2).
 - `discoverNatRecReachers` covers `Nat#rec`/`Pos#rec` directly but
   **does not auto-derive opacity for `Z#rec`, `AccessibleNat#rec`,
   `AccessiblePos#rec`** — only the textual `leanOpaqueBuiltins` list
@@ -48,7 +48,7 @@ comparison with `saw-core-rocq/`. Read-only audit. Citations are
   cap. Termination check uses `termIndex` equality.
 - `error.{u} : (α : Sort (u+1)) → String → α` at
   `lean/CryptolToLean/SAWCorePrimitives.lean:270`: excludes `Prop` by
-  construction. Pinned by `otherTests/saw-core-lean/shape/error_prop/`.
+  construction. Pinned by `otherTests/saw-core-lean/negative/error_prop/`.
 - `iteDep` / `ite` realisations at
   `lean/CryptolToLean/SAWCorePreludeExtra.lean:40-58`: the case-order
   permutation is correct (SAW: True-first; Lean's `Bool.rec`:
@@ -92,7 +92,7 @@ SAW: `(a : sort 1) -> (x y : a) -> Eq a x y`. The Lean form admits
 irrelevance — no inconsistency) and `α : Type k>0` (no
 translator-emitted use can reach it because `translateSort`
 collapses all sorts to `Type 0`). Translator-reachable use is sound.
-Hand-written-Lean attack surface: a downstream user can assert
+Hand-written-Lean exposure surface: a downstream user can assert
 function extensionality etc. without SAW vouching for it. The
 2026-04-24 audit Caveat 1 considered the broader shape acceptable
 because `unsafeAssert` is globally available to translated theorems

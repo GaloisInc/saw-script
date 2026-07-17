@@ -1,7 +1,7 @@
 # OP-3: structural lowering for the bounded-vec-fold fix class
 
 **Date**: 2026-07-12. **Status**: **REFUTED BY AUDIT (2026-07-12,
-third adversarial Opus audit) — DO NOT IMPLEMENT. Kept as the record
+third independent Opus audit) — DO NOT IMPLEMENT. Kept as the record
 of a rejected candidate so it is not re-proposed.** Verdicts:
 Primary REFUTED, A REFUTED, C REFUTED, D REFUTED, B/E
 CONDITION-and-defective. Findings:
@@ -48,7 +48,7 @@ Original (refuted) draft follows for the record.
 ---
 
 **Original status**: PRE-AUDIT DRAFT (the audit-first
-process applies: adversarial Opus audit before implementation).
+process applies: independent Opus audit before implementation).
 Companion to `2026-07-12_obligation-placement-design.md` §Instance 3,
 whose post-audit contract analysis this implements via the
 STRUCTURAL-FIRST entry decision (TODO.md, 2026-07-12). Reuses the
@@ -190,7 +190,7 @@ recognized class whose live recursive references are productive
   references) as proof support — successors of the retired May
   parametric bridges.
 
-### Audit questions (answer each adversarially)
+### Audit questions (answer each rigorously)
 
 A. Is the elementwise induction argument sound for ALL bodies the
    recognizer accepts — including bodies where `e` uses `rec` under

@@ -106,7 +106,7 @@ The principled fix is:
    the helper contract back to the source wrapper semantics.
 5. Promote `obligations/cryptol_ec_sdiv_zero` and
    `obligations/cryptol_ec_smod_zero` only when the emitted artifact exposes
-   the expected finite-successor/nonzero obligations and cannot bypass the
+   the expected finite-successor/nonzero obligations and cannot circumvent the
    checked BV helper.
 
 This still keeps Haskell dumb: it wires a declared source operation to a
@@ -152,7 +152,7 @@ For the immediate signed-BV wrapper slice:
   known gaps;
 - done: the positive shape tests require `ecSignedBVNonzeroM`, checked
   `ecSDiv_checkedM` / `ecSMod_checkedM`, and absence of residual `Nat__rec` or
-  unchecked direct signed-BV bypasses;
+  unchecked direct signed-BV circumventes;
 - done: the checked wrapper helpers delegate to `bvSDiv_checkedM` /
   `bvSRem_checkedM` in the finite positive case;
 - done: non-exact-arity partial-operation identifiers reject before falling

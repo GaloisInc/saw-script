@@ -102,7 +102,7 @@ They must remain regressions for this work.
   or proof-library work in this phase.
 - Do not refresh goldens to hide the current failure. Promote known gaps only
   after reviewing the emitted artifact against this convention.
-- Do not preserve fallback, backup, or legacy behavior that bypasses the
+- Do not preserve fallback, backup, or legacy behavior that circumventes the
   explicit convention.
 - Do not edit this goal document during execution to make the goal easier or
   broader. If reality differs from the plan, stop and report the decision point;
@@ -315,7 +315,7 @@ This task is small in code size but deep in semantics. The main risks are:
 - motive-shape churn: making value-producing motives always return
   `Except String T` is the principled rule, but it may perturb existing passing
   recursor output;
-- error-erasure cheats: successful examples alone do not prove that
+- error-erasure unsound shortcuts: successful examples alone do not prove that
   `Except.error` propagates;
 - stream scope creep: `Stream.rec` can pull in stream productivity,
   `MkStream`, or `Prelude.fix` semantics, which are out of scope here;

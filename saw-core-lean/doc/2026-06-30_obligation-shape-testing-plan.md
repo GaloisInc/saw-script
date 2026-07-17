@@ -103,7 +103,7 @@ For a positive obligation test, failure means any of the following:
 - the expected contract is absent, weakened, or represented by the wrong
   family;
 - the generated term no longer consumes evidence for the contract;
-- a forbidden bypass, hidden axiom, totalized primitive, or obsolete helper is
+- a forbidden circumvent, hidden axiom, totalized primitive, or obsolete helper is
   used instead.
 
 For a `.known-gap` obligation test, success means only that the current failure
@@ -267,7 +267,7 @@ pins direct zero cases as known gaps.
 - `proofs/*` checks completed proof replay. It rejects unresolved obligations
   and audits theorem axioms. This is the right model for checked discharge, but
   not for testing that an emitter produced the right open obligation.
-- `shape/*` contains hand-written adversarial Lean probes. These are useful
+- `shape/*` contains hand-written independent Lean probes. These are useful
   soundness guards, but they do not inspect generator output.
 
 ## Proposed Test Category
@@ -283,7 +283,7 @@ This keeps proof-carrying boundary tests separate from:
 - true value differential tests;
 - rejection-only boundary tests;
 - completed proof-discharge tests;
-- hand-written adversarial shape tests.
+- hand-written independent shape tests.
 
 The top-level conformance command should run this category after
 `differential/*` and before `saw-boundary/*`. A passing obligation-shape test
@@ -330,7 +330,7 @@ emitted artifact. It must not reconstruct an equivalent term by hand.
 
 Positive obligation tests must fail on failure: if the contract is missing, if
 the wrong contract head appears, if the generated term does not consume the
-evidence, if a forbidden bypass appears, or if the emitted artifact no longer
+evidence, if a forbidden circumvent appears, or if the emitted artifact no longer
 elaborates as an outline, the test must fail. Known-gap fixtures are allowed
 only when they pin a current missing obligation with a specific expected
 diagnostic; if the backend starts passing, the known-gap fixture must fail so it
@@ -599,8 +599,8 @@ The current tests should be reclassified as follows:
   - keep as known gaps;
   - replace with positive vector proof-obligation rows when implemented.
 - `shape/fix_contract`
-  - keep as an adversarial contract-strength probe.
-- `shape/unsafe_assert_prop` and `shape/coerce_unsafeassert_combo`
+  - keep as an independent contract-strength probe.
+- `negative/unsafe_assert_prop` and `negative/coerce_unsafeassert_combo`
   - keep as support-library shape guards.
 - `proofs/*`
   - continue to test completed proof replay;
@@ -618,10 +618,10 @@ The obligation-shape suite is good enough for the next backend phase when:
    - a rejection fixture marked as final boundary; or
    - an explicit `.known-gap` fixture.
 2. Every passing obligation fixture observes the emitted artifact itself.
-3. Every fixture checks both required contract heads and forbidden bypasses.
+3. Every fixture checks both required contract heads and forbidden circumvents.
 4. Known gaps remain visible in the conformance summary.
 5. A positive fixture fails when the emitted contract is absent, changed, or
-   bypassed, and a `.known-gap` fixture fails when the backend no longer exhibits
+   circumvented, and a `.known-gap` fixture fails when the backend no longer exhibits
    the pinned failure.
 6. No completed proof-discharge test accepts `sorry`, hidden axioms, or a proof
    of a different proposition.

@@ -182,7 +182,7 @@ soundness check on the translator, but it isn't a proof artifact.
   `doc/2026-05-01_bitvec-binding-decision.md` as intentionally punted.
   Single biggest "useful for proofs" gap.
 - **`error.{u}` uses `Sort (u+1)`** (excludes `Prop`); tested via
-  `otherTests/saw-core-lean/shape/error_prop`. Good.
+  `otherTests/saw-core-lean/negative/error_prop`. Good.
 - **`unsafeAssert.{u}` allows `Sort u` including `Prop`**
   (`SAWCorePrimitives.lean:255`). A Lean-side user could in principle
   write `unsafeAssert Prop True False` and derive inconsistency. The

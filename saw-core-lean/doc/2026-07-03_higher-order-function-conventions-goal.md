@@ -317,7 +317,7 @@ decision boundary, not that the backend is complete.
 9. Run focused validation, full conformance, and smoke tests as required.
 10. Commit only when the code, docs, and tests tell one coherent story.
 
-## Anti-Cheat Rules
+## Anti-Shortcut Rules
 
 The following are explicitly forbidden even if they make the tests green:
 

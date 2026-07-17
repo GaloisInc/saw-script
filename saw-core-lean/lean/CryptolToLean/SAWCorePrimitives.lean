@@ -1014,7 +1014,7 @@ type-equality transport is admissible (it's literally an
 identity function modulo the type label). The unsoundness
 attached to coerce in practice comes from chaining it with
 `unsafeAssert` to fabricate the required `Eq Type α β`; this
-def doesn't introduce any new attack vector beyond what
+def doesn't introduce any new unsoundness beyond what
 `unsafeAssert` already provides. -/
 @[reducible] def coerce : (α β : Type) → @Eq Type α β → α → β :=
   fun _ _ h x => cast h x

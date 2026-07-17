@@ -47,7 +47,7 @@ Three intTests pin failure modes; all three still test what they claim:
 
 - `otherTests/saw-core-lean/saw-boundary/natrec` — synthetic `Nat#rec` term forces `UnsoundRecursor`. Stable.
 - `otherTests/saw-core-lean/saw-boundary/polymorphic` — `\\(t : sort 1) -> \\(x : t) -> x` triggers `polymorphismResidual` from `SAWCentral.Prover.Exporter`. Stable.
-- `otherTests/saw-core-lean/shape/error_prop` — pure-Lean test that the `error : Sort (u+1)` axiom shape rejects `error False ""` (would prove `False`) but accepts realistic uses. The most subtle of the three; the `attack.lean`/`non_prop.lean` probes are exactly the right scope.
+- `otherTests/saw-core-lean/negative/error_prop` — pure-Lean test that the `error : Sort (u+1)` axiom shape rejects `error False ""` (would prove `False`) but accepts realistic uses. The most subtle of the three; the `rejection.lean`/`non_prop.lean` probes are exactly the right scope.
 
 No expected-fail tests exist for the other 5 `TranslationError` constructors.
 

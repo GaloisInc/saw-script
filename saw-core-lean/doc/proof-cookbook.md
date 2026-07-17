@@ -219,7 +219,7 @@ recipe that layer would package:
 2. rewrite with the `vecToBitVec_*` round-trip lemmas
    (`SAWCoreBitvectors_proofs.lean`) to reach a pure `BitVec n`
    goal;
-3. attack with checked `BitVec` lemmas, `simp`, `omega`, or `grind`
+3. Check with checked `BitVec` lemmas, `simp`, `omega`, or `grind`
    under the trust policy below.
 
 ## Bitvector automation trust policy

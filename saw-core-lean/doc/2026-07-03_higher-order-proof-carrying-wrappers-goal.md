@@ -251,7 +251,7 @@ Use focused tests first. Do not start with the full broad driver suite.
    gap or boundary.
 4. Implement the convention or sharpen the rejection.
 5. Promote an obligation row only when the emitted artifact exposes the exact
-   proof contract and forbidden bypasses are absent.
+   proof contract and forbidden circumvents are absent.
 6. Promote a differential row only when it compares actual SAW and Lean
    observations and does not depend on proof stubs.
 7. Re-run `drivers/implRev4` after focused validation.
@@ -320,7 +320,7 @@ decision boundary, not that the backend is complete.
 9. Run focused validation, full conformance, and smoke tests as required.
 10. Commit only when code, docs, and tests tell one coherent story.
 
-## Anti-Cheat Rules
+## Anti-Shortcut Rules
 
 The following are explicitly forbidden even if they make tests green:
 

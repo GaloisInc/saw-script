@@ -234,7 +234,7 @@ For each implemented family:
    - the precondition proposition or named predicate;
    - the local obligation/evidence names;
    - the checked helper call;
-   - absence of the unchecked primitive bypass when called in the partial
+   - absence of the unchecked primitive circumvent when called in the partial
      zero-divisor position.
 3. Add or update differential tests for defined nonzero cases only if the
    helper routing changes emitted value behavior.

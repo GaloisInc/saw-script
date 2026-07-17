@@ -59,7 +59,7 @@ Lean already has coverage beyond the Rocq baseline:
 - proof harnesses that elaborate human-written Lean proofs against generated
   obligations;
 - soundness boundary tests for unsupported recursors, generic fix obligations,
-  algebraic enums, and support-library attack probes.
+  algebraic enums, and support-library Check probes.
 
 These are valuable, and they point toward using Lean as a stronger replacement
 for some SMT workflows. They do not close Rocq parity gaps by themselves unless

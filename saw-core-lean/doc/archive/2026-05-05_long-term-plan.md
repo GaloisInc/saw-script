@@ -5,7 +5,7 @@
 ## 1. Where we are
 
 **Infrastructure: solid.**
-- Soundness lockdown L-1..L-17 with the attack-surface inventory and hostile-prover audit (`doc/2026-05-04_attack-surface.md`).
+- Soundness lockdown L-1..L-17 with the exposure-surface inventory and hostile-prover audit (`doc/2026-05-04_exposure-surface.md`).
 - Test infrastructure consolidated (Phase F): everything Lean-backend-specific lives under `otherTests/saw-core-lean/`, organized as `drivers/ proofs/ shape/ saw-boundary/`. Single CI gate: `make test-saw-core-lean`.
 - Translator at parity with Phase 1 plus several finds-and-fixes from case studies: free-var abstraction in `writeLeanProp`, `escapeIdent` for local vars, `error_unrestricted` consistency in `genFix` slots, constant-fold pass on Nat/Int/Bool literals (Improvement #1, ~38% emission size reduction).
 
