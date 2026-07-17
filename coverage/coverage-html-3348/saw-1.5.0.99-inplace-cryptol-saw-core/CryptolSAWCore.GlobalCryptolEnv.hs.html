@@ -1,0 +1,601 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : CryptolSAWCore.GlobalCryptolEnv
+<span class="lineno">    3 </span>Description : Cryptol to SAWCore import logic
+<span class="lineno">    4 </span>Copyright   : Galois, Inc. 2012-2026
+<span class="lineno">    5 </span>License     : BSD3
+<span class="lineno">    6 </span>Maintainer  : saw@galois.com
+<span class="lineno">    7 </span>Stability   : experimental
+<span class="lineno">    8 </span>Portability : non-portable (language extensions)
+<span class="lineno">    9 </span>
+<span class="lineno">   10 </span>-}
+<span class="lineno">   11 </span>
+<span class="lineno">   12 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">   13 </span>{-# LANGUAGE ViewPatterns #-}
+<span class="lineno">   14 </span>
+<span class="lineno">   15 </span>module CryptolSAWCore.GlobalCryptolEnv 
+<span class="lineno">   16 </span>  ( ImportVisibility(..)
+<span class="lineno">   17 </span>  , isToplevel
+<span class="lineno">   18 </span>  , sameHeight
+<span class="lineno">   19 </span>  , pushScope
+<span class="lineno">   20 </span>  , popScope
+<span class="lineno">   21 </span>  , initEnv
+<span class="lineno">   22 </span>  , CryptolEnv
+<span class="lineno">   23 </span>  , useModEnvSupply
+<span class="lineno">   24 </span>  , mapNaming
+<span class="lineno">   25 </span>  , mapImports
+<span class="lineno">   26 </span>  , eExtraNaming
+<span class="lineno">   27 </span>  , eImports
+<span class="lineno">   28 </span>  , eModuleEnv
+<span class="lineno">   29 </span>  , runModuleM
+<span class="lineno">   30 </span>  , addSearchPath
+<span class="lineno">   31 </span>  , eExtraVars
+<span class="lineno">   32 </span>  , addExtraVars
+<span class="lineno">   33 </span>  , eExtraTySyns
+<span class="lineno">   34 </span>  , addExtraTySyns
+<span class="lineno">   35 </span>  , eAllVars
+<span class="lineno">   36 </span>  , addToAllVars
+<span class="lineno">   37 </span>  , eTyVars
+<span class="lineno">   38 </span>  , addTyVars
+<span class="lineno">   39 </span>  , eTyProps
+<span class="lineno">   40 </span>  , addTyProps
+<span class="lineno">   41 </span>  , eAllTerms
+<span class="lineno">   42 </span>  , addToAllTerms
+<span class="lineno">   43 </span>  , eRefPrims
+<span class="lineno">   44 </span>  , addRefPrims
+<span class="lineno">   45 </span>  , ePrims
+<span class="lineno">   46 </span>  , addPrims
+<span class="lineno">   47 </span>  , ePrimTypes
+<span class="lineno">   48 </span>  , addPrimTypes
+<span class="lineno">   49 </span>  , eFFITypes
+<span class="lineno">   50 </span>  , addFFITypes
+<span class="lineno">   51 </span>  , withFreshScope
+<span class="lineno">   52 </span>  , getAllIfaceDecls
+<span class="lineno">   53 </span>  ) where
+<span class="lineno">   54 </span>
+<span class="lineno">   55 </span>import Data.List.NonEmpty (NonEmpty(..), (&lt;|))
+<span class="lineno">   56 </span>import qualified Data.List.NonEmpty as NE
+<span class="lineno">   57 </span>import Data.Map (Map)
+<span class="lineno">   58 </span>import qualified Data.Map as Map
+<span class="lineno">   59 </span>
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>import qualified Cryptol.ModuleSystem.Env as ME
+<span class="lineno">   62 </span>import qualified Cryptol.ModuleSystem.Name as C
+<span class="lineno">   63 </span>import qualified Cryptol.ModuleSystem.Renamer as MR
+<span class="lineno">   64 </span>
+<span class="lineno">   65 </span>import qualified Cryptol.TypeCheck.AST as C
+<span class="lineno">   66 </span>import qualified Cryptol.Utils.Ident as C
+<span class="lineno">   67 </span>
+<span class="lineno">   68 </span>import SAWCore.SharedTerm
+<span class="lineno">   69 </span>import SAWCore.Term.Functor (FieldName)
+<span class="lineno">   70 </span>
+<span class="lineno">   71 </span>import CryptolSAWCore.FileReader
+<span class="lineno">   72 </span>import CryptolSAWCore.Panic
+<span class="lineno">   73 </span>import qualified Cryptol.ModuleSystem as MI
+<span class="lineno">   74 </span>import Control.Monad (unless)
+<span class="lineno">   75 </span>import qualified Cryptol.ModuleSystem.Monad as MM
+<span class="lineno">   76 </span>import qualified Cryptol.Eval as E
+<span class="lineno">   77 </span>import Cryptol.Utils.Logger (quietLogger)
+<span class="lineno">   78 </span>import qualified Cryptol.TypeCheck.Solver.SMT as SMT
+<span class="lineno">   79 </span>import qualified Cryptol.TypeCheck as TM
+<span class="lineno">   80 </span>
+<span class="lineno">   81 </span>--------------------------------------------------------------------------------
+<span class="lineno">   82 </span>
+<span class="lineno">   83 </span>-- | ImportVisibility is an enumeration that indicates how we handle
+<span class="lineno">   84 </span>-- the visibility of the symbols in an imported module.
+<span class="lineno">   85 </span>--
+<span class="lineno">   86 </span>-- `OnlyPublic` makes only the public/exported symbols of a module
+<span class="lineno">   87 </span>-- visible from SAW. `PublicAndPrivate` instead makes all symbols
+<span class="lineno">   88 </span>-- visible, as if one is working inside it. The latter is often useful
+<span class="lineno">   89 </span>-- (or necessary) for verification and code generation.
+<span class="lineno">   90 </span>--
+<span class="lineno">   91 </span>-- `PublicAndPrivate` is akin to setting the module focus in the
+<span class="lineno">   92 </span>-- Cryptol REPL; however, it uses a simpler internal mechanism and is
+<span class="lineno">   93 </span>-- only settable at import time.
+<span class="lineno">   94 </span>--
+<span class="lineno">   95 </span>-- (See 'CryptolEnv.importCryptolModule'.)
+<span class="lineno">   96 </span>--
+<span class="lineno">   97 </span>-- NOTE: this notion of public vs. private symbols is specific to
+<span class="lineno">   98 </span>-- SAWScript and distinct from Cryptol's notion of private
+<span class="lineno">   99 </span>-- definitions.
+<span class="lineno">  100 </span>--
+<span class="lineno">  101 </span>-- FUTURE: this should probably be replaced with a way to manipulate
+<span class="lineno">  102 </span>-- the module focus like the Cryptol REPL uses. What you really want
+<span class="lineno">  103 </span>-- is not to expose module innards that weren't meant to be exposed,
+<span class="lineno">  104 </span>-- but to go inside to prove things in the module's internal context.
+<span class="lineno">  105 </span>--
+<span class="lineno">  106 </span>data ImportVisibility
+<span class="lineno">  107 </span>  = OnlyPublic       -- ^ behaves like a normal Cryptol @import@
+<span class="lineno">  108 </span>  | PublicAndPrivate -- ^ allows viewing of both @private@ sections
+<span class="lineno">  109 </span>                     --   and (arbitrarily nested) submodules.
+<span class="lineno">  110 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  111 </span>
+<span class="lineno">  112 </span>
+<span class="lineno">  113 </span>-- | The global environment for capturing the Cryptol state, both
+<span class="lineno">  114 </span>--   Cryptol's own state and the state associated with
+<span class="lineno">  115 </span>--   importing/translating into SAWCore. This is intended to be a
+<span class="lineno">  116 </span>--   write-once record of any work done during translation. Rather than
+<span class="lineno">  117 </span>--   using the fields of this datatype directly, it is accessed as
+<span class="lineno">  118 </span>--   'SharedContext' data via the setters and getters below.
+<span class="lineno">  119 </span>data GlobalCryptolEnv = GlobalCryptolEnv
+<span class="lineno">  120 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">geModuleEnv</span></span></span>   :: ME.ModuleEnv
+<span class="lineno">  121 </span>  -- | Invariant: This is a subset of 'geAllVars', which is
+<span class="lineno">  122 </span>  --   enforced by 'addExtraVars'
+<span class="lineno">  123 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">geExtraVars</span></span></span>   :: Map C.Name C.Schema
+<span class="lineno">  124 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">geExtraTySyns</span></span></span> :: Map C.Name C.TySyn
+<span class="lineno">  125 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">geAllVars</span></span></span>     :: Map C.Name C.Schema
+<span class="lineno">  126 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">geTyVars</span></span></span>      :: Map Int Term
+<span class="lineno">  127 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">geTyProps</span></span></span>     :: Map C.Prop (Term, [FieldName])
+<span class="lineno">  128 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">geAllTerms</span></span></span>    :: Map C.Name Term
+<span class="lineno">  129 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">geRefPrims</span></span></span>    :: Map C.PrimIdent C.Expr
+<span class="lineno">  130 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">gePrims</span></span></span>       :: Map C.PrimIdent Term
+<span class="lineno">  131 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">gePrimTypes</span></span></span>   :: Map C.PrimIdent Term
+<span class="lineno">  132 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">geFFITypes</span></span></span>    :: Map NameInfo C.FFI
+<span class="lineno">  133 </span>  }
+<span class="lineno">  134 </span>
+<span class="lineno">  135 </span>-- | Initialize the global environment with the given 'ME.ModuleEnv',
+<span class="lineno">  136 </span>--   and populate the 'geAllVars' field accordingly.
+<span class="lineno">  137 </span>initGlobalEnv :: ME.ModuleEnv -&gt; GlobalCryptolEnv
+<span class="lineno">  138 </span><span class="decl"><span class="istickedoff">initGlobalEnv modEnv = refreshCryptolEnv $</span>
+<span class="lineno">  139 </span><span class="spaces">    </span><span class="istickedoff">GlobalCryptolEnv modEnv</span>
+<span class="lineno">  140 </span><span class="spaces">      </span><span class="istickedoff">mempty mempty mempty mempty mempty mempty mempty <span class="nottickedoff">mempty</span> mempty </span>
+<span class="lineno">  141 </span><span class="spaces">      </span><span class="istickedoff">mempty</span></span>
+<span class="lineno">  142 </span>
+<span class="lineno">  143 </span>instance IsMetadata GlobalCryptolEnv where
+<span class="lineno">  144 </span>  <span class="decl"><span class="istickedoff">initMetadata = initGlobalEnv &lt;$&gt; ME.initialModuleEnv</span></span>
+<span class="lineno">  145 </span>
+<span class="lineno">  146 </span>-- | Restore a `GlobalCryptolEnv` from a checkpoint. The first argument
+<span class="lineno">  147 </span>--   @chkEnv@ is the `GlobalCryptolEnv` saved by / copied into the
+<span class="lineno">  148 </span>--   checkpoint; the second argument @newEnv@ is the current one
+<span class="lineno">  149 </span>--   we wish to overwrite by rolling back to the checkpoint.
+<span class="lineno">  150 </span>--   The 'ME.meNameSeeds' and 'ME.meSupply' from the
+<span class="lineno">  151 </span>--   module environment are not rolled back, to avoid re-using old
+<span class="lineno">  152 </span>--   names.
+<span class="lineno">  153 </span>--   NOTE: This effectively
+<span class="lineno">  154 </span>--   invalidates any translated 'Term's or Cryptol expressions created
+<span class="lineno">  155 </span>--   after the checkpoint. Attempting to use them in the restored
+<span class="lineno">  156 </span>--   environment will have unpredictable results, and likely will
+<span class="lineno">  157 </span>--   result in a panic. Similarly, 'CryptolEnv's captured after the
+<span class="lineno">  158 </span>--   checkpoint are no longer safe to use in the resulting environment.
+<span class="lineno">  159 </span>
+<span class="lineno">  160 </span>--   We also ought to invalidate terms constructed since the checkpoint
+<span class="lineno">  161 </span>--   was taken, like SAWCore does. See #2859.
+<span class="lineno">  162 </span>
+<span class="lineno">  163 </span>--   We could, for example, have 'CryptolScope' track which
+<span class="lineno">  164 </span>--   identifiers it references, and check that they are in a valid
+<span class="lineno">  165 </span>--   range with respect to the corresponding global environment
+<span class="lineno">  166 </span>--   before combining them into a 'CryptolEnv'.
+<span class="lineno">  167 </span>  <span class="decl"><span class="istickedoff">restoreMetadata chk now = return $</span>
+<span class="lineno">  168 </span><span class="spaces">    </span><span class="istickedoff">let newMEnv = geModuleEnv now</span>
+<span class="lineno">  169 </span><span class="spaces">        </span><span class="istickedoff">chkMEnv = geModuleEnv chk</span>
+<span class="lineno">  170 </span><span class="spaces">    </span><span class="istickedoff">in chk { geModuleEnv = chkMEnv </span>
+<span class="lineno">  171 </span><span class="spaces">               </span><span class="istickedoff">{ ME.meNameSeeds = ME.meNameSeeds newMEnv</span>
+<span class="lineno">  172 </span><span class="spaces">               </span><span class="istickedoff">, ME.meSupply = ME.meSupply newMEnv </span>
+<span class="lineno">  173 </span><span class="spaces">               </span><span class="istickedoff">}</span>
+<span class="lineno">  174 </span><span class="spaces">           </span><span class="istickedoff">}</span></span>
+<span class="lineno">  175 </span>
+<span class="lineno">  176 </span>-- | A scope frame that captures which Cryptol names are accessible.
+<span class="lineno">  177 </span>--  `fNamingEnv` is the local naming environment, which can be extended
+<span class="lineno">  178 </span>--  ad-hoc with additional declarations. `fImports` is a list of all
+<span class="lineno">  179 </span>--  the modules that have been imported, and a visibility setting for
+<span class="lineno">  180 </span>--  each. This does not include, for example, builtin modules that
+<span class="lineno">  181 </span>--  exist but that have not been imported.
+<span class="lineno">  182 </span>
+<span class="lineno">  183 </span>data CryptolFrame =
+<span class="lineno">  184 </span>  CryptolFrame { <span class="istickedoff"><span class="decl"><span class="istickedoff">fNamingEnv</span></span></span> :: MR.NamingEnv
+<span class="lineno">  185 </span>               , <span class="istickedoff"><span class="decl"><span class="istickedoff">fImports</span></span></span> :: [(ImportVisibility, C.Import)] 
+<span class="lineno">  186 </span>               }
+<span class="lineno">  187 </span>
+<span class="lineno">  188 </span>initFrame :: CryptolFrame
+<span class="lineno">  189 </span><span class="decl"><span class="istickedoff">initFrame = CryptolFrame mempty mempty</span></span>
+<span class="lineno">  190 </span>
+<span class="lineno">  191 </span>-- | A nonempty list of 'CryptolFrame's, where the first element is the
+<span class="lineno">  192 </span>--   &quot;bottom&quot; frame that takes highest precedence when looking up
+<span class="lineno">  193 </span>--   names. Each individual frame only contains values declared at
+<span class="lineno">  194 </span>--   exactly that level. The full scope is computed by collecting
+<span class="lineno">  195 </span>--   everything in this stack, via 'eExtraNaming' and 'eImports'.
+<span class="lineno">  196 </span>newtype CryptolEnv = CryptolEnv (NonEmpty CryptolFrame)
+<span class="lineno">  197 </span>
+<span class="lineno">  198 </span>initEnv :: CryptolEnv
+<span class="lineno">  199 </span><span class="decl"><span class="istickedoff">initEnv = CryptolEnv (initFrame :| [])</span></span>
+<span class="lineno">  200 </span>
+<span class="lineno">  201 </span>isToplevel :: CryptolEnv -&gt; Bool
+<span class="lineno">  202 </span><span class="decl"><span class="istickedoff">isToplevel (CryptolEnv (_ :| frames)) = null frames</span></span>
+<span class="lineno">  203 </span>
+<span class="lineno">  204 </span>-- | Test if the scopes have the same number of frames pushed.
+<span class="lineno">  205 </span>sameHeight :: CryptolEnv -&gt; CryptolEnv -&gt; Bool
+<span class="lineno">  206 </span><span class="decl"><span class="istickedoff">sameHeight (CryptolEnv scope1) (CryptolEnv scope2) = </span>
+<span class="lineno">  207 </span><span class="spaces">  </span><span class="istickedoff">NE.length scope1 == NE.length scope2</span></span>
+<span class="lineno">  208 </span>
+<span class="lineno">  209 </span>mapCurFrame :: 
+<span class="lineno">  210 </span>  (CryptolFrame -&gt; CryptolFrame) -&gt; 
+<span class="lineno">  211 </span>  CryptolEnv -&gt; 
+<span class="lineno">  212 </span>  CryptolEnv
+<span class="lineno">  213 </span><span class="decl"><span class="istickedoff">mapCurFrame f (CryptolEnv (frame :| frames)) =</span>
+<span class="lineno">  214 </span><span class="spaces">  </span><span class="istickedoff">CryptolEnv (f frame :| frames)</span></span>
+<span class="lineno">  215 </span>
+<span class="lineno">  216 </span>-- | Push a fresh frame onto the stack.
+<span class="lineno">  217 </span>pushScope :: CryptolEnv -&gt; CryptolEnv
+<span class="lineno">  218 </span><span class="decl"><span class="istickedoff">pushScope (CryptolEnv frames) = CryptolEnv (initFrame &lt;| frames)</span></span>
+<span class="lineno">  219 </span>
+<span class="lineno">  220 </span>-- | Pop the current frame from the stack, discarding its
+<span class="lineno">  221 </span>--   contents. Panics if this is the only frame.
+<span class="lineno">  222 </span>popScope :: CryptolEnv -&gt; CryptolEnv
+<span class="lineno">  223 </span><span class="decl"><span class="istickedoff">popScope (CryptolEnv frames) = case snd (NE.uncons frames) of</span>
+<span class="lineno">  224 </span><span class="spaces">  </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;popScope&quot; [ &quot;Popping topmost scope&quot;]</span></span>
+<span class="lineno">  225 </span><span class="spaces">  </span><span class="istickedoff">Just frames' -&gt; CryptolEnv frames'</span></span>
+<span class="lineno">  226 </span>
+<span class="lineno">  227 </span>-- | Map the naming environment of the frame currently in scope.
+<span class="lineno">  228 </span>mapNaming :: 
+<span class="lineno">  229 </span>  (MR.NamingEnv -&gt; MR.NamingEnv) -&gt; 
+<span class="lineno">  230 </span>  CryptolEnv -&gt; 
+<span class="lineno">  231 </span>  CryptolEnv
+<span class="lineno">  232 </span><span class="decl"><span class="istickedoff">mapNaming f = mapCurFrame $ </span>
+<span class="lineno">  233 </span><span class="spaces">      </span><span class="istickedoff">\fr -&gt; fr {fNamingEnv = f (fNamingEnv fr) }</span></span>
+<span class="lineno">  234 </span>
+<span class="lineno">  235 </span>-- | Map the module imports of the frame currently in scope.
+<span class="lineno">  236 </span>mapImports :: 
+<span class="lineno">  237 </span>  ([(ImportVisibility, C.Import)] -&gt; [(ImportVisibility, C.Import)] ) -&gt; 
+<span class="lineno">  238 </span>  CryptolEnv -&gt; 
+<span class="lineno">  239 </span>  CryptolEnv
+<span class="lineno">  240 </span><span class="decl"><span class="istickedoff">mapImports f = mapCurFrame $ </span>
+<span class="lineno">  241 </span><span class="spaces">      </span><span class="istickedoff">\fr -&gt; fr {fImports = f (fImports fr) }</span></span>
+<span class="lineno">  242 </span>
+<span class="lineno">  243 </span>-- | Run the inner action bracketed new frame pushed/popped on
+<span class="lineno">  244 </span>--   the 'CryptolScope' stack.
+<span class="lineno">  245 </span>--   Fails if the inner action changes the scope height
+<span class="lineno">  246 </span>--   (i.e. it does not properly bracket its pushes and pops).
+<span class="lineno">  247 </span>withFreshScope :: 
+<span class="lineno">  248 </span>  MonadFail m =&gt;
+<span class="lineno">  249 </span>  CryptolEnv -&gt; 
+<span class="lineno">  250 </span>  (CryptolEnv -&gt; 
+<span class="lineno">  251 </span>  m (a, CryptolEnv)) -&gt; 
+<span class="lineno">  252 </span>  m (a, CryptolEnv)
+<span class="lineno">  253 </span><span class="decl"><span class="istickedoff">withFreshScope env0 f = do</span>
+<span class="lineno">  254 </span><span class="spaces">  </span><span class="istickedoff">let env1 = pushScope env0</span>
+<span class="lineno">  255 </span><span class="spaces">  </span><span class="istickedoff">(a, env2) &lt;- f env1</span>
+<span class="lineno">  256 </span><span class="spaces">  </span><span class="istickedoff">unless (sameHeight env1 env2) $</span>
+<span class="lineno">  257 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">panic &quot;withFreshScope&quot; [&quot;mismatched push/pops&quot;]</span></span>
+<span class="lineno">  258 </span><span class="spaces">  </span><span class="istickedoff">let env3 = popScope env2</span>
+<span class="lineno">  259 </span><span class="spaces">  </span><span class="istickedoff">return (a, env3)</span></span>
+<span class="lineno">  260 </span>
+<span class="lineno">  261 </span>-- | Access the 'C.Supply' in the global 'ME.ModuleEnv' for generating
+<span class="lineno">  262 </span>--   fresh names. More efficient than 'runModuleM', as it avoids any other
+<span class="lineno">  263 </span>--   bookkeeping.
+<span class="lineno">  264 </span>useModEnvSupply :: SharedContext -&gt; (C.Supply -&gt; (a, C.Supply)) -&gt; IO a
+<span class="lineno">  265 </span><span class="decl"><span class="istickedoff">useModEnvSupply sc f = do</span>
+<span class="lineno">  266 </span><span class="spaces">  </span><span class="istickedoff">modEnv &lt;- eModuleEnv sc</span>
+<span class="lineno">  267 </span><span class="spaces">  </span><span class="istickedoff">let (a, supply) = f $ ME.meSupply modEnv</span>
+<span class="lineno">  268 </span><span class="spaces">  </span><span class="istickedoff">mapModEnv sc (\modEnv_ -&gt; modEnv_ { ME.meSupply = supply } )</span>
+<span class="lineno">  269 </span><span class="spaces">  </span><span class="istickedoff">return a</span></span>
+<span class="lineno">  270 </span>
+<span class="lineno">  271 </span>-------------------------------------
+<span class="lineno">  272 </span>-- Environment Access --
+<span class="lineno">  273 </span>
+<span class="lineno">  274 </span>getGlobal :: (GlobalCryptolEnv -&gt; a) -&gt; SharedContext -&gt; IO a
+<span class="lineno">  275 </span><span class="decl"><span class="istickedoff">getGlobal f sc = f &lt;$&gt; scGetData sc</span></span>
+<span class="lineno">  276 </span>
+<span class="lineno">  277 </span>mapGlobal :: SharedContext -&gt; (GlobalCryptolEnv -&gt; GlobalCryptolEnv) -&gt; IO ()
+<span class="lineno">  278 </span><span class="decl"><span class="istickedoff">mapGlobal = scUpdateData</span></span>
+<span class="lineno">  279 </span>
+<span class="lineno">  280 </span>mapModEnv :: SharedContext -&gt; (ME.ModuleEnv -&gt; ME.ModuleEnv) -&gt; IO ()
+<span class="lineno">  281 </span><span class="decl"><span class="istickedoff">mapModEnv sc f = mapGlobal sc (\genv -&gt; genv { geModuleEnv = f (geModuleEnv genv) })</span></span>
+<span class="lineno">  282 </span>
+<span class="lineno">  283 </span>-- The &quot;getters&quot; below were historically fields in 'CryptolEnv', which
+<span class="lineno">  284 </span>-- are now defined functions that access either the 'GlobalCryptolEnv'
+<span class="lineno">  285 </span>-- or the 'CryptolScope' as appropriate. In contrast, updates were
+<span class="lineno">  286 </span>-- historically made by directly accessing 'CryptolEnv' fields, and are
+<span class="lineno">  287 </span>-- now restricted to only adding new entries to the maps in
+<span class="lineno">  288 </span>-- 'GlobalCryptolEnv' (e.g. 'addExtraVars'). This enforces the policy
+<span class="lineno">  289 </span>-- that the global environment is intended to be a complete record of
+<span class="lineno">  290 </span>-- all work done during translation/import, regardless of scope. Since
+<span class="lineno">  291 </span>-- the maps in the global environment are all keyed on globally-unique
+<span class="lineno">  292 </span>-- values, these operations are expected to only add entries and never
+<span class="lineno">  293 </span>-- overwrite existing ones.
+<span class="lineno">  294 </span>--
+<span class="lineno">  295 </span>-- NOTE: We could enforce a write-once policy here, but it's
+<span class="lineno">  296 </span>-- not immediately obvious if we need to support key clashes
+<span class="lineno">  297 </span>-- for equal entries (not possible for
+<span class="lineno">  298 </span>-- some types like 'C.Expr'), or if it is even useful to do so.
+<span class="lineno">  299 </span>
+<span class="lineno">  300 </span>------------------------------------------------------------
+<span class="lineno">  301 </span>-- Accessing 'GlobalCryptolEnv' from 'SharedContext'
+<span class="lineno">  302 </span>
+<span class="lineno">  303 </span>--
+<span class="lineno">  304 </span>-- Pieces relating to Cryptol primitives:
+<span class="lineno">  305 </span>--
+<span class="lineno">  306 </span>
+<span class="lineno">  307 </span>-- | Map from Cryptol primitives to their reference
+<span class="lineno">  308 </span>-- implementations that Cryptol keeps around. Currently this data is
+<span class="lineno">  309 </span>-- only populated during initialization; it isn't clear if that's a
+<span class="lineno">  310 </span>-- bug. (If there are really no further uses after initialization,
+<span class="lineno">  311 </span>-- regardless of what the user does, dropping the contents allows the
+<span class="lineno">  312 </span>-- memory to be reclaimed. But if it's possible to construct such
+<span class="lineno">  313 </span>-- uses, they're likely to panic.)
+<span class="lineno">  314 </span>--
+<span class="lineno">  315 </span>-- Before the environment types were merged, this field was found only
+<span class="lineno">  316 </span>-- in @Env@ and called @envRefPrims@ (transitionally @impRefPrims@).
+<span class="lineno">  317 </span>eRefPrims :: SharedContext -&gt; IO (Map C.PrimIdent C.Expr)
+<span class="lineno">  318 </span><span class="decl"><span class="istickedoff">eRefPrims = getGlobal geRefPrims</span></span>
+<span class="lineno">  319 </span>
+<span class="lineno">  320 </span>-- | Add entries to 'eRefPrims'
+<span class="lineno">  321 </span>addRefPrims :: SharedContext -&gt; Map C.PrimIdent C.Expr -&gt; IO ()
+<span class="lineno">  322 </span><span class="decl"><span class="istickedoff">addRefPrims sc m = mapGlobal sc $ \genv -&gt; </span>
+<span class="lineno">  323 </span><span class="spaces">  </span><span class="istickedoff">genv { geRefPrims = Map.union m (geRefPrims genv) }</span></span>
+<span class="lineno">  324 </span>
+<span class="lineno">  325 </span>-- | Map from names of Cryptol primitives to their implementations
+<span class="lineno">  326 </span>-- as SAWCore terms.
+<span class="lineno">  327 </span>ePrims :: SharedContext -&gt; IO (Map C.PrimIdent Term)
+<span class="lineno">  328 </span><span class="decl"><span class="istickedoff">ePrims = getGlobal <span class="nottickedoff">gePrims</span></span></span>
+<span class="lineno">  329 </span>
+<span class="lineno">  330 </span>-- | Add entries to 'ePrims'
+<span class="lineno">  331 </span>addPrims :: SharedContext -&gt; Map C.PrimIdent Term -&gt; IO ()
+<span class="lineno">  332 </span><span class="decl"><span class="nottickedoff">addPrims sc m = mapGlobal sc $ \genv -&gt; </span>
+<span class="lineno">  333 </span><span class="spaces">  </span><span class="nottickedoff">genv { gePrims = Map.union m (gePrims genv) }</span></span>
+<span class="lineno">  334 </span>
+<span class="lineno">  335 </span>-- | Map from names of Cryptol primitive types to their
+<span class="lineno">  336 </span>-- implementations as SAWCore terms (that are types).
+<span class="lineno">  337 </span>ePrimTypes :: SharedContext -&gt; IO (Map C.PrimIdent Term)
+<span class="lineno">  338 </span><span class="decl"><span class="istickedoff">ePrimTypes = getGlobal gePrimTypes</span></span>
+<span class="lineno">  339 </span>
+<span class="lineno">  340 </span>-- | Add entries to 'ePrimTypes'
+<span class="lineno">  341 </span>addPrimTypes :: SharedContext -&gt; Map C.PrimIdent Term -&gt; IO ()
+<span class="lineno">  342 </span><span class="decl"><span class="istickedoff">addPrimTypes sc m = mapGlobal sc $ \genv -&gt; </span>
+<span class="lineno">  343 </span><span class="spaces">  </span><span class="istickedoff">genv { gePrimTypes = Map.union m (gePrimTypes genv) }</span></span>
+<span class="lineno">  344 </span>
+<span class="lineno">  345 </span>
+<span class="lineno">  346 </span>--
+<span class="lineno">  347 </span>-- Pieces that track Cryptol-level objects and types:
+<span class="lineno">  348 </span>--
+<span class="lineno">  349 </span>
+<span class="lineno">  350 </span>-- | The Cryptol-level module environment; it holds all
+<span class="lineno">  351 </span>-- the modules that have been loaded. Its type is also the state for
+<span class="lineno">  352 </span>-- Cryptol's `MM.ModuleM` monad.
+<span class="lineno">  353 </span>eModuleEnv :: SharedContext -&gt; IO ME.ModuleEnv
+<span class="lineno">  354 </span><span class="decl"><span class="istickedoff">eModuleEnv = getGlobal geModuleEnv</span></span>
+<span class="lineno">  355 </span>
+<span class="lineno">  356 </span>defaultEvalOpts :: E.EvalOpts
+<span class="lineno">  357 </span><span class="decl"><span class="istickedoff">defaultEvalOpts = E.EvalOpts quietLogger <span class="nottickedoff">E.defaultPPOpts</span></span></span>
+<span class="lineno">  358 </span>
+<span class="lineno">  359 </span>meSolverConfig :: ME.ModuleEnv -&gt; TM.SolverConfig
+<span class="lineno">  360 </span><span class="decl"><span class="istickedoff">meSolverConfig env = TM.defaultSolverConfig (ME.meSearchPath env)</span></span>
+<span class="lineno">  361 </span>
+<span class="lineno">  362 </span>-- | Add an entry to the 'ME.meSearchPath' of the 'eModuleEnv'.
+<span class="lineno">  363 </span>addSearchPath :: SharedContext -&gt; FilePath -&gt; IO ()
+<span class="lineno">  364 </span><span class="decl"><span class="nottickedoff">addSearchPath sc fp = mapGlobal sc $ \genv -&gt;</span>
+<span class="lineno">  365 </span><span class="spaces">  </span><span class="nottickedoff">genv { geModuleEnv = (geModuleEnv genv) </span>
+<span class="lineno">  366 </span><span class="spaces">    </span><span class="nottickedoff">{ ME.meSearchPath = fp : ME.meSearchPath (geModuleEnv genv) } }</span></span> 
+<span class="lineno">  367 </span>
+<span class="lineno">  368 </span>-- | Run an 'MM.ModuleM' action using the module environment from
+<span class="lineno">  369 </span>-- 'eModuleEnv'. If the action is successful, updates the module
+<span class="lineno">  370 </span>-- environment in the 'SharedContext' and returns the result of the
+<span class="lineno">  371 </span>-- action. Otherwise, the environment is left unchanged and a
+<span class="lineno">  372 </span>-- 'MM.ModuleError' is returned.
+<span class="lineno">  373 </span>runModuleM ::
+<span class="lineno">  374 </span> SharedContext -&gt; MM.ModuleM a -&gt; IO (Either MM.ModuleError a, [MM.ModuleWarning])
+<span class="lineno">  375 </span><span class="decl"><span class="istickedoff">runModuleM sc m = do</span>
+<span class="lineno">  376 </span><span class="spaces">  </span><span class="istickedoff">fileReader &lt;- scFileReader sc</span>
+<span class="lineno">  377 </span><span class="spaces">  </span><span class="istickedoff">env &lt;- eModuleEnv sc</span>
+<span class="lineno">  378 </span><span class="spaces">  </span><span class="istickedoff">let minp solver = MM.ModuleInput {</span>
+<span class="lineno">  379 </span><span class="spaces">          </span><span class="istickedoff">MM.minpCallStacks = True,</span>
+<span class="lineno">  380 </span><span class="spaces">          </span><span class="istickedoff">MM.minpSaveRenamed = False,</span>
+<span class="lineno">  381 </span><span class="spaces">          </span><span class="istickedoff">MM.minpEvalOpts = pure defaultEvalOpts,</span>
+<span class="lineno">  382 </span><span class="spaces">          </span><span class="istickedoff">MM.minpByteReader = fileReader,</span>
+<span class="lineno">  383 </span><span class="spaces">          </span><span class="istickedoff">MM.minpModuleEnv = env,</span>
+<span class="lineno">  384 </span><span class="spaces">          </span><span class="istickedoff">MM.minpTCSolver = solver</span>
+<span class="lineno">  385 </span><span class="spaces">      </span><span class="istickedoff">}</span>
+<span class="lineno">  386 </span><span class="spaces">  </span><span class="istickedoff">(res, ws) &lt;- SMT.withSolver (return <span class="nottickedoff">()</span>) (meSolverConfig env) $ \solver -&gt;</span>
+<span class="lineno">  387 </span><span class="spaces">    </span><span class="istickedoff">MM.runModuleM (minp solver) m</span>
+<span class="lineno">  388 </span><span class="spaces">  </span><span class="istickedoff">case res of</span>
+<span class="lineno">  389 </span><span class="spaces">    </span><span class="istickedoff">Right (a, env') -&gt; do</span>
+<span class="lineno">  390 </span><span class="spaces">      </span><span class="istickedoff">mapGlobal sc $ \genv -&gt;</span>
+<span class="lineno">  391 </span><span class="spaces">        </span><span class="istickedoff">refreshCryptolEnv $ genv { geModuleEnv = env' }</span>
+<span class="lineno">  392 </span><span class="spaces">      </span><span class="istickedoff">return (Right a, ws)</span>
+<span class="lineno">  393 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; return (Left err, ws)</span></span>
+<span class="lineno">  394 </span>
+<span class="lineno">  395 </span>
+<span class="lineno">  396 </span>-- | Expansions for the &quot;extra names&quot; that are type aliases (synonyms).
+<span class="lineno">  397 </span>-- Maps names to `T.TySyn`, which wraps Cryptol types and among other
+<span class="lineno">  398 </span>-- things allows synonyms to take parameters.
+<span class="lineno">  399 </span>eExtraTySyns :: SharedContext -&gt; IO (Map C.Name C.TySyn)
+<span class="lineno">  400 </span><span class="decl"><span class="istickedoff">eExtraTySyns = getGlobal geExtraTySyns</span></span>
+<span class="lineno">  401 </span>
+<span class="lineno">  402 </span>-- | Add entries to 'eExtraTySyns'
+<span class="lineno">  403 </span>addExtraTySyns :: SharedContext -&gt; Map C.Name C.TySyn -&gt; IO ()
+<span class="lineno">  404 </span><span class="decl"><span class="istickedoff">addExtraTySyns sc m = mapGlobal sc $ \genv -&gt; </span>
+<span class="lineno">  405 </span><span class="spaces">  </span><span class="istickedoff">genv { geExtraTySyns = Map.union m (geExtraTySyns genv) }</span></span>
+<span class="lineno">  406 </span>
+<span class="lineno">  407 </span>-- | Formerly @eExtraTypes@, holds the Cryptol-level
+<span class="lineno">  408 </span>-- types for &quot;extra names&quot; that are value/term variables. Maps names
+<span class="lineno">  409 </span>-- to type schemes.
+<span class="lineno">  410 </span>eExtraVars :: SharedContext -&gt; IO (Map C.Name C.Schema)
+<span class="lineno">  411 </span><span class="decl"><span class="istickedoff">eExtraVars = getGlobal geExtraVars</span></span>
+<span class="lineno">  412 </span>
+<span class="lineno">  413 </span>-- | Add entries to both 'eExtraVars' and 'eAllVars'
+<span class="lineno">  414 </span>addExtraVars :: SharedContext -&gt; Map C.Name C.Schema -&gt; IO ()
+<span class="lineno">  415 </span><span class="decl"><span class="istickedoff">addExtraVars sc m = mapGlobal sc $ \genv -&gt; </span>
+<span class="lineno">  416 </span><span class="spaces">  </span><span class="istickedoff">genv { geExtraVars = Map.union m (geExtraVars genv)</span>
+<span class="lineno">  417 </span><span class="spaces">       </span><span class="istickedoff">, geAllVars = Map.union m (geAllVars genv) </span>
+<span class="lineno">  418 </span><span class="spaces">       </span><span class="istickedoff">}</span></span>
+<span class="lineno">  419 </span>
+<span class="lineno">  420 </span>-- | Map from Cryptol names to Cryptol types. This is
+<span class="lineno">  421 </span>-- used to call `fastTypeOf` and `fastSchemaOf` on Cryptol expressions
+<span class="lineno">  422 </span>-- to fetch their types. This table is implicitly updated after every
+<span class="lineno">  423 </span>-- 'runModuleM' action to ensure it is always up-to-date.
+<span class="lineno">  424 </span>--
+<span class="lineno">  425 </span>-- FUTURE: in principle we should be able to use the SAWCore types of
+<span class="lineno">  426 </span>-- the SAWCore terms after importing them, instead of `fastTypeOf` and
+<span class="lineno">  427 </span>-- `fastSchemaOf`, and drop the `eAllVars` table. In practice, doing
+<span class="lineno">  428 </span>-- that relies (in some cases) on being able to call `scCryptolType`
+<span class="lineno">  429 </span>-- to reconstruct the Cryptol-level type; that in turn requires, when
+<span class="lineno">  430 </span>-- inside a forall-binding, logic to intercept and lift SAWCore type
+<span class="lineno">  431 </span>-- variables back to their Cryptol parents. That requires a table we
+<span class="lineno">  432 </span>-- don't currently have, as well as additional lookup logic that
+<span class="lineno">  433 </span>-- doesn't currently exist. Furthermore, while we've fixed many of the
+<span class="lineno">  434 </span>-- ways the Cryptol -&gt; SAWCore type mapping is noninjective, it still
+<span class="lineno">  435 </span>-- won't work for enumerations. And beyond that, when handling
+<span class="lineno">  436 </span>-- polymorphic type schemes we erase certain typeclasses in the
+<span class="lineno">  437 </span>-- translation, and that loses info, so we might need to translate
+<span class="lineno">  438 </span>-- those classes to placeholders instead of erasing them. It may then
+<span class="lineno">  439 </span>-- also be that the one use of `fastSchemaOf` can't actually be
+<span class="lineno">  440 </span>-- avoided; that isn't super clear.
+<span class="lineno">  441 </span>eAllVars :: SharedContext -&gt; IO (Map C.Name C.Schema)
+<span class="lineno">  442 </span><span class="decl"><span class="istickedoff">eAllVars = getGlobal geAllVars</span></span>
+<span class="lineno">  443 </span>
+<span class="lineno">  444 </span>-- | Add entries to 'eAllVars'
+<span class="lineno">  445 </span>addToAllVars :: SharedContext  -&gt; Map C.Name C.Schema -&gt; IO ()
+<span class="lineno">  446 </span><span class="decl"><span class="istickedoff">addToAllVars sc m = mapGlobal sc $ \genv -&gt;</span>
+<span class="lineno">  447 </span><span class="spaces">  </span><span class="istickedoff">genv { geAllVars = Map.union m (geAllVars genv) }</span></span>
+<span class="lineno">  448 </span>
+<span class="lineno">  449 </span>--
+<span class="lineno">  450 </span>-- Pieces that track imported SAWCore bits:
+<span class="lineno">  451 </span>--
+<span class="lineno">  452 </span>
+<span class="lineno">  453 </span>-- | Map from Cryptol type variable IDs to SAWCore types. This is
+<span class="lineno">  454 </span>-- only nonempty during import, when working inside a forall-binding.
+<span class="lineno">  455 </span>eTyVars :: SharedContext -&gt; IO (Map Int Term)
+<span class="lineno">  456 </span><span class="decl"><span class="istickedoff">eTyVars = getGlobal geTyVars</span></span>
+<span class="lineno">  457 </span>
+<span class="lineno">  458 </span>-- | Add entries to 'eTyVars'
+<span class="lineno">  459 </span>addTyVars :: SharedContext -&gt; Map Int Term -&gt; IO ()
+<span class="lineno">  460 </span><span class="decl"><span class="istickedoff">addTyVars sc m = mapGlobal sc $ \genv -&gt; </span>
+<span class="lineno">  461 </span><span class="spaces">  </span><span class="istickedoff">genv { geTyVars = Map.union m (geTyVars genv) }</span></span>
+<span class="lineno">  462 </span>
+<span class="lineno">  463 </span>-- | Map from Cryptol `C.Prop`, which are type constraints, to
+<span class="lineno">  464 </span>-- corresponding SAWCore information. There is both a term and a list
+<span class="lineno">  465 </span>-- of `FieldName`. The actual class dictionary we need is obtained by
+<span class="lineno">  466 </span>-- applying the given field selectors (in reverse order!) to the term.
+<span class="lineno">  467 </span>-- (This arises when a dictionary comes from a superclass; the field
+<span class="lineno">  468 </span>-- projections traverse the subclass dictionaries.)
+<span class="lineno">  469 </span>-- The constraints are referenced implicitly by their types.
+<span class="lineno">  470 </span>--
+<span class="lineno">  471 </span>-- Like `eTyVars`, this table is only nonempty during import, when
+<span class="lineno">  472 </span>-- working inside a forall-binding, and carries the info from that
+<span class="lineno">  473 </span>-- binding.
+<span class="lineno">  474 </span>eTyProps :: SharedContext -&gt; IO (Map C.Prop (Term, [FieldName]))
+<span class="lineno">  475 </span><span class="decl"><span class="istickedoff">eTyProps = getGlobal geTyProps</span></span>
+<span class="lineno">  476 </span>
+<span class="lineno">  477 </span>-- | Add entries to 'eTyProps'.
+<span class="lineno">  478 </span>--   The one current use of this function in 'CryptolSAWCore.Cryptol'
+<span class="lineno">  479 </span>--   collects all of the superclasses of the given 'C.Prop' as well.
+<span class="lineno">  480 </span>--   It may make sense to move that logic here, as the current
+<span class="lineno">  481 </span>--   approach involves redundantly re-computing the entries for
+<span class="lineno">  482 </span>--   all superclasses for each individual entry.
+<span class="lineno">  483 </span>--   This is not expensive, but would become problematic
+<span class="lineno">  484 </span>--   if we wanted to enforce a write-once policy.
+<span class="lineno">  485 </span>addTyProps :: SharedContext -&gt; Map C.Prop (Term, [FieldName]) -&gt; IO ()
+<span class="lineno">  486 </span><span class="decl"><span class="istickedoff">addTyProps sc m = mapGlobal sc $ \genv -&gt; </span>
+<span class="lineno">  487 </span><span class="spaces">  </span><span class="istickedoff">genv { geTyProps = Map.union m (geTyProps genv)  }</span></span>
+<span class="lineno">  488 </span>
+<span class="lineno">  489 </span>-- | The translations for all Cryptol names in scope. It maps names to
+<span class="lineno">  490 </span>-- SAWCore terms, both types and values. Does not include the contents
+<span class="lineno">  491 </span>-- of `ePrims` or `ePrimTypes` (which are not identified with a
+<span class="lineno">  492 </span>-- 'C.Name'). Note that the keys in this map are not necessarily a
+<span class="lineno">  493 </span>-- superset of those in 'eAllVars', which may contain variables that
+<span class="lineno">  494 </span>-- have not been translated into SAWCore yet. For entries with matching
+<span class="lineno">  495 </span>-- keys, the 'Term' in 'eAllTerms' should be a 'Variable' with a type
+<span class="lineno">  496 </span>-- that is the imported 'C.Schema' from 'eAllVars'.
+<span class="lineno">  497 </span>eAllTerms :: SharedContext -&gt; IO (Map C.Name Term)
+<span class="lineno">  498 </span><span class="decl"><span class="istickedoff">eAllTerms = getGlobal geAllTerms</span></span>
+<span class="lineno">  499 </span>
+<span class="lineno">  500 </span>-- | Add entries to 'eAllTerms'
+<span class="lineno">  501 </span>addToAllTerms :: SharedContext -&gt; Map C.Name Term -&gt; IO ()
+<span class="lineno">  502 </span><span class="decl"><span class="istickedoff">addToAllTerms sc m = mapGlobal sc $ \genv -&gt;</span>
+<span class="lineno">  503 </span><span class="spaces">  </span><span class="istickedoff">genv { geAllTerms = Map.union m (geAllTerms genv) }</span></span>
+<span class="lineno">  504 </span>
+<span class="lineno">  505 </span>-- | Map from SAWCore names to Cryptol FFI info where relevant.
+<span class="lineno">  506 </span>eFFITypes :: SharedContext -&gt; IO (Map NameInfo C.FFI)
+<span class="lineno">  507 </span><span class="decl"><span class="istickedoff">eFFITypes = getGlobal geFFITypes</span></span>
+<span class="lineno">  508 </span>
+<span class="lineno">  509 </span>-- | Add entries to 'eFFITypes'
+<span class="lineno">  510 </span>addFFITypes :: SharedContext -&gt; Map NameInfo C.FFI -&gt; IO ()
+<span class="lineno">  511 </span><span class="decl"><span class="istickedoff">addFFITypes sc m = mapGlobal sc $ \genv -&gt; </span>
+<span class="lineno">  512 </span><span class="spaces">  </span><span class="istickedoff">genv { geFFITypes = Map.union m (geFFITypes genv) }</span></span>
+<span class="lineno">  513 </span>
+<span class="lineno">  514 </span>--
+<span class="lineno">  515 </span>-- Scoped entries from 'CryptolEnv':
+<span class="lineno">  516 </span>--
+<span class="lineno">  517 </span>
+<span class="lineno">  518 </span>-- | The &quot;extra&quot; naming environment that captures Cryptol names
+<span class="lineno">  519 </span>--   which don't correspond to any imported module. Generally these
+<span class="lineno">  520 </span>--   result from names created in SAW which have been reflected into
+<span class="lineno">  521 </span>--   the Cryptol environment.
+<span class="lineno">  522 </span>--   This is scoped content, where the accessible names are expected
+<span class="lineno">  523 </span>--   to be managed by SAW and correspond to the same SAW values that
+<span class="lineno">  524 </span>--   are in scope.
+<span class="lineno">  525 </span>--
+<span class="lineno">  526 </span>-- FUTURE: Cryptol has its own functionality for additional bindings
+<span class="lineno">  527 </span>-- (it uses it for things created from the Cryptol REPL) and we ought
+<span class="lineno">  528 </span>-- to be able to use it instead of bolting on our own additional layer
+<span class="lineno">  529 </span>-- of material. Doing so would avoid various inconsistencies and
+<span class="lineno">  530 </span>-- irregularities that can creep in when we reimplement Cryptol name
+<span class="lineno">  531 </span>-- resolution.
+<span class="lineno">  532 </span>eExtraNaming :: CryptolEnv -&gt; MR.NamingEnv
+<span class="lineno">  533 </span><span class="decl"><span class="istickedoff">eExtraNaming (CryptolEnv (frame :| frames)) = </span>
+<span class="lineno">  534 </span><span class="spaces">  </span><span class="istickedoff">foldr (\fr ne -&gt; ne `MR.shadowing` (fNamingEnv fr)) (fNamingEnv frame) frames</span></span>
+<span class="lineno">  535 </span>
+<span class="lineno">  536 </span>-- | The list of Cryptol modules which have been brought into the
+<span class="lineno">  537 </span>--   current scope. This essentially acts as a filter on the full set
+<span class="lineno">  538 </span>--   of loaded modules in the global module environment ('eModuleEnv'),
+<span class="lineno">  539 </span>--   where the contents of the selected modules are brought into scope
+<span class="lineno">  540 </span>--   according to the associated 'ImportVisibility'. The modules here
+<span class="lineno">  541 </span>--   should only correspond to modules that are present in the module
+<span class="lineno">  542 </span>--   environment *and* have been translated into SAWCore.
+<span class="lineno">  543 </span>eImports :: CryptolEnv -&gt; [(ImportVisibility, C.Import)]
+<span class="lineno">  544 </span><span class="decl"><span class="istickedoff">eImports (CryptolEnv frames) = </span>
+<span class="lineno">  545 </span><span class="spaces">  </span><span class="istickedoff">concat $ map fImports $ NE.toList frames</span></span>
+<span class="lineno">  546 </span>
+<span class="lineno">  547 </span>
+<span class="lineno">  548 </span>-- | Refresh 'geAllVars' after updating the module environment.
+<span class="lineno">  549 </span>--   Previously (before 'GlobalCryptolEnv'), this would overwrite the
+<span class="lineno">  550 </span>--   'eAllVars' field. Now this will add new vars (i.e. from
+<span class="lineno">  551 </span>--   newly-added modules) but keep existing ones, as the
+<span class="lineno">  552 </span>--   'GlobalCryptolEnv' should never drop entries. If the module
+<span class="lineno">  553 </span>--   environment has been managed properly, we expect any clashing keys
+<span class="lineno">  554 </span>--   to have equal elements, but this is not checked/enforced. Not
+<span class="lineno">  555 </span>--   exported.
+<span class="lineno">  556 </span>refreshCryptolEnv :: GlobalCryptolEnv -&gt; GlobalCryptolEnv
+<span class="lineno">  557 </span><span class="decl"><span class="istickedoff">refreshCryptolEnv genv =</span>
+<span class="lineno">  558 </span><span class="spaces">     </span><span class="istickedoff">let modEnv = geModuleEnv genv</span>
+<span class="lineno">  559 </span><span class="spaces">         </span><span class="istickedoff">ifaceDecls = getAllIfaceDecls modEnv</span>
+<span class="lineno">  560 </span><span class="spaces">         </span><span class="istickedoff">newtypeCons = Map.fromList</span>
+<span class="lineno">  561 </span><span class="spaces">                         </span><span class="istickedoff">[ con</span>
+<span class="lineno">  562 </span><span class="spaces">                         </span><span class="istickedoff">| nt &lt;- Map.elems (MI.ifNominalTypes ifaceDecls)</span>
+<span class="lineno">  563 </span><span class="spaces">                         </span><span class="istickedoff">, con &lt;- C.nominalTypeConTypes nt</span>
+<span class="lineno">  564 </span><span class="spaces">                         </span><span class="istickedoff">]</span>
+<span class="lineno">  565 </span><span class="spaces">         </span><span class="istickedoff">vars = Map.map MI.ifDeclSig $ MI.ifDecls ifaceDecls</span>
+<span class="lineno">  566 </span><span class="spaces">         </span><span class="istickedoff">-- note that we don't need to re-add geExtraVars, because</span>
+<span class="lineno">  567 </span><span class="spaces">         </span><span class="istickedoff">-- it is already included in the existing geAllVars</span>
+<span class="lineno">  568 </span><span class="spaces">         </span><span class="istickedoff">allvars = newtypeCons `Map.union` vars</span>
+<span class="lineno">  569 </span><span class="spaces">         </span><span class="istickedoff">allvars' = Map.union allvars (geAllVars genv)</span>
+<span class="lineno">  570 </span><span class="spaces">     </span><span class="istickedoff">in genv { geAllVars = allvars' }</span></span>
+<span class="lineno">  571 </span>
+<span class="lineno">  572 </span>---- Misc Exports --------------------------------------------------------------
+<span class="lineno">  573 </span>
+<span class="lineno">  574 </span>getAllIfaceDecls :: ME.ModuleEnv -&gt; MI.IfaceDecls
+<span class="lineno">  575 </span><span class="decl"><span class="istickedoff">getAllIfaceDecls me =</span>
+<span class="lineno">  576 </span><span class="spaces">  </span><span class="istickedoff">mconcat</span>
+<span class="lineno">  577 </span><span class="spaces">    </span><span class="istickedoff">(map (MI.ifDefines . ME.lmInterface)</span>
+<span class="lineno">  578 </span><span class="spaces">         </span><span class="istickedoff">(ME.getLoadedModules (ME.meLoadedModules me)))</span></span>
+
+</pre>
+</body>
+</html>
