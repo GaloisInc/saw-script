@@ -667,3 +667,34 @@ zip-slot scan hardening, commit f2db4aeef), one mandatory addition
   caught by proof effort, not differential rows — which is exactly
   why the bvUExt/bvSExt exposure priority stands. Post-batch Zone-1
   residue (~40 names) must be stated, not implied closed.
+
+## W2 discharge record (2026-07-16) — byte_add; technique deviations binding on future discharges
+
+`proofs/llvm_byte_add_eq` discharges the 4001-line byte-decomposed
+carry-chain goal in ~43 s (axioms: standard trio + ONE round-trip
+axiom). New library: vecToBitVec_bvSShr, getElem_bvNat_zero,
+vecToBitVec_zeroPadWindow32 (covers all zext8 windows AND the 0xFFFF
+mask), vecToBitVec_bytePack32, atRuntimeCheckedM_ok_lt — the W2
+byte-split/carry seed set. Deviations:
+
+1. **Goal restatement over named defeq defs (the load-bearing new
+   move).** The completed outline restates `def goal` COMPOSITIONALLY
+   over ~12 named monadic defs (literals for macro chains, direct
+   `by omega` bounds, sharing instead of the artifact's 8-fold
+   inlining) — kernel-defeq to the generated goal, so the rfl drift
+   check (~1 s) licenses it. A 4001-line goal discharges in a
+   ~640-line outline. Supersedes numerals-first where used: a
+   literal-native outline needs no macro normalization at all.
+2. omega hazards (all reproduced): share partial sums as variables
+   (fully-inlined carry chains time out); pre-chain divisions by 256
+   (`x/65536` and `x/256/256` are unlinked atoms); GENERALIZE all
+   toNat atoms to fresh variables immediately before the closing
+   omega (its preprocessing defeq-compares large atoms otherwise).
+3. Nat precedence trap: `x % 256 <<< 8` parses as `x % (256 <<< 8)` —
+   parenthesize shifted-masked terms (produced a true-but-useless
+   hypothesis silently).
+4. bvSShr needed no signed-shift theory: core
+   `BitVec.sshiftRight_eq_of_msb_false` + `msb_and` under an 0xFFFF
+   mask suffice.
+5. Slice bodies via if-guarded `atWithDefault` (total) rather than
+   dependent getElem dodge dite-motive friction throughout.

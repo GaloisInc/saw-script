@@ -684,6 +684,20 @@ theorem atWithProof_gen_ok {α : Type} {n : Nat}
   simp [atWithProof_checkedM, Pure.pure, Bind.bind, Except.bind,
         Except.pure]
 
+/-- In-bounds runtime-checked indexing through an already-successful
+vector is the plain element read. The OP-2 accessor
+`atRuntimeCheckedM` guards the read with a RUNTIME bound test (the
+bound was not derivable at the emission site); once the index is
+proven in bounds on the proof side, the throw branch is dead and the
+read is pure. W2 seed (byte_add): emission's zero-pad branches
+(`atRuntimeCheckedM _ (pure (bvNat n 0)) i`) and fused-reassembly
+reads reduce through this. -/
+theorem atRuntimeCheckedM_ok_lt {α : Type} (n : Nat)
+    (v : Vec n α) (i : Nat) (h : i < n) :
+    atRuntimeCheckedM n α (Except.ok v) i = Except.ok (v[i]'h) := by
+  unfold atRuntimeCheckedM
+  simp [h, Bind.bind, Except.bind, Pure.pure, Except.pure]
+
 /-- `iteM` on an already-pure `true` condition selects the then
 branch. -/
 theorem iteM_pure_true {α : Type} (T E : Except String α) :

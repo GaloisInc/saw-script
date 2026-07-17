@@ -28,6 +28,7 @@ audit trail.
 import CryptolToLean.SAWCorePrimitives
 import CryptolToLean.SAWCoreVectors
 import CryptolToLean.SAWCorePreludeExtra
+import CryptolToLean.SAWCorePrelude_proofs
 import Std.Tactic.BVDecide
 
 namespace CryptolToLean.SAWCoreBitvectorsProofs
@@ -433,6 +434,16 @@ theorem vecToBitVec_bvShl (w : Nat) (a : Vec w Bool) (i : Nat) :
 theorem vecToBitVec_bvShr (w : Nat) (a : Vec w Bool) (i : Nat) :
     vecToBitVec (bvShr w a i) = vecToBitVec a >>> i := by
   unfold bvShr; rw [vecToBitVec_bitVecToVec]
+
+/-- `vecToBitVec ∘ bvSShr` distributes over BitVec arithmetic
+shift-right. W2 seed (byte_add): the emitted carry extraction is
+`bvSShr 31 x 8`; this moves it into `BitVec.sshiftRight`, where
+`BitVec.sshiftRight_eq_of_msb_false` exchanges it for the logical
+shift once the operand's sign bit is proven clear. -/
+@[simp]
+theorem vecToBitVec_bvSShr (w : Nat) (a : Vec (w + 1) Bool) (i : Nat) :
+    vecToBitVec (bvSShr w a i) = (vecToBitVec a).sshiftRight i := by
+  unfold bvSShr; rw [vecToBitVec_bitVecToVec]
 
 /-- `vecToBitVec ∘ bvOr` distributes over BitVec OR. -/
 @[simp]
@@ -896,6 +907,121 @@ theorem bvEq_bvSub_r (w : Nat) (a b : Vec w Bool) :
       exact hh.symm
     have : bitVecToVec (vecToBitVec a) = bitVecToVec (vecToBitVec b) := congrArg _ hab
     rwa [bitVecToVec_vecToBitVec, bitVecToVec_vecToBitVec] at this
+
+/-! ### W2 byte-decomposition seeds (2026-07-16, byte_add discharge)
+
+The `llvm_byte_add_eq` goal (mp_add_simple == a + b) decomposes a
+32-bit add into zero-padded byte windows, per-byte `bvAdd`s with
+`bvSShr` carries, and `bvShl`/`bvOr` reassembly. Emission expresses
+every extraction as a `gen 32` tower whose pure characterization is a
+`Vector.ofFn` with an `if`-guarded `atWithDefault` window; these
+lemmas carry those ofFn forms into `Lean.BitVec` shift/mask images so
+the arithmetic core can run on `BitVec 32`. MSB-first throughout: Vec
+position 0 is the most-significant bit, so a window whose PAD occupies
+positions `< p` zeroes the HIGH `p` bits' worth of positions and the
+window value lands in the LOW `32 - p` bits. -/
+
+/-- Indexing the all-zero bitvector gives `false` at every position.
+The pure image of emission's `atRuntimeCheckedM _ (pure (bvNat n 0)) i`
+zero-pad branches. -/
+theorem getElem_bvNat_zero (n i : Nat) (h : i < n) :
+    (bvNat n 0)[i] = false := by
+  unfold bvNat bitVecToVec
+  rw [Vector.getElem_ofFn]
+  rw [BitVec.getMsbD_eq_getLsbD, BitVec.getLsbD_ofNat]
+  simp
+
+/-- MSB-first zero-padded window image: an ofFn vector that is zero at
+positions `< p` and reads `v` at positions `K + (i - p)` from `p` on
+packs to `(vecToBitVec v >>> (p - K)) &&& (2^(32-p) - 1)`.
+
+Instances used by the byte_add discharge: `p = 24, K ∈ {24,16,8,0}`
+(the four `zext8_32` byte extractions, mask `0xff`, shifts
+`0/8/16/24`) and `p = 16, K = 16` (the fused truncate-to-16 /
+zero-extend-back mask, `x &&& 0xFFFF`, shift 0). -/
+theorem vecToBitVec_zeroPadWindow32 (v : Vec 32 Bool) (p K : Nat)
+    (hp : p ≤ 32) (hKp : K ≤ p) :
+    vecToBitVec (Vector.ofFn (fun i : Fin 32 =>
+      if i.val < p then false
+      else atWithDefault 32 Bool false v (K + (i.val - p))))
+      = (vecToBitVec v >>> (p - K)) &&& BitVec.ofNat 32 (2 ^ (32 - p) - 1) := by
+  apply BitVec.eq_of_getMsbD_eq
+  intro i hi
+  rw [CryptolToLean.SAWCoreBitvectorsProofs.getMsbD_vecToBitVec_lt _ _ hi]
+  rw [Vector.getElem_ofFn]
+  rw [BitVec.getMsbD_and, BitVec.getMsbD_ushiftRight]
+  rw [BitVec.getMsbD_eq_getLsbD (BitVec.ofNat 32 (2 ^ (32 - p) - 1))]
+  rw [BitVec.getLsbD_ofNat, Nat.testBit_two_pow_sub_one]
+  by_cases hip : i < p
+  · simp only [if_pos hip, hi, decide_true, Bool.true_and]
+    have hmask : ¬ (31 - i < 32 - p) := by omega
+    simp [hmask]
+  · simp only [if_neg hip]
+    have h1 : ¬ (i < p - K) := by omega
+    have h2 : 31 - i < 32 - p := by omega
+    have h3 : i - (p - K) < 32 := by omega
+    have h5 : K + (i - p) < 32 := by omega
+    have h6 : 32 - 1 - i < 32 := by omega
+    simp only [hi, decide_true, Bool.true_and, h1, decide_false,
+               Bool.not_false, h2, Bool.and_true]
+    rw [CryptolToLean.SAWCoreBitvectorsProofs.getMsbD_vecToBitVec_lt _ _ h3]
+    rw [CryptolToLean.SAWCorePreludeProofs.atWithDefault_lt _ _ _ h5]
+    simp only [h6, decide_true, Bool.and_true,
+               show K + (i - p) = i - (p - K) from by omega]
+
+/-- MSB-first fused two-byte reassembly image: an ofFn vector that is
+zero at positions `< 16`, reads byte `24..31` of `s1` at positions
+`16..23` and byte `24..31` of `s0` at positions `24..31` packs to
+`((s1 &&& 0xff) <<< 8) ||| (s0 &&& 0xff)` — i.e. `r1:r0` of the
+byte_add carry chain, zero-extended to 32 bits. -/
+theorem vecToBitVec_bytePack32 (s1 s0 : Vec 32 Bool) :
+    vecToBitVec (Vector.ofFn (fun i : Fin 32 =>
+      if i.val < 24 then
+        (if i.val < 16 then false
+         else atWithDefault 32 Bool false s1 (24 + (i.val - 16)))
+      else atWithDefault 32 Bool false s0 (24 + (i.val - 24))))
+      = ((vecToBitVec s1 &&& 255#32) <<< 8) ||| (vecToBitVec s0 &&& 255#32) := by
+  apply BitVec.eq_of_getMsbD_eq
+  intro i hi
+  rw [CryptolToLean.SAWCoreBitvectorsProofs.getMsbD_vecToBitVec_lt _ _ hi,
+      Vector.getElem_ofFn]
+  rw [BitVec.getMsbD_or, BitVec.getMsbD_shiftLeft, BitVec.getMsbD_and,
+      BitVec.getMsbD_and]
+  rw [show (255#32) = BitVec.ofNat 32 (2 ^ (32 - 24) - 1) from rfl]
+  rw [BitVec.getMsbD_eq_getLsbD (BitVec.ofNat 32 (2 ^ (32 - 24) - 1)),
+      BitVec.getMsbD_eq_getLsbD (BitVec.ofNat 32 (2 ^ (32 - 24) - 1)),
+      BitVec.getLsbD_ofNat, BitVec.getLsbD_ofNat,
+      Nat.testBit_two_pow_sub_one, Nat.testBit_two_pow_sub_one]
+  by_cases h16 : i < 16
+  · have hB : ¬ 31 - i < 8 := by omega
+    simp only [if_pos (show i < 24 from by omega), if_pos h16]
+    simp [hB]
+    intros
+    omega
+  · by_cases h24 : i < 24
+    · have hA : 31 - (i + 8) < 8 := by omega
+      have hB : ¬ 31 - i < 8 := by omega
+      have hs1 : i + 8 < 32 := by omega
+      have hg : 24 + (i - 16) < 32 := by omega
+      have h6 : 32 - 1 - (i + 8) < 32 := by omega
+      simp only [if_pos h24, if_neg h16, hA, hB, decide_true, decide_false,
+                 Bool.and_false, Bool.or_false, Bool.and_true, hs1,
+                 Bool.true_and, hi]
+      rw [CryptolToLean.SAWCoreBitvectorsProofs.getMsbD_vecToBitVec_lt _ _ hs1,
+          CryptolToLean.SAWCorePreludeProofs.atWithDefault_lt _ _ _ hg]
+      simp only [h6, decide_true, Bool.and_true,
+                 show 24 + (i - 16) = i + 8 from by omega]
+    · have hA : ¬ i + 8 < 32 := by omega
+      have hB : 31 - i < 8 := by omega
+      have hg : 24 + (i - 24) < 32 := by omega
+      have h6 : 32 - 1 - i < 32 := by omega
+      simp only [if_neg h24, hA, decide_false, Bool.false_and, hB,
+                 decide_true, Bool.and_true, hi, Bool.true_and,
+                 Bool.and_false, Bool.false_or]
+      rw [CryptolToLean.SAWCoreBitvectorsProofs.getMsbD_vecToBitVec_lt _ _ hi,
+          CryptolToLean.SAWCorePreludeProofs.atWithDefault_lt _ _ _ hg]
+      simp only [h6, decide_true, Bool.and_true,
+                 show 24 + (i - 24) = i from by omega]
 
 -- Boolean truth-table theorems (Rocq's boolEqb_eq, and_bool_eq_true,
 -- etc.) intentionally NOT mirrored here. They're properties of Lean's
