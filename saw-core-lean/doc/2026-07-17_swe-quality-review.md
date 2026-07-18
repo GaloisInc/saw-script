@@ -39,6 +39,11 @@ own terms — the support tree genuinely contains
 
 ### 1. Trust kernel lives under the test tree and is on the product runtime path — should-fix, arguably blocker
 
+[MOVED 2026-07-17: `git mv` to `saw-core-lean/replay/lean-check-core.sh`,
+`Builtins.hs` path updated. The Cabal `data-files` half stays with
+relocatable-install release packaging, which must also ship the Lean
+lake project.]
+
 `otherTests/saw-core-lean/support/lean-check-core.sh` is the
 factored trust kernel. The product builtin `offline_lean_replay`
 locates it at runtime as
@@ -71,6 +76,11 @@ minimum `SAWCoreLean/Obligations.hs` and
 objection a maintainer would raise at merge.
 
 ### 3. README "Tests" section + `lean-shape-test.sh` describe the removed `shape/` category — should-fix, cheap
+
+[FIXED 2026-07-17: README rewritten; script renamed
+`lean-negative-test.sh` with header/paths updated (also caught a
+residual "attacks/" mention from the vocabulary sweep); `test.sh`
+and `ci.yml` references updated.]
 
 `README.md` described `{shape,saw-boundary,proofs}` with "Soundness
 shape probes (`shape/`)"; `shape/` was removed 2026-07-15 and the

@@ -1560,19 +1560,21 @@ reject and pin a fixture rather than widen a heuristic.
 
 - [ ] **Execute the 2026-07-17 SWE-quality review findings**
   (`doc/2026-07-17_swe-quality-review.md`; ranked there). Open items:
-  - **(#1, merge gate)** Move the trust kernel
-    (`otherTests/saw-core-lean/support/lean-check-core.sh`) out of
-    the test tree into `saw-core-lean/` proper; resolve from
-    `offline_lean_replay` via Cabal `data-files` instead of
-    `SAW_LEAN_ROOT` path-joining into a source checkout. No goldens.
+  - **(#1, merge gate — MOVED 2026-07-17)** Trust kernel relocated
+    via `git mv` to `saw-core-lean/replay/lean-check-core.sh`;
+    `Builtins.hs` path updated. Remaining release-packaging half:
+    resolve via Cabal `data-files` instead of `SAW_LEAN_ROOT` — that
+    work must ship the whole Lean lake project as data too, so it
+    stays bundled with relocatable-install packaging.
   - **(#2, merge gate)** Split `Term.hs` (6,776 lines) along its
     existing banner sections — extract at least
     `SAWCoreLean/Obligations.hs` and `SAWCoreLean/Convention.hs`.
     Pure module reorganization; do BEFORE the pre-release soundness
     audit so the audit reviews final structure.
-  - **(#3 residual)** Rename `support/lean-shape-test.sh` (named for
-    the removed `shape/` category, now serves `negative/`) and drop
-    its dead `shape/` path branch. README already fixed 2026-07-17.
+  - **(#3 residual — DONE 2026-07-17)** `support/lean-shape-test.sh`
+    renamed to `lean-negative-test.sh`; header (which still said
+    "attacks/") and stale `shape/` mentions in `test.sh`/`ci.yml`
+    updated.
   - **(#4)** Split TODO.md: open items stay; Audit History +
     Decision Log to durable `doc/` files; large COMPLETE blocks to
     `doc/archive/`.
@@ -2109,7 +2111,7 @@ reject and pin a fixture rather than widen a heuristic.
     re-emits the obligation fresh in-process (fresh emission is the authority;
     the goal-telescope arity pin in `writeLeanProp` refuses emission on
     quantifier drift), stages user proof + `completed.lean` against it, and
-    runs the factored `otherTests/saw-core-lean/support/lean-check-core.sh`
+    runs the factored `saw-core-lean/replay/lean-check-core.sh`
     trust kernel: cleared `LEAN_PATH`, non-degradable timeout, placeholder
     policy, anti-trivialization probe, completed-outline drift check,
     user-file sorry scan, closer-type probe, and an EXACT-match axiom

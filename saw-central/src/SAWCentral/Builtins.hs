@@ -1435,8 +1435,8 @@ leanReplayFingerprint txt =
 
 -- | Admit the current goal iff a user-supplied Lean discharge
 -- kernel-checks against the goal SAW emits, under the factored trust
--- kernel (support/lean-check-core.sh) that the CI proof harness also
--- exercises. Design + binding amendments:
+-- kernel (saw-core-lean/replay/lean-check-core.sh) that the CI proof
+-- harness also exercises. Design + binding amendments:
 -- saw-core-lean/doc/2026-07-16_replay-design.md.
 --
 -- The FRESH in-process emission is the authority: the user's copy of
@@ -1463,11 +1463,11 @@ offline_lean_replay proofDir =
          , "Point it at the saw-script checkout root so replay can"
          , "find the pinned Lean support library"
          , "(saw-core-lean/lean) and the factored checker"
-         , "(otherTests/saw-core-lean/support/lean-check-core.sh)."
+         , "(saw-core-lean/replay/lean-check-core.sh)."
          ]
      let projRoot = root </> "saw-core-lean" </> "lean"
-         coreScript = root </> "otherTests" </> "saw-core-lean"
-                        </> "support" </> "lean-check-core.sh"
+         coreScript = root </> "saw-core-lean"
+                        </> "replay" </> "lean-check-core.sh"
      ok <- io $ doesFileExist coreScript
      unless ok $ fail $
        "offline_lean_replay: checker not found at " ++ coreScript

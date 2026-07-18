@@ -148,7 +148,7 @@ resolution loudly).
 
 ## Implementation record (2026-07-17)
 
-Landed: `support/lean-check-core.sh` (the factored trust kernel:
+Landed: `saw-core-lean/replay/lean-check-core.sh` (the factored trust kernel:
 non-degradable timeout; CLEARED ambient LEAN_PATH; per-call-unique
 gitignored in-root staging with trap cleanup — lake requires in-root
 inputs, so amendment 2's no-collision/no-pollution intent is met via

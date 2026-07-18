@@ -92,7 +92,7 @@
 #                  — same as conformance, but exits nonzero if any known gaps
 #                    remain. Use this for the final parity gate.
 #   good           — refresh *.log.good and *.lean.good in every driver
-#                    and saw-boundary subdir (no effect on proofs/shape).
+#                    and saw-boundary subdir (no effect on proofs/negative).
 #   gaps           — validate and report proof-gaps/* and stretch/* inventory
 #                    without trying to make those gaps pass.
 #   clean          — clean transient outputs across all subdirs.
@@ -258,7 +258,7 @@ iterate_obligations()   { for d in obligations/*/;   do run_one obligations   "$
 iterate_saw_boundary()  { for d in saw-boundary/*/;  do run_one saw-boundary  "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_proofs()        { for d in proofs/*/;        do run_one proofs        "$(basename "$d")" lean-proof-test.sh   "$@"; done; }
 iterate_support_proofs() { for d in support-proofs/*/; do run_one support-proofs "$(basename "$d")" lean-proof-test.sh "$@"; done; }
-iterate_negative()       { for d in negative/*/;       do run_one negative       "$(basename "$d")" lean-shape-test.sh   "$@"; done; }
+iterate_negative()       { for d in negative/*/;       do run_one negative       "$(basename "$d")" lean-negative-test.sh   "$@"; done; }
 
 record_gap_inventory_item() {
     local path="$1"

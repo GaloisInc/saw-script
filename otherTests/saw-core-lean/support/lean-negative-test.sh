@@ -1,5 +1,6 @@
-# Shared harness for otherTests/saw-core-lean/attacks/*/ negative probes
-# (category renamed from "shape/" in the 2026-07-15 restructure).
+# Shared harness for otherTests/saw-core-lean/negative/*/ probes
+# (category history: shape/ → attacks/ → negative/; this file was
+# support/lean-negative-test.sh until the 2026-07-17 rename).
 #
 # These exercise axiom-shape invariants by running Lean's elaborator
 # on small hand-written probes. File naming is the entire contract:
@@ -9,16 +10,15 @@
 #                       beyond SAW's declared shape — soundness drift.
 #
 # The test fails if any single probe misbehaves. Every probe in the
-# test dir matching either suffix is exercised; adding more is just
-# dropping files in, no script edits needed.
-#
-# Each test dir's test.sh is a one-liner that delegates here:
-#   exec ${TEST_SHELL:-bash} ../support/lean-shape-test.sh "$@"
+# test dir matching the suffix is exercised; adding more is just
+# dropping files in, no script edits needed. Subdirs are data-only;
+# the orchestrator (test.sh iterate_negative) invokes this harness
+# directly.
 
 set -u
 
 # Verb dispatch. The orchestrator passes one of: test (default), good,
-# clean. shape tests have no .good files so `good` is a no-op; `clean`
+# clean. negative probes have no .good files so `good` is a no-op; `clean`
 # removes any leftover probe staging.
 VERB="${1:-test}"
 RESOLVED_LAKE_DIR="$(cd ../../../../saw-core-lean/lean 2>/dev/null && pwd || true)"
@@ -26,7 +26,7 @@ TEST_NAME="$(basename "$(pwd)")"
 
 case "$VERB" in
     good)
-        echo "lean-shape-test.sh: 'good' is a no-op for shape tests (no .good files)"
+        echo "lean-negative-test.sh: 'good' is a no-op for negative probes (no .good files)"
         exit 0
         ;;
     clean)
@@ -38,7 +38,7 @@ case "$VERB" in
     test)
         ;;
     *)
-        echo "lean-shape-test.sh: unknown verb '$VERB'" >&2
+        echo "lean-negative-test.sh: unknown verb '$VERB'" >&2
         exit 1
         ;;
 esac
@@ -59,7 +59,7 @@ EOF
     exit 1
 fi
 
-# Test dirs live at otherTests/saw-core-lean/{shape,saw-boundary}/<name>/,
+# Test dirs live at otherTests/saw-core-lean/negative/<name>/,
 # so saw-core-lean/lean/ is four levels up.
 LAKE_DIR="$(cd ../../../../saw-core-lean/lean && pwd)"
 TEST_NAME="$(basename "$(pwd)")"
@@ -97,7 +97,7 @@ fi
 
 # Elaborate one *.shouldfail.lean probe. It MUST produce a Lean
 # elaboration error — that's the soundness invariant we're pinning.
-# (Phase F audit, 2026-05-04: shape tests host *only* negative
+# (Phase F audit, 2026-05-04: this category hosts *only* negative
 # probes. Positive coverage of "translator-emitted shapes elaborate"
 # lives in drivers/ where the generator's actual output is checked.)
 status=0

@@ -1,7 +1,7 @@
 // 0.02-W3 replay GREEN row: the product loop, closed. SAW emits the
 // E1 goal (bvAdd commutativity over [8]) FRESH, stages the existing
 // kernel-checked discharge from proofs/E1_bvAdd_comm, runs the
-// factored trust kernel (support/lean-check-core.sh: cleared env,
+// factored trust kernel (saw-core-lean/replay/lean-check-core.sh: cleared env,
 // placeholder policy, anti-trivialization, closer type, sorry scan,
 // axiom allowlist), and ADMITS the goal on Lean's authority —
 // prove_print succeeds with no fails() wrapper for the first time

@@ -760,12 +760,12 @@ jobs:
           # Install elan + the toolchain pinned in saw-core-lean/lean/lean-toolchain.
           # This puts 'lake' / 'lean' on PATH for both Lean-using test paths:
           #
-          #   - integration-tests: legacy otherTests/saw-core-lean/{shape,saw-boundary,proofs}/ harnesses
-          #     (lean-shape-test.sh, lean-proof-test.sh, test-lean.sh).
+          #   - integration-tests: legacy otherTests/saw-core-lean/{negative,saw-boundary,proofs}/ harnesses
+          #     (lean-negative-test.sh, lean-proof-test.sh, test-lean.sh).
           #
           #   - saw-core-lean-tests: otherTests/saw-core-lean/test.sh, which
           #     drives drivers/*, differential/*, obligations/*, saw-boundary/*,
-          #     proofs/*, and shape/* through the support harnesses.
+          #     proofs/*, and negative/* through the support harnesses.
           #
           # Phase A audit (2026-05-04): the Lean test harnesses FAIL LOUDLY
           # when lake is missing, instead of silently skipping. So this

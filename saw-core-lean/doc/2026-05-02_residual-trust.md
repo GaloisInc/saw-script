@@ -489,7 +489,7 @@ For goals ADMITTED via `offline_lean_replay` (and only those), the
 trusted base extends beyond the standing catalog to: Lean's kernel;
 the pinned toolchain (lean-toolchain file, recorded in evidence);
 the staged CryptolToLean support library; the factored checker
-(`support/lean-check-core.sh`); AND — seventh-audit amendment 1 —
+(`saw-core-lean/replay/lean-check-core.sh`); AND — seventh-audit amendment 1 —
 the SAW-side emission pipeline itself (`propToTerm`, `scPiList`
 free-var abstraction, `scNormalizeForLean`): replay converts an
 emission bug into a false SAW theorem, so goal formation is

@@ -999,7 +999,10 @@ instance Semigroup TheoremSummary where
 data LeanReplayInfo = LeanReplayInfo
   { leanReplayToolchain :: Text
   , leanReplayGoalHash  :: Text
+    -- ^ FNV-1a/64 provenance label of the emitted goal text; not an
+    --   integrity hash and carries no verification weight.
   , leanReplayProofHash :: Text
+    -- ^ Same provenance-label caveat as 'leanReplayGoalHash'.
   , leanReplayAxioms    :: [Text]
   } deriving Show
 
