@@ -492,7 +492,7 @@ betaReduceProp sc (Prop tm) =
   do tm' <- betaNormalize sc tm
      return (Prop tm')
 
--- | Return the contant false proposition.
+-- | Return the constant false proposition.
 falseProp :: SharedContext -> IO Prop
 falseProp sc = Prop <$> (scEqTrue sc =<< scBool sc False)
 
