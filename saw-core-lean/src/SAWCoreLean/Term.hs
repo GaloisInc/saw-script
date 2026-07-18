@@ -1293,6 +1293,26 @@ lowerMkStreamSound elTypeLean indexFnLean =
         "MkStream expects a unary index function after translation.")
 
 
+-- | Lower an UNDER-APPLIED contract-bearing partial op to its
+-- runtime-checked support wrapper (2026-07-18 design, audited): a
+-- plain application of the wrapper to the supplied actuals at the
+-- wrapper's declared modes (raw splice for Index/Type slots,
+-- runtime adaptation for value slots). No obligations; the wrapper
+-- itself reifies the excluded point as an Except throw. The result
+-- is a function value (strictly under arity by the caller's guard).
+lowerPartialOpRuntimeWrapper ::
+  TermTranslationMonad m =>
+  PartialOpContract -> [Term] -> m TranslatedTerm
+lowerPartialOpRuntimeWrapper contract args = do
+  actuals <- zipWithM translateOne (pocRuntimeWrapperModes contract) args
+  let head_ = Lean.Var (pocRuntimeWrapper contract)
+      app   = if null actuals then head_ else Lean.App head_ actuals
+  pure (TranslatedTerm app BindingFunction)
+  where
+    translateOne mode a = case mode of
+      RuntimeArg -> adaptToRuntime =<< translateTermWithShape a
+      _          -> withRawTranslationMode (translateTerm a)
+
 -- | Lower direct partial primitives through proof-carrying helpers.
 -- Haskell constructs the visible nonzero contract and wires the checked
 -- evidence into the helper call; it does not inspect or prove the divisor.
@@ -2452,13 +2472,23 @@ translateIdentWithArgsWithShape i args
           \they can be emitted soundly"))
   | Just contract <- findPartialOpContract i (length args)
   = lowerPartialOpContract contract i args
+    -- STRICT under-application (2026-07-18 wrapper design, audited
+    -- SAFE-WITH-CONDITIONS): a contract-bearing partial op at less
+    -- than contract arity (dictionary field, partial application)
+    -- lowers to its runtime-checked support wrapper — a plain
+    -- application, ZERO proof obligations (condition 5); the
+    -- wrapper throws at the contract-excluded point. Placed after
+    -- the exact-arity match so full-arity lowerings are untouched
+    -- (condition 4); over-application still rejects below.
+  | Just contract <- findPartialOpContractUnderApplied i (length args)
+  = lowerPartialOpRuntimeWrapper contract args
   | Just expectedArity <- findPartialOpContractArity i
   = Except.throwError (RejectedPrimitive (Text.pack (identName i))
       ("partial-operation contracts require exactly "
        <> Text.pack (show expectedArity)
-       <> " argument(s); under-applied or over-applied partial operations \
-          \must use a proof-carrying function-wrapper design before they can \
-          \be emitted soundly"))
+       <> " argument(s); over-applied partial operations are not \
+          \emittable (non-function result types make this unreachable \
+          \from well-typed SAWCore; kept as defense-in-depth)"))
   | i == "Prelude.unsafeAssert"
   , [aArg, xArg, yArg] <- args
   = translateUnsafeAssertObligation aArg xArg yArg

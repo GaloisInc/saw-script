@@ -182,6 +182,17 @@ is reciprocal. -/
     (_h : Not (a = Pure.pure 0)) : Except String Rational := do
   let a' ← a
   Pure.pure (rationalRecip a')
+@[reducible] def ratio_runtimeM (a b : Except String Int) :
+    Except String Rational := do
+  let a' ← a
+  let b' ← b
+  if b' = 0 then throw "ratio: zero denominator"
+  else Pure.pure (ratio a' b')
+@[reducible] def rationalRecip_runtimeM (a : Except String Rational) :
+    Except String Rational := do
+  let a' ← a
+  if a' = 0 then throw "rationalRecip: reciprocal of zero"
+  else Pure.pure (rationalRecip a')
 @[reducible] def rationalFloor : Rational → Int := fun a => a.floor
 
 /-! ## Floating-point (Phase 6 → Phase 9 follow-up)
@@ -239,6 +250,36 @@ Returns (quotient, remainder). -/
 @[reducible] def divModNat_checked (x y : Nat) (_h : Not (y = 0)) :
     PairType Nat (PairType Nat UnitType) :=
   divModNat x y
+
+/-! Under-applied partial-op RUNTIME wrappers (2026-07-18 design +
+audit, doc/2026-07-18_underapplied-partial-op-wrapper.md). These are
+the function VALUES a contract-bearing partial op lowers to when it
+appears at less than contract arity (dictionary fields, partial
+applications). Signature = the translated dictionary-field slot
+type: all-Except value args, NO proof argument. Every wrapper
+THROWS at the contract-excluded point — division by zero is
+genuinely undefined in SAWCore (concrete crash, symbolic
+unconstrained), so a throw is the only sound representation; the
+nonzero branch is defeq-identical to the matching *_checked(M)
+body so both representations agree away from zero. -/
+@[reducible] def divNat_runtimeM (x y : Except String Nat) :
+    Except String Nat := do
+  let x' ← x
+  let y' ← y
+  if y' = 0 then throw "divNat: division by zero"
+  else Pure.pure (divNat x' y')
+@[reducible] def modNat_runtimeM (x y : Except String Nat) :
+    Except String Nat := do
+  let x' ← x
+  let y' ← y
+  if y' = 0 then throw "modNat: division by zero"
+  else Pure.pure (modNat x' y')
+@[reducible] def divModNat_runtimeM (x y : Except String Nat) :
+    Except String (PairType Nat (PairType Nat UnitType)) := do
+  let x' ← x
+  let y' ← y
+  if y' = 0 then throw "divModNat: division by zero"
+  else Pure.pure (divModNat x' y')
 
 /-- Bridging lemmas for `omega`: it recognizes `x / k` / `x % k` only
 through the `HDiv.hDiv` / `HMod.hMod` spelling and atomizes bare
@@ -305,6 +346,18 @@ NOT `Int.div` / `Int.mod` (which are truncated). -/
   let x' ← x
   let y' ← y
   Pure.pure (intMod x' y')
+@[reducible] def intDiv_runtimeM (x y : Except String Int) :
+    Except String Int := do
+  let x' ← x
+  let y' ← y
+  if y' = 0 then throw "intDiv: division by zero"
+  else Pure.pure (intDiv x' y')
+@[reducible] def intMod_runtimeM (x y : Except String Int) :
+    Except String Int := do
+  let x' ← x
+  let y' ← y
+  if y' = 0 then throw "intMod: division by zero"
+  else Pure.pure (intMod x' y')
 @[reducible] def intNeg : Int → Int := fun a => -a
 @[reducible] def intEq  : Int → Int → Bool := fun a b => decide (a = b)
 @[reducible] def intLe  : Int → Int → Bool := fun a b => decide (a ≤ b)
@@ -452,6 +505,33 @@ noncomputable def bvSRem_checkedM (n : Nat)
   let y' ← y
   Pure.pure (bvSRem n x' y')
 
+noncomputable def bvUDiv_runtimeM (n : Nat)
+    (x y : Except String (Vec n Bool)) : Except String (Vec n Bool) := do
+  let x' ← x
+  let y' ← y
+  if vecToBitVec y' = 0 then throw "bvUDiv: division by zero"
+  else Pure.pure (bvUDiv n x' y')
+noncomputable def bvURem_runtimeM (n : Nat)
+    (x y : Except String (Vec n Bool)) : Except String (Vec n Bool) := do
+  let x' ← x
+  let y' ← y
+  if vecToBitVec y' = 0 then throw "bvURem: division by zero"
+  else Pure.pure (bvURem n x' y')
+noncomputable def bvSDiv_runtimeM (n : Nat)
+    (x y : Except String (Vec (n + 1) Bool)) :
+    Except String (Vec (n + 1) Bool) := do
+  let x' ← x
+  let y' ← y
+  if vecToBitVec y' = 0 then throw "bvSDiv: division by zero"
+  else Pure.pure (bvSDiv n x' y')
+noncomputable def bvSRem_runtimeM (n : Nat)
+    (x y : Except String (Vec (n + 1) Bool)) :
+    Except String (Vec (n + 1) Bool) := do
+  let x' ← x
+  let y' ← y
+  if vecToBitVec y' = 0 then throw "bvSRem: division by zero"
+  else Pure.pure (bvSRem n x' y')
+
 /-- Nonzero contract for Cryptol signed bitvector division/modulus wrappers.
 Only finite positive widths are admissible for the checked helper. The zero
 width and infinite stream branches are impossible under this contract, which
@@ -478,6 +558,19 @@ noncomputable def ecSMod_checkedM (n : Num)
   | Num.TCNum 0 => False.elim h
   | Num.TCNum (Nat.succ w) => bvSRem_checkedM w x y h
   | Num.TCInf => False.elim h
+
+noncomputable def ecSDiv_runtimeM (n : Num)
+    (x y : Except String (seqBool n)) : Except String (seqBool n) :=
+  match n with
+  | Num.TCNum 0 => throw "ecSDiv: zero-width signed division"
+  | Num.TCNum (Nat.succ w) => bvSDiv_runtimeM w x y
+  | Num.TCInf => throw "ecSDiv: infinite-width signed division"
+noncomputable def ecSMod_runtimeM (n : Num)
+    (x y : Except String (seqBool n)) : Except String (seqBool n) :=
+  match n with
+  | Num.TCNum 0 => throw "ecSMod: zero-width signed modulus"
+  | Num.TCNum (Nat.succ w) => bvSRem_runtimeM w x y
+  | Num.TCInf => throw "ecSMod: infinite-width signed modulus"
 
 noncomputable def bvShl (w : Nat) (x : Vec w Bool) (i : Nat) : Vec w Bool :=
   bitVecToVec ((vecToBitVec x) <<< i)

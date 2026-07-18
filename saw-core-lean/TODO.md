@@ -193,9 +193,16 @@ below track execution state as always.
   doc/2026-07-17_either-stream-recursor-convention.md and
   doc/2026-07-17_domain-map-coherence-audit.md). Two named blockers
   remain on the rev.cry exit criterion, both pinned:
-  - intDiv under-applied in PIntegral dictionary fields — needs the
-    proof-carrying partial-op FUNCTION-WRAPPER design (pinned by
-    saw-boundary/polymorphic_seq_module_rejection).
+  - [DONE 2026-07-18] Under-applied partial ops lower to
+    runtime-checked wrappers (design + audit:
+    doc/2026-07-18_underapplied-partial-op-wrapper.md; 13 wrappers,
+    zero obligations, throws at the excluded point).
+  - Total raw-target primitives unapplied in dictionary fields
+    (intNeg in PRingInteger): raw arrow at a wrapped-arrow slot —
+    needs the raw-function-value eta adaptation (existing
+    translateFunctionToWrappedFormal family); pinned by
+    differential/cryptol_rev_module. LAST known rev.cry
+    translation-side blocker.
   - Exception-hunt residuals (2026-07-18_exception-hunt.md):
     reclassify wrappedHelperFunctionValueSlot/-ResultIsValue as the
     DECLARED UseMapsToWrapped-callback convention (authority = the

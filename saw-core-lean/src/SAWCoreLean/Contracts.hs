@@ -46,6 +46,14 @@ data PartialOpContract = PartialOpContract
   , pocArity       :: Int
   , pocBuildProp   :: [Lean.Term] -> Lean.Term
   , pocConvention  :: PartialOpConvention
+    -- | Under-applied lowering (2026-07-18 wrapper design, audited):
+    -- the runtime-checked support wrapper this op lowers to at LESS
+    -- than contract arity (dictionary fields, partial applications),
+    -- with its declared argument modes (all value formals wrapped —
+    -- the translated dictionary-field slot type; no proof argument;
+    -- throws at the contract-excluded point).
+  , pocRuntimeWrapper      :: Lean.Ident
+  , pocRuntimeWrapperModes :: [ArgMode]
   }
 
 data PartialOpConvention
@@ -99,10 +107,14 @@ partialOpContracts =
   , PartialOpContract preludeModule "ratio" 2
       (wrappedNonzeroArg (Lean.Var (Lean.Ident "Int")) 1)
       (wrappedBinary "ratio_checkedM")
+      (Lean.Ident "ratio_runtimeM")
+      [RuntimeArg, RuntimeArg]
   , PartialOpContract preludeModule "rationalRecip" 1
       (wrappedNonzeroArg (Lean.Var (Lean.Ident "Rational")) 0)
       (PartialOpWrapped (Lean.Ident "rationalRecip_checkedM")
         [RuntimeArg])
+      (Lean.Ident "rationalRecip_runtimeM")
+      [RuntimeArg]
   , bvBinaryPartial "bvUDiv" "bvUDiv_checkedM"
   , bvBinaryPartial "bvURem" "bvURem_checkedM"
   , bvSignedBinaryPartial "bvSDiv" "bvSDiv_checkedM"
@@ -117,10 +129,14 @@ partialOpContracts =
       PartialOpContract preludeModule source 2
         (rawNonzeroArg (Lean.Var (Lean.Ident "Nat")) 1)
         (PartialOpRaw (Lean.Ident target))
+        (Lean.Ident (source ++ "_runtimeM"))
+        [RuntimeArg, RuntimeArg]
     intBinaryPartial source target =
       PartialOpContract preludeModule source 2
         (wrappedNonzeroArg (Lean.Var (Lean.Ident "Int")) 1)
         (wrappedBinary target)
+        (Lean.Ident (source ++ "_runtimeM"))
+        [RuntimeArg, RuntimeArg]
     wrappedBinary target =
       PartialOpWrapped (Lean.Ident target)
         [RuntimeArg, RuntimeArg]
@@ -129,16 +145,22 @@ partialOpContracts =
         (bvNonzeroArg 0 2)
         (PartialOpWrapped (Lean.Ident target)
           [IndexArg, RuntimeArg, RuntimeArg])
+        (Lean.Ident (source ++ "_runtimeM"))
+        [IndexArg, RuntimeArg, RuntimeArg]
     bvSignedBinaryPartial source target =
       PartialOpContract preludeModule source 3
         (bvSignedNonzeroArg 0 2)
         (PartialOpWrapped (Lean.Ident target)
           [IndexArg, RuntimeArg, RuntimeArg])
+        (Lean.Ident (source ++ "_runtimeM"))
+        [IndexArg, RuntimeArg, RuntimeArg]
     cryptolSignedBVPartial source target =
       PartialOpContract cryptolModule source 3
         (cryptolSignedBVNonzeroArg 0 2)
         (PartialOpWrapped (Lean.Ident target)
           [IndexArg, RuntimeArg, RuntimeArg])
+        (Lean.Ident (source ++ "_runtimeM"))
+        [IndexArg, RuntimeArg, RuntimeArg]
 
 -- The old three-way 'CheckedArgRaw' bucket is split into its true
 -- modes (plan Slice 4a): the width/index Nats are 'IndexArg', the
@@ -555,6 +577,16 @@ findPartialOpContract ident nArgs =
          identModule ident == pocModule contract
       && identName ident == pocName contract
       && nArgs == pocArity contract
+
+-- | Under-application finder (2026-07-18 wrapper design): the
+-- contract for an op supplied with STRICTLY FEWER args than its
+-- arity. Never matches at or above arity.
+findPartialOpContractUnderApplied :: Ident -> Int -> Maybe PartialOpContract
+findPartialOpContractUnderApplied ident nArgs =
+  find (\c -> pocModule c == identModule ident
+            && pocName c == identName ident
+            && nArgs < pocArity c)
+       partialOpContracts
 
 findPartialOpContractArity :: Ident -> Maybe Int
 findPartialOpContractArity ident =
