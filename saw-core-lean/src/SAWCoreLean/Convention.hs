@@ -759,6 +759,55 @@ withBindingInfo ident info =
 -- 'phaseBetaResultIsValue', 'functionConventionValueSlot') — never a
 -- standalone position authority at use sites. Positions come from
 -- declared conventions and production records.
+-- | THE domain map (2026-07-17 coherence audit; design doc
+-- 2026-07-17_either-stream-recursor-convention.md). One authority
+-- for "which representation do inhabitants of SAWCore type T take
+-- in emitted Lean?" — every classification cascade must project
+-- from this, never re-derive by hand (that scattering produced the
+-- Either@core hole and is the historical seam-bug substrate).
+--
+-- Variable-headed types classify KIND-DIRECTED: by the declared
+-- result sort of the head variable's kind (which the Variable node
+-- carries), not by bare-vs-applied syntax.
+--
+-- PROP BACKSTOP (audit condition 2 — load-bearing, do not weaken):
+-- SAWCore ADMITS Prop <= sort 0 cumulativity (Ord Sort:
+-- PropSort <= _; scmSubtype/scmApply), so a Type-sort-kinded head
+-- CAN be instantiated at a Prop. 'DVarValue' wrapping stays sound
+-- because the Lean side is the backstop: @Except String P@ at
+-- @P : Prop@ is ill-typed in Lean 4 (no term cumulativity), so the
+-- bad instantiation fails LOUDLY at elaboration. Any change to the
+-- wrapper type must re-establish a backstop with this property.
+data Domain
+  = DValue        -- ^ runtime data: wraps (@Except String T@)
+  | DRawType      -- ^ sorts, Num (recorded raw representation)
+  | DRawProp      -- ^ Eq/propositions/proofs: raw
+  | DFunction     -- ^ Pi types: function position
+  | DNat          -- ^ Nat: the ONE principled position-dependence
+                  --   (index/binder raw; computed result value)
+  | DVarValue     -- ^ var-headed, head kind results in a Type sort:
+                  --   value domain (Lean backstop covers Prop
+                  --   instantiation — see PROP BACKSTOP above)
+  | DVarRaw       -- ^ var-headed, head kind results in Prop or is
+                  --   not a variable-kinded family we can commit to
+  deriving (Eq, Show)
+
+classifyDomain :: Term -> Domain
+classifyDomain ty
+  | Just _ <- asSort ty     = DRawType
+  | isCryptolNumType ty     = DRawType
+  | Just _ <- asNatType ty  = DNat
+  | Just _ <- asEq ty       = DRawProp
+  | Just _ <- asPi ty       = DFunction
+  | otherwise =
+      case unwrapTermF (fst (asApplyAll ty)) of
+        Variable _ fty -> case asSort (snd (asPiList fty)) of
+          Just s | s == propSort -> DVarRaw
+                 | otherwise     -> DVarValue
+          Nothing -> DValue  -- head is a term-level variable of a
+                             -- concrete type: ordinary data
+        _ -> DValue
+
 shouldWrapBinder :: Term -> Bool
 shouldWrapBinder ty
   | Just _ <- asSort ty       = False
