@@ -1,6 +1,6 @@
 # Under-applied partial-op function wrappers (W1: the intDiv blocker)
 
-2026-07-18. Status: DESIGN — pre-audit. Unblocks rev.cry whole-module
+2026-07-18. Status: AUDITED — SAFE-WITH-CONDITIONS (verdict + five binding conditions at end; the Nat-family total-lift hypothesis was REFUTED and is struck below). Unblocks rev.cry whole-module
 translation (PIntegral dictionary fields carry partial ops
 UNAPPLIED; pinned by saw-boundary/polymorphic_seq_module_rejection).
 
@@ -23,11 +23,12 @@ proved). Today: named rejection.
   zero points DIVERGE; equating them unguarded would be silent
   0-vs-⊥ unsoundness. The checked contract's `Not (y = pure 0)`
   hypothesis exists precisely to exclude this point.
-- `divNat`/`modNat`: check SAW semantics per-op before design
-  freeze (differential/nat_division_defined suggests SAW Nat
-  division at 0 is DEFINED and agrees with Lean's total Nat.div —
-  if confirmed, the under-applied wrapper for these is the PLAIN
-  total function, no check).
+- `divNat`/`modNat`/`divModNat`: hypothesis REFUTED by audit. The
+  simulator does NOT run the Prelude recursion; it uses native
+  `divModNatOp` = Haskell `divMod` (Prims.hs:718-724) — concrete
+  zero point CRASHES; symbolic routes to bvUDiv = SMT all-ones.
+  Three-way divergence with Lean's total Nat.div. THROW like every
+  other op.
 - bv division family: zero-point semantics were pinned in the
   earlier zero-divisor work; per-op table entry required.
 
@@ -59,7 +60,12 @@ precedent: escaping SAW runtime error vs Lean Except error =
 agreeing outcome). For ops whose SAW zero point is DEFINED (Nat
 family, if confirmed) the wrapper is the plain total lift and the
 zero check is OMITTED — a per-op table decision, never a global
-rule.
+rule. [AUDIT RESULT: NO op qualifies — division-by-zero is
+genuinely undefined in SAWCore (concrete crash, symbolic
+unconstrained SMT value, mutually divergent), so an Except THROW is
+the ONLY sound representation at every excluded point: a throw
+never defeq-equals any `pure v`, so false equations cannot close —
+divergence is always a failed proof, loud.]
 
 ## Audit questions (for the pre-implementation audit)
 
@@ -83,3 +89,37 @@ rule.
 5. No new obligations anywhere (the design emits ZERO proof
    obligations for wrapped values) — confirm no path smuggles an
    eta-local h_nonzero back in.
+
+
+## Audit verdict (2026-07-18): SAFE-WITH-CONDITIONS
+
+Per-op zero-point table established from primary sources (see the
+audit message record): intDiv/intMod concrete = Haskell div/mod
+crash, symbolic = unconstrained SMT; Nat family = native divMod
+crash / bvUDiv all-ones; bv family = Prim.divideByZero crash /
+SMT all-ones (the Prelude.sawcore comments document only the
+SYMBOLIC behavior — not concrete truth); rational family crashes.
+UNIFORM CONCLUSION: every wrapper THROWS at the excluded point.
+
+Binding conditions:
+1. Nat-family wrappers throw (total-lift carve-out struck).
+2. Wrapper nonzero branch defeq-identical to the matching
+   *_checkedM body (same support op, same wrapped arg convention)
+   — keeps the both-representations probe benign (away from zero
+   both reduce to the same `pure`; at zero only the wrapper exists
+   and a throw never closes an equation against a value).
+3. Wrapper Lean type = the translated dictionary-field slot type:
+   all-Except arrows, NO proof argument (why *_checkedM cannot be
+   the field value); relies on the no-rawify-dictionaries rule.
+4. Dispatch gates on STRICT under-application (nArgs < arity),
+   placed after the exact-arity contract match — full-arity rows
+   cannot change; over-application stays rejected
+   (defense-in-depth; vacuous for non-function-result ops).
+5. The wrapper path emits ZERO proof obligations — bypasses the
+   proof-carrying builders entirely (plain Lean.App).
+
+Non-issues: error-message content (throw is soundness-inert;
+distinct per-op messages for hygiene), over-application,
+both-representations conflation, concrete-vs-symbolic ("which is
+SAW?" — neither is adoptable as a value; throw is the only
+representation consistent with both).
