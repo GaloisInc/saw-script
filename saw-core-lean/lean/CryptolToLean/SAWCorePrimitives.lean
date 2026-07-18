@@ -233,16 +233,25 @@ Lean's `Nat.sub` has the same truncated-subtraction semantics. -/
 @[reducible] def expNat : Nat → Nat → Nat := fun m n => Nat.pow m n
 @[reducible] def doubleNat : Nat → Nat := fun n => 2 * n
 @[reducible] def pred     : Nat → Nat := Nat.pred
-/-- SAW Prelude `divNat x y = (divModNat x y).0`. -/
+/-- SAW Prelude `divNat x y = (divModNat x y).0` — AT NONZERO
+DIVISORS ONLY. SAWCore division by zero is genuinely undefined
+(concrete simulator crashes on Haskell `divMod`; symbolic routes to
+SMT all-ones), while `Nat.div x 0 = 0` is total: the zero points
+DIVERGE. Emission never reaches this def unguarded — full-arity
+sites go through `divNat_checked` (proven nonzero) and
+under-applied sites through `divNat_runtimeM` (throws at zero);
+see doc/2026-07-18_underapplied-partial-op-wrapper.md. -/
 @[reducible] def divNat : Nat → Nat → Nat := Nat.div
 @[reducible] def divNat_checked (x y : Nat) (_h : Not (y = 0)) : Nat :=
   divNat x y
-/-- SAW Prelude `modNat x y = (divModNat x y).1`. -/
+/-- SAW Prelude `modNat x y = (divModNat x y).1` — at nonzero
+divisors only; same zero-point caveat as `divNat`. -/
 @[reducible] def modNat : Nat → Nat → Nat := Nat.mod
 @[reducible] def modNat_checked (x y : Nat) (_h : Not (y = 0)) : Nat :=
   modNat x y
 /-- SAW Prelude primitive `divModNat : Nat -> Nat -> Nat * Nat`.
-Returns (quotient, remainder). -/
+Returns (quotient, remainder) — at nonzero divisors only; same
+zero-point caveat as `divNat`. -/
 @[reducible] def divModNat : Nat → Nat → PairType Nat (PairType Nat UnitType) :=
   fun x y =>
     PairType.PairValue (Nat.div x y)
@@ -330,7 +339,11 @@ SAW's concrete simulator (`SAWCore.Simulator.Concrete`) defines
 `bpIntDiv = Haskell div` and `bpIntMod = Haskell mod`, which are
 **floor** division/modulus (non-negative remainder for positive
 divisor). This corresponds to Lean's `Int.fdiv` / `Int.fmod`,
-NOT `Int.div` / `Int.mod` (which are truncated). -/
+NOT `Int.div` / `Int.mod` (which are truncated) — AT NONZERO
+DIVISORS ONLY: Haskell div/mod by zero crashes while fdiv/fmod are
+total (`fdiv x 0 = 0`, `fmod x 0 = x`), so the zero points diverge
+and emission only reaches these through the checked/runtime gates
+(doc/2026-07-18_underapplied-partial-op-wrapper.md). -/
 @[reducible] def intAdd : Int → Int → Int := fun a b => a + b
 @[reducible] def intSub : Int → Int → Int := fun a b => a - b
 @[reducible] def intMul : Int → Int → Int := fun a b => a * b

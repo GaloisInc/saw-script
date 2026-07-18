@@ -233,7 +233,10 @@ All other Phase 6/9 ops are now defined: bv ops via
 `Lean.BitVec` (sdiv, srem, sshiftRight, signExtend), popcount/
 clz/ctz/lg2 via folds and `Nat.log2`, Integer ops via Lean's
 native `Int` (with `Int.fdiv`/`Int.fmod` matching SAW's floor-
-convention concrete simulator), IntMod via `Int` with
+convention concrete simulator AT NONZERO DIVISORS — the zero
+points diverge and are gated by checked/runtime wrappers; audited
+zero-point table in
+`2026-07-18_underapplied-partial-op-wrapper.md`), IntMod via `Int` with
 `Int.fmod`, Rational via Lean's `Rat`, Float/Double as
 `Int × Int` mantissa-exponent pairs (faithful since SAW has
 no operations on these), and `zip` via `Vector.ofFn`.
