@@ -161,3 +161,31 @@ one care point: do NOT eta-adapt at RAW-target callee positions
 (their formals are genuinely raw — the existing structural
 delivery is correct there); the convention derivation only fires
 where the instantiating Pi's translation wraps.
+
+### Located implementation points (2026-07-18 grounding)
+
+- Part 1: `instantiationMode` (Term.hs ~724), the
+  `DFunction -> FunctionArg Nothing` arm; the Pi→convention
+  derivation to reuse is `recursorMotiveFunctionConvention`
+  (Term.hs ~1064) — generalize/rename `piFunctionConvention` (it
+  is already generic over a Pi type; only the name is
+  motive-specific).
+- Part 2 consumers: the generic application path translates
+  actuals to `argResults` BEFORE modes and never adapts supplied
+  function actuals (Term.hs ~2747 eta region: modes drive only
+  bind/splice and MISSING-formal eta). Supplied actuals at
+  `FunctionArg (Just conv)` must translate at
+  `ExpectFunctionPosition (Just conv)`; the position consumer for
+  non-Lambda heads (Term.hs ~4687 guards on `Lambda{}`) extends
+  with the `translateFunctionToWrappedFormal` non-lambda pattern
+  (translate as-produced; if produced formals mismatch the
+  declared convention, eta via convention binders + `buildLifted`).
+- The checked-application interpreter's `FunctionArg` arm
+  (Term.hs ~1823) already routes through
+  `adaptTo (ExpectFunctionPosition mconv)` — it inherits part 2's
+  consumer extension for free.
+- Regression surface: `differential/cryptol_rev_module` flips when
+  this lands (promote to true differential row + un-fail demo step
+  3); raw-target callee rows (bvAdd-family drivers) must be
+  bit-identical (their FunctionArg positions are raw-formal and
+  must NOT gain eta).
