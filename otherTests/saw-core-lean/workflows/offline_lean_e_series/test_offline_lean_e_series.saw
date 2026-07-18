@@ -16,12 +16,12 @@
 //   (1) SAW emits the .lean file with the expected shape (pinned
 //       via *.prove0.lean.good).
 //   (2) The Lean discharge in otherTests/saw-core-lean/proofs/E<N>_*/
-//       closes cleanly — for E1-E5 and E7. E6 is the DELIBERATE
-//       exception: its naive-popcount side is the self-referential
-//       comprehension, so its obligation is recurrence-class
-//       (saw_fix_unique_exists, the release-0.01 OP-3 limitation)
-//       and has no discharge; the class is pinned by
-//       proof-gaps/{cryptol_running_sum_verify,offline_lean_popcount32}.
+//       closes cleanly — for all of E1-E7. E6's naive-popcount side
+//       is the self-referential comprehension: post-R2 its
+//       obligation is the proof-carrying Class-F contract
+//       (saw_fix_bounded_choose, proven productivity witness),
+//       discharged in proofs/E6_popcount_bridge via the
+//       saw_self_ref_comp_iterate bridge lemma.
 
 // E1 — bvAdd commutativity over [8]. Baseline one-liner via
 // bvAdd_comm. Tier 1.

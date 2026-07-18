@@ -106,10 +106,15 @@ for the prototype unless they let our regression tests falsely validate a broken
 emission strategy. (The worst instance — `offline_lean` acting as an ADMITTING
 exporter, claiming the goal on mere emission — was CLOSED 2026-07-14:
 `offline_lean` is now emission-only, returning `SolveUnknown` so the goal stays
-unsolved on the SAW side; `offline_lean_replay` is registered but fails with a
-named diagnostic until real replay lands. Pinned by
+unsolved on the SAW side; `offline_lean_replay` landed as a real checker
+2026-07-16 — fresh in-process emission is the authority, the factored
+`lean-check-core.sh` trust kernel enforces the exact-match axiom allowlist,
+sorry/placeholder policy, anti-trivialization and closer-type probes, and the
+goal-telescope arity pin refuses emission on quantifier drift. Pinned by
 `saw-boundary/offline_lean_export_only` (false goal must leave SAW unfinished
-while still emitting) and `saw-boundary/offline_lean_replay_disabled`. The LLVM
+while still emitting), `workflows/replay_e1_verify` /
+`replay_running_sum_verify` (positive), and
+`saw-boundary/replay_reject_{sorry,axiom,suffix_axiom}` (negative). The LLVM
 `verifyObligations` loop now runs every verification condition's tactic before
 failing on unfinished proofs, so multi-obligation `llvm_verify` runs still emit
 ALL obligation files in one pass.) Therefore:
@@ -117,17 +122,17 @@ ALL obligation files in one pass.) Therefore:
 - Prototype-critical harness checks should prevent stale artifacts, unrelated
   proofs, generated `sorry` dependencies, and unchecked axioms from making a
   regression look green.
-- `offline_lean` replay is a required final-product soundness boundary, but it
-  is not the next blocker while the backend is still stabilizing its emitted
-  obligation shapes. Current `offline_lean` output is emit-stage evidence only,
-  and since 2026-07-14 the command's own semantics say so: the goal is left
-  unsolved (scripts wrap in `fails`), so SAW cannot claim a goal on the
-  strength of an unread export.
-- Full SAW-side proof replay, import isolation, provenance manifests, and
-  final user-facing ergonomics remain required before the backend can be called
-  a sound proof-discharge product. They come after the conformance harness is
-  trustworthy and after emitted obligations/Lean support-library contracts are
-  stable enough that replay is checking the right artifact.
+- `offline_lean` remains emit-only (`SolveUnknown`; scripts wrap in `fails`):
+  SAW never claims a goal on the strength of an unread export.
+- `offline_lean_replay` (DONE 2026-07-16) is the discharge path: it re-emits
+  the goal fresh in-process, stages the user's completed proof against that
+  fresh emission (drift is load-bearing), runs the factored
+  `lean-check-core.sh` trust kernel under a cleared `LEAN_PATH`, and only on
+  full success returns `LeanReplayEvidence` (toolchain/goal-hash/proof-hash/
+  axiom record; non-recheckable trust token, absorbing in verification
+  summaries as `LeanReplayedTheorem`). Recorded hardening follow-ups: rebase
+  the CI harness onto the same factored checker (single-checker by mechanism),
+  and strengthen the goal-telescope pin from arity to binder-type comparison.
 
 ## Current State
 
@@ -2037,23 +2042,33 @@ reject and pin a fixture rather than widen a heuristic.
 
 ## Priority 5: SAW-Side Proof Checking
 
-- [ ] Add an integrated SAW-side proof-check command.
-  - Emit-only mode should produce obligations for offline work without
-    claiming success.
-  - Check mode should take a completed Lean proof file, rebuild the exact
-    obligation context, invoke Lean, reject forbidden proof escapes, and only
-    then discharge the SAW goal.
-  - The current `otherTests/saw-core-lean/proofs/*` harness validates this
-    shape outside SAW; the backend needs the same acceptance rule in SAWScript.
-  - This is important for final UX and end-to-end trust, but it comes after the
-    emitted Lean shape is stable and after the prototype harness is strong enough
-    to keep regression results honest.
+- [x] **Add an integrated SAW-side proof-check command (DONE 2026-07-16).**
+  Design + seven-audit record: `doc/2026-07-16_replay-design.md`.
+  - Emit-only mode (`offline_lean`) produces obligations without claiming
+    success (`SolveUnknown` since 2026-07-14).
+  - Check mode (`offline_lean_replay`) takes a completed Lean proof file,
+    re-emits the obligation fresh in-process (fresh emission is the authority;
+    the goal-telescope arity pin in `writeLeanProp` refuses emission on
+    quantifier drift), stages user proof + `completed.lean` against it, and
+    runs the factored `otherTests/saw-core-lean/support/lean-check-core.sh`
+    trust kernel: cleared `LEAN_PATH`, non-degradable timeout, placeholder
+    policy, anti-trivialization probe, completed-outline drift check,
+    user-file sorry scan, closer-type probe, and an EXACT-match axiom
+    allowlist (the four full axiom names — no suffix matching). Only on full
+    success does SAW record `LeanReplayEvidence` (toolchain, goal hash, proof
+    hash, axioms; surfaces as `Theorem (Lean kernel replay)` /
+    `verified-lean-replay` in verification summaries).
+  - Pinned by `workflows/replay_e1_verify`, `workflows/replay_running_sum_verify`
+    (positive) and `saw-boundary/replay_reject_{sorry,axiom,suffix_axiom}`
+    (negative). Full conformance pass 2026-07-17.
+  - Recorded follow-ups (not blockers): rebase the CI proofs harness onto the
+    same factored checker so the single-checker principle holds by mechanism;
+    strengthen the telescope pin from arity to binder-type comparison (a
+    same-arity wrong-type binder currently passes the pin, though the proof
+    would then fail to elaborate).
   - Audit triage (RESOLVED 2026-07-14): `offline_lean` formerly behaved like
     Rocq's offline exporter and marked the SAW goal solved after writing the
-    file. It is now EMIT-ONLY (`SolveUnknown`; goals stay unsolved; scripts
-    wrap in `fails`), and the reserved `offline_lean_replay` command fails
-    with a named diagnostic until real replay lands. The remaining Priority-5
-    work is the replay implementation itself, not the exporter semantics.
+    file. It is now EMIT-ONLY, and replay is the sole discharge path.
   - 2026-06-28 audit finding: driver tests that pin `Proof succeeded!` plus
     generated `by sorry` are emission/elaboration tests only. They must not be
     counted as checked proof-discharge regressions.
@@ -2082,9 +2097,10 @@ Still-live items carried into the priorities above and the operative plan:
   semantic theorems beyond type-checking — Priority 2.
 - Raw Lean injection policy: `InjectCodeDecl "Lean"` must not remain an ordinary
   untrusted path to arbitrary emitted Lean — Priority 2.
-- SAW-side `offline_lean` replay (the exporter is emit-only since 2026-07-14;
-  `offline_lean_replay` is a registered, always-failing stub): deferred
-  end-game plumbing — Priority 5.
+- SAW-side `offline_lean` replay — DONE 2026-07-16 (`offline_lean_replay`
+  discharges goals via the factored trust kernel; exporter stays emit-only) —
+  Priority 5. Remaining: CI-harness rebase onto the factored checker;
+  binder-type telescope comparison.
 
 Known-gap backlog triage (still current):
 
