@@ -309,7 +309,7 @@ library saw-core-rocq
 -- The saw-core-lean library implements a backend for translating terms
 -- in the SAWCore intermediate language into the syntax of Lean 4.
 -- Structured as a mirror of saw-core-rocq; see
--- saw-core-lean/doc/2026-04-22_lean-backend-design.md for the design.
+-- saw-core-lean/doc/architecture.md for the design.
 library saw-core-lean
   import: ghc-options
   default-language: Haskell2010

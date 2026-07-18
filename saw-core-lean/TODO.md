@@ -187,6 +187,33 @@ Full plan: `doc/2026-07-14_release-plan.md`. Decisions recorded there
 0.01 workstreams and exit criteria live in the plan doc; the items
 below track execution state as always.
 
+- [ ] **Pre-release soundness audit (release gate, added 2026-07-17).**
+  An aggressive end-to-end scrutiny pass over the whole trust chain
+  before any release is called ready — assume the backend is wrong and
+  try to demonstrate it. Non-implementer perspective required (fresh
+  auditor context, not the implementing session). Scope, at minimum:
+  - **False-theorem probes against replay**: try to get
+    `offline_lean_replay` to accept an unsound proof — axiom
+    introduction beyond the allowlist (prefix/suffix/namespace and
+    unicode-lookalike name variants), `open`/notation shadowing of
+    checked helpers, macro/elab tricks, Prop-level trivialization,
+    proofs of a different-but-similar goal, stale-artifact and
+    staging-path confusion, `LEAN_PATH`/toolchain substitution.
+  - **Emission-seam probes**: recognizer/lowering seams (the six-bug
+    under-approximation pattern), telescope pin residue (same-arity
+    wrong-type binders), rawification and adaptation chokepoints,
+    `InjectCodeDecl` policy, `scLiteralFold`, the two Vec/BitVec
+    round-trip axioms.
+  - **Harness-blindness probes**: can a regression go green while
+    checking nothing (vacuous goldens, `fails`-wrapped rows that fail
+    for the wrong reason, known-gap census masking a real failure)?
+  - **Differential stress**: adversarially chosen SAWCore terms where
+    SAW evaluation and emitted-Lean evaluation could plausibly
+    diverge (boundary widths, zero divisors, empty vectors, deep
+    nesting, shadowing, exotic-but-legal module shapes).
+  - Every finding lands as a pinned regression row (or a documented
+    reject) before release; the audit report is a doc/ artifact.
+
 ## Operative Priority: Obligation Placement & Satisfiability
 
 Full design: `doc/2026-07-12_obligation-placement-design.md`.
@@ -1519,12 +1546,44 @@ reject and pin a fixture rather than widen a heuristic.
   - Prefer stable helper names and local names in generated goals.
   - Keep readability changes behind elaboration and proof-regression tests.
 
-- [ ] Consider renaming the Lean support namespace/package.
-  - Current names such as `CryptolToLean` reflect the original prototype, but
-    the backend is translating SAWCore proof obligations to Lean. A later
-    cleanup should evaluate a rename toward `SAWCoreToLean` or similar.
-  - Defer until the proof-discharge core is stable; this will be broad
-    artifact/import churn rather than a semantic milestone.
+- [x] **Consider renaming the Lean support namespace/package —
+  DECIDED 2026-07-17: keep `CryptolToLean`, document provenance.**
+  The name is exact parity with upstream Rocq's `CryptolToRocq`
+  (`saw-core-rocq/rocq/handwritten/CryptolToRocq/`); a Lean-only
+  rename would manufacture a backend divergence to fix a cosmetic
+  issue, re-pin ~1,900 goldens/fixtures, and require a coordinated
+  `saw-lean-example` update — right before the pre-release
+  soundness audit needs clean baselines. Provenance note added to
+  README.md (Layout). If it ever changes, it changes as a
+  coordinated `CryptolTo{Rocq,Lean}` rename upstream. Full
+  analysis: `doc/2026-07-17_swe-quality-review.md`.
+
+- [ ] **Execute the 2026-07-17 SWE-quality review findings**
+  (`doc/2026-07-17_swe-quality-review.md`; ranked there). Open items:
+  - **(#1, merge gate)** Move the trust kernel
+    (`otherTests/saw-core-lean/support/lean-check-core.sh`) out of
+    the test tree into `saw-core-lean/` proper; resolve from
+    `offline_lean_replay` via Cabal `data-files` instead of
+    `SAW_LEAN_ROOT` path-joining into a source checkout. No goldens.
+  - **(#2, merge gate)** Split `Term.hs` (6,776 lines) along its
+    existing banner sections — extract at least
+    `SAWCoreLean/Obligations.hs` and `SAWCoreLean/Convention.hs`.
+    Pure module reorganization; do BEFORE the pre-release soundness
+    audit so the audit reviews final structure.
+  - **(#3 residual)** Rename `support/lean-shape-test.sh` (named for
+    the removed `shape/` category, now serves `negative/`) and drop
+    its dead `shape/` path branch. README already fixed 2026-07-17.
+  - **(#4)** Split TODO.md: open items stay; Audit History +
+    Decision Log to durable `doc/` files; large COMPLETE blocks to
+    `doc/archive/`.
+  - **(#5)** Sweep superseded dated notes from `doc/` top level into
+    `doc/archive/`, keeping durable docs + README-canonized dated
+    refs.
+  - **(#6)** Rename `support-proofs/` → `conformance/` to break the
+    three-way "proof(s)" overlap; harness case arms + Makefile only.
+  - Nits: haddock note that `leanReplayGoalHash`/`ProofHash` are
+    provenance labels, not integrity hashes. (`saw.cabal` doc
+    pointer already fixed 2026-07-17.)
 
 ## Priority 3: Regression Coverage
 

@@ -17,8 +17,15 @@ Working end-to-end on:
   Cryptol primitives module in Lean.
 - `offline_lean` — emit a SAW proof obligation as
   `def goal : Prop := …` plus a `theorem goal_holds := by sorry`
-  stub. Phase 2's `getting-started.md` walks through discharging
-  one of these end-to-end with a tactic proof.
+  stub. Emission-only: the SAW goal stays unsolved. Phase 2's
+  `getting-started.md` walks through discharging one of these
+  end-to-end with a tactic proof.
+- `offline_lean_replay` — the discharge path: re-emits the goal
+  fresh, checks a user-completed Lean proof against it under the
+  factored trust kernel (exact-match axiom allowlist, sorry and
+  placeholder policy, drift checks), and only on full success
+  admits the SAW goal with recorded `LeanReplayEvidence`. Design
+  and audit record: `doc/2026-07-16_replay-design.md`.
 
 `Prelude.fix` is handled by proof-carrying emission. The backend emits
 the literal fixed-point body plus explicit Lean obligations for the
@@ -93,7 +100,9 @@ saw-core-lean/
 │   ├── Language/Lean/        # Lean 4 surface-syntax AST
 │   └── SAWCoreLean/          # translator
 ├── lean/                     # support library (Lake project)
-│   └── CryptolToLean/
+│   └── CryptolToLean/        # named for parity with Rocq's CryptolToRocq;
+│                             #   the library itself is SAWCore→Lean —
+│                             #   standalone Cryptol translation is a non-goal
 │       ├── SAWCoreScaffolding.lean
 │       ├── SAWCoreVectors.lean         # Vec ≡ Vector
 │       ├── SAWCoreBitvectors.lean      # bitvector n ≡ Vec n Bool
@@ -136,10 +145,16 @@ Three layers:
   integration suite (one cabal test wrapping `bash test.sh`).
   Pinned `.log.good` and `.lean.good` files; optional
   `lake env lean` elaboration when `lake` is available.
-- `otherTests/saw-core-lean/{shape,saw-boundary,proofs}/` — bespoke
-  per-test directories. Soundness shape probes
-  (`shape/`), gate-firing tests (`saw-boundary/`), end-to-end
-  semantic proofs (`proofs/offline_t{1,3,4}/`,
-  `proofs/walkthrough/`).
+- `otherTests/saw-core-lean/` — data-only test categories driven by
+  one orchestrator (`test.sh`, whose header comment is the
+  authoritative taxonomy): `drivers/` and `workflows/` (SAW runs
+  diffed against goldens, emitted Lean elaborated), `differential/`
+  (true semantic conformance: SAW and Lean observations compared),
+  `obligations/` (emitted contract-shape pins), `proofs/` and
+  `support-proofs/` (Lean discharges against emitted artifacts /
+  support-library lemmas), `proof-gaps/` (honest inventory of
+  undischargeable obligations), `negative/` (hand-rolled
+  should-fail Lean probes), `saw-boundary/` (SAW rejection and
+  boundary diagnostics), `stretch/` (manual stress probes).
 
 CI runs all three on every push (`.github/workflows/ci.yml`).
