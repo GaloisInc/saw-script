@@ -788,8 +788,9 @@ data Domain
   | DVarValue     -- ^ var-headed, head kind results in a Type sort:
                   --   value domain (Lean backstop covers Prop
                   --   instantiation — see PROP BACKSTOP above)
-  | DVarRaw       -- ^ var-headed, head kind results in Prop or is
-                  --   not a variable-kinded family we can commit to
+  | DVarRaw       -- ^ var-headed, head kind results in Prop: a
+                  --   proof-type family, raw (the ONLY production;
+                  --   a term-level variable head is 'DValue')
   deriving (Eq, Show)
 
 classifyDomain :: Term -> Domain

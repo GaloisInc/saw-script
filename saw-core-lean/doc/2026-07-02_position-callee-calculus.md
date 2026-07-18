@@ -190,6 +190,69 @@ The important well-formedness rules are:
 wrapped in runtime-value positions. Any implementation rule that says "`Nat`
 is always raw" or "`Nat` is always wrapped" is wrong.
 
+### The domain map (canonical, 2026-07-17)
+
+Every rule above that asks "is `tau` a value-domain type?" consults ONE
+total classification, the domain map `D(tau)`, implemented as
+`classifyDomain` (SAWCoreLean.Convention). No position rule may re-derive
+the answer with its own head dispatch; a position rule may only PROJECT
+`D(tau)` into its position vocabulary. (History: before 2026-07-17 the
+implementation carried ~8 hand-copied cascades that disagreed on
+variable-headed types — the Either@core/Stream@core over-rejections. The
+coherence audit `2026-07-17_domain-map-coherence-audit.md` is the record.)
+
+```text
+D(sort k)            = RawTypeDomain
+D(Num)               = RawTypeDomain    (recorded representation choice)
+D(Nat)               = NatDomain        (position-projected: index vs
+                                         computed value — see above)
+D(Eq ...)            = RawPropDomain
+D(Pi x:a. b)         = FunctionDomain
+D(x args), x a variable:
+    kind(x) = Pi ... -> sort k, k a Type sort  = ValueDomain
+    kind(x) = Pi ... -> Prop                   = RawPropDomain
+    kind(x) not sort-valued (term-level head)  = ValueDomain
+    (bare x is the zero-argument case; bare-vs-applied is NOT a
+     distinction the calculus recognizes)
+D(anything else)     = ValueDomain
+     (String, Integer, Rational, records/pairs, Stream, and every
+      other constant-headed data type; isort/qsort FLAGS are
+      advisory and strip to their TypeSort — no separate arm)
+```
+
+Only `Eq`-shaped propositions are domain-classified `RawPropDomain`. A
+non-`Eq` constant-headed proposition falls to `ValueDomain` and rides
+the Prop backstop below (loud at elaboration, never silent) — the WFPos
+"propositions are raw" rule is enforced for them by Lean, not by `D`.
+
+Two positional gates legitimately SHADOW the domain answer, and are the
+only ones: (1) the dependency/index gate — a binder whose variable feeds
+a later binder's type, a type, or an index position is raw regardless of
+`D` (the WFPos dependency rule above: a later `A`-dependency cannot be
+satisfied by an `Except String A` binder); (2) the recursor elimination
+sort (below). Everything else may only project `D`.
+
+**Variable-headed types are KIND-DIRECTED.** The head variable's declared
+kind is in Γ; its result sort decides the domain. No rule may classify a
+variable-headed type by kind-blind syntactic head tests (the retired
+`isVariableHead` recognizer); `isVariableHeadTypeFamily` survives only as
+a kind-based sort-valued-head recognizer inside orthogonal
+type-producing checks, never as a wrap authority.
+
+**The Prop backstop (load-bearing).** SAWCore ADMITS `Prop <= sort 0`
+cumulativity, so a Type-sort-kinded head CAN be instantiated at a
+proposition. `ValueDomain` classification (wrapping as
+`Except String (T(tau))`) remains sound because the emitted Lean is the
+backstop: `Except String P` at `P : Prop` is ill-typed in Lean 4, so the
+bad instantiation fails loudly at elaboration — never silently. Any
+change to the wrapping carrier must re-establish a backstop with this
+property, or `D` must grow an explicit exclusion.
+
+Recursor motive results project `D` with one extra parameter, the
+elimination sort: a `ValueDomain` or `NatDomain` motive body is a runtime
+value only under non-`Prop` elimination (mirroring the Nat rule); `Prop`
+elimination keeps the logical family raw.
+
 ## Translation Judgment
 
 The core judgment is:
@@ -667,6 +730,11 @@ When reviewing an implementation change, ask:
    representation?
 10. For a top-level declaration, what definition convention determined the
     body's expected position?
+
+- For every type the rule classifies: which `Domain` does `D(tau)`
+  assign, and does the rule PROJECT `classifyDomain` rather than
+  re-derive the answer with its own head dispatch? If it shadows the
+  domain answer, is it one of the two named positional gates?
 
 If the answer to any of these questions is unclear, the implementation is not
 yet reviewable enough for this semantic core.

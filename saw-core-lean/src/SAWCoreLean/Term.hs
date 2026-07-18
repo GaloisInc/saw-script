@@ -4474,16 +4474,22 @@ translateTermUnshared t =
                 translateBinders params $ \paramTerms ->
                   localTR (set skipBinderWrap surroundingCtx) $ do
                     body' <- translateTermLet body
-                    -- If the motive body is a value-domain type
-                    -- expression (Vec n α, Bool, …), wrap it so
-                    -- recursor case handlers' wrapped bodies
-                    -- match. For higher-sort bodies (Type, Pi-to-
-                    -- Type), don't wrap — they're not value-
-                    -- domain. 'shouldWrapBinder' is the same
-                    -- predicate the Pi case uses for its body.
+                    -- Generic type-producing lambda (an UNDIRECTED
+                    -- type family — recursor motives never route
+                    -- here; the dispatch translates them at their
+                    -- declared convention via
+                    -- 'translateMotiveAtConvention'). Wrap only a
+                    -- CONCRETE value-domain body (Vec n α, Bool, …);
+                    -- a var-headed body stays raw because with no
+                    -- consumer convention this path cannot commit a
+                    -- polymorphic family to the wrapped carrier
+                    -- (2026-07-17 doc-coherence audit M-1: this was
+                    -- the last hand-composed cascade; the projection
+                    -- below is behavior-identical to the old
+                    -- shouldWrapBinder && not isVariableHeadTypeFamily
+                    -- composite).
                     let body'' = if phase
-                                    && shouldWrapBinder body
-                                    && not (isVariableHeadTypeFamily body)
+                                    && classifyDomain body == DValue
                                     then wrapExcept body'
                                     else body'
                     pure (Lean.Lambda paramTerms body'')

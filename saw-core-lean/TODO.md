@@ -196,6 +196,12 @@ below track execution state as always.
   - intDiv under-applied in PIntegral dictionary fields — needs the
     proof-carrying partial-op FUNCTION-WRAPPER design (pinned by
     saw-boundary/polymorphic_seq_module_rejection).
+  - Domain-map residuals (2026-07-18_calculus-doc-audit.md, filed
+    non-soundness): B-3 role-reflecting raw reasons under Prop
+    elimination; B-4 project recursorMotiveFunctionConvention
+    .resultPos through classifyDomain (+ elimSort); C-nit smoketest
+    source lint pinning wrapExcept as the sole wrapping carrier
+    (Prop-backstop tamper evidence).
   - Function-carrier Eq.refl transport corner: seq_cong-style
     coercion at a WRAPPED FUNCTION carrier fails elaboration
     (pinned by differential/cryptol_chacha20_core_iterate;
