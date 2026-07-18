@@ -123,3 +123,41 @@ distinct per-op messages for hygiene), over-application,
 both-representations conflation, concrete-vs-symbolic ("which is
 SAW?" — neither is adoptable as a value; throw is the only
 representation consistent with both).
+## Extension (2026-07-18): total raw-target ops in dictionary fields
+
+After the partial-op wrappers landed, rev.cry translation succeeds
+and the frontier is TOTAL mapped primitives (intNeg in
+PRingInteger) unapplied in dictionary fields: the field slot's
+TYPE-side translation is the wrapped arrow (the Pi translator wraps
+value-domain Pis), but the VALUE side delivers the raw-target var
+"structurally" (FunctionArg Nothing from instantiationMode's Pi
+arm) — a producer/consumer representation split inside one
+emission, caught loudly by Lean (pinned:
+differential/cryptol_rev_module).
+
+Design (position-directed, two parts):
+1. `instantiationMode`: a Pi instantiation derives its DECLARED
+   convention from the instantiating Pi itself —
+   `FunctionArg (Just conv)` via the standard Pi→convention
+   derivation (the `recursorMotiveFunctionConvention` analysis,
+   generalized/renamed `piFunctionConvention`) — instead of
+   committing to Nothing. This makes the value side read the SAME
+   authority the type side already uses.
+2. Non-lambda actuals at a declared convention: the
+   `ExpectFunctionPosition (Just conv)` consumers currently handle
+   only Lambda heads; a Constant/var-headed function value whose
+   produced formals mismatch the convention eta-adapts (the
+   `translateFunctionToWrappedFormal` non-lambda pattern:
+   translate as-produced, then convention binders + `buildLifted`).
+   Adaptation stays convention-driven — no new adaptTo arm; the
+   eta form is constructed at the position that declared the
+   convention.
+
+Soundness shape: pure representation adaptation of TOTAL functions
+(no excluded points, no obligations); divergence impossible away
+from representation (eta of a total raw op = pure-lift per
+argument), and any mismatch remains a loud Lean type error. The
+one care point: do NOT eta-adapt at RAW-target callee positions
+(their formals are genuinely raw — the existing structural
+delivery is correct there); the convention derivation only fires
+where the instantiating Pi's translation wraps.
