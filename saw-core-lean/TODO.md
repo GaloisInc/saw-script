@@ -187,6 +187,20 @@ Full plan: `doc/2026-07-14_release-plan.md`. Decisions recorded there
 0.01 workstreams and exit criteria live in the plan doc; the items
 below track execution state as always.
 
+- [ ] **W1 rev.cry frontier (post-2026-07-17 domain-map landing).** The
+  Either@core and Stream@core recursor-convention holes are CLOSED
+  (kind-directed classifyDomain; design + audits in
+  doc/2026-07-17_either-stream-recursor-convention.md and
+  doc/2026-07-17_domain-map-coherence-audit.md). Two named blockers
+  remain on the rev.cry exit criterion, both pinned:
+  - intDiv under-applied in PIntegral dictionary fields — needs the
+    proof-carrying partial-op FUNCTION-WRAPPER design (pinned by
+    saw-boundary/polymorphic_seq_module_rejection).
+  - Function-carrier Eq.refl transport corner: seq_cong-style
+    coercion at a WRAPPED FUNCTION carrier fails elaboration
+    (pinned by differential/cryptol_chacha20_core_iterate;
+    iround_zero elaborates — its residual is observer budget).
+
 - [ ] **Pre-release soundness audit (release gate, added 2026-07-17).**
   An aggressive end-to-end scrutiny pass over the whole trust chain
   before any release is called ready — assume the backend is wrong and

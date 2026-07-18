@@ -1,0 +1,24 @@
+// Differential known-gap litmus: ChaCha20 `core` (iterate-family
+// stream comprehension). HISTORY: rejected at Prelude::Stream@core
+// until 2026-07-17 (kind-directed domain map closed that hole —
+// doc/2026-07-17_either-stream-recursor-convention.md); translation
+// and emission now SUCCEED (the concrete `@ 10` index normalizes the
+// iterate fix away; only checked-access obligations + the Stream
+// ctor-order assertion remain). The pipeline currently dies at Lean
+// elaboration: an Eq.refl application mismatch on a seq_cong-style
+// coercion at a WRAPPED FUNCTION carrier — the function-carrier
+// equality-transport corner, filed in TODO.md (W1). This row pins
+// that frontier; when the corner is fixed the gap stops firing and
+// this row must be promoted to a true differential comparison.
+
+import "../../../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Stream/chacha20.cry";
+
+let observed =
+  {{ core zero == core zero }};
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;

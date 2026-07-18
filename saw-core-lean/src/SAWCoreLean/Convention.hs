@@ -809,13 +809,19 @@ classifyDomain ty
         _ -> DValue
 
 shouldWrapBinder :: Term -> Bool
-shouldWrapBinder ty
-  | Just _ <- asSort ty       = False
-  | isCryptolNumType ty       = False
-  | Just _ <- asNatType ty    = False
-  | Just _ <- asEq ty         = False
-  | Just _ <- asPi ty         = False
-  | otherwise                 = True
+shouldWrapBinder ty = case classifyDomain ty of
+  DValue    -> True
+  DVarValue -> True
+  -- DVarRaw was previously True here (the pre-classifier cascade
+  -- fell through to @otherwise@); under the kind-directed rule a
+  -- Prop-kinded var-headed family is a proof type and must not
+  -- wrap — this is intended cell-(h) alignment, not drift
+  -- (2026-07-17 audits, condition 3).
+  DVarRaw   -> False
+  DRawType  -> False
+  DRawProp  -> False
+  DFunction -> False
+  DNat      -> False
 
 isCryptolNumType :: Term -> Bool
 isCryptolNumType ty = case asGlobalDef ty of

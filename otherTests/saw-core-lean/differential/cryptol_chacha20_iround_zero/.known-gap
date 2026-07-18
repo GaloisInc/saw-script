@@ -1,0 +1,1 @@
+ChaCha20 iround-0 translates, emits, and ELABORATES since 2026-07-17 (Stream@core hole closed; this shape avoids the function-carrier transport corner) — the residual gap is observer budget: the #reduce differential observation of the 16x32 concrete computation exceeds Lean's default maximum recursion depth (same budget family as the doubleround ITP gap).

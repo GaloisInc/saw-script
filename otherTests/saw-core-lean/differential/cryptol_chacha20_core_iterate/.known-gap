@@ -1,0 +1,1 @@
+ChaCha20 core (iterate-family stream comprehension) translates and emits since 2026-07-17 (Stream@core recursor-convention hole closed by the kind-directed domain map), but the emitted artifact fails Lean elaboration at a function-carrier Eq.refl transport (seq_cong coercion at wrapped function type) — the W1 function-carrier equality-transport corner.

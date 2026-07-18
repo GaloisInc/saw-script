@@ -94,20 +94,12 @@ import           SAWCoreLean.Convention
 import           SAWCoreLean.FixRecognizer
 import           SAWCoreLean.Monad
 import           SAWCoreLean.SpecialTreatment
--- True for terms whose head is a SAW 'Variable' — i.e. the term
--- is a (possibly applied) type-variable. Examples:
---   * @t@ where @t : sort 1@ — the binder is at the type
---     variable itself.
---   * @p y pf@ where @p : (y : t) → Eq t x y → sort u_motive@
---     — the term is a polymorphic application whose sort is
---     determined by the motive's universe (which could be
---     'Prop'). Wrapping would force a specific universe
---     constraint that doesn't hold polymorphically.
-isVariableHead :: Term -> Bool
-isVariableHead t = case unwrapTermF t of
-  Variable _ _ -> True
-  App f _ -> isVariableHead f
-  _ -> False
+-- The historical 'isVariableHead' (kind-blind var-headed test) was
+-- retired by the 2026-07-17 domain-map consolidation: every former
+-- consumer now projects from 'classifyDomain', whose var-headed
+-- arms are KIND-DIRECTED (Type-sort head kind -> value, Prop ->
+-- raw). Its universe rationale lives on in the 'Domain' doc
+-- (Convention.hs) as the Prop backstop contract.
 
 -- | True when the head is an opaque local type family, e.g.
 -- @p : (y : t) -> Eq t x y -> Sort u@ used as @p y pf@.
@@ -730,13 +722,19 @@ varHeadedInstantiation binders srcArgs ix bty =
 -- caller's own type parameter) lands in the value-domain residual,
 -- the same assumption the un-supplied case carries.
 instantiationMode :: Term -> ArgMode
-instantiationMode inst
-  | isJust (asSort inst) = TypeArg
-  | isJust (asEq inst) = PropositionArg
-  | isJust (asPi inst) = FunctionArg Nothing
-  | isCryptolNumType inst = TypeArg
-  | isJust (asNatType inst) = IndexArg
-  | otherwise = RawValueArg
+instantiationMode inst = case classifyDomain inst of
+  DRawType  -> TypeArg
+  DRawProp  -> PropositionArg
+  DFunction -> FunctionArg Nothing
+  DNat      -> IndexArg
+  DValue    -> RawValueArg
+  -- Var-headed instantiations (nested polymorphism — the caller's
+  -- own type parameter) keep the value-domain residual for BOTH
+  -- kinds: RawValueArg's bind-iff-wrapped discipline is inert for
+  -- raw actuals, so a Prop-kinded family's (always-raw) values
+  -- splice unchanged. Not a kind-directed cell change.
+  DVarValue -> RawValueArg
+  DVarRaw   -> RawValueArg
 
 -- | Derive the ordinary Phase-β definition convention's argument
 -- modes from the callee's SAWCore Pi type plus the supplied actuals
@@ -771,21 +769,22 @@ phaseBetaArgModesFor fty srcArgs =
     modeFor ix bty
       | ix `elem` typeIxs =
           if isJust (asSort bty) then TypeArg else IndexArg
-      | isJust (asSort bty) = TypeArg
-      | isJust (asEq bty) = PropositionArg
-      | isJust (asPi bty) = FunctionArg Nothing
-      -- Num is Cryptol's singleton width/index CLASSIFIER, not a
-      -- value-domain computation (see 'shouldWrapBinder') — the
-      -- type-argument family, never bound. ('IndexArg' would bind a
-      -- wrapped Num actual; the legacy plan never did.)
-      | isCryptolNumType bty = TypeArg
-      | isJust (asNatType bty) = IndexArg
-      -- Var-headed formals: instantiation-directed where the type
-      -- actual is supplied (see the function doc); the value-domain
-      -- residual otherwise.
-      | Just inst <- varHeadedInstantiation binders srcArgs ix bty =
-          instantiationMode inst
-      | otherwise = RawValueArg
+      | otherwise = case classifyDomain bty of
+          -- Num is Cryptol's singleton width/index CLASSIFIER, not
+          -- a value-domain computation — the type-argument family,
+          -- never bound; 'DRawType' covers both sorts and Num.
+          DRawType  -> TypeArg
+          DRawProp  -> PropositionArg
+          DFunction -> FunctionArg Nothing
+          DNat      -> IndexArg
+          DValue    -> RawValueArg
+          -- Var-headed formals: instantiation-directed where the
+          -- type actual is supplied (see the function doc); the
+          -- value-domain residual otherwise (discipline-inert for
+          -- raw actuals — see 'instantiationMode').
+          _ | Just inst <- varHeadedInstantiation binders srcArgs ix bty ->
+                instantiationMode inst
+            | otherwise -> RawValueArg
 
 -- | The bind discipline each mode implies on the raw-formal
 -- ordinary-definition path. See 'phaseBetaArgModesFor'.
@@ -824,19 +823,23 @@ phaseBetaFunctionValueModesFor fty =
     modeFor ix bty
       | ix `elem` typeIxs =
           if isJust (asSort bty) then TypeArg else IndexArg
-      | isJust (asSort bty) = TypeArg
-      | isJust (asEq bty) = PropositionArg
-      | isJust (asPi bty) = FunctionArg Nothing
-      | isCryptolNumType bty = TypeArg
-      | isJust (asNatType bty) = IndexArg
-      -- Var-headed formals: this family's emitted Pi WRAPS them
-      -- ('shouldWrapBinder' is True for variables — the function
-      -- value's formal is a phase-β value slot), unlike the
-      -- raw-target family where they bind. First candidate special-
-      -- cased them raw and the oracle rejected it on the smoketest
-      -- (fix/iterate shapes peel Except at var-headed slots).
-      | shouldWrapBinder bty = RawValueArg
-      | otherwise = IndexArg
+      | otherwise = case classifyDomain bty of
+          DRawType  -> TypeArg
+          DRawProp  -> PropositionArg
+          DFunction -> FunctionArg Nothing
+          DNat      -> IndexArg
+          DValue    -> RawValueArg
+          -- Var-headed formals of Type-sort kind: this family's
+          -- emitted Pi WRAPS them (the function value's formal is a
+          -- phase-β value slot), unlike the raw-target family where
+          -- they bind. An earlier candidate special-cased them raw
+          -- and the oracle rejected it on the smoketest (fix/iterate
+          -- shapes peel Except at var-headed slots).
+          DVarValue -> RawValueArg
+          -- Prop-kinded family formals are proof slots: raw, never
+          -- wrapped by the emitted Pi (kind-directed cell (h);
+          -- 'IndexArg' discipline = splice raw, bind only wrapped).
+          DVarRaw   -> IndexArg
 
 -- | Convention-internal predicate (plan Slice 7), consulted ONLY by
 -- 'phaseBetaResultIsValue' — never a standalone position authority.
@@ -867,7 +870,16 @@ natValueResult fty =
 -- predicates, not position authorities).
 phaseBetaResultIsValue :: Term -> Bool
 phaseBetaResultIsValue fty =
-  shouldWrapBinder ret || isVariableHead ret || natValueResult fty
+  case classifyDomain ret of
+    DValue    -> True
+    -- Kind-directed (2026-07-17 audits, condition 3): the historical
+    -- 'isVariableHead ret' disjunct wrapped EVERY var-headed result
+    -- with no kind check; under 'classifyDomain' only Type-sort-
+    -- kinded heads are value results, and a Prop-kinded family
+    -- result is a proof (raw) — the deliberate cell-(h) fix.
+    DVarValue -> True
+    DNat      -> natValueResult fty
+    _         -> natValueResult fty
   where
     (_, ret) = asPiList fty
 
@@ -965,11 +977,14 @@ translateFunctionWithWrappedResult t = do
 functionConventionValueSlot :: [Int] -> Int -> Term -> Bool
 functionConventionValueSlot typeIxs ix ty =
      ix `notElem` typeIxs
-  && isNothing (asSort ty)
-  && isNothing (asEq ty)
-  && isNothing (asPi ty)
-  && not (isCryptolNumType ty)
-  && (shouldWrapBinder ty || isVariableHead ty)
+  && case classifyDomain ty of
+       DValue    -> True
+       -- Kind-directed (2026-07-17 audits): the historical
+       -- 'isVariableHead' disjunct counted every var-headed type as
+       -- value; only Type-sort-kinded heads are — a Prop-kinded
+       -- family slot is a proof slot (raw), cell (h).
+       DVarValue -> True
+       _         -> False
 
 -- | Convention-internal (plan Slice 7): the type-domain test "is this
 -- SAW type a value-domain type" with var-headed types counting as
@@ -981,11 +996,10 @@ functionConventionValueSlot typeIxs ix ty =
 -- authority.
 functionConventionResultIsValue :: Term -> Bool
 functionConventionResultIsValue ty =
-     isNothing (asSort ty)
-  && isNothing (asEq ty)
-  && isNothing (asPi ty)
-  && not (isCryptolNumType ty)
-  && (shouldWrapBinder ty || isVariableHead ty)
+  case classifyDomain ty of
+    DValue    -> True
+    DVarValue -> True  -- kind-directed; see 'functionConventionValueSlot'
+    _         -> False
 
 -- | Calculus §Recursors (plan Slice 6.1): the declared position of a
 -- fully-applied recursor's result — the single field
@@ -1012,19 +1026,29 @@ functionConventionResultIsValue ty =
 -- declared convention ('recursorMotiveFunctionConvention') — never
 -- @ExpectFunctionPosition Nothing@.
 recursorMotiveResultPosition :: Sort -> Term -> ExpectedPosition
-recursorMotiveResultPosition elimSort motiveBody
-  | Just _ <- asSort motiveBody = ExpectRaw RawTypePosition
-  | Just _ <- asEq motiveBody = ExpectRaw RawPropositionPosition
-  | Just _ <- asPi motiveBody =
+recursorMotiveResultPosition elimSort motiveBody =
+  case classifyDomain motiveBody of
+    DRawType  -> ExpectRaw RawTypePosition
+    DRawProp  -> ExpectRaw RawPropositionPosition
+    DFunction ->
       ExpectFunctionPosition
         (Just (recursorMotiveFunctionConvention motiveBody))
-  | isCryptolNumType motiveBody = ExpectRaw RawTypePosition
-  | Just _ <- asNatType motiveBody =
-      if elimSort /= propSort
-         then ExpectRuntimeValue
-         else ExpectRaw RawIndexPosition
-  | isVariableHeadTypeFamily motiveBody = ExpectRaw RawValuePosition
-  | otherwise = ExpectRuntimeValue
+    DNat
+      | elimSort /= propSort -> ExpectRuntimeValue
+      | otherwise            -> ExpectRaw RawIndexPosition
+    DValue    -> ExpectRuntimeValue
+    -- Kind-directed rule (2026-07-17 design + audits; the Either@core
+    -- / Stream@core fix): a var-headed motive body whose head kind
+    -- results in a Type sort is a VALUE the recursor computes — it
+    -- wraps and the wrapped-scrutinee Bind.bind path applies. Gated
+    -- on non-Prop elimination like the Nat arm (audit condition 1);
+    -- Prop-kinded heads stay raw. The pre-classifier rule sent every
+    -- var-headed body raw, which over-rejected (bare 'a' motives —
+    -- Prelude.either, streamGet) against every other site's answer.
+    DVarValue
+      | elimSort /= propSort -> ExpectRuntimeValue
+      | otherwise            -> ExpectRaw RawValuePosition
+    DVarRaw   -> ExpectRaw RawValuePosition
 
 -- | The declared function convention of a function-motive recursor
 -- (plan Slice 6.1): binder positions from the same value-slot

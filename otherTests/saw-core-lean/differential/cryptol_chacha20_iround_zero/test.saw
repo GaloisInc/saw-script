@@ -1,0 +1,24 @@
+// Differential known-gap litmus: ChaCha20 `iround 0` (iterate-family
+// stream comprehension). HISTORY: rejected at Prelude::Stream@core
+// until 2026-07-17 (kind-directed domain map closed that hole —
+// doc/2026-07-17_either-stream-recursor-convention.md); translation
+// and emission now SUCCEED (the concrete `@ 10` index normalizes the
+// iterate fix away; only checked-access obligations + the Stream
+// ctor-order assertion remain), and the artifact ELABORATES — this
+// shape avoids the function-carrier transport corner that still
+// blocks the core row. Residual gap: the #reduce observation of the
+// concrete 16x32 computation exceeds Lean's default recursion depth
+// (observer budget, doubleround-ITP family). When an observer with
+// an adequate budget lands, promote to a true differential row.
+
+import "../../../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Stream/chacha20.cry";
+
+let observed =
+  {{ iround 0 zero == zero }};
+
+print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  observed;
