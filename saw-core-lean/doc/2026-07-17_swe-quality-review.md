@@ -79,7 +79,7 @@ objection a maintainer would raise at merge.
 
 [FIXED 2026-07-17: README rewritten; script renamed
 `lean-negative-test.sh` with header/paths updated (also caught a
-residual "attacks/" mention from the vocabulary sweep); `test.sh`
+residual interim-name mention from the vocabulary sweep); `test.sh`
 and `ci.yml` references updated.]
 
 `README.md` described `{shape,saw-boundary,proofs}` with "Soundness

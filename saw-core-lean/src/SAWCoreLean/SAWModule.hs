@@ -1,7 +1,5 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -117,7 +115,7 @@ translateDef Def{..} = do
     emitWith mode name = case defQualifier of
       NoQualifier -> case defBody of
         Nothing   ->
-          Except.throwError $ RejectedPrimitive shortName $
+          Except.throwError $ RejectedPrimitive shortName
             "NoQualifier def has no body — SAWCore internal contract violation"
         Just body -> do
           ((body', tp'), univs, auxDecls) <- liftTermTranslationMonad $ mode $ do
@@ -131,7 +129,7 @@ translateDef Def{..} = do
 
     rejectAxiomOrPrimitive :: ModuleTranslationMonad m => Lean.Ident -> m (Doc ann)
     rejectAxiomOrPrimitive _ =
-      Except.throwError $ RejectedPrimitive shortName $
+      Except.throwError $ RejectedPrimitive shortName
         "generic Lean axiom emission is disabled. Map this SAW axiom or \
         \primitive to an explicit checked support-library declaration, skip it \
         \with a documented hand-library equivalent, or emit a proof obligation \
@@ -154,7 +152,7 @@ translateDataType DataType{..} = do
     DefRename _   -> failUnsupported
   where
     failUnsupported =
-      Except.throwError $ RejectedPrimitive (toShortName (nameInfo dtName)) $
+      Except.throwError $ RejectedPrimitive (toShortName (nameInfo dtName))
         "auto-emit of SAWCore data types is not yet implemented; \
         \map it to a hand-library equivalent via `mapsTo` in \
         \`SAWCoreLean.SpecialTreatment`."

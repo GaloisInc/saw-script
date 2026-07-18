@@ -72,7 +72,7 @@ Passing (the standing fences):
   gaps), with emitted artifacts elaborated. Tree restructured
   2026-07-15 (see otherTests/saw-core-lean/README.md): `workflows/`
   split out of `drivers/` for the end-to-end SAWScript rows;
-  `shape/` renamed `attacks/`; the 17 legacy `drivers/conformance_*`
+  `shape/` renamed (now `negative/`); the 17 legacy `drivers/conformance_*`
   litmus rows dispositioned (15 retired against named successors,
   2 unique residuals migrated as `differential/vector_zip_unequal`
   and `differential/nat_division_defined`).

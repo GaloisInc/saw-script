@@ -1064,7 +1064,7 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       -- R3b (fifth-audit amendment D): paired-stream mutual
       -- corecursion has its own disposition — an explicit NAMED
       -- rejection, never the retired-contract fallback and never a
-      -- smuggled lowering.
+      -- silently introduced lowering.
       boolTy       <- scBoolType sc
       true         <- scBool sc True
       false        <- scBool sc False
@@ -1479,7 +1479,7 @@ fixClassifierTests sc = testGroup "classifyFixShape (Slice R0, inert)"
             n32 <- scNat sc 32
             elemTy <- scGlobalApply sc "Prelude.Vec" [n32, boolTy]
             scGlobalApply sc "Prelude.at" [n9, elemTy, recVar, i2Var])
-        (\iVar -> pure iVar)
+        pure
       assertUnrecognized "same-index tail" (classifyFixShape vecTy body)
 
   , testCase "bare rec as a zip operand is Class F" $ do

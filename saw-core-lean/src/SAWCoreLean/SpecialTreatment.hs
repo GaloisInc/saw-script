@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 {- |
@@ -158,8 +157,7 @@ data IdentSpecialTreatment = IdentSpecialTreatment
 -- counterparts.
 moduleRenamingMap :: Map ModuleName ModuleName
 moduleRenamingMap = Map.fromList $
-  over _1 (mkModuleName . (: [])) <$>
-  over _2 mkModuleName <$>
+  over _1 (mkModuleName . (: [])) . over _2 mkModuleName <$>
   [ ("Cryptol", ["CryptolToLean", "CryptolPrimitivesForSAWCore"])
   , ("Prelude", ["CryptolToLean", "SAWCorePrelude"])
   ]
@@ -975,7 +973,7 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
 rawUnaryHelper :: Lean.Ident -> IdentSpecialTreatment
 rawUnaryHelper target =
   IdentSpecialTreatment DefSkip
-    (UseMacro 1 UseResultRaw (\args -> Lean.App (Lean.Var target) args))
+    (UseMacro 1 UseResultRaw (Lean.App (Lean.Var target)))
 
 -- | Lean-side helpers for SAWCore's Nat/Pos constructors.
 -- Defined in 'CryptolToLean.SAWCorePrimitives'.

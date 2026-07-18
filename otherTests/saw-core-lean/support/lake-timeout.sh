@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # lake-timeout.sh — picks a wall-clock guard for `lake build` and
 # `lake env lean` invocations from the saw-core-lean test harnesses.
 #

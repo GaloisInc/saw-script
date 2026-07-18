@@ -2,10 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE ViewPatterns #-}
 
 {- |
 Module      : SAWCoreLean.Term
@@ -52,20 +49,18 @@ module SAWCoreLean.Term
   , classifyFixShape
   ) where
 
-import           Control.Lens                 (makeLenses, over, set, view)
+import           Control.Lens                 (over, set, view)
 import           Control.Monad                (unless, zipWithM)
 import qualified Control.Monad.Except         as Except
-import           Control.Monad.Reader         (MonadReader(local), asks)
-import           Control.Monad.State          (get, modify)
+import           Control.Monad.Reader         (asks)
+import           Control.Monad.State          (gets, modify)
 import           Data.Foldable                (toList)
 import qualified Data.IntMap.Strict           as IntMap
-import           Data.IntMap.Strict           (IntMap)
 import qualified Data.IntSet                  as IntSet
-import           Data.List                    (find, findIndex)
+import           Data.List                    (elemIndex, findIndex)
 import qualified Data.Map                     as Map
 import           Data.Map                     (Map)
-import           Data.Maybe                   (fromMaybe, isJust, isNothing,
-                                               mapMaybe)
+import           Data.Maybe                   (fromMaybe, isJust, isNothing)
 import qualified Data.Set                     as Set
 import           Data.Set                     (Set)
 import qualified Data.Text                    as Text
@@ -94,734 +89,11 @@ import           SAWCore.Term.Functor
 import           SAWCore.Term.Pretty          (scTermCount, shouldMemoizeTerm)
 import           SAWCore.Term.Raw             (Term(..))
 
+import           SAWCoreLean.Contracts
+import           SAWCoreLean.Convention
+import           SAWCoreLean.FixRecognizer
 import           SAWCoreLean.Monad
 import           SAWCoreLean.SpecialTreatment
-
--- | A Lean identifier introduced for a shared subterm via let-binding.
--- Audit P-1 (2026-05-06) revealed that without sharing, the translator
--- re-translates each shared subterm 2^N times for N nested aliases —
--- ate ~100 GB on Salsa20. Mirrors @SAWCoreRocq.Term.SharedName@.
-newtype SharedName = SharedName { sharedNameIdent :: Lean.Ident }
-  deriving Show
-
--- | Expected-shape migration state for Lean identifiers in scope. This
--- replaces the old one-bit "wrapped variable" set: a variable can be an
--- outer 'Except' value, a function-shaped value, or a raw/type-like
--- value. Only 'BindingWrapped' should be unwrapped with 'Bind.bind'.
-data BindingShape
-  = BindingRaw
-  | BindingWrapped
-  | BindingFunction
-  deriving (Eq, Show)
-
-data RawReason
-  = RawValuePosition
-  | RawTypePosition
-  | RawIndexPosition
-  | RawPropositionPosition
-  | RawProofPosition
-  | RawMotivePosition
-  | RawLogicalPosition
-  | StructuralRecursorFieldPosition
-  deriving (Eq, Show)
-
-data ExpectedPosition
-  = ExpectRuntimeValue
-  | ExpectRaw RawReason
-  | ExpectFunctionPosition (Maybe FunctionConvention)
-    -- ^ A function position. @'Just' c@ carries the declared
-    -- convention that drives binder/result positions. 'Nothing' is a
-    -- PERMANENT production, not a migration bridge: some surrounds
-    -- (e.g. Eq.rec branch/carrier transport) legitimately demand "a
-    -- function delivered structurally" without constraining its
-    -- binder positions — Lean's typechecker guards the arity.
-  deriving (Eq, Show)
-
--- | Calculus §Positions: a function position recursively assigns a
--- position to each binder and to the result. 'fcArgPositions' is
--- outermost-first and must cover every binder of the lambda it is
--- applied to (translation rejects otherwise — no silent padding).
-data FunctionConvention = FunctionConvention
-  { fcArgPositions   :: [ExpectedPosition]
-  , fcResultPosition :: ExpectedPosition
-  }
-  deriving (Eq, Show)
-
--- | What a recursor motive's body computes (plan Slice 3c; calculus
--- §Recursors — "motive result position" is a declared convention
--- field). This is deliberately NOT a 'FunctionConvention' result
--- position: a motive's body is a TYPE-level expression, and a
--- value-computing motive wraps its body type in @Except String@
--- ('wrapExcept') — never a 'Pure.pure' value lift.
-data MotiveResultMode
-  = MotiveComputesRuntimeValueType
-    -- ^ Phase-β value motive: the body type wraps
-    -- (@… → Except String T@).
-  | MotiveComputesRawType
-    -- ^ Type/proof/function motive: the body type stays raw.
-  deriving (Eq, Show)
-
--- | Declared convention for a recursor motive: per-binder positions
--- (datatype indices, then the eliminated scrutinee) and the result
--- mode. Produced by the recursor dispatch, consumed by
--- 'translateMotiveAtConvention'.
-data MotiveConvention = MotiveConvention
-  { mcBinderPositions :: [ExpectedPosition]
-  , mcResultMode      :: MotiveResultMode
-  }
-  deriving (Eq, Show)
-
--- | Calculus §Callee Conventions: the explicit per-argument mode of a
--- callee convention (plan Slice 4a). An 'ArgMode' declares what the
--- callee's formal IS, and the convention interpreter derives from it
--- both the actual's expected position and the allowed adaptation:
---
---   * 'RuntimeArg' actuals adapt to runtime values ('Pure.pure' lift
---     of raws);
---   * 'IndexArg' actuals must arrive raw; a *wrapped* runtime-computed
---     index is sequenced through an error-preserving 'Bind.bind'
---     ahead of the application (never opened, never defaulted), and a
---     function-shaped actual is forbidden;
---   * 'TypeArg' / 'RawValueArg' / proof-family actuals must arrive
---     raw; anything else is forbidden;
---   * 'ProofArg' marks a source proof argument that is dropped at
---     emission and re-proved as a Lean obligation;
---   * 'FunctionWithNatLtArg' is the PERMANENT convention for
---     proof-carrying generator functions whose index is bounded by
---     the helper argument at the given (post-drop) position (e.g.
---     'genWithBoundsM' callbacks receiving @i < n@ evidence). A
---     once-planned fold into 'FunctionArg' never proved necessary —
---     the evidence-threading slot is what distinguishes it.
-data ArgMode
-  = TypeArg
-  | IndexArg
-  | RuntimeArg
-  | RawValueArg
-  | ProofArg
-  | PropositionArg
-  | MotiveArg
-  | StructuralFieldArg
-  | FunctionArg (Maybe FunctionConvention)
-  | FunctionWithNatLtArg Int
-  deriving (Eq, Show)
-
--- | Calculus §Callee Conventions: a convention's declared result mode.
--- Today every checked-application contract declares 'RuntimeResult';
--- the 'RawResult'/'FunctionResult' arms are the calculus's declared
--- vocabulary, kept so a future contract with a raw or function result
--- states its mode in the table rather than growing a side channel
--- (release audit 2026-07-14: declared-but-unproduced, deliberate).
-data ResultMode
-  = RuntimeResult
-  | RawResult RawReason
-  | FunctionResult FunctionConvention
-  deriving (Eq, Show)
-
-data EqualitySubjectRep
-  = EqualitySubjectRuntimeValue
-  | EqualitySubjectRaw RawReason
-  | EqualitySubjectRawFunction
-    -- ^ Function-carrier equality (plan Slice 5c): the subjects are
-    -- function-shaped and the carrier is the CURRENT-mode translation
-    -- of the source function type — in raw logical content (e.g. the
-    -- auto-emitted Prelude's @inverse_eta_rule@) that is the raw
-    -- @a -> b@ the lemma quantifies over; in Phase-β value content it
-    -- is the translated effectful type. Never a rawified value-level
-    -- signature: the carrier compares the functions SAW actually
-    -- denotes in that mode. Subjects deliver structurally (a function
-    -- undergoes no representation change); a wrapped operand mixed
-    -- with a function subject rejects — the carrier would not be
-    -- uniquely determined.
-  deriving (Eq, Show)
-
-data RawLogicalCallee
-  = RawLogicalEq
-  | RawLogicalRefl
-  | RawLogicalEqRec
-  deriving (Eq, Show)
-
--- | The full @Eq.rec@ field set the calculus requires (§Raw Logical
--- Callees, plan Slice 5b): every position a proof transport touches
--- is a declared field, so the operands, the motive's binders and
--- result, the branch, the proof, and the final result are consistent
--- BY CONSTRUCTION — never by translation-mode coincidence.
---
--- All fields derive from the declared subject representation ρ_eq at
--- convention-construction time ('eqRecConventionForStandalone'); the
--- lowering consumes only the record and never re-inspects operands.
-data EqRecConvention = EqRecConvention
-  { ercSubjectRep    :: EqualitySubjectRep
-    -- ^ Operand position ρ_eq: the representation @x@ and @y@ stand at.
-  , ercCarrierLevel  :: Maybe Lean.UnivLevel
-    -- ^ Universe class of the carrier @SubjectRep(a, ρ_eq)@. Recorded
-    -- for the trace/audit record; @Eq.rec@ itself is emitted without
-    -- explicit universes (Lean elaborates them from the motive), and
-    -- the motive's inner equality proposition emits its own @.{k}@
-    -- through the standalone path.
-  , ercMotive        :: MotiveConvention
-    -- ^ Motive binder positions (@y@ at ρ_eq, the equality proof at a
-    -- raw proof position) and the motive result mode.
-  , ercBranchPosition :: ExpectedPosition
-    -- ^ Branch position: the motive result at @y := x@.
-  , ercProofPosition :: RawReason
-    -- ^ Proof position (always a raw proof; its interpreter follows
-    -- ρ_eq so equality nodes INSIDE the proof term classify their
-    -- subjects consistently with the declared carrier).
-  , ercResultShape   :: BindingShape
-    -- ^ Final result position, as the shape the surround adapts.
-  }
-  deriving (Show)
-
--- NOTE (plan Slice 4c): the old 'CalleeConvention' enum — including
--- its 'CalleeTransitional' constructor — is DELETED, not filled in.
--- Only its raw-logical arm was ever consumed; the dispatch's real
--- classifier is the declarative guard chain over the contract tables
--- ('translateIdentWithArgsWithShape') with declared 'ArgMode' slots.
--- 'CalleeTransitional' count: zero, permanently.
-
-data RecursorScrutineeMode
-  = RecursorScrutineeRaw
-  | RecursorScrutineeWrapped
-  deriving (Eq, Show)
-
-data RecursorResultMode
-  = RecursorReturnsWrappedValue
-  | RecursorReturnsRawTypeOrProof
-  | RecursorReturnsFunction
-  deriving (Eq, Show)
-
-data RecursorConvention = RecursorConvention
-  { recScrutineeMode :: RecursorScrutineeMode
-  , recResultMode    :: RecursorResultMode
-  , recMotiveResultPosition :: ExpectedPosition
-    -- ^ The declared motive result position (plan Slice 6.1;
-    -- calculus §Recursors): the single source
-    -- 'recursorMotiveResultPosition' computes and from which
-    -- 'recResultMode' and 'recFinalShape' DERIVE. Consumed directly
-    -- by 'motiveConventionFor' for the motive's result mode.
-  , recFinalShape    :: BindingShape
-  }
-  deriving (Eq, Show)
-
--- | A translated term plus its Phase-β representation. Expected
--- positions are DEMANDED, not stored: ρ flows through the explicit
--- parameter of 'translateSharedAt' / 'translateAt' and the declared
--- conventions, and consistency is checked at production time
--- ('tracePositionAt' / 'shapeConsistentWithPosition'). A stored
--- produced-at stamp existed during the position-directed migration
--- but was a write-only ghost — nothing ever branched on it — and was
--- removed by the 2026-07-14 release audit.
-data TranslatedTerm = TranslatedTerm
-  { ttLean  :: Lean.Term
-  , ttShape :: BindingShape
-  }
-  deriving Show
-
-translatedTermLean :: TranslatedTerm -> Lean.Term
-translatedTermLean = ttLean
-
--- | Per-binding record for the calculus's Γ. Today its payload is
--- the binder's Phase-β representation — the one thing every
--- adaptation use site consults. The Slice-1 migration provisionally
--- carried richer fields (bound position, source type, emitted Lean
--- type) as a landing pad for consumers that were expected in
--- Slices 2/5; those consumers were ultimately served by declared
--- conventions instead and the write-only fields were removed by the
--- 2026-07-14 release audit. Re-enrich this record (rather than
--- adding side tables) if a future consumer genuinely needs more of
--- Γ per binder.
-newtype BindingInfo = BindingInfo
-  { biRepr :: BindingShape
-    -- ^ Phase-β representation of the bound Lean identifier.
-  }
-
-data ValueTranslationMode
-  = WrappedValueMode
-  | RawValueMode
-  deriving (Eq, Show)
-
-data SortBinderMode
-  = SortBinderAsSort
-  | SortBinderAsType
-  deriving (Eq, Show)
-
--- | Read-only state for translating terms.
-data TranslationReader = TranslationReader
-  { _namedEnvironment  :: Map VarName Lean.Ident
-    -- ^ SAWCore variable names in scope, paired with the Lean identifier
-    -- they translate to.
-  , _skipBinderWrap    :: Bool
-    -- ^ When True, 'translateBinder'' emits binder types without
-    -- the 'Except String' wrap. Set in two situations:
-    --
-    --   * Motive abstractions whose body is type-level (a
-    --     'Lambda' with 'isTypeProducing' body, or a 'Pi' whose
-    --     return is 'Sort'/'Pi'). The binders are scrutinees for
-    --     recursor elimination and must arrive at the inductive's
-    --     raw type. Set blanket-True for the whole binder list.
-    --
-    --   * Individual *type-arg* binders inside a value-level
-    --     abstraction — variables that appear in subsequent
-    --     binder types or the return type as indices (the @n@ in
-    --     @bvAdd : (n : Nat) → Vec n Bool → …@). Set transiently
-    --     per-binder by 'translateBindersSelective'.
-    --
-    -- The flag does not propagate into 'f' continuations of
-    -- 'translateBinder'': the wrap decision is one-shot per
-    -- binder, surrounding bindings re-assert their own value.
-  , _inRecursorCaseBinder :: Bool
-    -- ^ True during translation of a recursor case-handler's
-    -- binder types (NOT during the case body). Inhibits both the
-    -- 'translateBinder'' outer wrap AND the Pi case's body-wrap,
-    -- so case-handler binder types stay raw and match Lean's
-    -- @Foo.rec@ signature. Set transiently by 'translateRecursorApp'
-    -- when descending into a case-handler argument's Lambda binders;
-    -- cleared by the 'Lambda' case before translating the body.
-  , _bindingEnv :: Map Lean.Ident BindingInfo
-    -- ^ Γ: Lean identifiers in scope paired with everything their
-    -- introduction site knew about them ('BindingInfo'). The
-    -- 'biRepr' projection is used at application and recursor-app
-    -- sites to decide whether a variable is an outer 'Except' value
-    -- that must be 'Bind.bind'-ed, a function-shaped value that
-    -- should be passed directly, or raw. The remaining fields
-    -- (bound position, source type, exact Lean type) are the
-    -- calculus's binding record (plan Slice 1); they are recorded
-    -- but not yet consulted — Slices 2–5 make them the authority
-    -- for adaptation and proof transport.
-  , _natBoundsEnv :: Map Lean.Ident Lean.Term
-    -- ^ Exclusive Nat upper-bound facts in scope: binder identifiers
-    -- introduced with an @h_gen_bounds_ : i < n@ hypothesis, mapped
-    -- to their bound term @n@. Consulted by the @at@ contract's
-    -- interval-entailment decision (OP-2,
-    -- doc/2026-07-12_obligation-placement-design.md): the
-    -- proof-carrying lowering fires only when these facts entail the
-    -- emitted bound; otherwise the runtime-checked accessor is the
-    -- honest form.
-  , _boundUniverses    :: Map VarName Lean.UnivLevel
-    -- ^ For SAWCore variables whose binder type is @sort k@ at @k ≥ 1@,
-    -- the universe variable that 'translateSort' allocated for the
-    -- binder. Looked up at use sites by 'levelOfArg' so the translator
-    -- can supply explicit @\.{u_n}@ universes to polymorphic Lean
-    -- targets (mathport pattern). Variables not in this map have a
-    -- non-sort binder type and contribute no universe at use sites.
-  , _unavailableIdents :: Set Lean.Ident
-    -- ^ Lean identifiers already reserved or in use. Used to pick fresh
-    -- names that don't shadow.
-  , _sawModuleMap      :: ModuleMap
-    -- ^ The environment of SAWCore global definitions, used to resolve
-    -- 'Constant' references to their bodies for inline translation.
-  , _currentModule     :: Maybe ModuleName
-    -- ^ The SAWCore module currently being translated. When a
-    -- 'UsePreserve' reference targets this module, emit the short
-    -- name unqualified — Lean's namespace scoping already provides
-    -- the prefix.
-  , _sharedNames       :: IntMap SharedName
-    -- ^ Index of identifiers for repeated subterms that have been
-    -- lifted into a top-level @let@. Populated by 'translateTermLet'
-    -- before recursive descent; consulted by 'translateTerm' on
-    -- 'STApp' so a hash-consed subterm with multiple occurrences
-    -- emits as a 'Lean.Var' reference instead of being re-translated.
-  , _nextSharedName    :: Lean.Ident
-    -- ^ Counter used to mint fresh names for shared subterms.
-    -- 'freshVariant' threads it through 'unavailableIdents' so the
-    -- chosen names don't collide with anything else in scope.
-  , _valueTranslationMode :: ValueTranslationMode
-    -- ^ Whether this translation pass applies Phase-beta's wrapped
-    -- value-domain convention. Auto-emitted proof/type Prelude
-    -- infrastructure uses 'RawValueMode'; user terms and value-domain
-    -- Prelude facades use 'WrappedValueMode'.
-  , _sortBinderMode :: SortBinderMode
-    -- ^ How a bare SAWCore sort binder should be emitted. Normal raw
-    -- logical binders use @Sort u@. Wrapped value facades can bind
-    -- carrier types as @Type u@ so terms like @Except String α@ are
-    -- well-formed in Lean.
-  }
-
-makeLenses ''TranslationReader
-
--- | Mutable state collected during translation.
-data TranslationState = TranslationState
-  { _globalDeclarations   :: [Lean.Ident]
-    -- ^ Lean names for SAWCore constants we should /not/ re-emit
-    -- (either already translated or explicitly skipped by the caller).
-  , _topLevelDeclarations :: [Lean.Decl]
-    -- ^ Auxiliary Lean declarations discovered while translating a
-    -- term — the bodies of the SAWCore constants it references.
-    -- Stored most-recently-added first, reversed on output.
-  , _universeVars         :: [String]
-    -- ^ Universe-variable names allocated during translation of
-    -- the current declaration, in *binder-introduction order* —
-    -- most-recently-allocated last. Used to populate the def's
-    -- universe list (@def foo.{u0 u1} …@) in the order Lean
-    -- expects (mathport convention: introduction order).
-    -- A 'Set' lookup would lose order; we maintain order
-    -- explicitly because call-site emission threads positional
-    -- references back through this list.
-  , _universeVarCount     :: Int
-    -- ^ Counter for generating fresh @u0@, @u1@, … names. Bumped
-    -- once per 'BinderPos' allocation in 'translateSort'.
-  , _universeBinderAssignments :: Map VarName String
-    -- ^ Memoization of universe-name allocations by SAWCore
-    -- 'VarName'. 'translateDefDoc' walks the body and type
-    -- *separately*, but both may encounter the same SAWCore
-    -- binder (lambda body, pi type) which carries the same
-    -- 'vnIndex'. Without memoization each walk would allocate a
-    -- fresh universe, producing inconsistent 'Sort u_n' / 'Sort u_m'
-    -- emissions for what is logically one binder. The map keys
-    -- compare by 'VarIndex' (the global uniqueness invariant),
-    -- so body-side and type-side encounters of the same logical
-    -- variable resolve to the same allocation.
-  }
-
-makeLenses ''TranslationState
-
-type TermTranslationMonad m =
-  TranslationMonad TranslationReader TranslationState m
-
-askTR :: TermTranslationMonad m => m TranslationReader
-askTR = asks otherConfiguration
-
-localTR :: TermTranslationMonad m =>
-           (TranslationReader -> TranslationReader) -> m a -> m a
-localTR f =
-  local (\r -> r { otherConfiguration = f (otherConfiguration r) })
-
-phaseBetaEnabled :: TermTranslationMonad m => m Bool
-phaseBetaEnabled =
-  (== WrappedValueMode) <$> (view valueTranslationMode <$> askTR)
-
-withRawTranslationMode :: TermTranslationMonad m => m a -> m a
-withRawTranslationMode =
-  localTR ( set valueTranslationMode RawValueMode
-          . set skipBinderWrap True
-          . set sortBinderMode SortBinderAsSort
-          )
-
--- | A subset of Lean 4's reserved identifiers. Not exhaustive — the
--- Lean parser has more — but covers the ones most likely to collide
--- with names generated from SAWCore.
-reservedIdents :: Set Lean.Ident
-reservedIdents =
-  Set.fromList $ map Lean.Ident $ concatMap words
-    -- @_@ is intentionally *not* reserved: Lean accepts @fun _ => …@
-    -- and @(_ : A) -> B@ as valid anonymous-binder syntax. Treating
-    -- @_@ as reserved was making the translator rename anonymous
-    -- SAWCore binders to @_'@ / @_''@ / @_'''@ (audit finding 2C-3).
-    [ "axiom def example fun if then else let rec match with"
-    , "namespace end section open import variable instance theorem"
-    , "Prop Type Sort by do return"
-    ]
-
--- | The context in which a SAWCore 'Sort' appears determines how
--- we translate it into Lean. The two cases produce structurally
--- different Lean shapes:
---
---   * 'BinderPos' — the sort is the TYPE of a Pi/Lambda binder, as
---     in @(t : sort 1) → …@. At sort level @≥ 1@ we allocate a
---     fresh universe variable per occurrence (never share across
---     binders — the parked P4 "share by level" approach was
---     unsound; see @archive/2026-04-22_universe-internal-
---     investigation.md@). At sort 0 we emit Lean's concrete @Type@.
---
---   * 'ValuePos' — the sort is itself a value argument, as in
---     @Eq (sort 0) a b@. We emit a concrete Lean @Sort k@ literal:
---     @sort 0@ ↦ @Type@ (= @Type 0@), @sort 1@ ↦ @Type 1@, etc.
---     The "+1 shift" lives in the caller's universe-arithmetic,
---     not here.
-data SortContext
-  = BinderPos
-  | TypeCarrierPos
-  | ValuePos
-  deriving (Show, Eq)
-
--- | Translate a SAWCore 'Sort' to a Lean 'Lean.Sort', threading
--- universe constraints into the surrounding declaration's universe
--- list when context is 'BinderPos'.
---
--- Soundness contract (the new L-10): at 'BinderPos' with sort
--- @k ≥ 1@, each call allocates a *fresh* universe variable — never
--- sharing with any prior allocation. Sharing was the bug the
--- parked WIP attempt parked on; the new architecture is correct
--- because each binder's universe constraint is independent of
--- every other binder's.
-translateSort :: TermTranslationMonad m => SortContext -> Sort -> m Lean.Sort
-translateSort _   PropSort     = pure Lean.Prop
-translateSort _   (TypeSort 0) = pure Lean.Type
-translateSort ctx (TypeSort k) = case ctx of
-  ValuePos -> pure (Lean.TypeLvl (toInteger k))
-  TypeCarrierPos -> do
-    n <- view universeVarCount <$> get
-    let uname = "u" ++ show n
-    modify (over universeVars (++ [uname]))
-    modify (over universeVarCount (+ 1))
-    pure (Lean.TypeVar uname)
-  BinderPos -> do
-    n <- view universeVarCount <$> get
-    let uname = "u" ++ show n
-    modify (over universeVars (++ [uname]))
-    modify (over universeVarCount (+ 1))
-    pure (Lean.SortVar uname)
-
--- | Append @'@ until the identifier is not in use.
-nextVariant :: Lean.Ident -> Lean.Ident
-nextVariant (Lean.Ident s) = Lean.Ident (s ++ "'")
-
-freshVariant :: TermTranslationMonad m => Lean.Ident -> m Lean.Ident
-freshVariant x = do
-  used <- view unavailableIdents <$> askTR
-  let findVariant i = if Set.member i used then findVariant (nextVariant i) else i
-  pure (findVariant x)
-
-freshVariantAvoiding :: TermTranslationMonad m => Set Lean.Ident -> Lean.Ident -> m Lean.Ident
-freshVariantAvoiding extra x = do
-  used <- Set.union extra <$> view unavailableIdents <$> askTR
-  let findVariant i = if Set.member i used then findVariant (nextVariant i) else i
-  pure (findVariant x)
-
-withUsedLeanIdent :: TermTranslationMonad m => Lean.Ident -> m a -> m a
-withUsedLeanIdent ident =
-  localTR (over unavailableIdents (Set.insert ident))
-
--- | SAWCore local name to a safe, fresh Lean identifier. We escape
--- before freshening so dot-containing SAW names (e.g. record-field
--- variables `p1.x` introduced by `llvm_fresh_var`) get Z-encoded
--- rather than emitted as `(p1.x : ...)` which Lean rejects (`.` is
--- the namespace separator).
-translateLocalIdent :: TermTranslationMonad m => LocalName -> m Lean.Ident
-translateLocalIdent x = freshVariant (escapeIdent (Lean.Ident (Text.unpack x)))
-
-withSAWVar :: TermTranslationMonad m => VarName -> (Lean.Ident -> m a) -> m a
-withSAWVar n f = do
-  n_lean <- translateLocalIdent (vnName n)
-  withUsedLeanIdent n_lean $
-    localTR (over namedEnvironment (Map.insert n n_lean)) $
-      f n_lean
-
--- | The result of translating a SAWCore binder to Lean: the Lean
--- identifier and the translated type. Pre-specialization we also
--- carried auxiliary @Inhabited@ instance binders here; those are
--- gone (see 'translateBinder'' for rationale).
-data BindTrans = BindTrans Lean.Ident Lean.Type
-
--- | One binder in a recursor case handler's constructor-field prefix.
--- The distinction is semantic, not syntactic:
---
--- * 'CaseFieldRaw' is a structural constructor field. Lean's recursor
---   supplies it at the raw constructor type, so the case body gets a
---   Phase-beta shadow if it uses the field as a value.
---
--- * 'CaseFieldParam' is a field whose constructor type is exactly one
---   of the datatype parameters. Its Lean type is the already-translated
---   actual parameter supplied to this recursor application. This is the
---   expected-shape case for records such as
---   @RecordType s alpha beta@: if @alpha@ is instantiated with a
---   Phase-beta function type, the field binder must keep that function
---   type instead of being raw-eta-adapted.
-data CaseBinderRole
-  = CaseFieldRaw
-  | CaseFieldParam Lean.Type
-
--- | Case-handler binder plan. 'CaseHandlerAllRaw' is the conservative
--- fallback for constructors unavailable in the module map.
-data CaseHandlerPlan
-  = CaseHandlerPlan [CaseBinderRole]
-  | CaseHandlerAllRaw
-
--- | Flatten a 'BindTrans' into a Lean term-level 'Binder' list.
-bindTransToBinder :: BindTrans -> [Lean.Binder]
-bindTransToBinder (BindTrans name ty) =
-  [Lean.Binder Lean.Explicit name (Just ty)]
-
--- | Flatten a 'BindTrans' into a Lean type-level 'PiBinder' list.
--- Anonymous binders (@_@) collapse to the arrow form.
-bindTransToPiBinder :: BindTrans -> [Lean.PiBinder]
-bindTransToPiBinder (BindTrans name ty)
-  | name == Lean.Ident "_" = [Lean.PiBinder Lean.Explicit Nothing ty]
-  | otherwise              = [Lean.PiBinder Lean.Explicit (Just name) ty]
-
--- | Translate a single SAW-core binder. An earlier revision also
--- injected an @[Inh_a : Inhabited a]@ instance binder for parameters
--- whose SAWCore type carries the @isort@ flag (the "inhabited sort"
--- annotation). We no longer do this: the injected instance binders
--- created positional-argument mismatches when the caller applied a
--- SAWCore term like @Num.rec motive tcnum tcinf n a xs@, where the
--- motive's returned type had an instance binder Lean couldn't insert
--- through the applied chain. SAWCore's @isort@ flag is an advisory
--- about reachability; preserving it as a Lean typeclass binder is
--- not required for soundness of value-level translation.
---
--- If we later need @Inhabited@ reasoning for specific primitives,
--- wire it per-primitive in 'SAWCorePrimitives.lean' rather than
--- sprinkling binders through every parameter list.
--- | Infer the universe level of a SAWCore argument *at the call
--- site*, for use with 'UseRenameUniv'. Returns @Just lvl@ when
--- the argument's type lives at a known universe. The level we
--- return is the level of the argument's *type* — i.e. for a
--- polymorphic-callee @f.{u}@ with binder @(α : Sort u)@, supplying
--- the argument @x@ requires @x : Sort u@, so @u@ is the level of
--- @x@'s type.
---
--- Cases handled:
---
--- * 'Variable' whose binder was @sort k@ at @k ≥ 1@: the binder
---   carries a 'boundUniverses' entry recording the universe
---   variable that 'translateBinder'' allocated.
---
--- * 'Sort' literal at @sort k@: the value is Lean @Type k@,
---   whose type is @Sort (k+2)@. (Type k = Sort (k+1); Sort (k+1)
---   inhabits Sort (k+2).) Used for SAW expressions like
---   @unsafeAssert (sort 0) a b@ where the first argument is a
---   value-position type literal.
---
--- * 'Sort' at @Prop@: Lean's @Prop = Sort 0@, type @Sort 1@.
---
--- * Any other term whose SAWCore kind is known from 'termSortOrType'.
---   A type-level term of SAW sort @k@ is emitted as a Lean value in
---   @Sort (k+1)@, so @Bool@ / @Vec n Bool@ resolve to level 1.
---
--- * Pi/function types: Lean places @(a : Sort u) -> Sort v@ in
---   @Sort (imax u v)@, so we compute the imax of all binder and result
---   levels. This is load-bearing for emitted Prelude lemmas such as
---   @Eq (a -> b) f g@, where the level is @max u_a u_b@ rather than
---   a concrete sort from the SAW kind alone.
---
--- Returns 'Nothing' only when the argument is not known to be a
--- type/sort argument. Callers that require explicit universes should
--- reject rather than falling back to Lean inference.
-levelOfArg :: TermTranslationMonad m => Term -> m (Maybe Lean.UnivLevel)
-levelOfArg t
-  | (binders, ret) <- asPiList t
-  , not (null binders) = do
-      binderLvls <- traverse (levelOfArg . snd) binders
-      retLvl <- levelOfArg ret
-      pure (leanLevelIMax <$> sequence (binderLvls ++ [retLvl]))
-  | otherwise = case unwrapTermF t of
-      Variable nm _ -> do
-        bu <- view boundUniverses <$> askTR
-        case Map.lookup nm bu of
-          Just lvl -> pure (Just lvl)
-          Nothing  -> pure (levelOfTermSort t)
-      FTermF (Sort srt _flags) -> case srt of
-        TypeSort k -> pure (Just (Lean.LevelLit (fromIntegral k + 2)))
-        PropSort   -> pure (Just (Lean.LevelLit 1))
-      _ -> pure (levelOfTermSort t)
-  where
-    levelOfTermSort tm = case termSortOrType tm of
-      Left PropSort     -> Just (Lean.LevelLit 0)
-      Left (TypeSort k) -> Just (Lean.LevelLit (fromIntegral k + 1))
-      Right _           -> Nothing
-    leanLevelIMax [] = Lean.LevelLit 0
-    leanLevelIMax [lvl] = lvl
-    leanLevelIMax lvls = Lean.LevelIMax lvls
-
--- | Wrap a Lean type in @Except String α@. Cryptol's value-domain
--- expressions translate at this wrapped type (Lean stdlib's
--- 'Except', no custom wrapper).
-wrapExcept :: Lean.Type -> Lean.Type
-wrapExcept t =
-  Lean.App (Lean.Var (Lean.Ident "Except"))
-           [Lean.Var (Lean.Ident "String"), t]
-
--- | Syntactic test for the type shape emitted by 'wrapExcept'.
-isExceptStringType :: Lean.Type -> Bool
-isExceptStringType (Lean.App (Lean.Var (Lean.Ident "Except"))
-                             [Lean.Var (Lean.Ident "String"), _]) = True
-isExceptStringType _ = False
-
-isLeanPiType :: Lean.Type -> Bool
-isLeanPiType (Lean.Pi _ _) = True
-isLeanPiType _ = False
-
-peelLeanPiTypes :: Int -> Lean.Type -> ([Lean.Type], Lean.Type)
-peelLeanPiTypes n ty
-  | n <= 0 = ([], ty)
-peelLeanPiTypes n (Lean.Pi (Lean.PiBinder _ _ bty : rest) body) =
-  let nextTy = if null rest then body else Lean.Pi rest body
-      (tys, ret) = peelLeanPiTypes (n - 1) nextTy
-  in (bty : tys, ret)
-peelLeanPiTypes _ ty = ([], ty)
-
--- | CONVENTION-INTERNAL helper (plan Slice 3.4 / 4c): classifies a
--- binder type that the CALLING FUNCTION ITSELF just emitted from a
--- known wrap decision — a deterministic self-mirror, not a position
--- authority. Legal inputs are types built in the same function
--- (`wrapExcept t` / raw `t`); never classify types that arrived from
--- elsewhere, and never use this to infer a position. (The forbidden
--- emitted-AST inspection class — shape from emitted TERMS — was
--- deleted in Slices 2/4b.)
-bindingShapeOfType :: Lean.Type -> BindingShape
-bindingShapeOfType ty
-  | isExceptStringType ty = BindingWrapped
-  | isLeanPiType ty       = BindingFunction
-  | otherwise             = BindingRaw
-
--- NOTE: 'bindingShapeOfTerm' / 'bindingShapeOfLeanTermM' (shape
--- guessed from the emitted Lean term AST) are deleted per plan
--- Slice 2. Shape is an output of translation ('TranslatedTerm') or a
--- record in Γ ('BindingInfo') — never re-derived from generated
--- syntax. Do not reintroduce them.
-
-isWrappedShape :: BindingShape -> Bool
-isWrappedShape BindingWrapped = True
-isWrappedShape _              = False
-
-bindingShapeOfUseResultShape :: UseResultShape -> BindingShape
-bindingShapeOfUseResultShape UseResultRaw      = BindingRaw
-bindingShapeOfUseResultShape UseResultWrapped  = BindingWrapped
-bindingShapeOfUseResultShape UseResultFunction = BindingFunction
-
-withBindingInfo :: Lean.Ident -> BindingInfo -> TranslationReader -> TranslationReader
-withBindingInfo ident info =
-  over bindingEnv (Map.insert ident info)
-
--- | Should a SAW binder's type be wrapped in @Except String@ when
--- emitted in Lean?
---
--- Wrap = it's a value-domain type whose Cryptol semantics admits
--- the error case. Don't wrap when:
---
---   * Sorts (types-of-types) — they're not values themselves.
---   * Cryptol @Num@: this is the singleton width/index classifier
---     used by Cryptol's type-directed encodings, not a value-domain
---     computation result.
---   * @Nat@: SAW Nats double-duty as value-domain Nats and as
---     type-level indices (the @n@ in @Vec n α@). Wrapping the
---     latter use breaks dependent-type structure, so we keep
---     Nats raw everywhere. SAW workflows that explicitly @error@
---     at @Nat@ type get rejected; we revisit if that limit
---     proves real.
---   * Propositions like @Eq α x y@: a Prop has no error case;
---     wrapping would weaken the verification condition.
---   * Pi types (function types): the outer wrap stays off, but
---     the function's argument and result types still wrap via
---     recursive translation (translating the inner Pi structure).
---
--- CONVENTION-INTERNAL predicate (plan Slice 7): this is the
--- value-domain test the convention DERIVATIONS consult (binder
--- positions in the lambda/Pi/quantifier conventions,
--- 'phaseBetaResultIsValue', 'functionConventionValueSlot') — never a
--- standalone position authority at use sites. Positions come from
--- declared conventions and production records.
-shouldWrapBinder :: Term -> Bool
-shouldWrapBinder ty
-  | Just _ <- asSort ty       = False
-  | isCryptolNumType ty       = False
-  | Just _ <- asNatType ty    = False
-  | Just _ <- asEq ty         = False
-  | Just _ <- asPi ty         = False
-  | otherwise                 = True
-
-isCryptolNumType :: Term -> Bool
-isCryptolNumType ty = case asGlobalDef ty of
-  Just i -> identName i == "Num"
-         && identModule i == mkModuleName ["Cryptol"]
-  Nothing -> False
-
--- | Convention-internal predicate (plan Slice 7): consulted by the
--- convention derivations ('phaseBetaResultIsValue',
--- 'functionConventionValueSlot'/'functionConventionResultIsValue') —
--- never a standalone position authority.
---
 -- True for terms whose head is a SAW 'Variable' — i.e. the term
 -- is a (possibly applied) type-variable. Examples:
 --   * @t@ where @t : sort 1@ — the binder is at the type
@@ -911,7 +183,7 @@ quantifierShadow params piBinders body =
 -- a manual override or signature plumbing — neither silent
 -- unsoundness.
 typeArgPositionsBinders :: [(VarName, Term)] -> [Int]
-typeArgPositionsBinders bs = go 0 bs
+typeArgPositionsBinders = go 0
   where
     go _ [] = []
     go i ((vn, _) : rest) =
@@ -971,9 +243,7 @@ isTypeProducing t
               -- 'ret' if @nArgs >= length binders@ (fully applied);
               -- otherwise the residual is the @Pi@ of the leftover
               -- binders over 'ret', which is itself a type.
-          in if nArgs >= length binders
-                then isJust (asSort ret)
-                else True
+          in nArgs < length binders || isJust (asSort ret)
 
 translateBinder' :: TermTranslationMonad m => VarName -> Term ->
                     (BindTrans -> m a) -> m a
@@ -1047,7 +317,7 @@ translateBinderAt mrho vn ty f = do
         -- Body and type walks may both encounter this binder. Memoize
         -- on 'vn' so we allocate one universe per logical SAWCore
         -- variable, not one per syntactic occurrence.
-        memo <- view universeBinderAssignments <$> get
+        memo <- gets (view universeBinderAssignments)
         case Map.lookup vn memo of
           Just uname ->
             do mode <- view sortBinderMode <$> askTR
@@ -1098,7 +368,7 @@ translateBinderAt mrho vn ty f = do
                   then wrapExcept t
                   else t
       pure (t', Nothing)
-  let bindUniv = maybe id (\u -> over boundUniverses (Map.insert vn u)) mUniv
+  let bindUniv = maybe id (over boundUniverses . Map.insert vn) mUniv
   -- Track whether the binder type wrapped in 'Except String', so
   -- recursor-scrutinee emission can tell whether the variable
   -- arrives wrapped or raw. Sort-typed binders never wrap.
@@ -1336,9 +606,7 @@ buildLifted head_ pureWrap shouldBind argResults =
        m Lean.Term
     go _ [] _ subs = do
       let finalArgs =
-            [ case lookup pos subs of
-                Just bname -> Lean.Var bname
-                Nothing    -> origTerm
+            [ maybe origTerm Lean.Var (lookup pos subs)
             | (pos, origTerm) <- zip [0..] argTerms
             ]
           body = Lean.App head_ finalArgs
@@ -1934,7 +1202,7 @@ translateFunctionWithNatLtWrappedResult primitiveName nLean expectsSourceProof f
   case unwrapTermF fnTerm of
     Lambda {} ->
       case asLambdaList fnTerm of
-        ((idxName, _) : [], body)
+        ([(idxName, _)], body)
           | not expectsSourceProof ->
               translateBinderWithLeanType idxName (Lean.Var (Lean.Ident "Nat")) $
                 \idxBinder@(Lean.Binder _ idxLean _) -> do
@@ -1953,7 +1221,7 @@ translateFunctionWithNatLtWrappedResult primitiveName nLean expectsSourceProof f
                       (translateTermLetWithShape body)
                   bodyLean <- adaptToRuntime bodyResult
                   pure (Lean.Lambda [idxBinder, proofBinder] bodyLean)
-        ((idxName, _) : (proofName, _) : [], body)
+        ([(idxName, _), (proofName, _)], body)
           | expectsSourceProof ->
               translateBinderWithLeanType idxName (Lean.Var (Lean.Ident "Nat")) $
                 \idxBinder@(Lean.Binder _ idxLean _) ->
@@ -1999,647 +1267,6 @@ lowerMkStreamSound elTypeLean indexFnLean =
       Except.throwError (RejectedPrimitive "MkStream"
         "MkStream expects a unary index function after translation.")
 
-data PartialOpContract = PartialOpContract
-  { pocModule      :: ModuleName
-  , pocName        :: String
-  , pocArity       :: Int
-  , pocBuildProp   :: [Lean.Term] -> Lean.Term
-  , pocConvention  :: PartialOpConvention
-  }
-
-data PartialOpConvention
-  = PartialOpRaw Lean.Ident
-    -- ^ Raw checked helper (divNat-family); argument binds are driven
-    -- by 'argumentBindPlan' until Slice 4b/4c fold this into
-    -- 'CalleePhaseBetaDefinition'.
-  | PartialOpWrapped Lean.Ident [ArgMode]
-    -- ^ Wrapped checked helper with declared per-argument modes
-    -- (plan Slice 4a/4b): bitvector widths are 'IndexArg', value
-    -- operands 'RuntimeArg'.
-
-data CheckedApplicationContract = CheckedApplicationContract
-  { cacModule     :: ModuleName
-  , cacName       :: String
-  , cacArity      :: Int
-  , cacBuildProp  :: Maybe ([Lean.Term] -> Lean.Term)
-  , cacHelperName :: Lean.Ident
-  , cacArgModes   :: [ArgMode]
-    -- ^ Declared per-argument modes (calculus §Callee Conventions,
-    -- plan Slice 4a). 'ProofArg' entries are dropped from the helper
-    -- argument list; 'cacBuildProp' indexes into the POST-drop list.
-  , cacResultMode :: ResultMode
-    -- ^ Always 'RuntimeResult' for the current checked helpers: the
-    -- helper returns @Except String T@.
-  }
-
-data ProofPrimitiveContract = ProofPrimitiveContract
-  { ppcModule    :: ModuleName
-  , ppcName      :: String
-  , ppcArity     :: Int
-  , ppcArgModes  :: [ArgMode]
-    -- ^ Declared per-argument modes (plan Slice 4c). Interpretation
-    -- is raw-LOGICAL for every raw-family mode: 'TypeArg',
-    -- 'IndexArg', 'RawValueArg', and 'ProofArg' actuals all translate
-    -- under 'withRawTranslationMode' (proof primitives state
-    -- propositions over raw logical terms); 'RuntimeArg' actuals
-    -- adapt to wrapped runtime values. The labels document the true
-    -- slot roles per the SAWCore signatures.
-  , ppcBuildProp :: forall m. TermTranslationMonad m => [Lean.Term] -> m Lean.Term
-  , ppcUseProof  :: forall m. TermTranslationMonad m => [Lean.Term] -> Lean.Term -> m Lean.Term
-  }
-
-partialOpContracts :: [PartialOpContract]
-partialOpContracts =
-  [ natBinaryPartial "divNat"    "divNat_checked"
-  , natBinaryPartial "modNat"    "modNat_checked"
-  , natBinaryPartial "divModNat" "divModNat_checked"
-  , intBinaryPartial "intDiv"    "intDiv_checkedM"
-  , intBinaryPartial "intMod"    "intMod_checkedM"
-  , PartialOpContract preludeModule "ratio" 2
-      (wrappedNonzeroArg (Lean.Var (Lean.Ident "Int")) 1)
-      (wrappedBinary "ratio_checkedM")
-  , PartialOpContract preludeModule "rationalRecip" 1
-      (wrappedNonzeroArg (Lean.Var (Lean.Ident "Rational")) 0)
-      (PartialOpWrapped (Lean.Ident "rationalRecip_checkedM")
-        [RuntimeArg])
-  , bvBinaryPartial "bvUDiv" "bvUDiv_checkedM"
-  , bvBinaryPartial "bvURem" "bvURem_checkedM"
-  , bvSignedBinaryPartial "bvSDiv" "bvSDiv_checkedM"
-  , bvSignedBinaryPartial "bvSRem" "bvSRem_checkedM"
-  , cryptolSignedBVPartial "ecSDiv" "ecSDiv_checkedM"
-  , cryptolSignedBVPartial "ecSMod" "ecSMod_checkedM"
-  ]
-  where
-    preludeModule = mkModuleName ["Prelude"]
-    cryptolModule = mkModuleName ["Cryptol"]
-    natBinaryPartial source target =
-      PartialOpContract preludeModule source 2
-        (rawNonzeroArg (Lean.Var (Lean.Ident "Nat")) 1)
-        (PartialOpRaw (Lean.Ident target))
-    intBinaryPartial source target =
-      PartialOpContract preludeModule source 2
-        (wrappedNonzeroArg (Lean.Var (Lean.Ident "Int")) 1)
-        (wrappedBinary target)
-    wrappedBinary target =
-      PartialOpWrapped (Lean.Ident target)
-        [RuntimeArg, RuntimeArg]
-    bvBinaryPartial source target =
-      PartialOpContract preludeModule source 3
-        (bvNonzeroArg 0 2)
-        (PartialOpWrapped (Lean.Ident target)
-          [IndexArg, RuntimeArg, RuntimeArg])
-    bvSignedBinaryPartial source target =
-      PartialOpContract preludeModule source 3
-        (bvSignedNonzeroArg 0 2)
-        (PartialOpWrapped (Lean.Ident target)
-          [IndexArg, RuntimeArg, RuntimeArg])
-    cryptolSignedBVPartial source target =
-      PartialOpContract cryptolModule source 3
-        (cryptolSignedBVNonzeroArg 0 2)
-        (PartialOpWrapped (Lean.Ident target)
-          [IndexArg, RuntimeArg, RuntimeArg])
-
--- The old three-way 'CheckedArgRaw' bucket is split into its true
--- modes (plan Slice 4a): the width/index Nats are 'IndexArg', the
--- element type is 'TypeArg', matching the checked helpers' Lean
--- signatures (SAWCorePrimitives.lean).
-checkedApplicationContracts :: [CheckedApplicationContract]
-checkedApplicationContracts =
-  [ vecIndexContract
-      "at"
-      4
-      (Lean.Ident "atWithProof_checkedM")
-      [IndexArg, TypeArg, RuntimeArg, IndexArg]
-      0
-      3
-  , vecIndexContract
-      "atWithProof"
-      5
-      (Lean.Ident "atWithProof_checkedM")
-      [IndexArg, TypeArg, RuntimeArg, IndexArg, ProofArg]
-      0
-      3
-  , vecIndexContract
-      "updWithProof"
-      6
-      (Lean.Ident "updWithProof_checkedM")
-      [IndexArg, TypeArg, RuntimeArg, IndexArg, RuntimeArg, ProofArg]
-      0
-      3
-  , vecSliceContract
-      "sliceWithProof"
-      6
-      (Lean.Ident "sliceWithProof_checkedM")
-      [TypeArg, IndexArg, IndexArg, IndexArg, ProofArg, RuntimeArg]
-      1
-      2
-      3
-  , vecSliceContract
-      "updSliceWithProof"
-      7
-      (Lean.Ident "updSliceWithProof_checkedM")
-      [TypeArg, IndexArg, IndexArg, IndexArg, ProofArg, RuntimeArg, RuntimeArg]
-      1
-      2
-      3
-  , CheckedApplicationContract preludeModule "genWithProof" 3
-      Nothing
-      (Lean.Ident "genWithProof_checkedM")
-      [IndexArg, TypeArg, FunctionWithNatLtArg 0]
-      RuntimeResult
-  ]
-  where
-    preludeModule = mkModuleName ["Prelude"]
-    vecIndexContract source arity helper argModes nIdx iIdx =
-      CheckedApplicationContract preludeModule source arity
-        (Just (\helperArgs -> natLt (helperArgs !! iIdx) (helperArgs !! nIdx)))
-        helper
-        argModes
-        RuntimeResult
-    vecSliceContract source arity helper argModes nIdx offIdx lenIdx =
-      CheckedApplicationContract preludeModule source arity
-        (Just (\helperArgs ->
-          natLe
-            (Lean.App (Lean.Var (Lean.Ident "addNat"))
-              [helperArgs !! offIdx, helperArgs !! lenIdx])
-            (helperArgs !! nIdx)))
-        helper
-        argModes
-        RuntimeResult
-
-proofPrimitiveContracts :: [ProofPrimitiveContract]
--- Slot roles per the SAWCore Prelude signatures (plan Slice 4c):
--- widths are 'IndexArg', equality subjects at raw-logical positions
--- are 'RawValueArg', source proof terms are 'ProofArg', wrapped
--- runtime operands are 'RuntimeArg', carriers are 'TypeArg'.
-proofPrimitiveContracts =
-  [ bvAssertion "unsafeAssertBVULt" "bvult"
-  , bvAssertion "unsafeAssertBVULe" "bvule"
-    -- uip : (t : sort 1) -> (x y : t) -> (pf1 pf2 : Eq t x y) -> …
-  , ProofPrimitiveContract preludeModule "uip" 5
-      [TypeArg, RawValueArg, RawValueArg, ProofArg, ProofArg]
-      uipContract
-      (\_ proof -> pure proof)
-    -- equalNatToEqNat : (m n : Nat) -> Eq Bool (equalNat m n) True -> …
-  , ProofPrimitiveContract preludeModule "equalNatToEqNat" 3
-      [RawValueArg, RawValueArg, ProofArg]
-      equalNatToEqNatContract
-      applyLastArg
-    -- bvEqToEq : (n : Nat) -> (v1 v2 : Vec n Bool) -> Eq Bool … -> …
-  , ProofPrimitiveContract preludeModule "bvEqToEq" 4
-      [IndexArg, RuntimeArg, RuntimeArg, ProofArg]
-      bvEqToEqContract
-      applyLastArg
-  , ProofPrimitiveContract preludeModule "bvEq_refl" 2
-      [IndexArg, RuntimeArg]
-      bvEqReflContract
-      (\_ proof -> pure proof)
-  , ProofPrimitiveContract preludeModule "not_bvult_zero" 2
-      [IndexArg, RuntimeArg]
-      notBvultZeroContract
-      (\_ proof -> pure proof)
-  , ProofPrimitiveContract preludeModule "bvAddZeroL" 2
-      [IndexArg, RuntimeArg]
-      (bvAddZeroContract True)
-      (\_ proof -> pure proof)
-  , ProofPrimitiveContract preludeModule "bvAddZeroR" 2
-      [IndexArg, RuntimeArg]
-      (bvAddZeroContract False)
-      (\_ proof -> pure proof)
-  , ProofPrimitiveContract preludeModule "bvNat_bvToNat" 2
-      [IndexArg, RuntimeArg]
-      bvNatBvToNatContract
-      (\_ proof -> pure proof)
-  , ProofPrimitiveContract preludeModule "eqNatAdd0" 1
-      [RawValueArg]
-      eqNatAdd0Contract
-      (\_ proof -> pure proof)
-  , ProofPrimitiveContract preludeModule "eqNatAddS" 2
-      [RawValueArg, RawValueArg]
-      eqNatAddSContract
-      (\_ proof -> pure proof)
-  , ProofPrimitiveContract preludeModule "eqNatAddComm" 2
-      [RawValueArg, RawValueArg]
-      eqNatAddCommContract
-      (\_ proof -> pure proof)
-  , ProofPrimitiveContract preludeModule "addNat_assoc" 3
-      [RawValueArg, RawValueArg, RawValueArg]
-      addNatAssocContract
-      (\_ proof -> pure proof)
-  ]
-  where
-    preludeModule = mkModuleName ["Prelude"]
-    bvAssertion source op =
-      ProofPrimitiveContract preludeModule source 3
-        [IndexArg, RuntimeArg, RuntimeArg]
-        (bvComparisonEqM (Lean.Ident op) (Lean.Ident "Bool.true"))
-        (\_ proof -> pure proof)
-
-applyLastArg ::
-  TermTranslationMonad m =>
-  [Lean.Term] ->
-  Lean.Term ->
-  m Lean.Term
-applyLastArg args proof =
-  case reverse args of
-    (premise : _) -> pure (Lean.App proof [premise])
-    [] -> pure proof
-
-uipContract ::
-  TermTranslationMonad m =>
-  [Lean.Term] ->
-  m Lean.Term
-uipContract args =
-  case args of
-    [ty, lhs, rhs, proof1, proof2] -> do
-      let proofTy =
-            Lean.App (Lean.ExplVar (Lean.Ident "Eq")) [ty, lhs, rhs]
-      pure (Lean.App (Lean.ExplVar (Lean.Ident "Eq"))
-          [proofTy, proof1, proof2])
-    _ ->
-      Except.throwError (RejectedPrimitive "proof primitive"
-        "uip contract expected exactly type, lhs, rhs, and two proof arguments")
-
-equalNatToEqNatContract ::
-  TermTranslationMonad m =>
-  [Lean.Term] ->
-  m Lean.Term
-equalNatToEqNatContract args =
-  case args of
-    [m, n, _premise] -> do
-      let boolTy = Lean.Var (Lean.Ident "Bool")
-          natTy = Lean.Var (Lean.Ident "Nat")
-          trueVal = Lean.Var (Lean.Ident "Bool.true")
-          equalNatApp =
-            Lean.App (Lean.Var (Lean.Ident "equalNat")) [m, n]
-          premiseTy =
-            boolEqAt boolTy equalNatApp trueVal
-          resultTy =
-            Lean.App (Lean.ExplVar (Lean.Ident "Eq")) [natTy, m, n]
-      pure (Lean.Pi [Lean.PiBinder Lean.Explicit Nothing premiseTy] resultTy)
-    _ ->
-      Except.throwError (RejectedPrimitive "proof primitive"
-        "equalNatToEqNat contract expected exactly m, n, and premise arguments")
-
-bvEqToEqContract ::
-  TermTranslationMonad m =>
-  [Lean.Term] ->
-  m Lean.Term
-bvEqToEqContract args =
-  case args of
-    [width, lhs, rhs, _premise] -> do
-      premiseTy <- bvComparisonEqM (Lean.Ident "bvEq") (Lean.Ident "Bool.true") [width, lhs, rhs]
-      let vecTy =
-            Lean.App (Lean.Var (Lean.Ident "Vec"))
-              [width, Lean.Var (Lean.Ident "Bool")]
-          resultTy = boolEqAt (wrapExcept vecTy) lhs rhs
-      pure (Lean.Pi [Lean.PiBinder Lean.Explicit Nothing premiseTy] resultTy)
-    _ ->
-      Except.throwError (RejectedPrimitive "proof primitive"
-        "bvEqToEq contract expected exactly width, lhs, rhs, and premise arguments")
-
-bvEqReflContract ::
-  TermTranslationMonad m =>
-  [Lean.Term] ->
-  m Lean.Term
-bvEqReflContract args =
-  case args of
-    [width, value] ->
-      bvComparisonEqM (Lean.Ident "bvEq") (Lean.Ident "Bool.true")
-        [width, value, value]
-    _ ->
-      Except.throwError (RejectedPrimitive "proof primitive"
-        "bvEq_refl contract expected exactly width and vector arguments")
-
-notBvultZeroContract ::
-  TermTranslationMonad m =>
-  [Lean.Term] ->
-  m Lean.Term
-notBvultZeroContract args =
-  case args of
-    [width, value] -> do
-      let zeroVec =
-            Lean.App (Lean.Var (Lean.Ident "bvNat"))
-              [width, zeroNat]
-          zeroVecM =
-            Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [zeroVec]
-      bvComparisonEqM (Lean.Ident "bvult") (Lean.Ident "Bool.false")
-        [width, value, zeroVecM]
-    _ ->
-      Except.throwError (RejectedPrimitive "proof primitive"
-        "not_bvult_zero contract expected exactly width and vector arguments")
-
-bvAddZeroContract ::
-  TermTranslationMonad m =>
-  Bool ->
-  [Lean.Term] ->
-  m Lean.Term
-bvAddZeroContract zeroOnLeft args =
-  case args of
-    [width, value] -> do
-      let zeroVec =
-            Lean.App (Lean.Var (Lean.Ident "bvNat"))
-              [width, zeroNat]
-          zeroVecM =
-            Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [zeroVec]
-          vecTy =
-            Lean.App (Lean.Var (Lean.Ident "Vec"))
-              [width, Lean.Var (Lean.Ident "Bool")]
-          (lhsArg, rhsArg)
-            | zeroOnLeft = (zeroVecM, value)
-            | otherwise  = (value, zeroVecM)
-      addExpr <- bvBinaryM (Lean.Ident "bvAdd") width lhsArg rhsArg
-      pure (boolEqAt (wrapExcept vecTy) addExpr value)
-    _ ->
-      Except.throwError (RejectedPrimitive "proof primitive"
-        "bvAddZero contract expected exactly width and vector arguments")
-
-bvNatBvToNatContract ::
-  TermTranslationMonad m =>
-  [Lean.Term] ->
-  m Lean.Term
-bvNatBvToNatContract args =
-  case args of
-    [width, value] -> do
-      let vecTy =
-            Lean.App (Lean.Var (Lean.Ident "Vec"))
-              [width, Lean.Var (Lean.Ident "Bool")]
-          toNat v =
-            Lean.App (Lean.Var (Lean.Ident "bvToNat")) [width, v]
-          toBv n =
-            Lean.App (Lean.Var (Lean.Ident "bvNat"))
-              [width, n]
-      natValue <- bvUnaryM toNat value
-      rebuilt <- bvUnaryM toBv natValue
-      pure (boolEqAt (wrapExcept vecTy) rebuilt value)
-    _ ->
-      Except.throwError (RejectedPrimitive "proof primitive"
-        "bvNat_bvToNat contract expected exactly width and vector arguments")
-
-eqNatAdd0Contract ::
-  TermTranslationMonad m =>
-  [Lean.Term] ->
-  m Lean.Term
-eqNatAdd0Contract args =
-  case args of
-    [x] ->
-      pure (natEq (addNat x zeroNat) x)
-    _ ->
-      Except.throwError (RejectedPrimitive "proof primitive"
-        "eqNatAdd0 contract expected exactly one Nat argument")
-
-eqNatAddSContract ::
-  TermTranslationMonad m =>
-  [Lean.Term] ->
-  m Lean.Term
-eqNatAddSContract args =
-  case args of
-    [x, y] ->
-      pure (natEq (addNat x (succNat y)) (succNat (addNat x y)))
-    _ ->
-      Except.throwError (RejectedPrimitive "proof primitive"
-        "eqNatAddS contract expected exactly two Nat arguments")
-
-eqNatAddCommContract ::
-  TermTranslationMonad m =>
-  [Lean.Term] ->
-  m Lean.Term
-eqNatAddCommContract args =
-  case args of
-    [lhs, rhs] ->
-      pure (natEq (addNat lhs rhs) (addNat rhs lhs))
-    _ ->
-      Except.throwError (RejectedPrimitive "proof primitive"
-        "eqNatAddComm contract expected exactly two Nat arguments")
-
-addNatAssocContract ::
-  TermTranslationMonad m =>
-  [Lean.Term] ->
-  m Lean.Term
-addNatAssocContract args =
-  case args of
-    [x, y, z] ->
-      pure (natEq (addNat x (addNat y z)) (addNat (addNat x y) z))
-    _ ->
-      Except.throwError (RejectedPrimitive "proof primitive"
-        "addNat_assoc contract expected exactly three Nat arguments")
-
-natEq :: Lean.Term -> Lean.Term -> Lean.Term
-natEq =
-  boolEqAt (Lean.Var (Lean.Ident "Nat"))
-
-addNat :: Lean.Term -> Lean.Term -> Lean.Term
-addNat x y =
-  Lean.App (Lean.Var (Lean.Ident "addNat")) [x, y]
-
-bvBinaryM ::
-  TermTranslationMonad m =>
-  Lean.Ident ->
-  Lean.Term ->
-  Lean.Term ->
-  Lean.Term ->
-  m Lean.Term
-bvBinaryM op width lhs rhs = do
-  let avoid = Set.unions [leanTermIdents width, leanTermIdents lhs, leanTermIdents rhs]
-  lhsName <- freshVariantAvoiding avoid (Lean.Ident "v_1")
-  rhsName <- freshVariantAvoiding (Set.insert lhsName avoid) (Lean.Ident "v_2")
-  let bindVar = Lean.Var (Lean.Ident "Bind.bind")
-      pureVar = Lean.Var (Lean.Ident "Pure.pure")
-      opApp =
-        Lean.App (Lean.Var op)
-          [width, Lean.Var lhsName, Lean.Var rhsName]
-  pure $
-    Lean.App bindVar
-      [ lhs
-      , Lean.Lambda [Lean.Binder Lean.Explicit lhsName Nothing]
-          (Lean.App bindVar
-            [ rhs
-            , Lean.Lambda [Lean.Binder Lean.Explicit rhsName Nothing]
-                (Lean.App pureVar [opApp])
-            ])
-      ]
-
-bvUnaryM ::
-  TermTranslationMonad m =>
-  (Lean.Term -> Lean.Term) ->
-  Lean.Term ->
-  m Lean.Term
-bvUnaryM mkBody value = do
-  valueName <- freshVariantAvoiding (leanTermIdents value) (Lean.Ident "v_")
-  let bindVar = Lean.Var (Lean.Ident "Bind.bind")
-      pureVar = Lean.Var (Lean.Ident "Pure.pure")
-  pure $
-    Lean.App bindVar
-      [ value
-      , Lean.Lambda [Lean.Binder Lean.Explicit valueName Nothing]
-          (Lean.App pureVar [mkBody (Lean.Var valueName)])
-      ]
-
-bvComparisonEqM ::
-  TermTranslationMonad m =>
-  Lean.Ident ->
-  Lean.Ident ->
-  [Lean.Term] ->
-  m Lean.Term
-bvComparisonEqM op expected args =
-  case args of
-    [width, lhs, rhs] -> do
-      comparisonM <- bvBinaryM op width lhs rhs
-      let boolTy = Lean.Var (Lean.Ident "Bool")
-          expectedVal = Lean.Var expected
-          pureVar = Lean.Var (Lean.Ident "Pure.pure")
-      pure (boolEqAt (wrapExcept boolTy) comparisonM (Lean.App pureVar [expectedVal]))
-    _ ->
-      Except.throwError (RejectedPrimitive "proof primitive"
-        "bitvector assertion contract expected exactly width, lhs, and rhs arguments")
-
-zeroNat :: Lean.Term
-zeroNat =
-  Lean.Var (Lean.Ident "CryptolToLean.SAWCorePrimitives.zero_macro")
-
-succNat :: Lean.Term -> Lean.Term
-succNat n =
-  Lean.App (Lean.Var (Lean.Ident "CryptolToLean.SAWCorePrimitives.succ_macro")) [n]
-
-boolEqAt :: Lean.Term -> Lean.Term -> Lean.Term -> Lean.Term
-boolEqAt ty lhs rhs =
-  Lean.App (Lean.ExplVar (Lean.Ident "Eq"))
-    [ty, lhs, rhs]
-
-findPartialOpContract :: Ident -> Int -> Maybe PartialOpContract
-findPartialOpContract ident nArgs =
-  find matches partialOpContracts
-  where
-    matches contract =
-         identModule ident == pocModule contract
-      && identName ident == pocName contract
-      && nArgs == pocArity contract
-
-findPartialOpContractArity :: Ident -> Maybe Int
-findPartialOpContractArity ident =
-  pocArity <$> find matches partialOpContracts
-  where
-    matches contract =
-         identModule ident == pocModule contract
-      && identName ident == pocName contract
-
-findCheckedApplicationContract :: Ident -> Int -> Maybe CheckedApplicationContract
-findCheckedApplicationContract ident nArgs =
-  find matches checkedApplicationContracts
-  where
-    matches contract =
-         identModule ident == cacModule contract
-      && identName ident == cacName contract
-      && nArgs == cacArity contract
-
-findCheckedApplicationContractArity :: Ident -> Maybe Int
-findCheckedApplicationContractArity ident =
-  cacArity <$> find matches checkedApplicationContracts
-  where
-    matches contract =
-         identModule ident == cacModule contract
-      && identName ident == cacName contract
-
-findCheckedApplicationContractPrefix :: Ident -> Int -> Maybe CheckedApplicationContract
-findCheckedApplicationContractPrefix ident nArgs =
-  find matches checkedApplicationContracts
-  where
-    matches contract =
-         identModule ident == cacModule contract
-      && identName ident == cacName contract
-      && nArgs < cacArity contract
-
-findProofPrimitiveContract :: Ident -> Int -> Maybe ProofPrimitiveContract
-findProofPrimitiveContract ident nArgs =
-  find matches proofPrimitiveContracts
-  where
-    matches contract =
-         identModule ident == ppcModule contract
-      && identName ident == ppcName contract
-      && nArgs == ppcArity contract
-
-notEqZero :: Lean.Term -> Lean.Term -> Lean.Term
-notEqZero ty value =
-  Lean.App (Lean.Var (Lean.Ident "Not"))
-    [Lean.App (Lean.ExplVar (Lean.Ident "Eq"))
-      [ty, value, Lean.NatLit 0]]
-
-notEqPureZero :: Lean.Term -> Lean.Term -> Lean.Term
-notEqPureZero ty value =
-  Lean.App (Lean.Var (Lean.Ident "Not"))
-    [Lean.App (Lean.ExplVar (Lean.Ident "Eq"))
-      [ wrapExcept ty
-      , value
-      , Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [Lean.NatLit 0]
-      ]]
-
-rawNonzeroArg :: Lean.Term -> Int -> [Lean.Term] -> Lean.Term
-rawNonzeroArg ty argIdx args =
-  notEqZero ty (args !! argIdx)
-
-wrappedNonzeroArg :: Lean.Term -> Int -> [Lean.Term] -> Lean.Term
-wrappedNonzeroArg ty argIdx args =
-  notEqPureZero ty (args !! argIdx)
-
-bvNonzeroArg :: Int -> Int -> [Lean.Term] -> Lean.Term
-bvNonzeroArg widthIdx argIdx args =
-  Lean.App (Lean.Var (Lean.Ident "bvNonzeroM"))
-    [args !! widthIdx, args !! argIdx]
-
-bvSignedNonzeroArg :: Int -> Int -> [Lean.Term] -> Lean.Term
-bvSignedNonzeroArg widthIdx argIdx args =
-  Lean.App (Lean.Var (Lean.Ident "bvNonzeroM"))
-    [Lean.App (Lean.Var (Lean.Ident "succ_macro")) [args !! widthIdx],
-     args !! argIdx]
-
-cryptolSignedBVNonzeroArg :: Int -> Int -> [Lean.Term] -> Lean.Term
-cryptolSignedBVNonzeroArg widthIdx argIdx args =
-  Lean.App (Lean.Var (Lean.Ident "ecSignedBVNonzeroM"))
-    [args !! widthIdx, args !! argIdx]
-
-natLt :: Lean.Term -> Lean.Term -> Lean.Term
-natLt lhs rhs =
-  Lean.App (Lean.Var (Lean.Ident "LT.lt")) [lhs, rhs]
-
-natLe :: Lean.Term -> Lean.Term -> Lean.Term
-natLe lhs rhs =
-  Lean.App (Lean.Var (Lean.Ident "LE.le")) [lhs, rhs]
-
--- | The checked arithmetic evidence chain shared by the side-condition
--- scripts (doc/2026-07-12_obligation-placement-design.md, OP-1).
--- `assumption` closes bounds present verbatim as binder hypotheses;
--- `omega` closes derived index arithmetic; the simp alternative first
--- normalizes the reducible numeral macros and Nat aliases that omega
--- otherwise atomizes — `Nat.sub_eq`/`Nat.add_eq`/`Nat.mul_eq` are
--- mandatory because omega does not recognize the bare
--- `Nat.sub`/`Nat.add`/`Nat.mul` applications the aliases unfold to.
--- `simp only … at *` errors when it makes no progress, hence the bare
--- `omega` alternative before it. The div/mod bridges (support-library
--- rfl lemmas) rewrite the SAW aliases and their proof-carrying checked
--- forms to the `/`/`%` operator spelling, the only one omega's
--- division-by-constant support recognizes. The trailing `sorry` is the
--- loud last resort for obligations that are genuinely not local
--- arithmetic (runtime-symbolic divisors, eta positions pending OP-2);
--- the check stage still rejects artifacts where it survives.
-checkedEvidenceScript :: Lean.Ident -> Lean.Term
-checkedEvidenceScript (Lean.Ident propName) =
-  Lean.Tactic $
-    "(try unfold " ++ propName ++ "); " ++
-    "(first | assumption | omega | " ++
-    "(simp only [natPos_macro, bit0_macro, bit1_macro, one_macro, " ++
-    "zero_macro, succ_macro, subNat, addNat, mulNat, minNat, maxNat, " ++
-    "divNat_eq_div, modNat_eq_mod, divNat_checked_eq_div, " ++
-    "modNat_checked_eq_mod, Nat.sub_eq, Nat.add_eq, Nat.mul_eq] " ++
-    "at *; omega) | skip); " ++
-    "all_goals sorry"
-
-partialOpProofScript :: Lean.Ident -> Set Lean.Ident -> Lean.Term
-partialOpProofScript propName _proofIdents =
-  checkedEvidenceScript propName
-
-boundsProofScript :: Lean.Ident -> Set Lean.Ident -> Lean.Term
-boundsProofScript propName _proofIdents =
-  checkedEvidenceScript propName
 
 -- | Lower direct partial primitives through proof-carrying helpers.
 -- Haskell constructs the visible nonzero contract and wires the checked
@@ -2764,9 +1391,7 @@ buildRawProofCarryingApplication resultShape head_ pureWrap shouldBind argResult
           m Lean.Term
     go _ [] _ subs = do
       let finalArgs =
-            [ case lookup pos subs of
-                Just bname -> Lean.Var bname
-                Nothing    -> origTerm
+            [ maybe origTerm Lean.Var (lookup pos subs)
             | (pos, origTerm) <- zip [0..] argTerms
             ]
           prop = pocBuildProp contract finalArgs
@@ -3057,9 +1682,7 @@ lowerProofCarryingActuals obligName script mBuildProp head_ actuals =
 
     go _ [] subs = do
       let finalArgs =
-            [ case lookup pos subs of
-                Just bname -> Lean.Var bname
-                Nothing    -> tm
+            [ maybe tm Lean.Var (lookup pos subs)
             | (pos, tm) <- zip [0 :: Int ..] argTerms
             ]
       case mBuildProp of
@@ -3101,7 +1724,7 @@ checkedApplicationHelperArgsFor ::
   [ArgMode] ->
   [Term] ->
   m [CheckedActual]
-checkedApplicationHelperArgsFor ident modes0 args0 = go [] modes0 args0
+checkedApplicationHelperArgsFor ident = go []
   where
     go acc [] [] = pure (reverse acc)
     go acc (ProofArg : modes) (_ : rest) =
@@ -3280,72 +1903,6 @@ lowerProofPrimitiveContract contract args = do
       Except.throwError (RejectedPrimitive "proof primitive"
         "proof-primitive contract argument table did not match source arity")
 
-leanBinderName :: Lean.Binder -> Lean.Ident
-leanBinderName (Lean.Binder _ name _) = name
-
-termMentionsAny :: Set Lean.Ident -> Lean.Term -> Bool
-termMentionsAny needles0 = go needles0
-  where
-    go needles _
-      | Set.null needles = False
-    go needles (Lean.Var ident) = ident `Set.member` needles
-    go needles (Lean.ExplVar ident) = ident `Set.member` needles
-    go needles (Lean.ExplVarUniv ident _) = ident `Set.member` needles
-    go needles (Lean.Lambda binders body) =
-      any (binderMentions needles) binders
-        || go (foldr Set.delete needles (map leanBinderName binders)) body
-    go needles (Lean.Pi binders body) =
-      any (piBinderMentions needles) binders
-        || go (foldr Set.delete needles (mapMaybe piBinderName binders)) body
-    go needles (Lean.Let name binders mty rhs body) =
-      any (binderMentions needles) binders
-        || maybe False (go needles) mty
-        || go needles rhs
-        || go (Set.delete name needles) body
-    go needles (Lean.App f args) = go needles f || any (go needles) args
-    go needles (Lean.Ascription a b) = go needles a || go needles b
-    go needles (Lean.List xs) = any (go needles) xs
-    go _ Lean.Sort{} = False
-    go _ Lean.NatLit{} = False
-    go _ Lean.IntLit{} = False
-    go _ Lean.StringLit{} = False
-    go _ Lean.Tactic{} = False
-
-    piBinderName (Lean.PiBinder _ mName _) = mName
-    binderMentions needles (Lean.Binder _ _ mty) = maybe False (go needles) mty
-    piBinderMentions needles (Lean.PiBinder _ _ ty) = go needles ty
-
-leanTermIdents :: Lean.Term -> Set Lean.Ident
-leanTermIdents = go
-  where
-    go (Lean.Var ident) = Set.singleton ident
-    go (Lean.ExplVar ident) = Set.singleton ident
-    go (Lean.ExplVarUniv ident _) = Set.singleton ident
-    go (Lean.Lambda binders body) =
-      Set.unions (go body : map binderIdents binders)
-    go (Lean.Pi binders body) =
-      Set.unions (go body : map piBinderIdents binders)
-    go (Lean.Let name binders mty rhs body) =
-      let pieces =
-            [go rhs, go body] ++ maybe [] ((: []) . go) mty ++
-            map binderIdents binders
-      in
-      Set.insert name $
-        Set.unions pieces
-    go (Lean.App f args) = Set.unions (go f : map go args)
-    go (Lean.Ascription a b) = Set.union (go a) (go b)
-    go (Lean.List xs) = Set.unions (map go xs)
-    go Lean.Sort{} = Set.empty
-    go Lean.NatLit{} = Set.empty
-    go Lean.IntLit{} = Set.empty
-    go Lean.StringLit{} = Set.empty
-    go Lean.Tactic{} = Set.empty
-
-    binderIdents (Lean.Binder _ name mty) =
-      Set.insert name (maybe Set.empty go mty)
-    piBinderIdents (Lean.PiBinder _ mName ty) =
-      maybe id Set.insert mName (go ty)
-
 proofObligationPlaceholder :: Lean.Term
 proofObligationPlaceholder =
   -- Emit-stage placeholder only. The check-stage must reject completed
@@ -3454,7 +2011,7 @@ translateRawPositionError resultTy msgArg = do
           pure (TranslatedTerm lam BindingFunction)
     _ ->
       Except.throwError $ RejectedPrimitive "error"
-        ("Prelude.error demanded at a raw position (Nat/index, sort, \
+        "Prelude.error demanded at a raw position (Nat/index, sort, \
          \proof, dependent function, or a function whose final result \
          \is raw). No Except carrier exists at this position, so a \
          \faithful translation is impossible and a default would be \
@@ -3462,7 +2019,7 @@ translateRawPositionError resultTy msgArg = do
          \undischargeable at every reachable position (see \
          \doc/2026-07-14_reachable-raw-error-disposition.md). \
          \Function-typed error with a value-domain result lowers \
-         \soundly; other shapes reject until a checked design exists.")
+         \soundly; other shapes reject until a checked design exists."
   where
     -- The same carrier rule the Pi type translator applies to binder
     -- domains: value-domain wraps, index/type/proof stays raw.
@@ -3899,7 +2456,7 @@ translateIdentWithArgsWithShape i args
           FixClassSPaired ->
             -- R3b, fifth-audit amendment D: mutual paired-stream
             -- corecursion has its OWN disposition — an explicit
-            -- named rejection, never a smuggled lowering and never
+            -- named rejection, never a silently introduced lowering and never
             -- the retired-contract fallback.
             Except.throwError (RejectedPrimitive "Prelude.fix"
               ("paired-stream mutual corecursion is not realized "
@@ -4147,7 +2704,7 @@ originalDispatchWithShape i args = do
                   shouldUseLift =
                        any (shouldWrapBinder . snd) binders
                     || shouldWrapBinder ret
-                    || any id shouldBind
+                    || or shouldBind
               if not shouldUseLift
                  then do
                    let tm = Lean.App f argTerms
@@ -4158,7 +2715,7 @@ originalDispatchWithShape i args = do
                          take (length args') (shouldBind ++ repeat False)
                        pureWrap =
                             phaseBetaResultIsValue fty
-                         || any id shouldBindForArgs
+                         || or shouldBindForArgs
                        resultShape =
                          if pureWrap
                             then BindingWrapped
@@ -4208,8 +2765,8 @@ originalDispatchWithShape i args = do
                        -- re-bound, types/props/functions stay raw.
                        missingModes = drop (length args') derivedModes
                        etaFormalWrapped ix mode =
-                            (mode == RawValueArg
-                             || (mode == IndexArg && ix `notElem` typeIxsFor))
+                            mode == RawValueArg
+                            || (mode == IndexArg && ix `notElem` typeIxsFor)
                        missingWrapped =
                          [ etaFormalWrapped ix mode
                          | (ix, mode) <- zip [length args'..] missingModes
@@ -4229,7 +2786,7 @@ originalDispatchWithShape i args = do
                                (zip derivedModes
                                     (suppliedWrapped ++ missingWrapped))
                          ]
-                   let pureWrapEta = pureWrap || any id shouldBindEta
+                   let pureWrapEta = pureWrap || or shouldBindEta
                    body <- buildLifted f pureWrapEta
                              (take (length etaArgTerms)
                                    (shouldBindEta ++ repeat False))
@@ -4411,7 +2968,7 @@ originalDispatchWithShape i args = do
         wrappedHelperArgExpectsFunction UseArgFunction = True
         wrappedHelperArgExpectsFunction UseArgFunctionWithNatLt{} = True
         wrappedHelperArgExpectsFunction _ = False
-        translateWrappedHelperArgs modes0 args0 = go [] modes0 args0
+        translateWrappedHelperArgs = go []
           where
             go acc [] [] = pure acc
             go acc (UseArgFunctionWithNatLt nIdx : modes) (arg : rest)
@@ -4439,377 +2996,6 @@ originalDispatchWithShape i args = do
     apply _ _ (UseReject reason) =
       Except.throwError
         (RejectedPrimitive (Text.pack (identName i)) reason)
-
--- | OP-3 Slice R0 (doc/2026-07-15_op3-successor-design.md, slice
--- plan): the productivity recognizer, INERT — classification + trace
--- only. NOTHING in emission may branch on the result until Slice R2
--- flips the Class-F gate (and Slice R3 the stream gates); until then
--- this is the migration's differential oracle, mirroring the Slice-0
--- 'SAW_LEAN_TRACE_POSITIONS' pattern.
-data FixClass
-  = FixClassF
-    -- ^ Finite bounded-lookback (Class F): @Vec n α@-typed fix whose
-    -- body is @\rec -> append [seed] (gen k (\i -> elt))@ with seed
-    -- length exactly 1 (amendment B) and every recursive reference
-    -- consumed through the zip/at family at the append's constant
-    -- @-1@ shift (amendment C; the per-instance semantic guarantee
-    -- is Slice R2's PROVEN @H_prod@ obligation, not this syntactic
-    -- gate — amendment A).
-  | FixClassSSingle
-    -- ^ Stream single-step corecursion (Class S): @Stream α@-typed
-    -- fix in MkStream-headed or single-step append form.
-  | FixClassSPaired
-    -- ^ Mutual paired-stream fix (@PairType (Stream _) (Stream _)@).
-    -- Amendment D: OWN disposition — Slice R3 rejects it with a named
-    -- diagnostic; a paired lowering is a separate later design.
-  | FixUnrecognized String
-    -- ^ Everything else, with the reason the gate will name when
-    -- Slice R2 activates rejection.
-  deriving (Eq, Show)
-
--- | The reason string a rejection carries for an unrecognized (or
--- position-mismatched) wrapped fix verdict.
-fixVerdictReason :: FixClass -> String
-fixVerdictReason (FixUnrecognized r) = r
-fixVerdictReason FixClassF =
-  "Class F recognized at a non-wrapped position"
-fixVerdictReason FixClassSSingle =
-  "Class S-single recognized at a non-wrapped position"
-fixVerdictReason FixClassSPaired =
-  "paired-stream fix (rejected upstream)"
-
--- | Classify a wrapped @Prelude.fix@ application from its SOURCE-side
--- type and body terms — never from emitted Lean (calculus rule). The
--- checks are deliberately narrow and syntactic; when in doubt the
--- verdict is 'FixUnrecognized' (reject-when-gated, never guess).
-classifyFixShape :: Term -> Term -> FixClass
-classifyFixShape typeArg bodyArg
-    -- the prelude has both the sort-0 PairType and the sort-1
-    -- PairType1 spelling; paired-stream fixes arrive at the latter
-  | Just [sa, sb] <- asAnyPairType typeArg
-  , isStreamType sa && isStreamType sb
-  = FixClassSPaired
-  | isStreamType typeArg
-  = classifyStreamBody
-  | Just [_n, _a] <- asGlobalApply "Prelude.Vec" typeArg
-  = classifyVecBody
-  | otherwise
-  = FixUnrecognized
-      ("fix at a type outside Vec/Stream/paired-Stream: "
-       ++ termHeadName typeArg)
-  where
-    isStreamType t = isJust (asGlobalApply "Prelude.Stream" t)
-
-    asAnyPairType t = case asGlobalApply "Prelude.PairType" t of
-      Just as -> Just as
-      Nothing -> asGlobalApply "Prelude.PairType1" t
-
-    -- Class S-single (R3a hardening): a bare MkStream head is NOT
-    -- enough to gate an emission flip. The corpus's canonical
-    -- single-step shape (rec_ones) is
-    --   \rec -> MkStream a (\i -> atWithDefault 1 a
-    --                        <Stream.rec read of rec, using its
-    --                         index function only at (subNat i 1)>
-    --                        <rec-free literal seed of length 1> i)
-    -- Element 0 comes from the seed; element i reads the recursive
-    -- stream only at i-1. Anything looser stays Unrecognized until a
-    -- lowering for it is designed.
-    classifyStreamBody = case asLambda bodyArg of
-      Nothing -> FixUnrecognized "stream fix body is not a lambda"
-      Just (recVn, _recTy, inner) ->
-        case asGlobalApply "Prelude.MkStream" inner of
-          Just [_elemTy, idxF] -> case asLambda idxF of
-            Just (iVn, _ity, fbody) ->
-              classifyStreamElem recVn iVn fbody
-            Nothing ->
-              FixUnrecognized "MkStream index function is not a lambda"
-          _ ->
-            FixUnrecognized
-              ("stream fix body head is not MkStream: "
-               ++ termHeadName inner)
-
-    classifyStreamElem recVn iVn fbody =
-      case asGlobalApply "Prelude.atWithDefault" fbody of
-        Just [sLen, _elemTy, dflt, seedV, idx]
-          | asNat sLen /= Just 1 ->
-              FixUnrecognized "stream seed length is not the literal 1"
-          | not (isExactVar iVn idx) ->
-              FixUnrecognized
-                "stream atWithDefault index is not the MkStream binder"
-          | termMentionsVar recVn seedV ->
-              FixUnrecognized
-                "recursive binder occurs in the stream seed"
-          -- R3b review finding F1: the gate must equal the lowering's
-          -- destructure exactly — the lowering extracts x0 from a
-          -- literal single-element ArrayValue, so a computed
-          -- length-1 seed (gen 1 …, a bound vector) must classify
-          -- Unrecognized here, not surface as an internal-invariant
-          -- error downstream. Reject-when-unsure direction.
-          | Nothing <- asSingletonArraySeed seedV ->
-              FixUnrecognized
-                "stream seed is not a literal single-element vector"
-          | otherwise -> classifyStreamTail recVn iVn dflt
-        _ ->
-          FixUnrecognized
-            ("stream element body is not the seeded atWithDefault "
-             ++ "form: " ++ termHeadName fbody)
-
-    -- The recursor value (recursor + params + motive + elims) is
-    -- applied to the scrutinee as an ordinary App; 'asRecursorApp'
-    -- recognizes only the former (Stream has no indices), so peel
-    -- the scrutinee first.
-    classifyStreamTail recVn iVn dflt
-      | Just (recFn, scrut) <- asApp dflt
-      , Just (crec, _params, motive, [caseFn], []) <-
-          asRecursorApp recFn
-      , ModuleIdentifier dtIdent <- nameInfo (recursorDataType crec)
-      , identName dtIdent == "Stream"
-      = if not (isExactVar recVn scrut)
-          then FixUnrecognized
-            "stream read scrutinee is not the recursive binder"
-        else if termMentionsVar recVn motive
-          then FixUnrecognized
-            "recursive binder occurs in the stream read motive"
-        else if termMentionsVar recVn caseFn
-          then FixUnrecognized
-            "recursive binder occurs outside the scrutinee \
-            \of the stream read"
-        else case asLambda caseFn of
-          Just (sVn, _sty, caseBody) ->
-            -- R3 audit amendment 1 (2026-07-15, load-bearing): the
-            -- case body must be EXACTLY the identity read
-            -- @s (subNat i 1)@. A wrapping transformation
-            -- (@f (s (i-1))@ — the iterate family) is raw at the
-            -- SAWCore layer this recognizer sees, but its Lean
-            -- translation may be Except-valued (checked indexing,
-            -- division, …), and the only validated R3 lowering is
-            -- the identity step. Accepting more would make the
-            -- gate broader than the sound lowering — the
-            -- structural draft's failure mode. The iterate
-            -- generalization is the post-R4 program.
-            if isIdentityStreamRead iVn sVn caseBody
-              then FixClassSSingle
-              else FixUnrecognized
-                "stream step is not the identity read \
-                \(iterate-family transformations are not realized)"
-          Nothing ->
-            FixUnrecognized "stream case function is not a lambda"
-      | otherwise =
-          FixUnrecognized
-            ("stream tail is not a Stream.rec read of the "
-             ++ "recursive stream: " ++ termHeadName dflt)
-
-    -- @caseBody@ must be the bare application of the stream index
-    -- function binder to the constant -1 shift of the MkStream
-    -- binder — nothing above it, nothing around it.
-    isIdentityStreamRead iVn sVn caseBody
-      | Just (fh, arg) <- asApp caseBody
-      , Just (vn, _) <- asVariable fh
-      , vnIndex vn == vnIndex sVn
-      = isShiftMinusOne iVn arg
-      | otherwise = False
-
-    -- The corpus's normalized Class-F form is the FUSED gen/ite shape
-    -- (scNormalizeForLean folds the Cryptol append into one gen):
-    --   \rec -> gen N a (\i -> ite a (ltNat i 1)
-    --                              <seed branch, rec-free>
-    --                              (at K a (gen K a (\i2 -> elt))
-    --                                  (subNat i 1)))
-    -- The constant -1 shift (amendment C) lives at the tail branch:
-    -- result[i] = innerGen[i-1], and inside elt the recursive binder
-    -- is read through zip at the INNER binder exactly — so
-    -- result[i] reads rec only at index i-1 < i.
-    classifyVecBody = case asLambda bodyArg of
-      Nothing -> FixUnrecognized "vec fix body is not a lambda"
-      Just (recVn, _recTy, inner) ->
-        case asGlobalApply "Prelude.gen" inner of
-          Just [_nTot, _elemTy, genF] -> case asLambda genF of
-            Just (iVn, _ityp, iteBody) ->
-              classifyFusedIte recVn iVn iteBody
-            Nothing -> FixUnrecognized "gen element function is not a lambda"
-          _ ->
-            FixUnrecognized
-              ("vec fix body head is not the fused gen form: "
-               ++ termHeadName inner)
-
-    classifyFusedIte recVn iVn iteBody =
-      case asGlobalApply "Prelude.ite" iteBody of
-        Just [_a, cond, seedBranch, tailBranch]
-          | not (isSeedGuard iVn cond) ->
-              FixUnrecognized
-                ("element guard is not (ltNat i 1): " ++ termSpine 2 cond)
-          | termMentionsVar recVn cond ->
-              FixUnrecognized "recursive binder occurs in the element guard"
-          | termMentionsVar recVn seedBranch ->
-              FixUnrecognized "recursive binder occurs in the seed branch"
-          | otherwise -> classifyTail recVn iVn tailBranch
-        _ ->
-          FixUnrecognized
-            ("gen element body is not an ite: " ++ termHeadName iteBody)
-
-    classifyTail recVn iVn tailBranch =
-      case asGlobalApply "Prelude.at" tailBranch of
-        Just [_k, _pty, vec, idx]
-          | not (isShiftMinusOne iVn idx) ->
-              FixUnrecognized
-                ("tail selection index is not the constant -1 shift: "
-                 ++ termSpine 2 idx)
-          | otherwise -> case asGlobalApply "Prelude.gen" vec of
-              Just [_k2, _a2, innerF] -> case asLambda innerF of
-                Just (i2Vn, _t2, elt) -> recUseVerdict recVn i2Vn elt
-                Nothing ->
-                  FixUnrecognized "inner gen element function is not a lambda"
-              _ ->
-                FixUnrecognized
-                  ("shifted tail is not an inner gen: " ++ termHeadName vec)
-        _ ->
-          FixUnrecognized
-            ("tail branch is not an at-selection: "
-             ++ termHeadName tailBranch)
-
-    isSeedGuard iVn cond =
-      case asGlobalApply "Prelude.ltNat" cond of
-        Just [iv, bound]
-          | Just (vn, _) <- asVariable iv
-          , vnIndex vn == vnIndex iVn
-          , asNat bound == Just 1 -> True
-        _ -> False
-
-    -- Amendment-C discipline, syntactic side: every occurrence of the
-    -- recursive binder inside the element function must sit inside a
-    -- zip application (the corpus's parallel-comprehension form), and
-    -- every at-selection whose vector spine CONTAINS the recursive
-    -- binder must be indexed by the constant -1 shift of the outer
-    -- gen binder (@subNat i 1@) — a same-index or computed-index body
-    -- must NOT classify (it would be unsound to lower, third/fourth
-    -- audits).
-    recUseVerdict recVn idxVn elt =
-      case scanRecUses recVn idxVn False elt of
-        Left reason -> FixUnrecognized reason
-        Right sawRecUse
-          | sawRecUse -> FixClassF
-          | otherwise ->
-              FixUnrecognized
-                "no recursive reference under the append arm (not a recurrence)"
-
-    -- Walk the element term. Returns Left reason on a forbidden use,
-    -- Right sawAnyUse otherwise. 'inZip' tracks whether we are inside
-    -- a zip argument slot (the only place a BARE rec reference is
-    -- permitted).
-    scanRecUses recVn idxVn = go
-      where
-        go inZip t
-          | Just (vn, _) <- asVariable t =
-              if vnIndex vn == vnIndex recVn
-                then if inZip
-                       then Right True
-                       else Left "recursive binder used outside a zip slot"
-                else Right False
-          | Just [_a, _b, _m, _k, xs, ys] <- asGlobalApply "Prelude.zip" t =
-              -- Sixth-audit Finding 0 (2026-07-16): a zip OPERAND
-              -- admits exactly the bare recursive vector — nothing
-              -- wrapped around it. Blessing the whole operand spine
-              -- (the previous `go True`) admitted index-permuting or
-              -- forcing-opaque wrappers one level down
-              -- (@zip … (reverse rec) xs@, @zip … (bvAnd rec m) xs@),
-              -- the same class the at-spine rule already rejects.
-              -- Any non-bare operand is scanned with the zip
-              -- blessing OFF, so a deeper rec must re-qualify
-              -- through the at/zip rules on its own.
-              combine [goZipSlot xs, goZipSlot ys]
-          | Just [_n, _pty, vec, idx] <- asGlobalApply "Prelude.at" t
-          , termMentionsVar recVn vec =
-              -- inside the inner gen the -1 shift has already been
-              -- applied at the tail branch, so a rec-containing
-              -- at-selection must be indexed by EXACTLY the inner
-              -- binder — any further index arithmetic is out of the
-              -- recognized class. The selected spine must be the
-              -- recursive vector itself or reach it through zip
-              -- slots only (scanned with inZip=False, so the zip
-              -- rule is the sole admitter): an index-permuting
-              -- wrapper like @reverse rec@ would silently break the
-              -- lookback direction if the whole spine were blessed.
-              if isExactVar idxVn idx
-                then if isExactVar recVn vec
-                       then Right True
-                       else go False vec
-                else Left "rec-containing at-selection index is not the inner gen binder"
-          | otherwise =
-              case toList (unwrapTermF t) of
-                [] -> Right False
-                cs -> combine (map (go inZip) cs)
-
-        combine rs = case [e | Left e <- rs] of
-          (e : _) -> Left e
-          [] -> Right (or [b | Right b <- rs])
-
-        goZipSlot t
-          | Just (vn, _) <- asVariable t
-          , vnIndex vn == vnIndex recVn = Right True
-          | otherwise = go False t
-
-    termMentionsVar vn t = vnIndex vn `IntSet.member` freeVars t
-
-    isExactVar vn t = case asVariable t of
-      Just (vn', _) -> vnIndex vn' == vnIndex vn
-      Nothing -> False
-
-    isShiftMinusOne idxVn idx =
-      case asGlobalApply "Prelude.subNat" idx of
-        Just [base, one]
-          | Just (vn, _) <- asVariable base
-          , vnIndex vn == vnIndex idxVn
-          , asNat one == Just 1 -> True
-        _ -> False
-
--- | The one seed shape the Class S-single lowering can consume: a
--- literal ArrayValue with exactly one element. This is the SHARED
--- spelling of the seed guard — 'classifyStreamElem' (the gate) and
--- 'lowerClassSSingle' (the lowering) both go through it, so the two
--- can never drift apart on it again (R3b review finding F1).
-asSingletonArraySeed :: Term -> Maybe Term
-asSingletonArraySeed t = case asArrayValue t of
-  Just (_ty, [elt]) -> Just elt
-  _ -> Nothing
-
-termHeadName :: Term -> String
-termHeadName t = case asGlobalDef (fst (asApplyAll t)) of
-  Just i  -> identName i
-  Nothing -> case unwrapTermF t of
-    Lambda {}   -> "lam"
-    Variable {} -> "var"
-    tf          -> take 24 (show tf)
-
--- | Depth-limited application-spine dump for the R0 trace: head name
--- plus argument heads, recursively. Debug instrumentation only.
-termSpine :: Int -> Term -> String
-termSpine d t
-  | d <= 0 = termHeadName t
-  | Just (_vn, _ty, body) <- asLambda t =
-      "(lam. " ++ termSpine (d - 1) body ++ ")"
-  | otherwise =
-      case asApplyAll t of
-        (_, []) -> termHeadName t
-        (h, as) ->
-          "(" ++ termHeadName h ++ " "
-              ++ unwords (map (termSpine (d - 1)) as) ++ ")"
-
--- | One-shot read of @SAW_LEAN_TRACE_FIX_CLASS@, mirroring
--- 'positionTraceEnabled'. Debug instrumentation only; nothing
--- downstream may depend on it.
-fixClassTraceEnabled :: Bool
-fixClassTraceEnabled =
-  unsafePerformIO (isJust <$> lookupEnv "SAW_LEAN_TRACE_FIX_CLASS")
-{-# NOINLINE fixClassTraceEnabled #-}
-
-traceFixClass :: TermTranslationMonad m => Term -> Term -> m ()
-traceFixClass typeArg bodyArg
-  | not fixClassTraceEnabled = pure ()
-  | otherwise =
-      Debug.Trace.traceM $
-        "[fixClass] type=" ++ termHeadName typeArg
-        ++ " verdict=" ++ show (classifyFixShape typeArg bodyArg)
-        ++ " spine=" ++ termSpine 8 bodyArg
 
 -- | Lower a RAW-POSITION @Prelude.fix@ (function/proof/index result)
 -- to the raw unique-fixed-point proof obligation. Post-R4 this is the
@@ -4994,7 +3180,7 @@ translateConstantWithType nm sawType
           explicitlySkipped = nm_str `elem` constantSkips config
       case (mRenamed, explicitlySkipped) of
         (Nothing, False) ->
-          Except.throwError $ RejectedPrimitive (Text.pack nm_str) $
+          Except.throwError $ RejectedPrimitive (Text.pack nm_str)
             "imported constants require an explicit Lean realization. \
             \Add the name to the skip list when the Lean environment supplies \
             \a declaration with the same name, or provide an explicit renaming."
@@ -5026,12 +3212,12 @@ emitImportedRealizationAlias ::
   Name -> Either Sort Term -> Lean.Ident -> m Lean.Term
 emitImportedRealizationAlias nm sawType targetIdent = do
   let aliasIdent = importedRealizationAliasIdent nm
-  globals <- view globalDeclarations <$> get
+  globals <- gets (view globalDeclarations)
   if aliasIdent `elem` globals
      then pure (Lean.Var aliasIdent)
      else do
        typeLean <- translateConstantContractType sawType
-       univs <- view universeVars <$> get
+       univs <- gets (view universeVars)
        let body = Lean.Var targetIdent
            decl = mkDefinitionWith Lean.Noncomputable univs aliasIdent body typeLean
        modify (over topLevelDeclarations (decl :))
@@ -5283,7 +3469,7 @@ translateRecursorAppWithShape crec args = do
              recResultMode convention == RecursorReturnsWrappedValue
        paramTrans <- traverse translateTerm paramArgs
        casePlans <- recursorCasePlans paramTrans crec
-       preTrans <- sequence (zipWith
+       preTrans <- zipWithM
          (\i a -> if i < nParams
                      then pure (paramTrans !! i)
                      else if i == nParams
@@ -5296,7 +3482,7 @@ translateRecursorAppWithShape crec args = do
                                 motiveReturnsWrappedValue
                                 (casePlans !! (i - caseFirst)) a
                          else translateTerm a)
-         [0..] preScrut)
+         [0..] preScrut
        postResults <- traverse translateTermWithShape postScrut
        postTrans <- recursorPostArgs motiveBody postResults
        let recCallWith scrutTerm =
@@ -5496,7 +3682,7 @@ translateRecursorAppWithShape crec args = do
 
         datatypeParamIndex tp = case unwrapTermF tp of
           Variable vn _ ->
-            findIndex (== vn) ctorParamNames
+            elemIndex vn ctorParamNames
           _ -> Nothing
 
 -- | Translate a recursor case-handler argument. The handler is
@@ -5739,8 +3925,8 @@ recordCtorOrderAssertion ::
 recordCtorOrderAssertion crec = do
   dtQual <- qualifiedIdentFor (recursorDataType crec)
   ctorQuals <- traverse qualifiedIdentFor (recursorCtorOrder crec)
-  decls <- view topLevelDeclarations <$> get
-  let already = any (\d -> case d of
+  decls <- gets (view topLevelDeclarations)
+  let already = any (\case
         Lean.CtorOrderAssertion dt' _ -> dt' == dtQual
         _                             -> False) decls
   unless already $
@@ -6485,9 +4671,7 @@ translateTermUnsharedWithShapeAt mrho t =
             Variable vn _ -> do
               nenv <- view namedEnvironment <$> askTR
               env  <- view bindingEnv <$> askTR
-              pure $ case (`Map.lookup` env) =<< Map.lookup vn nenv of
-                Just info -> biRepr info
-                Nothing   -> BindingRaw
+              pure $ maybe BindingRaw biRepr ((`Map.lookup` env) =<< Map.lookup vn nenv)
             _ -> pure BindingRaw
           pure (TranslatedTerm tm shape)
 
@@ -6530,7 +4714,7 @@ applyKnownFunctionWithShape fty f args = do
            sourceResultShape = phaseBetaResultShape fty (length args)
            pureWrap =
                 not targetReturnsWrapped
-             && (isWrappedShape sourceResultShape || any id shouldBindRaw)
+             && (isWrappedShape sourceResultShape || or shouldBindRaw)
            resultShape =
              if targetReturnsWrapped || pureWrap
                 then BindingWrapped
@@ -6549,7 +4733,7 @@ applyKnownFunctionWithShape fty f args = do
 withSharedTerm :: TermTranslationMonad m =>
                   TermIndex -> (Lean.Ident -> m a) -> m a
 withSharedTerm idx f = do
-  ident <- (view nextSharedName <$> askTR) >>= freshVariant
+  ident <- askTR >>= freshVariant . view nextSharedName
   let sh = SharedName ident
   localTR (set nextSharedName (nextVariant ident)
            . over sharedNames (IntMap.insert idx sh)) $
@@ -6570,7 +4754,7 @@ withSharedTerms ((i, _) : ts) f =
 -- | Build a Lean @let@ wrapping. @mkLet (name, rhs) body@ produces
 -- @let name := rhs; body@ at the value level.
 mkLet :: (Lean.Ident, Lean.Term) -> Lean.Term -> Lean.Term
-mkLet (name, rhs) body = Lean.Let name [] Nothing rhs body
+mkLet (name, rhs) = Lean.Let name [] Nothing rhs
 
 -- | Top-level entry: walk the SAWCore term, identify subterms that
 -- appear more than once and warrant memoisation, allocate fresh Lean
@@ -6613,7 +4797,7 @@ translateTermLetAt mrho t = do
         Left _  -> True
         Right _ -> False
       keep (sub, n) = n > 1 && shouldMemoizeTerm sub && not (isType sub)
-      shares = IntMap.assocs $ fmap fst $ IntMap.filter keep occMap
+      shares = IntMap.assocs $ fmap fst (IntMap.filter keep occMap)
       shareTms = map snd shares
   withSharedTerms shares $ \names -> do
     -- Translate shared RHSs in dependency order, extending the shape

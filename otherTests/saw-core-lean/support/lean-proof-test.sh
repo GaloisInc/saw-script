@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # Shared harness for otherTests/saw-core-lean/proofs/*/ and
 # support-lemmas/*/ directories.
 #

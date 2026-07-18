@@ -258,7 +258,7 @@ in:
   - `proofs/popcount32_via_bridge/proof.lean`
 - **19 driver `.lean.good` files** (will regenerate on rerun;
   not human-edited).
-- **1 shape `.shouldfail.lean`** (`negative/error_prop/attack_empty.shouldfail.lean`).
+- **1 shape `.shouldfail.lean`** (`negative/error_prop/rejection_empty.shouldfail.lean`).
 
 **Recommended regression seed (9 short, wrap-clean proofs):**
 

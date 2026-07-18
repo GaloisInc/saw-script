@@ -337,7 +337,10 @@ library saw-core-lean
   exposed-modules:
     Language.Lean.AST
     Language.Lean.Pretty
+    SAWCoreLean.Contracts
+    SAWCoreLean.Convention
     SAWCoreLean.CryptolModule
+    SAWCoreLean.FixRecognizer
     SAWCoreLean.Lean
     SAWCoreLean.Monad
     SAWCoreLean.SAWModule

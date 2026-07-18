@@ -87,7 +87,7 @@ while staying faithful to SAW emission:
 Pinned by `otherTests/saw-core-lean/negative/error_prop/`:
 - `rejection.shouldfail.lean` — `error False ""` must fail (Prop
   excluded by `Type u`).
-- `attack_empty.shouldfail.lean` — `error Empty ""` must fail
+- `rejection_empty.shouldfail.lean` — `error Empty ""` must fail
   (no `Inhabited Empty` instance).
 
 **Residual.** A determined user can still write

@@ -58,19 +58,19 @@ STAGE="$WORK"
 # Non-degradable timeout guard (seventh-audit amendment 2): the CI
 # wrapper degrades to unguarded when coreutils is absent; the trust
 # kernel refuses instead.
-if command -v timeout >/dev/null 2>&1; then TO="timeout 120"
-elif command -v gtimeout >/dev/null 2>&1; then TO="gtimeout 120"
+if command -v timeout >/dev/null 2>&1; then TO=(timeout 120)
+elif command -v gtimeout >/dev/null 2>&1; then TO=(gtimeout 120)
 else fail "no-timeout-guard"
 fi
 
 # Cleared environment: ambient LEAN_PATH is dropped, replaced by the
 # stage dir only; `lake env` supplies the pinned project library.
 run_lean() {
-    ( cd "$PROJ" && env LEAN_PATH="$STAGE" $TO lake env lean "$@" ) 2>&1
+    ( cd "$PROJ" && env LEAN_PATH="$STAGE" "${TO[@]}" lake env lean "$@" ) 2>&1
 }
 
 # 0. Pinned support library must build.
-build_out=$( ( cd "$PROJ" && $TO lake build ) 2>&1 ) || {
+build_out=$( ( cd "$PROJ" && "${TO[@]}" lake build ) 2>&1 ) || {
     echo "$build_out"; fail "support-library-build"; }
 
 # 1. Emitted goal compiles.
@@ -133,8 +133,8 @@ if [ -f "$STAGE/completed.lean" ]; then
         fi
     } > "$STAGE/drift-check.lean"
     grep -q '^#check' "$STAGE/drift-check.lean" || fail "vacuous-drift-check"
-    drift_out=$(run_lean "$STAGE/drift-check.lean")
-    if [ $? -ne 0 ] || printf '%s\n' "$drift_out" | grep -qE '^[^[:space:]]+: error'; then
+    if ! drift_out=$(run_lean "$STAGE/drift-check.lean") \
+       || printf '%s\n' "$drift_out" | grep -qE '^[^[:space:]]+: error'; then
         echo "$drift_out"; fail "completed-outline-drift"
     fi
 fi
@@ -177,8 +177,8 @@ if [ "$has_goal_def" -eq 1 ]; then
         echo "$up_out"; fail "proof-does-not-elaborate"; }
     printf 'import Emitted\nimport UserProof\n#check (goal_closed : goal)\n' \
         > "$STAGE/closer-type-probe.lean"
-    ct_out=$(run_lean "$STAGE/closer-type-probe.lean")
-    if [ $? -ne 0 ] || printf '%s\n' "$ct_out" | grep -qE '^[^[:space:]]+: error'; then
+    if ! ct_out=$(run_lean "$STAGE/closer-type-probe.lean") \
+       || printf '%s\n' "$ct_out" | grep -qE '^[^[:space:]]+: error'; then
         echo "$ct_out"; fail "closer-wrong-type"
     fi
 fi

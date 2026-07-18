@@ -1573,7 +1573,7 @@ reject and pin a fixture rather than widen a heuristic.
     audit so the audit reviews final structure.
   - **(#3 residual — DONE 2026-07-17)** `support/lean-shape-test.sh`
     renamed to `lean-negative-test.sh`; header (which still said
-    "attacks/") and stale `shape/` mentions in `test.sh`/`ci.yml`
+    an interim name) and stale `shape/` mentions in `test.sh`/`ci.yml`
     updated.
   - **(#4)** Split TODO.md: open items stay; Audit History +
     Decision Log to durable `doc/` files; large COMPLETE blocks to

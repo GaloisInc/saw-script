@@ -40,7 +40,7 @@ The support library exposes two error symbols:
 |-------|--------|-----------|
 | `error False ""` (user-facing) | **B** | `error : Type u → ...` excludes `Prop` directly. Pinned by `negative/error_prop/rejection.shouldfail.lean`. |
 | `error_unrestricted False ""` | **B** | `Sort (u+1)` excludes `Prop`. Same probe also covers this since the Sort restriction matches. |
-| `Empty.elim (error Empty "boom")` → `False` | **B** | User-facing `error` requires `[Inhabited α]`; `Inhabited Empty` does not exist. Pinned by `negative/error_prop/attack_empty.shouldfail.lean`. |
+| `Empty.elim (error Empty "boom")` → `False` | **B** | User-facing `error` requires `[Inhabited α]`; `Inhabited Empty` does not exist. Pinned by `negative/error_prop/rejection_empty.shouldfail.lean`. |
 | `@Inhabited.default _ (error (Inhabited Empty) "")` → `Empty` → `False` | **B** | Same blocker — `Inhabited (Inhabited Empty)` does not exist. |
 | `error α "..."` (user-facing) for any uninhabited α : Type u | **B** | Universal — Inhabited synthesis fails on every uninhabited type. |
 | `Empty.elim (error_unrestricted Empty "boom")` → `False` | **R** | The user explicitly opts out by writing the long unsafe name. Same residual class as `unsafeAssert` generic unsoundness. Translator never emits it at uninhabited types (Cryptol surface has no Empty). Faithful binding of SAW's actual error semantics. |

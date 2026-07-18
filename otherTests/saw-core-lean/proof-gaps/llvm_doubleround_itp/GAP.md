@@ -85,7 +85,7 @@ secondary cost.
     `ac_rfl` closes elaborate as 16 independently-budgeted lemmas rather than
     one 120 s process. The outer `foldr_ofFn_all_true` discharge is already
     depth-invariant, so this is a packaging change, not new mathematics, and
-    it directly attacks the dominant cost — each per-word close is bounded and
+    it directly targets the dominant cost — each per-word close is bounded and
     well under budget on its own.
 
 Neither is a soundness concern; both are budget/packaging. The preserved

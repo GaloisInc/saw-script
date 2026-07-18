@@ -1,4 +1,4 @@
-// Replay reject pin: axiom smuggling. A closer that routes through a
+// Replay reject pin: axiom introduction. A closer that routes through a
 // user-declared axiom is rejected by the fixed allowlist
 // (CHECK-FAIL: axiom-outside-allowlist) — the same gate that would
 // catch native_decide's Lean.ofReduceBool compiler-trust hatch.

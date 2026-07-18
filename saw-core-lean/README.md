@@ -103,13 +103,14 @@ saw-core-lean/
 │   └── CryptolToLean/        # named for parity with Rocq's CryptolToRocq;
 │                             #   the library itself is SAWCore→Lean —
 │                             #   standalone Cryptol translation is a non-goal
-│       ├── SAWCoreScaffolding.lean
 │       ├── SAWCoreVectors.lean         # Vec ≡ Vector
 │       ├── SAWCoreBitvectors.lean      # bitvector n ≡ Vec n Bool
 │       ├── SAWCorePreludeExtra.lean    # iteDep / ite wrappers (L-7)
 │       ├── SAWCorePrimitives.lean      # axioms + inductives
-│       ├── SAWCoreBitvectors_proofs.lean  # ~15 axiomatic bv lemmas
+│       ├── SAWCoreCtorOrder.lean       # constructor-order assertions
+│       ├── SAWCoreBitvectors_proofs.lean  # bv lemma library
 │       └── SAWCorePrelude_proofs.lean     # round-trip + Nat lemmas
+├── replay/                   # factored trust kernel (lean-check-core.sh)
 └── smoketest/                # Tasty unit / regression tests
 ```
 

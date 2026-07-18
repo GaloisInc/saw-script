@@ -109,7 +109,7 @@
 set -u
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-cd "$HERE"
+cd "$HERE" || exit 1
 
 verb="${1:-test}"
 

@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # test-lean.sh — drive an integration test for the saw-core-lean
 # translation backend. Companion to ../support/test-and-diff.sh, but
 # extended to also pin generated .lean output files and (optionally)

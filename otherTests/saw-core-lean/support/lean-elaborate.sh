@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # lean-elaborate.sh — elaborate one or more generated Lean 4 files
 # against the CryptolToLean Lake project that ships with saw-core-lean.
 #

@@ -32,7 +32,7 @@ instance Show Ident where
   show (Ident s) = show s
 
 instance IsString Ident where
-  fromString s = Ident s
+  fromString = Ident
 
 -- | Lean 4 has 'Prop', universe-polymorphic 'Sort u', and 'Type n'
 -- for concrete level @n@. The pretty-printer emits:

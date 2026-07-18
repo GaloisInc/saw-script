@@ -1,5 +1,6 @@
+#!/usr/bin/env bash
 # Shared harness for otherTests/saw-core-lean/negative/*/ probes
-# (category history: shape/ → attacks/ → negative/; this file was
+# (category history: shape/ → negative/, via an interim name; this file was
 # support/lean-negative-test.sh until the 2026-07-17 rename).
 #
 # These exercise axiom-shape invariants by running Lean's elaborator
