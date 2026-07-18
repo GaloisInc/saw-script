@@ -316,7 +316,7 @@ unsupportedFixReason =
   "Prelude.fix must be translated by the proof-carrying fix path, \
   \which emits an explicit Lean fixed-point obligation. This occurrence \
   \did not have a supported application shape. See \
-  \saw-core-lean/doc/2026-06-26_proof-carrying-soundness-contracts.md."
+  \saw-core-lean/doc/archive/2026-06-26_proof-carrying-soundness-contracts.md."
 
 -- | The handwritten Lean-side support modules. Use these as the
 -- 'ModuleName' argument to 'mapsTo' / 'mapsToExpl'.

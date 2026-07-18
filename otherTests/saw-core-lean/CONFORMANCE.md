@@ -48,7 +48,7 @@ full backend conformance.
 ## Proof-Carrying Obligation Surface
 
 Authoritative testing plan:
-`saw-core-lean/doc/2026-06-30_obligation-shape-testing-plan.md`.
+`saw-core-lean/doc/archive/2026-06-30_obligation-shape-testing-plan.md`.
 
 These rows are not proof-discharge tests. Positive `obligation` rows check that
 the generated artifact exposes the expected contract shape and uses evidence for
@@ -228,7 +228,7 @@ boundary, or known-gap rows.
 ## Immediate Coverage Priorities
 
 1. Continue the bounds/index obligation plan:
-   `saw-core-lean/doc/2026-06-30_bounds-index-obligations-plan.md`.
+   `saw-core-lean/doc/archive/2026-06-30_bounds-index-obligations-plan.md`.
    Direct fully applied with-proof vector operations are promoted, including
    the `genWithProof` proof-binder adapter. `Cryptol.ecAt` finite bounds now
    route through the checked `Prelude.at` contract, with positive,
@@ -243,7 +243,7 @@ boundary, or known-gap rows.
    known gaps. Remaining generated sequence gaps are preserved where they
    require direct/derived index arithmetic or other proof obligations.
 2. Completed: promote the partial-operation obligation known gaps according to
-   `saw-core-lean/doc/2026-06-30_partial-operation-obligations-plan.md`.
+   `saw-core-lean/doc/archive/2026-06-30_partial-operation-obligations-plan.md`.
    Complete at the obligation-shape level: direct scalar Prelude operations,
    direct BV operations, and Cryptol partial arithmetic wrappers all have
    positive proof-carrying coverage for fully applied calls. Non-exact-arity

@@ -1,7 +1,8 @@
 # saw-core-lean status
 
-Last updated: 2026-07-15 (release 0.01 hardening + test-tree
-restructure; `doc/2026-07-14_release-plan.md`)
+Last updated: 2026-07-17 (OP-3 successor + offline_lean_replay
+landed; module split + SWE-quality pass;
+`doc/2026-07-14_release-plan.md`)
 
 ## Purpose
 
@@ -52,10 +53,15 @@ Slices 0–7 complete), the calculus IS the implementation:
 - `offline_lean` is EMISSION-ONLY (2026-07-14): it writes the goal
   file and returns `SolveUnknown`, so the goal stays unsolved on the
   SAW side and scripts wrap it in `fails`. SAW never claims a goal on
-  the strength of an export. `offline_lean_replay` is registered but
-  disabled (fails with a named diagnostic) until real SAW-side replay
-  lands. Pinned by `saw-boundary/offline_lean_export_only` and
-  `saw-boundary/offline_lean_replay_disabled`. The LLVM
+  the strength of an export. `offline_lean_replay` (LANDED
+  2026-07-16, `doc/2026-07-16_replay-design.md`) is the discharge
+  path: fresh in-process emission is the authority, the factored
+  trust kernel (`saw-core-lean/replay/lean-check-core.sh`) enforces
+  the exact-match axiom allowlist / placeholder policy / drift and
+  closer probes, and success records `LeanReplayEvidence`. Pinned by
+  `saw-boundary/offline_lean_export_only`,
+  `workflows/replay_{e1,running_sum}_verify`, and
+  `saw-boundary/replay_reject_{sorry,axiom,suffix_axiom}`. The LLVM
   `verifyObligations` loop runs every condition's tactic before
   failing, so multi-obligation `llvm_verify` still emits all files.
 
@@ -65,7 +71,7 @@ Passing (the standing fences):
 
 - Lean support library: `lake build` green, including the
   `saw_ctor_order` positive/negative self-tests.
-- `cabal test saw-core-lean-smoketest`: 57 tests, including the
+- `cabal test saw-core-lean-smoketest`: 72 tests, including the
   Slice 7 anti-regression source lint.
 - `otherTests/saw-core-lean`: `make conformance` exit 0 — 195 rows
   (differential SAW-vs-Lean evaluation, obligation shape, pinned known
@@ -98,23 +104,23 @@ tiers 2-3 below), plus the 7 `proof-gaps/` rows and the stretch
 probe carried in the full-suite inventory (tier 1 lives there).
 Three tiers:
 
-1. **Sound-but-undischargeable** (the top documented limitation):
-   the wrapped-fix recurrence class — running sum, popcount,
-   rec_ones, stream_fibs, ChaCha20 iterate — emits obligations that
-   elaborate but cannot be discharged (`saw_fix_unique_exists` is
-   unsatisfiable for strict bodies). SAW never claims these goals;
-   the OP-3 successor design is the 0.02 headline.
+1. **[ELIMINATED 2026-07-16]** The sound-but-undischargeable
+   wrapped-fix tier is gone: the OP-3 successor landed (W1, R0-R4)
+   — recognized fix classes lower to PROVEN realizations (running
+   sum, popcount32, E6, rec_ones discharged end-to-end), everything
+   else rejects loudly. See Known Holes below.
 2. **Clean rejections** (named diagnostics, pinned boundary rows):
-   Stream@core / Either@core comprehensions, direct recursors
+   Stream@core / Either@core comprehensions, paired-stream and
+   iterate-family fixes, direct recursors
    (Nat/Pos/Z/Bool/Accessible*), user datatypes, proof-primitive
    realization families, SMT-array/enum/polynomial surfaces,
    raw-position `error`, Prop-instantiated pair carriers.
 3. **Workflow scope**: `offline_lean` is emission-only — SAW leaves
-   punted goals unsolved and never claims them; SAW-side replay
-   (`offline_lean_replay`) is registered but disabled until 0.02+.
-   Remaining differential gaps are proof-support ergonomics
-   (starter tactics not yet closing concrete-vector/rational facts)
-   and SAW-simulator `Unimplemented` stubs, all pinned.
+   punted goals unsolved and never claims them; discharge is
+   `offline_lean_replay` (landed 2026-07-16). Remaining
+   differential gaps are proof-support ergonomics (starter tactics
+   not yet closing concrete-vector/rational facts) and
+   SAW-simulator `Unimplemented` stubs, all pinned.
 
 Known holes, all loud or pinned:
 
@@ -127,7 +133,7 @@ Known holes, all loud or pinned:
 - Direct recursors for Nat/Pos/Z/Bool/AccessibleNat/AccessiblePos are
   gated with specific diagnostics (constructor order / representation
   mismatches); the design for lifting the gate is
-  `doc/2026-07-03_direct-recursor-semantics-design.md` (PosRep
+  `doc/archive/2026-07-03_direct-recursor-semantics-design.md` (PosRep
   inductive + source-shaped checked realizations), tracked separately.
 - User-datatype recursors and datatype auto-emission reject with
   diagnostics (pinned by `saw-boundary/user_datatype_rejection`).
@@ -143,30 +149,26 @@ Known holes, all loud or pinned:
   constant-error function (message preserved; polynomial t1 now
   elaborates sorry-free); all other raw-position error rejects with
   a named diagnostic (pinned `saw-boundary/raw_error_rejection`).
-- Filed 2026-07-12 (TODO.md, design gap): `saw_fix_unique_exists` is
-  unsatisfiable for every strict wrapped fix body — errors are always
-  fixed points of eager `Except` bodies, so the recurrence-class
-  examples (running sum, popcount, rec_ones, stream_fibs, ChaCha20
 - CLOSED 2026-07-16 (W1, slices R0-R4 — commits 93fb03617 through
-  d3aa53199): the OP-3 successor program landed end-to-end. Wrapped
-  fixes are TWO-STATE: recognized classes lower to PROVEN
-  realizations (Class F `saw_fix_bounded_choose` — running_sum,
-  popcount32, E6, module popcount discharged; Class S-single
-  `saw_stream_realize` — rec_ones discharged), everything else
-  rejects with a named diagnostic carrying the recognizer's reason.
-  The wrapped `saw_fix_unique_exists` contract is DELETED (raw
-  variant retained per Instance 3, census-checked); the
-  sound-but-undischargeable wrapped-fix tier is ELIMINATED. Paired
-  streams (stream_fibs) and the iterate family (stream_step) are
-  pinned boundary rejections; the Bool divergence witness is pinned
-  at `saw-boundary/fix_obligation` and can never emit again. Six
-  seam bugs were found and fixed across the arc — all by
-  audit/review before any emission depended on them; the recognizer
-  surface is FROZEN (growth requires the fragment reference
-  semantics first — see doc/2026-07-16_fragment-semantics-scoping.md
-  and the sixth-audit record in the successor design doc).
-  iterate) emit obligations that elaborate but can never be discharged.
-  Sound but unusable; needs a contract revision design doc.
+  d3aa53199; was: filed 2026-07-12, `saw_fix_unique_exists`
+  unsatisfiable for every strict wrapped fix body): the OP-3
+  successor program landed end-to-end. Wrapped fixes are TWO-STATE:
+  recognized classes lower to PROVEN realizations (Class F
+  `saw_fix_bounded_choose` — running_sum, popcount32, E6, module
+  popcount discharged; Class S-single `saw_stream_realize` —
+  rec_ones discharged), everything else rejects with a named
+  diagnostic carrying the recognizer's reason. The wrapped
+  `saw_fix_unique_exists` contract is DELETED (raw variant retained
+  per Instance 3, census-checked); the sound-but-undischargeable
+  wrapped-fix tier is ELIMINATED. Paired streams (stream_fibs) and
+  the iterate family (stream_step) are pinned boundary rejections;
+  the Bool divergence witness is pinned at
+  `saw-boundary/fix_obligation` and can never emit again. Six seam
+  bugs were found and fixed across the arc — all by audit/review
+  before any emission depended on them; the recognizer surface is
+  FROZEN (growth requires the fragment reference semantics first —
+  see doc/2026-07-16_fragment-semantics-scoping.md and the
+  sixth-audit record in the successor design doc).
 - RESOLVED 2026-07-12 by Slice OP-2 (was: eta-expanded checked-access
   wrappers fabricated unprovable `η < n` evidence): evidence-less
   positions now route through `atRuntimeCheckedM`, and the
@@ -200,18 +202,21 @@ Release 0.01 posture (`doc/2026-07-14_release-plan.md`): the
 remaining items below are 0.02+ coverage work, shipped in 0.01 as
 documented limitations or pinned rejections.
 
-1. Slice OP-3 (obligation-placement program,
-   `doc/2026-07-12_obligation-placement-design.md`): successor design
-   against the third audit's six minimum conditions, then a fourth
-   audit — acceptance is `proof-gaps/cryptol_running_sum_verify`
-   closing end-to-end. The Stream@core / Either@core
-   recursor-convention translation paths (now pinned expected
-   rejections) fold into this design.
-2. The direct-recursor / `PosRep` program
-   (`doc/2026-07-03_direct-recursor-semantics-design.md`) — now
+1. [DONE 2026-07-16] The OP-3 successor program (W1, R0-R4) — the
+   recurrence class discharges via proven per-instance realizations;
+   acceptance row `proofs/cryptol_running_sum_verify` closes
+   end-to-end. Stream@core / Either@core recursor-convention paths
+   remain pinned rejections (fold into later coverage work).
+2. [DONE 2026-07-16] SAW-side `offline_lean_replay`
+   (`doc/2026-07-16_replay-design.md`; full conformance pass
+   2026-07-17).
+3. The direct-recursor / `PosRep` program
+   (`doc/archive/2026-07-03_direct-recursor-semantics-design.md`) — now
    tractable on the position-driven recursor convention.
-3. SAW-side `offline_lean_replay` (the command is registered and
-   disabled; the semantics are already scoped in the docs).
 4. Universe-generalized pair/record carriers (would lift the
    pair-at-Prop rejection), proof-primitive realization families,
    user datatypes — example-driven coverage.
+5. Pre-release: the aggressive soundness audit (TODO.md release
+   gate) and the recorded replay hardening follow-ups (CI-harness
+   rebase onto the factored checker; binder-type telescope
+   comparison).

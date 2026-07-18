@@ -235,7 +235,7 @@ mid-cycle, after W1 stabilizes obligation shapes; flips
 `saw-boundary/offline_lean_export_only` into the replay-semantics
 row and unlocks the Lean-verified-callee composition direction.
 (c) Direct recursors via the PosRep design
-(`doc/2026-07-03_direct-recursor-semantics-design.md`). (d) The
+(`doc/archive/2026-07-03_direct-recursor-semantics-design.md`). (d) The
 proof-primitive realization families as a mechanical batch.
 
 **OUT of 0.02 (recorded):** simulator `Unimplemented` differential

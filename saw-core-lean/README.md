@@ -82,8 +82,16 @@ Top-level docs are the **current** as-of-today reference:
   May-02 plans) remain in `doc/archive/` as historical accounts of
   work shipped.
 
-Historical audit reports live in `doc/archive/` alongside the plans
-they audited; the current audit is
+Two living records moved out of TODO.md (2026-07-17):
+[`doc/audit-history.md`](doc/audit-history.md) and
+[`doc/decision-log.md`](doc/decision-log.md).
+
+Every other dated doc at `doc/` top level is a LIVE design or
+census (position-callee calculus, obligation placement, OP-3
+successor, replay design, fragment-semantics scoping, conformance
+roadmap, coverage census, SWE review). Historical audit reports,
+executed plans, and superseded designs live in `doc/archive/`
+(aggressive sweep 2026-07-17); the current audit is
 [`doc/2026-07-14_release-audit.md`](doc/2026-07-14_release-audit.md).
 
 For the trajectory of how the project got here (failed P4 / P6
