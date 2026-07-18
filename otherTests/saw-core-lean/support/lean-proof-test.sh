@@ -1,5 +1,5 @@
 # Shared harness for otherTests/saw-core-lean/proofs/*/ and
-# support-proofs/*/ directories.
+# support-lemmas/*/ directories.
 #
 # Discharge pattern:
 #
@@ -88,7 +88,7 @@ EOF
 fi
 
 # Locate the Lake project root and this test's probe dir.
-# Test dirs live at otherTests/saw-core-lean/{proofs,support-proofs}/<name>/,
+# Test dirs live at otherTests/saw-core-lean/{proofs,support-lemmas}/<name>/,
 # so the Lake project (saw-core-lean/lean/) is four levels up, and the
 # saw-script root is also four levels up.
 LAKE_DIR="$(cd ../../../../saw-core-lean/lean && pwd)"

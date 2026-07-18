@@ -151,7 +151,7 @@ Three layers:
   diffed against goldens, emitted Lean elaborated), `differential/`
   (true semantic conformance: SAW and Lean observations compared),
   `obligations/` (emitted contract-shape pins), `proofs/` and
-  `support-proofs/` (Lean discharges against emitted artifacts /
+  `support-lemmas/` (Lean discharges against emitted artifacts /
   support-library lemmas), `proof-gaps/` (honest inventory of
   undischargeable obligations), `negative/` (hand-rolled
   should-fail Lean probes), `saw-boundary/` (SAW rejection and

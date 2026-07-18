@@ -205,7 +205,7 @@ equation. These lemmas intentionally do not hide `Except.error` or pretend that
 eager helpers are lazy.
 
 End-to-end test for the bridge-lemma patterns:
-`otherTests/saw-core-lean/support-proofs/cookbook/proof.lean`.
+`otherTests/saw-core-lean/support-lemmas/cookbook/proof.lean`.
 
 ## Lifting SAW-typed goals to `BitVec`
 

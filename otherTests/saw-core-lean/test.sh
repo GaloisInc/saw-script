@@ -35,7 +35,7 @@
 #                          discharge). The harness imports the emitted
 #                          file unchanged and elaborates the proof.
 #
-#   support-proofs/<name>/ Lean support-library regression proofs that are
+#   support-lemmas/<name>/ Lean support-library regression proofs that are
 #                          intentionally NOT generated proof-backend examples.
 #                          These may be self-contained and may import
 #                          CryptolToLean directly. They run in the default
@@ -84,7 +84,7 @@
 #                    differential/*, obligations/*, and saw-boundary/*.
 #                    Known gaps in these categories are pinned failures,
 #                    not evidence of full parity. Do not add
-#                    drivers/conformance_* or support-proofs/* here:
+#                    drivers/conformance_* or support-lemmas/* here:
 #                    proof/library/elaboration checks are not differential
 #                    tests unless the harness compares real SAW and Lean
 #                    observed outcomes.
@@ -257,7 +257,7 @@ iterate_differential()  { for d in differential/*/;  do run_one differential  "$
 iterate_obligations()   { for d in obligations/*/;   do run_one obligations   "$(basename "$d")" lean-obligation-test.sh "$@"; done; }
 iterate_saw_boundary()  { for d in saw-boundary/*/;  do run_one saw-boundary  "$(basename "$d")" lean-driver-test.sh "$@"; done; }
 iterate_proofs()        { for d in proofs/*/;        do run_one proofs        "$(basename "$d")" lean-proof-test.sh   "$@"; done; }
-iterate_support_proofs() { for d in support-proofs/*/; do run_one support-proofs "$(basename "$d")" lean-proof-test.sh "$@"; done; }
+iterate_support_lemmas() { for d in support-lemmas/*/; do run_one support-lemmas "$(basename "$d")" lean-proof-test.sh "$@"; done; }
 iterate_negative()       { for d in negative/*/;       do run_one negative       "$(basename "$d")" lean-negative-test.sh   "$@"; done; }
 
 record_gap_inventory_item() {
@@ -306,7 +306,7 @@ case "$verb" in
         iterate_obligations
         iterate_saw_boundary
         iterate_proofs
-        iterate_support_proofs
+        iterate_support_lemmas
         iterate_negative
         iterate_gap_inventory
         print_summary_and_exit
@@ -344,7 +344,7 @@ case "$verb" in
         iterate_obligations clean
         iterate_saw_boundary clean
         iterate_proofs clean
-        iterate_support_proofs clean
+        iterate_support_lemmas clean
         iterate_negative clean
         print_summary_and_exit
         ;;

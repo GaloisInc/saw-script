@@ -1581,8 +1581,10 @@ reject and pin a fixture rather than widen a heuristic.
   - **(#5)** Sweep superseded dated notes from `doc/` top level into
     `doc/archive/`, keeping durable docs + README-canonized dated
     refs.
-  - **(#6)** Rename `support-proofs/` → `conformance/` to break the
-    three-way "proof(s)" overlap; harness case arms + Makefile only.
+  - **(#6 — DONE 2026-07-17)** `support-proofs/` renamed
+    `support-lemmas/` (NOT the reviewer's `conformance/`, which
+    collides with the `test.sh` verb of that name that deliberately
+    excludes this category).
   - Nits: haddock note that `leanReplayGoalHash`/`ProofHash` are
     provenance labels, not integrity hashes. (`saw.cabal` doc
     pointer already fixed 2026-07-17.)

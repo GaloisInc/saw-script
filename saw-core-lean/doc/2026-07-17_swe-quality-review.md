@@ -119,6 +119,13 @@ document the `proofs` vs `proof-gaps` split in `test.sh`'s header.
 Blast radius: harness `case` arms + Makefile targets; `git mv`
 moves no goldens.
 
+[FIXED 2026-07-17, with one deviation: the target name is
+`support-lemmas/`, not `conformance/` — `conformance` is already a
+`test.sh` VERB (`make conformance`) that deliberately excludes this
+category, so a directory of that name would misdescribe what the
+verb runs. `git mv` + reference updates; `conformance_boolean`
+re-run green.]
+
 ## API surface (saw-central) — solid, nits only
 
 - `writeLeanProp` sits with `writeLeanTerm`/`writeLeanCryptolModule`
