@@ -196,6 +196,12 @@ below track execution state as always.
   - intDiv under-applied in PIntegral dictionary fields — needs the
     proof-carrying partial-op FUNCTION-WRAPPER design (pinned by
     saw-boundary/polymorphic_seq_module_rejection).
+  - Exception-hunt residuals (2026-07-18_exception-hunt.md):
+    reclassify wrappedHelperFunctionValueSlot/-ResultIsValue as the
+    DECLARED UseMapsToWrapped-callback convention (authority = the
+    support-library helper signatures; do NOT fold Nat into D) and
+    align only its var-headed arms to classifyDomain; document in
+    calculus doc SS Callee Conventions.
   - Domain-map residuals (2026-07-18_calculus-doc-audit.md, filed
     non-soundness): B-3 role-reflecting raw reasons under Prop
     elimination; B-4 project recursorMotiveFunctionConvention

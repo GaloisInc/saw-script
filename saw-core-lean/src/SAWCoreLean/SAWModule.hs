@@ -118,10 +118,16 @@ translateDef Def{..} = do
           Except.throwError $ RejectedPrimitive shortName
             "NoQualifier def has no body — SAWCore internal contract violation"
         Just body -> do
+          -- Body position + annotation carrier from the single
+          -- definition-convention authority (2026-07-18
+          -- exception-hunt Finding 1: this site formerly applied NO
+          -- top-level convention at all).
           ((body', tp'), univs, auxDecls) <- liftTermTranslationMonad $ mode $ do
-            b <- TermTranslation.translateTerm body
+            bodyResult <- TermTranslation.translateTermLetWithShape body
+            (b, wrapAnn) <- TermTranslation.topLevelDefConvention
+                              defType bodyResult
             t <- TermTranslation.translateTerm defType
-            pure (b, t)
+            pure (b, if wrapAnn then TermTranslation.wrapExcept t else t)
           let decl = mkDefinitionWith Lean.Noncomputable univs name body' tp'
           pure (Prettyprinter.vcat (map Lean.prettyDecl (auxDecls ++ [decl])))
       AxiomQualifier -> rejectAxiomOrPrimitive name

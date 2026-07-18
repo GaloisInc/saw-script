@@ -54,19 +54,14 @@ translateTypedTermMap = mapM translateAndRegisterEntry
       -- shallow.
       tResult <- TermTranslation.translateTermLetWithShape t
       tpTrans <- TermTranslation.translateTerm tp
-      -- Phase β fixup: wrap a closed-value top-level type in
-      -- @Except String@ if the SAW type is value-domain. Function-
-      -- typed (Pi) tps already wrap recursively inside the Pi case;
-      -- this fixup catches @Vec n α@/@Bool@/etc. typed defs whose
-      -- body produces an Except-wrapped value. Mirrors
-      -- 'TermTranslation.translateDefDoc' for the SAW-module path.
-      let wrapType = TermTranslation.shouldWrapBinder tp
-          tpTrans' = if wrapType
+      -- Body position + annotation carrier from the single
+      -- definition-convention authority (2026-07-18 exception-hunt
+      -- Finding 1: this site's hand-copied mirror had drifted —
+      -- it was missing the wrapped-body annotation clause).
+      (tTrans', wrapAnn) <- TermTranslation.topLevelDefConvention tp tResult
+      let tpTrans' = if wrapAnn
                         then TermTranslation.wrapExcept tpTrans
                         else tpTrans
-      tTrans' <- if wrapType
-                    then TermTranslation.adaptToRuntime tResult
-                    else pure (TermTranslation.translatedTermLean tResult)
       -- Every translated def can transitively reference @coerce@ /
       -- @unsafeAssert@ / @error@ — all noncomputable axioms. Emit the
       -- user decl as @noncomputable def@ so Lean's code generator

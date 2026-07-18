@@ -33,6 +33,7 @@ module SAWCoreLean.Term
   , translateTermLetWithShape
   , adaptToRuntime
   , translatedTermLean
+  , topLevelDefConvention
   , translateDefDoc
   , translateDefDocWithArity
   , leanPiSpineArity
@@ -4938,14 +4939,35 @@ translateDefDoc configuration mm name body tp =
 
 -- | 'translateDefDoc' plus the emitted goal body's Pi-spine arity
 -- (see 'leanPiSpineArity').
+-- | THE top-level definition convention (calculus §Definitions;
+-- 2026-07-18 exception-hunt Finding 1). Single authority for the two
+-- questions every top-level emitter must answer identically: the
+-- position the body stands at (runtime-value iff the declared SAW
+-- type is value-domain — the body then adapts through the
+-- chokepoint), and whether the type ANNOTATION wraps (value-domain
+-- type, OR a wrapped-produced body at a non-wrapping type, e.g. a
+-- runtime-computed Nat — annotating such a def raw cannot elaborate;
+-- filed 2026-07-12, fixed 2026-07-14). The three top-level emitters
+-- (translateDefDocWithArity, CryptolModule, SAWModule) had
+-- hand-copied this and CryptolModule's copy had already drifted
+-- (missing the wrapped-body clause) — all three now call here.
+topLevelDefConvention ::
+  TermTranslationMonad m =>
+  Term -> TranslatedTerm -> m (Lean.Term, Bool)
+topLevelDefConvention tp bodyResult = do
+  let wrapType = shouldWrapBinder tp
+  bodyLean <- if wrapType
+                 then adaptToRuntime bodyResult
+                 else pure (translatedTermLean bodyResult)
+  pure (bodyLean, wrapType || ttShape bodyResult == BindingWrapped)
+
 translateDefDocWithArity ::
   TranslationConfiguration ->
   ModuleMap ->
   Lean.Ident -> Term -> Term ->
   Either TranslationError (Doc ann, Int)
 translateDefDocWithArity configuration mm name body tp = do
-  let wrapType = shouldWrapBinder tp
-  ((bodyLean, bodyShape, tp'), state) <-
+  ((bodyLean, wrapAnn, tp'), state) <-
     runTermTranslationMonad configuration Nothing mm [] [name] $ do
       -- P-1 (2026-05-06): use 'translateTermLet' on the body so
       -- shared subterms are emitted as let-bound variables rather
@@ -4954,32 +4976,14 @@ translateDefDocWithArity configuration mm name body tp = do
       -- Salsa20). Type-side rarely shares; plain 'translateTerm'
       -- is enough there.
       bodyResult <- translateTermLetWithShape body
-      -- If the top-level type wraps, the body stands at
-      -- runtime-value position and adapts through the chokepoint.
-      bodyLean <- if wrapType
-                     then adaptToRuntime bodyResult
-                     else pure (ttLean bodyResult)
+      (bodyLean, wrapAnn) <- topLevelDefConvention tp bodyResult
       tpLean <- translateTerm tp
-      pure (bodyLean, ttShape bodyResult, tpLean)
+      pure (bodyLean, wrapAnn, tpLean)
   let auxDecls = reverse (view topLevelDeclarations state)
       univs    = view universeVars state
-      -- The def's declared type must be the carrier the produced body
-      -- actually inhabits, so the annotation follows the body's
-      -- production record, not a bare type translation:
-      --
-      --   * value-domain types ('shouldWrapBinder') wrap and the body
-      --     adapts to runtime — the Phase-β convention;
-      --   * a WRAPPED body at a non-wrapping type (e.g. a
-      --     runtime-computed Nat: SAW type @Nat@, body at
-      --     @Except String Nat@ via the Nat-value convention) wraps
-      --     the annotation to match — annotating such a def @: Nat@
-      --     raw cannot elaborate (filed 2026-07-12, fixed 2026-07-14);
-      --   * raw/function bodies at non-wrapping types stay raw (Pi
-      --     types already carry their internal wraps from the Pi
-      --     translator).
-      tp'' = if wrapType || bodyShape == BindingWrapped
-               then wrapExcept tp'
-               else tp'
+      -- Annotation carrier decided by 'topLevelDefConvention' (the
+      -- single definition-convention authority).
+      tp'' = if wrapAnn then wrapExcept tp' else tp'
       mainDecl = mkDefinitionWith Lean.Noncomputable univs name bodyLean tp''
       -- Each 'prettyDecl' already ends with 'hardline'; 'vcat' adds
       -- another between elements, yielding one blank line between

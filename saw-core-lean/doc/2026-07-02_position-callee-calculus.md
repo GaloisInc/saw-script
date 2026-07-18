@@ -225,12 +225,23 @@ non-`Eq` constant-headed proposition falls to `ValueDomain` and rides
 the Prop backstop below (loud at elaboration, never silent) — the WFPos
 "propositions are raw" rule is enforced for them by Lean, not by `D`.
 
-Two positional gates legitimately SHADOW the domain answer, and are the
-only ones: (1) the dependency/index gate — a binder whose variable feeds
-a later binder's type, a type, or an index position is raw regardless of
-`D` (the WFPos dependency rule above: a later `A`-dependency cannot be
-satisfied by an `Except String A` binder); (2) the recursor elimination
-sort (below). Everything else may only project `D`.
+Three positional gates legitimately SHADOW the domain answer, and are
+the only ones: (1) the dependency/index gate — a binder whose variable
+feeds a later binder's type, a type, or an index position is raw
+regardless of `D` (the WFPos dependency rule above: a later
+`A`-dependency cannot be satisfied by an `Except String A` binder);
+(2) the recursor elimination sort (below); (3) the quantifier-Pi
+binder-discipline gate — a Pi whose BODY is a proposition (`Eq`-shaped
+or `Prop`-sorted) binds its binders raw with value shadows, a
+binder-discipline question `D` cannot express because the Pi itself is
+`FunctionDomain` (2026-07-18 exception hunt, Finding 4). Everything
+else may only project `D`.
+
+One raw REASON is load-bearing: `adaptTo` admits `BindingFunction` at
+`ExpectRaw RawMotivePosition` only (defensive; motives normally travel
+at `ExpectFunctionPosition`). The `RawReason` label space is therefore
+not fully inert — reasons must reflect logical roles (2026-07-18
+exception hunt, Finding 5).
 
 **Variable-headed types are KIND-DIRECTED.** The head variable's declared
 kind is in Γ; its result sort decides the domain. No rule may classify a
