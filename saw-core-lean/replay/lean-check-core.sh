@@ -200,41 +200,8 @@ ax_out=$(run_lean "$STAGE/axiom-probe.lean") || { echo "$ax_out"; fail "axiom-au
 # Structured parse of "‘X’ depends on axioms: [...]" including
 # multi-line bracket lists (same continuation handling as the CI
 # harness's audit_axioms): reject any non-allowlisted entry.
-bad_ax=$(printf '%s\n' "$ax_out" | awk '
-  function check(line,    n, xs, i, ax) {
-    sub(/^.*depends on axioms: \[/, "", line)
-    sub(/\].*$/, "", line)
-    n = split(line, xs, /,[[:space:]]*/)
-    for (i = 1; i <= n; i++) {
-      ax = xs[i]
-      gsub(/^[[:space:]]+|[[:space:]]+$/, "", ax)
-      # EXACT match against the fixed allowlist — never suffix/regex.
-      # A suffix match would admit a user axiom named e.g.
-      # unsound_vecToBitVec_bitVecToVec (review finding, an unsoundness
-      # hole). Both the qualified and short spellings #print axioms
-      # may report are enumerated, matching the CI harness exactly
-      # (lean-proof-test.sh audit_axioms) — the single-checker
-      # principle requires identical allowlist semantics.
-      if (ax != "" &&
-          ax != "propext" &&
-          ax != "Classical.choice" &&
-          ax != "Quot.sound" &&
-          ax != "CryptolToLean.SAWCorePrimitives.vecToBitVec_bitVecToVec" &&
-          ax != "CryptolToLean.SAWCorePrimitives.bitVecToVec_vecToBitVec" &&
-          ax != "vecToBitVec_bitVecToVec" &&
-          ax != "bitVecToVec_vecToBitVec") print ax
-    }
-  }
-  /depends on axioms:/ {
-    pending = $0
-    if (pending ~ /\]/) { check(pending); pending = "" }
-    else collecting = 1
-    next
-  }
-  collecting {
-    pending = pending " " $0
-    if ($0 ~ /\]/) { check(pending); pending = ""; collecting = 0 }
-  }')
+bad_ax=$(printf '%s\n' "$ax_out" \
+    | awk -f "$(cd "$(dirname "$0")" && pwd)/axiom-audit.awk")
 [ -z "$bad_ax" ] || { echo "$bad_ax"; fail "axiom-outside-allowlist"; }
 printf '%s\n' "$ax_out" | grep -E "depends on axioms|does not depend" \
     | sed 's/^/CHECK-AXIOMS: /'

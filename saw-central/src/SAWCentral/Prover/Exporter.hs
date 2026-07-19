@@ -1328,12 +1328,13 @@ writeLeanProp name notations skips path t = do
   -- misrepresents the obligation. False positives (a legitimate
   -- shape this count does not model) fail loudly here and are the
   -- accepted cost.
-  let sawArity = length (fst (asPiList tm'))
-  case Lean.translateGoalAsDeclImportsWithArity configuration mm (Lean.Ident (Text.unpack name)) tm' tp of
+  let sawBinders = fst (asPiList tm')
+      sawArity = length sawBinders
+  case Lean.translateGoalAsDeclImportsWithTelescope configuration mm (Lean.Ident (Text.unpack name)) tm' tp of
     Left err -> do
       err' <- liftIO $ Lean.ppTranslationError sc err
       throwTopLevel $ "Error translating: " ++ Text.unpack err'
-    Right (_doc, leanArity)
+    Right (_doc, leanArity, _)
       | leanArity /= sawArity ->
           throwTopLevel $ unlines
             [ "Refusing to emit Lean goal: quantifier telescope mismatch."
@@ -1343,7 +1344,23 @@ writeLeanProp name notations skips path t = do
             , "(goal-telescope pin; saw-core-lean replay design,"
             , "seventh-audit amendment 1)."
             ]
-    Right (doc, _) -> io $ case path of
+    -- Binder-TYPE half of the pin (2026-07-18 replay hardening):
+    -- coarse type-family fingerprints compared pointwise; a
+    -- mismatch (e.g. a same-arity WRONG-TYPE binder) refuses
+    -- emission. FpOther is a wildcard, so var-headed/exotic
+    -- binders stay unpinned — the check can only refuse, never
+    -- admit.
+    Right (_doc, _, leanBinderTys)
+      | Just (ix, sfp, lfp) <-
+          Lean.telescopeFpMismatch (map snd sawBinders) leanBinderTys ->
+          throwTopLevel $ unlines
+            [ "Refusing to emit Lean goal: telescope binder-type mismatch."
+            , "Binder " ++ show ix ++ ": SAWCore family " ++ show sfp
+              ++ "; emitted Lean family " ++ show lfp
+            , "(goal-telescope pin, binder-type half; 2026-07-18"
+            , "replay hardening)."
+            ]
+    Right (doc, _, _) -> io $ case path of
       ""  -> print doc
       "-" -> print doc
       _   -> writeLeanFile path (show doc)

@@ -36,7 +36,11 @@ module SAWCoreLean.Term
   , topLevelDefConvention
   , translateDefDoc
   , translateDefDocWithArity
+  , translateDefDocWithTelescope
   , leanPiSpineArity
+  , leanPiSpineBinderTypes
+  , TelescopeFp(..)
+  , telescopeFpMismatch
   , withRawTranslationMode
     -- * Decl construction
   , mkDefinitionWith
@@ -5129,6 +5133,64 @@ leanPiSpineArity :: Lean.Term -> Int
 leanPiSpineArity (Lean.Pi bs t) = length bs + leanPiSpineArity t
 leanPiSpineArity _ = 0
 
+-- | The emitted goal Pi spine's binder types, outermost first
+-- (2026-07-18 replay hardening: the binder-TYPE half of the
+-- goal-telescope pin — the arity pin alone let a same-arity
+-- wrong-type binder through).
+leanPiSpineBinderTypes :: Lean.Term -> [Lean.Type]
+leanPiSpineBinderTypes (Lean.Pi bs t) =
+  [ ty | Lean.PiBinder _ _ ty <- bs ] ++ leanPiSpineBinderTypes t
+leanPiSpineBinderTypes _ = []
+
+-- | Coarse TYPE-FAMILY fingerprints for the telescope pin. The
+-- comparison can only REFUSE emission (never admit), so coarseness
+-- is safe: 'FpOther' matches anything (var-headed and exotic types
+-- stay unpinned); the concrete families must agree pointwise.
+data TelescopeFp = FpVec | FpBool | FpNat | FpInt | FpFun | FpOther
+  deriving (Eq, Show)
+
+sawBinderFp :: Term -> TelescopeFp
+sawBinderFp ty
+  | Just _ <- asGlobalApply "Prelude.Vec" ty = FpVec
+  | Just i <- asGlobalDef ty, identName i == "Bool" = FpBool
+  | Just _ <- asNatType ty = FpNat
+  | Just i <- asGlobalDef ty, identName i == "Integer" = FpInt
+  | Just _ <- asPi ty = FpFun
+  | otherwise = FpOther
+
+leanBinderFp :: Lean.Type -> TelescopeFp
+leanBinderFp ty0 = go (stripExcept ty0)
+  where
+    stripExcept (Lean.App (Lean.Var (Lean.Ident h)) [_, t])
+      | baseName h == "Except" = t
+    stripExcept t = t
+    go t = case t of
+      Lean.Pi{} -> FpFun
+      _ -> case fst (leanAppHead t) of
+        Just h | baseName h == "Vec" || baseName h == "BitVec" -> FpVec
+               | baseName h == "Bool" -> FpBool
+               | baseName h == "Nat"  -> FpNat
+               | baseName h == "Int"  -> FpInt
+        _ -> FpOther
+    leanAppHead (Lean.App f _) = leanAppHead f
+    leanAppHead (Lean.Var (Lean.Ident h)) = (Just h, ())
+    leanAppHead (Lean.ExplVar (Lean.Ident h)) = (Just h, ())
+    leanAppHead _ = (Nothing, ())
+    baseName h = reverse (takeWhile (/= '.') (reverse h))
+
+-- | Pointwise fingerprint agreement; 'FpOther' on EITHER side is a
+-- wildcard. Returns the first mismatch (index, saw, lean).
+telescopeFpMismatch :: [Term] -> [Lean.Type] -> Maybe (Int, TelescopeFp, TelescopeFp)
+telescopeFpMismatch sawTys leanTys =
+  case [ (ix, s, l)
+       | (ix, (sty, lty)) <- zip [0 :: Int ..] (zip sawTys leanTys)
+       , let s = sawBinderFp sty
+       , let l = leanBinderFp lty
+       , s /= FpOther, l /= FpOther, s /= l
+       ] of
+    m : _ -> Just m
+    []    -> Nothing
+
 translateDefDoc ::
   TranslationConfiguration ->
   ModuleMap ->
@@ -5166,7 +5228,18 @@ translateDefDocWithArity ::
   ModuleMap ->
   Lean.Ident -> Term -> Term ->
   Either TranslationError (Doc ann, Int)
-translateDefDocWithArity configuration mm name body tp = do
+translateDefDocWithArity configuration mm name body tp =
+  (\(d, a, _) -> (d, a)) <$>
+    translateDefDocWithTelescope configuration mm name body tp
+
+-- | 'translateDefDocWithArity' plus the emitted body Pi spine's
+-- binder types (the telescope pin's type half).
+translateDefDocWithTelescope ::
+  TranslationConfiguration ->
+  ModuleMap ->
+  Lean.Ident -> Term -> Term ->
+  Either TranslationError (Doc ann, Int, [Lean.Type])
+translateDefDocWithTelescope configuration mm name body tp = do
   ((bodyLean, wrapAnn, tp'), state) <-
     runTermTranslationMonad configuration Nothing mm [] [name] $ do
       -- P-1 (2026-05-06): use 'translateTermLet' on the body so
@@ -5191,4 +5264,5 @@ translateDefDocWithArity configuration mm name body tp = do
       rendered = if null auxDecls
         then Lean.prettyDecl mainDecl
         else vcat (map Lean.prettyDecl auxDecls) <> hardline <> Lean.prettyDecl mainDecl
-  pure (rendered, leanPiSpineArity bodyLean)
+  pure (rendered, leanPiSpineArity bodyLean,
+        leanPiSpineBinderTypes bodyLean)

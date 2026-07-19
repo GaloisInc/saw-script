@@ -187,46 +187,14 @@ write_generated_probe() {
 }
 
 audit_axioms() {
-    awk \
-      -v a1="CryptolToLean.SAWCorePrimitives.vecToBitVec_bitVecToVec" \
-      -v a2="CryptolToLean.SAWCorePrimitives.bitVecToVec_vecToBitVec" \
-      -v a1short="vecToBitVec_bitVecToVec" \
-      -v a2short="bitVecToVec_vecToBitVec" '
-      function check(line,    n, xs, i, ax) {
-        sub(/^.*depends on axioms: \[/, "", line)
-        sub(/\].*$/, "", line)
-        n = split(line, xs, /,[[:space:]]*/)
-        for (i = 1; i <= n; i++) {
-          ax = xs[i]
-          gsub(/^[[:space:]]+|[[:space:]]+$/, "", ax)
-          if (ax != "" &&
-              ax != "propext" &&
-              ax != "Classical.choice" &&
-              ax != "Quot.sound" &&
-              ax != a1 && ax != a2 && ax != a1short && ax != a2short) {
-            print ax
-          }
-        }
-      }
-      /depends on axioms:/ {
-        pending = $0
-        if (pending ~ /\]/) {
-          check(pending)
-          pending = ""
-        } else {
-          collecting = 1
-        }
-        next
-      }
-      collecting {
-        pending = pending " " $0
-        if ($0 ~ /\]/) {
-          check(pending)
-          pending = ""
-          collecting = 0
-        }
-      }
-    '
+    # Single-checker principle (2026-07-18 hardening): the allowlist
+    # audit is the SHARED authority in saw-core-lean/replay/
+    # axiom-audit.awk — identical semantics with the product trust
+    # kernel by mechanism, not discipline. (The former inline copy
+    # also allowed SHORT axiom spellings — a hole, since probe files
+    # have no opens and genuine axioms always print fully qualified;
+    # removed from both consumers.)
+    awk -f "$SAW_DIR/saw-core-lean/replay/axiom-audit.awk"
 }
 
 # Build the Lake project. A failure here means the support library

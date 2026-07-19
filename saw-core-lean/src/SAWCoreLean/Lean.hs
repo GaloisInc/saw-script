@@ -20,6 +20,9 @@ module SAWCoreLean.Lean
   , translateTermAsDeclImports
   , translateGoalAsDeclImports
   , translateGoalAsDeclImportsWithArity
+  , translateGoalAsDeclImportsWithTelescope
+  , TermTranslation.TelescopeFp(..)
+  , TermTranslation.telescopeFpMismatch
   , translateCryptolModule
   , translateSAWModule
   , moduleDeclName
@@ -115,8 +118,19 @@ translateGoalAsDeclImports configuration mm name t tp =
 translateGoalAsDeclImportsWithArity ::
   TranslationConfiguration -> ModuleMap -> Lean.Ident -> Term -> Term ->
   Either TranslationError (Doc ann, Int)
-translateGoalAsDeclImportsWithArity configuration mm name@(Lean.Ident nameStr) t tp = do
-  (doc, arity) <- TermTranslation.translateDefDocWithArity configuration mm name t tp
+translateGoalAsDeclImportsWithArity configuration mm name t tp =
+  (\(d, a, _) -> (d, a)) <$>
+    translateGoalAsDeclImportsWithTelescope configuration mm name t tp
+
+-- | Like 'translateGoalAsDeclImportsWithArity' but also returns the
+-- emitted goal Pi spine's binder TYPES (2026-07-18 replay hardening:
+-- the binder-type half of the goal-telescope pin).
+translateGoalAsDeclImportsWithTelescope ::
+  TranslationConfiguration -> ModuleMap -> Lean.Ident -> Term -> Term ->
+  Either TranslationError (Doc ann, Int, [Lean.Type])
+translateGoalAsDeclImportsWithTelescope configuration mm name@(Lean.Ident nameStr) t tp = do
+  (doc, arity, binderTys) <-
+    TermTranslation.translateDefDocWithTelescope configuration mm name t tp
   let stub =
         pretty ("theorem " <> nameStr <> "_holds : " <> nameStr <> " := by") <>
         hardline <> pretty ("  sorry" :: String)
@@ -129,7 +143,8 @@ translateGoalAsDeclImportsWithArity configuration mm name@(Lean.Ident nameStr) t
         , hardline <> doc
         , stub
         ]
-    , arity )
+    , arity
+    , binderTys )
 
 -- | Translate a Cryptol module to a Lean namespace block. Wraps the
 -- translated defs in @namespace nm … end nm@ so Cryptol users
