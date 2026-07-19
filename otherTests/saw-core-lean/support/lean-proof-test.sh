@@ -355,6 +355,13 @@ else
     {
         echo
         echo "-- Harness-added prototype validation checks."
+        # The axiom allowlist (axiom-audit.awk) matches EXACT fully
+        # qualified names. proof.check.lean is a COPY of the row's
+        # proof.lean, so any `open` there would otherwise abbreviate
+        # the printed axiom names and fail the audit spuriously
+        # (2026-07-19 finding: the 2026-07-18 hardening's "probe
+        # files have no opens" premise is false for THIS consumer).
+        echo "set_option pp.fullNames true"
         if goal_output_requires_goal_closed; then
             echo "#check (goal_closed : goal)"
             echo "#print axioms goal_closed"

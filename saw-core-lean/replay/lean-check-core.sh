@@ -192,6 +192,11 @@ fi
 {
     echo "import Emitted"
     echo "import UserProof"
+    # The allowlist matches EXACT fully qualified names. This probe
+    # has no `open` commands, so names already print fully qualified;
+    # the option makes that premise mechanical rather than incidental
+    # (defense-in-depth, 2026-07-19).
+    echo "set_option pp.fullNames true"
     printf '%s\n' "$closers" | while read -r nm; do
         echo "#print axioms $nm"
     done
