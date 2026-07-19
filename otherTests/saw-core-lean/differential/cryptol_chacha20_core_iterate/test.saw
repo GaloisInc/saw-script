@@ -2,14 +2,19 @@
 // stream comprehension). HISTORY: rejected at Prelude::Stream@core
 // until 2026-07-17 (kind-directed domain map closed that hole —
 // doc/2026-07-17_either-stream-recursor-convention.md); translation
-// and emission now SUCCEED (the concrete `@ 10` index normalizes the
-// iterate fix away; only checked-access obligations + the Stream
-// ctor-order assertion remain). The pipeline currently dies at Lean
-// elaboration: an Eq.refl application mismatch on a seq_cong-style
-// coercion at a WRAPPED FUNCTION carrier — the function-carrier
-// equality-transport corner, filed in TODO.md (W1). This row pins
-// that frontier; when the corner is fixed the gap stops firing and
-// this row must be promoted to a true differential comparison.
+// and emission SUCCEED since then (the concrete `@ 10` index
+// normalizes the iterate fix away). ELABORATES since 2026-07-19:
+// the Eq.refl application mismatch (a type-subject Eq__rec spine
+// mixing raw-motive and ambient-branch type interpretations) was
+// closed by the mode-uniform type-subject convention
+// (doc/2026-07-18_transport-carrier-design.md). The residual gap is
+// the differential OBSERVER's budget: #reduce of the full
+// 10-double-round concrete computation exceeds Lean's default
+// maximum recursion depth (same family as
+// cryptol_chacha20_iround_zero; emitted defs are noncomputable, so
+// #eval is not an available observer). When an in-budget observer
+// exists this row must be promoted to a true differential
+// comparison.
 
 import "../../../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Stream/chacha20.cry";
 

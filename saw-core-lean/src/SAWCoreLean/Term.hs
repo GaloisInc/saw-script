@@ -2199,6 +2199,22 @@ standaloneEqualitySubjectRep who operands
       traceSubjectRep who operands rep
       pure rep
 
+-- | Subject classification with the type-subject sub-case (calculus
+-- §Raw Logical Callees, 2026-07-19): a SORT carrier means the
+-- subjects are TYPES, and D decides from the carrier ALONE — operand
+-- production shapes never participate (types happen to carry raw
+-- shapes today, but the declared rule must not depend on that
+-- accident). Everything else classifies from operand production
+-- shapes via 'standaloneEqualitySubjectRep'.
+subjectRepForCarrier ::
+  TermTranslationMonad m =>
+  Text.Text -> Term -> [TranslatedTerm] -> m EqualitySubjectRep
+subjectRepForCarrier who aArg operands
+  | isJust (asSort aArg) = do
+      traceSubjectRep who operands EqualitySubjectTypeImage
+      pure EqualitySubjectTypeImage
+  | otherwise = standaloneEqualitySubjectRep who operands
+
 -- | Subject-representation decisions join the position trace so every
 -- ρ_eq choice is auditable alongside the per-term position log.
 traceSubjectRep ::
@@ -2233,7 +2249,7 @@ traceSubjectRep who operands rep
 eqRecConventionForStandalone ::
   TermTranslationMonad m => Term -> [TranslatedTerm] -> m EqRecConvention
 eqRecConventionForStandalone aArg operands = do
-  rep <- standaloneEqualitySubjectRep "Eq__rec" operands
+  rep <- subjectRepForCarrier "Eq__rec" aArg operands
   mLvl <- levelOfArg aArg
   let conv = case rep of
         EqualitySubjectRaw _ -> EqRecConvention
@@ -2278,6 +2294,27 @@ eqRecConventionForStandalone aArg operands = do
           , ercProofPosition  = RawProofPosition
           , ercResultShape    = BindingRaw
           }
+        -- Type-subject transport (2026-07-19): the subjects are TYPES
+        -- and the ENTIRE spine reads them at one interpretation — the
+        -- current mode's type translation (T-images in ambient Phase-β
+        -- content, raw inside raw logical mode). No field flips mode:
+        -- the motive and the nested proof translate with plain
+        -- 'translateTerm', so the branch (a Refl whose subject is a
+        -- type, translated ambient before the convention is chosen)
+        -- and the motive agree by construction instead of by
+        -- coincidence. The result is a proof: 'BindingRaw'.
+        EqualitySubjectTypeImage -> EqRecConvention
+          { ercSubjectRep     = rep
+          , ercCarrierLevel   = mLvl
+          , ercMotive         = MotiveConvention
+              [ ExpectRaw RawTypePosition
+              , ExpectRaw RawProofPosition
+              ]
+              MotiveComputesTypeImage
+          , ercBranchPosition = ExpectRaw RawTypePosition
+          , ercProofPosition  = RawProofPosition
+          , ercResultShape    = BindingRaw
+          }
   traceEqRecConvention conv
   pure conv
 
@@ -2310,6 +2347,13 @@ translateEqRecMotiveAtConvention conv motiveTerm =
   case mcResultMode (ercMotive conv) of
     MotiveComputesRawType ->
       withRawTranslationMode (translateTerm motiveTerm)
+    -- Type-subject transport motive: CURRENT mode, no flip — the
+    -- lambda is type/prop-level structural content (D of the body is
+    -- a raw type/prop domain, so no value lift and no Except wrap of
+    -- the lambda itself), and its embedded value-domain Pis wrap to
+    -- their T-images in ambient content exactly as the branch's do.
+    MotiveComputesTypeImage ->
+      translateTerm motiveTerm
     MotiveComputesRuntimeValueType ->
       case (asLambda motiveTerm, mcBinderPositions (ercMotive conv)) of
         (Just (yv, yty, rest), [yPos, hPos])
@@ -2335,6 +2379,10 @@ subjectCarrier :: EqualitySubjectRep -> Lean.Term -> Lean.Term
 subjectCarrier EqualitySubjectRuntimeValue ty = wrapExcept ty
 subjectCarrier (EqualitySubjectRaw _) ty = ty
 subjectCarrier EqualitySubjectRawFunction ty = ty
+-- The type-subject carrier is the translation of a SORT — raw and
+-- ambient coincide on sorts, so the caller-provided translation is
+-- already the carrier.
+subjectCarrier EqualitySubjectTypeImage ty = ty
 
 -- | The carrier type at the declared subject representation. Raw and
 -- runtime subjects reuse the raw translation of the source type the
@@ -2351,6 +2399,11 @@ subjectCarrierAt ::
   TermTranslationMonad m =>
   EqualitySubjectRep -> Term -> Lean.Term -> m Lean.Term
 subjectCarrierAt EqualitySubjectRawFunction aArg _aLeanRaw = translateTerm aArg
+-- Explicit type-subject arm (audit condition 2, 2026-07-19): never
+-- reach the wildcard below by accident. The carrier is a SORT, whose
+-- translation is mode-independent, so the raw translation the caller
+-- already produced IS the carrier.
+subjectCarrierAt EqualitySubjectTypeImage _aArg aLeanRaw = pure aLeanRaw
 subjectCarrierAt rep _aArg aLeanRaw = pure (subjectCarrier rep aLeanRaw)
 
 subjectTerm ::
@@ -2359,6 +2412,11 @@ subjectTerm EqualitySubjectRuntimeValue = adaptToRuntime
 subjectTerm (EqualitySubjectRaw r)      = fmap ttLean . adaptTo (ExpectRaw r)
 subjectTerm EqualitySubjectRawFunction  =
   fmap ttLean . adaptTo (ExpectFunctionPosition Nothing)
+-- Type subjects arrive at their current-mode translation (T-images in
+-- ambient content) with raw production shapes; the raw-type position
+-- keeps them on the adaptTo chokepoint without representation change.
+subjectTerm EqualitySubjectTypeImage    =
+  fmap ttLean . adaptTo (ExpectRaw RawTypePosition)
 
 explicitCoreNameAtArgUniverse ::
   TermTranslationMonad m => Lean.Ident -> Term -> m Lean.Term
@@ -2385,7 +2443,7 @@ lowerRawLogicalCallee RawLogicalEq _ [aArg, xArg, yArg] = do
   aLean <- withRawTranslationMode (translateTerm aArg)
   xTrans <- translateTermWithShape xArg
   yTrans <- translateTermWithShape yArg
-  rep <- standaloneEqualitySubjectRep "Eq" [xTrans, yTrans]
+  rep <- subjectRepForCarrier "Eq" aArg [xTrans, yTrans]
   eqHead <- explicitCoreNameAtArgUniverse (Lean.Ident "Eq") aArg
   carrier <- subjectCarrierAt rep aArg aLean
   xLean <- subjectTerm rep xTrans
@@ -2396,7 +2454,7 @@ lowerRawLogicalCallee RawLogicalEq _ [aArg, xArg, yArg] = do
 lowerRawLogicalCallee RawLogicalRefl _ [aArg, xArg] = do
   aLean <- withRawTranslationMode (translateTerm aArg)
   xTrans <- translateTermWithShape xArg
-  rep <- standaloneEqualitySubjectRep "Refl" [xTrans]
+  rep <- subjectRepForCarrier "Refl" aArg [xTrans]
   reflHead <- explicitCoreNameAtArgUniverse (Lean.Ident "Eq.refl") aArg
   carrier <- subjectCarrierAt rep aArg aLean
   xLean <- subjectTerm rep xTrans
@@ -2431,6 +2489,11 @@ lowerRawLogicalCallee RawLogicalEqRec _ [aArg, xArg, motiveArg, branchArg, yArg,
     -- raw mode, and ambient content rebuilds any inner equality at
     -- the same mode its declared carrier came from.
     EqualitySubjectRawFunction  -> translateTerm eqProofArg
+    -- Type-subject proofs: CURRENT mode, uniformly with the motive —
+    -- nested spines (value-subject index equalities, further
+    -- type-subject transports) recurse at the same one type
+    -- interpretation the whole spine reads.
+    EqualitySubjectTypeImage    -> translateTerm eqProofArg
   carrier <- subjectCarrierAt rep aArg aLean
   pure (TranslatedTerm
     (Lean.App (Lean.ExplVar (Lean.Ident "Eq.rec"))
@@ -4901,7 +4964,7 @@ applyKnownFunctionWithShape fty f args = do
   -- eta-adapt instead of splicing raw.
   argResults <-
     sequence
-      [ case snd <$> (lookup ix (zip [0 :: Int ..] (fst (asPiList fty)))) of
+      [ case snd <$> lookup ix (zip [0 :: Int ..] (fst (asPiList fty))) of
           Just bty | isJust (asPi bty) ->
             translateFunctionActualAtConvention (piFunctionConvention bty) a
           -- Args BEYOND the callee's Pi binders (dependent result is

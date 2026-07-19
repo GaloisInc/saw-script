@@ -116,6 +116,14 @@ data MotiveResultMode
     -- (@… → Except String T@).
   | MotiveComputesRawType
     -- ^ Type/proof/function motive: the body type stays raw.
+  | MotiveComputesTypeImage
+    -- ^ Type-subject transport motive (calculus §Raw Logical Callees,
+    -- type-subject sub-case, 2026-07-19): the motive body is
+    -- type/prop-level content translated in the CURRENT mode with no
+    -- mode flip — the subject images fix the type interpretation, so
+    -- in ambient Phase-β content embedded value-domain Pis wrap to
+    -- their T-images (matching the branch and the consuming value
+    -- transport), and inside raw logical mode everything stays raw.
   deriving (Eq, Show)
 
 -- | Declared convention for a recursor motive: per-binder positions
@@ -189,6 +197,20 @@ data EqualitySubjectRep
     -- undergoes no representation change); a wrapped operand mixed
     -- with a function subject rejects — the carrier would not be
     -- uniquely determined.
+  | EqualitySubjectTypeImage
+    -- ^ Type-subject equality (2026-07-19; calculus §Raw Logical
+    -- Callees, type-subject sub-case): the carrier @a@ is a SORT, so
+    -- the subjects are TYPES — decided by D (@asSort@ on the carrier),
+    -- never by operand production shapes. The whole spine translates
+    -- MODE-UNIFORMLY in the current mode's type translation: T-images
+    -- in ambient Phase-β content (wrapped value arrows — what a value
+    -- transport at T-carriers consumes), raw inside raw logical mode
+    -- (where current-mode and raw coincide by construction). A
+    -- type-level congruence spine is parametric in the type
+    -- interpretation, so leaves re-check at the chosen images: a Refl
+    -- leaf needs the images Lean-defeq and an unsafeAssert leaf states
+    -- its obligation at the images — divergence is a loud failed
+    -- elaboration or an unprovable obligation, never silent.
   deriving (Eq, Show)
 
 data RawLogicalCallee

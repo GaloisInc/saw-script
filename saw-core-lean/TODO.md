@@ -202,16 +202,24 @@ below track execution state as always.
     does not fire at one Num.rec trailing function slot; localize
     with instrumentation (pinned: differential/cryptol_rev_module).
     LAST rev.cry blocker.
-  - CHACHA transport work (audit item 2): function-carrier
-    sub-rule — component-wise congruence at wrapped components or
-    named rejection; plus declared carrier conventions for the
-    autoEmitRaw combinator family (sym/trans/eq_cong/coerce__def/
-    piCong/inverse_eta_rule — currently none). Pinned:
-    differential/cryptol_chacha20_core_iterate.
-  - Distinctness invariant (audit C3): document in the calculus doc
-    that T(tau) never emits Except-String-headed types — the named
-    always-loud backstop for the transport corner (done in the
-    transport design doc; port to 2026-07-02 calculus doc).
+  - [DONE 2026-07-19] CHACHA transport work: the pinned failure was
+    NOT a function-carrier congruence hole — the spine dump showed a
+    TYPE-SUBJECT Eq__rec (sort carrier) mixing a forced-raw motive
+    with ambient-translated subjects/branch. Closed by the
+    MODE-UNIFORM type-subject convention (EqualitySubjectTypeImage /
+    MotiveComputesTypeImage; design + SAFE-WITH-CONDITIONS audit in
+    doc/2026-07-18_transport-carrier-design.md, 2026-07-19
+    sections). chacha20 core now ELABORATES; the row's residual gap
+    is observer #reduce budget (re-pinned, same family as
+    iround_zero). autoEmitRaw combinators need NO per-name carrier
+    conventions (parametric in their carriers); KNOWN LOUD RESIDUAL:
+    arrow-FORMING named combinators (piCong family) state raw
+    arrows — an ambient call feeding a T-consumer mismatches
+    loudly; extend when a row pins it.
+  - [DONE 2026-07-19] Distinctness invariant (audit C3): named
+    backstop now in the calculus doc (§Raw Logical Callees,
+    type-subject sub-case) with TWO smoketest pins (wrapExcept sole
+    carrier; support library defines no Except-headed type alias).
   - Total raw-target primitives unapplied in dictionary fields
     (intNeg in PRingInteger): raw arrow at a wrapped-arrow slot —
     needs the raw-function-value eta adaptation (existing
@@ -230,10 +238,10 @@ below track execution state as always.
     .resultPos through classifyDomain (+ elimSort); C-nit smoketest
     source lint pinning wrapExcept as the sole wrapping carrier
     (Prop-backstop tamper evidence).
-  - Function-carrier Eq.refl transport corner: seq_cong-style
-    coercion at a WRAPPED FUNCTION carrier fails elaboration
-    (pinned by differential/cryptol_chacha20_core_iterate;
-    iround_zero elaborates — its residual is observer budget).
+  - [DONE 2026-07-19] Function-carrier Eq.refl transport corner:
+    resolved by the mode-uniform type-subject convention (see the
+    CHACHA item above); both chacha rows now elaborate and pin only
+    the observer #reduce budget.
 
 - [ ] **Pre-release soundness audit (release gate, added 2026-07-17).**
   An aggressive end-to-end scrutiny pass over the whole trust chain

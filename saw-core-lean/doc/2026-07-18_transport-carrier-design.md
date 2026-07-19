@@ -153,3 +153,193 @@ boundary). Then pick the C4 arm:
     component equality is not defeq under T.
 The autoEmitRaw combinator family conventions (audit B3) land with
 whichever arm wins.
+
+## Investigation result (2026-07-19): the spine dumped
+
+The pre-implementation description above is CORRECTED by the dump.
+The failing emission (Emitted.lean:282, compressed) is:
+
+    coerce (Except String (Vec (mulNat 4 8) Bool)
+              -> Except String (Vec 4 (Vec 8 Bool)))   -- T(T1)
+           (Except String (Vec (mulNat 8 4) Bool)
+              -> Except String (Vec 4 (Vec 8 Bool)))   -- T(T2)
+           (@Eq.rec Type (Vec 32 Bool)
+              (fun y' eq' =>
+                 (Vec (mulNat 4 8) Bool -> Vec 4 (Vec 8 Bool))
+                   = (y' -> Vec 4 (Vec 8 Bool)))       -- motive RAW
+              (@Eq.refl Type (Except String ...
+                 -> Except String ...))                -- base WRAPPED
+              (Vec 32 Bool)
+              (@Eq.rec Num x__' ...))                  -- Num index proof
+           (fun (v : Except String (Vec (mulNat 4 8) Bool)) => ...)
+
+Corrections to the grounding note above:
+- There is NO join/split wall here. The coerce is between two arrow
+  types differing only in DOMAIN INDEX ARITHMETIC (`mulNat 4 8` vs
+  `mulNat 8 4`); both domains are Lean-defeq to `Vec 32 Bool`
+  (mulNat reduces on literals). The codomain `Vec 4 (Vec 8 Bool)`
+  is shared.
+- The consumer is not "a coerce rejecting a refl": the coerce
+  lowering (Term.hs ~2613) already translates carriers AND proof in
+  ambient mode and applies the coerced function directly (the
+  function-carrier arm emits; no reject). The loud failure is
+  INSIDE the proof spine, at the standalone Eq__rec lowering.
+- The SAW proof is an inlined Eq__rec congruence spine at a SORT
+  carrier (a = sort 0; the subjects are TYPES), with a nested
+  Num-carrier Eq__rec (value-subject, all non-arrow content) and an
+  unsafeAssert leaf (obligation `Eq Num x__' x__'`, closed by rfl).
+
+The defect, precisely: for a TYPE-SUBJECT spine the standalone
+lowering mixes two type interpretations. Subjects and branch
+translate in AMBIENT mode (`translateTermWithShape` before the
+convention is chosen; adaptTo-raw is the identity on their raw
+shapes), so the branch Refl's subject comes out at T — the WRAPPED
+arrow. The motive and eqProof are FORCED RAW
+(`MotiveComputesRawType` -> `withRawTranslationMode`), so the same
+SAW arrow type comes out RAW inside the motive. `Eq.rec` demands
+the base inhabit `motive x rfl` — wrapped refl vs raw motive, loud.
+
+## Design (2026-07-19): type-subject spines are MODE-UNIFORM
+
+Rule (calculus §Raw Logical Callees, new sub-case): when the
+equality carrier `a` is a SORT — the subjects are TYPES, D-decided
+by `asSort`, never by operand production shapes — the declared
+subject representation is the CURRENT MODE's type translation
+(T in ambient Phase-β content; the raw translation inside raw
+logical mode, where the two coincide by construction). EVERY field
+of the convention follows the same mode: subjects, motive
+(plain `translateTerm`, no mode flip), branch, nested proof.
+
+Why this is the right thing (not arm (a), (b), or (c)):
+- A type-level congruence spine is PARAMETRIC in the type
+  interpretation: Eq__rec/Refl/sym/trans steps prove the image
+  equality verbatim whichever interpretation the embedded types are
+  read at. The CONSUMER fixes the interpretation: a value transport
+  (coerce) moves a value inhabiting T(T1) and needs `T(T1) = T(T2)`
+  — so ambient spines read types at T. Raw logical content (lemma
+  bodies auto-emitted under raw mode) reads them raw — unchanged,
+  since inside `withRawTranslationMode` current-mode = raw.
+- Leaves re-check at the chosen images: a Refl leaf needs the
+  T-images Lean-defeq (here: mulNat literal reduction — holds); an
+  unsafeAssert leaf emits its obligation AT the images. Where SAW
+  accepted a conversion that T does not preserve, elaboration or
+  the obligation fails LOUDLY. No silent divergence: the emitted
+  proof is checked by Lean's kernel end to end.
+- No new support lemmas (arm a unnecessary — the SAW spine already
+  IS the congruence proof; we only read its types at T), no
+  boundary adapter (arm b unnecessary — the value already inhabits
+  T(T1) natively), no rejection (arm c unnecessary).
+
+Value-subject conventions (carrier NOT a sort) are unchanged
+byte-for-byte: raw subjects keep the forced-raw motive (the legacy
+corpus), runtime subjects the wrapped motive, function subjects
+Slice 5c. The type-subject case bypasses
+`standaloneEqualitySubjectRep` entirely — D decides from the
+carrier, not from shapes (types happen to carry raw shapes, but the
+declared rule must not depend on that accident).
+
+Implementation surface:
+- `EqualitySubjectTypeImage` constructor on `EqualitySubjectRep`
+  (Convention.hs), documented as above.
+- `MotiveComputesTypeImage` arm on `MotiveResultMode`:
+  `translateEqRecMotiveAtConvention` translates the motive with
+  plain `translateTerm` (current mode).
+- `eqRecConventionForStandalone` gains the `asSort aArg` test FIRST;
+  subjects/branch at `ExpectRaw RawTypePosition` (they are types;
+  adaptTo chokepoint preserved), proof in current mode, result
+  `BindingRaw`.
+- `RawLogicalEq` / `RawLogicalRefl` at sort carriers reclassify to
+  the same rep — emission-identical today (their subjects already
+  translate ambient), but the production record and trace become
+  truthful rather than mode-coincidental.
+- The autoEmitRaw combinator family (sym/trans/eq_cong/coerce__def)
+  stays UsePreserve: the lemmas are PARAMETRIC in their carriers,
+  so ambient call sites instantiate them at T-images with no
+  per-name behavior. KNOWN RESIDUAL: arrow-FORMING combinators
+  called by name (piCong family) state raw arrows in their
+  auto-emitted signatures; an ambient call feeding a T-consumer
+  would mismatch LOUDLY. No pinned row exercises this; extend when
+  one does.
+
+Audit questions (adversarial, pre-implementation):
+1. Nested VALUE-subject spines inside an ambient type-subject proof
+   (the Num Eq__rec): their subjects are type-INDEX values. Under
+   ambient translation do Num variables/ctor applications carry raw
+   production shapes (rep stays raw, emission unchanged), or can a
+   shape flip the inner convention to runtime-subject (wrong-motive
+   garbage — loud, or silent)?
+2. Regression surface: any GREEN emission with an ambient
+   type-subject Eq__rec today elaborated only because its content
+   was all non-arrow (raw = T images coincide). Is the new emission
+   byte-identical there (index values inside types translate raw in
+   both modes)?
+3. unsafeAssert at SORT carriers inside ambient spines: the
+   obligation becomes `T(T1) = T(T2)` (possibly wrapped arrows).
+   Confirm the obligation machinery states it at the images and
+   that provability = component provability (congruence), never a
+   vacuous or unstatable goal.
+4. Soundness: can reading SAW's proof at T-images ever PROVE an
+   equality whose SAW counterpart did not hold semantically
+   (T-image conflation)? (Claim: no — Lean checks the transported
+   spine independently; coercion along a Lean-proved equality of
+   Lean types is unconditionally sound in Lean, and SAW-side
+   falsity surfaces as an unprovable obligation.)
+5. The reclassification of Eq/Refl at sort carriers: confirm
+   emission-identical (no green-row byte diffs) and that no
+   consumer keyed on the OLD rep value for type subjects.
+
+## Audit verdict (2026-07-19): SAFE-WITH-CONDITIONS
+
+No new silent-unsoundness path; every divergence the design
+introduces is loud (compile-time exhaustive enums, or Lean-kernel
+via the distinctness invariant). The mechanic fixes the pinned row.
+Per-question results (evidence in the audit record):
+
+- Q1 CORRECTED: nested Num/Nat index spines stay raw for TYPE-LEVEL
+  indices (Num vars read Γ raw records; TCNum-of-literals and
+  mulNat are raw producers). A VALUE-COMPUTED index (TCNum of a
+  bvToNat-style wrapped computation) flips the nested spine to the
+  runtime-subject convention — which then fails LOUDLY at the outer
+  type-spine boundary (distinctness invariant), never silently. No
+  pinned row produces one.
+- Q2: regression surface is structurally EMPTY — ambient and raw
+  type translation differ only where wrapExcept fires (value-domain
+  Pis, incl. function fields nested in tuple/record/Stream
+  type-subjects), and any type-subject spine carrying such content
+  is red today with exactly the known-gap failure. The only live
+  ambient `Eq.rec Type` in the corpus is the chacha row itself.
+- Q3: unsafeAssert at sort carriers states its obligation at the
+  ambient images (operands translate ambient in
+  translateUnsafeAssertObligation); false assertions are unprovable
+  obligations, loud.
+- Q4: no new conflation — Except is an injective type constructor,
+  so reading at wrapped images never identifies more than raw;
+  residual assumptions (T value-injectivity, Lean defeq vs SAW
+  convertibility) are pre-existing to every coerce.
+- Q5: Eq/Refl reclassification is emission-identical (subjects
+  already translated ambient; carrier of a bare sort is
+  mode-independent; no consumer branches on the rep value beyond
+  the projection functions).
+- Q6: ambient motive translation keeps the type-producing lambda
+  structural; `y' -> C` wraps via the kind-directed DVarValue rule
+  — exactly the T-images the branch and the coerce demand.
+- Q7: all enum consumers are exhaustive without silent defaults,
+  EXCEPT subjectCarrierAt's wildcard second clause — condition 2.
+
+Binding conditions (all implemented 2026-07-19):
+1. Distinctness invariant gains a support-library guard: smoketest
+   lint "support library defines no Except-headed type alias".
+2. Explicit TypeImage arms at every consumer (subjectCarrier,
+   subjectCarrierAt BEFORE the wildcard, subjectTerm, the eqProof
+   case, translateEqRecMotiveAtConvention,
+   eqRecConventionForStandalone); classification via the shared
+   `subjectRepForCarrier` (asSort test, D-decided).
+3. Q1 rationale corrected as above (flip is loud, not "unchanged").
+4. Full differential corpus run required before commit.
+5. Efficacy: mulNat is `@[reducible] def mulNat := Nat.mul` and the
+   nat-literal macros are reducible defs, so literal index
+   arithmetic is kernel-defeq — confirmed in
+   SAWCorePrimitives.lean; the row run is the empirical check.
+6. piCong/arrow-forming named combinators stay a KNOWN LOUD
+   residual (raw-arrow signatures vs ambient T-consumers); no green
+   row instantiates one at an ambient T-consumer today.

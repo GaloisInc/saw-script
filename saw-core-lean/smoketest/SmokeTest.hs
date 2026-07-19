@@ -9,7 +9,7 @@ emission) so a failure's cause is obvious from the test name.
 
 module Main (main) where
 
-import           Data.List           (isInfixOf, isPrefixOf)
+import           Data.List           (isInfixOf, isPrefixOf, tails)
 import qualified Data.Text           as Text
 import qualified Language.Lean.AST   as Lean
 import qualified Language.Lean.Pretty as Lean
@@ -1200,6 +1200,22 @@ lintSourceFiles =
     , "Language/Lean/Pretty.hs"
     ]
 
+-- | The Lean support library the emitted corpus imports. The
+-- transport distinctness-invariant lint scans every file: the
+-- invariant is about what T-emitted NAMES can reduce to, and any
+-- support module can introduce an alias.
+supportLibraryFiles :: [FilePath]
+supportLibraryFiles =
+  map ("saw-core-lean/lean/CryptolToLean/" ++)
+    [ "SAWCorePrimitives.lean"
+    , "SAWCoreVectors.lean"
+    , "SAWCoreBitvectors.lean"
+    , "SAWCoreBitvectors_proofs.lean"
+    , "SAWCorePrelude_proofs.lean"
+    , "SAWCorePreludeExtra.lean"
+    , "SAWCoreCtorOrder.lean"
+    ]
+
 -- | Names of deleted heuristics that must never reappear in CODE
 -- (comment lines — tombstone NOTEs — are exempt). Each entry names
 -- the slice that deleted it.
@@ -1267,6 +1283,41 @@ antiRegressionLintTests = testGroup "anti-regression source lint (Slice 7)"
          ++ show over_ ++ " — classify from source types or declared \
          \conventions instead, or (if you demoted a use) lower the ceiling")
         (null over_)
+  , testCase "support library defines no Except-headed type alias" $ do
+      -- Transport distinctness invariant (2026-07-18/19 transport
+      -- audits, binding condition 1): T never emits an
+      -- Except-String-HEADED type, so the wrapped and raw readings
+      -- of a SAW type are never defeq and every transport-mode
+      -- mismatch is LOUD. A support-library TYPE ALIAS whose body
+      -- head is `Except` (e.g. `abbrev Foo := Except String Bar`)
+      -- would let a T-emitted name reduce to the carrier and reopen
+      -- the corner SILENTLY. This scans every declaration body for
+      -- an Except-headed right-hand side (whitespace-collapsed;
+      -- named-argument uses like `(m := Except String)` are excluded
+      -- by the preceding token's open paren).
+      sources <- mapM readFile supportLibraryFiles
+      let collapse = unwords . words . unlines . lintCodeLines
+          hitsIn c =
+            [ take 60 rest
+            | (i, rest) <- zip [(0 :: Int) ..] (tails c)
+            , any (`isPrefixOf` rest) [":= Except ", ":= (Except "]
+            , let before = take i c
+                  lastWord =
+                    reverse (takeWhile (/= ' ')
+                      (dropWhile (== ' ') (reverse before)))
+            , not ("(" `isPrefixOf` lastWord)
+            ]
+          hits =
+            [ (f, h)
+            | (f, s) <- zip supportLibraryFiles sources
+            , h <- hitsIn (collapse s)
+            ]
+      assertBool
+        ("Except-headed definition body in the support library — this \
+         \endangers the transport distinctness invariant (a type alias \
+         \reducing to `Except String _` makes wrapped-vs-raw mode \
+         \mismatches silently defeq): " ++ show hits)
+        (null hits)
   , testCase "wrapExcept is the sole Except-carrier authority" $ do
       -- 2026-07-18 calculus/transport audits: BOTH backstops (the
       -- Prop backstop and the transport distinctness invariant —

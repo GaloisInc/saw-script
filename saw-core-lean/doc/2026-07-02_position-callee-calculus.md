@@ -555,6 +555,50 @@ proof-transported `Nat`, the branch `0` is raw `Nat`; wrapping it as
 `Except String Nat` is a convention error. If a proposition compares runtime
 computations, the compared terms may still be wrapped.
 
+**Type-subject sub-case (2026-07-19).** When the equality carrier `a` is a
+SORT, the subjects are TYPES. This case is decided by D from the carrier alone
+(`asSort`), never from operand production shapes: types happen to carry raw
+shapes today, but the declared rule must not depend on that accident. The
+declared representation is the CURRENT MODE's type translation, and EVERY
+field of the convention follows the same mode — subjects, motive (no mode
+flip), branch, nested proof:
+
+```text
+rho_eq = TypeImage:  SubjectRep(sort l, TypeImage) = the current mode's T
+  ambient Phase-beta content: T-images (value-domain Pis wrap)
+  inside raw logical mode:    raw (current mode and raw coincide)
+```
+
+Rationale: a type-level congruence spine is PARAMETRIC in the type
+interpretation — Eq/Refl/Eq__rec steps prove the image equality verbatim at
+whichever interpretation the embedded types are read, so the CONSUMER fixes
+it. A value transport (`coerce`) moves a value inhabiting `T(T1)` and needs
+`T(T1) = T(T2)`; ambient spines therefore read types at T. Leaves re-check at
+the chosen images: a `Refl` leaf needs the images Lean-defeq, an
+`unsafeAssert` leaf states its obligation AT the images — where SAW accepted a
+conversion T does not preserve, elaboration or the obligation fails LOUDLY.
+Mixing modes inside one spine (a raw motive against ambient-translated
+subjects) is the convention error this sub-case exists to forbid; it was the
+chacha20 function-carrier failure
+(doc/2026-07-18_transport-carrier-design.md, 2026-07-19 sections, audited
+SAFE-WITH-CONDITIONS).
+
+The loudness of every mode mismatch rests on the DISTINCTNESS INVARIANT: the
+type translation T never emits an `Except String _`-HEADED type, so a wrapped
+and a raw reading of the same SAW type are never definitionally equal. This is
+a named backstop parallel to the Prop backstop; `wrapExcept` is the sole
+carrier constructor (smoketest-pinned), and the support library must never
+introduce a type alias reducing to `Except String _` (smoketest-pinned,
+"support library defines no Except-headed type alias").
+
+Known loud residual: arrow-FORMING proof combinators called by NAME (the
+`piCong` family) state raw arrows in their auto-emitted signatures; an ambient
+call site feeding a T-consumer mismatches loudly. Extend them with declared
+carrier conventions when a pinned row exercises this. The parametric
+combinators (`sym`, `trans`, `eq_cong`, `coerce__def`) need no per-name
+conventions — they instantiate at whatever carrier images the call site
+supplies.
+
 ### Recursors
 
 Recursors are another convention instance.
