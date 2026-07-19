@@ -1188,6 +1188,9 @@ lintSourceFiles :: [FilePath]
 lintSourceFiles =
   map ("saw-core-lean/src/" ++)
     [ "SAWCoreLean/Term.hs"
+    , "SAWCoreLean/Convention.hs"
+    , "SAWCoreLean/Contracts.hs"
+    , "SAWCoreLean/FixRecognizer.hs"
     , "SAWCoreLean/Monad.hs"
     , "SAWCoreLean/SAWModule.hs"
     , "SAWCoreLean/CryptolModule.hs"
@@ -1264,6 +1267,29 @@ antiRegressionLintTests = testGroup "anti-regression source lint (Slice 7)"
          ++ show over_ ++ " — classify from source types or declared \
          \conventions instead, or (if you demoted a use) lower the ceiling")
         (null over_)
+  , testCase "wrapExcept is the sole Except-carrier authority" $ do
+      -- 2026-07-18 calculus/transport audits: BOTH backstops (the
+      -- Prop backstop and the transport distinctness invariant —
+      -- "T never emits Except-String-headed types") rest on the
+      -- wrapping carrier being uniformly `Except String _`,
+      -- constructed in exactly ONE place ('wrapExcept',
+      -- Convention.hs) and recognized in exactly TWO
+      -- ('isExceptStringType'; the telescope fingerprint's
+      -- stripExcept). A NEW site mentioning the Except identifier
+      -- means a new constructor or recognizer of the carrier —
+      -- which must either route through wrapExcept or be added
+      -- here DELIBERATELY with the backstop argument re-checked.
+      sources <- mapM readFile lintSourceFiles
+      let allCode = concatMap lintCodeLines sources
+          n = length (filter ("\"Except\"" `isInfixOf`) allCode)
+      assertBool
+        ("Except-carrier mention count changed (found " ++ show n
+         ++ ", ceiling 3: wrapExcept def + isExceptStringType + \
+            \telescope stripExcept) — a new carrier \
+            \constructor/recognizer endangers the Prop backstop and \
+            \the transport distinctness invariant; route through \
+            \wrapExcept or update this lint deliberately")
+        (n <= 3)
   ]
 
 --------------------------------------------------------------------------------
