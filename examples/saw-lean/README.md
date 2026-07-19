@@ -18,10 +18,12 @@ legacy); `saw-core-lean/doc/getting-started.md` walks this flow.
 >   disposition) and stays `fails`-wrapped.
 > - `offline_lean` is emission-only (goals stay unsolved; the
 >   Lean-side discharges live in `proof/Proofs/{Invol,Eq}.lean`).
->   SAW-side replay (`offline_lean_replay`) EXISTS since
->   2026-07-16 — the replay-driven form of this flow is exercised
->   by the `workflows/replay_*` zoo rows; wiring replay into this
->   demo's steps is a recorded follow-up.
+>   SAW-side replay (`offline_lean_replay`) is WIRED IN as demo
+>   step 5: SAW re-emits each goal fresh, checks
+>   `proof/replay/{invol,eq}/proof.lean` under the factored trust
+>   kernel, and genuinely SOLVES both goals on Lean's kernel
+>   authority (not `fails`-wrapped). Run the demo with
+>   `SAW_LEAN_ROOT=<saw-script checkout> saw demo.saw`.
 
 - `write_lean_term` — translate a single SAWCore term to a `.lean`.
 - `write_lean_cryptol_module` — translate every Cryptol top-level

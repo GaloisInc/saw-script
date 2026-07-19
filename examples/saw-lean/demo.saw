@@ -55,3 +55,16 @@ fails (prove_print (offline_lean "out/invol")
 
 fails (prove_print (offline_lean "out/eq_spec")
   {{ \(xs : [4][8]) -> implRev xs == specRev xs }});
+
+// 5. REPLAY (landed 2026-07-16): SAW admits the same two goals on
+//    Lean's kernel authority. offline_lean_replay re-emits each goal
+//    FRESH in-process, stages proof/replay/<goal>/proof.lean against
+//    it, and runs the factored trust kernel (exact-match axiom
+//    allowlist, sorry/placeholder policy, closer-type probe). NOT
+//    fails-wrapped: on success the goals are genuinely SOLVED.
+//    Requires SAW_LEAN_ROOT pointing at the saw-script checkout.
+prove_print (offline_lean_replay "proof/replay/invol")
+  {{ \(xs : [4][8]) -> implRev (implRev xs) == xs }};
+
+prove_print (offline_lean_replay "proof/replay/eq")
+  {{ \(xs : [4][8]) -> implRev xs == specRev xs }};
