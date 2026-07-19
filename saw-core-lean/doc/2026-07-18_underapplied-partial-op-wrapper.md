@@ -215,3 +215,26 @@ moved to two residuals, both loud, pinned by
    zero-arg global is BindingFunction (the in-code comment already
    concedes this); RuntimeArg consumers then reject/route it
    through the function machinery instead of value-lifting.
+
+### Part 3 findings (2026-07-18, after the raw-formal gate fix)
+
+The part-2 eta initially double-adapted partial-op wrapper values
+(raw-formal discipline over the already-wrapped-formal
+intDiv_runtimeM) — fixed by the raw-formal GATE:
+eta only for Preserve/Rename globals (translateIdentToIdent Just)
+with NO partial-op contract; UseMacro/UseMapsToWrapped/wrapper
+products pass through as-produced. intDiv/intMod errors gone.
+
+Remaining (part 3b, pinned by differential/cryptol_rev_module —
+all natToInt):
+1. `applied f []` stamps zero-arg function-typed mapped globals
+   BindingRaw; value slots then legally pure-lift them
+   (`pure natToInt` applied to an eta arg). Honest stamp is
+   BindingFunction for Pi-to-non-sort types; the consumer slots
+   that today rely on the pure-lift must instead route through the
+   declared-convention eta (or reject loudly).
+2. A Num#rec function-ARGUMENT slot (`Nat -> Except String Int`
+   motive-derived formal) receives raw `natToInt` — recursor
+   argument positions need the same
+   translateFunctionActualAtConvention treatment the generic path
+   gained.

@@ -4629,13 +4629,23 @@ translateFunctionActualAtConvention ::
 translateFunctionActualAtConvention conv arg =
   case unwrapTermF arg of
     Lambda{} -> translateLambdaAtConvention conv arg
-    _ | Just _ <- asGlobalDef arg
+    _ | Just ident <- asGlobalDef arg
+        -- Partial-op globals already lowered to their WRAPPED-formal
+        -- runtime wrappers by the under-application branch — eta
+        -- with the raw-formal discipline would double-adapt (the
+        -- intDiv_runtimeM v_0 regression); pass them through.
+      , Nothing <- findPartialOpContractUnderApplied ident 0
       , Right fty <- termSortOrType arg
       , (params@(_ : _), _) <- asPiList fty -> do
+          -- Raw-formal gate: only Preserve/Rename targets carry raw
+          -- formals; UseMacro/UseMapsToWrapped products are already
+          -- in their declared (wrapped) conventions.
+          mqi <- translateIdentToIdent ident
           produced <- translateTermWithShape arg
-          case ttShape produced of
-            BindingWrapped -> pure produced
-            _ -> do
+          case (mqi, ttShape produced) of
+            (Nothing, _)            -> pure produced
+            (_, BindingWrapped)     -> pure produced
+            (Just _, _) -> do
               let typeIxs = typeArgPositions fty
               translateFunctionConventionBindersWith
                 functionConventionValueSlot typeIxs params $
