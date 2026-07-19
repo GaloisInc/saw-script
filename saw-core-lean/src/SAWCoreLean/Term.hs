@@ -4676,17 +4676,48 @@ translateFunctionActualAtConvention conv arg =
   where
     etaAdaptMappedGlobal ident
       | Nothing <- findPartialOpContractUnderApplied ident 0
-      , Right fty <- termSortOrType arg
-      , (params@(_ : _), _) <- asPiList fty = do
+      , Right fty <- termSortOrType arg = do
           -- Raw-formal gate: only Preserve/Rename targets carry raw
           -- formals; UseMacro/UseMapsToWrapped products are already
           -- in their declared (wrapped) conventions.
           mqi <- translateIdentToIdent ident
+          case mqi of
+            Nothing -> translateTermWithShape arg
+            Just _
+              | not (null (fst (asPiList fty))) -> etaAdaptAtPi fty
+              | otherwise                       -> etaAdaptFromConv
+      | otherwise = translateTermWithShape arg
+    -- Convention-only eta for globals whose declared type is a
+    -- Constant-headed ALIAS (natToInt : PLiteral Integer — no
+    -- syntactic Pi to read binders from; the 2026-07-18 rev
+    -- survivor's actual mechanism). Binders are unannotated — the
+    -- consuming slot's expected type infers them.
+    etaAdaptFromConv = do
+      produced <- translateTermWithShape arg
+      case ttShape produced of
+        BindingWrapped -> pure produced
+        _ -> do
+          names <- mapM (\i2 -> freshVariant
+                           (Lean.Ident ("\951_c" ++ show (i2 :: Int) ++ "_")))
+                        [0 .. length (fcArgPositions conv) - 1]
+          let binders = [ Lean.Binder Lean.Explicit nm2 Nothing
+                        | nm2 <- names ]
+              etaArgs =
+                [ TranslatedTerm (Lean.Var nm2)
+                    (case pos of
+                       ExpectRuntimeValue -> BindingWrapped
+                       _                  -> BindingRaw)
+                | (nm2, pos) <- zip names (fcArgPositions conv) ]
+              shouldBind = map (isWrappedShape . ttShape) etaArgs
+              pureWrap = fcResultPosition conv == ExpectRuntimeValue
+          body <- buildLifted (ttLean produced) pureWrap shouldBind etaArgs
+          pure (TranslatedTerm (Lean.Lambda binders body) BindingFunction)
+    etaAdaptAtPi fty
+      | (params@(_ : _), _) <- asPiList fty = do
           produced <- translateTermWithShape arg
-          case (mqi, ttShape produced) of
-            (Nothing, _)            -> pure produced
-            (_, BindingWrapped)     -> pure produced
-            (Just _, _) -> do
+          case ttShape produced of
+            BindingWrapped -> pure produced
+            _ -> do
               let typeIxs = typeArgPositions fty
               translateFunctionConventionBindersWith
                 functionConventionValueSlot typeIxs params $

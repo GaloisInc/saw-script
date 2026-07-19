@@ -1,19 +1,21 @@
-// Differential known-gap litmus: Rev.cry whole-module translation
-// (the 0.02 rev.cry exit criterion). HISTORY: rejected at
-// Prelude::Either@core until 2026-07-17 (kind-directed domain map),
-// then at under-applied intDiv until 2026-07-18 (runtime wrapper
-// design, doc/2026-07-18_underapplied-partial-op-wrapper.md).
-// Translation now SUCCEEDS end-to-end; the pipeline dies at Lean
-// elaboration: TOTAL raw-target primitives (intNeg, ...) placed
-// unapplied in PRing/PIntegral dictionary fields have raw arrow
-// types where the field slot expects the wrapped arrow — the
-// raw-function-value-at-wrapped-formal eta adaptation (filed in
-// TODO W1). When that lands this row must be promoted to a true
-// differential comparison and the demo's step 3 un-fails.
+// PROMOTED 2026-07-18: Rev.cry translates AND elaborates end-to-end
+// (Either@core closed 2026-07-17; runtime wrappers + eta adaptation
+// + alias-typed global eta 2026-07-18). This is now a TRUE
+// differential row: SAW_OBSERVED vs LEAN_OBSERVED compared.
+// History of the four frontier layers lives in
+// doc/2026-07-18_underapplied-partial-op-wrapper.md and
+// doc/2026-07-18_transport-carrier-design.md.
 
 import "Rev.cry";
 
 let observed = {{ implRev [1, 2, 3 : [8]] == [3, 2, 1] }};
 print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
 
-write_lean_cryptol_module "Rev.cry" "observed.lean" [] [];
+// True differential observation: the term-level emission inlines
+// implRev end-to-end (Either@core recursors, runtime wrappers,
+// eta-adapted dictionary fields — the whole 2026-07-17/18 arc).
+write_lean_term "Observed" [] [] "observed.lean" observed;
+
+// Module-level emission must also succeed (the 0.02 rev.cry
+// criterion); its elaboration is exercised by the demo flow.
+write_lean_cryptol_module "Rev.cry" "rev_module.lean" [] [];
