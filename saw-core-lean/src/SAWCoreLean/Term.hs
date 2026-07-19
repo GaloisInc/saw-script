@@ -1089,6 +1089,12 @@ piFunctionConvention fty =
              then ExpectRaw RawTypePosition
              else ExpectRaw RawIndexPosition
       | functionConventionValueSlot typeIxs ix bty = ExpectRuntimeValue
+      -- 2026-07-18 eta part 3b: a Pi-typed binder is a FUNCTION
+      -- position carrying its own derived convention (recursively),
+      -- so function actuals (natToInt at Num#rec post slots)
+      -- eta-adapt instead of splicing raw.
+      | isJust (asPi bty) =
+          ExpectFunctionPosition (Just (piFunctionConvention bty))
       | otherwise = ExpectRaw RawValuePosition
     resultPos
       | Just _ <- asSort ret = ExpectRaw RawTypePosition
@@ -2701,14 +2707,23 @@ originalDispatchWithShape i args = do
     -- 'liftArgIfNeeded' helper inserts a 'pure' for the latter so
     -- the bind chain typechecks uniformly.
     applied :: TermTranslationMonad m => Lean.Term -> [Term] -> m TranslatedTerm
-    applied f [] =
-      -- Bare (zero-arg) reference to a global head. The old code
-      -- guessed the shape from the emitted Lean, which for a global
-      -- 'Var'/'ExplVar' head always resolved to 'BindingRaw'; state
-      -- that outcome explicitly instead of inspecting the AST. The
-      -- honest shape is the callee's convention (a bare 'bvAdd' is
-      -- function-shaped) — Slice 4 declares it per callee.
-      pure (TranslatedTerm f BindingRaw)
+    applied f [] = do
+      mm0 <- view sawModuleMap <$> askTR
+      let isValueFn = case funType mm0 of
+            Just fty | (_ : _, ret) <- asPiList fty
+                     , isNothing (asSort ret) -> True
+            _ -> False
+      if isValueFn
+         then
+           -- 2026-07-18 eta part 3b: the honest shape of a bare
+           -- Pi-typed (non-type-family) global is FUNCTION — the
+           -- BindingRaw stamp let value slots pure-lift raw function
+           -- values (pure natToInt). Consumers adapt by convention.
+           pure (TranslatedTerm f BindingFunction)
+         else
+           -- Bare zero-arg reference to a non-function global
+           -- (literals, type constants): raw, as before.
+           pure (TranslatedTerm f BindingRaw)
     applied f args' = do
       mm0 <- view sawModuleMap <$> askTR
       phase0 <- phaseBetaEnabled
@@ -3570,7 +3585,21 @@ translateRecursorAppWithShape crec args = do
                                 (casePlans !! (i - caseFirst)) a
                          else translateTerm a)
          [0..] preScrut
-       postResults <- traverse translateTermWithShape postScrut
+       -- 2026-07-18 eta part 3b: post-scrutinee args at declared
+       -- FUNCTION positions translate at their conventions (raw-
+       -- formal globals like natToInt eta-adapt to the wrapped-arrow
+       -- formal the motive-derived Pi declares).
+       let postPositions =
+             fcArgPositions (piFunctionConvention motiveBody)
+             ++ repeat (ExpectRaw RawValuePosition)
+       postResults <-
+         sequence
+           [ case pos of
+               ExpectFunctionPosition (Just conv) ->
+                 translateFunctionActualAtConvention conv a
+               _ -> translateTermWithShape a
+           | (pos, a) <- zip postPositions postScrut
+           ]
        postTrans <- recursorPostArgs motiveBody postResults
        let recCallWith scrutTerm =
              Lean.App recHead (preTrans ++ [scrutTerm] ++ postTrans)
@@ -4818,7 +4847,19 @@ applyKnownFunctionWithShape ::
   Term -> Lean.Term -> [Term] -> m TranslatedTerm
 applyKnownFunctionWithShape fty f args = do
   ftyLean <- translateTerm fty
-  argResults <- traverse translateTermWithShape args
+  -- 2026-07-18 eta part 3b: function-typed FORMALS of a phase-beta
+  -- function value carry the wrapped-arrow convention derived from
+  -- the formal's own Pi ('piFunctionConvention') — raw-formal
+  -- global actuals (natToInt at posNegCases' pos/neg slots)
+  -- eta-adapt instead of splicing raw.
+  argResults <-
+    sequence
+      [ case snd <$> (lookup ix (zip [0 :: Int ..] (fst (asPiList fty)))) of
+          Just bty | isJust (asPi bty) ->
+            translateFunctionActualAtConvention (piFunctionConvention bty) a
+          _ -> translateTermWithShape a
+      | (ix, a) <- zip [0 ..] args
+      ]
   let argTerms = map ttLean argResults
   phase <- phaseBetaEnabled
   if phase
