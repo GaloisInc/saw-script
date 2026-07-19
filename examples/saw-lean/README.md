@@ -1,9 +1,27 @@
-# saw-lean-example
+# saw-lean example
 
-End-to-end demo of SAW's Lean 4 backend. Mirrors the layout of the
-neighbouring `saw-rocq-example/`. The same `rev.cry` module drives
-both. This directory exercises the three primary commands the
-backend exposes:
+End-to-end demo of SAW's Lean 4 backend, driven by `rev.cry`
+(reverse, its spec, and two properties). This is the CANONICAL copy
+(the untracked `saw-lean-example/` folder in the parent workspace is
+legacy); `saw-core-lean/doc/getting-started.md` walks this flow.
+
+> **STATUS 2026-07-18 (post recursor-convention + wrapper arc)**
+>
+> - `write_lean_term` steps work; `out/{idBool,implRev}.lean`
+>   regenerate and elaborate.
+> - Step 3b: the reduced module (`rev_impl.cry`, implRev alone)
+>   TRANSLATES AND ELABORATES — `out/Rev.lean` is produced for real
+>   (the 0.02 rev.cry criterion; differential pin:
+>   `otherTests/saw-core-lean/differential/cryptol_rev_module`).
+>   The FULL module (step 3) still rejects at `specRev`'s built-in
+>   `reverse` → raw-position `Prelude.error` (audited 2026-07-14
+>   disposition) and stays `fails`-wrapped.
+> - `offline_lean` is emission-only (goals stay unsolved; the
+>   Lean-side discharges live in `proof/Proofs/{Invol,Eq}.lean`).
+>   SAW-side replay (`offline_lean_replay`) EXISTS since
+>   2026-07-16 — the replay-driven form of this flow is exercised
+>   by the `workflows/replay_*` zoo rows; wiring replay into this
+>   demo's steps is a recorded follow-up.
 
 - `write_lean_term` — translate a single SAWCore term to a `.lean`.
 - `write_lean_cryptol_module` — translate every Cryptol top-level

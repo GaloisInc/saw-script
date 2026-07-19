@@ -21,17 +21,20 @@ let impl4 = {{ implRev`{4, [8]} }};
 write_lean_term "implRev4" [] [] "out/implRev.lean" impl4;
 
 // 3. Translate the whole Cryptol module.
-//    KNOWN REJECTION (release 0.01): the full module rejects at
-//    translation — `specRev`'s built-in `reverse` reaches
-//    `Prelude.error` demanded at a raw position (the audited
-//    raw-error disposition,
-//    saw-core-lean/doc/2026-07-14_reachable-raw-error-disposition.md);
-//    the reduced module (implRev alone) rejects at
-//    `Prelude::Either@core` instead, pinned by
-//    otherTests/saw-core-lean/saw-boundary/
-//    polymorphic_seq_module_rejection. Wrapped in `fails` so the
-//    demo runs end-to-end; out/Rev.lean is NOT produced.
-fails (write_lean_cryptol_module "rev.cry" "out/Rev.lean" [] []);
+//    The 2026-07-17/18 arc closed the Either@core recursor hole and
+//    the under-applied-op layers (implRev now translates end-to-end;
+//    see step 3b), but the FULL module still rejects: `specRev`'s
+//    built-in `reverse` reaches `Prelude.error` demanded at a raw
+//    position (the audited raw-error disposition,
+//    saw-core-lean/doc/2026-07-14_reachable-raw-error-disposition.md).
+//    Wrapped in `fails` so the demo runs end-to-end.
+fails (write_lean_cryptol_module "rev.cry" "out/RevFull.lean" [] []);
+
+// 3b. Translate the reduced module (implRev alone) — SUCCEEDS since
+//    2026-07-18, producing out/Rev.lean (the 0.02 rev.cry
+//    criterion). Differentially pinned by
+//    otherTests/saw-core-lean/differential/cryptol_rev_module.
+write_lean_cryptol_module "rev_impl.cry" "out/Rev.lean" [] [];
 
 // 4. Punt the two Cryptol `property` declarations to Lean as proof
 //    goals. `offline_lean` emits one file per goal containing a
@@ -43,7 +46,10 @@ fails (write_lean_cryptol_module "rev.cry" "out/Rev.lean" [] []);
 //    goal UNSOLVED, so each prove_print fails and is wrapped in
 //    `fails`. SAW never claims these goals; the discharge lives in
 //    proof/Proofs/{Invol,Eq}.lean, checked by Lean. SAW-side replay
-//    (offline_lean_replay) is disabled in this release.
+//    (offline_lean_replay) LANDED 2026-07-16: SAW can now admit
+//    these goals on Lean's kernel authority — see the
+//    workflows/replay_* rows in otherTests/saw-core-lean for the
+//    replay-driven form of this flow.
 fails (prove_print (offline_lean "out/invol")
   {{ \(xs : [4][8]) -> implRev (implRev xs) == xs }});
 

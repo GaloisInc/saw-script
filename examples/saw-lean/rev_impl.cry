@@ -1,0 +1,9 @@
+module Rev where
+
+/** Polymorphic indexing comprehension: with a symbolic fin n, the
+    [0 .. < n] enumeration/indexing machinery specialises to
+    Prelude::Either@core under whole-module translation. Polymorphic
+    reverse (specRev in saw-lean-example rev.cry) translates fine;
+    this declaration is the reduced trigger. */
+implRev : {n, a} (fin n) => [n]a -> [n]a
+implRev xs = [ xs @ (`n - 1 - i) | i <- [0 .. < n] ]
