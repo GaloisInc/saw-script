@@ -45,13 +45,20 @@ All fixes applied same-day; residual nits filed in TODO.md.
 - **B-2 (FIXED, code):** `DVarRaw` Haddock's dead "not a family we
   can commit to" clause removed; Prop-kinded heads are the only
   production.
-- **B-3 (FILED):** raw-REASON labels under Prop elimination are
-  inconsistent across proposition-class domains
-  (RawValuePosition vs RawPropositionPosition) — emission-neutral
-  (`R(Raw*,tau)=T(tau)`); pick role-reflecting reasons.
-- **B-4 (FILED):** `recursorMotiveFunctionConvention.resultPos`
-  re-walks its own head dispatch and omits the elimSort gate —
-  unreachable (Prop-elim forces a Prop-valued motive), but should
-  project `D`.
-- **C-nit (FILED):** pin `wrapExcept` as the sole wrapper via a
-  smoketest source lint so the Prop backstop is tamper-evident.
+- **B-3 (FIXED 2026-07-19, code):** `DVarRaw` raw-reason labels are
+  role-reflecting (`RawPropositionPosition` — a Prop-kinded family
+  application is a proposition) in `recursorMotiveResultPosition`
+  and `piFunctionConvention`'s result projection. Emission-neutral;
+  corpus byte-identical.
+- **B-4 (FIXED 2026-07-19, code):** `piFunctionConvention.resultPos`
+  projects `classifyDomain` (equivalence with the former local
+  dispatch hand-checked class by class; conformance pins it), and
+  `recursorMotiveFunctionConvention` carries the elimSort gate: a
+  Prop-eliminating function motive's result position is forced
+  `ExpectRaw RawPropositionPosition` — the backstop class
+  (constant-headed non-Eq props classifying `DValue`) can no longer
+  declare a wrapping result there. Unreachable in the pinned
+  corpus; the declared default is now correct instead of loud.
+- **C-nit (FIXED 2026-07-18, test):** smoketest lint "wrapExcept is
+  the sole Except-carrier authority" (plus, 2026-07-19, the
+  support-library no-Except-headed-alias lint).

@@ -24,17 +24,20 @@ producing/universe analysis, error/effect routing.
    auto-emit golden: zero drift (current prelude corpus is Pi/type
    defs).
 2. **wrappedHelperFunctionValueSlot/-ResultIsValue do not project D
-   (FILED, disposition recorded).** The auditor recommended folding
-   into the D-projecting family; REJECTED as stated: this pair is
-   the declared callee convention for UseMapsToWrapped helper
-   CALLBACKS, whose authority is the support library's Lean
-   signatures (Nat callback formals ARE wrapped there — folding to
-   D's conditional-Nat would break real genWithProof/iteM
-   callbacks). Correct fix shape: reclassify as a bucket-(c)
-   declared convention, document its authority (the helper
-   signatures) in §Callee Conventions, and align only the
-   var-headed arms to D (Prop-kinded family formals raw — currently
-   they'd wrap, loud-caught by the backstop). TODO'd.
+   (FIXED 2026-07-19 as the recorded disposition).** The auditor
+   recommended folding into the D-projecting family; REJECTED as
+   stated: this pair is the declared callee convention for
+   UseMapsToWrapped helper CALLBACKS, whose authority is the
+   support library's Lean signatures (Nat callback formals ARE
+   wrapped there — folding to D's conditional-Nat would break real
+   genWithProof/iteM callbacks). Landed as recorded: the pair now
+   reads a single per-class classifier
+   (`wrappedHelperTypeIsWrapped`) that names the DNat deviation and
+   its authority in one place, aligns the var-headed arms to D
+   (`DVarRaw` Prop-kinded family formals now RAW — previously
+   wrapped, ill-typed downstream, loud only via the Prop backstop),
+   and is documented in the calculus doc §Proof Obligations And
+   Checked Helpers as a bucket-(c) declared convention.
 3. **B-4 (recursorMotiveFunctionConvention.resultPos own dispatch,
    no elimSort)** — already filed 2026-07-18; confirmed unreachable.
 4. **propBody quantifier-vs-family Pi discipline (Term.hs ~4365) is

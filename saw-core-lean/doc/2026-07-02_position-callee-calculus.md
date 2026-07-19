@@ -661,6 +661,22 @@ The broad pattern must be instantiated by a concrete contract schema:
 Under- or over-application is part of the schema. If the schema does not cover
 the arity at hand, translation rejects.
 
+**Wrapped-helper callbacks (the UseMapsToWrapped-callback convention,
+declared 2026-07-19).** Checked helpers that take CALLBACK functions
+(the `genWithBoundsM`/`iteM` family) declare their callback formal
+positions from the SUPPORT LIBRARY's Lean signatures, not from the
+domain map: those signatures wrap their `Nat` callback formals
+(`Except String Nat`), so this convention deliberately deviates from
+D's conditional-Nat rule at exactly one class — `DNat` slots are
+WRAPPED here. The deviation is declared in one place
+(`wrappedHelperTypeIsWrapped`); every other class follows D
+(`DValue`/`DVarValue` wrap, `DVarRaw` — Prop-kinded family formals —
+raw, types/propositions/functions raw). Folding the Nat class into D
+would break real helper callbacks; widening the deviation beyond Nat
+requires changing the helper signatures first. This is a bucket-(c)
+declared convention in the exception inventory: an authority OTHER
+than D, named, with its source of truth stated.
+
 `Prelude.error` follows the same representation discipline:
 
 - runtime value result: emit an observable `Except.error`;

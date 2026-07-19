@@ -1043,7 +1043,7 @@ recursorMotiveResultPosition elimSort motiveBody =
     DRawProp  -> ExpectRaw RawPropositionPosition
     DFunction ->
       ExpectFunctionPosition
-        (Just (recursorMotiveFunctionConvention motiveBody))
+        (Just (recursorMotiveFunctionConvention elimSort motiveBody))
     DNat
       | elimSort /= propSort -> ExpectRuntimeValue
       | otherwise            -> ExpectRaw RawIndexPosition
@@ -1059,21 +1059,32 @@ recursorMotiveResultPosition elimSort motiveBody =
     DVarValue
       | elimSort /= propSort -> ExpectRuntimeValue
       | otherwise            -> ExpectRaw RawValuePosition
-    DVarRaw   -> ExpectRaw RawValuePosition
+    -- B-3 (2026-07-19, calculus-doc audit): a Prop-kinded family
+    -- application is a PROPOSITION — the raw reason reflects the
+    -- role. Emission-neutral (R(Raw*, tau) = T(tau)); label only.
+    DVarRaw   -> ExpectRaw RawPropositionPosition
 
 -- | The declared function convention of a function-motive recursor
--- (plan Slice 6.1): binder positions from the same value-slot
--- analysis every function convention uses
--- ('functionConventionValueSlot'), result position mirroring the Pi
--- type translator's body-wrap rule (gamma.8's @valueBody@: a
--- value-domain or var-headed body wraps, and a Nat body wraps when
--- the function consumes a value input — 'natValueResult', both
--- convention-internal predicates here, not standalone authorities).
--- The emitted recursor call inhabits the translated motive Pi type,
--- so this convention is the truthful record of what a fully-applied
--- function-motive recursor produces.
-recursorMotiveFunctionConvention :: Term -> FunctionConvention
-recursorMotiveFunctionConvention = piFunctionConvention
+-- (plan Slice 6.1): the generic Pi derivation
+-- ('piFunctionConvention') plus the ELIMINATION-SORT gate the motive
+-- position owns (B-4, 2026-07-19 calculus-doc audit): under Prop
+-- elimination the motive's fully-applied result is a PROPOSITION
+-- regardless of what the generic domain projection says about the
+-- body type — in particular the backstop class (constant-headed
+-- non-Eq props classify 'DValue') must not declare a wrapping
+-- result. Unreachable in the pinned corpus (no Prop-eliminating
+-- function-motive rows); the declared default is now correct
+-- instead of merely loud. Binder positions are sort-independent by
+-- construction. The emitted recursor call inhabits the translated
+-- motive Pi type, so this convention is the truthful record of what
+-- a fully-applied function-motive recursor produces.
+recursorMotiveFunctionConvention :: Sort -> Term -> FunctionConvention
+recursorMotiveFunctionConvention elimSort fty
+  | elimSort == propSort =
+      conv { fcResultPosition = ExpectRaw RawPropositionPosition }
+  | otherwise = conv
+  where
+    conv = piFunctionConvention fty
 
 -- | The generic Pi→convention derivation (2026-07-18 rename of the
 -- motive-specific name: the analysis was always generic over a Pi
@@ -1100,28 +1111,70 @@ piFunctionConvention fty =
       | isJust (asPi bty) =
           ExpectFunctionPosition (Just (piFunctionConvention bty))
       | otherwise = ExpectRaw RawValuePosition
-    resultPos
-      | Just _ <- asSort ret = ExpectRaw RawTypePosition
-      | Just _ <- asEq ret = ExpectRaw RawPropositionPosition
-      | isCryptolNumType ret = ExpectRaw RawTypePosition
-      | phaseBetaResultIsValue fty = ExpectRuntimeValue
-      | Just _ <- asNatType ret = ExpectRaw RawIndexPosition
-      | otherwise = ExpectRaw RawValuePosition
+    -- B-4 (2026-07-19, calculus-doc audit): the result position
+    -- PROJECTS classifyDomain — the single domain authority —
+    -- instead of re-walking its own head dispatch. Equivalence with
+    -- the former local dispatch, class by class: DRawType covers the
+    -- old Sort and Num arms; DRawProp the Eq arm; DValue/DVarValue
+    -- are exactly 'phaseBetaResultIsValue' truth; the DNat split is
+    -- that function's DNat arm ('natValueResult') followed by the
+    -- old Nat-index fallthrough; DVarRaw fell through to the raw
+    -- default (natValueResult is False off Nat).
+    resultPos = case classifyDomain ret of
+      DRawType  -> ExpectRaw RawTypePosition
+      DRawProp  -> ExpectRaw RawPropositionPosition
+      -- B-3 role-reflecting label: a Prop-kinded family result is a
+      -- proposition (was the RawValuePosition default;
+      -- emission-neutral, R(Raw*, tau) = T(tau)).
+      DVarRaw   -> ExpectRaw RawPropositionPosition
+      -- Unreachable ('asPiList' peels every syntactic Pi, so ret is
+      -- never Pi-headed) — declared for D-totality: a function
+      -- result carries its own derived convention, mirroring
+      -- 'recursorMotiveResultPosition'.
+      DFunction -> ExpectFunctionPosition (Just (piFunctionConvention ret))
+      DNat
+        | natValueResult fty -> ExpectRuntimeValue
+        | otherwise          -> ExpectRaw RawIndexPosition
+      DValue    -> ExpectRuntimeValue
+      DVarValue -> ExpectRuntimeValue
+
+-- | The DECLARED UseMapsToWrapped-callback convention (calculus
+-- §Callee Conventions, wrapped-helper sub-case; 2026-07-18
+-- exception hunt, finding 2 — reclassified 2026-07-19). The
+-- AUTHORITY for these slots is the SUPPORT LIBRARY's Lean helper
+-- signatures (genWithBoundsM/iteM-family callbacks), NOT the domain
+-- map: those signatures wrap their Nat callback formals
+-- (@Except String Nat@), so this convention deliberately deviates
+-- from D's conditional-Nat rule — folding it into D would break
+-- real callbacks. The deviation is DECLARED here, in one place,
+-- per-class:
+--
+--   * 'DNat': WRAPPED (the declared deviation — helper signatures);
+--   * 'DValue' / 'DVarValue': wrapped, as D says (the backstop
+--     class — constant-headed non-Eq props classifying 'DValue' —
+--     wraps and stays loud, same as every other consumer);
+--   * 'DVarRaw': RAW — aligned to D 2026-07-19 (a Prop-kinded
+--     family formal is a proof; the previous shape-blind
+--     disjunction wrapped it, ill-typed downstream and only
+--     loud-caught by the Prop backstop);
+--   * types, propositions, functions ('DRawType' / 'DRawProp' /
+--     'DFunction'): raw, as D says.
+wrappedHelperTypeIsWrapped :: Term -> Bool
+wrappedHelperTypeIsWrapped ty = case classifyDomain ty of
+  DValue    -> True
+  DVarValue -> True
+  DNat      -> True   -- declared deviation: helper signatures wrap Nat
+  DVarRaw   -> False  -- aligned to D: Prop-kinded family = proof, raw
+  DRawType  -> False
+  DRawProp  -> False
+  DFunction -> False
 
 wrappedHelperFunctionValueSlot :: [Int] -> Int -> Term -> Bool
 wrappedHelperFunctionValueSlot typeIxs ix ty =
-     ix `notElem` typeIxs
-  && isNothing (asSort ty)
-  && isNothing (asEq ty)
-  && isNothing (asPi ty)
-  && not (isCryptolNumType ty)
+  ix `notElem` typeIxs && wrappedHelperTypeIsWrapped ty
 
 wrappedHelperFunctionResultIsValue :: Term -> Bool
-wrappedHelperFunctionResultIsValue ty =
-     isNothing (asSort ty)
-  && isNothing (asEq ty)
-  && isNothing (asPi ty)
-  && not (isCryptolNumType ty)
+wrappedHelperFunctionResultIsValue = wrappedHelperTypeIsWrapped
 
 translateFunctionConventionBindersWith ::
   TermTranslationMonad m =>
@@ -3667,7 +3720,7 @@ translateRecursorAppWithShape crec args = do
                _ -> translateTermWithShape a
            | (pos, a) <- zip postPositions postScrut
            ]
-       postTrans <- recursorPostArgs motiveBody postResults
+       postTrans <- recursorPostArgs (recursorSort crec) motiveBody postResults
        let recCallWith scrutTerm =
              Lean.App recHead (preTrans ++ [scrutTerm] ++ postTrans)
        case (recScrutineeMode convention, recResultMode convention) of
@@ -3697,7 +3750,7 @@ translateRecursorAppWithShape crec args = do
                        BindingWrapped)
            | null postScrut
            , recFinalShape convention == BindingFunction
-           , recursorFunctionResultCanPropagate motiveBody -> do
+           , recursorFunctionResultCanPropagate (recursorSort crec) motiveBody -> do
                fn <- etaExpandWrappedScrutineeFunctionResult
                        motiveBody scrutTrans recCallWith
                pure (TranslatedTerm fn BindingFunction)
@@ -3749,7 +3802,7 @@ translateRecursorAppWithShape crec args = do
           if finalShape == BindingWrapped ||
              (nPostArgs == 0 &&
               finalShape == BindingFunction &&
-              recursorFunctionResultCanPropagate motiveBody)
+              recursorFunctionResultCanPropagate (recursorSort rec) motiveBody)
              then pure convention
              else rejectWrappedRawRecursor rec convention
         _ -> pure convention
@@ -3779,19 +3832,20 @@ translateRecursorAppWithShape crec args = do
     -- declared motive function convention's result position is a
     -- runtime value — i.e. the emitted Pi's body wraps, so the eta
     -- body's @Bind.bind@ typechecks and errors propagate.
-    recursorFunctionResultCanPropagate :: Term -> Bool
-    recursorFunctionResultCanPropagate fty =
+    recursorFunctionResultCanPropagate :: Sort -> Term -> Bool
+    recursorFunctionResultCanPropagate elimSort fty =
       not (null (fcArgPositions conv)) &&
       fcResultPosition conv == ExpectRuntimeValue
       where
-        conv = recursorMotiveFunctionConvention fty
+        conv = recursorMotiveFunctionConvention elimSort fty
 
     -- Post-scrutinee actuals adapt at the declared motive function
     -- convention's binder positions (plan Slice 6.1): runtime-value
     -- slots lift, every raw slot splices.
     recursorPostArgs ::
-      TermTranslationMonad m => Term -> [TranslatedTerm] -> m [Lean.Term]
-    recursorPostArgs fty argResults =
+      TermTranslationMonad m =>
+      Sort -> Term -> [TranslatedTerm] -> m [Lean.Term]
+    recursorPostArgs elimSort fty argResults =
       sequence
         [ case drop ix positions of
             ExpectRuntimeValue : _ -> adaptToRuntime result
@@ -3799,7 +3853,8 @@ translateRecursorAppWithShape crec args = do
         | (ix, result) <- zip [0..] argResults
         ]
       where
-        positions = fcArgPositions (recursorMotiveFunctionConvention fty)
+        positions =
+          fcArgPositions (recursorMotiveFunctionConvention elimSort fty)
 
     etaExpandWrappedScrutineeFunctionResult ::
       TermTranslationMonad m =>

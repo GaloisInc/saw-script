@@ -197,11 +197,12 @@ below track execution state as always.
     runtime-checked wrappers (design + audit:
     doc/2026-07-18_underapplied-partial-op-wrapper.md; 13 wrappers,
     zero obligations, throws at the excluded point).
-  - REV residual (2026-07-18 transport audit, item 1): the
-    recursor-post-arg adaptation gap — part-3b's convention path
-    does not fire at one Num.rec trailing function slot; localize
-    with instrumentation (pinned: differential/cryptol_rev_module).
-    LAST rev.cry blocker.
+  - [DONE 2026-07-18] REV residual: recursor post-scrutinee args
+    made convention-aware (eta part 3b) — the Num.rec trailing
+    function slot now routes through
+    translateFunctionActualAtConvention;
+    differential/cryptol_rev_module is a TRUE differential row
+    (SAW and Lean observations match).
   - [DONE 2026-07-19] CHACHA transport work: the pinned failure was
     NOT a function-carrier congruence hole — the spine dump showed a
     TYPE-SUBJECT Eq__rec (sort carrier) mixing a forced-raw motive
@@ -220,24 +221,26 @@ below track execution state as always.
     backstop now in the calculus doc (§Raw Logical Callees,
     type-subject sub-case) with TWO smoketest pins (wrapExcept sole
     carrier; support library defines no Except-headed type alias).
-  - Total raw-target primitives unapplied in dictionary fields
-    (intNeg in PRingInteger): raw arrow at a wrapped-arrow slot —
-    needs the raw-function-value eta adaptation (existing
-    translateFunctionToWrappedFormal family); pinned by
-    differential/cryptol_rev_module. LAST known rev.cry
-    translation-side blocker.
-  - Exception-hunt residuals (2026-07-18_exception-hunt.md):
-    reclassify wrappedHelperFunctionValueSlot/-ResultIsValue as the
-    DECLARED UseMapsToWrapped-callback convention (authority = the
-    support-library helper signatures; do NOT fold Nat into D) and
-    align only its var-headed arms to classifyDomain; document in
-    calculus doc SS Callee Conventions.
-  - Domain-map residuals (2026-07-18_calculus-doc-audit.md, filed
-    non-soundness): B-3 role-reflecting raw reasons under Prop
-    elimination; B-4 project recursorMotiveFunctionConvention
-    .resultPos through classifyDomain (+ elimSort); C-nit smoketest
-    source lint pinning wrapExcept as the sole wrapping carrier
-    (Prop-backstop tamper evidence).
+  - [DONE 2026-07-18] Total raw-target primitives unapplied in
+    dictionary fields (intNeg, natToInt): the eta-adaptation
+    program (parts 1-3b: instantiation-derived conventions,
+    translateFunctionActualAtConvention with the raw-formal gate,
+    etaAdaptFromConv for alias-typed globals, honest
+    BindingFunction stamps) closed all of these;
+    differential/cryptol_rev_module green.
+  - [DONE 2026-07-19] Exception-hunt residuals: wrappedHelper
+    predicates reclassified as the DECLARED UseMapsToWrapped-
+    callback convention — single per-class classifier
+    (wrappedHelperTypeIsWrapped) naming the DNat deviation and its
+    authority (support-library helper signatures); DVarRaw
+    (Prop-kinded family formals) aligned to D (raw); documented in
+    the calculus doc (§Proof Obligations And Checked Helpers).
+  - [DONE 2026-07-19] Domain-map residuals: B-3 (DVarRaw labels
+    role-reflecting: RawPropositionPosition) and B-4
+    (piFunctionConvention.resultPos projects classifyDomain;
+    recursorMotiveFunctionConvention carries the elimSort gate)
+    landed; emission byte-identical, corpus-pinned. [C-nit DONE
+    2026-07-18: wrapExcept sole-carrier lint.]
   - [DONE 2026-07-19] Function-carrier Eq.refl transport corner:
     resolved by the mode-uniform type-subject convention (see the
     CHACHA item above); both chacha rows now elaborate and pin only
