@@ -120,3 +120,36 @@ corner silently.
    mode switch — preserves OP-3 realizations riding inside);
    equality OPERANDS keep the certified operand-domain rule
    untouched; the distinctness invariant documented (above).
+
+## Chacha grounding (2026-07-18, pre-implementation)
+
+The failing `Eq.refl` is emitted by the ONE refl site —
+`lowerRawLogicalCallee RawLogicalRefl` (Term.hs ~2392) — for a SAW
+`Refl` whose SUBJECT is a TYPE (the seq arrow); the subject's
+ambient translation wraps (T of a value Pi = the Except arrow), so
+the emitted refl is `@Eq.refl Type (Except…→Except…)` while the
+consuming coerce demands `T(A) = T(B)` with `T(A) ≠ T(B)`
+syntactically (`Vec (mulNat 4 8) Bool` vs `Vec 4 (Vec 8 Bool)` —
+join/split, equal only via the seq_cong lemma family, NOT defeq on
+either side).
+
+Investigation entry (next session): dump the SAW-side proof spine
+feeding this coerce (which combination of Refl / unsafeAssert /
+seq_cong SAW type-checked — SAW-side `mulNat 4 8` reduces, so what
+SAW accepted and what T preserves diverge at the join/split
+boundary). Then pick the C4 arm:
+(a) WRAPPED-COMPONENT CONGRUENCE: keep type-equality subjects at
+    T (wrapped) and emit the wrapped-arrow equality from component
+    equalities via an emitted support congruence (seq_cong at
+    wrapped components — new support lemma family, provable
+    generically);
+(b) RAW CARRIERS + BOUNDARY ADAPTATION: translate transport
+    carriers and proofs raw-logical (T_raw where join/split IS
+    defeq or lemma-provable), and adapt the transported VALUE at
+    the boundary per candidate A's bind discipline — requires the
+    no-sound-(A→Except B)→(A→B)-adapter wall to be respected,
+    i.e. only value (non-function) components adapt;
+(c) named REJECTION for function-carrier transports whose
+    component equality is not defeq under T.
+The autoEmitRaw combinator family conventions (audit B3) land with
+whichever arm wins.
