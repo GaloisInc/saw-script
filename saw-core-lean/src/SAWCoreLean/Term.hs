@@ -4658,14 +4658,26 @@ translateFunctionActualAtConvention ::
 translateFunctionActualAtConvention conv arg =
   case unwrapTermF arg of
     Lambda{} -> translateLambdaAtConvention conv arg
+    -- Prelude DEFINITIONS with rename treatments (natToInt-family)
+    -- arrive as Constant nodes, not GlobalDefs — same raw-formal
+    -- gate applies (2026-07-18 part 3b survivor: the asGlobalDef
+    -- guard silently missed them, raw-splicing natToInt at wrapped
+    -- Num#rec slots).
+    Constant nm
+      | ModuleIdentifier ident <- nameInfo nm ->
+          etaAdaptMappedGlobal ident
     _ | Just ident <- asGlobalDef arg
         -- Partial-op globals already lowered to their WRAPPED-formal
         -- runtime wrappers by the under-application branch — eta
         -- with the raw-formal discipline would double-adapt (the
         -- intDiv_runtimeM v_0 regression); pass them through.
-      , Nothing <- findPartialOpContractUnderApplied ident 0
+      -> etaAdaptMappedGlobal ident
+    _ -> translateTermWithShape arg
+  where
+    etaAdaptMappedGlobal ident
+      | Nothing <- findPartialOpContractUnderApplied ident 0
       , Right fty <- termSortOrType arg
-      , (params@(_ : _), _) <- asPiList fty -> do
+      , (params@(_ : _), _) <- asPiList fty = do
           -- Raw-formal gate: only Preserve/Rename targets carry raw
           -- formals; UseMacro/UseMapsToWrapped products are already
           -- in their declared (wrapped) conventions.
@@ -4686,7 +4698,7 @@ translateFunctionActualAtConvention conv arg =
                             shouldBind etaArgs
                   pure (TranslatedTerm (Lean.Lambda binders body)
                           BindingFunction)
-    _ -> translateTermWithShape arg
+      | otherwise = translateTermWithShape arg
 
 translateLambdaAtConvention ::
   TermTranslationMonad m => FunctionConvention -> Term -> m TranslatedTerm
@@ -4857,6 +4869,15 @@ applyKnownFunctionWithShape fty f args = do
       [ case snd <$> (lookup ix (zip [0 :: Int ..] (fst (asPiList fty)))) of
           Just bty | isJust (asPi bty) ->
             translateFunctionActualAtConvention (piFunctionConvention bty) a
+          -- Args BEYOND the callee's Pi binders (dependent result is
+          -- itself a function — Num_rec1's p n): the demanded slot is
+          -- the phase-beta translation of the instantiated result
+          -- arrow, so a function-typed actual translates at the
+          -- convention of its OWN source Pi (equal to the
+          -- instantiated formal here). 2026-07-18 part 3b survivor.
+          Nothing | Right aty <- termSortOrType a
+                  , isJust (asPi aty) ->
+            translateFunctionActualAtConvention (piFunctionConvention aty) a
           _ -> translateTermWithShape a
       | (ix, a) <- zip [0 ..] args
       ]
