@@ -197,6 +197,21 @@ below track execution state as always.
     runtime-checked wrappers (design + audit:
     doc/2026-07-18_underapplied-partial-op-wrapper.md; 13 wrappers,
     zero obligations, throws at the excluded point).
+  - REV residual (2026-07-18 transport audit, item 1): the
+    recursor-post-arg adaptation gap — part-3b's convention path
+    does not fire at one Num.rec trailing function slot; localize
+    with instrumentation (pinned: differential/cryptol_rev_module).
+    LAST rev.cry blocker.
+  - CHACHA transport work (audit item 2): function-carrier
+    sub-rule — component-wise congruence at wrapped components or
+    named rejection; plus declared carrier conventions for the
+    autoEmitRaw combinator family (sym/trans/eq_cong/coerce__def/
+    piCong/inverse_eta_rule — currently none). Pinned:
+    differential/cryptol_chacha20_core_iterate.
+  - Distinctness invariant (audit C3): document in the calculus doc
+    that T(tau) never emits Except-String-headed types — the named
+    always-loud backstop for the transport corner (done in the
+    transport design doc; port to 2026-07-02 calculus doc).
   - Total raw-target primitives unapplied in dictionary fields
     (intNeg in PRingInteger): raw arrow at a wrapped-arrow slot —
     needs the raw-function-value eta adaptation (existing

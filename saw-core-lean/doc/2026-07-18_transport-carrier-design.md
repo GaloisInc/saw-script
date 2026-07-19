@@ -76,3 +76,47 @@ special case); the audit must probe:
    carriers? (The chacha20 Eq.refl mismatch suggests the emitted
    congruence proofs and the carrier types already disagree
    somewhere.)
+
+## Audit verdict (2026-07-18): NEITHER as scoped — design restructured
+
+**The scoping's premise was WRONG and is corrected here.** The two
+pinned rows are NOT the same hole and NEITHER is a RawValueMode
+seam (all withRawTranslationMode entry points are genuinely
+logical; the value-carrying transports translate their values in
+AMBIENT mode — value-carrier coerce already implements candidate
+A's boundary-bind at Term.hs ~2630).
+
+**Soundness result (probe 6, structural): the status quo is
+ALWAYS-LOUD.** Wherever raw and wrapped translations coincide
+syntactically, wrapping is the identity (no value-domain content —
+nothing to get wrong); wherever they differ, `Except String _` is
+never definitionally equal to any `T(tau)` and Lean rejects. This
+rests on the DISTINCTNESS INVARIANT — the type translation `T`
+never emits an `Except String _`-headed type — which is hereby a
+named backstop contract parallel to the Prop backstop: any support
+library alias reducing to `Except String _` would reopen the
+corner silently.
+
+**The real work, split three ways:**
+1. **REV (separate item, NOT transport):** a recursor-post-arg
+   raw-function-vs-wrapped-arrow adaptation gap in phase-beta mode
+   — the part-3b translateFunctionActualAtConvention path does not
+   fire at the failing Num.rec trailing slot even though the same
+   natToInt eta-adapts correctly elsewhere in the same file.
+   Localize with a fresh instrumented run (suspects: the
+   `(Nothing,_)` pass-through gate, or a piFunctionConvention
+   classification miss at that motive).
+2. **CHACHA (the true transport work):** the FUNCTION-CARRIER
+   sub-rule — carrier types + eqProof translate raw-logical; the
+   value at its function convention; the coerce needs an emitted,
+   checked component-wise congruence at the wrapped components
+   (no sound (A -> Except B) -> (A -> B) adapter exists) or a
+   named REJECTION. Includes giving the autoEmitRaw combinator
+   family (sym/trans/eq_cong/coerce__def/piCong/inverse_eta_rule)
+   declared carrier conventions — currently none (Term.hs ~2465
+   defers them).
+3. **C1-C3 conditions on the surviving parts of A:** transported
+   values stay in natural runtime mode (bind at boundary, never a
+   mode switch — preserves OP-3 realizations riding inside);
+   equality OPERANDS keep the certified operand-domain rule
+   untouched; the distinctness invariant documented (above).
