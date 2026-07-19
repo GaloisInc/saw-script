@@ -189,3 +189,29 @@ where the instantiating Pi's translation wraps.
   3); raw-target callee rows (bvAdd-family drivers) must be
   bit-identical (their FunctionArg positions are raw-formal and
   must NOT gain eta).
+
+### Part 3 (found by landing parts 1-2): call-site discipline
+
+Parts 1-2 landed 2026-07-18 (instantiation-derived conventions;
+`translateFunctionActualAtConvention` eta-adapts mapped raw-formal
+globals at declared-convention slots). The rev-module frontier
+moved to two residuals, both loud, pinned by
+`differential/cryptol_rev_module`:
+
+1. APPLYING a wrapped-formal function value (dictionary field,
+   runtime wrapper) still uses the raw-formal call discipline —
+   actuals are bound to raw then spliced (`intDiv_runtimeM v_0`
+   with `v_0 : Int`). The application path for function VALUES
+   must use the S5 family discipline (wrapped formals: supply
+   wrapped actuals as-is) when the callee value carries wrapped
+   formals — the callee-representation question the production
+   record already answers (`BindingFunction` produced by the
+   eta/wrapper paths is wrapped-formal; `applyKnownFunctionWithShape`
+   currently re-derives raw-formal discipline from the SAW type).
+2. `applied f [] = pure (TranslatedTerm f BindingRaw)` mis-stamps
+   zero-arg function-typed mapped globals as raw DATA, so
+   RuntimeArg slots legally pure-lift them (`pure natToInt`
+   applied to an eta arg). The honest stamp for a Pi-typed
+   zero-arg global is BindingFunction (the in-code comment already
+   concedes this); RuntimeArg consumers then reject/route it
+   through the function machinery instead of value-lifting.

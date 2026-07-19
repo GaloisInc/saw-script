@@ -726,7 +726,13 @@ instantiationMode :: Term -> ArgMode
 instantiationMode inst = case classifyDomain inst of
   DRawType  -> TypeArg
   DRawProp  -> PropositionArg
-  DFunction -> FunctionArg Nothing
+  -- A Pi instantiation carries its DECLARED convention derived from
+  -- the instantiating Pi itself (2026-07-18 eta-adaptation design:
+  -- the value side must read the same authority the type side's Pi
+  -- translation uses — FunctionArg Nothing structural delivery let
+  -- raw-target function values reach wrapped-arrow dictionary
+  -- slots, the rev.cry intNeg elaboration failure).
+  DFunction -> FunctionArg (Just (piFunctionConvention inst))
   DNat      -> IndexArg
   DValue    -> RawValueArg
   -- Var-headed instantiations (nested polymorphism — the caller's
@@ -1063,7 +1069,14 @@ recursorMotiveResultPosition elimSort motiveBody =
 -- so this convention is the truthful record of what a fully-applied
 -- function-motive recursor produces.
 recursorMotiveFunctionConvention :: Term -> FunctionConvention
-recursorMotiveFunctionConvention fty =
+recursorMotiveFunctionConvention = piFunctionConvention
+
+-- | The generic Pi→convention derivation (2026-07-18 rename of the
+-- motive-specific name: the analysis was always generic over a Pi
+-- type). Also the declared convention a Pi INSTANTIATION carries at
+-- 'FunctionArg' slots ('instantiationMode', eta-adaptation design).
+piFunctionConvention :: Term -> FunctionConvention
+piFunctionConvention fty =
   FunctionConvention
     [ binderPos ix bty | (ix, (_, bty)) <- zip [0 :: Int ..] binders ]
     resultPos
@@ -2697,7 +2710,26 @@ originalDispatchWithShape i args = do
       -- function-shaped) — Slice 4 declares it per callee.
       pure (TranslatedTerm f BindingRaw)
     applied f args' = do
-      argResults <- mapM translateTermWithShape args'
+      mm0 <- view sawModuleMap <$> askTR
+      phase0 <- phaseBetaEnabled
+      -- Mode-aware actual translation (2026-07-18 eta-adaptation
+      -- design, part 2): a supplied actual at a 'FunctionArg (Just
+      -- conv)' slot (the convention derived from the instantiating
+      -- Pi — 'instantiationMode') translates AT that convention, so
+      -- a raw-formal function value eta-adapts to the wrapped-arrow
+      -- slot instead of splicing structurally. All other modes keep
+      -- the as-produced translation.
+      argResults <- case funType mm0 of
+        Just fty | phase0 -> do
+          let modes = phaseBetaArgModesFor fty args'
+          sequence
+            [ case mode of
+                FunctionArg (Just conv) ->
+                  translateFunctionActualAtConvention conv a
+                _ -> translateTermWithShape a
+            | (mode, a) <- zip (modes ++ repeat (FunctionArg Nothing)) args'
+            ]
+        _ -> mapM translateTermWithShape args'
       let argTerms = map ttLean argResults
       mm' <- view sawModuleMap <$> askTR
       phase <- phaseBetaEnabled
@@ -4582,6 +4614,41 @@ translateTermUnsharedWithShape = translateTermUnsharedWithShapeAt Nothing
 -- machinery no longer re-derives them from 'shouldWrapBinder'.
 -- Rejects (never pads) when the declared arity does not match the
 -- lambda's binder count.
+-- | Translate a FUNCTION-VALUE actual at its declared convention
+-- (2026-07-18 eta-adaptation design, part 2). Lambdas consume the
+-- convention directly. A mapped raw-formal global (asGlobalDef +
+-- SpecialTreatment rename — intNeg-family primitives) eta-adapts:
+-- its produced Lean value has raw formals, but the declared
+-- convention (derived from the instantiating Pi, whose TYPE-side
+-- translation wraps) demands the wrapped-arrow form — so wrap it in
+-- convention binders + 'buildLifted'. Module constants and
+-- function-valued variables already carry wrapped formals under
+-- phase-β and pass through as-produced.
+translateFunctionActualAtConvention ::
+  TermTranslationMonad m => FunctionConvention -> Term -> m TranslatedTerm
+translateFunctionActualAtConvention conv arg =
+  case unwrapTermF arg of
+    Lambda{} -> translateLambdaAtConvention conv arg
+    _ | Just _ <- asGlobalDef arg
+      , Right fty <- termSortOrType arg
+      , (params@(_ : _), _) <- asPiList fty -> do
+          produced <- translateTermWithShape arg
+          case ttShape produced of
+            BindingWrapped -> pure produced
+            _ -> do
+              let typeIxs = typeArgPositions fty
+              translateFunctionConventionBindersWith
+                functionConventionValueSlot typeIxs params $
+                \binders etaArgs -> do
+                  let shouldBind = map (isWrappedShape . ttShape) etaArgs
+                      pureWrap =
+                        fcResultPosition conv == ExpectRuntimeValue
+                  body <- buildLifted (ttLean produced) pureWrap
+                            shouldBind etaArgs
+                  pure (TranslatedTerm (Lean.Lambda binders body)
+                          BindingFunction)
+    _ -> translateTermWithShape arg
+
 translateLambdaAtConvention ::
   TermTranslationMonad m => FunctionConvention -> Term -> m TranslatedTerm
 translateLambdaAtConvention conv t = do
