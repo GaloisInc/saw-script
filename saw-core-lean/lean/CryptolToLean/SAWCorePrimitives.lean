@@ -411,6 +411,13 @@ and emission only reaches these through the checked/runtime gates
   if y' = 0 then throw "intMod: division by zero"
   else Pure.pure (intMod x' y')
 @[reducible] def intNeg : Int → Int := fun a => -a
+-- intAbs/intMin/intMax (2026-07-20): SAW's concrete simulator is
+-- Haskell abs/min/max on unbounded Integer (Concrete.hs
+-- bpIntAbs/bpIntMin/bpIntMax) — these are the exact Lean
+-- counterparts (total; no bounded-representation edge cases).
+@[reducible] def intAbs : Int → Int := fun a => if a < 0 then -a else a
+@[reducible] def intMin : Int → Int → Int := fun a b => min a b
+@[reducible] def intMax : Int → Int → Int := fun a b => max a b
 @[reducible] def intEq  : Int → Int → Bool := fun a b => decide (a = b)
 @[reducible] def intLe  : Int → Int → Bool := fun a b => decide (a ≤ b)
 @[reducible] def intLt  : Int → Int → Bool := fun a b => decide (a < b)
@@ -726,6 +733,11 @@ needs a small structural realisation; deferred to a follow-up). -/
 bridged by projecting `Fin.val`. -/
 def gen (n : Nat) (α : Type) (f : Nat → α) : Vec n α :=
   Vector.ofFn (fun (i : Fin n) => f i.val)
+
+/-- SAWCore `EmptyVec a` — the empty vector (2026-07-20). Defined by
+`Fin 0` elimination so it needs no element of `α`. -/
+def EmptyVec (α : Type) : Vec 0 α :=
+  Vector.ofFn (fun (i : Fin 0) => i.elim0)
 
 /-- SAWCore `head n a v` — first element of a nonempty vector.
 Raw definition for RAW-LOGICAL positions only (proof-primitive

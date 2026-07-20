@@ -886,12 +886,13 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- declared types over the Nat.le/Nat.lt images of IsLeNat/IsLtNat.
   , ("proveLeNat",      mapsTo sawCorePrimitivesModule "proveLeNat")
   , ("natCompareLe",    mapsTo sawCorePrimitivesModule "natCompareLe")
-  , ("intAbs",          reject "Int primitive (intAbs) not mapped; needs Lean \
-                                 \realization.")
-  , ("intMin",          reject "Int primitive (intMin) not mapped; needs Lean \
-                                 \realization.")
-  , ("intMax",          reject "Int primitive (intMax) not mapped; needs Lean \
-                                 \realization.")
+    -- intAbs/intMin/intMax (2026-07-20): realized — SAW's concrete
+    -- semantics is Haskell abs/min/max on unbounded Integer
+    -- (Concrete.hs bpIntAbs/bpIntMin/bpIntMax); the support defs are
+    -- the exact Lean counterparts.
+  , ("intAbs",          mapsTo sawCorePrimitivesModule "intAbs")
+  , ("intMin",          mapsTo sawCorePrimitivesModule "intMin")
+  , ("intMax",          mapsTo sawCorePrimitivesModule "intMax")
 
     -- Vector primitives we use atWithDefault / gen for.
     -- head/tail gained raw support definitions 2026-07-19 (the
@@ -902,8 +903,8 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- results like the bvAdd family).
   , ("head",     mapsTo sawCorePrimitivesModule "head")
   , ("tail",     mapsTo sawCorePrimitivesModule "tail")
-  , ("EmptyVec", reject "EmptyVec not mapped; emit Vector.nil-shaped output \
-                         \through gen instead.")
+    -- EmptyVec (2026-07-20): realized via Fin 0 elimination.
+  , ("EmptyVec", mapsTo sawCorePrimitivesModule "EmptyVec")
   , ("scanl",    reject "Prelude.scanl not mapped on bounded vectors yet; \
                          \streamScanl covers the stream case.")
 
