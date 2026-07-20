@@ -680,6 +680,19 @@ bridged by projecting `Fin.val`. -/
 def gen (n : Nat) (α : Type) (f : Nat → α) : Vec n α :=
   Vector.ofFn (fun (i : Fin n) => f i.val)
 
+/-- SAWCore `head n a v` — first element of a nonempty vector.
+Raw definition for RAW-LOGICAL positions only (proof-primitive
+obligation statements such as `head_gen`); Phase-β VALUE positions
+keep their existing rejection (`SpecialTreatment`: replaced by
+`atWithDefault` on the value path). -/
+def head (n : Nat) (α : Type) (v : Vec (Nat.succ n) α) : α :=
+  v[0]
+
+/-- SAWCore `tail n a v` — drop the first element. Raw definition
+for RAW-LOGICAL positions only, mirroring `head`. -/
+def tail (n : Nat) (α : Type) (v : Vec (Nat.succ n) α) : Vec n α :=
+  Vector.ofFn (fun (i : Fin n) => v[i.val + 1])
+
 /-- SAWCore `shiftL n α z v i` — shift @v@ left by @i@ positions,
 filling with @z@ on the right. Generic over the element type; the
 bitvector shift `bvShl` is the @α = Bool@ specialization. -/

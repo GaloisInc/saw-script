@@ -2024,6 +2024,33 @@ lowerProofPrimitiveContract contract args = do
       Except.throwError (RejectedPrimitive "proof primitive"
         "proof-primitive contract argument table did not match source arity")
 
+-- | Lower a type-image obligation primitive
+-- ('Contracts.typeImageObligationPrimitives'): the obligation is the
+-- ambient type translation of the application's OWN SAWCore type —
+-- the instantiated axiom statement under T, read off the term's type
+-- tag. Obligation = T(prop) by construction: it matches every
+-- consumer's translation of the same proposition with zero
+-- hand-mirrored emission shapes, and any untranslatable content in
+-- the statement fails loudly through the ordinary translation
+-- rejections. The result is the bound local evidence (a proof:
+-- 'BindingRaw').
+lowerTypeImageObligation ::
+  TermTranslationMonad m => Ident -> Term -> m TranslatedTerm
+lowerTypeImageObligation ident appTerm =
+  case termSortOrType appTerm of
+    Right propTm -> do
+      prop <- translateTerm propTm
+      tm <- withLocalProofObligation
+              (Lean.Ident "h_proof_")
+              prop
+              pure
+      pure (TranslatedTerm tm BindingRaw)
+    Left _ ->
+      Except.throwError (RejectedPrimitive
+        (Text.pack (identName ident))
+        "type-image obligation primitive's application is a sort, \
+        \not a proposition — the contract table entry is wrong")
+
 proofObligationPlaceholder :: Lean.Term
 proofObligationPlaceholder =
   -- Emit-stage placeholder only. The check-stage must reject completed
@@ -2593,7 +2620,35 @@ lowerRawLogicalCallee callee ident _ =
 --   'SpecialTreatment.defaultTreatmentFor'.
 translateIdentWithArgsWithShape ::
   TermTranslationMonad m => Ident -> [Term] -> m TranslatedTerm
-translateIdentWithArgsWithShape i args
+translateIdentWithArgsWithShape i args = do
+  phase <- phaseBetaEnabled
+  case rawLogicalTwin (identName i) of
+    -- Raw-twin lowering (2026-07-19, vector-lemma proof-primitive
+    -- batch): inside RAW translation mode the wrapped-helper and
+    -- checked-application conventions have no denotation — their
+    -- Lean targets take Except-wrapped formals and thread checked
+    -- index evidence, neither of which exists in raw logical
+    -- content (obligation statements, axiom types). Prelude idents
+    -- with a DECLARED raw twin ('SpecialTreatment.rawLogicalTwin' —
+    -- the raw support definition that IS the ident's raw
+    -- denotation) lower to an ordinary raw application BEFORE the
+    -- contract guards, which would otherwise route them into the
+    -- wrapped machinery; everything else keeps its current loud
+    -- raw-mode behavior.
+    Just twin
+      | not phase
+      , identModule i == mkModuleName ["Prelude"] -> do
+          argLeans <- mapM translateTerm args
+          pure (TranslatedTerm
+            (if null args
+               then Lean.Var twin
+               else Lean.App (Lean.Var twin) argLeans)
+            BindingRaw)
+    _ -> dispatchIdentWithArgsWithShape i args
+
+dispatchIdentWithArgsWithShape ::
+  TermTranslationMonad m => Ident -> [Term] -> m TranslatedTerm
+dispatchIdentWithArgsWithShape i args
   | Just contract <- findProofPrimitiveContract i (length args)
   = lowerProofPrimitiveContract contract args
   | Just callee <- rawLogicalCalleeForIdent i
@@ -2753,7 +2808,7 @@ translateIdentWithArgsWithShape i args
                    then pure coerced
                    else Except.throwError (RejectedPrimitive "coerce"
                           "non-function coerce was applied to extra arguments")
-translateIdentWithArgsWithShape i args = originalDispatchWithShape i args
+dispatchIdentWithArgsWithShape i args = originalDispatchWithShape i args
 
 originalDispatchWithShape ::
   TermTranslationMonad m => Ident -> [Term] -> m TranslatedTerm
@@ -4960,6 +5015,13 @@ translateTermUnsharedWithShapeAt mrho t =
     App {} -> do
       let (f, args) = asApplyAll t
       case asGlobalDef f of
+        -- Type-image obligation primitives (2026-07-19): lowered
+        -- HERE because only the application site holds the full
+        -- term whose type tag carries the instantiated axiom
+        -- statement ('lowerTypeImageObligation').
+        Just ident
+          | findTypeImageObligation ident (length args) ->
+              lowerTypeImageObligation ident t
         Just ident -> translateIdentWithArgsWithShape ident args
         Nothing    -> case asRecursor f of
           Just crec -> translateRecursorAppWithShape crec args

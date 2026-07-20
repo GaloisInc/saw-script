@@ -1,1 +1,5 @@
 contains:h_proof_obligation_
+contains:h_proof_
+contains-normalized:foldrM Nat Nat CryptolToLean.SAWCorePrimitives.zero_macro
+contains:genWithBoundsM
+absent:foldr_nil

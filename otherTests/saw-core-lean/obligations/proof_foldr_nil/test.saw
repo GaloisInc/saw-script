@@ -1,4 +1,9 @@
 enable_experimental;
 
-let probe = parse_core "foldr_nil";
+// 2026-07-19 vector-lemma proof-primitive batch: the axiom
+// application emits a TYPE-IMAGE obligation — exactly the ambient
+// translation of its instantiated statement (obligation = T(prop)
+// by construction) — consumed here through a proposition-indexed
+// binder so the emitted def carries the obligation inside.
+let probe = parse_core "\\ (P : (Eq Nat (foldr Nat Nat 0 (\\ (a : Nat) -> \\ (b : Nat) -> b) 5 (gen 0 Nat (\\ (i : Nat) -> i))) 5) -> Nat) -> P (foldr_nil Nat Nat (\\ (a : Nat) -> \\ (b : Nat) -> b) 5 (gen 0 Nat (\\ (i : Nat) -> i)))";
 write_lean_term "ProofFoldrNilProbe" [] [] "emitted.lean" probe;

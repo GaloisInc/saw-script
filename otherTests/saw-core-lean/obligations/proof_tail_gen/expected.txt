@@ -1,1 +1,6 @@
 contains:h_proof_obligation_
+contains:h_proof_
+contains:genWithBoundsM
+contains-normalized:Pure.pure (tail
+contains-normalized:Pure.pure (CryptolToLean.SAWCorePrimitives.succ_macro i)
+absent:tail_gen

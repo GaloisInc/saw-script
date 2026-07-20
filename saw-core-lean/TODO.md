@@ -187,12 +187,11 @@ Full plan: `doc/2026-07-14_release-plan.md`. Decisions recorded there
 0.01 workstreams and exit criteria live in the plan doc; the items
 below track execution state as always.
 
-- [ ] **W1 rev.cry frontier (post-2026-07-17 domain-map landing).** The
-  Either@core and Stream@core recursor-convention holes are CLOSED
-  (kind-directed classifyDomain; design + audits in
-  doc/2026-07-17_either-stream-recursor-convention.md and
-  doc/2026-07-17_domain-map-coherence-audit.md). Two named blockers
-  remain on the rev.cry exit criterion, both pinned:
+- [x] **W1 rev.cry frontier — CLOSED 2026-07-19.** Every sub-item
+  landed: rev.cry is a TRUE differential row, both chacha rows
+  elaborate (residual = observer #reduce budget only), and the
+  exception-hunt / domain-map residual lists are fully discharged.
+  History below:
   - [DONE 2026-07-18] Under-applied partial ops lower to
     runtime-checked wrappers (design + audit:
     doc/2026-07-18_underapplied-partial-op-wrapper.md; 13 wrappers,
@@ -705,6 +704,20 @@ as their own items in the priorities below.
        `bvAddZeroL`, `head_gen`, and `foldr_nil` only through exact
        obligations or checked realization theorems. Leave BV-heavy proof work
        as known gaps until Lean-side proof support exists.
+       2026-07-19 checkpoint: the vector generator/fold axiom family
+       (`head_gen`, `tail_gen`, `foldr_nil`, `foldl_nil`) now emits
+       TYPE-IMAGE obligations — the obligation is exactly the ambient
+       translation of the application's OWN instantiated statement, read
+       off the term's type tag (obligation = T(prop) BY CONSTRUCTION;
+       `lowerTypeImageObligation` + `typeImageObligationPrimitives`, no
+       hand-mirrored emission shapes). Enablers landed with it: raw
+       `head`/`tail` support definitions (mapsTo treatments — the
+       value-position rejection is GONE; vector_primitive_rejection
+       re-pinned to EmptyVec/scanl only) and the RAW-TWIN table
+       (`rawLogicalTwin`: gen/foldr/foldl lower to their raw support
+       definitions inside raw translation mode, where the wrapped-helper
+       convention has no denotation). All four obligations rows are
+       positive; bare/under-applied names keep their rejection boundary.
        2026-07-01 checkpoint: `bvEqToEq` now emits a theorem-shaped local
        obligation from the translated monadic `bvEq` proof premise to the
        translated wrapped vector equality, then applies that local evidence to

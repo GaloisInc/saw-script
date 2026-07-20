@@ -1,1 +1,7 @@
 contains:h_proof_obligation_
+contains:h_proof_
+contains:genWithBoundsM
+contains-normalized:Pure.pure (head
+contains-normalized:@Eq.{1} (Except String Nat) (Bind.bind
+absent:head_gen
+absent:CryptolToLean.SAWCorePrimitives.head_gen

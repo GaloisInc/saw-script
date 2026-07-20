@@ -1,1 +1,1 @@
-head/tail/EmptyVec/scanl are SAWCore vector primitives; current rejection pins missing Lean realizations.
+EmptyVec and scanl are SAWCore vector primitives still without Lean realizations (rejection pinned by empty_vec.saw / scanl.saw). head and tail gained raw support definitions and mapsTo treatments 2026-07-19 (vector-lemma proof-primitive batch) and are now positive emission probes in this row.

@@ -27,6 +27,7 @@ module SAWCoreLean.SpecialTreatment
   , findSpecialTreatment'
   , findSpecialTreatment
   , specialTreatmentMap
+  , rawLogicalTwin
   , escapeIdent
     -- * Combinators for building 'IdentSpecialTreatment' values
     -- (table-internal combinators and module names are no longer
@@ -291,6 +292,24 @@ skip = IdentSpecialTreatment DefSkip UsePreserve
 -- it up from the @namespace SAWCorePrelude@ block). For identifiers
 -- whose Lean target name should differ from the SAWCore short name,
 -- use 'rename' instead (todo).
+-- | Raw twins of wrapped-helper idents (2026-07-19, vector-lemma
+-- proof-primitive batch). A 'UseMapsToWrapped' treatment describes
+-- the ident's PHASE-BETA value denotation (wrapped formals, checked
+-- index evidence); inside RAW translation mode — obligation
+-- statements, axiom types, other raw logical content — that
+-- convention has no denotation, and the ident's raw denotation is
+-- the RAW support definition named here. Consulted only in raw mode
+-- (Term.hs 'originalDispatchWithShape'); idents without a twin keep
+-- their loud raw-mode behavior. The twin MUST be the semantically
+-- identical raw definition the wrapped helper is derived from —
+-- never a behavioral variant.
+rawLogicalTwin :: String -> Maybe Lean.Ident
+rawLogicalTwin name = case name of
+  "gen"   -> Just (Lean.Ident "gen")
+  "foldr" -> Just (Lean.Ident "foldr")
+  "foldl" -> Just (Lean.Ident "foldl")
+  _       -> Nothing
+
 autoEmit :: IdentSpecialTreatment
 autoEmit = IdentSpecialTreatment DefPreserve UsePreserve
 
@@ -851,10 +870,14 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
                                  \realization.")
 
     -- Vector primitives we use atWithDefault / gen for.
-  , ("head",     reject "Vec.head is replaced by atWithDefault on the Lean side; \
-                         \refactor or supply a wrapper.")
-  , ("tail",     reject "Vec.tail is not yet mapped; use atWithDefault / gen \
-                         \patterns instead.")
+    -- head/tail gained raw support definitions 2026-07-19 (the
+    -- vector-lemma proof-primitive batch: head_gen/tail_gen
+    -- obligations state raw equalities over them). As mapsTo raw
+    -- targets they follow the ordinary raw-formal callee discipline
+    -- everywhere (value positions bind wrapped actuals and pure-lift
+    -- results like the bvAdd family).
+  , ("head",     mapsTo sawCorePrimitivesModule "head")
+  , ("tail",     mapsTo sawCorePrimitivesModule "tail")
   , ("EmptyVec", reject "EmptyVec not mapped; emit Vector.nil-shaped output \
                          \through gen instead.")
   , ("scanl",    reject "Prelude.scanl not mapped on bounded vectors yet; \

@@ -298,6 +298,38 @@ proofPrimitiveContracts =
         (bvComparisonEqM (Lean.Ident op) (Lean.Ident "Bool.true"))
         (\_ proof -> pure proof)
 
+-- | Type-image obligation primitives (2026-07-19, vector-lemma
+-- proof-primitive batch). For these axioms the emitted obligation is
+-- EXACTLY the ambient type translation of the application's own
+-- SAWCore type — the instantiated axiom statement under T, read off
+-- the term's type tag ('termSortOrType'). Obligation = T(prop) BY
+-- CONSTRUCTION: no hand-mirrored emission shapes to drift, and the
+-- statement automatically matches every consumer's translation of
+-- the same proposition (runtime-subject equalities come out at
+-- wrapped subjects exactly as the calculus states them). Lowered by
+-- 'lowerTypeImageObligation' at the application site (which holds
+-- the full term); bare or under-applied occurrences keep their
+-- SpecialTreatment rejections.
+typeImageObligationPrimitives :: [(ModuleName, String, Int)]
+typeImageObligationPrimitives =
+  [ (typeImagePreludeModule, "head_gen", 3)
+  , (typeImagePreludeModule, "tail_gen", 3)
+  , (typeImagePreludeModule, "foldr_nil", 5)
+  , (typeImagePreludeModule, "foldl_nil", 5)
+  ]
+
+typeImagePreludeModule :: ModuleName
+typeImagePreludeModule = mkModuleName ["Prelude"]
+
+findTypeImageObligation :: Ident -> Int -> Bool
+findTypeImageObligation ident nArgs =
+  any
+    (\(m, n, arity) ->
+       identModule ident == m
+         && identName ident == n
+         && nArgs == arity)
+    typeImageObligationPrimitives
+
 applyLastArg ::
   TermTranslationMonad m =>
   [Lean.Term] ->
