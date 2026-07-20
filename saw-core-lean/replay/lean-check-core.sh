@@ -208,6 +208,18 @@ ax_out=$(run_lean "$STAGE/axiom-probe.lean") || { echo "$ax_out"; fail "axiom-au
 bad_ax=$(printf '%s\n' "$ax_out" \
     | awk -f "$(cd "$(dirname "$0")" && pwd)/axiom-audit.awk")
 [ -z "$bad_ax" ] || { echo "$bad_ax"; fail "axiom-outside-allowlist"; }
+# Vacuity guard (2026-07-20): the allowlist audit passes when it
+# finds nothing to reject, so an audit that never RAN must not look
+# like a pass. Every named closer must produce exactly one audited
+# line ("depends on axioms" / "does not depend on any axioms");
+# message-format drift or a silent probe fails loudly here.
+n_closers=$(printf '%s\n' "$closers" | grep -c .)
+n_audited=$(printf '%s\n' "$ax_out" \
+    | grep -cE "depends on axioms|does not depend on any axioms")
+[ "$n_audited" -eq "$n_closers" ] || {
+    echo "$ax_out"
+    echo "expected $n_closers audited closer(s), saw $n_audited audit line(s)"
+    fail "axiom-audit-vacuous"; }
 printf '%s\n' "$ax_out" | grep -E "depends on axioms|does not depend" \
     | sed 's/^/CHECK-AXIOMS: /'
 

@@ -377,7 +377,23 @@ else
                     "intTestsProbe/$TEST_NAME/proof.check.lean" ) 2>&1 ) && \
         check_rc=0 || check_rc=$?
     bad_axioms=$(printf '%s\n' "$check_out" | audit_axioms)
-    if [ "$check_rc" -ne 0 ] || echo "$check_out" | grep -qE "^[^[:space:]]+: error" ; then
+    # Vacuity guard (2026-07-20, pre-release audit backlog): the
+    # allowlist audit passes when it finds NOTHING to reject, so an
+    # audit that never ran must not look like a pass. Every appended
+    # `#print axioms` line must produce exactly one audited-output
+    # line ("depends on axioms" or "does not depend on any axioms"),
+    # and there must be at least one — a row whose proof.lean names
+    # no auditable closer (example-only / def-only) fails here
+    # instead of silently skipping the sorry/axiom check.
+    expected_audits=$(grep -c '^#print axioms ' "$check_file")
+    actual_audits=$(printf '%s\n' "$check_out" \
+        | grep -cE "depends on axioms|does not depend on any axioms")
+    if [ "$expected_audits" -lt 1 ] || [ "$actual_audits" -ne "$expected_audits" ]; then
+        echo "--- proof.check.lean (axiom audit) ---"
+        echo "$check_out"
+        echo "FAIL: axiom audit was vacuous (expected $expected_audits audited closer(s), saw $actual_audits audit line(s))"
+        status=1
+    elif [ "$check_rc" -ne 0 ] || echo "$check_out" | grep -qE "^[^[:space:]]+: error" ; then
         echo "--- proof.check.lean (harness-added checks) ---"
         echo "$check_out"
         echo "FAIL: proof theorem audit failed"

@@ -251,14 +251,27 @@ run_one() {
 }
 
 # Iterate categories in a fixed order so the output is deterministic.
-iterate_drivers()       { for d in drivers/*/;       do run_one drivers       "$(basename "$d")" lean-driver-test.sh "$@"; done; }
-iterate_workflows()     { for d in workflows/*/;     do run_one workflows     "$(basename "$d")" lean-driver-test.sh "$@"; done; }
-iterate_differential()  { for d in differential/*/;  do run_one differential  "$(basename "$d")" lean-differential-test.sh "$@"; done; }
-iterate_obligations()   { for d in obligations/*/;   do run_one obligations   "$(basename "$d")" lean-obligation-test.sh "$@"; done; }
-iterate_saw_boundary()  { for d in saw-boundary/*/;  do run_one saw-boundary  "$(basename "$d")" lean-driver-test.sh "$@"; done; }
-iterate_proofs()        { for d in proofs/*/;        do run_one proofs        "$(basename "$d")" lean-proof-test.sh   "$@"; done; }
-iterate_support_lemmas() { for d in support-lemmas/*/; do run_one support-lemmas "$(basename "$d")" lean-proof-test.sh "$@"; done; }
-iterate_negative()       { for d in negative/*/;       do run_one negative       "$(basename "$d")" lean-negative-test.sh   "$@"; done; }
+#
+# Vacuity guard (2026-07-20, pre-release audit backlog): with
+# nullglob active, a deleted or renamed category directory would
+# match NO rows and silently vanish from the census — every checked
+# category must contain at least one row or the run fails loudly.
+require_rows() {
+    local cat="$1" n=0 d
+    for d in "$cat"/*/; do n=$((n+1)); done
+    if [ "$n" -eq 0 ]; then
+        echo "FAIL: test category '$cat' matched no rows — a deleted or renamed category must fail, not vanish from the census" >&2
+        record_failure "category $cat is empty"
+    fi
+}
+iterate_drivers()       { require_rows drivers;       for d in drivers/*/;       do run_one drivers       "$(basename "$d")" lean-driver-test.sh "$@"; done; }
+iterate_workflows()     { require_rows workflows;     for d in workflows/*/;     do run_one workflows     "$(basename "$d")" lean-driver-test.sh "$@"; done; }
+iterate_differential()  { require_rows differential;  for d in differential/*/;  do run_one differential  "$(basename "$d")" lean-differential-test.sh "$@"; done; }
+iterate_obligations()   { require_rows obligations;   for d in obligations/*/;   do run_one obligations   "$(basename "$d")" lean-obligation-test.sh "$@"; done; }
+iterate_saw_boundary()  { require_rows saw-boundary;  for d in saw-boundary/*/;  do run_one saw-boundary  "$(basename "$d")" lean-driver-test.sh "$@"; done; }
+iterate_proofs()        { require_rows proofs;        for d in proofs/*/;        do run_one proofs        "$(basename "$d")" lean-proof-test.sh   "$@"; done; }
+iterate_support_lemmas() { require_rows support-lemmas; for d in support-lemmas/*/; do run_one support-lemmas "$(basename "$d")" lean-proof-test.sh "$@"; done; }
+iterate_negative()       { require_rows negative;       for d in negative/*/;       do run_one negative       "$(basename "$d")" lean-negative-test.sh   "$@"; done; }
 
 record_gap_inventory_item() {
     local path="$1"

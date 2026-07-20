@@ -297,9 +297,12 @@ below track execution state as always.
     verify still bite: the R3b F2 drift-check non-vacuity fence (an
     imports-only check file must FAIL); `.known-gap.expected`
     required diagnostics (a gap firing DIFFERENTLY must fail);
-    `goal_closed : goal` type pins; the axiom audit (must FAIL when
-    `#print axioms` produces NO lines — silent-empty output is a
-    pass today?); expected.txt `contains:` rows (would an EMPTY
+    `goal_closed : goal` type pins; the axiom audit
+    [DONE 2026-07-20: BOTH consumers now require one audited-output
+    line per named closer (lean-proof-test.sh, lean-check-core.sh);
+    the guard immediately caught support-lemmas/cookbook — 45
+    anonymous examples, zero audited closers, an axiom declaration
+    there would have passed silently; converted to named theorems]; expected.txt `contains:` rows (would an EMPTY
     emitted.lean pass any row's checks? do all rows have at least
     one `contains-normalized` on semantic content?); the smoketest
     source lints (ceilings that can only ratchet). Suspected
@@ -312,8 +315,8 @@ below track execution state as always.
     without comparing values; `fails`-wrapped demo steps that fail
     for an unrelated reason (partially covered by reason-text
     checks); conformance category iteration silently skipping an
-    empty/renamed directory (nullglob — a deleted category would
-    vanish from the census without failing); per-row harness `tail`
+    empty/renamed directory [DONE 2026-07-20: require_rows in
+    test.sh fails any executable category matching zero rows]; per-row harness `tail`
     /grep pipelines that mask nonzero exits. Each confirmed hole
     lands as a guard + a mutation test that the guard catches.
   - **Differential stress**: adversarially chosen SAWCore terms where
