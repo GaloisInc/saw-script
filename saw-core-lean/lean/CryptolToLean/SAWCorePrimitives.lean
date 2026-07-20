@@ -37,10 +37,24 @@ than as a Haskell-side replacement. -/
 /-- SAWCore Prelude `Either a b` — standard coproduct. Matches
 Lean's standard sum but defined here so the SAWCore translator can
 emit `@CryptolToLean.SAWCorePrimitives.Either.Left …` without
-importing Lean's `Sum`. -/
-inductive Either (α β : Type) : Type where
+importing Lean's `Sum`. Sort-polymorphic (2026-07-19, mirroring
+Lean's `PSum` universe signature): SAWCore's `Either` is applied at
+PROPS as well as data — `natCompareLe : (m n : Nat) -> Either
+(IsLtNat m n) (IsLeNat n m)` — because SAWCore Prop embeds in
+sort 0. Type-level uses instantiate `u = v = 1` and behave exactly
+as the previous monomorphic declaration. -/
+inductive Either (α : Sort u) (β : Sort v) : Sort (max 1 u v) where
   | Left  : α → Either α β
   | Right : β → Either α β
+
+/-- SAWCore Prelude `Maybe a`. Sort-polymorphic for the same reason
+as `Either` (`proveLeNat : (x y : Nat) -> Maybe (IsLeNat x y)`
+instantiates it at a Prop); mirrors Lean's `Option` at `u = 1`.
+Constructor order (Nothing, Just) matches the SAWCore declaration
+and is pinned in `SAWCoreCtorOrder`. -/
+inductive Maybe (α : Sort u) : Sort (max 1 u) where
+  | Nothing : Maybe α
+  | Just    : α → Maybe α
 
 /-- Cryptol Prelude `Num` (from `Cryptol.sawcore`). The marker used
 throughout Cryptol's numeric-kind machinery: a finite length (via
@@ -227,6 +241,26 @@ Lean's `Nat.sub` has the same truncated-subtraction semantics. -/
 
 @[reducible] def addNat : Nat → Nat → Nat := Nat.add
 @[reducible] def subNat : Nat → Nat → Nat := Nat.sub
+/-- SAWCore Prelude `primitive proveLeNat : (x y : Nat) -> Maybe
+(IsLeNat x y)`. NO implementation exists anywhere in SAW — neither
+the simulator nor the Rocq backend realizes it (repo-wide: zero
+references outside the Prelude declaration), so the primitive is
+TYPING-ONLY and any inhabitant is unfalsifiable against SAW
+semantics. This realization is the canonical decision procedure:
+`Just` exactly when `x ≤ y`, carrying the actual proof. SAWCore
+`IsLeNat` maps to `Nat.le` — structurally identical inductives
+(base at `n`; step to `Succ m`). -/
+def proveLeNat (x y : Nat) : Maybe (Nat.le x y) :=
+  if h : x ≤ y then Maybe.Just h else Maybe.Nothing
+
+/-- SAWCore Prelude `primitive natCompareLe : (m n : Nat) -> Either
+(IsLtNat m n) (IsLeNat n m)`. Same status as `proveLeNat`
+(typing-only, no SAW-side realization anywhere); the canonical
+total comparison. SAWCore `IsLtNat m n = IsLeNat (Succ m) n` maps
+to `Nat.lt` definitionally. -/
+def natCompareLe (m n : Nat) : Either (Nat.lt m n) (Nat.le n m) :=
+  if h : m < n then Either.Left h else Either.Right (Nat.le_of_not_lt h)
+
 @[reducible] def minNat : Nat → Nat → Nat := Nat.min
 @[reducible] def maxNat : Nat → Nat → Nat := Nat.max
 @[reducible] def mulNat : Nat → Nat → Nat := Nat.mul

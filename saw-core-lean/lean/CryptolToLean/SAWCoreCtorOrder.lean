@@ -61,6 +61,9 @@ saw_ctor_order CryptolToLean.SAWCorePrimitives.Num
 saw_ctor_order CryptolToLean.SAWCorePrimitives.Either
   [CryptolToLean.SAWCorePrimitives.Either.Left,
    CryptolToLean.SAWCorePrimitives.Either.Right]
+saw_ctor_order CryptolToLean.SAWCorePrimitives.Maybe
+  [CryptolToLean.SAWCorePrimitives.Maybe.Nothing,
+   CryptolToLean.SAWCorePrimitives.Maybe.Just]
 saw_ctor_order CryptolToLean.SAWCorePrimitives.Stream
   [CryptolToLean.SAWCorePrimitives.Stream.MkStream]
 

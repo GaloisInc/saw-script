@@ -575,6 +575,20 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- so the two positional arguments resolve correctly.
   , ("Left",          mapsToExpl sawCorePrimitivesModule "Either.Left")
   , ("Right",         mapsToExpl sawCorePrimitivesModule "Either.Right")
+    -- Maybe (2026-07-19, proveLeNat realization): Sort-polymorphic
+    -- support inductive, ctor order pinned in SAWCoreCtorOrder.
+  , ("Maybe",         mapsTo sawCorePrimitivesModule "Maybe")
+  , ("Nothing",       mapsToExpl sawCorePrimitivesModule "Maybe.Nothing")
+  , ("Just",          mapsToExpl sawCorePrimitivesModule "Maybe.Just")
+    -- IsLeNat / IsLtNat (2026-07-19): SAWCore's IsLeNat is
+    -- structurally IDENTICAL to Lean core's Nat.le (base at n; step
+    -- to Succ m), and IsLtNat m n = IsLeNat (Succ m) n is Nat.lt
+    -- definitionally. TYPE-level mappings only: the constructors
+    -- (IsLeNat_base/IsLeNat_succ) and the recursor stay unmapped —
+    -- content constructing or eliminating these proofs rejects
+    -- loudly until a pinned row demands the ctor/recursor surface.
+  , ("IsLeNat",       mapsToCore "Nat.le")
+  , ("IsLtNat",       mapsToCore "Nat.lt")
   , ("Stream",        mapsTo sawCorePrimitivesModule "Stream")
   , ("MkStream",      mapsToExpl sawCorePrimitivesModule "Stream.MkStream")
   , ("EmptyType",     mapsTo sawCorePrimitivesModule "EmptyType")
@@ -858,10 +872,14 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
                                  \a Lean realization.")
   , ("expByNat",        reject "SAW-internal proof primitive; mapping requires \
                                  \a Lean realization.")
-  , ("proveLeNat",      reject "SAW-internal proof primitive; mapping requires \
-                                 \a Lean realization.")
-  , ("natCompareLe",    reject "SAW-internal proof primitive; mapping requires \
-                                 \a Lean realization.")
+    -- proveLeNat / natCompareLe (2026-07-19): realized as the
+    -- canonical decision procedures in the support library. Both
+    -- primitives are TYPING-ONLY in SAW (no simulator or Rocq
+    -- implementation exists repo-wide), so the realizations are
+    -- unfalsifiable against SAW semantics; they inhabit exactly the
+    -- declared types over the Nat.le/Nat.lt images of IsLeNat/IsLtNat.
+  , ("proveLeNat",      mapsTo sawCorePrimitivesModule "proveLeNat")
+  , ("natCompareLe",    mapsTo sawCorePrimitivesModule "natCompareLe")
   , ("intAbs",          reject "Int primitive (intAbs) not mapped; needs Lean \
                                  \realization.")
   , ("intMin",          reject "Int primitive (intMin) not mapped; needs Lean \

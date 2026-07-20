@@ -1,1 +1,5 @@
-contains:h_proof_obligation_
+contains:proveLeNat
+contains-normalized:Except String (Maybe (Nat.le
+contains-normalized:Pure.pure (proveLeNat
+absent:Refusing to translate
+absent:sorry

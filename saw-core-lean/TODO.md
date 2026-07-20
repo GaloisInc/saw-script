@@ -265,6 +265,32 @@ below track execution state as always.
   - **Harness-blindness probes**: can a regression go green while
     checking nothing (vacuous goldens, `fails`-wrapped rows that fail
     for the wrong reason, known-gap census masking a real failure)?
+  - **Vacuity-guard sweep (added 2026-07-19, user request: "do we
+    have enough vacuity guards?").** Inventory every gate that can
+    pass without checking anything, and for each either demonstrate
+    a mutation it catches or add the missing guard. Known guards to
+    verify still bite: the R3b F2 drift-check non-vacuity fence (an
+    imports-only check file must FAIL); `.known-gap.expected`
+    required diagnostics (a gap firing DIFFERENTLY must fail);
+    `goal_closed : goal` type pins; the axiom audit (must FAIL when
+    `#print axioms` produces NO lines — silent-empty output is a
+    pass today?); expected.txt `contains:` rows (would an EMPTY
+    emitted.lean pass any row's checks? do all rows have at least
+    one `contains-normalized` on semantic content?); the smoketest
+    source lints (ceilings that can only ratchet). Suspected
+    UNGUARDED vacuity surfaces to probe: obligation `by sorry`
+    blocks that discharge because the PROP is trivially true rather
+    than because evidence exists (e.g. an `Eq x x` obligation
+    emitted where the real side condition got lost upstream — the
+    obligation PASSES rfl vacuously); differential rows whose
+    SAW_OBSERVED and LEAN_OBSERVED both print errors and "agree"
+    without comparing values; `fails`-wrapped demo steps that fail
+    for an unrelated reason (partially covered by reason-text
+    checks); conformance category iteration silently skipping an
+    empty/renamed directory (nullglob — a deleted category would
+    vanish from the census without failing); per-row harness `tail`
+    /grep pipelines that mask nonzero exits. Each confirmed hole
+    lands as a guard + a mutation test that the guard catches.
   - **Differential stress**: adversarially chosen SAWCore terms where
     SAW evaluation and emitted-Lean evaluation could plausibly
     diverge (boundary widths, zero divisors, empty vectors, deep
@@ -689,6 +715,19 @@ as their own items in the priorities below.
        tests proof evidence without papering over the separate `eqNat`
        Prelude-alias emission gap. `coerce__eq`, `proveLeNat`, and
        `natCompareLe` remain pinned known gaps.
+       2026-07-19 checkpoint: `proveLeNat` and `natCompareLe` are
+       REALIZED — both are typing-only SAW primitives (no simulator or
+       Rocq implementation exists repo-wide), so the canonical decision
+       procedures in the support library are unfalsifiable against SAW
+       semantics. Enablers: `IsLeNat -> Nat.le` (structurally identical
+       inductives) and `IsLtNat -> Nat.lt` (definitional) TYPE mappings
+       (ctors/recursor stay unmapped-loud); Sort-polymorphic `Maybe`
+       (new) and `Either` (generalized, PSum-style universes) so
+       prop-carrying instantiations typecheck; Maybe ctor order pinned
+       in SAWCoreCtorOrder. Both obligations rows are positive
+       realization-shape rows. `coerce__eq` remains pinned (its
+       obligation references auto-emit-dependent `coerce__def`; needs
+       the hand-library theorem route).
     4. [x] Promote assertion-style BV bound rows such as
        `unsafeAssertBVULt` and `unsafeAssertBVULe` by emitting the comparison
        fact as a local obligation when the source assertion reaches the

@@ -1,1 +1,5 @@
-contains:h_proof_obligation_
+contains:natCompareLe
+contains-normalized:Except String (Either (Nat.lt
+contains-normalized:Pure.pure (natCompareLe
+absent:Refusing to translate
+absent:sorry

@@ -1,4 +1,9 @@
 enable_experimental;
 
-let probe = parse_core "proveLeNat";
+// 2026-07-19: proveLeNat/natCompareLe are TYPING-ONLY SAW
+// primitives (no simulator or Rocq implementation exists) realized
+// as the canonical decision procedures in the support library,
+// over the Nat.le/Nat.lt images of IsLeNat/IsLtNat. This row pins
+// the realization call shape.
+let probe = parse_core "proveLeNat 3 5";
 write_lean_term "ProofProveLeNatProbe" [] [] "emitted.lean" probe;
