@@ -245,6 +245,31 @@ below track execution state as always.
     CHACHA item above); both chacha rows now elaborate and pin only
     the observer #reduce budget.
 
+- [ ] **Constant-headed Prop domain rule + prop-former argument
+  convention (filed 2026-07-19, from the IsLeNat/bv-order obligation
+  probes).** The domain map's kind-directed rule classifies
+  VAR-headed Prop-kinded applications DVarRaw, but CONSTANT-headed
+  non-Eq props (IsLeNat/Nat.le images, eqNat, is_bvult) ride the
+  backstop as DValue (A-3): Pi bodies stating them WRAP
+  (`Except String (Nat.le ...)` — ill-typed, loud) and ambient prop
+  applications bind wrapped value args OUTSIDE the prop head (an
+  Except-String-Prop non-proposition, loud). Design shape, needs the
+  full domain-map discipline (design doc + adversarial audit — this
+  is a classifyDomain change): (1) extend the kind-directed rule to
+  constant heads — resolve the head global's type, result sort
+  propSort => DRawProp; (2) declare the PROP-FORMER argument
+  convention: a prop application's args are raw logical statement
+  content (like Eq's raw operands under the raw regime), so bvToNat
+  spines in statements translate raw, never bind-wrapped. Unlocks:
+  obligations rows IsLeNat_SuccSucc, bvultToIsLtNat,
+  bvult_to_IsLtNat, IsLtNat_to_bvult, bvEqToEqNat (their
+  type-mapping enablers — IsLeNat->Nat.le, IsLtNat->Nat.lt, eqNat,
+  is_bvult — landed 2026-07-19); also de-backstops non-Eq prop
+  content generally. Regression care: the backstop's LOUDNESS is
+  load-bearing wherever content relies on it — the audit must sweep
+  current DValue-classified prop occurrences before flipping them
+  raw.
+
 - [ ] **Pre-release soundness audit (release gate, added 2026-07-17).**
   An aggressive end-to-end scrutiny pass over the whole trust chain
   before any release is called ready — assume the backend is wrong and

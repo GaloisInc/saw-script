@@ -316,6 +316,20 @@ typeImageObligationPrimitives =
   , (typeImagePreludeModule, "tail_gen", 3)
   , (typeImagePreludeModule, "foldr_nil", 5)
   , (typeImagePreludeModule, "foldl_nil", 5)
+    -- NOT here (2026-07-19 probe results): the IsLeNat/bv-order
+    -- axiom family (IsLeNat_SuccSucc, bvultToIsLtNat,
+    -- bvult_to_IsLtNat, IsLtNat_to_bvult, bvEqToEqNat). Their
+    -- statements are CONSTANT-HEADED non-Eq Prop applications —
+    -- the domain map's backstop class (A-3): classifyDomain sends
+    -- constant heads to DValue, so (a) prop args value-translate
+    -- and the ambient prop application binds wrapped args OUTSIDE
+    -- the prop head (an Except-String-Prop non-proposition), and
+    -- (b) Pi bodies stating them WRAP (Except String (Nat.le ...)),
+    -- both loud. Unlocking them needs the filed calculus design
+    -- item: extend the kind-directed domain rule to CONSTANT heads
+    -- (DRawProp via the resolved head's result sort) plus the
+    -- prop-former argument convention (statement args are raw
+    -- logical content). See TODO.md.
   ]
 
 typeImagePreludeModule :: ModuleName

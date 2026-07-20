@@ -589,6 +589,12 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
     -- loudly until a pinned row demands the ctor/recursor surface.
   , ("IsLeNat",       mapsToCore "Nat.le")
   , ("IsLtNat",       mapsToCore "Nat.lt")
+    -- Prop-valued Prelude aliases (2026-07-19, IsLeNat/bv-order
+    -- obligation family): reducible support definitions, so the
+    -- type-image obligations that state them and the consumers that
+    -- unfold them agree definitionally.
+  , ("eqNat",         mapsTo sawCorePrimitivesModule "eqNat")
+  , ("is_bvult",      mapsTo sawCorePrimitivesModule "is_bvult")
   , ("Stream",        mapsTo sawCorePrimitivesModule "Stream")
   , ("MkStream",      mapsToExpl sawCorePrimitivesModule "Stream.MkStream")
   , ("EmptyType",     mapsTo sawCorePrimitivesModule "EmptyType")

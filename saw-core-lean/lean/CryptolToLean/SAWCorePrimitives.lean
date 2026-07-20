@@ -241,6 +241,11 @@ Lean's `Nat.sub` has the same truncated-subtraction semantics. -/
 
 @[reducible] def addNat : Nat → Nat → Nat := Nat.add
 @[reducible] def subNat : Nat → Nat → Nat := Nat.sub
+/-- SAWCore Prelude `eqNat x y = Eq Nat x y` — the Prop-valued Nat
+equality alias (2026-07-19, IsLeNat/bv-order obligation family).
+Reducible so consumers see the underlying `Eq` definitionally. -/
+@[reducible] def eqNat (x y : Nat) : Prop := @Eq Nat x y
+
 /-- SAWCore Prelude `primitive proveLeNat : (x y : Nat) -> Maybe
 (IsLeNat x y)`. NO implementation exists anywhere in SAW — neither
 the simulator nor the Rocq backend realizes it (repo-wide: zero
@@ -640,6 +645,14 @@ noncomputable def bvEq  (n : Nat) (x y : Vec n Bool) : Bool :=
   (vecToBitVec x) == (vecToBitVec y)
 noncomputable def bvult (n : Nat) (x y : Vec n Bool) : Bool :=
   (vecToBitVec x).ult (vecToBitVec y)
+
+/-- SAWCore Prelude `is_bvult n x y = Eq Bool (bvult n x y) True` —
+the Prop-valued bitvector strict-order alias (2026-07-19,
+IsLeNat/bv-order obligation family). Reducible so consumers see the
+underlying `Eq` definitionally. -/
+@[reducible] noncomputable def is_bvult (n : Nat) (x y : Vec n Bool) : Prop :=
+  @Eq Bool (bvult n x y) Bool.true
+
 noncomputable def bvule (n : Nat) (x y : Vec n Bool) : Bool :=
   (vecToBitVec x).ule (vecToBitVec y)
 noncomputable def bvugt (n : Nat) (x y : Vec n Bool) : Bool :=
