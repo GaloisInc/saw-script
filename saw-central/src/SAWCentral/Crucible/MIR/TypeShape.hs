@@ -263,6 +263,7 @@ tyToShape col = go
         M.TyRef ty' mutbl -> goRef ty ty' mutbl
         M.TyRawPtr ty' mutbl -> goRef ty ty' mutbl
         M.TyFnPtr sig -> goFnPtr ty sig
+        M.TyPat ty' -> go ty'
         _ -> error $ "tyToShape: " ++ show ty ++ " NYI"
 
     goPrim :: M.Ty -> Some TypeShape
@@ -1026,6 +1027,7 @@ data TyView
   | TyViewFloat !M.FloatKind
   | TyViewDowncast !TyView !Integer
   | TyViewNever
+  | TyViewPat !TyView
   | TyViewForeign
   | TyViewLifetime
   | TyViewConst !M.ConstVal
@@ -1103,6 +1105,7 @@ tyView (M.TyRawPtr ty mut) = TyViewRawPtr (tyView ty) mut
 tyView (M.TyFloat fk) = TyViewFloat fk
 tyView (M.TyDowncast ty n) = TyViewDowncast (tyView ty) n
 tyView M.TyNever = TyViewNever
+tyView (M.TyPat ty) = TyViewPat (tyView ty)
 tyView M.TyForeign = TyViewForeign
 tyView M.TyLifetime = TyViewLifetime
 tyView (M.TyConst c) = TyViewConst c

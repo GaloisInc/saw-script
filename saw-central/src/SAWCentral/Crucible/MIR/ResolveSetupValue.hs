@@ -41,7 +41,6 @@ module SAWCentral.Crucible.MIR.ResolveSetupValue
   , findStaticVar
   , staticRefMux
     -- * Enum discriminants
-  , getEnumVariantDiscr
   , testDiscriminantIsBV
   , variantIntIndex
     -- * Structs
@@ -709,7 +708,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
                 Right x -> return x
               let discrShp = tyToShapeEq col discrTp discrTpr
               IsBVShape _ discrW <- pure $ testDiscriminantIsBV discrShp
-              let discr = getEnumVariantDiscr variant
+              let discr = variant ^. Mir.discrval
               discrVal <- W4.bvLit sym discrW $ BV.mkBV discrW discr
 
               -- Construct an EnumShape and RustEnumRepr. This requires
@@ -779,7 +778,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
               variantFlds' <-
                 zipWithM
                   (\variant flds -> do
-                    let variantDiscr = getEnumVariantDiscr variant
+                    let variantDiscr = variant ^. Mir.discrval
                     variantDiscrBV <- W4.bvLit sym discrW $ BV.mkBV discrW variantDiscr
                     branch <- W4.bvEq sym variantDiscrBV discrVal
                     flds' <- traverse (resolveSetupVal mcc env tyenv nameEnv) flds
@@ -1919,18 +1918,6 @@ staticTyRef static =
   Mir.TyRef
     (static ^. Mir.sTy)
     (staticMutability static)
-
--- | Retrieve the discriminant corresponding to an enum variant. This function
--- will panic if the variant does not contain a discriminant.
-getEnumVariantDiscr :: Mir.Variant -> Integer
-getEnumVariantDiscr variant =
-  case variant ^. Mir.discrval of
-    Just discr ->
-      discr
-    Nothing ->
-      panic "getEnumVariantDiscr" [
-          "discrval not set for variant: " <> Text.pack (show (variant ^. Mir.vname))
-      ]
 
 -- | An enum's discriminant should have an integral type such as @isize@ or
 -- @i8@, which this function checks. If this is not the case, this function will

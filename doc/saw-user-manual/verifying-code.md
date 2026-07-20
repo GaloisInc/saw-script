@@ -2309,8 +2309,8 @@ file to the `mir_load_module` function:
 
 - `mir_load_module : String -> TopLevel MIRModule`
 
-SAW currently supports Rust code that can be built with a [September 14, 2025
-Rust nightly](https://static.rust-lang.org/dist/2025-09-14/).  If you encounter
+SAW currently supports Rust code that can be built with a [March 21, 2026
+Rust nightly](https://static.rust-lang.org/dist/2026-03-21/).  If you encounter
 a Rust feature that SAW does not support, please report it [on
 GitHub](https://github.com/GaloisInc/saw-script/issues).
 

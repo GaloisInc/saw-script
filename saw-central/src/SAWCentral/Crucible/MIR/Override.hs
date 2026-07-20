@@ -1465,7 +1465,7 @@ matchArg opts sc cc cs prepost md = go False []
 
                 -- Ensure that the discriminant values match.
                 IsBVShape _ discrW <- pure $ testDiscriminantIsBV discrShp
-                let discr = getEnumVariantDiscr variant
+                let discr = variant ^. Mir.discrval
                 expectedDiscr <- liftIO $
                   W4.bvLit sym discrW $ BV.mkBV discrW discr
                 discrEq <- liftIO $
