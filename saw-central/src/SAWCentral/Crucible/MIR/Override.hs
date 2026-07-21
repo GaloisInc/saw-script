@@ -183,7 +183,15 @@ assignVar cc md var sref@(Some ref) =
   do old <- OM (setupValueSub . at var <<.= Just sref)
      let loc = MS.conditionLoc md
      F.for_ old $ \(Some ref') ->
-       do p <- liftIO (Mir.mirRef_eqMA bak (ref^.mpRef) (ref'^.mpRef))
+       do let eq = Mir.mirRef_eqMA bak (ref^.mpRef) (ref'^.mpRef)
+          let maEnv = MatchAssertEnv
+                { maeConditionMetadata = md
+                , maeFailureReason = \_ -> pure BadEqualityComparison
+                }
+          -- We run `mirRef_eqMA` in `MatchAssertM` here because we'd like its
+          -- failure to propagate neatly during override matching, and running
+          -- it in `IO` instead will cause it to fail messily.
+          p <- runMatchAssert eq maEnv
           addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError "equality of aliased references" ""))
 
 -- | When a specification is used as a composition override, this function
