@@ -1,7 +1,7 @@
 Loading file "test04.saw"
-("a", \(u1273 : isort 0) ->
-        \(_P : PLiteral u1273) -> ecNumber (TCNum 3) u1273 _P)
-("b", \(u1275 : isort 0) ->
-        \(_P : PLiteral u1275) -> ecNumber (TCNum 4) u1275 _P)
-("c", \(u1277 : isort 0) ->
-        \(_P : PLiteral u1277) -> ecNumber (TCNum 5) u1277 _P)
+("a", \(u1283 : isort 0) ->
+        \(_P : PLiteral u1283) -> ecNumber (TCNum 3) u1283 _P)
+("b", \(u1285 : isort 0) ->
+        \(_P : PLiteral u1285) -> ecNumber (TCNum 4) u1285 _P)
+("c", \(u1287 : isort 0) ->
+        \(_P : PLiteral u1287) -> ecNumber (TCNum 5) u1287 _P)
