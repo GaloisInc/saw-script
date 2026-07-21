@@ -584,7 +584,7 @@ constructExpandedSetupValue cc sc = go
            traverse (\discr -> do
                       discrNat  <- scNat sc $ fromInteger discr
                       scBvNat sc discrWNat discrNat)
-                    (map getEnumVariantDiscr variants)
+                    (map (view Mir.discrval) variants)
          scFalse <- liftIO $ scBool sc False
          possibleDiscrPredTerm <- liftIO $
            foldM
@@ -1869,6 +1869,7 @@ cryptolTypeOfActual mty =
     Mir.TySlice _      -> Nothing
     Mir.TyDowncast _ _ -> Nothing
     Mir.TyNever        -> Nothing
+    Mir.TyPat _        -> Nothing
     Mir.TyForeign      -> Nothing
     Mir.TyLifetime     -> Nothing
     Mir.TyConst _      -> Nothing
