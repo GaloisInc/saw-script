@@ -72,7 +72,7 @@ import qualified Mir.DefId as Mir
 import qualified Mir.FancyMuxTree as Mir
 import qualified Mir.Generator as Mir
 import qualified Mir.Intrinsics as Mir
-import Mir.Intrinsics (MIR)
+import Mir.Intrinsics (MIR, wordLit)
 import qualified Mir.Mir as Mir
 import qualified Mir.TransTy as Mir
 import qualified What4.Expr as W4
@@ -1352,16 +1352,11 @@ matchArg opts sc cc cs prepost md = go False []
                         let elemSize = tySize col elemTy
                         -- get the reference to the containing aggregate and the
                         -- index of the current reference within it
-                        Ctx.Empty Ctx.:> Crucible.RV arrRef
-                                  Ctx.:> Crucible.RV i'_sym <-
-                          tryMirOperation $ Mir.mirRef_peelIndexMA bak iTypes elemRef elemSize
-                        -- the index should be concrete
-                        case fromInteger . BV.asUnsigned <$> W4.asBV i'_sym of
-                          Just i'
-                            -- make sure the expected and actual indices match
-                            | i == i' ->
-                              go inCast [] (MIRVal arrRefShp arrRef) z
-                          _ -> fail_
+                        let elemOff = fromIntegral i * elemSize
+                        originOff <- liftIO $ wordLit sym (negate elemOff)
+                        arrRef <- tryMirOperation $ do
+                          Mir.mirRef_agOffsetMA bak iTypes originOff elemRef
+                        go inCast [] (MIRVal arrRefShp arrRef) z
                     _ -> fail_
                 _ -> fail_
 
@@ -1429,10 +1424,11 @@ matchArg opts sc cc cs prepost md = go False []
                           TransparentShape _ _ ->
                             go inCast [] (MIRVal structRefShp fieldRef) z
                           StructShape _ elems -> do
-                            AgElemShape off sz _shp <-
+                            AgElemShape off _sz _shp <-
                               return $ agElemShapeAtIndex structTy elems iInt
                             structRef <- tryMirOperation $ do
-                              Mir.mirRef_peelAgElemMA bak iTypes off fieldRef
+                              originOff <- liftIO $ wordLit sym (negate off)
+                              Mir.mirRef_agOffsetMA bak iTypes originOff fieldRef
                             go inCast [] (MIRVal structRefShp structRef) z
                           _ -> fail_
                     _ -> fail_
