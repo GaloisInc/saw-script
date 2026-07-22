@@ -145,11 +145,12 @@ termToExpr sym varMap term = do
 -- `(A, (B, C))` vs `(A, B, C)` (these are the same type in saw-core).
 termToReg :: forall sym t fs tp.
     (IsSymInterface sym, sym ~ MirSym t fs, HasCallStack) =>
+    M.Collection ->
     sym ->
     SAW.Term ->
     TypeShape tp ->
     IO (RegValue sym tp)
-termToReg sym term shp0 = do
+termToReg col sym term shp0 = do
     varMap <- readIORef (SAW.saw_elt_cache_r (mirSAWCoreState (sym ^. W4.userState)))
     sv <- termToSValue sym varMap term
     go shp0 sv
@@ -167,9 +168,10 @@ termToReg sym term shp0 = do
                                             ("a vector containing " <> show x)
             buildBitVector w bits
         (TupleShape _ [], SAW.VCtorApp 0 _ []) -> mirAggregate_zstIO
-        (TupleShape _ elems, _) -> do
+        (TupleShape ty elems, _) -> do
+            let tupleSz = tySize col ty
             svs <- reverse <$> tupleToListRev (length elems) [] sv
-            buildMirAggregate sym elems svs $ \_ _ shp' sv' -> go shp' sv'
+            buildMirAggregate sym tupleSz elems svs $ \_ _ shp' sv' -> go shp' sv'
         (ArrayShape _ _ sz shp' len, SAW.VVector thunks) -> do
             svs <- mapM SAW.force $ toList thunks
             when (length svs /= fromIntegral len) $
@@ -346,7 +348,8 @@ regToTermWithAdapt sym sc name ada0 shp0 rv0 = go ada0 shp0 rv0
             tyTerm <- shapeToTerm' sc a shp'
             liftIO $ SAW.scVector sc tyTerm terms
         (AdaptDerefRef col elAda, RefShape _ty elT M.Immut tpr, mirPtr) ->
-             do r <- readMirRefSim tpr mirPtr
+             do let elSize = tySize col elT
+                r <- readMirRefSim tpr (M.Width elSize) mirPtr
                 let elShp = tyToShapeEq col elT tpr
                 go elAda elShp r
         (AdaptDerefSlice col n elAda, SliceShape _ty elT M.Immut tpr, Ctx.Empty Ctx.:> RV mirPtr Ctx.:> RV lenExpr) ->
@@ -369,7 +372,7 @@ regToTermWithAdapt sym sc name ada0 shp0 rv0 = go ada0 shp0 rv0
                       do
                         iExpr   <- liftIO (W4.bvLit sym knownNat (BV.mkBV knownNat i))
                         elemPtr <- mirRef_offsetWrapSim mirPtr iExpr elSize
-                        r       <- readMirRefSim tpr elemPtr
+                        r       <- readMirRefSim tpr (M.Width elSize) elemPtr
                         go elAda elShp r
                   elTyTerm <- shapeToTerm' sc elAda elShp
                   liftIO (SAW.scVector sc elTyTerm vals)

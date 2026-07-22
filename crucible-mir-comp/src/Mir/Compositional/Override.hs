@@ -155,7 +155,7 @@ printSpec ms = ovrWithBackend $ \bak ->
     let agRef = newConstMirRef sym MirAggregateRepr ag'
     zero <- liftIO (W4.bvLit sym knownRepr (BV.zero knownRepr))
     ptr <- ovrWithBackend $ \_bak ->
-        modifyRefMuxSim (mirRef_agElemLeaf zero byteSize byteRepr) agRef
+        modifyRefMuxSim (mirRef_agOffsetLeaf bak zero) agRef
     return $ Empty :> RV ptr :> RV len
 
 -- | Enable a MethodSpec.  This installs an override, so for the remainder of
@@ -280,7 +280,7 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak -> do
                 iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
                 let elemSize = tySize col ty
                 ref' <- lift $ mirRef_offsetSim (ptr ^. mpRef) iSym elemSize
-                rv <- lift $ readMirRefSim (ptr ^. mpType) ref'
+                rv <- lift $ readMirRefSim (ptr ^. mpType) (M.Width elemSize) ref'
                 let shp = tyToShapeEq col ty (ptr ^. mpType)
                 matchArg sym ppopts eval col (ms ^. MS.csPreState . MS.csAllocs) md shp rv sv
 
@@ -352,10 +352,10 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak -> do
         elemSize_sym <- liftIO $ usizeBvLit sym (fromIntegral elemSize)
         allocSize_sym <- liftIO (W4.bvMul sym len_sym elemSize_sym)
         ag <- liftIO $ mirAggregate_uninitIO bak allocSize_sym
-        writeMirRefSim MirAggregateRepr agRef ag
+        writeMirRefSim MirAggregateRepr agRef M.All ag
         zero <- liftIO $ W4.bvLit sym knownRepr $ BV.zero knownRepr
         ref <- ovrWithBackend $ \_bak ->
-            modifyRefMuxSim (mirRef_agElemLeaf zero elemSize (allocSpec ^. maType)) agRef
+            modifyRefMuxSim (mirRef_agOffsetLeaf bak zero) agRef
         return ( alloc
                , Some $ MirPointer (allocSpec ^. maType)
                                    (allocSpec ^. maPtrKind)
@@ -373,7 +373,7 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak -> do
     w4VarMap <- liftIO $ readIORef w4VarMapRef
     let termSub = os ^. MS.termSub
     retVal <- case ms ^. MS.csRetValue of
-        Just sv -> liftIO $ setupToReg sym termSub w4VarMap allocMap retShp sv
+        Just sv -> liftIO $ setupToReg sym col termSub w4VarMap allocMap retShp sv
         Nothing ->
           -- We know that the returned value is (), so assert that the type
           -- representation is MirAggregateRepr (which is how all tuples are
@@ -408,8 +408,8 @@ runSpec sc myCS mh ms = ovrWithBackend $ \bak -> do
         forM_ (zip svs [0 .. len - 1]) $ \(sv, i) -> do
             iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
             ref' <- mirRef_offsetSim (ptr ^. mpRef) iSym elemSize
-            rv <- liftIO $ setupToReg sym termSub w4VarMap allocMap shp sv
-            writeMirRefSim (ptr ^. mpType) ref' rv
+            rv <- liftIO $ setupToReg sym col termSub w4VarMap allocMap shp sv
+            writeMirRefSim (ptr ^. mpType) ref' (M.Width elemSize) rv
 
     -- Clobber all globals.  We don't yet support mentioning globals in specs.
     -- However, we also don't prevent the subject function from modifying
@@ -553,7 +553,7 @@ matchArg sym ppopts eval col allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
             Just (Some ptr)
               | Just Refl <- testEquality tpr (ptr ^. mpType) -> do
                 eq <- lift $ ovrWithBackend $ \bak ->
-                        liftIO $ mirRef_eqIO bak ref' (ptr ^. mpRef)
+                        liftIO $ mirRef_eqMA bak ref' (ptr ^. mpRef)
                 let loc = mkProgramLoc "matchArg" InternalPos
                 MS.addAssert eq md $
                     SimError loc (AssertFailureSimError ("mismatch on " ++ show alloc) "")
@@ -568,6 +568,7 @@ matchArg sym ppopts eval col allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
 setupToReg :: forall sym t fs tp0.
     (IsSymInterface sym, sym ~ MirSym t fs, HasCallStack) =>
     sym ->
+    M.Collection ->
     -- | `termSub`: maps `VarIndex`es in the MethodSpec's namespace to `Term`s
     -- in the context's namespace.
     IntMap SAW.Term ->
@@ -578,7 +579,7 @@ setupToReg :: forall sym t fs tp0.
     TypeShape tp0 ->
     MS.SetupValue MIR ->
     IO (RegValue sym tp0)
-setupToReg sym termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
+setupToReg sym col termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
   where
     go :: forall tp. TypeShape tp -> MS.SetupValue MIR -> IO (RegValue sym tp)
     go (PrimShape _ btpr) (MS.SetupTerm tt) = do
@@ -590,12 +591,14 @@ setupToReg sym termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
             Nothing -> error $ "setupToReg: expected " ++ show btpr ++ ", but got " ++
                 show (W4.exprType expr)
         return expr
-    go (TupleShape _ elems) (MS.SetupTuple _ svs) =
-        buildMirAggregate sym elems svs $ \_off _sz shp sv -> go shp sv
+    go (TupleShape tupleTy elems) (MS.SetupTuple _ svs) = do
+        let tupleSz = tySize col tupleTy
+        buildMirAggregate sym tupleSz elems svs $ \_off _sz shp sv -> go shp sv
     go (ArrayShape _ _ sz shp len) (MS.SetupArray _ svs) = do
         buildMirAggregateArray sym sz shp len svs $ \_off sv -> go shp sv
-    go (StructShape _ elems) (MS.SetupStruct _ svs) =
-        buildMirAggregate sym elems svs $ \_off _sz shp sv -> go shp sv
+    go (StructShape structTy elems) (MS.SetupStruct _ svs) = do
+        let structSz = tySize col structTy
+        buildMirAggregate sym structSz elems svs $ \_off _sz shp sv -> go shp sv
     go (TransparentShape _ shp) sv = go shp sv
     go (RefShape _ _ _ tpr) (MS.SetupVar alloc) = case Map.lookup alloc allocMap of
         Just (Some ptr) -> case testEquality tpr (ptr ^. mpType) of
