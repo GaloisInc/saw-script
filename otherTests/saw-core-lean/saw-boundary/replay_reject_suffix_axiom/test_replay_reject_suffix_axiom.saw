@@ -1,8 +1,13 @@
 // Replay reject pin (review finding): the axiom allowlist is
 // EXACT-match, never suffix. A closer routed through a user axiom
 // named `cheat_vecToBitVec_bitVecToVec` (ending in an allowlisted
-// name) must reject — a suffix regex would have admitted a false
-// theorem. CHECK-FAIL: axiom-outside-allowlist.
+// name) must reject. Since the 2026-07-21 source lint (introduced
+// with the trust tiers), the DECLARATION itself is rejected first
+// (CHECK-FAIL: axiom-or-macro-decl-in-user-file) — this row now pins
+// that layer end-to-end. The exact-vs-suffix discipline at the audit
+// layer itself (which would catch a suffix-named axiom arriving
+// without a declaration in the user file) is pinned by the pure-awk
+// allowlist cases in support/trust-tier-selftest.sh.
 enable_experimental;
 fails (prove_print (offline_lean_replay "rejected_proof")
   {{ \(x : [8]) (y : [8]) -> x + y == y + x }});

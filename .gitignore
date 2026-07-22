@@ -30,4 +30,5 @@ saw-core-rocq/rocq/.Makefile.rocq.d
 *.olean
 *.ilean
 saw-core-lean/lean/intTestsProbe/
+otherTests/saw-core-lean/.tier-selftest/
 .claude/

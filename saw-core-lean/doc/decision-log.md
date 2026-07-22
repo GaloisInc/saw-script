@@ -37,3 +37,16 @@ in the 2026-07-17 doc reorganization.
   Remaining convention surfaces should extend this design by new declared
   positions/callee contracts, not by local patches.
 
+- [x] AMEND the bv_decide rejection into a TWO-TIER trust policy
+  (2026-07-21, user decision: "show we can discharge with bv_decide but
+  note this clearly as something that should be resolved later"). The
+  strict tier is unchanged and remains the default. A per-row,
+  loudly-labeled `native-eval` tier (row-local `.trust-tier` file)
+  admits bv_decide's per-invocation proof-local native axioms — and
+  nothing else — for genuinely SAT-shaped fixed-width goals
+  (quarterround/SWAR class). Tier names and admissions live solely in
+  `replay/axiom-audit.awk`; stale markers, unknown tiers, and forged
+  axiom declarations all fail loudly (mutation-tested by
+  `support/trust-tier-selftest.sh`). Recorded resolution: migrate tier
+  rows to the strict tier by swapping `bv_decide` -> `smt` when
+  lean-smt's cvc5 BV proof reconstruction becomes usable upstream.

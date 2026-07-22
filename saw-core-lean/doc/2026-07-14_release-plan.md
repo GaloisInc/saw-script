@@ -211,9 +211,23 @@ boundary families, and the demo's visible limitation.
 **W2 — Proof-support library.** (a) A policy-compliant BV proof
 strategy for the quarterround equation class — unparks
 `llvm_salsa20_q_eq`, `llvm_chacha20_q_eq`, and chacha20-core's eight
-obligations at once. The `bv_decide` trust policy HOLDS for 0.02
+obligations at once. ~~The `bv_decide` trust policy HOLDS for 0.02
 (decision 2026-07-15); revisit only if the lemma route proves
-genuinely intractable, as its own recorded decision. (b) The
+genuinely intractable, as its own recorded decision.~~
+**AMENDED 2026-07-21 (the recorded revision this clause allowed;
+user decision): TWO-TIER trust policy.** The strict tier is
+unchanged; a per-row, loudly-labeled `native-eval` tier admits
+bv_decide's per-invocation proof-local native axioms, with the
+migration to lean-smt's kernel-checked `smt` tactic recorded as the
+resolution trigger on every tier row (lean-smt probed 2026-07-21:
+BV reconstruction not yet usable — its own BitVec tests leave
+admitted placeholders). Policy statement + mechanics:
+`doc/proof-cookbook.md` §"Bitvector automation trust policy";
+enforcement: `replay/axiom-audit.awk` (tier variable) + both audit
+consumers + `support/trust-tier-selftest.sh` mutation tests.
+Landed 2026-07-21: `llvm_chacha20_q_eq`, `llvm_salsa20_q_eq` (all
+four points-to obligations, 4 rows) promoted to `proofs/` under the
+tier; chacha20-core's eight and `llvm_popcount_eq` in flight. (b) The
 `llvm_eq_u128` unlock: emitted-shape reduction lemmas for the
 `genWithBoundsM`/`foldrM`/`atWithProof_checkedM` byte-loop towers,
 plus the byte-to-word `bvEq` decomposition bridge (memory-model

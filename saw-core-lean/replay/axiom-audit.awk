@@ -13,6 +13,31 @@
 # spellings could only ever match a user-declared TOP-LEVEL axiom
 # of the same bare name and were a hole (2026-07-18 hardening
 # finding; removed from both consumers simultaneously).
+#
+# TRUST TIERS (2026-07-21, user decision): pass -v tier=<name> to
+# admit a tier's additional axioms for THIS row only. Recognized:
+#   (unset/empty)  — STRICT: the fixed allowlist above, nothing else.
+#   native-eval    — additionally admits bv_decide's per-invocation
+#                    proof-local native axioms, which on this
+#                    toolchain print as <decl>._native.bv_decide.ax_N*
+#                    (declaration-dependent names, so this is the ONE
+#                    sanctioned PATTERN rule; both consumers pair it
+#                    with a source lint forbidding axiom/macro/elab
+#                    declarations in proof-side files, closing the
+#                    matching-name forgery hole that made patterns
+#                    unacceptable for the strict list).
+# Any other tier value fails loudly (UNKNOWN-TRUST-TIER sentinel).
+# A declared tier whose extra axioms never appear fails loudly too
+# (TRUST-TIER-UNUSED sentinel) — a tier marker must never be a
+# no-op, else stale markers accumulate silent trust.
+function tier_allows(ax) {
+  if (tier == "native-eval" &&
+      ax ~ /^[A-Za-z0-9_'.]+\._native\.bv_decide\.ax_[0-9_]+$/) {
+    tier_used = 1
+    return 1
+  }
+  return 0
+}
 function check(line,    n, xs, i, ax) {
   sub(/^.*depends on axioms: \[/, "", line)
   sub(/\].*$/, "", line)
@@ -25,9 +50,21 @@ function check(line,    n, xs, i, ax) {
         ax != "Classical.choice" &&
         ax != "Quot.sound" &&
         ax != "CryptolToLean.SAWCorePrimitives.vecToBitVec_bitVecToVec" &&
-        ax != "CryptolToLean.SAWCorePrimitives.bitVecToVec_vecToBitVec") {
+        ax != "CryptolToLean.SAWCorePrimitives.bitVecToVec_vecToBitVec" &&
+        !tier_allows(ax)) {
       print ax
     }
+  }
+}
+BEGIN {
+  if (tier != "" && tier != "native-eval") {
+    print "UNKNOWN-TRUST-TIER: " tier
+    tier = ""
+  }
+}
+END {
+  if (tier == "native-eval" && !tier_used) {
+    print "TRUST-TIER-UNUSED: native-eval (no bv_decide native axiom in any audited closer — remove the stale .trust-tier marker)"
   }
 }
 /depends on axioms:/ {

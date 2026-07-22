@@ -187,6 +187,129 @@ Full plan: `doc/2026-07-14_release-plan.md`. Decisions recorded there
 0.01 workstreams and exit criteria live in the plan doc; the items
 below track execution state as always.
 
+### 0.02 punch list (2026-07-21, user-confirmed)
+
+**BV trust-tier decision (2026-07-21, user-confirmed): "show we can
+discharge with bv_decide but note this clearly as something that
+should be resolved later."** Two-tier trust policy: the STRICT tier is
+unchanged (kernel + propext/Classical.choice/Quot.sound + the two
+Vec/BitVec bridge axioms — no global allowlist widening). A new
+clearly-labeled per-row tier (accepted-with-native-eval) additionally
+admits `Lean.ofReduceBool` for bv_decide rows only (verified
+bitblaster, certificate-checked SAT; the LRAT checker runs as
+compiled native code, hence the trust-the-compiler axiom). Recorded
+resolution trigger — checkable, not vague: lean-smt BV proof
+reconstruction lands upstream (its Test/BitVec goldens pass
+sorry-free; the BV rewrite-theorems PR merges), then swap the closing
+tactic `bv_decide` -> `smt` and migrate rows to the strict tier.
+lean-smt is NOT adoptable today (2026-07-21 probe): its own width-2
+XOR-comm and shift tests expect `sorry` warnings; ~30% of cvc5's
+proof rules reconstruct; main branch requires mathlib (our support
+library has ZERO deps) and a cvc5 binary in the offline harness.
+
+Tier 1 — mechanical:
+
+- [ ] ~~Doubleround budget packaging~~ **RE-TIERED HARD, re-parked
+  2026-07-21**: measurement refuted the GAP's cost model — the 16
+  per-word closes are FREE (B-A ~ 0s); the cost is the KERNEL check
+  of the normalization Eq.mpr chain (78s big-simp + ~45s expansion
+  tail; elaboration is ~2s), and rotl staging dies in whnf
+  heartbeats (the rotl collapse is load-bearing for the
+  normalization's termination). Per-word splitting moves ~0s out of
+  the critical process. Honest unlocks recorded in the GAP
+  (kernel-cost surgery on the normalization chain, or explicit
+  mid-form multi-process split); NOT 0.02-blocking. Full
+  measurements: proof-gaps/llvm_doubleround_itp/GAP.md §2026-07-21.
+- [ ] **Doubleround via SAW-side compositional split (user
+  suggestion 2026-07-21; MEDIUM, try before any kernel surgery)**:
+  new workflow row verifying doubleround WITH the already-green
+  columnround/rowround results as overrides — the obligation drops
+  to composition granularity (Cryptol doubleround IS
+  rowround . columnround), no inlined quarterround arithmetic.
+  Stacks SAW's compositional machinery on top of the in-ITP stage
+  rows; the no-override row stays as the depth-scaling stress pin.
+  Details in the GAP, 2026-07-21 update, path 3.
+- [ ] **Lean toolchain bump** v4.29.1 -> latest (user-approved
+  2026-07-21 as low-cost; also pre-clears the lean-smt migration
+  path). Do before the audit freeze.
+- [ ] **W2(d) deferred hardening**: goldens for the 11 zero-coverage
+  emitter-wired helpers; `#guard_msgs` fences.
+- [ ] **STATUS.md census pass** (0.02 exit criterion): known-gap
+  delta stated; target = sound-but-undischargeable tier eliminated
+  modulo the two chacha observer-#reduce-budget rows.
+- [ ] **Docstrings decision**: 135 Lean docstrings — user call
+  pending, then mechanical.
+
+BV native-eval tier package (MEDIUM, no unknown mathematics; land
+machinery WITH the first promoted row in one commit):
+
+- [x] **Tier machinery in BOTH audit consumers — DONE 2026-07-21.**
+  Design changed from the plan: on this toolchain bv_decide emits
+  PER-INVOCATION proof-local native axioms
+  (`<decl>._native.bv_decide.ax_*`), NOT `Lean.ofReduceBool`, so the
+  tier admits that NAME PATTERN — the one sanctioned pattern rule —
+  and row markers name a TIER (`.trust-tier` = `native-eval`), never
+  axioms, keeping all axiom-name authority in axiom-audit.awk
+  (`-v tier=`). Guards: UNKNOWN-TRUST-TIER sentinel (bad tier name),
+  TRUST-TIER-UNUSED sentinel (stale marker), and a NEW source lint
+  in both consumers (proof-side files must not declare
+  axiom/macro/elab machinery — closes the forged-pattern-name hole;
+  corpus scanned clean). support/trust-tier-selftest.sh
+  mutation-tests all four failure modes; wired into test.sh.
+  (Also learned: bv_normalize closes trivialities WITHOUT a native
+  axiom — the selftest's bv case must genuinely bitblast.)
+- [x] **Promote `llvm_chacha20_q_eq` + `llvm_salsa20_q_eq` — DONE
+  2026-07-21, five rows.** The preserved proofs were STALE against
+  the regenerated monadic emission and were rebuilt as
+  completed-outline rows (rowround-recipe scaffold; chacha: rotate
+  bridge at {16,12,8,7}, 12 bvEq_refl passthroughs + 4 bv_decide
+  closes, 14.7s; salsa: all FOUR points-to obligations promoted —
+  llvm_salsa20_q_eq + _pt0/_pt1/_pt2, identical script, ~3s each).
+  Scaffold gotchas recorded: bvEq_refl/`rfl` must never touch
+  LLVM-vs-spec words (whnf explosion — close per-position
+  explicitly); seq lemmas need the rotl bridge present in the same
+  pass.
+- [ ] **Unpark the nine chacha-core qround obligations**
+  (`llvm_chacha20_core_verify`; the GAP records one discharge
+  unparks all nine). The C6 recipe applies per obligation.
+- [ ] **`llvm_popcount_eq`**: R2 fix-plumbing recipe (routine; same
+  shape as popcount32/E6), then bv_decide on the SWAR residue
+  `bvEq 32 (swar x) (pcChain x 32)`.
+- [x] **Resolution markers + trust-policy doc — DONE 2026-07-21.**
+  Two-tier policy stated in doc/proof-cookbook.md ("Bitvector
+  automation trust policy"); proof-gaps/README.md updated; every
+  promoted row's header + .trust-tier carries the RESOLVE LATER
+  note (lean-smt migration trigger, one-token bv_decide -> smt
+  swap).
+
+Tier 2 — design items:
+
+- [ ] Constant-headed Prop domain rule — tracked as its own item
+  below (filed 2026-07-19); unlocks 5 obligation rows.
+- [ ] PosRep direct recursors (design:
+  doc/archive/2026-07-03_direct-recursor-semantics-design.md);
+  unlocks the recursor_nat/recursor_z/pos_values gap family.
+- [ ] natCase value-motive lowering — un-gaps cryptol_bv_sext and
+  cryptol_bv_signed_shift.
+- [ ] `Z n` / ZtoNat realization (IntMod slate).
+- [ ] `reverse` realization — full rev.cry module; demo step 3
+  loses its `fails` wrap (step 3b already emits Rev.lean).
+
+Gate:
+
+- [ ] Pre-release soundness audit — tracked as its own item below;
+  NEW surface from the tier decision: prove the tier can't leak
+  (no path admits ofReduceBool on a strict-tier row; markers can't
+  be satisfied vacuously; replay enforces the identical per-row
+  tiering as the conformance harness).
+- [ ] Cabal data-files relocatable packaging.
+
+OUT of 0.02: unchanged, per the recorded list in
+`doc/2026-07-14_release-plan.md` (simulator Unimplemented gaps, user
+datatypes, SMT-arrays, JVM/MIR, SHA512-at-scale, lean-smt adoption,
+pair-at-Prop universe generalization); the chacha observer #reduce
+budget stays a differential-harness limitation.
+
 - [x] **W1 rev.cry frontier — CLOSED 2026-07-19.** Every sub-item
   landed: rev.cry is a TRUE differential row, both chacha rows
   elaborate (residual = observer #reduce budget only), and the
@@ -270,11 +393,20 @@ below track execution state as always.
   current DValue-classified prop occurrences before flipping them
   raw.
 
-- [ ] **Pre-release soundness audit (release gate, added 2026-07-17).**
-  An aggressive end-to-end scrutiny pass over the whole trust chain
-  before any release is called ready — assume the backend is wrong and
-  try to demonstrate it. Non-implementer perspective required (fresh
-  auditor context, not the implementing session). Scope, at minimum:
+- [ ] **Pre-release soundness audit (release gate, added 2026-07-17;
+  SCOPE RAISED 2026-07-21, user request: "a whole-project audit by
+  multiple adversarial critic [agents], aimed at breaking anything
+  that can be broken — the big one, the pre-launch attempt to break
+  the soundness model in any way possible").** Execution shape: a
+  PANEL of independent adversarial auditor agents, each with a fresh
+  context (never the implementing session), each assigned a distinct
+  attack surface and told to BREAK it, not review it; findings
+  adversarially cross-verified before landing. Whole-project scope —
+  translator, support library, harness, replay kernel, trust-tier
+  machinery, docs-vs-behavior honesty. An aggressive end-to-end
+  scrutiny pass over the whole trust chain before any release is
+  called ready — assume the backend is wrong and try to demonstrate
+  it. Scope, at minimum:
   - **False-theorem probes against replay**: try to get
     `offline_lean_replay` to accept an unsound proof — axiom
     introduction beyond the allowlist (prefix/suffix/namespace and

@@ -1,7 +1,13 @@
-// Replay reject pin: axiom introduction. A closer that routes through a
-// user-declared axiom is rejected by the fixed allowlist
-// (CHECK-FAIL: axiom-outside-allowlist) — the same gate that would
-// catch native_decide's Lean.ofReduceBool compiler-trust hatch.
+// Replay reject pin: axiom introduction. Since the 2026-07-21 source
+// lint (introduced with the trust tiers), a proof file that DECLARES
+// an axiom is rejected before elaboration
+// (CHECK-FAIL: axiom-or-macro-decl-in-user-file) — this row pins that
+// lint layer. Axiom smuggling that declares nothing (native tactics'
+// proof-local axioms, e.g. bv_decide without a .trust-tier marker) is
+// still caught downstream by the fixed allowlist
+// (CHECK-FAIL: axiom-outside-allowlist); that audit layer's rejection
+// semantics are pinned by support/trust-tier-selftest.sh (end-to-end
+// missing-marker case + pure-awk allowlist cases).
 enable_experimental;
 fails (prove_print (offline_lean_replay "rejected_proof")
   {{ \(x : [8]) (y : [8]) -> x + y == y + x }});

@@ -222,20 +222,49 @@ recipe that layer would package:
 3. Check with checked `BitVec` lemmas, `simp`, `omega`, or `grind`
    under the trust policy below.
 
-## Bitvector automation trust policy
+## Bitvector automation trust policy (TWO TIERS, 2026-07-21)
 
-For accepted backend proof regressions, do not use plain `bv_decide` or
-`bv_check` today. They are powerful and use LRAT certificates, but the current
-Lean frontend checks those certificates through native evaluation and inserts a
-proof-local native axiom for substantial goals. That widens the trusted base to
-Lean code generation, which is outside this backend's soundness policy.
+**Strict tier (the default).** Accepted proofs depend on nothing beyond the
+Lean kernel's three built-in axioms and the two Vec<->BitVec round-trip
+axioms. Do not use plain `bv_decide` or `bv_check` in strict-tier rows. They
+are powerful and use LRAT certificates, but the current Lean frontend checks
+those certificates through native evaluation and inserts a proof-local native
+axiom (`<decl>._native.bv_decide.ax_*`) for substantial goals. That widens
+the trusted base to Lean code generation. Use checked Lean proof automation
+instead: named `BitVec` lemmas, the SAW bitvector bridge lemmas, `simp`,
+`grind`, `omega`/`bv_omega` where applicable, and hand-written helper
+theorems.
 
-Use checked Lean proof automation instead: named `BitVec` lemmas, the SAW
-bitvector bridge lemmas, `simp`, `grind`, `omega`/`bv_omega` where applicable,
-and hand-written helper theorems. If a crypto-style bitvector obligation cannot
-yet be discharged this way, leave it as an explicit proof obligation or mark the
-example as an expected proof gap. The emitted obligation is still meaningful and
-sound; only the automation is missing.
+**`native-eval` tier (per-row opt-in, user decision 2026-07-21).** A
+conformance row may carry a `.trust-tier` file containing `native-eval`;
+that row's axiom audit additionally admits `bv_decide`'s per-invocation
+proof-local native axioms — and NOTHING else (`sorryAx` and arbitrary
+axioms are still rejected). Mechanics, all enforced by
+`replay/axiom-audit.awk` (the single audit authority) plus both harness
+consumers:
+
+  * the tier is printed loudly on every run, with the recorded
+    resolution note;
+  * an unknown tier name fails (`UNKNOWN-TRUST-TIER`);
+  * a stale marker — a tier row whose proof uses no bv_decide native
+    axiom — fails (`TRUST-TIER-UNUSED`);
+  * proof-side files must not DECLARE axioms or macro/elab machinery
+    (source lint; closes the forged-axiom-name hole that a
+    pattern-based allowance would otherwise open);
+  * `support/trust-tier-selftest.sh` mutation-tests all four failure
+    modes on every conformance run.
+
+RESOLVE LATER (recorded): the tier exists because lean-smt's cvc5 BV proof
+reconstruction is not yet usable (2026-07-21 probe: its own BitVec tests
+leave admitted placeholders; ~30% of cvc5 proof rules reconstruct). When it
+lands upstream, tier rows migrate to the strict tier by swapping
+`bv_decide` -> `smt` and deleting `.trust-tier` — the row proofs are
+structured to make that a one-token change.
+
+If a bitvector obligation cannot be discharged under either tier's rules,
+leave it as an explicit proof obligation or mark the example as an expected
+proof gap. The emitted obligation is still meaningful and sound; only the
+automation is missing.
 
 ## When the cookbook doesn't have your pattern
 
@@ -251,8 +280,9 @@ If your goal doesn't match any pattern above:
    goals, lift to `BitVec` with `congrArg vecToBitVec` and the
    `vecToBitVec_*` round-trip lemmas, then
    try `simp`, `grind`, `omega`/`bv_omega`, and named `BitVec` lemmas. Avoid
-   `bv_decide` in accepted backend proofs unless the project explicitly changes
-   its trusted-base policy.
+   `bv_decide` in strict-tier proofs; for genuinely SAT-shaped fixed-width
+   goals a row may opt into the `native-eval` tier (see the trust policy
+   above) with the migration note recorded.
 
 3. **Add a theorem to `SAWCoreBitvectors_proofs.lean`.** If
    the shape is general (will recur), it belongs in the

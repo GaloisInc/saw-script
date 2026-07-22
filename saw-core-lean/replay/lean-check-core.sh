@@ -8,7 +8,14 @@
 # added here protects both paths; any check added elsewhere is drift.
 #
 # Usage:
-#   lean-check-core.sh <lean-project-root-abs> <stage-dir-abs>
+#   lean-check-core.sh <lean-project-root-abs> <stage-dir-abs> [trust-tier]
+#
+# trust-tier (optional, 2026-07-21): names a NON-STRICT axiom tier
+# for THIS check only. The single authority for tier names and what
+# each admits is axiom-audit.awk (currently: `native-eval` admits
+# bv_decide's per-invocation proof-local native axioms). Omitted =
+# strict, byte-identical behavior to before. Unknown tier names and
+# declared-but-unused tiers fail loudly inside the audit.
 #
 # The stage dir must contain:
 #   Emitted.lean     — the FRESHLY-EMITTED goal (authority; the caller
@@ -33,8 +40,13 @@ set -u
 
 PROJ="${1:?lean project root (absolute) required}"
 STAGE="${2:?stage dir (absolute) required}"
+TRUST_TIER="${3:-}"
 
 fail() { echo "CHECK-FAIL: $1"; exit 1; }
+
+if [ -n "$TRUST_TIER" ]; then
+    echo "CHECK-TIER: $TRUST_TIER (non-strict axiom tier; authority: axiom-audit.awk)"
+fi
 
 case "$PROJ" in /*) ;; *) fail "project-root-not-absolute" ;; esac
 case "$STAGE" in /*) ;; *) fail "stage-dir-not-absolute" ;; esac
@@ -149,6 +161,24 @@ for uf in proof.lean completed.lean; do
     fi
 done
 
+# 4.6 Axiom-declaration lint on the USER's files (2026-07-21,
+# introduced with the trust tiers; applies to ALL checks): proof-side
+# files must never DECLARE axioms or macro/elab-level machinery. The
+# strict allowlist is exact-name so forged axioms cannot collide with
+# it, but the native-eval tier admits a NAME PATTERN
+# (declaration-dependent bv_decide axiom names) that a hand-declared
+# axiom could forge — this lint closes that hole at the source level
+# and is defense-in-depth for strict checks.
+for uf in proof.lean completed.lean; do
+    if [ -f "$STAGE/$uf" ]; then
+        bad_decl=$(grep -nE '^[[:space:]]*(axiom|macro|macro_rules|elab|elab_rules|run_cmd|initialize)[[:space:]]|@\[(extern|implemented_by)' "$STAGE/$uf" || true)
+        if [ -n "$bad_decl" ]; then
+            echo "$bad_decl"
+            fail "axiom-or-macro-decl-in-user-file"
+        fi
+    fi
+done
+
 # 5. The user's proof elaborates.
 proof_out=$(run_lean "$STAGE/proof.lean") || {
     echo "$proof_out"; fail "proof-does-not-elaborate"; }
@@ -206,7 +236,7 @@ ax_out=$(run_lean "$STAGE/axiom-probe.lean") || { echo "$ax_out"; fail "axiom-au
 # multi-line bracket lists (same continuation handling as the CI
 # harness's audit_axioms): reject any non-allowlisted entry.
 bad_ax=$(printf '%s\n' "$ax_out" \
-    | awk -f "$(cd "$(dirname "$0")" && pwd)/axiom-audit.awk")
+    | awk -v tier="$TRUST_TIER" -f "$(cd "$(dirname "$0")" && pwd)/axiom-audit.awk")
 [ -z "$bad_ax" ] || { echo "$bad_ax"; fail "axiom-outside-allowlist"; }
 # Vacuity guard (2026-07-20): the allowlist audit passes when it
 # finds nothing to reject, so an audit that never RAN must not look

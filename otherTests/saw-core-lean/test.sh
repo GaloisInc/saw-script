@@ -273,6 +273,20 @@ iterate_proofs()        { require_rows proofs;        for d in proofs/*/;       
 iterate_support_lemmas() { require_rows support-lemmas; for d in support-lemmas/*/; do run_one support-lemmas "$(basename "$d")" lean-proof-test.sh "$@"; done; }
 iterate_negative()       { require_rows negative;       for d in negative/*/;       do run_one negative       "$(basename "$d")" lean-negative-test.sh   "$@"; done; }
 
+# Trust-tier guard self-test (2026-07-21): mutation tests proving the
+# tier machinery's failure modes still fire (stale marker, unknown
+# tier, bv_decide without marker, forged-axiom source lint). Runs as
+# its own step — the synthetic rows live outside the category dirs.
+run_trust_tier_selftest() {
+    echo
+    echo "=== support/trust-tier-selftest ==="
+    local rc=0
+    bash "$HERE/support/trust-tier-selftest.sh" test || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        record_failure "support/trust-tier-selftest (exit=$rc)"
+    fi
+}
+
 record_gap_inventory_item() {
     local path="$1"
     local note="$2"
@@ -321,6 +335,7 @@ case "$verb" in
         iterate_proofs
         iterate_support_lemmas
         iterate_negative
+        run_trust_tier_selftest
         iterate_gap_inventory
         print_summary_and_exit
         ;;
@@ -359,6 +374,7 @@ case "$verb" in
         iterate_proofs clean
         iterate_support_lemmas clean
         iterate_negative clean
+        bash "$HERE/support/trust-tier-selftest.sh" clean
         print_summary_and_exit
         ;;
     *)

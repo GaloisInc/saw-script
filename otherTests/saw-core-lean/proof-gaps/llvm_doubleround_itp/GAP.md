@@ -91,3 +91,70 @@ secondary cost.
 Neither is a soundness concern; both are budget/packaging. The preserved
 `completed.lean` + `proof.lean` are the real, checked (just over-budget)
 artifacts, kept here so the gap is visible and not a silent skip.
+
+## 2026-07-21 measurement update: cost model corrected; per-word split REFUTED
+
+Controlled measurements (idle-ish box, Lean v4.29.1, `set_option profiler
+true`, scratch variants of this row's `completed.lean`) invalidate the cost
+attribution above and with it the "PRINCIPLED" unlock path:
+
+    variant                                            user CPU   kernel check
+    Z:  def goal + library, goal_holds := sorry          5.6 s     ~0
+    A:  scaffold (big simp+apply+expand+refine),
+        all 16 word closes sorried                      80.8 s     111-123 s*
+    B:  scaffold + ONE word closed for real             80.8 s     (== A)
+    K1: big simp only, then sorry                          —        78.4 s
+
+    * profiled clean run: simp elaboration 1.16 s + 0.18 s; the rest is
+      KERNEL type-checking of the produced proof term.
+
+Consequences:
+
+  * The per-word `ac_rfl` closes are FREE (B - A ~ 0 s), not the dominant
+    cost. Splitting them into 16 independently-budgeted lemmas moves ~0 s
+    out of the critical process. The "~206 s is the discharge tactic"
+    attribution above conflated elaboration with kernel checking: the
+    tactic block elaborates in ~2 s; the cost is the KERNEL CHECK of the
+    normalization `Eq.mpr`/congruence chain (78 s for the big simp step,
+    ~45 s for the Fin-expansion/refine tail).
+  * The earlier 134-213 s full-compile swings were load noise around a
+    ~112-135 s CPU-bound kernel check, consistent with the 109.8 s best
+    run recorded above.
+  * Staging the propositional rewrites out of the big simp does NOT work
+    as-is: with `rotl_7/9/13/18` removed from the set, the first `simp
+    only` itself dies with a whnf heartbeat timeout (the rotl collapse is
+    load-bearing for the normalization's termination), so the rotl steps
+    cannot simply be deferred to the post-normalization (small-motive)
+    goal. Verified for both "second simp" and "rotl inside per-word
+    closes" stagings.
+
+Remaining honest unlock paths (neither is quick packaging; neither blocks
+0.02 exit criteria — re-parked 2026-07-21):
+
+  1. KERNEL-COST SURGERY: root-cause the 646 ms-elab / 78 s-kernel blowup
+     of the big simp's proof chain (suspects: congruence motives over the
+     zeta-expanded emitted term; kernel re-reduction of motive types) and
+     restructure the normalization to be kernel-cheap — e.g. defeq-staging
+     via `show` against an explicit bvOr/bvShl/bvShr mid-form so that only
+     the 32 rotl rewrites remain propositional, over the SMALL normalized
+     term.
+  2. EXPLICIT MID-FORM MULTI-PROCESS SPLIT: extract the intermediate goal
+     by trace, state it explicitly, and prove `goal -> mid` and
+     `mid -> done` in separate files, each under the per-process cap
+     (requires multi-unit proof staging in the harness; mechanical but
+     heavy — pretty-printer round-trip fragility on ~10^2 KB statements).
+  3. SAW-SIDE COMPOSITIONAL SPLIT (user suggestion 2026-07-21; likely the
+     CHEAPEST path — try FIRST): this row deliberately verifies with NO
+     overrides, which is what inlines both ladder stages into one
+     monolithic goal. But `columnround` and `rowround` are each already
+     verified as green rows, so a compositional driver (`llvm_verify`
+     with those two results as overrides) emits the doubleround
+     obligation at COMPOSITION granularity — spec-vs-spec at the stage
+     boundary, no inlined quarterround arithmetic. Cryptol's doubleround
+     IS rowround . columnround, so the residual obligation should be
+     near-structural. Note this does not abandon the in-ITP decomposition
+     pattern — it stacks SAW's own compositional machinery ON TOP of the
+     two in-ITP-verified stage rows, which is exactly how the pattern was
+     meant to scale. Requires: a new compositional workflow row + its
+     discharge; the existing no-override row would then be re-scoped as
+     the depth-scaling stress pin it already is.

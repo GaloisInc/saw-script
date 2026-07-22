@@ -100,6 +100,47 @@ TEST_NAME="$(basename "$(pwd)")"
 . "$(cd ../../support && pwd)/lake-timeout.sh"
 PROBE_DIR="$LAKE_DIR/intTestsProbe/$TEST_NAME"
 
+# Trust tier (2026-07-21, user decision). A row may carry a
+# .trust-tier file naming a NON-STRICT trust tier; the only
+# recognized value is `native-eval` (bv_decide rows: admits the
+# per-invocation proof-local native axioms — see
+# replay/axiom-audit.awk, the single authority for what each tier
+# admits). The tier is per-row, printed loudly, and validated by
+# the audit itself: unknown names and unused (stale) markers both
+# fail. Strict rows pass no tier and are byte-identical to before.
+TRUST_TIER=""
+if [ -f .trust-tier ]; then
+    TRUST_TIER="$(grep -v '^#' .trust-tier | head -n1 | tr -d '[:space:]')"
+    if [ -z "$TRUST_TIER" ]; then
+        echo "FAIL: .trust-tier exists but names no tier"
+        exit 1
+    fi
+    echo "TRUST TIER: $TRUST_TIER (non-strict axiom tier; see replay/axiom-audit.awk)"
+    echo "TRUST TIER RESOLUTION: migrate this row to the strict tier (swap bv_decide -> smt, delete .trust-tier) when lean-smt BV proof reconstruction lands upstream."
+fi
+
+# Axiom-declaration source lint (2026-07-21, introduced with the
+# trust tiers and applied to ALL rows): proof-side files must never
+# DECLARE axioms or macro/elab-level machinery. The strict allowlist
+# is exact-name so hand-rolled axioms cannot collide with it, but the
+# native-eval tier admits a NAME PATTERN (declaration-dependent
+# bv_decide axiom names), which a hand-declared axiom could forge —
+# this lint closes that hole at the source level, and is
+# defense-in-depth for strict rows. (Block-comment interiors are not
+# special-cased: a comment line starting with one of these keywords
+# fails too — rename or reflow the comment; cheap, and keeps the
+# lint un-foolable.)
+for user_file in proof.lean completed.lean; do
+    [ -f "$user_file" ] || continue
+    bad_decl=$(grep -nE '^[[:space:]]*(axiom|macro|macro_rules|elab|elab_rules|run_cmd|initialize)[[:space:]]|@\[(extern|implemented_by)' "$user_file" || true)
+    if [ -n "$bad_decl" ]; then
+        echo "--- $user_file (proof-side files must not declare axioms or macro/elab machinery) ---"
+        echo "$bad_decl"
+        echo "FAIL: axiom/macro declaration in proof-side file"
+        exit 1
+    fi
+done
+
 # source.txt (optional) names the SAW-emitted .lean file this
 # test discharges, relative to the saw-script root. If present,
 # it is copied into the probe dir as Emitted.lean so proof.lean
@@ -193,8 +234,10 @@ audit_axioms() {
     # kernel by mechanism, not discipline. (The former inline copy
     # also allowed SHORT axiom spellings — a hole, since probe files
     # have no opens and genuine axioms always print fully qualified;
-    # removed from both consumers.)
-    awk -f "$SAW_DIR/saw-core-lean/replay/axiom-audit.awk"
+    # removed from both consumers.) The row's trust tier (if any)
+    # rides through here; the awk validates it (unknown/unused tiers
+    # emit sentinel lines, which land in bad_axioms and fail).
+    awk -v tier="$TRUST_TIER" -f "$SAW_DIR/saw-core-lean/replay/axiom-audit.awk"
 }
 
 # Build the Lake project. A failure here means the support library

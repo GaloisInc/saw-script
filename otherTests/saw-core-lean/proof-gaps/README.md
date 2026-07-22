@@ -4,10 +4,14 @@ This directory keeps proof attempts and explicit proof-gap notes that are
 useful stress cases but are not accepted backend proof regressions yet.
 
 The default `proofs/` sweep is for obligations that elaborate and pass the axiom
-audit under the current trust policy. BV-heavy crypto proofs currently live here
-when they depend on `bv_decide`/`bv_check` native-evaluation axioms or time out
-under checked automation. Keeping them out of `proofs/` prevents the default
-regression suite from treating native-axiom or unavailable automation as a green
+audit under the trust policy (two tiers since 2026-07-21 — see
+`saw-core-lean/doc/proof-cookbook.md`, "Bitvector automation trust policy":
+strict by default; a row may opt into the loudly-labeled `native-eval` tier via
+a `.trust-tier` file, which admits bv_decide's per-invocation native axioms for
+that row only, with the lean-smt migration recorded as the resolution). BV-heavy
+proofs still land HERE when they time out under the per-process budget or need
+automation that neither tier sanctions. Keeping them out of `proofs/` prevents
+the default regression suite from treating unavailable automation as a green
 proof-discharge path.
 
 Small proof examples can also live here when the backend now emits a sound
