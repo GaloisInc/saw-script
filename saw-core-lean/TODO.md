@@ -334,25 +334,23 @@ machinery WITH the first promoted row in one commit):
   LLVM-vs-spec words (whnf explosion — close per-position
   explicitly); seq lemmas need the rotl bridge present in the same
   pass.
-- [ ] **Chacha-core qround obligations — direct route PARKED
-  2026-07-22, pivot to SAW-side compositional.** The core-round
-  emission is NOT the q_eq shape: the C code updates state in place,
-  so each obligation carries four chained symbolic-index update-gens
-  plus bvToNat-spelled runtime-checked gathers. A complete discharge
-  architecture was built and validated on structural replicas
-  (gen_update_16 = update-gen ⇒ `Vector.set`, one rewrite per site,
-  vectors stay abstract; select-collapse lemmas; per-bullet
-  `Vector.getElem_set` reduction; `generalize` canonicalization of
-  proof-variant selects that bv_decide would otherwise atomize
-  apart) — see proof-gaps/llvm_chacha20_core_qround_c0/GAP.md. On
-  the real term the big normalization + kernel check alone exceeds
-  550s (elementwise variants exceed 25 min) vs the 120s harness
-  cap — the doubleround wall at core-round scale. UNLOCK (in
-  progress): SAW-side compositional split — verify chacha20_core
-  with the verified qround as override, removing all eight
-  obligations at once (same unlock as doubleround). Fallbacks
-  recorded in the GAP: unconditional per-literal lemma variant;
-  emission-side Vector.set for in-place updates.
+- [x] **Chacha-core qround obligations — DONE 2026-07-22 (all
+  eight rows landed via a spec-spelling fix).** Root cause found in
+  the workflow itself: the obligations verify the qround FUNCTION
+  per tuple, and the wall came from the SPEC building its post-state
+  with Cryptol `update` chains — each `update` emits a symbolic-index
+  generate-and-dispatch that no Lean-side budget survives (direct
+  route measured and parked earlier the same day: big simp + kernel
+  >550s, elementwise >25min; full architecture preserved in commit
+  641533a37 and distilled into proof-cookbook Pattern 10). Rewriting
+  the eight specs in the EXPLICIT-LITERAL post-state spelling (the
+  llvm_chacha20_q_verify form) made the emissions byte-identical to
+  the discharged llvm_chacha20_q_eq shape; gen-qround-row.sh then
+  stamped out proofs/llvm_chacha20_core_qround_{c0..c3,d0..d3}
+  (native-eval tier, ~45s each). Durable gotcha recorded in Pattern
+  10: `generalize state[k]'(by decide)` before bv_decide whenever the
+  two sides select through different bounds-proof terms (proof-variant
+  selects atomize apart and yield spurious counterexamples).
 - [ ] **`llvm_popcount_eq`**: R2 fix-plumbing recipe (routine; same
   shape as popcount32/E6), then bv_decide on the SWAR residue
   `bvEq 32 (swar x) (pcChain x 32)`.

@@ -3,41 +3,50 @@ Loading file "../../../../exercises/common/helpers.saw"
 Verifying qround...
 Simulating qround...
 Checking proof obligations qround...
-Subgoal failed: qround test_llvm_chacha20_core_verify.saw:59:5: error: in llvm_points_to
+Subgoal failed: qround test_llvm_chacha20_core_verify.saw:64:5: error: in llvm_points_to
 Literal equality postcondition
 Expected term: 
-let { x`1 = TCNum 0;
-      x`2 = TCNum 4;
-      x`3 = TCNum 32;
-      x`4 = seq x`3 Bool;
+let { x`1 = TCNum 4;
+      x`2 = ecNumber (TCNum 0) Integer PLiteralInteger;
+      x`3 = ecNumber (TCNum 1) Integer PLiteralInteger;
+      x`4 = seq (TCNum 32) Bool;
       x`5 = TCNum 16;
-      x`6 = PLiteralSeqBool x`3;
-      x`7 = PIntegralSeqBool x`3;
-      x`8 = ecNumber x`1 x`4 x`6;
-      x`9 = ecNumber x`2 x`4 x`6;
-      x`10 = ecNumber (TCNum 8) x`4 x`6;
-      x`11 = ecNumber (TCNum 12) x`4 x`6;
-      x`12 = qround
-               [ ecAt x`5 x`4 x`4 x`7 state x`8
-               , ecAt x`5 x`4 x`4 x`7 state x`9
-               , ecAt x`5 x`4 x`4 x`7 state x`10
-               , ecAt x`5 x`4 x`4 x`7 state x`11 ];
+      x`6 = qround
+              [ ecAt x`5 x`4 Integer PIntegralInteger state x`2
+              , ecAt x`5 x`4 Integer PIntegralInteger state
+                  (ecNumber x`1 Integer PLiteralInteger)
+              , ecAt x`5 x`4 Integer PIntegralInteger state
+                  (ecNumber (TCNum 8) Integer PLiteralInteger)
+              , ecAt x`5 x`4 Integer PIntegralInteger state
+                  (ecNumber (TCNum 12) Integer PLiteralInteger) ];
+      x`7 = ecNumber (TCNum 2) Integer PLiteralInteger;
+      x`8 = ecNumber (TCNum 3) Integer PLiteralInteger;
     }
- in ecUpdate x`5 x`4 x`4 x`7
-      (ecUpdate x`5 x`4 x`4 x`7
-         (ecUpdate x`5 x`4 x`4 x`7
-            (ecUpdate x`5 x`4 x`4 x`7 state x`8
-               (ecAt x`2 x`4 Integer PIntegralInteger x`12
-                  (ecNumber x`1 Integer PLiteralInteger)))
-            x`9
-            (ecAt x`2 x`4 Integer PIntegralInteger x`12
-               (ecNumber (TCNum 1) Integer PLiteralInteger)))
-         x`10
-         (ecAt x`2 x`4 Integer PIntegralInteger x`12
-            (ecNumber (TCNum 2) Integer PLiteralInteger)))
-      x`11
-      (ecAt x`2 x`4 Integer PIntegralInteger x`12
-         (ecNumber (TCNum 3) Integer PLiteralInteger))
+ in [ ecAt x`1 x`4 Integer PIntegralInteger x`6 x`2
+    , ecAt x`5 x`4 Integer PIntegralInteger state x`3
+    , ecAt x`5 x`4 Integer PIntegralInteger state x`7
+    , ecAt x`5 x`4 Integer PIntegralInteger state x`8
+    , ecAt x`1 x`4 Integer PIntegralInteger x`6 x`3
+    , ecAt x`5 x`4 Integer PIntegralInteger state
+        (ecNumber (TCNum 5) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state
+        (ecNumber (TCNum 6) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state
+        (ecNumber (TCNum 7) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`6 x`7
+    , ecAt x`5 x`4 Integer PIntegralInteger state
+        (ecNumber (TCNum 9) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state
+        (ecNumber (TCNum 10) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state
+        (ecNumber (TCNum 11) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`6 x`8
+    , ecAt x`5 x`4 Integer PIntegralInteger state
+        (ecNumber (TCNum 13) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state
+        (ecNumber (TCNum 14) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state
+        (ecNumber (TCNum 15) Integer PLiteralInteger) ]
 Actual term:
 let { x`1 = Vec 32 Bool;
       x`2 = at 16 x`1 state 0;
@@ -77,49 +86,58 @@ let { x`1 = Vec 32 Bool;
 == Anticipated failure message ==
 Stack trace:
    (builtin) in llvm_verify
-   test_llvm_chacha20_core_verify.saw:73:8-74:69 in (callback)
+   test_llvm_chacha20_core_verify.saw:205:8-206:69 in (callback)
    (builtin) in fails
-   test_llvm_chacha20_core_verify.saw:73:1-74:69 (at top level)
+   test_llvm_chacha20_core_verify.saw:205:1-206:69 (at top level)
 Proof failed: 1 of 1 verification conditions unfinished.
 
 Verifying qround...
 Simulating qround...
 Checking proof obligations qround...
-Subgoal failed: qround test_llvm_chacha20_core_verify.saw:59:5: error: in llvm_points_to
+Subgoal failed: qround test_llvm_chacha20_core_verify.saw:82:5: error: in llvm_points_to
 Literal equality postcondition
 Expected term: 
-let { x`1 = TCNum 1;
-      x`2 = TCNum 4;
-      x`3 = TCNum 32;
-      x`4 = seq x`3 Bool;
+let { x`1 = TCNum 4;
+      x`2 = ecNumber (TCNum 0) Integer PLiteralInteger;
+      x`3 = ecNumber (TCNum 1) Integer PLiteralInteger;
+      x`4 = seq (TCNum 32) Bool;
       x`5 = TCNum 16;
-      x`6 = PLiteralSeqBool x`3;
-      x`7 = PIntegralSeqBool x`3;
-      x`8 = ecNumber x`1 x`4 x`6;
-      x`9 = ecNumber (TCNum 5) x`4 x`6;
-      x`10 = ecNumber (TCNum 9) x`4 x`6;
-      x`11 = ecNumber (TCNum 13) x`4 x`6;
-      x`12 = qround
-               [ ecAt x`5 x`4 x`4 x`7 state`6015 x`8
-               , ecAt x`5 x`4 x`4 x`7 state`6015 x`9
-               , ecAt x`5 x`4 x`4 x`7 state`6015 x`10
-               , ecAt x`5 x`4 x`4 x`7 state`6015 x`11 ];
+      x`6 = ecNumber (TCNum 2) Integer PLiteralInteger;
+      x`7 = ecNumber (TCNum 3) Integer PLiteralInteger;
+      x`8 = qround
+              [ ecAt x`5 x`4 Integer PIntegralInteger state`6015 x`3
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6015
+                  (ecNumber (TCNum 5) Integer PLiteralInteger)
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6015
+                  (ecNumber (TCNum 9) Integer PLiteralInteger)
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6015
+                  (ecNumber (TCNum 13) Integer PLiteralInteger) ];
     }
- in ecUpdate x`5 x`4 x`4 x`7
-      (ecUpdate x`5 x`4 x`4 x`7
-         (ecUpdate x`5 x`4 x`4 x`7
-            (ecUpdate x`5 x`4 x`4 x`7 state`6015 x`8
-               (ecAt x`2 x`4 Integer PIntegralInteger x`12
-                  (ecNumber (TCNum 0) Integer PLiteralInteger)))
-            x`9
-            (ecAt x`2 x`4 Integer PIntegralInteger x`12
-               (ecNumber x`1 Integer PLiteralInteger)))
-         x`10
-         (ecAt x`2 x`4 Integer PIntegralInteger x`12
-            (ecNumber (TCNum 2) Integer PLiteralInteger)))
-      x`11
-      (ecAt x`2 x`4 Integer PIntegralInteger x`12
-         (ecNumber (TCNum 3) Integer PLiteralInteger))
+ in [ ecAt x`5 x`4 Integer PIntegralInteger state`6015 x`2
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`2
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6015 x`6
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6015 x`7
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6015
+        (ecNumber x`1 Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`3
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6015
+        (ecNumber (TCNum 6) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6015
+        (ecNumber (TCNum 7) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6015
+        (ecNumber (TCNum 8) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`6
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6015
+        (ecNumber (TCNum 10) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6015
+        (ecNumber (TCNum 11) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6015
+        (ecNumber (TCNum 12) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`7
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6015
+        (ecNumber (TCNum 14) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6015
+        (ecNumber (TCNum 15) Integer PLiteralInteger) ]
 Actual term:
 let { x`1 = Vec 32 Bool;
       x`2 = bvToNat 32 (bvNat 32 16);
@@ -159,49 +177,58 @@ let { x`1 = Vec 32 Bool;
 == Anticipated failure message ==
 Stack trace:
    (builtin) in llvm_verify
-   test_llvm_chacha20_core_verify.saw:75:8-76:69 in (callback)
+   test_llvm_chacha20_core_verify.saw:207:8-208:69 in (callback)
    (builtin) in fails
-   test_llvm_chacha20_core_verify.saw:75:1-76:69 (at top level)
+   test_llvm_chacha20_core_verify.saw:207:1-208:69 (at top level)
 Proof failed: 1 of 1 verification conditions unfinished.
 
 Verifying qround...
 Simulating qround...
 Checking proof obligations qround...
-Subgoal failed: qround test_llvm_chacha20_core_verify.saw:59:5: error: in llvm_points_to
+Subgoal failed: qround test_llvm_chacha20_core_verify.saw:100:5: error: in llvm_points_to
 Literal equality postcondition
 Expected term: 
 let { x`1 = TCNum 4;
-      x`2 = TCNum 2;
-      x`3 = TCNum 32;
-      x`4 = seq x`3 Bool;
+      x`2 = ecNumber (TCNum 0) Integer PLiteralInteger;
+      x`3 = ecNumber (TCNum 1) Integer PLiteralInteger;
+      x`4 = seq (TCNum 32) Bool;
       x`5 = TCNum 16;
-      x`6 = PLiteralSeqBool x`3;
-      x`7 = PIntegralSeqBool x`3;
-      x`8 = ecNumber x`2 x`4 x`6;
-      x`9 = ecNumber (TCNum 6) x`4 x`6;
-      x`10 = ecNumber (TCNum 10) x`4 x`6;
-      x`11 = ecNumber (TCNum 14) x`4 x`6;
-      x`12 = qround
-               [ ecAt x`5 x`4 x`4 x`7 state`6016 x`8
-               , ecAt x`5 x`4 x`4 x`7 state`6016 x`9
-               , ecAt x`5 x`4 x`4 x`7 state`6016 x`10
-               , ecAt x`5 x`4 x`4 x`7 state`6016 x`11 ];
+      x`6 = ecNumber (TCNum 2) Integer PLiteralInteger;
+      x`7 = ecNumber (TCNum 3) Integer PLiteralInteger;
+      x`8 = qround
+              [ ecAt x`5 x`4 Integer PIntegralInteger state`6016 x`6
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6016
+                  (ecNumber (TCNum 6) Integer PLiteralInteger)
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6016
+                  (ecNumber (TCNum 10) Integer PLiteralInteger)
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6016
+                  (ecNumber (TCNum 14) Integer PLiteralInteger) ];
     }
- in ecUpdate x`5 x`4 x`4 x`7
-      (ecUpdate x`5 x`4 x`4 x`7
-         (ecUpdate x`5 x`4 x`4 x`7
-            (ecUpdate x`5 x`4 x`4 x`7 state`6016 x`8
-               (ecAt x`1 x`4 Integer PIntegralInteger x`12
-                  (ecNumber (TCNum 0) Integer PLiteralInteger)))
-            x`9
-            (ecAt x`1 x`4 Integer PIntegralInteger x`12
-               (ecNumber (TCNum 1) Integer PLiteralInteger)))
-         x`10
-         (ecAt x`1 x`4 Integer PIntegralInteger x`12
-            (ecNumber x`2 Integer PLiteralInteger)))
-      x`11
-      (ecAt x`1 x`4 Integer PIntegralInteger x`12
-         (ecNumber (TCNum 3) Integer PLiteralInteger))
+ in [ ecAt x`5 x`4 Integer PIntegralInteger state`6016 x`2
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6016 x`3
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`2
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6016 x`7
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6016
+        (ecNumber x`1 Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6016
+        (ecNumber (TCNum 5) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`3
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6016
+        (ecNumber (TCNum 7) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6016
+        (ecNumber (TCNum 8) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6016
+        (ecNumber (TCNum 9) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`6
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6016
+        (ecNumber (TCNum 11) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6016
+        (ecNumber (TCNum 12) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6016
+        (ecNumber (TCNum 13) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`7
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6016
+        (ecNumber (TCNum 15) Integer PLiteralInteger) ]
 Actual term:
 let { x`1 = Vec 32 Bool;
       x`2 = bvToNat 32 (bvNat 32 16);
@@ -241,49 +268,58 @@ let { x`1 = Vec 32 Bool;
 == Anticipated failure message ==
 Stack trace:
    (builtin) in llvm_verify
-   test_llvm_chacha20_core_verify.saw:77:8-78:69 in (callback)
+   test_llvm_chacha20_core_verify.saw:209:8-210:69 in (callback)
    (builtin) in fails
-   test_llvm_chacha20_core_verify.saw:77:1-78:69 (at top level)
+   test_llvm_chacha20_core_verify.saw:209:1-210:69 (at top level)
 Proof failed: 1 of 1 verification conditions unfinished.
 
 Verifying qround...
 Simulating qround...
 Checking proof obligations qround...
-Subgoal failed: qround test_llvm_chacha20_core_verify.saw:59:5: error: in llvm_points_to
+Subgoal failed: qround test_llvm_chacha20_core_verify.saw:118:5: error: in llvm_points_to
 Literal equality postcondition
 Expected term: 
 let { x`1 = TCNum 4;
-      x`2 = TCNum 32;
-      x`3 = seq x`2 Bool;
-      x`4 = TCNum 16;
-      x`5 = PLiteralSeqBool x`2;
-      x`6 = PIntegralSeqBool x`2;
-      x`7 = TCNum 3;
-      x`8 = ecNumber x`7 x`3 x`5;
-      x`9 = ecNumber (TCNum 7) x`3 x`5;
-      x`10 = ecNumber (TCNum 11) x`3 x`5;
-      x`11 = ecNumber (TCNum 15) x`3 x`5;
-      x`12 = qround
-               [ ecAt x`4 x`3 x`3 x`6 state`6017 x`8
-               , ecAt x`4 x`3 x`3 x`6 state`6017 x`9
-               , ecAt x`4 x`3 x`3 x`6 state`6017 x`10
-               , ecAt x`4 x`3 x`3 x`6 state`6017 x`11 ];
+      x`2 = ecNumber (TCNum 0) Integer PLiteralInteger;
+      x`3 = ecNumber (TCNum 1) Integer PLiteralInteger;
+      x`4 = seq (TCNum 32) Bool;
+      x`5 = TCNum 16;
+      x`6 = ecNumber (TCNum 2) Integer PLiteralInteger;
+      x`7 = ecNumber (TCNum 3) Integer PLiteralInteger;
+      x`8 = qround
+              [ ecAt x`5 x`4 Integer PIntegralInteger state`6017 x`7
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6017
+                  (ecNumber (TCNum 7) Integer PLiteralInteger)
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6017
+                  (ecNumber (TCNum 11) Integer PLiteralInteger)
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6017
+                  (ecNumber (TCNum 15) Integer PLiteralInteger) ];
     }
- in ecUpdate x`4 x`3 x`3 x`6
-      (ecUpdate x`4 x`3 x`3 x`6
-         (ecUpdate x`4 x`3 x`3 x`6
-            (ecUpdate x`4 x`3 x`3 x`6 state`6017 x`8
-               (ecAt x`1 x`3 Integer PIntegralInteger x`12
-                  (ecNumber (TCNum 0) Integer PLiteralInteger)))
-            x`9
-            (ecAt x`1 x`3 Integer PIntegralInteger x`12
-               (ecNumber (TCNum 1) Integer PLiteralInteger)))
-         x`10
-         (ecAt x`1 x`3 Integer PIntegralInteger x`12
-            (ecNumber (TCNum 2) Integer PLiteralInteger)))
-      x`11
-      (ecAt x`1 x`3 Integer PIntegralInteger x`12
-         (ecNumber x`7 Integer PLiteralInteger))
+ in [ ecAt x`5 x`4 Integer PIntegralInteger state`6017 x`2
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6017 x`3
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6017 x`6
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`2
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6017
+        (ecNumber x`1 Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6017
+        (ecNumber (TCNum 5) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6017
+        (ecNumber (TCNum 6) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`3
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6017
+        (ecNumber (TCNum 8) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6017
+        (ecNumber (TCNum 9) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6017
+        (ecNumber (TCNum 10) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`6
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6017
+        (ecNumber (TCNum 12) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6017
+        (ecNumber (TCNum 13) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6017
+        (ecNumber (TCNum 14) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`7 ]
 Actual term:
 let { x`1 = Vec 32 Bool;
       x`2 = bvToNat 32 (bvNat 32 16);
@@ -323,49 +359,58 @@ let { x`1 = Vec 32 Bool;
 == Anticipated failure message ==
 Stack trace:
    (builtin) in llvm_verify
-   test_llvm_chacha20_core_verify.saw:79:8-80:69 in (callback)
+   test_llvm_chacha20_core_verify.saw:211:8-212:69 in (callback)
    (builtin) in fails
-   test_llvm_chacha20_core_verify.saw:79:1-80:69 (at top level)
+   test_llvm_chacha20_core_verify.saw:211:1-212:69 (at top level)
 Proof failed: 1 of 1 verification conditions unfinished.
 
 Verifying qround...
 Simulating qround...
 Checking proof obligations qround...
-Subgoal failed: qround test_llvm_chacha20_core_verify.saw:59:5: error: in llvm_points_to
+Subgoal failed: qround test_llvm_chacha20_core_verify.saw:136:5: error: in llvm_points_to
 Literal equality postcondition
 Expected term: 
-let { x`1 = TCNum 0;
-      x`2 = TCNum 4;
-      x`3 = TCNum 32;
-      x`4 = seq x`3 Bool;
+let { x`1 = TCNum 4;
+      x`2 = ecNumber (TCNum 0) Integer PLiteralInteger;
+      x`3 = ecNumber (TCNum 1) Integer PLiteralInteger;
+      x`4 = seq (TCNum 32) Bool;
       x`5 = TCNum 16;
-      x`6 = PLiteralSeqBool x`3;
-      x`7 = PIntegralSeqBool x`3;
-      x`8 = ecNumber x`1 x`4 x`6;
-      x`9 = ecNumber (TCNum 5) x`4 x`6;
-      x`10 = ecNumber (TCNum 10) x`4 x`6;
-      x`11 = ecNumber (TCNum 15) x`4 x`6;
-      x`12 = qround
-               [ ecAt x`5 x`4 x`4 x`7 state`6018 x`8
-               , ecAt x`5 x`4 x`4 x`7 state`6018 x`9
-               , ecAt x`5 x`4 x`4 x`7 state`6018 x`10
-               , ecAt x`5 x`4 x`4 x`7 state`6018 x`11 ];
+      x`6 = ecNumber (TCNum 2) Integer PLiteralInteger;
+      x`7 = ecNumber (TCNum 3) Integer PLiteralInteger;
+      x`8 = qround
+              [ ecAt x`5 x`4 Integer PIntegralInteger state`6018 x`2
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6018
+                  (ecNumber (TCNum 5) Integer PLiteralInteger)
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6018
+                  (ecNumber (TCNum 10) Integer PLiteralInteger)
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6018
+                  (ecNumber (TCNum 15) Integer PLiteralInteger) ];
     }
- in ecUpdate x`5 x`4 x`4 x`7
-      (ecUpdate x`5 x`4 x`4 x`7
-         (ecUpdate x`5 x`4 x`4 x`7
-            (ecUpdate x`5 x`4 x`4 x`7 state`6018 x`8
-               (ecAt x`2 x`4 Integer PIntegralInteger x`12
-                  (ecNumber x`1 Integer PLiteralInteger)))
-            x`9
-            (ecAt x`2 x`4 Integer PIntegralInteger x`12
-               (ecNumber (TCNum 1) Integer PLiteralInteger)))
-         x`10
-         (ecAt x`2 x`4 Integer PIntegralInteger x`12
-            (ecNumber (TCNum 2) Integer PLiteralInteger)))
-      x`11
-      (ecAt x`2 x`4 Integer PIntegralInteger x`12
-         (ecNumber (TCNum 3) Integer PLiteralInteger))
+ in [ ecAt x`1 x`4 Integer PIntegralInteger x`8 x`2
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6018 x`3
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6018 x`6
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6018 x`7
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6018
+        (ecNumber x`1 Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`3
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6018
+        (ecNumber (TCNum 6) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6018
+        (ecNumber (TCNum 7) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6018
+        (ecNumber (TCNum 8) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6018
+        (ecNumber (TCNum 9) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`6
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6018
+        (ecNumber (TCNum 11) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6018
+        (ecNumber (TCNum 12) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6018
+        (ecNumber (TCNum 13) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6018
+        (ecNumber (TCNum 14) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`7 ]
 Actual term:
 let { x`1 = Vec 32 Bool;
       x`2 = bvToNat 32 (bvNat 32 16);
@@ -405,49 +450,58 @@ let { x`1 = Vec 32 Bool;
 == Anticipated failure message ==
 Stack trace:
    (builtin) in llvm_verify
-   test_llvm_chacha20_core_verify.saw:81:8-82:69 in (callback)
+   test_llvm_chacha20_core_verify.saw:213:8-214:69 in (callback)
    (builtin) in fails
-   test_llvm_chacha20_core_verify.saw:81:1-82:69 (at top level)
+   test_llvm_chacha20_core_verify.saw:213:1-214:69 (at top level)
 Proof failed: 1 of 1 verification conditions unfinished.
 
 Verifying qround...
 Simulating qround...
 Checking proof obligations qround...
-Subgoal failed: qround test_llvm_chacha20_core_verify.saw:59:5: error: in llvm_points_to
+Subgoal failed: qround test_llvm_chacha20_core_verify.saw:154:5: error: in llvm_points_to
 Literal equality postcondition
 Expected term: 
-let { x`1 = TCNum 1;
-      x`2 = TCNum 4;
-      x`3 = TCNum 32;
-      x`4 = seq x`3 Bool;
+let { x`1 = TCNum 4;
+      x`2 = ecNumber (TCNum 0) Integer PLiteralInteger;
+      x`3 = ecNumber (TCNum 1) Integer PLiteralInteger;
+      x`4 = seq (TCNum 32) Bool;
       x`5 = TCNum 16;
-      x`6 = PLiteralSeqBool x`3;
-      x`7 = PIntegralSeqBool x`3;
-      x`8 = ecNumber x`1 x`4 x`6;
-      x`9 = ecNumber (TCNum 12) x`4 x`6;
-      x`10 = ecNumber (TCNum 6) x`4 x`6;
-      x`11 = ecNumber (TCNum 11) x`4 x`6;
-      x`12 = qround
-               [ ecAt x`5 x`4 x`4 x`7 state`6019 x`8
-               , ecAt x`5 x`4 x`4 x`7 state`6019 x`10
-               , ecAt x`5 x`4 x`4 x`7 state`6019 x`11
-               , ecAt x`5 x`4 x`4 x`7 state`6019 x`9 ];
+      x`6 = ecNumber (TCNum 2) Integer PLiteralInteger;
+      x`7 = ecNumber (TCNum 3) Integer PLiteralInteger;
+      x`8 = qround
+              [ ecAt x`5 x`4 Integer PIntegralInteger state`6019 x`3
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6019
+                  (ecNumber (TCNum 6) Integer PLiteralInteger)
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6019
+                  (ecNumber (TCNum 11) Integer PLiteralInteger)
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6019
+                  (ecNumber (TCNum 12) Integer PLiteralInteger) ];
     }
- in ecUpdate x`5 x`4 x`4 x`7
-      (ecUpdate x`5 x`4 x`4 x`7
-         (ecUpdate x`5 x`4 x`4 x`7
-            (ecUpdate x`5 x`4 x`4 x`7 state`6019 x`8
-               (ecAt x`2 x`4 Integer PIntegralInteger x`12
-                  (ecNumber (TCNum 0) Integer PLiteralInteger)))
-            x`10
-            (ecAt x`2 x`4 Integer PIntegralInteger x`12
-               (ecNumber x`1 Integer PLiteralInteger)))
-         x`11
-         (ecAt x`2 x`4 Integer PIntegralInteger x`12
-            (ecNumber (TCNum 2) Integer PLiteralInteger)))
-      x`9
-      (ecAt x`2 x`4 Integer PIntegralInteger x`12
-         (ecNumber (TCNum 3) Integer PLiteralInteger))
+ in [ ecAt x`5 x`4 Integer PIntegralInteger state`6019 x`2
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`2
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6019 x`6
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6019 x`7
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6019
+        (ecNumber x`1 Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6019
+        (ecNumber (TCNum 5) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`3
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6019
+        (ecNumber (TCNum 7) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6019
+        (ecNumber (TCNum 8) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6019
+        (ecNumber (TCNum 9) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6019
+        (ecNumber (TCNum 10) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`6
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`7
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6019
+        (ecNumber (TCNum 13) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6019
+        (ecNumber (TCNum 14) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6019
+        (ecNumber (TCNum 15) Integer PLiteralInteger) ]
 Actual term:
 let { x`1 = Vec 32 Bool;
       x`2 = bvToNat 32 (bvNat 32 16);
@@ -487,49 +541,58 @@ let { x`1 = Vec 32 Bool;
 == Anticipated failure message ==
 Stack trace:
    (builtin) in llvm_verify
-   test_llvm_chacha20_core_verify.saw:83:8-84:69 in (callback)
+   test_llvm_chacha20_core_verify.saw:215:8-216:69 in (callback)
    (builtin) in fails
-   test_llvm_chacha20_core_verify.saw:83:1-84:69 (at top level)
+   test_llvm_chacha20_core_verify.saw:215:1-216:69 (at top level)
 Proof failed: 1 of 1 verification conditions unfinished.
 
 Verifying qround...
 Simulating qround...
 Checking proof obligations qround...
-Subgoal failed: qround test_llvm_chacha20_core_verify.saw:59:5: error: in llvm_points_to
+Subgoal failed: qround test_llvm_chacha20_core_verify.saw:172:5: error: in llvm_points_to
 Literal equality postcondition
 Expected term: 
 let { x`1 = TCNum 4;
-      x`2 = TCNum 2;
-      x`3 = TCNum 32;
-      x`4 = seq x`3 Bool;
+      x`2 = ecNumber (TCNum 0) Integer PLiteralInteger;
+      x`3 = ecNumber (TCNum 1) Integer PLiteralInteger;
+      x`4 = seq (TCNum 32) Bool;
       x`5 = TCNum 16;
-      x`6 = PLiteralSeqBool x`3;
-      x`7 = PIntegralSeqBool x`3;
-      x`8 = ecNumber (TCNum 8) x`4 x`6;
-      x`9 = ecNumber (TCNum 13) x`4 x`6;
-      x`10 = ecNumber x`2 x`4 x`6;
-      x`11 = ecNumber (TCNum 7) x`4 x`6;
-      x`12 = qround
-               [ ecAt x`5 x`4 x`4 x`7 state`6020 x`10
-               , ecAt x`5 x`4 x`4 x`7 state`6020 x`11
-               , ecAt x`5 x`4 x`4 x`7 state`6020 x`8
-               , ecAt x`5 x`4 x`4 x`7 state`6020 x`9 ];
+      x`6 = ecNumber (TCNum 2) Integer PLiteralInteger;
+      x`7 = ecNumber (TCNum 3) Integer PLiteralInteger;
+      x`8 = qround
+              [ ecAt x`5 x`4 Integer PIntegralInteger state`6020 x`6
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6020
+                  (ecNumber (TCNum 7) Integer PLiteralInteger)
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6020
+                  (ecNumber (TCNum 8) Integer PLiteralInteger)
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6020
+                  (ecNumber (TCNum 13) Integer PLiteralInteger) ];
     }
- in ecUpdate x`5 x`4 x`4 x`7
-      (ecUpdate x`5 x`4 x`4 x`7
-         (ecUpdate x`5 x`4 x`4 x`7
-            (ecUpdate x`5 x`4 x`4 x`7 state`6020 x`10
-               (ecAt x`1 x`4 Integer PIntegralInteger x`12
-                  (ecNumber (TCNum 0) Integer PLiteralInteger)))
-            x`11
-            (ecAt x`1 x`4 Integer PIntegralInteger x`12
-               (ecNumber (TCNum 1) Integer PLiteralInteger)))
-         x`8
-         (ecAt x`1 x`4 Integer PIntegralInteger x`12
-            (ecNumber x`2 Integer PLiteralInteger)))
-      x`9
-      (ecAt x`1 x`4 Integer PIntegralInteger x`12
-         (ecNumber (TCNum 3) Integer PLiteralInteger))
+ in [ ecAt x`5 x`4 Integer PIntegralInteger state`6020 x`2
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6020 x`3
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`2
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6020 x`7
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6020
+        (ecNumber x`1 Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6020
+        (ecNumber (TCNum 5) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6020
+        (ecNumber (TCNum 6) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`3
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`6
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6020
+        (ecNumber (TCNum 9) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6020
+        (ecNumber (TCNum 10) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6020
+        (ecNumber (TCNum 11) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6020
+        (ecNumber (TCNum 12) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`7
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6020
+        (ecNumber (TCNum 14) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6020
+        (ecNumber (TCNum 15) Integer PLiteralInteger) ]
 Actual term:
 let { x`1 = Vec 32 Bool;
       x`2 = bvToNat 32 (bvNat 32 16);
@@ -569,49 +632,58 @@ let { x`1 = Vec 32 Bool;
 == Anticipated failure message ==
 Stack trace:
    (builtin) in llvm_verify
-   test_llvm_chacha20_core_verify.saw:85:8-86:69 in (callback)
+   test_llvm_chacha20_core_verify.saw:217:8-218:69 in (callback)
    (builtin) in fails
-   test_llvm_chacha20_core_verify.saw:85:1-86:69 (at top level)
+   test_llvm_chacha20_core_verify.saw:217:1-218:69 (at top level)
 Proof failed: 1 of 1 verification conditions unfinished.
 
 Verifying qround...
 Simulating qround...
 Checking proof obligations qround...
-Subgoal failed: qround test_llvm_chacha20_core_verify.saw:59:5: error: in llvm_points_to
+Subgoal failed: qround test_llvm_chacha20_core_verify.saw:190:5: error: in llvm_points_to
 Literal equality postcondition
 Expected term: 
 let { x`1 = TCNum 4;
-      x`2 = TCNum 32;
-      x`3 = seq x`2 Bool;
-      x`4 = TCNum 16;
-      x`5 = PLiteralSeqBool x`2;
-      x`6 = PIntegralSeqBool x`2;
-      x`7 = TCNum 3;
-      x`8 = ecNumber x`1 x`3 x`5;
-      x`9 = ecNumber (TCNum 9) x`3 x`5;
-      x`10 = ecNumber (TCNum 14) x`3 x`5;
-      x`11 = ecNumber x`7 x`3 x`5;
-      x`12 = qround
-               [ ecAt x`4 x`3 x`3 x`6 state`6021 x`11
-               , ecAt x`4 x`3 x`3 x`6 state`6021 x`8
-               , ecAt x`4 x`3 x`3 x`6 state`6021 x`9
-               , ecAt x`4 x`3 x`3 x`6 state`6021 x`10 ];
+      x`2 = ecNumber (TCNum 0) Integer PLiteralInteger;
+      x`3 = ecNumber (TCNum 1) Integer PLiteralInteger;
+      x`4 = seq (TCNum 32) Bool;
+      x`5 = TCNum 16;
+      x`6 = ecNumber (TCNum 2) Integer PLiteralInteger;
+      x`7 = ecNumber (TCNum 3) Integer PLiteralInteger;
+      x`8 = qround
+              [ ecAt x`5 x`4 Integer PIntegralInteger state`6021 x`7
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6021
+                  (ecNumber x`1 Integer PLiteralInteger)
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6021
+                  (ecNumber (TCNum 9) Integer PLiteralInteger)
+              , ecAt x`5 x`4 Integer PIntegralInteger state`6021
+                  (ecNumber (TCNum 14) Integer PLiteralInteger) ];
     }
- in ecUpdate x`4 x`3 x`3 x`6
-      (ecUpdate x`4 x`3 x`3 x`6
-         (ecUpdate x`4 x`3 x`3 x`6
-            (ecUpdate x`4 x`3 x`3 x`6 state`6021 x`11
-               (ecAt x`1 x`3 Integer PIntegralInteger x`12
-                  (ecNumber (TCNum 0) Integer PLiteralInteger)))
-            x`8
-            (ecAt x`1 x`3 Integer PIntegralInteger x`12
-               (ecNumber (TCNum 1) Integer PLiteralInteger)))
-         x`9
-         (ecAt x`1 x`3 Integer PIntegralInteger x`12
-            (ecNumber (TCNum 2) Integer PLiteralInteger)))
-      x`10
-      (ecAt x`1 x`3 Integer PIntegralInteger x`12
-         (ecNumber x`7 Integer PLiteralInteger))
+ in [ ecAt x`5 x`4 Integer PIntegralInteger state`6021 x`2
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6021 x`3
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6021 x`6
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`2
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`3
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6021
+        (ecNumber (TCNum 5) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6021
+        (ecNumber (TCNum 6) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6021
+        (ecNumber (TCNum 7) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6021
+        (ecNumber (TCNum 8) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`6
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6021
+        (ecNumber (TCNum 10) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6021
+        (ecNumber (TCNum 11) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6021
+        (ecNumber (TCNum 12) Integer PLiteralInteger)
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6021
+        (ecNumber (TCNum 13) Integer PLiteralInteger)
+    , ecAt x`1 x`4 Integer PIntegralInteger x`8 x`7
+    , ecAt x`5 x`4 Integer PIntegralInteger state`6021
+        (ecNumber (TCNum 15) Integer PLiteralInteger) ]
 Actual term:
 let { x`1 = Vec 32 Bool;
       x`2 = bvToNat 32 (bvNat 32 16);
@@ -651,8 +723,8 @@ let { x`1 = Vec 32 Bool;
 == Anticipated failure message ==
 Stack trace:
    (builtin) in llvm_verify
-   test_llvm_chacha20_core_verify.saw:87:8-88:69 in (callback)
+   test_llvm_chacha20_core_verify.saw:219:8-220:69 in (callback)
    (builtin) in fails
-   test_llvm_chacha20_core_verify.saw:87:1-88:69 (at top level)
+   test_llvm_chacha20_core_verify.saw:219:1-220:69 (at top level)
 Proof failed: 1 of 1 verification conditions unfinished.
 

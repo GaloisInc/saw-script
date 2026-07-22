@@ -39,52 +39,184 @@ import "../../../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Stream/chacha2
 
 m <- llvm_load_module "chacha20_ref.bc";
 
-// qround spec at a *concrete* (a, b, c, d) index tuple. The C
-// signature is `qround(unsigned int* x, unsigned int a, unsigned int b,
-// unsigned int c, unsigned int d)`, mutating `x[a]`, `x[b]`, `x[c]`,
-// `x[d]` in place. With (a, b, c, d) concrete, the post-state literal
-// `#v[...16 words with 4 positions overwritten...]` is small and SAW's
-// override-matcher selects it cleanly per invocation. a/b/c/d are SAW
-// Cryptol terms (e.g. `{{ 0 : [32] }}`), spliced via SAW's value-level
-// interpolation rather than Cryptol type-level backticks.
-let qround_spec a b c d = do {
+// qround spec at a *concrete* (a, b, c, d) index tuple, in the
+// EXPLICIT-LITERAL post-state spelling (2026-07-22). The earlier
+// spelling built the post-state as an `update`-chain; SAW does not
+// reduce those to a literal on the Lean emission path — each `update`
+// emits a symbolic-index generate-and-dispatch, and the resulting
+// obligations exceed any workable Lean kernel budget (measured:
+// proof-gaps/llvm_chacha20_core_qround_c0/GAP.md). Writing the
+// 16-word literal with the tuple's four positions replaced — exactly
+// the spelling `llvm_chacha20_q_verify` uses — keeps each emission in
+// the shape `proofs/llvm_chacha20_q_eq`'s recipe discharges. The C
+// signature is `qround(unsigned int* x, unsigned int a, unsigned int
+// b, unsigned int c, unsigned int d)`, mutating the four positions in
+// place; a/b/c/d are spliced as SAW Cryptol terms.
+
+let qround_spec_c0 = do {
     (state, p_state) <- ptr_to_fresh "state" (llvm_array 16 (llvm_int 32));
 
-    llvm_execute_func [p_state, llvm_term a, llvm_term b,
-                                llvm_term c, llvm_term d];
+    llvm_execute_func [p_state, llvm_term {{ 0 : [32] }}, llvm_term {{ 4 : [32] }},
+                                llvm_term {{ 8 : [32] }}, llvm_term {{ 12 : [32] }}];
 
-    // Build the post-state by `update`-ing the four positions in
-    // sequence. At concrete indices the chained `update`s reduce to a
-    // literal 16-word vector.
+    let outputs = {{ qround [state @ 0, state @ 4, state @ 8, state @ 12] }};
+
     llvm_points_to p_state (llvm_term {{
-        update (update (update (update state
-                a ((qround [state @ a, state @ b, state @ c, state @ d]) @ 0))
-                b ((qround [state @ a, state @ b, state @ c, state @ d]) @ 1))
-                c ((qround [state @ a, state @ b, state @ c, state @ d]) @ 2))
-                d ((qround [state @ a, state @ b, state @ c, state @ d]) @ 3)
+      [
+        outputs @ 0, state @ 1, state @ 2, state @ 3,
+        outputs @ 1, state @ 5, state @ 6, state @ 7,
+        outputs @ 2, state @ 9, state @ 10, state @ 11,
+        outputs @ 3, state @ 13, state @ 14, state @ 15
+      ]
+    }});
+};
+
+let qround_spec_c1 = do {
+    (state, p_state) <- ptr_to_fresh "state" (llvm_array 16 (llvm_int 32));
+
+    llvm_execute_func [p_state, llvm_term {{ 1 : [32] }}, llvm_term {{ 5 : [32] }},
+                                llvm_term {{ 9 : [32] }}, llvm_term {{ 13 : [32] }}];
+
+    let outputs = {{ qround [state @ 1, state @ 5, state @ 9, state @ 13] }};
+
+    llvm_points_to p_state (llvm_term {{
+      [
+        state @ 0, outputs @ 0, state @ 2, state @ 3,
+        state @ 4, outputs @ 1, state @ 6, state @ 7,
+        state @ 8, outputs @ 2, state @ 10, state @ 11,
+        state @ 12, outputs @ 3, state @ 14, state @ 15
+      ]
+    }});
+};
+
+let qround_spec_c2 = do {
+    (state, p_state) <- ptr_to_fresh "state" (llvm_array 16 (llvm_int 32));
+
+    llvm_execute_func [p_state, llvm_term {{ 2 : [32] }}, llvm_term {{ 6 : [32] }},
+                                llvm_term {{ 10 : [32] }}, llvm_term {{ 14 : [32] }}];
+
+    let outputs = {{ qround [state @ 2, state @ 6, state @ 10, state @ 14] }};
+
+    llvm_points_to p_state (llvm_term {{
+      [
+        state @ 0, state @ 1, outputs @ 0, state @ 3,
+        state @ 4, state @ 5, outputs @ 1, state @ 7,
+        state @ 8, state @ 9, outputs @ 2, state @ 11,
+        state @ 12, state @ 13, outputs @ 3, state @ 15
+      ]
+    }});
+};
+
+let qround_spec_c3 = do {
+    (state, p_state) <- ptr_to_fresh "state" (llvm_array 16 (llvm_int 32));
+
+    llvm_execute_func [p_state, llvm_term {{ 3 : [32] }}, llvm_term {{ 7 : [32] }},
+                                llvm_term {{ 11 : [32] }}, llvm_term {{ 15 : [32] }}];
+
+    let outputs = {{ qround [state @ 3, state @ 7, state @ 11, state @ 15] }};
+
+    llvm_points_to p_state (llvm_term {{
+      [
+        state @ 0, state @ 1, state @ 2, outputs @ 0,
+        state @ 4, state @ 5, state @ 6, outputs @ 1,
+        state @ 8, state @ 9, state @ 10, outputs @ 2,
+        state @ 12, state @ 13, state @ 14, outputs @ 3
+      ]
+    }});
+};
+
+let qround_spec_d0 = do {
+    (state, p_state) <- ptr_to_fresh "state" (llvm_array 16 (llvm_int 32));
+
+    llvm_execute_func [p_state, llvm_term {{ 0 : [32] }}, llvm_term {{ 5 : [32] }},
+                                llvm_term {{ 10 : [32] }}, llvm_term {{ 15 : [32] }}];
+
+    let outputs = {{ qround [state @ 0, state @ 5, state @ 10, state @ 15] }};
+
+    llvm_points_to p_state (llvm_term {{
+      [
+        outputs @ 0, state @ 1, state @ 2, state @ 3,
+        state @ 4, outputs @ 1, state @ 6, state @ 7,
+        state @ 8, state @ 9, outputs @ 2, state @ 11,
+        state @ 12, state @ 13, state @ 14, outputs @ 3
+      ]
+    }});
+};
+
+let qround_spec_d1 = do {
+    (state, p_state) <- ptr_to_fresh "state" (llvm_array 16 (llvm_int 32));
+
+    llvm_execute_func [p_state, llvm_term {{ 1 : [32] }}, llvm_term {{ 6 : [32] }},
+                                llvm_term {{ 11 : [32] }}, llvm_term {{ 12 : [32] }}];
+
+    let outputs = {{ qround [state @ 1, state @ 6, state @ 11, state @ 12] }};
+
+    llvm_points_to p_state (llvm_term {{
+      [
+        state @ 0, outputs @ 0, state @ 2, state @ 3,
+        state @ 4, state @ 5, outputs @ 1, state @ 7,
+        state @ 8, state @ 9, state @ 10, outputs @ 2,
+        outputs @ 3, state @ 13, state @ 14, state @ 15
+      ]
+    }});
+};
+
+let qround_spec_d2 = do {
+    (state, p_state) <- ptr_to_fresh "state" (llvm_array 16 (llvm_int 32));
+
+    llvm_execute_func [p_state, llvm_term {{ 2 : [32] }}, llvm_term {{ 7 : [32] }},
+                                llvm_term {{ 8 : [32] }}, llvm_term {{ 13 : [32] }}];
+
+    let outputs = {{ qround [state @ 2, state @ 7, state @ 8, state @ 13] }};
+
+    llvm_points_to p_state (llvm_term {{
+      [
+        state @ 0, state @ 1, outputs @ 0, state @ 3,
+        state @ 4, state @ 5, state @ 6, outputs @ 1,
+        outputs @ 2, state @ 9, state @ 10, state @ 11,
+        state @ 12, outputs @ 3, state @ 14, state @ 15
+      ]
+    }});
+};
+
+let qround_spec_d3 = do {
+    (state, p_state) <- ptr_to_fresh "state" (llvm_array 16 (llvm_int 32));
+
+    llvm_execute_func [p_state, llvm_term {{ 3 : [32] }}, llvm_term {{ 4 : [32] }},
+                                llvm_term {{ 9 : [32] }}, llvm_term {{ 14 : [32] }}];
+
+    let outputs = {{ qround [state @ 3, state @ 4, state @ 9, state @ 14] }};
+
+    llvm_points_to p_state (llvm_term {{
+      [
+        state @ 0, state @ 1, state @ 2, outputs @ 0,
+        outputs @ 1, state @ 5, state @ 6, state @ 7,
+        state @ 8, outputs @ 2, state @ 10, state @ 11,
+        state @ 12, state @ 13, outputs @ 3, state @ 15
+      ]
     }});
 };
 
 // Verify qround once per (a, b, c, d) tuple `core` invokes. The eight
-// tuples below are exact transcripts of the calls in `examples/chacha20/
+// tuples are exact transcripts of the calls in `examples/chacha20/
 // chacha20.c:55-65` — column round (0,4,8,12 / 1,5,9,13 / 2,6,10,14 /
-// 3,7,11,15) followed by diagonal round (0,5,10,15 / 1,6,11,12 / 2,7,8,
-// 13 / 3,4,9,14).
-fails (llvm_verify m "qround" [] true (qround_spec {{ 0 : [32] }} {{ 4  : [32] }} {{ 8  : [32] }} {{ 12 : [32] }})
+// 3,7,11,15) followed by diagonal round (0,5,10,15 / 1,6,11,12 /
+// 2,7,8,13 / 3,4,9,14).
+fails (llvm_verify m "qround" [] true qround_spec_c0
             (offline_lean "test_llvm_chacha20_core_verify.qround_c0"));
-fails (llvm_verify m "qround" [] true (qround_spec {{ 1 : [32] }} {{ 5  : [32] }} {{ 9  : [32] }} {{ 13 : [32] }})
+fails (llvm_verify m "qround" [] true qround_spec_c1
             (offline_lean "test_llvm_chacha20_core_verify.qround_c1"));
-fails (llvm_verify m "qround" [] true (qround_spec {{ 2 : [32] }} {{ 6  : [32] }} {{ 10 : [32] }} {{ 14 : [32] }})
+fails (llvm_verify m "qround" [] true qround_spec_c2
             (offline_lean "test_llvm_chacha20_core_verify.qround_c2"));
-fails (llvm_verify m "qround" [] true (qround_spec {{ 3 : [32] }} {{ 7  : [32] }} {{ 11 : [32] }} {{ 15 : [32] }})
+fails (llvm_verify m "qround" [] true qround_spec_c3
             (offline_lean "test_llvm_chacha20_core_verify.qround_c3"));
-fails (llvm_verify m "qround" [] true (qround_spec {{ 0 : [32] }} {{ 5  : [32] }} {{ 10 : [32] }} {{ 15 : [32] }})
+fails (llvm_verify m "qround" [] true qround_spec_d0
             (offline_lean "test_llvm_chacha20_core_verify.qround_d0"));
-fails (llvm_verify m "qround" [] true (qround_spec {{ 1 : [32] }} {{ 6  : [32] }} {{ 11 : [32] }} {{ 12 : [32] }})
+fails (llvm_verify m "qround" [] true qround_spec_d1
             (offline_lean "test_llvm_chacha20_core_verify.qround_d1"));
-fails (llvm_verify m "qround" [] true (qround_spec {{ 2 : [32] }} {{ 7  : [32] }} {{ 8  : [32] }} {{ 13 : [32] }})
+fails (llvm_verify m "qround" [] true qround_spec_d2
             (offline_lean "test_llvm_chacha20_core_verify.qround_d2"));
-fails (llvm_verify m "qround" [] true (qround_spec {{ 3 : [32] }} {{ 4  : [32] }} {{ 9  : [32] }} {{ 14 : [32] }})
+fails (llvm_verify m "qround" [] true qround_spec_d3
             (offline_lean "test_llvm_chacha20_core_verify.qround_d3"));
 
 // NOTE: offline_lean is emission-only, so each llvm_verify above is

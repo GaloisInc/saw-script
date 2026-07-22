@@ -207,6 +207,51 @@ eager helpers are lazy.
 End-to-end test for the bridge-lemma patterns:
 `otherTests/saw-core-lean/support-lemmas/cookbook/proof.lean`.
 
+## Pattern 10: spec-side `update` chains (in-place state updates)
+
+**Fix the spec spelling, not the proof.** A SAW spec that builds its
+post-state with Cryptol `update` chains —
+
+    llvm_points_to p (llvm_term {{ update (update state a v0) b v1 }})
+
+— does NOT reduce to a literal vector on the Lean emission path, even
+at concrete indices: every `update` emits a full generate-and-dispatch
+over the SYMBOLIC generation index (`genWithBoundsM` + `iteM
+(equalNat i' c)`), and chained updates nest those gens. The Lean-side
+discharge of that shape is a measured wall, not a missing lemma: the
+elementwise reduction's kernel re-check exceeds 25 minutes, and even a
+one-rewrite-per-site abstract collapse (`update`-gen ⇒ `Vector.set`,
+vectors kept abstract) leaves the normalization pass beyond any
+harness budget (2026-07-22 measurements, chacha20-core qrounds).
+
+Spell the post-state as an EXPLICIT literal with the updated positions
+substituted (the `llvm_chacha20_q_verify` spelling):
+
+    let outputs = {{ qround [state @ 0, state @ 4, state @ 8, state @ 12] }};
+    llvm_points_to p (llvm_term {{
+      [ outputs @ 0, state @ 1,  state @ 2,  state @ 3,
+        outputs @ 1, state @ 5,  ... ] }});
+
+The emission then lands in the Pattern-1/rowround-recipe shape and the
+standard qround scaffold discharges it (all eight chacha20-core rows
+went from unworkable to ~45 s each by this spelling change alone —
+the emitted goals became byte-identical to the already-discharged
+`llvm_chacha20_q_eq` family).
+
+If an `update`-chain emission is ever genuinely unavoidable, a
+complete replica-validated discharge architecture is preserved in
+history (commit 641533a37, `proof-gaps/llvm_chacha20_core_qround_c0`):
+`gen_update_16` (update-gen ⇒ `Vector.set` in one rewrite),
+select-collapse lemmas that keep the accessor defs opaque, per-bullet
+`Vector.getElem_set` + `reduceIte` reduction, and — critical for
+`bv_decide` — `generalize state[k]'(by decide) = x` before the solver,
+because the two sides reach `state[k]` through different bounds-proof
+terms and bv_decide atomizes syntactically (proof-variant selects
+become distinct opaque atoms and yield a spurious counterexample;
+`generalize`/kabstract matches up to proof irrelevance and unifies
+them). That last gotcha applies to ANY bv_decide row whose two sides
+select from the same vector through different proof paths.
+
 ## Lifting SAW-typed goals to `BitVec`
 
 There is no convenience-tactic module today (a `CryptolToLean.Tactics`
