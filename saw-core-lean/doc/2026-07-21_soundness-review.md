@@ -79,6 +79,48 @@ deliberately rather than under time pressure.
    produced native-axiom set, rather than trusting names in the
    author's file.
 
+**FIXED (2026-07-21, same day).** `proof-source-lint.awk` was
+rewritten as a character-level state machine tracking nested block
+comments, line comments, plain string literals (escape-aware,
+multi-line), and char literals, with prime-vs-char-literal decided by
+token tracking. Its soundness invariant: never in literal/comment
+state while Lean's lexer is in code state; every construct where
+byte-level tracking cannot CERTAINLY agree with Lean's lexer is
+rejected loudly instead of guessed (raw strings, interpolated
+strings, primes on tokens containing non-ASCII characters, the
+genuinely ambiguous `]'X'` — Lean resolves checked-indexing-proof vs
+char-literal by parser backtracking, probed empirically on the pinned
+toolchain). This is sound because acceptance also requires the file
+to elaborate: a file the lexer tracks differently from Lean either
+rejects here or fails to compile. With source-level declaration
+prevention airtight, the name-pattern admission is justified (a
+residual tier-pattern axiom can only come from a genuine bv_decide
+run), which discharges the structural concern in fix direction 2.
+
+The fix pass also closed four adjacent holes the review had missed:
+
+- **Escape-hatch tokens**: the ban list lacked `run_tac` (arbitrary
+  `TacticM` from inside a proof — can `addDecl` an axiom exactly the
+  way `bv_decide` itself does), `#eval` (elab-monad actions),
+  `builtin_initialize` (slipped the `initialize` token boundary), the
+  `@[csimp]` attribute (swaps implementations used by native
+  evaluation, which the native-eval tier leans on), and
+  `debug.`-namespace options (`debug.skipKernelTC` suspends kernel
+  checking of added declarations). All banned; the lint header
+  requires re-reviewing this list on every toolchain bump.
+- **awk-crash = silent pass**: UTF-8-locale awk can hard-error on
+  some multibyte input with empty output, and both consumers treated
+  empty output as a pass. Both now run the lint under `LC_ALL=C`
+  (byte mode, which the taint rule assumes) and reject on any nonzero
+  awk exit regardless of output.
+- **Selftest coverage**: `trust-tier-selftest.sh` grew from 15 to 27
+  cases — the end-to-end F1 regression (string-hidden axiom on a tier
+  row) plus a pure-lint battery (escape hatches, cannot-classify
+  rejections, and a no-false-positive acceptance of every legitimate
+  landed shape: strings containing banned words, identifier primes,
+  escaped char literals, `xs[i]'h`).
+- The minor LEAN_PATH asymmetry below was folded in as planned.
+
 ### C1 — IsLeNat constructor/recursor mapping hazard (condition, sound today)
 
 `IsLeNat` maps to Lean's `Nat.le` and this is sound as used. But the
@@ -103,14 +145,15 @@ genWithBoundsM pre-exist. Verified by evaluation against
 `tail = [11,12,13]` (drop-first); both sides require
 `Vec (Nat.succ n)`, so any shape mismatch is a loud Lean type error.
 
-### Minor — consumer LEAN_PATH asymmetry
+### Minor — consumer LEAN_PATH asymmetry (FIXED 2026-07-21)
 
 The trust kernel `lean-check-core.sh` clears `LEAN_PATH` to the stage
 dir; the CI harness `lean-proof-test.sh` appends the ambient
 `${LEAN_PATH:-}`. Empty in clean CI, so not a live issue, but the CI
 consumer would import from an ambient `LEAN_PATH` where the trust kernel
 would not. Pin the CI consumer's `LEAN_PATH` to the stage dir only, for
-parity. (Independent of F1.)
+parity. (Independent of F1.) **Fixed with the F1 commit: all three
+invocation sites now pin `LEAN_PATH` to the probe dir only.**
 
 ## Coverage evidence (checks the designs survived)
 
@@ -140,11 +183,10 @@ identifiers reject loudly.
 
 ## Disposition
 
-- F1: fix before release. Top TODO item. Until fixed, treat any
-  `native-eval` tier acceptance as trusting the row author not to have
-  used the string-literal blind spot — acceptable only because all
-  current tier rows are first-party and inspected.
+- F1: **FIXED same day** (lexer-based lint + escape-hatch bans +
+  awk-crash hardening + 12 new selftest cases; see the FIXED note in
+  the F1 section).
 - C1: standing note attached to the constant-headed-Prop work.
 - C2: closed (verified).
-- Minor LEAN_PATH: fold into the F1 fix commit.
+- Minor LEAN_PATH: fixed in the F1 commit.
 - Reviewers otherwise found the type-image and primitive surfaces sound.

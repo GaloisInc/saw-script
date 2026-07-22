@@ -193,29 +193,32 @@ Independent multi-reviewer soundness review of the additions landed
 without prior review (type-image mechanism, primitive realizations,
 trust-tier machinery). Two surfaces SOUND; one CRITICAL finding.
 
-- [ ] **F1 — CRITICAL, fix before release.** replay/proof-source-lint.awk
-  tracks `/- -/` comments with no string/char-literal awareness, so a
+- [x] **F1 — CRITICAL — FIXED 2026-07-21.** replay/proof-source-lint.awk
+  tracked `/- -/` comments with no string/char-literal awareness, so a
   proof-side file containing a string with the comment-open sequence
-  (e.g. `def s : String := "/-"`) drives the scanner into skip mode and
-  it misses a following `axiom` declaration (exit 0). Under the
-  native-eval tier that lint is the sole guard against a hand-declared
-  axiom named to match the admitted bv_decide pattern — so a
-  hand-declared `axiom goal_holds._native.bv_decide.ax_1 : goal`
-  (declarable at top
-  level; the deefbefad "needs a namespace" claim is wrong) closes any
-  goal, admitting a false theorem. Confirmed on BOTH consumers;
-  re-verified this session. LATENT (no landed row exploits it).
-  Fix: (1) make the lint literal-aware (skip `"…"`, raw/interp strings,
-  `'…'`) + add the string-blind-spot regression to
-  trust-tier-selftest.sh; (2) structural — stop admitting axioms by
-  NAME PATTERN (the name is author-chosen, so a hand-declared axiom can
-  satisfy it); verify residual native axioms genuinely came from a
-  harness-run bv_decide on the row's goal.
-  Fold the LEAN_PATH parity nit (below) into this commit.
-- [ ] **Minor — LEAN_PATH consumer parity.** lean-check-core.sh clears
-  LEAN_PATH to the stage dir; lean-proof-test.sh appends ambient
-  ${LEAN_PATH:-} (empty in clean CI, but asymmetric). Pin the CI
-  consumer to the stage dir only.
+  (e.g. `def s : String := "/-"`) drove the scanner into skip mode and
+  it missed a following `axiom` declaration — under the native-eval
+  tier the sole guard against a hand-declared axiom named to match the
+  admitted bv_decide pattern.
+  FIX: the lint is now a character-level lexer (comments + string/char
+  literals, prime-vs-char by token tracking); everything it cannot
+  certainly classify against Lean's lexer rejects loudly (raw/interp
+  strings, non-ASCII primes, the parser-backtracking-ambiguous `]'X'`).
+  Sound because acceptance also requires elaboration. The fix pass also
+  banned escape hatches the review missed — run_tac, #eval,
+  builtin_initialize, @[csimp], debug.* options (debug.skipKernelTC
+  suspends the kernel) — and hardened both consumers: LC_ALL=C (UTF-8
+  awk can hard-error) and nonzero-awk-exit ⇒ reject (a crash must never
+  read as a pass). Selftest 15 → 27 cases. With source-level
+  declaration prevention airtight, the name-pattern admission is
+  justified (residual tier-pattern axioms can only come from a genuine
+  bv_decide run) — discharges the structural fix direction (2).
+  NOTE: re-review the escape-hatch token list on EVERY toolchain bump
+  (it is a denylist against core-Lean surface; the lint header carries
+  the same warning).
+- [x] **Minor — LEAN_PATH consumer parity — FIXED 2026-07-21** (in the
+  F1 commit). All three lean-proof-test.sh invocation sites now pin
+  LEAN_PATH to the probe dir only, matching the trust kernel.
 - [ ] **C1 — standing note (no action now).** IsLeNat constructors/
   recursor do NOT structurally match Nat.le's (explicit vs implicit m;
   IsLeNat__rec arg shape). Sound today because they are unmapped and
@@ -289,7 +292,11 @@ Tier 1 — mechanical:
   Details in the GAP, 2026-07-21 update, path 3.
 - [ ] **Lean toolchain bump** v4.29.1 -> latest (user-approved
   2026-07-21 as low-cost; also pre-clears the lean-smt migration
-  path). Do before the audit freeze.
+  path). Do before the audit freeze. MUST include: re-review the
+  proof-source-lint escape-hatch token list against the new
+  toolchain's command/tactic surface (it is a denylist; see the lint
+  header), and re-probe the `]'X'` / bv_decide native-axiom-name
+  behaviors the lint and audit pin.
 - [ ] **W2(d) deferred hardening**: goldens for the 11 zero-coverage
   emitter-wired helpers; `#guard_msgs` fences.
 - [ ] **STATUS.md census pass** (0.02 exit criterion): known-gap

@@ -120,23 +120,32 @@ if [ -f .trust-tier ]; then
 fi
 
 # Axiom-declaration source lint (2026-07-21, introduced with the
-# trust tiers and applied to ALL rows; hardened same day): proof-side
-# files must never DECLARE axioms or macro/elab-level machinery. The
+# trust tiers and applied to ALL rows): proof-side files must never
+# DECLARE axioms or reach machinery that can add declarations. The
 # strict allowlist is exact-name so hand-rolled axioms cannot collide
 # with it, but the native-eval tier admits a NAME PATTERN
 # (declaration-dependent bv_decide axiom names), which a hand-declared
-# axiom of a matching name could satisfy — `private axiom` names even print UNMANGLED in
-# `#print axioms`. The shared comment-aware token lint
-# (replay/proof-source-lint.awk, single authority with the replay
-# trust kernel) closes modifier/prefix bypasses (`private axiom`,
-# `set_option … in axiom`, `@[simp] axiom`).
+# axiom of a matching name could satisfy — `private axiom` names even
+# print UNMANGLED in `#print axioms`. The shared lexer-based token
+# lint (replay/proof-source-lint.awk, single authority with the
+# replay trust kernel) tracks comments AND string/char literals
+# (F1 fix — a comment-stripper without string awareness was blinded
+# by a string containing the comment-open sequence) and bans every
+# known escape hatch into environment mutation or kernel bypass.
 SAW_DIR_EARLY="$(cd ../../../.. && pwd)"
 for user_file in proof.lean completed.lean; do
     [ -f "$user_file" ] || continue
-    bad_decl=$(awk -f "$SAW_DIR_EARLY/saw-core-lean/replay/proof-source-lint.awk" "$user_file" || true)
-    if [ -n "$bad_decl" ]; then
+    # LC_ALL=C: the lint is a byte-level lexer (its non-ASCII taint
+    # rule assumes byte mode), and UTF-8-locale awk can HARD-ERROR on
+    # some multibyte input. A nonzero awk exit must reject even with
+    # empty output — an awk crash must never read as a lint pass
+    # (F1-fix hardening, 2026-07-21).
+    bad_decl=$(LC_ALL=C awk -f "$SAW_DIR_EARLY/saw-core-lean/replay/proof-source-lint.awk" "$user_file" 2>&1) \
+        && lint_rc=0 || lint_rc=$?
+    if [ "$lint_rc" -ne 0 ] || [ -n "$bad_decl" ]; then
         echo "--- $user_file (proof-side files must not declare axioms or macro/elab machinery) ---"
         echo "$bad_decl"
+        echo "(lint exit=$lint_rc)"
         echo "FAIL: axiom/macro declaration in proof-side file"
         exit 1
     fi
@@ -362,7 +371,7 @@ if [ -n "$STAGED_EMITTED_ABS" ]; then
             rm -rf "$PROBE_DIR"
             exit 1
         fi
-        drift_out=$( ( cd "$LAKE_DIR" && LEAN_PATH="intTestsProbe/$TEST_NAME:${LEAN_PATH:-}" \
+        drift_out=$( ( cd "$LAKE_DIR" && LEAN_PATH="intTestsProbe/$TEST_NAME" \
                        $LAKE_TIMEOUT_CMD lake env lean \
                         "intTestsProbe/$TEST_NAME/completed-outline.check.lean" ) 2>&1 ) && \
             drift_rc=0 || drift_rc=$?
@@ -378,7 +387,7 @@ fi
 
 # Elaborate proof.lean. LEAN_PATH points at the probe dir so
 # `import Emitted` finds our freshly-built Emitted.olean.
-proof_out=$( ( cd "$LAKE_DIR" && LEAN_PATH="intTestsProbe/$TEST_NAME:${LEAN_PATH:-}" \
+proof_out=$( ( cd "$LAKE_DIR" && LEAN_PATH="intTestsProbe/$TEST_NAME" \
                $LAKE_TIMEOUT_CMD lake env lean \
                 "intTestsProbe/$TEST_NAME/proof.lean" ) 2>&1 ) && \
     proof_rc=0 || proof_rc=$?
@@ -416,7 +425,7 @@ else
         fi
     } >> "$check_file"
 
-    check_out=$( ( cd "$LAKE_DIR" && LEAN_PATH="intTestsProbe/$TEST_NAME:${LEAN_PATH:-}" \
+    check_out=$( ( cd "$LAKE_DIR" && LEAN_PATH="intTestsProbe/$TEST_NAME" \
                    $LAKE_TIMEOUT_CMD lake env lean \
                     "intTestsProbe/$TEST_NAME/proof.check.lean" ) 2>&1 ) && \
         check_rc=0 || check_rc=$?

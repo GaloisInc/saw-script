@@ -34,14 +34,16 @@
 #                    whose closer has another name fails LOUD here;
 #                    extend deliberately, never widen to a bare
 #                    wildcard.
-#                    KNOWN GAP (F1, 2026-07-21 soundness review,
-#                    doc/2026-07-21_soundness-review.md): the source
-#                    lint is not yet string-literal aware, so it can
-#                    miss a hand-declared axiom hidden after a string
-#                    containing the comment-open sequence. Until F1 is
-#                    fixed, the name-collision defense is incomplete;
-#                    the tier is safe only because all current tier
-#                    rows are first-party and inspected.
+#                    The F1 gap (2026-07-21 soundness review: the
+#                    original lint was not string-literal aware) is
+#                    FIXED — the lint is now a lexer tracking
+#                    comments AND string/char literals, banning every
+#                    known escape hatch into environment mutation or
+#                    kernel bypass, and rejecting loudly whatever it
+#                    cannot classify. With source-level declaration
+#                    prevention airtight, a residual tier-pattern
+#                    axiom can only come from a genuine bv_decide
+#                    run. See doc/2026-07-21_soundness-review.md.
 # Any other tier value fails loudly (UNKNOWN-TRUST-TIER sentinel).
 # A declared tier whose extra axioms never appear fails loudly too
 # (TRUST-TIER-UNUSED sentinel) — a tier marker must never be a

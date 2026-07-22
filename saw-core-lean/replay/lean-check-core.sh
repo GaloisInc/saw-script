@@ -162,23 +162,31 @@ for uf in proof.lean completed.lean; do
 done
 
 # 4.6 Axiom-declaration lint on the USER's files (2026-07-21,
-# introduced with the trust tiers; applies to ALL checks; hardened
-# same day): proof-side files must never DECLARE axioms or
-# macro/elab-level machinery. The strict allowlist is exact-name so
-# a hand-declared axiom cannot collide with it, but the native-eval tier
-# admits a NAME PATTERN (declaration-dependent bv_decide axiom names)
-# that a hand-declared axiom of a matching name could satisfy — a `private axiom` name
-# even prints UNMANGLED in `#print axioms`. The shared comment-aware
-# token lint (proof-source-lint.awk, single authority with the CI
-# harness) closes modifier/prefix bypasses (`private axiom`,
-# `set_option … in axiom`, `@[simp] axiom`).
+# introduced with the trust tiers; applies to ALL checks): proof-side
+# files must never DECLARE axioms or reach machinery that can add
+# declarations. The strict allowlist is exact-name so a hand-declared
+# axiom cannot collide with it, but the native-eval tier admits a
+# NAME PATTERN (declaration-dependent bv_decide axiom names) that a
+# hand-declared axiom of a matching name could satisfy — a `private
+# axiom` name even prints UNMANGLED in `#print axioms`. The shared
+# lexer-based token lint (proof-source-lint.awk, single authority
+# with the CI harness) tracks comments AND string/char literals
+# (F1 fix — a comment-stripper without string awareness was blinded
+# by a string containing the comment-open sequence) and bans every
+# known escape hatch into environment mutation or kernel bypass.
 # (The per-call-unique stage path is stripped from the lint output so
 # the diagnostic is deterministic — driver goldens pin it.)
+# LC_ALL=C: the lint is a byte-level lexer (its non-ASCII taint rule
+# assumes byte mode), and UTF-8-locale awk can HARD-ERROR on some
+# multibyte input. A nonzero awk exit must reject even with empty
+# output — an awk crash must never read as a lint pass (F1-fix
+# hardening, 2026-07-21).
 for uf in proof.lean completed.lean; do
     if [ -f "$STAGE/$uf" ]; then
-        bad_decl=$(awk -f "$(cd "$(dirname "$0")" && pwd)/proof-source-lint.awk" "$STAGE/$uf" \
-                     | sed "s|$STAGE/||g" || true)
-        if [ -n "$bad_decl" ]; then
+        lint_out=$(LC_ALL=C awk -f "$(cd "$(dirname "$0")" && pwd)/proof-source-lint.awk" \
+                     "$STAGE/$uf" 2>&1) && lint_rc=0 || lint_rc=$?
+        bad_decl=$(printf '%s' "$lint_out" | sed "s|$STAGE/||g")
+        if [ "$lint_rc" -ne 0 ] || [ -n "$bad_decl" ]; then
             echo "$bad_decl"
             fail "axiom-or-macro-decl-in-user-file"
         fi

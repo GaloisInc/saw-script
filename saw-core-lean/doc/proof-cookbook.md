@@ -248,11 +248,15 @@ consumers:
   * an unknown tier name fails (`UNKNOWN-TRUST-TIER`);
   * a stale marker — a tier row whose proof uses no bv_decide native
     axiom — fails (`TRUST-TIER-UNUSED`);
-  * proof-side files must not DECLARE axioms or macro/elab machinery
-    (source lint; closes the forged-axiom-name hole that a
-    pattern-based allowance would otherwise open);
-  * `support/trust-tier-selftest.sh` mutation-tests all four failure
-    modes on every conformance run.
+  * proof-side files must not DECLARE axioms or reach any machinery
+    that can add declarations or bypass the kernel (the lexer-based
+    source lint `replay/proof-source-lint.awk`; this is what makes a
+    pattern-based allowance sound — a hand-declared axiom cannot
+    collide with the tier's name pattern, so a residual tier-pattern
+    axiom can only come from a genuine bv_decide run);
+  * `support/trust-tier-selftest.sh` mutation-tests every guard (27
+    cases: tier sentinels, audit allowlist semantics, and the lint's
+    lexer semantics) on every conformance run.
 
 RESOLVE LATER (recorded): the tier exists because lean-smt's cvc5 BV proof
 reconstruction is not yet usable (2026-07-21 probe: its own BitVec tests

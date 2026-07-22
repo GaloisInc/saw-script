@@ -6,17 +6,19 @@
 # that stops firing is a silent trust hole (vacuity-guard doctrine:
 # every guard ships with a mutation it demonstrably catches).
 #
-# Cases:
-#   stale-marker    — .trust-tier on a row whose proof uses no
-#                     bv_decide native axiom => TRUST-TIER-UNUSED.
-#   unknown-tier    — .trust-tier naming an unrecognized tier
-#                     => UNKNOWN-TRUST-TIER.
-#   missing-marker  — bv_decide proof WITHOUT .trust-tier => the
-#                     per-invocation native axiom is rejected by the
-#                     strict allowlist.
-#   axiom-decl-lint — proof.lean DECLARING an axiom (colliding with the
-#                     tier's name pattern) => source lint failure,
-#                     regardless of marker.
+# Case groups:
+#   End-to-end (via lean-proof-test.sh): stale-marker, unknown-tier,
+#     missing-marker, axiom-decl-lint, private-axiom-decl,
+#     prefixed-axiom-decl, string-hidden-axiom-decl (F1).
+#   Pure-awk audit (axiom-audit.awk semantics on synthetic
+#     `#print axioms` output): exact/tier accept, suffix/prefix
+#     look-alikes, native-under-strict, sorry-under-tier,
+#     noncanonical tier-pattern near-misses.
+#   Pure lint (proof-source-lint.awk lexer semantics): F1 string
+#     blindness, escape-hatch bans (run_tac, #eval,
+#     builtin_initialize, csimp, debug.*), cannot-classify rejections
+#     (raw/interpolated strings, non-ASCII primes, ambiguous ]'),
+#     and a no-false-positive acceptance of legitimate shapes.
 #
 # Invoked by test.sh (conformance and default test verbs). Stages
 # rows under ../.tier-selftest/<case>/ so relative paths match real
@@ -122,6 +124,21 @@ EOF
 printf 'native-eval\n' > "$STAGE/prefixed-axiom-decl/.trust-tier"
 run_case prefixed-axiom-decl "axiom/macro declaration in proof-side file"
 
+# Case 7 (F1 fix pin, 2026-07-21 soundness review): string-literal
+# blindness — the original comment-stripping lint entered comment-skip
+# mode inside a string containing the comment-open sequence and missed
+# a following axiom declaration entirely (the axiom then matched the
+# tier's name pattern and was admitted). The lexer-based lint tracks
+# string literals and must flag the axiom.
+mkdir -p "$STAGE/string-hidden-axiom-decl"
+cat > "$STAGE/string-hidden-axiom-decl/proof.lean" <<'EOF'
+def cmt : String := "/-"
+axiom goal_holds._native.bv_decide.ax_1 : False
+theorem tier_selftest_hidden : False := goal_holds._native.bv_decide.ax_1
+EOF
+printf 'native-eval\n' > "$STAGE/string-hidden-axiom-decl/.trust-tier"
+run_case string-hidden-axiom-decl "axiom/macro declaration in proof-side file"
+
 # --- Pure-awk allowlist cases -------------------------------------
 # The audit layer's own rejection semantics, exercised directly on
 # synthetic `#print axioms` output (no Lean involved). These carry the
@@ -176,6 +193,99 @@ awk_case sorry-tier "native-eval" "sorryAx, goal_holds._native.bv_decide.ax_1" r
 # pre-hardening wildcard-prefix pattern).
 awk_case noncanonical-family "native-eval" "goal_holds._native.native_decide.ax_1, goal_holds._native.bv_decide.ax_1" reject
 awk_case noncanonical-prefix "native-eval" "evil._native.bv_decide.ax_1, goal_holds._native.bv_decide.ax_1" reject
+
+# --- Pure lint cases ----------------------------------------------
+# The source lint's own lexer semantics (proof-source-lint.awk),
+# exercised directly on synthetic proof-side files. These pin the F1
+# fix at the layer that owns it: the lexer must track string/char
+# literals alongside comments, ban every known escape hatch into
+# environment mutation or kernel bypass, and reject loudly whatever
+# it cannot classify with certainty against Lean's lexer.
+
+AWK_LINT="$(cd "$CATROOT/../../saw-core-lean/replay" && pwd)/proof-source-lint.awk"
+
+# lint_case <name> <want> [required-substring]
+# want = "reject" | "accept"; file staged at $STAGE/lint-<name>.lean.
+# Run under LC_ALL=C (byte mode) exactly as the consumers do.
+lint_case() {
+    local name="$1" want="$2" need="${3:-}" out rc
+    out=$(LC_ALL=C awk -f "$AWK_LINT" "$STAGE/lint-$name.lean" 2>&1)
+    rc=$?
+    case "$want" in
+        reject)
+            if [ "$rc" -eq 0 ] && [ -z "$out" ]; then
+                echo "FAIL[lint:$name]: lint PASSED a file it must reject"
+                status=1
+            elif [ -n "$need" ] && ! printf '%s\n' "$out" | grep -qF "$need"; then
+                echo "FAIL[lint:$name]: rejected, but WITHOUT the required diagnostic '$need'"
+                printf '%s\n' "$out" | head -3
+                status=1
+            else
+                echo "OK[lint:$name]"
+            fi ;;
+        accept)
+            if [ "$rc" -ne 0 ] || [ -n "$out" ]; then
+                echo "FAIL[lint:$name]: lint rejected a legitimate proof-side file:"
+                printf '%s\n' "$out" | head -3
+                status=1
+            else
+                echo "OK[lint:$name]"
+            fi ;;
+    esac
+}
+
+# F1 at unit level: the hidden axiom line itself must be flagged.
+cat > "$STAGE/lint-string-blind.lean" <<'EOF'
+def cmt : String := "/-"
+axiom sneaky : (1 : Nat) = 2
+EOF
+lint_case string-blind reject "axiom sneaky"
+
+# Escape hatches added during the F1 fix: run_tac can addDecl an
+# axiom from inside a tactic block exactly the way bv_decide does;
+# #eval can run elab-monad actions; builtin_initialize slipped the
+# `initialize` token boundary; @[csimp] swaps native-eval
+# implementations; debug.* options can suspend kernel checking.
+printf 'theorem t : True := by run_tac pure ()\n' > "$STAGE/lint-run-tac.lean"
+lint_case run-tac reject "run_tac"
+printf '#eval (1 : Nat)\n' > "$STAGE/lint-hash-eval.lean"
+lint_case hash-eval reject "#eval"
+printf 'builtin_initialize x : Nat <- pure 3\n' > "$STAGE/lint-builtin-init.lean"
+lint_case builtin-init reject "builtin_initialize"
+printf '@[csimp] theorem c : id = id := rfl\n' > "$STAGE/lint-csimp.lean"
+lint_case csimp reject "csimp"
+printf 'set_option debug.skipKernelTC true in\ntheorem t : True := trivial\n' \
+    > "$STAGE/lint-debug-option.lean"
+lint_case debug-option reject "debug.skipKernelTC"
+
+# Constructs the byte-level lexer cannot certainly classify against
+# Lean's lexer must reject loudly, never guess.
+printf 'def r1 : String := r"x"\n' > "$STAGE/lint-raw-string.lean"
+lint_case raw-string reject "raw string"
+printf 'def i1 : String := s!"x"\n' > "$STAGE/lint-interp-string.lean"
+lint_case interp-string reject "interpolated"
+printf "def x := \xce\xb11' axiom evil : False\n" > "$STAGE/lint-nonascii-prime.lean"
+lint_case nonascii-prime reject "non-ASCII"
+printf "example (h' : 0 < 2) : zs[0]'h' = 1 := rfl\n" > "$STAGE/lint-ambiguous-idx.lean"
+lint_case ambiguous-idx reject "ambiguous"
+
+# Legitimate proof-side shapes must stay accepted (no false
+# positives): strings are data even when they contain banned words or
+# comment delimiters; identifier primes; char literals with escapes;
+# the checked-indexing proof operator; comments mentioning anything.
+cat > "$STAGE/lint-ok-shapes.lean" <<'EOF'
+/- a comment with " a quote and the word axiom
+   nested /- axiom -/ still fine -/
+-- line comment: axiom macro "
+def s : String := " axiom macro /- -/ "
+def v_1'''' : Nat := 3
+def c : Char := '"'
+def d : Char := '\''
+def e : Char := '\x41'
+example (h : 0 < 2) : bits[0]'h = bits[0]'(by omega) := rfl
+theorem tier_ok : v_1'''' = 3 := rfl
+EOF
+lint_case ok-shapes accept
 
 if [ "$status" -eq 0 ]; then
     echo "trust-tier-selftest: ALL CASES OK"
