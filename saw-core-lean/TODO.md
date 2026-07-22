@@ -334,9 +334,25 @@ machinery WITH the first promoted row in one commit):
   LLVM-vs-spec words (whnf explosion — close per-position
   explicitly); seq lemmas need the rotl bridge present in the same
   pass.
-- [ ] **Unpark the nine chacha-core qround obligations**
-  (`llvm_chacha20_core_verify`; the GAP records one discharge
-  unparks all nine). The C6 recipe applies per obligation.
+- [ ] **Chacha-core qround obligations — direct route PARKED
+  2026-07-22, pivot to SAW-side compositional.** The core-round
+  emission is NOT the q_eq shape: the C code updates state in place,
+  so each obligation carries four chained symbolic-index update-gens
+  plus bvToNat-spelled runtime-checked gathers. A complete discharge
+  architecture was built and validated on structural replicas
+  (gen_update_16 = update-gen ⇒ `Vector.set`, one rewrite per site,
+  vectors stay abstract; select-collapse lemmas; per-bullet
+  `Vector.getElem_set` reduction; `generalize` canonicalization of
+  proof-variant selects that bv_decide would otherwise atomize
+  apart) — see proof-gaps/llvm_chacha20_core_qround_c0/GAP.md. On
+  the real term the big normalization + kernel check alone exceeds
+  550s (elementwise variants exceed 25 min) vs the 120s harness
+  cap — the doubleround wall at core-round scale. UNLOCK (in
+  progress): SAW-side compositional split — verify chacha20_core
+  with the verified qround as override, removing all eight
+  obligations at once (same unlock as doubleround). Fallbacks
+  recorded in the GAP: unconditional per-literal lemma variant;
+  emission-side Vector.set for in-place updates.
 - [ ] **`llvm_popcount_eq`**: R2 fix-plumbing recipe (routine; same
   shape as popcount32/E6), then bv_decide on the SWAR residue
   `bvEq 32 (swar x) (pcChain x 32)`.
