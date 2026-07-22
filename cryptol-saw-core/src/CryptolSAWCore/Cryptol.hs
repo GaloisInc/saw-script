@@ -244,6 +244,7 @@ importPC sc pc =
     C.PFin             -> panic "importPC" ["found PFin"]
     C.PHas _           -> panic "importPC" ["found PHas"]
     C.PPrime           -> panic "importPC" ["found PPrime"]
+    C.PNotPrime        -> panic "importPC" ["found PNotPrime"]
     C.PZero            -> scGlobalDef sc "Cryptol.PZero"
     C.PLogic           -> scGlobalDef sc "Cryptol.PLogic"
     C.PRing            -> scGlobalDef sc "Cryptol.PRing"
@@ -373,6 +374,7 @@ isErasedPC pc =
     C.PGeq             -> True
     C.PFin             -> True
     C.PPrime           -> True
+    C.PNotPrime        -> True
     C.PHas _           -> True
     C.PZero            -> False
     C.PLogic           -> False

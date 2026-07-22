@@ -1,14 +1,14 @@
 Loading file "test.saw"
-\(u1288 : isort 0) -> \(x : u1288) -> x
+\(u1298 : isort 0) -> \(x : u1298) -> x
 True
 12
-\(u1306 : isort 0) ->
-  \(x : (u1306 -> u1306)) -> \(x1 : u1306) -> x (x (x (x x1)))
+\(u1316 : isort 0) ->
+  \(x : (u1316 -> u1316)) -> \(x1 : u1316) -> x (x (x (x x1)))
 True
 24
-\(u1332 : isort 0) ->
-  \(x : (u1332 -> u1332)) ->
-    \(x1 : u1332) ->
+\(u1342 : isort 0) ->
+  \(x : (u1342 -> u1342)) ->
+    \(x1 : u1342) ->
       x (x (x (x (x (x (x (x (x (x (x (x (x (x (x (x x1)))))))))))))))
 True
 \(x : Vec 8 Bool) -> bvAdd 8 (bvAdd 8 (bvNat 8 6) (bvNat 8 7)) x
