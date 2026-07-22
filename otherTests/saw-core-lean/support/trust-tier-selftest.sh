@@ -99,6 +99,29 @@ EOF
 printf 'native-eval\n' > "$STAGE/axiom-decl-lint/.trust-tier"
 run_case axiom-decl-lint "axiom/macro declaration in proof-side file"
 
+# Case 5 (2026-07-21 hardening pin): `private axiom` — the modifier
+# prefix bypassed the original line-anchored lint, and a private
+# axiom's name prints UNMANGLED in `#print axioms`, so before the
+# hardening this forge would have been ADMITTED on a tier row. The
+# comment-aware token lint must reject it.
+mkdir -p "$STAGE/private-axiom-forge"
+cat > "$STAGE/private-axiom-forge/proof.lean" <<'EOF'
+private axiom goal_holds._native.bv_decide.ax_1 : False
+theorem tier_selftest_priv : False := goal_holds._native.bv_decide.ax_1
+EOF
+printf 'native-eval\n' > "$STAGE/private-axiom-forge/.trust-tier"
+run_case private-axiom-forge "axiom/macro declaration in proof-side file"
+
+# Case 6 (2026-07-21 hardening pin): `set_option … in axiom` — a
+# command prefix on the same line also bypassed the original lint.
+mkdir -p "$STAGE/prefixed-axiom-forge"
+cat > "$STAGE/prefixed-axiom-forge/proof.lean" <<'EOF'
+set_option pp.fullNames true in axiom goal_closed._native.bv_decide.ax_1 : False
+theorem tier_selftest_pref : False := goal_closed._native.bv_decide.ax_1
+EOF
+printf 'native-eval\n' > "$STAGE/prefixed-axiom-forge/.trust-tier"
+run_case prefixed-axiom-forge "axiom/macro declaration in proof-side file"
+
 # --- Pure-awk allowlist cases -------------------------------------
 # The audit layer's own rejection semantics, exercised directly on
 # synthetic `#print axioms` output (no Lean involved). These carry the
@@ -134,18 +157,25 @@ awk_case() {
 
 # Exact allowlist accepted (strict).
 awk_case exact-accept "" "propext, Classical.choice, Quot.sound, CryptolToLean.SAWCorePrimitives.vecToBitVec_bitVecToVec" pass
+# The GENUINE tier shape accepted under the tier (goal_holds/goal_closed
+# closers only — 2026-07-21 prefix pinning).
+awk_case tier-accept "native-eval" "propext, goal_holds._native.bv_decide.ax_1_10, goal_closed._native.bv_decide.ax_2_5" pass
 # Suffix-named impostor rejected under BOTH tiers (review-finding pin).
 awk_case suffix-strict "" "cheat_vecToBitVec_bitVecToVec" reject
-awk_case suffix-tier "native-eval" "cheat_vecToBitVec_bitVecToVec, p._native.bv_decide.ax_1" reject
+awk_case suffix-tier "native-eval" "cheat_vecToBitVec_bitVecToVec, goal_holds._native.bv_decide.ax_1" reject
 # Prefix-named impostor rejected.
 awk_case prefix-strict "" "propext_evil" reject
 # bv_decide native axioms rejected under STRICT (tier gate is real).
-awk_case native-strict "" "p._native.bv_decide.ax_1_10" reject
+awk_case native-strict "" "goal_holds._native.bv_decide.ax_1_10" reject
 # sorryAx rejected even under the tier.
-awk_case sorry-tier "native-eval" "sorryAx, p._native.bv_decide.ax_1" reject
-# Forged near-miss of the tier pattern rejected under the tier
-# (missing ax_ suffix / wrong family).
-awk_case forged-family "native-eval" "p._native.native_decide.ax_1, p._native.bv_decide.ax_1" reject
+awk_case sorry-tier "native-eval" "sorryAx, goal_holds._native.bv_decide.ax_1" reject
+# Forged near-misses of the tier pattern rejected under the tier:
+# wrong tactic family, and a non-sanctioned declaration prefix (the
+# 2026-07-21 confirmed forge shape — a private axiom named
+# evil._native.bv_decide.ax_1 prints unmangled and matched the
+# pre-hardening wildcard-prefix pattern).
+awk_case forged-family "native-eval" "goal_holds._native.native_decide.ax_1, goal_holds._native.bv_decide.ax_1" reject
+awk_case forged-prefix "native-eval" "evil._native.bv_decide.ax_1, goal_holds._native.bv_decide.ax_1" reject
 
 if [ "$status" -eq 0 ]; then
     echo "trust-tier-selftest: ALL CASES OK"

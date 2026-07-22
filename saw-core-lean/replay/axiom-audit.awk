@@ -22,17 +22,26 @@
 #                    toolchain print as <decl>._native.bv_decide.ax_N*
 #                    (declaration-dependent names, so this is the ONE
 #                    sanctioned PATTERN rule; both consumers pair it
-#                    with a source lint forbidding axiom/macro/elab
-#                    declarations in proof-side files, closing the
-#                    matching-name forgery hole that made patterns
-#                    unacceptable for the strict list).
+#                    with a source lint — proof-source-lint.awk —
+#                    forbidding axiom/macro/elab declarations in
+#                    proof-side files, closing the matching-name
+#                    forgery hole that made patterns unacceptable for
+#                    the strict list). 2026-07-21 hardening: the
+#                    <decl> prefix is pinned to the sanctioned closer
+#                    names goal_holds/goal_closed — every tier row
+#                    discharges through those (harness-enforced), and
+#                    forging `goal_holds._native…` requires an axiom
+#                    declaration inside `namespace goal_holds`, which
+#                    the source lint rejects. A future tier row whose
+#                    closer has another name fails LOUD here; extend
+#                    deliberately, never widen to a bare wildcard.
 # Any other tier value fails loudly (UNKNOWN-TRUST-TIER sentinel).
 # A declared tier whose extra axioms never appear fails loudly too
 # (TRUST-TIER-UNUSED sentinel) — a tier marker must never be a
 # no-op, else stale markers accumulate silent trust.
 function tier_allows(ax) {
   if (tier == "native-eval" &&
-      ax ~ /^[A-Za-z0-9_'.]+\._native\.bv_decide\.ax_[0-9_]+$/) {
+      ax ~ /^goal_(holds|closed)\._native\.bv_decide\.ax_[0-9_]+$/) {
     tier_used = 1
     return 1
   }

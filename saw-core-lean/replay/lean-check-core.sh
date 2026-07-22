@@ -162,16 +162,22 @@ for uf in proof.lean completed.lean; do
 done
 
 # 4.6 Axiom-declaration lint on the USER's files (2026-07-21,
-# introduced with the trust tiers; applies to ALL checks): proof-side
-# files must never DECLARE axioms or macro/elab-level machinery. The
-# strict allowlist is exact-name so forged axioms cannot collide with
-# it, but the native-eval tier admits a NAME PATTERN
-# (declaration-dependent bv_decide axiom names) that a hand-declared
-# axiom could forge — this lint closes that hole at the source level
-# and is defense-in-depth for strict checks.
+# introduced with the trust tiers; applies to ALL checks; hardened
+# same day): proof-side files must never DECLARE axioms or
+# macro/elab-level machinery. The strict allowlist is exact-name so
+# forged axioms cannot collide with it, but the native-eval tier
+# admits a NAME PATTERN (declaration-dependent bv_decide axiom names)
+# that a hand-declared axiom could forge — a `private axiom`'s name
+# even prints UNMANGLED in `#print axioms`. The shared comment-aware
+# token lint (proof-source-lint.awk, single authority with the CI
+# harness) closes modifier/prefix bypasses (`private axiom`,
+# `set_option … in axiom`, `@[simp] axiom`).
+# (The per-call-unique stage path is stripped from the lint output so
+# the diagnostic is deterministic — driver goldens pin it.)
 for uf in proof.lean completed.lean; do
     if [ -f "$STAGE/$uf" ]; then
-        bad_decl=$(grep -nE '^[[:space:]]*(axiom|macro|macro_rules|elab|elab_rules|run_cmd|initialize)[[:space:]]|@\[(extern|implemented_by)' "$STAGE/$uf" || true)
+        bad_decl=$(awk -f "$(cd "$(dirname "$0")" && pwd)/proof-source-lint.awk" "$STAGE/$uf" \
+                     | sed "s|$STAGE/||g" || true)
         if [ -n "$bad_decl" ]; then
             echo "$bad_decl"
             fail "axiom-or-macro-decl-in-user-file"

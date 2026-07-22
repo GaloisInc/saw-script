@@ -120,19 +120,20 @@ if [ -f .trust-tier ]; then
 fi
 
 # Axiom-declaration source lint (2026-07-21, introduced with the
-# trust tiers and applied to ALL rows): proof-side files must never
-# DECLARE axioms or macro/elab-level machinery. The strict allowlist
-# is exact-name so hand-rolled axioms cannot collide with it, but the
-# native-eval tier admits a NAME PATTERN (declaration-dependent
-# bv_decide axiom names), which a hand-declared axiom could forge —
-# this lint closes that hole at the source level, and is
-# defense-in-depth for strict rows. (Block-comment interiors are not
-# special-cased: a comment line starting with one of these keywords
-# fails too — rename or reflow the comment; cheap, and keeps the
-# lint un-foolable.)
+# trust tiers and applied to ALL rows; hardened same day): proof-side
+# files must never DECLARE axioms or macro/elab-level machinery. The
+# strict allowlist is exact-name so hand-rolled axioms cannot collide
+# with it, but the native-eval tier admits a NAME PATTERN
+# (declaration-dependent bv_decide axiom names), which a hand-declared
+# axiom could forge — `private axiom` names even print UNMANGLED in
+# `#print axioms`. The shared comment-aware token lint
+# (replay/proof-source-lint.awk, single authority with the replay
+# trust kernel) closes modifier/prefix bypasses (`private axiom`,
+# `set_option … in axiom`, `@[simp] axiom`).
+SAW_DIR_EARLY="$(cd ../../../.. && pwd)"
 for user_file in proof.lean completed.lean; do
     [ -f "$user_file" ] || continue
-    bad_decl=$(grep -nE '^[[:space:]]*(axiom|macro|macro_rules|elab|elab_rules|run_cmd|initialize)[[:space:]]|@\[(extern|implemented_by)' "$user_file" || true)
+    bad_decl=$(awk -f "$SAW_DIR_EARLY/saw-core-lean/replay/proof-source-lint.awk" "$user_file" || true)
     if [ -n "$bad_decl" ]; then
         echo "--- $user_file (proof-side files must not declare axioms or macro/elab machinery) ---"
         echo "$bad_decl"

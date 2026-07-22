@@ -8,7 +8,7 @@ Stack trace:
    (builtin) in fails
    test_replay_reject_suffix_axiom.saw:12:1-13:47 (at top level)
 offline_lean_replay: Lean check FAILED — goal not admitted.
-6:axiom unsound_vecToBitVec_bitVecToVec : goal
+proof.lean:6: axiom unsound_vecToBitVec_bitVecToVec : goal
 CHECK-FAIL: axiom-or-macro-decl-in-user-file
 
 
