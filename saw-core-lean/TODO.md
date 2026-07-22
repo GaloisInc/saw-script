@@ -187,6 +187,64 @@ Full plan: `doc/2026-07-14_release-plan.md`. Decisions recorded there
 0.01 workstreams and exit criteria live in the plan doc; the items
 below track execution state as always.
 
+### Soundness-review findings (2026-07-21) — full report doc/2026-07-21_soundness-review.md
+
+Independent multi-reviewer soundness review of the additions landed
+without prior review (type-image mechanism, primitive realizations,
+trust-tier machinery). Two surfaces SOUND; one CRITICAL finding.
+
+- [ ] **F1 — CRITICAL, fix before release.** replay/proof-source-lint.awk
+  tracks `/- -/` comments with no string/char-literal awareness, so a
+  proof-side file containing a string with the comment-open sequence
+  (e.g. `def s : String := "/-"`) drives the scanner into skip mode and
+  it misses a following `axiom` declaration (exit 0). Under the
+  native-eval tier that lint is the sole guard against a hand-declared
+  axiom named to match the admitted bv_decide pattern — so a
+  hand-declared `axiom goal_holds._native.bv_decide.ax_1 : goal`
+  (declarable at top
+  level; the deefbefad "needs a namespace" claim is wrong) closes any
+  goal, admitting a false theorem. Confirmed on BOTH consumers;
+  re-verified this session. LATENT (no landed row exploits it).
+  Fix: (1) make the lint literal-aware (skip `"…"`, raw/interp strings,
+  `'…'`) + add the string-blind-spot regression to
+  trust-tier-selftest.sh; (2) structural — stop admitting axioms by
+  NAME PATTERN (the name is author-chosen, so a hand-declared axiom can
+  satisfy it); verify residual native axioms genuinely came from a
+  harness-run bv_decide on the row's goal.
+  Fold the LEAN_PATH parity nit (below) into this commit.
+- [ ] **Minor — LEAN_PATH consumer parity.** lean-check-core.sh clears
+  LEAN_PATH to the stage dir; lean-proof-test.sh appends ambient
+  ${LEAN_PATH:-} (empty in clean CI, but asymmetric). Pin the CI
+  consumer to the stage dir only.
+- [ ] **C1 — standing note (no action now).** IsLeNat constructors/
+  recursor do NOT structurally match Nat.le's (explicit vs implicit m;
+  IsLeNat__rec arg shape). Sound today because they are unmapped and
+  reject loudly. The constant-headed-Prop work must NOT naively mapsTo
+  them without reconciling the shapes first.
+- Reviewers found the type-image and primitive surfaces otherwise SOUND
+  (C2 support-def faithfulness verified: raw head/tail match
+  Prelude.sawcore:1536-1537).
+
+### Docs/comment phrasing pass (2026-07-21) — precise formal-verification terms
+
+Some earlier phrasing described this soundness work in imprecise
+offensive-security terms. This is a formal-verification capability, and
+a skeptical soundness review — not an attack. Rework to precise terms
+(skeptical review / counterexample search / unsound-acceptance path /
+name-collision / guard coverage), improving accuracy where the old
+wording implied the wrong activity:
+- [x] TODO.md pre-release-review item: reframed as a skeptical
+  independent soundness review.
+- [x] TODO.md: the remaining review-discipline mentions reworded to
+  "skeptical review".
+- [x] replay/proof-source-lint.awk, replay/axiom-audit.awk,
+  replay/lean-check-core.sh, support/lean-proof-test.sh,
+  support/trust-tier-selftest.sh: comment phrasing.
+- [x] saw-boundary/replay_reject_axiom + _suffix_axiom .saw comments.
+- [x] memory project_bv_decide_two_tier (~/.claude).
+- Commit messages b1a8b3cae/deefbefad already use the old phrasing; leave
+  them (history rewrite not worth it) unless the user wants otherwise.
+
 ### 0.02 punch list (2026-07-21, user-confirmed)
 
 **BV trust-tier decision (2026-07-21, user-confirmed): "show we can
@@ -253,7 +311,7 @@ machinery WITH the first promoted row in one commit):
   (`-v tier=`). Guards: UNKNOWN-TRUST-TIER sentinel (bad tier name),
   TRUST-TIER-UNUSED sentinel (stale marker), and a NEW source lint
   in both consumers (proof-side files must not declare
-  axiom/macro/elab machinery — closes the forged-pattern-name hole;
+  axiom/macro/elab machinery — closes the name-collision hole;
   corpus scanned clean). support/trust-tier-selftest.sh
   mutation-tests all four failure modes; wired into test.sh.
   (Also learned: bv_normalize closes trivialities WITHOUT a native
@@ -377,7 +435,7 @@ budget stays a differential-harness limitation.
   (`Except String (Nat.le ...)` — ill-typed, loud) and ambient prop
   applications bind wrapped value args OUTSIDE the prop head (an
   Except-String-Prop non-proposition, loud). Design shape, needs the
-  full domain-map discipline (design doc + adversarial audit — this
+  full domain-map discipline (design doc + skeptical review — this
   is a classifyDomain change): (1) extend the kind-directed rule to
   constant heads — resolve the head global's type, result sort
   propSort => DRawProp; (2) declare the PROP-FORMER argument
@@ -393,20 +451,24 @@ budget stays a differential-harness limitation.
   current DValue-classified prop occurrences before flipping them
   raw.
 
-- [ ] **Pre-release soundness audit (release gate, added 2026-07-17;
-  SCOPE RAISED 2026-07-21, user request: "a whole-project audit by
-  multiple adversarial critic [agents], aimed at breaking anything
-  that can be broken — the big one, the pre-launch attempt to break
-  the soundness model in any way possible").** Execution shape: a
-  PANEL of independent adversarial auditor agents, each with a fresh
-  context (never the implementing session), each assigned a distinct
-  attack surface and told to BREAK it, not review it; findings
-  adversarially cross-verified before landing. Whole-project scope —
-  translator, support library, harness, replay kernel, trust-tier
-  machinery, docs-vs-behavior honesty. An aggressive end-to-end
-  scrutiny pass over the whole trust chain before any release is
-  called ready — assume the backend is wrong and try to demonstrate
-  it. Scope, at minimum:
+- [ ] **Pre-release soundness review (release gate, added 2026-07-17;
+  SCOPE RAISED 2026-07-21, user request: a whole-project soundness
+  review by multiple independent reviewers, covering every part of the
+  trust chain that could admit an unsound proof — the comprehensive
+  pre-launch verification of the soundness model).** Execution shape: a
+  panel of independent reviewers, each with a fresh context (never the
+  implementing session), each assigned a distinct part of the trust
+  chain and tasked with searching for unsound-acceptance paths
+  (counterexamples where a Lean proof succeeds while the SAW statement
+  is false or has different semantics); findings independently
+  cross-checked before landing. Whole-project scope — translator,
+  support library, harness, replay kernel, trust-tier machinery,
+  docs-vs-behavior honesty. A thorough end-to-end verification of the
+  whole trust chain before any release is called ready; the reviewer's
+  working assumption is that a defect exists until the surface is shown
+  sound. This is the discipline the 2026-07-21 review already applied
+  to three surfaces (doc/2026-07-21_soundness-review.md). Scope, at
+  minimum:
   - **False-theorem probes against replay**: try to get
     `offline_lean_replay` to accept an unsound proof — axiom
     introduction beyond the allowlist (prefix/suffix/namespace and
@@ -451,7 +513,7 @@ budget stays a differential-harness limitation.
     test.sh fails any executable category matching zero rows]; per-row harness `tail`
     /grep pipelines that mask nonzero exits. Each confirmed hole
     lands as a guard + a mutation test that the guard catches.
-  - **Differential stress**: adversarially chosen SAWCore terms where
+  - **Differential stress**: deliberately chosen SAWCore terms where
     SAW evaluation and emitted-Lean evaluation could plausibly
     diverge (boundary widths, zero divisors, empty vectors, deep
     nesting, shadowing, exotic-but-legal module shapes).
@@ -518,7 +580,7 @@ Slices (each emitted-Lean-diff-reviewed and green before commit):
   interval set = omega-closable operations only (minNat/maxNat/
   var×var-mulNat unbounded per the audit witnesses).
 - [x] **OP-2 follow-up: reachable raw `error` disposition — DESIGNED,
-  ADVERSARIALLY AUDITED, AND IMPLEMENTED 2026-07-14**
+  SKEPTICALLY REVIEWED, AND IMPLEMENTED 2026-07-14**
   (`doc/2026-07-14_reachable-raw-error-disposition.md`, audit record
   inside). The audit sharpened the 2026-07-12 census in three ways:
   the real census was FOUR emitters, not one (polynomial t1 plus
@@ -817,7 +879,7 @@ as their own items in the priorities below.
   - Acceptance: the conformance matrix records every target row as
     `obligation`, `known gap`, or `boundary`; full validation passes; and no
     target path relies on Haskell-side bounds reasoning.
-  - 2026-07-01 adversarial audit follow-up:
+  - 2026-07-01 skeptical review follow-up:
     1. [x] Strengthen obligation-shape fixtures so they pin the actual
        proposition over translated terms, not merely `LT.lt`/`LE.le` and helper
        names.

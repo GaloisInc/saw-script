@@ -21,20 +21,27 @@
 #                    proof-local native axioms, which on this
 #                    toolchain print as <decl>._native.bv_decide.ax_N*
 #                    (declaration-dependent names, so this is the ONE
-#                    sanctioned PATTERN rule; both consumers pair it
-#                    with a source lint — proof-source-lint.awk —
-#                    forbidding axiom/macro/elab declarations in
-#                    proof-side files, closing the matching-name
-#                    forgery hole that made patterns unacceptable for
-#                    the strict list). 2026-07-21 hardening: the
-#                    <decl> prefix is pinned to the sanctioned closer
-#                    names goal_holds/goal_closed — every tier row
-#                    discharges through those (harness-enforced), and
-#                    forging `goal_holds._native…` requires an axiom
-#                    declaration inside `namespace goal_holds`, which
-#                    the source lint rejects. A future tier row whose
-#                    closer has another name fails LOUD here; extend
-#                    deliberately, never widen to a bare wildcard.
+#                    PATTERN rule; both consumers pair it with a source
+#                    lint — proof-source-lint.awk — forbidding
+#                    axiom/macro/elab declarations in proof-side files,
+#                    so a hand-declared axiom cannot collide with the
+#                    pattern by name. This name-collision risk is why
+#                    bare patterns are not acceptable for the strict
+#                    list). 2026-07-21 hardening: the <decl> prefix is
+#                    pinned to the sanctioned closer names
+#                    goal_holds/goal_closed — every tier row discharges
+#                    through those (harness-enforced). A future tier row
+#                    whose closer has another name fails LOUD here;
+#                    extend deliberately, never widen to a bare
+#                    wildcard.
+#                    KNOWN GAP (F1, 2026-07-21 soundness review,
+#                    doc/2026-07-21_soundness-review.md): the source
+#                    lint is not yet string-literal aware, so it can
+#                    miss a hand-declared axiom hidden after a string
+#                    containing the comment-open sequence. Until F1 is
+#                    fixed, the name-collision defense is incomplete;
+#                    the tier is safe only because all current tier
+#                    rows are first-party and inspected.
 # Any other tier value fails loudly (UNKNOWN-TRUST-TIER sentinel).
 # A declared tier whose extra axioms never appear fails loudly too
 # (TRUST-TIER-UNUSED sentinel) — a tier marker must never be a

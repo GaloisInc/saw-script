@@ -125,7 +125,7 @@ fi
 # strict allowlist is exact-name so hand-rolled axioms cannot collide
 # with it, but the native-eval tier admits a NAME PATTERN
 # (declaration-dependent bv_decide axiom names), which a hand-declared
-# axiom could forge — `private axiom` names even print UNMANGLED in
+# axiom of a matching name could satisfy — `private axiom` names even print UNMANGLED in
 # `#print axioms`. The shared comment-aware token lint
 # (replay/proof-source-lint.awk, single authority with the replay
 # trust kernel) closes modifier/prefix bypasses (`private axiom`,

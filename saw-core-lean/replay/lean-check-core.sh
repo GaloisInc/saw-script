@@ -165,9 +165,9 @@ done
 # introduced with the trust tiers; applies to ALL checks; hardened
 # same day): proof-side files must never DECLARE axioms or
 # macro/elab-level machinery. The strict allowlist is exact-name so
-# forged axioms cannot collide with it, but the native-eval tier
+# a hand-declared axiom cannot collide with it, but the native-eval tier
 # admits a NAME PATTERN (declaration-dependent bv_decide axiom names)
-# that a hand-declared axiom could forge — a `private axiom`'s name
+# that a hand-declared axiom of a matching name could satisfy — a `private axiom` name
 # even prints UNMANGLED in `#print axioms`. The shared comment-aware
 # token lint (proof-source-lint.awk, single authority with the CI
 # harness) closes modifier/prefix bypasses (`private axiom`,

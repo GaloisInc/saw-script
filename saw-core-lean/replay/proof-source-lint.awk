@@ -7,11 +7,11 @@
 # exact-name so hand axioms cannot collide with it, but the
 # native-eval trust tier admits a NAME PATTERN (bv_decide's
 # declaration-dependent native axioms), which a hand-declared axiom
-# could forge. 2026-07-21 hardening: the original line-anchored
+# could satisfy by name. 2026-07-21 hardening: the original line-anchored
 # keyword grep was bypassable by modifier/command prefixes on the
 # same line (`private axiom …`, `set_option … in axiom …`,
 # `@[simp] axiom …`) — a private axiom's name even PRINTS unmangled
-# in `#print axioms`, so the forge would have been admitted on a
+# in `#print axioms`, so the matching-named axiom would have been admitted on a
 # tier row. This lint therefore strips comments (line `--` and
 # NESTED block `/- -/`) and then flags the banned keywords as
 # standalone tokens ANYWHERE in the remaining source text.
