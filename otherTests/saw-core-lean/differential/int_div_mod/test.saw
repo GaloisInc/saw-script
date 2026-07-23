@@ -1,13 +1,30 @@
 // TRUE differential litmus for defined Integer division and modulus.
 //
-// Division by zero is a partiality surface and belongs in an obligation row.
-
-let observed =
-  parse_core "and (intEq (intDiv (intNeg (natToInt 3)) (natToInt 2)) (intNeg (natToInt 2))) (and (intEq (intMod (intNeg (natToInt 3)) (natToInt 2)) (natToInt 1)) (and (intEq (intDiv (natToInt 3) (intNeg (natToInt 2))) (intNeg (natToInt 2))) (intEq (intMod (natToInt 3) (intNeg (natToInt 2))) (intNeg (natToInt 1)))))";
-
-print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+// EDGE-CASE MATRIX (2026-07-23, comprehensive boundary-coverage
+// pass; authored via an offline case-table generator, committed
+// artifact is this file). One labeled case per SAW_OBSERVED line;
+// the emitted artifact is the Vec of all case terms and
+// lean-observe.lean prints the matching labeled line per index, so
+// a single divergent case names itself. The expected value inside
+// each case is a human annotation only — the row compares SAW's and
+// Lean's evaluation of the same closed term, so a wrong expectation
+// still agrees on both sides (both false) and divergence on ANY
+// case shows as a SAW/Lean mismatch.
+print (str_concat "SAW_OBSERVED: div_pp " (show (eval_bool (parse_core "intEq (intDiv (natToInt 7) (natToInt 2)) (natToInt 3)"))));
+print (str_concat "SAW_OBSERVED: mod_pp " (show (eval_bool (parse_core "intEq (intMod (natToInt 7) (natToInt 2)) (natToInt 1)"))));
+print (str_concat "SAW_OBSERVED: div_np " (show (eval_bool (parse_core "intEq (intDiv (intNeg (natToInt 3)) (natToInt 2)) (intNeg (natToInt 2))"))));
+print (str_concat "SAW_OBSERVED: mod_np " (show (eval_bool (parse_core "intEq (intMod (intNeg (natToInt 3)) (natToInt 2)) (natToInt 1)"))));
+print (str_concat "SAW_OBSERVED: div_pn " (show (eval_bool (parse_core "intEq (intDiv (natToInt 3) (intNeg (natToInt 2))) (intNeg (natToInt 2))"))));
+print (str_concat "SAW_OBSERVED: mod_pn " (show (eval_bool (parse_core "intEq (intMod (natToInt 3) (intNeg (natToInt 2))) (intNeg (natToInt 1))"))));
+print (str_concat "SAW_OBSERVED: div_nn " (show (eval_bool (parse_core "intEq (intDiv (intNeg (natToInt 7)) (intNeg (natToInt 2))) (natToInt 3)"))));
+print (str_concat "SAW_OBSERVED: mod_nn " (show (eval_bool (parse_core "intEq (intMod (intNeg (natToInt 7)) (intNeg (natToInt 2))) (intNeg (natToInt 1))"))));
+print (str_concat "SAW_OBSERVED: div_exact_np " (show (eval_bool (parse_core "intEq (intDiv (intNeg (natToInt 6)) (natToInt 3)) (intNeg (natToInt 2))"))));
+print (str_concat "SAW_OBSERVED: mod_exact_np " (show (eval_bool (parse_core "intEq (intMod (intNeg (natToInt 6)) (natToInt 3)) (natToInt 0)"))));
+print (str_concat "SAW_OBSERVED: div_by1_neg " (show (eval_bool (parse_core "intEq (intDiv (intNeg (natToInt 9)) (natToInt 1)) (intNeg (natToInt 9))"))));
+print (str_concat "SAW_OBSERVED: div_0_neg " (show (eval_bool (parse_core "intEq (intDiv (natToInt 0) (intNeg (natToInt 5))) (natToInt 0)"))));
+print (str_concat "SAW_OBSERVED: mod_0_neg " (show (eval_bool (parse_core "intEq (intMod (natToInt 0) (intNeg (natToInt 5))) (natToInt 0)"))));
 
 write_lean_term
   "Observed" [] []
   "observed.lean"
-  observed;
+  (parse_core "[intEq (intDiv (natToInt 7) (natToInt 2)) (natToInt 3), intEq (intMod (natToInt 7) (natToInt 2)) (natToInt 1), intEq (intDiv (intNeg (natToInt 3)) (natToInt 2)) (intNeg (natToInt 2)), intEq (intMod (intNeg (natToInt 3)) (natToInt 2)) (natToInt 1), intEq (intDiv (natToInt 3) (intNeg (natToInt 2))) (intNeg (natToInt 2)), intEq (intMod (natToInt 3) (intNeg (natToInt 2))) (intNeg (natToInt 1)), intEq (intDiv (intNeg (natToInt 7)) (intNeg (natToInt 2))) (natToInt 3), intEq (intMod (intNeg (natToInt 7)) (intNeg (natToInt 2))) (intNeg (natToInt 1)), intEq (intDiv (intNeg (natToInt 6)) (natToInt 3)) (intNeg (natToInt 2)), intEq (intMod (intNeg (natToInt 6)) (natToInt 3)) (natToInt 0), intEq (intDiv (intNeg (natToInt 9)) (natToInt 1)) (intNeg (natToInt 9)), intEq (intDiv (natToInt 0) (intNeg (natToInt 5))) (natToInt 0), intEq (intMod (natToInt 0) (intNeg (natToInt 5))) (natToInt 0)]");

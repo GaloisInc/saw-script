@@ -1,11 +1,35 @@
-// TRUE differential litmus for defined Integer primitive behavior.
-
-let observed =
-  parse_core "and (intEq (intAdd (intNeg (natToInt 2)) (natToInt 5)) (natToInt 3)) (and (intEq (intSub (natToInt 2) (natToInt 5)) (intNeg (natToInt 3))) (and (intEq (intMul (intNeg (natToInt 3)) (natToInt 4)) (intNeg (natToInt 12))) (and (intLe (intNeg (natToInt 3)) (natToInt 2)) (and (intLt (intNeg (natToInt 3)) (natToInt 2)) (and (equalNat (intToNat (intNeg (natToInt 3))) 0) (equalNat (intToNat (natToInt 7)) 7))))))";
-
-print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+// TRUE differential litmus for Integer scalar arithmetic and conversions.
+//
+// EDGE-CASE MATRIX (2026-07-23, comprehensive boundary-coverage
+// pass; authored via an offline case-table generator, committed
+// artifact is this file). One labeled case per SAW_OBSERVED line;
+// the emitted artifact is the Vec of all case terms and
+// lean-observe.lean prints the matching labeled line per index, so
+// a single divergent case names itself. The expected value inside
+// each case is a human annotation only — the row compares SAW's and
+// Lean's evaluation of the same closed term, so a wrong expectation
+// still agrees on both sides (both false) and divergence on ANY
+// case shows as a SAW/Lean mismatch.
+print (str_concat "SAW_OBSERVED: add_mixed " (show (eval_bool (parse_core "intEq (intAdd (intNeg (natToInt 2)) (natToInt 5)) (natToInt 3)"))));
+print (str_concat "SAW_OBSERVED: sub_cross " (show (eval_bool (parse_core "intEq (intSub (natToInt 2) (natToInt 5)) (intNeg (natToInt 3))"))));
+print (str_concat "SAW_OBSERVED: mul_neg " (show (eval_bool (parse_core "intEq (intMul (intNeg (natToInt 3)) (natToInt 4)) (intNeg (natToInt 12))"))));
+print (str_concat "SAW_OBSERVED: mul_negneg " (show (eval_bool (parse_core "intEq (intMul (intNeg (natToInt 3)) (intNeg (natToInt 4))) (natToInt 12)"))));
+print (str_concat "SAW_OBSERVED: le_neg " (show (eval_bool (parse_core "intLe (intNeg (natToInt 3)) (natToInt 2)"))));
+print (str_concat "SAW_OBSERVED: lt_neg " (show (eval_bool (parse_core "intLt (intNeg (natToInt 3)) (natToInt 2)"))));
+print (str_concat "SAW_OBSERVED: le_refl " (show (eval_bool (parse_core "intLe (intNeg (natToInt 3)) (intNeg (natToInt 3))"))));
+print (str_concat "SAW_OBSERVED: lt_irrefl " (show (eval_bool (parse_core "bvEq 1 [intLt (intNeg (natToInt 3)) (intNeg (natToInt 3))] [False]"))));
+print (str_concat "SAW_OBSERVED: neg_zero " (show (eval_bool (parse_core "intEq (intNeg (natToInt 0)) (natToInt 0)"))));
+print (str_concat "SAW_OBSERVED: abs_neg " (show (eval_bool (parse_core "intEq (intAbs (intNeg (natToInt 7))) (natToInt 7)"))));
+print (str_concat "SAW_OBSERVED: abs_pos " (show (eval_bool (parse_core "intEq (intAbs (natToInt 7)) (natToInt 7)"))));
+print (str_concat "SAW_OBSERVED: abs_zero " (show (eval_bool (parse_core "intEq (intAbs (natToInt 0)) (natToInt 0)"))));
+print (str_concat "SAW_OBSERVED: min_mixed " (show (eval_bool (parse_core "intEq (intMin (intNeg (natToInt 2)) (natToInt 1)) (intNeg (natToInt 2))"))));
+print (str_concat "SAW_OBSERVED: max_mixed " (show (eval_bool (parse_core "intEq (intMax (intNeg (natToInt 2)) (natToInt 1)) (natToInt 1)"))));
+print (str_concat "SAW_OBSERVED: min_negneg " (show (eval_bool (parse_core "intEq (intMin (intNeg (natToInt 5)) (intNeg (natToInt 2))) (intNeg (natToInt 5))"))));
+print (str_concat "SAW_OBSERVED: toNat_neg " (show (eval_bool (parse_core "equalNat (intToNat (intNeg (natToInt 3))) 0"))));
+print (str_concat "SAW_OBSERVED: toNat_pos " (show (eval_bool (parse_core "equalNat (intToNat (natToInt 7)) 7"))));
+print (str_concat "SAW_OBSERVED: toNat_zero " (show (eval_bool (parse_core "equalNat (intToNat (natToInt 0)) 0"))));
 
 write_lean_term
   "Observed" [] []
   "observed.lean"
-  observed;
+  (parse_core "[intEq (intAdd (intNeg (natToInt 2)) (natToInt 5)) (natToInt 3), intEq (intSub (natToInt 2) (natToInt 5)) (intNeg (natToInt 3)), intEq (intMul (intNeg (natToInt 3)) (natToInt 4)) (intNeg (natToInt 12)), intEq (intMul (intNeg (natToInt 3)) (intNeg (natToInt 4))) (natToInt 12), intLe (intNeg (natToInt 3)) (natToInt 2), intLt (intNeg (natToInt 3)) (natToInt 2), intLe (intNeg (natToInt 3)) (intNeg (natToInt 3)), bvEq 1 [intLt (intNeg (natToInt 3)) (intNeg (natToInt 3))] [False], intEq (intNeg (natToInt 0)) (natToInt 0), intEq (intAbs (intNeg (natToInt 7))) (natToInt 7), intEq (intAbs (natToInt 7)) (natToInt 7), intEq (intAbs (natToInt 0)) (natToInt 0), intEq (intMin (intNeg (natToInt 2)) (natToInt 1)) (intNeg (natToInt 2)), intEq (intMax (intNeg (natToInt 2)) (natToInt 1)) (natToInt 1), intEq (intMin (intNeg (natToInt 5)) (intNeg (natToInt 2))) (intNeg (natToInt 5)), equalNat (intToNat (intNeg (natToInt 3))) 0, equalNat (intToNat (natToInt 7)) 7, equalNat (intToNat (natToInt 0)) 0]");

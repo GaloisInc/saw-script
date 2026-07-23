@@ -108,11 +108,38 @@ Passing (the standing fences):
   restructured tree (57 gaps in full-suite inventory scope,
   census above).
 
-Known-gap census (release 0.02 posture, taken 2026-07-23): 53
-pinned `.known-gap` rows in conformance scope
-(differential 22 / obligations 18 / saw-boundary 13), plus 3
-`proof-gaps/` rows and the stretch probe in the full-suite
-inventory — 57 total, the number `make test` reports. Delta from
+Known-gap census (release 0.02 posture, taken 2026-07-23; +1 the
+same day, see the audit note below): 54 pinned `.known-gap` rows in
+conformance scope (differential 23 / obligations 18 /
+saw-boundary 13), plus 3 `proof-gaps/` rows and the stretch probe
+in the full-suite inventory — 58 total, the number `make test`
+reports.
+
+**2026-07-23 audit + edge-case-matrix addendum.** An independent
+audit found a REAL soundness defect in the trusted support layer:
+`bvToInt` was realized as the SIGNED conversion while SAW's is
+UNSIGNED (Prelude.sawcore:2113; divergent on every sign-bit-set
+input; the only test case, 0x7f, never crossed the sign bit). Fixed
+same day (commit "SOUNDNESS FIX — bvToInt"), zero landed proofs
+affected, and the differential row now pins the sign-crossing pair.
+In response, the differential corpus gained a 200+-case labeled
+edge-case matrix across ten rows (conversions, arithmetic,
+division, shifts/bitwise, order/width/counts, Nat, Int, Int
+div/mod, IntMod, Rational) — each case is its own SAW-vs-Lean
+observation line, so a single divergent case names itself. The
+matrix immediately caught a second fidelity item: SAW's concrete
+evaluator CRASHES at `Z 0` (`toIntModOp` = Haskell `x mod 0`) while
+the library totalizes — pinned as
+`differential/intmod_zero_boundary` (the +1 census row); the
+library's false "no-reduction convention" comment is corrected, and
+the gate-vs-caveat disposition is a recorded open decision. A
+follow-up whole-surface fidelity review (independent reviewer,
+every public library definition dispositioned against
+Prelude.sawcore/Prims.hs/Concrete.hs) found NO further same-value
+divergences and confirmed the classic risk sites (flipped
+comparators, signed div/rem, floor div/mod, shift direction/fill,
+lg2/width conventions, zip truncation, fold direction, iteM
+laziness, unreduced-Rational observations) exactly faithful. Delta from
 the 0.01 census (64 conformance-scope + 7 proof-gaps): 11
 conformance rows un-gapped and 4 proof-gaps discharged across
 0.02 — the Stream@core hole closed (kind-directed domain map,

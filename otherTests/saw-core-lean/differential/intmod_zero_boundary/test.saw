@@ -1,0 +1,19 @@
+// TRUE differential litmus for the Z 0 (IntMod 0) evaluation boundary.
+//
+// EDGE-CASE MATRIX (2026-07-23, comprehensive boundary-coverage
+// pass; authored via an offline case-table generator, committed
+// artifact is this file). One labeled case per SAW_OBSERVED line;
+// the emitted artifact is the Vec of all case terms and
+// lean-observe.lean prints the matching labeled line per index, so
+// a single divergent case names itself. The expected value inside
+// each case is a human annotation only — the row compares SAW's and
+// Lean's evaluation of the same closed term, so a wrong expectation
+// still agrees on both sides (both false) and divergence on ANY
+// case shows as a SAW/Lean mismatch.
+print (str_concat "SAW_OBSERVED: mod0_pos " (show (eval_bool (parse_core "intEq (fromIntMod 0 (toIntMod 0 (natToInt 5))) (natToInt 5)"))));
+print (str_concat "SAW_OBSERVED: mod0_neg " (show (eval_bool (parse_core "intEq (fromIntMod 0 (toIntMod 0 (intNeg (natToInt 5)))) (intNeg (natToInt 5))"))));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  (parse_core "[intEq (fromIntMod 0 (toIntMod 0 (natToInt 5))) (natToInt 5), intEq (fromIntMod 0 (toIntMod 0 (intNeg (natToInt 5)))) (intNeg (natToInt 5))]");

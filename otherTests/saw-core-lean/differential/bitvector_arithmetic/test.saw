@@ -1,15 +1,32 @@
-// TRUE differential litmus for total bitvector arithmetic.
+// TRUE differential litmus for modular bitvector arithmetic.
 //
-// Division/remainder cases are intentionally not here. They are partial
-// operations in the SAW-Lean backend and need checked nonzero obligations
-// even when this concrete divisor is nonzero; see bitvector_division.
-
-let observed =
-  parse_core "and (bvEq 8 (bvAdd 8 0x0f 0x01) 0x10) (and (bvEq 8 (bvSub 8 0x00 0x01) 0xff) (and (bvEq 8 (bvMul 8 0x10 0x10) 0x00) (bvEq 8 (bvNeg 8 0x01) 0xff)))";
-
-print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+// EDGE-CASE MATRIX (2026-07-23, comprehensive boundary-coverage
+// pass; authored via an offline case-table generator, committed
+// artifact is this file). One labeled case per SAW_OBSERVED line;
+// the emitted artifact is the Vec of all case terms and
+// lean-observe.lean prints the matching labeled line per index, so
+// a single divergent case names itself. The expected value inside
+// each case is a human annotation only — the row compares SAW's and
+// Lean's evaluation of the same closed term, so a wrong expectation
+// still agrees on both sides (both false) and divergence on ANY
+// case shows as a SAW/Lean mismatch.
+print (str_concat "SAW_OBSERVED: add_plain " (show (eval_bool (parse_core "bvEq 8 (bvAdd 8 0x0f 0x01) 0x10"))));
+print (str_concat "SAW_OBSERVED: add_wrap " (show (eval_bool (parse_core "bvEq 8 (bvAdd 8 0xff 0x01) 0x00"))));
+print (str_concat "SAW_OBSERVED: add_signflip " (show (eval_bool (parse_core "bvEq 8 (bvAdd 8 0x7f 0x01) 0x80"))));
+print (str_concat "SAW_OBSERVED: sub_wrap " (show (eval_bool (parse_core "bvEq 8 (bvSub 8 0x00 0x01) 0xff"))));
+print (str_concat "SAW_OBSERVED: sub_plain " (show (eval_bool (parse_core "bvEq 8 (bvSub 8 0x10 0x01) 0x0f"))));
+print (str_concat "SAW_OBSERVED: sub_self " (show (eval_bool (parse_core "bvEq 8 (bvSub 8 0xa5 0xa5) 0x00"))));
+print (str_concat "SAW_OBSERVED: neg_minneg " (show (eval_bool (parse_core "bvEq 8 (bvNeg 8 0x80) 0x80"))));
+print (str_concat "SAW_OBSERVED: neg_zero " (show (eval_bool (parse_core "bvEq 8 (bvNeg 8 0x00) 0x00"))));
+print (str_concat "SAW_OBSERVED: neg_one " (show (eval_bool (parse_core "bvEq 8 (bvNeg 8 0x01) 0xff"))));
+print (str_concat "SAW_OBSERVED: mul_wrap " (show (eval_bool (parse_core "bvEq 8 (bvMul 8 0x10 0x10) 0x00"))));
+print (str_concat "SAW_OBSERVED: mul_msb " (show (eval_bool (parse_core "bvEq 8 (bvMul 8 0x80 0x02) 0x00"))));
+print (str_concat "SAW_OBSERVED: mul_ffff " (show (eval_bool (parse_core "bvEq 8 (bvMul 8 0xff 0xff) 0x01"))));
+print (str_concat "SAW_OBSERVED: mul_zero " (show (eval_bool (parse_core "bvEq 8 (bvMul 8 0xff 0x00) 0x00"))));
+print (str_concat "SAW_OBSERVED: w1_add_wrap " (show (eval_bool (parse_core "bvEq 1 (bvAdd 1 (bvNat 1 1) (bvNat 1 1)) (bvNat 1 0)"))));
+print (str_concat "SAW_OBSERVED: w1_neg " (show (eval_bool (parse_core "bvEq 1 (bvNeg 1 (bvNat 1 1)) (bvNat 1 1)"))));
 
 write_lean_term
   "Observed" [] []
   "observed.lean"
-  observed;
+  (parse_core "[bvEq 8 (bvAdd 8 0x0f 0x01) 0x10, bvEq 8 (bvAdd 8 0xff 0x01) 0x00, bvEq 8 (bvAdd 8 0x7f 0x01) 0x80, bvEq 8 (bvSub 8 0x00 0x01) 0xff, bvEq 8 (bvSub 8 0x10 0x01) 0x0f, bvEq 8 (bvSub 8 0xa5 0xa5) 0x00, bvEq 8 (bvNeg 8 0x80) 0x80, bvEq 8 (bvNeg 8 0x00) 0x00, bvEq 8 (bvNeg 8 0x01) 0xff, bvEq 8 (bvMul 8 0x10 0x10) 0x00, bvEq 8 (bvMul 8 0x80 0x02) 0x00, bvEq 8 (bvMul 8 0xff 0xff) 0x01, bvEq 8 (bvMul 8 0xff 0x00) 0x00, bvEq 1 (bvAdd 1 (bvNat 1 1) (bvNat 1 1)) (bvNat 1 0), bvEq 1 (bvNeg 1 (bvNat 1 1)) (bvNat 1 1)]");

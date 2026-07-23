@@ -1,11 +1,42 @@
-// TRUE differential litmus for bitvector bitwise and shift primitives.
-
-let observed =
-  parse_core "and (bvEq 8 (bvShl 8 0x81 1) 0x02) (and (bvEq 8 (bvShr 8 0x81 1) 0x40) (and (bvEq 8 (bvSShr 7 0xf8 1) 0xfc) (and (bvEq 8 (bvNot 8 0x0f) 0xf0) (and (bvEq 8 (bvAnd 8 0xf0 0xcc) 0xc0) (and (bvEq 8 (bvOr 8 0xf0 0x0f) 0xff) (bvEq 8 (bvXor 8 0xaa 0xff) 0x55))))))";
-
-print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+// TRUE differential litmus for bitwise operations and shifts.
+//
+// EDGE-CASE MATRIX (2026-07-23, comprehensive boundary-coverage
+// pass; authored via an offline case-table generator, committed
+// artifact is this file). One labeled case per SAW_OBSERVED line;
+// the emitted artifact is the Vec of all case terms and
+// lean-observe.lean prints the matching labeled line per index, so
+// a single divergent case names itself. The expected value inside
+// each case is a human annotation only — the row compares SAW's and
+// Lean's evaluation of the same closed term, so a wrong expectation
+// still agrees on both sides (both false) and divergence on ANY
+// case shows as a SAW/Lean mismatch.
+print (str_concat "SAW_OBSERVED: shl_1 " (show (eval_bool (parse_core "bvEq 8 (bvShl 8 0x81 1) 0x02"))));
+print (str_concat "SAW_OBSERVED: shl_0 " (show (eval_bool (parse_core "bvEq 8 (bvShl 8 0x81 0) 0x81"))));
+print (str_concat "SAW_OBSERVED: shl_w1 " (show (eval_bool (parse_core "bvEq 8 (bvShl 8 0x01 7) 0x80"))));
+print (str_concat "SAW_OBSERVED: shl_w " (show (eval_bool (parse_core "bvEq 8 (bvShl 8 0xff 8) 0x00"))));
+print (str_concat "SAW_OBSERVED: shl_gt_w " (show (eval_bool (parse_core "bvEq 8 (bvShl 8 0xff 9) 0x00"))));
+print (str_concat "SAW_OBSERVED: shl_2w " (show (eval_bool (parse_core "bvEq 8 (bvShl 8 0xff 16) 0x00"))));
+print (str_concat "SAW_OBSERVED: shr_1 " (show (eval_bool (parse_core "bvEq 8 (bvShr 8 0x81 1) 0x40"))));
+print (str_concat "SAW_OBSERVED: shr_0 " (show (eval_bool (parse_core "bvEq 8 (bvShr 8 0x81 0) 0x81"))));
+print (str_concat "SAW_OBSERVED: shr_w1 " (show (eval_bool (parse_core "bvEq 8 (bvShr 8 0x80 7) 0x01"))));
+print (str_concat "SAW_OBSERVED: shr_w " (show (eval_bool (parse_core "bvEq 8 (bvShr 8 0xff 8) 0x00"))));
+print (str_concat "SAW_OBSERVED: shr_gt_w " (show (eval_bool (parse_core "bvEq 8 (bvShr 8 0xff 9) 0x00"))));
+print (str_concat "SAW_OBSERVED: sshr_1_neg " (show (eval_bool (parse_core "bvEq 8 (bvSShr 7 0xf8 1) 0xfc"))));
+print (str_concat "SAW_OBSERVED: sshr_0 " (show (eval_bool (parse_core "bvEq 8 (bvSShr 7 0x80 0) 0x80"))));
+print (str_concat "SAW_OBSERVED: sshr_w1_neg " (show (eval_bool (parse_core "bvEq 8 (bvSShr 7 0x80 7) 0xff"))));
+print (str_concat "SAW_OBSERVED: sshr_w_neg " (show (eval_bool (parse_core "bvEq 8 (bvSShr 7 0x80 8) 0xff"))));
+print (str_concat "SAW_OBSERVED: sshr_big_neg " (show (eval_bool (parse_core "bvEq 8 (bvSShr 7 0x80 100) 0xff"))));
+print (str_concat "SAW_OBSERVED: sshr_w1_pos " (show (eval_bool (parse_core "bvEq 8 (bvSShr 7 0x7f 7) 0x00"))));
+print (str_concat "SAW_OBSERVED: sshr_1_pos " (show (eval_bool (parse_core "bvEq 8 (bvSShr 7 0x7f 1) 0x3f"))));
+print (str_concat "SAW_OBSERVED: not_pattern " (show (eval_bool (parse_core "bvEq 8 (bvNot 8 0x0f) 0xf0"))));
+print (str_concat "SAW_OBSERVED: and_pattern " (show (eval_bool (parse_core "bvEq 8 (bvAnd 8 0xf0 0xcc) 0xc0"))));
+print (str_concat "SAW_OBSERVED: or_pattern " (show (eval_bool (parse_core "bvEq 8 (bvOr 8 0xf0 0x0f) 0xff"))));
+print (str_concat "SAW_OBSERVED: xor_pattern " (show (eval_bool (parse_core "bvEq 8 (bvXor 8 0xaa 0xff) 0x55"))));
+print (str_concat "SAW_OBSERVED: xor_self " (show (eval_bool (parse_core "bvEq 8 (bvXor 8 0xa7 0xa7) 0x00"))));
+print (str_concat "SAW_OBSERVED: and_not_self " (show (eval_bool (parse_core "bvEq 8 (bvAnd 8 0xa7 (bvNot 8 0xa7)) 0x00"))));
+print (str_concat "SAW_OBSERVED: or_not_self " (show (eval_bool (parse_core "bvEq 8 (bvOr 8 0xa7 (bvNot 8 0xa7)) 0xff"))));
 
 write_lean_term
   "Observed" [] []
   "observed.lean"
-  observed;
+  (parse_core "[bvEq 8 (bvShl 8 0x81 1) 0x02, bvEq 8 (bvShl 8 0x81 0) 0x81, bvEq 8 (bvShl 8 0x01 7) 0x80, bvEq 8 (bvShl 8 0xff 8) 0x00, bvEq 8 (bvShl 8 0xff 9) 0x00, bvEq 8 (bvShl 8 0xff 16) 0x00, bvEq 8 (bvShr 8 0x81 1) 0x40, bvEq 8 (bvShr 8 0x81 0) 0x81, bvEq 8 (bvShr 8 0x80 7) 0x01, bvEq 8 (bvShr 8 0xff 8) 0x00, bvEq 8 (bvShr 8 0xff 9) 0x00, bvEq 8 (bvSShr 7 0xf8 1) 0xfc, bvEq 8 (bvSShr 7 0x80 0) 0x80, bvEq 8 (bvSShr 7 0x80 7) 0xff, bvEq 8 (bvSShr 7 0x80 8) 0xff, bvEq 8 (bvSShr 7 0x80 100) 0xff, bvEq 8 (bvSShr 7 0x7f 7) 0x00, bvEq 8 (bvSShr 7 0x7f 1) 0x3f, bvEq 8 (bvNot 8 0x0f) 0xf0, bvEq 8 (bvAnd 8 0xf0 0xcc) 0xc0, bvEq 8 (bvOr 8 0xf0 0x0f) 0xff, bvEq 8 (bvXor 8 0xaa 0xff) 0x55, bvEq 8 (bvXor 8 0xa7 0xa7) 0x00, bvEq 8 (bvAnd 8 0xa7 (bvNot 8 0xa7)) 0x00, bvEq 8 (bvOr 8 0xa7 (bvNot 8 0xa7)) 0xff]");

@@ -1,14 +1,33 @@
-// TRUE differential litmus for defined Rational primitive behavior.
+// TRUE differential litmus for Rational arithmetic.
 //
-// Zero-denominator and reciprocal-zero cases are partiality surfaces and need
-// separate proof-obligation rows.
-
-let observed =
-  parse_core "and (rationalLe (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 2) (natToInt 3))) (and (rationalLt (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 2) (natToInt 3))) (and (rationalEq (rationalAdd (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 1) (natToInt 3))) (ratio (natToInt 5) (natToInt 6))) (and (rationalEq (rationalSub (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 1) (natToInt 3))) (ratio (natToInt 1) (natToInt 6))) (and (rationalEq (rationalMul (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 1) (natToInt 3))) (ratio (natToInt 1) (natToInt 6))) (and (rationalEq (rationalNeg (ratio (natToInt 1) (natToInt 2))) (ratio (intNeg (natToInt 1)) (natToInt 2))) (and (rationalEq (rationalRecip (ratio (natToInt 2) (natToInt 3))) (ratio (natToInt 3) (natToInt 2))) (intEq (rationalFloor (ratio (natToInt 7) (natToInt 2))) (natToInt 3))))))))";
-
-print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+// EDGE-CASE MATRIX (2026-07-23, comprehensive boundary-coverage
+// pass; authored via an offline case-table generator, committed
+// artifact is this file). One labeled case per SAW_OBSERVED line;
+// the emitted artifact is the Vec of all case terms and
+// lean-observe.lean prints the matching labeled line per index, so
+// a single divergent case names itself. The expected value inside
+// each case is a human annotation only — the row compares SAW's and
+// Lean's evaluation of the same closed term, so a wrong expectation
+// still agrees on both sides (both false) and divergence on ANY
+// case shows as a SAW/Lean mismatch.
+print (str_concat "SAW_OBSERVED: le " (show (eval_bool (parse_core "rationalLe (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 2) (natToInt 3))"))));
+print (str_concat "SAW_OBSERVED: lt " (show (eval_bool (parse_core "rationalLt (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 2) (natToInt 3))"))));
+print (str_concat "SAW_OBSERVED: add " (show (eval_bool (parse_core "rationalEq (rationalAdd (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 1) (natToInt 3))) (ratio (natToInt 5) (natToInt 6))"))));
+print (str_concat "SAW_OBSERVED: sub " (show (eval_bool (parse_core "rationalEq (rationalSub (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 1) (natToInt 3))) (ratio (natToInt 1) (natToInt 6))"))));
+print (str_concat "SAW_OBSERVED: mul " (show (eval_bool (parse_core "rationalEq (rationalMul (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 1) (natToInt 3))) (ratio (natToInt 1) (natToInt 6))"))));
+print (str_concat "SAW_OBSERVED: neg " (show (eval_bool (parse_core "rationalEq (rationalNeg (ratio (natToInt 1) (natToInt 2))) (ratio (intNeg (natToInt 1)) (natToInt 2))"))));
+print (str_concat "SAW_OBSERVED: recip " (show (eval_bool (parse_core "rationalEq (rationalRecip (ratio (natToInt 2) (natToInt 3))) (ratio (natToInt 3) (natToInt 2))"))));
+print (str_concat "SAW_OBSERVED: floor_pos " (show (eval_bool (parse_core "intEq (rationalFloor (ratio (natToInt 7) (natToInt 2))) (natToInt 3)"))));
+print (str_concat "SAW_OBSERVED: floor_neg " (show (eval_bool (parse_core "intEq (rationalFloor (ratio (intNeg (natToInt 3)) (natToInt 2))) (intNeg (natToInt 2))"))));
+print (str_concat "SAW_OBSERVED: floor_neg_exact " (show (eval_bool (parse_core "intEq (rationalFloor (ratio (intNeg (natToInt 6)) (natToInt 3))) (intNeg (natToInt 2))"))));
+print (str_concat "SAW_OBSERVED: floor_neg_small " (show (eval_bool (parse_core "intEq (rationalFloor (ratio (intNeg (natToInt 1)) (natToInt 3))) (intNeg (natToInt 1))"))));
+print (str_concat "SAW_OBSERVED: neg_denom " (show (eval_bool (parse_core "rationalEq (ratio (natToInt 1) (intNeg (natToInt 2))) (rationalNeg (ratio (natToInt 1) (natToInt 2)))"))));
+print (str_concat "SAW_OBSERVED: unreduced " (show (eval_bool (parse_core "rationalEq (ratio (natToInt 2) (natToInt 4)) (ratio (natToInt 1) (natToInt 2))"))));
+print (str_concat "SAW_OBSERVED: recip_neg " (show (eval_bool (parse_core "rationalEq (rationalRecip (ratio (intNeg (natToInt 2)) (natToInt 3))) (ratio (intNeg (natToInt 3)) (natToInt 2))"))));
+print (str_concat "SAW_OBSERVED: lt_neg " (show (eval_bool (parse_core "rationalLt (ratio (intNeg (natToInt 2)) (natToInt 3)) (ratio (intNeg (natToInt 1)) (natToInt 3))"))));
+print (str_concat "SAW_OBSERVED: recip_recip " (show (eval_bool (parse_core "rationalEq (rationalRecip (rationalRecip (ratio (natToInt 3) (natToInt 4)))) (ratio (natToInt 3) (natToInt 4))"))));
 
 write_lean_term
   "Observed" [] []
   "observed.lean"
-  observed;
+  (parse_core "[rationalLe (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 2) (natToInt 3)), rationalLt (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 2) (natToInt 3)), rationalEq (rationalAdd (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 1) (natToInt 3))) (ratio (natToInt 5) (natToInt 6)), rationalEq (rationalSub (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 1) (natToInt 3))) (ratio (natToInt 1) (natToInt 6)), rationalEq (rationalMul (ratio (natToInt 1) (natToInt 2)) (ratio (natToInt 1) (natToInt 3))) (ratio (natToInt 1) (natToInt 6)), rationalEq (rationalNeg (ratio (natToInt 1) (natToInt 2))) (ratio (intNeg (natToInt 1)) (natToInt 2)), rationalEq (rationalRecip (ratio (natToInt 2) (natToInt 3))) (ratio (natToInt 3) (natToInt 2)), intEq (rationalFloor (ratio (natToInt 7) (natToInt 2))) (natToInt 3), intEq (rationalFloor (ratio (intNeg (natToInt 3)) (natToInt 2))) (intNeg (natToInt 2)), intEq (rationalFloor (ratio (intNeg (natToInt 6)) (natToInt 3))) (intNeg (natToInt 2)), intEq (rationalFloor (ratio (intNeg (natToInt 1)) (natToInt 3))) (intNeg (natToInt 1)), rationalEq (ratio (natToInt 1) (intNeg (natToInt 2))) (rationalNeg (ratio (natToInt 1) (natToInt 2))), rationalEq (ratio (natToInt 2) (natToInt 4)) (ratio (natToInt 1) (natToInt 2)), rationalEq (rationalRecip (ratio (intNeg (natToInt 2)) (natToInt 3))) (ratio (intNeg (natToInt 3)) (natToInt 2)), rationalLt (ratio (intNeg (natToInt 2)) (natToInt 3)) (ratio (intNeg (natToInt 1)) (natToInt 3)), rationalEq (rationalRecip (rationalRecip (ratio (natToInt 3) (natToInt 4)))) (ratio (natToInt 3) (natToInt 4))]");

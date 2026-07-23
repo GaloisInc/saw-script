@@ -1,11 +1,29 @@
-// TRUE differential litmus for small IntMod primitive behavior.
-
-let observed =
-  parse_core "and (intEq (fromIntMod 5 (toIntMod 5 (natToInt 12))) (natToInt 2)) (and (intModEq 5 (intModSub 5 (toIntMod 5 (natToInt 1)) (toIntMod 5 (natToInt 3))) (toIntMod 5 (natToInt 3))) (intModEq 5 (intModMul 5 (toIntMod 5 (natToInt 3)) (toIntMod 5 (natToInt 4))) (toIntMod 5 (natToInt 2))))";
-
-print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+// TRUE differential litmus for IntMod (Z n) arithmetic.
+//
+// EDGE-CASE MATRIX (2026-07-23, comprehensive boundary-coverage
+// pass; authored via an offline case-table generator, committed
+// artifact is this file). One labeled case per SAW_OBSERVED line;
+// the emitted artifact is the Vec of all case terms and
+// lean-observe.lean prints the matching labeled line per index, so
+// a single divergent case names itself. The expected value inside
+// each case is a human annotation only — the row compares SAW's and
+// Lean's evaluation of the same closed term, so a wrong expectation
+// still agrees on both sides (both false) and divergence on ANY
+// case shows as a SAW/Lean mismatch.
+print (str_concat "SAW_OBSERVED: from_to " (show (eval_bool (parse_core "intEq (fromIntMod 5 (toIntMod 5 (natToInt 12))) (natToInt 2)"))));
+print (str_concat "SAW_OBSERVED: sub_wrap " (show (eval_bool (parse_core "intModEq 5 (intModSub 5 (toIntMod 5 (natToInt 1)) (toIntMod 5 (natToInt 3))) (toIntMod 5 (natToInt 3))"))));
+print (str_concat "SAW_OBSERVED: mul_wrap " (show (eval_bool (parse_core "intModEq 5 (intModMul 5 (toIntMod 5 (natToInt 3)) (toIntMod 5 (natToInt 4))) (toIntMod 5 (natToInt 2))"))));
+print (str_concat "SAW_OBSERVED: neg_rep " (show (eval_bool (parse_core "intEq (fromIntMod 5 (toIntMod 5 (intNeg (natToInt 3)))) (natToInt 2)"))));
+print (str_concat "SAW_OBSERVED: neg_rep_big " (show (eval_bool (parse_core "intEq (fromIntMod 5 (toIntMod 5 (intNeg (natToInt 12)))) (natToInt 3)"))));
+print (str_concat "SAW_OBSERVED: eq_noncanon " (show (eval_bool (parse_core "intModEq 5 (toIntMod 5 (natToInt 7)) (toIntMod 5 (natToInt 2))"))));
+print (str_concat "SAW_OBSERVED: eq_neg_pos " (show (eval_bool (parse_core "intModEq 5 (toIntMod 5 (intNeg (natToInt 3))) (toIntMod 5 (natToInt 2))"))));
+print (str_concat "SAW_OBSERVED: add_wrap " (show (eval_bool (parse_core "intEq (fromIntMod 5 (intModAdd 5 (toIntMod 5 (natToInt 3)) (toIntMod 5 (natToInt 4)))) (natToInt 2)"))));
+print (str_concat "SAW_OBSERVED: neg_op " (show (eval_bool (parse_core "intEq (fromIntMod 5 (intModNeg 5 (toIntMod 5 (natToInt 2)))) (natToInt 3)"))));
+print (str_concat "SAW_OBSERVED: neg_op_zero " (show (eval_bool (parse_core "intEq (fromIntMod 5 (intModNeg 5 (toIntMod 5 (natToInt 0)))) (natToInt 0)"))));
+print (str_concat "SAW_OBSERVED: mod1_seven " (show (eval_bool (parse_core "intEq (fromIntMod 1 (toIntMod 1 (natToInt 7))) (natToInt 0)"))));
+print (str_concat "SAW_OBSERVED: mod1_eq " (show (eval_bool (parse_core "intModEq 1 (toIntMod 1 (natToInt 3)) (toIntMod 1 (natToInt 8))"))));
 
 write_lean_term
   "Observed" [] []
   "observed.lean"
-  observed;
+  (parse_core "[intEq (fromIntMod 5 (toIntMod 5 (natToInt 12))) (natToInt 2), intModEq 5 (intModSub 5 (toIntMod 5 (natToInt 1)) (toIntMod 5 (natToInt 3))) (toIntMod 5 (natToInt 3)), intModEq 5 (intModMul 5 (toIntMod 5 (natToInt 3)) (toIntMod 5 (natToInt 4))) (toIntMod 5 (natToInt 2)), intEq (fromIntMod 5 (toIntMod 5 (intNeg (natToInt 3)))) (natToInt 2), intEq (fromIntMod 5 (toIntMod 5 (intNeg (natToInt 12)))) (natToInt 3), intModEq 5 (toIntMod 5 (natToInt 7)) (toIntMod 5 (natToInt 2)), intModEq 5 (toIntMod 5 (intNeg (natToInt 3))) (toIntMod 5 (natToInt 2)), intEq (fromIntMod 5 (intModAdd 5 (toIntMod 5 (natToInt 3)) (toIntMod 5 (natToInt 4)))) (natToInt 2), intEq (fromIntMod 5 (intModNeg 5 (toIntMod 5 (natToInt 2)))) (natToInt 3), intEq (fromIntMod 5 (intModNeg 5 (toIntMod 5 (natToInt 0)))) (natToInt 0), intEq (fromIntMod 1 (toIntMod 1 (natToInt 7))) (natToInt 0), intModEq 1 (toIntMod 1 (natToInt 3)) (toIntMod 1 (natToInt 8))]");

@@ -1,15 +1,42 @@
-// TRUE differential litmus for basic SAWCore Nat constants and application.
+// TRUE differential litmus for Nat scalar arithmetic.
 //
-// The observed result is Boolean equality over a small closed Nat expression,
-// so both sides can compare concrete behavior without a hand-written Lean
-// analogue of the Nat computation.
-
-let observed =
-  parse_core "and (equalNat (addNat 2 3) 5) (and (equalNat (pred 0) 0) (ltNat 3 4))";
-
-print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+// EDGE-CASE MATRIX (2026-07-23, comprehensive boundary-coverage
+// pass; authored via an offline case-table generator, committed
+// artifact is this file). One labeled case per SAW_OBSERVED line;
+// the emitted artifact is the Vec of all case terms and
+// lean-observe.lean prints the matching labeled line per index, so
+// a single divergent case names itself. The expected value inside
+// each case is a human annotation only — the row compares SAW's and
+// Lean's evaluation of the same closed term, so a wrong expectation
+// still agrees on both sides (both false) and divergence on ANY
+// case shows as a SAW/Lean mismatch.
+print (str_concat "SAW_OBSERVED: add " (show (eval_bool (parse_core "equalNat (addNat 2 3) 5"))));
+print (str_concat "SAW_OBSERVED: pred_zero " (show (eval_bool (parse_core "equalNat (pred 0) 0"))));
+print (str_concat "SAW_OBSERVED: pred_one " (show (eval_bool (parse_core "equalNat (pred 1) 0"))));
+print (str_concat "SAW_OBSERVED: lt " (show (eval_bool (parse_core "ltNat 3 4"))));
+print (str_concat "SAW_OBSERVED: lt_irrefl " (show (eval_bool (parse_core "bvEq 1 [ltNat 4 4] [False]"))));
+print (str_concat "SAW_OBSERVED: sub_saturate " (show (eval_bool (parse_core "equalNat (subNat 3 5) 0"))));
+print (str_concat "SAW_OBSERVED: sub_exact " (show (eval_bool (parse_core "equalNat (subNat 5 5) 0"))));
+print (str_concat "SAW_OBSERVED: sub_plain " (show (eval_bool (parse_core "equalNat (subNat 5 3) 2"))));
+print (str_concat "SAW_OBSERVED: mul_zero " (show (eval_bool (parse_core "equalNat (mulNat 0 7) 0"))));
+print (str_concat "SAW_OBSERVED: mul_plain " (show (eval_bool (parse_core "equalNat (mulNat 6 7) 42"))));
+print (str_concat "SAW_OBSERVED: double " (show (eval_bool (parse_core "equalNat (doubleNat 21) 42"))));
+print (str_concat "SAW_OBSERVED: exp_0_0 " (show (eval_bool (parse_core "equalNat (expNat 0 0) 1"))));
+print (str_concat "SAW_OBSERVED: exp_0_3 " (show (eval_bool (parse_core "equalNat (expNat 0 3) 0"))));
+print (str_concat "SAW_OBSERVED: exp_5_0 " (show (eval_bool (parse_core "equalNat (expNat 5 0) 1"))));
+print (str_concat "SAW_OBSERVED: exp_2_10 " (show (eval_bool (parse_core "equalNat (expNat 2 10) 1024"))));
+print (str_concat "SAW_OBSERVED: min_lo " (show (eval_bool (parse_core "equalNat (minNat 3 5) 3"))));
+print (str_concat "SAW_OBSERVED: min_eq " (show (eval_bool (parse_core "equalNat (minNat 5 5) 5"))));
+print (str_concat "SAW_OBSERVED: max_hi " (show (eval_bool (parse_core "equalNat (maxNat 3 5) 5"))));
+print (str_concat "SAW_OBSERVED: div_basic " (show (eval_bool (parse_core "equalNat (divNat 7 2) 3"))));
+print (str_concat "SAW_OBSERVED: mod_basic " (show (eval_bool (parse_core "equalNat (modNat 7 2) 1"))));
+print (str_concat "SAW_OBSERVED: div_by1 " (show (eval_bool (parse_core "equalNat (divNat 9 1) 9"))));
+print (str_concat "SAW_OBSERVED: div_0_x " (show (eval_bool (parse_core "equalNat (divNat 0 5) 0"))));
+print (str_concat "SAW_OBSERVED: mod_exact " (show (eval_bool (parse_core "equalNat (modNat 8 4) 0"))));
+print (str_concat "SAW_OBSERVED: if0_zero " (show (eval_bool (parse_core "equalNat (if0Nat Nat 0 4 8) 4"))));
+print (str_concat "SAW_OBSERVED: if0_succ " (show (eval_bool (parse_core "equalNat (if0Nat Nat 3 4 8) 8"))));
 
 write_lean_term
   "Observed" [] []
   "observed.lean"
-  observed;
+  (parse_core "[equalNat (addNat 2 3) 5, equalNat (pred 0) 0, equalNat (pred 1) 0, ltNat 3 4, bvEq 1 [ltNat 4 4] [False], equalNat (subNat 3 5) 0, equalNat (subNat 5 5) 0, equalNat (subNat 5 3) 2, equalNat (mulNat 0 7) 0, equalNat (mulNat 6 7) 42, equalNat (doubleNat 21) 42, equalNat (expNat 0 0) 1, equalNat (expNat 0 3) 0, equalNat (expNat 5 0) 1, equalNat (expNat 2 10) 1024, equalNat (minNat 3 5) 3, equalNat (minNat 5 5) 5, equalNat (maxNat 3 5) 5, equalNat (divNat 7 2) 3, equalNat (modNat 7 2) 1, equalNat (divNat 9 1) 9, equalNat (divNat 0 5) 0, equalNat (modNat 8 4) 0, equalNat (if0Nat Nat 0 4 8) 4, equalNat (if0Nat Nat 3 4 8) 8]");

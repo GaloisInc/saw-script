@@ -331,6 +331,41 @@ Tier 1 — mechanical:
   modulo exactly the two chacha observer-#reduce-budget rows, and
   every one of the 53 reasons was re-read and classified
   (rejection / SAW-side stub / observation-path) to back the claim.
+- [x] **bvToInt soundness fix + differential edge-case matrix —
+  DONE 2026-07-23.** Audit finding (independent session): `bvToInt`
+  realized SIGNED vs SAW's UNSIGNED (Prelude.sawcore:2113,
+  Concrete.hs bvToIntOp) — real trusted-layer soundness defect,
+  zero landed-proof impact, sole test case (0x7f) never crossed the
+  sign bit. Fixed (Int.ofNat ∘ toNat), mutation-tested live (buggy
+  def FAILS the row), committed standalone. Follow-ups the same
+  day: (a) 200+-case labeled differential edge-case matrix across
+  ten rows (user request: comprehensive boundary coverage) — one
+  SAW_OBSERVED/LEAN_OBSERVED line per case so a divergent case
+  names itself; expectations inside cases are annotations only (a
+  wrong expectation agrees false=false; divergence always
+  mismatches); (b) the matrix caught `Z 0`: SAW's concrete
+  evaluator CRASHES (toIntModOp = Haskell `x mod 0`) while the
+  library totalizes — pinned `differential/intmod_zero_boundary`,
+  false library comment corrected (census 57 -> 58); (c)
+  whole-surface fidelity review (independent Opus reviewer, every
+  public def dispositioned against Prelude.sawcore /Prims.hs
+  /Concrete.hs): NO further same-value divergences; flipped
+  comparators, signed div/rem, floor div/mod, shift fill/direction,
+  lg2/width, zip truncation, fold direction, iteM laziness,
+  unreduced-Rational observations all confirmed faithful; Rational
+  authority is the SHARED Prims.hs table (Concrete.hs only
+  overrides a subset) — worth remembering when citing simulator
+  authorities.
+- [ ] **IntMod n = 0 disposition (opened 2026-07-23, user
+  decision).** SAW concrete evaluation of any `Z 0` operation
+  CRASHES; the Lean realizations are total (fmod _ 0 = x) with NO
+  contract gate (unlike every division-family partial op).
+  Reachable only from raw SAWCore (Cryptol's `Z n` requires
+  n >= 1). Options: translation-time gate (reject `IntMod 0`
+  loudly, mirroring the raw-error discipline) vs documented caveat
+  (current state; divergence-at-crash-point pinned by the boundary
+  row). Gate is the house-consistent choice; needs a small
+  emitter change + a saw-boundary rejection row.
 - [x] **Docstrings — DONE 2026-07-23** (user call: add them, per
   Lean's linter). The authority is core's `linter.missingDocs`:
   153 public declarations flagged (145 SAWCorePrimitives, 4

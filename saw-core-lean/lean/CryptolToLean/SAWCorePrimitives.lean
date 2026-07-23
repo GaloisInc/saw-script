@@ -170,10 +170,18 @@ use sites via `SpecialTreatment`; the local def is `Int` directly
 The quotient type `Z / nZ` — Cryptol's `Z n`. SAW Prelude declares
 each operation as a `primitive` (no body); we represent `IntMod n`
 as `Int` (every value implicitly `mod n`) and route operations
-through `Int.fmod` (floor modulus). For `n = 0`, SAW's convention
-is "no reduction" (representative is the input as-is), which
-matches `Int.fmod _ 0 = _`. Each function is `@[reducible]` so
-SAW-named goals reduce transparently to Int arithmetic.
+through `Int.fmod` (floor modulus). Each function is `@[reducible]`
+so SAW-named goals reduce transparently to Int arithmetic.
+
+`n = 0` CAVEAT (corrected 2026-07-23 — the earlier "SAW's
+convention is no reduction" claim here was FALSE): SAW's concrete
+evaluator is PARTIAL at `Z 0` — `toIntModOp` computes Haskell
+`x mod 0`, which THROWS (SAWCore.Simulator.Concrete), so no
+SAW-observable `Z 0` value exists. These realizations are total at
+`n = 0` (`Int.fmod x 0 = x`), a divergence-at-crash-point pinned by
+`differential/intmod_zero_boundary`. Reachable only from raw
+SAWCore (Cryptol's `Z n` requires `n >= 1`); the gate-vs-caveat
+disposition is a recorded open decision.
 
 The signatures match `Prelude.sawcore` lines 2126-2135 exactly. -/
 
@@ -183,7 +191,8 @@ every value implicitly reduced mod `n` (see the section comment). -/
 /-- SAWCore `toIntMod` — inject an `Int` into `Z n` by reducing. -/
 @[reducible] def toIntMod : (n : Nat) → Int → IntMod n := fun n x => Int.fmod x n
 /-- SAWCore `fromIntMod` — the canonical representative in `[0, n)`
-(floor modulus; identity at `n = 0`). -/
+(floor modulus; identity at `n = 0`, where SAW itself has no value —
+see the section's `n = 0` caveat). -/
 @[reducible] def fromIntMod : (n : Nat) → IntMod n → Int := fun n x => Int.fmod x n
 /-- SAWCore `intModEq` — equality in `Z n`, decided on canonical
 representatives. -/

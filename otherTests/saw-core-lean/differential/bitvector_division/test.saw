@@ -1,16 +1,38 @@
 // TRUE differential litmus for nonzero bitvector division/remainder.
 //
-// This is currently pinned as a known gap: SAW and the emitted Lean term agree
-// semantically, but the proof-carrying backend now emits explicit nonzero
-// obligations and the starter proof does not yet discharge concrete vector
-// nonzero facts.
-
-let observed =
-  parse_core "and (bvEq 8 (bvUDiv 8 0x0d 0x03) 0x04) (and (bvEq 8 (bvURem 8 0x0d 0x03) 0x01) (and (bvEq 8 (bvSDiv 7 0xf9 0x02) 0xfd) (bvEq 8 (bvSRem 7 0xf9 0x02) 0xff)))";
-
-print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+// EDGE-CASE MATRIX (2026-07-23, comprehensive boundary-coverage
+// pass; authored via an offline case-table generator, committed
+// artifact is this file). One labeled case per SAW_OBSERVED line;
+// the emitted artifact is the Vec of all case terms and
+// lean-observe.lean prints the matching labeled line per index, so
+// a single divergent case names itself. The expected value inside
+// each case is a human annotation only — the row compares SAW's and
+// Lean's evaluation of the same closed term, so a wrong expectation
+// still agrees on both sides (both false) and divergence on ANY
+// case shows as a SAW/Lean mismatch.
+print (str_concat "SAW_OBSERVED: udiv_basic " (show (eval_bool (parse_core "bvEq 8 (bvUDiv 8 0x0d 0x03) 0x04"))));
+print (str_concat "SAW_OBSERVED: urem_basic " (show (eval_bool (parse_core "bvEq 8 (bvURem 8 0x0d 0x03) 0x01"))));
+print (str_concat "SAW_OBSERVED: udiv_by1 " (show (eval_bool (parse_core "bvEq 8 (bvUDiv 8 0xff 0x01) 0xff"))));
+print (str_concat "SAW_OBSERVED: urem_by1 " (show (eval_bool (parse_core "bvEq 8 (bvURem 8 0xff 0x01) 0x00"))));
+print (str_concat "SAW_OBSERVED: udiv_self " (show (eval_bool (parse_core "bvEq 8 (bvUDiv 8 0xfe 0xfe) 0x01"))));
+print (str_concat "SAW_OBSERVED: udiv_small_big " (show (eval_bool (parse_core "bvEq 8 (bvUDiv 8 0x03 0x0d) 0x00"))));
+print (str_concat "SAW_OBSERVED: urem_small_big " (show (eval_bool (parse_core "bvEq 8 (bvURem 8 0x03 0x0d) 0x03"))));
+print (str_concat "SAW_OBSERVED: udiv_msb_set " (show (eval_bool (parse_core "bvEq 8 (bvUDiv 8 0x80 0x02) 0x40"))));
+print (str_concat "SAW_OBSERVED: udiv_ff_ff " (show (eval_bool (parse_core "bvEq 8 (bvUDiv 8 0xff 0xff) 0x01"))));
+print (str_concat "SAW_OBSERVED: sdiv_pp " (show (eval_bool (parse_core "bvEq 8 (bvSDiv 7 0x07 0x02) 0x03"))));
+print (str_concat "SAW_OBSERVED: srem_pp " (show (eval_bool (parse_core "bvEq 8 (bvSRem 7 0x07 0x02) 0x01"))));
+print (str_concat "SAW_OBSERVED: sdiv_np " (show (eval_bool (parse_core "bvEq 8 (bvSDiv 7 0xf9 0x02) 0xfd"))));
+print (str_concat "SAW_OBSERVED: srem_np " (show (eval_bool (parse_core "bvEq 8 (bvSRem 7 0xf9 0x02) 0xff"))));
+print (str_concat "SAW_OBSERVED: sdiv_pn " (show (eval_bool (parse_core "bvEq 8 (bvSDiv 7 0x07 0xfe) 0xfd"))));
+print (str_concat "SAW_OBSERVED: srem_pn " (show (eval_bool (parse_core "bvEq 8 (bvSRem 7 0x07 0xfe) 0x01"))));
+print (str_concat "SAW_OBSERVED: sdiv_nn " (show (eval_bool (parse_core "bvEq 8 (bvSDiv 7 0xf9 0xfe) 0x03"))));
+print (str_concat "SAW_OBSERVED: srem_nn " (show (eval_bool (parse_core "bvEq 8 (bvSRem 7 0xf9 0xfe) 0xff"))));
+print (str_concat "SAW_OBSERVED: sdiv_min_neg1 " (show (eval_bool (parse_core "bvEq 8 (bvSDiv 7 0x80 0xff) 0x80"))));
+print (str_concat "SAW_OBSERVED: srem_min_neg1 " (show (eval_bool (parse_core "bvEq 8 (bvSRem 7 0x80 0xff) 0x00"))));
+print (str_concat "SAW_OBSERVED: sdiv_zero_x " (show (eval_bool (parse_core "bvEq 8 (bvSDiv 7 0x00 0xfe) 0x00"))));
+print (str_concat "SAW_OBSERVED: sdiv_by1 " (show (eval_bool (parse_core "bvEq 8 (bvSDiv 7 0x80 0x01) 0x80"))));
 
 write_lean_term
   "Observed" [] []
   "observed.lean"
-  observed;
+  (parse_core "[bvEq 8 (bvUDiv 8 0x0d 0x03) 0x04, bvEq 8 (bvURem 8 0x0d 0x03) 0x01, bvEq 8 (bvUDiv 8 0xff 0x01) 0xff, bvEq 8 (bvURem 8 0xff 0x01) 0x00, bvEq 8 (bvUDiv 8 0xfe 0xfe) 0x01, bvEq 8 (bvUDiv 8 0x03 0x0d) 0x00, bvEq 8 (bvURem 8 0x03 0x0d) 0x03, bvEq 8 (bvUDiv 8 0x80 0x02) 0x40, bvEq 8 (bvUDiv 8 0xff 0xff) 0x01, bvEq 8 (bvSDiv 7 0x07 0x02) 0x03, bvEq 8 (bvSRem 7 0x07 0x02) 0x01, bvEq 8 (bvSDiv 7 0xf9 0x02) 0xfd, bvEq 8 (bvSRem 7 0xf9 0x02) 0xff, bvEq 8 (bvSDiv 7 0x07 0xfe) 0xfd, bvEq 8 (bvSRem 7 0x07 0xfe) 0x01, bvEq 8 (bvSDiv 7 0xf9 0xfe) 0x03, bvEq 8 (bvSRem 7 0xf9 0xfe) 0xff, bvEq 8 (bvSDiv 7 0x80 0xff) 0x80, bvEq 8 (bvSRem 7 0x80 0xff) 0x00, bvEq 8 (bvSDiv 7 0x00 0xfe) 0x00, bvEq 8 (bvSDiv 7 0x80 0x01) 0x80]");

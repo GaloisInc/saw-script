@@ -1,19 +1,41 @@
 // TRUE differential litmus for bitvector conversion primitives.
 //
-// SIGN-CROSSING CASES ARE LOAD-BEARING (2026-07-23 soundness fix):
-// bvToInt is UNSIGNED and sbvToInt is SIGNED (Prelude.sawcore
-// 2113/2116), and the two must be pinned on the SAME sign-bit-set
-// input (0xff -> 255 vs -1) so a realization that conflates them —
-// the audit-found defect: both were BitVec.toInt — can never pass
-// this row again. The original row only checked bvToInt at 0x7f,
-// which never crosses the sign bit.
-
-let observed =
-  parse_core "and (equalNat (bvToNat 8 0xff) 255) (and (intEq (bvToInt 8 0x7f) (natToInt 127)) (and (intEq (bvToInt 8 0xff) (natToInt 255)) (and (intEq (sbvToInt 8 0xff) (intNeg (natToInt 1))) (and (bvEq 8 (bvNat 8 257) 0x01) (and (bvEq 8 (intToBv 8 (intNeg (natToInt 1))) 0xff) (bvEq 8 (intToBv 8 (natToInt 257)) 0x01))))))";
-
-print (str_concat "SAW_OBSERVED: " (show (eval_bool observed)));
+// EDGE-CASE MATRIX (2026-07-23, comprehensive boundary-coverage
+// pass; authored via an offline case-table generator, committed
+// artifact is this file). One labeled case per SAW_OBSERVED line;
+// the emitted artifact is the Vec of all case terms and
+// lean-observe.lean prints the matching labeled line per index, so
+// a single divergent case names itself. The expected value inside
+// each case is a human annotation only — the row compares SAW's and
+// Lean's evaluation of the same closed term, so a wrong expectation
+// still agrees on both sides (both false) and divergence on ANY
+// case shows as a SAW/Lean mismatch.
+print (str_concat "SAW_OBSERVED: bvToNat_ff " (show (eval_bool (parse_core "equalNat (bvToNat 8 0xff) 255"))));
+print (str_concat "SAW_OBSERVED: bvToNat_00 " (show (eval_bool (parse_core "equalNat (bvToNat 8 0x00) 0"))));
+print (str_concat "SAW_OBSERVED: bvToNat_w1 " (show (eval_bool (parse_core "equalNat (bvToNat 1 (bvNat 1 1)) 1"))));
+print (str_concat "SAW_OBSERVED: bvToInt_7f " (show (eval_bool (parse_core "intEq (bvToInt 8 0x7f) (natToInt 127)"))));
+print (str_concat "SAW_OBSERVED: bvToInt_80 " (show (eval_bool (parse_core "intEq (bvToInt 8 0x80) (natToInt 128)"))));
+print (str_concat "SAW_OBSERVED: bvToInt_ff " (show (eval_bool (parse_core "intEq (bvToInt 8 0xff) (natToInt 255)"))));
+print (str_concat "SAW_OBSERVED: bvToInt_00 " (show (eval_bool (parse_core "intEq (bvToInt 8 0x00) (natToInt 0)"))));
+print (str_concat "SAW_OBSERVED: bvToInt_w1_1 " (show (eval_bool (parse_core "intEq (bvToInt 1 (bvNat 1 1)) (natToInt 1)"))));
+print (str_concat "SAW_OBSERVED: sbvToInt_7f " (show (eval_bool (parse_core "intEq (sbvToInt 8 0x7f) (natToInt 127)"))));
+print (str_concat "SAW_OBSERVED: sbvToInt_80 " (show (eval_bool (parse_core "intEq (sbvToInt 8 0x80) (intNeg (natToInt 128))"))));
+print (str_concat "SAW_OBSERVED: sbvToInt_ff " (show (eval_bool (parse_core "intEq (sbvToInt 8 0xff) (intNeg (natToInt 1))"))));
+print (str_concat "SAW_OBSERVED: sbvToInt_w1_1 " (show (eval_bool (parse_core "intEq (sbvToInt 1 (bvNat 1 1)) (intNeg (natToInt 1))"))));
+print (str_concat "SAW_OBSERVED: sbvToInt_w1_0 " (show (eval_bool (parse_core "intEq (sbvToInt 1 (bvNat 1 0)) (natToInt 0)"))));
+print (str_concat "SAW_OBSERVED: to_int_agree_pos " (show (eval_bool (parse_core "intEq (bvToInt 8 0x3c) (sbvToInt 8 0x3c)"))));
+print (str_concat "SAW_OBSERVED: bvNat_max " (show (eval_bool (parse_core "bvEq 8 (bvNat 8 255) 0xff"))));
+print (str_concat "SAW_OBSERVED: bvNat_wrap_256 " (show (eval_bool (parse_core "bvEq 8 (bvNat 8 256) 0x00"))));
+print (str_concat "SAW_OBSERVED: bvNat_wrap_257 " (show (eval_bool (parse_core "bvEq 8 (bvNat 8 257) 0x01"))));
+print (str_concat "SAW_OBSERVED: intToBv_neg1 " (show (eval_bool (parse_core "bvEq 8 (intToBv 8 (intNeg (natToInt 1))) 0xff"))));
+print (str_concat "SAW_OBSERVED: intToBv_neg128 " (show (eval_bool (parse_core "bvEq 8 (intToBv 8 (intNeg (natToInt 128))) 0x80"))));
+print (str_concat "SAW_OBSERVED: intToBv_neg129 " (show (eval_bool (parse_core "bvEq 8 (intToBv 8 (intNeg (natToInt 129))) 0x7f"))));
+print (str_concat "SAW_OBSERVED: intToBv_257 " (show (eval_bool (parse_core "bvEq 8 (intToBv 8 (natToInt 257)) 0x01"))));
+print (str_concat "SAW_OBSERVED: intToBv_neg256 " (show (eval_bool (parse_core "bvEq 8 (intToBv 8 (intNeg (natToInt 256))) 0x00"))));
+print (str_concat "SAW_OBSERVED: rt_unsigned " (show (eval_bool (parse_core "equalNat (bvToNat 8 (intToBv 8 (natToInt 200))) 200"))));
+print (str_concat "SAW_OBSERVED: rt_signed " (show (eval_bool (parse_core "intEq (sbvToInt 8 (intToBv 8 (intNeg (natToInt 100)))) (intNeg (natToInt 100))"))));
 
 write_lean_term
   "Observed" [] []
   "observed.lean"
-  observed;
+  (parse_core "[equalNat (bvToNat 8 0xff) 255, equalNat (bvToNat 8 0x00) 0, equalNat (bvToNat 1 (bvNat 1 1)) 1, intEq (bvToInt 8 0x7f) (natToInt 127), intEq (bvToInt 8 0x80) (natToInt 128), intEq (bvToInt 8 0xff) (natToInt 255), intEq (bvToInt 8 0x00) (natToInt 0), intEq (bvToInt 1 (bvNat 1 1)) (natToInt 1), intEq (sbvToInt 8 0x7f) (natToInt 127), intEq (sbvToInt 8 0x80) (intNeg (natToInt 128)), intEq (sbvToInt 8 0xff) (intNeg (natToInt 1)), intEq (sbvToInt 1 (bvNat 1 1)) (intNeg (natToInt 1)), intEq (sbvToInt 1 (bvNat 1 0)) (natToInt 0), intEq (bvToInt 8 0x3c) (sbvToInt 8 0x3c), bvEq 8 (bvNat 8 255) 0xff, bvEq 8 (bvNat 8 256) 0x00, bvEq 8 (bvNat 8 257) 0x01, bvEq 8 (intToBv 8 (intNeg (natToInt 1))) 0xff, bvEq 8 (intToBv 8 (intNeg (natToInt 128))) 0x80, bvEq 8 (intToBv 8 (intNeg (natToInt 129))) 0x7f, bvEq 8 (intToBv 8 (natToInt 257)) 0x01, bvEq 8 (intToBv 8 (intNeg (natToInt 256))) 0x00, equalNat (bvToNat 8 (intToBv 8 (natToInt 200))) 200, intEq (sbvToInt 8 (intToBv 8 (intNeg (natToInt 100)))) (intNeg (natToInt 100))]");
