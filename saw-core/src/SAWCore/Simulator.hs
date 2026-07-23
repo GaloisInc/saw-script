@@ -26,13 +26,12 @@ module SAWCore.Simulator
 
 import Prelude hiding (mapM)
 
-import Control.Monad (liftM, void)
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
 import Control.Monad.Fix (MonadFix(mfix))
 import Control.Monad.Identity (Identity)
 import qualified Control.Monad.State as State
-import Data.Foldable (foldlM)
+import Data.Foldable (Foldable(..))
 import qualified Data.Set as Set
 import Data.Maybe (mapMaybe)
 import Data.Map (Map)
@@ -43,7 +42,6 @@ import Data.IntSet (IntSet)
 import qualified Data.IntSet as IntSet
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Traversable
 import GHC.Stack
 
 import SAWCore.Panic (panic)
@@ -76,7 +74,6 @@ import qualified SAWCore.Simulator.Prims as Prims
 type Id = Identity
 
 type ThunkIn m l           = Thunk (WithM m l)
-type OpenValueIn m l       = OpenValue (WithM m l)
 --type ValueIn m l           = Value (WithM m l)
 type PrimIn m l            = Prims.Prim (WithM m l)
 type TValueIn m l          = TValue (WithM m l)
@@ -105,74 +102,191 @@ data SimulatorConfig l =
   }
 
 ------------------------------------------------------------
+-- Let-based terms
+
+-- | A representation of SAWCore terms with explicit @let@ bindings
+-- instead of using a 'TermIndex' on every subterm.
+-- This representation is designed to support efficient evaluation.
+-- Type 'TermIndex' is used to represent let-bound variable names.
+--
+-- Invariant: In any 'LLet', all let-variables occurring on the rhs of
+-- any binding must be strictly less than the index of the lhs; this
+-- ensures the term is well-founded.
+data LTerm
+  = LFlat !(FlatTermF LTerm)
+  | LApp !LTerm !LTerm
+  | LLam !TermIndex !LTerm
+    -- ^ The type is omitted because it is not needed for evaluation.
+  | LLet !(IntMap LTerm) !LTerm
+    -- ^ A non-recursive let, where smaller indices are in scope for
+    -- entries of larger indices, but not vice versa.
+  | LFun !LTerm !LTerm -- ^ Non-dependent function type.
+  | LPi !VarIndex !LTerm !LTerm -- ^ Dependent function type.
+  | LConst !Name
+  | LLetVar !TermIndex -- ^ A variable bound in a 'LLet' term.
+  | LBoundVar !VarIndex -- ^ A variable bound in a 'LLam' or 'LPi' term.
+  deriving Show
+
+-- | The number of occurrences of a subterm.
+data Multiplicity = Single | Multiple
+  deriving Eq
+
+-- | An 'LTerm' paired with the 'varTypes' field of the 'Term' it was
+-- derived from and a multiplicity.
+data LBinding = LBinding !LTerm !(IntMap Term) !Multiplicity
+
+usesVarName :: VarName -> LBinding -> Bool
+usesVarName vn (LBinding _ env _) = IntMap.member (vnIndex vn) env
+
+-- | Apply a let-variable substitution to an 'LTerm'.
+-- Only use entries marked as a single occurrence.
+-- Precondition: No entries in the substitution may share keys with
+-- any let-bindings in the term; this ensures that variable capture is
+-- impossible when substituting under 'LLet'.
+substLTerm :: IntMap LBinding -> LTerm -> LTerm
+substLTerm s = go
+  where
+    go :: LTerm -> LTerm
+    go t =
+      case t of
+        LFlat ftf ->
+          LFlat (fmap go ftf)
+        LApp t1 t2 ->
+          LApp (go t1) (go t2)
+        LLam x t1 ->
+          LLam x (go t1)
+        LLet binds body ->
+          LLet (fmap go binds) (go body)
+        LFun t1 t2 ->
+          LFun (go t1) (go t2)
+        LPi x t1 t2 ->
+          LPi x (go t1) (go t2)
+        LConst {} ->
+          t
+        LLetVar i ->
+          case IntMap.lookup i s of
+            Nothing -> t
+            Just (LBinding t' _ n) ->
+              if n == Single then go t' else t
+        LBoundVar {} ->
+          t
+
+-- | Make a let expression after inlining all local bindings that are
+-- used only once.
+mkLLet :: IntMap LBinding -> LTerm -> LTerm
+mkLLet s body =
+  if IntMap.null s2 then body' else LLet s2 body'
+  where
+    body' = substLTerm s body
+    s1 = IntMap.filter (\(LBinding _ _ n) -> n == Multiple) s
+    s2 = fmap (\(LBinding t _ _) -> substLTerm s t) s1
+
+toLTerm :: Term -> LTerm
+toLTerm t0 =
+  let (t', binds) = State.runState (go t0) mempty
+  in mkLLet binds t'
+  where
+    go :: Term -> State.State (IntMap LBinding) LTerm
+    go t =
+      do binds <- State.get
+         let i = termIndex t
+         case IntMap.lookup i binds of
+           Just (LBinding lt env _) ->
+             -- Subterm has already been seen, so mark it as a multiple occurrence.
+             do State.modify (IntMap.insert i (LBinding lt env Multiple))
+                pure (LLetVar i)
+           Nothing ->
+             -- New subterm: Traverse it and then record a single occurrence.
+             do t' <- termf (unwrapTermF t)
+                State.modify (IntMap.insert i (LBinding t' (varTypes t) Single))
+                pure (LLetVar i)
+
+    termf :: TermF Term -> State.State (IntMap LBinding) LTerm
+    termf tf =
+      case tf of
+        FTermF ftf ->
+          do ftf' <- traverse go ftf
+             pure (LFlat ftf')
+        App t1 t2 ->
+          do t1' <- go t1
+             t2' <- go t2
+             pure (LApp t1' t2')
+        Lambda x _ty body ->
+          localScope x $
+          do body' <- go body
+             locals <- getLocalBindings x
+             pure (LLam (vnIndex x) (mkLLet locals body'))
+        Pi x t1 t2
+          | IntMap.member (vnIndex x) (varTypes t2) ->
+              do t1' <- go t1
+                 localScope x $
+                   do t2' <- go t2
+                      locals <- getLocalBindings x
+                      pure (LPi (vnIndex x) t1' (mkLLet locals t2'))
+          | otherwise ->
+              do t1' <- go t1
+                 t2' <- go t2
+                 pure (LFun t1' t2')
+        Constant nm ->
+          pure (LConst nm)
+        Variable x _ty ->
+          pure (LBoundVar (vnIndex x))
+        Label _text t1 ->
+          go t1
+
+    -- | Temporarily remove bindings that mention x, run the inner
+    -- computation where those bindings would be shadowed, and then
+    -- put them back.
+    localScope :: VarName -> State.State (IntMap LBinding) a -> State.State (IntMap LBinding) a
+    localScope x action =
+      do binds <- State.get
+         let (shadowed, binds1) = IntMap.partition (usesVarName x) binds
+         State.put binds1
+         result <- action
+         binds2 <- State.get
+         State.put (shadowed <> binds2)
+         pure result
+
+    -- | Filter out all bindings mentioning x and return them.
+    getLocalBindings :: VarName -> State.State (IntMap LBinding) (IntMap LBinding)
+    getLocalBindings x =
+      do binds <- State.get
+         let (locals, binds') = IntMap.partition (usesVarName x) binds
+         State.put binds'
+         pure locals
+
+------------------------------------------------------------
 -- Evaluation of terms
 
-type Env l = IntMap (Thunk l) -- indexed by VarIndex
-type EnvIn m l = Env (WithM m l)
-
--- | Meaning of an open term, parameterized by environment of bound variables
-type OpenValue l = Env l -> MValue l
-
 {-# SPECIALIZE
-  evalTermF :: Show (Extra l) =>
+  evalLTerm ::
+    Show (Extra l) =>
     SimulatorConfigIn Id l ->
-    (Term -> OpenValueIn Id l) ->
-    (Term -> MValueIn Id l) ->
-    TermF Term ->
-    OpenValueIn Id l #-}
+    IntMap (ThunkIn Id l) ->
+    IntMap (ThunkIn Id l) ->
+    IntMap (ThunkIn Id l) ->
+    LTerm -> MValueIn Id l #-}
 
 {-# SPECIALIZE
-  evalTermF :: Show (Extra l) =>
+  evalLTerm ::
+    Show (Extra l) =>
     SimulatorConfigIn IO l ->
-    (Term -> OpenValueIn IO l) ->
-    (Term -> MValueIn IO l) ->
-    TermF Term ->
-    OpenValueIn IO l #-}
+    IntMap (ThunkIn IO l) ->
+    IntMap (ThunkIn IO l) ->
+    IntMap (ThunkIn IO l) ->
+    LTerm -> MValueIn IO l #-}
 
--- | Generic evaluator for TermFs.
-evalTermF :: forall l. (VMonadLazy l, Show (Extra l)) =>
-             SimulatorConfig l          -- ^ Evaluator for global constants
-          -> (Term -> OpenValue l)      -- ^ Evaluator for subterms under binders
-          -> (Term -> MValue l)         -- ^ Evaluator for subterms in the same bound variable context
-          -> TermF Term -> OpenValue l
-evalTermF cfg lam recEval tf env =
-  case tf of
-    App t1 t2               -> recEval t1 >>= \case
-                                 VFun f ->
-                                   do x <- recEvalDelay t2
-                                      f x
-                                 _ -> panic "evalTermF" ["Expected VFun"]
-    Lambda nm _tp t         -> pure $ VFun (\x -> lam t (IntMap.insert (vnIndex nm) x env))
-    Pi nm t1 t2             -> do v <- evalType t1
-                                  body <-
-                                    if IntSet.member (vnIndex nm) (freeVars t2) then
-                                      pure (VDependentPi (\x -> toTValue <$> lam t2 (IntMap.insert (vnIndex nm) x env)))
-                                    else
-                                      VNondependentPi . toTValue <$> lam t2 env
-                                  return $ TValue $ VPiType v body
-
-    Constant nm             -> do let r = requireNameInMap nm (simModMap cfg)
-                                  ty' <- evalType (resolvedNameType r)
-                                  case simConstant cfg nm ty' of
-                                    Just override -> override
-                                    Nothing ->
-                                      case r of
-                                        ResolvedCtor ctor ->
-                                          ctorValue (ctorNumber ctor) (ctorMuxability ctor) (ctorNumParams ctor) (ctorNumArgs ctor)
-                                        ResolvedDataType dt ->
-                                          dtValue (nameInfo nm) (dtNumParams dt) (dtNumIndices dt)
-                                        ResolvedDef d ->
-                                          case defBody d of
-                                            Just t -> recEval t
-                                            Nothing -> simPrimitive cfg nm
-
-    Variable nm tp          -> case IntMap.lookup (vnIndex nm) env of
-                                 Just x -> force x
-                                 Nothing ->
-                                   do tp' <- evalType tp
-                                      simVariable cfg tp nm tp'
-    Label _ t1 -> recEval t1
-    FTermF ftf              ->
+-- | Generic evaluator for 'LTerm's.
+evalLTerm ::
+  forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
+  SimulatorConfig l ->
+  IntMap (Thunk l) {- ^ Constant environment, indexed by 'VarIndex' -} ->
+  IntMap (Thunk l) {- ^ Bound variable environment, indexed by 'VarIndex' -} ->
+  IntMap (Thunk l) {- ^ Let-variable environment, indexed by 'TermIndex' -} ->
+  LTerm -> MValue l
+evalLTerm cfg consts vars lets t0 =
+  case t0 of
+    LFlat ftf ->
       case ftf of
         Recursor r ->
           case simRecursor cfg (recursorDataType r) (recursorSort r) of
@@ -192,15 +306,65 @@ evalTermF cfg lam recEval tf env =
                   panic "evalTermF"
                   [ "Data type not found for recursor: " <>
                     toAbsoluteName (nameInfo (recursorDataType r)) ]
+        Sort s _h ->
+          pure $ TValue (VSort s)
+        ArrayValue _ tv ->
+          VVector <$> traverse (delay . recEval) tv
+        StringLit s ->
+          pure $ VString s
 
-        Sort s _h           -> return $ TValue (VSort s)
+    LApp t1 t2 ->
+      do v1 <- recEval t1
+         case v1 of
+           VFun f ->
+             do x <- delay (recEval t2)
+                f x
+           _ -> panic "evalLTerm" ["Expected VFun"]
 
-        ArrayValue _ tv     -> liftM VVector $ mapM recEvalDelay tv
+    LLam i t1 ->
+      pure $ VFun (\x -> loop (IntMap.insert i x vars) lets t1)
 
-        StringLit s         -> return $ VString s
+    LLet binds body ->
+      do lets' <-
+           mfix $ \lets' ->
+           do vs <- traverse (delay . loop vars lets') binds
+              pure (lets <> vs)
+         loop vars lets' body
+
+    LFun t1 t2 ->
+      do v1 <- toTValue <$> recEval t1
+         v2 <- toTValue <$> recEval t2
+         pure $ TValue $ VPiType v1 $ VNondependentPi v2
+
+    LPi i t1 t2 ->
+      do v1 <- toTValue <$> recEval t1
+         pure $ TValue $ VPiType v1 $
+           VDependentPi (\x -> toTValue <$> loop (IntMap.insert i x vars) lets t2)
+
+    LConst nm ->
+      case IntMap.lookup (nameIndex nm) consts of
+        Just x -> force x
+        Nothing -> panic "evalLTerm" ["Constant name not found", Text.pack (show nm)]
+
+    LLetVar i ->
+      case IntMap.lookup i lets of
+        Just x -> force x
+        Nothing ->
+          panic "evalLTerm"
+          ["Let variable not found", Text.pack (show i), Text.pack (show (IntMap.keys lets))]
+
+    LBoundVar i ->
+      case IntMap.lookup i vars of
+        Just x -> force x
+        Nothing ->
+          panic "evalLTerm"
+          ["Lambda/pi variable not found", Text.pack (show i), Text.pack (show (IntMap.keys vars))]
   where
-    evalType :: Term -> EvalM l (TValue l)
-    evalType t = toTValue <$> recEval t
+    loop :: IntMap (Thunk l) -> IntMap (Thunk l) -> LTerm -> EvalM l (Value l)
+    loop vars' lets' = evalLTerm cfg consts vars' lets'
+
+    recEval :: LTerm -> EvalM l (Value l)
+    recEval = loop vars lets
 
     toTValue :: HasCallStack => Value l -> TValue l
     toTValue (TValue x) = x
@@ -241,21 +405,6 @@ evalTermF cfg lam recEval tf env =
     combineAlts [] = panic "evalTermF / combineAlts" ["no alternatives"]
     combineAlts [(_, x)] = x
     combineAlts ((p, x) : alts) = simLazyMux cfg p x (combineAlts alts)
-
-    recEvalDelay :: Term -> EvalM l (Thunk l)
-    recEvalDelay = delay . recEval
-
-    ctorValue :: Int -> Muxability -> Int -> Int -> MValue l
-    ctorValue k m i j =
-      vFunList i $ \_params ->
-      vFunList j $ \args ->
-      pure $ VCtorApp k m args
-
-    dtValue :: NameInfo -> Int -> Int -> MValue l
-    dtValue nm i j =
-      vStrictFunList i $ \params ->
-      vStrictFunList j $ \idxs ->
-      pure $ TValue $ VDataType nm params idxs
 
 -- | Compute whether the 'Ctor' has a type that allows argument-wise
 -- muxing.
@@ -451,15 +600,21 @@ defIdent d =
     ImportedName{} -> Nothing
 
 ----------------------------------------------------------------------
--- The evaluation strategy for SharedTerms involves two memo tables:
--- The first, @memoClosed@, is precomputed and contains the result of
--- evaluating all _closed_ subterms. The same @memoClosed@ table is
--- used for evaluation under lambdas, since the meaning of a closed
--- term does not depend on the local variable context. The second memo
--- table is @memoLocal@, which additionally includes the result of
--- evaluating _open_ terms in the current variable context. It is
--- reinitialized to @memoClosed@ whenever we descend under a lambda
--- binder.
+-- The evaluation strategy for shared terms involves a preprocessing
+-- phase, where each term is translated to a special term type with
+-- explicit let bindings.
+-- The let-terms are then evaluated recursively using a set of three
+-- environment parameters:
+--
+-- * The constant environment contains a thunk for each constant used
+-- in the term, or in the definition of another used constant.
+--
+-- * The bound variable environment has a thunk for each lambda- or
+-- pi-bound variable in scope; it is pre-populated with translations
+-- of variables free in the top-level term.
+--
+-- * The let-variable environment has a thunk for each let-binding in
+-- scope.
 
 {-# SPECIALIZE evalSharedTerm ::
   Show (Extra l) => SimulatorConfigIn Id l -> Term -> MValueIn Id l #-}
@@ -467,186 +622,90 @@ defIdent d =
   Show (Extra l) => SimulatorConfigIn IO l -> Term -> MValueIn IO l #-}
 
 -- | Evaluator for shared terms.
-evalSharedTerm :: (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
-                  SimulatorConfig l -> Term -> MValue l
-evalSharedTerm cfg t = do
-  memoClosed <- mkMemoClosed cfg t
-  evalOpen cfg memoClosed t IntMap.empty
-
-{-# SPECIALIZE mkMemoClosed ::
-  Show (Extra l) =>
-  SimulatorConfigIn Id l -> Term -> Id (IntMap (ThunkIn Id l)) #-}
-{-# SPECIALIZE mkMemoClosed ::
-  Show (Extra l) =>
-  SimulatorConfigIn IO l -> Term -> IO (IntMap (ThunkIn IO l)) #-}
-
--- | Precomputing the memo table for closed subterms.
-mkMemoClosed :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
-                SimulatorConfig l -> Term -> EvalM l (IntMap (Thunk l))
-mkMemoClosed cfg t =
-  mfix $ \memoClosed -> mapM (delay . evalClosedTermF cfg memoClosed) subterms
+evalSharedTerm ::
+  forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
+  SimulatorConfig l -> Term -> MValue l
+evalSharedTerm cfg t =
+  do let names = collectConstants cfg t
+     constThunks <-
+       mfix $ \constThunks ->
+       traverse (delay . evalConst constThunks) names
+     let freevars = collectVariables t
+     varThunks <-
+       mfix $ \varThunks ->
+       traverse (delay . evalVar constThunks varThunks) freevars
+     evalLTerm cfg constThunks varThunks mempty (toLTerm t)
   where
-    -- | Map of all closed subterms of t.
-    subterms :: IntMap (TermF Term)
-    subterms = fmap fst $ IntMap.filter (IntSet.null . snd) $ State.execState (go t) IntMap.empty
-
-    go :: Term -> State.State (IntMap (TermF Term, IntSet)) IntSet
-    go t' =
-      do memo <- State.get
-         let i = termIndex t'
-         case IntMap.lookup i memo of
-           Just (_, b) -> pure b
+    evalConst :: IntMap (Thunk l) -> Name -> MValue l
+    evalConst consts nm =
+      do let r = requireNameInMap nm (simModMap cfg)
+         ty' <- toTValue <$> evalLTerm cfg consts mempty mempty (toLTerm (resolvedNameType r))
+         case simConstant cfg nm ty' of
+           Just override -> override
            Nothing ->
-             do let tf = unwrapTermF t'
-                b <- termf tf
-                State.modify (IntMap.insert i (tf, b))
-                pure b
+             case r of
+               ResolvedCtor ctor ->
+                 ctorValue (ctorNumber ctor) (ctorMuxability ctor) (ctorNumParams ctor) (ctorNumArgs ctor)
+               ResolvedDataType dt ->
+                 dtValue (nameInfo nm) (dtNumParams dt) (dtNumIndices dt)
+               ResolvedDef d ->
+                 case defBody d of
+                   Just body -> evalLTerm cfg consts mempty mempty (toLTerm body)
+                   Nothing -> simPrimitive cfg nm
 
-    termf :: TermF Term -> State.State (IntMap (TermF Term, IntSet)) IntSet
-    termf tf =
+    evalVar :: IntMap (Thunk l) -> IntMap (Thunk l) -> (VarName, Term) -> MValue l
+    evalVar consts env (nm, tp) =
+      do tv <- toTValue <$> evalLTerm cfg consts env mempty (toLTerm tp)
+         simVariable cfg tp nm tv
+
+    toTValue :: HasCallStack => Value l -> TValue l
+    toTValue (TValue x) = x
+    toTValue v = panic "evalTermF / toTValue" ["Not a type value: " <> Text.pack (show v)]
+
+    ctorValue :: Int -> Muxability -> Int -> Int -> MValue l
+    ctorValue k m i j =
+      vFunList i $ \_params ->
+      vFunList j $ \args ->
+      pure $ VCtorApp k m args
+
+    dtValue :: NameInfo -> Int -> Int -> MValue l
+    dtValue nm i j =
+      vStrictFunList i $ \params ->
+      vStrictFunList j $ \idxs ->
+      pure $ TValue $ VDataType nm params idxs
+
+-- | Precompute the set of constant names (indexed by 'VarIndex')
+-- required for evaluation of a 'Term'.
+collectConstants :: SimulatorConfig l -> Term -> IntMap Name
+collectConstants cfg t0 = snd $ go (IntSet.empty, IntMap.empty) t0
+  where
+    go :: (IntSet, IntMap Name) -> Term -> (IntSet, IntMap Name)
+    go acc@(idxs, names) t
+      | IntSet.member (termIndex t) idxs = acc
+      | otherwise = termf (IntSet.insert (termIndex t) idxs, names) (unwrapTermF t)
+
+    termf :: (IntSet, IntMap Name) -> TermF Term -> (IntSet, IntMap Name)
+    termf acc@(idxs, names) tf =
       case tf of
         Constant nm ->
-          -- if tf is a defined constant, traverse the definition body and type
-          do let r = requireNameInMap nm (simModMap cfg)
-             void $ go (resolvedNameType r)
-             case r of
-               ResolvedDef (defBody -> Just body) -> go body
-               _ -> pure IntSet.empty
-        Lambda x _ty body ->
-          -- skip type, which is not used for simulation
-          IntSet.delete (vnIndex x) <$> go body
+          case r of
+            -- if tf is a defined constant, traverse the definition body and type
+            ResolvedDef (defBody -> Just body) -> go (go acc' (resolvedNameType r)) body
+            -- otherwise just traverse the type
+            _ -> go acc' (resolvedNameType r)
+          where
+            acc' = (idxs, IntMap.insert (nameIndex nm) nm names)
+            r = requireNameInMap nm (simModMap cfg)
+        Lambda _x _ty body ->
+          go acc body -- skip type, which is not used for simulation
         _ ->
-          freesTermF <$> traverse go tf
+          foldl' go acc tf
 
-{-# SPECIALIZE evalClosedTermF ::
-  Show (Extra l) =>
-  SimulatorConfigIn Id l ->
-  IntMap (ThunkIn Id l) ->
-  TermF Term ->
-  MValueIn Id l #-}
-{-# SPECIALIZE evalClosedTermF ::
-  Show (Extra l) =>
-  SimulatorConfigIn IO l ->
-  IntMap (ThunkIn IO l) ->
-  TermF Term ->
-  MValueIn IO l #-}
-
--- | Evaluator for closed terms, used to populate @memoClosed@.
-evalClosedTermF :: (VMonadLazy l, Show (Extra l)) =>
-                   SimulatorConfig l
-                -> IntMap (Thunk l)
-                -> TermF Term -> MValue l
-evalClosedTermF cfg memoClosed tf = evalTermF cfg lam recEval tf IntMap.empty
-  where
-    lam = evalOpen cfg memoClosed
-    recEval t =
-      case IntMap.lookup (termIndex t) memoClosed of
-        Just x -> force x
-        Nothing -> panic "evalClosedTermF" ["internal error"]
-
-{-# SPECIALIZE mkMemoLocal ::
-  Show (Extra l) =>
-  SimulatorConfigIn Id l ->
-  IntMap (ThunkIn Id l) ->
-  Term ->
-  EnvIn Id l ->
-  Id (IntMap (ThunkIn Id l)) #-}
-{-# SPECIALIZE mkMemoLocal ::
-  Show (Extra l) =>
-  SimulatorConfigIn IO l ->
-  IntMap (ThunkIn IO l) ->
-  Term ->
-  EnvIn IO l ->
-  IO (IntMap (ThunkIn IO l)) #-}
-
--- | Precomputing the memo table for open subterms in the current context.
-mkMemoLocal :: forall l. (VMonadLazy l, Show (Extra l)) =>
-               SimulatorConfig l -> IntMap (Thunk l) ->
-               Term -> Env l -> EvalM l (IntMap (Thunk l))
-mkMemoLocal cfg memoClosed t env = go mempty t
-  where
-    go :: IntMap (Thunk l) -> Term -> EvalM l (IntMap (Thunk l))
-    go memo t'
-      | closedTerm t' = pure memo
-      | otherwise =
-        let i = termIndex t' in
-        case IntMap.lookup i memo of
-          Just _ -> pure memo
-          Nothing ->
-            do let tf = unwrapTermF t'
-               memo' <- goTermF memo tf
-               thunk <- delay (evalLocalTermF cfg memoClosed memo' tf env)
-               pure (IntMap.insert i thunk memo')
-    goTermF :: IntMap (Thunk l) -> TermF Term -> EvalM l (IntMap (Thunk l))
-    goTermF memo tf =
-      case tf of
-        FTermF ftf      -> foldlM go memo ftf
-        App t1 t2       -> do memo' <- goTermF memo (unwrapTermF t1)
-                              go memo' t2
-        Lambda{}        -> pure memo
-        Pi _ t1 _       -> go memo t1
-        Constant{}      -> pure memo
-        Variable _nm tp -> go memo tp
-        Label _ t1       -> go memo t1
-
-{-# SPECIALIZE evalLocalTermF ::
-  Show (Extra l) =>
-  SimulatorConfigIn Id l ->
-  IntMap (ThunkIn Id l) ->
-  IntMap (ThunkIn Id l) ->
-  TermF Term ->
-  OpenValueIn Id l #-}
-{-# SPECIALIZE evalLocalTermF ::
-  Show (Extra l) =>
-  SimulatorConfigIn IO l ->
-  IntMap (ThunkIn IO l) ->
-  IntMap (ThunkIn IO l) ->
-  TermF Term ->
-  OpenValueIn IO l #-}
--- | Evaluator for open terms, used to populate @memoLocal@.
-evalLocalTermF :: (VMonadLazy l, Show (Extra l)) =>
-                   SimulatorConfig l
-                -> IntMap (Thunk l) -> IntMap (Thunk l)
-                -> TermF Term -> OpenValue l
-evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF cfg lam recEval tf0 env
-  where
-    lam = evalOpen cfg memoClosed
-    recEval t =
-      case IntMap.lookup (termIndex t) memo of
-        Just x -> force x
-        Nothing -> evalTermF cfg lam recEval (unwrapTermF t) env
-      where memo = if closedTerm t then memoClosed else memoLocal
-
-{-# SPECIALIZE evalOpen ::
-  Show (Extra l) =>
-  SimulatorConfigIn Id l ->
-  IntMap (ThunkIn Id l) ->
-  Term ->
-  OpenValueIn Id l #-}
-
-{-# SPECIALIZE evalOpen ::
-  Show (Extra l) =>
-  SimulatorConfigIn IO l ->
-  IntMap (ThunkIn IO l) ->
-  Term ->
-  OpenValueIn IO l #-}
-
--- | Evaluator for open terms; parameterized by a precomputed table @memoClosed@.
-evalOpen :: forall l. (VMonadLazy l, Show (Extra l)) =>
-            SimulatorConfig l
-         -> IntMap (Thunk l)
-         -> Term -> OpenValue l
-evalOpen cfg memoClosed t env = do
-  memoLocal <- mkMemoLocal cfg memoClosed t env
-  let eval :: Term -> MValue l
-      eval t' =
-        case IntMap.lookup (termIndex t') memo of
-          Just x -> force x
-          Nothing -> evalF (unwrapTermF t')
-        where memo = if closedTerm t' then memoClosed else memoLocal
-      evalF :: TermF Term -> MValue l
-      evalF tf = evalTermF cfg (evalOpen cfg memoClosed) eval tf env
-  eval t
+-- | Precompute the set of variables (indexed by 'VarIndex') occurring
+-- free in a 'Term'.
+collectVariables :: Term -> IntMap (VarName, Term)
+collectVariables t0 =
+  IntMap.fromList [ (vnIndex vn, (vn, t)) | (vn, t) <- Map.assocs (getAllVarsMap t0) ]
 
 
 {-# SPECIALIZE evalPrim ::
