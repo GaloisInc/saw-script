@@ -93,14 +93,12 @@ module SAWCentral.Builtins (
     proveBitwuzla,
     proveBoolector,
     proveZ3,
-    proveCVC4,
     proveCVC5,
     proveMathSAT,
     proveYices,
     proveUnintBitwuzla,
     proveUnintBoolector,
     proveUnintZ3,
-    proveUnintCVC4,
     proveUnintCVC5,
     proveUnintMathSAT,
     proveUnintYices,
@@ -108,7 +106,6 @@ module SAWCentral.Builtins (
     w4_bitwuzla,
     w4_boolector,
     w4_z3,
-    w4_cvc4,
     w4_cvc5,
     w4_yices,
     w4_unint_bitwuzla,
@@ -116,12 +113,10 @@ module SAWCentral.Builtins (
     w4_unint_boolector,
     w4_unint_z3,
     w4_unint_z3_using,
-    w4_unint_cvc4,
     w4_unint_cvc5,
     w4_unint_yices,
     offline_w4_unint_bitwuzla,
     offline_w4_unint_z3,
-    offline_w4_unint_cvc4,
     offline_w4_unint_cvc5,
     offline_w4_unint_yices,
     offline_aig,
@@ -1231,9 +1226,6 @@ proveBoolector = proveSBV SBV.boolector
 proveZ3 :: ProofScript ()
 proveZ3 = proveSBV SBV.z3
 
-proveCVC4 :: ProofScript ()
-proveCVC4 = proveSBV SBV.cvc4
-
 proveCVC5 :: ProofScript ()
 proveCVC5 = proveSBV SBV.cvc5
 
@@ -1251,9 +1243,6 @@ proveUnintBoolector = proveUnintSBV SBV.boolector
 
 proveUnintZ3 :: [Text] -> ProofScript ()
 proveUnintZ3 = proveUnintSBV SBV.z3
-
-proveUnintCVC4 :: [Text] -> ProofScript ()
-proveUnintCVC4 = proveUnintSBV SBV.cvc4
 
 proveUnintCVC5 :: [Text] -> ProofScript ()
 proveUnintCVC5 = proveUnintSBV SBV.cvc5
@@ -1279,10 +1268,6 @@ w4_boolector = wrapW4Prover Boolector [] Prover.proveWhat4_boolector []
 
 w4_z3 :: ProofScript ()
 w4_z3 = wrapW4Prover Z3 [] Prover.proveWhat4_z3 []
-
--- XXX not accessable from sawscript (only w4_unint_cvc4 is)
-w4_cvc4 :: ProofScript ()
-w4_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4 []
 
 -- XXX not accessable from sawscript (only w4_unint_cvc5 is)
 w4_cvc5 :: ProofScript ()
@@ -1310,9 +1295,6 @@ w4_unint_z3_using tactic =
   let tactic' = Text.unpack tactic in
   wrapW4Prover Z3 [W4_Tactic tactic'] (Prover.proveWhat4_z3_using tactic')
 
-w4_unint_cvc4 :: [Text] -> ProofScript ()
-w4_unint_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4
-
 w4_unint_cvc5 :: [Text] -> ProofScript ()
 w4_unint_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5
 
@@ -1326,10 +1308,6 @@ offline_w4_unint_bitwuzla unints path =
 offline_w4_unint_z3 :: [Text] -> FilePath -> ProofScript ()
 offline_w4_unint_z3 unints path =
   wrapW4ProveExporter Prover.proveExportWhat4_z3 unints path ".smt2"
-
-offline_w4_unint_cvc4 :: [Text] -> FilePath -> ProofScript ()
-offline_w4_unint_cvc4 unints path =
-  wrapW4ProveExporter Prover.proveExportWhat4_cvc4 unints path ".smt2"
 
 offline_w4_unint_cvc5 :: [Text] -> FilePath -> ProofScript ()
 offline_w4_unint_cvc5 unints path =
