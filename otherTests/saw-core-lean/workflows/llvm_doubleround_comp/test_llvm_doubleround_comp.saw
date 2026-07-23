@@ -1,0 +1,96 @@
+// Case Study — LLVM Salsa20 doubleround: SAW-SIDE COMPOSITION OVER
+// REPLAY-ADMITTED LEAN LEAVES (the classic override recipe, with the
+// solver oracle replaced by kernel-checked Lean discharges).
+//
+// Contrast with the two existing doubleround-family styles:
+//
+//   * IN-ITP DECOMPOSITION (workflows/llvm_doubleround_itp): verify
+//       s20_doubleround with NO overrides — both ladder stages inline
+//       into ONE [16][32] goal, and the composition happens inside
+//       Lean. COMPLETE but parked on wall-clock (the normalization
+//       chain's kernel bill; see proof-gaps/llvm_doubleround_itp).
+//
+//   * THIS ROW: the standard SAW compositional recipe
+//       (examples/salsa20/salsa.saw), with Lean in the trust position
+//       the SMT solver normally occupies:
+//         1. verify s20_rowround and s20_columnround, discharging each
+//            single points-to obligation via offline_lean_replay
+//            against the committed kernel-checked rows
+//            (proofs/llvm_rowround_itp, proofs/llvm_columnround_itp) —
+//            SAW re-emits each goal FRESH in-process and admits it
+//            only after the factored trust kernel passes
+//            (LeanReplayEvidence);
+//         2. verify s20_doubleround WITH those results as overrides —
+//            symbolic execution replaces the two callee bodies by
+//            their specs, so the callees never inline and the residual
+//            points-to obligation is spec-vs-spec glue
+//            (`rowround (columnround x) == doubleround x`-shaped),
+//            with no bitvector content of its own.
+//
+// The residual obligation is emitted via offline_lean (emission-only,
+// so that llvm_verify stays fails-wrapped) and discharged in
+// proofs/llvm_doubleround_comp. This is the first row where SAW-side
+// compositional structure rides on Lean-replay-admitted leaves —
+// the full product loop for compositional verification.
+//
+// Sources: this dir contains the .saw script and a local copy of
+// salsa20.bc. The canonical Salsa20.cry and salsa20.c live under
+// exercises/functional-correctness/salsa20/. Rebuild salsa20.bc with:
+//
+//   cd otherTests/saw-core-lean/workflows/llvm_doubleround_comp
+//   clang -c -g -O0 -emit-llvm \
+//     -o salsa20.bc \
+//     ../../../../exercises/functional-correctness/salsa20/salsa20.c
+
+enable_experimental;
+include "../../../../exercises/common/helpers.saw";
+import "../../../../exercises/functional-correctness/salsa20/Salsa20.cry";
+
+m <- llvm_load_module "salsa20.bc";
+
+let oneptr_update_func (ty : LLVMType) (name : String) (f : Term) = do {
+    (x, p) <- ptr_to_fresh name ty;
+    llvm_execute_func [p];
+    llvm_points_to p (llvm_term {{ f x }});
+};
+
+// Setups copied VERBATIM from the itp rows (fresh-variable names
+// included): replay re-emits each goal fresh from THIS script, and
+// the committed discharges were built against the itp emissions, so
+// the setups must produce identical goals.
+let rowround_setup =
+  oneptr_update_func (llvm_array 16 (llvm_int 32)) "y" {{ rowround }};
+
+let columnround_setup =
+  oneptr_update_func (llvm_array 16 (llvm_int 32)) "x" {{ columnround }};
+
+let doubleround_setup =
+  oneptr_update_func (llvm_array 16 (llvm_int 32)) "x" {{ doubleround }};
+
+// Leaves: admitted on Lean's authority (kernel replay of the
+// committed rows). No fails() wrapper — these succeed for real.
+rr <- llvm_verify m "s20_rowround" [] true
+    rowround_setup
+    (offline_lean_replay "../../proofs/llvm_rowround_itp");
+
+cr <- llvm_verify m "s20_columnround" [] true
+    columnround_setup
+    (offline_lean_replay "../../proofs/llvm_columnround_itp");
+
+// Composition: the two admitted specs as overrides. The residual
+// points-to obligation is emitted for Lean discharge
+// (proofs/llvm_doubleround_comp). Emission-only, hence fails-wrapped;
+// this step pins the residual's shape as a golden.
+fails (llvm_verify m "s20_doubleround" [cr, rr] true
+    doubleround_setup
+    (offline_lean "test_llvm_doubleround_comp.doubleround"));
+
+// The loop, closed: the same composition, discharged by replaying the
+// committed residual row. This llvm_verify SUCCEEDS unwrapped — the
+// complete doubleround chain (both leaves and the glue) verified with
+// Lean's kernel in the trust position SAW normally gives the SMT
+// solver. `dr` is a genuine verified result, usable as an override in
+// turn (s20_hash is the next rung).
+dr <- llvm_verify m "s20_doubleround" [cr, rr] true
+    doubleround_setup
+    (offline_lean_replay "../../proofs/llvm_doubleround_comp");

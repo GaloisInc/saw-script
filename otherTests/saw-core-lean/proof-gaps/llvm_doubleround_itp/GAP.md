@@ -158,3 +158,27 @@ Remaining honest unlock paths (neither is quick packaging; neither blocks
      meant to scale. Requires: a new compositional workflow row + its
      discharge; the existing no-override row would then be re-scoped as
      the depth-scaling stress pin it already is.
+
+## UNLOCK 3 REALIZED (2026-07-22): the theorem is proven compositionally
+
+`workflows/llvm_doubleround_comp` runs the standard SAW override recipe
+with Lean in the solver's trust position: `s20_rowround` and
+`s20_columnround` are verified by `offline_lean_replay` against the
+committed in-ITP rows (SAW re-emits each goal fresh and admits it only
+after the factored trust kernel passes), then `s20_doubleround` is
+verified WITH those results as overrides. The residual points-to
+obligation is exactly `rowround (columnround x)` vs `doubleround x`;
+after standard monadic normalization the sides are syntactically
+identical and every position closes by `bvEq_refl` —
+`proofs/llvm_doubleround_comp` discharges it on the STRICT tier
+(no bitvector automation, no rotate bridge) in ~60 s. The workflow's
+final step replays that row too, so the complete chain — both leaves
+and the composed theorem — succeeds unwrapped on the SAW side with
+`LeanReplayEvidence` at every link.
+
+THIS row is therefore no longer the only route to the doubleround
+theorem. It remains, deliberately, as the depth-scaling stress pin for
+the monolithic (no-overrides) emission and the cost-model record
+above; the wall it documents is real for any obligation that inlines
+two ladder stages, and the measurements justify the compositional
+default.

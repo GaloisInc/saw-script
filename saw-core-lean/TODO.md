@@ -270,26 +270,21 @@ library has ZERO deps) and a cvc5 binary in the offline harness.
 
 Tier 1 — mechanical:
 
-- [ ] ~~Doubleround budget packaging~~ **RE-TIERED HARD, re-parked
-  2026-07-21**: measurement refuted the GAP's cost model — the 16
-  per-word closes are FREE (B-A ~ 0s); the cost is the KERNEL check
-  of the normalization Eq.mpr chain (78s big-simp + ~45s expansion
-  tail; elaboration is ~2s), and rotl staging dies in whnf
-  heartbeats (the rotl collapse is load-bearing for the
-  normalization's termination). Per-word splitting moves ~0s out of
-  the critical process. Honest unlocks recorded in the GAP
-  (kernel-cost surgery on the normalization chain, or explicit
-  mid-form multi-process split); NOT 0.02-blocking. Full
-  measurements: proof-gaps/llvm_doubleround_itp/GAP.md §2026-07-21.
-- [ ] **Doubleround via SAW-side compositional split (user
-  suggestion 2026-07-21; MEDIUM, try before any kernel surgery)**:
-  new workflow row verifying doubleround WITH the already-green
-  columnround/rowround results as overrides — the obligation drops
-  to composition granularity (Cryptol doubleround IS
-  rowround . columnround), no inlined quarterround arithmetic.
-  Stacks SAW's compositional machinery on top of the in-ITP stage
-  rows; the no-override row stays as the depth-scaling stress pin.
-  Details in the GAP, 2026-07-21 update, path 3.
+- [x] **Doubleround — PROVEN COMPOSITIONALLY 2026-07-22**
+  (workflows/llvm_doubleround_comp + proofs/llvm_doubleround_comp).
+  The standard SAW override recipe with Lean in the solver's trust
+  position: rowround and columnround admitted via offline_lean_replay
+  against the committed in-ITP rows, doubleround verified WITH those
+  results as overrides, and the residual (`rowround (columnround x)`
+  vs `doubleround x` — syntactically identical after normalization)
+  discharged on the STRICT tier by bvEq_refl at every position, ~60s.
+  The workflow's final step replays the residual row too, so the
+  complete chain succeeds UNWRAPPED on the SAW side —
+  LeanReplayEvidence at every link; first exercise of replay-admitted
+  overrides, and `dr` is a real verified result usable as an override
+  for s20_hash next. The no-override monolithic row stays parked in
+  proof-gaps/llvm_doubleround_itp as the depth-scaling stress pin and
+  cost-model record (GAP.md updated: unlock 3 realized).
 - [ ] **Lean toolchain bump** v4.29.1 -> latest (user-approved
   2026-07-21 as low-cost; also pre-clears the lean-smt migration
   path). Do before the audit freeze. MUST include: re-review the
@@ -362,6 +357,16 @@ machinery WITH the first promoted row in one commit):
   swap).
 
 Tier 2 — design items:
+
+- [ ] **Emitter: lower `update` at concrete indices** (filed 2026-07-22,
+  from the chacha-core resolution). Cookbook Pattern 10 tells spec
+  AUTHORS to avoid `update`-chain post-states, but arbitrary user
+  specs will contain them, and the current emission (symbolic-index
+  generate-and-dispatch per `update`) is sound yet undischargeable in
+  any harness budget (measured, commit 641533a37). Emit `update v k x`
+  with concrete `k` as a literal-vector rebuild (or a `Vector.set`
+  form) instead. Dischargeability, not soundness — no translator
+  behavior is wrong today, only the emitted shape's proof cost.
 
 - [ ] Constant-headed Prop domain rule — tracked as its own item
   below (filed 2026-07-19); unlocks 5 obligation rows.
