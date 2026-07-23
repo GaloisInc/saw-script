@@ -1,0 +1,13 @@
+enable_experimental;
+
+// IntMod modulus 0 REJECTS at translation (2026-07-23, user
+// decision: strict). SAW has no coherent Z 0 semantics — concrete
+// evaluation crashes (toIntModOp is Haskell `x mod 0`), SBV lowers
+// fromIntMod to SMT-uninterpreted `rem x 0`, What4 applies its own
+// convention — so the backend refuses to assign the total Lean
+// realization's semantics to it. The SAW-side crash is pinned by
+// differential/intmod_zero_boundary; this row pins the
+// translation-time gate.
+let probe = parse_core "toIntMod 0 (natToInt 5)";
+
+write_lean_term "IntModZeroProbe" [] [] "emitted.lean" probe;

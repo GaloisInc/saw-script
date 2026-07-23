@@ -356,16 +356,25 @@ Tier 1 — mechanical:
   authority is the SHARED Prims.hs table (Concrete.hs only
   overrides a subset) — worth remembering when citing simulator
   authorities.
-- [ ] **IntMod n = 0 disposition (opened 2026-07-23, user
-  decision).** SAW concrete evaluation of any `Z 0` operation
-  CRASHES; the Lean realizations are total (fmod _ 0 = x) with NO
-  contract gate (unlike every division-family partial op).
-  Reachable only from raw SAWCore (Cryptol's `Z n` requires
-  n >= 1). Options: translation-time gate (reject `IntMod 0`
-  loudly, mirroring the raw-error discipline) vs documented caveat
-  (current state; divergence-at-crash-point pinned by the boundary
-  row). Gate is the house-consistent choice; needs a small
-  emitter change + a saw-boundary rejection row.
+- [x] **IntMod n = 0 disposition — DECIDED STRICT + DONE 2026-07-23
+  (user: "we should be strict re IntMod, which I guess means loud
+  fail").** Translation-time gate in `dispatchIdentWithArgsWithShape`
+  (Term.hs): all seven IntMod ops demand a modulus that
+  `evalNatConst`-evaluates to a concrete literal >= 1; literal 0
+  rejects (SAW has no coherent Z 0 semantics: concrete crash, SBV =
+  SMT-uninterpreted `rem x 0`, What4 = its own convention — three
+  backends, three behaviors) and NON-LITERAL moduli also reject (a
+  syntactic nonzero check on open terms would be the recurring
+  under-approximation seam-bug shape; Cryptol's `Z n` (n >= 1)
+  always arrives monomorphized, and the corpus has zero
+  variable-modulus uses). Pinned: `saw-boundary/intmod_zero_rejection`
+  (both diagnostics, expect-fail probes); the SAW-side crash stays
+  pinned at `differential/intmod_zero_boundary`. Regression-checked:
+  intmod_scalar/intmod_more/z_values/cryptol_module_intmod green,
+  prelude auto-emit golden BYTE-UNCHANGED (no Prelude def translates
+  IntMod at a variable modulus), smoketest 74/74. Known residual:
+  polymorphic-modulus SAWCore needs proof-carrying nonzero evidence
+  if ever wanted (named in the rejection diagnostic).
 - [x] **Docstrings — DONE 2026-07-23** (user call: add them, per
   Lean's linter). The authority is core's `linter.missingDocs`:
   153 public declarations flagged (145 SAWCorePrimitives, 4

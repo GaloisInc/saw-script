@@ -2740,6 +2740,45 @@ dispatchIdentWithArgsWithShape i args
       indexFnLean <- translateFunctionWithWrappedResult indexFnArg
       streamTerm <- lowerMkStreamSound elTypeLean indexFnLean
       pure (TranslatedTerm streamTerm BindingWrapped)
+  | i `elem` [ "Prelude.toIntMod", "Prelude.fromIntMod"
+             , "Prelude.intModEq", "Prelude.intModAdd"
+             , "Prelude.intModSub", "Prelude.intModMul"
+             , "Prelude.intModNeg" ]
+  , (modArg : _) <- args
+  = do
+      -- IntMod modulus gate (2026-07-23, user decision: STRICT).
+      -- SAW has NO coherent `Z 0` semantics: the concrete evaluator
+      -- CRASHES (toIntModOp is Haskell `x mod 0`,
+      -- SAWCore.Simulator.Concrete), SBV lowers fromIntMod to SMT
+      -- `rem x 0` (UNINTERPRETED in SMT-LIB Ints), and What4 applies
+      -- its own mod-by-zero convention — three backends, three
+      -- behaviors. The Lean realizations (Int.fmod) are total, so an
+      -- ungated `IntMod 0` obligation would assign Lean semantics
+      -- where SAW has none (differential/intmod_zero_boundary pins
+      -- the concrete crash). The gate demands a modulus that
+      -- evaluates to a CONCRETE literal >= 1; a non-literal modulus
+      -- also rejects — a syntactic nonzero check on open terms would
+      -- under-approximate the semantic property (the recurring
+      -- seam-bug shape), and Cryptol's `Z n` (n >= 1, monomorphized
+      -- to literals) never produces one.
+      modLean <- withRawTranslationMode (translateTerm modArg)
+      case evalNatConst modLean of
+        Just 0 ->
+          Except.throwError (RejectedPrimitive
+            (Text.pack (identName i))
+            ("IntMod modulus 0 is rejected: SAW has no coherent "
+             <> "Z 0 semantics (concrete evaluation crashes with "
+             <> "mod-by-zero; symbolic backends disagree), so the "
+             <> "backend refuses to assign Lean semantics to it."))
+        Just _ -> originalDispatchWithShape i args
+        Nothing ->
+          Except.throwError (RejectedPrimitive
+            (Text.pack (identName i))
+            ("non-literal IntMod modulus is rejected: the nonzero-"
+             <> "modulus gate needs a concrete literal (Cryptol's "
+             <> "Z n arrives monomorphized; polymorphic moduli "
+             <> "would need proof-carrying nonzero evidence, which "
+             <> "does not exist yet)."))
   | i == "Prelude.if0Nat"
   , [aArg, nArg, xArg, yArg] <- args
   = do

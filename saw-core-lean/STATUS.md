@@ -132,7 +132,11 @@ evaluator CRASHES at `Z 0` (`toIntModOp` = Haskell `x mod 0`) while
 the library totalizes — pinned as
 `differential/intmod_zero_boundary` (the +1 census row); the
 library's false "no-reduction convention" comment is corrected, and
-the gate-vs-caveat disposition is a recorded open decision. A
+the disposition was decided STRICT the same day (user decision):
+translation now REJECTS `IntMod` at modulus 0 and at any
+non-literal modulus (`saw-boundary/intmod_zero_rejection` pins both
+diagnostics), so the total Lean realizations are unreachable at the
+incoherent point. A
 follow-up whole-surface fidelity review (independent reviewer,
 every public library definition dispositioned against
 Prelude.sawcore/Prims.hs/Concrete.hs) found NO further same-value

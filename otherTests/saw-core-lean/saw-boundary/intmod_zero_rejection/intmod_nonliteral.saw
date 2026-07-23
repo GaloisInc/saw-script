@@ -1,0 +1,13 @@
+enable_experimental;
+
+// Non-literal IntMod modulus REJECTS at translation (2026-07-23,
+// same gate). A syntactic nonzero test on an open modulus would
+// under-approximate the semantic property (the recurring seam-bug
+// shape), so the gate demands a concrete literal >= 1; Cryptol's
+// `Z n` (n >= 1) always arrives monomorphized, so this boundary is
+// unreachable from the Cryptol surface. Polymorphic moduli would
+// need proof-carrying nonzero evidence, which does not exist yet.
+let probe =
+  parse_core "\\(n : Nat) -> \\(x : Integer) -> intModAdd n (toIntMod n x) (toIntMod n x)";
+
+write_lean_term "IntModNonLiteralProbe" [] [] "emitted.lean" probe;

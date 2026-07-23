@@ -179,9 +179,11 @@ evaluator is PARTIAL at `Z 0` — `toIntModOp` computes Haskell
 `x mod 0`, which THROWS (SAWCore.Simulator.Concrete), so no
 SAW-observable `Z 0` value exists. These realizations are total at
 `n = 0` (`Int.fmod x 0 = x`), a divergence-at-crash-point pinned by
-`differential/intmod_zero_boundary`. Reachable only from raw
-SAWCore (Cryptol's `Z n` requires `n >= 1`); the gate-vs-caveat
-disposition is a recorded open decision.
+`differential/intmod_zero_boundary` — and UNREACHABLE from emission
+since the 2026-07-23 strict gate: translation rejects `IntMod` at
+modulus 0 and at any non-literal modulus (Term.hs
+`dispatchIdentWithArgsWithShape`;
+`saw-boundary/intmod_zero_rejection` pins both diagnostics).
 
 The signatures match `Prelude.sawcore` lines 2126-2135 exactly. -/
 
