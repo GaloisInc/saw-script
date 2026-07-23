@@ -1,12 +1,12 @@
 Loading file "err037.saw"
-err037.saw:9:18-9:33: Type mismatch.
-    Mismatch of types. Perhaps a function was not given enough arguments?
-    err037.saw:9:10-9:15: The type [Int] arises from this type annotation
-    err037.saw:7:15-7:35: The type [Int] -> [Int] arises from the context of the term
-
+Type errors:
+  err037.saw:9:18-9:33: Error: Type mismatch.
+    Perhaps a function was not given enough arguments?
     Expected: [Int]
     Found:    [Int] -> [Int]
 
-    within "xs" (err037.saw:9:5-9:7)
+  err037.saw:9:10-9:15: Note: The type [Int] arises from this type annotation
+  err037.saw:7:15-7:35: Note: The type [Int] -> [Int] arises from the context of the term
+
 
 FAILED

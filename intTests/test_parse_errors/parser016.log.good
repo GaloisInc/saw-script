@@ -2,4 +2,4 @@
 Some legal inputs at this point: 'let' 'rec' 'do' 'if' '[' '('
    ')' '{' '\\' string code ctype num name
 
-<stdin>:1:1-1:4: Unbound variable: "bar" (<stdin>:1:1-1:4)
+<stdin>:1:1-1:4: Unbound variable: "bar"

@@ -1,15 +1,12 @@
 Loading file "err032.saw"
 Type errors:
   err032.saw:5:9-5:12: Kind mismatch: expected * -> * but found *
-  err032.saw:5:20-5:25: Type mismatch.
-    Mismatch of type constructors. Expected: <Block> but got Bool
-    err032.saw:5:9-5:17: The type t.0 Bool arises from this type annotation
-    <type of false>:1:1-1:5: The type Bool arises from this type annotation
-
+  err032.saw:5:20-5:25: Error: Type mismatch.
     Expected: t.0 Bool
     Found:    Bool
 
-    within "x" (err032.saw:5:5-5:6)
+  err032.saw:5:9-5:17: Note: The type t.0 Bool arises from this type annotation
+  <type of false>:1:1-1:5: Note: The type Bool arises from this type annotation
 
 
 FAILED
