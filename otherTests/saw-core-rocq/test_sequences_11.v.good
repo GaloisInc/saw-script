@@ -66,7 +66,9 @@ Definition TestSeq_TakeDrop:
             (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
    in
    CryptolPrimitivesForSAWCore.ecTake var__4 var__0 var__2 
-      (CryptolPrimitivesForSAWCore.ecDrop var__0 var__5 var__2 [
+      (CryptolPrimitivesForSAWCore.ecDrop var__0 var__5 var__2 
+         (CryptolPrimitivesForSAWCore.PFin_TCNum 
+            (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) [
             CryptolPrimitivesForSAWCore.ecNumber var__0 var__2 var__3;
             CryptolPrimitivesForSAWCore.ecNumber var__4 var__2 var__3;
             CryptolPrimitivesForSAWCore.ecNumber var__5 var__2 var__3;

@@ -54,6 +54,10 @@ Definition TestSeq_Fold:
       CryptolPrimitivesForSAWCore.PLiteralSeqBool var__1
    in
    CryptolPrimitivesForSAWCore.ecFoldl var__0 var__2 var__2 
+      (CryptolPrimitivesForSAWCore.PFin_TCNum 
+         (Stdlib.PArith.BinPos.Pos.to_nat 
+            (Stdlib.PArith.BinPos.xO 
+               (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) 
       (CryptolPrimitivesForSAWCore.ecPlus var__2 
          (CryptolPrimitivesForSAWCore.PRingSeqBool var__1)) 
       (CryptolPrimitivesForSAWCore.ecNumber 

@@ -53,7 +53,10 @@ Definition TestSeq_DropAll:
             (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
    in
    CryptolPrimitivesForSAWCore.ecDrop var__3 
-      (CryptolPrimitivesForSAWCore.TCNum SAWCoreScaffolding.Zero) var__1 [
+      (CryptolPrimitivesForSAWCore.TCNum SAWCoreScaffolding.Zero) var__1 
+      (CryptolPrimitivesForSAWCore.PFin_TCNum 
+         (Stdlib.PArith.BinPos.Pos.to_nat 
+            (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))) [
          CryptolPrimitivesForSAWCore.ecNumber 
             (CryptolPrimitivesForSAWCore.TCNum 
                (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) var__1

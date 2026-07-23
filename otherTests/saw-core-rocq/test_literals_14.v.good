@@ -22,6 +22,12 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 Definition TestLit_Poly2
         (u1303: CryptolPrimitivesForSAWCore.Num)
+        (_P: CryptolPrimitivesForSAWCore.PGeq u1303 
+              (CryptolPrimitivesForSAWCore.TCNum 
+                 (Stdlib.PArith.BinPos.Pos.to_nat 
+                    (Stdlib.PArith.BinPos.xI 
+                       (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+        (_P1: CryptolPrimitivesForSAWCore.PFin u1303)
       : CryptolPrimitivesForSAWCore.seq u1303 Init.Datatypes.bool :=
    CryptolPrimitivesForSAWCore.ecNumber 
       (CryptolPrimitivesForSAWCore.TCNum 

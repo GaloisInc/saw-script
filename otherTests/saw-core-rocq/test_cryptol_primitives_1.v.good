@@ -122,49 +122,53 @@ Definition tcFin: forall (_1: Num), Init.Datatypes.bool :=
          Init.Datatypes.false n
    .
 
-Definition getFinNat: forall (n: Num), Init.Datatypes.nat :=
+Definition PFin: forall (_1: Num), Prop :=
    fun (n: Num)
+      =>
+      @Init.Logic.eq Init.Datatypes.bool (tcFin n) Init.Datatypes.true
+   .
+
+Definition PFin_TCNum: forall (n: Init.Datatypes.nat), PFin (TCNum n) :=
+   fun (n: Init.Datatypes.nat)
+      =>
+      @Init.Logic.eq_refl Init.Datatypes.bool Init.Datatypes.true
+   .
+
+Definition PFin_TCInf: forall (_1: PFin TCInf), SAWCorePrelude.FalseProp :=
+   fun (pf: PFin TCInf)
+      =>
+      SAWCorePrelude.sym Init.Datatypes.bool Init.Datatypes.false
+         Init.Datatypes.true pf
+   .
+
+Definition FalseProp_elim: forall (a: Type) (_1: SAWCorePrelude.FalseProp), a :=
+   fun (a: Type)
+      =>
+      SAWCoreScaffolding.Eq__rec Init.Datatypes.bool Init.Datatypes.true (fun
+              (y: Init.Datatypes.bool) (_1: 
+                 @Init.Logic.eq Init.Datatypes.bool Init.Datatypes.true y)
+            =>
+            @Init.Datatypes.bool_rect (fun (_2: Init.Datatypes.bool) => Type)
+               SAWCorePrelude.TrueProp a y
+         ) SAWCorePrelude.TrueI Init.Datatypes.false
+   .
+
+Definition PFinNumRec: forall (n: Num) (_1: PFin n) (p: forall (_2: Num), Type)
+        (_2: forall (n1: Init.Datatypes.nat), p (TCNum n1)),
+        p n :=
+   fun (n: Num) (fn: PFin n) (p: forall (_1: Num), Type) (f: forall
+                (n1: Init.Datatypes.nat),
+                p (TCNum n1))
       =>
       @CryptolPrimitivesForSAWCore.Num_rect (fun (n1: Num)
             =>
-            Init.Datatypes.nat
-         ) (fun (n1: Init.Datatypes.nat) => n1) 
-         (SAWCoreScaffolding.error Init.Datatypes.nat
-            "Unexpected Fin constraint violation!"%string) n
-   .
-
-Definition finNumRec: forall (p: forall (_1: Num), Type) {Inh_p: forall
-                (_1: Num),
-                SAWCoreScaffolding.Inhabited (p _1)} (_1: forall
-                (n: Init.Datatypes.nat),
-                p (TCNum n)) (n: Num),
-        p n :=
-   fun (p: forall (_1: Num), Type) (Inh_p: forall (_1: Num),
-                SAWCoreScaffolding.Inhabited (p _1)) (f: forall
-                (n: Init.Datatypes.nat),
-                p (TCNum n)) (n: Num)
-      =>
-      @CryptolPrimitivesForSAWCore.Num_rect p f 
-         (SAWCoreScaffolding.error (p TCInf)
-            "Unexpected Fin constraint violation!"%string) n
-   .
-
-Definition finNumRec2: forall (p: forall (_1 _2: Num), Type) {Inh_p: forall
-                (_1 _2: Num),
-                SAWCoreScaffolding.Inhabited (p _1 _2)} (_1: forall
-                (m n: Init.Datatypes.nat),
-                p (TCNum m) (TCNum n)) (m n: Num),
-        p m n :=
-   fun (p: forall (_1 _2: Num), Type) (Inh_p: forall (_1 _2: Num),
-                SAWCoreScaffolding.Inhabited (p _1 _2)) (f: forall
-                (m n: Init.Datatypes.nat),
-                p (TCNum m) (TCNum n))
-      =>
-      finNumRec (fun (m: Num) => forall (n: Num), p m n) (fun
-              (m: Init.Datatypes.nat)
+            forall (_1: PFin n1),
+                 p n1
+         ) (fun (n1: Init.Datatypes.nat) (_1: PFin (TCNum n1)) => f n1) (fun
+              (c: PFin TCInf)
             =>
-            finNumRec (p (TCNum m)) (f m)
-         )
+            FalseProp_elim (p TCInf) (PFin_TCInf c)
+         ) n fn
    .
 
 Definition binaryNumFun: forall (_1: forall (_1 _2: Init.Datatypes.nat),
@@ -371,6 +375,142 @@ Definition tcLt: forall (_1 _2: Num), Init.Datatypes.bool :=
          Init.Datatypes.true
       ) (fun (y: Init.Datatypes.nat) => Init.Datatypes.false)
       Init.Datatypes.true.
+
+Definition PNeq: forall (_1 _2: Num), Prop :=
+   fun (m n: Num)
+      =>
+      @Init.Logic.eq Init.Datatypes.bool (tcEqual m n) Init.Datatypes.false
+   .
+
+Definition PGeq: forall (_1 _2: Num), Prop :=
+   fun (m n: Num)
+      =>
+      @Init.Logic.eq Init.Datatypes.bool (tcLt m n) Init.Datatypes.false
+   .
+
+Definition PGeq_0: forall (n: Num), PGeq n (TCNum SAWCoreScaffolding.Zero) :=
+   @CryptolPrimitivesForSAWCore.Num_rect (fun (n: Num)
+         =>
+         PGeq n (TCNum SAWCoreScaffolding.Zero)
+      ) SAWCoreScaffolding.ltNat_0_right 
+      (@Init.Logic.eq_refl Init.Datatypes.bool Init.Datatypes.false).
+
+Definition PFin_tcAdd: forall (m n: Num) (_1: PFin m) (_2: PFin n),
+        PFin (tcAdd m n) :=
+   fun (m n: Num) (pm: PFin m) (pn: PFin n)
+      =>
+      PFinNumRec m pm (fun (m1: Num) => PFin (tcAdd m1 n)) (fun
+              (m1: Init.Datatypes.nat)
+            =>
+            PFinNumRec n pn (fun (n1: Num) => PFin (tcAdd (TCNum m1) n1)) (fun
+                    (n1: Init.Datatypes.nat)
+                  =>
+                  PFin_TCNum (SAWCoreScaffolding.addNat m1 n1)
+               )
+         )
+   .
+
+Definition PFin_tcMul: forall (m n: Num) (_1: PFin m) (_2: PFin n),
+        PFin (tcMul m n) :=
+   fun (m n: Num) (pm: PFin m) (pn: PFin n)
+      =>
+      PFinNumRec m pm (fun (m1: Num) => PFin (tcMul m1 n)) (fun
+              (m1: Init.Datatypes.nat)
+            =>
+            PFinNumRec n pn (fun (n1: Num) => PFin (tcMul (TCNum m1) n1)) (fun
+                    (n1: Init.Datatypes.nat)
+                  =>
+                  PFin_TCNum (SAWCoreScaffolding.mulNat m1 n1)
+               )
+         )
+   .
+
+Definition PFin_tcSub: forall (m n: Num) (_1: PFin m), PFin (tcSub m n) :=
+   fun (m n: Num) (pm: PFin m)
+      =>
+      PFinNumRec m pm (fun (m1: Num) => PFin (tcSub m1 n)) (fun
+              (m1: Init.Datatypes.nat)
+            =>
+            @CryptolPrimitivesForSAWCore.Num_rect (fun (n1: Num)
+                  =>
+                  PFin (tcSub (TCNum m1) n1)
+               ) (fun (n1: Init.Datatypes.nat)
+                  =>
+                  PFin_TCNum (SAWCoreScaffolding.subNat m1 n1)
+               ) (PFin_TCNum SAWCoreScaffolding.Zero) n
+         )
+   .
+
+Definition PFin_tcDiv: forall (m n: Num) (_1: PFin m), PFin (tcDiv m n) :=
+   fun (m n: Num) (pm: PFin m)
+      =>
+      PFinNumRec m pm (fun (m1: Num) => PFin (tcDiv m1 n)) (fun
+              (m1: Init.Datatypes.nat)
+            =>
+            @CryptolPrimitivesForSAWCore.Num_rect (fun (n1: Num)
+                  =>
+                  PFin (tcDiv (TCNum m1) n1)
+               ) (fun (n1: Init.Datatypes.nat)
+                  =>
+                  PFin_TCNum (SAWCorePrelude.divNat m1 n1)
+               ) (PFin_TCNum SAWCoreScaffolding.Zero) n
+         )
+   .
+
+Definition PFin_tcCeilDiv: forall (m n: Num) (_1: PFin m),
+        PFin (tcCeilDiv m n) :=
+   fun (m n: Num) (pm: PFin m)
+      =>
+      PFinNumRec m pm (fun (m1: Num) => PFin (tcCeilDiv m1 n)) (fun
+              (m1: Init.Datatypes.nat)
+            =>
+            @CryptolPrimitivesForSAWCore.Num_rect (fun (n1: Num)
+                  =>
+                  PFin (tcCeilDiv (TCNum m1) n1)
+               ) (fun (n1: Init.Datatypes.nat) => PFin_TCNum (ceilDivNat m1 n1))
+               (PFin_TCNum SAWCoreScaffolding.Zero) n
+         )
+   .
+
+Definition PFin_downward_closed: forall (m n: Num) (_1: PGeq m n) (_2: PFin m),
+        PFin n :=
+   fun (m n: Num)
+      =>
+      @CryptolPrimitivesForSAWCore.Num_rect (fun (m1: Num)
+            =>
+            forall (_1: PGeq m1 n) (_2: PFin m1),
+                 PFin n
+         ) (fun (m1: Init.Datatypes.nat)
+            =>
+            @CryptolPrimitivesForSAWCore.Num_rect (fun (n1: Num)
+                  =>
+                  forall (_1: PGeq (TCNum m1) n1) (_2: PFin (TCNum m1)),
+                       PFin n1
+               ) (fun (n1: Init.Datatypes.nat) (_1: PGeq (TCNum m1) (TCNum n1))
+                    (_2: PFin (TCNum m1))
+                  =>
+                  @Init.Logic.eq_refl Init.Datatypes.bool Init.Datatypes.true
+               ) (fun (c1: PGeq (TCNum m1) TCInf) (_1: PFin (TCNum m1))
+                  =>
+                  SAWCorePrelude.sym Init.Datatypes.bool Init.Datatypes.true
+                     Init.Datatypes.false c1
+               ) n
+         ) (@CryptolPrimitivesForSAWCore.Num_rect (fun (n1: Num)
+               =>
+               forall (_1: PGeq TCInf n1) (_2: PFin TCInf),
+                    PFin n1
+            ) (fun (n1: Init.Datatypes.nat) (_1: PGeq TCInf (TCNum n1)) (_2: 
+                    PFin TCInf)
+               =>
+               @Init.Logic.eq_refl Init.Datatypes.bool Init.Datatypes.true
+            ) (fun (_1: PGeq TCInf TCInf) (c2: PFin TCInf) => c2) n) m
+   .
+
+(* "Cryptol::unsafeAssumePFin@core" was skipped *)
+
+(* "Cryptol::unsafeAssumePGeq@core" was skipped *)
+
+(* "Cryptol::unsafeAssumePNeq@core" was skipped *)
 
 Definition seq: forall (_1: Num) (_2: Type), Type :=
    fun (num: Num) (a: Type)
@@ -8213,18 +8353,21 @@ Definition ecNumber: forall (val: Num) (a: Type) (_1: PLiteral a), a :=
          (pa SAWCoreScaffolding.Zero) val
    .
 
-Definition ecFromZ: forall (n: Num) (_1: IntModNum n),
+Definition ecFromZ: forall (n: Num) (_1: PFin n)
+        (_2: PGeq n
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
+        (_3: IntModNum n),
         SAWCoreScaffolding.Integer :=
-   fun (n: Num)
+   fun
+        (n: Num) (pn: PFin n)
+        (_1: PGeq n
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
       =>
-      @CryptolPrimitivesForSAWCore.Num_rect (fun (n1: Num)
+      PFinNumRec n pn (fun (n1: Num)
             =>
-            forall (_1: IntModNum n1),
+            forall (_2: IntModNum n1),
                  SAWCoreScaffolding.Integer
-         ) SAWCoreScaffolding.fromIntMod (fun (x: SAWCoreScaffolding.Integer)
-            =>
-            x
-         ) n
+         ) SAWCoreScaffolding.fromIntMod
    .
 
 Definition ecFromInteger: forall (a: Type) (_1: PRing a)
@@ -9092,26 +9235,28 @@ Definition ecRoundToEven: forall (a: Type) (_1: PRound a) (_2: a),
                            pr))))))
    .
 
-Definition ecLg2: forall (n: Num) (_1: seq n Init.Datatypes.bool),
+Definition ecLg2: forall (n: Num) (_1: PFin n) (_2: seq n Init.Datatypes.bool),
         seq n Init.Datatypes.bool :=
-   fun (n: Num)
+   fun (n: Num) (pn: PFin n)
       =>
-      @CryptolPrimitivesForSAWCore.Num_rect (fun (n1: Num)
+      PFinNumRec n pn (fun (n1: Num)
             =>
             forall (_1: seq n1 Init.Datatypes.bool),
                  seq n1 Init.Datatypes.bool
-         ) SAWCoreVectorsAsRocqVectors.bvLg2 
-         (SAWCoreScaffolding.error (forall (_1: 
-                    SAWCorePrelude.Stream Init.Datatypes.bool),
-                 SAWCorePrelude.Stream Init.Datatypes.bool)
-            "ecLg2: expected finite word"%string) n
+         ) SAWCoreVectorsAsRocqVectors.bvLg2
    .
 
-Definition ecSDiv: forall (n: Num) (_1 _2: seq n Init.Datatypes.bool),
+Definition ecSDiv: forall (n: Num) (_1: PFin n)
+        (_2: PGeq n
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
+        (_3 _4: seq n Init.Datatypes.bool),
         seq n Init.Datatypes.bool :=
-   fun (n: Num)
+   fun
+        (n: Num) (pn: PFin n)
+        (_pgeq: PGeq n 
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
       =>
-      @CryptolPrimitivesForSAWCore.Num_rect (fun (n1: Num)
+      PFinNumRec n pn (fun (n1: Num)
             =>
             forall (_1 _2: seq n1 Init.Datatypes.bool),
                  seq n1 Init.Datatypes.bool
@@ -9132,18 +9277,20 @@ Definition ecSDiv: forall (n: Num) (_1 _2: seq n Init.Datatypes.bool),
                          SAWCoreVectorsAsRocqVectors.Vec n' Init.Datatypes.bool)
                =>
                SAWCoreVectorsAsRocqVectors.bvSDiv n'
-            )) 
-         (SAWCoreScaffolding.error (forall (_1 _2: 
-                    SAWCorePrelude.Stream Init.Datatypes.bool),
-                 SAWCorePrelude.Stream Init.Datatypes.bool)
-            "ecSDiv: expected finite word"%string) n
+            ))
    .
 
-Definition ecSMod: forall (n: Num) (_1 _2: seq n Init.Datatypes.bool),
+Definition ecSMod: forall (n: Num) (_1: PFin n)
+        (_2: PGeq n
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
+        (_3 _4: seq n Init.Datatypes.bool),
         seq n Init.Datatypes.bool :=
-   fun (n: Num)
+   fun
+        (n: Num) (pn: PFin n)
+        (_pgeq: PGeq n 
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
       =>
-      @CryptolPrimitivesForSAWCore.Num_rect (fun (n1: Num)
+      PFinNumRec n pn (fun (n1: Num)
             =>
             forall (_1 _2: seq n1 Init.Datatypes.bool),
                  seq n1 Init.Datatypes.bool
@@ -9164,26 +9311,24 @@ Definition ecSMod: forall (n: Num) (_1 _2: seq n Init.Datatypes.bool),
                          SAWCoreVectorsAsRocqVectors.Vec n' Init.Datatypes.bool)
                =>
                SAWCoreVectorsAsRocqVectors.bvSRem n'
-            )) 
-         (SAWCoreScaffolding.error (forall (_1 _2: 
-                    SAWCorePrelude.Stream Init.Datatypes.bool),
-                 SAWCorePrelude.Stream Init.Datatypes.bool)
-            "ecSMod: expected finite word"%string) n
+            ))
    .
 
-Definition toSignedInteger: forall (n: Num) (_1: seq n Init.Datatypes.bool),
+Definition toSignedInteger: forall (n: Num) (_1: PFin n)
+        (_2: PGeq n
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
+        (_3: seq n Init.Datatypes.bool),
         SAWCoreScaffolding.Integer :=
-   fun (n: Num)
+   fun
+        (n: Num) (pn: PFin n)
+        (_pgeq: PGeq n 
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
       =>
-      @CryptolPrimitivesForSAWCore.Num_rect (fun (n1: Num)
+      PFinNumRec n pn (fun (n1: Num)
             =>
             forall (_1: seq n1 Init.Datatypes.bool),
                  SAWCoreScaffolding.Integer
-         ) SAWCoreVectorsAsRocqVectors.sbvToInt 
-         (SAWCoreScaffolding.error (forall (_1: 
-                    SAWCorePrelude.Stream Init.Datatypes.bool),
-                 SAWCoreScaffolding.Integer)
-            "toSignedInteger: expected finite word"%string) n
+         ) SAWCoreVectorsAsRocqVectors.sbvToInt
    .
 
 Definition ecEq: forall (a: Type) (_1: PEq a) (_2 _3: a), Init.Datatypes.bool :=
@@ -9525,17 +9670,22 @@ Definition ecShiftR: forall (m: Num) (ix a: Type) (_1: PIntegral ix) (_2:
          ) m
    .
 
-Definition ecSShiftR: forall (n: Num) (ix: Type) (_1: PIntegral ix) (_2: 
-           seq n Init.Datatypes.bool) (_3: ix),
+Definition ecSShiftR: forall (n: Num) (ix: Type) (_1: PFin n)
+        (_2: PGeq n
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
+        (_3: PIntegral ix) (_4: seq n Init.Datatypes.bool) (_5: ix),
         seq n Init.Datatypes.bool :=
-   finNumRec (fun (n: Num)
-         =>
-         forall (ix: Type) (_1: PIntegral ix) (_2: seq n Init.Datatypes.bool)
-              (_3: ix),
-              seq n Init.Datatypes.bool
-      ) (fun (n: Init.Datatypes.nat) (ix: Type) (pix: PIntegral ix)
-         =>
-         SAWCorePrelude.natCase (fun (w: Init.Datatypes.nat)
+   fun
+        (n: Num) (ix: Type) (pn: PFin n)
+        (_pgeq: PGeq n 
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
+        (pix: PIntegral ix)
+      =>
+      PFinNumRec n pn (fun (n1: Num)
+            =>
+            forall (_1: seq n1 Init.Datatypes.bool) (_2: ix),
+                 seq n1 Init.Datatypes.bool
+         ) (SAWCorePrelude.natCase (fun (w: Init.Datatypes.nat)
                =>
                forall (_1: SAWCoreVectorsAsRocqVectors.Vec w
                           Init.Datatypes.bool) (_2: ix),
@@ -9556,63 +9706,66 @@ Definition ecSShiftR: forall (n: Num) (ix: Type) (_1: PIntegral ix) (_2:
                   (SAWCoreVectorsAsRocqVectors.Vec var__0 Init.Datatypes.bool) 
                   (SAWCoreVectorsAsRocqVectors.bvSShr w xs) 
                   (SAWCoreVectorsAsRocqVectors.bvShl var__0 xs)
-            ) n
-      ).
+            ))
+   .
 
-Definition ecRotL: forall (m: Num) (ix a: Type) (_1: PIntegral ix) (_2: seq m a)
-        (_3: ix),
+Definition ecRotL: forall (m: Num) (ix a: Type) (_1: PFin m) (_2: PIntegral ix)
+        (_3: seq m a) (_4: ix),
         seq m a :=
-   finNumRec (fun (m: Num)
-         =>
-         forall (ix a: Type) (_1: PIntegral ix) (_2: seq m a) (_3: ix),
-              seq m a
-      ) (fun (m: Init.Datatypes.nat) (ix a: Type) (pix: PIntegral ix) (xs: 
-              SAWCoreVectorsAsRocqVectors.Vec m a)
-         =>
-         posNegCases ix pix (SAWCoreVectorsAsRocqVectors.Vec m a) 
-            (SAWCoreVectorsAsRocqVectors.rotateL m a xs) 
-            (SAWCoreVectorsAsRocqVectors.rotateR m a xs)
-      ).
+   fun (m: Num) (ix a: Type) (pm: PFin m)
+      =>
+      PFinNumRec m pm (fun (m1: Num)
+            =>
+            forall (_1: PIntegral ix) (_2: seq m1 a) (_3: ix),
+                 seq m1 a
+         ) (fun (m1: Init.Datatypes.nat) (pix: PIntegral ix) (xs: 
+                 SAWCoreVectorsAsRocqVectors.Vec m1 a)
+            =>
+            posNegCases ix pix (SAWCoreVectorsAsRocqVectors.Vec m1 a) 
+               (SAWCoreVectorsAsRocqVectors.rotateL m1 a xs) 
+               (SAWCoreVectorsAsRocqVectors.rotateR m1 a xs)
+         )
+   .
 
-Definition ecRotR: forall (m: Num) (ix a: Type) (_1: PIntegral ix) (_2: seq m a)
-        (_3: ix),
+Definition ecRotR: forall (m: Num) (ix a: Type) (_1: PFin m) (_2: PIntegral ix)
+        (_3: seq m a) (_4: ix),
         seq m a :=
-   finNumRec (fun (m: Num)
-         =>
-         forall (ix a: Type) (_1: PIntegral ix) (_2: seq m a) (_3: ix),
-              seq m a
-      ) (fun (m: Init.Datatypes.nat) (ix a: Type) (pix: PIntegral ix) (xs: 
-              SAWCoreVectorsAsRocqVectors.Vec m a)
-         =>
-         posNegCases ix pix (SAWCoreVectorsAsRocqVectors.Vec m a) 
-            (SAWCoreVectorsAsRocqVectors.rotateR m a xs) 
-            (SAWCoreVectorsAsRocqVectors.rotateL m a xs)
-      ).
+   fun (m: Num) (ix a: Type) (pm: PFin m)
+      =>
+      PFinNumRec m pm (fun (m1: Num)
+            =>
+            forall (_1: PIntegral ix) (_2: seq m1 a) (_3: ix),
+                 seq m1 a
+         ) (fun (m1: Init.Datatypes.nat) (pix: PIntegral ix) (xs: 
+                 SAWCoreVectorsAsRocqVectors.Vec m1 a)
+            =>
+            posNegCases ix pix (SAWCoreVectorsAsRocqVectors.Vec m1 a) 
+               (SAWCoreVectorsAsRocqVectors.rotateR m1 a xs) 
+               (SAWCoreVectorsAsRocqVectors.rotateL m1 a xs)
+         )
+   .
 
 Definition ecCat: forall (m n: Num) (a: Type) {Inh_a: 
-           SAWCoreScaffolding.Inhabited a} (_1: seq m a) (_2: seq n a),
+           SAWCoreScaffolding.Inhabited a} (_1: PFin m) (_2: seq m a) (_3: 
+           seq n a),
         seq (tcAdd m n) a :=
-   finNumRec (fun (m: Num)
-         =>
-         forall (n: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (_1: 
-                 seq m a) (_2: seq n a),
-              seq (tcAdd m n) a
-      ) (fun (m: Init.Datatypes.nat)
-         =>
-         CryptolPrimitivesForSAWCore.Num__rec (fun (n: Num)
-               =>
-               forall (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (_1: 
-                       SAWCoreVectorsAsRocqVectors.Vec m a) (_2: seq n a),
-                    seq (tcAdd (TCNum m) n) a
-            ) (fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: 
-                    SAWCoreScaffolding.Inhabited a)
-               =>
-               SAWCorePrelude.append m n a
-            ) (fun (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
-               =>
-               SAWCorePrelude.streamAppend a m
-            )
-      ).
+   fun (m n: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (pm: PFin m)
+      =>
+      PFinNumRec m pm (fun (m1: Num)
+            =>
+            forall (_1: seq m1 a) (_2: seq n a),
+                 seq (tcAdd m1 n) a
+         ) (fun (m1: Init.Datatypes.nat)
+            =>
+            CryptolPrimitivesForSAWCore.Num__rec (fun (n1: Num)
+                  =>
+                  forall (_1: SAWCoreVectorsAsRocqVectors.Vec m1 a) (_2: 
+                          seq n1 a),
+                       seq (tcAdd (TCNum m1) n1) a
+               ) (fun (n1: Init.Datatypes.nat) => SAWCorePrelude.append m1 n1 a)
+               (SAWCorePrelude.streamAppend a m1) n
+         )
+   .
 
 Definition ecTake: forall (m n: Num) (a: Type) {Inh_a: 
            SAWCoreScaffolding.Inhabited a} (_1: seq (tcAdd m n) a),
@@ -9656,65 +9809,41 @@ Definition ecTake: forall (m n: Num) (a: Type) {Inh_a:
          )).
 
 Definition ecDrop: forall (m n: Num) (a: Type) {Inh_a: 
-           SAWCoreScaffolding.Inhabited a} (_1: seq (tcAdd m n) a),
+           SAWCoreScaffolding.Inhabited a} (_1: PFin m) (_2: seq (tcAdd m n) a),
         seq n a :=
-   finNumRec (fun (m: Num)
-         =>
-         forall (n: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (_1: 
-                 seq (tcAdd m n) a),
-              seq n a
-      ) (fun (m: Init.Datatypes.nat)
-         =>
-         CryptolPrimitivesForSAWCore.Num__rec (fun (n: Num)
-               =>
-               forall (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (_1: 
-                       seq (tcAdd (TCNum m) n) a),
-                    seq n a
-            ) (fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: 
-                    SAWCoreScaffolding.Inhabited a) (xs: 
-                    SAWCoreVectorsAsRocqVectors.Vec 
-                       (SAWCoreScaffolding.addNat m n) a)
-               =>
-               SAWCorePrelude.drop a m n xs
-            ) (fun (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (xs: 
-                    SAWCorePrelude.Stream a)
-               =>
-               SAWCorePrelude.streamDrop a m xs
-            )
-      ).
-
-Definition ecJoin: forall (m n: Num) (a: Type) {Inh_a: 
-           SAWCoreScaffolding.Inhabited a} (_1: seq m (seq n a)),
-        seq (tcMul m n) a :=
-   fun (m: Num)
+   fun (m n: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (pm: PFin m)
       =>
-      @CryptolPrimitivesForSAWCore.Num_rect (fun (m1: Num)
+      PFinNumRec m pm (fun (m1: Num)
             =>
-            forall (n: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
-                 (_1: seq m1 (seq n a)),
-                 seq (tcMul m1 n) a
+            forall (_1: seq (tcAdd m1 n) a),
+                 seq n a
          ) (fun (m1: Init.Datatypes.nat)
             =>
-            finNumRec (fun (n: Num)
+            CryptolPrimitivesForSAWCore.Num__rec (fun (n1: Num)
                   =>
-                  forall (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (_1: 
-                          SAWCoreVectorsAsRocqVectors.Vec m1 (seq n a)),
-                       seq (tcMul (TCNum m1) n) a
-               ) (fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: 
-                       SAWCoreScaffolding.Inhabited a)
-                  =>
-                  SAWCorePrelude.join m1 n a
-               )
+                  forall (_1: seq (tcAdd (TCNum m1) n1) a),
+                       seq n1 a
+               ) (SAWCorePrelude.drop a m1) (SAWCorePrelude.streamDrop a m1) n
          )
-         (finNumRec (fun (n: Num)
-               =>
-               forall (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (_1: 
-                       SAWCorePrelude.Stream (seq n a)),
-                    seq (tcMul TCInf n) a
-            ) (fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: 
-                    SAWCoreScaffolding.Inhabited a)
-               =>
-               SAWCorePrelude.natCase (fun (n': Init.Datatypes.nat)
+   .
+
+Definition ecJoin: forall (m n: Num) (a: Type) {Inh_a: 
+           SAWCoreScaffolding.Inhabited a} (_1: PFin n) (_2: seq m (seq n a)),
+        seq (tcMul m n) a :=
+   fun (m n: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (pn: PFin n)
+      =>
+      PFinNumRec n pn (fun (n1: Num)
+            =>
+            forall (_1: seq m (seq n1 a)),
+                 seq (tcMul m n1) a
+         ) (fun (n1: Init.Datatypes.nat)
+            =>
+            @CryptolPrimitivesForSAWCore.Num_rect (fun (m1: Num)
+                  =>
+                  forall (_1: seq m1 (SAWCoreVectorsAsRocqVectors.Vec n1 a)),
+                       seq (tcMul m1 (TCNum n1)) a
+               ) (fun (m1: Init.Datatypes.nat) => SAWCorePrelude.join m1 n1 a) 
+               (SAWCorePrelude.natCase (fun (n': Init.Datatypes.nat)
                      =>
                      forall (_1: SAWCorePrelude.Stream 
                                 (SAWCoreVectorsAsRocqVectors.Vec n' a)),
@@ -9727,47 +9856,27 @@ Definition ecJoin: forall (m n: Num) (a: Type) {Inh_a:
                                 a))
                      =>
                      SAWCoreVectorsAsRocqVectors.EmptyVec a
-                  ) (fun (n': Init.Datatypes.nat) (s: 
-                          SAWCorePrelude.Stream 
-                             (SAWCoreVectorsAsRocqVectors.Vec 
-                                (SAWCoreScaffolding.Succ n') a))
-                     =>
-                     SAWCorePrelude.streamJoin a n' s
-                  ) n
-            )) m
+                  ) (SAWCorePrelude.streamJoin a) n1) m
+         )
    .
 
 Definition ecSplit: forall (m n: Num) (a: Type) {Inh_a: 
-           SAWCoreScaffolding.Inhabited a} (_1: seq (tcMul m n) a),
+           SAWCoreScaffolding.Inhabited a} (_1: PFin n) (_2: seq (tcMul m n) a),
         seq m (seq n a) :=
-   fun (m: Num)
+   fun (m n: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (pn: PFin n)
       =>
-      @CryptolPrimitivesForSAWCore.Num_rect (fun (m1: Num)
+      PFinNumRec n pn (fun (n1: Num)
             =>
-            forall (n: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
-                 (_1: seq (tcMul m1 n) a),
-                 seq m1 (seq n a)
-         ) (fun (m1: Init.Datatypes.nat)
+            forall (_1: seq (tcMul m n1) a),
+                 seq m (seq n1 a)
+         ) (fun (n1: Init.Datatypes.nat)
             =>
-            finNumRec (fun (n: Num)
+            @CryptolPrimitivesForSAWCore.Num_rect (fun (m1: Num)
                   =>
-                  forall (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (_1: 
-                          seq (tcMul (TCNum m1) n) a),
-                       SAWCoreVectorsAsRocqVectors.Vec m1 (seq n a)
-               ) (fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: 
-                       SAWCoreScaffolding.Inhabited a)
-                  =>
-                  SAWCorePrelude.split m1 n a
-               )
-         ) (finNumRec (fun (n: Num)
-               =>
-               forall (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (_1: 
-                       seq (tcMul TCInf n) a),
-                    SAWCorePrelude.Stream (seq n a)
-            ) (fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: 
-                    SAWCoreScaffolding.Inhabited a)
-               =>
-               SAWCorePrelude.natCase (fun (n': Init.Datatypes.nat)
+                  forall (_1: seq (tcMul m1 (TCNum n1)) a),
+                       seq m1 (SAWCoreVectorsAsRocqVectors.Vec n1 a)
+               ) (fun (m1: Init.Datatypes.nat) => SAWCorePrelude.split m1 n1 a) 
+               (SAWCorePrelude.natCase (fun (n': Init.Datatypes.nat)
                      =>
                      forall (_1: seq (SAWCoreScaffolding.if0Nat Num n' 
                                     (TCNum SAWCoreScaffolding.Zero) TCInf) a),
@@ -9778,18 +9887,21 @@ Definition ecSplit: forall (m n: Num) (a: Type) {Inh_a:
                         a)) (fun (n': Init.Datatypes.nat)
                      =>
                      SAWCorePrelude.streamSplit a (SAWCoreScaffolding.Succ n')
-                  ) n
-            )) m
+                  ) n1) m
+         )
    .
 
 Definition ecReverse: forall (n: Num) (a: Type) {Inh_a: 
-           SAWCoreScaffolding.Inhabited a} (_1: seq n a),
+           SAWCoreScaffolding.Inhabited a} (_1: PFin n) (_2: seq n a),
         seq n a :=
-   finNumRec (fun (n: Num)
-         =>
-         forall (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (_1: seq n a),
-              seq n a
-      ) SAWCorePrelude.reverse.
+   fun (n: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (pn: PFin n)
+      =>
+      PFinNumRec n pn (fun (n1: Num) => forall (_1: seq n1 a), seq n1 a) (fun
+              (n1: Init.Datatypes.nat)
+            =>
+            SAWCorePrelude.reverse n1 a
+         )
+   .
 
 Definition ecTranspose: forall (m n: Num) (a: Type) {Inh_a: 
            SAWCoreScaffolding.Inhabited a} (_1: seq m (seq n a)),
@@ -9889,53 +10001,56 @@ Definition ecAt: forall (n: Num) (a: Type) {Inh_a:
    .
 
 Definition ecAtBack: forall (n: Num) (a: Type) {Inh_a: 
-           SAWCoreScaffolding.Inhabited a} (ix: Type) (_1: PIntegral ix) (_2: 
-           seq n a) (_3: ix),
+           SAWCoreScaffolding.Inhabited a} (ix: Type) (_1: PFin n) (_2: 
+           PIntegral ix) (_3: seq n a) (_4: ix),
         a :=
    fun (n: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (ix: Type)
-        (pix: PIntegral ix) (xs: seq n a)
+        (pn: PFin n) (pix: PIntegral ix) (xs: seq n a)
       =>
-      ecAt n a ix pix (ecReverse n a xs)
+      ecAt n a ix pix (ecReverse n a pn xs)
    .
 
 Definition ecFromTo: forall (first last: Num) (a: Type) {Inh_a: 
-           SAWCoreScaffolding.Inhabited a} (_1: PLiteral a),
+           SAWCoreScaffolding.Inhabited a} (_1: PFin last) (_2: PGeq last first)
+        (_3: PLiteral a),
         seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
                   (tcSub last first)) a :=
-   finNumRec (fun (first: Num)
-         =>
-         forall (last: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
-              (_1: PLiteral a),
-              seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
-                        (tcSub last first)) a
-      ) (fun (first: Init.Datatypes.nat)
-         =>
-         finNumRec (fun (last: Num)
-               =>
-               forall (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (_1: 
-                       PLiteral a),
-                    seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
-                              (tcSub last (TCNum first))) a
-            ) (fun (last: Init.Datatypes.nat) (a: Type) (Inh_a: 
-                    SAWCoreScaffolding.Inhabited a) (pa: PLiteral a)
-               =>
-               SAWCoreVectorsAsRocqVectors.gen 
-                  (SAWCoreScaffolding.addNat 
-                     (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH) 
-                     (SAWCoreScaffolding.subNat last first)) a (fun
-                       (i: Init.Datatypes.nat)
-                     =>
-                     pa (SAWCoreScaffolding.addNat i first)
-                  )
-            )
-      ).
+   fun (first last: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
+        (plast: PFin last) (pgeq: PGeq last first) (pa: PLiteral a)
+      =>
+      PFinNumRec first (PFin_downward_closed last first pgeq plast) (fun
+              (first1: Num)
+            =>
+            seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+                      (tcSub last first1)) a
+         ) (fun (first1: Init.Datatypes.nat)
+            =>
+            PFinNumRec last plast (fun (last1: Num)
+                  =>
+                  seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+                            (tcSub last1 (TCNum first1))) a
+               ) (fun (last1: Init.Datatypes.nat)
+                  =>
+                  SAWCoreVectorsAsRocqVectors.gen 
+                     (SAWCoreScaffolding.addNat 
+                        (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)
+                        (SAWCoreScaffolding.subNat last1 first1)) a (fun
+                          (i: Init.Datatypes.nat)
+                        =>
+                        pa (SAWCoreScaffolding.addNat i first1)
+                     )
+               )
+         )
+   .
 
 Definition ecFromToLessThan: forall (first bound: Num) (a: Type) {Inh_a: 
-           SAWCoreScaffolding.Inhabited a} (_1: PLiteralLessThan a),
+           SAWCoreScaffolding.Inhabited a} (_1: PFin first) (_2: 
+           PGeq bound first) (_3: PLiteralLessThan a),
         seq (tcSub bound first) a :=
    fun (first bound: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
+        (pfirst: PFin first) (_pgeq: PGeq bound first)
       =>
-      finNumRec (fun (first1: Num)
+      PFinNumRec first pfirst (fun (first1: Num)
             =>
             forall (_1: PLiteralLessThan a),
                  seq (tcSub bound first1) a
@@ -9960,208 +10075,255 @@ Definition ecFromToLessThan: forall (first bound: Num) (a: Type) {Inh_a:
                         pa (SAWCoreScaffolding.addNat i first1)
                      )
                ) bound
-         ) first
+         )
    .
 
 Definition ecFromThenTo: forall (first next last: Num) (a: Type) {Inh_a: 
-           SAWCoreScaffolding.Inhabited a} (len: Num) (_1 _2 _3: PLiteral a),
+           SAWCoreScaffolding.Inhabited a} (len: Num) (_1: PFin first) (_2: 
+           PFin next) (_3: PFin last) (_4 _5 _6: PLiteral a) (_7: 
+           PNeq first next) (_8: 
+           @Init.Logic.eq Num (tcLenFromThenTo first next last) len),
         seq len a :=
-   fun (first next _1: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
+   fun (first next last: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
+        (len: Num) (pf: PFin first) (pn: PFin next) (pl: PFin last) (pa _1 _2: 
+           PLiteral a) (_pneq: PNeq first next)
       =>
-      finNumRec (fun (len: Num) => forall (_2 _3 _4: PLiteral a), seq len a)
-         (fun (len: Init.Datatypes.nat) (pa _2 _3: PLiteral a)
+      PFinNumRec first pf (fun (first1: Num)
             =>
-            SAWCoreVectorsAsRocqVectors.gen len a (fun (i: Init.Datatypes.nat)
+            forall (_3: @Init.Logic.eq Num (tcLenFromThenTo first1 next last)
+                       len),
+                 seq len a
+         ) (fun (first1: Init.Datatypes.nat)
+            =>
+            PFinNumRec next pn (fun (next1: Num)
                   =>
-                  let var__0
-                     :=
-                     getFinNat first
-                  in
-                  pa (SAWCoreScaffolding.subNat 
-                        (SAWCoreScaffolding.addNat var__0 
-                           (SAWCoreScaffolding.mulNat i (getFinNat next))) 
-                        (SAWCoreScaffolding.mulNat i var__0))
+                  forall (_3: @Init.Logic.eq Num 
+                             (tcLenFromThenTo (TCNum first1) next1 last) len),
+                       seq len a
+               ) (fun (next1: Init.Datatypes.nat)
+                  =>
+                  PFinNumRec last pl (fun (last1: Num)
+                        =>
+                        forall (_3: @Init.Logic.eq Num 
+                                   (tcLenFromThenTo (TCNum first1) (TCNum next1)
+                                      last1) len),
+                             seq len a
+                     ) (fun (last1: Init.Datatypes.nat) (eq: 
+                             @Init.Logic.eq Num 
+                                (TCNum (tcLenFromThenTo_Nat first1 next1 last1))
+                                len)
+                        =>
+                        let var__0
+                           :=
+                           tcLenFromThenTo_Nat first1 next1 last1
+                        in
+                        SAWCoreScaffolding.coerce 
+                           (SAWCoreVectorsAsRocqVectors.Vec var__0 a) 
+                           (seq len a) (seq_cong1 (TCNum var__0) len a eq) 
+                           (SAWCoreVectorsAsRocqVectors.gen var__0 a (fun
+                                   (i: Init.Datatypes.nat)
+                                 =>
+                                 pa (SAWCoreScaffolding.subNat 
+                                       (SAWCoreScaffolding.addNat first1 
+                                          (SAWCoreScaffolding.mulNat i next1)) 
+                                       (SAWCoreScaffolding.mulNat i first1))
+                              ))
+                     )
                )
          )
    .
 
 Definition ecFromToBy: forall (first last stride: Num) (a: Type) {Inh_a: 
-           SAWCoreScaffolding.Inhabited a} (_1: PLiteral a),
+           SAWCoreScaffolding.Inhabited a} (_1: PFin last) (_2: PFin stride)
+        (_3: PGeq stride 
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
+        (_4: PGeq last first) (_5: PLiteral a),
         seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
                   (tcDiv (tcSub last first) stride)) a :=
-   finNumRec (fun (first: Num)
-         =>
-         forall (last stride: Num) (a: Type) (Inh_a: 
-                 SAWCoreScaffolding.Inhabited a) (_1: PLiteral a),
-              seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
-                        (tcDiv (tcSub last first) stride)) a
-      ) (fun (first: Init.Datatypes.nat)
-         =>
-         finNumRec (fun (last: Num)
-               =>
-               forall (stride: Num) (a: Type) (Inh_a: 
-                       SAWCoreScaffolding.Inhabited a) (_1: PLiteral a),
-                    seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
-                              (tcDiv (tcSub last (TCNum first)) stride)) a
-            ) (fun (last: Init.Datatypes.nat)
-               =>
-               finNumRec (fun (stride: Num)
-                     =>
-                     forall (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
-                          (_1: PLiteral a),
-                          seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
-                                    (tcDiv (TCNum (SAWCoreScaffolding.subNat last
-                                                   first)) stride)) a
-                  ) (fun (stride: Init.Datatypes.nat) (a: Type) (Inh_a: 
-                          SAWCoreScaffolding.Inhabited a) (pa: PLiteral a)
-                     =>
-                     SAWCoreVectorsAsRocqVectors.gen 
-                        (SAWCoreScaffolding.addNat 
-                           (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)
-                           (SAWCorePrelude.divNat 
-                              (SAWCoreScaffolding.subNat last first) stride)) a
-                        (fun (i: Init.Datatypes.nat)
-                           =>
-                           pa (SAWCoreScaffolding.addNat first 
-                                 (SAWCoreScaffolding.mulNat i stride))
-                        )
-                  )
-            )
-      ).
+   fun
+        (first last stride: Num) (a: Type) (Inh_a: 
+           SAWCoreScaffolding.Inhabited a) (plast: PFin last) (pstride: 
+           PFin stride)
+        (_1: PGeq stride 
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
+        (pgeqlf: PGeq last first) (pa: PLiteral a)
+      =>
+      PFinNumRec first (PFin_downward_closed last first pgeqlf plast) (fun
+              (first1: Num)
+            =>
+            seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+                      (tcDiv (tcSub last first1) stride)) a
+         ) (fun (first1: Init.Datatypes.nat)
+            =>
+            PFinNumRec last plast (fun (last1: Num)
+                  =>
+                  seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+                            (tcDiv (tcSub last1 (TCNum first1)) stride)) a
+               ) (fun (last1: Init.Datatypes.nat)
+                  =>
+                  PFinNumRec stride pstride (fun (stride1: Num)
+                        =>
+                        seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+                                  (tcDiv (TCNum (SAWCoreScaffolding.subNat last1
+                                                 first1)) stride1)) a
+                     ) (fun (stride1: Init.Datatypes.nat)
+                        =>
+                        SAWCoreVectorsAsRocqVectors.gen 
+                           (SAWCoreScaffolding.addNat 
+                              (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)
+                              (SAWCorePrelude.divNat 
+                                 (SAWCoreScaffolding.subNat last1 first1)
+                                 stride1)) a (fun (i: Init.Datatypes.nat)
+                              =>
+                              pa (SAWCoreScaffolding.addNat first1 
+                                    (SAWCoreScaffolding.mulNat i stride1))
+                           )
+                     )
+               )
+         )
+   .
 
 Definition ecFromToByLessThan: forall (first bound stride: Num) (a: Type)
-        {Inh_a: SAWCoreScaffolding.Inhabited a} (_1: PLiteralLessThan a),
+        {Inh_a: SAWCoreScaffolding.Inhabited a} (_1: PFin first) (_2: 
+           PFin stride)
+        (_3: PGeq stride 
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
+        (_4: PGeq bound first) (_5: PLiteralLessThan a),
         seq (tcCeilDiv (tcSub bound first) stride) a :=
-   finNumRec (fun (first: Num)
-         =>
-         forall (bound stride: Num) (a: Type) (Inh_a: 
-                 SAWCoreScaffolding.Inhabited a) (_1: PLiteralLessThan a),
-              seq (tcCeilDiv (tcSub bound first) stride) a
-      ) (fun (first: Init.Datatypes.nat)
-         =>
-         CryptolPrimitivesForSAWCore.Num__rec (fun (bound: Num)
-               =>
-               forall (stride: Num) (a: Type) (Inh_a: 
-                       SAWCoreScaffolding.Inhabited a) (_1: PLiteralLessThan a),
-                    seq (tcCeilDiv (tcSub bound (TCNum first)) stride) a
-            ) (fun (bound: Init.Datatypes.nat)
-               =>
-               finNumRec (fun (stride: Num)
-                     =>
-                     forall (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
-                          (_1: PLiteralLessThan a),
-                          seq (tcCeilDiv 
-                                 (TCNum (SAWCoreScaffolding.subNat bound first))
-                                 stride) a
-                  ) (fun (stride: Init.Datatypes.nat) (a: Type) (Inh_a: 
-                          SAWCoreScaffolding.Inhabited a) (pa: 
-                          PLiteralLessThan a)
-                     =>
-                     SAWCoreVectorsAsRocqVectors.gen 
-                        (ceilDivNat (SAWCoreScaffolding.subNat bound first)
-                           stride) a (fun (i: Init.Datatypes.nat)
-                           =>
-                           pa (SAWCoreScaffolding.addNat first 
-                                 (SAWCoreScaffolding.mulNat i stride))
-                        )
-                  )
-            ) (finNumRec (fun (stride: Num)
+   fun
+        (first bound stride: Num) (a: Type) (Inh_a: 
+           SAWCoreScaffolding.Inhabited a) (pfirst: PFin first) (pstride: 
+           PFin stride)
+        (_1: PGeq stride 
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
+        (_2: PGeq bound first) (pa: PLiteralLessThan a)
+      =>
+      PFinNumRec first pfirst (fun (first1: Num)
+            =>
+            seq (tcCeilDiv (tcSub bound first1) stride) a
+         ) (fun (first1: Init.Datatypes.nat)
+            =>
+            PFinNumRec stride pstride (fun (stride1: Num)
                   =>
-                  forall (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (_1: 
-                          PLiteralLessThan a),
-                       seq (tcCeilDiv TCInf stride) a
-               ) (fun (stride: Init.Datatypes.nat) (a: Type) (Inh_a: 
-                       SAWCoreScaffolding.Inhabited a) (pa: PLiteralLessThan a)
+                  seq (tcCeilDiv (tcSub bound (TCNum first1)) stride1) a
+               ) (fun (stride1: Init.Datatypes.nat)
                   =>
-                  SAWCorePrelude.MkStream a (fun (i: Init.Datatypes.nat)
+                  CryptolPrimitivesForSAWCore.Num__rec (fun (bound1: Num)
                         =>
-                        pa (SAWCoreScaffolding.addNat first 
-                              (SAWCoreScaffolding.mulNat i stride))
-                     )
-               ))
-      ).
+                        seq (tcCeilDiv (tcSub bound1 (TCNum first1)) 
+                               (TCNum stride1)) a
+                     ) (fun (bound1: Init.Datatypes.nat)
+                        =>
+                        SAWCoreVectorsAsRocqVectors.gen 
+                           (ceilDivNat (SAWCoreScaffolding.subNat bound1 first1)
+                              stride1) a (fun (i: Init.Datatypes.nat)
+                              =>
+                              pa (SAWCoreScaffolding.addNat first1 
+                                    (SAWCoreScaffolding.mulNat i stride1))
+                           )
+                     ) (SAWCorePrelude.MkStream a (fun (i: Init.Datatypes.nat)
+                           =>
+                           pa (SAWCoreScaffolding.addNat first1 
+                                 (SAWCoreScaffolding.mulNat i stride1))
+                        )) bound
+               )
+         )
+   .
 
 Definition ecFromToDownBy: forall (first last stride: Num) (a: Type) {Inh_a: 
-           SAWCoreScaffolding.Inhabited a} (_1: PLiteral a),
+           SAWCoreScaffolding.Inhabited a} (_1: PFin first) (_2: PFin stride)
+        (_3: PGeq stride 
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
+        (_4: PGeq first last) (_5: PLiteral a),
         seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
                   (tcDiv (tcSub first last) stride)) a :=
-   finNumRec (fun (first: Num)
-         =>
-         forall (last stride: Num) (a: Type) (Inh_a: 
-                 SAWCoreScaffolding.Inhabited a) (_1: PLiteral a),
-              seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
-                        (tcDiv (tcSub first last) stride)) a
-      ) (fun (first: Init.Datatypes.nat)
-         =>
-         finNumRec (fun (last: Num)
-               =>
-               forall (stride: Num) (a: Type) (Inh_a: 
-                       SAWCoreScaffolding.Inhabited a) (_1: PLiteral a),
-                    seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
-                              (tcDiv (tcSub (TCNum first) last) stride)) a
-            ) (fun (last: Init.Datatypes.nat)
-               =>
-               finNumRec (fun (stride: Num)
-                     =>
-                     forall (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
-                          (_1: PLiteral a),
-                          seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
-                                    (tcDiv (TCNum (SAWCoreScaffolding.subNat first
-                                                   last)) stride)) a
-                  ) (fun (stride: Init.Datatypes.nat) (a: Type) (Inh_a: 
-                          SAWCoreScaffolding.Inhabited a) (pa: PLiteral a)
-                     =>
-                     SAWCoreVectorsAsRocqVectors.gen 
-                        (SAWCoreScaffolding.addNat 
-                           (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)
-                           (SAWCorePrelude.divNat 
-                              (SAWCoreScaffolding.subNat first last) stride)) a
-                        (fun (i: Init.Datatypes.nat)
-                           =>
-                           pa (SAWCoreScaffolding.subNat first 
-                                 (SAWCoreScaffolding.mulNat i stride))
-                        )
-                  )
-            )
-      ).
+   fun
+        (first last stride: Num) (a: Type) (Inh_a: 
+           SAWCoreScaffolding.Inhabited a) (pfirst: PFin first) (pstride: 
+           PFin stride)
+        (_1: PGeq stride 
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
+        (pgeqfl: PGeq first last) (pa: PLiteral a)
+      =>
+      PFinNumRec last (PFin_downward_closed first last pgeqfl pfirst) (fun
+              (last1: Num)
+            =>
+            seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+                      (tcDiv (tcSub first last1) stride)) a
+         ) (fun (last1: Init.Datatypes.nat)
+            =>
+            PFinNumRec first pfirst (fun (first1: Num)
+                  =>
+                  seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+                            (tcDiv (tcSub first1 (TCNum last1)) stride)) a
+               ) (fun (first1: Init.Datatypes.nat)
+                  =>
+                  PFinNumRec stride pstride (fun (stride1: Num)
+                        =>
+                        seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+                                  (tcDiv (TCNum (SAWCoreScaffolding.subNat first1
+                                                 last1)) stride1)) a
+                     ) (fun (stride1: Init.Datatypes.nat)
+                        =>
+                        SAWCoreVectorsAsRocqVectors.gen 
+                           (SAWCoreScaffolding.addNat 
+                              (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)
+                              (SAWCorePrelude.divNat 
+                                 (SAWCoreScaffolding.subNat first1 last1)
+                                 stride1)) a (fun (i: Init.Datatypes.nat)
+                              =>
+                              pa (SAWCoreScaffolding.subNat first1 
+                                    (SAWCoreScaffolding.mulNat i stride1))
+                           )
+                     )
+               )
+         )
+   .
 
 Definition ecFromToDownByGreaterThan: forall (first bound stride: Num) (a: Type)
-        {Inh_a: SAWCoreScaffolding.Inhabited a} (_1: PLiteral a),
+        {Inh_a: SAWCoreScaffolding.Inhabited a} (_1: PFin first) (_2: 
+           PFin stride)
+        (_3: PGeq stride 
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
+        (_4: PGeq first bound) (_5: PLiteral a),
         seq (tcCeilDiv (tcSub first bound) stride) a :=
-   finNumRec (fun (first: Num)
-         =>
-         forall (bound stride: Num) (a: Type) (Inh_a: 
-                 SAWCoreScaffolding.Inhabited a) (_1: PLiteral a),
-              seq (tcCeilDiv (tcSub first bound) stride) a
-      ) (fun (first: Init.Datatypes.nat)
-         =>
-         finNumRec (fun (bound: Num)
-               =>
-               forall (stride: Num) (a: Type) (Inh_a: 
-                       SAWCoreScaffolding.Inhabited a) (_1: PLiteral a),
-                    seq (tcCeilDiv (tcSub (TCNum first) bound) stride) a
-            ) (fun (bound: Init.Datatypes.nat)
-               =>
-               finNumRec (fun (stride: Num)
-                     =>
-                     forall (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
-                          (_1: PLiteral a),
-                          seq (tcCeilDiv 
-                                 (TCNum (SAWCoreScaffolding.subNat first bound))
-                                 stride) a
-                  ) (fun (stride: Init.Datatypes.nat) (a: Type) (Inh_a: 
-                          SAWCoreScaffolding.Inhabited a) (pa: PLiteral a)
-                     =>
-                     SAWCoreVectorsAsRocqVectors.gen 
-                        (ceilDivNat (SAWCoreScaffolding.subNat first bound)
-                           stride) a (fun (i: Init.Datatypes.nat)
-                           =>
-                           pa (SAWCoreScaffolding.subNat first 
-                                 (SAWCoreScaffolding.mulNat i stride))
-                        )
-                  )
-            )
-      ).
+   fun
+        (first bound stride: Num) (a: Type) (Inh_a: 
+           SAWCoreScaffolding.Inhabited a) (pfirst: PFin first) (pstride: 
+           PFin stride)
+        (_1: PGeq stride 
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
+        (pgeqfb: PGeq first bound) (pa: PLiteral a)
+      =>
+      PFinNumRec bound (PFin_downward_closed first bound pgeqfb pfirst) (fun
+              (bound1: Num)
+            =>
+            seq (tcCeilDiv (tcSub first bound1) stride) a
+         ) (fun (bound1: Init.Datatypes.nat)
+            =>
+            PFinNumRec first pfirst (fun (first1: Num)
+                  =>
+                  seq (tcCeilDiv (tcSub first1 (TCNum bound1)) stride) a
+               ) (fun (first1: Init.Datatypes.nat)
+                  =>
+                  PFinNumRec stride pstride (fun (stride1: Num)
+                        =>
+                        seq (tcCeilDiv 
+                               (TCNum (SAWCoreScaffolding.subNat first1 bound1))
+                               stride1) a
+                     ) (fun (stride1: Init.Datatypes.nat)
+                        =>
+                        SAWCoreVectorsAsRocqVectors.gen 
+                           (ceilDivNat (SAWCoreScaffolding.subNat first1 bound1)
+                              stride1) a (fun (i: Init.Datatypes.nat)
+                              =>
+                              pa (SAWCoreScaffolding.subNat first1 
+                                    (SAWCoreScaffolding.mulNat i stride1))
+                           )
+                     )
+               )
+         )
+   .
 
 Definition ecInfFrom: forall (a: Type) (_1: PIntegral a) (_2: a),
         seq TCInf a :=
@@ -10477,7 +10639,7 @@ Definition ecInfFromThen: forall (a: Type) (_1: PIntegral a) (_2 _3: a),
    .
 
 Definition ecError: forall (a: Type) {Inh_a: SAWCoreScaffolding.Inhabited a}
-        (len: Num) (_1: 
+        (len: Num) (_1: PFin len) (_2: 
            seq len (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xO 
@@ -10485,12 +10647,13 @@ Definition ecError: forall (a: Type) {Inh_a: SAWCoreScaffolding.Inhabited a}
                            (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
                   Init.Datatypes.bool)),
         a :=
-   fun (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
+   fun (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (len: Num) (plen: 
+           PFin len)
       =>
-      finNumRec (fun (len: Num)
+      PFinNumRec len plen (fun (len1: Num)
             =>
             forall
-                 (_1: seq len 
+                 (_1: seq len1 
                         (SAWCoreVectorsAsRocqVectors.Vec 
                            (Stdlib.PArith.BinPos.Pos.to_nat 
                               (Stdlib.PArith.BinPos.xO 
@@ -10500,8 +10663,8 @@ Definition ecError: forall (a: Type) {Inh_a: SAWCoreScaffolding.Inhabited a}
                  a
          )
          (fun
-              (len: Init.Datatypes.nat)
-              (msg: SAWCoreVectorsAsRocqVectors.Vec len 
+              (len1: Init.Datatypes.nat)
+              (msg: SAWCoreVectorsAsRocqVectors.Vec len1 
                     (SAWCoreVectorsAsRocqVectors.Vec 
                        (Stdlib.PArith.BinPos.Pos.to_nat 
                           (Stdlib.PArith.BinPos.xO 
@@ -10511,7 +10674,7 @@ Definition ecError: forall (a: Type) {Inh_a: SAWCoreScaffolding.Inhabited a}
             =>
             SAWCoreScaffolding.error a 
                (SAWCoreScaffolding.appendString "encountered call to the Cryptol 'error' function: "%string
-                  (SAWCorePrelude.bytesToString len msg))
+                  (SAWCorePrelude.bytesToString len1 msg))
          )
    .
 
@@ -10545,21 +10708,21 @@ Definition ecRandom: forall (a: Type) {Inh_a: SAWCoreScaffolding.Inhabited a}
       SAWCoreScaffolding.error a "Cryptol.random"%string
    .
 
-Definition ecTrace: forall (n: Num) (a b: Type) (_1: 
+Definition ecTrace: forall (n: Num) (a b: Type) (_1: PFin n) (_2: 
            seq n (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xO 
                         (Stdlib.PArith.BinPos.xO 
                            (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
-                  Init.Datatypes.bool)) (_2: a) (_3: b),
+                  Init.Datatypes.bool)) (_3: a) (_4: b),
         b :=
-   fun (n: Num) (a b: Type) (_1: 
+   fun (n: Num) (a b: Type) (_1: PFin n) (_2: 
            seq n (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xO 
                         (Stdlib.PArith.BinPos.xO 
                            (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
-                  Init.Datatypes.bool)) (_2: a) (x: b)
+                  Init.Datatypes.bool)) (_3: a) (x: b)
       =>
       x
    .
@@ -10593,36 +10756,29 @@ Definition ecParmap: forall (a: Type) {Inh_a: SAWCoreScaffolding.Inhabited a}
    .
 
 Definition ecFoldl: forall (n: Num) (a b: Type) {Inh_b: 
-           SAWCoreScaffolding.Inhabited b} (_1: forall (_1: a) (_2: b), a)
-        (_2: a) (_3: seq n b),
-        a :=
-   fun (n: Num) (a b: Type) (Inh_b: SAWCoreScaffolding.Inhabited b) (f: forall
-                (_1: a) (_2: b),
-                a) (z: a)
-      =>
-      @CryptolPrimitivesForSAWCore.Num_rect (fun (n1: Num)
-            =>
-            forall (_1: seq n1 b),
-                 a
-         ) (fun (n1: Init.Datatypes.nat) (xs: 
-                 SAWCoreVectorsAsRocqVectors.Vec n1 b)
-            =>
-            SAWCoreVectorsAsRocqVectors.foldl b a n1 f z xs
-         ) (fun (xs: SAWCorePrelude.Stream b)
-            =>
-            SAWCoreScaffolding.error a
-               "Unexpected infinite stream in foldl"%string
-         ) n
-   .
-
-Definition ecFoldlPrime: forall (n: Num) (a b: Type) {Inh_b: 
-           SAWCoreScaffolding.Inhabited b} (_1: PEq a) (_2: forall (_2: a)
+           SAWCoreScaffolding.Inhabited b} (_1: PFin n) (_2: forall (_2: a)
                 (_3: b),
                 a) (_3: a) (_4: seq n b),
         a :=
-   fun (n: Num) (a b: Type) (Inh_b: SAWCoreScaffolding.Inhabited b) (pa: PEq a)
+   fun (n: Num) (a b: Type) (Inh_b: SAWCoreScaffolding.Inhabited b) (pn: PFin n)
+        (f: forall (_1: a) (_2: b), a) (z: a)
       =>
-      ecFoldl n a b
+      PFinNumRec n pn (fun (n1: Num) => forall (_1: seq n1 b), a) (fun
+              (n1: Init.Datatypes.nat)
+            =>
+            SAWCoreVectorsAsRocqVectors.foldl b a n1 f z
+         )
+   .
+
+Definition ecFoldlPrime: forall (n: Num) (a b: Type) {Inh_b: 
+           SAWCoreScaffolding.Inhabited b} (_1: PFin n) (_2: PEq a) (_3: forall
+                (_3: a) (_4: b),
+                a) (_4: a) (_5: seq n b),
+        a :=
+   fun (n: Num) (a b: Type) (Inh_b: SAWCoreScaffolding.Inhabited b) (pn: PFin n)
+        (pa: PEq a)
+      =>
+      ecFoldl n a b pn
    .
 
 Definition ecScanl: forall (n: Num) (a b: Type) (_1: forall (_1: a) (_2: b), a)
@@ -11189,100 +11345,159 @@ Definition ecUpdate: forall (n: Num) (a: Type) {Inh_a:
    .
 
 Definition ecUpdateEnd: forall (n: Num) (a: Type) {Inh_a: 
-           SAWCoreScaffolding.Inhabited a} (ix: Type) (_1: PIntegral ix) (_2: 
-           seq n a) (_3: ix) (_4: a),
+           SAWCoreScaffolding.Inhabited a} (ix: Type) (_1: PFin n) (_2: 
+           PIntegral ix) (_3: seq n a) (_4: ix) (_5: a),
         seq n a :=
-   finNumRec (fun (n: Num)
-         =>
-         forall (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (ix: Type)
-              (_1: PIntegral ix) (_2: seq n a) (_3: ix) (_4: a),
-              seq n a
-      ) (fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: 
-              SAWCoreScaffolding.Inhabited a) (ix: Type) (pix: PIntegral ix)
-           (xs: SAWCoreVectorsAsRocqVectors.Vec n a)
-         =>
-         posNegCases ix pix (forall (_1: a),
-                 SAWCoreVectorsAsRocqVectors.Vec n a) (fun
-                 (i: Init.Datatypes.nat)
-               =>
-               SAWCorePrelude.upd n a xs 
-                  (SAWCoreScaffolding.subNat 
-                     (SAWCoreScaffolding.subNat n 
-                        (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
-                     i)
-            ) (fun (_1: Init.Datatypes.nat) (_2: a) => xs)
-      ).
+   fun (n: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (ix: Type)
+        (pn: PFin n) (pix: PIntegral ix)
+      =>
+      PFinNumRec n pn (fun (n1: Num)
+            =>
+            forall (_1: seq n1 a) (_2: ix) (_3: a),
+                 seq n1 a
+         ) (fun (n1: Init.Datatypes.nat) (xs: 
+                 SAWCoreVectorsAsRocqVectors.Vec n1 a)
+            =>
+            posNegCases ix pix (forall (_1: a),
+                    SAWCoreVectorsAsRocqVectors.Vec n1 a) (fun
+                    (i: Init.Datatypes.nat)
+                  =>
+                  SAWCorePrelude.upd n1 a xs 
+                     (SAWCoreScaffolding.subNat 
+                        (SAWCoreScaffolding.subNat n1 
+                           (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+                        i)
+               ) (fun (_1: Init.Datatypes.nat) (_2: a) => xs)
+         )
+   .
 
-Definition ecTrunc: forall (m n: Num) (_1: seq (tcAdd m n) Init.Datatypes.bool),
+Definition ecTrunc: forall (m n: Num) (_1: PFin m) (_2: PFin n) (_3: 
+           seq (tcAdd m n) Init.Datatypes.bool),
         seq n Init.Datatypes.bool :=
-   finNumRec2 (fun (m n: Num)
-         =>
-         forall (_1: seq (tcAdd m n) Init.Datatypes.bool),
-              seq n Init.Datatypes.bool
-      ) SAWCorePrelude.bvTrunc.
+   fun (m n: Num) (pm: PFin m) (pn: PFin n)
+      =>
+      PFinNumRec m pm (fun (m1: Num)
+            =>
+            forall (_1: seq (tcAdd m1 n) Init.Datatypes.bool),
+                 seq n Init.Datatypes.bool
+         ) (fun (m1: Init.Datatypes.nat)
+            =>
+            PFinNumRec n pn (fun (n1: Num)
+                  =>
+                  forall (_1: seq (tcAdd (TCNum m1) n1) Init.Datatypes.bool),
+                       seq n1 Init.Datatypes.bool
+               ) (fun (n1: Init.Datatypes.nat) => SAWCorePrelude.bvTrunc m1 n1)
+         )
+   .
 
-Definition ecUExt: forall (m n: Num) (_1: seq n Init.Datatypes.bool),
+Definition ecUExt: forall (m n: Num) (_1: PFin m) (_2: PFin n) (_3: 
+           seq n Init.Datatypes.bool),
         seq (tcAdd m n) Init.Datatypes.bool :=
-   finNumRec2 (fun (m n: Num)
-         =>
-         forall (_1: seq n Init.Datatypes.bool),
-              seq (tcAdd m n) Init.Datatypes.bool
-      ) SAWCorePrelude.bvUExt.
+   fun (m n: Num) (pm: PFin m) (pn: PFin n)
+      =>
+      PFinNumRec m pm (fun (m1: Num)
+            =>
+            forall (_1: seq n Init.Datatypes.bool),
+                 seq (tcAdd m1 n) Init.Datatypes.bool
+         ) (fun (m1: Init.Datatypes.nat)
+            =>
+            PFinNumRec n pn (fun (n1: Num)
+                  =>
+                  forall (_1: seq n1 Init.Datatypes.bool),
+                       seq (tcAdd (TCNum m1) n1) Init.Datatypes.bool
+               ) (fun (n1: Init.Datatypes.nat) => SAWCorePrelude.bvUExt m1 n1)
+         )
+   .
 
-Definition ecSExt: forall (m n: Num) (_1: seq n Init.Datatypes.bool),
+Definition ecSExt: forall (m n: Num) (_1: PFin m) (_2: PFin n)
+        (_3: PGeq n
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
+        (_4: seq n Init.Datatypes.bool),
         seq (tcAdd m n) Init.Datatypes.bool :=
-   finNumRec2 (fun (m n: Num)
-         =>
-         forall (_1: seq n Init.Datatypes.bool),
-              seq (tcAdd m n) Init.Datatypes.bool
-      ) (fun (m n: Init.Datatypes.nat)
-         =>
-         SAWCorePrelude.natCase (fun (n': Init.Datatypes.nat)
-               =>
-               forall (_1: SAWCoreVectorsAsRocqVectors.Vec n'
-                          Init.Datatypes.bool),
-                    SAWCoreVectorsAsRocqVectors.Vec 
-                       (SAWCoreScaffolding.addNat m n') Init.Datatypes.bool
-            ) (fun (_1: SAWCoreVectorsAsRocqVectors.Vec SAWCoreScaffolding.Zero
-                       Init.Datatypes.bool)
-               =>
-               SAWCoreVectorsAsRocqVectors.bvNat 
-                  (SAWCoreScaffolding.addNat m SAWCoreScaffolding.Zero)
-                  SAWCoreScaffolding.Zero
-            ) (SAWCorePrelude.bvSExt m) n
-      ).
+   fun
+        (m n: Num) (pm: PFin m) (pn: PFin n)
+        (_pgeq: PGeq n 
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
+      =>
+      PFinNumRec m pm (fun (m1: Num)
+            =>
+            forall (_1: seq n Init.Datatypes.bool),
+                 seq (tcAdd m1 n) Init.Datatypes.bool
+         ) (fun (m1: Init.Datatypes.nat)
+            =>
+            PFinNumRec n pn (fun (n1: Num)
+                  =>
+                  forall (_1: seq n1 Init.Datatypes.bool),
+                       seq (tcAdd (TCNum m1) n1) Init.Datatypes.bool
+               ) (fun (n1: Init.Datatypes.nat)
+                  =>
+                  SAWCorePrelude.natCase (fun (n': Init.Datatypes.nat)
+                        =>
+                        forall (_1: SAWCoreVectorsAsRocqVectors.Vec n'
+                                   Init.Datatypes.bool),
+                             SAWCoreVectorsAsRocqVectors.Vec 
+                                (SAWCoreScaffolding.addNat m1 n')
+                                Init.Datatypes.bool
+                     )
+                     (fun
+                          (_1: SAWCoreVectorsAsRocqVectors.Vec SAWCoreScaffolding.Zero
+                                Init.Datatypes.bool)
+                        =>
+                        SAWCoreVectorsAsRocqVectors.bvNat 
+                           (SAWCoreScaffolding.addNat m1
+                              SAWCoreScaffolding.Zero) SAWCoreScaffolding.Zero
+                     ) (SAWCorePrelude.bvSExt m1) n1
+               )
+         )
+   .
 
-Definition ecSgt: forall (n: Num) (_1 _2: seq n Init.Datatypes.bool),
+Definition ecSgt: forall (n: Num) (_1: PFin n) (_2 _3: 
+           seq n Init.Datatypes.bool),
         Init.Datatypes.bool :=
-   finNumRec (fun (n: Num)
-         =>
-         forall (_1 _2: seq n Init.Datatypes.bool),
-              Init.Datatypes.bool
-      ) SAWCoreVectorsAsRocqVectors.bvsgt.
+   fun (n: Num) (pn: PFin n)
+      =>
+      PFinNumRec n pn (fun (n1: Num)
+            =>
+            forall (_1 _2: seq n1 Init.Datatypes.bool),
+                 Init.Datatypes.bool
+         ) SAWCoreVectorsAsRocqVectors.bvsgt
+   .
 
-Definition ecSge: forall (n: Num) (_1 _2: seq n Init.Datatypes.bool),
+Definition ecSge: forall (n: Num) (_1: PFin n) (_2 _3: 
+           seq n Init.Datatypes.bool),
         Init.Datatypes.bool :=
-   finNumRec (fun (n: Num)
-         =>
-         forall (_1 _2: seq n Init.Datatypes.bool),
-              Init.Datatypes.bool
-      ) SAWCoreVectorsAsRocqVectors.bvsge.
+   fun (n: Num) (pn: PFin n)
+      =>
+      PFinNumRec n pn (fun (n1: Num)
+            =>
+            forall (_1 _2: seq n1 Init.Datatypes.bool),
+                 Init.Datatypes.bool
+         ) SAWCoreVectorsAsRocqVectors.bvsge
+   .
 
-Definition ecSlt: forall (n: Num) (_1 _2: seq n Init.Datatypes.bool),
+Definition ecSlt: forall (n: Num) (_1: PFin n) (_2 _3: 
+           seq n Init.Datatypes.bool),
         Init.Datatypes.bool :=
-   finNumRec (fun (n: Num)
-         =>
-         forall (_1 _2: seq n Init.Datatypes.bool),
-              Init.Datatypes.bool
-      ) SAWCoreVectorsAsRocqVectors.bvslt.
+   fun (n: Num) (pn: PFin n)
+      =>
+      PFinNumRec n pn (fun (n1: Num)
+            =>
+            forall (_1 _2: seq n1 Init.Datatypes.bool),
+                 Init.Datatypes.bool
+         ) SAWCoreVectorsAsRocqVectors.bvslt
+   .
 
-Definition ecSle: forall (n: Num) (_1 _2: seq n Init.Datatypes.bool),
+Definition ecSle: forall (n: Num) (_1: PFin n) (_2 _3: 
+           seq n Init.Datatypes.bool),
         Init.Datatypes.bool :=
-   finNumRec (fun (n: Num)
-         =>
-         forall (_1 _2: seq n Init.Datatypes.bool),
-              Init.Datatypes.bool
-      ) SAWCoreVectorsAsRocqVectors.bvsle.
+   fun (n: Num) (pn: PFin n)
+      =>
+      PFinNumRec n pn (fun (n1: Num)
+            =>
+            forall (_1 _2: seq n1 Init.Datatypes.bool),
+                 Init.Datatypes.bool
+         ) SAWCoreVectorsAsRocqVectors.bvsle
+   .
 
 Definition ecArrayConstant: forall (a b: Type) (_1: b),
         SAWCorePrelude.Array a b :=
@@ -11298,64 +11513,64 @@ Definition ecArrayUpdate: forall (a b: Type) (_1: SAWCorePrelude.Array a b)
         SAWCorePrelude.Array a b :=
    SAWCorePrelude.arrayUpdate.
 
-Definition ecArrayCopy: forall (n: Num) (a: Type) (_1: 
-           SAWCorePrelude.Array (seq n Init.Datatypes.bool) a) (_2: 
-           seq n Init.Datatypes.bool) (_3: 
-           SAWCorePrelude.Array (seq n Init.Datatypes.bool) a) (_4 _5: 
+Definition ecArrayCopy: forall (n: Num) (a: Type) (_1: PFin n) (_2: 
+           SAWCorePrelude.Array (seq n Init.Datatypes.bool) a) (_3: 
+           seq n Init.Datatypes.bool) (_4: 
+           SAWCorePrelude.Array (seq n Init.Datatypes.bool) a) (_5 _6: 
            seq n Init.Datatypes.bool),
         SAWCorePrelude.Array (seq n Init.Datatypes.bool) a :=
-   finNumRec (fun (n: Num)
-         =>
-         forall (a: Type) (_1: 
-                 SAWCorePrelude.Array (seq n Init.Datatypes.bool) a) (_2: 
-                 seq n Init.Datatypes.bool) (_3: 
-                 SAWCorePrelude.Array (seq n Init.Datatypes.bool) a) (_4 _5: 
-                 seq n Init.Datatypes.bool),
-              SAWCorePrelude.Array (seq n Init.Datatypes.bool) a
-      ) SAWCorePrelude.arrayCopy.
+   fun (n: Num) (a: Type) (pn: PFin n)
+      =>
+      PFinNumRec n pn (fun (n1: Num)
+            =>
+            forall (_1: SAWCorePrelude.Array (seq n1 Init.Datatypes.bool) a)
+                 (_2: seq n1 Init.Datatypes.bool) (_3: 
+                    SAWCorePrelude.Array (seq n1 Init.Datatypes.bool) a)
+                 (_4 _5: seq n1 Init.Datatypes.bool),
+                 SAWCorePrelude.Array (seq n1 Init.Datatypes.bool) a
+         ) (fun (n1: Init.Datatypes.nat) => SAWCorePrelude.arrayCopy n1 a)
+   .
 
 Definition ecArrayEq: forall (n: Num) (a: Type) (_1 _2: 
            SAWCorePrelude.Array (seq n Init.Datatypes.bool) a),
         Init.Datatypes.bool :=
-   finNumRec (fun (n: Num)
-         =>
-         forall (a: Type) (_1 _2: 
-                 SAWCorePrelude.Array (seq n Init.Datatypes.bool) a),
-              Init.Datatypes.bool
-      ) (fun (n: Init.Datatypes.nat)
-         =>
-         SAWCorePrelude.arrayEq 
-            (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool)
-      ).
+   fun (n: Num) (a: Type)
+      =>
+      SAWCorePrelude.arrayEq (seq n Init.Datatypes.bool) a
+   .
 
-Definition ecArraySet: forall (n: Num) (a: Type) (_1: 
-           SAWCorePrelude.Array (seq n Init.Datatypes.bool) a) (_2: 
-           seq n Init.Datatypes.bool) (_3: a) (_4: seq n Init.Datatypes.bool),
+Definition ecArraySet: forall (n: Num) (a: Type) (_1: PFin n) (_2: 
+           SAWCorePrelude.Array (seq n Init.Datatypes.bool) a) (_3: 
+           seq n Init.Datatypes.bool) (_4: a) (_5: seq n Init.Datatypes.bool),
         SAWCorePrelude.Array (seq n Init.Datatypes.bool) a :=
-   finNumRec (fun (n: Num)
-         =>
-         forall (a: Type) (_1: 
-                 SAWCorePrelude.Array (seq n Init.Datatypes.bool) a) (_2: 
-                 seq n Init.Datatypes.bool) (_3: a) (_4: 
-                 seq n Init.Datatypes.bool),
-              SAWCorePrelude.Array (seq n Init.Datatypes.bool) a
-      ) SAWCorePrelude.arraySet.
+   fun (n: Num) (a: Type) (pn: PFin n)
+      =>
+      PFinNumRec n pn (fun (n1: Num)
+            =>
+            forall (_1: SAWCorePrelude.Array (seq n1 Init.Datatypes.bool) a)
+                 (_2: seq n1 Init.Datatypes.bool) (_3: a) (_4: 
+                    seq n1 Init.Datatypes.bool),
+                 SAWCorePrelude.Array (seq n1 Init.Datatypes.bool) a
+         ) (fun (n1: Init.Datatypes.nat) => SAWCorePrelude.arraySet n1 a)
+   .
 
-Definition ecArrayRangeEq: forall (n: Num) (a: Type) (_1: 
-           SAWCorePrelude.Array (seq n Init.Datatypes.bool) a) (_2: 
-           seq n Init.Datatypes.bool) (_3: 
-           SAWCorePrelude.Array (seq n Init.Datatypes.bool) a) (_4 _5: 
+Definition ecArrayRangeEq: forall (n: Num) (a: Type) (_1: PFin n) (_2: 
+           SAWCorePrelude.Array (seq n Init.Datatypes.bool) a) (_3: 
+           seq n Init.Datatypes.bool) (_4: 
+           SAWCorePrelude.Array (seq n Init.Datatypes.bool) a) (_5 _6: 
            seq n Init.Datatypes.bool),
         Init.Datatypes.bool :=
-   finNumRec (fun (n: Num)
-         =>
-         forall (a: Type) (_1: 
-                 SAWCorePrelude.Array (seq n Init.Datatypes.bool) a) (_2: 
-                 seq n Init.Datatypes.bool) (_3: 
-                 SAWCorePrelude.Array (seq n Init.Datatypes.bool) a) (_4 _5: 
-                 seq n Init.Datatypes.bool),
-              Init.Datatypes.bool
-      ) SAWCorePrelude.arrayRangeEq.
+   fun (n: Num) (a: Type) (pn: PFin n)
+      =>
+      PFinNumRec n pn (fun (n1: Num)
+            =>
+            forall (_1: SAWCorePrelude.Array (seq n1 Init.Datatypes.bool) a)
+                 (_2: seq n1 Init.Datatypes.bool) (_3: 
+                    SAWCorePrelude.Array (seq n1 Init.Datatypes.bool) a)
+                 (_4 _5: seq n1 Init.Datatypes.bool),
+                 Init.Datatypes.bool
+         ) (fun (n1: Init.Datatypes.nat) => SAWCorePrelude.arrayRangeEq n1 a)
+   .
 
 Definition addNat_1: forall (n: Init.Datatypes.nat),
         @Init.Logic.eq Init.Datatypes.nat 
@@ -11394,82 +11609,117 @@ Definition addNat_1: forall (n: Init.Datatypes.nat),
             (SAWCorePrelude.eqNatSucc var__0 var__1 ih)
       ).
 
-Definition ecPmult: forall (u v: Num)
-        (_1: seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+Definition ecPmult: forall (u v: Num) (_1: PFin u) (_2: PFin v)
+        (_3: seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
                      u) Init.Datatypes.bool)
-        (_2: seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+        (_4: seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
                      v) Init.Datatypes.bool),
         seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
                   (tcAdd u v)) Init.Datatypes.bool :=
-   finNumRec2 (fun (u v: Num)
-         =>
-         forall
-              (_1: seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
-                           u) Init.Datatypes.bool)
-              (_2: seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
-                           v) Init.Datatypes.bool),
-              seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
-                        (tcAdd u v)) Init.Datatypes.bool
-      ) (fun (u v: Init.Datatypes.nat) (x: 
-              SAWCoreVectorsAsRocqVectors.Vec 
-                 (SAWCoreScaffolding.addNat 
-                    (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH) u)
-                 Init.Datatypes.bool) (y: 
-              SAWCoreVectorsAsRocqVectors.Vec 
-                 (SAWCoreScaffolding.addNat 
-                    (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH) v)
-                 Init.Datatypes.bool)
-         =>
-         let var__0
-            :=
-            SAWCoreScaffolding.addNat u v
-         in
-         let var__1
-            :=
-            SAWCoreScaffolding.Succ var__0
-         in
-         let var__2
-            :=
-            SAWCoreScaffolding.addNat 
-               (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH) var__0
-         in
-         SAWCoreVectorsAsRocqVectors.coerceVec Init.Datatypes.bool var__1 var__2
-            (SAWCorePrelude.sym Init.Datatypes.nat var__2 var__1 
-               (addNat_1 var__0)) 
-            (SAWCorePrelude.polyMul u v 
-               (SAWCoreVectorsAsRocqVectors.coerceVec Init.Datatypes.bool 
-                  (SAWCoreScaffolding.addNat 
-                     (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)
-                     u) (SAWCoreScaffolding.Succ u) (addNat_1 u) x) 
-               (SAWCoreVectorsAsRocqVectors.coerceVec Init.Datatypes.bool 
-                  (SAWCoreScaffolding.addNat 
-                     (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)
-                     v) (SAWCoreScaffolding.Succ v) (addNat_1 v) y))
-      ).
+   fun (u v: Num) (pu: PFin u) (pv: PFin v)
+      =>
+      PFinNumRec u pu (fun (u1: Num)
+            =>
+            forall
+                 (_1: seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+                              u1) Init.Datatypes.bool)
+                 (_2: seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+                              v) Init.Datatypes.bool),
+                 seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+                           (tcAdd u1 v)) Init.Datatypes.bool
+         ) (fun (u1: Init.Datatypes.nat)
+            =>
+            PFinNumRec v pv (fun (v1: Num)
+                  =>
+                  forall
+                       (_1: seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+                                    (TCNum u1)) Init.Datatypes.bool)
+                       (_2: seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+                                    v1) Init.Datatypes.bool),
+                       seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+                                 (tcAdd (TCNum u1) v1)) Init.Datatypes.bool
+               )
+               (fun
+                    (v1: Init.Datatypes.nat)
+                    (x: SAWCoreVectorsAsRocqVectors.Vec 
+                          (SAWCoreScaffolding.addNat 
+                             (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)
+                             u1) Init.Datatypes.bool)
+                    (y: SAWCoreVectorsAsRocqVectors.Vec 
+                          (SAWCoreScaffolding.addNat 
+                             (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)
+                             v1) Init.Datatypes.bool)
+                  =>
+                  let var__0
+                     :=
+                     SAWCoreScaffolding.addNat u1 v1
+                  in
+                  let var__1
+                     :=
+                     SAWCoreScaffolding.Succ var__0
+                  in
+                  let var__2
+                     :=
+                     SAWCoreScaffolding.addNat 
+                        (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)
+                        var__0
+                  in
+                  SAWCoreVectorsAsRocqVectors.coerceVec Init.Datatypes.bool
+                     var__1 var__2 
+                     (SAWCorePrelude.sym Init.Datatypes.nat var__2 var__1 
+                        (addNat_1 var__0)) 
+                     (SAWCorePrelude.polyMul u1 v1 
+                        (SAWCoreVectorsAsRocqVectors.coerceVec Init.Datatypes.bool
+                           (SAWCoreScaffolding.addNat 
+                              (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)
+                              u1) (SAWCoreScaffolding.Succ u1) (addNat_1 u1) x) 
+                        (SAWCoreVectorsAsRocqVectors.coerceVec Init.Datatypes.bool
+                           (SAWCoreScaffolding.addNat 
+                              (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)
+                              v1) (SAWCoreScaffolding.Succ v1) (addNat_1 v1) y))
+               )
+         )
+   .
 
-Definition ecPmod: forall (u v: Num) (_1: seq u Init.Datatypes.bool)
-        (_2: seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+Definition ecPmod: forall (u v: Num) (_1: PFin u) (_2: PFin v) (_3: 
+           seq u Init.Datatypes.bool)
+        (_4: seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
                      v) Init.Datatypes.bool),
         seq v Init.Datatypes.bool :=
-   finNumRec2 (fun (u v: Num)
-         =>
-         forall (_1: seq u Init.Datatypes.bool)
-              (_2: seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
-                           v) Init.Datatypes.bool),
-              seq v Init.Datatypes.bool
-      ) (fun (u v: Init.Datatypes.nat) (x: 
-              SAWCoreVectorsAsRocqVectors.Vec u Init.Datatypes.bool) (y: 
-              SAWCoreVectorsAsRocqVectors.Vec 
-                 (SAWCoreScaffolding.addNat 
-                    (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH) v)
-                 Init.Datatypes.bool)
-         =>
-         SAWCorePrelude.polyMod u v x 
-            (SAWCoreVectorsAsRocqVectors.coerceVec Init.Datatypes.bool 
-               (SAWCoreScaffolding.addNat 
-                  (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH) v) 
-               (SAWCoreScaffolding.Succ v) (addNat_1 v) y)
-      ).
+   fun (u v: Num) (pu: PFin u) (pv: PFin v)
+      =>
+      PFinNumRec u pu (fun (u1: Num)
+            =>
+            forall (_1: seq u1 Init.Datatypes.bool)
+                 (_2: seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+                              v) Init.Datatypes.bool),
+                 seq v Init.Datatypes.bool
+         ) (fun (u1: Init.Datatypes.nat)
+            =>
+            PFinNumRec v pv (fun (v1: Num)
+                  =>
+                  forall (_1: SAWCoreVectorsAsRocqVectors.Vec u1
+                             Init.Datatypes.bool)
+                       (_2: seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+                                    v1) Init.Datatypes.bool),
+                       seq v1 Init.Datatypes.bool
+               )
+               (fun
+                    (v1: Init.Datatypes.nat) (x: 
+                       SAWCoreVectorsAsRocqVectors.Vec u1 Init.Datatypes.bool)
+                    (y: SAWCoreVectorsAsRocqVectors.Vec 
+                          (SAWCoreScaffolding.addNat 
+                             (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)
+                             v1) Init.Datatypes.bool)
+                  =>
+                  SAWCorePrelude.polyMod u1 v1 x 
+                     (SAWCoreVectorsAsRocqVectors.coerceVec Init.Datatypes.bool 
+                        (SAWCoreScaffolding.addNat 
+                           (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)
+                           v1) (SAWCoreScaffolding.Succ v1) (addNat_1 v1) y)
+               )
+         )
+   .
 
 Definition AESEncRound: forall
         (_1: SAWCoreVectorsAsRocqVectors.Vec 
@@ -11741,8 +11991,17 @@ Definition AESInvMixColumns: forall
                Init.Datatypes.bool)) "Unimplemented: AESInvMixColumns"%string
    .
 
-Definition AESKeyExpand: forall (k: Num)
-        (_1: seq k
+Definition AESKeyExpand: forall (k: Num) (_1: PFin k)
+        (_2: PGeq k
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+                         (Stdlib.PArith.BinPos.xO 
+                            (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+        (_3: PGeq (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+                         (Stdlib.PArith.BinPos.xO 
+                            (Stdlib.PArith.BinPos.xO 
+                               (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+                k)
+        (_4: seq k
                (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xO 
@@ -11767,7 +12026,16 @@ Definition AESKeyExpand: forall (k: Num)
                               (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))))
                Init.Datatypes.bool) :=
    fun
-        (k: Num)
+        (k: Num) (_1: PFin k)
+        (_2: PGeq k
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+                         (Stdlib.PArith.BinPos.xO 
+                            (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+        (_3: PGeq (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+                         (Stdlib.PArith.BinPos.xO 
+                            (Stdlib.PArith.BinPos.xO 
+                               (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+                k)
         (x: seq k
                (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
@@ -11796,8 +12064,8 @@ Definition AESKeyExpand: forall (k: Num)
                 Init.Datatypes.bool)) "Unimplemented: AESKeyExpand"%string
    .
 
-Definition processSHA2_224: forall (n: Num)
-        (_1: seq n
+Definition processSHA2_224: forall (n: Num) (_1: PFin n)
+        (_2: seq n
                (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xO 
@@ -11825,7 +12093,7 @@ Definition processSHA2_224: forall (n: Num)
                              (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))))
               Init.Datatypes.bool) :=
    fun
-        (n: Num)
+        (n: Num) (_1: PFin n)
         (x: seq n
                (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
@@ -11857,8 +12125,8 @@ Definition processSHA2_224: forall (n: Num)
                Init.Datatypes.bool)) "Unimplemented: processSHA2_224"%string
    .
 
-Definition processSHA2_256: forall (n: Num)
-        (_1: seq n
+Definition processSHA2_256: forall (n: Num) (_1: PFin n)
+        (_2: seq n
                (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xO 
@@ -11887,7 +12155,7 @@ Definition processSHA2_256: forall (n: Num)
                              (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))))
               Init.Datatypes.bool) :=
    fun
-        (n: Num)
+        (n: Num) (_1: PFin n)
         (x: seq n
                (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
@@ -11920,8 +12188,8 @@ Definition processSHA2_256: forall (n: Num)
                Init.Datatypes.bool)) "Unimplemented: processSHA2_256"%string
    .
 
-Definition processSHA2_384: forall (n: Num)
-        (_1: seq n
+Definition processSHA2_384: forall (n: Num) (_1: PFin n)
+        (_2: seq n
                (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xO 
@@ -11951,7 +12219,7 @@ Definition processSHA2_384: forall (n: Num)
                                 (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))))
               Init.Datatypes.bool) :=
    fun
-        (n: Num)
+        (n: Num) (_1: PFin n)
         (x: seq n
                (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
@@ -11985,8 +12253,8 @@ Definition processSHA2_384: forall (n: Num)
                Init.Datatypes.bool)) "Unimplemented: processSHA2_384"%string
    .
 
-Definition processSHA2_512: forall (n: Num)
-        (_1: seq n
+Definition processSHA2_512: forall (n: Num) (_1: PFin n)
+        (_2: seq n
                (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xO 
@@ -12017,7 +12285,7 @@ Definition processSHA2_512: forall (n: Num)
                                 (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))))
               Init.Datatypes.bool) :=
    fun
-        (n: Num)
+        (n: Num) (_1: PFin n)
         (x: seq n
                (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
@@ -12065,34 +12333,77 @@ Definition ProjectivePoint: forall (_1: Num), Type :=
                SAWCoreScaffolding.RecordTypeNil))
    .
 
-Definition ec_double: forall (p: Num) (_1: ProjectivePoint p),
+Definition ec_double: forall (p: Num)
+        (_1: PGeq p
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+                         (Stdlib.PArith.BinPos.xO 
+                            (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+        (_2: ProjectivePoint p),
         ProjectivePoint p :=
-   fun (p: Num) (x: ProjectivePoint p)
+   fun
+        (p: Num)
+        (_1: PGeq p
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+                         (Stdlib.PArith.BinPos.xO 
+                            (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+        (x: ProjectivePoint p)
       =>
       SAWCoreScaffolding.error (ProjectivePoint p)
          "Unimplemented: ec_double"%string
    .
 
-Definition ec_add_nonzero: forall (p: Num) (_1 _2: ProjectivePoint p),
+Definition ec_add_nonzero: forall (p: Num)
+        (_1: PGeq p
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+                         (Stdlib.PArith.BinPos.xO 
+                            (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+        (_2 _3: ProjectivePoint p),
         ProjectivePoint p :=
-   fun (p: Num) (x y: ProjectivePoint p)
+   fun
+        (p: Num)
+        (_1: PGeq p
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+                         (Stdlib.PArith.BinPos.xO 
+                            (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+        (x y: ProjectivePoint p)
       =>
       SAWCoreScaffolding.error (ProjectivePoint p)
          "Unimplemented: ec_add_nonzero"%string
    .
 
-Definition ec_mult: forall (p: Num) (_1: IntModNum p) (_2: ProjectivePoint p),
+Definition ec_mult: forall (p: Num)
+        (_1: PGeq p
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+                         (Stdlib.PArith.BinPos.xO 
+                            (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+        (_2: IntModNum p) (_3: ProjectivePoint p),
         ProjectivePoint p :=
-   fun (p: Num) (x: IntModNum p) (y: ProjectivePoint p)
+   fun
+        (p: Num)
+        (_1: PGeq p
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+                         (Stdlib.PArith.BinPos.xO 
+                            (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+        (x: IntModNum p) (y: ProjectivePoint p)
       =>
       SAWCoreScaffolding.error (ProjectivePoint p)
          "Unimplemented: ec_mult"%string
    .
 
-Definition ec_twin_mult: forall (p: Num) (_1: IntModNum p) (_2 _3: 
-           ProjectivePoint p),
+Definition ec_twin_mult: forall (p: Num)
+        (_1: PGeq p
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+                         (Stdlib.PArith.BinPos.xO 
+                            (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+        (_2: IntModNum p) (_3 _4: ProjectivePoint p),
         ProjectivePoint p :=
-   fun (p: Num) (x: IntModNum p) (y z: ProjectivePoint p)
+   fun
+        (p: Num)
+        (_1: PGeq p
+                (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+                         (Stdlib.PArith.BinPos.xO 
+                            (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+        (x: IntModNum p) (y z: ProjectivePoint p)
       =>
       SAWCoreScaffolding.error (ProjectivePoint p)
          "Unimplemented: ec_twin_mult"%string

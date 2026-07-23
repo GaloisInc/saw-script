@@ -57,7 +57,10 @@ Definition TestSeq_Concat: let var__0
          (Stdlib.PArith.BinPos.Pos.to_nat 
             (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))
    in
-   CryptolPrimitivesForSAWCore.ecCat var__3 var__3 var__1 [
+   CryptolPrimitivesForSAWCore.ecCat var__3 var__3 var__1 
+      (CryptolPrimitivesForSAWCore.PFin_TCNum 
+         (Stdlib.PArith.BinPos.Pos.to_nat 
+            (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) [
          CryptolPrimitivesForSAWCore.ecNumber 
             (CryptolPrimitivesForSAWCore.TCNum 
                (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) var__1

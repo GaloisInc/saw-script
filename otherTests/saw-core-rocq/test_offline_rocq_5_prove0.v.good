@@ -51,4 +51,10 @@ Definition goal: Prop :=
               (CryptolPrimitivesForSAWCore.seq var__2 var__1) 
               (CryptolPrimitivesForSAWCore.PEqSeq var__2 var__1 
                  (CryptolPrimitivesForSAWCore.PEqSeqBool var__0)) [x; y] 
-              (CryptolPrimitivesForSAWCore.ecReverse var__2 var__1 [y; x])).
+              (CryptolPrimitivesForSAWCore.ecReverse var__2 var__1 
+                 (CryptolPrimitivesForSAWCore.PFin_TCNum 
+                    (Stdlib.PArith.BinPos.Pos.to_nat 
+                       (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) [
+                    y;
+                    x
+                 ])).
