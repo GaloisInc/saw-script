@@ -94,7 +94,7 @@ import SAWCoreWhat4.ReturnTrip (newSAWCoreExprBuilder, sawCoreState)
 import qualified SAWCore.Parser.AST as Un
 
 import SAWCentral.Proof
-  (Prop, Sequent, propSize, sequentSharedSize, propToTerm, predicateToSATQuery, sequentToSATQuery)
+  (Prop, propSize, propSharedSize, propToTerm, predicateToSATQuery, propToSATQuery)
 import SAWCentral.Prover.SolverStats
 import SAWCentral.Prover.Util
 import SAWCentral.Prover.What4
@@ -114,13 +114,13 @@ proveWithSATExporter ::
   (FilePath -> SATQuery -> TopLevel a) ->
   Set VarIndex ->
   FilePath ->
-  Sequent ->
+  Prop ->
   TopLevel SolverStats
 proveWithSATExporter exporter unintSet path goal =
   do sc <- getSharedContext
-     satq <- io $ sequentToSATQuery sc unintSet goal
+     satq <- io $ propToSATQuery sc unintSet goal
      _ <- exporter path satq
-     let stats = solverStats ("offline: " <> Text.pack path) (sequentSharedSize goal)
+     let stats = solverStats ("offline: " <> Text.pack path) (propSharedSize goal)
      return stats
 
 
