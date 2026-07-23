@@ -1,0 +1,242 @@
+Loading file "test_llvm_s20hash_comp.saw"
+Loading file "../../../../exercises/common/helpers.saw"
+Verifying s20_rowround...
+Simulating s20_rowround...
+Checking proof obligations s20_rowround...
+offline_lean_replay: Lean kernel check passed (leanprover/lean4:v4.29.1)
+Proof succeeded! s20_rowround
+Verifying s20_columnround...
+Simulating s20_columnround...
+Checking proof obligations s20_columnround...
+offline_lean_replay: Lean kernel check passed (leanprover/lean4:v4.29.1)
+Proof succeeded! s20_columnround
+Verifying s20_doubleround...
+Simulating s20_doubleround...
+Registering overrides for `s20_columnround`
+  variant `Symbol "s20_columnround"`
+Registering overrides for `s20_rowround`
+  variant `Symbol "s20_rowround"`
+Matching 1 overrides of s20_columnround...
+Branching on 1 override variants of s20_columnround...
+Applied override! s20_columnround
+Matching 1 overrides of s20_rowround...
+Branching on 1 override variants of s20_rowround...
+Applied override! s20_rowround
+Checking proof obligations s20_doubleround...
+offline_lean_replay: Lean kernel check passed (leanprover/lean4:v4.29.1)
+Proof succeeded! s20_doubleround
+Verifying s20_hash...
+Simulating s20_hash...
+Registering overrides for `s20_doubleround`
+  variant `Symbol "s20_doubleround"`
+Matching 1 overrides of s20_doubleround...
+Branching on 1 override variants of s20_doubleround...
+Applied override! s20_doubleround
+Matching 1 overrides of s20_doubleround...
+Branching on 1 override variants of s20_doubleround...
+Applied override! s20_doubleround
+Matching 1 overrides of s20_doubleround...
+Branching on 1 override variants of s20_doubleround...
+Applied override! s20_doubleround
+Matching 1 overrides of s20_doubleround...
+Branching on 1 override variants of s20_doubleround...
+Applied override! s20_doubleround
+Matching 1 overrides of s20_doubleround...
+Branching on 1 override variants of s20_doubleround...
+Applied override! s20_doubleround
+Matching 1 overrides of s20_doubleround...
+Branching on 1 override variants of s20_doubleround...
+Applied override! s20_doubleround
+Matching 1 overrides of s20_doubleround...
+Branching on 1 override variants of s20_doubleround...
+Applied override! s20_doubleround
+Matching 1 overrides of s20_doubleround...
+Branching on 1 override variants of s20_doubleround...
+Applied override! s20_doubleround
+Matching 1 overrides of s20_doubleround...
+Branching on 1 override variants of s20_doubleround...
+Applied override! s20_doubleround
+Matching 1 overrides of s20_doubleround...
+Branching on 1 override variants of s20_doubleround...
+Applied override! s20_doubleround
+Checking proof obligations s20_hash...
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:45:22: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:46:23: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:45:22: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:46:23: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:45:22: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:46:23: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:45:22: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:46:23: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:45:22: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:46:23: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:45:22: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:46:23: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:45:22: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:46:23: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:45:22: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:46:23: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:45:22: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:46:23: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:45:22: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:46:23: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:45:22: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:46:23: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:45:22: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:46:23: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:45:22: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:46:23: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:45:22: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:46:23: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:45:22: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:46:23: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:45:22: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+Subgoal failed: s20_hash ../../../../exercises/functional-correctness/salsa20/salsa20.c:46:23: error: in s20_littleendian
+Undefined behavior encountered
+Details:
+  Poison value created
+  Signed addition caused wrapping even though the `nsw` flag was set
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in offline_lean
+   test_llvm_s20hash_comp.saw:64:6-64:52 in (callback)
+   (builtin) in llvm_verify
+   test_llvm_s20hash_comp.saw:62:8-64:52 in (callback)
+   (builtin) in fails
+   test_llvm_s20hash_comp.saw:62:1-64:52 (at top level)
+Error translating: Refusing to translate primitive Prelude.fix.
+
+Reason: unrecognized wrapped fix shape (the unique-fixed-point contract is retired): stream tail is not a Stream.rec read of the recursive stream: FTermF (ArrayValue (STAp
+
+This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
+transposition for this primitive yet. If your Cryptol code specialised down to it,
+you've hit one of the open cases tracked in the long-term plan.
+
+Workaround: refactor to avoid the primitive (e.g. recursion via `fix` can sometimes
+be expressed as a bounded fold instead). Run dump_lean_residual_primitives on your
+term to see all surviving names — Prelude.fix will be one of them.
+

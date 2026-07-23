@@ -1,0 +1,64 @@
+// Case Study — LLVM Salsa20 s20_hash: the NEXT RUNG of the
+// compositional ladder over replay-admitted Lean leaves.
+//
+// Extends workflows/llvm_doubleround_comp one level up
+// examples/salsa20/salsa.saw's ladder: rowround and columnround are
+// admitted by Lean kernel replay, doubleround is verified with them
+// as overrides and its residual replay-admitted in turn, and s20_hash
+// is then verified WITH the doubleround result as override. The C
+// hash runs ten doubleround calls (each replaced by the spec), adds
+// the input matrix, and little-endian-packs 64 output bytes; the
+// Cryptol Salsa20 spells the rounds as the self-referential
+// comprehension `zs = [xw] # [ doubleround zi | zi <- zs ]` with
+// `zs@10` — the R2 fix-recognizer shape at [16][32] element type.
+// The residual obligation is emitted for Lean discharge
+// (emission-only, fails-wrapped).
+//
+// Sources: local salsa20.bc copy; canonical Salsa20.cry and salsa20.c
+// under exercises/functional-correctness/salsa20/.
+
+enable_experimental;
+include "../../../../exercises/common/helpers.saw";
+import "../../../../exercises/functional-correctness/salsa20/Salsa20.cry";
+
+m <- llvm_load_module "salsa20.bc";
+
+let oneptr_update_func (ty : LLVMType) (name : String) (f : Term) = do {
+    (x, p) <- ptr_to_fresh name ty;
+    llvm_execute_func [p];
+    llvm_points_to p (llvm_term {{ f x }});
+};
+
+// Setups copied VERBATIM from the itp/comp rows (replay re-emits each
+// goal fresh from THIS script; the committed discharges pin the
+// shapes).
+let rowround_setup =
+  oneptr_update_func (llvm_array 16 (llvm_int 32)) "y" {{ rowround }};
+
+let columnround_setup =
+  oneptr_update_func (llvm_array 16 (llvm_int 32)) "x" {{ columnround }};
+
+let doubleround_setup =
+  oneptr_update_func (llvm_array 16 (llvm_int 32)) "x" {{ doubleround }};
+
+let salsa20_setup =
+  oneptr_update_func (llvm_array 64 (llvm_int 8)) "seq" {{ Salsa20 }};
+
+rr <- llvm_verify m "s20_rowround" [] true
+    rowround_setup
+    (offline_lean_replay "../../proofs/llvm_rowround_itp");
+
+cr <- llvm_verify m "s20_columnround" [] true
+    columnround_setup
+    (offline_lean_replay "../../proofs/llvm_columnround_itp");
+
+dr <- llvm_verify m "s20_doubleround" [cr, rr] true
+    doubleround_setup
+    (offline_lean_replay "../../proofs/llvm_doubleround_comp");
+
+// The hash over the admitted doubleround. Emission-only for now: the
+// residual carries the ten unrolled spec applications vs the
+// fix-comprehension spec, the input add, and the byte packing.
+fails (llvm_verify m "s20_hash" [dr] true
+    salsa20_setup
+    (offline_lean "test_llvm_s20hash_comp.s20_hash"));

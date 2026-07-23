@@ -351,14 +351,23 @@ Compositional ladder (0.02 coverage expansion, user-approved
 the realized pattern: leaves replay-admitted, composition by SAW
 overrides, residual glue discharged in Lean and replayed in turn.
 
-- [ ] **`s20_hash` over the replay-admitted `dr`** (the next rung of
-  examples/salsa.saw's ladder). First rung where a LOOP survives into
-  the residual: the C hash runs 10 doublerounds, then input-add and
-  little-endian byte packing, so expect the recurrence-shape bridges
-  (saw_self_ref_comp_iterate / foldl_eq_natRec_atWithDefault — the
-  popcount/ChaCha20 comprehension machinery) for the iterate shape,
-  plus seq/pack shuffles. Honest unknown: whether the Cryptol-side
-  rounds spelling reaches the recognized fix/iterate path.
+- [ ] **`s20_hash` over the replay-admitted `dr`** — PROBED
+  2026-07-22, boundary pinned (workflows/llvm_s20hash_comp). The
+  SAW-side chain works COMPLETELY: rr/cr/dr replay-admitted and the
+  dr override applies at all TEN loop iterations. The residual
+  emission then hits the R2 recognizer's coverage boundary LOUDLY:
+  Salsa20's `zs = [xw] # [ doubleround zi | zi <- zs ]` reaches the
+  translator as raw `Prelude.fix` and is refused ("Refusing to
+  translate primitive Prelude.fix") — the recognizer covers the
+  popCount-class comprehension but not this lookback-1 recurrence at
+  [16][32] element type. Same family as the pinned
+  cryptol_chacha20_core_iterate gap. The workflow row pins all of
+  this in one golden (the fails-wrapped emission catches the loud
+  refusal). BLOCKED ON: recognizer coverage for this shape — a
+  FROZEN-SURFACE change (seam-bug pause rule: recognizer surface
+  frozen after R3b), so extending it is a discuss-with-user design
+  item, grouped with the chacha-core-iterate family. NOT a 0.02
+  blocker; the rung completes when that lands.
 - [ ] **`s20_expand32` / `s20_crypt32` rungs (stretch)**: extend to
   the full encrypt path as salsa.saw does (crypt32 at 63/64/65), each
   over the previous rung's replay-admitted result. Ends with the
