@@ -318,7 +318,7 @@ llvm_verify bc "add" [] true add_spec z3;
 ```
 
 This loads the compiler output, giving us an LLVM module handle `bc`,
-and them runs the verification by calling `llvm_verify`.
+and then runs the verification by calling `llvm_verify`.
 
 (Note that `jvm_verify` and `mir_verify` are essentially the same,
 except that they work with JVM and MIR code modules and specs.)
@@ -1176,7 +1176,7 @@ that call this one.
 
 ## The JVM Backend and JVM Specifications
 
-In the JVM backend, types appear as values of SAWSCript type
+In the JVM backend, types appear as values of SAWScript type
 `JavaType` (not `JVMType`, by historical accident), and values have
 the type `JVMValue`.
 JVM code modules are class files and thus have the type `JavaClass`.

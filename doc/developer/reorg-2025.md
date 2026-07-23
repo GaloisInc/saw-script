@@ -363,7 +363,7 @@ In `src`, moved to `saw-script/src`:
 | SAWScript.Import                                | (unchanged)
 | SAWScript.Interpreter                           | (unchanged)
 | SAWScript.Lexer                                 | (unchanged)
-| SAWScript.MGU                                   | SAWSCript.Typechecker
+| SAWScript.MGU                                   | SAWScript.Typechecker
 | SAWScript.Parser                                | (unchanged)
 | SAWScript.Panic                                 | (unchanged)
 | SAWScript.Search                                | (unchanged)

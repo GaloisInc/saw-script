@@ -253,7 +253,7 @@ There are also the following derived types:
   (The unit type has one value, also written `()`; a value of type `()`
   contains no information.
   It is like `void` in C and Java.)
-  There are no monoples (tuples of arity 1).
+  There are no monuples (tuples of arity 1).
 - Lists.
   List types are written with a type name in square brackets: `[Int]` is a
   list of integers.
@@ -492,7 +492,7 @@ One can also write `let {{ ... }};`, in which the double-braces can
 contain not just an expression but any Cryptol declaration or
 let-binding.
 This is a convenient way to insert Cryptol type declarations; it also
-allows using Cryptol binding patterns that cannot readly be expressed
+allows using Cryptol binding patterns that cannot readily be expressed
 directly in SAWScript.
 
 (monad-bind)=
