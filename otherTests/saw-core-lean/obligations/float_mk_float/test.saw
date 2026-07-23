@@ -1,0 +1,10 @@
+enable_experimental;
+
+// W2(d) coverage: Prelude.mkFloat maps to the hand-library `mkFloat`
+// (Float = Int x Int mantissa/exponent pair; CONFORMANCE.md "Float"
+// row records why this is emission+behavior coverage, not
+// differential conformance — SAW exposes no executable Float
+// observer). The observer pins the pair components.
+let probe = parse_core "mkFloat (natToInt 1) (natToInt 2)";
+
+write_lean_term "Observed" [] [] "emitted.lean" probe;

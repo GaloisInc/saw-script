@@ -95,18 +95,26 @@ does not yet express directly. Keeping them here avoids Haskell-side verbatim
 Lean injection: the backend only maps the SAW name to this checked declaration.
 -/
 
+/-- SAWCore `sawLet` — the sharing marker. Value-domain semantics is
+plain monadic bind: bind the wrapped bound value, feed the raw value
+to the body. -/
 @[reducible] noncomputable def sawLet.{u, v} (α : Type u) (β : Type v)
     (x : Except String α) (f : α -> Except String β) : Except String β :=
   match x with
   | Except.ok value => f value
   | Except.error msg => Except.error msg
 
+/-- SAWCore Prelude `xor` at the wrapped Bool convention — mirrors
+the Prelude body `xor b1 b2 = ite b1 (not b2) b2`, with each branch's
+effect kept (via `iteM`). -/
 @[reducible] noncomputable def xor (b1 : Except String Bool)
     (b2 : Except String Bool) : Except String Bool :=
   iteM Bool b1
     (Bind.bind b2 (fun value => Pure.pure (!value)))
     b2
 
+/-- SAWCore Prelude `boolEq` at the wrapped Bool convention —
+mirrors `boolEq b1 b2 = ite b1 b2 (not b2)`; the dual of `xor`. -/
 @[reducible] noncomputable def boolEq (b1 : Except String Bool)
     (b2 : Except String Bool) : Except String Bool :=
   iteM Bool b1
@@ -127,6 +135,10 @@ explicit. The two equivalence lemmas (`streamScanl_zero` /
 `streamScanl_succ`) hold by `rfl`, mirroring Rocq's. -/
 
 open CryptolToLean.SAWCorePrimitives in
+/-- SAWCore `streamScanl` — the stream of left-fold prefixes
+(element `i` is `f` folded over the first `i` stream elements from
+`z`), realized by structural recursion on the index (see the section
+comment). -/
 def streamScanl (α β : Type) (f : β → α → β) (z : β)
     (xs : Stream α) : Stream β :=
   Stream.MkStream (streamScanlIdx α β f z xs)

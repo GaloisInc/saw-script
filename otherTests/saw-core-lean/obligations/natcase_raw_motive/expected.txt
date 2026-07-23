@@ -1,0 +1,4 @@
+contains:natCaseRaw
+contains:def Observed (n : Nat) : Nat
+absent:sorry
+absent:saw_throw_error

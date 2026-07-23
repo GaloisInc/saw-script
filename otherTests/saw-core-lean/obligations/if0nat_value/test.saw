@@ -1,0 +1,11 @@
+enable_experimental;
+
+// W2(d) coverage: value-domain Prelude.if0Nat must lower to the
+// wrapped `if0NatM` realization (never `if0NatRaw`, which would drop
+// the Except carrier of its branches). The binder keeps the scrutinee
+// symbolic so the artifact pins BOTH branches; the observer evaluates
+// them (n = 0 selects x, n = 1 selects y).
+let probe = parse_core
+  "\\(n : Nat) -> if0Nat (Vec 8 Bool) n (bvNat 8 3) (bvNat 8 5)";
+
+write_lean_term "Observed" [] [] "emitted.lean" probe;

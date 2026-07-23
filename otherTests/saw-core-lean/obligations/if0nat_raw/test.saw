@@ -1,0 +1,11 @@
+enable_experimental;
+
+// W2(d) coverage: raw-position Prelude.if0Nat (element type Nat —
+// index domain, `shouldWrapBinder Nat = False`) must lower to the raw
+// `if0NatRaw` realization. The result feeds a bitvector WIDTH, so the
+// observer's types only check if the raw branch select computes: with
+// n = 0 the width is 4 and the value is bvNat 4 3.
+let probe = parse_core
+  "\\(n : Nat) -> bvNat (if0Nat Nat n 4 8) 3";
+
+write_lean_term "Observed" [] [] "emitted.lean" probe;

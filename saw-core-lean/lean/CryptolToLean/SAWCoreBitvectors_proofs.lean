@@ -210,9 +210,13 @@ Useful when chaining bv comparison with other Prop-valued
 hypotheses. Each definition matches Rocq's
 `isBvsle / isBvslt / isBvule / isBvult` exactly. -/
 
+/-- Prop form of `bvsle` (signed `≤`) — matches Rocq's `isBvsle`. -/
 def isBvsle (w : Nat) (a b : Vec w Bool) : Prop := bvsle w a b = true
+/-- Prop form of `bvslt` (signed `<`) — matches Rocq's `isBvslt`. -/
 def isBvslt (w : Nat) (a b : Vec w Bool) : Prop := bvslt w a b = true
+/-- Prop form of `bvule` (unsigned `≤`) — matches Rocq's `isBvule`. -/
 def isBvule (w : Nat) (a b : Vec w Bool) : Prop := bvule w a b = true
+/-- Prop form of `bvult` (unsigned `<`) — matches Rocq's `isBvult`. -/
 def isBvult (w : Nat) (a b : Vec w Bool) : Prop := bvult w a b = true
 
 /-! ### Cross-comparison theorems

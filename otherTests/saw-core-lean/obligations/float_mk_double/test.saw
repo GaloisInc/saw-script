@@ -1,0 +1,10 @@
+enable_experimental;
+
+// W2(d) coverage: Prelude.mkDouble maps to the hand-library
+// `mkDouble`. NOTE the faithful oddity pinned here: SAW's own
+// `mkDouble` primitive RETURNS Float (Prelude.sawcore:2163), and the
+// library binding preserves that (SAWCorePrimitives.lean:227-229).
+// Same emission+behavior (not differential) status as float_mk_float.
+let probe = parse_core "mkDouble (natToInt 6) (natToInt 7)";
+
+write_lean_term "Observed" [] [] "emitted.lean" probe;

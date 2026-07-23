@@ -1,0 +1,10 @@
+enable_experimental;
+
+// W2(d) coverage: residual Prelude.natCase with a raw (Nat) motive
+// must lower to `natCaseRaw`. The successor arm reads its predecessor
+// (s = \m -> m), so the observer distinguishes the arms AND checks the
+// predecessor plumbing: n = 0 -> z = 4; n = 3 -> s 2 = 2.
+let probe = parse_core
+  "\\(n : Nat) -> natCase (\\(_ : Nat) -> Nat) 4 (\\(m : Nat) -> m) n";
+
+write_lean_term "Observed" [] [] "emitted.lean" probe;

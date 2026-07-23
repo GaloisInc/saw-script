@@ -1,0 +1,1 @@
+zero-arm 4 succ-arm pred 2

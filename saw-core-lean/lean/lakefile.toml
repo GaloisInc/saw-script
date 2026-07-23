@@ -2,5 +2,14 @@ name = "cryptol_to_lean"
 version = "0.1.0"
 defaultTargets = ["CryptolToLean"]
 
+# Docstring coverage is enforced as a build-visible warning
+# (2026-07-23, 0.02 docstrings pass: 153 declarations documented,
+# zero remaining). `lake build` output stays warning-free; a new
+# public declaration without a docstring reintroduces a warning
+# here. Emitted probe artifacts are unaffected — they compile via
+# `lake env lean`, which does not read these options.
+[leanOptions]
+weak.linter.missingDocs = true
+
 [[lean_lib]]
 name = "CryptolToLean"

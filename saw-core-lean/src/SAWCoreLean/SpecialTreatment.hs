@@ -234,6 +234,23 @@ mapsTo targetModule targetName =
   IdentSpecialTreatment DefSkip
     (UseRename (Just targetModule) targetName False)
 
+-- | Like 'mapsTo' but the use site is ALWAYS emitted fully
+-- qualified, bypassing the implicitly-opened-module shortening. Use
+-- this when the short target name is a same-kind TIE with a Lean
+-- root-scope name, which the elaborator cannot resolve (it errors
+-- with "Ambiguous term" rather than picking one — loud, but wrong).
+-- Passing 'Nothing' as the 'UseRename' module marks the dotted name
+-- as pre-qualified for every consumer ('translateIdentToIdent' and
+-- the apply path emit it as-is).
+mapsToQualifiedTie :: ModuleName -> Lean.Ident -> IdentSpecialTreatment
+mapsToQualifiedTie targetModule (Lean.Ident targetName) =
+  IdentSpecialTreatment DefSkip
+    (UseRename Nothing
+      (Lean.Ident
+        (Text.unpack (Text.intercalate "." (moduleNamePieces targetModule))
+          ++ "." ++ targetName))
+      False)
+
 -- | Like 'mapsTo' but emits @\@name@ at use sites, forcing all
 -- implicit arguments to be supplied explicitly.
 mapsToExpl :: ModuleName -> Lean.Ident -> IdentSpecialTreatment
@@ -697,7 +714,15 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList
   , ("rationalRecip", mapsTo sawCorePrimitivesModule "rationalRecip")
   , ("rationalFloor", mapsTo sawCorePrimitivesModule "rationalFloor")
     -- Float / Double primitive bindings (Prelude.sawcore 2153-2165).
-  , ("Float",         mapsTo sawCorePrimitivesModule "Float")
+    -- `Float` must emit FULLY QUALIFIED: the bare name is a same-kind
+    -- TIE with Lean core's `_root_.Float` (both `: Type`), so the
+    -- implicit `open SAWCorePrimitives` shortening produces an
+    -- "Ambiguous term" error in type position (found by the
+    -- obligations/float_mk_float coverage row, 2026-07-23). `Stream`
+    -- stays short because root `Stream` is a two-parameter class —
+    -- different kind, so the elaborator disambiguates; `Double` has
+    -- no root counterpart.
+  , ("Float",         mapsToQualifiedTie sawCorePrimitivesModule "Float")
   , ("mkFloat",       mapsTo sawCorePrimitivesModule "mkFloat")
   , ("Double",        mapsTo sawCorePrimitivesModule "Double")
   , ("mkDouble",      mapsTo sawCorePrimitivesModule "mkDouble")

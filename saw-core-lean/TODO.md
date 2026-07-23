@@ -301,13 +301,50 @@ Tier 1 — mechanical:
   equation, elaborating by defeq) and eq_u128 (a formerly-cosmetic
   `simp only at` now errors on no-progress; dropped). Four replay
   goldens re-pinned for the toolchain string. Full suite green.
-- [ ] **W2(d) deferred hardening**: goldens for the 11 zero-coverage
-  emitter-wired helpers; `#guard_msgs` fences.
-- [ ] **STATUS.md census pass** (0.02 exit criterion): known-gap
-  delta stated; target = sound-but-undischargeable tier eliminated
-  modulo the two chacha observer-#reduce-budget rows.
-- [ ] **Docstrings decision**: 135 Lean docstrings — user call
-  pending, then mechanical.
+- [x] **W2(d) deferred hardening — DONE 2026-07-23.** Census of the
+  audit's 11: the four `*WithProof_checkedM` were covered by
+  cryptol_seq_surgery (0.01) and `saw_fix_{unique_exists,choose}_raw`
+  by the obligations/fix_raw_* rows, leaving 7 truly uncovered. Five
+  new obligations rows with `#reduce` behavior observers:
+  `if0nat_value` (if0NatM, both branches), `if0nat_raw` (if0NatRaw,
+  the branch select IS the result width so the observer only
+  typechecks if it computes), `natcase_raw_motive` (natCaseRaw,
+  zero arm + successor-arm predecessor plumbing), `float_mk_float` /
+  `float_mk_double` (pair components; emission+behavior, NOT
+  differential conformance — CONFORMANCE.md Float row updated).
+  In-library `#guard_msgs` fences added for `atRuntimeCheckedM`
+  (in-bounds / exact Prelude error string / error propagation) and
+  `saw_throw_error` (verbatim message / inner-error-wins). FOUND AND
+  FIXED a latent emitter defect: bare emitted `Float` is a same-kind
+  tie with Lean core's `_root_.Float` under the preamble opens
+  ("Ambiguous term" — loud, but wrong); `Float` now emits fully
+  qualified via the new `mapsToQualifiedTie` (SpecialTreatment.hs;
+  `Stream` stays short — root Stream is a two-parameter class, so
+  the elaborator disambiguates by kind). Smoketest green; zero
+  golden drift (all prior Float references were skip-note comments).
+  CONFORMANCE matrix rows added for if0Nat routing + raw-motive
+  natCase.
+- [x] **STATUS.md census pass — DONE 2026-07-23** (0.02 exit
+  criterion met): census 53 conformance-scope + 3 proof-gaps +
+  1 stretch = 57 (matches the suite count); delta from 0.01 stated
+  (64+7 -> 53+3); the sound-but-undischargeable tier is eliminated
+  modulo exactly the two chacha observer-#reduce-budget rows, and
+  every one of the 53 reasons was re-read and classified
+  (rejection / SAW-side stub / observation-path) to back the claim.
+- [x] **Docstrings — DONE 2026-07-23** (user call: add them, per
+  Lean's linter). The authority is core's `linter.missingDocs`:
+  153 public declarations flagged (145 SAWCorePrimitives, 4
+  SAWCorePreludeExtra, 4 SAWCoreBitvectors_proofs; the old 135
+  figure predated the R2/R3b helpers), all documented in house
+  style (SAWCore primitive named + semantics where non-obvious;
+  `intToNat` clamp claim verified against Prims.hs:1341 before
+  writing). Enforcement wired: `weak.linter.missingDocs = true` in
+  lakefile.toml `[leanOptions]` (the `weak.` prefix is required —
+  the option registers after CLI parse; unquoted dotted TOML key,
+  a quoted key reaches Lean as one guillemet-quoted identifier and
+  errors). Mutation-tested: an undocumented probe def warns, revert
+  builds clean. `lake env lean` paths (emitted probe artifacts,
+  proof rows) are unaffected by lakefile options by design.
 
 BV native-eval tier package (MEDIUM, no unknown mathematics; land
 machinery WITH the first promoted row in one commit):
@@ -610,6 +647,49 @@ budget stays a differential-harness limitation.
     nesting, shadowing, exotic-but-legal module shapes).
   - Every finding lands as a pinned regression row (or a documented
     reject) before release; the audit report is a doc/ artifact.
+
+- [ ] **Upstream sync: rebase onto GaloisInc/saw-script:master
+  (added 2026-07-23, user request).** The backend lives on a fork
+  branch (`saw-core-lean`) with an OPEN UPSTREAM PR —
+  https://github.com/GaloisInc/saw-script/pull/3214 — so this is
+  not internal housekeeping: the rebase is what keeps that PR
+  mergeable and reviewable against master. Upstream is ~300
+  commits ahead (user estimate, 2026-07-23 — the local
+  `upstream/master` ref is STALE, last fetched 2026-05-01 at
+  441d1019b, and shows our line 522 commits ahead of that
+  merge-base, so first step is a fresh `git fetch upstream`).
+  A rebase rewrites the PR's history — coordinate the force-push
+  with any in-flight upstream review. GitHub's conflict report for
+  the PR (checked 2026-07-23) lists exactly FIVE conflicting files
+  — `.github/workflows/ci.yml`, `CHANGES.md`,
+  `saw-central/src/SAWCentral/Proof.hs`,
+  `saw-central/src/SAWCentral/Prover/Exporter.hs`,
+  `saw-script/src/SAWScript/Interpreter.hs` — i.e. the registration
+  seams (exporter verbs, interpreter builtin table, proof
+  machinery) plus CI/changelog; everything else merges cleanly.
+  So the textual conflict mass is small; the REAL risk is
+  clean-merging behavioral drift (saw-core normalization, Prelude
+  changes) that only the full suite catches. Known integration
+  risk surfaces, in descending order of expected pain:
+  - **saw-core / SAWCentral seams**: the backend hooks
+    `SAWCentral.Prover.Exporter` (`leanOpaqueBuiltins`,
+    offline_lean/offline_lean_replay verbs), the LLVM
+    `verifyObligations` loop, and saw-core's Name/Simulator/Term
+    APIs — upstream churn here is the likely conflict mass.
+  - **Prelude.sawcore drift**: emissions and several lint/doc
+    claims cite exact Prelude line numbers (e.g. mkDouble's
+    Float-returning declaration at 2163) and exact Prelude error
+    strings (`"at: index out of bounds"` is semantics, not
+    cosmetics — the Except carrier compares messages). Any
+    upstream Prelude change must be re-checked against the
+    conformance corpus, not just compiled.
+  - **Golden/snapshot invalidation**: if upstream changes
+    normalization or term sharing, emitted Lean drifts; re-pin via
+    the snapshot oracle + full suite, reviewing hunks (never bulk
+    `good`).
+  - Post-rebase gate: smoketest + full `make test` + demo, same
+    bar as a toolchain bump; treat it as its own reviewed landing,
+    not a background merge.
 
 ## Operative Priority: Obligation Placement & Satisfiability
 

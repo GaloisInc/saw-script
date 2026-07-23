@@ -1,8 +1,9 @@
 # saw-core-lean status
 
-Last updated: 2026-07-17 (OP-3 successor + offline_lean_replay
-landed; module split + SWE-quality pass;
-`doc/2026-07-14_release-plan.md`)
+Last updated: 2026-07-23 (0.02 census pass: BV native-eval tier
+package complete, compositional replay chains, toolchain v4.32.0,
+W2(d) hardening, docstring lint; plan:
+`doc/2026-07-14_release-plan.md` §0.02)
 
 ## Purpose
 
@@ -69,19 +70,26 @@ Slices 0–7 complete), the calculus IS the implementation:
 
 Passing (the standing fences):
 
-- Lean support library: `lake build` green, including the
-  `saw_ctor_order` positive/negative self-tests.
-- `cabal test saw-core-lean-smoketest`: 72 tests, including the
+- Lean support library: `lake build` green on pinned toolchain
+  `leanprover/lean4:v4.32.0` (bumped from v4.29.1 on 2026-07-23;
+  drift across 340 proof rows was 2), including the
+  `saw_ctor_order` positive/negative self-tests, the
+  `saw_fix_bounded` / `atRuntimeCheckedM` / `saw_throw_error`
+  `#guard_msgs` behavior fences, and the `linter.missingDocs`
+  build option (all 153 public declarations documented 2026-07-23;
+  a new undocumented declaration warns in `lake build`).
+- `cabal test saw-core-lean-smoketest`: 74 tests, including the
   Slice 7 anti-regression source lint.
-- `otherTests/saw-core-lean`: `make conformance` exit 0 — 195 rows
-  (differential SAW-vs-Lean evaluation, obligation shape, pinned known
-  gaps), with emitted artifacts elaborated. Tree restructured
-  2026-07-15 (see otherTests/saw-core-lean/README.md): `workflows/`
-  split out of `drivers/` for the end-to-end SAWScript rows;
-  `shape/` renamed (now `negative/`); the 17 legacy `drivers/conformance_*`
-  litmus rows dispositioned (15 retired against named successors,
-  2 unique residuals migrated as `differential/vector_zip_unequal`
-  and `differential/nat_division_defined`).
+- `otherTests/saw-core-lean`: `make conformance` exit 0 — 233 rows
+  in conformance scope (116 differential SAW-vs-Lean evaluation,
+  91 obligation shape, 26 saw-boundary), with emitted artifacts
+  elaborated. Tree restructured 2026-07-15 (see
+  otherTests/saw-core-lean/README.md): `workflows/` split out of
+  `drivers/` for the end-to-end SAWScript rows; `shape/` renamed
+  (now `negative/`); the 17 legacy `drivers/conformance_*` litmus
+  rows dispositioned (15 retired against named successors, 2 unique
+  residuals migrated as `differential/vector_zip_unequal` and
+  `differential/nat_division_defined`).
 - Emitted-Lean byte-diff oracle: `.snapshots/op2-baseline`, re-cut
   2026-07-15 after the full suite ran exit-0 on the release binary —
   `support/emitted-lean-snapshot.sh diff .snapshots/op2-baseline`
@@ -95,32 +103,75 @@ Passing (the standing fences):
   work's own reviewed footprint.)
 - Driver + workflow rows (`bash test.sh` per-row,
   `lean-driver-test.sh`) green, including the ChaCha20 core verify
-  workflow and the prelude auto-emit driver; full `make test` exit 0
-  on the restructured tree (72 gaps in full-suite inventory scope).
+  workflow (explicit-literal spec spelling, Pattern 10) and the
+  prelude auto-emit driver; full `make test` exit 0 on the
+  restructured tree (57 gaps in full-suite inventory scope,
+  census above).
 
-Known-gap census (release 0.01 posture): 64 pinned `.known-gap`
-rows in conformance scope (differential/obligations/saw-boundary —
-tiers 2-3 below), plus the 7 `proof-gaps/` rows and the stretch
-probe carried in the full-suite inventory (tier 1 lives there).
-Three tiers:
+Known-gap census (release 0.02 posture, taken 2026-07-23): 53
+pinned `.known-gap` rows in conformance scope
+(differential 22 / obligations 18 / saw-boundary 13), plus 3
+`proof-gaps/` rows and the stretch probe in the full-suite
+inventory — 57 total, the number `make test` reports. Delta from
+the 0.01 census (64 conformance-scope + 7 proof-gaps): 11
+conformance rows un-gapped and 4 proof-gaps discharged across
+0.02 — the Stream@core hole closed (kind-directed domain map,
+2026-07-17), the transport-carrier convention landed (2026-07-19),
+and the BV package tail completed under the two-tier trust policy
+(salsa/chacha q_eq family, the 8 chacha-core qrounds via the
+Pattern-10 spec spelling, `llvm_eq_u128`, `llvm_popcount_eq`, and
+`llvm_doubleround_comp` — the first fully green compositional
+replay chain, strict tier).
 
-1. **[ELIMINATED 2026-07-16]** The sound-but-undischargeable
-   wrapped-fix tier is gone: the OP-3 successor landed (W1, R0-R4)
-   — recognized fix classes lower to PROVEN realizations (running
-   sum, popcount32, E6, rec_ones discharged end-to-end), everything
-   else rejects loudly. See Known Holes below.
+**0.02 exit-criterion statement**: no current known-gap row pins a
+sound-but-undischargeable emission, modulo exactly the two
+documented chacha observer-budget rows
+(`differential/cryptol_chacha20_{iround_zero,core_iterate}` —
+both translate, emit, and ELABORATE; the residual gap is that the
+`#reduce` differential OBSERVATION of the 16x32 concrete
+computation exceeds Lean's default recursion depth, and the
+noncomputable emissions rule out `#eval`). Every other row is a
+clean rejection, a SAW-side evaluator stub, or an
+observation-path limitation, per the tiers below. The 3 surviving
+`proof-gaps/` rows are the same two chacha shapes at the
+proof-workflow level plus `llvm_doubleround_itp`, the preserved
+direct-ITP attempt superseded by the compositional
+`proofs/llvm_doubleround_comp` discharge.
+
+Tiers:
+
+1. **[ELIMINATED 2026-07-16, still true at the 0.02 census]** The
+   sound-but-undischargeable wrapped-fix tier is gone: the OP-3
+   successor landed (W1, R0-R4) — recognized fix classes lower to
+   PROVEN realizations (running sum, popcount32, E6, rec_ones
+   discharged end-to-end), everything else rejects loudly. See
+   Known Holes below. The no-zip lookback-1 recurrence family
+   (s20_hash's `zs` — boundary-pinned 2026-07-22 at
+   `workflows/llvm_s20hash_comp`) rejects loudly; the recognizer
+   extension is the scheduled 0.03 fragment-semantics program.
 2. **Clean rejections** (named diagnostics, pinned boundary rows):
-   Stream@core / Either@core comprehensions, paired-stream and
-   iterate-family fixes, direct recursors
+   iterate-family and paired-stream fixes, direct recursors
    (Nat/Pos/Z/Bool/Accessible*), user datatypes, proof-primitive
    realization families, SMT-array/enum/polynomial surfaces,
-   raw-position `error`, Prop-instantiated pair carriers.
+   raw-position `error`, residual `natCase`/`ZtoNat`/`scanl`/
+   `expByNat`/ListSort surfaces.
 3. **Workflow scope**: `offline_lean` is emission-only — SAW leaves
    punted goals unsolved and never claims them; discharge is
-   `offline_lean_replay` (landed 2026-07-16). Remaining
-   differential gaps are proof-support ergonomics (starter tactics
-   not yet closing concrete-vector/rational facts) and
-   SAW-simulator `Unimplemented` stubs, all pinned.
+   `offline_lean_replay`. Remaining differential gaps are
+   SAW-simulator `Unimplemented`/panic stubs and error-outcome
+   observation paths (no executable SAW-vs-Lean error comparison),
+   all pinned.
+
+Bitvector automation trust policy (0.02, user decision 2026-07-21):
+TWO-TIER. The strict tier admits exactly the kernel plus
+propext/Classical.choice/Quot.sound and the two Vec/BitVec bridge
+axioms; a per-row, loudly-labeled `native-eval` tier additionally
+admits bv_decide's per-invocation proof-local native axioms
+(`.trust-tier` markers; enforcement in `replay/axiom-audit.awk`,
+both audit consumers, and the 30-case
+`support/trust-tier-selftest.sh` mutation suite; migration trigger:
+lean-smt kernel-checked BV reconstruction). Policy statement:
+`doc/proof-cookbook.md` §"Bitvector automation trust policy".
 
 Known holes, all loud or pinned:
 
@@ -198,25 +249,27 @@ Known holes, all loud or pinned:
 
 ## Next Work
 
-Release 0.01 posture (`doc/2026-07-14_release-plan.md`): the
-remaining items below are 0.02+ coverage work, shipped in 0.01 as
-documented limitations or pinned rejections.
+Release 0.02 posture (`doc/2026-07-14_release-plan.md` §0.02;
+detailed punch list in TODO.md):
 
-1. [DONE 2026-07-16] The OP-3 successor program (W1, R0-R4) — the
-   recurrence class discharges via proven per-instance realizations;
-   acceptance row `proofs/cryptol_running_sum_verify` closes
-   end-to-end. Stream@core / Either@core recursor-convention paths
-   remain pinned rejections (fold into later coverage work).
-2. [DONE 2026-07-16] SAW-side `offline_lean_replay`
-   (`doc/2026-07-16_replay-design.md`; full conformance pass
-   2026-07-17).
+1. [DONE through 2026-07-23] W1 (OP-3 successor, R0-R4), W2(a) BV
+   package under the two-tier trust policy, W2(b) `llvm_eq_u128`,
+   W2(d) hardening (helper goldens + `#guard_msgs` fences),
+   `offline_lean_replay` + compositional replay chains, docstring
+   pass, toolchain v4.32.0.
+2. Scheduled 0.03: the fragment-semantics program
+   (`doc/2026-07-16_fragment-semantics-scoping.md` Phases A-C) and
+   the no-zip lookback-1 recognizer extension it gates — unlocks
+   the s20_hash compositional rung and the chacha iterate family
+   (user decision 2026-07-22).
 3. The direct-recursor / `PosRep` program
    (`doc/archive/2026-07-03_direct-recursor-semantics-design.md`) — now
    tractable on the position-driven recursor convention.
 4. Universe-generalized pair/record carriers (would lift the
    pair-at-Prop rejection), proof-primitive realization families,
    user datatypes — example-driven coverage.
-5. Pre-release: the aggressive soundness audit (TODO.md release
-   gate) and the recorded replay hardening follow-ups (CI-harness
-   rebase onto the factored checker; binder-type telescope
-   comparison).
+5. Pre-release gate: the whole-project multi-reviewer skeptical
+   soundness review (TODO.md release gate), Cabal data-files
+   packaging, and the recorded replay hardening follow-ups
+   (CI-harness rebase onto the factored checker; binder-type
+   telescope comparison).
