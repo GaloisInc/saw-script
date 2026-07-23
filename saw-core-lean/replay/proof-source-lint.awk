@@ -41,19 +41,24 @@
 # either rejected here or fails to compile (loud either way).
 #
 # Banned as standalone tokens wherever they appear in code: axiom,
-# macro, macro_rules, elab, elab_rules, run_cmd, run_tac, initialize,
-# builtin_initialize, attribute, #eval; the extern /
-# implemented_by / csimp attributes in any @[...] position; and any
-# `debug.`-namespace option (debug.skipKernelTC suspends kernel
-# checking of added declarations — the kernel is the trust anchor).
-# This is the full set of core-Lean escape hatches into environment
-# mutation or kernel bypass known as of 2026-07-21 (run_tac / #eval /
-# builtin_initialize / csimp / debug.* added during the F1 fix —
-# run_tac can addDecl an axiom from inside a tactic block exactly the
-# way bv_decide itself does, and csimp swaps implementations used by
-# native evaluation, which the native-eval tier leans on). The import
-# closure is pinned (support lib + Std only), so non-core escape
-# hatches are unreachable.
+# macro, macro_rules, elab, elab_rules, run_cmd, run_tac, run_meta,
+# run_elab, initialize, builtin_initialize, attribute, any #eval
+# spelling (#eval and #eval! — matched as a substring, since `#`
+# cannot occur in identifiers after comment/string stripping); the
+# extern / implemented_by / csimp attributes in any @[...] position;
+# and any `debug.`-namespace option (debug.skipKernelTC suspends
+# kernel checking of added declarations — the kernel is the trust
+# anchor). This is the full set of core-Lean escape hatches into
+# environment mutation or kernel bypass known as of the v4.32.0 bump
+# (2026-07-22 re-review: run_meta / run_elab / #eval! added — all
+# three exist as commands there, and the import-closure defense is
+# NOT sufficient on its own because bv_decide rows import
+# Std.Tactic.BVDecide, which transitively reaches Lean's meta layer).
+# Earlier additions 2026-07-21 (F1 fix): run_tac / #eval /
+# builtin_initialize / csimp / debug.* — run_tac can addDecl an axiom
+# from inside a tactic block exactly the way bv_decide itself does,
+# and csimp swaps implementations used by native evaluation, which
+# the native-eval tier leans on.
 # RE-REVIEW THIS LIST ON EVERY TOOLCHAIN BUMP.
 # A comment or string literal may mention these words freely (string
 # CONTENT is data — it is elided from the token scan).
@@ -160,8 +165,8 @@ function fatal(msg) {
     i++
   }
 
-  if (out ~ /(^|[^A-Za-z0-9_'.])(axiom|macro|macro_rules|elab|elab_rules|run_cmd|run_tac|initialize|builtin_initialize|attribute)([^A-Za-z0-9_'.]|$)/ ||
-      out ~ /#eval([^A-Za-z0-9_'!?]|$)/ ||
+  if (out ~ /(^|[^A-Za-z0-9_'.])(axiom|macro|macro_rules|elab|elab_rules|run_cmd|run_tac|run_meta|run_elab|initialize|builtin_initialize|attribute)([^A-Za-z0-9_'.]|$)/ ||
+      out ~ /#eval/ ||
       out ~ /(^|[^A-Za-z0-9_'.])debug\.[A-Za-z]/ ||
       out ~ /@\[[^]]*(extern|implemented_by|csimp)/) {
     print FILENAME ":" FNR ": " $0

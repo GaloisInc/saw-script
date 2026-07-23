@@ -246,6 +246,30 @@ noncomputable def rsStep (x : Vec 8 (Vec 32 Bool)) (v : Vec 9 (Vec 32 Bool)) :
     Vec 9 (Vec 32 Bool) :=
   Vector.ofFn (fun i : Fin 9 => rsElem x v i.val i.isLt)
 
+/-- v4.32.0 adaptation: the emitted term applies its selects at
+macro-spelled 8 while the zip vector's type is `minNat 9 8`-spelled;
+`Nat.min` is not reducible, so v4.32's tighter matching bridges the
+two only at full transparency. This equation (which ELABORATES by
+defeq — both sides' lengths are definitionally 8) rewrites the zip
+node once into a consistently 8-spelled vector, after which the
+original discharge script works unchanged. -/
+theorem zip98_eq (v : Vec 9 (Vec 32 Bool)) (x : Vec 8 (Vec 32 Bool)) :
+    zip (Vec 32 Bool) (Vec 32 Bool) 9 8 v x
+      = (Vector.ofFn (fun i : Fin 8 =>
+          PairType.PairValue (v[(i : Nat)]'(by omega))
+            (PairType.PairValue (x[(i : Nat)]'i.isLt) UnitType.Unit))
+         : Vec 8 (PairType (Vec 32 Bool) (PairType (Vec 32 Bool) UnitType))) := by
+  apply Vector.ext
+  intro i hi
+  have hi8 : i < 8 := hi
+  unfold zip
+  simp [Vector.getElem_ofFn, Vector.get, hi8]
+  exact (Vector.getElem_ofFn
+    (f := fun i : Fin 8 =>
+      PairType.PairValue (v[(i : Nat)]'(by omega))
+        (PairType.PairValue (x[(i : Nat)]'i.isLt) UnitType.Unit))
+    hi8).symm
+
 theorem rsBody_pure_eq (x : Vec 8 (Vec 32 Bool)) (v : Vec 9 (Vec 32 Bool)) :
     rsBody (Pure.pure x) (Pure.pure v) = Pure.pure (rsStep x v) := by
   show rsBody (Except.ok x) (Except.ok v) = Except.ok (rsStep x v)
@@ -265,9 +289,12 @@ theorem rsBody_pure_eq (x : Vec 8 (Vec 32 Bool)) (v : Vec 9 (Vec 32 Bool)) :
       (fun j hj => bvAdd 32 (v[j]'(by omega)) (x[j]'(by omega)))
       (subNat i (natPos_macro one_macro)) _ ?_) ?_
     · intro j hj
+      -- v4.32.0: the zip-select sits at the minNat-spelled bound and simp
+      -- no longer bridges `j < 8` to it on its own;
+      -- instantiate the ofFn read explicitly.
       simp [Pure.pure, Bind.bind, Except.bind, Except.pure,
-            atWithProof_checkedM, zip, Pair_fst, Pair_snd,
-            Vector.get]
+            atWithProof_checkedM, zip98_eq, Vector.getElem_ofFn,
+            Pair_fst, Pair_snd, Vector.get]
     · simp [rsElem, h1]
 
 /-- H_prod for the running_sum body — every field by unfolding the

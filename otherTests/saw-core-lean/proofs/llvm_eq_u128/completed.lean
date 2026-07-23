@@ -340,7 +340,6 @@ theorem scrutBool (b : Bool) :
       have heq := (bvEq_true_iff_BitVec_eq 32 (bvNat 32 0) _).mp hbv
       rw [h0] at heq
       have h31 := congrArg (fun bv : BitVec 32 => bv.getMsbD 31) heq
-      simp only at h31
       rw [getMsbD_vecToBitVec_lt _ _ (show (31 : Nat) < 32 by omega),
           Vector.getElem_ofFn] at h31
       simp at h31

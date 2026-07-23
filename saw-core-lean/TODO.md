@@ -285,13 +285,22 @@ Tier 1 — mechanical:
   for s20_hash next. The no-override monolithic row stays parked in
   proof-gaps/llvm_doubleround_itp as the depth-scaling stress pin and
   cost-model record (GAP.md updated: unlock 3 realized).
-- [ ] **Lean toolchain bump** v4.29.1 -> latest (user-approved
-  2026-07-21 as low-cost; also pre-clears the lean-smt migration
-  path). Do before the audit freeze. MUST include: re-review the
-  proof-source-lint escape-hatch token list against the new
-  toolchain's command/tactic surface (it is a denylist; see the lint
-  header), and re-probe the `]'X'` / bv_decide native-axiom-name
-  behaviors the lint and audit pin.
+- [x] **Lean toolchain bump — DONE 2026-07-22/23** v4.29.1 ->
+  v4.32.0 (v4.32.1 released same day — skipped as day-zero). All
+  riders executed: bv_decide native-axiom naming UNCHANGED (selftest
+  pins it); `]'X'` char-literal-after-`]` reading is GONE on 4.32,
+  so the lint's ambiguity-fatal is now purely conservative (sound);
+  escape-hatch re-review found and banned THREE additions —
+  run_meta, run_elab, and #eval! (which slipped the old #eval
+  boundary regex; now matched as substring) — and established the
+  import-closure defense is insufficient alone (Std.Tactic.BVDecide
+  transitively reaches Lean's meta layer). Selftest 27 -> 30 cases.
+  Proof drift across 340 rows: TWO rows — running_sum (4.32's
+  tighter matcher stopped bridging the emission's macro-8 vs
+  minNat-9-8 spelling; fixed by an in-row zip98_eq respelling
+  equation, elaborating by defeq) and eq_u128 (a formerly-cosmetic
+  `simp only at` now errors on no-progress; dropped). Four replay
+  goldens re-pinned for the toolchain string. Full suite green.
 - [ ] **W2(d) deferred hardening**: goldens for the 11 zero-coverage
   emitter-wired helpers; `#guard_msgs` fences.
 - [ ] **STATUS.md census pass** (0.02 exit criterion): known-gap
@@ -365,9 +374,17 @@ overrides, residual glue discharged in Lean and replayed in turn.
   this in one golden (the fails-wrapped emission catches the loud
   refusal). BLOCKED ON: recognizer coverage for this shape — a
   FROZEN-SURFACE change (seam-bug pause rule: recognizer surface
-  frozen after R3b), so extending it is a discuss-with-user design
-  item, grouped with the chacha-core-iterate family. NOT a 0.02
-  blocker; the rung completes when that lands.
+  frozen after R3b), grouped with the chacha-core-iterate family.
+  USER DECISION 2026-07-22: DEFERRED TO 0.03, bundled with the
+  un-iceboxed fragment-semantics program
+  (doc/2026-07-16_fragment-semantics-scoping.md — its revisit
+  trigger, "concrete non-recognized-fix need", has now fired twice).
+  0.03 sequencing: Phase A adequacy model first, then the no-zip
+  lookback-1 extension reviewed against that model, Phase B
+  shape-witness reification behind it (recognizer becomes untrusted
+  compiler with Lean-checked output). For 0.02 the rung ships as the
+  boundary pin — a deliberate demonstration of the refusal
+  discipline.
 - [ ] **`s20_expand32` / `s20_crypt32` rungs (stretch)**: extend to
   the full encrypt path as salsa.saw does (crypt32 at 63/64/65), each
   over the previous rung's replay-admitted result. Ends with the

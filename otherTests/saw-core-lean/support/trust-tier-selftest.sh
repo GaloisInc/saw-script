@@ -250,6 +250,15 @@ printf 'theorem t : True := by run_tac pure ()\n' > "$STAGE/lint-run-tac.lean"
 lint_case run-tac reject "run_tac"
 printf '#eval (1 : Nat)\n' > "$STAGE/lint-hash-eval.lean"
 lint_case hash-eval reject "#eval"
+# v4.32.0 bump re-review additions (2026-07-22): run_meta/run_elab
+# exist as commands there, and #eval! previously slipped the #eval
+# boundary regex.
+printf 'run_meta pure ()\n' > "$STAGE/lint-run-meta.lean"
+lint_case run-meta reject "run_meta"
+printf 'run_elab pure ()\n' > "$STAGE/lint-run-elab.lean"
+lint_case run-elab reject "run_elab"
+printf '#eval! (1 : Nat)\n' > "$STAGE/lint-hash-eval-bang.lean"
+lint_case hash-eval-bang reject "#eval"
 printf 'builtin_initialize x : Nat <- pure 3\n' > "$STAGE/lint-builtin-init.lean"
 lint_case builtin-init reject "builtin_initialize"
 printf '@[csimp] theorem c : id = id := rfl\n' > "$STAGE/lint-csimp.lean"
