@@ -346,9 +346,48 @@ machinery WITH the first promoted row in one commit):
   10: `generalize state[k]'(by decide)` before bv_decide whenever the
   two sides select through different bounds-proof terms (proof-variant
   selects atomize apart and yield spurious counterexamples).
-- [ ] **`llvm_popcount_eq`**: R2 fix-plumbing recipe (routine; same
-  shape as popcount32/E6), then bv_decide on the SWAR residue
-  `bvEq 32 (swar x) (pcChain x 32)`.
+Compositional ladder (0.02 coverage expansion, user-approved
+2026-07-22 after the doubleround composition landed). Each rung uses
+the realized pattern: leaves replay-admitted, composition by SAW
+overrides, residual glue discharged in Lean and replayed in turn.
+
+- [ ] **`s20_hash` over the replay-admitted `dr`** (the next rung of
+  examples/salsa.saw's ladder). First rung where a LOOP survives into
+  the residual: the C hash runs 10 doublerounds, then input-add and
+  little-endian byte packing, so expect the recurrence-shape bridges
+  (saw_self_ref_comp_iterate / foldl_eq_natRec_atWithDefault — the
+  popcount/ChaCha20 comprehension machinery) for the iterate shape,
+  plus seq/pack shuffles. Honest unknown: whether the Cryptol-side
+  rounds spelling reaches the recognized fix/iterate path.
+- [ ] **`s20_expand32` / `s20_crypt32` rungs (stretch)**: extend to
+  the full encrypt path as salsa.saw does (crypt32 at 63/64/65), each
+  over the previous rung's replay-admitted result. Ends with the
+  complete salsa20 encryption verified with Lean at every link — the
+  release-story showcase if it lands.
+- [ ] **chacha20-core `core` composition re-probe (SAW-side)**: the
+  earlier attempt stalled in SAW's normalizer with 80 qround override
+  applications ("Checking proof obligations core…", >10 min). The 8
+  qround rows are now replay-admittable, so re-probe; if the stall
+  reproduces, reduce it and file the normalizer issue upstream with
+  the reproducer (it blocks the chacha ladder, not the salsa one).
+
+- [x] **`llvm_popcount_eq` — DONE 2026-07-22** (native-eval tier,
+  16 s; gap row retired — its "sanctioned checked decision path"
+  blocker is exactly what the two-tier policy now provides). R2
+  plumbing reused from offline_lean_popcount32 with two portable
+  tricks: the emitted goal shadows its binder (`x` / `let x :=
+  Pure.pure x`), so the completed outline alpha-renames the outer
+  binder to `x0` (drift-safe) exactly as the exemplar's bits0/bits
+  split; and the inline `fix_body_` lambda is replaced by
+  `PCDischarge.pcBody x` in the goal def (definitionally equal —
+  this, not simp matching, is what makes pc_choose_eq applicable;
+  the exemplar does the same). The SWAR residue closes by bv_decide
+  after pushing through the NEW support bridges vecToBitVec_bvAnd/
+  bvMul/bvNat, a cond-push lemma, and `← getMsbD_vecToBitVec_lt`
+  (bits become extracts of the SAME BitVec atom; the SAT instance is
+  trivial). With this the 0.02 BV package tail is COMPLETE: q_eq
+  family (5), chacha-core qrounds (8), doubleround (compositional,
+  strict), popcount.
 - [x] **Resolution markers + trust-policy doc — DONE 2026-07-21.**
   Two-tier policy stated in doc/proof-cookbook.md ("Bitvector
   automation trust policy"); proof-gaps/README.md updated; every

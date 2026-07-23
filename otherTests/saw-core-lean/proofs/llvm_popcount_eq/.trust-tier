@@ -1,0 +1,6 @@
+# Non-strict trust tier for this row (2026-07-21 user decision):
+# bv_decide closes the 32-bit SWAR-popcount correctness residue; its
+# per-invocation proof-local native axioms are admitted for THIS ROW
+# ONLY. RESOLVE LATER: swap bv_decide -> smt and delete this file when
+# lean-smt BV proof reconstruction lands upstream.
+native-eval

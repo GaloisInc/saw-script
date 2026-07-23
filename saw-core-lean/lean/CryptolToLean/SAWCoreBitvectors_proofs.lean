@@ -457,6 +457,26 @@ theorem vecToBitVec_bvXor (w : Nat) (a b : Vec w Bool) :
     vecToBitVec (bvXor w a b) = vecToBitVec a ^^^ vecToBitVec b := by
   unfold bvXor; rw [vecToBitVec_bitVecToVec]
 
+/-- `vecToBitVec ∘ bvAnd` distributes over BitVec AND. Same mechanical
+    family as the Phase-9 block above; surfaced by the popcount SWAR
+    residue (llvm_popcount_eq). -/
+@[simp]
+theorem vecToBitVec_bvAnd (w : Nat) (a b : Vec w Bool) :
+    vecToBitVec (bvAnd w a b) = vecToBitVec a &&& vecToBitVec b := by
+  unfold bvAnd; rw [vecToBitVec_bitVecToVec]
+
+/-- `vecToBitVec ∘ bvMul` distributes over BitVec multiplication. -/
+@[simp]
+theorem vecToBitVec_bvMul (w : Nat) (a b : Vec w Bool) :
+    vecToBitVec (bvMul w a b) = vecToBitVec a * vecToBitVec b := by
+  unfold bvMul; rw [vecToBitVec_bitVecToVec]
+
+/-- `vecToBitVec ∘ bvNat` is `BitVec.ofNat`. -/
+@[simp]
+theorem vecToBitVec_bvNat (w k : Nat) :
+    vecToBitVec (bvNat w k) = BitVec.ofNat w k := by
+  unfold bvNat; rw [vecToBitVec_bitVecToVec]
+
 /-- `bvEq … = true` collapses to BitVec equality. Useful as a
     rewriting target for goals of the form `bvEq w a b = true`. -/
 theorem bvEq_true_iff_BitVec_eq (w : Nat) (a b : Vec w Bool) :
