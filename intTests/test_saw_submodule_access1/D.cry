@@ -14,6 +14,7 @@ submodule D2 where
 
   submodule D3 where
     d3 = d00 + d2 + 1  // 14229
+    d4 = d5
 
     type D3TySy = [32]
 
@@ -21,5 +22,6 @@ submodule D2 where
 //  - type synonyms and values
 d01 : D2::D3::D3TySy
 d01 = 5 + D2::d2   // D2 is not referencable till now!
-    + D2::D3::d3   
+    + D2::D3::d3
 
+d5 = 1
