@@ -640,16 +640,23 @@ the checked division/remainder helpers take. -/
 /-- SAWCore `bvToNat` — the unsigned value. -/
 noncomputable def bvToNat (n : Nat) (v : Vec n Bool) : Nat :=
   (vecToBitVec v).toNat
-/-- SAWCore `bvToInt` — the SIGNED (two's-complement) value
-(`BitVec.toInt`). -/
+/-- SAWCore `bvToInt` — the UNSIGNED value
+(`Prelude.sawcore:2113` "return the unsigned value"; the concrete
+simulator's `bvToIntOp` is `unsigned`, Concrete.hs). Realized as
+`BitVec.toNat` injected into `Int` — NOT `BitVec.toInt`, which is
+the signed conversion and belongs to `sbvToInt` only. (2026-07-23
+soundness fix: both conversions were `.toInt`, so `bvToInt`
+diverged from SAW on every sign-bit-set input — found by audit;
+the differential row now pins a sign-crossing case.) -/
 noncomputable def bvToInt (n : Nat) (v : Vec n Bool) : Int :=
-  (vecToBitVec v).toInt
+  Int.ofNat (vecToBitVec v).toNat
 /-- SAWCore `intToBv` — `k mod 2^n` for `k ≥ 0`, two's-complement
 encoding for `k < 0` (`BitVec.ofInt`). -/
 noncomputable def intToBv (n : Nat) (k : Int) : Vec n Bool :=
   bitVecToVec (BitVec.ofInt n k)
-/-- SAWCore `sbvToInt` — the signed value (same realization as
-`bvToInt`; SAW distinguishes the names, not the semantics). -/
+/-- SAWCore `sbvToInt` — the 2's-complement SIGNED value
+(`Prelude.sawcore:2116`; the concrete simulator's `sbvToIntOp` is
+`signed`). `BitVec.toInt` is exactly this. -/
 noncomputable def sbvToInt (n : Nat) (v : Vec n Bool) : Int :=
   (vecToBitVec v).toInt
 
