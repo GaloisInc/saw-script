@@ -92,16 +92,18 @@ Passing (the standing fences):
   residuals migrated as `differential/vector_zip_unequal` and
   `differential/nat_division_defined`).
 - Emitted-Lean byte-diff oracle: `.snapshots/op2-baseline`, re-cut
-  2026-07-15 after the full suite ran exit-0 on the release binary —
-  `support/emitted-lean-snapshot.sh diff .snapshots/op2-baseline`
-  clean at 307 artifacts (re-cut 2026-07-16 after wave 3 landed:
-  double-extract, goal-routing, tuple-swap, and rowround-ITP
-  artifacts added). (The earlier "1267" count was inflated by
-  a scan bug that swallowed retired baselines' frozen copies —
-  fixed: the scan now excludes `.snapshots/` wholesale. History: the
-  stale op1-baseline's 32 diffs were per-hunk reviewed — all the
-  expected OP-2 `atRuntimeCheckedM` migration — plus this release
-  work's own reviewed footprint.)
+  2026-07-24 immediately after a fully green `make test` on the
+  current binary — `support/emitted-lean-snapshot.sh diff
+  .snapshots/op2-baseline` clean at 372 artifacts. Before the
+  re-cut, every hunk of drift vs the previous (2026-07-16) baseline
+  was accounted for by committed, suite-verified work: 18 CHANGED
+  (the ten 2026-07-23 edge-case-matrix `observed.lean` rewrites +
+  the eight chacha qround emissions from the 2026-07-22
+  explicit-literal spec respelling) and 57 NEW (rows added during
+  0.02). The 2026-07-16 baseline is retired REVERSIBLY to
+  `.snapshots/superseded/op2-baseline-2026-07-16`. (History: the
+  earlier "1267" count was a scan bug — the scan now excludes
+  `.snapshots/` wholesale.)
 - Driver + workflow rows (`bash test.sh` per-row,
   `lean-driver-test.sh`) green, including the ChaCha20 core verify
   workflow (explicit-literal spec spelling, Pattern 10) and the
