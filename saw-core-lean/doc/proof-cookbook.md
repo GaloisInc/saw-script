@@ -306,9 +306,10 @@ consumers:
     pattern-based allowance sound — a hand-declared axiom cannot
     collide with the tier's name pattern, so a residual tier-pattern
     axiom can only come from a genuine bv_decide run);
-  * `support/trust-tier-selftest.sh` mutation-tests every guard (27
-    cases: tier sentinels, audit allowlist semantics, and the lint's
-    lexer semantics) on every conformance run.
+  * `support/trust-tier-selftest.sh` mutation-tests every guard (32
+    cases: tier sentinels, audit allowlist semantics, the lint's
+    lexer semantics, and the completed-outline binding guards) on
+    every conformance run.
 
 RESOLVE LATER (recorded): the tier exists because lean-smt's cvc5 BV proof
 reconstruction is not yet usable (2026-07-21 probe: its own BitVec tests

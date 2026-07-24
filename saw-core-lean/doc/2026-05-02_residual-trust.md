@@ -527,6 +527,22 @@ trust token: checkEvidence verifies sequent subsumption only; the
 recorded toolchain/hashes/axiom list document the one-shot kernel
 check and cannot re-verify it.
 
+Tier note (2026-07-24 audit, TIER-1): `offline_lean_replay` runs
+STRICT-tier only — it never reads a `.trust-tier` marker, so the
+labeled `native-eval` tier (bv_decide's per-invocation proof-local
+axioms) is a conformance-suite construct and is never honored at
+product-runtime admission; a native-eval proof replayed through the
+product path fails loudly with `axiom-outside-allowlist`. This
+asymmetry is deliberate (replay is never looser than CI).
+
+Completed-outline binding (R-1 fix, 2026-07-24 audit): on the
+completed-outline path, goal-presence is decided by the fresh
+emission (the authority), a completed file without a bare
+`def goal :` line is rejected outright, and user files mentioning
+the `GeneratedHarness` probe namespace are rejected — the
+closer↔goal binding check (`goal_closed : goal`) therefore ALWAYS
+runs on admitted replays.
+
 ### 3.3 `scNormalizeForLean` semantics-preservation (Phase 5 Link 2)
 
 **Status:** Pending catalog acknowledgment (this entry); SAWCore

@@ -185,6 +185,34 @@ if [ -f source.txt ]; then
     fi
 fi
 
+# Goal-presence is decided by the AUTHORITY (the tracked reference
+# artifact), never by the user's completed outline (R-1 fix,
+# 2026-07-24 audit — mirrors replay/lean-check-core.sh): reading it
+# from the staged completed file let an outline without a bare
+# `def goal :` line silently skip the closer↔goal binding gate. When
+# the reference carries a `def goal`, a completed outline that does
+# not present the same bare line is malformed — hard fail.
+GOAL_DEF_RE='^[[:space:]]*(noncomputable[[:space:]]+)?def[[:space:]]+goal[[:space:]]*:'
+if [ "$USING_COMPLETED_OUTLINE" -eq 1 ] \
+   && grep -qE "$GOAL_DEF_RE" "$EMITTED_REF_ABS" \
+   && ! grep -qE "$GOAL_DEF_RE" completed.lean; then
+    echo "FAIL: completed.lean does not present the emitted 'def goal :' line"
+    echo "(the tracked reference $EMITTED_REF_ABS defines the goal; a completed outline must keep it a bare top-level def so the goal_closed binding check can run)"
+    exit 1
+fi
+
+# The GeneratedHarness namespace exists only in harness-staged probe
+# files; user files have no legitimate mention of it, and a def
+# planted inside it is exactly the R-1 capture shape. Reject on
+# sight (mirrors replay/lean-check-core.sh).
+for user_file in proof.lean completed.lean; do
+    if [ -f "$user_file" ] && grep -qn 'GeneratedHarness' "$user_file"; then
+        grep -n 'GeneratedHarness' "$user_file"
+        echo "FAIL: user file mentions the GeneratedHarness probe namespace"
+        exit 1
+    fi
+done
+
 mkdir -p "$PROBE_DIR"
 if [ -n "$STAGED_EMITTED_ABS" ]; then
     cp "$STAGED_EMITTED_ABS" "$PROBE_DIR/Emitted.lean"
@@ -207,8 +235,11 @@ proof_targets() {
 }
 
 goal_output_requires_goal_closed() {
+    # Decided by the tracked reference artifact (the authority), not
+    # the staged file — on completed rows the staged Emitted.lean is
+    # the user's outline (R-1 fix, 2026-07-24 audit).
     [ -n "$STAGED_EMITTED_ABS" ] && \
-      grep -qE '^[[:space:]]*(noncomputable[[:space:]]+)?def[[:space:]]+goal[[:space:]]*:' "$PROBE_DIR/Emitted.lean"
+      grep -qE "$GOAL_DEF_RE" "$EMITTED_REF_ABS"
 }
 
 write_generated_probe() {

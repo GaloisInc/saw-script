@@ -187,6 +187,32 @@ Post-review fixes (2026-07-17, non-implementer review):
   mismatched property → CHECK-FAIL: completed-outline-drift).
   `workflows/replay_running_sum_verify` pins the green path.
 
+Post-audit fix (R-1, the 2026-07-24 soundness audit's one CRITICAL
+finding — confirmed end-to-end with a proof-of-`True` witness):
+- **Goal-presence is decided by the AUTHORITY, never the user's
+  file.** `has_goal_def` was computed by grepping the staged
+  `Emitted.lean`, which on the completed-outline path IS the user's
+  `completed.lean` (the driver overwrites it). A completed file with
+  no bare `def goal :` line set `has_goal_def=0`, silently skipping
+  the closer↔goal binding gate (`#check (goal_closed : goal)`), while
+  the per-def drift fallback emitted a doubled-namespace probe
+  (`GeneratedHarness.GeneratedHarness.goal`) that a user-planted def
+  satisfied — CHECK-OK on a closer proving only `True`. Fixed in both
+  consumers: the kernel reads goal-presence from `Generated.lean`
+  (the fresh emission) and hard-fails a goal-less completed outline
+  (`CHECK-FAIL: completed-outline-missing-goal-def` /
+  `authority-missing-goal-def`); the goal-less per-def branch is
+  REMOVED from the kernel (the single-goal replay path has no such
+  form — it survives only in the CI harness for module-artifact rows,
+  where the def list derives from the raw tracked reference);
+  user files mentioning the `GeneratedHarness` probe namespace are
+  rejected on sight (`harness-namespace-in-user-file`).
+  `lean-proof-test.sh` mirrors all three (authority = the tracked
+  `.lean.good` reference). Pins:
+  `saw-boundary/replay_reject_unbound_completed` (the audit witness,
+  end-to-end through SAW) + two `trust-tier-selftest.sh` cases
+  (goal-less outline, harness-namespace capture).
+
 Recorded deviations for the reviewer:
 1. **RESOLVED (2026-07-17, user-ratified the stronger course):** the
    Pi-telescope pin is IMPLEMENTED — and at the emission chokepoint

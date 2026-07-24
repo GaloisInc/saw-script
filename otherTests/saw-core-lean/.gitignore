@@ -20,13 +20,19 @@
 # Completed generated outlines (the edit-outline-and-replay workflow in
 # lean-proof-test.sh) are hand-maintained sources, not generated artifacts.
 !proofs/**/completed.lean
-!support-proofs/**/proof.lean
-!support-proofs/**/completed.lean
+!support-lemmas/**/proof.lean
+!support-lemmas/**/completed.lean
 # Gap rows preserve their (partial or over-budget) discharge attempts as
 # tracked sources — the gap must be visible, not a silent skip.
 !proof-gaps/**/proof.lean
 !proof-gaps/**/completed.lean
-!shape/**/*.shouldfail.lean
+# Negative probes are hand-written sources (category renamed
+# shape/ → negative/, 2026-07-17; the old `!shape/**` pattern left
+# every probe silently untracked until 2026-07-24).
+!negative/**/*.shouldfail.lean
+# Replay reject-row discharge sources: saw-boundary rows drive
+# offline_lean_replay against these proofDirs.
+!saw-boundary/**/rejected_proof/*.lean
 
 # When Test.hs runs us, it overrides HOME to this directory; elan
 # tries to bootstrap a toolchain config here. Drop the leftover.

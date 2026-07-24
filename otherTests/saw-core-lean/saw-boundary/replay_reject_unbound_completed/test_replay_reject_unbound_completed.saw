@@ -1,0 +1,15 @@
+// Replay reject pin: completed-outline goal binding (R-1,
+// 2026-07-24 soundness audit). The completed.lean here does NOT
+// present the emitted `def goal :` — it hides a verbatim copy of the
+// goal body under the doubled harness namespace
+// GeneratedHarness.GeneratedHarness.goal — and proof.lean closes only
+// `True`. Before the fix this passed CHECK-OK (has_goal_def read from
+// the user-controlled staged file went 0, silently skipping the
+// closer<->goal binding gate, while the per-def drift probe resolved
+// its LHS to the user's own def). The checker must instead hard-fail:
+// a completed outline on the single-goal replay path that lacks a
+// bare `def goal :` is malformed
+// (CHECK-FAIL: completed-outline-missing-goal-def).
+enable_experimental;
+fails (prove_print (offline_lean_replay "rejected_proof")
+  {{ \(x : [8]) (y : [8]) -> x + y == y + x }});

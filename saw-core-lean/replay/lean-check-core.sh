@@ -27,7 +27,12 @@
 #   completed.lean   — OPTIONAL completed outline; if present the
 #                      caller must also stage Generated.lean (the
 #                      reference emission wrapped in namespace
-#                      GeneratedHarness) for the drift check
+#                      GeneratedHarness) for the drift check. Both
+#                      must carry the single emitted `def goal :` —
+#                      goal-presence is decided by Generated.lean
+#                      (the authority), and a completed outline that
+#                      does not present the bare `def goal :` line is
+#                      rejected outright (R-1 fix, 2026-07-24 audit)
 #
 # Environment: ambient LEAN_PATH is CLEARED (seventh-audit amendment
 # 2) — Lean sees exactly the stage dir plus lake's own project paths.
@@ -98,10 +103,44 @@ bad_sorry=$(grep -n 'sorry' "$STAGE/Emitted.lean" \
     | grep -vF '| skip); all_goals sorry));' || true)
 [ -z "$bad_sorry" ] || { echo "$bad_sorry"; fail "unsanctioned-sorry-in-emitted"; }
 
-has_goal_def=0
-if grep -qE '^[[:space:]]*(noncomputable[[:space:]]+)?def[[:space:]]+goal[[:space:]]*:' "$STAGE/Emitted.lean"; then
+# Goal-presence is decided by the AUTHORITY, never by user-supplied
+# content (R-1 fix, 2026-07-24 audit). On the completed-outline path
+# the staged Emitted.lean IS the user's completed file (the caller
+# overwrites it), so reading goal-presence from it let a completed
+# outline without a bare `def goal :` line silently set
+# has_goal_def=0 and disable the closer↔goal binding gate — admitting
+# a closer that proves only `True`. The authority is the fresh
+# emission: Generated.lean on the completed path, Emitted.lean
+# (which IS the fresh emission) otherwise. The replay path always
+# emits exactly one `def goal`, so on the completed path both a
+# goal-less authority and a goal-less completed outline are hard
+# failures, never a silent branch.
+goal_def_re='^[[:space:]]*(noncomputable[[:space:]]+)?def[[:space:]]+goal[[:space:]]*:'
+if [ -f "$STAGE/completed.lean" ]; then
+    [ -f "$STAGE/Generated.lean" ] || fail "completed-without-generated-reference"
+    grep -qE "$goal_def_re" "$STAGE/Generated.lean" \
+        || fail "authority-missing-goal-def"
+    grep -qE "$goal_def_re" "$STAGE/Emitted.lean" \
+        || fail "completed-outline-missing-goal-def"
     has_goal_def=1
+else
+    has_goal_def=0
+    if grep -qE "$goal_def_re" "$STAGE/Emitted.lean"; then
+        has_goal_def=1
+    fi
 fi
+
+# The GeneratedHarness namespace exists only in checker-staged probe
+# files; user files have no legitimate mention of it, and a def
+# planted inside it is exactly the R-1 capture shape (a user def the
+# drift probe could resolve instead of the reference). Reject on
+# sight, both paths.
+for uf in proof.lean completed.lean; do
+    if [ -f "$STAGE/$uf" ] && grep -qn 'GeneratedHarness' "$STAGE/$uf"; then
+        grep -n 'GeneratedHarness' "$STAGE/$uf" | sed "s|$STAGE/||g"
+        fail "harness-namespace-in-user-file"
+    fi
+done
 
 # 3. Anti-trivialization (seventh-audit amendment 1): a goal the
 # emission pipeline has trivialized closes by rfl/trivial; reject.
@@ -115,36 +154,23 @@ if [ "$has_goal_def" -eq 1 ]; then
     fi
 fi
 
-# 4. Completed-outline drift (when staged): the completed goal must be
-# definitionally the generated goal; per-def form for module
-# artifacts; the check file must be non-vacuous.
+# 4. Completed-outline drift (when staged): the completed goal must
+# be definitionally the generated goal. The completed path guarantees
+# has_goal_def=1 (enforced above), so the probe is a fixed literal
+# comparing the reference goal to the user's goal by rfl. (A former
+# per-def branch for goal-less completed files was the R-1 hole: its
+# awk read namespaces from the ALREADY-WRAPPED Generated.lean,
+# producing a doubled-namespace LHS a user def could satisfy. Removed
+# 2026-07-24 — the trust kernel has no goal-less completed path.)
 if [ -f "$STAGE/completed.lean" ]; then
-    [ -f "$STAGE/Generated.lean" ] || fail "completed-without-generated-reference"
     gen_out=$(run_lean -o "$STAGE/Generated.olean" "$STAGE/Generated.lean") || {
         echo "$gen_out"; fail "generated-reference-does-not-compile"; }
     {
         echo "import Generated"
         echo "import Emitted"
         echo
-        if [ "$has_goal_def" -eq 1 ]; then
-            echo "#check (show GeneratedHarness.goal = goal from rfl)"
-        else
-            awk '
-              /^[[:space:]]*namespace[[:space:]]+/ { ns = $2; next }
-              /^[[:space:]]*end[[:space:]]+/ { ns = ""; next }
-              /^[[:space:]]*(noncomputable[[:space:]]+)?def[[:space:]]+/ {
-                name = ""
-                for (i = 1; i <= NF; i++) if ($i == "def") { name = $(i+1); break }
-                sub(/[:(].*/, "", name)
-                if (name != "") {
-                  q = (ns != "" ? ns "." name : name)
-                  print "#check (show GeneratedHarness." q " = " q " from rfl)"
-                }
-              }
-            ' "$STAGE/Generated.lean"
-        fi
+        echo "#check (show GeneratedHarness.goal = goal from rfl)"
     } > "$STAGE/drift-check.lean"
-    grep -q '^#check' "$STAGE/drift-check.lean" || fail "vacuous-drift-check"
     if ! drift_out=$(run_lean "$STAGE/drift-check.lean") \
        || printf '%s\n' "$drift_out" | grep -qE '^[^[:space:]]+: error'; then
         echo "$drift_out"; fail "completed-outline-drift"

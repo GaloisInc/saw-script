@@ -1,0 +1,15 @@
+Loading file "test_replay_reject_unbound_completed.saw"
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in offline_lean_replay
+   test_replay_reject_unbound_completed.saw:14:21-14:57 in (callback)
+   (builtin) in prove_print
+   test_replay_reject_unbound_completed.saw:14:8-15:47 in (callback)
+   (builtin) in fails
+   test_replay_reject_unbound_completed.saw:14:1-15:47 (at top level)
+offline_lean_replay: Lean check FAILED — goal not admitted.
+CHECK-FAIL: completed-outline-missing-goal-def
+
+
+
+

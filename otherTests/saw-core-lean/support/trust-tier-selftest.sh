@@ -19,6 +19,8 @@
 #     builtin_initialize, csimp, debug.*), cannot-classify rejections
 #     (raw/interpolated strings, non-ASCII primes, ambiguous ]'),
 #     and a no-false-positive acceptance of legitimate shapes.
+#   Completed-outline binding, R-1 (via lean-proof-test.sh):
+#     goal-less completed outline, harness-namespace capture.
 #
 # Invoked by test.sh (conformance and default test verbs). Stages
 # rows under ../.tier-selftest/<case>/ so relative paths match real
@@ -295,6 +297,33 @@ example (h : 0 < 2) : bits[0]'h = bits[0]'(by omega) := rfl
 theorem tier_ok : v_1'''' = 3 := rfl
 EOF
 lint_case ok-shapes accept
+
+# Completed-outline binding guards (R-1 fix, 2026-07-24 audit):
+# goal-presence is decided by the tracked reference artifact, and a
+# completed outline that does not present the bare `def goal :` line
+# must hard-fail — never silently skip the closer↔goal binding gate.
+# Reuses a real tracked artifact path so the reference carries a
+# genuine `def goal`.
+R1_SOURCE='otherTests/saw-core-lean/workflows/cryptol_running_sum_verify/test_cryptol_running_sum_verify.eq_prove0.lean'
+mkdir -p "$STAGE/unbound-completed"
+printf '%s\n' "$R1_SOURCE" > "$STAGE/unbound-completed/source.txt"
+printf 'import CryptolToLean\nabbrev goal : Prop := True\n' \
+    > "$STAGE/unbound-completed/completed.lean"
+printf 'import Emitted\ntheorem goal_closed : True := trivial\n' \
+    > "$STAGE/unbound-completed/proof.lean"
+run_case unbound-completed "does not present the emitted 'def goal :' line"
+
+# The GeneratedHarness probe namespace is harness-internal; a user
+# file that mentions it (the R-1 capture shape: planting a def the
+# drift probe could resolve instead of the reference) is rejected on
+# sight.
+mkdir -p "$STAGE/harness-namespace-capture"
+printf '%s\n' "$R1_SOURCE" > "$STAGE/harness-namespace-capture/source.txt"
+printf 'import CryptolToLean\ndef goal : Prop := True\ndef GeneratedHarness.GeneratedHarness.goal : Prop := True\n' \
+    > "$STAGE/harness-namespace-capture/completed.lean"
+printf 'import Emitted\ntheorem goal_closed : True := trivial\n' \
+    > "$STAGE/harness-namespace-capture/proof.lean"
+run_case harness-namespace-capture "GeneratedHarness probe namespace"
 
 if [ "$status" -eq 0 ]; then
     echo "trust-tier-selftest: ALL CASES OK"
