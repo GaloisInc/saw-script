@@ -80,10 +80,11 @@ Passing (the standing fences):
   a new undocumented declaration warns in `lake build`).
 - `cabal test saw-core-lean-smoketest`: 74 tests, including the
   Slice 7 anti-regression source lint.
-- `otherTests/saw-core-lean`: `make conformance` exit 0 — 233 rows
-  in conformance scope (116 differential SAW-vs-Lean evaluation,
-  91 obligation shape, 26 saw-boundary), with emitted artifacts
-  elaborated. Tree restructured 2026-07-15 (see
+- `otherTests/saw-core-lean`: `make conformance` exit 0 — 235 rows
+  in conformance scope (117 differential SAW-vs-Lean evaluation,
+  91 obligation shape, 27 saw-boundary; recounted from disk
+  2026-07-23 after the intmod boundary/rejection rows landed), with
+  emitted artifacts elaborated. Tree restructured 2026-07-15 (see
   otherTests/saw-core-lean/README.md): `workflows/` split out of
   `drivers/` for the end-to-end SAWScript rows; `shape/` renamed
   (now `negative/`); the 17 legacy `drivers/conformance_*` litmus
@@ -105,7 +106,7 @@ Passing (the standing fences):
   `lean-driver-test.sh`) green, including the ChaCha20 core verify
   workflow (explicit-literal spec spelling, Pattern 10) and the
   prelude auto-emit driver; full `make test` exit 0 on the
-  restructured tree (57 gaps in full-suite inventory scope,
+  restructured tree (58 gaps in full-suite inventory scope,
   census above).
 
 Known-gap census (release 0.02 posture, taken 2026-07-23; +1 the
@@ -270,11 +271,17 @@ Known holes, all loud or pinned:
   proof-carrying form. Four more rows un-gapped (census 68→64), and
   the saw-lean-example invol/eq_spec goals now discharge end-to-end
   from raw emitted artifacts — the eta-wrapper hole is closed.
-- Filed 2026-07-12 (pinned `saw-boundary/polymorphic_seq_module_rejection`):
-  whole-module translation of polymorphic indexing comprehensions
-  rejects at `Prelude::Either@core` — same recursor-convention hole as
-  the parked Stream@core pair; blocks the saw-lean-example
-  `write_lean_cryptol_module` step.
+- RESOLVED 2026-07-19 (was: filed 2026-07-12, whole-module
+  translation of polymorphic indexing comprehensions rejected at
+  `Prelude::Either@core`): the Stream@core hole closed 2026-07-17
+  (kind-directed domain map) and the function-carrier transport
+  mismatch closed 2026-07-19 (mode-uniform type-subject spine
+  convention, `doc/2026-07-18_transport-carrier-design.md`). The
+  demo's REDUCED rev.cry module now translates and elaborates
+  un-`fails`-wrapped (`examples/saw-lean/out/Rev.lean`); the interim
+  `saw-boundary/polymorphic_seq_module_rejection` pin was retired
+  with the fix. Only the FULL module still rejects — at raw-position
+  `Prelude.error`, a different (intended) boundary.
 - Two Vec/BitVec round-trip axioms remain in the support library TCB
   (cheap, separately tracked proof task).
 
@@ -300,7 +307,8 @@ detailed punch list in TODO.md):
    pair-at-Prop rejection), proof-primitive realization families,
    user datatypes — example-driven coverage.
 5. Pre-release gate: the whole-project multi-reviewer skeptical
-   soundness review (TODO.md release gate), Cabal data-files
-   packaging, and the recorded replay hardening follow-ups
-   (CI-harness rebase onto the factored checker; binder-type
-   telescope comparison).
+   soundness review (TODO.md release gate) and the recorded replay
+   hardening follow-ups (CI-harness rebase onto the factored
+   checker; binder-type telescope comparison). [Cabal data-files
+   relocatable packaging: DONE 2026-07-23 — assets ship as package
+   data; `SAW_LEAN_ROOT` is now an optional dev override.]

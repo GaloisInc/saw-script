@@ -162,8 +162,15 @@ End-to-end test: `otherTests/saw-core-lean/proofs/walkthrough/proof.lean`.
 
 ## Pattern 7: Recursive fixed-point obligations
 
-**Shape:** a generated proposition such as
-`saw_fix_unique_exists α body`.
+**Shape:** for a WRAPPED (value-domain) `Prelude.fix`, the emission
+is a recognized-class proven realization — Class F bounded-lookback
+recurrences carry the per-instance obligation
+`saw_fix_bounded_productive n α body` (fields `seed`/`total`/
+`lookback`, all PROVEN by unfolding the concrete body), Class
+S-single streams carry `saw_stream_single_productive` — and
+unrecognized wrapped shapes REJECT at translation (the old wrapped
+`saw_fix_unique_exists` contract is retired). Raw-position fixes
+emit `saw_fix_unique_exists_raw α body`.
 
 **Discharge:** prove the emitted contract in Lean. Small cases may close
 by unfolding the literal body and proving uniqueness directly; larger

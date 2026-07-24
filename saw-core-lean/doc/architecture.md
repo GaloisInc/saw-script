@@ -26,10 +26,15 @@ Three SAWScript primitives drive the backend:
   := by sorry` stub the user discharges. EMISSION-ONLY: the goal is
   left unsolved on the SAW side (wrap in `fails` to continue a
   script); SAW never claims a goal on the strength of an export.
-- `offline_lean_replay : String -> ProofScript ()` — reserved
-  SAW-side discharge (kernel-check the completed proof, then admit).
-  Registered but disabled in this release; always fails with a
-  diagnostic.
+- `offline_lean_replay : String -> ProofScript ()` — the SAW-side
+  DISCHARGE path (landed 2026-07-16): re-emits the goal fresh
+  in-process (the authority), kernel-checks the user's completed
+  proof against it under the factored trust kernel
+  (`saw-core-lean/replay/lean-check-core.sh` — exact-match axiom
+  allowlist, placeholder policy, drift check, source lint), and
+  admits the goal only on success, recording `LeanReplayEvidence`.
+  Assets resolve relocatably (Cabal data-files + cache staging,
+  2026-07-23); `SAW_LEAN_ROOT` is an optional dev/CI override.
 
 ## Translation pipeline
 
@@ -95,13 +100,13 @@ saw-core-lean/
 │   ├── 2026-07-14_release-plan.md           (current plan-of-record)
 │   └── archive/              (dated trajectory docs + concluded plans/audits)
 ├── lean/CryptolToLean/       (handwritten Lean support library)
-│   ├── SAWCorePrimitives.lean         (axiom set: bv ops, Either, …)
-│   ├── SAWCorePreludeExtra.lean       (iteDep / ite wrappers)
+│   ├── SAWCorePrimitives.lean         (primitive realizations: bv ops, Either, …)
+│   ├── SAWCorePreludeExtra.lean       (iteDep / ite wrappers, streamScanl)
 │   ├── SAWCoreVectors.lean            (Vec n α := Vector α n alias)
-│   ├── SAWCoreScaffolding.lean        (Lean Bool / Nat / Int re-exports)
 │   ├── SAWCoreBitvectors.lean         (bv-Vec aliases)
-│   ├── SAWCoreBitvectors_proofs.lean  (Phase 3b: ~15 axiomatic bv lemmas)
-│   └── SAWCorePrelude_proofs.lean     (P3-4: addNat/gen/foldr lemmas)
+│   ├── SAWCoreBitvectors_proofs.lean  (bv identity THEOREMS — zero axioms)
+│   ├── SAWCorePrelude_proofs.lean     (addNat/gen/foldr lemmas — zero axioms)
+│   └── SAWCoreCtorOrder.lean          (saw_ctor_order assertion command)
 ├── src/SAWCoreLean/          (Haskell translator)
 │   ├── Lean.hs               (top-level entry points)
 │   ├── Term.hs               (term translation)
@@ -129,10 +134,13 @@ Tests live across:
   Lean → optional `lake env lean` verification). Runs via
   `cabal test saw-core-lean-tests` or
   `make -C otherTests/saw-core-lean test`.
-- `otherTests/saw-core-lean/{shape,saw-boundary,proofs}/` — bespoke
-  per-test directories: `shape/` and `saw-boundary/` for the
-  lockdown gate-firing tests, `proofs/offline_t{1,3,4}/` and
-  `proofs/walkthrough/` for end-to-end semantic verification.
+- `otherTests/saw-core-lean/{negative,saw-boundary,proofs}/` —
+  bespoke per-test directories: `negative/` (hand-rolled shouldfail
+  probes) and `saw-boundary/` (rejection/boundary litmuses,
+  including the lockdown gate-firing tests), `proofs/` for
+  end-to-end proof discharge (see
+  `otherTests/saw-core-lean/README.md` for the full category
+  taxonomy).
 
 ## Soundness boundaries
 
@@ -144,14 +152,20 @@ Quick summary:
   `#rec` survivors), `RejectedPrimitive` (`fix_unfold` and other
   primitives with no proof-carrying interface),
   `scNormalize` 100-iter cap. Each pinned by a regression test.
-- **Proof-carrying `Prelude.fix`**: fixed-point terms emit the
-  translated body plus an explicit Lean contract such as
-  `saw_fix_unique_exists`. For wrapped values, this contract requires a
-  unique fixed point over the full `Except String α` space, so an
-  `Except.error` fixed point cannot coexist with the chosen successful
-  value. The old stream/vector structural helper lowerings have been
-  removed; recurrence-specific reasoning belongs in Lean-checked proof
-  scripts, not Haskell classifiers.
+- **Proof-carrying `Prelude.fix`** (two-state since R4,
+  2026-07-16): a WRAPPED (value-domain) fix either matches a
+  recognized productive class and lowers to a PROVEN realization —
+  Class F bounded-lookback recurrences via `saw_fix_bounded_choose`
+  under the per-instance proven obligation
+  `saw_fix_bounded_productive`, Class S single-step stream
+  corecursion via `saw_stream_realize` under
+  `saw_stream_single_productive` — or REJECTS with a named
+  diagnostic carrying the recognizer's reason. The wrapped
+  unique-fixed-point contract (`saw_fix_unique_exists`) is RETIRED
+  and no emitter may produce it (the driver harness's
+  obsolete-helper scan enforces this). Raw-position fixes
+  (function/proof/index results) keep the raw proof-carrying
+  contract `saw_fix_unique_exists_raw`.
 - **Universe collapse**: `translateSort` maps every non-Prop SAW
   sort to Lean `Type`. Pre-`polymorphismResidual` this would
   weaken; the gate enforces that only Type-0 binders reach

@@ -15,7 +15,7 @@ expected rejection — nothing is silently red.
 | `drivers/` | Golden + elaboration pins for translation families: module translation (`cryptol_module_*`), auto-emission (`*_auto_emit`), and emission-surface litmus (arithmetic, records, sequences, …). | …you're pinning translator output shape for a surface, without an executable comparison or workflow framing. |
 | `proofs/` | Completed Lean discharges of emitted goals (sorry-free, axiom-audited every run). | …a workflow/driver goal has a real proof. |
 | `proof-gaps/` | Documented undischargeable or parked proofs (GAP.md states exactly why and what unblocks it). | …the obligation emits but cannot honestly be closed yet. |
-| `support-proofs/` | Standalone proofs ABOUT the Lean support library's realizations (no SAW run). | …you're verifying library semantics, not emission. |
+| `support-lemmas/` | Standalone proofs ABOUT the Lean support library's realizations (no SAW run). | …you're verifying library semantics, not emission. |
 | `negative/` | Hand-rolled NEGATIVE probes (`*.shouldfail.lean`) that must FAIL elaboration — soundness checks on the support library. | …you're pinning that a non-conforming/wrong shape is rejected by Lean. |
 | `stretch/` | Large stress probes excluded from default gates. | …it's scalability evidence, not a fence. |
 | `support/` | The harness scripts themselves. | — |

@@ -139,7 +139,7 @@ make -C otherTests/saw-core-lean test
 ```
 
 Lean toolchain pinned in `lean/lean-toolchain`
-(`leanprover/lean4:v4.29.1`).
+(`leanprover/lean4:v4.32.0`).
 
 ## Tests
 

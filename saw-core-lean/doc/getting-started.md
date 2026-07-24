@@ -33,10 +33,11 @@ fails with `1 unsolved subgoal(s)`, which the `fails` wrapper
 converts back to success so the script continues. SAW never claims a
 goal on the strength of an export (this deliberately differs from
 `offline_rocq` and the offline SMT exporters, which admit on
-emission). The proof happens in Lean, in steps 2–3 below; a future
-`offline_lean_replay` will let SAW check the completed proof file
-itself and only then admit the goal (the command exists but is
-disabled in this release).
+emission). The proof happens in Lean, in steps 2–3 below. Once the
+proof is complete, `offline_lean_replay "<proof dir>"` is the
+SAW-side discharge path: it re-emits the goal fresh, kernel-checks
+your completed proof against it under the factored trust kernel,
+and only then admits the goal.
 
 The emitted file looks like this (regenerated 2026-07-15 from the
 exact script above):
@@ -121,7 +122,7 @@ few minutes); subsequent builds reuse the cache.
 
 > **In-repo demo of the same pattern**: `examples/saw-lean/proof/`
 > is a two-file Lake project using this exact `[[require]]` form
-> with a *relative* path (`../../saw-core-lean/lean`). Copy its
+> with a *relative* path (`../../../saw-core-lean/lean`). Copy its
 > `lakefile.toml` as a starting template for your own project.
 
 ## Step 3: discharge the goal
@@ -190,10 +191,13 @@ support-library functions that were axioms are now defined:
 - **Concrete-width and symbolic bv goals** should use checked Lean proof
   methods: named `BitVec`/SAW bridge lemmas, `simp`, `grind`, and
   `omega`/`bv_omega` where applicable, after manually lifting through
-  `vecToBitVec` when needed. Plain `bv_decide`/`bv_check` are not accepted
-  proof-discharge mechanisms under the current backend trust policy because
-  substantial uses introduce proof-local native-evaluation axioms. See
-  [`doc/proof-cookbook.md`](proof-cookbook.md) for current recipes.
+  `vecToBitVec` when needed. `bv_decide` sits under a TWO-TIER trust
+  policy (2026-07-21): the default STRICT tier does not accept it
+  (substantial uses introduce proof-local native-evaluation
+  axioms), but a per-row, loudly-labeled `native-eval` tier admits
+  those per-invocation axioms on rows carrying a `.trust-tier`
+  marker. See [`doc/proof-cookbook.md`](proof-cookbook.md)
+  §"Bitvector automation trust policy" for the authoritative rules.
 
 - **Integer / IntMod / Rational arithmetic.** `intAdd`, `intDiv`,
   `intMod`, `intModAdd`, `rationalAdd`, etc. are `@[reducible]`

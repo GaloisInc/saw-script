@@ -713,7 +713,14 @@ budget stays a differential-harness limitation.
     reject) before release; the audit report is a doc/ artifact.
 
 - [ ] **Upstream sync: rebase onto GaloisInc/saw-script:master
-  (added 2026-07-23, user request).** The backend lives on a fork
+  (added 2026-07-23, user request; ON HOLD 2026-07-23, user
+  decision: wait for the SAW maintainers to say how they want
+  PR #3214 landed — merge-commit / squash / curated series — since
+  two of the three outcomes would discard or supersede a sync done
+  now; conflicts only block the merge button, not review, so
+  waiting doesn't impede them. Hedge if the wait stretches: a
+  throwaway trial merge on a scratch branch, never pushed, to
+  measure resolution rot.)** The backend lives on a fork
   branch (`saw-core-lean`) with an OPEN UPSTREAM PR —
   https://github.com/GaloisInc/saw-script/pull/3214 — so this is
   not internal housekeeping: the rebase is what keeps that PR

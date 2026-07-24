@@ -29,7 +29,7 @@ legacy); `saw-core-lean/doc/getting-started.md` walks this flow.
 - `write_lean_cryptol_module` — translate every Cryptol top-level
   in a `.cry` source into a `namespace <Mod>` block of `def`s.
 - `offline_lean` — punt a SAWScript proof obligation to Lean as a
-  `def goal : Prop := <Prop>` plus a
+  `noncomputable def goal : Prop := <Prop>` plus a
   `theorem goal_holds : goal := by sorry` stub the user can open and
   discharge. EMISSION-ONLY: the goal is left unsolved on the SAW
   side (`demo.saw` wraps each `prove_print` in `fails`); SAW never
@@ -67,24 +67,26 @@ The `out/` directory is created automatically. `saw` writes:
 out/
 ├── idBool.lean         # \(b : Bit) -> b           via write_lean_term
 ├── implRev.lean        # implRev`{4,[8]}           via write_lean_term
+├── Rev.lean            # reduced module (implRev)  via write_lean_cryptol_module
 ├── invol_prove0.lean   # revInvolutive proof goal  via offline_lean
 └── eq_spec_prove0.lean # impl_eq_spec proof goal   via offline_lean
 ```
 
-`out/Rev.lean` is NOT produced: whole-module translation of
-`rev.cry` rejects at SAW translation time — `specRev`'s built-in
-`reverse` reaches `Prelude.error` demanded at a raw position (the
-audited raw-error disposition), and the reduced module (implRev
-alone) rejects at `Prelude::Either@core`, pinned by
-`otherTests/saw-core-lean/saw-boundary/polymorphic_seq_module_rejection`.
-`demo.saw` wraps the step in `fails` so the run completes; the two
+`out/Rev.lean` IS produced (since 2026-07-18): the reduced module
+(implRev alone) translates and elaborates, un-`fails`-wrapped —
+differentially pinned by
+`otherTests/saw-core-lean/differential/cryptol_rev_module`. Only
+the FULL module (`out/RevFull.lean`) still rejects at SAW
+translation time: `specRev`'s built-in `reverse` reaches
+`Prelude.error` demanded at a raw position (the audited raw-error
+disposition), so `demo.saw` wraps that one step in `fails`. The two
 `prove_print (offline_lean …)` steps are likewise `fails`-wrapped
 because emission leaves the goals unsolved by design.
 
 Every file imports `CryptolToLean` and elaborates against the
 support library shipped with `saw-core-lean/lean/`. The
-`_prove0.lean` files contain a `def goal : <Prop>` + a placeholder
-`theorem goal_holds : goal := by sorry`.
+`_prove0.lean` files contain a `noncomputable def goal : <Prop>` +
+a placeholder `theorem goal_holds : goal := by sorry`.
 
 ### Step 2 — Copy emitted goals into the Lake project
 

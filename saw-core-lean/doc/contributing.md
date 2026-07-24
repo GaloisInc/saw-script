@@ -177,12 +177,12 @@ file, the framework also runs `lake env lean` on each emitted
 `.lean`.
 
 **Lean-only** (for tests that exercise the support library
-directly, no SAW involvement): an `otherTests/saw-core-lean/{checks,proofs}/*`
-directory with a bespoke `test.sh` that runs `lake env lean` on
-probe files. Mirror the existing
-`otherTests/saw-core-lean/checks/error_prop/` or
-`otherTests/saw-core-lean/proofs/walkthrough/`
-patterns.
+directly, no SAW involvement): an
+`otherTests/saw-core-lean/{negative,support-lemmas}/*` row (data
+only — the shared harnesses in `support/` run them; per-subdir
+scripts are forbidden by the test.sh design rules). Mirror the
+existing `otherTests/saw-core-lean/negative/error_prop/` or
+`otherTests/saw-core-lean/proofs/walkthrough/` patterns.
 
 ## How to add a proof of an offline_lean goal
 
