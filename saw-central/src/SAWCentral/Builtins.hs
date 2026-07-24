@@ -234,7 +234,7 @@ import qualified Data.ByteString.Lazy as BS
 import Data.Bits (xor)
 import Data.Word (Word64)
 import Numeric (showHex)
-import Data.List (isPrefixOf, isInfixOf, sort, intersperse)
+import Data.List (isPrefixOf, isInfixOf, isSuffixOf, sort, intersperse)
 import qualified Data.Map as Map
 import Data.Maybe (catMaybes)
 import Data.Parameterized.Classes (KnownRepr(..))
@@ -249,6 +249,7 @@ import Data.Time.Clock
 
 import System.Directory
 import qualified System.Environment as Env
+import qualified Paths_saw
 import qualified System.Exit as Exit
 import qualified Data.Text.IO as TextIO
 import System.IO
@@ -1433,6 +1434,80 @@ leanReplayFingerprint txt =
     h = foldl (\acc c -> (acc `xor` fromIntegral (fromEnum c)) * 1099511628211)
           14695981039346656037 txt
 
+-- | Resolve the Lean replay assets: the lake project root the
+-- checker BUILDS IN, and the factored checker script itself. Two
+-- modes (relocatable packaging, 2026-07-23):
+--
+--   * @SAW_LEAN_ROOT@ set (dev/CI): the saw-script checkout root,
+--     used exactly as before — the harnesses pin this so
+--     conformance runs exercise the same tree they test.
+--
+--   * unset (installed/relocatable): the assets ship as Cabal
+--     @data-files@ ('Paths_saw.getDataDir'). The checker script and
+--     audit awk scripts run from the data directory directly, but
+--     @lake build@ and the replay staging both WRITE inside the
+--     project root and an installed data directory is not writable
+--     — so the lake project is staged into a per-content-fingerprint
+--     user cache directory (XDG cache) and reused across runs. A
+--     changed support library or toolchain pin changes the
+--     fingerprint and restages; the fingerprint covers file NAMES
+--     and CONTENTS of every shipped project file, so a stale cache
+--     can never satisfy a newer saw. Staging is crash-safe: copy to
+--     a temp sibling, write the trailing @.staged-ok@ marker, then
+--     atomically rename — a directory without the marker is never
+--     trusted, and losing a rename race to a concurrent stager is
+--     fine because the same fingerprint implies the same contents.
+resolveLeanReplayAssets :: IO (FilePath, FilePath)
+resolveLeanReplayAssets = do
+  mroot <- Env.lookupEnv "SAW_LEAN_ROOT"
+  case mroot of
+    Just r | not (null r) ->
+      return ( r </> "saw-core-lean" </> "lean"
+             , r </> "saw-core-lean" </> "replay"
+                 </> "lean-check-core.sh" )
+    _ -> do
+      dataDir <- Paths_saw.getDataDir
+      let dataLean   = dataDir </> "saw-core-lean" </> "lean"
+          coreScript = dataDir </> "saw-core-lean" </> "replay"
+                         </> "lean-check-core.sh"
+      okData <- doesFileExist coreScript
+      unless okData $ fail $ unlines
+        [ "offline_lean_replay: bundled Lean assets not found at"
+        , "  " ++ coreScript
+        , "Reinstall saw (the assets ship as Cabal data-files), or"
+        , "set SAW_LEAN_ROOT to a saw-script checkout root."
+        ]
+      libNames <- sort . filter (".lean" `isSuffixOf`)
+                    <$> listDirectory (dataLean </> "CryptolToLean")
+      let relFiles =
+            [ "lakefile.toml", "lean-toolchain", "lake-manifest.json"
+            , "CryptolToLean.lean" ]
+            ++ [ "CryptolToLean" </> f | f <- libNames ]
+      contents <- mapM (\rel -> readFile (dataLean </> rel)) relFiles
+      let fpText = leanReplayFingerprint
+            (concat (zipWith (\n c -> n ++ "\0" ++ c) relFiles contents))
+          fpTag = map (\c -> if c == ':' then '-' else c)
+                    (Text.unpack fpText)
+      cacheBase <- getXdgDirectory XdgCache "saw-core-lean"
+      let cacheDir = cacheBase </> ("lean-" ++ fpTag)
+          marker   = cacheDir </> ".staged-ok"
+      staged <- doesFileExist marker
+      unless staged $ do
+        createDirectoryIfMissing True cacheBase
+        let tmp = cacheBase </> ("staging-tmp-" ++ fpTag)
+        tmpLeft <- doesDirectoryExist tmp
+        when tmpLeft $ removeDirectoryRecursive tmp
+        createDirectoryIfMissing True (tmp </> "CryptolToLean")
+        mapM_ (\rel -> copyFile (dataLean </> rel) (tmp </> rel))
+              relFiles
+        writeFile (tmp </> ".staged-ok") (Text.unpack fpText)
+        renameDirectory tmp cacheDir `Ex.catch` \e -> do
+          nowStaged <- doesFileExist marker
+          if nowStaged
+            then removeDirectoryRecursive tmp
+            else Ex.throwIO (e :: Ex.IOException)
+      return (cacheDir, coreScript)
+
 -- | Admit the current goal iff a user-supplied Lean discharge
 -- kernel-checks against the goal SAW emits, under the factored trust
 -- kernel (saw-core-lean/replay/lean-check-core.sh) that the CI proof
@@ -1447,27 +1522,15 @@ leanReplayFingerprint txt =
 -- the closer's axiom audit (amendment 3). One goal per call
 -- (goalNum-independent staging).
 --
--- Deployment (v1): the checker and pinned library are located via
--- the SAW_LEAN_ROOT environment variable (the saw-script checkout
--- root). Packaging a relocatable installation is release work.
+-- Deployment: assets resolve through 'resolveLeanReplayAssets' —
+-- SAW_LEAN_ROOT (dev/CI checkout override) or the bundled Cabal
+-- data-files with cache staging (relocatable installs).
 offline_lean_replay :: FilePath -> ProofScript ()
 offline_lean_replay proofDir =
   execTactic $ tacticSolve $ \g ->
   do sc <- getSharedContext
      p <- io $ sequentToProp sc (goalSequent g)
-     mroot <- io $ Env.lookupEnv "SAW_LEAN_ROOT"
-     root <- case mroot of
-       Just r | not (null r) -> return r
-       _ -> fail $ unlines
-         [ "offline_lean_replay: SAW_LEAN_ROOT is not set."
-         , "Point it at the saw-script checkout root so replay can"
-         , "find the pinned Lean support library"
-         , "(saw-core-lean/lean) and the factored checker"
-         , "(saw-core-lean/replay/lean-check-core.sh)."
-         ]
-     let projRoot = root </> "saw-core-lean" </> "lean"
-         coreScript = root </> "saw-core-lean"
-                        </> "replay" </> "lean-check-core.sh"
+     (projRoot, coreScript) <- io resolveLeanReplayAssets
      ok <- io $ doesFileExist coreScript
      unless ok $ fail $
        "offline_lean_replay: checker not found at " ++ coreScript

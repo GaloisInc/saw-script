@@ -532,7 +532,27 @@ Gate:
   (no path admits ofReduceBool on a strict-tier row; markers can't
   be satisfied vacuously; replay enforces the identical per-row
   tiering as the conformance harness).
-- [ ] Cabal data-files relocatable packaging.
+- [x] **Cabal data-files relocatable packaging — DONE 2026-07-23.**
+  saw.cabal ships the lake project (lakefile.toml, lean-toolchain,
+  lake-manifest.json, CryptolToLean.lean, CryptolToLean/*.lean) and
+  the three replay trust-kernel scripts as `data-files`;
+  `offline_lean_replay` resolves via `resolveLeanReplayAssets`
+  (Builtins.hs): SAW_LEAN_ROOT keeps its exact dev/CI checkout
+  semantics; unset, assets come from Paths_saw.getDataDir and the
+  lake project stages ONCE into an XDG-cache directory keyed by a
+  content fingerprint over every shipped file's name+contents
+  (stale cache can never satisfy a newer saw; crash-safe: temp
+  sibling + .staged-ok marker + atomic rename; rename-race loser
+  defers to the winner — same fingerprint = same contents). The
+  checker script runs from the data dir (needs no writability);
+  builds happen in the cache. Verified: env-mode replay row
+  unchanged; data-mode end-to-end with saw_datadir override +
+  XDG_CACHE_HOME (cold run stages+builds+passes kernel check; warm
+  run ~10s, no restage); missing-assets failure is loud with both
+  remedies named; `cabal sdist --list-only` includes all 15 asset
+  files. Note: first data-mode run on a machine without the pinned
+  toolchain will have elan fetch it — user-runtime behavior,
+  inherent to relocatable installs.
 
 OUT of 0.02: unchanged, per the recorded list in
 `doc/2026-07-14_release-plan.md` (simulator Unimplemented gaps, user
@@ -1630,12 +1650,12 @@ as their own items in the priorities below.
 
 - [ ] **Execute the 2026-07-17 SWE-quality review findings**
   (`doc/2026-07-17_swe-quality-review.md`; ranked there). Open items:
-  - **(#1, merge gate — MOVED 2026-07-17)** Trust kernel relocated
-    via `git mv` to `saw-core-lean/replay/lean-check-core.sh`;
-    `Builtins.hs` path updated. Remaining release-packaging half:
-    resolve via Cabal `data-files` instead of `SAW_LEAN_ROOT` — that
-    work must ship the whole Lean lake project as data too, so it
-    stays bundled with relocatable-install packaging.
+  - **(#1, merge gate — CLOSED 2026-07-23)** Trust kernel relocated
+    2026-07-17 (`git mv` to `saw-core-lean/replay/lean-check-core.sh`);
+    the release-packaging half landed 2026-07-23: Cabal `data-files`
+    + `resolveLeanReplayAssets` cache staging (see the 0.02 punch
+    list entry). SAW_LEAN_ROOT survives as the dev/CI override, no
+    longer a requirement.
   - **(#2, merge gate)** Split `Term.hs` (6,776 lines) along its
     existing banner sections — extract at least
     `SAWCoreLean/Obligations.hs` and `SAWCoreLean/Convention.hs`.

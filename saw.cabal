@@ -28,6 +28,26 @@ extra-source-files:
   saw-script/src/SAWScript/Parser.y
   saw-script/src/SAWScript/Lexer.x
 
+-- Runtime assets for the saw-core-lean backend (relocatable
+-- packaging, 2026-07-23): `offline_lean_replay` needs the pinned
+-- Lean support library (the whole lake project) and the factored
+-- trust-kernel scripts at RUNTIME. When SAW_LEAN_ROOT is unset, the
+-- builtin resolves these through Paths_saw.getDataDir and stages
+-- the lake project into a per-content-fingerprint user cache
+-- directory before building there (installed data directories are
+-- not writable; `lake build` and the replay staging both write
+-- inside the project root). SAW_LEAN_ROOT remains the explicit
+-- checkout-root override used by the dev/CI harnesses.
+data-files:
+  saw-core-lean/lean/lakefile.toml
+  saw-core-lean/lean/lean-toolchain
+  saw-core-lean/lean/lake-manifest.json
+  saw-core-lean/lean/CryptolToLean.lean
+  saw-core-lean/lean/CryptolToLean/*.lean
+  saw-core-lean/replay/lean-check-core.sh
+  saw-core-lean/replay/axiom-audit.awk
+  saw-core-lean/replay/proof-source-lint.awk
+
 -- declare GHC options once
 common ghc-options
   ghc-options: -O2 -Wall -Werror -Wcompat -Werror=missing-export-lists -fno-ignore-asserts -fno-spec-constr-count
@@ -667,6 +687,9 @@ library saw-central
     SAWCentral.Value
   other-modules:
     SAWCentral.Panic
+    Paths_saw
+  autogen-modules:
+    Paths_saw
 
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
