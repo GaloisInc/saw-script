@@ -1,6 +1,9 @@
 # Under-applied partial-op function wrappers (W1: the intDiv blocker)
 
-2026-07-18. Status: AUDITED — SAFE-WITH-CONDITIONS (verdict + five binding conditions at end; the Nat-family total-lift hypothesis was REFUTED and is struck below). Unblocks rev.cry whole-module
+2026-07-18. Status: IMPLEMENTED 2026-07-18 (Parts 1–3 landed; the
+contract field shipped as `pocRuntimeWrapper`, not the
+`underAppliedWrapper` working name used below). Audit record:
+AUDITED — SAFE-WITH-CONDITIONS (verdict + five binding conditions at end; the Nat-family total-lift hypothesis was REFUTED and is struck below). Unblocks rev.cry whole-module
 translation (PIntegral dictionary fields carry partial ops
 UNAPPLIED; pinned by saw-boundary/polymorphic_seq_module_rejection).
 

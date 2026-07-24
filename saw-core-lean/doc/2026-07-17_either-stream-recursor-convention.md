@@ -1,6 +1,8 @@
 # Either@core / Stream@core recursor-convention design (0.02 W1 final rung)
 
-2026-07-17. Status: AUDITED — two independent audits complete
+2026-07-17. Status: IMPLEMENTED 2026-07-17 (the kind-directed
+domain rule landed; the predicted test flips occurred). Audit
+record: AUDITED — two independent audits complete
 (SAFE-TO-IMPLEMENT WITH CONDITIONS); the operative design is the
 KIND-DIRECTED rule + shared classifier below, superseding
 candidate A's bare-vs-applied split. See the audit-verdict section

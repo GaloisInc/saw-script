@@ -158,7 +158,14 @@ no-vacuous assertion; user-file sorry scan; closer-type probe; axiom
 audit with multi-line-list parsing emitting CHECK-AXIOMS lines);
 `offline_lean_replay` in Builtins.hs (fresh in-process emission as
 authority; trailing goal_holds stub stripped at staging per
-amendment 3; SAW_LEAN_ROOT env-var deployment for v1 — packaging is
+amendment 3; [SUPERSEDED 2026-07-23: assets now ship as Cabal
+data-files with content-fingerprinted cache staging
+(`resolveLeanReplayAssets`, Builtins.hs) — SAW_LEAN_ROOT survives
+only as the dev/CI checkout override. Also note the 2026-07-21
+two-tier bv_decide policy supersedes any "native-eval always
+rejected" framing here: a per-row labeled `native-eval` tier admits
+bv_decide's per-invocation axioms under `.trust-tier` markers.]
+SAW_LEAN_ROOT env-var deployment for v1 — packaging is
 release work; LeanReplayEvidence + LeanReplayInfo + absorbing
 LeanReplayedTheorem summary variant per amendment 4, JSON status
 "verified-lean-replay"); rows: workflows/replay_e1_verify (GREEN —

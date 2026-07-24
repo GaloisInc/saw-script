@@ -42,14 +42,21 @@ and the known limitations stated in one place.
    (`saw-boundary/polymorphic_seq_module_rejection`). The
    translation path (the May parametric-bridge family / lazy
    selection) folds into the OP-3 successor design post-release.
-2. **OP-3 ships as the documented top limitation.** The wrapped-fix
-   recurrence class (running-sum, popcount, rec_ones, stream_fibs,
-   ChaCha20-iterate) emits obligations that are sound but
-   undischargeable (`saw_fix_unique_exists` is unsatisfiable for
-   strict bodies — errors are always fixed points). SAW never
-   claims these goals, so shipping is sound; the audit-gated
-   successor design (six minimum conditions,
-   `2026-07-12_op3-structural-fix-design.md`) continues after 0.01.
+2. **OP-3 ships as the documented top limitation.**
+   [RESOLVED IN 0.02 — banner 2026-07-24: the OP-3 successor landed
+   2026-07-16 (R0–R4, `2026-07-15_op3-successor-design.md`);
+   recognized wrapped-fix classes now lower to PROVEN realizations
+   (running_sum, popcount32, E6, rec_ones discharged end-to-end),
+   the wrapped `saw_fix_unique_exists` contract is RETIRED, and
+   unrecognized shapes reject loudly. The paragraph below is the
+   0.01-era decision record.] The wrapped-fix recurrence class
+   (running-sum, popcount, rec_ones, stream_fibs, ChaCha20-iterate)
+   emits obligations that are sound but undischargeable
+   (`saw_fix_unique_exists` is unsatisfiable for strict bodies —
+   errors are always fixed points). SAW never claims these goals,
+   so shipping is sound; the audit-gated successor design (six
+   minimum conditions, `2026-07-15_op3-successor-design.md`)
+   continues after 0.01.
 
 ## 0.01 workstreams
 
@@ -198,14 +205,22 @@ otherwise.
 Story: cover all our examples in a reasonable way, and close every
 gap that can reasonably be closed. Three workstreams; W1 leads.
 
-**W1 — Recurrence/stream program (the headline).** OP-3 successor
-design against the third audit's six minimum conditions → fourth
-independent audit → implementation. Acceptance ladder:
-`proof-gaps/cryptol_running_sum_verify` → `offline_lean_popcount32` +
-E6 → `llvm_popcount_eq` → the `rec_ones`/`stream_fibs` module rows →
-the Stream@core/Either@core translation path (un-parks the boundary
-rejections) → `rev.cry` whole-module translation works and the demo
-loses its `fails`-wrapped step 3. Closes 5 of the 9 proof-gaps, two
+**W1 — Recurrence/stream program (the headline).**
+[COMPLETE — banner 2026-07-24: every ladder rung below landed —
+running_sum/popcount32/E6 discharged 2026-07-15/16 and graduated
+out of proof-gaps, llvm_popcount_eq discharged 2026-07-22 (SWAR
+residue, native-eval tier), rec_ones realized (stream_fibs =
+pinned paired-stream rejection by design), Stream@core closed
+2026-07-17 and Either@core 2026-07-19, and the reduced rev.cry
+module emits un-`fails`-wrapped since 2026-07-18.] Original
+ladder: OP-3 successor design against the third audit's six
+minimum conditions → fourth independent audit → implementation.
+Acceptance ladder: `proof-gaps/cryptol_running_sum_verify` →
+`offline_lean_popcount32` + E6 → `llvm_popcount_eq` → the
+`rec_ones`/`stream_fibs` module rows → the Stream@core/Either@core
+translation path (un-parks the boundary rejections) → `rev.cry`
+whole-module translation works and the demo loses its
+`fails`-wrapped step 3. Closes 5 of the 9 proof-gaps, two
 boundary families, and the demo's visible limitation.
 
 **W2 — Proof-support library.** (a) A policy-compliant BV proof
@@ -242,7 +257,8 @@ goldens for the 11 zero-coverage emitter-wired helpers, and
 sequence-surgery via the checked helpers, `Z n`/IntMod) plus the
 coverage-matrix extras (fixed-bound C loop, Int workflow, signed-BV
 property). (b) `offline_lean_replay` IS IN 0.02 (decision
-2026-07-15): SAW invokes the pinned Lean toolchain on the exact
+2026-07-15) [LANDED 2026-07-16; relocatable data-files packaging
+followed 2026-07-23]: SAW invokes the pinned Lean toolchain on the exact
 emitted obligation + completed proof, admits only on a kernel-checked
 theorem of that exact type with no forbidden escape hatches — lands
 mid-cycle, after W1 stabilizes obligation shapes; flips

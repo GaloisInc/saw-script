@@ -1,13 +1,28 @@
 # Soundness boundaries — user-facing summary
 
-*Status as of Phase 1a soundness lockdown (2026-05-02). Distilled
-from the audits in this directory and the lockdown catalog in
-`2026-05-02_post-audit-plan.md`:*
+> **SUPERSEDED IN PART (banner added 2026-07-24).** This is the
+> Phase 1a (May 2026) snapshot; the TRUST MODEL it describes has
+> since changed materially. Current authority:
+> `2026-05-02_residual-trust.md` §1.3–1.4 (axiom inventory — the
+> trusted base is now exactly TWO axioms, the Vec↔BitVec
+> round-trips) plus STATUS.md. Known-stale claims below: the
+> `error_unrestricted`/`error` two-tier axioms are DELETED (`error`
+> routes to `saw_throw_error`, a def); `unsafeAssert` is a
+> proof-obligation, not an axiom; `coerce` is a reducible `cast`
+> def, not an axiom; Integer ops are reducible defs over native
+> `Int`, not opaque axioms; and "native_decide cannot fire" predates
+> the 2026-07-21 two-tier bv_decide policy (per-row labeled
+> `native-eval` tier). The regression-test citation discipline and
+> the failure-mode walkthroughs remain useful history.
 
-- *`2026-04-24_audit-primitives-fidelity.md` — handwritten Lean
+*Status as of Phase 1a soundness lockdown (2026-05-02). Distilled
+from the audits in this directory (now under `archive/`) and the
+lockdown catalog in `archive/2026-05-02_post-audit-plan.md`:*
+
+- *`archive/2026-04-24_audit-primitives-fidelity.md` — handwritten Lean
   declarations vs SAWCore primitives*
-- *`2026-04-24_audit-nat-mapping.md` — SAW-Nat-to-Lean-Nat mapping*
-- *`audit/2026-05-02_soundness-and-rocq-parity.md` — full
+- *`archive/2026-04-24_audit-nat-mapping.md` — SAW-Nat-to-Lean-Nat mapping*
+- *`archive/2026-05-02_soundness-and-rocq-parity.md` — full
   re-audit under the lockdown bar*
 
 The audits go deeper into mechanism. This doc is the actionable
@@ -18,7 +33,7 @@ like. **Every claim below cites the regression test that pins it**
 
 For the cross-cutting view of "every known route a hostile prover
 could take to derive `False`", see the dedicated exposure-surface
-inventory: [`2026-05-04_exposure-surface.md`](2026-05-04_exposure-surface.md).
+inventory: [`archive/2026-05-04_exposure-surface.md`](archive/2026-05-04_exposure-surface.md).
 That doc is the place to add new Check vectors as they're found.
 
 ## What the translator guarantees

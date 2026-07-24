@@ -1,6 +1,9 @@
 # Zone-1 coverage census (2026-07-16)
 
-**Status**: LIVE ARTIFACT — the explicit membership list behind the
+**Status**: LIVE ARTIFACT — RE-RUN PENDING (the re-run trigger
+fired 2026-07-23: the emitter surface changed — IntMod strict
+modulus gate added, bvToInt realization corrected to unsigned).
+The explicit membership list behind the
 zone anatomy's Zone-1 claim (see
 2026-07-16_fragment-semantics-scoping.md). Re-run the census when the
 emitter surface changes. Produced by a read-only census pass over

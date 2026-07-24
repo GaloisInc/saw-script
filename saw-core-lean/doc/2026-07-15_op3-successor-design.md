@@ -5,8 +5,12 @@
 OP-3 design to survive audit. The six amendments in the audit record
 below are BINDING on the implementation; amendments A and D are
 load-bearing.
+[R4 LANDED 2026-07-16 — all slices R0–R4 complete; the wrapped
+unique-fixed-point contract is retired and both class realizations
+are live. This doc is the audited design + execution record.]
+
 Successor to the REFUTED structural draft
-(`2026-07-12_op3-structural-fix-design.md`, kept as the
+(`archive/2026-07-12_op3-structural-fix-design.md`, kept as the
 rejected-candidate record); implements
 `2026-07-12_obligation-placement-design.md` §Instance 3's two-part
 fix under the STRUCTURAL-FIRST entry decision. 0.02 W1 headline

@@ -805,7 +805,7 @@ When reviewing an implementation change, ask:
 - For every type the rule classifies: which `Domain` does `D(tau)`
   assign, and does the rule PROJECT `classifyDomain` rather than
   re-derive the answer with its own head dispatch? If it shadows the
-  domain answer, is it one of the two named positional gates?
+  domain answer, is it one of the three named positional gates?
 
 If the answer to any of these questions is unclear, the implementation is not
 yet reviewable enough for this semantic core.

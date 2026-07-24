@@ -41,12 +41,20 @@ Residual trust falls into four categories:
 
 ### 1.1 `unsafeAssert` at `α = Prop`
 
-**Status:** Intentional residual (faithful to SAW).
+**Status:** CLOSED as an axiom (updated 2026-07-24). `unsafeAssert`
+is NO LONGER an axiom: fully applied `unsafeAssert α x y` emits a
+LOCAL `Eq` proof obligation discharged by generated checked
+evidence (`saw_unsafeAssert` tactic — rfl/decide/omega/simp only,
+no fabricated proofs; see `translateUnsafeAssertObligation` and the
+`obligations/unsafe_assert_*` rows), and under-applied uses reject.
+The Prop-instantiation discussion below is the HISTORICAL record of
+why the axiom form was dangerous; the residual it describes no
+longer exists because the axiom no longer exists.
 
-**Where exercised:**
-[`lean/CryptolToLean/SAWCorePrimitives.lean:421`](../lean/CryptolToLean/SAWCorePrimitives.lean#L421) —
-`axiom unsafeAssert : (α : Type) → (x y : α) → @Eq α x y`. SAW's
-declaration: `Prelude.sawcore:212`,
+**Historical record (May 2026 axiom era):**
+`axiom unsafeAssert : (α : Type) → (x y : α) → @Eq α x y`
+(line-cite stale — the file has since grown). SAW's declaration:
+`Prelude.sawcore:212`,
 `primitive unsafeAssert : (a : sort 1) → (x y : a) → Eq a x y`.
 
 **What we trust:** SAWCore's `unsafeAssert` admits `α = Prop`
@@ -75,9 +83,17 @@ tested.
 
 ### 1.2 `error.{u}` two-tier design (revised 2026-05-04, was Phase 9)
 
-**Status:** Intentional residual on `error_unrestricted` (faithful
-to SAW); user-facing `error` is **closed** to the L-17 risk
-class.
+**Status:** CLOSED — BOTH error axioms are DELETED (updated
+2026-07-24). Value-domain `Prelude.error` now routes to
+`saw_throw_error` (a reducible def over the `Except String` carrier
+— the error is a visible value, no axiom, no fake inhabitant);
+raw-position `error` REJECTS at translation or lowers to the
+constant-error function per the audited disposition
+(`2026-07-14_reachable-raw-error-disposition.md`). The two-tier
+`error_unrestricted`/`error` axiom design below is the HISTORICAL
+May-2026 record; neither symbol exists in the library today, and
+the negative rows cited at the end now pin the support library's
+current shapes.
 
 **Where exercised:**
 [`SAWCorePrimitives.lean`](../lean/CryptolToLean/SAWCorePrimitives.lean):
@@ -247,10 +263,14 @@ successor/predecessor, and boundary lemma is a machine-checked
 theorem proven from the 2 coherence axioms + Lean's `BitVec`
 library.
 
-The remaining axioms in the codebase are the SAW-faithful
-trust commitments: `coerce`, `unsafeAssert`, `error.{u}` (all
-Category 1, intentional residual matching SAW's primitive
-declarations).
+The remaining axioms in the codebase are EXACTLY the two Vec↔BitVec
+round-trip coherence axioms above — nothing else (updated
+2026-07-24; the earlier version of this paragraph also listed
+`coerce`, `unsafeAssert`, and `error.{u}`, all of which have since
+been converted: `coerce` to a reducible `cast` def (§1.3),
+`unsafeAssert` to a local proof obligation with checked evidence
+(§1.1), and both error axioms deleted in favor of `saw_throw_error`
+and the raw-error rejection disposition (§1.2)).
 
 **Phase 8 conversions (closed):** `gen`, `atWithDefault`, `foldr`,
 `foldl`, `shiftL`, `shiftR`, `rotateL`, `rotateR`, `Pair_fst`,
@@ -340,7 +360,7 @@ SAW's `Zero / NatPos` case-split applied through Lean's
 this — pinned by `otherTests/saw-core-lean/saw-boundary/natrec/` and the
 L-3 auto-derive smoketest.
 
-**Adjacent doc:** [`2026-04-24_audit-nat-mapping.md`](2026-04-24_audit-nat-mapping.md).
+**Adjacent doc:** [`archive/2026-04-24_audit-nat-mapping.md`](archive/2026-04-24_audit-nat-mapping.md).
 
 ---
 
@@ -407,10 +427,13 @@ classifier selected the wrong shape, Lean could compute a value that
 did not match SAW's denotational fixed point — SILENTLY.
 
 **Re-opened shape (OP-3 successor, amendments A/E/F —
-doc/2026-07-15_op3-successor-design.md):** the backend will again
-realize recognized fix shapes directly: Class F via `saw_fix_bounded`
-(Slice R2), Class S via `saw_stream_unfold` (Slice R3). The
-difference is WHERE a wrong claim lands:
+doc/2026-07-15_op3-successor-design.md; LANDED in full 2026-07-16,
+slices R0–R4):** the backend again realizes recognized fix shapes
+directly: Class F via `saw_fix_bounded_choose` (R2), Class S-single
+via `saw_stream_realize` (R3b); every unrecognized wrapped fix
+rejects with a named diagnostic, and the wrapped
+unique-fixed-point contract was retired at R4. The difference from
+the refuted Phase 5 shape is WHERE a wrong claim lands:
 
 * the per-instance productivity obligation
   (`saw_fix_bounded_productive` — totality AND bounded lookback) is

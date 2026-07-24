@@ -1,6 +1,9 @@
 # Value content inside equality transports (the transport corner)
 
-2026-07-18. Status: SCOPING — pre-audit. The LAST rev.cry blocker
+2026-07-18. Status: IMPLEMENTED 2026-07-19 (the mode-uniform
+type-subject spine convention below landed as designed —
+Convention.hs/Term.hs; rev.cry reduced module emits). Originally:
+SCOPING — pre-audit. The LAST rev.cry blocker
 and the chacha20 function-carrier corner are the SAME hole, pinned
 by differential/cryptol_rev_module and
 differential/cryptol_chacha20_core_iterate.

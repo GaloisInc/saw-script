@@ -1,8 +1,17 @@
 # Obligation Placement & Satisfiability
 
-**Date**: 2026-07-12. **Status**: design for the current operative
-priority (TODO.md). Successor program to the position-directed
-translation plan (`2026-07-08_position-directed-translation-plan.md`,
+**Date**: 2026-07-12. **Status**: OP-1 and OP-2 SHIPPED (2026-07-12,
+markers inline) and still describe the live contracts. **Instance 3
+(OP-3) is SUPERSEDED**: every wrapped-fix design option discussed
+there — including the gated pure-uniqueness contract — was replaced
+by the OP-3 successor program
+(`2026-07-15_op3-successor-design.md`, slices R0–R4, landed
+2026-07-16); the wrapped `saw_fix_unique_exists` contract is RETIRED
+(no emitter may produce it) and recognized fix classes lower to
+proven realizations instead. Read Instance 3 below as the problem
+statement and refuted-candidate record only. Successor program to
+the position-directed translation plan
+(`archive/2026-07-08_position-directed-translation-plan.md`,
 complete).
 
 **Audit record (2026-07-12, independent Opus audit before any
@@ -433,6 +442,17 @@ runtime-check regression on interval-entailed slots).
 
 ## Instance 3: the wrapped-fix contract must be satisfiable (OP-3)
 
+> **SUPERSEDED (2026-07-16, R4).** This whole instance — the defect
+> analysis AND the candidate contracts below — is the historical
+> problem statement that led to the OP-3 successor program
+> (`2026-07-15_op3-successor-design.md`). None of the contracts
+> discussed here is emittable today: the wrapped
+> `saw_fix_unique_exists` contract is RETIRED; recognized wrapped
+> fix classes lower to PROVEN realizations
+> (`saw_fix_bounded_choose` / `saw_stream_realize`) and every other
+> wrapped fix rejects with a named diagnostic. Raw-position fixes
+> keep `saw_fix_unique_exists_raw`.
+
 **Defect.** `saw_fix_unique_exists`
 (`lean/CryptolToLean/SAWCorePrimitives.lean:857`):
 
@@ -548,8 +568,8 @@ program does with it:
 | `boundsProofScript` (`h_bounds_`) | `i < n`, `off+len ≤ n` from checked-helper contracts | Derivable ones no (chain too weak) | OP-1 closes derivable; OP-2 removes the evidence-less eta family |
 | `partialOpProofScript` (`h_nonzero_` etc.) | divisor nonzero | Concrete yes, runtime-symbolic no | OP-1 closes concrete; symbolic stays a LOUD `sorry` — correct: it is a real goal-level obligation |
 | `h_unsafeAssert_` | `Eq Num x x` shapes | Reducible-reflexive yes | OP-1 adds `rfl`; symbolic non-reflexive stays loud `sorry` |
-| `h_fix_unique_` (wrapped) | `saw_fix_unique_exists` | NO — refutable for strict bodies | OP-3: productivity-gated structural lowering / gated contract + rejection |
-| `h_fix_unique_` (raw, `saw_fix_unique_exists_raw`) | raw unique fixed point | shares divergence caveat | untouched; stays behind existing rejections; future OP-3 treatment |
+| `h_fix_unique_` (wrapped) | `saw_fix_unique_exists` | NO — refutable for strict bodies | [SUPERSEDED by R4: contract RETIRED; recognized classes lower to proven realizations, else named rejection — see the Instance 3 banner] |
+| `h_fix_unique_` (raw, `saw_fix_unique_exists_raw`) | raw unique fixed point | shares divergence caveat | retained per Instance 3 (R4 decision); believed corpus-unreachable for divergent shapes, census-checked |
 | `h_mkStream_total_` | `saw_mkStream_total_exists` (pointwise totality) | yes for productive streams | sound as-is (no fixed-point choice); dischargeability rests on the same productivity trust as OP-3(a) — proof-support work, not a contract defect |
 | `h_raw_error_` | `False` (unreachable-branch contract) | only when genuinely unreachable | AUDIT ACTION: verify every in-corpus raw-error position is unreachable-with-context; a REACHABLE raw `error` must reject per the calculus, not emit an undischargeable `False` |
 | `h_proof_` (`lowerProofPrimitiveContract`, 14 rows) | proof-primitive props | no (unrealized) | out of scope; loud `sorry` is the honest state until the proof-primitive realizations land |

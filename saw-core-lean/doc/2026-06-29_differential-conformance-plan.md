@@ -1,5 +1,13 @@
 # Differential Conformance Plan
 
+**Status (added 2026-07-24)**: NORTH-STAR SCOPE document — the
+target conformance surface, not a statement of current state.
+Current coverage lives in `otherTests/saw-core-lean/CONFORMANCE.md`
+(the per-surface matrix) and STATUS.md (the census). Note one
+sharpening since this was written: `bvToInt` is UNSIGNED and
+`sbvToInt` SIGNED — the split is load-bearing and differentially
+pinned on sign-crossing inputs (2026-07-23).
+
 ## Goal
 
 The conformance suite is a coverage suite for SAWCore. Its long-term acceptance
