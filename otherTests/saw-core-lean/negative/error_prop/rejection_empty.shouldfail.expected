@@ -1,0 +1,5 @@
+# DELETION PIN (V-H1 recalibration, 2026-07-24): same as
+# rejection.shouldfail — the guarded `error` def this probe's
+# Inhabited-synthesis pin targeted no longer exists; the pin is now
+# that the name stays deleted.
+Unknown identifier `error`

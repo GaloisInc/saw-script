@@ -46,10 +46,10 @@ completed-outline replay path.
 |----|-----|------|----------|------------------|
 | R-1 | **CRITICAL** | replay | completed.lean admits goal on a proof of `True`; real obligation never checked | **FIXED 2026-07-24** (was: YES — runtime replay driver + CI harness) |
 | LB-1 | Medium | lean-base | raw fix contract `saw_fix_unique_exists_raw` is extensional-only; provable while SAW diverges | Latent (0 corpus uses; gated only by Haskell recognizer routing + a comment) |
-| V-H1 | Medium | vacuity | negative-probe harness accepts ANY error; no expected-diagnostic pin | Latent (guards against future regression) |
-| V-H2 | Low-Med | vacuity | obligation rows with only `absent:` directives pass on empty emission | Latent |
-| V-H3 | Low | vacuity | obligation-observer error regex is dead (can't cross `:line:col:`) | Latent (masked by exit-code check) |
-| LB-2 | Low | lean-base | `missingDocs` documented as "enforced" but only warns; harness checks exit code only | Live (doc/enforcement gap, not soundness) |
+| V-H1 | Medium | vacuity | negative-probe harness accepts ANY error; no expected-diagnostic pin | **FIXED 2026-07-24** — and NOT latent: 4 of 6 probes were already vacuous (see the V-H1 section) |
+| V-H2 | Low-Med | vacuity | obligation rows with only `absent:` directives pass on empty emission | **FIXED 2026-07-24** (positive-directive + non-empty-literal guards, mutation-checked) |
+| V-H3 | Low | vacuity | obligation-observer error regex is dead (can't cross `:line:col:`) | **FIXED 2026-07-24** (colon-crossing pattern; leading-quote exclusion kept for `"LEAN_OBSERVED: error:` rows) |
+| LB-2 | Low | lean-base | `missingDocs` documented as "enforced" but only warns; harness checks exit code only | **FIXED 2026-07-24** (lakefile comment downgraded to state the warning-surfaced convention honestly) |
 | TIER-1 | Low | tier/replay | replay is always strict-tier (ignores `.trust-tier`); safe asymmetry, undocumented | **FIXED 2026-07-24** (documented in residual-trust §3.2b; no code change — the strict direction is deliberate) |
 | SEAMS-D3 | Low (unconfirmed) | seams | type-translation injectivity: type-image `Eq` obligation could be weaker if translation collapses two SAW-distinct types | Unknown (no witness; not proven either way) |
 | DOC-1 | Tertiary | docs | self-test "27 cases" (proof-cookbook.md:309) — actually 30 | **FIXED 2026-07-24** (now says 32 — the R-1 fix added two cases) |
@@ -309,6 +309,20 @@ expected-diagnostic sidecar (like `.known-gap.expected`) whose
 substrings must appear in the actual rejection; fail if absent or
 unmatched. Add the sidecars for the 5 existing probes as part of the
 fix.
+
+**FIXED 2026-07-24 — and the finding was NOT latent.** Writing the
+sidecars exposed that the predicted rot had ALREADY happened: four of
+the six probes (`coerce_unsafeassert_combo`, both `error_prop` rows,
+`fix_contract/weak_success_only`) were passing on
+`unknown identifier` because their subjects (`unsafeAssert`, `error`,
+`saw_fix_unique_exists`) had been deliberately retired from the
+library — they pinned nothing. Disposition: those four are
+recalibrated as explicit DELETION PINS (a reintroduced unsound name
+changes the diagnostic and turns the row red for review; each probe
+header and sidecar records this), and `coerce` pins its genuine
+universe-mismatch diagnostic. The harness now hard-fails a probe with
+no sidecar, a comment-only sidecar, or an unmatched pin —
+all three mutation-checked against the real harness.
 
 ---
 
@@ -586,11 +600,16 @@ FixRecognizer.hs, SpecialTreatment.hs}`;
    full suite green. — **DONE 2026-07-24** (see the FIXED note in the
    R-1 section).
 2. **V-H1** (Medium): expected-diagnostic sidecars for negative
-   probes + the harness requirement.
+   probes + the harness requirement. — **DONE 2026-07-24** (see the
+   FIXED note in the V-H1 section; four probes recalibrated as
+   deletion pins).
 3. **LB-1** (Medium, latent): coordinate the raw-fix contract gating
    with the 0.03 fragment-semantics program; until then keep the
-   reachability record current.
+   reachability record current. — reachability set recorded in the
+   project memory (`project_op3_pure_uniqueness_hole`) 2026-07-24;
+   the contract fix itself remains OPEN.
 4. **V-H2 / V-H3 / LB-2 / TIER-1 / DOC-1**: housekeeping guard/doc
-   fixes, batchable.
+   fixes, batchable. — **ALL DONE 2026-07-24**.
 5. **SEAMS-D3**: targeted type-translation-injectivity follow-up
-   (open; low priority; do not mark cleared).
+   (open; low priority; do not mark cleared). — **OPEN** (the only
+   remaining audit item besides LB-1's contract fix).

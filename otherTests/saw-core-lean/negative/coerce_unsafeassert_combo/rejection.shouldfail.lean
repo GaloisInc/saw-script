@@ -1,3 +1,6 @@
+/- RECALIBRATED 2026-07-24 (V-H1): the surface this probe originally
+   pinned was retired from the library; the row is now a DELETION PIN —
+   see the .shouldfail.expected sidecar for the current contract. -/
 /-
 Combinational probe: build `Eq Type Bool Empty` via unsafeAssert
 at α = Type, then `coerce true : Bool` to `Empty`, then

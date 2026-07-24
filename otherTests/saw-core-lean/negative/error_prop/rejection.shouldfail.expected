@@ -1,0 +1,7 @@
+# DELETION PIN (V-H1 recalibration, 2026-07-24): the user-facing
+# `error` def (and the unsound error_unrestricted axiom behind it)
+# were retired — value-domain SAWCore error now lowers to
+# saw_throw_error (an ordinary Except.error, no axiom). A
+# reintroduced `error` name changes this diagnostic and turns the
+# row red for review.
+Unknown identifier `error`

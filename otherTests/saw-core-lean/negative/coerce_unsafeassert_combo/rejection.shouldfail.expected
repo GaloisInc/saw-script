@@ -1,0 +1,8 @@
+# DELETION PIN (V-H1 recalibration, 2026-07-24): `unsafeAssert` was
+# retired from the library — SAWCore unsafeAssert now emits a
+# call-site proof obligation, no Lean name. The combo attack this
+# probe originally pinned (fabricate Eq Type via unsafeAssert, coerce
+# across it) is impossible while the name stays deleted. If someone
+# reintroduces `unsafeAssert`, the diagnostic changes and this row
+# goes red for review.
+Unknown identifier `unsafeAssert`

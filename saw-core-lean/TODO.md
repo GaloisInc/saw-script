@@ -47,12 +47,14 @@ fragment fails LOUDLY at translation. No silent divergence, ever.
   **STATUS 2026-07-24: the panel RAN** (six Opus reviewers, one lane
   each; report = `doc/2026-07-24_soundness-audit.md`). Verdict: one
   CRITICAL (R-1, replay completed-outline goal binding) — **FIXED
-  same day** with red-before/green-after pins in both consumers;
-  remaining open findings tracked in the report's sequencing
-  section: V-H1 (negative-probe diagnostic pins), LB-1 (raw fix
-  contract, coordinate with 0.03 fragment semantics), V-H2/V-H3/
-  LB-2/TIER-1 (housekeeping batch), SEAMS-D3 (type-translation
-  injectivity follow-up, open).
+  same day** with red-before/green-after pins in both consumers.
+  V-H1 (negative-probe diagnostic pins — found four probes ALREADY
+  vacuous, recalibrated as deletion pins), V-H2/V-H3 (obligation
+  harness guards), LB-2/TIER-1/DOC-1 (doc honesty) — all FIXED
+  2026-07-24. Still OPEN from the audit: LB-1 (raw fix contract —
+  coordinate with 0.03 fragment semantics; reachability recorded in
+  project memory) and SEAMS-D3 (type-translation injectivity
+  follow-up).
 - [ ] **Docs phrasing pass** (2026-07-21): rework the few remaining
   imprecise offensive-security phrasings into formal-verification
   terms (skeptical review / counterexample search /

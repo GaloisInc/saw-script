@@ -1,3 +1,6 @@
+/- RECALIBRATED 2026-07-24 (V-H1): saw_fix_unique_exists was retired at
+   R4; this row is now a DELETION PIN — see the .shouldfail.expected
+   sidecar for the current contract. -/
 import CryptolToLean
 
 open CryptolToLean.SAWCorePrimitives

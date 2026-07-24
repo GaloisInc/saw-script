@@ -6,9 +6,22 @@
 # These exercise axiom-shape invariants by running Lean's elaborator
 # on small hand-written probes. File naming is the entire contract:
 #
-#   *.shouldfail.lean — MUST FAIL Lean elaboration. A successful
-#                       elaboration means the axiom/def was loosened
-#                       beyond SAW's declared shape — soundness drift.
+#   *.shouldfail.lean     — MUST FAIL Lean elaboration. A successful
+#                           elaboration means the axiom/def was
+#                           loosened beyond SAW's declared shape —
+#                           soundness drift.
+#   *.shouldfail.expected — REQUIRED sidecar (V-H1 fix, 2026-07-24
+#                           audit): every non-empty, non-# line is a
+#                           literal substring that must appear in the
+#                           probe's rejection output. Without it, a
+#                           probe that fails for an UNRELATED reason
+#                           (renamed symbol, removed import, typo)
+#                           reads as green while the invariant it
+#                           claims to pin goes untested — exactly what
+#                           had happened to four of the five original
+#                           probe rows when the audit looked (their
+#                           subjects were retired from the library and
+#                           they were passing on `unknown identifier`).
 #
 # The test fails if any single probe misbehaves. Every probe in the
 # test dir matching the suffix is exercised; adding more is just
@@ -104,17 +117,44 @@ fi
 status=0
 run_probe() {
     local probe="$1"
-    local out rc
+    local expected="${probe%.lean}.expected"
+    local out rc want missed
+    # The sidecar is REQUIRED, and must carry at least one substring:
+    # an anything-fails probe is vacuous (V-H1).
+    if [ ! -f "$expected" ]; then
+        echo "FAIL: $probe has no $expected sidecar — a probe without a pinned diagnostic passes on ANY error, including unrelated breakage"
+        status=1
+        return
+    fi
+    if ! grep -qE '^[^#[:space:]]' "$expected"; then
+        echo "FAIL: $expected pins no diagnostic substring (empty/comment-only)"
+        status=1
+        return
+    fi
     out=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake env lean \
               "intTestsProbe/$TEST_NAME/$probe" ) 2>&1 ) && rc=0 || rc=$?
     echo "--- $probe (expected: fail) ---"
     echo "$out"
     echo "exit=$rc"
-    if echo "$out" | grep -qE "^[^[:space:]]+: error" ; then
-        echo "OK: $probe rejected as designed"
-    else
+    if ! echo "$out" | grep -qE "^[^[:space:]]+: error" ; then
         echo "FAIL: $probe elaborated cleanly — soundness drift!"
         status=1
+        return
+    fi
+    # Every pinned substring must appear in the actual rejection.
+    missed=0
+    while IFS= read -r want; do
+        case "$want" in ''|'#'*) continue ;; esac
+        if ! printf '%s\n' "$out" | grep -qF -- "$want"; then
+            echo "FAIL: $probe rejected, but WITHOUT the pinned diagnostic: $want"
+            missed=1
+        fi
+    done < "$expected"
+    if [ "$missed" -ne 0 ]; then
+        echo "(a probe failing for the wrong reason pins nothing — review whether the invariant moved or the probe rotted)"
+        status=1
+    else
+        echo "OK: $probe rejected with the pinned diagnostic(s)"
     fi
 }
 

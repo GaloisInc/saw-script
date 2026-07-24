@@ -1,0 +1,5 @@
+# The live pin: coerce is Type-0-only, so a Type 1 argument is a
+# genuine universe rejection at the coerce application itself.
+error: Application type mismatch
+coerce α
+Type 1

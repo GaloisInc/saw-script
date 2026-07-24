@@ -224,7 +224,13 @@ if [ -f lean-observe.lean ]; then
                   "intTestsProbe/$PROBE_NAME/lean-observe.lean" ) 2>&1 ) && \
         lean_rc=0 || lean_rc=$?
     printf '%s\n' "$lean_out" >test.lean.log
-    if [ "$lean_rc" -ne 0 ] || printf '%s\n' "$lean_out" | grep -qE '^[^"[:space:]][^:]*: error' ; then
+    # Error scan (V-H3 fix, 2026-07-24 audit): the old pattern's
+    # `[^:]*` could not cross Lean's `:line:col:` prefix, so the
+    # clause was dead (only the exit code fired). The leading-quote
+    # exclusion is load-bearing and stays: observer rows legitimately
+    # print quoted `"LEAN_OBSERVED: error: ..."` strings that must
+    # not read as elaboration errors.
+    if [ "$lean_rc" -ne 0 ] || printf '%s\n' "$lean_out" | grep -qE '^[^"[:space:]][^[:space:]]*: error' ; then
         cat test.lean.log
         echo "FAIL: Lean obligation observer failed" >&2
         rm -rf "$PROBE_DIR"
@@ -301,11 +307,28 @@ check_absent() {
     fi
 }
 
+# Directive hygiene (V-H2 fix, 2026-07-24 audit): an expected.txt
+# holding only absent: directives passes on a completely EMPTY
+# emission (every forbidden literal trivially absent, and an empty
+# .lean compiles clean), and an empty directive literal is vacuous
+# (grep -F "" matches any non-empty file). Every row must pin at
+# least one positive shape, and every literal must be non-empty.
+positive_directives=0
 while IFS= read -r directive || [ -n "$directive" ]; do
     case "$directive" in
         ''|\#*) continue ;;
-        contains-normalized:*) check_contains_normalized "${directive#contains-normalized:}" ;;
-        contains:*) check_contains "${directive#contains:}" ;;
+        contains-normalized:|contains:|absent:)
+            echo "FAIL: empty literal in expected.txt directive: $directive" >&2
+            status=1
+            ;;
+        contains-normalized:*)
+            check_contains_normalized "${directive#contains-normalized:}"
+            positive_directives=$((positive_directives + 1))
+            ;;
+        contains:*)
+            check_contains "${directive#contains:}"
+            positive_directives=$((positive_directives + 1))
+            ;;
         absent:*) check_absent "${directive#absent:}" ;;
         *)
             echo "FAIL: unknown expected.txt directive: $directive" >&2
@@ -313,6 +336,10 @@ while IFS= read -r directive || [ -n "$directive" ]; do
             ;;
     esac
 done < expected.txt
+if [ "$positive_directives" -eq 0 ]; then
+    echo "FAIL: expected.txt pins no positive directive (contains/contains-normalized) — an absent-only row passes on an empty emission" >&2
+    status=1
+fi
 
 if [ -f forbidden.txt ]; then
     while IFS= read -r literal || [ -n "$literal" ]; do

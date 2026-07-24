@@ -2,12 +2,14 @@ name = "cryptol_to_lean"
 version = "0.1.0"
 defaultTargets = ["CryptolToLean"]
 
-# Docstring coverage is enforced as a build-visible warning
+# Docstring coverage is SURFACED as a build-visible warning
 # (2026-07-23, 0.02 docstrings pass: 153 declarations documented,
-# zero remaining). `lake build` output stays warning-free; a new
-# public declaration without a docstring reintroduces a warning
-# here. Emitted probe artifacts are unaffected — they compile via
-# `lake env lean`, which does not read these options.
+# zero remaining) — it is NOT a gate: `lake build` still exits 0
+# with warnings, and no harness greps for them (LB-2, 2026-07-24
+# audit). The zero-warning state is convention; a new public
+# declaration without a docstring reintroduces a warning here but
+# fails nothing. Emitted probe artifacts are unaffected — they
+# compile via `lake env lean`, which does not read these options.
 [leanOptions]
 weak.linter.missingDocs = true
 

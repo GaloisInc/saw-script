@@ -1,0 +1,9 @@
+# DELETION PIN (V-H1 recalibration, 2026-07-24): the wrapped
+# `saw_fix_unique_exists` contract was RETIRED at R4 (2026-07-16) —
+# wrapped fixes route to the proven Class F/S realizations or reject,
+# and the driver harness's obsolete-helper scan bans re-emission. The
+# weak-success-uniqueness loosening this probe originally pinned has
+# no surface while the name stays deleted. (autoImplicit renders the
+# unknown name as a "Function expected" error at the application.)
+error: Function expected
+saw_fix_unique_exists

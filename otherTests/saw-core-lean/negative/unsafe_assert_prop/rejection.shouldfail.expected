@@ -1,0 +1,6 @@
+# DELETION PIN (V-H1 recalibration, 2026-07-24): `unsafeAssert` was
+# retired from the library — SAWCore unsafeAssert now emits a
+# call-site proof obligation discharged by the saw_unsafeAssert
+# tactic (sound tactics only). The universe-shape pin this probe
+# originally carried has no surface while the name stays deleted.
+Unknown identifier `unsafeAssert`
