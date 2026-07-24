@@ -146,7 +146,7 @@ discipline:
    support-library-level gates (e.g., the L-2 unsafeAssert axiom
    shape), it's a Lean-only intTest with negative/positive `.lean`
    probes.
-3. Document in `2026-04-24_soundness-boundaries.md` with a
+3. Document in `archive/2026-04-24_soundness-boundaries.md` with a
    citation back to the test path.
 4. (For new lockdown items) record the gap and its closure in
    `TODO.md` (the working roadmap; the historical L-series lives in

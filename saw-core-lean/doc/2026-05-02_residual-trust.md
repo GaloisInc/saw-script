@@ -15,7 +15,7 @@ the violation to manifest.
 
 For the user-facing summary of soundness boundaries — what
 shapes the translator accepts vs refuses, what mappings imply
-— see [`2026-04-24_soundness-boundaries.md`](2026-04-24_soundness-boundaries.md).
+— see [`archive/2026-04-24_soundness-boundaries.md`](archive/2026-04-24_soundness-boundaries.md).
 This catalog is the auditor-facing complement: where do we trust,
 and what does the trust depend on?
 

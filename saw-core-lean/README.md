@@ -68,13 +68,13 @@ Top-level docs are the **current** as-of-today reference:
   walkthrough from a Cryptol property to a closed Lean theorem.
 - [`doc/contributing.md`](doc/contributing.md) — how to add a
   primitive, extend a soundness gate, write tests.
-- [`doc/2026-04-24_soundness-boundaries.md`](doc/2026-04-24_soundness-boundaries.md)
-  — canonical trust contract; cites every regression test that
-  pins a soundness claim.
 - [`doc/2026-05-02_residual-trust.md`](doc/2026-05-02_residual-trust.md)
-  — auditor-facing index of inherited-trust assumptions (what
-  the translator trusts but doesn't itself test, organized by
-  category).
+  — the trust authority: auditor-facing index of inherited-trust
+  assumptions, including the current axiom inventory (§1.3–1.4:
+  exactly the two Vec↔BitVec round-trip axioms). The earlier
+  user-facing trust summary
+  (`doc/archive/2026-04-24_soundness-boundaries.md`) is the
+  superseded May-era snapshot, kept as history.
 - [`doc/2026-07-14_release-plan.md`](doc/2026-07-14_release-plan.md)
   — current plan-of-record: the 0.01 (coherence) / 0.02 (coverage)
   release plan. Earlier plans-of-record
@@ -86,13 +86,16 @@ Two living records moved out of TODO.md (2026-07-17):
 [`doc/audit-history.md`](doc/audit-history.md) and
 [`doc/decision-log.md`](doc/decision-log.md).
 
-Every other dated doc at `doc/` top level is a LIVE design or
-census (position-callee calculus, obligation placement, OP-3
+Every other dated doc at `doc/` top level is a LIVE design, contract,
+or census (position-callee calculus, obligation placement, OP-3
 successor, replay design, fragment-semantics scoping, conformance
-roadmap, coverage census, SWE review). Historical audit reports,
-executed plans, and superseded designs live in `doc/archive/`
-(aggressive sweep 2026-07-17); the current audit is
-[`doc/2026-07-14_release-audit.md`](doc/2026-07-14_release-audit.md).
+roadmap, coverage census, the 2026-07-21/23 soundness and fidelity
+reviews). Historical audit reports, executed plans, and superseded
+designs live in `doc/archive/` (swept 2026-07-17 and 2026-07-24),
+including the executed release audit
+([`doc/archive/2026-07-14_release-audit.md`](doc/archive/2026-07-14_release-audit.md))
+and the frozen TODO buildout record
+([`doc/archive/2026-07-24_todo-execution-record.md`](doc/archive/2026-07-24_todo-execution-record.md)).
 
 For the trajectory of how the project got here (failed P4 / P6
 attempts, the specialization-mode pivot), see

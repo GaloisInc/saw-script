@@ -12,7 +12,7 @@ under the handwritten support library at
 `saw-core-lean/lean/CryptolToLean/`. The emitted file's
 semantics are convertible-equivalent to the SAWCore input
 (modulo a documented residual trust list — see
-`soundness-boundaries.md`).
+`2026-05-02_residual-trust.md`).
 
 Three SAWScript primitives drive the backend:
 
@@ -95,7 +95,7 @@ saw-core-lean/
 │   ├── architecture.md       (this file — current reference)
 │   ├── getting-started.md    (Phase 2 walkthrough)
 │   ├── contributing.md       (how to extend)
-│   ├── 2026-04-24_soundness-boundaries.md   (canonical trust contract)
+│   ├── 2026-05-02_residual-trust.md         (trust authority + axiom inventory)
 │   ├── 2026-07-02_position-callee-calculus.md (canonical translation contract)
 │   ├── 2026-07-14_release-plan.md           (current plan-of-record)
 │   └── archive/              (dated trajectory docs + concluded plans/audits)
@@ -144,8 +144,9 @@ Tests live across:
 
 ## Soundness boundaries
 
-The full contract is in `2026-04-24_soundness-boundaries.md`.
-Quick summary:
+The trust authority is `2026-05-02_residual-trust.md` (the May-era
+user-facing summary is archived at
+`archive/2026-04-24_soundness-boundaries.md`). Quick summary:
 
 - **Translator-time refusals**: `polymorphismResidual` (sort k>0
   binders), `UnsoundRecursor` (Nat/Pos/Z/AccessibleNat/AccessiblePos

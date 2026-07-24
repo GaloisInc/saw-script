@@ -199,7 +199,7 @@ the answer with its own head dispatch; a position rule may only PROJECT
 `D(tau)` into its position vocabulary. (History: before 2026-07-17 the
 implementation carried ~8 hand-copied cascades that disagreed on
 variable-headed types — the Either@core/Stream@core over-rejections. The
-coherence audit `2026-07-17_domain-map-coherence-audit.md` is the record.)
+coherence audit `archive/2026-07-17_domain-map-coherence-audit.md` is the record.)
 
 ```text
 D(sort k)            = RawTypeDomain

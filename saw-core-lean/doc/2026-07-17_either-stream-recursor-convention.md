@@ -6,7 +6,7 @@ record: AUDITED — two independent audits complete
 (SAFE-TO-IMPLEMENT WITH CONDITIONS); the operative design is the
 KIND-DIRECTED rule + shared classifier below, superseding
 candidate A's bare-vs-applied split. See the audit-verdict section
-at the end and `2026-07-17_domain-map-coherence-audit.md`. Goal: `rev.cry` whole-module translation
+at the end and `archive/2026-07-17_domain-map-coherence-audit.md`. Goal: `rev.cry` whole-module translation
 (`write_lean_cryptol_module`) produces `Rev.lean`; the
 saw-lean-example demo loses its `fails`-wrapped step 3.
 

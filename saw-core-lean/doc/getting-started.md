@@ -242,7 +242,7 @@ The harder remaining cases:
 
 ## Where to read next
 
-- `doc/2026-04-24_soundness-boundaries.md` — what the translator
+- `doc/archive/2026-04-24_soundness-boundaries.md` — what the translator
   guarantees and what residual trust you inherit.
 - `doc/2026-07-14_release-plan.md` — the plan-of-record for what's
   coming (0.01 coherence, 0.02 example-driven coverage). The
