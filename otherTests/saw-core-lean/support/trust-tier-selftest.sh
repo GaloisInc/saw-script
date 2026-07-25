@@ -298,6 +298,80 @@ theorem tier_ok : v_1'''' = 3 := rfl
 EOF
 lint_case ok-shapes accept
 
+# Lint rules added by the second audit (2026-07-24). Each new guard
+# ships with the mutation it catches (rule C4), and each was a live
+# evasion of the shipped lint before the fix.
+
+# A-6: Lean accepts escaped name components, so «debug».skipKernelTC
+# is the SAME Name as debug.skipKernelTC — it switched kernel
+# type-checking off for the whole file while the lint saw nothing.
+printf 'set_option debug.skipKernelTC true in\ntheorem t : True := trivial\n' \
+    > "$STAGE/lint-debug-plain.lean"
+lint_case debug-plain reject "debug.skipKernelTC"
+printf 'set_option \xc2\xabdebug\xc2\xbb.skipKernelTC true in\ntheorem t : True := trivial\n' \
+    > "$STAGE/lint-debug-escaped.lean"
+lint_case debug-escaped reject "skipKernelTC"
+# The bracket-stripping hardens every OTHER rule too, not just this one.
+printf '\xc2\xabaxiom\xc2\xbb evil : False\n' > "$STAGE/lint-axiom-escaped.lean"
+lint_case axiom-escaped reject
+
+# A-1: a syntax-declaring command in a proof file retargets the token
+# in every importing module — including the checker's own binding
+# probe — so `theorem goal_closed : goal := trivial` proved True.
+printf 'import Emitted\nnotation "goal" => True\ntheorem goal_closed : goal := trivial\n' \
+    > "$STAGE/lint-notation.lean"
+lint_case notation reject "notation"
+printf 'import Emitted\nlocal notation "goal" => True\n' > "$STAGE/lint-notation-local.lean"
+lint_case notation-local reject "notation"
+printf 'infixl:65 " ^^ " => Nat.add\n' > "$STAGE/lint-infixl.lean"
+lint_case infixl reject "infixl"
+printf 'syntax "mytac" : tactic\n' > "$STAGE/lint-syntax.lean"
+lint_case syntax reject "syntax"
+printf 'export Decoy (goal)\n' > "$STAGE/lint-export.lean"
+lint_case export reject "export"
+
+# A-7: the attribute rule was per-line by construction, so splitting
+# the attribute across lines evaded it.
+printf '@[\n  implemented_by evilImpl]\ndef f (x : Nat) : Nat := x\n' \
+    > "$STAGE/lint-attr-multiline.lean"
+lint_case attr-multiline reject "implemented_by"
+printf '@[\n\n  csimp]\ntheorem c : id = id := rfl\n' \
+    > "$STAGE/lint-attr-multiline-gap.lean"
+lint_case attr-multiline-gap reject "csimp"
+
+# No false positives from the new rules: these are legitimate
+# proof-side shapes that MENTION the banned words in comments or
+# strings, or use an attribute list that closes on its own line.
+cat > "$STAGE/lint-newrules-ok.lean" <<'LINTOK'
+-- a comment mentioning notation, syntax, export and implemented_by
+/- and a block comment with infixl and «debug».skipKernelTC -/
+def s : String := "notation syntax export unif_hint"
+@[simp]
+theorem fine : 1 + 1 = 2 := rfl
+def prefixLength : Nat := 3
+def my_export : Nat := 4
+LINTOK
+lint_case newrules-ok accept
+
+# RK-5 (2026-07-24 second audit): the harness used to append its
+# checks to a COPY of the row's proof.lean, so a row that omitted
+# `import Emitted` and defined its OWN `goal` bound against itself and
+# passed everything — an accidental-miss class (an honest row that
+# forgets the import silently stops being checked) and the reason the
+# suite could not catch an A-1/A-5-class regression. The checks now
+# live in a separate probe module importing the tracked artifact.
+R1_SOURCE_RK5='otherTests/saw-core-lean/workflows/offline_lean_e_series/test_offline_lean_e_series.E1_prove0.lean'
+mkdir -p "$STAGE/decoy-goal"
+printf '%s\n' "$R1_SOURCE_RK5" > "$STAGE/decoy-goal/source.txt"
+cat > "$STAGE/decoy-goal/proof.lean" <<'DECOY'
+import CryptolToLean
+
+def goal : Prop := True
+
+theorem goal_closed : goal := trivial
+DECOY
+run_case decoy-goal "environment already contains 'goal' from Emitted"
+
 # Completed-outline binding guards (R-1 fix, 2026-07-24 audit):
 # goal-presence is decided by the tracked reference artifact, and a
 # completed outline that does not present the bare `def goal :` line

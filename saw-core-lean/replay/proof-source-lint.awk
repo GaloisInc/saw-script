@@ -165,10 +165,50 @@ function fatal(msg) {
     i++
   }
 
-  if (out ~ /(^|[^A-Za-z0-9_'.])(axiom|macro|macro_rules|elab|elab_rules|run_cmd|run_tac|run_meta|run_elab|initialize|builtin_initialize|attribute)([^A-Za-z0-9_'.]|$)/ ||
-      out ~ /#eval/ ||
-      out ~ /(^|[^A-Za-z0-9_'.])debug\.[A-Za-z]/ ||
-      out ~ /@\[[^]]*(extern|implemented_by|csimp)/) {
+  # A-6 (2026-07-24 audit): Lean accepts ESCAPED name components, and
+  # `«debug».skipKernelTC` is the same Name as `debug.skipKernelTC` —
+  # so the denylist below, matching literal spellings, was evaded by
+  # one pair of brackets, switching kernel type-checking off for the
+  # whole file. Stripping the brackets before matching hardens EVERY
+  # rule here at once (`«axiom»`, `«macro_rules»`, …), not just the
+  # option rule that surfaced it.
+  gsub(/[«»]/, "", out)
+
+  # A-7 (2026-07-24 audit): the attribute rule is per-line BY
+  # CONSTRUCTION, so an attribute split across lines —
+  #     @[
+  #       implemented_by evilImpl]
+  # — was never matched. Carry an unclosed `@[` forward and match on
+  # the joined text. `attr_pending` holds the text since the opening
+  # bracket; it is cleared by the closing `]`, so an attribute list
+  # spanning any number of lines is scanned as one string.
+  scan = out
+  if (attr_pending != "") {
+    scan = attr_pending " " out
+    if (out ~ /]/) attr_pending = ""
+    else           attr_pending = scan
+  } else if (out ~ /@\[/ && out !~ /@\[[^]]*]/) {
+    attr_pending = out
+  }
+
+  # A-1 (2026-07-24 audit): syntax-declaring commands are banned.
+  # `notation "goal" => True` in a proof file retargets the token
+  # `goal` in EVERY importing module — including the checker's own
+  # binding probe — so the closer proved `True` while the probe
+  # type-checked against it. None of these has a legitimate place in
+  # a discharge file, and this is the same defence-in-depth reasoning
+  # that already bans `macro_rules` and `elab`, which are exactly
+  # what `notation` desugars to. `unif_hint` is included as an
+  # elaborator-level defeq extension (tested NOT exploitable against
+  # the drift rfl on v4.32.0, but it belongs on the list). `export`
+  # is included because it can introduce a competing root-level name.
+  # Measured cost when added: ZERO — no current proof-side file in
+  # the tree matches any of these outside comments, which the lint
+  # already strips before matching.
+  if (scan ~ /(^|[^A-Za-z0-9_'.])(axiom|macro|macro_rules|elab|elab_rules|run_cmd|run_tac|run_meta|run_elab|initialize|builtin_initialize|attribute|notation|syntax|infix|infixl|infixr|prefix|postfix|declare_syntax_cat|binder_predicate|unif_hint|export)([^A-Za-z0-9_'.]|$)/ ||
+      scan ~ /#eval/ ||
+      scan ~ /(^|[^A-Za-z0-9_'.])debug\.[A-Za-z]/ ||
+      scan ~ /@\[[^]]*(extern|implemented_by|csimp)/) {
     print FILENAME ":" FNR ": " $0
     bad = 1
   }
