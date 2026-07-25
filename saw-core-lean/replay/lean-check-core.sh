@@ -273,11 +273,33 @@ printf '%s\n' "$closers" | grep -qx 'goal_closed' || fail "missing-goal_closed"
 cp "$STAGE/proof.lean" "$STAGE/UserProof.lean"
 up_out=$(run_lean -o "$STAGE/UserProof.olean" "$STAGE/UserProof.lean") || {
     echo "$up_out"; fail "proof-does-not-elaborate"; }
-printf 'import Emitted\nimport UserProof\n#check (goal_closed : goal)\n' \
-    > "$STAGE/closer-type-probe.lean"
-if ! ct_out=$(run_lean "$STAGE/closer-type-probe.lean") \
-   || printf '%s\n' "$ct_out" | grep -qE '^[^[:space:]]+: error'; then
-    echo "$ct_out"; fail "closer-wrong-type"
+# The binding is a KERNEL-CHECKED DECLARATION, not a `#check`
+# (A-5 fix, 2026-07-24 second audit; RK-9 structurally).
+#
+# `#check (goal_closed : goal)` was decided by the ELABORATOR alone:
+# `#check` adds no declaration, so nothing was ever kernel-checked,
+# and a type ascription inserts COERCIONS. A user could supply
+#     def hidden : goal := by ... native_decide
+#     theorem goal_closed : True := trivial
+#     instance : CoeT True goal_closed goal := ⟨hidden⟩
+# whereupon the probe printed `hidden : goal` and passed — while the
+# audit inspected `goal_closed` (clean) and never saw `hidden`'s
+# native-evaluation axiom. That admitted compiler-level trust onto a
+# row whose evidence record says STRICT tier.
+#
+# Declaring `__replay_binding : goal := goal_closed` fixes both
+# halves: the kernel checks it, and it becomes an audited constant,
+# so ANY axiom reachable through the real proof term — including one
+# reached via an inserted coercion — is caught by the allowlist in
+# step 7. The name is prefixed to keep it out of the user's way; a
+# user file that declares it collides and fails to compile.
+printf 'import Emitted\nimport UserProof\ntheorem __replay_binding : goal := goal_closed\n' \
+    > "$STAGE/BindingProbe.lean"
+bind_out=$(run_lean -o "$STAGE/BindingProbe.olean" "$STAGE/BindingProbe.lean")
+bind_rc=$?
+if [ "$bind_rc" -ne 0 ] \
+   || printf '%s\n' "$bind_out" | grep -qE '^[^[:space:]]+: error'; then
+    echo "$bind_out"; fail "closer-wrong-type"
 fi
 
 # 7. Axiom audit: every named closer, fixed allowlist.
@@ -286,15 +308,24 @@ if [ ! -f "$STAGE/UserProof.olean" ]; then
     up2_out=$(run_lean -o "$STAGE/UserProof.olean" "$STAGE/UserProof.lean") || {
         echo "$up2_out"; fail "proof-does-not-elaborate"; }
 fi
+# The BINDING CONSTANT is audited alongside the user's closers
+# (A-5 fix): it is the only constant guaranteed to have the goal's
+# type, so auditing it is what catches an axiom reached through an
+# inserted coercion — the closer itself can be clean while the term
+# actually proving the goal is not. `__replay_binding` is listed
+# FIRST so the vacuity count below covers it too.
+audited="__replay_binding
+$closers"
 {
     echo "import Emitted"
     echo "import UserProof"
+    echo "import BindingProbe"
     # The allowlist matches EXACT fully qualified names. This probe
     # has no `open` commands, so names already print fully qualified;
     # the option makes that premise mechanical rather than incidental
     # (defense-in-depth, 2026-07-19).
     echo "set_option pp.fullNames true"
-    printf '%s\n' "$closers" | while read -r nm; do
+    printf '%s\n' "$audited" | while read -r nm; do
         echo "#print axioms $nm"
     done
 } > "$STAGE/axiom-probe.lean"
@@ -322,7 +353,7 @@ fi
 # like a pass. Every named closer must produce exactly one audited
 # line ("depends on axioms" / "does not depend on any axioms");
 # message-format drift or a silent probe fails loudly here.
-n_closers=$(printf '%s\n' "$closers" | grep -c .)
+n_closers=$(printf '%s\n' "$audited" | grep -c .)
 n_audited=$(printf '%s\n' "$ax_out" \
     | grep -cE "depends on axioms|does not depend on any axioms")
 [ "$n_audited" -eq "$n_closers" ] || {

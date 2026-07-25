@@ -193,6 +193,59 @@ theorem goal_closed : goal := by
 EOF
 expect_fail nscapture harness-namespace-in-user-file
 
+# --- A-5: the coercion + hidden-def vector. `goal_closed` is clean
+# and trivial; a CoeT instance carries the ascription to `def hidden`,
+# which holds the real proof BY NATIVE EVALUATION. `def` is invisible
+# to the closer awk (theorem|lemma only), so under the old
+# `#check (goal_closed : goal)` probe this printed `hidden : goal` and
+# PASSED while the audit inspected only `goal_closed` (clean) —
+# putting Lean's COMPILER into the trusted base on a row whose
+# evidence record says strict tier.
+#
+# The kernel-checked binding constant drags the real proof term into
+# the audit, so the native axiom is named and rejected. Note the
+# guard that fires is the AXIOM ALLOWLIST, not the binding gate: the
+# coercion is not itself unsound, and the fix is that its axioms can
+# no longer hide (see the acceptance case below).
+mk coercion
+cat > "$STAGE_ROOT/coercion/Emitted.lean" <<'EOF'
+import CryptolToLean
+
+noncomputable def goal : Prop := forall (x y : BitVec 8), x * y = y * x
+EOF
+cat > "$STAGE_ROOT/coercion/proof.lean" <<'EOF'
+import Emitted
+import Std.Tactic.BVDecide
+
+def hidden : goal := by
+  intro x y
+  bv_decide
+
+theorem goal_closed : True := trivial
+
+instance : CoeT True goal_closed goal := ⟨hidden⟩
+EOF
+expect_fail coercion axiom-outside-allowlist
+
+# --- ...and the DELIBERATE non-rejection: the same shape with an
+# HONEST proof is admitted. The property the kernel enforces is "a
+# kernel-checked term of the goal's type exists and its axioms are
+# allowlisted", not "the user wrote it in the expected style". This
+# case exists so a future hardening that blanket-bans coercions is
+# recognised as a behaviour change rather than a silent tightening.
+mk coercion_ok; real_goal > "$STAGE_ROOT/coercion_ok/Emitted.lean"
+cat > "$STAGE_ROOT/coercion_ok/proof.lean" <<'EOF'
+import Emitted
+
+def hidden : goal := by
+  intro x; cases x <;> rfl
+
+theorem goal_closed : True := trivial
+
+instance : CoeT True goal_closed goal := ⟨hidden⟩
+EOF
+expect_ok coercion_ok
+
 # --- completed-without-generated-reference: a completed outline with
 # no authority to drift-check against.
 mk noref; real_goal > "$STAGE_ROOT/noref/Emitted.lean"

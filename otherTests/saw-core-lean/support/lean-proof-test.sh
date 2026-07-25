@@ -441,31 +441,59 @@ elif echo "$proof_out" | \
     echo "FAIL: proof.lean elaborates but its own declarations use \`sorry\`"
     status=1
 else
-    check_file="$PROBE_DIR/proof.check.lean"
-    cp "$PROBE_DIR/proof.lean" "$check_file"
+    # RK-5 + A-5 fix (2026-07-24 second audit). This harness used to
+    # APPEND its checks to a COPY of the row's proof.lean, so both
+    # `goal_closed` and `goal` resolved in the ROW AUTHOR's scope: a
+    # row that simply omitted `import Emitted` and defined its own
+    # `goal` passed everything (RK-5), and the suite therefore could
+    # not catch an A-1/A-5-class regression at all. The checks now
+    # live in a SEPARATE probe module that imports the tracked
+    # artifact, so the goal it binds against is the authority's.
+    #
+    # The binding is also a kernel-checked DECLARATION rather than a
+    # `#check` (A-5): `#check` adds no declaration and is decided by
+    # the elaborator, and its type ascription inserts COERCIONS — so a
+    # `def hidden` holding a native-evaluation proof could satisfy the
+    # probe while the audit inspected only the clean `goal_closed`.
+    # Auditing `__replay_binding` drags the real proof term in.
+    check_file="$PROBE_DIR/ProofCheck.lean"
+    cp "$PROBE_DIR/proof.lean" "$PROBE_DIR/UserProof.lean"
+    up_out=$( ( cd "$LAKE_DIR" && LEAN_PATH="intTestsProbe/$TEST_NAME" \
+                $LAKE_TIMEOUT_CMD lake env lean \
+                 -o "intTestsProbe/$TEST_NAME/UserProof.olean" \
+                 "intTestsProbe/$TEST_NAME/UserProof.lean" ) 2>&1 ) && \
+        up_rc=0 || up_rc=$?
+    if [ "$up_rc" -ne 0 ]; then
+        echo "--- UserProof.lean (must compile for the audit probe) ---"
+        echo "$up_out"
+        echo "FAIL: proof.lean did not compile as a module"
+        rm -rf "$PROBE_DIR"
+        exit 1
+    fi
     {
-        echo
-        echo "-- Harness-added prototype validation checks."
-        # The axiom allowlist (axiom-audit.awk) matches EXACT fully
-        # qualified names. proof.check.lean is a COPY of the row's
-        # proof.lean, so any `open` there would otherwise abbreviate
-        # the printed axiom names and fail the audit spuriously
-        # (2026-07-19 finding: the 2026-07-18 hardening's "probe
-        # files have no opens" premise is false for THIS consumer).
+        echo "-- Harness-added validation checks (separate module: the"
+        echo "-- names below resolve against the AUTHORITY, not the row)."
+        [ -n "$STAGED_EMITTED_ABS" ] && echo "import Emitted"
+        echo "import UserProof"
+        # The allowlist matches EXACT fully qualified names. This probe
+        # has no `open` commands of its own, so names print fully
+        # qualified; the option makes that mechanical rather than
+        # incidental (2026-07-19).
         echo "set_option pp.fullNames true"
         if goal_output_requires_goal_closed; then
-            echo "#check (goal_closed : goal)"
+            echo "theorem __replay_binding : goal := goal_closed"
+            echo "#print axioms __replay_binding"
             echo "#print axioms goal_closed"
         else
             proof_targets | while IFS= read -r target; do
                 echo "#print axioms $target"
             done
         fi
-    } >> "$check_file"
+    } > "$check_file"
 
     check_out=$( ( cd "$LAKE_DIR" && LEAN_PATH="intTestsProbe/$TEST_NAME" \
                    $LAKE_TIMEOUT_CMD lake env lean \
-                    "intTestsProbe/$TEST_NAME/proof.check.lean" ) 2>&1 ) && \
+                    "intTestsProbe/$TEST_NAME/ProofCheck.lean" ) 2>&1 ) && \
         check_rc=0 || check_rc=$?
     bad_axioms=$(printf '%s\n' "$check_out" | audit_axioms)
     # Vacuity guard (2026-07-20, pre-release audit backlog): the
@@ -476,21 +504,29 @@ else
     # and there must be at least one — a row whose proof.lean names
     # no auditable closer (example-only / def-only) fails here
     # instead of silently skipping the sorry/axiom check.
-    expected_audits=$(grep -c '^#print axioms ' "$check_file")
+    # `|| true`: `grep -c` EXITS 1 on a zero count, and `set -e` is
+    # active from the build step above — so without this the script
+    # died silently at exactly the moment the vacuity guard was
+    # supposed to speak. Fail-closed (the row still exited nonzero),
+    # but the diagnostic below could never print, so this guard had
+    # never once been observed to fire. Found 2026-07-24 while
+    # building the RK-5 mutation case: the C4 discipline catching a
+    # C3-shaped bug in the guard C4 exists to watch.
+    expected_audits=$(grep -c '^#print axioms ' "$check_file" || true)
     actual_audits=$(printf '%s\n' "$check_out" \
-        | grep -cE "depends on axioms|does not depend on any axioms")
+        | grep -cE "depends on axioms|does not depend on any axioms" || true)
     if [ "$expected_audits" -lt 1 ] || [ "$actual_audits" -ne "$expected_audits" ]; then
-        echo "--- proof.check.lean (axiom audit) ---"
+        echo "--- ProofCheck.lean (axiom audit) ---"
         echo "$check_out"
         echo "FAIL: axiom audit was vacuous (expected $expected_audits audited closer(s), saw $actual_audits audit line(s))"
         status=1
     elif [ "$check_rc" -ne 0 ] || echo "$check_out" | grep -qE "^[^[:space:]]+: error" ; then
-        echo "--- proof.check.lean (harness-added checks) ---"
+        echo "--- ProofCheck.lean (harness-added checks) ---"
         echo "$check_out"
         echo "FAIL: proof theorem audit failed"
         status=1
     elif [ -n "$bad_axioms" ]; then
-        echo "--- proof.check.lean (axiom audit) ---"
+        echo "--- ProofCheck.lean (axiom audit) ---"
         echo "$check_out"
         echo "FAIL: proof theorem depends on unallowlisted axioms:"
         echo "$bad_axioms"
