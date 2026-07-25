@@ -301,6 +301,21 @@ run_doc_claim_lint() {
     fi
 }
 
+# Replay trust-kernel guard self-test (2026-07-24, audit category
+# C4): drives lean-check-core.sh directly with synthetic stages so
+# each of its NAMED failures has a mutation that demonstrably fires.
+# Enumeration found only 4 of 25 kernel guards pinned; the unpinned
+# set included the two guards A-5 and S-1 defeat.
+run_replay_kernel_selftest() {
+    echo
+    echo "=== support/replay-kernel-selftest ==="
+    local rc=0
+    bash "$HERE/support/replay-kernel-selftest.sh" test || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        record_failure "support/replay-kernel-selftest (exit=$rc)"
+    fi
+}
+
 record_gap_inventory_item() {
     local path="$1"
     local note="$2"
@@ -350,6 +365,7 @@ case "$verb" in
         iterate_support_lemmas
         iterate_negative
         run_trust_tier_selftest
+        run_replay_kernel_selftest
         run_doc_claim_lint
         iterate_gap_inventory
         print_summary_and_exit
@@ -390,6 +406,7 @@ case "$verb" in
         iterate_support_lemmas clean
         iterate_negative clean
         bash "$HERE/support/trust-tier-selftest.sh" clean
+        bash "$HERE/support/replay-kernel-selftest.sh" clean
         print_summary_and_exit
         ;;
     *)
