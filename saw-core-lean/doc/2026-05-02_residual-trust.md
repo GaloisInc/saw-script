@@ -276,10 +276,15 @@ and the raw-error rejection disposition (§1.2)).
 `foldl`, `shiftL`, `shiftR`, `rotateL`, `rotateR`, `Pair_fst`,
 `Pair_snd` are now structural defs over Lean's `Vector` /
 `PairType`. The corresponding round-trip axioms in
-`SAWCorePrelude_proofs.lean` (`gen_atWithDefault`,
-`atWithDefault_gen`, `atWithDefault_out_of_bounds`,
-`atWithDefault_singleton_zero`, `foldr_zero`, `foldl_zero`)
-are theorems, not axioms.
+`SAWCorePrelude_proofs.lean` are theorems, not axioms. (Corrected
+2026-07-24, audit category C2: this list previously named six
+theorems, three of which — atWithDefault_gen,
+atWithDefault_out_of_bounds, atWithDefault_singleton_zero — do not
+exist under those names, and a fourth, gen_atWithDefault, exists
+only as `gen_atWithDefault_double_reverse`. The surviving claim is
+the one that matters and is mechanically checkable: that file
+declares no axioms. Verify with
+`grep -c '^axiom' SAWCorePrelude_proofs.lean`.)
 
 **Manifestation if violated:** A wrong-type axiom would let users
 derive false equalities at the term level. We mitigate by
@@ -571,12 +576,32 @@ backend bug, and would affect the Rocq backend identically.)
 
 ---
 
-### 3.4 L-1 polymorphismResidual scope — *closed by L-discipline-5*
+### 3.4 L-1 polymorphismResidual scope — *GATE REMOVED; entry superseded*
 
-**Status:** Closed 2026-05-02 evening. The gate now checks both
-Pi and Lambda binders for sort `k ≥ 1`; pinned by the smoketest
-"polymorphismResidual catches Lambda-side sort 1 binder
-(L-discipline-5)" in `SmokeTest.hs`.
+**Status (corrected 2026-07-24, audit finding A-3):** the
+polymorphismResidual gate this entry describes **no longer exists**
+— it was removed from the source in May and this catalog continued
+to record it as a closed-and-pinned soundness gate for two months,
+through two soundness audits and a doc-faithfulness pass. Nothing
+refuses a sort-`k ≥ 1` binder today; such binders are TRANSLATED,
+each getting a fresh Lean universe variable
+(`Convention.hs:527-542`).
+
+That replacement is sound in the direction that matters
+(`∀ {u} (a : Sort u), P a` implies SAW's `∀ (a : sort k), P a`),
+so removing the gate did not create the weakening this entry was
+written to exclude. But two consequences are OPEN and tracked in
+`TODO.md`: a universe-parameterized goal renders `def goal.{u0}`,
+which the replay checker's goal-presence regex misses (A-2), and
+its `goal_holds` stub drops the universe binders (A-9); separately,
+`sort 0 → Type` NARROWS the quantifier, since SAWCore admits
+`Prop ≤ sort 0` cumulativity and Lean 4 has no term cumulativity
+(F-5) — which the removed gate would not have covered either, as
+it only gated `k > 0`.
+
+**Historical text follows, retained as the record of what was
+believed:** the gate checked both Pi and Lambda binders for sort
+`k ≥ 1`, pinned by a smoketest for the Lambda-side case.
 
 The Lambda-side check is defensive (post-`scNormalizeForLean`
 type terms shouldn't contain unreduced Lambdas), but covering

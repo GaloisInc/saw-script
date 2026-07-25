@@ -51,10 +51,343 @@ fragment fails LOUDLY at translation. No silent divergence, ever.
   V-H1 (negative-probe diagnostic pins — found four probes ALREADY
   vacuous, recalibrated as deletion pins), V-H2/V-H3 (obligation
   harness guards), LB-2/TIER-1/DOC-1 (doc honesty) — all FIXED
-  2026-07-24. Still OPEN from the audit: LB-1 (raw fix contract —
-  coordinate with 0.03 fragment semantics; reachability recorded in
-  project memory) and SEAMS-D3 (type-translation injectivity
-  follow-up).
+  2026-07-24. Still OPEN from that audit: LB-1 (raw fix contract) —
+  **now superseded by S-2 below, which supplies the witness proving
+  it reachable** — and SEAMS-D3, **now SETTLED in the affirmative by
+  F-2 below**.
+  **A SECOND panel then ran the same day** and found R-1 was one
+  instance of a class rather than the class: report
+  `doc/2026-07-24_soundness-audit-2.md`, findings tracked in the
+  section below. Three further CRITICALs, two demonstrated
+  end-to-end. The release gate is NOT met until those clear.
+## Release gate — second audit findings (2026-07-24)
+
+A SECOND independent six-lane audit ran the same day
+(`doc/2026-07-24_soundness-audit-2.md`), after the first audit's R-1
+fix landed. It found that R-1 was one instance of a class, not the
+class: **three further CRITICALs, two of them demonstrated
+end-to-end against the shipped trust kernel.** Items below are
+verbatim-traceable to that report; `[V]` marks claims re-verified
+independently in-session (2026-07-24, read-only).
+
+### Blocks release
+
+- [ ] **A-1 (CRITICAL, live) — `notation` capture of the binding
+  probe.** A user `proof.lean` containing `notation "goal" => True`
+  makes the checker's `#check (goal_closed : goal)` probe resolve
+  `goal` in the USER's token table: `CHECK-OK` on a proof of `True`
+  against a false obligation. Live on runtime replay AND the CI
+  harness; additionally defeats the in-statement `by sorry`
+  obligation detection (the captured closer's type never mentions
+  `goal`, so `#print axioms` never traverses it). Fix = BOTH
+  (a) ban syntax-declaring commands in proof-side files
+  (`notation|syntax|infix|infixl|infixr|prefix|postfix|declare_syntax_cat|binder_predicate|unif_hint|export`)
+  in `proof-source-lint.awk:168` — measured cost zero across all 119
+  proof-side files — and (b) A-5's kernel-checked binding theorem.
+  **A probe rename does NOT work** (verified in-report: notation
+  atoms are arbitrary strings, so `_root_.goal` and `«goal»` are
+  capturable too). *Standing caution: the report's §A-5 claims its
+  binding theorem alone blocks A-1; in-session analysis disputes
+  this (the notation captures the binding theorem identically) —
+  settle by experiment, do NOT drop the lint half on that claim.*
+- [ ] **A-5 (CRITICAL, live) — the probe accepts a coercion and the
+  audit then inspects the wrong declaration.** `#check (goal : …)`
+  type-ascription inserts coercions, so a user `instance : CoeT True
+  goal_closed goal := ⟨hidden⟩` makes the probe pass via `def hidden`
+  — which the closer awk (`theorem|lemma` only) never audits.
+  Result: `native_decide` trust admitted on a STRICT-tier row. Fix
+  (verified effective in-report): replace the `#check` with a real
+  kernel-checked declaration and audit IT —
+  `theorem __replay_binding : goal := goal_closed` +
+  `#print axioms __replay_binding`.
+- [ ] **S-1 (CRITICAL) — the Class-F / Class-S productivity
+  obligations are ERASABLE on the completed-outline path** (the only
+  path that can accept them). `[V]` `saw_stream_realize`'s body is
+  `Pure.pure (saw_stream_unfold α x0 step)` — it mentions neither
+  `mkfn` nor `_h`, while its own docstring claims "the proof argument
+  is consumed so an undischarged obligation is loud". `[V]`
+  `saw_fix_bounded_choose` uses `Classical.choice h.seed`
+  (Prop-typed ⇒ proof-irrelevant ⇒ erasable); contrast
+  `saw_mkStream_choose`, which uses `Classical.choose` (carries the
+  predicate as a type-level implicit ⇒ binding). So a completed
+  outline may write the reduct directly, never stating
+  `total`/`lookback`/`faithful`, and drift-`rfl` passes clean.
+  10+ tracked `proofs/*/completed.lean` rows sit on this path and
+  no pin exists. **FIX-SEAM ⇒ pause rule applies: discuss before
+  touching the recognizer/realization surface.** Verify first — the
+  audit lane could not execute the defeq reductions.
+
+### High
+
+- [ ] **A-2 (HIGH, live-narrow) — `has_goal_def=0` is still a silent
+  branch on the PLAIN replay path.** The R-1 fix hard-failed the
+  completed path and left the plain path branching silently, though
+  the same justification covers both. `[V]` A goal rendered
+  `noncomputable def goal.{u0} :` misses the detection regex ⇒ the
+  binding gate disappears entirely ⇒ a `proof.lean` that never
+  mentions the goal is admitted. Trigger is REACHABLE via
+  `parse_core` (lane-core traced `parse_core "Eq (sort 1) (sort 0)
+  (sort 0)"` → `universeVars` → `def goal.{u0}`); neither
+  `writeLeanProp` telescope pin fires. Fix: hard-fail `has_goal_def
+  == 0` on the plain path too, AND refuse a goal emission with
+  non-empty `universeVars` (emitter-side, two lines, loud).
+- [ ] **A-9 (HIGH) — the `goal_holds` stub drops the goal's universe
+  binders** (`Lean.hs:134-137` builds it from the bare `nameStr`), so
+  it proves `goal.{?u}` at one level instead of universally — a
+  silently weaker theorem. Must land with any A-2 fix.
+- [ ] **A-6 (HIGH) — `«debug».skipKernelTC` evades the source lint**
+  (`proof-source-lint.awk:170` matches `debug\.` literally; Lean
+  treats the escaped component as the same `Name`). Kernel type
+  checking off for the whole file = the Lean kernel leaves the
+  trusted base. One-line fix: `gsub(/[«»]/, "", out)` before the
+  denylist match, which also hardens every other rule against
+  `«axiom»`-style spellings.
+- [ ] **LIB-1 / D-1 (HIGH) — the wrapped-vector carrier EQUATES
+  computations SAW distinguishes** (found independently by two
+  lanes; the audit's most significant translator-side finding).
+  SAW's vectors are element-lazy (`genOp` builds delayed thunks;
+  `atWithDefaultOp` forces only the selected one), but the Lean
+  carrier `Except String (Vec n T')` cannot represent "error in one
+  slot, good values elsewhere" — `genWithBoundsM` = `Vector.ofFnM`
+  sequences and short-circuits, denotationally. The adaptation is
+  NON-INJECTIVE and the collapsed value appears on BOTH sides of
+  emitted equations, so a SAW-FALSE equation closes by `rfl` in
+  Lean. Same class, lower reach: `genM`, `vecSequenceM`,
+  `atRuntimeCheckedM`, `foldrM`/`foldlM`, `sawLet`. NOT affected
+  (each checked): `iteM`, accumulators, `atWithDefaultM`.
+  Reachability strongly indicated, unproven — no differential row
+  covers "SAW succeeds lazily while Lean errors eagerly". **First
+  action: write that row** (template
+  `differential/error_unreachable/test.saw`); one run settles it.
+- [ ] **F-5 (HIGH if reachable) — `sort 0 → Type` NARROWS the
+  quantifier.** SAWCore admits `Prop ≤ sort 0` cumulativity and
+  applies it as subsumption, so a SAW binder `(a : sort 0)` can be
+  instantiated at a proposition; Lean 4 has no term cumulativity, so
+  that instantiation class is absent and the emitted goal is
+  strictly WEAKER. Zero corpus hits (specialization monomorphizes
+  goals). Note this is k=0, so the (nonexistent) `polymorphismResidual`
+  would not have covered it. Fix: emit `Sort u` for sort-0 binders
+  too, or refuse a sort binder in a goal telescope — tension with
+  A-2, so the two must land together.
+
+### Medium
+
+- [ ] **S-2 — `saw_fix_unique_exists_raw` is reachable AND honestly
+  dischargeable** (upgrades the first audit's LB-1 from "latent,
+  zero corpus uses"). Witness: `parse_core "fix Nat (\n -> mulNat n
+  0)"` routes `FixUnrecognized` → `shouldWrapBinder Nat = False` →
+  `lowerFixProofObligation`; the obligation is provable in three
+  tokens (`⟨0, rfl, fun y h => h.symm⟩`) while SAW's meaning is ⊥.
+  **Not fixable by hardening a checker** — the contract is
+  extensional and cannot observe divergence. Also recorded: ordinary
+  recursive Cryptol functions escape this only ACCIDENTALLY (the
+  constant-error family is a fixed point of bind-sequenced bodies,
+  so uniqueness fails for divergent shapes) — protection that does
+  not extend to `DNat`/`DRawProp`/`DRawType`. FIX-SEAM ⇒ pause rule.
+- [ ] **LIB-2 — the five `*WithProof` primitives are UNINTERPRETED
+  in SAW but interpreted in Lean.** `atWithProof`/`genWithProof`/
+  `updWithProof`/`sliceWithProof`/`updSliceWithProof` are declared
+  `primitive` with no body and have zero implementations anywhere in
+  SAW; their only semantics is their type. The Lean helpers give
+  them values, so the Lean statement is strictly WEAKER than the SAW
+  obligation (which must hold for all interpretations). Two
+  obligation rows already emit them. Add to the residual-trust
+  catalog (currently absent) or gate them the way `IntMod` now is.
+- [ ] **A-7 — multi-line `@[ \n implemented_by …]` evades the
+  attribute rule** (`proof-source-lint.awk:171` is per-line by
+  construction). Same shape for `csimp`/`extern`; matters for
+  native-evaluation trust. Fix: track attribute brackets in the
+  lexer state or accumulate across lines.
+- [ ] **A-3 — `polymorphismResidual` is documented as a live gate
+  and DOES NOT EXIST.** `[V]` Confirmed absent from every `.hs` in
+  the tree (doc-only identifier; the May keep/kill map already
+  recorded it dead). Cited as live in `architecture.md:47,124,151,
+  169-172`, `README.md:45-46`, `contributing.md:132,239` and —
+  critically — **`doc/2026-05-02_residual-trust.md:574`, the trust
+  authority itself**, where it backs a universe-soundness argument.
+  Also false as written: "translateSort maps every non-Prop SAW sort
+  to Lean Type" (only `TypeSort 0` does). The REPLACEMENT machinery
+  is sound (lane-core verified no collapse remains and per-binder
+  freshness is real) — this is a documentation-faithfulness defect
+  in a soundness argument, and it supplies A-2's trigger. *Missed by
+  the 2026-07-23 doc-faithfulness pass, which read the claim without
+  checking the identifier existed.*
+- [ ] **HELP-1 — the SAWScript help text says the discharge path
+  does not exist.** `saw-script/src/SAWScript/Interpreter.hs:5303-5307`
+  still reads *"Reserved: … NOT AVAILABLE in this release — this
+  command currently always fails with a diagnostic. Use
+  `offline_lean` (emission-only) and discharge the obligation in
+  Lean externally."* — and `:5295`, in `offline_lean`'s own help,
+  promises *"SAW-side discharge will arrive as
+  `offline_lean_replay`"* in the future tense. Both have been false
+  since the replay landing on 2026-07-16 (`Builtins.hs:1528-1611` is
+  a complete live implementation: it stages the fresh emission, runs
+  the trust kernel, and admits the goal with `LeanReplayEvidence`).
+  So for eight days the primary user-facing surface has told users
+  the product's central feature is unavailable — a user reading
+  `:help offline_lean_replay` would never try it.
+  Found 2026-07-24 by an independent agent, AFTER both six-lane
+  audits; neither found it. Audit-1's lane-sawside checked that the
+  interpreter registrations are pass-through — i.e. it verified the
+  WIRING and never read the TEXT.
+  Category: C2 (claim without a mechanism) at **inverse polarity** —
+  a claim that a mechanism does NOT exist, when it does. The
+  `doc-claim-lint.sh` closure does not cover this: it checks that
+  identifiers named in maintained `.md` docs resolve, not that
+  user-facing behavioural claims are true. See the C2 note in
+  `doc/2026-07-24_semantic-trust-kernel-plan.md` for the proposed
+  second half (a stale-promise lint over prim help text: every
+  "not yet" / "will arrive" / "NOT AVAILABLE" / "always fails"
+  claim must be re-justified, because nothing breaks when such a
+  claim becomes false).
+  Fix: rewrite both help texts to describe what replay actually
+  does and what it requires (a `proofDir` with `proof.lean`, and
+  optionally `completed.lean`), and state the strict-tier admission
+  posture (TIER-1).
+- [ ] **RK-5 — the CI harness binds inside the user's own module.**
+  `lean-proof-test.sh` appends its checks to a COPY of the row's
+  `proof.lean`, so both names resolve in the row author's scope: a
+  row that omits `import Emitted` and defines its own `goal` passes
+  everything. Accidental-miss class (an honest row that forgets the
+  import silently stops being checked) AND it means the suite cannot
+  catch an A-1/A-5-class regression. Fix: build the checks in a
+  separate probe module that imports the emitted artifact. This is
+  also genuine consumer drift against the harness's own
+  "identical by mechanism, not discipline" claim.
+- [ ] **F-2 (contracts) — SEAMS-D3 is SETTLED, in the affirmative.**
+  Type-image collapse is real: `mkFloat`/`mkDouble` share a Lean
+  body, making a SAW-invalid equation `rfl`-provable. Needs
+  hand-written SAWCore to reach. (Supersedes the first audit's
+  SEAMS-D3 "unconfirmed, do not mark cleared".)
+- [ ] **F-2 (core) — the recursor head is emitted SHORT while its
+  ctor-order assertion is emitted QUALIFIED**, so `@Stream.rec` is
+  genuinely ambiguous against Lean core's root-scope `Stream` and is
+  resolved by overload-by-elaboration; if it ever resolved to the
+  core one, the assertion would still pass while checking a
+  different inductive. One-line fix: emit the head qualified too.
+- [ ] **F-6 / F-7 — name hygiene is delegated to Lean's
+  typechecker.** `reservedIdents` omits `Vec Bool Nat Eq Except
+  String Pure Bind Num Stream coerce saw_throw_error …`, all of
+  which the emitter writes as bare short names into the same file
+  (`llvm_fresh_var "Vec"` traces all the way to a shadowing binder).
+  Instances fail loudly today, but the disjointness is ACCIDENTAL,
+  not structural; Cryptol/SAWCore def names bypass `escapeIdent`
+  entirely and land inside the emitted namespace where Lean prefers
+  the namespace-local name. Fix: seed `unavailableIdents` from the
+  enumerable set of bare names the emitter can produce.
+- [ ] **S-3 — the Class-F recognizer over-approximates; `inZip` is
+  dead code.** `scanRecUses` is entered as `go False elt` and every
+  recursive call passes `False`, so the zip arm fires anywhere in the
+  element term with no requirement that the zip be consumed by an
+  `at` at the inner binder. Converts an intended emission-time named
+  rejection into a check-time undischargeable obligation — violating
+  the module's own reject-when-unsure discipline, which matters more
+  given S-1 undermines "the obligation is the backstop". FIX-SEAM ⇒
+  pause rule.
+
+### Low / housekeeping
+
+- [ ] **RK-7** — the axiom-audit awk output is tested for emptiness
+  only, so an awk hard-error reads as a clean audit. `[V]` Confirmed
+  asymmetric with the lint invocation, which checks BOTH `lint_rc`
+  and output (hardened in the F1 fix). One line.
+- [ ] **RK-8** — cache reuse is gated on marker EXISTENCE only;
+  staged contents are never re-hashed, so anyone with write access
+  to `~/.cache/saw-core-lean/lean-<fp>/` can substitute the support
+  library (adding *lemmas*, invisible to the allowlist audit).
+  `SAW_LEAN_ROOT` substitutes both library and checker. Defensible
+  as a dev override — residual-trust should say so.
+- [ ] **A-10** — the two `sorry` rules contradict each other on the
+  completed path (lenient scan of `Emitted.lean` exempts the
+  sanctioned `| skip); all_goals sorry));` form; the user-file scan
+  is zero-tolerance; on the completed path they apply to the same
+  bytes and zero-tolerance wins). Fail-CLOSED, so incompleteness not
+  unsoundness: a goal carrying a sanctioned in-statement `sorry`
+  cannot be discharged through the completed path unless the user
+  also rewrites the tactic text. Third instance of proxy-vs-intent
+  divergence; reconcile.
+- [ ] **A-4** — `prettyTerm` ignores `Prec` for `Sort`; the only
+  case producing multi-token output at `PrecAtom`. Reachable by the
+  same `parse_core` route as A-2, so a sort-1 goal trips both.
+- [ ] **F-1** — the under-applied partial-op path emits an
+  ILL-TYPED artifact and has zero compiling witnesses despite being
+  marked "audited safe". Loud, not silent; the defect is the claim.
+- [ ] **F-3 (contracts)** — division-wrapper error messages have no
+  SAWCore backing. **F-3 (core) / LIB-4** — `saw_ctor_order`
+  compares constructor names in order but not arity or FIELD order
+  within a constructor, and 5 of 6 asserted datatypes are
+  single-constructor, i.e. the assertion is vacuous exactly where
+  the field-order hazard lives (a Cryptol record `{a : [8], b :
+  [8]}` field swap typechecks while swapping every projection).
+  **F-3b** — `@Eq.rec` reaches emission through a hardcoded path
+  that skips `translateFTermF`, so it carries no assertion.
+- [ ] **LIB-3** — `IntMod n := Int` means a BOUND `IntMod` variable
+  ranges over representatives, not residues. Harmless in positive
+  `∀` position; unsound only in negative position (no such emitted
+  shape found). Distinct from the open F1 `n = 0` totalization.
+- [ ] **F-8 / F-9** — `combineBinders` takes the lambda binder's
+  annotation with the Pi's result type, translated by predicates the
+  code says can disagree; a binder-NAME disagreement is loud, a
+  binder-TYPE disagreement is silent. Not on the goal path, but on
+  `write_lean_term`/`write_lean_cryptol_module` whose defs proofs
+  import. — `SAWModule.hs:185-187` passes `InjectCodeDecl "Lean"`
+  text into the emitted file verbatim with no validation or
+  escaping: an unaudited text-injection seam in an otherwise
+  fully-structured emitter (not reachable from user Cryptol today).
+- [ ] **Documentation corrections batch**: A-3's five-plus sites
+  (including the trust authority); the residual-trust sentence
+  LIB-1 shows is BACKWARDS (`:496-503` says the eager carrier makes
+  obligations "unprovable, not wrong" — when both sides surface the
+  same message the obligation becomes trivially TRUE in Lean while
+  FALSE in SAW, and the byte-exact messages chosen to stop Lean
+  over-DISTINGUISHING are what let it over-EQUATE); the
+  `Float`/`Double` faithfulness argument; the `divNat 2 0` ledger
+  entry; `bvSExt` "stays axiomatic"; and the F-1 "audited safe"
+  verdict.
+- [ ] **Dead code**: `Ascription` in `prettyTerm` has only
+  consumption sites — delete so it cannot be reintroduced.
+
+### Systemic
+
+- [ ] **A-11 — the trust kernel asks `grep` questions that only Lean
+  can answer.** Six kernel rules establish properties of an
+  ELABORATED Lean environment by pattern-matching over Lean SOURCE
+  TEXT (goal presence, closer set, goal binding, placeholder policy,
+  source lint, drift); text matching and Lean's view of the
+  environment are different functions, and every place they are used
+  interchangeably is a place they can disagree — they did, six
+  times. Lean can answer five of the six authoritatively, and the
+  checker is already positioned to ask (it compiles the user file to
+  `UserProof.olean` and runs probe modules that import it): *what
+  did this module declare* (subsumes the closer awk, closes A-5
+  outright), *what does it depend on* (`#print axioms` over every
+  added declaration — subsumes the `sorry` text scan and A-10),
+  *does it prove the goal* (a real kernel-checked binding theorem),
+  *did it extend the environment* (parser extensions, attributes,
+  instances are enumerable — A-1/A-6/A-7 each slipped past the awk
+  approximation). The honest exception: **options that change how
+  the module was BUILT** (`debug.skipKernelTC`) cannot be detected
+  from inside Lean afterwards, because importing a module does not
+  re-check it — for that class the answer is to stop the user
+  controlling the build, with the lint as a named backstop.
+  Plan-of-record: `doc/2026-07-24_semantic-trust-kernel-plan.md`.
+
+### Verification and pins owed
+
+- [ ] Red-before/green-after regression rows for A-1, A-2, A-5 and
+  S-1 under `saw-boundary/`, plus lint self-tests for A-6 and A-7
+  and a `trust-tier-selftest.sh` case for the notation shape.
+- [ ] A CI-harness negative row for the no-import decoy-`goal`
+  vector (RK-5).
+- [ ] The LIB-1 differential row (settles the highest-value
+  reachability question in the report).
+- [ ] Re-run the appendix witnesses as REAL rows: the audit
+  exercised the shipped kernel with `lake` swapped for the pinned
+  raw `lean` (every grep/awk/probe/branch is shipped code, but the
+  substitution should be retired now the suite is idle).
+
+## Release gate (continued)
+
 - [ ] **Docs phrasing pass** (2026-07-21): rework the few remaining
   imprecise offensive-security phrasings into formal-verification
   terms (skeptical review / counterexample search /

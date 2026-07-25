@@ -278,7 +278,14 @@ audit_axioms() {
     # removed from both consumers.) The row's trust tier (if any)
     # rides through here; the awk validates it (unknown/unused tiers
     # emit sentinel lines, which land in bad_axioms and fail).
-    awk -v tier="$TRUST_TIER" -f "$SAW_DIR/saw-core-lean/replay/axiom-audit.awk"
+    #
+    # C3 (category closure, 2026-07-24): on a nonzero awk exit, emit a
+    # sentinel so an awk hard-error cannot read as a clean audit
+    # (empty output). Mirrors the explicit rc check in the trust
+    # kernel; the caller treats any output as rejection.
+    LC_ALL=C awk -v tier="$TRUST_TIER" \
+        -f "$SAW_DIR/saw-core-lean/replay/axiom-audit.awk" \
+        || echo "AXIOM-AUDIT-AWK-FAILED (exit $?) — audit did not run; failing closed"
 }
 
 # Build the Lake project. A failure here means the support library

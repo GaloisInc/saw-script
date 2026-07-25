@@ -287,6 +287,20 @@ run_trust_tier_selftest() {
     fi
 }
 
+# Doc-claim lint (2026-07-24, audit category C2): every code
+# identifier a MAINTAINED doc cites in backticks must exist in the
+# source. Catches the A-3 class — a soundness argument resting on a
+# named mechanism that was deleted or renamed.
+run_doc_claim_lint() {
+    echo
+    echo "=== support/doc-claim-lint ==="
+    local rc=0
+    bash "$HERE/support/doc-claim-lint.sh" test || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        record_failure "support/doc-claim-lint (exit=$rc)"
+    fi
+}
+
 record_gap_inventory_item() {
     local path="$1"
     local note="$2"
@@ -336,6 +350,7 @@ case "$verb" in
         iterate_support_lemmas
         iterate_negative
         run_trust_tier_selftest
+        run_doc_claim_lint
         iterate_gap_inventory
         print_summary_and_exit
         ;;

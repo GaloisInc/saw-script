@@ -44,7 +44,10 @@ SAWCore Term
 scNormalizeForLean   (specialization to fixed point; opaque set
                       auto-derived + leanOpaqueBuiltins fallback)
     ↓
-polymorphismResidual (gate: full term-tree walk; reject sort k>0)
+translateSort        (sort k=0 → Type; sort k≥1 → TypeLvl k at
+                      ValuePos, or a FRESH universe variable at
+                      TypeCarrier/BinderPos — see the universe note
+                      under Soundness boundaries)
     ↓
 SAWCoreLean.Term     (term → Lean.AST)
     ↓
@@ -121,8 +124,7 @@ The `saw-central` package also has Lean-related code:
 
 - `saw-central/src/SAWCentral/Prover/Exporter.hs` — wires the
   translator into SAWScript primitives. Hosts
-  `polymorphismResidual`, `scNormalizeForLean`,
-  `discoverNatRecReachers`, `leanOpaqueBuiltins`, the
+  `scNormalizeForLean`, `discoverNatRecReachers`, `leanOpaqueBuiltins`, the
   `auditPreludePrimitivesForLean` audit, and the
   `iterateNormalizeToFixedPoint` cap-loop.
 
@@ -148,8 +150,8 @@ The trust authority is `2026-05-02_residual-trust.md` (the May-era
 user-facing summary is archived at
 `archive/2026-04-24_soundness-boundaries.md`). Quick summary:
 
-- **Translator-time refusals**: `polymorphismResidual` (sort k>0
-  binders), `UnsoundRecursor` (Nat/Pos/Z/AccessibleNat/AccessiblePos
+- **Translator-time refusals**: `UnsoundRecursor`
+  (Nat/Pos/Z/AccessibleNat/AccessiblePos
   `#rec` survivors), `RejectedPrimitive` (`fix_unfold` and other
   primitives with no proof-carrying interface),
   `scNormalize` 100-iter cap. Each pinned by a regression test.
@@ -167,10 +169,22 @@ user-facing summary is archived at
   obsolete-helper scan enforces this). Raw-position fixes
   (function/proof/index results) keep the raw proof-carrying
   contract `saw_fix_unique_exists_raw`.
-- **Universe collapse**: `translateSort` maps every non-Prop SAW
-  sort to Lean `Type`. Pre-`polymorphismResidual` this would
-  weaken; the gate enforces that only Type-0 binders reach
-  emission.
+- **Universes** (corrected 2026-07-24, audit finding A-3 — the
+  previous text described a polymorphismResidual gate that has
+  NOT existed since May, and mis-stated `translateSort`).
+  What is actually true: `translateSort` maps `TypeSort 0 → Type`,
+  and `TypeSort k ≥ 1` to `Lean.TypeLvl k` at `ValuePos` or to a
+  FRESHLY ALLOCATED universe variable at `TypeCarrierPos`/
+  `BinderPos` (`Convention.hs:527-542`). Sort-`k≥1` binders are
+  therefore TRANSLATED, not refused. The replacement is sound in
+  the direction that matters — `∀ {u} (a : Sort u), P a` implies
+  SAW's `∀ (a : sort k), P a` — and per-binder freshness is real
+  (the memo keys on `VarName`'s index). Two OPEN consequences are
+  tracked in `TODO.md`: a universe-parameterized goal renders
+  `def goal.{u0}` and trips the replay checker's goal-presence
+  regex (A-2/A-9), and `sort 0 → Type` NARROWS the quantifier
+  because SAWCore admits `Prop ≤ sort 0` cumulativity while Lean 4
+  has no term cumulativity (F-5).
 - **Bool case order**: SAW's True-first vs Lean's false-first.
   Handwritten `iteDep`/`ite` wrappers in `SAWCorePreludeExtra`
   permute correctly; `iteDep` is opaque under specialization

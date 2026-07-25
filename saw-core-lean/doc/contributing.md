@@ -129,8 +129,8 @@ normalization with no Lean target.
 Soundness gates live in two places:
 
 - **Translator-time** (`saw-central/src/SAWCentral/Prover/Exporter.hs`):
-  `polymorphismResidual`, `discoverNatRecReachers`,
-  `iterateNormalizeToFixedPoint`, `auditPreludePrimitivesForLean`.
+  `discoverNatRecReachers`, `iterateNormalizeToFixedPoint`,
+  `auditPreludePrimitivesForLean`.
 - **Translation-emission-time** (`saw-core-lean/src/SAWCoreLean/Term.hs`):
   the `UnsoundRecursor` guard, the `UseReject` SpecialTreatment
   combinator.
@@ -151,6 +151,59 @@ discipline:
 4. (For new lockdown items) record the gap and its closure in
    `TODO.md` (the working roadmap; the historical L-series lives in
    `doc/archive/2026-05-05_long-term-plan.md`).
+
+### Four rules a gate must satisfy (review checklist)
+
+Derived from the categories in
+`doc/2026-07-24_semantic-trust-kernel-plan.md` §3. Each rule exists
+because breaking it produced a real defect, cited inline. Check all
+four when adding or reviewing anything in the trust path
+(`saw-core-lean/replay/`, `otherTests/saw-core-lean/support/`).
+
+1. **No skip branch (C1).** A recognizer that cannot answer must
+   FAIL, never skip the gate it guards. If a gate is conditional,
+   the else-branch must either run an equivalent check or `fail` —
+   and if you believe a skip is sound, write the argument in place.
+   *Broke twice:* R-1 and A-2 were both `has_goal_def = 0` silently
+   disabling the closer↔goal binding. The kernel now treats goal
+   presence as an asserted invariant with no flag at all.
+2. **No claim without a mechanism (C2).** A doc sentence naming a
+   gate is a claim; the identifier must exist. Enforced mechanically
+   by `support/doc-claim-lint.sh` for maintained docs — in those,
+   `backticks` mean "live identifier in this tree", plain text means
+   prose or history. A docstring asserting a code *property* is on
+   you: cite what enforces it. *Broke:* A-3 (polymorphismResidual — plain text here
+   precisely because it does not exist —
+   cited in the trust authority, deleted in May) and
+   `saw_stream_realize`'s docstring claiming it consumes a proof its
+   body ignores.
+3. **Fail closed on tool failure (C3).** Every subprocess capture
+   checks exit status **and** output. Empty output from a crashed
+   `awk` must never read as a clean result. *Broke twice:* the F1
+   lint hardening fixed one call site and did not generalize; RK-7
+   was the same bug in the axiom audit.
+4. **Ship a mutation the guard catches (C4).** A guard nobody has
+   watched fire is a guard that may already be dead. Add the case to
+   `support/trust-tier-selftest.sh` and confirm it goes red without
+   the guard. *Broke:* four of six negative probes were passing on
+   `unknown identifier` because their subjects had been retired —
+   they had pinned nothing for weeks.
+
+Two further rules apply to what a check may *rely on*:
+
+5. **Ask Lean, not the text.** Properties of an elaborated
+   environment (what a module declared, what it depends on, whether
+   it proves the goal, whether it extended the parser) must be asked
+   of Lean, not pattern-matched from source. `#check` adds no
+   declaration and is therefore never kernel-checked. See the plan
+   doc for the migration and for the one honest exception
+   (build-affecting options, which cannot be detected after the
+   fact).
+6. **Obligations must constrain the value (C6).** A contract taking
+   a proof argument the realization ignores is erasable: the
+   discharge can drop it and every gate stays green.
+   `Classical.choose` binds (the predicate is a type-level implicit);
+   `Classical.choice` does not (its argument is proof-irrelevant).
 
 ## How to add an integration test
 
@@ -226,7 +279,7 @@ separate Lean proof.
   auto-derive (`discoverNatRecReachers`,
   `discoverEnumEncodingReachers`) or startup audit
   (`auditPreludePrimitivesForLean`,
-  `auditCryptolPrimitivesForLean`) over textual lists. Where
+  the Prelude audit) over textual lists. Where
   a textual list survives (`leanOpaqueBuiltins`,
   per-primitive `reject` entries in the SpecialTreatment maps),
   document each entry's reason inline.
@@ -236,7 +289,7 @@ separate Lean proof.
 
 ## What NOT to do
 
-- Don't circumvent `polymorphismResidual` or the `UnsoundRecursor`
+- Don't circumvent the `UnsoundRecursor`
   guard. They're load-bearing for translator output to mean what
   SAW says it means.
 - Don't add `axiom` declarations to support library files

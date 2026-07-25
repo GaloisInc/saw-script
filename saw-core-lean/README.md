@@ -42,8 +42,12 @@ What's punted (with diagnostics — translator refuses cleanly):
   shapes can't be soundly translated under productivity-only trust;
   refused at translation time with the `RejectedPrimitive`
   diagnostic.
-- Universe-polymorphic terms (`(t : sort 1) → …`) — refused with
-  `polymorphismResidual`.
+- Universe-polymorphic terms (`(t : sort 1) → …`) — NOT refused;
+  translated with a fresh Lean universe variable per binder. (This
+  entry previously claimed a polymorphismResidual refusal that has
+  not existed since May — corrected 2026-07-24, audit finding A-3.
+  See doc/architecture.md's universe note for what holds and for
+  the two open consequences, A-2/A-9 and F-5.)
 - Native `Lean.BitVec` as the `bitvector` TYPE (currently
   `bitvector n := Vec n Bool`; the `bv*` operations are real
   `noncomputable def`s routing through `Lean.BitVec` via the

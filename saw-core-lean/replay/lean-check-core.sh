@@ -115,20 +115,49 @@ bad_sorry=$(grep -n 'sorry' "$STAGE/Emitted.lean" \
 # emits exactly one `def goal`, so on the completed path both a
 # goal-less authority and a goal-less completed outline are hard
 # failures, never a silent branch.
+#
+# C1 CATEGORY CLOSURE (2026-07-24, second audit finding A-2): the R-1
+# fix hard-failed the COMPLETED path but left the plain path as a
+# silent `has_goal_def=0` branch — and the same justification covers
+# both. A goal rendered `noncomputable def goal.{u0} :` (which the
+# emitter DOES produce: a `sort k≥1` anywhere in the term allocates a
+# universe variable, and nothing refuses that today) misses this
+# regex, and every downstream gate keyed on has_goal_def then
+# silently disappeared — verified end-to-end: a proof.lean reading
+# only `theorem totally_unrelated : 1+1=2 := rfl` was admitted.
+#
+# The rule this file now obeys, without exception: a recognizer that
+# cannot answer must FAIL, never skip the gate it guards. So
+# goal-presence is an INVARIANT here (asserted immediately below),
+# not a flag consulted by later branches.
 goal_def_re='^[[:space:]]*(noncomputable[[:space:]]+)?def[[:space:]]+goal[[:space:]]*:'
+# Diagnose the known near-miss specifically, so the failure names the
+# cause instead of leaving the next reader to rediscover A-2/A-9.
+univ_goal_re='^[[:space:]]*(noncomputable[[:space:]]+)?def[[:space:]]+goal\.\{'
+diagnose_missing_goal_def() {
+    local f="$1" which="$2"
+    if grep -qE "$univ_goal_re" "$f"; then
+        grep -nE "$univ_goal_re" "$f" | sed "s|$STAGE/||g"
+        echo "The $which emission carries UNIVERSE PARAMETERS. Replay cannot"
+        echo "bind a universe-parameterized goal: the goal_holds stub drops the"
+        echo "binders and proves it at one level only (audit A-9). Refuse the"
+        echo "emission upstream rather than discharging it here."
+    fi
+}
 if [ -f "$STAGE/completed.lean" ]; then
     [ -f "$STAGE/Generated.lean" ] || fail "completed-without-generated-reference"
-    grep -qE "$goal_def_re" "$STAGE/Generated.lean" \
-        || fail "authority-missing-goal-def"
+    grep -qE "$goal_def_re" "$STAGE/Generated.lean" || {
+        diagnose_missing_goal_def "$STAGE/Generated.lean" "authority"
+        fail "authority-missing-goal-def"; }
     grep -qE "$goal_def_re" "$STAGE/Emitted.lean" \
         || fail "completed-outline-missing-goal-def"
-    has_goal_def=1
 else
-    has_goal_def=0
-    if grep -qE "$goal_def_re" "$STAGE/Emitted.lean"; then
-        has_goal_def=1
-    fi
+    grep -qE "$goal_def_re" "$STAGE/Emitted.lean" || {
+        diagnose_missing_goal_def "$STAGE/Emitted.lean" "fresh"
+        fail "replay-emission-missing-goal-def"; }
 fi
+# From here on this is an INVARIANT, not a condition. Every gate below
+# runs unconditionally; there is no has_goal_def flag to be 0.
 
 # The GeneratedHarness namespace exists only in checker-staged probe
 # files; user files have no legitimate mention of it, and a def
@@ -146,12 +175,10 @@ done
 # emission pipeline has trivialized closes by rfl/trivial; reject.
 # (Genuinely trivial user goals are also rejected — loud, and SMT
 # handles those; the pin guards the goal-formation layer.)
-if [ "$has_goal_def" -eq 1 ]; then
-    printf 'import Emitted\nexample : goal := by first | rfl | trivial\n' \
-        > "$STAGE/triviality-probe.lean"
-    if run_lean "$STAGE/triviality-probe.lean" >/dev/null 2>&1; then
-        fail "goal-formation-trivial"
-    fi
+printf 'import Emitted\nexample : goal := by first | rfl | trivial\n' \
+    > "$STAGE/triviality-probe.lean"
+if run_lean "$STAGE/triviality-probe.lean" >/dev/null 2>&1; then
+    fail "goal-formation-trivial"
 fi
 
 # 4. Completed-outline drift (when staged): the completed goal must
@@ -236,21 +263,21 @@ closers=$(awk '
   }
 ' "$STAGE/proof.lean")
 [ -n "$closers" ] || fail "no-named-closer"
-if [ "$has_goal_def" -eq 1 ]; then
-    printf '%s\n' "$closers" | grep -qx 'goal_closed' || fail "missing-goal_closed"
-    printf 'import Emitted\nimport proof\n#check (goal_closed : goal)\n' \
-        > "$STAGE/closer-type-probe.lean"
-    # proof.lean is not a module name; compile it to an olean under a
-    # module-safe name instead.
-    cp "$STAGE/proof.lean" "$STAGE/UserProof.lean"
-    up_out=$(run_lean -o "$STAGE/UserProof.olean" "$STAGE/UserProof.lean") || {
-        echo "$up_out"; fail "proof-does-not-elaborate"; }
-    printf 'import Emitted\nimport UserProof\n#check (goal_closed : goal)\n' \
-        > "$STAGE/closer-type-probe.lean"
-    if ! ct_out=$(run_lean "$STAGE/closer-type-probe.lean") \
-       || printf '%s\n' "$ct_out" | grep -qE '^[^[:space:]]+: error'; then
-        echo "$ct_out"; fail "closer-wrong-type"
-    fi
+# UNCONDITIONAL (C1 closure): goal presence is an invariant above, so
+# the binding gate has no skip branch. Previously guarded by
+# `if [ "$has_goal_def" -eq 1 ]`, which is exactly how A-2 turned the
+# whole gate off.
+printf '%s\n' "$closers" | grep -qx 'goal_closed' || fail "missing-goal_closed"
+# proof.lean is not a module name; compile it to an olean under a
+# module-safe name instead.
+cp "$STAGE/proof.lean" "$STAGE/UserProof.lean"
+up_out=$(run_lean -o "$STAGE/UserProof.olean" "$STAGE/UserProof.lean") || {
+    echo "$up_out"; fail "proof-does-not-elaborate"; }
+printf 'import Emitted\nimport UserProof\n#check (goal_closed : goal)\n' \
+    > "$STAGE/closer-type-probe.lean"
+if ! ct_out=$(run_lean "$STAGE/closer-type-probe.lean") \
+   || printf '%s\n' "$ct_out" | grep -qE '^[^[:space:]]+: error'; then
+    echo "$ct_out"; fail "closer-wrong-type"
 fi
 
 # 7. Axiom audit: every named closer, fixed allowlist.
@@ -275,9 +302,21 @@ ax_out=$(run_lean "$STAGE/axiom-probe.lean") || { echo "$ax_out"; fail "axiom-au
 # Structured parse of "‘X’ depends on axioms: [...]" including
 # multi-line bracket lists (same continuation handling as the CI
 # harness's audit_axioms): reject any non-allowlisted entry.
+#
+# C3 (category closure, 2026-07-24): a nonzero awk exit must REJECT
+# even with empty output. Testing only emptiness makes an awk
+# hard-error read as a clean audit — the identical fail-open the F1
+# fix hardened at the lint call site (:212-218) and did not
+# generalize. Rule for the whole trust path: every subprocess
+# capture checks exit status AND output.
 bad_ax=$(printf '%s\n' "$ax_out" \
-    | awk -v tier="$TRUST_TIER" -f "$(cd "$(dirname "$0")" && pwd)/axiom-audit.awk")
-[ -z "$bad_ax" ] || { echo "$bad_ax"; fail "axiom-outside-allowlist"; }
+    | LC_ALL=C awk -v tier="$TRUST_TIER" -f "$(cd "$(dirname "$0")" && pwd)/axiom-audit.awk") \
+    && ax_rc=0 || ax_rc=$?
+if [ "$ax_rc" -ne 0 ] || [ -n "$bad_ax" ]; then
+    echo "$bad_ax"
+    [ "$ax_rc" -eq 0 ] || echo "(axiom-audit awk exited $ax_rc)"
+    fail "axiom-outside-allowlist"
+fi
 # Vacuity guard (2026-07-20): the allowlist audit passes when it
 # finds nothing to reject, so an audit that never RAN must not look
 # like a pass. Every named closer must produce exactly one audited
