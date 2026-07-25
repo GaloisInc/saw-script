@@ -72,8 +72,16 @@ independently in-session (2026-07-24, read-only).
 
 ### Blocks release
 
-- [ ] **A-1 (CRITICAL, live) — `notation` capture of the binding
-  probe.** A user `proof.lean` containing `notation "goal" => True`
+**Status 2026-07-25: A-1, A-5 and A-2 are CLOSED** (plus A-6, A-7,
+A-3, RK-5, RK-7, HELP-1 and the four mechanical categories C1–C4).
+**S-1 is the one remaining release blocker**, and it needs the
+contract fix (option (a), user-approved 2026-07-25) rather than a
+checker change — no gate can detect a missing obligation when the
+emitted value is defeq without it. Also still open and agreed for
+the reject-until-needed treatment: LIB-1, S-2, F-5, LIB-2.
+
+- [x] **A-1 (CRITICAL) — CLOSED 2026-07-25** (commit fa842349b).
+  `notation` capture of the binding probe. A user `proof.lean` containing `notation "goal" => True`
   makes the checker's `#check (goal_closed : goal)` probe resolve
   `goal` in the USER's token table: `CHECK-OK` on a proof of `True`
   against a false obligation. Live on runtime replay AND the CI
@@ -90,8 +98,9 @@ independently in-session (2026-07-24, read-only).
   binding theorem alone blocks A-1; in-session analysis disputes
   this (the notation captures the binding theorem identically) —
   settle by experiment, do NOT drop the lint half on that claim.*
-- [ ] **A-5 (CRITICAL, live) — the probe accepts a coercion and the
-  audit then inspects the wrong declaration.** `#check (goal : …)`
+- [x] **A-5 (CRITICAL) — CLOSED 2026-07-25** (commit 389a55ec9).
+  The probe accepted a coercion and the audit inspected the wrong
+  declaration. `#check (goal : …)`
   type-ascription inserts coercions, so a user `instance : CoeT True
   goal_closed goal := ⟨hidden⟩` makes the probe pass via `def hidden`
   — which the closer awk (`theorem|lemma` only) never audits.
@@ -119,8 +128,13 @@ independently in-session (2026-07-24, read-only).
 
 ### High
 
-- [ ] **A-2 (HIGH, live-narrow) — `has_goal_def=0` is still a silent
-  branch on the PLAIN replay path.** The R-1 fix hard-failed the
+- [~] **A-2 (HIGH) — CHECKER HALF CLOSED 2026-07-24** (75c2acfc6,
+  C1); the EMITTER half is still OPEN and pairs with A-9 below:
+  nothing yet refuses a goal emission with non-empty `universeVars`,
+  so the shape can still be produced — it now fails LOUDLY at replay
+  (`replay-emission-missing-goal-def`, with a diagnostic naming the
+  universe parameters) instead of silently disabling the gate.
+  `has_goal_def=0` was a silent branch on the plain replay path. The R-1 fix hard-failed the
   completed path and left the plain path branching silently, though
   the same justification covers both. `[V]` A goal rendered
   `noncomputable def goal.{u0} :` misses the detection regex ⇒ the
@@ -135,7 +149,7 @@ independently in-session (2026-07-24, read-only).
   binders** (`Lean.hs:134-137` builds it from the bare `nameStr`), so
   it proves `goal.{?u}` at one level instead of universally — a
   silently weaker theorem. Must land with any A-2 fix.
-- [ ] **A-6 (HIGH) — `«debug».skipKernelTC` evades the source lint**
+- [x] **A-6 (HIGH) — CLOSED 2026-07-25** (fa842349b). `«debug».skipKernelTC` evaded the source lint
   (`proof-source-lint.awk:170` matches `debug\.` literally; Lean
   treats the escaped component as the same `Name`). Kernel type
   checking off for the whole file = the Lean kernel leaves the
@@ -193,13 +207,11 @@ independently in-session (2026-07-24, read-only).
   obligation (which must hold for all interpretations). Two
   obligation rows already emit them. Add to the residual-trust
   catalog (currently absent) or gate them the way `IntMod` now is.
-- [ ] **A-7 — multi-line `@[ \n implemented_by …]` evades the
-  attribute rule** (`proof-source-lint.awk:171` is per-line by
+- [x] **A-7 — CLOSED 2026-07-25** (fa842349b). Multi-line `@[…]` evaded the attribute rule (`proof-source-lint.awk:171` is per-line by
   construction). Same shape for `csimp`/`extern`; matters for
   native-evaluation trust. Fix: track attribute brackets in the
   lexer state or accumulate across lines.
-- [ ] **A-3 — `polymorphismResidual` is documented as a live gate
-  and DOES NOT EXIST.** `[V]` Confirmed absent from every `.hs` in
+- [x] **A-3 — CLOSED 2026-07-24** (75c2acfc6, C2). polymorphismResidual was documented as a live gate and does not exist. `[V]` Confirmed absent from every `.hs` in
   the tree (doc-only identifier; the May keep/kill map already
   recorded it dead). Cited as live in `architecture.md:47,124,151,
   169-172`, `README.md:45-46`, `contributing.md:132,239` and —
@@ -212,8 +224,7 @@ independently in-session (2026-07-24, read-only).
   in a soundness argument, and it supplies A-2's trigger. *Missed by
   the 2026-07-23 doc-faithfulness pass, which read the claim without
   checking the identifier existed.*
-- [ ] **HELP-1 — the SAWScript help text says the discharge path
-  does not exist.** `saw-script/src/SAWScript/Interpreter.hs:5303-5307`
+- [x] **HELP-1 — CLOSED 2026-07-25** (389a55ec9). The help text said the discharge path did not exist. `saw-script/src/SAWScript/Interpreter.hs:5303-5307`
   still reads *"Reserved: … NOT AVAILABLE in this release — this
   command currently always fails with a diagnostic. Use
   `offline_lean` (emission-only) and discharge the obligation in
@@ -244,7 +255,7 @@ independently in-session (2026-07-24, read-only).
   does and what it requires (a `proofDir` with `proof.lean`, and
   optionally `completed.lean`), and state the strict-tier admission
   posture (TIER-1).
-- [ ] **RK-5 — the CI harness binds inside the user's own module.**
+- [x] **RK-5 — CLOSED 2026-07-25** (389a55ec9). The CI harness bound inside the user's own module.
   `lean-proof-test.sh` appends its checks to a COPY of the row's
   `proof.lean`, so both names resolve in the row author's scope: a
   row that omits `import Emitted` and defines its own `goal` passes
@@ -287,7 +298,7 @@ independently in-session (2026-07-24, read-only).
 
 ### Low / housekeeping
 
-- [ ] **RK-7** — the axiom-audit awk output is tested for emptiness
+- [x] **RK-7 — CLOSED 2026-07-24** (75c2acfc6, C3). The axiom-audit awk output was tested for emptiness
   only, so an awk hard-error reads as a clean audit. `[V]` Confirmed
   asymmetric with the lint invocation, which checks BOTH `lint_rc`
   and output (hardened in the F1 fix). One line.
