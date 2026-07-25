@@ -917,7 +917,7 @@ theorem saw_fix_bounded_choose_eq_bounded
     (H : saw_fix_bounded_productive n α body) :
     saw_fix_bounded_choose n α body H = saw_fix_bounded n α d body :=
   saw_fix_bounded_iter_from_seed_irrelevant n α
-    (Classical.choice H.seed) (Vector.replicate n d) body H
+    (Classical.choose (saw_fix_bounded_seed_exists_of n α body H)) (Vector.replicate n d) body H
 
 /-- L3 (unfolding agreement — the SAW link), general-seed form: `n`
 iterates from any pure seed reach a fixed point of the body. SAW's
@@ -960,7 +960,7 @@ theorem saw_fix_bounded_choose_fixed_point
     body (saw_fix_bounded_choose n α body H) =
       saw_fix_bounded_choose n α body H :=
   saw_fix_bounded_iter_from_fixed_point n α
-    (Classical.choice H.seed) body H
+    (Classical.choose (saw_fix_bounded_seed_exists_of n α body H)) body H
 
 /-- Uniqueness among PURE fixed points (the honest strengthening the
 retired `saw_fix_unique_exists` contract could not have: uniqueness
@@ -1026,7 +1026,7 @@ theorem saw_fix_bounded_choose_unique_pure_fixed_point
     (x : Vec n α) (hx : body (Pure.pure x) = Pure.pure x) :
     Pure.pure x = saw_fix_bounded_choose n α body H :=
   saw_fix_bounded_iter_from_unique_pure_fixed_point n α
-    (Classical.choice H.seed) body H x hx
+    (Classical.choose (saw_fix_bounded_seed_exists_of n α body H)) body H x hx
 
 /-! ## `saw_stream_unfold` faithfulness core (OP-3 successor, R3b)
 

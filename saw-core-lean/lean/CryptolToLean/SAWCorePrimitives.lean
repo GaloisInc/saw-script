@@ -1324,17 +1324,45 @@ structure saw_fix_bounded_productive (n : Nat) (α : Type)
       (∀ (j : Nat) (hj : j < n), j < i → v₁[j] = v₂[j]) →
       w₁[i] = w₂[i]
 
+/-- The seed existential (S-1 fix, 2026-07-25). The obligation is a
+CONJUNCT of this proposition, and that is the whole point: the
+realization below draws its seed via `Classical.choose` of THIS, so
+the emitted term cannot be written without a proof of the obligation.
+
+Why the previous form was not binding: it read the seed as
+`Classical.choice h.seed`, whose argument is `Nonempty (Vec n α)` —
+a Prop, hence proof-irrelevant, hence satisfiable by `⟨v⟩` for any
+`v` at all. A completed outline could therefore write
+`saw_fix_bounded_iter_from n α (Classical.choice ⟨v⟩) body n`,
+never state `total` or `lookback`, and pass the drift check by `rfl`
+(verified 2026-07-24). `Classical.choose` binds where
+`Classical.choice` does not, because its argument type mentions the
+predicate — the same distinction that already made
+`saw_mkStream_choose` immune. -/
+def saw_fix_bounded_seed_exists (n : Nat) (α : Type)
+    (body : Except String (Vec n α) → Except String (Vec n α)) : Prop :=
+  ∃ _s : Vec n α, saw_fix_bounded_productive n α body
+
+/-- The seed existential follows from the obligation. -/
+theorem saw_fix_bounded_seed_exists_of (n : Nat) (α : Type)
+    (body : Except String (Vec n α) → Except String (Vec n α))
+    (h : saw_fix_bounded_productive n α body) :
+    saw_fix_bounded_seed_exists n α body :=
+  ⟨Classical.choice h.seed, h⟩
+
 /-- The emitted realization (Slice R2): `n`-fold iteration of the
-untouched body from a seed drawn from the obligation's own `Nonempty`
-witness. Noncomputable exactly like the retired `saw_fix_choose`;
+untouched body from a seed drawn — via `Classical.choose`, so the
+obligation is load-bearing (S-1) — from `saw_fix_bounded_seed_exists`.
 `saw_fix_bounded_choose_eq_bounded` (SAWCorePreludeProofs) exchanges
 it for the computable `saw_fix_bounded` at any placeholder, which is
-how discharges actually compute. -/
+how discharges actually compute; that lemma holds for ANY seed, so
+the S-1 change did not disturb it. -/
 noncomputable def saw_fix_bounded_choose (n : Nat) (α : Type)
     (body : Except String (Vec n α) → Except String (Vec n α))
     (h : saw_fix_bounded_productive n α body) :
     Except String (Vec n α) :=
-  saw_fix_bounded_iter_from n α (Classical.choice h.seed) body n
+  saw_fix_bounded_iter_from n α
+    (Classical.choose (saw_fix_bounded_seed_exists_of n α body h)) body n
 
 /- Self-tests: a concrete -1-lookback recurrence
 (`out[0] = 1, out[i] = in[i-1] + 1`) stabilizes to `[1, 2, 3]` in
@@ -1411,14 +1439,52 @@ structure saw_stream_single_productive (α : Type) (x0 : α)
     (∀ j : Nat, j < i → streamIdx α t₁ j = streamIdx α t₂ j) →
     mkfn (Pure.pure t₁) i = mkfn (Pure.pure t₂) i
 
-/-- The emitted realization for a recognized Class S-single fix: the
-proof argument is consumed so an undischarged obligation is loud in
-the audit tier, exactly like `atWithProof_checkedM`'s bounds. -/
-def saw_stream_realize (α : Type) (x0 : α) (step : α → α)
+/-- The realization existential (S-1 fix, 2026-07-25). Carries BOTH
+the identification of the stream with the unfold AND the obligation,
+so a proof of it is a proof of the obligation. -/
+def saw_stream_realize_exists (α : Type) (x0 : α) (step : α → α)
+    (mkfn : Except String (Stream α) → Nat → Except String α) : Prop :=
+  ∃ s : Stream α, s = saw_stream_unfold α x0 step ∧
+    saw_stream_single_productive α x0 step mkfn
+
+/-- The realization existential follows from the obligation. -/
+theorem saw_stream_realize_exists_of (α : Type) (x0 : α) (step : α → α)
     (mkfn : Except String (Stream α) → Nat → Except String α)
-    (_h : saw_stream_single_productive α x0 step mkfn) :
+    (h : saw_stream_single_productive α x0 step mkfn) :
+    saw_stream_realize_exists α x0 step mkfn :=
+  ⟨saw_stream_unfold α x0 step, rfl, h⟩
+
+/-- The emitted realization for a recognized Class S-single fix.
+
+S-1 fix (2026-07-25). The previous body was
+`Pure.pure (saw_stream_unfold α x0 step)`, which mentions NEITHER
+`mkfn` NOR the proof — so a completed outline could write that reduct
+verbatim, never state `faithful` or `lookback`, and pass the drift
+check by `rfl` with a clean axiom audit (verified 2026-07-24). The
+docstring at the time claimed "the proof argument is consumed so an
+undischarged obligation is loud", which the body did not support.
+
+Routing through `Classical.choose` of an existential that CONTAINS
+the obligation makes the proof argument load-bearing: the term cannot
+be written without it, and `Classical.choose` has no reduct to write
+instead. `saw_stream_realize_eq_unfold` below recovers the old value
+PROPOSITIONALLY (not definitionally — which is exactly why the drift
+check no longer accepts the erased form). -/
+noncomputable def saw_stream_realize (α : Type) (x0 : α) (step : α → α)
+    (mkfn : Except String (Stream α) → Nat → Except String α)
+    (h : saw_stream_single_productive α x0 step mkfn) :
     Except String (Stream α) :=
-  Pure.pure (saw_stream_unfold α x0 step)
+  Pure.pure (Classical.choose (saw_stream_realize_exists_of α x0 step mkfn h))
+
+/-- The realization is the unfold — propositionally. Discharges that
+need to compute with the realization rewrite with this. -/
+theorem saw_stream_realize_eq_unfold (α : Type) (x0 : α) (step : α → α)
+    (mkfn : Except String (Stream α) → Nat → Except String α)
+    (h : saw_stream_single_productive α x0 step mkfn) :
+    saw_stream_realize α x0 step mkfn h
+      = Pure.pure (saw_stream_unfold α x0 step) := by
+  unfold saw_stream_realize
+  rw [(Classical.choose_spec (saw_stream_realize_exists_of α x0 step mkfn h)).1]
 
 /-! ### Proof-carrying `MkStream` totality contract
 

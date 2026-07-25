@@ -265,6 +265,64 @@ binding), so the audit is: walk every realization, classify, and fix
 or gate the erasable ones. Two are known bad; the rest have never
 been checked as a class.
 
+### C6 addendum — how S-1 was fixed, and why that is INTERIM
+
+Landed 2026-07-25 (strategy **A**): both defective realizations now
+draw their value through `Classical.choose` of an existential that
+CONTAINS the obligation, so the emitted term cannot be written
+without proving it, and `Classical.choose` has no reduct to write
+instead. Verified: both erasures that typechecked as `rfl` are now
+rejected; `cryptol_module_rec_ones` — whose proof was `rfl` under a
+docstring asserting "`rfl` holds because the emitted value IS the
+realization" — was found relying on the erasure and re-proved
+honestly through the propositional recovery lemma.
+
+**A is a value-shape workaround for a fact-establishment
+requirement, and should be superseded.** What soundness needs is that
+the productivity FACT is established; it does not need the emitted
+value to mention the proof. Conflating the two is what forces A's
+cost: the realization becomes noncomputable EVERYWHERE, including the
+plain-emission path (`write_lean_term`), which never had the erasure
+hazard at all — erasure requires a completed outline and a defeq
+drift check. The visible price was `differential/fix_classS_eval`,
+whose observer had to be rebuilt (it is now stronger — a
+kernel-checked link plus a reduction, mutation-tested in both
+directions — but the churn was caused by A, not required by
+soundness).
+
+Note the equivalence that makes this unavoidable *within* A: "reduces
+to a proof-free value" and "erasable under a defeq drift check" are
+the same property, so blocking the erasure necessarily blocks
+reduction. The way out is not a cleverer realization but a different
+enforcement point.
+
+**Strategy C — the successor.** Require the completed module to
+contain a term whose TYPE is defeq to the authority's obligation
+proposition, kernel-checked. This is S1's `__replay_binding` trick
+generalized per-obligation: the authority states the Prop, the
+outline must prove it, and the type match pins it to the authority's
+`mkfn`, so a drifted hand-copy cannot satisfy it. Realizations stay
+computable, differential rows keep working, and nothing is enforced
+by grep. Cost: obligations must be exposed as top-level named defs
+rather than `let`-bound (an emitter change, and an inspectability
+improvement), plus the environment-query machinery of stage S2.
+
+**When C lands, A should be REVERTED, not kept alongside** — two
+mechanisms for one property is how several of these bugs started.
+
+Rejected alternatives, recorded so they are not re-proposed:
+- *Syntactic obligation-presence gate* (grep the authority's
+  `h_*obligation_` lines): cheap, keeps computability, and is exactly
+  the text-proxy anti-pattern this document exists to end.
+- *`@[irreducible]` realizations*: blocks the defeq erasure at
+  default transparency while staying computable — but irreducibility
+  is a transparency HINT, not a kernel property; the kernel still
+  considers the terms defeq. Strictly weaker than `Classical.choose`,
+  where no reduct exists at any transparency.
+- *Computable companion def, or split realizations by path*: preserve
+  both properties at the cost of two definitions of one thing — a
+  fresh divergence seam.
+
 ### C7 — Text proxy for an environment property — the subject of this plan
 
 Instances: A-1, A-5, A-6, A-7, A-10, plus the goal-presence half of
