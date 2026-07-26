@@ -31,14 +31,14 @@ noncomputable def id (a : Type) (x : Except String a) : Except String a :=
 -- Void was skipped (mapped to a hand-library equivalent)
 -- elimVoid was skipped (mapped to a hand-library equivalent)
 -- Eq was skipped (mapped to a hand-library equivalent)
-noncomputable def Eq__rec.{u0, u1} (t : Sort u0) (x : t) (p : (y : t) ->
-  @Eq.{u0} t x y -> Sort u1) (f1 : p x (@Eq.refl.{u0} t
+noncomputable def Eq__rec.{u0, u3} (t : Sort u0) (x : t) (p : (y : t) ->
+  @Eq.{u0} t x y -> Sort u3) (f1 : p x (@Eq.refl.{u0} t
   x)) (y : t) (pf : @Eq.{u0} t x y) : p y pf :=
   @Eq.rec t x p f1 y pf
 
 -- uip was skipped (mapped to a hand-library equivalent)
 noncomputable def eq_cong.{u0, u1} (t : Sort u0) (x : t) (y : t) (eq : @Eq.{u0}
-  t x y) (u : Sort u1) (f : t -> u) : @Eq.{u1} u (f x) (f y) :=
+  t x y) (u : Sort u1) (f : (_' : t) -> u) : @Eq.{u1} u (f x) (f y) :=
   @Eq.rec t x (fun (y' : t) (eq' : @Eq.{u0} t x y') => @Eq.{u1} u (f x) (f y'))
   (@Eq.refl.{u1} u (f x)) y eq
 
@@ -61,8 +61,8 @@ noncomputable def trans4.{u0} (a : Sort u0) (w : a) (x : a) (y : a) (z : a) (eq1
   trans a w x z eq1 (trans a x y z eq2 eq3)
 
 noncomputable def eq_inv_map.{u0, u1} (a : Sort u0) (b : Sort u1) (a1 : a) (a2 : a) (eq_a : @Eq.{u0}
-  a a1 a2) (f1 : a -> b) (f2 : a -> b) (eq_f : @Eq.{u1} b (f1 a2) (f2
-  a2)) : @Eq.{u1} b (f1 a1) (f2 a1) :=
+  a a1 a2) (f1 : (_' : a) -> b) (f2 : (_' : a) -> b) (eq_f : @Eq.{u1} b (f1 a2)
+  (f2 a2)) : @Eq.{u1} b (f1 a1) (f2 a1) :=
   let x__ := (f1 a2); let x__' := (f2 a1); trans b (f1 a1) x__ x__' (eq_cong a
   a1 a2 eq_a b f1) (trans b x__ (f2 a2) x__' eq_f (eq_cong a a2 a1 (sym a a1 a2
   eq_a) b f2))

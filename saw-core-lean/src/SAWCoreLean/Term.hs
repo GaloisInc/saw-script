@@ -3547,7 +3547,8 @@ emitImportedRealizationAlias nm sawType targetIdent = do
        typeLean <- translateConstantContractType sawType
        univs <- gets (view universeVars)
        let body = Lean.Var targetIdent
-           decl = mkDefinitionWith Lean.Noncomputable univs aliasIdent body typeLean
+       let decl = mkDefinitionWith Lean.Noncomputable univs aliasIdent
+                    body typeLean
        modify (over topLevelDeclarations (decl :))
        modify (over globalDeclarations (aliasIdent :))
        pure (Lean.Var aliasIdent)
@@ -3566,12 +3567,43 @@ importedRealizationAliasIdent nm =
     "__saw_realizes_" ++
     zEncodeString (Text.unpack (toAbsoluteName (nameInfo nm)))
 
--- | Combine a term-level 'Binder' with a type-level 'PiBinder', keeping
--- the binder's identifier and type but the pi's implicit/explicit
--- status. Mirrors @SAWCoreRocq.Term.combineBinders@.
+-- | Combine a term-level 'Binder' with a type-level 'PiBinder',
+-- keeping the binder's identifier (the body references it by name)
+-- but the pi's implicit/explicit status AND the pi's type. Mirrors
+-- @SAWCoreRocq.Term.combineBinders@.
+--
+-- Audit-2 F-8, fixed 2026-07-25 by CONSTRUCTION rather than by a
+-- gate. This used to keep the LAMBDA's type annotation and discard
+-- the Pi's, so the emitted @def@'s declared signature was synthesized
+-- from the BODY side while the term's declared type came from the
+-- TYPE side. The two are produced by separate predicates that the
+-- code says can disagree, and a disagreement gave the emitted
+-- declaration a different type from the SAWCore term it claims to
+-- translate — silently, since Lean has no way to know the SAWCore
+-- type.
+--
+-- Taking the Pi's type removes the possibility instead of detecting
+-- it: the declared type IS the authority for what the definition's
+-- type is, so the emitted signature now has the SAWCore term's type
+-- by construction. A genuine disagreement becomes a Lean type error
+-- (the body no longer matches the signature) — loud, and checked by
+-- the kernel rather than by us.
+--
+-- A gate was tried first and rejected: comparing the two renderings
+-- flags differences that are not disagreements at all (the body and
+-- type traversals draw fresh universe variables from one counter, so
+-- @Eq__rec@'s motive renders @Sort u1@ against @Sort u3@; and an
+-- anonymous Pi binder renders against an unused named one, as in
+-- @eq_cong@). Getting that right needs a full structural
+-- alpha-equivalence, which is delicate code in a trust path to
+-- detect a condition this line makes unreachable.
+--
+-- Dropping the body-side annotation is the established pattern here,
+-- not a new one: the unequal-length branch below already strips
+-- lambda annotations wholesale and relies on the signature.
 combineBinders :: Lean.Binder -> Lean.PiBinder -> Lean.Binder
-combineBinders (Lean.Binder _ n mty) (Lean.PiBinder impl _ _) =
-  Lean.Binder impl n mty
+combineBinders (Lean.Binder _ n _) (Lean.PiBinder impl _ ty) =
+  Lean.Binder impl n (Just ty)
 
 -- | Produce a Lean @def@ from a 'Noncomputable' flag, a list of
 -- universe-variable names, a name, a translated body, and a
@@ -3691,8 +3723,6 @@ usedUniversesInTerm = \case
   Lean.ExplVar _ -> Set.empty
   Lean.ExplVarUniv _ levels ->
     Set.unions (map usedUniversesInLevel levels)
-  Lean.Ascription a b ->
-    Set.union (usedUniversesInTerm a) (usedUniversesInTerm b)
   Lean.NatLit _ -> Set.empty
   Lean.IntLit _ -> Set.empty
   Lean.List ts -> Set.unions (map usedUniversesInTerm ts)
@@ -5400,7 +5430,6 @@ leanSortBinders = go
       Lean.Let _ bs mty rhs b ->
         concatMap binder bs ++ concatMap go mty ++ go rhs ++ go b
       Lean.App f as           -> go f ++ concatMap go as
-      Lean.Ascription a b     -> go a ++ go b
       Lean.List xs            -> concatMap go xs
       Lean.Sort{}             -> []
       Lean.Var{}              -> []
@@ -5591,10 +5620,10 @@ translateDocWithTelescope kind configuration mm name body tp = do
            "a sort binder\nat propositions; Lean 4 has no term " <>
            "cumulativity, so the emitted `Type` binder\nomits that " <>
            "instantiation class and the Lean statement is strictly WEAKER.")
-  let -- Annotation carrier decided by 'topLevelDefConvention' (the
-      -- single definition-convention authority).
-      tp'' = if wrapAnn then wrapExcept tp' else tp'
-      mainDecl = mkDefinitionWith Lean.Noncomputable univs name bodyLean tp''
+  -- Annotation carrier decided by 'topLevelDefConvention' (the
+  -- single definition-convention authority).
+  let tp'' = if wrapAnn then wrapExcept tp' else tp'
+  let mainDecl = mkDefinitionWith Lean.Noncomputable univs name bodyLean tp''
       -- Each 'prettyDecl' already ends with 'hardline'; 'vcat' adds
       -- another between elements, yielding one blank line between
       -- decls.

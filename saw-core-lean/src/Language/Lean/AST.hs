@@ -105,8 +105,6 @@ data Term
     -- unifier (Lean issue #2297). The list order matches the
     -- callee's declared universe-binder order.
   | ExplVarUniv Ident [UnivLevel]
-    -- | An ascription @(tm : tp)@ of a type to a term.
-  | Ascription Term Term
   | NatLit Integer
   | IntLit Integer
   | List [Term]

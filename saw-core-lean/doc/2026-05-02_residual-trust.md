@@ -620,6 +620,39 @@ boundary DOES mean in practice is that `LeanReplayEvidence` is
 meaningful to a second party only to the extent they trust the
 environment that produced it.
 
+### 3.2d Two narrow type-image residuals (2026-07-25, audit-2)
+
+Recorded here because they are the two surviving members of the
+class F-2 belonged to, and F-2 showed that class is not benign. Both
+are narrower than F-2 was, and neither has a demonstrated witness.
+
+- **LIB-3 — `IntMod n := Int` maps residues to representatives.**
+  A BOUND `IntMod n` variable in the emitted statement therefore
+  ranges over representatives, not residues, so it quantifies over a
+  strictly larger domain. In POSITIVE `∀` position that is harmless
+  and in fact conservative: proving it for every representative
+  proves it for every residue. It would be unsound in NEGATIVE
+  position — an existential, or a hypothesis of the form
+  "for all `x : IntMod n`, …" used to derive something — because
+  there the larger domain is a weaker assumption. No emitted shape
+  puts a bound `IntMod` in negative position, and every `IntMod`
+  operation carries `n` explicitly and normalizes through
+  `Int.fmod`. Distinct from the open F1 `n = 0` totalization, which
+  is about partiality rather than the domain.
+
+- **F-3b — `@Eq.rec` carries no constructor-order assertion.** It
+  reaches emission through a hardcoded path that bypasses
+  `translateFTermF`, so `recordCtorOrderAssertion` never fires for
+  it. Deliberately left that way: the assertion exists to catch
+  drift between SAWCore's declared constructor order and *this
+  library's* realizing inductive, and `Eq` is neither — it is Lean
+  CORE's `Eq`, whose single constructor and recursor signature are
+  fixed by the kernel and by the pinned toolchain. An assertion
+  about it could not fail for any reason the mechanism was built to
+  detect. Emitting one would add a check that reads as coverage
+  while proving nothing, which is the failure mode
+  `doc-claim-lint.sh` exists to prevent.
+
 ### 3.3 `scNormalizeForLean` semantics-preservation (Phase 5 Link 2)
 
 **Status:** Pending catalog acknowledgment (this entry); SAWCore

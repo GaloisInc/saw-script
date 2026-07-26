@@ -108,22 +108,34 @@ below.
   kernel-checked declaration and audit IT —
   `theorem __replay_binding : goal := goal_closed` +
   `#print axioms __replay_binding`.
-- [ ] **S-1 (CRITICAL) — the Class-F / Class-S productivity
-  obligations are ERASABLE on the completed-outline path** (the only
-  path that can accept them). `[V]` `saw_stream_realize`'s body is
-  `Pure.pure (saw_stream_unfold α x0 step)` — it mentions neither
-  `mkfn` nor `_h`, while its own docstring claims "the proof argument
-  is consumed so an undischarged obligation is loud". `[V]`
-  `saw_fix_bounded_choose` uses `Classical.choice h.seed`
-  (Prop-typed ⇒ proof-irrelevant ⇒ erasable); contrast
+- [x] **S-1 (CRITICAL) — CLOSED 2026-07-25** (05153ef08), by the
+  CONTRACT fix (option (a), user-approved), not a checker change:
+  no gate can detect a missing obligation when the emitted value is
+  defeq without it. The Class-F / Class-S productivity obligations
+  were ERASABLE on the completed-outline path — the only path that
+  can accept them. `[V]` `saw_stream_realize`'s body was
+  `Pure.pure (saw_stream_unfold α x0 step)`, mentioning neither
+  `mkfn` nor `_h`, while its own docstring claimed "the proof
+  argument is consumed so an undischarged obligation is loud".
+  `[V]` `saw_fix_bounded_choose` used `Classical.choice h.seed`
+  (Prop-typed ⇒ proof-irrelevant ⇒ ERASABLE); contrast
   `saw_mkStream_choose`, which uses `Classical.choose` (carries the
-  predicate as a type-level implicit ⇒ binding). So a completed
-  outline may write the reduct directly, never stating
-  `total`/`lookback`/`faithful`, and drift-`rfl` passes clean.
-  10+ tracked `proofs/*/completed.lean` rows sit on this path and
-  no pin exists. **FIX-SEAM ⇒ pause rule applies: discuss before
-  touching the recognizer/realization surface.** Verify first — the
-  audit lane could not execute the defeq reductions.
+  predicate as a type-level implicit ⇒ BINDING). So a completed
+  outline could write the reduct directly, never stating
+  `total`/`lookback`/`faithful`, and drift-`rfl` passed clean.
+  Both realizations now draw their value via `Classical.choose` of
+  an existential CONTAINING the obligation, so the value cannot be
+  written without proving it. Cost, deliberate: the realizations no
+  longer REDUCE — "reduces to a proof-free value" and "erasable
+  under the defeq drift check" are the same property, so blocking
+  the erasure necessarily blocks reduction. The two affected
+  observers were rebuilt around the library's propositional
+  recovery lemma and are stronger than the `#reduce` they replace
+  (`differential/fix_classS_eval`, `proofs/cryptol_module_rec_ones`).
+  **Strategy A is INTERIM.** The successor is strategy C (semantic
+  per-obligation presence) in
+  `doc/2026-07-24_semantic-trust-kernel-plan.md`; A should be
+  REVERTED when C lands.
 
 ### High
 
@@ -389,21 +401,37 @@ below.
   only, so an awk hard-error reads as a clean audit. `[V]` Confirmed
   asymmetric with the lint invocation, which checks BOTH `lint_rc`
   and output (hardened in the F1 fix). One line.
-- [ ] **RK-8** — cache reuse is gated on marker EXISTENCE only;
-  staged contents are never re-hashed, so anyone with write access
-  to `~/.cache/saw-core-lean/lean-<fp>/` can substitute the support
+- [x] **RK-8 — CLOSED 2026-07-25 as documentation.** Cache reuse is
+  gated on marker EXISTENCE only; staged contents are never
+  re-hashed, so anyone with write access to
+  `~/.cache/saw-core-lean/lean-<fp>/` can substitute the support
   library (adding *lemmas*, invisible to the allowlist audit).
-  `SAW_LEAN_ROOT` substitutes both library and checker. Defensible
-  as a dev override — residual-trust should say so.
-- [ ] **A-10** — the two `sorry` rules contradict each other on the
-  completed path (lenient scan of `Emitted.lean` exempts the
-  sanctioned `| skip); all_goals sorry));` form; the user-file scan
-  is zero-tolerance; on the completed path they apply to the same
-  bytes and zero-tolerance wins). Fail-CLOSED, so incompleteness not
-  unsoundness: a goal carrying a sanctioned in-statement `sorry`
-  cannot be discharged through the completed path unless the user
-  also rewrites the tactic text. Third instance of proxy-vs-intent
-  divergence; reconcile.
+  `SAW_LEAN_ROOT` substitutes both library and checker. Both are
+  T3 (write access to the library/checker), which the threat model
+  puts out of scope — the point of the finding was that an
+  out-of-scope boundary left implicit is not documented. Now named
+  explicitly in `doc/2026-05-02_residual-trust.md` §3.2c together
+  with the toolchain, and with the plain statement of what the
+  boundary means: `LeanReplayEvidence` is meaningful to a second
+  party only to the extent they trust the environment that produced
+  it. No code change — re-hashing the cache would not help against
+  someone who can also substitute the checker that does the
+  hashing.
+- [x] **A-10 — RECONCILED 2026-07-25 in favour of zero tolerance.**
+  The two `sorry` rules contradict each other on the completed path
+  (the lenient scan of `Emitted.lean` exempts the sanctioned
+  in-statement forms; the user-file scan is zero-tolerance; on the
+  completed path they apply to the SAME BYTES). Resolution: the
+  stricter rule wins, deliberately. The divergence is FAIL-CLOSED —
+  it can only refuse a discharge — so it costs completeness, not
+  soundness, and the cheap fix (exempt the sanctioned forms in the
+  user scan too) would trade a zero-tolerance rule for convenience.
+  A completed outline still containing `by sorry` has not discharged
+  the obligation the placeholder stands for. Both rules now state
+  the contradiction and the decision in `lean-check-core.sh`.
+  **The residual is filed where it belongs, below**: a goal whose
+  emitted form carries an obligation the user CANNOT discharge is an
+  emitter defect, not a checker defect.
 - [x] **A-4 — CLOSED 2026-07-25.** `prettyTerm` was the only `Term`
   case producing multi-token output while ignoring `Prec`, so a sort
   in argument position emitted `Vec 5 Type 1` (three arguments to
@@ -416,28 +444,134 @@ below.
 - [ ] **F-1** — the under-applied partial-op path emits an
   ILL-TYPED artifact and has zero compiling witnesses despite being
   marked "audited safe". Loud, not silent; the defect is the claim.
-- [ ] **F-3 (contracts)** — division-wrapper error messages have no
-  SAWCore backing. **F-3 (core) / LIB-4** — `saw_ctor_order`
-  compares constructor names in order but not arity or FIELD order
-  within a constructor, and 5 of 6 asserted datatypes are
-  single-constructor, i.e. the assertion is vacuous exactly where
-  the field-order hazard lives (a Cryptol record `{a : [8], b :
-  [8]}` field swap typechecks while swapping every projection).
-  **F-3b** — `@Eq.rec` reaches emission through a hardcoded path
-  that skips `translateFTermF`, so it carries no assertion.
-- [ ] **LIB-3** — `IntMod n := Int` means a BOUND `IntMod` variable
-  ranges over representatives, not residues. Harmless in positive
-  `∀` position; unsound only in negative position (no such emitted
-  shape found). Distinct from the open F1 `n = 0` totalization.
-- [ ] **F-8 / F-9** — `combineBinders` takes the lambda binder's
-  annotation with the Pi's result type, translated by predicates the
-  code says can disagree; a binder-NAME disagreement is loud, a
-  binder-TYPE disagreement is silent. Not on the goal path, but on
-  `write_lean_term`/`write_lean_cryptol_module` whose defs proofs
-  import. — `SAWModule.hs:185-187` passes `InjectCodeDecl "Lean"`
-  text into the emitted file verbatim with no validation or
-  escaping: an unaudited text-injection seam in an otherwise
-  fully-structured emitter (not reachable from user Cryptol today).
+- [x] **F-3 (contracts) — CLOSED 2026-07-25 as documentation.**
+  Division-wrapper error messages have no SAWCore backing
+  (`divNat_runtimeM` throws `"divNat: division by zero"`, which
+  SAWCore never produces — unlike the `at` out-of-bounds string,
+  which is byte-exact by construction). Both readings of the zero
+  point are defensible and the backend takes the simulator's, so
+  there is nothing to fix in code; what was missing was the ledger
+  saying so. Now recorded in `doc/2026-07-23_fidelity-review.md`
+  with all THREE readings of `divNat 2 0` (definitional `1`,
+  simulator ⊥, Lean `0`) — the omission was load-bearing in the
+  wrong direction, since a future "SAW is undefined there anyway,
+  so we may totalize" argument would have reasoned from a false
+  premise.
+- [~] **LIB-4 — LEAN HALF CLOSED 2026-07-25; SAWCore half open.**
+  `saw_ctor_order` compares constructor NAMES in order but says
+  nothing about arity or FIELD order within a constructor, and 5 of
+  6 asserted datatypes are single-constructor — so the assertion was
+  vacuous exactly where the field-order hazard lives. Concretely: if
+  `RecordType.RecordValue : α → β → …` drifted to `β → α → …`, then
+  at `α = β` (a Cryptol record `{a : [8], b : [8]}` is exactly that)
+  the emitted recursor still TYPECHECKS while swapping every
+  projection. Closed for the LEAN realization — where the hazard was
+  demonstrated — by constructor SIGNATURE pins in
+  `SAWCoreCtorOrder.lean`: each `example` ascribes a constructor to
+  its expected type, so field order, field types and arity all fail
+  loudly at `lake build`. Verified non-vacuous against a
+  deliberately field-swapped inductive.
+  **Still open: the SAWCore side.** The emitter READS SAWCore's
+  declaration, so a SAWCore-side field reorder would be emitted in
+  the new order and the Lean pin would still pass. Closing that
+  needs the emitter to carry per-constructor field information into
+  the emitted assertion (`CtorOrderAssertion` currently carries only
+  names).
+- [x] **F-3b — CLOSED 2026-07-25 as a documented non-defect.**
+  `@Eq.rec` reaches emission through a hardcoded path that skips
+  `translateFTermF`, so it carries no ctor-order assertion. Left
+  that way deliberately: the assertion catches drift between
+  SAWCore's declared order and *this library's* realizing inductive,
+  and `Eq` is neither — it is Lean CORE's `Eq`, fixed by the kernel
+  and the pinned toolchain. An assertion about it could not fail for
+  any reason the mechanism was built to detect, and adding one would
+  read as coverage while proving nothing. Recorded in
+  `doc/2026-05-02_residual-trust.md` §3.2d.
+- [x] **LIB-3 — CLOSED 2026-07-25 as a recorded residual.**
+  `IntMod n := Int` means a BOUND `IntMod` variable ranges over
+  representatives, not residues — a strictly larger domain.
+  Conservative (hence sound) in positive `∀` position; unsound only
+  in negative position, and no emitted shape puts a bound `IntMod`
+  there. Recorded in `doc/2026-05-02_residual-trust.md` §3.2d
+  alongside F-3b, deliberately filed as one of the two survivors of
+  the type-image class F-2 belonged to — F-2 showed that class is
+  not benign, so its remaining members should not sit unnamed.
+  Distinct from the open F1 `n = 0` totalization, which is about
+  partiality rather than the domain.
+- [x] **F-8 — CLOSED 2026-07-26, by CONSTRUCTION rather than a
+  gate.** `combineBinders` took the LAMBDA binder's annotation with
+  the PI's result type, and the two are translated by separate
+  predicates the code says can disagree. A binder-NAME disagreement
+  was already loud (Lean reports an unbound identifier); the
+  binder-TYPE half was SILENT, and would give the emitted `def` a
+  different type from the SAWCore term it claims to translate — Lean
+  cannot catch it, having no idea what the SAWCore type was. Not on
+  the goal path, but on `write_lean_term` /
+  `write_lean_cryptol_module`, whose defs proofs import.
+  Fix: take the PI's binder type. The declared type is the authority
+  for what the definition's type is, so the emitted signature now
+  has the SAWCore term's type by construction, and a genuine
+  disagreement becomes a Lean type error (the body stops matching
+  the signature) — loud, and checked by the kernel instead of by us.
+  Dropping the body-side annotation is the established pattern, not
+  a new one: the unequal-length branch already strips lambda
+  annotations wholesale and relies on the signature.
+  **A refusal gate was built first and REJECTED — worth recording,
+  because the failure is instructive.** Comparing the two renderings
+  false-positived twice on one legitimate row: `Eq__rec`'s motive
+  rendered `Sort u1` against `Sort u3` (body and type are separate
+  traversals drawing from ONE `universeVarCount`, exactly as
+  `mkDefinitionWith`'s own docstring says), and `eq_cong` rendered
+  `t -> u` against `(_' : t) -> u` (anonymous binder vs unused named
+  one). Getting that right needs full structural alpha-equivalence:
+  delicate new code in a trust path, to detect a condition one line
+  makes unreachable. The machinery was DELETED, not left dormant —
+  same reasoning as `lowerFixProofObligation` under S-2.
+  Measured cost: ONE golden (`drivers/sawcore_prelude_auto_emit`),
+  three cosmetic lines, still elaborating; known-gap count unchanged
+  at 71.
+- [x] **F-9 — CLOSED 2026-07-25 by REFUSAL.**
+  `InjectCodeDecl "Lean"` text went into the emitted file verbatim,
+  with no validation and no escaping — an unstructured seam in an
+  otherwise fully-structured emitter, landing in `Emitted.lean`,
+  which the replay kernel scans LENIENTLY because it is supposed to
+  be generator output. Anything could come through: an `axiom`, a
+  `set_option`, a `notation` recapturing an emitted name. Refused,
+  on the same rule as the other withdrawn surfaces. Cost is zero: no
+  public entry point reaches a generic SAWCore-module Lean writer
+  (`obligations/injected_lean_code` pins exactly that) and no
+  shipped `.sawcore` carries a "Lean" injection. This also ANSWERS
+  the open question the CONFORMANCE row recorded — trusted
+  declarations or proof-carrying realizations? — in the only
+  direction safe by default: not trusted. Admitting them later means
+  giving the text a checked shape, not restoring the verbatim copy.
+  **The refusal itself is UNPINNED**, and cannot be pinned from a
+  `.saw` row: no public entry point reaches the branch. That is the
+  same fact that makes the cost zero, so it is stated rather than
+  papered over — `obligations/injected_lean_code` pins the
+  unreachability, not the rejection. A pin becomes possible (and
+  required) the day a public SAWCore-module Lean writer is exposed.
+- [ ] **Obligation the emitter cannot discharge** (filed 2026-07-25
+  out of A-10's reconciliation). The completed path zero-tolerances
+  `sorry`, so a goal whose EMITTED form carries an obligation
+  placeholder the user has no route to discharge (the `H_prod`
+  placeholder in `fix_classF_eval` is the live case) cannot go
+  through it at all. Fixing that in the checker would mean weakening
+  a zero-tolerance rule; the defect is that the emitter produces an
+  obligation it supplies no way to prove. Belongs with the
+  fragment-semantics programme, which is where productivity
+  obligations get a discharge route.
+- [ ] **Printer: drop unused Pi binder names** (filed 2026-07-26 out
+  of F-8). `prettyPiBinder` renders `PiBinder _ (Just x) ty` as
+  `(x : ty) ->` even when `x` is unreferenced, so the F-8 fix made
+  three emitted signatures read `(_' : a) -> b` where they used to
+  read `a -> b`. Semantically identical, uglier, and the right fix
+  is at the printer: a named binder nobody references SHOULD print
+  anonymously. Would also remove one of the two cosmetic axes that
+  defeated the F-8 gate. Measured: 70 occurrences across 9 golden
+  files. PURE COSMETICS — deliberately not folded into a soundness
+  batch, where it would have been 9 files of noise around the real
+  change.
 - [ ] **Documentation corrections batch**: A-3's five-plus sites
   (including the trust authority); the residual-trust sentence
   LIB-1 shows is BACKWARDS (`:496-503` says the eager carrier makes
@@ -448,8 +582,15 @@ below.
   `Float`/`Double` faithfulness argument; the `divNat 2 0` ledger
   entry; `bvSExt` "stays axiomatic"; and the F-1 "audited safe"
   verdict.
-- [ ] **Dead code**: `Ascription` in `prettyTerm` has only
-  consumption sites — delete so it cannot be reintroduced.
+- [x] **Dead code — DONE 2026-07-25.** `Lean.Ascription` had only
+  consumption sites (pretty-printer, two `Convention.hs` walkers,
+  the universe walker) and no construction site anywhere. Deleted
+  from the AST and from all five consumers, so it cannot be
+  reintroduced without also reintroducing the unguarded-`Prec` case
+  the audit flagged. `NatLit` is the other structurally-unguarded
+  case; it stays, since every construction site is non-negative —
+  noted here so a future negative literal is a known question, not a
+  surprise.
 
 ### Systemic
 

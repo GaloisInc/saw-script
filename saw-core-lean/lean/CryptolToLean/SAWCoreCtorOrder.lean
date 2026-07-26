@@ -84,4 +84,61 @@ error: saw_ctor_order: CryptolToLean.SAWCorePrimitives.seq is not an inductive t
 saw_ctor_order CryptolToLean.SAWCorePrimitives.seq
   [CryptolToLean.SAWCorePrimitives.Num.TCNum]
 
+/-! ## Constructor SIGNATURE pins (audit-2 LIB-4)
+
+`saw_ctor_order` compares constructor NAMES in declaration order.
+That is the whole check, and it has a blind spot the audit named
+precisely: **it says nothing about the fields WITHIN a constructor**,
+and five of the six asserted datatypes are single-constructor — so on
+exactly the datatypes where the field-order hazard lives, a
+name-order assertion is vacuous (a one-element list has one order).
+
+The hazard is concrete. `@Foo.rec` is emitted with SAWCore's
+positional argument order, so a minor premise is applied to the
+constructor's fields left to right. If this library's
+`RecordType.RecordValue : α → β → …` ever drifted to
+`β → α → …`, then at `α = β` — a Cryptol record `{a : [8], b : [8]}`
+is exactly that — the emitted recursor still TYPECHECKS while
+swapping the field and the record tail, silently swapping every
+projection. Same shape for `PairType.PairValue`.
+
+Name-order checking cannot see this, so it is pinned directly: each
+`example` ascribes the constructor to its expected signature, which
+fails to elaborate if the field order, the field types, or the arity
+drifts. These run at every `lake build`, alongside the assertions
+above.
+
+Scope note: this closes drift in the LEAN realization, which is
+where the hazard was demonstrated. A SAWCore-side field reorder is
+not covered here — the emitter reads SAWCore's declaration, so it
+would emit the new order and this pin would still pass. Closing that
+direction needs the emitter to carry per-constructor field
+information into the assertion, and is tracked in `TODO.md`. -/
+
+section SignaturePins
+open CryptolToLean.SAWCorePrimitives
+
+/-- `RecordValue` takes the field value BEFORE the record tail. -/
+example : ∀ (s : String) (α β : Type), α → β → RecordType s α β :=
+  fun _ _ _ => RecordType.RecordValue
+/-- `PairValue` takes the first component before the second. -/
+example : ∀ (α β : Type), α → β → PairType α β :=
+  fun _ _ => PairType.PairValue
+/-- `TCNum` carries the `Nat`; `TCInf` carries nothing. -/
+example : Nat → Num := Num.TCNum
+example : Num := Num.TCInf
+/-- `Left` carries the α; `Right` carries the β. -/
+example : ∀ (α β : Type), α → Either α β := fun _ _ => Either.Left
+example : ∀ (α β : Type), β → Either α β := fun _ _ => Either.Right
+/-- `Nothing` is nullary; `Just` carries the payload. -/
+example : ∀ (α : Type), Maybe α := fun _ => Maybe.Nothing
+example : ∀ (α : Type), α → Maybe α := fun _ => Maybe.Just
+/-- `MkStream` carries the index function, not a head/tail pair. -/
+example : ∀ (α : Type), (Nat → α) → Stream α := fun _ => Stream.MkStream
+/-- The record/tuple terminators are nullary. -/
+example : EmptyType := EmptyType.Empty
+example : UnitType := UnitType.Unit
+
+end SignaturePins
+
 end CryptolToLean.SAWCoreCtorOrder

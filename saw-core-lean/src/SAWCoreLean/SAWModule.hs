@@ -182,6 +182,36 @@ translateDecl sc configuration modname mm decl =
   case decl of
     TypeDecl td -> runIt (translateDataType td)
     DefDecl dd  -> runIt (translateDef dd)
+    -- Audit-2 F-9. A SAWCore module's `injectCode "Lean" "<text>"`
+    -- used to be copied into the emitted file VERBATIM: an
+    -- unstructured text seam in an otherwise fully-structured
+    -- emitter, with no validation and no escaping. Anything can come
+    -- through it — an `axiom`, a `set_option`, a `notation` that
+    -- recaptures an emitted name — and it lands in `Emitted.lean`,
+    -- which the replay kernel scans LENIENTLY because it is supposed
+    -- to be generator output rather than user input.
+    --
+    -- REFUSED as of 2026-07-25, on the same rule as the other
+    -- withdrawn surfaces: the backend must be sound, and features
+    -- may be deferred. Cost is zero — no public entry point reaches
+    -- a generic SAWCore-module Lean writer (see
+    -- `obligations/injected_lean_code`, which pins exactly that),
+    -- and no shipped `.sawcore` module carries a "Lean" injection.
+    --
+    -- The open question the CONFORMANCE row records — are Lean
+    -- injections TRUSTED declarations or PROOF-CARRYING
+    -- realizations? — is answered here in the only direction that is
+    -- safe by default: not trusted. Admitting them later means
+    -- giving the text a checked shape (parse it, or require a
+    -- declaration form the axiom audit can see), not restoring the
+    -- verbatim copy.
     InjectCodeDecl ns txt
-      | ns == "Lean" -> pure (pretty txt)
+      | ns == "Lean" -> runIt $ Except.throwError $ RejectedPrimitive
+          "injectCode \"Lean\""
+          ("a SAWCore module asked to inject Lean source text \
+           \verbatim into the emitted file. Injected text bypasses \
+           \every structured emission gate and lands in the \
+           \leniently-scanned generator output, so it is refused \
+           \rather than trusted (audit-2 F-9). Offending text: "
+           <> Text.pack (show txt))
       | otherwise    -> pure mempty

@@ -207,6 +207,29 @@ fi
 # 4.5 Sorry scan on the USER's files: zero tolerance (the axiom audit
 # would catch a live sorry anyway via sorryAx — this fails faster and
 # names the check the design specifies).
+#
+# A-10 (audit-2), RECONCILED 2026-07-25 in favour of zero tolerance.
+# This rule and the placeholder policy at step 2 contradict each other
+# on the completed-outline path, where they apply to the SAME BYTES:
+# step 2 EXEMPTS the two sanctioned in-statement forms because they
+# are generator output, while this rule forbids every `sorry` because
+# the file is user input. On the completed path `completed.lean` is
+# both, and the stricter rule wins.
+#
+# That is deliberate, not an oversight. The divergence is
+# FAIL-CLOSED — it can only refuse a discharge, never admit one — so
+# it costs completeness, not soundness, and the cheap "fix" (exempt
+# the sanctioned forms here too) would trade a zero-tolerance rule
+# for convenience. A completed outline that still contains `by sorry`
+# has not discharged the obligation the placeholder stands for; the
+# user is meant to REPLACE it, and when they do, nothing here fires.
+#
+# The residual case is real: a goal whose emitted form carries an
+# obligation placeholder the user cannot discharge (e.g. the
+# `H_prod` placeholder in `fix_classF_eval`) simply cannot go through
+# the completed path. That is an EMITTER problem — the emitter should
+# not produce an obligation it has no route to discharge — and it is
+# filed as such in TODO.md rather than papered over here.
 for uf in proof.lean completed.lean; do
     if [ -f "$STAGE/$uf" ] && grep -qn 'sorry' "$STAGE/$uf"; then
         grep -n 'sorry' "$STAGE/$uf"

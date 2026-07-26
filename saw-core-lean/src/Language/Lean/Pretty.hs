@@ -208,11 +208,6 @@ prettyTerm p e =
       let x' = prettyIdent x
           us = hsep (punctuate comma (map prettyUnivLevel univs))
       in parensIf (p > PrecApp) $ "@" <> x' <> "." <> braces us
-    Ascription tm tp ->
-      let tm' = prettyTerm PrecApp tm
-          tp' = prettyTerm PrecApp tp
-      in
-      parensIf (p > PrecLambda) $ tm' <+> ":" <+> tp'
     NatLit i ->
       -- Lean's @Nat@ is arbitrary-precision and backed by machine ints,
       -- so no @Z.to_nat@ wrapper is needed for large literals.

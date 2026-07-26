@@ -881,7 +881,6 @@ termMentionsAny = go
         || go needles rhs
         || go (Set.delete name needles) body
     go needles (Lean.App f args) = go needles f || any (go needles) args
-    go needles (Lean.Ascription a b) = go needles a || go needles b
     go needles (Lean.List xs) = any (go needles) xs
     go _ Lean.Sort{} = False
     go _ Lean.NatLit{} = False
@@ -911,7 +910,6 @@ leanTermIdents = go
       Set.insert name $
         Set.unions pieces
     go (Lean.App f args) = Set.unions (go f : map go args)
-    go (Lean.Ascription a b) = Set.union (go a) (go b)
     go (Lean.List xs) = Set.unions (map go xs)
     go Lean.Sort{} = Set.empty
     go Lean.NatLit{} = Set.empty
