@@ -3,7 +3,24 @@
 2026-07-18. Status: IMPLEMENTED 2026-07-18 (Parts 1–3 landed; the
 contract field shipped as `pocRuntimeWrapper`, not the
 `underAppliedWrapper` working name used below). Audit record:
-AUDITED — SAFE-WITH-CONDITIONS (verdict + five binding conditions at end; the Nat-family total-lift hypothesis was REFUTED and is struck below). Unblocks rev.cry whole-module
+AUDITED — SAFE-WITH-CONDITIONS (verdict + five binding conditions at end; the Nat-family total-lift hypothesis was REFUTED and is struck below).
+
+**Correction 2026-07-25 (audit-2 F-1).** "SAFE" above means *cannot
+be silently unsound* — it does NOT mean "produces a working
+artifact", and the original phrasing invited that reading. The path
+has **no compiling Lean witness anywhere in the tree**: its single
+pinned golden
+(`saw-boundary/partial_operation_obligations/under_applied_partial.log.good:10-11`)
+emits `noncomputable def … : Nat -> Nat := divNat_runtimeM …`, whose
+RHS has type `Except String Nat -> Except String Nat` — ill-typed,
+and `grep -r "_runtimeM"` returns exactly that one line. Lean
+rejects it, and `adaptTo` confirms nothing downstream can absorb the
+stray `Except`, so the failure is LOUD. The soundness verdict
+stands; the *evidence* for the path working does not exist, and this
+path should be treated as unexercised until a compiling witness is
+added.
+
+Unblocks rev.cry whole-module
 translation (PIntegral dictionary fields carry partial ops
 UNAPPLIED; pinned by saw-boundary/polymorphic_seq_module_rejection).
 

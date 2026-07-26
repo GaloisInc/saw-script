@@ -129,8 +129,15 @@ translateGoalAsDeclImportsWithTelescope ::
   TranslationConfiguration -> ModuleMap -> Lean.Ident -> Term -> Term ->
   Either TranslationError (Doc ann, Int, [Lean.Type])
 translateGoalAsDeclImportsWithTelescope configuration mm name@(Lean.Ident nameStr) t tp = do
+  -- Goal emission, NOT def emission: 'translateGoalDocWithTelescope'
+  -- additionally refuses the two goal shapes the emitted statement
+  -- cannot faithfully carry (audit-2 A-2/A-9 and F-5 — see
+  -- 'UnrepresentableGoalShape'). The universe gate is what keeps the
+  -- @nameStr@-built stub below honest: it can only drop universe
+  -- binders if the goal has any, and a goal that has any is refused
+  -- here.
   (doc, arity, binderTys) <-
-    TermTranslation.translateDefDocWithTelescope configuration mm name t tp
+    TermTranslation.translateGoalDocWithTelescope configuration mm name t tp
   let stub =
         pretty ("theorem " <> nameStr <> "_holds : " <> nameStr <> " := by") <>
         hardline <> pretty ("  sorry" :: String)

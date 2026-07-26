@@ -107,12 +107,32 @@ landed proofs were affected (nothing proved through `bvToInt`).
 
 | Op family | SAW partial at | Lean bare realization | Gate |
 |---|---|---|---|
-| divNat/modNat/divModNat | y=0 (crash) | total (Nat.div/mod = 0) | checked + runtimeM |
+| divNat/modNat/divModNat | y=0 (crash — simulator) [†] | total (Nat.div/mod = 0) | checked + runtimeM |
 | intDiv/intMod | y=0 (crash) | total (fdiv/fmod) | checkedM + runtimeM |
 | bvUDiv/bvURem/bvSDiv/bvSRem | y=0 | total (BitVec ops) | checkedM + runtimeM + ecS* width gates |
 | ratio/rationalRecip | 0 (crash) | total (Rat, x/0=0) | checkedM + runtimeM |
 | at (index OOB) | Prelude error string | — | atWithProof_checkedM / atRuntimeCheckedM (byte-exact message) |
 | **IntMod ops** | **n=0 (crash)** | **total (fmod)** | **NONE — F1, open** |
+
+[†] **Correction 2026-07-25 (audit-2 D3).** "SAW partial at y=0" for
+the Nat family records the *simulator's* semantics only, and the
+single-column framing hid that THREE readings exist at divisor zero:
+
+| Reading | `divNat 2 0` |
+|---|---|
+| SAWCore definitional unfolding (`divModNat` is a defined function, hence total) | `1` |
+| SAW simulator (`Prims.hs` overrides with Haskell `divMod`, crashes) | ⊥ |
+| Lean support (`Nat.div`, total) | `0` |
+
+The backend deliberately takes the *simulator* reading, under which
+the crash-vs-`0` gap is a genuine partiality and the runtime gate is
+the right answer. Recorded because the omission is load-bearing in
+the wrong direction: a future "SAW is undefined there anyway, so we
+may totalize" argument would be reasoning from a false premise —
+under the definitional reading SAW has a specific answer, and it is
+neither ⊥ nor Lean's. Same shape as the `divNat: division by zero`
+message, which SAWCore itself never produces (unlike the `at`
+out-of-bounds string, which is byte-exact by construction).
 
 ## Per-definition disposition summary
 

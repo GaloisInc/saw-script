@@ -1,0 +1,9 @@
+// F-5 pin (audit-2). A goal telescope may not quantify over a
+// SAWCore sort. SAWCore admits `Prop <= sort 0` cumulativity and
+// instantiates `(a : sort 0)` at propositions; Lean 4 has no term
+// cumulativity, so the emitted `(a : Type)` binder omits that
+// instantiation class and the Lean theorem would be strictly WEAKER
+// than the SAW obligation. Emission refuses instead.
+enable_experimental;
+let g = parse_core "\\(a : sort 0) -> \\(x : a) -> True";
+prove_print (offline_lean "sort0_goal") g;

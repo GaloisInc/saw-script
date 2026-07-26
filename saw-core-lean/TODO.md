@@ -72,13 +72,12 @@ independently in-session (2026-07-24, read-only).
 
 ### Blocks release
 
-**Status 2026-07-25: A-1, A-5 and A-2 are CLOSED** (plus A-6, A-7,
-A-3, RK-5, RK-7, HELP-1 and the four mechanical categories C1–C4).
-**S-1 is the one remaining release blocker**, and it needs the
-contract fix (option (a), user-approved 2026-07-25) rather than a
-checker change — no gate can detect a missing obligation when the
-emitted value is defeq without it. Also still open and agreed for
-the reject-until-needed treatment: LIB-1, S-2, F-5, LIB-2.
+**Status 2026-07-25: A-1, A-2, A-5, A-9, S-1, S-2, F-5 and LIB-2 are
+CLOSED** (plus A-6, A-7, A-3, RK-5, RK-7, HELP-1 and the four
+mechanical categories C1–C4). **LIB-1 is the one remaining
+confirmed soundness defect**; it is a CARRIER defect, not a gate or
+contract defect, so no trust-kernel work reaches it — see its row
+below.
 
 - [x] **A-1 (CRITICAL) — CLOSED 2026-07-25** (commit fa842349b).
   `notation` capture of the binding probe. A user `proof.lean` containing `notation "goal" => True`
@@ -128,27 +127,28 @@ the reject-until-needed treatment: LIB-1, S-2, F-5, LIB-2.
 
 ### High
 
-- [~] **A-2 (HIGH) — CHECKER HALF CLOSED 2026-07-24** (75c2acfc6,
-  C1); the EMITTER half is still OPEN and pairs with A-9 below:
-  nothing yet refuses a goal emission with non-empty `universeVars`,
-  so the shape can still be produced — it now fails LOUDLY at replay
-  (`replay-emission-missing-goal-def`, with a diagnostic naming the
-  universe parameters) instead of silently disabling the gate.
-  `has_goal_def=0` was a silent branch on the plain replay path. The R-1 fix hard-failed the
-  completed path and left the plain path branching silently, though
-  the same justification covers both. `[V]` A goal rendered
-  `noncomputable def goal.{u0} :` misses the detection regex ⇒ the
-  binding gate disappears entirely ⇒ a `proof.lean` that never
-  mentions the goal is admitted. Trigger is REACHABLE via
-  `parse_core` (lane-core traced `parse_core "Eq (sort 1) (sort 0)
-  (sort 0)"` → `universeVars` → `def goal.{u0}`); neither
-  `writeLeanProp` telescope pin fires. Fix: hard-fail `has_goal_def
-  == 0` on the plain path too, AND refuse a goal emission with
-  non-empty `universeVars` (emitter-side, two lines, loud).
-- [ ] **A-9 (HIGH) — the `goal_holds` stub drops the goal's universe
-  binders** (`Lean.hs:134-137` builds it from the bare `nameStr`), so
-  it proves `goal.{?u}` at one level instead of universally — a
-  silently weaker theorem. Must land with any A-2 fix.
+- [x] **A-2 (HIGH) — FULLY CLOSED 2026-07-25.** Checker half landed
+  2026-07-24 (75c2acfc6, C1): goal presence is now derived from the
+  authority and is an INVARIANT, so `has_goal_def=0` cannot silently
+  disable the binding gate on either replay path. The EMITTER half
+  landed today: goal emission now refuses a non-empty `universeVars`
+  at translation time (`UnrepresentableGoalShape`), so the shape is
+  never produced in the first place rather than merely failing
+  loudly downstream. Pinned by
+  `saw-boundary/goal_sort_binder_rejection/sort1_binder`. Original
+  finding: `[V]` a goal rendered `noncomputable def goal.{u0} :`
+  missed the detection regex ⇒ the binding gate disappeared ⇒ a
+  `proof.lean` that never mentions the goal was admitted; trigger
+  REACHABLE via `parse_core` and no `writeLeanProp` telescope pin
+  fires.
+- [x] **A-9 (HIGH) — CLOSED BY CONSTRUCTION 2026-07-25.** The
+  `goal_holds` stub is still built from the bare `nameStr`
+  (`Lean.hs`), but it can no longer drop anything: A-2's emitter gate
+  refuses any goal that allocates a universe variable, so a goal
+  reaching the stub has NO universe binders to drop. Recorded here
+  rather than "fixed" because the dependency is real — reopening the
+  universe gate reopens A-9, and the comment at the stub site says
+  so.
 - [x] **A-6 (HIGH) — CLOSED 2026-07-25** (fa842349b). `«debug».skipKernelTC` evaded the source lint
   (`proof-source-lint.awk:170` matches `debug\.` literally; Lean
   treats the escaped component as the same `Name`). Kernel type
@@ -169,20 +169,63 @@ the reject-until-needed treatment: LIB-1, S-2, F-5, LIB-2.
   Lean. Same class, lower reach: `genM`, `vecSequenceM`,
   `atRuntimeCheckedM`, `foldrM`/`foldlM`, `sawLet`. NOT affected
   (each checked): `iteM`, accumulators, `atWithDefaultM`.
-  Reachability strongly indicated, unproven — no differential row
-  covers "SAW succeeds lazily while Lean errors eagerly". **First
-  action: write that row** (template
-  `differential/error_unreachable/test.saw`); one run settles it.
-- [ ] **F-5 (HIGH if reachable) — `sort 0 → Type` NARROWS the
-  quantifier.** SAWCore admits `Prop ≤ sort 0` cumulativity and
-  applies it as subsumption, so a SAW binder `(a : sort 0)` can be
-  instantiated at a proposition; Lean 4 has no term cumulativity, so
-  that instantiation class is absent and the emitted goal is
-  strictly WEAKER. Zero corpus hits (specialization monomorphizes
-  goals). Note this is k=0, so the (nonexistent) `polymorphismResidual`
-  would not have covered it. Fix: emit `Sort u` for sort-0 binders
-  too, or refuse a sort binder in a goal telescope — tension with
-  A-2, so the two must land together.
+  **Reachability SETTLED 2026-07-25 (affirmative).** Scratch witness:
+  SAW gives `7` where Lean gives `9`, and Lean proves them EQUAL with
+  only `[propext, Quot.sound]` — a SAW-false equation closing in a
+  clean kernel. The witness is scratch-only; **the row is still
+  missing** (template `differential/error_unreachable/test.saw`) and
+  writing it is the first action.
+
+  **Character (2026-07-25): this is a CARRIER defect**, and that is
+  why it survived a day of trust-kernel work. A-1/A-2/A-5/R-1 were
+  GATE defects (the checker failed to look); S-1/S-2/LIB-2 were
+  CONTRACT defects (the emitted obligation was not binding). Both
+  classes are reachable from the replay kernel. LIB-1 is neither: the
+  emitted statement is well-formed, genuinely proved, kernel-checked
+  and allowlist-clean — and false in SAW. No gate can catch it,
+  because there is nothing wrong with the proof.
+
+  Options weighed with the user:
+  (a) move `Except` INSIDE the element (`Vec n (Except String T')`) —
+      principled, but a 0.03-scale rewrite of the value convention;
+  (b) REJECT element bodies that can throw — measured zero blast
+      radius on `gen`;
+  (c) document only — excluded by the "must not ship soundness bugs"
+      rule.
+  Recommendation: **(b) now, (a) as successor** (same shape as S-1's
+  interim/successor split). Three things must settle first:
+  1. **Scope.** Only `gen` is measured. `genM`, `vecSequenceM`,
+     `atRuntimeCheckedM`, `foldrM`/`foldlM` and `sawLet` are
+     UNMEASURED. `sawLet` is a distinct instance, not a variant: SAW
+     beta-reduces and DISCARDS a throwing `x`, while Lean propagates
+     it.
+  2. **Conservatism.** "Can this body throw" is undecidable, so (b)
+     must reject any body that *can*.
+  3. **Product posture.** Unlike LIB-2 (parse_core-only), (b) may
+     bite real user Cryptol: `error` inside a sequence comprehension
+     is a plausible defensive idiom. That is a call for the user, not
+     the translator.
+  Measure each surface with the suite before committing to a
+  rejection count — the LIB-2 estimate was wrong twice, in both
+  directions.
+- [x] **F-5 (HIGH if reachable) — CLOSED 2026-07-25.** Resolved the
+  same way as A-2, and together with it as the row required: goal
+  emission refuses a sort-typed binder outright rather than emitting
+  a narrower one. The audit's other option (emit `Sort u` for sort-0
+  binders) was rejected — it allocates a universe variable and so
+  collides head-on with the A-2 gate; "a goal telescope may not
+  quantify over a sort" is the one rule that discharges both. The
+  scan (`leanSortBinders`) walks the WHOLE emitted term, not just
+  the Pi spine, because the narrowing is a property of the binder:
+  `(f : (a : sort 0) -> …) -> …` hides one where a spine walk stops.
+  `Prop` binders are deliberately NOT refused — SAWCore `Prop` maps
+  to Lean `Prop` with no cumulativity gap. Pinned by
+  `saw-boundary/goal_sort_binder_rejection/sort0_binder`. Original
+  finding: SAWCore admits `Prop ≤ sort 0` cumulativity and applies it
+  as subsumption, so a SAW binder `(a : sort 0)` can be instantiated
+  at a proposition; Lean 4 has no term cumulativity, so the emitted
+  goal was strictly WEAKER. Zero corpus hits (specialization
+  monomorphizes goals).
 
 ### Medium
 
@@ -275,17 +318,51 @@ the reject-until-needed treatment: LIB-1, S-2, F-5, LIB-2.
   separate probe module that imports the emitted artifact. This is
   also genuine consumer drift against the harness's own
   "identical by mechanism, not discipline" claim.
-- [ ] **F-2 (contracts) — SEAMS-D3 is SETTLED, in the affirmative.**
-  Type-image collapse is real: `mkFloat`/`mkDouble` share a Lean
-  body, making a SAW-invalid equation `rfl`-provable. Needs
-  hand-written SAWCore to reach. (Supersedes the first audit's
-  SEAMS-D3 "unconfirmed, do not mark cleared".)
+- [x] **F-2 (contracts) — CLOSED 2026-07-25.** SEAMS-D3 was SETTLED
+  in the affirmative: type-image collapse was real. `Float` and
+  `Double` both bound to `@[reducible] def … := Int × Int` and
+  `mkFloat`/`mkDouble` to the same pair constructor, so
+  `Eq (sort 0) Float Double`, `Eq Float (mkFloat m e) (mkDouble m e)`
+  and `mkFloat`-injectivity were all `rfl`/`decide` in Lean and
+  underivable in SAW. Fixed by realizing what SAW actually declares:
+  two SEPARATE sealed `opaque` carriers and two uninterpreted
+  `opaque` constructors. Rejection (the LIB-2/S-2 treatment) was
+  NOT needed — the faithful realization costs nothing, since SAW
+  exposes no observer for the components either.
+  Cost, deliberate: `obligations/float_mk_*` lost the pair
+  observation and now pin emission shape plus a kernel-checked
+  equality against the literal constructor application; the old
+  observation was reading the bug. Pinned by
+  `negative/float_double_collapse` (all three collapsed equations
+  must fail with "Not a definitional equality").
+  The refuted justification — "SAW has no operations to make this
+  binding observable, so any inhabited concrete type is faithful" —
+  is corrected in place in `SAWCorePrimitives.lean`. Its error is
+  worth keeping in mind for the rest of the table: it conflated **no
+  *executable* observer** with **no *equational* observer**, and
+  `Eq` is the latter at both the type and the value level.
 - [ ] **F-2 (core) — the recursor head is emitted SHORT while its
   ctor-order assertion is emitted QUALIFIED**, so `@Stream.rec` is
   genuinely ambiguous against Lean core's root-scope `Stream` and is
   resolved by overload-by-elaboration; if it ever resolved to the
   core one, the assertion would still pass while checking a
-  different inductive. One-line fix: emit the head qualified too.
+  different inductive.
+  **DEFERRED 2026-07-25 with the blast radius measured** — it is not
+  the one-line fix the report suggests. Switching the head to
+  `translateIdentToQualifiedIdent` (the call the assertion already
+  uses) is one line, but it changes emitted output across **15 rows**
+  (`@Num.rec` ×39, `@RecordType.rec` ×29, `@Eq.rec` ×15,
+  `@Stream.rec` ×9, `@Either.rec`, `@Bool.rec`), and four of those
+  are HAND-WRITTEN artifacts, not regenerable goldens:
+  `differential/fix_classS_eval/lean-observe.lean`,
+  `proofs/cryptol_module_rec_ones`, `proofs/llvm_eq_u128`,
+  `proofs/point_shift_property`, `support-lemmas/conformance_stream`.
+  Those are written against the emitted names, so this is a change to
+  what a USER must write in a discharge — a naming-convention
+  decision, not a drive-by. Failure mode meanwhile is LOUD: the
+  scrutinee type pins the inductive, so a wrong resolution produces
+  an ill-typed application rather than a silently swapped branch.
+  Take it with the naming pass (F-6/F-7), not alone.
 - [ ] **F-6 / F-7 — name hygiene is delegated to Lean's
   typechecker.** `reservedIdents` omits `Vec Bool Nat Eq Except
   String Pure Bind Num Stream coerce saw_throw_error …`, all of
@@ -327,9 +404,15 @@ the reject-until-needed treatment: LIB-1, S-2, F-5, LIB-2.
   cannot be discharged through the completed path unless the user
   also rewrites the tactic text. Third instance of proxy-vs-intent
   divergence; reconcile.
-- [ ] **A-4** — `prettyTerm` ignores `Prec` for `Sort`; the only
-  case producing multi-token output at `PrecAtom`. Reachable by the
-  same `parse_core` route as A-2, so a sort-1 goal trips both.
+- [x] **A-4 — CLOSED 2026-07-25.** `prettyTerm` was the only `Term`
+  case producing multi-token output while ignoring `Prec`, so a sort
+  in argument position emitted `Vec 5 Type 1` (three arguments to
+  `Vec`). Now parenthesised via `sortIsMultiToken`; `Prop` and
+  `Type` stay bare since they are single atoms. Note the A-2 gate
+  does NOT subsume this: it closes the goal route the audit named,
+  but module/term emission still prints sorts at argument position.
+  Loud (ill-typed artifact), never silent — fixed because it is two
+  lines, not because it threatened soundness.
 - [ ] **F-1** — the under-applied partial-op path emits an
   ILL-TYPED artifact and has zero compiling witnesses despite being
   marked "audited safe". Loud, not silent; the defect is the claim.

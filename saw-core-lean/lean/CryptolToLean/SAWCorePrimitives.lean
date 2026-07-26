@@ -275,31 +275,74 @@ nonzero-denominator bound is NOT derivable at the emission site
 /-- SAWCore `rationalFloor` — floor to `Int`. -/
 @[reducible] def rationalFloor : Rational → Int := fun a => a.floor
 
-/-! ## Floating-point (Phase 6 → Phase 9 follow-up)
+/-! ## Floating-point (Phase 6 → Phase 9 → audit-2 F-2 correction)
 
-SAW Prelude declares `Float` and `Double` as opaque types with
-mantissa-exponent constructors and no operations. Phase 9
-binds these as concrete `Int × Int` mantissa-exponent pairs —
-SAW has no operations to make this binding observable, so any
-inhabited concrete type is faithful. Note: SAW's `mkDouble`
-declaration in `Prelude.sawcore:2163` returns `Float` (not
-`Double`) — possibly a SAW typo, but our def matches exactly
-per the soundness-paramount rule (no silent corrections). If
+SAW Prelude declares `Float` and `Double` as two DISTINCT abstract
+types (`Prelude.sawcore:2153/2160`) with two DISTINCT uninterpreted
+constructors (`:2156/2163`) and no operations and no simulator
+realizations.
+
+**Corrected 2026-07-25 (audit-2 F-2).** Phase 9 bound both to the
+same `@[reducible] def … := Int × Int`, justified by "SAW has no
+operations to make this binding observable, so any inhabited
+concrete type is faithful". That argument was WRONG, and the
+resulting collapse was demonstrably unsound: it conflated "no
+*executable* observer" with "no *equational* observer", and `Eq` is
+an equational observer at both the type and the value level. Under
+the old binding all three of these were `rfl` in Lean and
+underivable in SAW:
+
+  * `Eq (sort 0) Float Double`
+  * `Eq Float (mkFloat m e) (mkDouble m e)`
+  * `mkFloat`-injectivity, making SAW-unprovable disequalities
+    `decide`-provable.
+
+The faithful realization is what SAW actually declares: two distinct
+SEALED types and uninterpreted constructors. `opaque` is the Lean
+idiom for that — the kernel will not unfold it, so none of the three
+survives. Witness inputs are `Int × Int` only to establish
+non-emptiness (SAW's types are inhabited, via `mkFloat`); the
+witness is sealed with the carrier and is not recoverable.
+
+The cost is real and deliberate: the mantissa/exponent components
+are no longer OBSERVABLE from Lean, because SAW exposes no observer
+for them either. `obligations/float_mk_*` accordingly pin emission
+shape only — the pair observation they used to make was reading the
+bug.
+
+Note: SAW's `mkDouble` declaration in `Prelude.sawcore:2163` returns
+`Float` (not `Double`) — possibly a SAW typo, but our def matches
+exactly per the soundness-paramount rule (no silent corrections). If
 SAW fixes the upstream declaration, this should be updated. -/
 
-/-- SAWCore `Float` — bound as a mantissa-exponent `Int × Int` pair
-(see the section comment for why any inhabited type is faithful).
-Emitted FULLY QUALIFIED: the short name ties with Lean core's
+/-- Sealed carrier for SAWCore `Float`. `opaque` is what makes the
+type abstract: the kernel will not unfold it, so `Float = Double`
+and `Float = Int × Int` are both underivable. -/
+opaque FloatCarrier : NonemptyType.{0} := ⟨Int × Int, ⟨(0, 0)⟩⟩
+/-- SAWCore `Float` — an ABSTRACT type, exactly as SAW declares it
+(see the section comment; the old `Int × Int` binding was audit-2
+F-2). Emitted FULLY QUALIFIED: the short name ties with Lean core's
 `_root_.Float` (`mapsToQualifiedTie`, SpecialTreatment.hs). -/
-@[reducible] def Float : Type := Int × Int
-/-- SAWCore `mkFloat` — the mantissa-exponent constructor. -/
-@[reducible] def mkFloat : Int → Int → Float := fun m e => (m, e)
-/-- SAWCore `Double` — same `Int × Int` binding as `Float`. -/
-@[reducible] def Double : Type := Int × Int
-/-- SAWCore `mkDouble`. N.B.: SAW's own declaration returns `Float`,
-not `Double` — see `saw-core/prelude/Prelude.sawcore:2163`. Faithful
-binding. -/
-@[reducible] def mkDouble : Int → Int → Float := fun m e => (m, e)
+def Float : Type := FloatCarrier.type
+instance : Nonempty Float := FloatCarrier.property
+/-- Sealed carrier for SAWCore `Double`. SEPARATE from
+`FloatCarrier` on purpose: SAW declares two distinct types, and one
+shared carrier would make `Float = Double` provable again. -/
+opaque DoubleCarrier : NonemptyType.{0} := ⟨Int × Int, ⟨(0, 0)⟩⟩
+/-- SAWCore `Double` — an ABSTRACT type distinct from `Float`. -/
+def Double : Type := DoubleCarrier.type
+instance : Nonempty Double := DoubleCarrier.property
+/-- SAWCore `mkFloat` — the mantissa-exponent constructor,
+UNINTERPRETED as SAW declares it. Not a pair constructor: making it
+one would make it injective, so SAW-unprovable disequalities would
+become `decide`-provable. -/
+noncomputable opaque mkFloat : Int → Int → Float
+/-- SAWCore `mkDouble` — uninterpreted, like `mkFloat`. N.B.: SAW's
+own declaration returns `Float`, not `Double` — see
+`saw-core/prelude/Prelude.sawcore:2163`. Faithful binding.
+Distinct constant from `mkFloat`, so `mkFloat m e = mkDouble m e` is
+underivable, matching SAW. -/
+noncomputable opaque mkDouble : Int → Int → Float
 
 /-! ## Arithmetic primitives
 
@@ -622,7 +665,11 @@ non-trivial enough to defer to focused follow-up:
   - `bvSExt`: SAW's `bvSExt m n : Vec (n+1) Bool → Vec (m + (n+1))
     Bool` has a length shape Lean's `BitVec.signExtend` doesn't
     quite match. Coherence needs the length arithmetic worked
-    through. Stays axiomatic.
+    through. **Corrected 2026-07-25 (audit-2): this said "Stays
+    axiomatic", which was Phase-9 drift and MISDESCRIBED THE TCB.**
+    `bvSExt` below is an ordinary `noncomputable def` through
+    `BitVec.signExtend` — no axiom, no cast. What remains deferred
+    is the *coherence theorem*, not the definition.
   - `bvPopcount` / `bvCountLeadingZeros` / `bvCountTrailingZeros` /
     `bvLg2`: Lean has `BitVec.toNat`-based equivalents but broader theorem
     coherence is bit-level rather than int-level. Deferred.

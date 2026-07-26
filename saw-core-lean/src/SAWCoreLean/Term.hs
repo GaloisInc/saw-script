@@ -37,6 +37,7 @@ module SAWCoreLean.Term
   , translateDefDoc
   , translateDefDocWithArity
   , translateDefDocWithTelescope
+  , translateGoalDocWithTelescope
   , leanPiSpineArity
   , leanPiSpineBinderTypes
   , TelescopeFp(..)
@@ -55,14 +56,14 @@ module SAWCoreLean.Term
   ) where
 
 import           Control.Lens                 (over, set, view)
-import           Control.Monad                (unless, zipWithM)
+import           Control.Monad                (unless, when, zipWithM)
 import qualified Control.Monad.Except         as Except
 import           Control.Monad.Reader         (asks)
 import           Control.Monad.State          (gets, modify)
 import           Data.Foldable                (toList)
 import qualified Data.IntMap.Strict           as IntMap
 import qualified Data.IntSet                  as IntSet
-import           Data.List                    (elemIndex, findIndex)
+import           Data.List                    (elemIndex, findIndex, intercalate)
 import qualified Data.Map                     as Map
 import           Data.Map                     (Map)
 import           Data.Maybe                   (fromMaybe, isJust, isNothing)
@@ -5372,6 +5373,60 @@ leanPiSpineBinderTypes (Lean.Pi bs t) =
   [ ty | Lean.PiBinder _ _ ty <- bs ] ++ leanPiSpineBinderTypes t
 leanPiSpineBinderTypes _ = []
 
+-- | Every binder in the term — at ANY depth, Pi or Lambda or Let —
+-- whose declared type is a Lean sort OTHER than @Prop@, rendered as
+-- @"name : sort"@. Drives the F-5 goal-emission gate (see
+-- 'UnrepresentableGoalShape').
+--
+-- Why the whole term and not just 'leanPiSpineBinderTypes': the
+-- narrowing is a property of the BINDER, not of the outermost
+-- telescope. @(f : (a : sort 0) -> ...) -> ...@ hides one under a
+-- binder type, where the spine walk reports a 'Lean.Pi' and stops.
+--
+-- Why 'Lean.Prop' is EXCLUDED: SAWCore's @Prop@ maps to Lean's
+-- @Prop@ with no cumulativity gap, so a proposition binder is
+-- faithful. Only @sort k@ binders narrow (@sort 0@, which subsumes
+-- @Prop@ in SAWCore but not in Lean) or go universe-polymorphic
+-- (@sort k ≥ 1@).
+leanIdentStr :: Lean.Ident -> String
+leanIdentStr (Lean.Ident s) = s
+
+leanSortBinders :: Lean.Term -> [String]
+leanSortBinders = go
+  where
+    go tm = case tm of
+      Lean.Lambda bs b        -> concatMap binder bs ++ go b
+      Lean.Pi bs b            -> concatMap piBinder bs ++ go b
+      Lean.Let _ bs mty rhs b ->
+        concatMap binder bs ++ concatMap go mty ++ go rhs ++ go b
+      Lean.App f as           -> go f ++ concatMap go as
+      Lean.Ascription a b     -> go a ++ go b
+      Lean.List xs            -> concatMap go xs
+      Lean.Sort{}             -> []
+      Lean.Var{}              -> []
+      Lean.ExplVar{}          -> []
+      Lean.ExplVarUniv{}      -> []
+      Lean.NatLit{}           -> []
+      Lean.IntLit{}           -> []
+      Lean.StringLit{}        -> []
+      Lean.Tactic{}           -> []
+
+    binder (Lean.Binder _ nm mty) = concatMap (report (leanIdentStr nm)) mty
+    piBinder (Lean.PiBinder _ mnm ty) =
+      report (maybe "_" leanIdentStr mnm) ty
+
+    -- A sort-typed binder is reported; anything else is descended into.
+    report nm ty = case ty of
+      Lean.Sort Lean.Prop -> []
+      Lean.Sort s         -> [nm ++ " : " ++ renderSort s]
+      _                   -> go ty
+
+    renderSort Lean.Prop        = "Prop"
+    renderSort (Lean.TypeLvl 0) = "Type"
+    renderSort (Lean.TypeLvl n) = "Type " ++ show n
+    renderSort (Lean.TypeVar u) = "Type " ++ u
+    renderSort (Lean.SortVar u) = "Sort " ++ u
+
 -- | Coarse TYPE-FAMILY fingerprints for the telescope pin. The
 -- comparison can only REFUSE emission (never admit), so coarseness
 -- is safe: 'FpOther' matches anything (var-headed and exotic types
@@ -5469,7 +5524,35 @@ translateDefDocWithTelescope ::
   ModuleMap ->
   Lean.Ident -> Term -> Term ->
   Either TranslationError (Doc ann, Int, [Lean.Type])
-translateDefDocWithTelescope configuration mm name body tp = do
+translateDefDocWithTelescope = translateDocWithTelescope DefEmission
+
+-- | 'translateDefDocWithTelescope' for a PROOF GOAL. Identical
+-- emission, plus the two goal-shape gates described on
+-- 'UnrepresentableGoalShape' (audit-2 A-2/A-9 and F-5).
+--
+-- The gates are goal-only on purpose: module and term emission
+-- legitimately bind types and stay universe-polymorphic. It is only
+-- the goal statement that has to mean exactly what the SAWCore
+-- obligation means.
+translateGoalDocWithTelescope ::
+  TranslationConfiguration ->
+  ModuleMap ->
+  Lean.Ident -> Term -> Term ->
+  Either TranslationError (Doc ann, Int, [Lean.Type])
+translateGoalDocWithTelescope = translateDocWithTelescope GoalEmission
+
+-- | Which of the two emission contracts 'translateDocWithTelescope'
+-- is serving. See 'translateGoalDocWithTelescope'.
+data EmissionKind = DefEmission | GoalEmission
+  deriving (Eq, Show)
+
+translateDocWithTelescope ::
+  EmissionKind ->
+  TranslationConfiguration ->
+  ModuleMap ->
+  Lean.Ident -> Term -> Term ->
+  Either TranslationError (Doc ann, Int, [Lean.Type])
+translateDocWithTelescope kind configuration mm name body tp = do
   ((bodyLean, wrapAnn, tp'), state) <-
     runTermTranslationMonad configuration Nothing mm [] [name] $ do
       -- P-1 (2026-05-06): use 'translateTermLet' on the body so
@@ -5484,7 +5567,31 @@ translateDefDocWithTelescope configuration mm name body tp = do
       pure (bodyLean, wrapAnn, tpLean)
   let auxDecls = reverse (view topLevelDeclarations state)
       univs    = view universeVars state
-      -- Annotation carrier decided by 'topLevelDefConvention' (the
+  -- Goal-shape gates (audit-2 A-2/A-9, F-5). Ordered so the
+  -- universe report comes first: a sort-@k@ binder trips both, and
+  -- the universe message names the concrete Lean shape.
+  when (kind == GoalEmission) $ do
+    unless (null univs) $
+      Except.throwError $ UnrepresentableGoalShape
+        (Text.pack ("a universe-polymorphic sort (universe parameters " ++
+                    intercalate ", " univs ++ ")"))
+        ("the goal def would be emitted as `" <> Text.pack (leanIdentStr name) <>
+         ".{" <> Text.pack (intercalate ", " univs) <>
+         "}` while its `_holds` stub names the bare `" <>
+         Text.pack (leanIdentStr name) <>
+         "`, proving it at one\ninferred level instead of universally — " <>
+         "a strictly weaker theorem than the SAWCore obligation.")
+    case leanSortBinders bodyLean of
+      []       -> pure ()
+      offenders ->
+        Except.throwError $ UnrepresentableGoalShape
+          (Text.pack ("a sort-typed binder (" ++
+                      intercalate "; " offenders ++ ")"))
+          ("SAWCore admits `Prop <= sort 0` cumulativity and instantiates " <>
+           "a sort binder\nat propositions; Lean 4 has no term " <>
+           "cumulativity, so the emitted `Type` binder\nomits that " <>
+           "instantiation class and the Lean statement is strictly WEAKER.")
+  let -- Annotation carrier decided by 'topLevelDefConvention' (the
       -- single definition-convention authority).
       tp'' = if wrapAnn then wrapExcept tp' else tp'
       mainDecl = mkDefinitionWith Lean.Noncomputable univs name bodyLean tp''

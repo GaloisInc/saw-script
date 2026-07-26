@@ -109,6 +109,20 @@ prettySort s = case s of
     TypeVar u        -> "Type" <+> pretty u
     SortVar u        -> "Sort" <+> pretty u
 
+-- | Does 'prettySort' render this sort as more than one token?
+-- @Prop@ and @Type@ are atoms; @Type n@, @Type u@ and @Sort u@ are
+-- an application-shaped pair and need parentheses in argument
+-- position (audit-2 A-4 — @Sort@ was the one 'Term' case that
+-- rendered multi-token output while ignoring 'Prec', so a sort
+-- reaching an argument slot emitted @Vec 5 Type 1@, which parses as
+-- THREE arguments to @Vec@).
+sortIsMultiToken :: Sort -> Bool
+sortIsMultiToken Prop        = False
+sortIsMultiToken (TypeLvl 0) = False
+sortIsMultiToken TypeLvl{}   = True
+sortIsMultiToken TypeVar{}   = True
+sortIsMultiToken SortVar{}   = True
+
 data Prec
   = PrecNone
   | PrecLambda
@@ -180,7 +194,7 @@ prettyTerm p e =
       -- without compounding.
       parensIf (p > PrecApp) $ group $ fillSep (f' : args')
     Sort s ->
-      prettySort s
+      parensIf (p > PrecApp && sortIsMultiToken s) (prettySort s)
     Var x ->
       prettyIdent x
     ExplVar x ->

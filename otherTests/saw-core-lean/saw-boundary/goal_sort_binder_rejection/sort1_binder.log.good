@@ -1,0 +1,26 @@
+Loading file "sort1_binder.saw"
+Stack trace:
+   (builtin) in offline_lean
+   sort1_binder.saw:10:14-10:39 in (callback)
+   (builtin) in prove_print
+   sort1_binder.saw:10:1-10:42 (at top level)
+Error translating: Refusing to emit a Lean proof goal containing a universe-polymorphic sort (universe parameters u0).
+
+Reason: the goal def would be emitted as `goal.{u0}` while its `_holds` stub names the bare `goal`, proving it at one
+inferred level instead of universally — a strictly weaker theorem than the SAWCore obligation.
+
+What this means: the emitted `goal` def and its `goal_holds`
+stub must state EXACTLY the SAWCore obligation. For this shape
+the Lean statement would differ from the SAWCore one, so
+discharging it in Lean would not discharge the SAW obligation.
+Translation is refused rather than emitting a mis-stated goal.
+
+Likely cause: the goal reached translation without being
+monomorphised. Goals produced by `prove_print` / `llvm_verify`
+are specialised first and do not quantify over sorts; a
+hand-written `parse_core` goal can.
+
+Workaround: instantiate the sort binder at the concrete type
+you care about and prove that instance. Sort-quantified goals
+are a deferred feature, not a supported one.
+

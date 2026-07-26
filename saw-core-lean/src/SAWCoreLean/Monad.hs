@@ -86,6 +86,29 @@ data TranslationError
     --   must be fixed, never worked around by wrapping/unwrapping at
     --   the call site.
   | ForbiddenAdaptation Text Text
+    -- | A proof-goal emission carried a shape the emitted Lean
+    --   statement cannot faithfully represent, so translation is
+    --   refused rather than emitting a goal that does not mean what
+    --   the SAWCore obligation means. The first 'Text' names the
+    --   offending shape, the second explains why it is refused.
+    --
+    --   Two shapes reach here (audit-2 A-2/A-9 and F-5), both
+    --   involving a SAWCore sort in the goal:
+    --
+    --   * A @sort k@ (k ≥ 1) anywhere in the goal allocates a Lean
+    --     universe variable, so the goal def is emitted
+    --     @goal.{u0}@ while the @goal_holds@ stub names the bare
+    --     @goal@ — a strictly weaker theorem at one level, and a
+    --     shape the replay kernel refuses downstream anyway.
+    --   * A @sort 0@ BINDER narrows the quantifier: SAWCore admits
+    --     @Prop ≤ sort 0@ cumulativity and instantiates such a
+    --     binder at propositions, while Lean 4 has no term
+    --     cumulativity, so the emitted @(a : Type)@ omits that
+    --     instantiation class.
+    --
+    --   Only goal emission is gated; module/term emission legitimately
+    --   binds types and stays universe-polymorphic.
+  | UnrepresentableGoalShape Text Text
 
 ppTranslationError :: SharedContext -> TranslationError -> IO Text
 ppTranslationError sc err = case err of
@@ -185,6 +208,26 @@ ppTranslationError sc err = case err of
       "dump_lean_residual_primitives on your\n" <>
       "term to see all surviving names — " <> name <>
       " will be one of them."
+  UnrepresentableGoalShape shape reason ->
+    pure $
+      "Refusing to emit a Lean proof goal containing " <> shape <> ".\n" <>
+      "\n" <>
+      "Reason: " <> reason <> "\n" <>
+      "\n" <>
+      "What this means: the emitted `goal` def and its `goal_holds`\n" <>
+      "stub must state EXACTLY the SAWCore obligation. For this shape\n" <>
+      "the Lean statement would differ from the SAWCore one, so\n" <>
+      "discharging it in Lean would not discharge the SAW obligation.\n" <>
+      "Translation is refused rather than emitting a mis-stated goal.\n" <>
+      "\n" <>
+      "Likely cause: the goal reached translation without being\n" <>
+      "monomorphised. Goals produced by `prove_print` / `llvm_verify`\n" <>
+      "are specialised first and do not quantify over sorts; a\n" <>
+      "hand-written `parse_core` goal can.\n" <>
+      "\n" <>
+      "Workaround: instantiate the sort binder at the concrete type\n" <>
+      "you care about and prove that instance. Sort-quantified goals\n" <>
+      "are a deferred feature, not a supported one."
   LocalVarOutOfBounds t -> ppWithTerm
     ("Local variable reference is out of bounds — the term references a\n" <>
      "Variable that no Pi/Lambda in scope binds.\n" <>

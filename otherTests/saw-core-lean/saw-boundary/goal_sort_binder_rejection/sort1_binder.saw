@@ -1,0 +1,10 @@
+// A-2 (emitter half) / A-9 pin (audit-2). A `sort k` (k >= 1) in a
+// goal allocates a Lean universe variable, so the goal def would be
+// emitted `goal.{u0}` while the `goal_holds` stub — built from the
+// bare name — proves it at ONE inferred level instead of
+// universally. That is a silently weaker theorem, so emission
+// refuses. With this gate the stub cannot drop universe binders,
+// because a goal that has any never reaches it.
+enable_experimental;
+let g = parse_core "\\(a : sort 1) -> \\(x : a) -> True";
+prove_print (offline_lean "sort1_goal") g;

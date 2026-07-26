@@ -185,8 +185,11 @@ narrowed by Phase 9 (2026-05-02 evening).
   `intToNat`.
 - **IntMod / Rational / Float / Double ops:** Phase 6 additions —
   axiomatic as a SAW-faithful surface (Lean has no native `IntMod`;
-  `Rational`/`Float`/`Double` map outputs but coherence with SAW's
-  semantics is uncommitted).
+  `Rational` maps outputs but coherence with SAW's semantics is
+  uncommitted). `Float`/`Double` are no longer in that "maps
+  outputs" class as of 2026-07-25 (audit-2 F-2): they are sealed
+  `opaque` types with uninterpreted constructors, matching SAW's own
+  declaration, so there is no output map to be coherent with.
 
 **What we trust:** Each axiom's signature matches SAW's primitive
 declaration in `Prelude.sawcore`. SAW's semantics for the operation
@@ -253,9 +256,22 @@ convention concrete simulator AT NONZERO DIVISORS — the zero
 points diverge and are gated by checked/runtime wrappers; audited
 zero-point table in
 `2026-07-18_underapplied-partial-op-wrapper.md`), IntMod via `Int` with
-`Int.fmod`, Rational via Lean's `Rat`, Float/Double as
-`Int × Int` mantissa-exponent pairs (faithful since SAW has
-no operations on these), and `zip` via `Vector.ofFn`.
+`Int.fmod`, Rational via Lean's `Rat`, Float/Double as two SEPARATE
+sealed `opaque` carriers with uninterpreted `opaque` constructors,
+and `zip` via `Vector.ofFn`.
+
+**Corrected 2026-07-25 (audit-2 F-2).** This sentence used to read
+"Float/Double as `Int × Int` mantissa-exponent pairs (faithful since
+SAW has no operations on these)", and both the binding and its
+justification were wrong. `Eq` is an observer — at the type level
+and at the value level — so a shared transparent image made
+`Float = Double`, `mkFloat m e = mkDouble m e` and
+`mkFloat`-injectivity all provable in Lean while underivable in SAW.
+The error generalizes and is worth carrying forward when reading the
+rest of this catalog: **"no *executable* observer" is strictly
+weaker than "no *equational* observer"**, and only the latter
+licenses collapsing two SAW types onto one Lean type. Pinned by
+`negative/float_double_collapse`.
 
 `SAWCoreBitvectors_proofs.lean` has **zero axioms**: every
 arithmetic, bitwise, comparison, round-trip, signed/unsigned,
@@ -646,14 +662,42 @@ each getting a fresh Lean universe variable
 That replacement is sound in the direction that matters
 (`∀ {u} (a : Sort u), P a` implies SAW's `∀ (a : sort k), P a`),
 so removing the gate did not create the weakening this entry was
-written to exclude. But two consequences are OPEN and tracked in
-`TODO.md`: a universe-parameterized goal renders `def goal.{u0}`,
-which the replay checker's goal-presence regex misses (A-2), and
-its `goal_holds` stub drops the universe binders (A-9); separately,
-`sort 0 → Type` NARROWS the quantifier, since SAWCore admits
-`Prop ≤ sort 0` cumulativity and Lean 4 has no term cumulativity
-(F-5) — which the removed gate would not have covered either, as
-it only gated `k > 0`.
+written to exclude. Three consequences were OPEN; **all three were
+closed 2026-07-25**, by a single rule replacing the deleted gate:
+
+> **A goal telescope may not quantify over a sort.**
+
+`translateGoalDocWithTelescope` refuses, at translation time, any
+goal emission that (i) allocates a universe variable, or (ii)
+contains a sort-typed binder at any depth (`Prop` excepted — SAWCore
+`Prop` maps to Lean `Prop` with no cumulativity gap). The gate is
+GOAL-ONLY: module and term emission still translate sort binders and
+still go universe-polymorphic, which is sound and needed. What the
+rule closes:
+
+- **A-2** — a universe-parameterized goal rendered `def goal.{u0}`,
+  which the replay checker's goal-presence regex missed. The checker
+  half was closed 2026-07-24 by making goal presence an invariant
+  derived from the authority; the emitter half now prevents the
+  shape from existing at all.
+- **A-9** — the `goal_holds` stub is built from the bare name and
+  dropped the universe binders, proving the goal at ONE inferred
+  level instead of universally. Closed **by construction**: a goal
+  reaching the stub has no universe binders to drop. Reopening the
+  A-2 gate reopens A-9.
+- **F-5** — `sort 0 → Type` NARROWS the quantifier, since SAWCore
+  admits `Prop ≤ sort 0` cumulativity and Lean 4 has no term
+  cumulativity. Note the removed gate would NOT have covered this
+  one either: it gated only `k > 0`. The audit's alternative fix
+  (emit `Sort u` for sort-0 binders) was rejected — it allocates a
+  universe variable and so collides with A-2's gate; refusing is the
+  only resolution that discharges both.
+
+Pinned by `saw-boundary/goal_sort_binder_rejection/{sort0,sort1}_binder`.
+Measured cost: zero — the full suite's known-gap count was unchanged
+across the change (71 before, 71 after), because specialization
+monomorphizes goals and the shape is reachable only from
+hand-written `parse_core`.
 
 **Historical text follows, retained as the record of what was
 believed:** the gate checked both Pi and Lambda binders for sort

@@ -1,1 +1,1 @@
-mkFloat pair 1 2
+mkFloat 1 2
