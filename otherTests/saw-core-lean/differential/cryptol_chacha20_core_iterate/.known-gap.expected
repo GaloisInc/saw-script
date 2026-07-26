@@ -1,1 +1,5 @@
-maximum recursion depth
+# Stable substrings of the S-2 rejection. If this row starts failing
+# for a DIFFERENT reason, these stop matching and the gap goes red —
+# a gap must stay pinned to its actual cause (V-H1 discipline).
+Refusing to translate primitive Prelude.fix
+raw-position fix

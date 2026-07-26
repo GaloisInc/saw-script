@@ -2724,12 +2724,47 @@ dispatchIdentWithArgsWithShape i args
                    <> "unique-fixed-point contract is retired): "
                    <> Text.pack (fixVerdictReason verdict)))
             | otherwise ->
-                -- Raw-position fixes (function/proof/index results)
-                -- keep the raw proof-carrying contract, explicitly
-                -- retained per Instance 3; believed corpus-unreachable
-                -- for divergent shapes and census-checked.
-                lowerFixProofObligation typeArg bodyArg
-                  "raw-position fix uses the raw proof-carrying contract"
+                -- S-2 (2026-07-25, second audit): raw-position fixes
+                -- are now REJECTED rather than given the raw
+                -- proof-carrying contract.
+                --
+                -- That contract's sole condition is uniqueness among
+                -- ALL fixed points, which is purely EXTENSIONAL and
+                -- therefore cannot observe SAW's operational
+                -- divergence — so it is honestly dischargeable while
+                -- SAW's meaning is ⊥. Witness (lane-fix):
+                --   parse_core "fix Nat (\\(n : Nat) -> mulNat n 0)"
+                -- routes here (FixUnrecognized, shouldWrapBinder Nat =
+                -- False), and its obligation is provable in three
+                -- tokens, ⟨0, rfl, fun y h => h.symm⟩, because
+                -- `Nat.mul y 0` reduces to 0 — while SAW's `mulNat`
+                -- recurses on its FIRST argument, so `let x = mulNat
+                -- x 0 in x` must force `x` to compute `x`.
+                --
+                -- No checker hardening can catch this: every gate goes
+                -- green honestly. The code previously hedged "believed
+                -- corpus-unreachable ... and census-checked" — but a
+                -- census is not a proof, and the protection it relied
+                -- on is ACCIDENTAL: ordinary recursive Cryptol escapes
+                -- only because its value-domain codomain is
+                -- `Except String T`, where the constant-error family
+                -- is a fixed point of essentially every bind-sequenced
+                -- body, so uniqueness fails for divergent shapes. That
+                -- does not extend to DNat / DRawProp / DRawType.
+                --
+                -- Reject-until-needed (user decision 2026-07-25):
+                -- there are ZERO corpus uses of saw_fix_choose_raw, so
+                -- this costs nothing today and fails loudly if a real
+                -- example ever needs it. Re-enabling requires a
+                -- productivity-gated contract, not a census — see the
+                -- 0.03 fragment-semantics programme.
+                Except.throwError (RejectedPrimitive "Prelude.fix"
+                  ("raw-position fix (function/proof/index result): the "
+                   <> "raw unique-fixed-point contract is extensional "
+                   <> "and cannot observe divergence, so it is "
+                   <> "dischargeable for fixes whose SAW meaning is "
+                   <> "bottom. Rejected pending a productivity-gated "
+                   <> "raw contract."))
       if null rest
          then pure fixedPoint
          else applyKnownFunctionWithShape typeArg (ttLean fixedPoint) rest
@@ -3313,40 +3348,16 @@ originalDispatchWithShape i args = do
       Except.throwError
         (RejectedPrimitive (Text.pack (identName i)) reason)
 
--- | Lower a RAW-POSITION @Prelude.fix@ (function/proof/index result)
--- to the raw unique-fixed-point proof obligation. Post-R4 this is the
--- ONLY caller of the unique-fixed-point contract family: the wrapped
--- variant is retired (the dispatch rejects every unrecognized wrapped
--- fix with a named diagnostic; recognized classes have proven
--- realizations). The raw obligation is intentionally semantic and
--- strong — uniqueness over the whole raw fixed-point space — and is
--- retained per Instance 3; believed corpus-unreachable for divergent
--- shapes and census-checked.
-lowerFixProofObligation ::
-  TermTranslationMonad m =>
-  Term -> Term -> Text.Text -> m TranslatedTerm
-lowerFixProofObligation typeArg bodyArg _reason = do
-  typeLean <- translateTerm typeArg
-  bodyLean <- translateTerm bodyArg
-  -- R4: the wrapped branch is GONE — the dispatch rejects every
-  -- unrecognized wrapped fix before reaching here, so this lowering
-  -- serves raw result positions only (Instance 3 retention).
-  do
-       term <- withSharedLocalTerm
-         (Lean.Ident "fix_body_")
-         (leanTermIdents typeLean)
-         bodyLean
-         $ \bodyVar -> do
-             let prop =
-                   Lean.App (Lean.Var (Lean.Ident "saw_fix_unique_exists_raw"))
-                     [typeLean, bodyVar]
-             withLocalProofObligation
-               (Lean.Ident "h_fix_unique_")
-               prop
-               $ \proof ->
-                   pure (Lean.App (Lean.Var (Lean.Ident "saw_fix_choose_raw"))
-                     [typeLean, bodyVar, proof])
-       pure (TranslatedTerm term (rawErrorResultShape typeArg))
+-- NOTE (S-2, 2026-07-25): `lowerFixProofObligation` — which
+-- emitted the raw `saw_fix_unique_exists_raw` /
+-- `saw_fix_choose_raw` contract for raw-position fixes — was
+-- DELETED with the S-2 rejection above, not merely bypassed.
+-- The contract is extensional and cannot observe divergence, so
+-- leaving a reachable emitter for it would be one re-wire away
+-- from reintroducing a hole every gate passes honestly. The
+-- Lean-side contract remains in the support library, unused by
+-- any emitter; re-enabling needs a productivity-gated
+-- replacement (0.03 fragment semantics), not this function.
 
 -- | Lower a RECOGNIZED Class-F (bounded-lookback) wrapped
 -- @Prelude.fix@ to the OP-3 successor realization (Slice R2):

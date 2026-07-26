@@ -175,57 +175,28 @@ checkedApplicationContracts =
       [IndexArg, TypeArg, RuntimeArg, IndexArg]
       0
       3
-  , vecIndexContract
-      "atWithProof"
-      5
-      (Lean.Ident "atWithProof_checkedM")
-      [IndexArg, TypeArg, RuntimeArg, IndexArg, ProofArg]
-      0
-      3
-  , vecIndexContract
-      "updWithProof"
-      6
-      (Lean.Ident "updWithProof_checkedM")
-      [IndexArg, TypeArg, RuntimeArg, IndexArg, RuntimeArg, ProofArg]
-      0
-      3
-  , vecSliceContract
-      "sliceWithProof"
-      6
-      (Lean.Ident "sliceWithProof_checkedM")
-      [TypeArg, IndexArg, IndexArg, IndexArg, ProofArg, RuntimeArg]
-      1
-      2
-      3
-  , vecSliceContract
-      "updSliceWithProof"
-      7
-      (Lean.Ident "updSliceWithProof_checkedM")
-      [TypeArg, IndexArg, IndexArg, IndexArg, ProofArg, RuntimeArg, RuntimeArg]
-      1
-      2
-      3
-  , CheckedApplicationContract preludeModule "genWithProof" 3
-      Nothing
-      (Lean.Ident "genWithProof_checkedM")
-      [IndexArg, TypeArg, FunctionWithNatLtArg 0]
-      RuntimeResult
+  -- LIB-2 (2026-07-25, second audit): the five `*WithProof` SAW
+  -- primitives are declared `primitive` in Prelude.sawcore with NO
+  -- body, and a repo-wide search finds zero implementations — no
+  -- constMap entry, no Concrete.hs override, nothing in What4/SBV/RME.
+  -- Their ONLY semantics in SAW is their type, so giving them Lean
+  -- VALUES makes the emitted statement strictly WEAKER than the SAW
+  -- obligation, which must hold under every interpretation.
+  --
+  -- Routing them here also meant the `reject` entries for these names
+  -- in SpecialTreatment.hs were DEAD CODE — this contract path
+  -- matched first. Removing them lets those rejections finally fire,
+  -- per reject-until-needed: nothing outside the purpose-built
+  -- obligations/vector_*_with_proof rows uses them.
+  --
+  -- NOTE `at` above is NOT one of these — it is SAW's ordinary,
+  -- fully-interpreted indexing primitive and keeps its contract.
   ]
   where
     preludeModule = mkModuleName ["Prelude"]
     vecIndexContract source arity helper argModes nIdx iIdx =
       CheckedApplicationContract preludeModule source arity
         (Just (\helperArgs -> natLt (helperArgs !! iIdx) (helperArgs !! nIdx)))
-        helper
-        argModes
-        RuntimeResult
-    vecSliceContract source arity helper argModes nIdx offIdx lenIdx =
-      CheckedApplicationContract preludeModule source arity
-        (Just (\helperArgs ->
-          natLe
-            (Lean.App (Lean.Var (Lean.Ident "addNat"))
-              [helperArgs !! offIdx, helperArgs !! lenIdx])
-            (helperArgs !! nIdx)))
         helper
         argModes
         RuntimeResult

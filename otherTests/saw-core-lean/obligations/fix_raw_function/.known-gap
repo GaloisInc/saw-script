@@ -1,0 +1,12 @@
+Raw-position `Prelude.fix` (function/proof/index result) was
+withdrawn 2026-07-25 (audit finding S-2). Its contract,
+`saw_fix_unique_exists_raw`, states uniqueness among all fixed
+points — purely EXTENSIONAL, so it cannot observe SAW's operational
+divergence and is honestly dischargeable for fixes whose SAW meaning
+is bottom (witness: `fix Nat (\(n : Nat) -> mulNat n 0)`, provable in
+three tokens while SAW's `mulNat` recurses on its first argument).
+
+No checker hardening can catch this — every gate goes green — so the
+emitter now rejects instead. Restoration path is the
+productivity-gated raw contract in the 0.03 fragment-semantics
+programme, matching what the wrapped Class-F/Class-S fixes have.

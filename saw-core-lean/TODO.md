@@ -186,7 +186,12 @@ the reject-until-needed treatment: LIB-1, S-2, F-5, LIB-2.
 
 ### Medium
 
-- [ ] **S-2 — `saw_fix_unique_exists_raw` is reachable AND honestly
+- [x] **S-2 — CLOSED 2026-07-25.** Raw-position fixes now REJECT at
+  translation (`lowerFixProofObligation` DELETED, not merely bypassed —
+  dead code emitting an unsound contract is one re-wire from returning).
+  Cost: a REAL Cryptol feature deferral (chacha20 iterate/iround),
+  gapped as `differential/cryptol_chacha20_*`; restoration = the 0.03
+  productivity-gated raw contract. Original finding:
   dischargeable** (upgrades the first audit's LB-1 from "latent,
   zero corpus uses"). Witness: `parse_core "fix Nat (\n -> mulNat n
   0)"` routes `FixUnrecognized` → `shouldWrapBinder Nat = False` →
@@ -198,8 +203,13 @@ the reject-until-needed treatment: LIB-1, S-2, F-5, LIB-2.
   constant-error family is a fixed point of bind-sequenced bodies,
   so uniqueness fails for divergent shapes) — protection that does
   not extend to `DNat`/`DRawProp`/`DRawType`. FIX-SEAM ⇒ pause rule.
-- [ ] **LIB-2 — the five `*WithProof` primitives are UNINTERPRETED
-  in SAW but interpreted in Lean.** `atWithProof`/`genWithProof`/
+- [x] **LIB-2 — CLOSED 2026-07-25.** Contracts removed so the
+  pre-existing `SpecialTreatment` rejects finally fire — they had
+  been DEAD CODE, shadowed by the contract path. Cost: NO Cryptol
+  capability (verified: reachable only from hand-written SAWCore);
+  13 probe/discharge rows gapped, 4 stale goldens retired.
+  Principled restoration = a genuinely UNINTERPRETED Lean
+  realization. Was: `atWithProof`/`genWithProof`/
   `updWithProof`/`sliceWithProof`/`updSliceWithProof` are declared
   `primitive` with no body and have zero implementations anywhere in
   SAW; their only semantics is their type. The Lean helpers give

@@ -507,6 +507,36 @@ simulator changes):
   goals are equated only where all-success holds, and outside it the
   obligations are unprovable, not wrong.
 
+  **CORRECTION (2026-07-25, audit finding LIB-1 — the paragraph
+  above is BACKWARDS in its most important case, and the error was
+  load-bearing.)** "Unprovable, not wrong" holds when the two sides
+  surface DIFFERENT errors. When they surface the SAME error — which
+  is the normal case, because the byte-exact message identity
+  recorded just above was chosen deliberately to stop Lean
+  OVER-DISTINGUISHING — the emitted equation does not become
+  unprovable. It becomes trivially TRUE in Lean while FALSE in SAW.
+  The eager `Except` carrier cannot represent "an error in one slot,
+  good values elsewhere", so `Vec n (Except String T)` collapses to
+  `Except String (Vec n T)`, and that adaptation is NON-INJECTIVE.
+
+  Verified end-to-end 2026-07-25 (SAWCore via `parse_core`):
+
+      A = at 2 T (gen 2 T (\i -> ite T (equalNat i 1) (error T "e") (bvNat 8 7))) 0
+      B = at 2 T (gen 2 T (\i -> ite T (equalNat i 1) (error T "e") (bvNat 8 9))) 0
+
+  SAW evaluates `A = 0x07` and `B = 0x09` (index 0 is read; the
+  index-1 thunk holding `error` is never forced), so `Eq T A B` is
+  FALSE. Lean reduces BOTH to `Except.error "e"`, and the emitted
+  equation is provable using only allowlisted axioms
+  (`propext`, `Quot.sound`) — i.e. a perfect trust kernel admits it,
+  because the Lean statement really is proved. It is the WRONG
+  statement.
+
+  So the message identity that protects against over-distinguishing
+  is exactly what enables over-EQUATING. This is an OPEN soundness
+  defect (LIB-1), tracked in TODO.md; it is a translator/carrier
+  problem, not a gate problem, and no checker hardening addresses it.
+
 Remaining UNREAD/UNPROVEN after this pass (unchanged): §3.3
 normalization preservation; the meaning link from SAW's proof
 pipeline to the emitted goal term; Cryptol elaboration. The
@@ -547,6 +577,32 @@ emission (the authority), a completed file without a bare
 the `GeneratedHarness` probe namespace are rejected — the
 closer↔goal binding check (`goal_closed : goal`) therefore ALWAYS
 runs on admitted replays.
+
+### 3.2c Deployment trust: the dev-override affordances (2026-07-25)
+
+Named here because the plan's threat model (T3) treats them as OUT
+OF SCOPE, and an out-of-scope boundary that is only implied is not
+documented. These are affordances, not defects — but a reader
+should not have to infer them.
+
+- **`SAW_LEAN_ROOT`** substitutes BOTH the pinned support library
+  and the checker script itself. Anyone who can set it can make the
+  trust kernel say anything.
+- **The staging cache** (`~/.cache/saw-core-lean/lean-<fp>/`) is
+  reused on marker EXISTENCE only; staged contents are never
+  re-hashed (audit RK-8). Write access there permits substituting
+  the support library — adding *lemmas*, which the allowlist audit
+  cannot see, since it audits axioms rather than theorems.
+- **The toolchain** is trusted by construction: replay records the
+  `lean-toolchain` in evidence but cannot verify the binary.
+
+The trust kernel defends against a proof that does not prove the
+emitted obligation. It does not, and cannot, defend against someone
+who controls the checker, the library, or the compiler — such a
+person could equally just assert the goal was proved. What this
+boundary DOES mean in practice is that `LeanReplayEvidence` is
+meaningful to a second party only to the extent they trust the
+environment that produced it.
 
 ### 3.3 `scNormalizeForLean` semantics-preservation (Phase 5 Link 2)
 

@@ -1,37 +1,81 @@
 Loading file "test_cryptol_seq_surgery.saw"
 == Anticipated failure message ==
 Stack trace:
+   (builtin) in offline_lean
+   test_cryptol_seq_surgery.saw:61:21-61:64 in (callback)
    (builtin) in prove_print
    test_cryptol_seq_surgery.saw:61:8-61:71 in (callback)
    (builtin) in fails
    test_cryptol_seq_surgery.saw:61:1-61:71 (at top level)
-prove: 1 unsolved subgoal(s)
-Unfinished: 1 goals remaining
+Error translating: Refusing to translate primitive updWithProof.
+
+Reason: with-proof Vec variants not mapped; use upd instead, or refactor.
+
+This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
+transposition for this primitive yet. If your Cryptol code specialised down to it,
+you've hit one of the open cases tracked in the long-term plan.
+
+Workaround: refactor to avoid the primitive (e.g. recursion via `fix` can sometimes
+be expressed as a bounded fold instead). Run dump_lean_residual_primitives on your
+term to see all surviving names — updWithProof will be one of them.
 
 == Anticipated failure message ==
 Stack trace:
+   (builtin) in offline_lean
+   test_cryptol_seq_surgery.saw:73:21-73:66 in (callback)
    (builtin) in prove_print
    test_cryptol_seq_surgery.saw:73:8-73:75 in (callback)
    (builtin) in fails
    test_cryptol_seq_surgery.saw:73:1-73:75 (at top level)
-prove: 1 unsolved subgoal(s)
-Unfinished: 1 goals remaining
+Error translating: Refusing to translate primitive sliceWithProof.
+
+Reason: with-proof Vec variants not mapped; use slice instead, or refactor.
+
+This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
+transposition for this primitive yet. If your Cryptol code specialised down to it,
+you've hit one of the open cases tracked in the long-term plan.
+
+Workaround: refactor to avoid the primitive (e.g. recursion via `fix` can sometimes
+be expressed as a bounded fold instead). Run dump_lean_residual_primitives on your
+term to see all surviving names — sliceWithProof will be one of them.
 
 == Anticipated failure message ==
 Stack trace:
+   (builtin) in offline_lean
+   test_cryptol_seq_surgery.saw:82:21-82:64 in (callback)
    (builtin) in prove_print
    test_cryptol_seq_surgery.saw:82:8-82:71 in (callback)
    (builtin) in fails
    test_cryptol_seq_surgery.saw:82:1-82:71 (at top level)
-prove: 1 unsolved subgoal(s)
-Unfinished: 1 goals remaining
+Error translating: Refusing to translate primitive genWithProof.
+
+Reason: with-proof Vec variants not mapped; use gen instead, or refactor to thread the proof manually.
+
+This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
+transposition for this primitive yet. If your Cryptol code specialised down to it,
+you've hit one of the open cases tracked in the long-term plan.
+
+Workaround: refactor to avoid the primitive (e.g. recursion via `fix` can sometimes
+be expressed as a bounded fold instead). Run dump_lean_residual_primitives on your
+term to see all surviving names — genWithProof will be one of them.
 
 == Anticipated failure message ==
 Stack trace:
+   (builtin) in offline_lean
+   test_cryptol_seq_surgery.saw:94:21-94:69 in (callback)
    (builtin) in prove_print
    test_cryptol_seq_surgery.saw:94:8-94:81 in (callback)
    (builtin) in fails
    test_cryptol_seq_surgery.saw:94:1-94:81 (at top level)
-prove: 1 unsolved subgoal(s)
-Unfinished: 1 goals remaining
+Error translating: Refusing to translate primitive updSliceWithProof.
+
+Reason: with-proof Vec variants not mapped; use updSlice instead, or refactor.
+
+This is a deliberate translator-level rejection — the Lean backend doesn't have a sound
+transposition for this primitive yet. If your Cryptol code specialised down to it,
+you've hit one of the open cases tracked in the long-term plan.
+
+Workaround: refactor to avoid the primitive (e.g. recursion via `fix` can sometimes
+be expressed as a bounded fold instead). Run dump_lean_residual_primitives on your
+term to see all surviving names — updSliceWithProof will be one of them.
 

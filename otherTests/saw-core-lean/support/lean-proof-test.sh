@@ -73,6 +73,58 @@ case "$VERB" in
         ;;
 esac
 
+# Known-gap support (2026-07-25). Mirrors lean-differential-test.sh and
+# lean-obligation-test.sh: a row carrying `.known-gap` is EXPECTED to
+# fail, and `.known-gap.expected` must list stable diagnostic
+# substrings that appear in the failure. Added so that a discharge
+# withdrawn for SOUNDNESS stays VISIBLE in the conformance census
+# rather than being deleted — silently removing a proof row makes the
+# capability loss invisible, which is the opposite of what the gap
+# census is for.
+#
+# Two guards keep the gap honest: an unexpectedly PASSING row fails
+# (the gap is stale — the capability came back and the row should be
+# restored), and a changed diagnostic fails (the row is now failing
+# for a different reason, so the gap no longer pins what it claims —
+# the V-H1 discipline).
+if [ -f .known-gap ] && [ -z "${SAW_LEAN_PROOF_KNOWN_GAP_INNER:-}" ]; then
+    if [ ! -f .known-gap.expected ]; then
+        echo "FAIL: proof known gap requires .known-gap.expected" >&2
+        exit 1
+    fi
+
+    set +e
+    SAW_LEAN_PROOF_KNOWN_GAP_INNER=1 bash "$0" test >known-gap.actual 2>&1
+    gap_rc=$?
+    set -u
+
+    if [ "$gap_rc" -eq 0 ]; then
+        cat known-gap.actual
+        echo "FAIL: known-gap proof row unexpectedly passed" >&2
+        exit 1
+    fi
+
+    missing=0
+    while IFS= read -r expected || [ -n "$expected" ]; do
+        case "$expected" in
+            ''|\#*) continue ;;
+        esac
+        if ! grep -F "$expected" known-gap.actual >/dev/null 2>&1; then
+            echo "MISSING EXPECTED KNOWN-GAP DIAGNOSTIC: $expected" >&2
+            missing=1
+        fi
+    done < .known-gap.expected
+
+    if [ "$missing" -ne 0 ]; then
+        cat known-gap.actual
+        echo "FAIL: known-gap proof diagnostic changed" >&2
+        exit 1
+    fi
+
+    echo "OK: known proof gap pinned"
+    exit 0
+fi
+
 # Phase A (2026-05-04 audit): no silent skips. lake must be available
 # whenever this harness runs.
 if ! command -v lake >/dev/null 2>&1; then

@@ -1,0 +1,20 @@
+This row discharged a goal over the `*WithProof` SAW primitives,
+whose emitter path was WITHDRAWN 2026-07-25 (audit finding LIB-2).
+Those primitives are declared `primitive` in Prelude.sawcore with no
+body and have zero implementations anywhere in SAW, so their only
+semantics is their type; giving them Lean VALUES made the emitted
+statement strictly WEAKER than the SAW obligation, which must hold
+under every interpretation.
+
+The tracked `.lean.good` artifact this row consumed was retired with
+the emitter path: a `.good` file asserts "this is what the emitter
+produces", and that claim became false. Keeping it would have left a
+stale mechanism-claim in the repo; deleting this row instead would
+have hidden the capability loss. The row is therefore GAPPED, so the
+loss stays visible in the conformance census.
+
+No Cryptol capability is affected — these primitives are reachable
+only from hand-written SAWCore (`parse_core`). Restoration needs a
+genuinely UNINTERPRETED Lean realization, so the Lean statement
+matches SAW's "holds for all interpretations" rather than committing
+to one; the discharge can then be re-cut against a fresh artifact.

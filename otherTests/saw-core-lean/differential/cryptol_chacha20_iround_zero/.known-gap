@@ -1,1 +1,16 @@
-ChaCha20 iround-0 translates, emits, and ELABORATES since 2026-07-17 (Stream@core hole closed; this shape avoids the function-carrier transport corner) — the residual gap is observer budget: the #reduce differential observation of the 16x32 concrete computation exceeds Lean's default maximum recursion depth (same budget family as the doubleround ITP gap).
+Cryptol reaches a RAW-POSITION `Prelude.fix` (function/proof/index
+result). That surface was withdrawn on 2026-07-25 (audit finding
+S-2): its contract, `saw_fix_unique_exists_raw`, states uniqueness
+among all fixed points, which is purely EXTENSIONAL and therefore
+cannot observe SAW's operational divergence — so it is honestly
+dischargeable for fixes whose SAW meaning is bottom (witness:
+`fix Nat (\(n : Nat) -> mulNat n 0)`, provable in three tokens).
+No checker hardening can catch that; every gate goes green.
+
+This is a deliberate FEATURE DEFERRAL under the project rule that
+the backend must be sound and features may be bumped: the row
+translated correctly before, but through a mechanism that cannot
+distinguish productive from divergent raw fixes. Restoration path is
+the productivity-gated raw contract in the 0.03 fragment-semantics
+programme, which is what the wrapped Class-F/Class-S fixes already
+have.

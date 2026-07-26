@@ -1,0 +1,17 @@
+The `*WithProof` SAW primitives are declared `primitive` in
+Prelude.sawcore with NO body, and a repo-wide search finds zero
+implementations — no constMap entry, no Concrete.hs override,
+nothing in What4/SBV/RME. Their ONLY semantics in SAW is their type.
+
+Giving them Lean VALUES therefore made the emitted statement
+strictly WEAKER than the SAW obligation, which must hold under every
+interpretation (audit finding LIB-2). The contracts that did so were
+removed 2026-07-25, so these names now hit the pre-existing
+`reject` entries in SpecialTreatment.hs — which the contract path had
+been shadowing, leaving them dead code.
+
+No Cryptol capability is affected: these primitives are not produced
+by Cryptol translation, only by hand-written SAWCore (`parse_core`).
+Restoration would need a genuinely UNINTERPRETED Lean realization, so
+that the Lean statement matches SAW's "holds for all interpretations"
+rather than committing to one.

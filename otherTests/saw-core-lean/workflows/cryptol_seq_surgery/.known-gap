@@ -1,0 +1,12 @@
+The `parse_core` goals in this row apply the `*WithProof` SAW
+primitives directly. Those primitives are declared `primitive` in
+Prelude.sawcore with NO body and have zero implementations anywhere
+in SAW, so their only semantics is their type — giving them Lean
+VALUES made the emitted statement strictly WEAKER than the SAW
+obligation, which must hold under every interpretation (audit
+finding LIB-2). The contracts were removed 2026-07-25 and the
+primitives now reject.
+
+No Cryptol capability is affected: these primitives are not produced
+by Cryptol translation, only by hand-written SAWCore. Restoration
+would need a genuinely UNINTERPRETED Lean realization.

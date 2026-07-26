@@ -1,0 +1,5 @@
+# NOTE: this diagnostic is accident-shaped — it would also match a
+# golden deleted by mistake. The cause is recorded in .known-gap;
+# the authoritative pin for the WITHDRAWAL itself is the rejection
+# diagnostic on obligations/vector_*_with_proof.
+Proof tests must use a tracked .lean.good artifact
