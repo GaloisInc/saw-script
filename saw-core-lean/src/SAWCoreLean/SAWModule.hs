@@ -112,7 +112,8 @@ translateDef Def{..} = do
       ModuleTranslationMonad m =>
       (forall n a. TermTranslation.TermTranslationMonad n => n a -> n a) ->
       Lean.Ident -> m (Doc ann)
-    emitWith mode name = case defQualifier of
+    emitWith mode name = checkEmittedName "a SAWCore definition" name >>
+                         case defQualifier of
       NoQualifier -> case defBody of
         Nothing   ->
           Except.throwError $ RejectedPrimitive shortName

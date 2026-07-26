@@ -5355,7 +5355,20 @@ runTermTranslationMonad configuration mname mm globals localEnv =
        , _bindingEnv            = Map.empty
        , _natBoundsEnv          = Map.empty
        , _boundUniverses    = Map.empty
+       -- Audit-2 F-6: 'reservedIdents' alone was Lean keywords plus
+       -- a handful of sorts, which said nothing about the ~130
+       -- support-library short names the emitter writes BARE because
+       -- 'implicitlyOpenedModules' are `open`ed. A generated binder
+       -- named `Vec` shadowed the library `Vec` throughout a goal
+       -- body full of `Vec n Bool`; instances failed loudly, but by
+       -- ACCIDENT, not by construction. Seeding the emitter's own
+       -- bare-name set makes 'freshVariant' rename such a binder
+       -- instead. Binder names are internal to the emitted term, so
+       -- this renaming is invisible to users — contrast the
+       -- DEFINITION-name case (F-7), which is user-facing and
+       -- refuses rather than renames.
        , _unavailableIdents = Set.unions [ reservedIdents
+                                         , emitterBareNames configuration
                                          , Set.fromList globals
                                          , Set.fromList localEnv
                                          ]

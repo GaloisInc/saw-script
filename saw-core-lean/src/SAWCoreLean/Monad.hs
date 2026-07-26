@@ -109,6 +109,22 @@ data TranslationError
     --   Only goal emission is gated; module/term emission legitimately
     --   binds types and stays universe-polymorphic.
   | UnrepresentableGoalShape Text Text
+    -- | A SAWCore or Cryptol definition's name collides with a name
+    --   the emitter writes BARE into the same file. Audit-2 F-7.
+    --
+    --   The emitted declaration lands INSIDE the generated
+    --   @namespace@, and Lean resolves a namespace-local declaration
+    --   in preference to an @open@ed one SILENTLY — no ambiguity
+    --   error. So a Cryptol def named @zip@ or @seq@ rebinds that
+    --   primitive for the rest of the namespace, and every later use
+    --   in the file means something different.
+    --
+    --   Refused rather than renamed: the emitted name is what a user
+    --   writes in a discharge (@Foo.zip@), so silently renaming it to
+    --   @Foo.zip'@ would make proofs reference a name their source
+    --   never mentions. Binder names, being internal, ARE renamed
+    --   instead (F-6).
+  | EmittedNameCollision Text Text
 
 ppTranslationError :: SharedContext -> TranslationError -> IO Text
 ppTranslationError sc err = case err of
@@ -208,6 +224,29 @@ ppTranslationError sc err = case err of
       "dump_lean_residual_primitives on your\n" <>
       "term to see all surviving names — " <> name <>
       " will be one of them."
+  EmittedNameCollision nm kind ->
+    pure $
+      "Refusing to emit a definition named " <> nm <> ": that name is " <>
+      "also written\n" <>
+      "bare by the translator itself (" <> kind <> ").\n" <>
+      "\n" <>
+      "What this means: the emitted declaration goes inside the " <>
+      "generated `namespace`,\n" <>
+      "and Lean prefers a namespace-local declaration over one " <>
+      "brought in by `open` --\n" <>
+      "SILENTLY, with no ambiguity error. Your definition would " <>
+      "rebind " <> nm <> " for the\n" <>
+      "rest of the emitted file, so every later use of the primitive " <>
+      "would mean your\n" <>
+      "definition instead.\n" <>
+      "\n" <>
+      "Workaround: rename the definition in your Cryptol/SAWCore " <>
+      "source. The backend\n" <>
+      "deliberately does NOT rename it for you: the emitted name is " <>
+      "what you write in a\n" <>
+      "Lean discharge, and a silent rename would make your proof " <>
+      "reference a name your\n" <>
+      "source never mentions."
   UnrepresentableGoalShape shape reason ->
     pure $
       "Refusing to emit a Lean proof goal containing " <> shape <> ".\n" <>

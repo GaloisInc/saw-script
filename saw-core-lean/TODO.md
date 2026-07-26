@@ -353,6 +353,16 @@ below.
   worth keeping in mind for the rest of the table: it conflated **no
   *executable* observer** with **no *equational* observer**, and
   `Eq` is the latter at both the type and the value level.
+- [ ] **Flake: `proofs/llvm_doubleround_comp` reported "emitted .lean
+  did not compile — emission drift" under full-suite load**
+  (2026-07-26), with only linter WARNINGS in the log and no error.
+  Passes standalone. Most likely resource exhaustion — this row
+  family is already noted as heavyweight. Worth a real fix rather
+  than a shrug: a trust-path harness that intermittently reports
+  emission drift without an error is indistinguishable at a glance
+  from a genuine drift, which is the one thing that verdict must
+  never be ambiguous about. Second heavyweight row this session to
+  behave differently in isolation than in the suite.
 - [ ] **F-2 (core) — the recursor head is emitted SHORT while its
   ctor-order assertion is emitted QUALIFIED**, so `@Stream.rec` is
   genuinely ambiguous against Lean core's root-scope `Stream` and is
@@ -375,16 +385,33 @@ below.
   scrutinee type pins the inductive, so a wrong resolution produces
   an ill-typed application rather than a silently swapped branch.
   Take it with the naming pass (F-6/F-7), not alone.
-- [ ] **F-6 / F-7 — name hygiene is delegated to Lean's
-  typechecker.** `reservedIdents` omits `Vec Bool Nat Eq Except
-  String Pure Bind Num Stream coerce saw_throw_error …`, all of
-  which the emitter writes as bare short names into the same file
-  (`llvm_fresh_var "Vec"` traces all the way to a shadowing binder).
-  Instances fail loudly today, but the disjointness is ACCIDENTAL,
-  not structural; Cryptol/SAWCore def names bypass `escapeIdent`
-  entirely and land inside the emitted namespace where Lean prefers
-  the namespace-local name. Fix: seed `unavailableIdents` from the
-  enumerable set of bare names the emitter can produce.
+- [x] **F-6 / F-7 — CLOSED 2026-07-26**, with DIFFERENT treatments,
+  because the two halves differ in whether the name is user-facing.
+  `emitterBareNames` now enumerates what the emitter writes bare —
+  the `UseRename`/`UseRenameUniv`/`UseMapsToWrapped` targets with an
+  implicitly-opened (or absent) module, plus a hand-listed set of
+  hardcoded emissions.
+  * **F-6 RENAMES.** `unavailableIdents` is seeded with that set, so
+    `freshVariant` renames a colliding BINDER. Binder names are
+    internal to the emitted term. Caught a real instance immediately:
+    a goal binder `seq` (from `llvm_fresh_var "seq"`) collides with
+    the support library's `seq`, and 32 `llvm_s20hash_comp` goldens
+    now read `seq'`. Verified no proof row depends on the old name.
+  * **F-7 REFUSES** (`EmittedNameCollision`), at the two sites where
+    a SAWCore/Cryptol definition name becomes an emitted declaration
+    inside the generated `namespace` — the exact position where Lean
+    prefers the local declaration over an `open`ed one SILENTLY.
+    Renaming is wrong here: the emitted name is what a user writes
+    in a discharge, so `Foo.zip` quietly becoming `Foo.zip'` would
+    make their proof reference a name the source never mentions.
+    Pinned by `saw-boundary/emitted_name_collision`.
+  **Mistake worth keeping:** the first version also listed the
+  emitter's own GENERATED binder prefixes (`x__`, `prev_`, `scrut_`,
+  the `h_*_` obligation names). Those are the SHADOWERS, not the
+  shadowed — listing them renamed the emitter's let-sharing variable
+  to `x__'` in every artifact that shares a subterm, failing **77
+  rows**. The set is specifically "names the emitter REFERENCES",
+  and the code now says so at the site.
 - [ ] **S-3 — the Class-F recognizer over-approximates; `inZip` is
   dead code.** `scanRecUses` is entered as `go False elt` and every
   recursive call passes `False`, so the zip arm fires anywhere in the

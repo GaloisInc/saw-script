@@ -1,0 +1,11 @@
+// F-7 witness (audit-2). `zip` is a name the translator writes BARE
+// into the emitted file (SAWCore `zip` maps to a support-library
+// short name, reachable because `implicitlyOpenedModules` are
+// `open`ed). A Cryptol def of the same name lands INSIDE the emitted
+// `namespace Collide`, and Lean prefers a namespace-local
+// declaration over an `open`ed one SILENTLY — no ambiguity error.
+// So this def would rebind the primitive for the rest of the file.
+module Collide where
+
+zip : [8] -> [8]
+zip x = x + 1

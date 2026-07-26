@@ -1,0 +1,10 @@
+// F-7 pin: a Cryptol definition whose name collides with a bare name
+// the emitter writes must REFUSE, not silently rebind and not
+// silently rename. Renaming is deliberately not the answer here: the
+// emitted name is what a user writes in a Lean discharge, so
+// `Collide.zip` quietly becoming `Collide.zip'` would make a proof
+// reference a name the Cryptol source never mentions.
+//
+// Contrast the BINDER case (F-6), which does rename — binder names
+// are internal to the emitted term and invisible to users.
+write_lean_cryptol_module "Collide.cry" "collide.module.lean" [] [];

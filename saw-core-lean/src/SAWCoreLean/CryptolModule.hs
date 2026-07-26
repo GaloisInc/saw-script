@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 {- |
@@ -33,6 +34,7 @@ import           CryptolSAWCore.TypedTerm
 import           CryptolSAWCore.Cryptol    (CryptolEnv)
 
 import           SAWCoreLean.Monad
+import           SAWCoreLean.SpecialTreatment (checkEmittedName)
 import qualified SAWCoreLean.Term          as TermTranslation
 
 -- | Translate a list of named terms with their types to Lean
@@ -47,6 +49,11 @@ translateTypedTermMap = mapM translateAndRegisterEntry
   where
     translateAndRegisterEntry (name, t, tp) = do
       let nameStr = Lean.Ident (unpackIdent (nameIdent name))
+      -- Audit-2 F-7: this name lands inside the emitted `namespace`,
+      -- where Lean prefers it over any `open`ed name of the same
+      -- spelling — silently. Refuse rather than rename: the emitted
+      -- name is what a user writes in a discharge.
+      checkEmittedName "a Cryptol definition" nameStr
       -- Use the let-sharing entry point for the body: shared
       -- subterms are lifted into nested @let@s so the emission stays
       -- linear in the SAWCore DAG size (audit P-1, 2026-05-06). The

@@ -42,9 +42,12 @@ module SAWCoreLean.SpecialTreatment
     -- * Output-shape predicates
   , implicitlyOpenedModules
   , isImplicitlyOpened
+  , emitterBareNames
+  , checkEmittedName
   ) where
 
 import           Control.Lens            (_1, _2, over)
+import qualified Control.Monad.Except    as Except
 import           Control.Monad.Reader    (asks)
 import           Data.Char               (isAlphaNum)
 import qualified Data.List
@@ -183,6 +186,34 @@ findSpecialTreatment ident = do
   let moduleMap = Map.findWithDefault Map.empty (identModule ident)
                     (specialTreatmentMap configuration)
   pure $ Map.findWithDefault (defaultTreatmentFor ident) (identName ident) moduleMap
+
+-- | Audit-2 F-7 gate. Refuse to emit a user-visible definition whose
+-- name collides with something the emitter writes BARE into the same
+-- file (see 'emitterBareNames').
+--
+-- Applied at the two sites where a SAWCore/Cryptol definition name
+-- becomes an emitted declaration name inside the generated
+-- @namespace@ — the exact position where Lean prefers the local
+-- declaration over an @open@ed one SILENTLY. Goal emission does not
+-- need it (the goal is always named @goal@).
+--
+-- REFUSES rather than renames, which is the whole point: the emitted
+-- name is what a user writes in a Lean discharge, so a silent rename
+-- would make their proof reference a name their source never
+-- mentions. Generated BINDER names, being internal to the emitted
+-- term, take the opposite treatment — 'unavailableIdents' renames
+-- them (F-6).
+checkEmittedName ::
+  ( TranslationConfigurationMonad r m
+  , Except.MonadError TranslationError m
+  ) =>
+  Text -> Lean.Ident -> m ()
+checkEmittedName kind nm@(Lean.Ident nmStr) = do
+  configuration <- asks translationConfiguration
+  if nm `Set.member` emitterBareNames configuration
+    then Except.throwError
+           (EmittedNameCollision (Text.pack nmStr) kind)
+    else pure ()
 
 -- | Default treatment when an identifier has no explicit
 -- 'SpecialTreatment' entry. Always 'UseReject'.
@@ -403,6 +434,83 @@ specialTreatmentMap _configuration = Map.fromList $
   [ ("Cryptol", cryptolPreludeSpecialTreatmentMap)
   , ("Prelude", sawCorePreludeSpecialTreatmentMap)
   ]
+
+-- | Every Lean identifier the emitter can write into a generated
+-- file as a BARE short name — the set a generated binder or a
+-- translated definition name must stay clear of.
+--
+-- Audit-2 F-6/F-7. `reservedIdents` (the seed for 'unavailableIdents')
+-- was Lean keywords plus @Prop Type Sort by do return@, which says
+-- nothing about @Vec@, @Except@, @Pure@, @Bind@, @Nat@, @Bool@,
+-- @coerce@, @saw_throw_error@ and the ~130 support-library names the
+-- emitter writes bare because 'implicitlyOpenedModules' are
+-- @open@ed. Collisions failed loudly in practice, but only by
+-- ACCIDENT — nothing made the two sets disjoint, and Lean resolves a
+-- namespace-local declaration in preference to an @open@ed one
+-- SILENTLY, with no ambiguity error.
+--
+-- Two sources, because the emitter has two ways of producing a bare
+-- name:
+--
+--   * table-driven — a 'UseRename' / 'UseRenameUniv' /
+--     'UseMapsToWrapped' target with no module, or with an
+--     implicitly-opened one (the same condition
+--     'translateIdentToIdent' uses to decide NOT to qualify);
+--   * hardcoded — names the emitter writes directly rather than
+--     through the table.
+--
+-- KNOWN INCOMPLETE, deliberately: 'UseMacro' entries build their
+-- output in Haskell, so the names inside a macro expansion are not
+-- enumerable from the table. That is a bounded gap (macro output is
+-- near-syntactic by contract) and is why this set is used to REFUSE
+-- rather than to prove absence of collisions — an under-approximation
+-- can only miss a collision, never invent one.
+emitterBareNames :: TranslationConfiguration -> Set Lean.Ident
+emitterBareNames configuration =
+  Set.union hardcodedBareNames $
+    Set.fromList
+      [ nm
+      | perModule <- Map.elems (specialTreatmentMap configuration)
+      , treatment <- Map.elems perModule
+      , nm <- bareTarget (atUseSite treatment)
+      ]
+  where
+    bareTarget (UseRename mmod nm _)     = [ nm | emittedBare mmod ]
+    bareTarget (UseRenameUniv mmod nm _) = [ nm | emittedBare mmod ]
+    bareTarget (UseMapsToWrapped _ nm)   = [ nm ]
+    bareTarget _                         = []
+
+    emittedBare Nothing      = True
+    emittedBare (Just mod_)  = isImplicitlyOpened mod_
+
+-- | Bare names the emitter writes DIRECTLY, not via the treatment
+-- table: carrier and monad names from the value convention, the
+-- runtime-checked wrappers, the obligation binders, and the
+-- generated-variable prefixes. Kept beside 'emitterBareNames' so a
+-- new hardcoded emission has one obvious place to be registered.
+hardcodedBareNames :: Set Lean.Ident
+hardcodedBareNames = Set.fromList $ map Lean.Ident $ concatMap words
+    -- Value-convention carriers, and the names Lean itself supplies
+    -- through the emitted `open`s.
+  [ "Vec Bool Nat Eq Except String Pure Bind Num Stream"
+  , "Int Rat Fin Prod Option List Array Char Unit"
+    -- Emitter-written support-library entry points.
+  , "coerce saw_throw_error vecSequenceM atRuntimeCheckedM"
+  , "if0NatM if0NatRaw natCaseRaw saw_fix_bounded_choose"
+  , "saw_fix_bounded_productive saw_mkStream_choose"
+  , "saw_mkStream_total_exists saw_stream_realize"
+  , "saw_stream_single_productive"
+  ]
+
+-- NOTE (2026-07-26): the emitter's own GENERATED binder prefixes
+-- (@x__@, @prev_@, @scrut_@, @fix_body_@, the @h_*_@ obligation
+-- names) are deliberately NOT listed above, and adding them is a
+-- mistake worth naming once: they are the SHADOWERS, not the
+-- shadowed. Listing them made 'freshVariant' rename the emitter's
+-- own let-sharing variable to @x__'@ in every artifact that shares a
+-- subterm — 77 rows churned for no soundness content. This set is
+-- specifically "names the emitter REFERENCES", because those are the
+-- only ones a user-supplied binder can capture.
 
 -- | Cryptol-side treatment entries. The Cryptol @Num@ inductive and
 -- its constructors are declared in 'CryptolToLean.SAWCorePrimitives'
