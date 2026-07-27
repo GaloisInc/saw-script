@@ -19,6 +19,43 @@ Soundness is absolute: the emitted Lean statement must faithfully
 express the SAW obligation, and every input outside the supported
 fragment fails LOUDLY at translation. No silent divergence, ever.
 
+## Where this stands (2026-07-26)
+
+Every audit-2 finding is now CLOSED or explicitly deferred with a
+stated reason, **except LIB-1**, which is the one remaining confirmed
+soundness defect and is not closable cheaply.
+
+Closed across 2026-07-25/26: A-1, A-2, A-3, A-4, A-5, A-6, A-7, A-9,
+A-10, F-1, F-2 (contracts), F-3, F-3b, F-5, F-6, F-7, F-8, F-9,
+LIB-2, LIB-3, LIB-4 (Lean half), RK-5, RK-7, RK-8, HELP-1, S-1, S-2,
+and the four mechanical categories C1–C4.
+
+**Three things need a decision and are not mine to make:**
+
+1. **LIB-1** — see `doc/2026-07-26_lib1-carrier-scoping.md`. Option
+   (b) was measured (costs 24 rows, rejected); option (c) was
+   prototyped and works (appendix of that doc); option (a) was scoped
+   and is BLOCKED by the `BitVec` bridge, refuted by direct witness.
+   The real choice is the two-carrier rewrite (0.03-scale, closes it)
+   vs (c) (bounded, closes it, inherits A-10) vs shipping with the
+   defect stated. "(a) narrowly" is NOT a closure.
+2. **S-3** — Low, fail-closed, and S-1's closure removed its
+   escalation premise. Frozen only by the fix-seam pause rule; needs
+   a yes/no, not a design session.
+3. **F-2 (core)** — the recursor head qualification, deferred with
+   its blast radius measured (15 rows, 5 hand-written). Belongs with
+   a naming pass, and F-6/F-7 have now landed, so it is unblocked.
+
+**The most important open item is not a defect.** A third audit is
+owed, scoped to this session's work: 25+ findings were closed by the
+same session that wrote the fixes, several by changing trust-path
+code. Two surfaces specifically want an independent eye — the
+A-2/F-5 goal gate (a REFUSAL: over-refusal means goals silently stop
+being emitted rather than being emitted wrong) and C7 (the closer set
+is still an awk grep, and three separate findings came from that
+category). "All findings closed" and "the backend is sound" are not
+the same statement.
+
 ## Release gate (0.02 → release)
 
 - [ ] **Pre-release soundness review** (release gate, added

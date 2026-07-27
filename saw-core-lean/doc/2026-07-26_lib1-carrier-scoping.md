@@ -212,3 +212,145 @@ So:
 The decision this forces: either build (c)'s tactic now, or ship with
 LIB-1 open and stated. Those are the two honest choices —
 "(a) narrowly" is neither.
+
+---
+
+## Appendix — the option (c) prototype, verbatim
+
+Preserved here because it is the EVIDENCE for the claims above and
+lived only in a session scratchpad. It elaborates against the
+support library as-is. Both theorems check with axioms
+`[propext, Quot.sound]`:
+
+- `sampleBody_total` — the guarded shape IS total, so the obligation
+  is dischargeable on real emitted bodies;
+- `sampleBadBody_not_total` — an unguarded body is provably NOT
+  total, so the obligation genuinely discriminates rather than
+  holding vacuously.
+
+The second is the one that matters. It is what separates (c) from
+(b): (b) rejected all 24 rows because it could not tell these two
+apart, and this obligation can.
+
+```lean
+import CryptolToLean
+
+open CryptolToLean.SAWCorePrimitives
+open CryptolToLean.SAWCorePreludeExtra
+open CryptolToLean.SAWCoreVectors
+
+/-!
+LIB-1 option (c) PROTOTYPE — 2026-07-26. Scratch, not for commit.
+
+Question: if the emitter attached a totality obligation to every
+`gen` whose element body can throw, how expensive is discharging it
+on a REAL emitted shape?
+
+The shape is taken from `drivers/cryptol_module_popcount`, whose
+element body is
+
+    iteM (Vec 32 Bool)
+      (Pure.pure (ltNat i' 1))
+      (atRuntimeCheckedM 1 _ v i')     -- guarded: only taken when i' < 1
+      <else>
+
+so the throw is unreachable, but only SEMANTICALLY — the guard is an
+`iteM` condition, not a proof. A syntactic "can throw" scan rejects
+this (and 23 other working rows); the obligation should discharge it.
+-/
+
+/-- The obligation shape: the element function never throws. -/
+abbrev ElemTotal (n : Nat) (α : Type)
+    (f : (i : Nat) → i < n → Except String α) : Prop :=
+  ∀ (i : Nat) (h : i < n), ∃ a, f i h = Except.ok a
+
+/-! ## The lemma set a discharge would lean on -/
+
+theorem pure_ok {α : Type} (a : α) :
+    ∃ b, (Pure.pure a : Except String α) = Except.ok b := ⟨a, rfl⟩
+
+theorem bind_ok {α β : Type} {x : Except String α}
+    {f : α → Except String β} {a : α}
+    (hx : x = Except.ok a) (hf : ∃ b, f a = Except.ok b) :
+    ∃ b, (Bind.bind x f : Except String β) = Except.ok b := by
+  obtain ⟨b, hb⟩ := hf; exact ⟨b, by rw [hx]; exact hb⟩
+
+/-- `atWithProof_checkedM` carries its bound, so it is ALWAYS ok
+whenever its vector argument is. This is the cheap case. -/
+theorem atWithProof_checkedM_ok {α : Type} {n : Nat}
+    {xs : Except String (Vec n α)} {v : Vec n α} (hxs : xs = Except.ok v)
+    (i : Nat) (h : i < n) :
+    ∃ a, atWithProof_checkedM n α xs i h = Except.ok a := by
+  refine ⟨v[i], ?_⟩
+  unfold atWithProof_checkedM
+  rw [hxs]; rfl
+
+/-- `atRuntimeCheckedM` is ok exactly when the index is in range —
+the side condition the obligation has to supply. -/
+theorem atRuntimeCheckedM_ok_of_lt {α : Type} {n : Nat}
+    {xs : Except String (Vec n α)} {v : Vec n α} (hxs : xs = Except.ok v)
+    (i : Nat) (h : i < n) :
+    ∃ a, atRuntimeCheckedM n α xs i = Except.ok a := by
+  refine ⟨v[i], ?_⟩
+  unfold atRuntimeCheckedM
+  rw [hxs]
+  simp only [h, dif_pos]
+  rfl
+
+/-- The load-bearing one: `iteM` discards the untaken branch, so only
+the SELECTED branch has to be total. This is what makes the popcount
+shape dischargeable at all — the `atRuntimeCheckedM` error sits in a
+branch that is never selected for an out-of-range index. -/
+theorem iteM_ok {α : Type} {c : Bool} {b : Except String Bool}
+    {x y : Except String α}
+    (hb : b = Except.ok c)
+    (hx : c = true → ∃ a, x = Except.ok a)
+    (hy : c = false → ∃ a, y = Except.ok a) :
+    ∃ a, iteM α b x y = Except.ok a := by
+  unfold iteM
+  rw [hb]
+  cases c with
+  | false => exact hy rfl
+  | true  => exact hx rfl
+
+/-! ## The prototype discharge
+
+A structurally representative popcount element body: the guarded
+`atRuntimeCheckedM` in the then-branch, a `Pure.pure` else-branch,
+under a `Bind.bind`. -/
+
+noncomputable def sampleBody (v : Vec 1 Bool) (i : Nat) (_h : i < 32) :
+    Except String Bool :=
+  iteM Bool (Pure.pure (ltNat i 1))
+    (atRuntimeCheckedM 1 Bool (Pure.pure v) i)
+    (Pure.pure false)
+
+theorem sampleBody_total (v : Vec 1 Bool) :
+    ElemTotal 32 Bool (sampleBody v) := by
+  intro i _h
+  unfold sampleBody
+  refine iteM_ok (c := ltNat i 1) rfl ?_ ?_
+  · intro hlt
+    -- the guard is what supplies the bound the runtime check needs
+    exact atRuntimeCheckedM_ok_of_lt rfl i (by
+      simpa [ltNat] using hlt)
+  · intro _; exact pure_ok false
+
+#print axioms sampleBody_total
+
+-- NON-VACUITY: the same obligation for a body whose throw is NOT
+-- guarded must be unprovable. `sampleBadBody` indexes a length-1
+-- vector at `i` with no guard, so at i = 1 it genuinely throws.
+noncomputable def sampleBadBody (v : Vec 1 Bool) (i : Nat) (_h : i < 32) :
+    Except String Bool :=
+  atRuntimeCheckedM 1 Bool (Pure.pure v) i
+
+theorem sampleBadBody_not_total (v : Vec 1 Bool) :
+    ¬ ElemTotal 32 Bool (sampleBadBody v) := by
+  intro hcon
+  obtain ⟨a, ha⟩ := hcon 1 (by omega)
+  unfold sampleBadBody atRuntimeCheckedM at ha
+  simp at ha
+
+#print axioms sampleBadBody_not_total
+```
