@@ -96,9 +96,14 @@ Passing (the standing fences):
   residuals migrated as `differential/vector_zip_unequal` and
   `differential/nat_division_defined`).
 - Emitted-Lean byte-diff oracle: `.snapshots/op2-baseline`, re-cut
-  2026-07-24 immediately after a fully green `make test` on the
-  current binary — `support/emitted-lean-snapshot.sh diff
-  .snapshots/op2-baseline` clean at 372 artifacts. Before the
+  2026-07-28 immediately after a fully green `make test` on the new
+  machine — `support/emitted-lean-snapshot.sh diff
+  .snapshots/op2-baseline` clean at 350 artifacts. (The 2026-07-24
+  baseline, 372 artifacts, was UNTRACKED local state and did not
+  survive the machine migration; the 372 → 350 delta is the
+  LIB-2/S-2 withdrawals that retired emissions after it was cut.
+  Baselines are still untracked — consider committing them so a
+  machine move cannot drop the oracle again.) Before the
   re-cut, every hunk of drift vs the previous (2026-07-16) baseline
   was accounted for by committed, suite-verified work: 18 CHANGED
   (the ten 2026-07-23 edge-case-matrix `observed.lean` rewrites +
