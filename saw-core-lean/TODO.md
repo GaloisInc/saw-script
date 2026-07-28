@@ -202,9 +202,21 @@ below.
   `foldrM`/`foldlM`/`sawLet` have zero in-element throwers.
   Decision now between (b-narrow) (user-error + runtime-division
   elements only, ~2 rows, leaves the checked-indexing half open),
-  (b-evidence) (admit elements whose only throw sources carry
-  in-artifact discharged obligations — dead throw ⇒ no collapse;
-  needs a design note), or accelerating (a). USER DECISION PENDING.
+  (b-evidence), or accelerating (a).
+  **(b-evidence) SCRUTINIZED AND REFUTED 2026-07-28**
+  (`doc/2026-07-28_lib1-b-evidence-design.md`): five structural
+  defects, one foundational — `atRuntimeCheckedM` exists precisely
+  where evidence was underivable, so there is no in-artifact
+  obligation to admit on; the salvage (minting new per-element
+  totality obligations) fails the S-3 emission-time-rejection
+  discipline, needs reference-closed interprocedural effect
+  analysis (live witness: `vector_literal_edges` let-shares a
+  thrower into element spans), and prices at (a)-scale for a worse
+  endpoint. Recommendation: (b-narrow) reference-closed as the
+  honest stopgap + residual-trust entry for the open half, and
+  accelerate (a) resting on the note's kernel-checkable
+  `genWithBoundsM_ok_of_total` lemma family.
+  USER DECISION PENDING.
 
   **Character (2026-07-25): this is a CARRIER defect**, and that is
   why it survived a day of trust-kernel work. A-1/A-2/A-5/R-1 were
