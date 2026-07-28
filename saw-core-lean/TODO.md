@@ -191,10 +191,20 @@ below.
   never forced), Lean observes `error/error/error` (the
   `vecSequenceM`/`atWithProof_checkedM`/`genWithBoundsM` chain
   collapses every case). The row flips to a rejection pin when the
-  (b) fix lands. Next actions: measure the five unmeasured surfaces
-  (`genM`, `vecSequenceM`, `atRuntimeCheckedM`, `foldrM`/`foldlM`,
-  `sawLet`) against the suite, then the (b) rejection with the
-  user's product-posture sign-off.
+  (b) fix lands. **Surfaces MEASURED 2026-07-28**
+  (`doc/2026-07-28_lib1-scope-measurement.md`): 59 of 350 baseline
+  artifacts have a thrower inside an element position — 57 of them
+  `atRuntimeCheckedM` (the OP-2 evidence-less indexing route),
+  including the whole discharged workflow corpus (s20hash ×32,
+  running_sum, popcount, eq_u128, E6). So **(b) at its recorded
+  scope is NOT viable** — the "measured cost zero" note was true
+  only for user `error`. `genM` is a dead surface (0 uses);
+  `foldrM`/`foldlM`/`sawLet` have zero in-element throwers.
+  Decision now between (b-narrow) (user-error + runtime-division
+  elements only, ~2 rows, leaves the checked-indexing half open),
+  (b-evidence) (admit elements whose only throw sources carry
+  in-artifact discharged obligations — dead throw ⇒ no collapse;
+  needs a design note), or accelerating (a). USER DECISION PENDING.
 
   **Character (2026-07-25): this is a CARRIER defect**, and that is
   why it survived a day of trust-kernel work. A-1/A-2/A-5/R-1 were
