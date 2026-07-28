@@ -1,0 +1,9 @@
+# S-1 (2026-07-25; probe 2026-07-28). Two separate tactic-`rfl`
+# failures, one per realization class. The pinned diagnostic is the
+# SPECIFIC defeq refusal — same discipline as the F-2 probe — so the
+# row cannot pass for an unrelated reason (an unknown identifier,
+# say). A regression that reintroduces a proof-irrelevant seed
+# (Classical.choice of a Nonempty) or a proof-free body
+# (Pure.pure of the unfold) makes this elaborate clean, which is
+# exactly the erasable-obligation defect returning.
+is not definitionally equal to the right-hand side

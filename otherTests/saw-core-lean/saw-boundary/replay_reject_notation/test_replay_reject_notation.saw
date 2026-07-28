@@ -1,0 +1,15 @@
+// Replay reject pin: notation capture of the binding probe (A-1,
+// 2026-07-24 second audit, CRITICAL; fix 2026-07-25; runtime row
+// landed 2026-07-28 with the owed-pins batch). A user proof.lean
+// declaring `notation "goal" => True` makes every later mention of
+// `goal` — including the kernel-checked binding theorem — resolve in
+// the USER's token table, so a proof of True would admit a false
+// obligation. The lint half of the fix bans syntax-declaring
+// commands in proof-side files outright
+// (proof-source-lint.awk; kernel-selftest + trust-tier-selftest pin
+// the lint and the «»-spelling variants); THIS row pins that the
+// rejection fires end-to-end through the RUNTIME replay path — the
+// wiring the lint-level cases cannot see.
+enable_experimental;
+fails (prove_print (offline_lean_replay "rejected_proof")
+  {{ \(x : [8]) (y : [8]) -> x + y == y + x }});

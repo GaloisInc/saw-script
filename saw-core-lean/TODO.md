@@ -690,18 +690,40 @@ until (a).**
 
 ### Verification and pins owed
 
-- [ ] Red-before/green-after regression rows for A-1, A-2, A-5 and
-  S-1 under `saw-boundary/`, plus lint self-tests for A-6 and A-7
-  and a `trust-tier-selftest.sh` case for the notation shape.
-- [ ] A CI-harness negative row for the no-import decoy-`goal`
-  vector (RK-5).
+- [x] Red-before/green-after regression rows for A-1, A-2, A-5 and
+  S-1 — CLOSED 2026-07-28 after a coverage audit found most already
+  existed (this list predated the closes that carried their own
+  pins): A-2/R-1 runtime row = `saw-boundary/replay_reject_unbound_completed`
+  (landed with the R-1 fix); A-5 = the kernel-selftest coercion case
+  (drives the real `lean-check-core.sh` with the audit's own
+  vector); A-6/A-7 lint self-tests and the notation trust-tier case
+  = present in `trust-tier-selftest.sh` since fa842349b. ADDED
+  today: `saw-boundary/replay_reject_notation` (A-1 end-to-end
+  through the runtime replay path — the wiring the lint-level cases
+  cannot see; rejects `CHECK-FAIL: axiom-or-macro-decl-in-user-file`)
+  and `negative/fix_obligation_erasure` (S-1: both pre-fix erased
+  reducts must fail defeq — the F-2 probe discipline; a
+  proof-irrelevant seed or proof-free body returning turns it
+  green). A bespoke A-5 RUNTIME row was considered and NOT added:
+  every laundering ingredient is caught by an earlier layer in a
+  way that would pin the wrong diagnostic, and the runtime wiring
+  is already proven by the four replay_reject rows + the kernel
+  selftest exercises the exact vector.
+- [x] A CI-harness negative row for the no-import decoy-`goal`
+  vector (RK-5) — was ALREADY LANDED with the RK-5 close
+  (389a55ec9: "Pinned by a decoy-goal case"); the owed entry was
+  stale.
 - [x] The LIB-1 differential row — LANDED 2026-07-28 as
   `differential/lazy_vector_error_slot` (known-gap pin of the
   SAW `true/true/false` vs Lean `error/error/error` divergence).
-- [ ] Re-run the appendix witnesses as REAL rows: the audit
-  exercised the shipped kernel with `lake` swapped for the pinned
-  raw `lean` (every grep/awk/probe/branch is shipped code, but the
-  substitution should be retired now the suite is idle).
+- [x] Re-run the appendix witnesses as REAL rows — RETIRED
+  2026-07-28: the kernel selftest drives the UNsubstituted
+  `lean-check-core.sh` (real `lake`, `CORE=` points at the shipped
+  script) with the appendix's A-2/A-5/R-1 vectors, the trust-tier
+  selftest runs the A-1/A-6/A-7 lint vectors, and the new
+  `replay_reject_notation` row carries A-1 through the full runtime
+  path. Nothing exercised under the audit's lake-substitution
+  remains unexercised without it.
 
 ## Release gate (continued)
 
