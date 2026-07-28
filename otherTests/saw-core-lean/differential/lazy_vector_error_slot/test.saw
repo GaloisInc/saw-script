@@ -1,0 +1,31 @@
+// TRUE differential litmus for LIB-1: the wrapped-vector carrier
+// equates computations SAW distinguishes (2026-07-24 second audit,
+// finding LIB-1/D-1; reachability settled affirmative 2026-07-25;
+// row landed 2026-07-28).
+//
+// SAW's vectors are element-lazy: genOp builds delayed thunks and
+// `at` forces only the selected one, so the error thunk parked at
+// index 1 is never observed: A evaluates to 7, B to 9, and SAW
+// DISTINGUISHES them (A == B is false).
+//
+// The Lean carrier `Except String (Vec n T)` cannot represent
+// "error in one slot, good values elsewhere": genWithBoundsM
+// sequences every element through Except and short-circuits,
+// denotationally, so BOTH terms collapse to Except.error "e" —
+// every case below observes `error` in Lean against a SAW value.
+// That non-injective collapse puts the SAME value on both sides of
+// emitted equations, which is how a SAW-false equation closes by
+// rfl in a clean kernel (the unsound acceptance this row grounds).
+//
+// One labeled case per SAW_OBSERVED line; the emitted artifact is
+// the Vec of all case terms and lean-observe.lean prints the
+// matching labeled line per index.
+
+print (str_concat "SAW_OBSERVED: lazy_elem_A_eq_7 " (show (eval_bool (parse_core "bvEq 8 (at 2 (Vec 8 Bool) (gen 2 (Vec 8 Bool) (\\ (i : Nat) -> ite (Vec 8 Bool) (equalNat i 1) (error (Vec 8 Bool) \"e\") (bvNat 8 7))) 0) (bvNat 8 7)"))));
+print (str_concat "SAW_OBSERVED: lazy_elem_B_eq_9 " (show (eval_bool (parse_core "bvEq 8 (at 2 (Vec 8 Bool) (gen 2 (Vec 8 Bool) (\\ (i : Nat) -> ite (Vec 8 Bool) (equalNat i 1) (error (Vec 8 Bool) \"e\") (bvNat 8 9))) 0) (bvNat 8 9)"))));
+print (str_concat "SAW_OBSERVED: lazy_A_eq_B " (show (eval_bool (parse_core "bvEq 8 (at 2 (Vec 8 Bool) (gen 2 (Vec 8 Bool) (\\ (i : Nat) -> ite (Vec 8 Bool) (equalNat i 1) (error (Vec 8 Bool) \"e\") (bvNat 8 7))) 0) (at 2 (Vec 8 Bool) (gen 2 (Vec 8 Bool) (\\ (i : Nat) -> ite (Vec 8 Bool) (equalNat i 1) (error (Vec 8 Bool) \"e\") (bvNat 8 9))) 0)"))));
+
+write_lean_term
+  "Observed" [] []
+  "observed.lean"
+  (parse_core "[ bvEq 8 (at 2 (Vec 8 Bool) (gen 2 (Vec 8 Bool) (\\ (i : Nat) -> ite (Vec 8 Bool) (equalNat i 1) (error (Vec 8 Bool) \"e\") (bvNat 8 7))) 0) (bvNat 8 7), bvEq 8 (at 2 (Vec 8 Bool) (gen 2 (Vec 8 Bool) (\\ (i : Nat) -> ite (Vec 8 Bool) (equalNat i 1) (error (Vec 8 Bool) \"e\") (bvNat 8 9))) 0) (bvNat 8 9), bvEq 8 (at 2 (Vec 8 Bool) (gen 2 (Vec 8 Bool) (\\ (i : Nat) -> ite (Vec 8 Bool) (equalNat i 1) (error (Vec 8 Bool) \"e\") (bvNat 8 7))) 0) (at 2 (Vec 8 Bool) (gen 2 (Vec 8 Bool) (\\ (i : Nat) -> ite (Vec 8 Bool) (equalNat i 1) (error (Vec 8 Bool) \"e\") (bvNat 8 9))) 0) ]");

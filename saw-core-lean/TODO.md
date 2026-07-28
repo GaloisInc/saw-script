@@ -184,9 +184,17 @@ below.
   **Reachability SETTLED 2026-07-25 (affirmative).** Scratch witness:
   SAW gives `7` where Lean gives `9`, and Lean proves them EQUAL with
   only `[propext, Quot.sound]` — a SAW-false equation closing in a
-  clean kernel. The witness is scratch-only; **the row is still
-  missing** (template `differential/error_unreachable/test.saw`) and
-  writing it is the first action.
+  clean kernel. **Row LANDED 2026-07-28:
+  `differential/lazy_vector_error_slot`** — the audit's witness run
+  through the real pipeline as a pinned known gap: SAW observes
+  `true/true/false` (A = 7, B = 9, A ≠ B; the index-1 error thunk is
+  never forced), Lean observes `error/error/error` (the
+  `vecSequenceM`/`atWithProof_checkedM`/`genWithBoundsM` chain
+  collapses every case). The row flips to a rejection pin when the
+  (b) fix lands. Next actions: measure the five unmeasured surfaces
+  (`genM`, `vecSequenceM`, `atRuntimeCheckedM`, `foldrM`/`foldlM`,
+  `sawLet`) against the suite, then the (b) rejection with the
+  user's product-posture sign-off.
 
   **Character (2026-07-25): this is a CARRIER defect**, and that is
   why it survived a day of trust-kernel work. A-1/A-2/A-5/R-1 were
@@ -651,8 +659,9 @@ below.
   and a `trust-tier-selftest.sh` case for the notation shape.
 - [ ] A CI-harness negative row for the no-import decoy-`goal`
   vector (RK-5).
-- [ ] The LIB-1 differential row (settles the highest-value
-  reachability question in the report).
+- [x] The LIB-1 differential row — LANDED 2026-07-28 as
+  `differential/lazy_vector_error_slot` (known-gap pin of the
+  SAW `true/true/false` vs Lean `error/error/error` divergence).
 - [ ] Re-run the appendix witnesses as REAL rows: the audit
   exercised the shipped kernel with `lake` swapped for the pinned
   raw `lean` (every grep/awk/probe/branch is shipped code, but the

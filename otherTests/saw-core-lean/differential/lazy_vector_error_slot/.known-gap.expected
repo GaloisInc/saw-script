@@ -1,0 +1,10 @@
+# SAW side: lazy evaluation never forces the index-1 error thunk.
+lazy_elem_A_eq_7 true
+lazy_elem_B_eq_9 true
+lazy_A_eq_B false
+# Lean side: the collapsed carrier makes every case error.
+lazy_elem_A_eq_7 error
+lazy_elem_B_eq_9 error
+lazy_A_eq_B error
+# The divergence itself.
+FAIL: SAW and Lean observations differ
