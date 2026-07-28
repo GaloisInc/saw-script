@@ -77,7 +77,11 @@ CLOSED** (plus A-6, A-7, A-3, RK-5, RK-7, HELP-1 and the four
 mechanical categories C1–C4). **LIB-1 is the one remaining
 confirmed soundness defect**; it is a CARRIER defect, not a gate or
 contract defect, so no trust-kernel work reaches it — see its row
-below.
+below. **2026-07-28: LIB-1 DISPOSITIONED by user decision — ship
+documented (README flag + residual-trust §3.2e), no interim gate;
+the remedy is the (a) faithful carrier, scheduled with 0.03. It no
+longer blocks this release AS A GATE; the defect itself stays open
+until (a).**
 
 - [x] **A-1 (CRITICAL) — CLOSED 2026-07-25** (commit fa842349b).
   `notation` capture of the binding probe. A user `proof.lean` containing `notation "goal" => True`
@@ -216,7 +220,17 @@ below.
   honest stopgap + residual-trust entry for the open half, and
   accelerate (a) resting on the note's kernel-checkable
   `genWithBoundsM_ok_of_total` lemma family.
-  USER DECISION PENDING.
+  **DISPOSITIONED 2026-07-28 (user decision): ship DOCUMENTED — a
+  clearly-flagged README section (with the second-party
+  "LeanReplayEvidence modulo LIB-1" caveat) + residual-trust §3.2e;
+  NO interim gate (both (b) variants rejected: full scope kills the
+  corpus, narrow scope closes only the cheapest vector while adding
+  gate machinery).** Remedy = (a), scheduled with 0.03; its design
+  should start from the salvaged lemma family. Severity assessment
+  that informed the decision: adversarially constructible and
+  Cryptol-reachable, but a narrow false-statement class, zero
+  landed proofs affected, and invisible-to-gates by nature (which
+  is why documentation, not detection, is the honest interim).
 
   **Character (2026-07-25): this is a CARRIER defect**, and that is
   why it survived a day of trust-kernel work. A-1/A-2/A-5/R-1 were
@@ -702,6 +716,17 @@ below.
 
 ## 0.03 program (scheduled, user decision 2026-07-22 — do NOT start early)
 
+- [ ] **LIB-1 remedy — the (a) faithful per-element carrier**
+  (`Vec n (Except String T')`; user decision 2026-07-28 scheduled
+  it here when dispositioning LIB-1 as ship-documented). The
+  by-construction fix for the carrier collapse: nothing to detect,
+  no effect system. Design should rest on the kernel-checkable
+  `genWithBoundsM_ok_of_total` lemma family
+  (`doc/2026-07-28_lib1-b-evidence-design.md` §"The salvageable
+  lemma") and route the representation change through `adaptTo`.
+  When it lands: flip `differential/lazy_vector_error_slot` from
+  known-gap to true coverage, close residual-trust §3.2e, take
+  down the README flag.
 - [ ] **Fragment-semantics program + recognizer extension**
   (`doc/2026-07-16_fragment-semantics-scoping.md`; its revisit
   trigger fired twice). Sequencing: Phase A pointwise-lazy lfp

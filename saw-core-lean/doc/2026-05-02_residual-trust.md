@@ -653,6 +653,59 @@ are narrower than F-2 was, and neither has a demonstrated witness.
   while proving nothing, which is the failure mode
   `doc-claim-lint.sh` exists to prevent.
 
+### 3.2e LIB-1 — the wrapped-vector carrier collapse (OPEN, shipped documented; user decision 2026-07-28)
+
+The one KNOWN OPEN unsound-acceptance surface in this catalog, and
+the only entry that is a live soundness defect rather than a trust
+assumption. Recorded with its full character because no gate in the
+replay kernel can catch it: the accepted proof is well-formed,
+kernel-checked and allowlist-clean — and false in SAW.
+
+**Mechanism.** SAW vectors are element-lazy (§3.2a: `VVector` of
+per-slot thunks; an unforced erring slot is never observed). The
+Lean value carrier `Except String (Vec n T)` collapses any erring
+element into failure of the whole vector (`genWithBoundsM` =
+`Vector.ofFnM`, denotationally short-circuiting; same class:
+`vecSequenceM` literals, and see the reference-closure caveat
+below). The collapse is non-injective and appears on BOTH sides of
+emitted equations, so a SAW-false equation whose falsity is hidden
+behind an unread erring slot closes by `rfl` under
+`[propext, Quot.sound]`.
+
+**Evidence and scope** (all 2026-07-28):
+- Pinned witness: `differential/lazy_vector_error_slot` — SAW
+  `true/true/false` vs Lean `error ×3` through the real pipeline.
+- Corpus: 59 of 350 baseline artifacts carry a thrower inside an
+  element position (57 via `atRuntimeCheckedM`) —
+  `doc/2026-07-28_lib1-scope-measurement.md`. The census must be
+  read REFERENCE-CLOSED: emitter let-sharing can move a thrower
+  textually outside the element (witness:
+  `differential/vector_literal_edges`).
+- No landed discharge is affected: every landed proof closes at
+  explicit `Except.ok` values, the shape the collapse cannot help.
+- Reachable from ordinary Cryptol (not `parse_core`-only), and an
+  admitted false lemma amplifies through compositional replay
+  chains.
+
+**Disposition (user decision 2026-07-28): ship documented, no
+interim gate.** Interim rejection at full scope would refuse ~17%
+of the corpus including the discharged workflow proofs; the
+evidence-gated variant was scrutinized and refuted
+(`doc/2026-07-28_lib1-b-evidence-design.md` — foundationally, the
+runtime-checked form exists exactly where evidence was underivable).
+The user-facing flag is in `README.md` ("KNOWN SOUNDNESS
+LIMITATION"), including the second-party caveat: until the remedy
+lands, `LeanReplayEvidence` is evidence modulo LIB-1.
+
+**Remedy (recorded):** the faithful per-element carrier
+`Vec n (Except String T)` — a by-construction fix (nothing to
+detect), planned for a later release; its migration proofs should
+rest on the kernel-checkable element-totality lemma family proposed
+(under the working name genWithBoundsM_ok_of_total — not yet in the
+library) in the design-scrutiny doc. This entry closes (and the
+README flag comes down) when that carrier lands and the pin row
+flips from known-gap to true differential coverage.
+
 ### 3.3 `scNormalizeForLean` semantics-preservation (Phase 5 Link 2)
 
 **Status:** Pending catalog acknowledgment (this entry); SAWCore

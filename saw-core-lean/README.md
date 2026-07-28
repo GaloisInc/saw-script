@@ -27,6 +27,46 @@ Working end-to-end on:
   admits the SAW goal with recorded `LeanReplayEvidence`. Design
   and audit record: `doc/2026-07-16_replay-design.md`.
 
+## ⚠ KNOWN SOUNDNESS LIMITATION — LIB-1 (wrapped-vector carrier)
+
+**Shipped releases of this backend can admit a SAW-false equation
+whose falsity is hidden behind an unread erring vector slot.**
+SAW's vectors are element-lazy (an `error` or out-of-bounds read in
+a slot that is never forced is never observed); the Lean value
+carrier `Except String (Vec n T)` collapses any erring element into
+failure of the WHOLE vector. The collapse is non-injective and lands
+on both sides of emitted equations, so two computations SAW
+distinguishes (e.g. values `7` and `9` behind an unread `error`
+slot) both become `Except.error "e"` in Lean — and their equation
+closes by `rfl` in a clean kernel. Every replay gate passes, because
+nothing is wrong with the proof.
+
+Practical scope (assessed 2026-07-28, user decision same day —
+ship documented, no interim gate):
+
+- The false-statement class is narrow: falsity must live entirely in
+  computations the carrier collapses. Goals proved to `Except.ok`
+  values — the shape of every landed discharge in this repo — cannot
+  close through the collapse.
+- No landed proof is affected (checked; discharges prove ok-ness
+  explicitly).
+- It IS reachable from ordinary Cryptol (partial operations or
+  `error` in lazily-skipped slots), and a deliberately constructed
+  false lemma admitted this way can propagate through compositional
+  replay chains. `LeanReplayEvidence` handed to a second party
+  therefore carries an implicit "modulo LIB-1" caveat until the
+  remedy lands.
+- Pinned by `otherTests/saw-core-lean/differential/lazy_vector_error_slot`
+  (SAW observes `true/true/false`; Lean observes `error ×3`).
+
+**Remedy (planned, later release):** the faithful per-element
+carrier `Vec n (Except String T)`, which cannot represent the
+collapse — by construction, not by gating. Scope measurement:
+`doc/2026-07-28_lib1-scope-measurement.md`; why interim gating was
+rejected after design scrutiny:
+`doc/2026-07-28_lib1-b-evidence-design.md`; trust-catalog entry:
+`doc/2026-05-02_residual-trust.md` §3.2e.
+
 `Prelude.fix` is handled by proof-carrying emission. The backend emits
 the literal fixed-point body plus explicit Lean obligations for the
 semantic facts needed to use it; shape-specific helper lowerings such as

@@ -50,3 +50,22 @@ in the 2026-07-17 doc reorganization.
   `support/trust-tier-selftest.sh`). Recorded resolution: migrate tier
   rows to the strict tier by swapping `bv_decide` -> `smt` when
   lean-smt's cvc5 BV proof reconstruction becomes usable upstream.
+
+- [x] DISPOSITION LIB-1 as ship-documented (2026-07-28, user
+  decision: "this can just be a clearly-flagged note in the
+  backend-specific README with a known remedy for later releases").
+  Context: the differential row landed (`lazy_vector_error_slot`),
+  scope was measured (59/350 artifacts, 57 via the evidence-less
+  checked-indexing route — `doc/2026-07-28_lib1-scope-measurement.md`),
+  and the (b-evidence) interim gate was scrutinized and REFUTED
+  (`doc/2026-07-28_lib1-b-evidence-design.md`). Severity assessment
+  informing the decision: adversarially constructible and reachable
+  from ordinary Cryptol, amplified by compositional chains — but a
+  narrow false-statement class, zero landed proofs affected
+  (discharges close at explicit Except.ok), and undetectable by any
+  proof-side gate in principle. Disposition: README "KNOWN SOUNDNESS
+  LIMITATION" flag carrying the second-party "LeanReplayEvidence
+  modulo LIB-1" caveat + residual-trust §3.2e (the catalog's one
+  live-defect entry); NO interim rejection gate. Recorded remedy:
+  the (a) faithful per-element carrier, scheduled with 0.03; entry
+  closes when the pin row flips to true coverage.

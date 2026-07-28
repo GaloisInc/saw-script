@@ -218,6 +218,18 @@ lean-smt kernel-checked BV reconstruction). Policy statement:
 
 Known holes, all loud or pinned:
 
+- **OPEN SOUNDNESS LIMITATION — LIB-1 (2026-07-24 audit; shipped
+  DOCUMENTED by user decision 2026-07-28).** The wrapped-vector
+  carrier collapses erring elements SAW's lazy vectors never force,
+  so a SAW-false equation whose falsity hides behind an unread
+  erring slot closes by `rfl` in a clean kernel — invisible to
+  every replay gate by nature. Pinned:
+  `differential/lazy_vector_error_slot`. Zero landed proofs
+  affected; `LeanReplayEvidence` carries a "modulo LIB-1" caveat
+  until the remedy. Flag: README "KNOWN SOUNDNESS LIMITATION";
+  catalog: residual-trust §3.2e; remedy: the (a) faithful
+  per-element carrier, scheduled with 0.03 (TODO.md).
+
 - RESOLVED 2026-07-14 (release 0.01 decision): the former deliberate
   red pair `drivers/cryptol_chacha20_{core_iterate,iround_zero}` is
   reclassified to `saw-boundary/` as expected rejections pinning the
