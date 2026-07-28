@@ -140,6 +140,13 @@ usesVarName vn (LBinding _ env _) = IntMap.member (vnIndex vn) env
 
 -- | Apply a let-variable substitution to an 'LTerm'.
 -- Only use entries marked as a single occurrence.
+-- The substitution is applied recursively, so that entries defined in
+-- terms of other entries will be completely unfolded.
+--
+-- Precondition: A binding at key index @i@ in the substitution may
+-- only contain 'LLetVar's with indices strictly less than @i@; this
+-- ensures that the substitution is well-founded.
+--
 -- Precondition: No entries in the substitution may share keys with
 -- any let-bindings in the term; this ensures that variable capture is
 -- impossible when substituting under 'LLet'.
@@ -181,11 +188,18 @@ mkLLet s body =
     s1 = IntMap.filter (\(LBinding _ _ n) -> n == Multiple) s
     s2 = fmap (\(LBinding t _ _) -> substLTerm s t) s1
 
+-- | Translate a 'Term' to an 'LTerm'.
+-- Subterms that occur more than once are lifted out to the largest
+-- possible scope and collected into let expressions ('LLet').
 toLTerm :: Term -> LTerm
 toLTerm t0 =
   let (t', binds) = State.runState (go t0) mempty
   in mkLLet binds t'
   where
+    -- | Translate a term @t@ into a let-variable.
+    -- The 'IntMap' in the state monad is indexed by 'VarIndex', and
+    -- records the 'LTerm' translations of all subterms of @t@ and
+    -- other terms we've already seen in the current scope.
     go :: Term -> State.State (IntMap LBinding) LTerm
     go t =
       do binds <- State.get
@@ -201,6 +215,12 @@ toLTerm t0 =
                 State.modify (IntMap.insert i (LBinding t' (varTypes t) Single))
                 pure (LLetVar i)
 
+    -- | Translate a 'TermF' into an 'LTerm'.
+    -- If the input 'TermF' is a lambda or pi binder, then put all the
+    -- bindings from the state monad that mention the bound variable
+    -- into a 'LLet'.
+    -- Bindings not mentioning the bound variable stay in the map and
+    -- are thus lifted out of the scope of the binder.
     termf :: TermF Term -> State.State (IntMap LBinding) LTerm
     termf tf =
       case tf of
