@@ -253,7 +253,7 @@ There are also the following derived types:
   (The unit type has one value, also written `()`; a value of type `()`
   contains no information.
   It is like `void` in C and Java.)
-  There are no monuples (tuples of arity 1).
+  There are no monoples (tuples of arity 1).
 - Lists.
   List types are written with a type name in square brackets: `[Int]` is a
   list of integers.
