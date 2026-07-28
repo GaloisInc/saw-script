@@ -120,11 +120,6 @@ prettyPrinterTests = testGroup "Language.Lean.Pretty"
           s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable [] "n" [] (Just (Lean.Var "Int")) body))
       assertContains "int lit" "(-7 : Int)" s
 
-  , testCase "Ascription prints with a colon" $ do
-      let body = Lean.Ascription (Lean.Var "x") (Lean.Var "Nat")
-          s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable [] "a" [] Nothing body))
-      assertContains "ascription" "x : Nat" s
-
   , testCase "ExplVar prefixes with @" $ do
       let body = Lean.App (Lean.ExplVar "id") [Lean.Var "Bool", Lean.Var "true"]
           s    = render (Lean.prettyDecl (Lean.Definition Lean.Computable [] "a" [] Nothing body))
@@ -1086,7 +1081,7 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       assertContains "names the paired-stream disposition"
                      "paired-stream mutual corecursion is not realized" msg
 
-  , testCase "polymorphic stream iterate fix emits generic obligation" $ do
+  , testCase "polymorphic stream iterate fix rejects with the S-2 raw-position diagnostic" $ do
       typeSort <- scSort sc (mkSort 0)
       boolTy <- scBoolType sc
       true <- scBool sc True
@@ -1126,11 +1121,20 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
       stepArg <- scLambda sc bName boolTy true
       fixApp <- scGlobalApply sc "Prelude.fix"
         [typeArg, bodyArg, boolTy, stepArg, true]
-      s <- translateOrFail sc "iterateNoBroadRewrite" fixApp
-      assertContains "emits generic raw fixed-point obligation"
-                     "saw_fix_unique_exists_raw" s
+      -- S-2 (2026-07-25, second audit): the raw unique-fixed-point
+      -- contract this shape used to receive is withdrawn as unsound
+      -- (extensional, cannot observe divergence), so a function-result
+      -- fix like iterate now rejects by name rather than emitting
+      -- saw_fix_unique_exists_raw. The original point of this test —
+      -- no broad rewrite to cryptolIterate — is preserved: rejection
+      -- is not a rewrite.
+      msg <- translateExpectReject sc "iterateNoBroadRewrite" fixApp
+      assertContains "names the raw-position disposition"
+                     "raw-position fix" msg
+      assertContains "points at the productivity-gated restoration path"
+                     "productivity-gated" msg
       assertNotContains "does not rewrite to cryptolIterate"
-                        "cryptolIterate" s
+                        "cryptolIterate" msg
 
   , testCase "Phase 5: unmatched fix shapes emit unique-fix obligations" $ do
       -- Conservatism check after proof-carrying fix migration. The

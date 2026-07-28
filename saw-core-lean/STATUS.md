@@ -78,8 +78,12 @@ Passing (the standing fences):
   `#guard_msgs` behavior fences, and the `linter.missingDocs`
   build option (all 153 public declarations documented 2026-07-23;
   a new undocumented declaration warns in `lake build`).
-- `cabal test saw-core-lean-smoketest`: 74 tests, including the
-  Slice 7 anti-regression source lint.
+- `cabal test saw-core-lean-smoketest`: 73 tests, including the
+  Slice 7 anti-regression source lint (74 → 73 on 2026-07-28: the
+  Ascription pretty-printer case went with the `Lean.Ascription`
+  AST deletion, and the S-2 iterate test now pins the raw-position
+  rejection instead of the withdrawn `saw_fix_unique_exists_raw`
+  contract).
 - `otherTests/saw-core-lean`: `make conformance` exit 0 — 235 rows
   in conformance scope (117 differential SAW-vs-Lean evaluation,
   91 obligation shape, 27 saw-boundary; recounted from disk
