@@ -227,7 +227,8 @@ until (a).**
   corpus, narrow scope closes only the cheapest vector while adding
   gate machinery).** Remedy = (a), scheduled with 0.03; its design
   should start from the salvaged lemma family. Severity assessment
-  that informed the decision: adversarially constructible and
+  that informed the decision: a deliberately constructed
+  unsound acceptance is demonstrable today and
   Cryptol-reachable, but a narrow false-statement class, zero
   landed proofs affected, and invisible-to-gates by nature (which
   is why documentation, not detection, is the honest interim).
@@ -512,9 +513,18 @@ until (a).**
   but module/term emission still prints sorts at argument position.
   Loud (ill-typed artifact), never silent — fixed because it is two
   lines, not because it threatened soundness.
-- [ ] **F-1** — the under-applied partial-op path emits an
-  ILL-TYPED artifact and has zero compiling witnesses despite being
-  marked "audited safe". Loud, not silent; the defect is the claim.
+- [~] **F-1 — claim CORRECTED (2026-07-25, in the wrapper design
+  doc) and loudness PINNED 2026-07-28**
+  (`negative/underapplied_partial_illtyped`: the golden emission
+  shape must stay ill-typed; if it ever elaborates, the loud
+  failure has become silent absorption and the probe fires —
+  re-audit before touching). REMAINING (design decision, flag for
+  the sign-off discussion): give the path a compiling witness
+  (annotate the definition at the wrapped-arrow convention the body
+  actually has) or delete the lowering and let under-application
+  reject by arity — it was built for dictionary-field partial ops
+  (rev.cry PIntegral), so deletion trades a plausible future
+  Cryptol capability for the S-2/F-9 withdrawal discipline.
 - [x] **F-3 (contracts) — CLOSED 2026-07-25 as documentation.**
   Division-wrapper error messages have no SAWCore backing
   (`divNat_runtimeM` throws `"divNat: division by zero"`, which
@@ -727,11 +737,15 @@ until (a).**
 
 ## Release gate (continued)
 
-- [ ] **Docs phrasing pass** (2026-07-21): rework the few remaining
-  imprecise offensive-security phrasings into formal-verification
-  terms (skeptical review / counterexample search /
-  unsound-acceptance path / guard coverage) — the work is soundness
-  review, not attack tooling, and the wording should say so.
+- [x] **Docs phrasing pass — CLOSED 2026-07-28.** A sweep of the
+  maintained docs (README/STATUS/TODO/architecture/cookbook/
+  replay-design/calculus/contributing/residual-trust) for
+  offensive-security phrasings found the original targets already
+  reworked by the intervening doc passes; the survivors are precise
+  assurance vocabulary inside finding records ("threat model (T3)",
+  "defeated by construction"), which is the intended register. One
+  fresh line in the LIB-1 disposition was moved to
+  unsound-acceptance vocabulary.
 - [ ] **Replay hardening follow-ups** (recorded at replay landing):
   CI-harness rebase onto the factored checker; binder-type
   telescope comparison in the drift check.

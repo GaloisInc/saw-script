@@ -1,0 +1,6 @@
+# F-1 (2026-07-28). The golden emission shape must stay ILL-TYPED:
+# the definition is annotated Nat -> Nat while the body is the
+# Except-level wrapper. The pinned diagnostic is the type mismatch.
+# If this row goes green, the under-applied path's loud failure has
+# become silent absorption — re-audit before touching this pin.
+Type mismatch
