@@ -286,7 +286,7 @@ classifyFixShape typeArg bodyArg
     -- must NOT classify (it would be unsound to lower, third/fourth
     -- audits).
     recUseVerdict recVn idxVn elt =
-      case scanRecUses recVn idxVn False elt of
+      case scanRecUses recVn idxVn elt of
         Left reason -> FixUnrecognized reason
         Right sawRecUse
           | sawRecUse -> FixClassF
@@ -295,60 +295,87 @@ classifyFixShape typeArg bodyArg
                 "no recursive reference under the append arm (not a recurrence)"
 
     -- Walk the element term. Returns Left reason on a forbidden use,
-    -- Right sawAnyUse otherwise. 'inZip' tracks whether we are inside
-    -- a zip argument slot (the only place a BARE rec reference is
-    -- permitted).
+    -- Right sawAnyUse otherwise. There is NO context flag: a
+    -- recursive reference is admissible only inside the spine of an
+    -- at-selection at the inner binder ('goAtSpine'), so every other
+    -- occurrence is a Left at the variable arm.
+    --
+    -- S-3 NARROWING (2026-07-28), two defects in one walk:
+    --
+    -- (1) The former 'inZip' parameter was provably always False —
+    -- no call site ever passed True. It was a fossil of the
+    -- pre-sixth-audit design, whose `go True` was replaced by a
+    -- zip-slot helper (Finding 0, below); the flag's `then` branch
+    -- had been unreachable ever since, and bare-rec-in-a-zip-slot
+    -- was admitted by that helper's own first clause instead.
+    --
+    -- (2) With the flag dead, the standalone zip arm blessed a zip
+    -- ANYWHERE in the element term, with nothing requiring it to be
+    -- CONSUMED at the inner binder: @f (zip … rec xs)@ classified
+    -- Class F even though elt[i] then depends on ALL of rec rather
+    -- than on rec[i] alone — not a lookback-1 recurrence, so the
+    -- emitted productivity obligation was undischargeable where the
+    -- module's reject-when-unsure discipline wanted a named
+    -- emission-time rejection.
+    --
+    -- Admission is now STRUCTURAL rather than contextual: the only
+    -- two admissible rec-containing spines are matched directly at
+    -- the at-selection. This also closes a wrapper-ABOVE-the-zip
+    -- case the flag design could not see
+    -- (@at … (reverse (zip … rec xs)) i@), the mirror of the
+    -- wrapper-BELOW case Finding 0 closed.
     scanRecUses recVn idxVn = go
       where
-        go inZip t
+        go t
           | Just (vn, _) <- asVariable t =
               if vnIndex vn == vnIndex recVn
-                then if inZip
-                       then Right True
-                       else Left "recursive binder used outside a zip slot"
+                then Left "recursive binder used outside an at-selected zip slot"
                 else Right False
-          | Just [_a, _b, _m, _k, xs, ys] <- asGlobalApply "Prelude.zip" t =
-              -- Sixth-audit Finding 0 (2026-07-16): a zip OPERAND
-              -- admits exactly the bare recursive vector — nothing
-              -- wrapped around it. Blessing the whole operand spine
-              -- (the previous `go True`) admitted index-permuting or
-              -- forcing-opaque wrappers one level down
-              -- (@zip … (reverse rec) xs@, @zip … (bvAnd rec m) xs@),
-              -- the same class the at-spine rule already rejects.
-              -- Any non-bare operand is scanned with the zip
-              -- blessing OFF, so a deeper rec must re-qualify
-              -- through the at/zip rules on its own.
-              combine [goZipSlot xs, goZipSlot ys]
           | Just [_n, _pty, vec, idx] <- asGlobalApply "Prelude.at" t
           , termMentionsVar recVn vec =
               -- inside the inner gen the -1 shift has already been
               -- applied at the tail branch, so a rec-containing
               -- at-selection must be indexed by EXACTLY the inner
               -- binder — any further index arithmetic is out of the
-              -- recognized class. The selected spine must be the
-              -- recursive vector itself or reach it through zip
-              -- slots only (scanned with inZip=False, so the zip
-              -- rule is the sole admitter): an index-permuting
-              -- wrapper like @reverse rec@ would silently break the
-              -- lookback direction if the whole spine were blessed.
+              -- recognized class.
               if isExactVar idxVn idx
-                then if isExactVar recVn vec
-                       then Right True
-                       else go False vec
+                then goAtSpine vec
                 else Left "rec-containing at-selection index is not the inner gen binder"
           | otherwise =
               case toList (unwrapTermF t) of
                 [] -> Right False
-                cs -> combine (map (go inZip) cs)
+                cs -> combine (map go cs)
 
         combine rs = case lefts rs of
           (e : _) -> Left e
           [] -> Right (or (rights rs))
 
-        goZipSlot t
-          | Just (vn, _) <- asVariable t
-          , vnIndex vn == vnIndex recVn = Right True
-          | otherwise = go False t
+        -- The rec-containing spine of an at-selection at the inner
+        -- binder must be EXACTLY the recursive vector, or a zip one
+        -- of whose operands is the BARE recursive vector (the
+        -- corpus's parallel-comprehension form). Anything else —
+        -- a wrapper above the zip, a wrapper inside the slot, a
+        -- different combinator — can permute or force beyond the
+        -- lookback, and is out of the recognized class.
+        goAtSpine vec
+          | isExactVar recVn vec = Right True
+          | Just [_a, _b, _m, _k, xs, ys] <- asGlobalApply "Prelude.zip" vec =
+              combine [goZipOperand xs, goZipOperand ys]
+          | otherwise =
+              Left "rec-containing at-spine is neither the recursive \
+                   \vector nor a zip of it"
+
+        -- Sixth-audit Finding 0 (2026-07-16): a zip OPERAND admits
+        -- exactly the bare recursive vector — nothing wrapped around
+        -- it. Index-permuting or forcing-opaque wrappers one level
+        -- down (@zip … (reverse rec) xs@, @zip … (bvAnd rec m) xs@)
+        -- are the same class the at-spine rule rejects, so a
+        -- non-bare operand is scanned as an ordinary subterm and any
+        -- rec inside it must re-qualify on its own (it cannot: the
+        -- variable arm rejects).
+        goZipOperand t
+          | isExactVar recVn t = Right True
+          | otherwise = go t
 
     termMentionsVar vn t = vnIndex vn `IntSet.member` freeVars t
 
