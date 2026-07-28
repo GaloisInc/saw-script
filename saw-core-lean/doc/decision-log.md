@@ -69,3 +69,25 @@ in the 2026-07-17 doc reorganization.
   live-defect entry); NO interim rejection gate. Recorded remedy:
   the (a) faithful per-element carrier, scheduled with 0.03; entry
   closes when the pin row flips to true coverage.
+
+- [x] SEQUENCE the Family-3 emission pass BEFORE the pre-release
+  audit (2026-07-28, user decision, in answer to "are these
+  symptoms of a wider problem? do we need an audit or a plan?").
+  Analysis: `doc/2026-07-28_defect-families-and-sequencing.md` —
+  every finding from both audits sorts into three families; two
+  (trust-kernel-asks-text-questions, no-model-of-partiality) have
+  named roots and written plans and are deferred past the audit BY
+  DECISION; the third (emission conventions: F-8/F-1/A-4/F-6/F-7/
+  F-2 core) had neither, which is why its fixes read as
+  whack-a-mole. Proposed root recorded: the calculus made
+  ADAPTATION safe via the adaptTo chokepoint but left ANNOTATION
+  unguarded — a definition's declared type is computed by a
+  different path from its body, over a binding vocabulary too
+  coarse to carry the invariant. Decision: write the plan (state
+  the invariant, give it a chokepoint), execute it as ONE pass with
+  the Term.hs split and the three open emission items as instances,
+  and only then run the panel — an audit is for finding what we do
+  not know, and auditing first would spend lanes rediscovering
+  F-1-class issues in code about to be restructured. The audit is
+  NOT skipped: the deferred families' dispositions and the
+  possibility of a fourth family are precisely its job.

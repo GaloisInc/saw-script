@@ -19,6 +19,56 @@ Soundness is absolute: the emitted Lean statement must faithfully
 express the SAW obligation, and every input outside the supported
 fragment fails LOUDLY at translation. No silent divergence, ever.
 
+## Sequencing (plan of record, 2026-07-28)
+
+Full reasoning: `doc/2026-07-28_defect-families-and-sequencing.md`.
+Every finding from both audits sorts into THREE families. Two have
+named roots and written plans; the third had neither, which is why
+its fixes felt like whack-a-mole — they were, because nothing stated
+what would make them stop.
+
+1. **Family 1 — the trust kernel asks TEXT questions about a
+   SEMANTIC object** (A-1/A-2/A-5/A-6/A-7/R-1/A-10/RK-5/RK-7).
+   Root named as A-11; plan of record
+   `doc/2026-07-24_semantic-trust-kernel-plan.md`. AFTER the audit.
+2. **Family 2 — no model of SAW's PARTIALITY** (LIB-1 errors, S-2
+   divergence, S-1 erasability, the divNat/IntMod boundaries).
+   Plan of record `doc/2026-07-16_fragment-semantics-scoping.md`;
+   LIB-1's carrier remedy (a) is its value-domain instance.
+   0.03, unchanged — LIB-1 ships documented under that deferral.
+3. **Family 3 — EMISSION CONVENTIONS** (F-8, F-1, A-4, F-6/F-7,
+   F-2 core). The open one. Proposed root: the calculus made
+   *adaptation* safe (the `adaptTo` chokepoint, forbidden
+   adaptations unrepresentable) but left *annotation* unguarded —
+   the type a definition DECLARES is computed by a different path
+   from the one that builds its BODY, over a binding vocabulary
+   too coarse to carry the invariant (`BindingFunction` records
+   nothing about the formals' representation, which IS F-1).
+   **Missing invariant: the emitted signature must derive from the
+   same authority as the emitted body.**
+
+**Order of work, decided 2026-07-28 (user):**
+
+- [x] **S-3 narrowing** — landed 2026-07-28 (low-risk, strictly
+  narrowing; see the S-3 entry).
+- [ ] **THE FAMILY-3 PASS — do this BEFORE the audit, as ONE pass,
+  not three drive-bys.** Contents: the `Term.hs` split (already
+  required pre-audit); a design note stating the annotation
+  invariant above and where its chokepoint lives; then the three
+  open emission items folded in AS INSTANCES — F-1's top-level
+  annotation, F-2 core's recursor-head qualification, and the
+  unused-Pi-binder printer cosmetic. Rationale for the ordering: an
+  audit is for finding what we do NOT know, and auditing first
+  spends reviewer lanes rediscovering F-1-class issues in code
+  we are about to restructure; the charter's "a defect exists until
+  the surface is shown sound" is also much harder to satisfy for a
+  surface with no stated invariant.
+- [ ] **Pre-release soundness review** (the panel below) — against
+  the restructured, invariant-stated emitter. NOT skippable once
+  the pass lands: Families 1 and 2 are deferred BY DECISION, not
+  closed, and checking that those dispositions are honest — and
+  that no FOURTH family exists — is exactly the panel's job.
+
 ## Release gate (0.02 → release)
 
 - [ ] **Pre-release soundness review** (release gate, added
@@ -485,13 +535,28 @@ until (a).**
   2. *The acceptance-breadth defect is real and SEPARATE from the
      flag.* A `zip … rec xs` reached through the generic traversal
      classifies Class F even when nothing consumes it at the inner
-     binder. Narrowing that is a genuine recognizer-semantics
-     change (it must thread an at-spine context), which is exactly
-     what the freeze covers — and it needs a reachability
-     measurement first: can a term satisfying the outer gen/append
-     structure carry such an unconsumed zip? Not unsound today (the
-     obligation is binding post-S-1), so the cost is discipline,
-     not soundness. FOR THE SIGN-OFF DISCUSSION.
+     binder — elt[i] then depends on ALL of rec rather than rec[i]
+     alone, which is not a lookback-1 recurrence, so the emitted
+     productivity obligation was undischargeable where the module's
+     reject-when-unsure discipline wanted a named emission-time
+     rejection. Not unsound (the obligation is binding post-S-1);
+     the cost was discipline.
+  **BOTH CLOSED 2026-07-28 (user decision: land the low-risk
+  narrowing).** Admission is now STRUCTURAL rather than contextual:
+  the flag is gone, the free-floating zip arm is gone, and the
+  at-selection matches its rec-containing spine directly — either
+  the bare recursive vector or a zip with a BARE rec operand,
+  nothing else. Strictly narrowing, so it cannot introduce
+  unsoundness. It additionally closes a case the flag design could
+  not see: a permuting wrapper ABOVE the zip
+  (`at … (reverse (zip … rec xs)) i`), the mirror of the
+  wrapper-BELOW case sixth-audit Finding 0 closed — a genuinely NEW
+  hole found by the analysis. Gate: all 15 recognizer smoketests
+  green unchanged (each traced against the new rule before
+  building), full smoketest 73, full suite green with the known-gap
+  census unchanged. This is a TIGHTENING, not recognizer growth, so
+  it does not breach the 0.03 freeze — growth still requires the
+  fragment semantics first.
 
 ### Low / housekeeping
 
@@ -857,7 +922,10 @@ until (a).**
   extract at least `Obligations.hs` and finish the `Convention.hs`
   split along the existing banner sections. Pure reorganization; do
   BEFORE the pre-release soundness review so the audit reviews the
-  final structure.
+  final structure. **Promoted 2026-07-28 into the Family-3 pass at
+  the top of this file** — it is not merely tidying: Family 3's
+  defects live in this file, and the split is where the annotation
+  invariant gets a home to be stated in.
 - [ ] **lean-smt migration** (recorded resolution trigger for the
   native-eval trust tier): when lean-smt's BV proof reconstruction
   lands kernel-checked (its own BitVec tests stop admitting
