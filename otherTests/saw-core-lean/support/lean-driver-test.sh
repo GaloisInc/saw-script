@@ -90,8 +90,27 @@ run-tests() {
         sed "s,$CURDIR/,,g; s,\"$CURDIR\",\".\",g" \
             "$TEST.rawlog" >"$TEST.log"
 
-        # Diff stdout.
-        diff -u "$TEST.log.good" "$TEST.log" >"$TEST.diff" 2>&1 || true
+        # Diff stdout. Counterexample VALUES are normalized on BOTH
+        # sides first (2026-07-28): which model the SMT solver picks
+        # for an anticipated-failure row is solver-version-dependent
+        # (moving machines changed z3 and flipped the concrete
+        # values in llvm_byte_add_verify). The row pins THAT the
+        # anticipated failure produced a counterexample over the
+        # named variables — not which model this particular solver
+        # build happened to choose. Goldens keep raw values; the
+        # normalization is compare-time only.
+        normalize_counterexample_values() {
+            awk '
+              /^----------Counterexample----------$/ { in_cex = 1; print; next }
+              in_cex && /^----------------------------------$/ { in_cex = 0; print; next }
+              in_cex { sub(/:.*$/, ": <solver-model>"); print; next }
+              { print }
+            '
+        }
+        diff -u \
+            <(normalize_counterexample_values <"$TEST.log.good") \
+            <(normalize_counterexample_values <"$TEST.log") \
+            >"$TEST.diff" 2>&1 || true
 
         # Diff each pinned .lean output. We discover them from the
         # presence of *.lean.good files so adding a new emitted
