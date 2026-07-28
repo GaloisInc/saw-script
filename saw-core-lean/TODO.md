@@ -466,6 +466,32 @@ until (a).**
   the module's own reject-when-unsure discipline, which matters more
   given S-1 undermines "the obligation is the backstop". FIX-SEAM ⇒
   pause rule.
+  **ANALYSIS 2026-07-28 (read-only; NOT fixed — the recognizer
+  surface is frozen and this entry's own pause rule applies). The
+  item is TWO separable halves:**
+  1. *`inZip` is dead, provably.* Entry passes `False` (:289) and
+     every recursive call passes `False` or routes through
+     `goZipSlot` (:321, :337, :342, :351) — there is no `go True`
+     in the module. It is a FOSSIL of the pre-sixth-audit design
+     (the comment at :314 records that `go True` was replaced by
+     `goZipSlot`), so the `then Right True` branch at :306 is
+     unreachable and bare-rec-in-a-zip-slot is admitted by
+     `goZipSlot`'s own first clause instead. Deleting the parameter
+     is therefore BEHAVIOR-PRESERVING — a no-op cleanup, safe under
+     the freeze because it cannot change any classification.
+     (Pinned meanwhile by the smoketest's "rec use outside zip/at
+     slots is Unrecognized", which passes *because* the flag is
+     always `False`.)
+  2. *The acceptance-breadth defect is real and SEPARATE from the
+     flag.* A `zip … rec xs` reached through the generic traversal
+     classifies Class F even when nothing consumes it at the inner
+     binder. Narrowing that is a genuine recognizer-semantics
+     change (it must thread an at-spine context), which is exactly
+     what the freeze covers — and it needs a reachability
+     measurement first: can a term satisfying the outer gen/append
+     structure carry such an unconsumed zip? Not unsound today (the
+     obligation is binding post-S-1), so the cost is discipline,
+     not soundness. FOR THE SIGN-OFF DISCUSSION.
 
 ### Low / housekeeping
 
