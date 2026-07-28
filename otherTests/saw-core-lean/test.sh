@@ -155,6 +155,7 @@ esac
 
 declare -a failures=()
 declare -a known_gaps=()
+declare -a row_times=()
 
 record_failure() {
     failures+=("$1")
@@ -188,7 +189,20 @@ preflight_conformance_inputs() {
     return "$failed"
 }
 
+# Per-row wall-clock profile (2026-07-28): collected so decisions
+# about suite speedups are made from data, not guesses. Milliseconds
+# via GNU date %s%3N (Linux CI + dev boxes).
+print_slowest_rows() {
+    if [ "${#row_times[@]}" -gt 0 ]; then
+        echo
+        echo "Slowest rows (top 20 of ${#row_times[@]}):"
+        printf '%s\n' "${row_times[@]}" | sort -rn | head -20 | \
+            awk '{ printf "  %8.1fs  %s\n", $1 / 1000, $2 }'
+    fi
+}
+
 print_summary_and_exit() {
+    print_slowest_rows
     echo
     echo "================================================================"
     if [ "${#failures[@]}" -eq 0 ]; then
@@ -239,8 +253,12 @@ run_one() {
     local subverb="${4:-test}"
     echo
     echo "=== $cat/$sub ($subverb) ==="
-    local rc=0
+    local rc=0 t0 t1
+    t0=$(date +%s%3N)
     ( cd "$cat/$sub" && bash "$HERE/support/$harness" "$subverb" ) || rc=$?
+    t1=$(date +%s%3N)
+    row_times+=("$((t1 - t0)) $cat/$sub")
+    echo "--- $cat/$sub: $((t1 - t0)) ms"
     if [ "$rc" -ne 0 ]; then
         record_failure "$cat/$sub (exit=$rc, harness=$harness)"
     elif [ "$subverb" = "test" ] && [ -f "$cat/$sub/.known-gap" ]; then
