@@ -195,10 +195,17 @@ mkdir -p "$PROBE_DIR"
 cp "$emitted" "$PROBE_DIR/Emitted.lean"
 cp lean-observe.lean "$PROBE_DIR/lean-observe.lean"
 
-set +e
-build_log=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake build ) 2>&1 )
-build_rc=$?
-set -e
+if [ -n "${SAW_LEAN_SUITE_LAKE_PREBUILT:-}" ]; then
+    # The orchestrator already built the shared library once for this
+    # sweep (test.sh prebuild_lake_library). Standalone runs still build.
+    build_log=""
+    build_rc=0
+else
+    set +e
+    build_log=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake build ) 2>&1 )
+    build_rc=$?
+    set -e
+fi
 if [ "$build_rc" -ne 0 ]; then
     echo "FAIL: lake build failed in $LAKE_DIR (rc=$build_rc)" >&2
     echo "$build_log" >&2

@@ -91,10 +91,17 @@ done
 # Build the Lake project. A failure here means the support library
 # itself didn't compile — that's a real problem, not an environment
 # issue, so fail loud.
-set +e
-build_log=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake build ) 2>&1 )
-build_rc=$?
-set -e
+if [ -n "${SAW_LEAN_SUITE_LAKE_PREBUILT:-}" ]; then
+    # The orchestrator already built the shared library once for this
+    # sweep (test.sh prebuild_lake_library). Standalone runs still build.
+    build_log=""
+    build_rc=0
+else
+    set +e
+    build_log=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake build ) 2>&1 )
+    build_rc=$?
+    set -e
+fi
 if [ "$build_rc" -ne 0 ]; then
     cat >&2 <<EOF
 FAIL: \`lake build\` failed in $LAKE_DIR (rc=$build_rc).

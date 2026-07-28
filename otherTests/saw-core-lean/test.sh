@@ -353,9 +353,37 @@ iterate_gap_inventory() {
 # -----------------------------------------------------------------------------
 # Verb dispatch.
 
+# One shared `lake build` per sweep (2026-07-28). Every elaborating
+# harness needs the support library built, and each row paid a fresh
+# no-op `lake` workspace resolution (seconds x ~290 rows). The
+# orchestrator builds ONCE here; the per-row harnesses skip their
+# build step when SAW_LEAN_SUITE_LAKE_PREBUILT is set, and still
+# build for themselves when invoked standalone. A failed prebuild
+# aborts the sweep loudly — every elaborating row would fail anyway,
+# and one clear diagnostic beats hundreds.
+prebuild_lake_library() {
+    local lake_dir
+    lake_dir="$(cd "$HERE/../../saw-core-lean/lean" && pwd)" || {
+        echo "FAIL: cannot resolve saw-core-lean/lean from $HERE" >&2
+        exit 1
+    }
+    # shellcheck disable=SC1091
+    . "$HERE/support/lake-timeout.sh"
+    echo "=== shared lake build ($lake_dir) ==="
+    local build_log build_rc=0
+    build_log=$( ( cd "$lake_dir" && $LAKE_TIMEOUT_CMD lake build ) 2>&1 ) || build_rc=$?
+    if [ "$build_rc" -ne 0 ]; then
+        echo "$build_log" >&2
+        echo "FAIL: shared lake build failed (rc=$build_rc); aborting sweep" >&2
+        exit 1
+    fi
+    export SAW_LEAN_SUITE_LAKE_PREBUILT=1
+}
+
 shopt -s nullglob
 case "$verb" in
     test|run)
+        prebuild_lake_library
         iterate_drivers
         iterate_workflows
         iterate_differential
@@ -371,6 +399,7 @@ case "$verb" in
         print_summary_and_exit
         ;;
     conformance)
+        prebuild_lake_library
         preflight_conformance_inputs || record_failure "conformance input preflight"
         iterate_differential
         iterate_obligations
@@ -379,6 +408,7 @@ case "$verb" in
         ;;
     conformance-strict)
         SAW_LEAN_FAIL_ON_KNOWN_GAPS=1
+        prebuild_lake_library
         preflight_conformance_inputs || record_failure "conformance input preflight"
         iterate_differential
         iterate_obligations

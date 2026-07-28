@@ -77,10 +77,17 @@ done
 # (Phase A audit, 2026-05-04: previous code exited 77 here, which
 # the caller treated as a clean skip and silently masked broken
 # library code. Now: exit 1 so it propagates as a test failure.)
-set +e
-build_log=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake build ) 2>&1 )
-build_rc=$?
-set -e
+if [ -n "${SAW_LEAN_SUITE_LAKE_PREBUILT:-}" ]; then
+  # The orchestrator already built the shared library once for this
+  # sweep (test.sh prebuild_lake_library). Standalone runs still build.
+  build_log=""
+  build_rc=0
+else
+  set +e
+  build_log=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake build ) 2>&1 )
+  build_rc=$?
+  set -e
+fi
 if [ "$build_rc" -ne 0 ]; then
   echo "lean-elaborate.sh: lake build failed for $LAKE_DIR (rc=$build_rc)" >&2
   echo "$build_log" >&2
