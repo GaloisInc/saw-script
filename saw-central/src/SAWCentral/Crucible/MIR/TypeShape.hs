@@ -59,6 +59,7 @@ module SAWCentral.Crucible.MIR.TypeShape
 import Control.Lens ((^.), (^..), each)
 import Control.Monad (when, forM, zipWithM, foldM)
 import Control.Monad.IO.Class (MonadIO(..))
+import qualified Data.IntSet as IntSet
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (isJust)
@@ -557,6 +558,45 @@ agCheckLengthsEqF fail_ loc elems xs =
   when (length elems /= length xs) $
     fail_ $ loc ++ ": got " ++ show (length elems) ++ " elems, but " ++ show (length xs) ++ " xs"
 
+-- | Expand a list of `AgElemShape`s recursively.  Given the `AgElemShape`s
+-- from the top-level `TypeShape`, this returns the complete list of
+-- `AgElemShape`s that will appear in a flattened aggregate of that type.
+expandAgElems :: [AgElemShape] -> [AgElemShape]
+expandAgElems as = goList 0 as
+  where
+    go :: Word -> AgElemShape -> [AgElemShape]
+    go base (AgElemShape off sz shp) =
+      case goShape (base + off) shp of
+        Just x -> x
+        Nothing -> [AgElemShape (base + off) sz shp]
+
+    goShape :: Word -> TypeShape tp -> Maybe [AgElemShape]
+    goShape base (TupleShape _ as') = Just $ goList base as'
+    goShape base (ArrayShape _ _ sz shp len) =
+      Just $ concat [go base (AgElemShape (i * sz) sz shp) | i <- init [0 .. len]]
+    goShape base (StructShape _ as') = Just $ goList base as'
+    goShape base (TransparentShape _ shp) = goShape base shp
+    goShape _ _ = Nothing
+
+    goList base as' = concatMap (go base) as'
+
+agCheckKeysEq :: MonadFail m => String -> [AgElemShape] -> MirAggregate sym -> m ()
+agCheckKeysEq loc elems m =
+  agCheckKeysEqF fail loc elems m
+
+agCheckKeysEqF :: Monad m =>
+  (forall a. String -> m a) -> String -> [AgElemShape] -> MirAggregate sym -> m ()
+agCheckKeysEqF fail_ loc elems ag = do
+  let mKeys = mirAggregate_keysSet ag
+  let elemsKeys =
+        IntSet.fromList [fromIntegral off | AgElemShape off sz _ <- expandAgElems elems, sz /= 0]
+  when (mKeys /= elemsKeys) $
+    if mKeys `IntSet.isSubsetOf` elemsKeys
+      then fail_ $ loc ++ ": missing or uninitialized fields at offsets "
+        ++ show (elemsKeys IntSet.\\ mKeys)
+      else fail_ $ loc ++ ": expected aggregate to have fields at offsets "
+        ++ show elemsKeys ++ ", but got fields at offsets " ++ show mKeys
+
 -- | Build a `MirAggregate` with one entry for each provided `AgElemShape`.
 -- The callback receives the offset, size, and type of the entry, along with
 -- the corresponding value from @xs@ (which must have as many items as there
@@ -601,7 +641,9 @@ traverseMirAggregate ::
   MirAggregate sym ->
   (forall tp. Word -> Word -> TypeShape tp -> RegValue sym tp -> m (RegValue sym tp)) ->
   m (MirAggregate sym)
-traverseMirAggregate sym elems aggregate f = foldM modify aggregate elems
+traverseMirAggregate sym elems aggregate f = do
+  agCheckKeysEq "traverseMirAggregate" elems aggregate
+  foldM modify aggregate elems
   where
     modify :: MirAggregate sym -> AgElemShape -> m (MirAggregate sym)
     modify ag (AgElemShape off sz elemShp)
@@ -661,6 +703,7 @@ accessMirAggregateF' ::
   m [b]
 accessMirAggregateF' sym fail_ elems xs ag f = do
   agCheckLengthsEqF fail_ "accessMirAggregate'" elems xs
+  agCheckKeysEqF fail_ "accessMirAggregate'" elems ag
   forM (zip elems xs) $ \(AgElemShape off sz shp, x) -> do
     let tpr = shapeType shp
     case mirAggregate_lookup sym off sz tpr ag of
@@ -689,6 +732,8 @@ zipMirAggregates ::
   (forall tp. Word -> Word -> TypeShape tp -> RegValue sym tp -> RegValue sym tp -> m b) ->
   m [b]
 zipMirAggregates sym elems a1 a2 f = do
+  agCheckKeysEq "zipMirAggregates" elems a1
+  agCheckKeysEq "zipMirAggregates" elems a2
   -- We don't require the `totalSize`s of the two aggregates to match.
   -- `buildMirAggregate` sets the `totalSize` to the end of the last field, but
   -- other methods of building aggregates use the actual layout from rustc,
