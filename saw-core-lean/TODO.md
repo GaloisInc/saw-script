@@ -82,7 +82,6 @@ what would make them stop.
   the pass lands: Families 1 and 2 are deferred BY DECISION, not
   closed, and checking that those dispositions are honest — and
   that no FOURTH family exists — is exactly the panel's job.
-
 ## Release gate (0.02 → release)
 
 - [ ] **Pre-release soundness review** (release gate, added
