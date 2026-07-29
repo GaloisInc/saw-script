@@ -47,3 +47,22 @@ Known-gap backlog triage (still current):
   broad proof automation and cookbook polish; final SAW-side replay UX, import
   isolation, provenance manifests.
 
+## 2026-07-29 — 0.02 release-gate panel (DO NOT RELEASE)
+
+Report `doc/2026-07-29_release-gate-audit.md`; findings ledger in
+TODO.md. Seven Opus lanes, one per release claim C1..C7, every finding
+adversarially refuted, surviving CRITICAL/HIGH given a second
+independent lens, and the audit itself critiqued for completeness.
+21 agents. 29 findings, 21 survived refutation, 8 CRITICAL/HIGH.
+
+Two CRITICALs, both silent, both reachable from ordinary product
+invocations: the trust kernel elaborates the user's Lean before any
+gate reads it (arbitrary IO rewrites both the lint's target and the
+drift check's authority), and F-5's goal-shape gate — recorded CLOSED
+— lets a strictly weaker Lean goal out with no diagnostic.
+
+The durable lesson is in what the panel could NOT establish: C2
+(loudness) was never assigned a lane, `SpecialTreatment.hs`'s 259
+mapping entries were read by nobody, and `classifyDomain`'s
+default-accept is the unvalidated shared premise four lanes' arguments
+bottom out in. Those set the next wave's scope.

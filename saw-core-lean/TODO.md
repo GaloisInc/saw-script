@@ -124,6 +124,225 @@ what would make them stop.
   `doc/2026-07-24_soundness-audit-2.md`, findings tracked in the
   section below. Three further CRITICALs, two demonstrated
   end-to-end. The release gate is NOT met until those clear.
+## Release gate — 0.02 audit findings (2026-07-29): DO NOT RELEASE
+
+Report: `doc/2026-07-29_release-gate-audit.md` (seven Opus lanes, one
+per release claim C1..C7; every finding adversarially refuted;
+surviving CRITICAL/HIGH given a second independent lens; the audit
+itself critiqued for completeness. 21 agents, HEAD 64fb0079c).
+29 findings raised, 21 survived refutation, 8 at CRITICAL/HIGH.
+
+**A fix is not closed here until its named PIN lands and the pin's
+stated MUTATION has been shown to turn it red.** That rule exists
+because this project has shipped vacuous pins repeatedly.
+
+### BLOCKS RELEASE
+
+- [ ] **B1/F1 (CRITICAL) — the trust kernel elaborates the user's
+  Lean BEFORE any gate reads it.** `replay/lean-check-core.sh:93-94`
+  runs `lake env lean` as its first Lean action; the sorry scan
+  (`:233-238`) and source lint (`:260-271`) come 140-180 lines later,
+  and `Emitted.lean` is in no gate's file list on either path.
+  Elaboration executes commands, so a `run_cmd` in `completed.lean`
+  runs arbitrary IO while the lint's target AND `Generated.lean` (the
+  drift check's authority — the only thing binding the user's `def
+  goal` to the SAW obligation) are still on disk and rewritable.
+  Result: `CHECK-OK`, `SolveSuccess (LeanReplayEvidence …)` on a
+  false obligation. Aggravating: the CI consumer
+  (`lean-proof-test.sh`) has the ordering RIGHT, so the product path
+  is strictly looser than CI, contradicting `lean-check-core.sh:8`;
+  `residual-trust.md` §3.2b reasons from "Emitted is the untouched
+  fresh emission", false on this path; and the
+  `axiom-or-macro-decl-in-user-file` guard is WAIVED at
+  `replay-kernel-selftest.sh:337-355` on the strength of rows that
+  only ever carry `proof.lean` — a vacuous waiver.
+  FIX: move the pure-text gates above the first Lean invocation;
+  then hash the three user files at stage time and re-verify each
+  hash immediately before its consuming gate, making "no user
+  elaboration precedes any gate on the bytes that gate reads" a
+  checked invariant rather than a property of statement order.
+  PIN: selftest case on the completed path with a self-erasing
+  `run_cmd`, expecting `CHECK-FAIL`; un-waive the guard for that
+  path; plus a saw-boundary row driving the payload through
+  `offline_lean_replay` so the PRODUCT path is pinned.
+  MUTATION: restoring today's gate order turns it green.
+
+- [ ] **B2/F2 (CRITICAL) — F-5's goal-shape gate, recorded CLOSED,
+  misses sorts INSIDE a binder's type.** `Signature.hs:264-296`:
+  classification happens only in `report`, reached only from a
+  Lambda/Pi binder's own type; `report`'s fallthrough re-enters `go`,
+  whose `Lean.Sort{} -> []` (`:274`) DISCARDS. Gate 1 cannot cover it
+  because `Convention.hs:559` matches any `SortContext` before the
+  allocating case, so `sort 0` allocates no universe variable.
+  `(f : Nat -> sort 0)` emits `(f : Nat -> Type)`; SAWCore admits
+  `Prop <= sort 0` cumulativity and covariant Pi subtyping, so the
+  SAW obligation ranges over Prop-valued `f` while the Lean goal does
+  not — a strictly WEAKER statement, well-typed, no diagnostic.
+  Reproduced end-to-end with controls: bare-binder refuses, nested
+  BINDER refuses, `sort 1` refuses via gate 1; only `sort 0` at an
+  arrow-result position escapes. `parse_core`-reachable only — the
+  same class already judged gate-worthy for the bare spelling.
+  Two corrections adopted from the second lens: `(v : Vec 3 Type)` is
+  NOT reachable (SAWCore rejects it), so scope the fix to the arrow
+  case; and the docs' description of the walk is literally accurate —
+  what is false is the stated RULE and the `[x] CLOSED` status.
+  FIX: in `report`, a binder-type-scoped walk whose `Lean.Sort` arm
+  REPORTS instead of falling into `go`'s discarding arm. Scope to
+  binder types, NOT all of `go` — `Term.hs:2140`/`:2699` can place a
+  `Lean.Sort` in the goal BODY and reporting those over-rejects.
+  PIN: `saw-boundary/goal_sort_binder_rejection/sort0_under_arrow.saw`,
+  body `\(f : Nat -> sort 0) -> \(x : f 0) -> True`, `.log.good`
+  naming `f`. MUTATION: reverting the arm flips it red->green.
+  TRAP: an `EqTrue`-terminated variant dies earlier in
+  `predicateToProp` and never reaches the gate — the goal must be
+  Bool-terminated or the probe is VACUOUS.
+
+### HIGH
+
+- [ ] **F4 (HIGH) — the F-1 `isFunctionShape` sweep missed
+  `Term.hs:466-476`.** `(App{}, BindingFunction)` was not swept, so a
+  `BindingWrappedArrow` at `foldr`/`foldl`'s `UseArgFunction` slot
+  takes the eta-expansion branch and emits a doubly-wrapped ill-typed
+  term where the pass-through arm emitted what `foldrM` wants. LOUD
+  at Lean (translation succeeds, artifact does not elaborate) so this
+  is a capability regression, not unsoundness — HIGH because it
+  falsifies the in-tree invariant at `Convention.hs:96-99` and the
+  claim in 64fb0079c's own message. Reachable from PLAIN CRYPTOL:
+  `{{ foldl (/) (1 : [16]) ([1,2,3,4] : [4][16]) }}`.
+  PIN: a `drivers/` row (drivers elaborate) with that Cryptol form.
+  MUTATION: reverting `:467` to `(App{}, BindingFunction)`; also
+  catches dropping `BindingWrappedArrow` from `isFunctionShape`,
+  which `under_applied_partial_wrapper` cannot.
+
+- [ ] **F3 (HIGH) — the snapshot oracle is vacuous over 187 of the
+  353 artifacts it counts.** `make conformance` runs only
+  differential/obligations/saw-boundary, so the rest are compared
+  stale-to-stale by construction. FIX: `.taken-at` marker on
+  snapshot; fail loudly on any emitted `.lean` not newer than it;
+  correct the script header's `make conformance` to `make test`.
+  PIN: oracle self-test requiring STALE for 187 files. MUTATION:
+  deleting the freshness guard. Do NOT pin with an emitter mutation —
+  the natural candidates also hit a row `conformance` DOES run, so
+  such a pin goes red for the wrong reason.
+  NOTE for the record: 585ebf660's inertness CONCLUSION survives —
+  the full-suite run plus oracle covered it, and F-1 writes to stdout
+  so it moves no `.lean` — but that commit's cited evidence was the
+  conformance run, and the attribution was wrong.
+
+- [ ] **F5 (HIGH) — the LIB-1 reference-closure retraction never
+  reached the trust catalog.** `residual-trust.md:669, 680-683` still
+  names `differential/vector_literal_edges` as a live escape and
+  tells the reader 59 is a FLOOR; the same session established it is
+  EXACT. Conservative in direction, but the catalog and the
+  correction give a reader opposite bounds on the same shipped
+  number. `doc-claim-lint.sh` structurally cannot catch this — the
+  named witness exists. Also `b-evidence-design.md:79` arithmetic
+  slip and a stale `350`.
+  PIN: check the corpus scan into `support/`, run by `test.sh`,
+  asserting in-element throwers == 59 AND reference-closure escapes
+  == 0. MUTATION: a fixture where a closed throwing subterm occurs
+  both inside a comprehension element and once outside — `foldr
+  mkLet` hoists it above the element lambda, escapes 0->1.
+
+- [ ] **F6 (HIGH) — `residual-trust.md` §3.3 disowns
+  `scLiteralFold`.** It attributes all pre-translation rewriting to
+  SAWCore meta-theory, but `Exporter.hs:573` composes that with
+  ~130 lines of BACKEND-OWNED hand-written rewriting the Rocq path
+  never runs, so "would affect Rocq identically" is backwards. It
+  runs UPSTREAM of every pin (`writeLeanProp` computes arity and
+  telescope after `scNormalizeForLean`), so nothing downstream
+  guards it. FIX: its own catalog entry. PIN: per-rule differential
+  rows for the guarded rules (`subNat` saturation, `expNat` 0^0,
+  `divNat`/`modNat` `bn/=0`, `intToNat` `nv>=0`). MUTATION: dropping
+  any one guard.
+
+- [ ] **F7 (HIGH) — the Slice-7 source lint lost the three new
+  modules.** `SmokeTest.hs:1195-1209` hardcodes an 11-file list, so
+  `adaptTo` and `topLevelDefConvention` are no longer swept and the
+  `"Except"` ceiling has gone slack. FIX: enumerate `src/**/*.hs`;
+  re-derive ceilings. MUTATION: reintroduce `translatedTermAsWrapped`
+  inside `Calculus.adaptTo` — red before the split, green today, red
+  again after the fix.
+
+- [ ] **F8 (HIGH, ledger) — owed-pin (ii) is FALSE.** The A-6
+  guillemet pin exists at `trust-tier-selftest.sh:311-313` and its
+  non-vacuity was demonstrated by mutation (removing
+  `proof-source-lint.awk:175`'s `gsub(/[«»]/, "", out)` flips it from
+  reject to ACCEPT). Strike the owed entry, record the mutation, and
+  separately give `axiom-escaped` a required diagnostic or delete it.
+  **F8b (MEDIUM):** owed-pin (i) is unconstructible as specified —
+  no `.saw` script can build it because the emitter refuses the shape
+  first. Close it with the F-9 treatment.
+
+### MEDIUM / LOW
+
+- [ ] **F9 (MEDIUM)** — the single-checker deferral's justification
+  is a non-sequitur: the CI harness never invokes
+  `lean-check-core.sh`, so "checks are added to the core"
+  GUARANTEES drift. `goal-formation-trivial` has no CI counterpart.
+- [ ] **F10 (MEDIUM)** — `Proof.hs:983-991`: `LeanReplayedTheorem`
+  absorbs `TestedTheorem`, inverting the assurance lattice, so a
+  quickchecked conjunct is reported `verified-lean-replay`.
+  Reporting-only, operator-initiated. PIN: split-goal row,
+  golden = summary JSON.
+- [ ] **F11 (MEDIUM, docs batch)** — `architecture.md` (A-2/A-9/F-5
+  recorded open against a tracker saying closed; module map missing
+  seven of twelve modules; `UnrepresentableGoalShape` absent from the
+  refusal list); `STATUS.md` (census 14 rows short, and the 0.02 exit
+  criterion is quantified over it); imported-realization contract
+  absent from the catalog; two uncaveated pointers into an archived
+  doc that a maintained doc cites as current.
+- [ ] **F12 (MEDIUM)** — `lean-proof-test.sh:289-295, 542-550`: a
+  text regex decides whether the closer-to-authority binding gate
+  runs at all, with no in-place argument (unlike the sibling drift
+  branch, which has one).
+- [ ] **F13 (LOW batch)** — `lean-negative-test.sh:141-146` reports a
+  timeout as "elaborated cleanly — soundness drift!";
+  `lean-driver-test.sh:179-183` `set -e` leak (latent); orphaned
+  Haddock at `Calculus.hs:1136-1152` / `Signature.hs:235-253,
+  348-370` — MOVE, do not delete: one block is the sole rationale for
+  the gate in B2; stale checkboxes and superseded LIB-1 remedy text;
+  the dead `moduleRenamingMap` "Cryptol" target
+  (`SpecialTreatment.hs:165`) naming a nonexistent Lean module.
+
+### What this audit did NOT establish — feeds the next wave
+
+- **C2 (loudness) was never assigned to a lane.** Half the charter.
+  The next wave must enumerate the fragment boundary FROM THE CODE:
+  every `UseReject`/`RejectedPrimitive`/`throwError` site plus every
+  default that does NOT reject, showing each non-rejecting default is
+  total or provably unreachable.
+- **`SpecialTreatment.hs` (1218 lines, 259 mapping entries) was
+  opened by nobody.** Its mechanical audits check an entry EXISTS,
+  never that the Lean target MEANS what the SAW primitive means. A
+  `mapsTo` at a well-typed-but-wrong definition elaborates cleanly:
+  silent divergence by construction, the CRITICAL class, on the file
+  nobody read.
+- **`classifyDomain`'s `otherwise` arm sends unrecognized types to
+  `DValue`**, which `shouldWrapBinder` wraps — an unrecognized
+  SAWCore type is silently treated as a runtime value rather than
+  loudly rejected, the inverse of the stated discipline. Four lanes'
+  arguments bottom out in this function as a CONSISTENCY argument
+  (two consumers agree), never a correctness one.
+- **`lean-obligation-test.sh`'s main path** — 91 rows, ~504 `grep -F`
+  substring directives over emitted Lean text, `forbidden.txt` in 0
+  of 91 rows, semantic observers in 8 — read by nobody. 83 rows of
+  text-shape gating over a semantic object.
+- **Nobody compared a Lean support-library body against
+  `Prelude.sawcore`.** With the `SpecialTreatment.hs` gap, the
+  SAW->Lean MEANING correspondence is unaudited from both ends.
+- **Highest-value single probe not run**, endorsed as first after the
+  blockers: emit a goal from a sequent that HAS HYPOTHESES
+  (`goal_insert`/`goal_intro_hyp`/`goal_cut` -> `sequentToProp`'s
+  `scFun` chain) and check the telescope pin and wrap convention on
+  the hypothesis binders. Zero rows in 353 artifacts have this shape
+  (all 110 goals are bare `Eq`); the telescope pin is PROVABLY blind
+  there (a Prop-typed binder fingerprints `FpOther`, so
+  `telescopeFpMismatch` skips it and only arity has teeth); and one
+  refuter argues it makes LIB-1's admission direction reachable from
+  ordinary Cryptol. Recorded UNRESOLVED — the lanes disagreed and one
+  probe settles it.
+
 ## Release gate — second audit findings (2026-07-24)
 
 A SECOND independent six-lane audit ran the same day
