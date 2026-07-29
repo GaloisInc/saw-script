@@ -123,6 +123,116 @@ what would make them stop.
   `doc/2026-07-24_soundness-audit-2.md`, findings tracked in the
   section below. Three further CRITICALs, two demonstrated
   end-to-end. The release gate is NOT met until those clear.
+## Release gate — WAVE 2 findings (2026-07-29): STILL DO NOT RELEASE
+
+Report: `doc/2026-07-29_release-gate-audit-wave2.md`. Six Opus lanes
+on the surfaces wave 1 said it could NOT establish, adversarially
+refuted. 15 findings survived refutation, 5 at CRITICAL/HIGH.
+
+**I re-derived the three most serious claims myself. Two hold; one
+does not hold at the severity the verdict assigns it.** The report
+leads with that verification, not with the panel's summary.
+
+### BLOCKS RELEASE — confirmed by independent reproduction
+
+- [ ] **W2-MAP-1 (CRITICAL, SILENT) — `emitterBareNames` misses the
+  entire contract family.** `hardcodedBareNames`
+  (`SpecialTreatment.hs`) lists `saw_throw_error`, `vecSequenceM`,
+  `atRuntimeCheckedM` and the `saw_fix_*`/`saw_mkStream_*` family, and
+  NONE of the ~30 names `Contracts.hs` builds — `intDiv_checkedM`,
+  `bvUDiv_runtimeM`, `atWithProof_checkedM`, the 13 `_runtimeM`
+  family. VERIFIED by reading both lists. All are emitted unqualified
+  and resolve only through the emitted `open`, so the F-7 collision
+  gate (`checkEmittedName`) and the F-6 binder-rename seed both miss
+  them. A Cryptol definition named `intDiv_runtimeM` therefore
+  rebinds the library helper silently.
+  This also falsifies TODO's own F-6/F-7 CLOSED entry, which
+  describes the enumeration as complete but for `UseMacro`.
+  FIX: derive the names from `Contracts.hs` instead of hand-listing,
+  so adding a contract row cannot forget to register its name.
+  PIN: a saw-boundary row with a colliding Cryptol definition,
+  expecting `EmittedNameCollision`. MUTATION: remove the derived
+  names and the row goes green (silently wrong) again.
+
+- [ ] **LIB-W2-1 (CRITICAL, SILENT) — `IntMod` is a reducible
+  constant function, so a type-level `unsafeAssert` self-discharges.**
+  `SAWCorePrimitives.lean:192` is
+  `@[reducible] def IntMod : Nat → Type := fun _ => Int`, while
+  `Prelude.sawcore` declares `primitive IntMod : Nat -> sort 0` —
+  opaque, no reduction rule. VERIFIED by elaboration: all four of
+  `IntMod 5 = IntMod 7`, `IntMod 5 = Integer`, free transport of a
+  value between them, and the emitted tactic
+  `(first | rfl | skip); all_goals sorry` are ACCEPTED with no error
+  and **no `declaration uses 'sorry'`**. Negative control
+  `Float = Double` (sealed by audit-2 F-2) is REJECTED, so the loud
+  path exists and `IntMod` is the outlier.
+  `unsafeAssert` is SAW's admission that it has NO proof; the
+  backend's stated discipline is that the discharge must prove it.
+  Here it is free, and it feeds `coerce` = `cast` on the shared `Int`
+  carrier, so a `Z 5` value is reinterpreted as `Z 7`.
+  FIX: seal the type family (`structure IntMod (n : Nat) where val :
+  Int`, or an `opaque` carrier). **Dropping `@[reducible]` alone is
+  NOT sufficient** — a plain `def` is still delta-unfoldable and
+  `rfl` still closes. Verified.
+  PIN: `#guard_msgs` self-tests in the library asserting the two
+  `rfl`s now FAIL, plus a saw-boundary row asserting the emitted
+  artifact leaves `declaration uses 'sorry'`. MUTATION: re-aliasing
+  IntMod to Int. NOTE the emitted TEXT still contains `sorry` (inside
+  `all_goals sorry`), so a textual sorry-grep does NOT discriminate —
+  the discriminators are Lean's warning and `#print axioms`.
+
+### NEEDS REPRODUCTION BEFORE IT IS ACTED ON
+
+- [ ] **W2-UNRUN-1 / W2-UNRUN-3 (claimed CRITICAL/HIGH) — hypothesis
+  vacuity. NOT REPRODUCED at the claimed reachability.** The verdict
+  leads with "demonstrated end-to-end from ordinary Cryptol with SAW
+  exiting 0 on `Theorem (EqTrue False)`". I could not reproduce that;
+  both constructible routes are BLOCKED:
+  (i) the `goal_cut` script the verdict prints is REFUSED at emission
+  — "quantifier telescope mismatch. SAWCore goal binders: 1; emitted
+  Lean goal binders: 0" — and the decisive control (a
+  hypothesis-bearing goal with NO error anywhere) is refused
+  identically, so the pin refuses EVERY sequent-hypothesis goal on
+  that route, which is precisely the binder B2 needs emitted;
+  (ii) an implication inside the term emits an `@Eq (Except String
+  Bool) …` EQUATION, not a Pi, so there is no antecedent to be
+  uninhabited.
+  The panel's own evidence shows `SAW EXIT: 0` only for a
+  `parse_core` term with free variables where `x‵1` is used as a
+  TYPE; the pure-Cryptol run shows only "kernel check passed", not
+  acceptance of a false theorem. The two look conflated.
+  CONSEQUENCE: if real, this is `parse_core`-reachable — the class
+  the verdict itself rates HIGH, not CRITICAL — and it does NOT, on
+  this evidence, falsify the shipped LIB-1 scope claim as W2-UNRUN-3
+  asserts. Both stay OPEN pending a reproduction at the claimed
+  reachability. Do not amend the README's LIB-1 scope wording on the
+  strength of W2-UNRUN-3 alone.
+
+### OTHER SURVIVORS (see the wave-2 report for the full list)
+
+- [ ] **L-1 (HIGH, SILENT)** — the IntMod modulus gate is bypassed at
+  ZERO arguments: `Term.hs`'s guard is conjoined with
+  `(modArg : _) <- args`, so an unapplied occurrence falls through to
+  the ordinary dispatch and emits a function quantified over all `n`,
+  including `n = 0`. `parse_core`-reachable.
+- [ ] **W2-UNRUN-2 (HIGH)** — the telescope pin's binder-TYPE half
+  has zero teeth on hypothesis binders: a Prop-typed binder
+  fingerprints `FpOther` and `telescopeFpMismatch` skips any position
+  where either side is `FpOther`. Only the ARITY half has teeth
+  there — which is exactly what refused my B2 attempts.
+- [ ] **OBL-1 / OBL-2 (HIGH)** — five stream-helper obligation rows
+  share one byte-identical `expected.txt` naming no stream operation;
+  a shift-left→shift-right mutation passes all six directives.
+  Coverage debt against a defect that does not exist today.
+- [ ] **LIB-W2-2 (HIGH)** — `unsafeAssertProofScript`'s stated
+  guarantee is not met wherever the two operands are defeq for a
+  reason other than being the same assertion; LIB-W2-1 is the live
+  instance.
+- [ ] Plus MEDIUM/LOW: W2-MAP-2/3, LIB-W2-3..6, OBL-3..7, L-2..5,
+  W2-UNRUN-4, W2-CD-1..3 (all three classifyDomain findings were
+  REFUTED — that surface came out best and its recorded deferral
+  justification was tested and holds).
+
 ## Release gate — 0.02 audit findings (2026-07-29): DO NOT RELEASE
 
 Report: `doc/2026-07-29_release-gate-audit.md` (seven Opus lanes, one
