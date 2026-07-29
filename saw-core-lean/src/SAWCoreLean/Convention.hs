@@ -288,6 +288,8 @@ data EqRecConvention = EqRecConvention
 -- classifier is the declarative guard chain over the contract tables
 -- ('translateIdentWithArgsWithShape') with declared 'ArgMode' slots.
 -- 'CalleeTransitional' count: zero, permanently.
+--
+-- TOMBSTONE: CalleeTransitional — Slice 4c: the undeclared-convention escape hatch
 
 data RecursorScrutineeMode
   = RecursorScrutineeRaw
@@ -770,6 +772,10 @@ bindingShapeOfType ty
 -- Slice 2. Shape is an output of translation ('TranslatedTerm') or a
 -- record in Γ ('BindingInfo') — never re-derived from generated
 -- syntax. Do not reintroduce them.
+--
+-- TOMBSTONE: bindingShapeOfTerm — Slice 2: shape guessed from emitted Lean term AST
+-- TOMBSTONE: bindingShapeOfLeanTermM — Slice 2: monadic emitted-AST shape guess
+-- TOMBSTONE: translatedTermAsWrapped — Slice 2: wrap-status read off the emitted term
 
 isWrappedShape :: BindingShape -> Bool
 isWrappedShape BindingWrapped = True

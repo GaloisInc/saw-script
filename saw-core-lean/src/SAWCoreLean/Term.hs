@@ -2355,6 +2355,8 @@ translateRecursorAppWithShape crec args = do
     -- 'ExpectRuntimeValue'; a function-motive final shape reads the
     -- declared function convention's arity and result position (the
     -- record 'phaseBetaResultShape' used to re-derive here).
+    --
+    -- TOMBSTONE: classifyRecursorResult — Slice 6.1: local recursor classification predicates
     recursorConvention ::
       TermTranslationMonad m =>
       CompiledRecursor -> Bool -> Term -> Int -> m RecursorConvention

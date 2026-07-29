@@ -341,7 +341,12 @@ translateIdentToQualifiedIdent i = do
 -- ('phaseBetaArgModesFor' + 'phaseBetaBindFromMode'); equivalence was
 -- proven corpus-wide by the two-oracle inert step before the swap.
 -- No shape or bind decision is inferred from emitted Lean TERMS any
--- more. Two type-classification self-mirrors remain
+-- more.
+--
+-- TOMBSTONE: argumentBindPlan — Slice 4b: bind plan from emitted types, not declared modes
+-- TOMBSTONE: polymorphicFormalInstantiatedExpected — Slice 4b/debts: Pi-only instantiation predicate
+--
+-- Two type-classification self-mirrors remain
 -- ('bindingShapeOfType' at binder sites; the Except/Pi peel in
 -- 'applyKnownFunctionWithShape') — they classify types the translator
 -- itself just emitted from known source types, and are 4c demotion
@@ -566,6 +571,8 @@ phaseBetaResultShape fty nApplied
 -- 'BindingWrapped' for bare raw applications, the stamp/emission
 -- divergence that forced the raw-mode pipeline guards
 -- ('lowerRawLogicalCalleeRawMode', unsafeAssert's raw-mode arm).
+--
+-- TOMBSTONE: lowerRawLogicalCalleeRawMode — debts slice: mode-guard over false raw-mode records
 rawModeResultShape :: Term -> Int -> BindingShape
 rawModeResultShape fty nApplied
   | nApplied < length binders = BindingFunction
@@ -819,10 +826,15 @@ isPreludeIdent baseName i =
 -- lemmas and runtime over value-domain computations, and only the
 -- operand domain distinguishes them.
 --
--- This is one convention among several, not a universal authority.
--- A surround that knows its ρ_eq (e.g. 'unsafeAssert', declared raw)
--- calls 'equalityPropositionAtSubjectRep' with it directly and never
--- falls through to this function.
+-- This is one convention among several, not a universal authority —
+-- but the old surround-declared entry point (which let a surround
+-- like 'unsafeAssert' assert its ρ_eq directly, bypassing the
+-- operand-domain read) is deleted; 'unsafeAssert' now routes its
+-- operands through THIS function like every other caller (Term.hs,
+-- @standaloneEqualitySubjectRep "unsafeAssert"@).
+--
+-- TOMBSTONE: equalityPropositionAtSubjectRep — debts slice: surround-declared rho_eq entry point
+-- TOMBSTONE: subjectRepFromTranslatedOperands — Slice 5a: renamed to standaloneEqualitySubjectRep
 standaloneEqualitySubjectRep ::
   TermTranslationMonad m =>
   Text.Text -> [TranslatedTerm] -> m EqualitySubjectRep

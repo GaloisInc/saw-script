@@ -1224,47 +1224,70 @@ lintSourceFiles = sortOn id <$> go "saw-core-lean/src"
       if isDir then go path
       else pure [ path | ".hs" `isSuffixOf` path ]
 
--- | The Lean support library the emitted corpus imports. The
--- transport distinctness-invariant lint scans every file: the
--- invariant is about what T-emitted NAMES can reduce to, and any
--- support module can introduce an alias.
-supportLibraryFiles :: [FilePath]
-supportLibraryFiles =
-  map ("saw-core-lean/lean/CryptolToLean/" ++)
-    [ "SAWCorePrimitives.lean"
-    , "SAWCoreVectors.lean"
-    , "SAWCoreBitvectors.lean"
-    , "SAWCoreBitvectors_proofs.lean"
-    , "SAWCorePrelude_proofs.lean"
-    , "SAWCorePreludeExtra.lean"
-    , "SAWCoreCtorOrder.lean"
-    ]
+-- | Root module of the Lean support library — the single file the
+-- emitted preamble imports; everything the corpus can see is in its
+-- import closure. Scanned too: a future alias added here would be
+-- in that closure.
+supportLibraryRoot :: FilePath
+supportLibraryRoot = "saw-core-lean/lean/CryptolToLean.lean"
 
--- | Names of deleted heuristics that must never reappear in CODE
--- (comment lines — tombstone NOTEs — are exempt). Each entry names
--- the slice that deleted it.
-lintForbiddenNames :: [(String, String)]
-lintForbiddenNames =
-  [ ("bindingShapeOfTerm",       "Slice 2: shape guessed from emitted Lean term AST")
-  , ("bindingShapeOfLeanTermM",  "Slice 2: monadic emitted-AST shape guess")
-  , ("translatedTermAsWrapped",  "Slice 2: wrap-status read off the emitted term")
-  , ("CalleeTransitional",       "Slice 4c: the undeclared-convention escape hatch")
-  , ("argumentBindPlan",         "Slice 4b: bind plan from emitted types, not declared modes")
-  , ("polymorphicFormalInstantiatedExpected", "Slice 4b/debts: Pi-only instantiation predicate")
-  , ("lowerRawLogicalCalleeRawMode", "debts slice: mode-guard over false raw-mode records")
-  , ("equalityPropositionAtSubjectRep", "debts slice: surround-declared rho_eq entry point")
-  , ("subjectRepFromTranslatedOperands", "Slice 5a: renamed to standaloneEqualitySubjectRep")
-  , ("classifyRecursorResult",   "Slice 6.1: local recursor classification predicates")
-  ]
+supportLibraryDir :: FilePath
+supportLibraryDir = "saw-core-lean/lean/CryptolToLean"
+
+-- | The Lean support library the emitted corpus imports: the root
+-- module plus every @.lean@ file under 'supportLibraryDir', DERIVED
+-- by a directory walk (2026-07-29 convergence work — the previous
+-- hand-listed version is the enumeration style that rotted five
+-- times over; see the convergence proposal §2). Throws when run
+-- from the wrong cwd, like 'lintSourceFiles'; that loud failure is
+-- deliberate — do not make it tolerant. The transport
+-- distinctness-invariant lint scans every file: the invariant is
+-- about what T-emitted NAMES can reduce to, and any support module
+-- can introduce an alias. The derivation's assumption — the whole
+-- import closure lives in this one directory — is pinned by the
+-- "walk and root imports agree" test below.
+supportLibraryFiles :: IO [FilePath]
+supportLibraryFiles = do
+  entries <- listDirectory supportLibraryDir
+  pure $ supportLibraryRoot
+       : sortOn id [ supportLibraryDir ++ "/" ++ e
+                   | e <- entries, ".lean" `isSuffixOf` e ]
+
+-- | Deleted heuristics that must never reappear in CODE, DERIVED
+-- from @TOMBSTONE:@ comment markers placed at the deletion sites
+-- (comment lines are exempt from the code scan, so a marker never
+-- trips its own lint). This list used to be hand-maintained here;
+-- deriving it moves registration into the file the deleter is
+-- already editing — the only place it reliably happens (convergence
+-- proposal §4). Marker format, one whole-line comment per name:
+--
+-- @-- TOMBSTONE: name — why it must stay dead@
+lintForbiddenNames :: IO [(String, String)]
+lintForbiddenNames = do
+  files   <- lintSourceFiles
+  sources <- mapM readFile files
+  pure [ (name, why)
+       | source <- sources
+       , l <- lines source
+       , t <- take 1 [ drop (length tombstoneMarker) rest
+                     | rest <- tails l
+                     , tombstoneMarker `isPrefixOf` rest ]
+       , let (name, rest') = break (== ' ') t
+       , not (null name)
+       , let why = dropWhile (\c -> c == ' ' || c == '—') rest'
+       ]
+  where tombstoneMarker = "-- TOMBSTONE: "
 
 -- | Allow-listed emitted-TYPE self-mirrors (documented
 -- convention-internal classifiers of types the translator itself just
--- emitted). The ceiling is the current number of non-comment source
--- LINES mentioning the name; growing it means a NEW consumer was
--- added, which the plan forbids ("do not add new consumers").
--- Shrinking is always fine — lower the ceiling when you demote a use.
-lintSelfMirrorCeilings :: [(String, Int)]
-lintSelfMirrorCeilings =
+-- emitted). The count is the EXACT number of non-comment source
+-- LINES mentioning the name (the @"Except"@-ceiling precedent, F7):
+-- above means a NEW consumer was added, which the plan forbids
+-- ("do not add new consumers"); below means the definition or a
+-- recorded use was deleted. Either way the record is updated
+-- consciously, never silently.
+lintSelfMirrorCounts :: [(String, Int)]
+lintSelfMirrorCounts =
   [ ("bindingShapeOfType", 7)   -- definition + binder-site Γ records
   , ("isExceptStringType", 5)   -- definition + bindingShapeOfType
                                 -- + applyKnownFunctionWithShape result peel
@@ -1281,13 +1304,19 @@ lintCodeLines source =
 
 antiRegressionLintTests :: TestTree
 antiRegressionLintTests = testGroup "anti-regression source lint (Slice 7)"
-  [ testCase "deleted heuristics stay deleted" $ do
-      files   <- lintSourceFiles
-      sources <- mapM readFile files
+  [ testCase "deleted heuristics stay deleted (tombstone-derived)" $ do
+      files     <- lintSourceFiles
+      sources   <- mapM readFile files
+      forbidden <- lintForbiddenNames
+      assertBool
+        "no TOMBSTONE markers found anywhere in src — either every \
+        \deletion site lost its marker or the marker format drifted; \
+        \both mean this lint is scanning for nothing"
+        (not (null forbidden))
       let hits =
             [ (file, name, why)
             | (file, source) <- zip files sources
-            , (name, why) <- lintForbiddenNames
+            , (name, why) <- forbidden
             , any (name `isInfixOf`) (lintCodeLines source)
             ]
       assertBool
@@ -1295,20 +1324,41 @@ antiRegressionLintTests = testGroup "anti-regression source lint (Slice 7)"
          \conventions and production records, never from emitted Lean: "
          ++ show hits)
         (null hits)
-  , testCase "emitted-type self-mirrors gain no new consumers" $ do
+  , testCase "emitted-type self-mirror counts are exact" $ do
       files   <- lintSourceFiles
       sources <- mapM readFile files
       let allCode = concatMap lintCodeLines sources
           counts =
-            [ (name, ceiling_, length (filter (name `isInfixOf`) allCode))
-            | (name, ceiling_) <- lintSelfMirrorCeilings
+            [ (name, expected, length (filter (name `isInfixOf`) allCode))
+            | (name, expected) <- lintSelfMirrorCounts
             ]
-          over_ = [ c | c@(_, ceil_, n) <- counts, n > ceil_ ]
+          wrong = [ c | c@(_, expected, n) <- counts, n /= expected ]
       assertBool
-        ("emitted-type self-mirror gained a consumer (name, ceiling, found): "
-         ++ show over_ ++ " — classify from source types or declared \
-         \conventions instead, or (if you demoted a use) lower the ceiling")
-        (null over_)
+        ("emitted-type self-mirror count drifted (name, recorded, found): "
+         ++ show wrong ++ " — above the record means a NEW consumer was \
+         \added (classify from source types or declared conventions \
+         \instead); below means a definition or recorded use was deleted. \
+         \Update the record only after deciding the change is right.")
+        (null wrong)
+  , testCase "support-library walk and root imports agree" $ do
+      -- Pins the derivation assumption of 'supportLibraryFiles':
+      -- the emitted preamble's import closure is exactly the root
+      -- module plus this one directory. A module added to the
+      -- directory but not imported (dead file the lint would
+      -- vacuously bless) or imported from somewhere else entirely
+      -- both fail here.
+      files <- supportLibraryFiles
+      root  <- readFile supportLibraryRoot
+      let importPrefix = "import CryptolToLean."
+          imported = sortOn id
+            [ drop (length importPrefix) l'
+            | l <- lines root
+            , let l' = dropWhile (== ' ') l
+            , importPrefix `isPrefixOf` l' ]
+          walked = sortOn id
+            [ takeWhile (/= '.') (drop (length supportLibraryDir + 1) f)
+            | f <- files, f /= supportLibraryRoot ]
+      imported @?= walked
   , testCase "support library defines no Except-headed type alias" $ do
       -- Transport distinctness invariant (2026-07-18/19 transport
       -- audits, binding condition 1): T never emits an
@@ -1321,7 +1371,8 @@ antiRegressionLintTests = testGroup "anti-regression source lint (Slice 7)"
       -- an Except-headed right-hand side (whitespace-collapsed;
       -- named-argument uses like `(m := Except String)` are excluded
       -- by the preceding token's open paren).
-      sources <- mapM readFile supportLibraryFiles
+      libFiles <- supportLibraryFiles
+      sources  <- mapM readFile libFiles
       let collapse = unwords . words . unlines . lintCodeLines
           hitsIn c =
             [ take 60 rest
@@ -1335,7 +1386,7 @@ antiRegressionLintTests = testGroup "anti-regression source lint (Slice 7)"
             ]
           hits =
             [ (f, h)
-            | (f, s) <- zip supportLibraryFiles sources
+            | (f, s) <- zip libFiles sources
             , h <- hitsIn (collapse s)
             ]
       assertBool
