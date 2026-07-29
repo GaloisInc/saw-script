@@ -36,6 +36,8 @@ module SAWCentral.Crucible.MIR.TypeShape
   , testRefShape
   , sliceShapeParts
   -- `MirAggregate` / `AgElemShape` helpers
+  , expandAgElem
+  , expandAgElems
   , buildMirAggregate
   , traverseMirAggregate
   , accessMirAggregate
@@ -557,6 +559,9 @@ agCheckLengthsEqF :: (HasCallStack, Monad m) =>
 agCheckLengthsEqF fail_ loc elems xs =
   when (length elems /= length xs) $
     fail_ $ loc ++ ": got " ++ show (length elems) ++ " elems, but " ++ show (length xs) ++ " xs"
+
+expandAgElem :: AgElemShape -> [AgElemShape]
+expandAgElem a = expandAgElems [a]
 
 -- | Expand a list of `AgElemShape`s recursively.  Given the `AgElemShape`s
 -- from the top-level `TypeShape`, this returns the complete list of

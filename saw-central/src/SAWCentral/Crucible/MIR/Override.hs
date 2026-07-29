@@ -2168,11 +2168,11 @@ valueToSC sym fail_ tval (MIRVal shp val) =
               \_off _sz shp' val' tval' -> valueToSC sym fail_ tval' (MIRVal shp' val')
             liftIO (scTupleReduced sc terms)
     (Cryptol.TVSeq n cryty, ArrayShape _ _ elemSz elemShp len)
-      -- When matching against the backing array of a slice, the length in the
-      -- TypeShape might differ from the actual length of the RegValue, so we
-      -- need to check both.
+      -- The lengths of the cryptol type, the MIR type/shape, and the aggregate
+      -- value should all match up.
       | toInteger len == n
-      , length (Mir.mirAggregate_entries sym val) >= fromIntegral len
+      , entriesPerElem <- length (expandAgElem $ AgElemShape 0 elemSz elemShp)
+      , length (Mir.mirAggregate_entries sym val) == fromIntegral len * entriesPerElem
       -> do terms <- accessMirAggregateArray sym elemSz elemShp len val $
               \_off val' -> valueToSC sym fail_ cryty (MIRVal elemShp val')
             t <- shapeToTerm sc elemShp
