@@ -311,9 +311,31 @@ lint_case debug-plain reject "debug.skipKernelTC"
 printf 'set_option \xc2\xabdebug\xc2\xbb.skipKernelTC true in\ntheorem t : True := trivial\n' \
     > "$STAGE/lint-debug-escaped.lean"
 lint_case debug-escaped reject "skipKernelTC"
-# The bracket-stripping hardens every OTHER rule too, not just this one.
+# This case pins that the ESCAPED axiom spelling is rejected. It does
+# NOT pin the bracket-stripping, and its old comment ("the
+# bracket-stripping hardens every OTHER rule too") implied it did.
+#
+# Corrected 2026-07-29 (release-gate audit, F8) by measurement rather
+# than reasoning. Removing `gsub(/[«»]/, "", out)` from
+# proof-source-lint.awk turns `debug-escaped` RED — correctly — and
+# leaves THIS case green with BYTE-IDENTICAL output. So no required
+# diagnostic can make it discriminate; the audit's suggested "give it
+# a required diagnostic or delete it" does not work as stated.
+#
+# WHY it cannot discriminate, which is the durable part: the denylist
+# matches on byte boundaries under LC_ALL=C, and the guillemet bytes
+# (\xc2\xab / \xc2\xbb) are themselves non-letter boundaries — so
+# `«axiom»` satisfies the plain `axiom` rule with or without
+# stripping. It is caught by luck of encoding, not by the fix.
+# `«debug».skipKernelTC` is different: the option rule matches a
+# DOTTED name, which the interposed bracket bytes break, so stripping
+# is load-bearing there and `debug-escaped` is the case that pins it.
+#
+# Kept rather than deleted — rejecting the escaped spelling is a real
+# property worth holding — with a required diagnostic so it at least
+# pins its own message, and with the claim it cannot support removed.
 printf '\xc2\xabaxiom\xc2\xbb evil : False\n' > "$STAGE/lint-axiom-escaped.lean"
-lint_case axiom-escaped reject
+lint_case axiom-escaped reject "axiom"
 
 # A-1: a syntax-declaring command in a proof file retargets the token
 # in every importing module — including the checker's own binding

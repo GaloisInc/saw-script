@@ -334,6 +334,21 @@ run_replay_kernel_selftest() {
     fi
 }
 
+run_snapshot_oracle_selftest() {
+    echo
+    echo "=== support/emitted-lean-snapshot selftest ==="
+    # F3 (0.02 release-gate audit): the oracle compares files on disk
+    # and cannot, by itself, tell a file that was RE-EMITTED and matched
+    # from one that was never re-emitted. This pins that its staleness
+    # guard fires. Cheap — it cuts a throwaway snapshot in a temp dir
+    # and never touches the real baseline.
+    local rc=0
+    bash "$HERE/support/emitted-lean-snapshot.sh" selftest || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        record_failure "support/emitted-lean-snapshot selftest (exit=$rc)"
+    fi
+}
+
 run_lib1_census() {
     echo
     echo "=== support/lib1-census ==="
@@ -433,6 +448,7 @@ case "$verb" in
         run_trust_tier_selftest
         run_replay_kernel_selftest
         run_doc_claim_lint
+        run_snapshot_oracle_selftest
         run_lib1_census
         iterate_gap_inventory
         print_summary_and_exit

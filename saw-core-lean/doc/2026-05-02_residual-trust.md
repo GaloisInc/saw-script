@@ -778,6 +778,70 @@ that elaborates but disagrees with `saw`-side `prove_print` /
 `assume`-mode evaluation. (This would be a SAW bug, not a Lean
 backend bug, and would affect the Rocq backend identically.)
 
+**SCOPE CORRECTION (F6, 0.02 release-gate audit, 2026-07-29).**
+Everything above is true of `scNormalize` — SAWCore's own reduction
+relation — and that is now ALL this entry claims. It was written as
+though `scNormalizeForLean` were only that, and it is not:
+`Exporter.hs:573` composes SAWCore's normalizer with
+`scLiteralFold`, a rewriting pass this backend owns. So the three
+load-bearing sentences above were each half-false — "a property of
+SAWCore's reduction relation, not our backend", "not killable from
+the Lean side", and above all "would affect the Rocq backend
+identically", which is backwards: the Rocq path never runs it. The
+backend-owned half now has its own entry below, because a residual
+that a reader cannot find is not catalogued.
+
+---
+
+### 3.3a `scLiteralFold` — backend-owned rewriting upstream of every gate (2026-07-29)
+
+**Status:** OPEN residual, newly catalogued (F6, 0.02 release-gate
+audit). Previously absorbed into §3.3 and thereby attributed to
+SAWCore.
+
+**Where exercised:** every goal and term on the LEAN path only.
+`scNormalizeForLean` composes it with `scNormalize`
+(`Exporter.hs:573`); a repo-wide search finds no other caller, so
+the Rocq backend never runs it.
+
+**What we trust:** 24 hand-written constant-folding rules
+(`Exporter.hs:603` onward) agree with SAW's own evaluator on every
+input they fire on — the Nat family (`addNat`, `subNat`, `mulNat`,
+`minNat`, `maxNat`, `expNat`, `divNat`, `modNat`, `pred`,
+`doubleNat`, `equalNat`, `ltNat`, `leNat`), the Int family
+(`intAdd`, `intSub`, `intMul`, `intNeg`, `intEq`, `intLe`, `intLt`,
+`intToNat`, `natToInt`), and the `ite`/`iteDep` selectors. Four
+carry explicit guards at the partial points (`divNat`/`modNat`
+require `bn /= 0`; `intToNat` requires `nv >= 0`; `subNat` is
+saturating).
+
+**Why this is a distinct residual, not a variant of §3.3.** Three
+reasons, and the third is the one that matters. It is OURS — a
+SAWCore-side normalization bug is an upstream bug, but a wrong rule
+here is a defect in this backend. It is KILLABLE from the Lean side,
+so "not killable" was never true of it. And it runs UPSTREAM OF THE
+ENTIRE AUTHORITY: `writeLeanProp` computes the goal's arity and
+telescope pins AFTER `scNormalizeForLean`, so the telescope
+fingerprint, the sort gates and the replay drift check all compare
+against a term this pass has already rewritten. No downstream gate
+can see a rule that folded a term to the wrong value; every gate
+would agree with itself.
+
+**Manifestation if violated:** a folded constant that disagrees with
+SAW's evaluator makes the emitted goal state something the SAW
+obligation does not, silently — the emitted artifact is well-typed
+and every gate passes. This is the same shape as LIB-1 (a
+value-domain divergence no proof-side gate can catch), and unlike
+LIB-1 it is not bounded by a measurement.
+
+**What would close it:** per-rule differential rows against SAW's
+own evaluator, so each rule's agreement is a tested fact rather than
+a 2026-07-24 reading of the source; the guarded partial points
+(`divNat`/`modNat` at zero, `intToNat` on negatives, `subNat`
+saturation) are the ones to write first, since those are where a
+rule and an evaluator most easily disagree. Tracked in TODO.md as
+F6.
+
 ---
 
 ### 3.4 L-1 polymorphismResidual scope — *GATE REMOVED; entry superseded*

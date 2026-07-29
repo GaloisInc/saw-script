@@ -77,7 +77,7 @@ EXPECT_REF_ESCAPES = 0
 # 2026-07-29: scanning mid-run gave 27/324 instead of 59/353 and
 # looked like good news. Run this only after a complete emission
 # (test.sh invokes it last).
-EXPECT_SCANNED = 353
+EXPECT_SCANNED = 354
 
 
 def strip_line_comments(src):

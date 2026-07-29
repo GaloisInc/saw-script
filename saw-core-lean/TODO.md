@@ -256,7 +256,7 @@ because this project has shipped vacuous pins repeatedly.
   catches dropping `BindingWrappedArrow` from `isFunctionShape`,
   which `under_applied_partial_wrapper` cannot.
 
-- [ ] **F3 (HIGH) — the snapshot oracle is vacuous over 187 of the
+- [x] **F3 (HIGH) — FIXED 2026-07-29, mutation-verified.** The snapshot oracle was vacuous over 187 of the
   353 artifacts it counts.** `make conformance` runs only
   differential/obligations/saw-boundary, so the rest are compared
   stale-to-stale by construction. FIX: `.taken-at` marker on
@@ -266,12 +266,24 @@ because this project has shipped vacuous pins repeatedly.
   deleting the freshness guard. Do NOT pin with an emitter mutation —
   the natural candidates also hit a row `conformance` DOES run, so
   such a pin goes red for the wrong reason.
+  **LANDED.** `snapshot` writes a `.taken-at` marker; `diff` requires
+  every emitted file to be NEWER than it and fails loudly otherwise.
+  The script header's procedure is corrected from `make conformance`
+  to `make test`. Pinned by a new `selftest` verb, run by `test.sh`:
+  it cuts a throwaway snapshot in a temp dir and diffs WITHOUT
+  re-emitting, so the guard must fire on every file.
+  **MEASURED:** after a conformance-only re-emission the guard reports
+  **188 stale files** of 354 — the audit predicted 187, the extra one
+  being the F4 row added since. Before the guard, that same diff
+  reported "OK: emitted Lean identical".
+  **MUTATION:** deleting the guard makes the selftest report OK with
+  zero re-emission, and the case goes red.
   NOTE for the record: 585ebf660's inertness CONCLUSION survives —
   the full-suite run plus oracle covered it, and F-1 writes to stdout
   so it moves no `.lean` — but that commit's cited evidence was the
   conformance run, and the attribution was wrong.
 
-- [ ] **F5 (HIGH) — the LIB-1 reference-closure retraction never
+- [x] **F5 (HIGH) — FIXED 2026-07-29.** The LIB-1 reference-closure retraction had never
   reached the trust catalog.** `residual-trust.md:669, 680-683` still
   names `differential/vector_literal_edges` as a live escape and
   tells the reader 59 is a FLOOR; the same session established it is
@@ -280,23 +292,45 @@ because this project has shipped vacuous pins repeatedly.
   number. `doc-claim-lint.sh` structurally cannot catch this — the
   named witness exists. Also `b-evidence-design.md:79` arithmetic
   slip and a stale `350`.
-  PIN: check the corpus scan into `support/`, run by `test.sh`,
-  asserting in-element throwers == 59 AND reference-closure escapes
-  == 0. MUTATION: a fixture where a closed throwing subterm occurs
-  both inside a comprehension element and once outside — `foldr
-  mkLet` hoists it above the element lambda, escapes 0->1.
+  **LANDED** as `support/lib1-census.py`, run by `test.sh` after
+  every emission category; it re-derives 59 in-element throwers and 0
+  reference-closure escapes instead of re-asserting them. The trust
+  catalog's retracted "live witness" sentence is corrected, and it now
+  states plainly that the figure bounds THIS CORPUS exactly and is not
+  a property of the emitter.
+  **Two things came out of BUILDING the pin, neither from the audit:**
+  (i) a partial corpus under-reports in the DANGEROUS direction —
+  found by making the mistake, scanning mid-sweep gave 27/324 and read
+  as good news — so the script asserts corpus SIZE as well; (ii) a
+  blind spot the new fold row exposed: the element scan sees a lambda
+  in the element slot but not a bare partially-applied name
+  (`foldlM … (bvUDiv_runtimeM 16) …`). It does not move the number,
+  because a left fold forces every element on both sides so there is
+  no unforced-slot divergence — RECORDED rather than patched, since
+  widening the scan would move a published figure for a reason
+  unrelated to the hazard.
+  Also corrects two arithmetic slips, re-derived from the artifact:
+  the numeral is `bvNat 8 3`, not `8 1` (`natPos(bit1(one))` = 3), and
+  the baseline was 350 then, 353 now.
 
-- [ ] **F6 (HIGH) — `residual-trust.md` §3.3 disowns
+- [x] **F6 (HIGH) — FIXED 2026-07-29.** `residual-trust.md` §3.3 disowned
   `scLiteralFold`.** It attributes all pre-translation rewriting to
   SAWCore meta-theory, but `Exporter.hs:573` composes that with
   ~130 lines of BACKEND-OWNED hand-written rewriting the Rocq path
   never runs, so "would affect Rocq identically" is backwards. It
   runs UPSTREAM of every pin (`writeLeanProp` computes arity and
   telescope after `scNormalizeForLean`), so nothing downstream
-  guards it. FIX: its own catalog entry. PIN: per-rule differential
-  rows for the guarded rules (`subNat` saturation, `expNat` 0^0,
-  `divNat`/`modNat` `bn/=0`, `intToNat` `nv>=0`). MUTATION: dropping
-  any one guard.
+  guards it.
+  **LANDED** as §3.3a, its own catalog entry, with §3.3 scoped to the
+  SAWCore half it is actually about. Verified independently before
+  writing: `scLiteralFold` has exactly 24 rules and a repo-wide search
+  finds NO caller outside `scNormalizeForLean`, so "would affect the
+  Rocq backend identically" was indeed backwards.
+  STILL OPEN, and the entry says so: the per-rule differential rows
+  against SAW's own evaluator. Write the guarded partial points first
+  (`divNat`/`modNat` at zero, `intToNat` on negatives, `subNat`
+  saturation) — those are where a rule and an evaluator most easily
+  disagree. MUTATION for that future pin: drop any one guard.
 
 - [ ] **F7 (HIGH) — the Slice-7 source lint lost the three new
   modules.** `SmokeTest.hs:1195-1209` hardcodes an 11-file list, so
@@ -306,12 +340,28 @@ because this project has shipped vacuous pins repeatedly.
   inside `Calculus.adaptTo` — red before the split, green today, red
   again after the fix.
 
-- [ ] **F8 (HIGH, ledger) — owed-pin (ii) is FALSE.** The A-6
-  guillemet pin exists at `trust-tier-selftest.sh:311-313` and its
-  non-vacuity was demonstrated by mutation (removing
-  `proof-source-lint.awk:175`'s `gsub(/[«»]/, "", out)` flips it from
-  reject to ACCEPT). Strike the owed entry, record the mutation, and
-  separately give `axiom-escaped` a required diagnostic or delete it.
+- [x] **F8 (HIGH, ledger) — CLOSED 2026-07-29, and the audit's own
+  remedy was wrong.** Owed-pin (ii) IS false: the A-6 guillemet pin
+  exists at `trust-tier-selftest.sh` (`debug-escaped`), and I
+  re-verified its non-vacuity by mutation rather than on report —
+  removing `proof-source-lint.awk`'s `gsub(/[«»]/, "", out)` flips it
+  from reject to ACCEPT. Owed entry struck.
+  **Where the audit was wrong:** it proposed "give `axiom-escaped` a
+  required diagnostic or delete it". A diagnostic CANNOT work. Under
+  the same mutation that reddens `debug-escaped`, `axiom-escaped`
+  stays green with BYTE-IDENTICAL output, so nothing in the message
+  discriminates. The reason is worth keeping: the denylist matches on
+  byte boundaries under `LC_ALL=C`, and the guillemet bytes
+  (`\xc2\xab`/`\xc2\xbb`) are themselves non-letter boundaries, so
+  `«axiom»` satisfies the plain `axiom` rule with or without
+  stripping — caught by luck of encoding, not by the fix.
+  `«debug».skipKernelTC` differs because the option rule matches a
+  DOTTED name, which the interposed bracket bytes break.
+  Disposition: KEPT (rejecting the escaped spelling is a real property
+  worth holding) with a required diagnostic so it pins its own
+  message, and with the claim it cannot support removed from its
+  comment. **F8b (MEDIUM)** — owed-pin (i) unconstructible — remains
+  open below.
   **F8b (MEDIUM):** owed-pin (i) is unconstructible as specified —
   no `.saw` script can build it because the emitter refuses the shape
   first. Close it with the F-9 treatment.
