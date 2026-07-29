@@ -652,7 +652,7 @@ checkDisjoint bak refs = go refs
     go [] = return ()
     go ((alloc, Some ptr) : rest) = do
         forM_ rest $ \(alloc', Some ptr') -> do
-            disjoint <- W4.notPred sym =<< mirRef_overlapsIO bak (ptr ^. mpRef) (ptr' ^. mpRef)
+            disjoint <- W4.notPred sym =<< mirRef_overlapsMA bak (ptr ^. mpRef) (ptr' ^. mpRef)
             assert bak disjoint $ GenericSimError $
                 "references " ++ show alloc ++ " and " ++ show alloc' ++ " must not overlap"
         go rest

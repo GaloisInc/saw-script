@@ -156,6 +156,18 @@ instance IsSymBackend Sym bak => Mir.MonadAssert Sym bak (MatchAssertM w) where
 runMatchAssert :: MatchAssertM w a -> MatchAssertEnv w -> OverrideMatcher MIR w a
 runMatchAssert (MatchAssertM m) = runReaderT m
 
+runMatchAssertSimple ::
+  MS.ConditionMetadata ->
+  (Crucible.SimErrorReason -> OverrideMatcher MIR w (OverrideFailureReason MIR)) ->
+  MatchAssertM w a ->
+  OverrideMatcher MIR w a
+runMatchAssertSimple md reason f =
+  runMatchAssert f $
+    MatchAssertEnv
+      { maeConditionMetadata = md
+      , maeFailureReason = reason
+      }
+
 assertTermEqualities ::
   SharedContext ->
   MIRCrucibleContext ->
@@ -183,15 +195,8 @@ assignVar cc md var sref@(Some ref) =
   do old <- OM (setupValueSub . at var <<.= Just sref)
      let loc = MS.conditionLoc md
      F.for_ old $ \(Some ref') ->
-       do let eq = Mir.mirRef_eqMA bak (ref^.mpRef) (ref'^.mpRef)
-          let maEnv = MatchAssertEnv
-                { maeConditionMetadata = md
-                , maeFailureReason = \_ -> pure BadEqualityComparison
-                }
-          -- We run `mirRef_eqMA` in `MatchAssertM` here because we'd like its
-          -- failure to propagate neatly during override matching, and running
-          -- it in `IO` instead will cause it to fail messily.
-          p <- runMatchAssert eq maEnv
+       do p <- runMatchAssertSimple md (\_ -> pure BadEqualityComparison) $
+            Mir.mirRef_eqMA bak (ref^.mpRef) (ref'^.mpRef)
           addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError "equality of aliased references" ""))
 
 -- | When a specification is used as a composition override, this function
@@ -620,9 +625,10 @@ enforceDisjointness cc loc ss =
               }
      -- Ensure that all regions are disjoint from each other.
      sequence_
-        [ do c <- liftIO $
-                    W4.notPred sym =<< Mir.mirRef_overlapsIO bak (p^.mpRef) (q^.mpRef)
-             addAssert c md a
+        [ do overlap <- runMatchAssertSimple md (\_ -> pure BadEqualityComparison) $
+                    Mir.mirRef_overlapsMA bak (p^.mpRef) (q^.mpRef)
+             notOverlap <- liftIO $ W4.notPred sym overlap
+             addAssert notOverlap md a
 
         | let a = Crucible.SimError loc $
                     Crucible.AssertFailureSimError "Memory regions not disjoint" ""
@@ -644,13 +650,13 @@ enforcePointerValidity cc ss =
   let mems = Map.intersectionWith (,) (view MS.csAllocs ss) sub
   F.for_ mems $ \(Some alloc, Some ptr) -> do
     -- For now, pointer is valid iff its constructor is MirReference
-    c <- liftIO $
+    let md = alloc^.maConditionMetadata
+    c <- runMatchAssertSimple md (\_ -> pure BadPointerCast) $
       Mir.readRefMuxMA bak (cc^.mccIntrinsicTypes) Crucible.BoolRepr
         (\case
           Mir.MirReference{} -> pure $ W4.truePred sym
           Mir.MirReference_Integer{} -> pure $ W4.falsePred sym)
         (ptr^.mpRef)
-    let md = alloc^.maConditionMetadata
     addAssert c md $
       Crucible.SimError (MS.conditionLoc md) $
         Crucible.AssertFailureSimError "Pointer not valid" ""
@@ -1562,7 +1568,7 @@ matchArg opts sc cc cs prepost md = go False []
              -- See Note [Matching slices in overrides] for why we do this.
              let arrElemSize = tySize col actualElemTy
              Ctx.Empty Ctx.:> Crucible.RV actualArrRef Ctx.:> Crucible.RV actualStartSym <-
-               liftIO $ Mir.mirRef_peelIndexMA bak iTypes actualSliceRef arrElemSize
+               tryMirOperation $ Mir.mirRef_peelIndexMA bak iTypes actualSliceRef arrElemSize
 
              let -- Match the expected array reference value against the actual
                  -- array reference value.
@@ -1624,7 +1630,7 @@ matchArg opts sc cc cs prepost md = go False []
           case W4.testEquality xTpr (Crucible.globalType yGlobalVar) of
             Nothing -> fail_
             Just Refl -> do
-              pred_ <- liftIO $
+              pred_ <- tryMirOperation $
                 Mir.mirRef_eqMA bak x y
               addAssert pred_ md =<< notEq
         (_, MIRVal actualShp _, MS.SetupGlobalInitializer () name) -> do
