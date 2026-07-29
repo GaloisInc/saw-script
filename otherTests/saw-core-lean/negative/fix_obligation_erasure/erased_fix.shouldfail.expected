@@ -1,0 +1,8 @@
+# S-1, Class F. The tactic-`rfl` defeq refusal. The RHS is the
+# audit's own S-1(b) witness spelling (seed laundered through
+# Classical.choice of a Nonempty), so restoring the pre-fix
+# proof-irrelevant seed makes this claim elaborate clean and the
+# harness reports "elaborated cleanly — soundness drift!". A bare
+# seed here would fail rfl against BOTH definitions and pin nothing,
+# which is what the 2026-07-28 version of this probe did.
+is not definitionally equal to the right-hand side

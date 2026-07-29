@@ -1,0 +1,7 @@
+# S-1, Class S-single. The tactic-`rfl` defeq refusal. A regression
+# that restores the proof-free body (Pure.pure of the unfold) makes
+# this claim elaborate clean, and — because this file carries ONLY
+# this claim — the harness then reports "elaborated cleanly —
+# soundness drift!" instead of silently passing on a sibling claim's
+# error.
+is not definitionally equal to the right-hand side
