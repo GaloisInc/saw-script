@@ -1631,7 +1631,24 @@ genuine proof of the equality. When it fails, the user must either:
   the first place.
 
 We never trust SAW's claim — the discharge always has to prove
-it. -/
+it.
+
+PRECISION, added 2026-07-29 (wave-2 audit, LIB-W2-2). "Always has to
+prove it" is true of the TACTIC but says nothing about how hard the
+proof is, and the emitted script's first arm is `rfl`. So the
+guarantee holds exactly to the extent that two SAW-DISTINCT operands
+are not Lean-defeq. Where a realization collapses them, `rfl` closes
+a claim SAW cannot prove — with no `sorry` and a clean
+`#print axioms`, because `all_goals` then has nothing left to mark.
+
+That is not hypothetical: it was live for `IntMod` until the same
+audit (LIB-W2-1), where `IntMod 5` and `IntMod 7` were both `Int`.
+The sentence above was read for months as though it made the
+discharge self-evidently safe; what actually makes it safe is that
+every SAW type SAW declares DISTINCT is realized distinctly. That is
+a property of the realizations, not of this tactic, and it is pinned
+in `negative/intmod_type_collapse` and
+`negative/float_double_collapse`. -/
 
 /-- Lemma library that `saw_unsafeAssert` rewrites with.
 The corresponding Rocq theorems (in

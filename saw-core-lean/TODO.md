@@ -135,8 +135,9 @@ leads with that verification, not with the panel's summary.
 
 ### BLOCKS RELEASE — confirmed by independent reproduction
 
-- [ ] **W2-MAP-1 (CRITICAL, SILENT) — `emitterBareNames` misses the
-  entire contract family.** `hardcodedBareNames`
+- [x] **W2-MAP-1 (CRITICAL, SILENT) — FIXED 2026-07-29,
+  mutation-verified.** `emitterBareNames` missed the entire contract
+  family. `hardcodedBareNames`
   (`SpecialTreatment.hs`) lists `saw_throw_error`, `vecSequenceM`,
   `atRuntimeCheckedM` and the `saw_fix_*`/`saw_mkStream_*` family, and
   NONE of the ~30 names `Contracts.hs` builds — `intDiv_checkedM`,
@@ -150,12 +151,19 @@ leads with that verification, not with the panel's summary.
   describes the enumeration as complete but for `UseMacro`.
   FIX: derive the names from `Contracts.hs` instead of hand-listing,
   so adding a contract row cannot forget to register its name.
-  PIN: a saw-boundary row with a colliding Cryptol definition,
-  expecting `EmittedNameCollision`. MUTATION: remove the derived
-  names and the row goes green (silently wrong) again.
+  **LANDED.** The complete set now lives in `Contracts.hs` (which
+  imports `SpecialTreatment`, not the reverse) and is DERIVED from the
+  contract tables, so adding a contract row registers its emitted
+  names automatically. The partial set is renamed
+  `treatmentDerivedBareNames` so it cannot be mistaken for the whole
+  again. Pinned by `saw-boundary/contract_name_collision`.
+  **MUTATION VERIFIED:** dropping `contractEmittedNames` from the
+  union makes the row exit 0 — silently accepted, exactly the pre-fix
+  behaviour.
 
-- [ ] **LIB-W2-1 (CRITICAL, SILENT) — `IntMod` is a reducible
-  constant function, so a type-level `unsafeAssert` self-discharges.**
+- [x] **LIB-W2-1 (CRITICAL, SILENT) — FIXED 2026-07-29,
+  mutation-verified.** `IntMod` was a reducible constant function, so
+  a type-level `unsafeAssert` self-discharged.
   `SAWCorePrimitives.lean:192` is
   `@[reducible] def IntMod : Nat → Type := fun _ => Int`, while
   `Prelude.sawcore` declares `primitive IntMod : Nat -> sort 0` —
@@ -174,12 +182,33 @@ leads with that verification, not with the panel's summary.
   Int`, or an `opaque` carrier). **Dropping `@[reducible]` alone is
   NOT sufficient** — a plain `def` is still delta-unfoldable and
   `rfl` still closes. Verified.
-  PIN: `#guard_msgs` self-tests in the library asserting the two
-  `rfl`s now FAIL, plus a saw-boundary row asserting the emitted
-  artifact leaves `declaration uses 'sorry'`. MUTATION: re-aliasing
-  IntMod to Int. NOTE the emitted TEXT still contains `sorry` (inside
-  `all_goals sorry`), so a textual sorry-grep does NOT discriminate —
-  the discriminators are Lean's warning and `#print axioms`.
+  **LANDED** as a `structure`. After the seal all three collapse
+  probes REJECT and the emitted tactic leaves `declaration uses
+  'sorry'` — the loud path, matching the `Float`/`Double` control.
+  Pinned by `negative/intmod_type_collapse` (three probes, ONE CLAIM
+  PER FILE).
+  **THE CLASS WAS SWEPT, not just the instance.** The shape is:
+  SAWCore declares `primitive X : sort 0` (opaque) while Lean aliases
+  it reducibly to a shared carrier. There are exactly FIVE such
+  primitives. `Float`/`Double` sealed by audit-2 F-2; `IntMod` sealed
+  here; `Integer` and `Rational` have the same shape but do NOT
+  collapse — each has a distinct carrier and no other SAW type maps
+  onto it, `IntMod` being the one that did. The class is closed, but
+  closed by coincidence of carrier choice, which is why it is now
+  pinned rather than argued.
+  **Also fixed the same S-1 MASKING DEFECT in the sibling guard:**
+  `negative/float_double_collapse` carried three claims in ONE file,
+  so the first failing claim made the row pass while the other two
+  could have gone green unnoticed — in the very row that guards the
+  F-2 seal. Split one claim per file.
+  Two notes: dropping `@[reducible]` alone would NOT have worked (a
+  plain `def` is still delta-unfoldable and `rfl` still closes —
+  verified); and LIB-3 is unchanged, since `rep` is still a
+  representative, not a residue.
+  The seal self-test lives in the TEST SUITE, not the library:
+  `#guard_msgs` would tie a trust-path file to Lean's exact error
+  wording and break on a toolchain bump for a reason unrelated to
+  soundness.
 
 ### NEEDS REPRODUCTION BEFORE IT IS ACTED ON
 
@@ -208,13 +237,64 @@ leads with that verification, not with the panel's summary.
   reachability. Do not amend the README's LIB-1 scope wording on the
   strength of W2-UNRUN-3 alone.
 
+### WAVE-3 SCOPE — what is logged for the next audit to settle
+
+Recorded here rather than acted on, because acting on an unconfirmed
+finding is how a ledger accumulates fiction.
+
+- [ ] **W2-UNRUN-1 / W2-UNRUN-3 — reproduce, or retract.** See the
+  entry above for why the claimed ordinary-Cryptol reachability did
+  not reproduce. What wave 3 must do, concretely: build a goal whose
+  emitted Lean Pi spine has a binder with an `Except`-carried domain.
+  I could not construct one — the `goal_cut` route is refused by the
+  telescope pin's ARITY half for every sequent hypothesis (verified
+  with an error-free control), and the in-term `==>` route emits an
+  equation. If wave 3 cannot construct one either, the finding should
+  be RETRACTED and the telescope pin's incidental refusal promoted to
+  a deliberate, documented one (it is currently load-bearing by
+  accident — see W2-UNRUN-4). If wave 3 CAN construct one, the fix is
+  the refuse-on-`Except`-carried-binder gate the verdict proposes,
+  which costs nothing today: ZERO of 354 artifacts is a
+  hypothesis-bearing goal.
+  **Do not amend the README's LIB-1 scope wording until this is
+  settled** — W2-UNRUN-3's claim that the shipped scope bound is false
+  rests entirely on W2-UNRUN-1's reachability.
+
+- [ ] **NEW (mine, 2026-07-29): unapplied `Prelude.coerce` emits
+  where every sibling gate rejects.** Found by sweeping the L-1 class
+  rather than by the panel. Of the seven `Term.hs` guards that
+  conjoin an ident test with an argument pattern, six reject an
+  unapplied occurrence (`unsafeAssert`, `error`, `fix`, `MkStream`,
+  `if0Nat`, `natCase`); `coerce` emits, exit 0.
+  **What I established:** the fact. **What I did NOT establish:** the
+  consequence. `coerce`'s guard is a Phase-β LOWERING, not a
+  soundness gate, and unapplied it falls through to the faithful
+  library `coerce` (= `cast`). So this may be entirely benign. But
+  the emitted form is the UN-LIFTED one, carrying `BindingFunction`
+  with no record of its formals' representation — which is the F-1
+  shape, and F-1 was a real defect. Wave 3 should decide it, and
+  should not take my "may be benign" as a finding either way.
+
 ### OTHER SURVIVORS (see the wave-2 report for the full list)
 
-- [ ] **L-1 (HIGH, SILENT)** — the IntMod modulus gate is bypassed at
-  ZERO arguments: `Term.hs`'s guard is conjoined with
-  `(modArg : _) <- args`, so an unapplied occurrence falls through to
-  the ordinary dispatch and emits a function quantified over all `n`,
-  including `n = 0`. `parse_core`-reachable.
+- [x] **L-1 (HIGH, SILENT) — FIXED 2026-07-29, verified both
+  directions.** The IntMod modulus gate was bypassed at ZERO
+  arguments: the ident-membership test was conjoined with
+  `(modArg : _) <- args`, so an unapplied occurrence fell through to
+  the ordinary dispatch and emitted a function quantified over all
+  `n`, including `n = 0`. Confirmed by running it (exit 0, silent)
+  against the applied control (rejects loudly). The membership test
+  now stands ALONE with the arity decision inside, so an unapplied
+  occurrence gets its own named rejection. Pinned by
+  `saw-boundary/intmod_zero_rejection/intmod_unapplied`.
+  **THE GENERAL LESSON, recorded because this is a CLASS:** a
+  soundness gate written as an argument-PATTERN guard is bypassable
+  by supplying fewer arguments, and the bypass is SILENT because
+  falling through a guard is how Haskell says "not my case".
+  **I swept the other six gates of this shape in `Term.hs`**
+  (`unsafeAssert`, `error`, `fix`, `MkStream`, `if0Nat`, `natCase`,
+  `coerce`) by running an unapplied occurrence of each. Five reject
+  loudly. `coerce` EMITS — see the new open item below.
 - [ ] **W2-UNRUN-2 (HIGH)** — the telescope pin's binder-TYPE half
   has zero teeth on hypothesis binders: a Prop-typed binder
   fingerprints `FpOther` and `telescopeFpMismatch` skips any position

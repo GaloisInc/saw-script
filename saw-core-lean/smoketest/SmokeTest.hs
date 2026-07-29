@@ -1205,6 +1205,13 @@ goalEmissionTests sc = testGroup "SAWCoreLean.Lean.translateGoalAsDeclImports"
 -- degrades exactly when the code is reorganised, which is exactly
 -- when it is most needed. Enumerating removes the failure mode
 -- instead of correcting this instance of it.
+-- Fails LOUDLY (an exception naming the missing directory) when run
+-- from anywhere but the repo root, rather than enumerating nothing
+-- and passing vacuously. Verified 2026-07-29 by running it from
+-- otherTests/. Do NOT make this tolerant: an empty enumeration would
+-- turn every lint below into a test that passes because it checked
+-- nothing, which is the exact defect class (V-H1) these lints exist
+-- to prevent.
 lintSourceFiles :: IO [FilePath]
 lintSourceFiles = sortOn id <$> go "saw-core-lean/src"
   where

@@ -1,0 +1,27 @@
+// L-1 pin (wave-2 release-gate audit, 2026-07-29, HIGH/SILENT).
+//
+// The modulus gate's ident-membership test used to be conjoined with
+// an ARGUMENT PATTERN (`, (modArg : _) <- args`). At zero arguments
+// that pattern failed, so the whole guard alternative fell through to
+// the ordinary dispatch — which emits, because all seven IntMod idents
+// carry non-rejecting `mapsTo` entries. The result was a well-typed
+// Lean function universally quantified over `n : Nat`, INCLUDING the
+// `n = 0` this gate exists to refuse.
+//
+// Zero-argument occurrence is not exotic: it is what an ident in
+// argument, dictionary-field or higher-order position produces. So the
+// gate could be walked around simply by never applying the operation.
+//
+// The general lesson, recorded because this is a CLASS: a soundness
+// gate written as an argument-pattern guard is bypassable by supplying
+// fewer arguments, and the bypass is SILENT, because falling through a
+// guard is how Haskell says "not my case".
+//
+// The sibling rows here (intmod_zero.saw, intmod_nonliteral.saw) both
+// use APPLIED forms, so nothing in the corpus covered arity 0.
+//
+// MUTATION: restoring `, (modArg : _) <- args` to the guard makes this
+// row emit cleanly and exit 0 — verified 2026-07-29.
+enable_experimental;
+let p = parse_core "\\(g : ((n : Nat) -> IntMod n -> IntMod n -> IntMod n) -> Bool) -> g intModAdd";
+write_lean_term "IntModUnapplied" [] [] "intmod_unapplied.lean" p;

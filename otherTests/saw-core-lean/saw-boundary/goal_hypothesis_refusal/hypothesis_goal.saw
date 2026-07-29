@@ -1,0 +1,36 @@
+// Pins that a HYPOTHESIS-BEARING goal is refused at emission
+// (2026-07-29, wave-2 release-gate audit).
+//
+// This row exists because the refusal is currently INCIDENTAL and is
+// nonetheless relied upon. `sequentToProp` folds a sequent's
+// hypotheses into a SAWCore arrow chain; the emitter does not emit
+// those binders; the goal-telescope pin's ARITY half sees the
+// disagreement and refuses. Nothing about that chain was designed to
+// police this shape — it falls out of a dropped binder.
+//
+// Why it is relied upon: wave 2 argued that IF such a binder were
+// emitted, its domain would be the hypothesis's `Except`-carried
+// image, and an erring-but-unforced computation makes that domain
+// UNINHABITED — so the implication is vacuously provable and
+// `offline_lean_replay` would admit an arbitrary conclusion. That
+// end-to-end claim did NOT reproduce and is logged for wave 3. Until
+// it is settled, this refusal is the boundary, so it gets a row.
+//
+// DELIBERATELY ERROR-FREE. An earlier draft used a vector with an
+// `error` in an unread slot, which would have made this row pass for
+// two possible reasons at once. With no error anywhere, the ONLY
+// thing that can refuse it is the shape — verified 2026-07-29 by
+// running both.
+//
+// MUTATION: teaching the emitter to emit hypothesis binders makes the
+// counts agree and this row emit cleanly. That is exactly the change
+// nobody should make until the Except-carried-domain question is
+// settled; this row is the tripwire.
+enable_experimental;
+prove_print
+  (do {
+     goal_cut {{ (1:[8]) == 1 }};
+     goal_num_when 0 (offline_lean "hypothesis_goal");
+     z3;
+   })
+  {{ (2:[8]) == 2 }};

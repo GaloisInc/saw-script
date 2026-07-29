@@ -1,0 +1,15 @@
+Loading file "hypothesis_goal.saw"
+Stack trace:
+   (builtin) in offline_lean
+   hypothesis_goal.saw:33:23-33:53 in (callback)
+   (builtin) in goal_num_when
+   hypothesis_goal.saw:33:6-33:53 in (callback)
+   (builtin) in prove_print
+   hypothesis_goal.saw:30:1-36:21 (at top level)
+Refusing to emit Lean goal: quantifier telescope mismatch.
+SAWCore goal binders: 1; emitted Lean goal binders: 0
+The emitted goal would misrepresent the proof obligation
+(goal-telescope pin; saw-core-lean replay design,
+seventh-audit amendment 1).
+
+

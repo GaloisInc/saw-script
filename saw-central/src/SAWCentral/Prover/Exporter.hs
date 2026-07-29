@@ -1328,6 +1328,31 @@ writeLeanProp name notations skips path t = do
   -- misrepresents the obligation. False positives (a legitimate
   -- shape this count does not model) fail loudly here and are the
   -- accepted cost.
+  --
+  -- LOAD-BEARING BEYOND ITS ORIGINAL PURPOSE (2026-07-29, wave-2
+  -- release-gate audit). This arity check is currently the ONLY thing
+  -- refusing a HYPOTHESIS-BEARING goal — one built with `goal_cut` /
+  -- `goal_intro_hyp`, whose sequent hypotheses `sequentToProp` folds
+  -- into a SAWCore arrow chain. The emitter does not emit those
+  -- binders, so the counts disagree and this refuses. Measured: a
+  -- hypothesis-bearing goal with NO error anywhere is refused
+  -- identically, so the refusal is about the SHAPE, not about
+  -- anything going wrong in that particular goal.
+  --
+  -- That refusal is INCIDENTAL — a side effect of the emitter
+  -- dropping a binder — and it is now relied upon, which is why it is
+  -- written down here. Wave 2 argued that if such a binder WERE
+  -- emitted, its domain would be the hypothesis's `Except`-carried
+  -- image, and an erring-but-unforced computation makes that domain
+  -- UNINHABITED — so the implication would be vacuously provable and
+  -- replay would admit an arbitrary conclusion. That end-to-end claim
+  -- did not reproduce (see TODO.md, wave-3 scope) and is unsettled.
+  --
+  -- CONSEQUENCE FOR ANYONE "FIXING" THE EMITTER TO EMIT THESE
+  -- BINDERS: do not, until the `Except`-carried-domain question is
+  -- settled. Making the counts agree would remove the only thing
+  -- currently standing between a hypothesis-bearing goal and replay.
+  -- Pinned by `saw-boundary/goal_hypothesis_refusal`.
   let sawBinders = fst (asPiList tm')
       sawArity = length sawBinders
   case Lean.translateGoalAsDeclImportsWithTelescope configuration mm (Lean.Ident (Text.unpack name)) tm' tp of
