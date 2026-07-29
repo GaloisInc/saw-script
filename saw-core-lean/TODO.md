@@ -368,15 +368,36 @@ because this project has shipped vacuous pins repeatedly.
 
 ### MEDIUM / LOW
 
-- [ ] **F9 (MEDIUM)** — the single-checker deferral's justification
-  is a non-sequitur: the CI harness never invokes
+- [x] **F9 (MEDIUM) — CORRECTED 2026-07-29** (the false justification is struck; the REBASE itself stays open under 'Replay hardening follow-ups'). The single-checker deferral's justification
+  was a non-sequitur: the CI harness never invokes
   `lean-check-core.sh`, so "checks are added to the core"
-  GUARANTEES drift. `goal-formation-trivial` has no CI counterpart.
-- [ ] **F10 (MEDIUM)** — `Proof.hs:983-991`: `LeanReplayedTheorem`
+  GUARANTEES drift — the sentence named the mechanism producing the
+  drift as the thing preventing it. `goal-formation-trivial` has no
+  CI counterpart. B1 is the same shape from the other direction: CI
+  had the elaboration order RIGHT while the product path had it
+  wrong, so for that check the product was the looser consumer.
+  Corrected in `doc/2026-07-16_replay-design.md` with what actually
+  bounds the risk today (a trivializing emitter change reddens the
+  workflow golden first) — an argument that must be re-made PER
+  GUARD, which is why the rebase is the fix.
+- [x] **F10 (MEDIUM) — FIXED 2026-07-29, mutation-verified.** `Proof.hs`: `LeanReplayedTheorem`
   absorbs `TestedTheorem`, inverting the assurance lattice, so a
   quickchecked conjunct is reported `verified-lean-replay`.
-  Reporting-only, operator-initiated. PIN: split-goal row,
-  golden = summary JSON.
+  Reporting-only, operator-initiated. **LANDED**: clause order IS the
+  assurance lattice, and it now reads weakest-first
+  (Admitted < Tested < LeanReplayed < Proved). The seventh-audit
+  amendment the instance was written for is preserved — Lean replay
+  still surfaces over a SOLVER proof, where both are proofs and which
+  engine closed it is worth knowing; it was only wrong against
+  `TestedTheorem`, which is not a proof at all, so there was no
+  dependency to surface and only assurance to lose.
+  PIN: four smoketest cases (`assurance lattice (F10)`) rather than
+  the audit's suggested summary-JSON row — the suite has no
+  summary-JSON category, and the smoketest already links saw-central,
+  so the lattice can be pinned exactly and pairwise.
+  **MUTATION:** restoring the old clause order reddens EXACTLY the
+  pair-specific case and leaves the other three green — so they
+  discriminate rather than redundantly assert.
 - [ ] **F11 (MEDIUM, docs batch)** — `architecture.md` (A-2/A-9/F-5
   recorded open against a tracker saying closed; module map missing
   seven of twelve modules; `UnrepresentableGoalShape` absent from the
@@ -384,7 +405,7 @@ because this project has shipped vacuous pins repeatedly.
   criterion is quantified over it); imported-realization contract
   absent from the catalog; two uncaveated pointers into an archived
   doc that a maintained doc cites as current.
-- [ ] **F12 (MEDIUM)** — `lean-proof-test.sh:289-295, 542-550`: a
+- [~] **F12 (MEDIUM) — ARGUED 2026-07-29; the successor stays open.** `lean-proof-test.sh`: a
   text regex decides whether the closer-to-authority binding gate
   runs at all, with no in-place argument (unlike the sibling drift
   branch, which has one).

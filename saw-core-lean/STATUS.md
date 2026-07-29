@@ -1,6 +1,11 @@
 # saw-core-lean status
 
-Last updated: 2026-07-23 (0.02 census pass: BV native-eval tier
+Last updated: 2026-07-29 (0.02 release-gate audit remediation: two
+CRITICAL unsound-acceptance paths closed — the trust kernel's
+elaboration order and the F-5 goal-shape gate's nested-sort hole —
+plus the Family-3 emission pass and the module split. Release
+posture: **NOT RELEASED**; see the findings ledger in TODO.md.
+Previous entry 2026-07-23: 0.02 census pass: BV native-eval tier
 package complete, compositional replay chains, toolchain v4.32.0,
 W2(d) hardening, docstring lint; plan:
 `doc/2026-07-14_release-plan.md` §0.02)
@@ -117,15 +122,33 @@ Passing (the standing fences):
   `lean-driver-test.sh`) green, including the ChaCha20 core verify
   workflow (explicit-literal spec spelling, Pattern 10) and the
   prelude auto-emit driver; full `make test` exit 0 on the
-  restructured tree (58 gaps in full-suite inventory scope,
-  census above).
+  restructured tree (72 gaps in full-suite inventory scope,
+  census below).
 
-Known-gap census (release 0.02 posture, taken 2026-07-23; +1 the
-same day, see the audit note below): 54 pinned `.known-gap` rows in
-conformance scope (differential 23 / obligations 18 /
-saw-boundary 13), plus 3 `proof-gaps/` rows and the stretch probe
-in the full-suite inventory — 58 total, the number `make test`
-reports.
+Known-gap census (**re-measured 2026-07-29**, release-gate audit
+finding F11 — the previous figure was 58, taken 2026-07-23, and had
+drifted 14 rows behind what `make test` actually reports; the 0.02
+exit-criterion statement below is quantified over this census, so a
+stale count silently narrows a release claim):
+
+| scope | rows |
+|---|---|
+| `obligations/` | 26 |
+| `differential/` | 24 |
+| `saw-boundary/` | 13 |
+| `proofs/` | 4 |
+| `proof-gaps/` | 3 |
+| `workflows/` | 1 |
+| `stretch/` | 1 |
+| **total** | **72** |
+
+72 is the number `make test` reports. Most of the growth since
+2026-07-23 is deliberate WITHDRAWAL rather than regression — the
+`*WithProof` primitives (LIB-2) and raw-position `Prelude.fix` (S-2)
+were removed because their emitted statements were strictly weaker
+than the SAW obligations they claimed, and each withdrawal converts
+previously-green rows into pinned gaps so the capability loss stays
+visible in this census rather than disappearing.
 
 **2026-07-23 audit + edge-case-matrix addendum.** An independent
 audit found a REAL soundness defect in the trusted support layer:

@@ -290,6 +290,35 @@ goal_output_requires_goal_closed() {
     # Decided by the tracked reference artifact (the authority), not
     # the staged file — on completed rows the staged Emitted.lean is
     # the user's outline (R-1 fix, 2026-07-24 audit).
+    #
+    # WHY A FALSE ANSWER HERE IS SAFE, written down 2026-07-29
+    # (release-gate audit, F12). This predicate decides whether the
+    # closer-to-goal binding gate runs at all, and it decides it with a
+    # regex — a C1-shaped skip if the regex could be wrong. The sibling
+    # drift branch below carries its argument in place; this one did
+    # not, and an unargued gate-skip is exactly what that finding is
+    # about.
+    #
+    # The argument: the two ways this can answer NO are not
+    # symmetric.
+    #   * Genuinely no `def goal` — a MODULE-artifact row (R3b). There
+    #     is no goal to bind a closer to, so there is nothing for the
+    #     gate to check. The drift branch below still runs, and it
+    #     checks EVERY top-level def by rfl, so the row is not
+    #     unguarded.
+    #   * A goal row whose emitted spelling drifted out of
+    #     GOAL_DEF_RE. This is the dangerous reading, and it cannot
+    #     happen silently: GOAL_DEF_RE is matched against the TRACKED
+    #     reference artifact, so any spelling change shows up first as
+    #     a `.lean.good` golden diff in the drivers/workflows row that
+    #     produces it. A drifted goal row is a red golden before it is
+    #     ever a skipped gate here.
+    #
+    # That second half is a claim about ANOTHER mechanism, which is
+    # weaker than an in-place check. The successor is a positive
+    # classifier — decide goal-row vs module-row from the row's own
+    # declared shape rather than from whether a regex happens to
+    # match — and it is tracked in TODO.md as F12's residue.
     [ -n "$STAGED_EMITTED_ABS" ] && \
       grep -qE "$GOAL_DEF_RE" "$EMITTED_REF_ABS"
 }

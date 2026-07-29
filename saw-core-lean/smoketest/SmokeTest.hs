@@ -29,6 +29,7 @@ import           SAWCentral.Prover.Exporter
                   , iterateNormalizeToFixedPoint
                   , scNormalizeForLean
                   , scNormalizeForLeanMaxIters )
+import           SAWCentral.Proof     (TheoremSummary(..))
 
 import           SAWCoreLean.Lean
 import           SAWCoreLean.SpecialTreatment (escapeIdent)
@@ -1883,6 +1884,62 @@ annotationInvariantTests sc = testGroup "annotation invariant (F-1)"
   ]
 
 --------------------------------------------------------------------------------
+-- Assurance lattice (F10, 0.02 release-gate audit)
+--------------------------------------------------------------------------------
+
+-- | 'TheoremSummary' combination must be WEAKEST-LINK: a summary over
+-- several conjuncts reports the least assurance any one of them
+-- carries. These pin the lattice pairwise, because the defect was at
+-- exactly ONE pair and everything else was already right — a test
+-- that only checked "Admitted beats everything" would have passed
+-- against the broken instance.
+assuranceLatticeTests :: TestTree
+assuranceLatticeTests = testGroup "assurance lattice (F10)"
+  [ testCase "F10: a TESTED conjunct dominates a Lean-replayed one" $ do
+      -- THE REGRESSION. Before the fix this produced
+      -- LeanReplayedTheorem, so a goal with one quickchecked conjunct
+      -- reported "status": "verified-lean-replay" in summary.json and
+      -- dropped numtests entirely — a randomly-tested claim presented
+      -- as kernel-verified. Both orders, because Semigroup is not
+      -- assumed commutative anywhere else here.
+      assertBool "tested <> lean-replayed"
+        (isTested (TestedTheorem 100 <> LeanReplayedTheorem "leanprover/lean4:v4.32.0"))
+      assertBool "lean-replayed <> tested"
+        (isTested (LeanReplayedTheorem "leanprover/lean4:v4.32.0" <> TestedTheorem 100))
+
+  , testCase "F10: an ADMITTED conjunct dominates everything" $ do
+      assertBool "admitted <> lean-replayed"
+        (isAdmitted (AdmittedTheorem "assumed" <> LeanReplayedTheorem "t"))
+      assertBool "admitted <> tested"
+        (isAdmitted (AdmittedTheorem "assumed" <> TestedTheorem 5))
+      assertBool "proved <> admitted"
+        (isAdmitted (ProvedTheorem mempty <> AdmittedTheorem "assumed"))
+
+  , testCase "F10: Lean replay still surfaces over a solver proof" $ do
+      -- The seventh-audit amendment this instance was written for is
+      -- PRESERVED: against another PROOF, the Lean dependency is the
+      -- one worth surfacing. Only the Tested pair was wrong.
+      assertBool "lean-replayed <> proved"
+        (isLeanReplayed (LeanReplayedTheorem "t" <> ProvedTheorem mempty))
+      assertBool "proved <> lean-replayed"
+        (isLeanReplayed (ProvedTheorem mempty <> LeanReplayedTheorem "t"))
+
+  , testCase "F10: tested conjuncts keep the SMALLEST sample count" $ do
+      case TestedTheorem 100 <> TestedTheorem 7 of
+        TestedTheorem n -> n @?= 7
+        other -> assertFailure ("expected TestedTheorem, got " ++ summaryName other)
+  ]
+  where
+    isTested s        = case s of TestedTheorem{}       -> True; _ -> False
+    isAdmitted s      = case s of AdmittedTheorem{}     -> True; _ -> False
+    isLeanReplayed s  = case s of LeanReplayedTheorem{} -> True; _ -> False
+    summaryName s = case s of
+      ProvedTheorem{}       -> "ProvedTheorem"
+      TestedTheorem{}       -> "TestedTheorem"
+      AdmittedTheorem{}     -> "AdmittedTheorem"
+      LeanReplayedTheorem{} -> "LeanReplayedTheorem"
+
+--------------------------------------------------------------------------------
 -- Entry point
 --------------------------------------------------------------------------------
 
@@ -1897,4 +1954,5 @@ main = do
     , antiRegressionLintTests
     , fixClassifierTests sc
     , annotationInvariantTests sc
+    , assuranceLatticeTests
     ]

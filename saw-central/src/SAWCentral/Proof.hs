@@ -980,14 +980,34 @@ data TheoremSummary
 instance Monoid TheoremSummary where
   mempty = ProvedTheorem mempty
 
+-- | Combination is WEAKEST-LINK: a summary over several conjuncts
+-- reports the least assurance any of them carries.
+--
+-- Clause order IS the assurance lattice, weakest first:
+-- Admitted < Tested < LeanReplayed < Proved.
+--
+-- F10 (0.02 release-gate audit, 2026-07-29). 'TestedTheorem' used to
+-- sit BELOW 'LeanReplayedTheorem', which inverted the lattice at
+-- exactly one pair: a goal with one quickchecked conjunct and one
+-- Lean-replayed conjunct reported @"status": "verified-lean-replay"@
+-- and dropped @numtests@ altogether, so a randomly-tested claim was
+-- presented as kernel-verified.
+--
+-- The original rationale — absorb "so a mixed Lean/SMT proof visibly
+-- carries the Lean-backed dependency" (seventh-audit amendment 4) —
+-- is still honoured, and still correct, against 'ProvedTheorem':
+-- both are proofs, and which engine closed it is worth surfacing.
+-- It was wrong against 'TestedTheorem' because that is not a proof
+-- at all, so there is no dependency to surface, only assurance to
+-- lose.
 instance Semigroup TheoremSummary where
   AdmittedTheorem msg <> _ = AdmittedTheorem msg
   _ <> AdmittedTheorem msg = AdmittedTheorem msg
-  LeanReplayedTheorem t <> _ = LeanReplayedTheorem t
-  _ <> LeanReplayedTheorem t = LeanReplayedTheorem t
   TestedTheorem x <> TestedTheorem y = TestedTheorem (min x y)
   TestedTheorem x <> _ = TestedTheorem x
   _ <> TestedTheorem y = TestedTheorem y
+  LeanReplayedTheorem t <> _ = LeanReplayedTheorem t
+  _ <> LeanReplayedTheorem t = LeanReplayedTheorem t
   ProvedTheorem s1 <> ProvedTheorem s2 = ProvedTheorem (s1<>s2)
 
 

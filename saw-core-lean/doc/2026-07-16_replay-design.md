@@ -234,6 +234,29 @@ Recorded deviations for the reviewer:
    implementation. Until the rebase lands, the single-checker
    principle holds by construction discipline (checks are added to
    the core), not by mechanism. Immediate follow-up.
+
+   **CORRECTION 2026-07-29 (release-gate audit, F9): that
+   justification is a non-sequitur, and it pointed the wrong way.**
+   "Checks are added to the core" cannot make the single-checker
+   principle hold while the CI harness never INVOKES the core — it
+   guarantees the opposite. Every check added to `lean-check-core.sh`
+   from that day forward was, by that very discipline, added to only
+   one of the two consumers. The sentence described the mechanism
+   producing the drift as the thing preventing it.
+
+   The drift is measurable, not hypothetical: `goal-formation-trivial`
+   (the anti-trivialization probe) exists in the core and has no CI
+   counterpart. B1 in the same audit is the same shape from the other
+   direction — the CI harness had the elaboration ORDER right while
+   the product path had it wrong, so for that check the product was
+   the looser consumer.
+
+   What actually bounds the risk today, stated as a claim that can be
+   checked rather than a discipline: a trivializing emitter change
+   turns the corresponding workflow golden red before the missing CI
+   probe would have fired. That is a real backstop for THIS guard and
+   an argument that must be re-made per guard — which is why the
+   rebase, not the discipline, is the fix. Tracked in TODO.md.
 3. Reject-row v1 subset: sorry + axiom-introduce (the allowlist line
    that also catches native_decide's ofReduceBool). Env-overriding,
    stale-drift, timeout, and name-rebind rows deferred with the

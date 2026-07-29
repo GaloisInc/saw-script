@@ -143,6 +143,22 @@ run_probe() {
     echo "--- $probe (expected: fail) ---"
     echo "$out"
     echo "exit=$rc"
+    # F13 (0.02 release-gate audit, 2026-07-29): distinguish a
+    # RESOURCE event from a semantic one BEFORE concluding anything.
+    # `rc` was captured and then discarded, and the only test was
+    # "does the output contain a `file: error` line". A `timeout` kill
+    # produces no such line, so an OOM or a runaway elaboration was
+    # reported as "elaborated cleanly — soundness drift!" — the single
+    # most alarming verdict this harness can emit, produced by a
+    # machine being busy. A trust-path harness must never let those two
+    # read the same.
+    if [ "$rc" -eq 124 ] || [ "$rc" -gt 128 ]; then
+        echo "FAIL: $probe was KILLED (rc=$rc, timeout or signal) — this is a"
+        echo "  RESOURCE event, not a soundness verdict. The probe neither"
+        echo "  elaborated nor failed to; re-run it in isolation."
+        status=1
+        return
+    fi
     if ! echo "$out" | grep -qE "^[^[:space:]]+: error" ; then
         echo "FAIL: $probe elaborated cleanly — soundness drift!"
         status=1

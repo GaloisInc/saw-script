@@ -176,11 +176,18 @@ run-tests() {
                 } >"$TEST.lean.obsolete-helpers.fail"
             fi
 
+            # F13 (2026-07-29): restore the PRIOR state, which is
+            # errexit OFF — this script sets only `set -u`. The old
+            # `set -e` here turned errexit ON for everything after the
+            # first row's elaboration, so a later nonzero command would
+            # abort the sweep mid-way instead of being recorded as a
+            # row failure. Latent today only because the rows that
+            # reach here emit in a shape that happens not to trip it.
             set +e
             bash "$(dirname "$0")/lean-elaborate.sh" $EMITTED_FILES \
                 >"$TEST.lean.elaboration" 2>&1
             rc=$?
-            set -e
+            set +e
             if [ "$rc" -ne 0 ]; then
                 echo "ELABORATION FAILED (rc=$rc)" >"$TEST.lean.elaboration.fail"
             fi

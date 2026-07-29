@@ -112,10 +112,24 @@ saw-core-lean/
 │   └── SAWCoreCtorOrder.lean          (saw_ctor_order assertion command)
 ├── src/SAWCoreLean/          (Haskell translator)
 │   ├── Lean.hs               (top-level entry points)
-│   ├── Term.hs               (term translation)
 │   ├── Monad.hs              (TranslationMonad + errors)
 │   ├── SpecialTreatment.hs   (SAW name → Lean target table)
+│   ├── Convention.hs         (calculus VOCABULARY + the translation Γ)
+│   ├── Calculus.hs           (calculus RULES + identifier targeting)
+│   ├── Signature.hs          (what a declaration DECLARES —
+│   │                          the annotation-invariant chokepoint)
+│   ├── Obligations.hs        (proof-carrying application builders,
+│   │                          OP-2 interval domain, placeholders)
+│   ├── Contracts.hs          (partial-op / checked-application tables)
+│   ├── FixRecognizer.hs      (Class-F/Class-S fix classification)
+│   ├── Term.hs               (the recursive translator)
+│   ├── SAWModule.hs          (SAWCore-module path)
 │   └── CryptolModule.hs      (Cryptol-module specific path)
+│
+│   Layered bottom-up with no upward edges:
+│   Monad → SpecialTreatment → Convention → Calculus → Signature
+│         → Obligations → Term. The split landed 2026-07-29;
+│   see doc/2026-07-29_annotation-invariant.md.
 ├── smoketest/SmokeTest.hs    (Tasty unit tests)
 └── ...
 ```
@@ -154,7 +168,13 @@ user-facing summary is archived at
   (Nat/Pos/Z/AccessibleNat/AccessiblePos
   `#rec` survivors), `RejectedPrimitive` (`fix_unfold` and other
   primitives with no proof-carrying interface),
-  `scNormalize` 100-iter cap. Each pinned by a regression test.
+  `UnrepresentableGoalShape` (a goal whose emitted form would state
+  something other than the SAWCore obligation — universe-polymorphic
+  sorts, and sort-typed binders including sorts NESTED inside a
+  binder's type), `ForbiddenAdaptation` (the `adaptTo` chokepoint
+  asked for a representation change no adapter reaches),
+  `EmittedNameCollision`, `scNormalize` 100-iter cap. Each pinned by
+  a regression test.
 - **Proof-carrying `Prelude.fix`** (two-state since R4,
   2026-07-16): a WRAPPED (value-domain) fix either matches a
   recognized productive class and lowers to a PROVEN realization —
