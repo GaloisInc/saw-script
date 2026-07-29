@@ -123,6 +123,15 @@ type SetupCondition = MS.SetupCondition MIR
 -- various functions in this module as arguments. So instead we put a 'ReaderT'
 -- on top, which can then be supplied with the right inputs at the call site of
 -- the "Mir.Intrinsics" operation.
+--
+-- Many operations on 'MirReferenceMux' (a.k.a. @RegValue sym MirReferenceRepr@)
+-- can fail if the input is an empty 'FancyMuxTree' (or, for operations with
+-- two inputs, if there is no condition under which both 'FancyMuxTree's have
+-- values).  This specifically applies to operations that return types other
+-- than 'MirReferenceMux', since these operations typically don't have good
+-- default values to return when the input 'FancyMuxTree' is empty.  Operations
+-- that take and return 'MirReferenceMux' can instead return an empty output
+-- when the input is empty.
 newtype MatchAssertM w a =
   MatchAssertM (ReaderT (MatchAssertEnv w) (OverrideMatcher' Sym MIR w IO) a)
   deriving (Functor, Applicative, Monad, MonadIO)
