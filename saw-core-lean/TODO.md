@@ -307,13 +307,30 @@ finding is how a ledger accumulates fiction.
   green end-to-end (1326s). Residual: nothing asserts the two
   invocation paths stay equivalent — logged for wave 3.
 
-- [ ] **Convergence proposal §7.2: the two real conversions are
-  SCOPED, not done.** See `2026-07-29_unregistered-name-design.md`:
-  the `hardcodedBareNames` residue (128 inline `Lean.Ident`
-  spellings; lint first, registry-by-construction later) and
-  `leanOpaqueBuiltins` (dead-entry check + treatment-vs-opacity
-  coverage check; the live hazard shape is L-16). Wave 3 should
-  treat any CRITICAL landing in either as CONFIRMING the proposal's
+- [x] **Convergence proposal §7.2, pre-wave-3 halves: DONE
+  (2026-07-30).** Per `2026-07-29_unregistered-name-design.md`:
+  - §3a stage 1: the spelling lint ("every inline `Lean.Ident`
+    spelling is registered or a generated binder", SmokeTest) — the
+    shadower/reference split is DERIVED from the trailing-underscore
+    naming convention, with a companion check pinning the
+    convention's blind spot. Its first run found **11 unaccounted
+    names** (heads `CryptolToLean`, `Not`, `LT`, `LE`, plus
+    `bvNonzeroM`/`ecSignedBVNonzeroM` — checked-contract wrappers
+    the contract-derived set missed because they are spelled at the
+    point of use — and `succ_macro`, `gen`, `foldr`, `foldl`). All
+    registered; the full gate confirms zero corpus churn.
+  - §3b both directions: `auditLeanOpaqueDeadEntries` (no dead rows
+    today; guards renames/deletions) and
+    `auditLeanHandwrittenRealizationOpacity` (9 violations on first
+    run, each assessed against its quoted SAWCore body and waived
+    with a stated reason in `leanSafeToUnfoldRealizations` —
+    sawLet is beta-only, xor/boolEq/is_bvult stop at an opaque
+    sibling, bvUExt/bvSExt/rationalZero are differential-pinned,
+    seq's unfolding is the intended type-level dispatch).
+  All three checks mutation-verified red. REMAINING (post-0.02):
+  §3a stage 2, the registry-by-construction refactor of the ~128
+  inline spellings. Wave 3 should treat any CRITICAL landing in the
+  remaining hand enumerations as CONFIRMING the proposal's
   diagnosis, and any CRITICAL landing in a *derived* enumeration or
   by-construction chokepoint as REFUTING it.
 

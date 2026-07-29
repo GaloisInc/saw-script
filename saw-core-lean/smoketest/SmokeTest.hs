@@ -18,6 +18,7 @@ import           Prettyprinter        (Doc, defaultLayoutOptions, layoutPretty)
 import           Prettyprinter.Render.String (renderString)
 
 import           SAWCore.Prelude     (scLoadPreludeModule)
+import           CryptolSAWCore.Prelude (scLoadCryptolModule)
 import qualified SAWCore.QualName    as QN
 import           SAWCore.SharedTerm
 import           SAWCore.Term.Functor (mkSort, propSort)
@@ -25,6 +26,8 @@ import           SAWCore.Term.Functor (mkSort, propSort)
 import           SAWCentral.Prover.Exporter
                   ( auditPreludePrimitivesForLean
                   , auditOpaqueBuiltinsCoveredBySpecialTreatment
+                  , auditLeanOpaqueDeadEntries
+                  , auditLeanHandwrittenRealizationOpacity
                   , discoverNatRecReachers
                   , iterateNormalizeToFixedPoint
                   , scNormalizeForLean
@@ -32,6 +35,7 @@ import           SAWCentral.Prover.Exporter
 import           SAWCentral.Proof     (TheoremSummary(..))
 
 import           SAWCoreLean.Lean
+import           SAWCoreLean.Contracts (emitterBareNames)
 import           SAWCoreLean.SpecialTreatment (escapeIdent)
 import           SAWCoreLean.Term (FixClass(..), classifyFixShape)
 import           SAWCoreLean.Convention (ArgMode(..))
@@ -496,6 +500,39 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
           "\nAdd a mapsTo entry in " ++
           "saw-core-lean/src/SAWCoreLean/SpecialTreatment.hs for each, " ++
           "and define the corresponding Lean function in SAWCorePrimitives.lean."
+
+  , testCase "no leanOpaqueBuiltins entry is dead (resolves in loaded modules)" $ do
+      -- Dead-entry direction (2026-07-29 design note §3b). An entry
+      -- naming a primitive that was renamed or deleted resolves to
+      -- nothing and protects nothing — the don't-unfold protection
+      -- ends silently, which is how every hand list here has rotted.
+      -- Prelude AND Cryptol modules are loaded in main, so a live
+      -- entry cannot be misreported dead.
+      dead <- auditLeanOpaqueDeadEntries sc
+      assertBool
+        ("leanOpaqueBuiltins entr(ies) resolve to NOTHING in the \
+         \loaded SAWCore modules — the def was renamed or deleted \
+         \and this row is dead; fix the name or delete the row: "
+         ++ show dead)
+        (null dead)
+
+  , testCase "every handwritten-routed bodied def is opaque or waived" $ do
+      -- Coverage direction (2026-07-29 design note §3b). The
+      -- treatment table promises "use the handwritten Lean" for
+      -- these defs; if scNormalizeForLean may unfold their SAW
+      -- bodies first, the promise silently fails and the emitted
+      -- term is whatever the body lowers to — the L-16 hazard shape
+      -- (unfolded ite = Bool#rec with SAW's argument order, read by
+      -- Lean in the opposite order). Every violation must become an
+      -- opacity entry or a reasoned waiver in
+      -- 'leanSafeToUnfoldRealizations'.
+      violations <- auditLeanHandwrittenRealizationOpacity sc defaultConfig
+      assertBool
+        ("bodied def(s) whose treatment routes to a handwritten \
+         \CryptolToLean realisation are NOT opaque under \
+         \scNormalizeForLean and NOT waived — normalization can \
+         \bypass the handwritten Lean: " ++ show violations)
+        (null violations)
 
   , testCase "every Prelude primitive is mapped or intentional (L-14)" $ do
       -- L-14 lockdown. Every SAW Prelude primitive (def with no
@@ -1324,6 +1361,74 @@ antiRegressionLintTests = testGroup "anti-regression source lint (Slice 7)"
          \conventions and production records, never from emitted Lean: "
          ++ show hits)
         (null hits)
+  , testCase "every inline Lean.Ident spelling is registered or a generated binder" $ do
+      -- W2-MAP-1's remaining edge (2026-07-29 design note §3a stage
+      -- 1). 'emitterBareNames' is the capture-avoidance set: a name
+      -- the emitter REFERENCES that is missing from it lets a user
+      -- binder of that name capture the reference silently. The
+      -- emitter also writes names as string literals at the point
+      -- of use, and nothing connected those spellings to the set —
+      -- this lint does. Every non-comment `Lean.Ident "…"` literal
+      -- in src must be one of:
+      --
+      --   * a GENERATED BINDER the emitter introduces (a shadower,
+      --     deliberately NOT in the capture set — the 2026-07-26
+      --     NOTE in SpecialTreatment.hs). Derived from the naming
+      --     convention, not a hand list: after stripping trailing
+      --     digits it ends in '_' (x__, scrut_, h_proof_, v_1 …).
+      --   * "_" (a hole), or
+      --   * a REFERENCE whose head segment (before any '.') is in
+      --     'emitterBareNames' — registered for capture avoidance.
+      --
+      -- The convention's blind spot is pinned by the companion
+      -- check below: no registered name may end in '_', so nothing
+      -- can be classified into the shadower bucket by accident.
+      files   <- lintSourceFiles
+      sources <- mapM readFile files
+      let marker = "Lean.Ident \""
+          literalsIn l =
+            [ takeWhile (/= '"') rest
+            | t <- tails l, marker `isPrefixOf` t
+            , let rest = drop (length marker) t ]
+          spellings =
+            [ (file, name)
+            | (file, source) <- zip files sources
+            , l <- lintCodeLines source
+            , name <- literalsIn l ]
+          registered = emitterBareNames defaultConfig
+          headSegment = takeWhile (/= '.')
+          isGeneratedBinder n =
+            case reverse (dropWhile (`elem` ("0123456789" :: String))
+                            (reverse n)) of
+              "" -> False
+              s  -> last s == '_'
+          unaccounted =
+            [ (f, n)
+            | (f, n) <- spellings
+            , n /= "_"
+            , not (isGeneratedBinder n)
+            , Lean.Ident (headSegment n) `Set.notMember` registered ]
+          registeredEndingUnderscore =
+            [ n | Lean.Ident n <- Set.toList registered
+                , isGeneratedBinder n ]
+      assertBool
+        "no Lean.Ident literals found in src at all — the extractor \
+        \pattern drifted and this lint is scanning for nothing"
+        (not (null spellings))
+      assertBool
+        ("registered bare name(s) end in '_', which the shadower \
+         \convention would misclassify as generated binders — rename \
+         \them or revisit the convention: "
+         ++ show registeredEndingUnderscore)
+        (null registeredEndingUnderscore)
+      assertBool
+        ("emitter writes name(s) as Lean.Ident literals that are NOT \
+         \in emitterBareNames (file, name) — a user binder with that \
+         \name captures the emitter's reference silently. Register \
+         \each in hardcodedBareNames (SpecialTreatment.hs) or, if it \
+         \is a generated binder, give it a trailing-underscore name: "
+         ++ show unaccounted)
+        (null unaccounted)
   , testCase "emitted-type self-mirror counts are exact" $ do
       files   <- lintSourceFiles
       sources <- mapM readFile files
@@ -2005,6 +2110,11 @@ main :: IO ()
 main = do
   sc <- mkSharedContext
   scLoadPreludeModule sc
+  -- The Cryptol SAWCore module too: the leanOpaqueBuiltins audits
+  -- must resolve entries that live there (ecSDiv, ecSMod), and a
+  -- dead-entry check against a partially loaded world would report
+  -- live entries as dead.
+  scLoadCryptolModule sc
   defaultMain $ testGroup "saw-core-lean smoke tests"
     [ prettyPrinterTests
     , translatorTests sc

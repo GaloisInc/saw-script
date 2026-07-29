@@ -473,7 +473,12 @@ treatmentDerivedBareNames configuration =
 -- table: carrier and monad names from the value convention, the
 -- runtime-checked wrappers, the obligation binders, and the
 -- generated-variable prefixes. Kept beside 'emitterBareNames' so a
--- new hardcoded emission has one obvious place to be registered.
+-- new hardcoded emission has one obvious place to be registered —
+-- and since 2026-07-29 the smoketest lint "every inline Lean.Ident
+-- spelling is registered or a generated binder" enforces it: an
+-- inline @Lean.Ident "…"@ reference whose head is missing here (or
+-- from the derived sets) fails the build, so this list can no
+-- longer silently lag the spellings it mirrors.
 hardcodedBareNames :: Set Lean.Ident
 hardcodedBareNames = Set.fromList $ map Lean.Ident $ concatMap words
     -- Value-convention carriers, and the names Lean itself supplies
@@ -486,6 +491,19 @@ hardcodedBareNames = Set.fromList $ map Lean.Ident $ concatMap words
   , "saw_fix_bounded_productive saw_mkStream_choose"
   , "saw_mkStream_total_exists saw_stream_realize"
   , "saw_stream_single_productive"
+    -- 2026-07-29, found by the spelling lint's first run — names
+    -- referenced inline that no set accounted for. `CryptolToLean`
+    -- is the namespace ROOT: every fully-qualified reference
+    -- (`CryptolToLean.SAWCorePrimitives.zero_macro`, …) is captured
+    -- whole by a user binder of that name. `Not`/`LT`/`LE` are Lean
+    -- core references in emitted obligations. `bvNonzeroM` /
+    -- `ecSignedBVNonzeroM` are checked-contract wrappers spelled at
+    -- the point of use, which is exactly why the contract-derived
+    -- set missed them. `succ_macro` has a bare spelling in
+    -- Contracts.hs. `gen`/`foldr`/`foldl` are the raw logical twins
+    -- ('rawLogicalTwin') emitted bare in raw mode.
+  , "CryptolToLean Not LT LE bvNonzeroM ecSignedBVNonzeroM"
+  , "succ_macro gen foldr foldl"
   ]
 
 -- NOTE (2026-07-26): the emitter's own GENERATED binder prefixes

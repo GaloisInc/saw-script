@@ -49,6 +49,8 @@ module SAWCentral.Prover.Exporter
   , discoverNatRecReachers
   , auditPreludePrimitivesForLean
   , auditOpaqueBuiltinsCoveredBySpecialTreatment
+  , auditLeanOpaqueDeadEntries
+  , auditLeanHandwrittenRealizationOpacity
   , writeCore
   , writeVerilog
   , writeVerilogSAT
@@ -62,7 +64,7 @@ module SAWCentral.Prover.Exporter
 import Data.Foldable(toList)
 import qualified Data.Foldable as Foldable
 
-import Control.Monad (unless)
+import Control.Monad (filterM, unless)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.State (gets, liftIO)
 import Data.IORef (newIORef, readIORef, modifyIORef')
@@ -92,6 +94,7 @@ import qualified Data.IntMap as IntMap
 import SAWCore.Module (emptyModule, moduleDecls,
                        allModuleDefs, defBody, defName)
 import SAWCore.Name (VarName(..), mkModuleName,
+                     moduleNamePieces,
                      nameIndex, nameInfo,
                      toAbsoluteName,
                      identName, identModule)
@@ -964,6 +967,109 @@ leanOpaqueBuiltinsIntentionallyUnmapped =
     -- SAW terms, both of which are out-of-scope.
   , "Nat__rec", "Nat_cases", "Nat_cases2", "natCase", "if0Nat"
   , "AccessibleNat_all"
+  ]
+
+-- | Dead-entry direction of the 2026-07-29 design note (§3b): every
+-- 'leanOpaqueBuiltins' entry must still RESOLVE to something in the
+-- loaded SAWCore modules. An entry that resolves to nothing is a
+-- dead row — the primitive it protected was renamed or deleted, and
+-- its don't-unfold protection silently ended (the same rot as a
+-- waiver for a guard that no longer exists). Caller must have
+-- loaded every module the entries name (Prelude AND Cryptol —
+-- @ecSDiv@/@ecSMod@ live in the latter).
+auditLeanOpaqueDeadEntries :: SharedContext -> IO [Text]
+auditLeanOpaqueDeadEntries sc =
+  filterM (\nm -> null <$> SC.scResolveName sc nm) leanOpaqueBuiltins
+
+-- | Coverage direction of the 2026-07-29 design note (§3b): every
+-- SAWCore def WITH A BODY whose use-site treatment routes to a
+-- HANDWRITTEN Lean realisation (a @CryptolToLean.*@ support module)
+-- must be opaque under 'scNormalizeForLean' — via
+-- 'leanOpaqueBuiltins' or the auto-derives — or carry a
+-- safe-to-unfold waiver below. Otherwise normalization can unfold
+-- the SAW body and the handwritten realisation never fires; the
+-- canonical hazard is L-16, where unfolding @ite@ surfaces a bare
+-- @Bool#rec@ whose argument order Lean reads OPPOSITE to SAW —
+-- silently swapping the branches. The treatment table promises "use
+-- the handwritten Lean"; this audit makes the promise hold under
+-- normalization too.
+auditLeanHandwrittenRealizationOpacity ::
+  SharedContext -> Lean.TranslationConfiguration -> IO [Text]
+auditLeanHandwrittenRealizationOpacity sc config = do
+  mm <- scGetModuleMap sc
+  builtinIdxs <- mconcat <$> traverse (SC.scResolveName sc) leanOpaqueBuiltins
+  derivedIdxs <- discoverNatRecReachers sc
+  enumEncIdxs <- discoverEnumEncodingReachers sc
+  let opaqueSet = Set.unions
+        [ derivedIdxs, enumEncIdxs, Set.fromList builtinIdxs ]
+      stmap = Lean.specialTreatmentMap config
+      isHandwrittenModule m = case moduleNamePieces m of
+        ("CryptolToLean" : _) -> True
+        _                     -> False
+      routesToHandwritten t = case Lean.atUseSite t of
+        Lean.UseRename (Just m) _ _     -> isHandwrittenModule m
+        Lean.UseRenameUniv (Just m) _ _ -> isHandwrittenModule m
+        Lean.UseMapsToWrapped _ _       -> True
+        _                               -> False
+      violations =
+        [ Text.pack short
+        | d <- allModuleDefs mm
+        , Just _ <- [defBody d]
+        , ModuleIdentifier i <- [nameInfo (defName d)]
+        , let short = identName i
+        , Just perModule <- [Map.lookup (identModule i) stmap]
+        , Just treatment <- [Map.lookup short perModule]
+        , routesToHandwritten treatment
+        , nameIndex (defName d) `Set.notMember` opaqueSet
+        , short `notElem` leanSafeToUnfoldRealizations
+        ]
+  pure violations
+
+-- | Waivers for 'auditLeanHandwrittenRealizationOpacity': defs whose
+-- treatment routes to a handwritten realisation but whose SAW body
+-- may safely unfold, each WITH THE REASON the unfolding is safe.
+-- The audit fails on any bodied, handwritten-routed def that is
+-- neither opaque nor listed here — so a new entry must argue its
+-- safety in this comment, not just add its name. Bodies quoted from
+-- Prelude.sawcore / Cryptol.sawcore, verified 2026-07-29.
+leanSafeToUnfoldRealizations :: [String]
+leanSafeToUnfoldRealizations =
+  [ -- @sawLet _ _ x f = f x@ — unfolding is beta and nothing else;
+    -- no operator, no recursor, no argument-order content.
+    "sawLet"
+    -- @xor b1 b2 = ite Bool b1 (not b2) b2@ and
+    -- @boolEq b1 b2 = ite Bool b1 b2 (not b2)@ — unfold exactly one
+    -- step and stop at OPAQUE 'ite' (the L-16 wrapper), the chain
+    -- already documented at the 'leanOpaqueBuiltins' definition for
+    -- their not/and/or siblings.
+  , "xor", "boolEq"
+    -- @eqNat x y = Eq Nat x y@ — unfolds to core 'Eq' applied; no
+    -- recursor, no order-sensitive intermediary.
+  , "eqNat"
+    -- @is_bvult n x y = Eq Bool (bvult n x y) True@ — stops at
+    -- OPAQUE 'bvult' under core 'Eq'.
+  , "is_bvult"
+    -- @bvUExt m n x = append m n Bool (bvNat m 0) x@ and
+    -- @bvSExt m n x = append m (Succ n) Bool (replicateBool m (msb n x)) x@
+    -- — 'bvNat' is opaque; append/replicateBool/msb are mapped Vec
+    -- primitives with faithful realisations. Unfolding here is
+    -- DESIRED, not merely tolerated: blocking it regressed
+    -- test_arithmetic.t11 (see the L-3 walker NOTE above), and the
+    -- differential bv rows (cryptol_bv_sext, bitvector_*) pin the
+    -- unfolded form's semantics.
+  , "bvUExt", "bvSExt"
+    -- @rationalZero = ratio (natToInt 0) (natToInt 1)@ — literal
+    -- construction through the mapped 'ratio'; differential
+    -- rational_scalar pins the surface.
+  , "rationalZero"
+    -- @seq num a = Num#rec1 … (Vec n a) (Stream a) num@ — the
+    -- type-level dispatcher whose unfolding IS the intended
+    -- semantics: a concrete Num iota-reduces to Vec/Stream during
+    -- normalization (every Cryptol sequence type in the corpus),
+    -- and a symbolic Num routes through the checked Num recursor
+    -- dispatch (ctor order pinned by SAWCoreCtorOrder). The
+    -- handwritten target serves unreduced references only.
+  , "seq"
   ]
 
 -- NOTE (audit 2026-05-07): a previous version of this module
