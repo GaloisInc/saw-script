@@ -1,0 +1,5 @@
+# The seal is a `structure`, so the two type applications are not
+# defeq and `rfl` fails to elaborate. A regression that re-aliases
+# `IntMod` to `Int` — with or without `@[reducible]`, since a plain
+# `def` is still delta-unfoldable — makes this elaborate CLEAN.
+Type mismatch

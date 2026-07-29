@@ -187,31 +187,69 @@ modulus 0 and at any non-literal modulus (Term.hs
 
 The signatures match `Prelude.sawcore` lines 2126-2135 exactly. -/
 
-/-- SAWCore `IntMod n` — Cryptol's `Z n`, represented as `Int` with
-every value implicitly reduced mod `n` (see the section comment). -/
-@[reducible] def IntMod : Nat → Type := fun _ => Int
+/-- SAWCore `IntMod n` — Cryptol's `Z n`, carrying a representative.
+
+SEALED 2026-07-29 (wave-2 release-gate audit, LIB-W2-1 — CRITICAL).
+This was `@[reducible] def IntMod : Nat → Type := fun _ => Int`, and
+that made distinct moduli the SAME Lean type: `IntMod 5`, `IntMod 7`
+and `Integer` all whnf'd to `Int`. SAWCore declares
+`primitive IntMod : Nat -> sort 0` — OPAQUE, with no reduction rule
+identifying `IntMod 5` with `IntMod 7` — so the collapse let
+`unsafeAssert (sort 0) (IntMod 5) (IntMod 7)` be discharged by the
+emitted tactic's `rfl` arm. `unsafeAssert` is precisely SAW's
+admission that it has NO proof, and the emitted obligation closed
+with no `sorry` and a clean `#print axioms`, then fed `coerce`
+(= `cast`) to reinterpret a `Z 5` value as a `Z 7` one. Same defect
+class as audit-2 F-2 (`Float`/`Double`), on a type family nobody had
+sealed.
+
+A `structure` is the seal: `IntMod 5` and `IntMod 7` are distinct
+applications of one inductive, so they are not defeq, and neither is
+defeq to `Integer`. Dropping `@[reducible]` alone would NOT have
+worked — a plain `def` is still delta-unfoldable by the kernel and
+`rfl` still closes; that was verified before choosing this.
+
+What does NOT change: `rep` is still a REPRESENTATIVE, not a residue,
+so a bound `(x : IntMod n)` still ranges over a strictly larger
+domain than `Z n` — LIB-3 in `doc/2026-05-02_residual-trust.md` §3.2d
+stands exactly as written. The operations below still reduce, so the
+differential observers (which project through `intModEq`/`fromIntMod`
+to `Bool` before observing) are unaffected. -/
+structure IntMod (n : Nat) where
+  /-- The integer representative; canonical only after `Int.fmod`. -/
+  rep : Int
 /-- SAWCore `toIntMod` — inject an `Int` into `Z n` by reducing. -/
-@[reducible] def toIntMod : (n : Nat) → Int → IntMod n := fun n x => Int.fmod x n
+@[reducible] def toIntMod : (n : Nat) → Int → IntMod n :=
+  fun n x => ⟨Int.fmod x n⟩
 /-- SAWCore `fromIntMod` — the canonical representative in `[0, n)`
 (floor modulus; identity at `n = 0`, where SAW itself has no value —
 see the section's `n = 0` caveat). -/
-@[reducible] def fromIntMod : (n : Nat) → IntMod n → Int := fun n x => Int.fmod x n
+@[reducible] def fromIntMod : (n : Nat) → IntMod n → Int :=
+  fun n x => Int.fmod x.rep n
 /-- SAWCore `intModEq` — equality in `Z n`, decided on canonical
 representatives. -/
 @[reducible] def intModEq : (n : Nat) → IntMod n → IntMod n → Bool :=
-  fun n x y => decide (Int.fmod x n = Int.fmod y n)
+  fun n x y => decide (Int.fmod x.rep n = Int.fmod y.rep n)
 /-- SAWCore `intModAdd` — addition in `Z n`. -/
 @[reducible] def intModAdd : (n : Nat) → IntMod n → IntMod n → IntMod n :=
-  fun n x y => Int.fmod (x + y) n
+  fun n x y => ⟨Int.fmod (x.rep + y.rep) n⟩
 /-- SAWCore `intModSub` — subtraction in `Z n`. -/
 @[reducible] def intModSub : (n : Nat) → IntMod n → IntMod n → IntMod n :=
-  fun n x y => Int.fmod (x - y) n
+  fun n x y => ⟨Int.fmod (x.rep - y.rep) n⟩
 /-- SAWCore `intModMul` — multiplication in `Z n`. -/
 @[reducible] def intModMul : (n : Nat) → IntMod n → IntMod n → IntMod n :=
-  fun n x y => Int.fmod (x * y) n
+  fun n x y => ⟨Int.fmod (x.rep * y.rep) n⟩
 /-- SAWCore `intModNeg` — negation in `Z n`. -/
 @[reducible] def intModNeg : (n : Nat) → IntMod n → IntMod n :=
-  fun n x => Int.fmod (-x) n
+  fun n x => ⟨Int.fmod (-x.rep) n⟩
+
+-- SEAL SELF-TEST for LIB-W2-1 lives in the test suite, not here:
+-- `otherTests/saw-core-lean/negative/intmod_type_collapse/`. It is a
+-- `.shouldfail.lean` probe — this project's idiom for "must not
+-- elaborate" — which pins a diagnostic SUBSTRING rather than an exact
+-- compiler message. `#guard_msgs` would tie a trust-path file to
+-- Lean's error wording and break on a toolchain bump for a reason
+-- unrelated to soundness.
 
 /-! ## Rational (Phase 6 → Phase 9 follow-up)
 

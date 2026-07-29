@@ -28,8 +28,11 @@ module SAWCoreLean.Contracts
   ) where
 
 import qualified Control.Monad.Except         as Except
+import           Control.Monad.Reader         (asks)
 import           Data.List                    (find)
 import qualified Data.Set                     as Set
+import qualified Data.Text                    as Text
+import           Data.Text                    (Text)
 import           Data.Set                     (Set)
 import           Prelude                      hiding (fail)
 
@@ -39,6 +42,7 @@ import           SAWCore.Name
 
 import           SAWCoreLean.Convention
 import           SAWCoreLean.Monad
+import           SAWCoreLean.SpecialTreatment
 
 data PartialOpContract = PartialOpContract
   { pocModule      :: ModuleName
@@ -730,3 +734,67 @@ partialOpProofScript propName _proofIdents =
 boundsProofScript :: Lean.Ident -> Set Lean.Ident -> Lean.Term
 boundsProofScript propName _proofIdents =
   checkedEvidenceScript propName
+
+-- ---------------------------------------------------------------
+-- The COMPLETE emitter bare-name set (W2-MAP-1, wave-2 audit,
+-- 2026-07-29, CRITICAL).
+--
+-- `SpecialTreatment.treatmentDerivedBareNames` can only enumerate what
+-- the treatment TABLE knows plus a hand-typed list. Every name below
+-- is built HERE, emitted unqualified, and resolves only through the
+-- artifact's `open CryptolToLean.SAWCorePrimitives` — so all of them
+-- were missing from the F-7 collision gate and the F-6 binder-rename
+-- seed. A Cryptol definition named `intDiv_runtimeM` therefore
+-- rebound the library helper silently, and the `_runtimeM` family
+-- collides TYPE-COMPATIBLY (all-`Except` value arguments, no proof
+-- argument) — which is exactly the shape of a translated Cryptol
+-- function of the same arity, so Lean had no reason to complain.
+--
+-- DERIVED, not listed. That is the point: adding a contract row now
+-- registers its emitted names automatically, so this cannot drift out
+-- of date the way the hand-typed list did.
+contractEmittedNames :: Set Lean.Ident
+contractEmittedNames = Set.fromList $ concat
+  [ [ pocRuntimeWrapper c | c <- partialOpContracts ]
+  , [ nm | c <- partialOpContracts, nm <- conventionTarget (pocConvention c) ]
+  , [ cacHelperName c | c <- checkedApplicationContracts ]
+  ]
+  where
+    conventionTarget (PartialOpRaw nm)       = [nm]
+    conventionTarget (PartialOpWrapped nm _) = [nm]
+
+-- | Every bare name the emitter can write: the treatment-derived set
+-- unioned with the contract-derived one. THIS is the set the F-6/F-7
+-- machinery must consult; `treatmentDerivedBareNames` alone is a
+-- part, and was mistaken for the whole until 2026-07-29.
+emitterBareNames :: TranslationConfiguration -> Set Lean.Ident
+emitterBareNames configuration =
+  Set.union (treatmentDerivedBareNames configuration) contractEmittedNames
+
+-- | Audit-2 F-7 gate. Refuse to emit a user-visible definition whose
+-- name collides with something the emitter writes BARE into the same
+-- file (see 'emitterBareNames').
+--
+-- Applied at the two sites where a SAWCore/Cryptol definition name
+-- becomes an emitted declaration name inside the generated
+-- @namespace@ — the exact position where Lean prefers the local
+-- declaration over an @open@ed one SILENTLY. Goal emission does not
+-- need it (the goal is always named @goal@).
+--
+-- REFUSES rather than renames, which is the whole point: the emitted
+-- name is what a user writes in a Lean discharge, so a silent rename
+-- would make their proof reference a name their source never
+-- mentions. Generated BINDER names, being internal to the emitted
+-- term, take the opposite treatment — 'unavailableIdents' renames
+-- them (F-6).
+checkEmittedName ::
+  ( TranslationConfigurationMonad r m
+  , Except.MonadError TranslationError m
+  ) =>
+  Text -> Lean.Ident -> m ()
+checkEmittedName kind nm@(Lean.Ident nmStr) = do
+  configuration <- asks translationConfiguration
+  if nm `Set.member` emitterBareNames configuration
+    then Except.throwError
+           (EmittedNameCollision (Text.pack nmStr) kind)
+    else pure ()

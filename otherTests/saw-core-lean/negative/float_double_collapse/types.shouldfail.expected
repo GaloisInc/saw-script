@@ -1,0 +1,8 @@
+# F-2 (2026-07-25). Three separate `rfl` failures, one per claim.
+# The pinned diagnostic is the SPECIFIC one — "Not a definitional
+# equality" — not the generic `rfl` type mismatch that follows it,
+# so the row cannot pass for an unrelated reason (an ambiguous-name
+# error, say, which is why `Float` is written fully qualified in the
+# probe). A regression that un-seals the types, or shares one
+# carrier between them, makes this elaborate clean.
+Not a definitional equality

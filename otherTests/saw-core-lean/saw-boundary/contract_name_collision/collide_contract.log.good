@@ -1,0 +1,18 @@
+Loading file "collide_contract.saw"
+Stack trace:
+   (builtin) in write_lean_cryptol_module
+   collide_contract.saw:24:1-24:77 (at top level)
+Error translating Cryptol module: Refusing to emit a definition named intDiv_runtimeM: that name is also written
+bare by the translator itself (a Cryptol definition).
+
+What this means: the emitted declaration goes inside the generated `namespace`,
+and Lean prefers a namespace-local declaration over one brought in by `open` --
+SILENTLY, with no ambiguity error. Your definition would rebind intDiv_runtimeM for the
+rest of the emitted file, so every later use of the primitive would mean your
+definition instead.
+
+Workaround: rename the definition in your Cryptol/SAWCore source. The backend
+deliberately does NOT rename it for you: the emitted name is what you write in a
+Lean discharge, and a silent rename would make your proof reference a name your
+source never mentions.
+

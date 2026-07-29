@@ -221,6 +221,14 @@ def main():
         print("  added or removed deliberately, update EXPECT_SCANNED in the")
         print("  same commit; if not, this ran against an incomplete emission")
         print("  (mid-sweep, or before `make test` finished).")
+        print("  THIRD CAUSE, and the likeliest when the count is HIGH: this")
+        print("  defines `emitted` as `untracked` (same as the snapshot")
+        print("  oracle), so UNCOMMITTED hand-written .lean files — a new")
+        print("  negative probe, say — count as emitted until they are")
+        print("  committed. That over-counts, which fails LOUD rather than")
+        print("  understating exposure, so the direction is right; but check")
+        print("  `git status --short | grep \'\\.lean$\'` before assuming the")
+        print("  corpus really grew.")
     if len(in_element) != EXPECT_IN_ELEMENT:
         status = 1
         print("lib1-census: FAIL — the in-element thrower count moved.")

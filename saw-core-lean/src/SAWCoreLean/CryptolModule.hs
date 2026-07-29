@@ -34,7 +34,7 @@ import           CryptolSAWCore.TypedTerm
 import           CryptolSAWCore.Cryptol    (CryptolEnv)
 
 import           SAWCoreLean.Monad
-import           SAWCoreLean.SpecialTreatment (checkEmittedName)
+import           SAWCoreLean.Contracts (checkEmittedName)
 import qualified SAWCoreLean.Term          as TermTranslation
 
 -- | Translate a list of named terms with their types to Lean

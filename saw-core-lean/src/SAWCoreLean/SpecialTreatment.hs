@@ -42,12 +42,10 @@ module SAWCoreLean.SpecialTreatment
     -- * Output-shape predicates
   , implicitlyOpenedModules
   , isImplicitlyOpened
-  , emitterBareNames
-  , checkEmittedName
+  , treatmentDerivedBareNames
   ) where
 
 import           Control.Lens            (_1, _2, over)
-import qualified Control.Monad.Except    as Except
 import           Control.Monad.Reader    (asks)
 import           Data.Char               (isAlphaNum)
 import qualified Data.List
@@ -187,33 +185,6 @@ findSpecialTreatment ident = do
                     (specialTreatmentMap configuration)
   pure $ Map.findWithDefault (defaultTreatmentFor ident) (identName ident) moduleMap
 
--- | Audit-2 F-7 gate. Refuse to emit a user-visible definition whose
--- name collides with something the emitter writes BARE into the same
--- file (see 'emitterBareNames').
---
--- Applied at the two sites where a SAWCore/Cryptol definition name
--- becomes an emitted declaration name inside the generated
--- @namespace@ — the exact position where Lean prefers the local
--- declaration over an @open@ed one SILENTLY. Goal emission does not
--- need it (the goal is always named @goal@).
---
--- REFUSES rather than renames, which is the whole point: the emitted
--- name is what a user writes in a Lean discharge, so a silent rename
--- would make their proof reference a name their source never
--- mentions. Generated BINDER names, being internal to the emitted
--- term, take the opposite treatment — 'unavailableIdents' renames
--- them (F-6).
-checkEmittedName ::
-  ( TranslationConfigurationMonad r m
-  , Except.MonadError TranslationError m
-  ) =>
-  Text -> Lean.Ident -> m ()
-checkEmittedName kind nm@(Lean.Ident nmStr) = do
-  configuration <- asks translationConfiguration
-  if nm `Set.member` emitterBareNames configuration
-    then Except.throwError
-           (EmittedNameCollision (Text.pack nmStr) kind)
-    else pure ()
 
 -- | Default treatment when an identifier has no explicit
 -- 'SpecialTreatment' entry. Always 'UseReject'.
@@ -465,8 +436,23 @@ specialTreatmentMap _configuration = Map.fromList $
 -- near-syntactic by contract) and is why this set is used to REFUSE
 -- rather than to prove absence of collisions — an under-approximation
 -- can only miss a collision, never invent one.
-emitterBareNames :: TranslationConfiguration -> Set Lean.Ident
-emitterBareNames configuration =
+-- RENAMED 2026-07-29 (wave-2 audit, W2-MAP-1, CRITICAL). This was
+-- `emitterBareNames` and was used AS IF complete, but it can only see
+-- what this module can see — and the ~30 names `Contracts.hs` builds
+-- (`intDiv_checkedM`, `bvUDiv_runtimeM`, `atWithProof_checkedM`, the
+-- 13 `_runtimeM` family, …) are emitted BARE and were in neither
+-- source. So the F-7 collision gate and the F-6 binder-rename seed
+-- were both blind to the entire contract family, and a Cryptol
+-- definition named `intDiv_runtimeM` silently rebound the library
+-- helper.
+--
+-- The complete set is `SAWCoreLean.Contracts.emitterBareNames`, which
+-- unions this with the contract-derived names. It lives there because
+-- `Contracts` imports this module and not the reverse. This one keeps
+-- a name that says what it actually covers, so a future caller cannot
+-- mistake the part for the whole.
+treatmentDerivedBareNames :: TranslationConfiguration -> Set Lean.Ident
+treatmentDerivedBareNames configuration =
   Set.union hardcodedBareNames $
     Set.fromList
       [ nm

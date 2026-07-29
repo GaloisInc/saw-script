@@ -1,0 +1,8 @@
+module Collide where
+
+// A Cryptol definition whose name collides with a support-library
+// CONTRACT helper. `intDiv_runtimeM` is built by Contracts.hs (not by
+// the SpecialTreatment table) and emitted BARE, resolving only through
+// the artifact's `open CryptolToLean.SAWCorePrimitives`.
+intDiv_runtimeM : Integer -> Integer -> Integer
+intDiv_runtimeM x y = x + y

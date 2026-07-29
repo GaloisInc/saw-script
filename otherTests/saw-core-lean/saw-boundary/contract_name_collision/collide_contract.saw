@@ -1,0 +1,24 @@
+// W2-MAP-1 pin (wave-2 release-gate audit, 2026-07-29, CRITICAL).
+//
+// The F-7 collision gate consulted a bare-name set built from the
+// SpecialTreatment table plus a HAND-TYPED list. Every name
+// Contracts.hs builds — intDiv_checkedM, bvUDiv_runtimeM,
+// atWithProof_checkedM, the 13 _runtimeM family, ~30 in all — was in
+// neither source, so the gate was blind to the entire contract family
+// and this module emitted CLEANLY.
+//
+// Why that is silent rather than loud: the emitted module's own
+// definition shadows the `open`ed library one with no ambiguity error
+// (that is the exact Lean behaviour F-7 exists for), and the
+// `_runtimeM` family collides TYPE-COMPATIBLY — all-`Except` value
+// arguments and no proof argument, which is the shape of a translated
+// Cryptol function of the same arity. So Lean has no reason to
+// complain and the artifact means addition where the source says
+// division.
+//
+// The set is now DERIVED from the contract tables rather than listed,
+// so adding a contract row registers its emitted names automatically.
+// MUTATION: dropping `contractEmittedNames` from the union in
+// Contracts.hs makes this row exit 0 — verified 2026-07-29.
+enable_experimental;
+write_lean_cryptol_module "Collide.cry" "collide_contract.module.lean" [] [];

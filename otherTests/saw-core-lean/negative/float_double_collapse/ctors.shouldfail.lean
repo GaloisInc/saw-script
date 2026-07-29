@@ -24,12 +24,12 @@ open CryptolToLean.SAWCorePrimitives
 -- (`mapsToQualifiedTie`): the short name ties with Lean core's
 -- `_root_.Float`, and an ambiguity error would make this row pass
 -- for the wrong reason.
-theorem float_is_double :
-    CryptolToLean.SAWCorePrimitives.Float = Double := rfl
+
+-- SPLIT 2026-07-29 (wave-2 audit). This file carried all three claims
+-- at once, which is the S-1 masking defect: the FIRST failing claim
+-- makes the row pass, so the other two could have gone green
+-- unnoticed. One claim per file now — the same discipline the sibling
+-- intmod_type_collapse row was built with.
 
 -- The two uninterpreted CONSTRUCTORS must not be identified.
 theorem mk_agree (m e : Int) : mkFloat m e = mkDouble m e := rfl
-
--- The abstract type must not be its own witness carrier.
-theorem float_is_pair :
-    CryptolToLean.SAWCorePrimitives.Float = (Int × Int) := rfl

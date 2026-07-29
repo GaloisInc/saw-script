@@ -42,6 +42,7 @@ import           SAWCore.SharedTerm
 
 import qualified SAWCoreLean.Monad            as M
 import           SAWCoreLean.Monad            (TranslationError(..), ppTranslationError)
+import           SAWCoreLean.Contracts (checkEmittedName)
 import           SAWCoreLean.SpecialTreatment
 import qualified SAWCoreLean.Term             as TermTranslation
 import           SAWCoreLean.Term             (mkDefinitionWith, universeVars)
