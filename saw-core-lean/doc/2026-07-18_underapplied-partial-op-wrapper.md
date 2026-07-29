@@ -20,6 +20,37 @@ stands; the *evidence* for the path working does not exist, and this
 path should be treated as unexercised until a compiling witness is
 added.
 
+**RESOLVED 2026-07-29 (Family-3 pass, F-1's instance).** The
+2026-07-25 correction named two honest fixes — "a wrapped-convention
+signature or deleting the lowering". The first was taken; deletion
+was ruled out because `differential/cryptol_rev_module` is a live
+consumer, so the lowering is not dead code.
+
+Root cause, stated in `doc/2026-07-29_annotation-invariant.md`: the
+binding vocabulary could not express what this lowering produces.
+`BindingFunction` says "a function" and nothing about the formals'
+representation, so the top-level annotation authority
+(`topLevelDefConvention`) saw a Pi-typed SAWCore type, saw a shape
+that was not `BindingWrapped`, and annotated raw. The fix gives the
+lowering a shape that carries its residual argument modes
+(`BindingWrappedArrow`), and makes the annotation an
+`AnnotationAdjustment` derived from that shape rather than a Bool
+that could only say "wrap the whole thing". Mode-directed, not
+uniform: a bitvector width formal stays a raw `Nat` because
+`bvUDiv_runtimeM` declares it raw.
+
+The emission is now
+`noncomputable def … : Except String Nat -> Except String Nat :=
+divNat_runtimeM …`, and the evidence gap is closed the way the
+correction asked: `drivers/under_applied_partial_wrapper` emits three
+under-application shapes (one residual formal; two; and the bare
+three-mode case whose first formal must stay raw) and drivers/ rows
+ELABORATE, so the artifact is compiled, not merely diffed. The
+`negative/underapplied_partial_illtyped` probe was retired in the
+same commit: it pinned the loudness of an ill-typed emission that no
+longer exists, and its own text named this fix as the reason it would
+be retired.
+
 Unblocks rev.cry whole-module
 translation (PIntegral dictionary fields carry partial ops
 UNAPPLIED; pinned by saw-boundary/polymorphic_seq_module_rejection).

@@ -69,7 +69,38 @@ data BindingShape
   = BindingRaw
   | BindingWrapped
   | BindingFunction
+  | BindingWrappedArrow [ArgMode]
+    -- ^ A function value whose formals' representation is DECLARED,
+    -- not merely "some function": the residual argument modes of a
+    -- partially-applied support wrapper, outermost first, with a
+    -- wrapped ('Except String _') result.
+    --
+    -- F-1 (audit-2; fixed 2026-07-29) is exactly the absence of this
+    -- constructor. 'BindingFunction' records nothing about the
+    -- formals, so a body of type
+    -- @Except String Nat -> Except String Nat@ and a body of type
+    -- @Nat -> Nat@ are indistinguishable to the top-level annotation
+    -- authority, which then annotated the former RAW and emitted an
+    -- ill-typed artifact. See
+    -- @doc/2026-07-29_annotation-invariant.md@: the annotation must
+    -- derive from the same authority as the body, and this is the
+    -- vocabulary that lets it.
+    --
+    -- Produced ONLY where the producer knows the convention
+    -- (currently 'lowerPartialOpRuntimeWrapper'). Deliberately NOT
+    -- produced by 'bindingShapeOfType', which classifies a TYPE and
+    -- cannot know per-formal modes — a Pi type stays
+    -- 'BindingFunction' there.
   deriving (Eq, Show)
+
+-- | Every function-shaped production. Use this in place of
+-- @== 'BindingFunction'@: a 'BindingWrappedArrow' is a function too,
+-- and the 2026-07-29 refinement must not silently reclassify one as
+-- a non-function at the sites that only ask "is this a function".
+isFunctionShape :: BindingShape -> Bool
+isFunctionShape BindingFunction        = True
+isFunctionShape BindingWrappedArrow{}  = True
+isFunctionShape _                      = False
 
 data RawReason
   = RawValuePosition

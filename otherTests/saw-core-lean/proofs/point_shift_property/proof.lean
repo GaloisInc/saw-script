@@ -49,7 +49,7 @@ projecting `.x` returns the original `.x`. Proves the actual
 semantic claim about shift_y, not the trivial post-normalization
 emission of shift_y_preserves_x. Discharge: case on `p` (a
 single-constructor inductive), unfold shift_y, and the nested
-@RecordType.rec applications iota-reduce to `rfl`. -/
+@CryptolToLean.SAWCorePrimitives.RecordType.rec applications iota-reduce to `rfl`. -/
 theorem shift_y_preserves_x_semantic
     (p : Point) (dy : CryptolToLean.SAWCoreVectors.Vec 32 Bool) :
     Bind.bind (PointShift.shift_y (Pure.pure p) (Pure.pure dy))

@@ -827,7 +827,7 @@ standaloneEqualitySubjectRep ::
   TermTranslationMonad m =>
   Text.Text -> [TranslatedTerm] -> m EqualitySubjectRep
 standaloneEqualitySubjectRep who operands
-  | any ((== BindingFunction) . ttShape) operands
+  | any (isFunctionShape . ttShape) operands
   , any (isWrappedShape . ttShape) operands =
       Except.throwError (RejectedPrimitive who
         "raw logical equality with a function-shaped subject on one \
@@ -836,7 +836,7 @@ standaloneEqualitySubjectRep who operands
         \classification bug, so the backend rejects instead of \
         \coercing either side")
   | otherwise = do
-      let rep | any ((== BindingFunction) . ttShape) operands =
+      let rep | any (isFunctionShape . ttShape) operands =
                   EqualitySubjectRawFunction
               | any (isWrappedShape . ttShape) operands =
                   EqualitySubjectRuntimeValue
@@ -1034,12 +1034,22 @@ adaptTo rho result =
       deliver (Lean.App (Lean.Var (Lean.Ident "Pure.pure")) [ttLean result])
               BindingWrapped
     (ExpectRuntimeValue, BindingFunction) -> forbidden
+    -- A wrapped-arrow function is a FUNCTION, not a wrapped value:
+    -- its 'Except' level is on the formals and result, not on the
+    -- term itself, so 'Pure.pure' would be the wrong adapter and no
+    -- other one applies (2026-07-29, F-1).
+    (ExpectRuntimeValue, BindingWrappedArrow{}) -> forbidden
     (ExpectRaw _, BindingRaw)             -> deliver (ttLean result) BindingRaw
     (ExpectRaw RawMotivePosition, BindingFunction) ->
       deliver (ttLean result) BindingFunction
     (ExpectRaw _, _)                      -> forbidden
     (ExpectFunctionPosition _, BindingFunction) ->
       deliver (ttLean result) BindingFunction
+    -- Shape-PRESERVING, deliberately: the declared formal modes are
+    -- the only record of what the body actually is, and dropping
+    -- them here would restore F-1 one adaptation later.
+    (ExpectFunctionPosition _, BindingWrappedArrow modes) ->
+      deliver (ttLean result) (BindingWrappedArrow modes)
     (ExpectFunctionPosition _, BindingRaw)  -> deliver (ttLean result) BindingRaw
     (ExpectFunctionPosition _, BindingWrapped) -> forbidden
 
@@ -1067,7 +1077,7 @@ adaptWrappedFormal False = pure
 -- trace; translation must never branch on it.
 shapeConsistentWithPosition :: ExpectedPosition -> BindingShape -> Bool
 shapeConsistentWithPosition rho shape = case rho of
-  ExpectRuntimeValue          -> shape /= BindingFunction
+  ExpectRuntimeValue          -> not (isFunctionShape shape)
   ExpectRaw RawMotivePosition -> shape /= BindingWrapped
   ExpectRaw _                 -> shape == BindingRaw
   ExpectFunctionPosition _    -> shape /= BindingWrapped

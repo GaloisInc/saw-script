@@ -114,8 +114,8 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) (plaintext : Except
-    String (@Num.rec (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    String (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
+    (fun (n : Nat) => Vec n (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -125,8 +125,8 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) a)) : Except String
-    (@Num.rec (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
+    (fun (n : Nat) => Vec n (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -136,7 +136,8 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) a) :=
-    @Num.rec (fun (n : Num) => Except String (@Num.rec (fun (num : Num) => Type)
+    @CryptolToLean.SAWCorePrimitives.Num.rec (fun (n : Num) => Except String
+    (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
     (fun (n' : Nat) => Vec n' (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -147,8 +148,8 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) n) -> Except String
-    (@Num.rec (fun (num : Num) => Type) (fun (n' : Nat) => Vec n' (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
+    (fun (n' : Nat) => Vec n' (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -187,7 +188,7 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro))))
     Bool))) => let mkStream_fn_ := (fun (i : Nat) => Bind.bind (Bind.bind xs
-    (fun scrut_ => @Stream.rec (Vec
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.Stream.rec (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -235,8 +236,8 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) (ciphertext : Except
-    String (@Num.rec (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    String (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
+    (fun (n : Nat) => Vec n (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -246,8 +247,8 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) a)) : Except String
-    (@Num.rec (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
+    (fun (n : Nat) => Vec n (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -257,7 +258,8 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) a) :=
-    @Num.rec (fun (n : Num) => Except String (@Num.rec (fun (num : Num) => Type)
+    @CryptolToLean.SAWCorePrimitives.Num.rec (fun (n : Num) => Except String
+    (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
     (fun (n' : Nat) => Vec n' (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -268,8 +270,8 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) n) -> Except String
-    (@Num.rec (fun (num : Num) => Type) (fun (n' : Nat) => Vec n' (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
+    (fun (n' : Nat) => Vec n' (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -308,7 +310,7 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro))))
     Bool))) => let mkStream_fn_ := (fun (i : Nat) => Bind.bind (Bind.bind xs
-    (fun scrut_ => @Stream.rec (Vec
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.Stream.rec (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -356,8 +358,8 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) (ip : Except String
-    (@Num.rec (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
+    (fun (n : Nat) => Vec n (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -368,9 +370,9 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) u1266)) : Except String
     Bool :=
-    let x__ := (fun (n : Num) => Except String (@Num.rec
-    (fun (num : Num) => Type) (fun (n' : Nat) => Vec n' (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    let x__ := (fun (n : Num) => Except String
+    (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
+    (fun (n' : Nat) => Vec n' (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -380,8 +382,8 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) n) -> Except String
-    (@Num.rec (fun (num : Num) => Type) (fun (n' : Nat) => Vec n' (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
+    (fun (n' : Nat) => Vec n' (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -398,7 +400,7 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro))))
     Bool))) => let mkStream_fn_ := (fun (i : Nat) => Bind.bind (Bind.bind xs
-    (fun scrut_ => @Stream.rec (Vec
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.Stream.rec (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -461,33 +463,34 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) v_1 v_2))))); Bind.bind
-    (@Num.rec (fun (n : Num) => (a : Type) -> Except String (RecordType "eq"
-    (Except String a -> (_' : Except String a) -> Except String Bool)
-    EmptyType) -> Except String (RecordType "eq" ((_' : Except String (@Num.rec
-    (fun (num : Num) => Type) (fun (n' : Nat) => Vec n' a) (Stream a) n)) ->
-    (_'' : Except String (@Num.rec (fun (num : Num) => Type)
-    (fun (n' : Nat) => Vec n' a) (Stream a) n)) -> Except String Bool)
+    (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (n : Num) => (a : Type) ->
+    Except String (RecordType "eq" (Except String a -> Except String a -> Except
+    String Bool) EmptyType) -> Except String (RecordType "eq" (Except String
+    (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
+    (fun (n' : Nat) => Vec n' a) (Stream a) n) -> Except String
+    (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
+    (fun (n' : Nat) => Vec n' a) (Stream a) n) -> Except String Bool)
     EmptyType)) (fun (n : Nat) (a : Type) (pa : Except String (RecordType "eq"
-    (Except String a -> (_' : Except String a) -> Except String Bool)
+    (Except String a -> Except String a -> Except String Bool)
     EmptyType)) => Pure.pure (@RecordType.RecordValue "eq" (Except String (Vec n
-    a) -> (_' : Except String (Vec n a)) -> Except String Bool) EmptyType
+    a) -> Except String (Vec n a) -> Except String Bool) EmptyType
     (fun (x : Except String (Vec n a)) (y : Except String (Vec n a)) => foldrM
     Bool Bool n (fun (b1 : Except String Bool) (b2 : Except String
     Bool) => CryptolToLean.SAWCorePreludeExtra.iteM Bool b1 b2 (Pure.pure
     Bool.false)) (Pure.pure Bool.true) (genWithBoundsM n Bool
     (fun (i : Nat) (h_gen_bounds_ : LT.lt i n) => Bind.bind pa
-    (fun scrut_ => @RecordType.rec "eq" (Except String a -> (_' : Except String
-    a) -> Except String Bool) EmptyType (fun (_ : RecordType "eq" (Except String
-    a -> (_' : Except String a) -> Except String Bool)
-    EmptyType) => (_' : Except String a) -> (_'' : Except String a) -> Except
-    String Bool) (fun (x' : Except String a -> (_' : Except String a) -> Except
-    String Bool) (y' : EmptyType) => x') scrut_ (atRuntimeCheckedM n a x i)
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "eq" (Except
+    String a -> Except String a -> Except String Bool) EmptyType
+    (fun (_ : RecordType "eq" (Except String a -> Except String a -> Except
+    String Bool) EmptyType) => Except String a -> Except String a -> Except
+    String Bool) (fun (x' : Except String a -> Except String a -> Except String
+    Bool) (y' : EmptyType) => x') scrut_ (atRuntimeCheckedM n a x i)
     (atRuntimeCheckedM n a y i))))) EmptyType.Empty))
     (fun (a : Type) (pa : Except String (RecordType "eq" (Except String a ->
-    (_' : Except String a) -> Except String Bool) EmptyType)) => saw_throw_error
-    (RecordType "eq" (Except String (Stream a) -> (_' : Except String (Stream
-    a)) -> Except String Bool) EmptyType) (Pure.pure "invalid Eq instance"))
-    u1266 (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    Except String a -> Except String Bool) EmptyType)) => saw_throw_error
+    (RecordType "eq" (Except String (Stream a) -> Except String (Stream a) ->
+    Except String Bool) EmptyType) (Pure.pure "invalid Eq instance")) u1266 (Vec
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -497,77 +500,20 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) -> (_' : Except String
-    (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) -> Except String (Vec
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) -> Except String Bool)
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) -> Except String Bool)
     EmptyType (fun η_0 η_1 => Bind.bind η_0 (fun v_1 => Bind.bind η_1
     (fun v_2 => Pure.pure (bvEq (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) v_1 v_2)))) EmptyType.Empty)))
-    (fun scrut_ => @RecordType.rec "eq" (Except String (@Num.rec
-    (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) (Stream (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) u1266) -> (_' : Except
-    String (@Num.rec (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) (Stream (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) u1266)) -> Except
-    String Bool) EmptyType (fun (_ : RecordType "eq" (Except String (@Num.rec
-    (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) (Stream (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) u1266) -> (_' : Except
-    String (@Num.rec (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) (Stream (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) u1266)) -> Except
-    String Bool) EmptyType) => (_' : Except String (@Num.rec
-    (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) (Stream (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) u1266)) ->
-    (_'' : Except String (@Num.rec (fun (num : Num) => Type)
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "eq" (Except
+    String (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
     (fun (n : Nat) => Vec n (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -577,8 +523,8 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) u1266)) -> Except
-    String Bool) (fun (x : Except String (@Num.rec (fun (num : Num) => Type)
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) u1266) -> Except String
+    (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
     (fun (n : Nat) => Vec n (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -588,8 +534,32 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) u1266) -> (_' : Except
-    String (@Num.rec (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) u1266) -> Except String
+    Bool) EmptyType (fun (_ : RecordType "eq" (Except String
+    (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
+    (fun (n : Nat) => Vec n (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) (Stream (Vec
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) u1266) -> Except String
+    (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
+    (fun (n : Nat) => Vec n (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) (Stream (Vec
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) u1266) -> Except String
+    Bool) EmptyType) => Except String (@CryptolToLean.SAWCorePrimitives.Num.rec
+    (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -599,9 +569,44 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
-    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) u1266)) -> Except
-    String Bool) (y : EmptyType) => x) scrut_ (@Num.rec (fun (n : Num) => Except
-    String (@Num.rec (fun (num : Num) => Type) (fun (n' : Nat) => Vec n' (Vec
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) u1266) -> Except String
+    (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
+    (fun (n : Nat) => Vec n (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) (Stream (Vec
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) u1266) -> Except String
+    Bool) (fun (x : Except String (@CryptolToLean.SAWCorePrimitives.Num.rec
+    (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) (Stream (Vec
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) u1266) -> Except String
+    (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
+    (fun (n : Nat) => Vec n (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) (Stream (Vec
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    (CryptolToLean.SAWCorePrimitives.bit0_macro
+    CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) u1266) -> Except String
+    Bool) (y : EmptyType) => x) scrut_ (@CryptolToLean.SAWCorePrimitives.Num.rec
+    (fun (n : Num) => Except String (@CryptolToLean.SAWCorePrimitives.Num.rec
+    (fun (num : Num) => Type) (fun (n' : Nat) => Vec n' (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -612,8 +617,8 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) n) -> Except String
-    (@Num.rec (fun (num : Num) => Type) (fun (n' : Nat) => Vec n' (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
+    (fun (n' : Nat) => Vec n' (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -652,7 +657,7 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro))))
     Bool))) => let mkStream_fn_ := (fun (i : Nat) => Bind.bind (Bind.bind xs
-    (fun scrut_ => @Stream.rec (Vec
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.Stream.rec (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -692,7 +697,8 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) Bool) mkStream_fn_
-    h_mkStream_total_) u1266 (@Num.rec (fun (n : Num) => Except String (@Num.rec
+    h_mkStream_total_) u1266 (@CryptolToLean.SAWCorePrimitives.Num.rec
+    (fun (n : Num) => Except String (@CryptolToLean.SAWCorePrimitives.Num.rec
     (fun (num : Num) => Type) (fun (n' : Nat) => Vec n' (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -704,8 +710,8 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) n) -> Except String
-    (@Num.rec (fun (num : Num) => Type) (fun (n' : Nat) => Vec n' (Vec
-    (CryptolToLean.SAWCorePrimitives.natPos_macro
+    (@CryptolToLean.SAWCorePrimitives.Num.rec (fun (num : Num) => Type)
+    (fun (n' : Nat) => Vec n' (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -744,7 +750,7 @@ namespace Simple
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro))))
     Bool))) => let mkStream_fn_ := (fun (i : Nat) => Bind.bind (Bind.bind xs
-    (fun scrut_ => @Stream.rec (Vec
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.Stream.rec (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro

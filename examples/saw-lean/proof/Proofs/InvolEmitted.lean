@@ -115,7 +115,7 @@ noncomputable def goal : Prop :=
   (fun v_0 => Pure.pure (intToNat v_0))) (fun v_2 => Pure.pure (@Either.Left Nat
   Nat v_2))) (Bind.bind (Bind.bind (Bind.bind x__'' (fun v_0 => Pure.pure
   (intNeg v_0))) (fun v_0' => Pure.pure (intToNat v_0'))) (fun v_2 => Pure.pure
-  (@Either.Right Nat Nat v_2)))) (fun scrut_ => @Either.rec Nat Nat
+  (@Either.Right Nat Nat v_2)))) (fun scrut_ => @CryptolToLean.SAWCorePrimitives.Either.rec Nat Nat
   (fun (p : Either Nat Nat) => Except String (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -176,7 +176,7 @@ noncomputable def goal : Prop :=
   (fun v_0 => Pure.pure (intToNat v_0))) (fun v_2 => Pure.pure (@Either.Left Nat
   Nat v_2))) (Bind.bind (Bind.bind (Bind.bind x__''' (fun v_0 => Pure.pure
   (intNeg v_0))) (fun v_0' => Pure.pure (intToNat v_0'))) (fun v_2 => Pure.pure
-  (@Either.Right Nat Nat v_2)))) (fun scrut_ => @Either.rec Nat Nat
+  (@Either.Right Nat Nat v_2)))) (fun scrut_ => @CryptolToLean.SAWCorePrimitives.Either.rec Nat Nat
   (fun (p : Either Nat Nat) => Except String (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -243,7 +243,7 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) (@Num.rec
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) (@CryptolToLean.SAWCorePrimitives.Num.rec
   (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -332,7 +332,7 @@ noncomputable def goal : Prop :=
   (fun v_0 => Pure.pure (intToNat v_0))) (fun v_2 => Pure.pure (@Either.Left Nat
   Nat v_2))) (Bind.bind (Bind.bind (Bind.bind x__'''' (fun v_0 => Pure.pure
   (intNeg v_0))) (fun v_0' => Pure.pure (intToNat v_0'))) (fun v_2 => Pure.pure
-  (@Either.Right Nat Nat v_2)))) (fun scrut_ => @Either.rec Nat Nat
+  (@Either.Right Nat Nat v_2)))) (fun scrut_ => @CryptolToLean.SAWCorePrimitives.Either.rec Nat Nat
   (fun (p : Either Nat Nat) => Except String (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -399,7 +399,7 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) (@Num.rec
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) (@CryptolToLean.SAWCorePrimitives.Num.rec
   (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -456,7 +456,7 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) (@Num.rec
+  CryptolToLean.SAWCorePrimitives.one_macro)))) Bool)) (@CryptolToLean.SAWCorePrimitives.Num.rec
   (fun (num : Num) => Type) (fun (n : Nat) => Vec n (Vec
   (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro

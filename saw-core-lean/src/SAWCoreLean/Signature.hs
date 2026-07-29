@@ -43,6 +43,9 @@ module SAWCoreLean.Signature
   , leanBinderFp
   , telescopeFpMismatch
   , topLevelDefConvention
+  , AnnotationAdjustment(..)
+  , applyAnnotationAdjustment
+  , wrappedArrowAdjustment
   ) where
 
 import qualified Data.Set                     as Set
@@ -356,12 +359,119 @@ telescopeFpMismatch sawTys leanTys =
 -- (translateDefDocWithArity, CryptolModule, SAWModule) had
 -- hand-copied this and CryptolModule's copy had already drifted
 -- (missing the wrapped-body clause) — all three now call here.
+--
+-- 2026-07-29 (F-1): the second component is no longer a Bool but an
+-- 'AnnotationAdjustment'. A Bool can only express "wrap the whole
+-- annotation", and the under-applied partial-op wrapper needs
+-- "wrap the FORMALS the wrapper declares runtime, and the result" —
+-- the case the Bool could not say, so the annotation was emitted raw
+-- over a wrapped-arrow body. Callers apply it with
+-- 'applyAnnotationAdjustment' instead of hand-rolling @wrapExcept@.
 topLevelDefConvention ::
   TermTranslationMonad m =>
-  Term -> TranslatedTerm -> m (Lean.Term, Bool)
+  Term -> TranslatedTerm -> m (Lean.Term, AnnotationAdjustment)
 topLevelDefConvention tp bodyResult = do
   let wrapType = shouldWrapBinder tp
   bodyLean <- if wrapType
                  then adaptToRuntime bodyResult
                  else pure (translatedTermLean bodyResult)
-  pure (bodyLean, wrapType || ttShape bodyResult == BindingWrapped)
+  let adjustment
+        | wrapType                             = AnnotateWrapped
+        | BindingWrappedArrow modes <- ttShape bodyResult
+                                               = wrappedArrowAdjustment tp modes
+        | ttShape bodyResult == BindingWrapped = AnnotateWrapped
+        | otherwise                            = AnnotateAsIs
+  pure (bodyLean, adjustment)
+
+-- | Decide, per residual formal of a partially-applied support
+-- wrapper, whether the emitted annotation needs an @Except@ ADDED.
+--
+-- The subtlety, and the bug the first version of the F-1 fix had:
+-- @translateTerm@ ALREADY wraps a Pi binder whose SAWCore type is
+-- value-domain (Term.hs, @if shouldWrapBinder dom then wrapExcept …@).
+-- So "the wrapper declares this slot runtime, therefore wrap it" is
+-- wrong — it double-wraps every formal whose own image is already
+-- wrapped, and emits @Except String (Except String (Vec n Bool))@.
+-- Caught by the bare-@bvUDiv@ probe in
+-- drivers/under_applied_partial_wrapper; the @divNat@ shape alone
+-- could not catch it, because @shouldWrapBinder Nat@ is 'False' and
+-- that formal genuinely does need the wrap added.
+--
+-- So the question asked here is the DIFFERENCE between what the
+-- wrapper's Lean signature has and what the translated SAWCore type
+-- already has. Both sides are answered by the SAME authority — the
+-- wrap rule applied to the SAWCore type — which is the point of the
+-- annotation invariant; nothing inspects the emitted Lean AST.
+wrappedArrowAdjustment :: Term -> [ArgMode] -> AnnotationAdjustment
+wrappedArrowAdjustment = go []
+  where
+    go acc ty [] = AnnotateWrappedArrow (reverse acc) (needsExcept ty)
+    go acc ty (m : ms) = case asPi ty of
+      Just (_, dom, cod) ->
+        go (addFor m dom : acc) cod ms
+      -- The SAWCore type has fewer binders than the wrapper has
+      -- residual formals: the two authorities disagree about arity,
+      -- so decline to adjust rather than invent a signature. Loud at
+      -- Lean, which is the intended ordering of bad outcomes.
+      Nothing -> AnnotateAsIs
+
+    -- A runtime slot needs the wrap added only when the SAWCore
+    -- binder's own image did not already carry it. Raw-family modes
+    -- (a bitvector width is 'IndexArg') never do.
+    addFor m dom = m == RuntimeArg && needsExcept dom
+    needsExcept t = not (shouldWrapBinder t)
+
+-- | How the emitted type ANNOTATION must be adjusted so that it
+-- describes the body the translator actually produced.
+--
+-- This type is the Family-3 invariant in miniature
+-- (@doc/2026-07-29_annotation-invariant.md@): the adjustment is
+-- computed FROM the body's production record ('BindingShape'), never
+-- re-derived from what the body was supposed to be. Adding a case
+-- here is how a new body representation earns a faithful signature.
+data AnnotationAdjustment
+  = AnnotateAsIs
+    -- ^ Raw: the body stands at the SAWCore type's own image.
+  | AnnotateWrapped
+    -- ^ @Except String T@ around the whole annotation.
+  | AnnotateWrappedArrow [Bool] Bool
+    -- ^ The body is a partially-applied support wrapper. One flag per
+    -- residual formal, outermost first, saying whether that binder
+    -- needs an @Except@ ADDED to reach the wrapper's declared slot
+    -- type; the trailing flag says the same for the result. Computed
+    -- by 'wrappedArrowAdjustment', which is where the reasoning about
+    -- what the translated type already carries lives.
+  deriving (Eq, Show)
+
+-- | Apply an 'AnnotationAdjustment' to the translated SAWCore type.
+--
+-- 'AnnotateWrappedArrow' walks the Pi spine consuming one declared
+-- mode per binder. If the spine runs out of binders before the modes
+-- do, the two authorities disagree about the body's arity and the
+-- adjustment is a no-op — which reproduces the pre-fix ill-typed
+-- emission rather than inventing a signature. That is the intended
+-- ordering of bad outcomes (LOUD at Lean over silently plausible),
+-- and it is unreached for every contract in the table, where the
+-- residual mode count is the SAWCore type's residual arity by
+-- construction.
+applyAnnotationAdjustment :: AnnotationAdjustment -> Lean.Type -> Lean.Type
+applyAnnotationAdjustment adj ty = case adj of
+  AnnotateAsIs                    -> ty
+  AnnotateWrapped                 -> wrapExcept ty
+  AnnotateWrappedArrow adds wrapR
+    | spineFits adds ty           -> goArrow wrapR adds ty
+    | otherwise                   -> ty
+  where
+    spineFits [] _ = True
+    spineFits (_ : ms) (Lean.Pi (_ : bs) t) =
+      spineFits ms (if null bs then t else Lean.Pi bs t)
+    spineFits _ _ = False
+
+    goArrow wrapR [] t = if wrapR then wrapExcept t else t
+    goArrow wrapR (add : ms) (Lean.Pi (Lean.PiBinder impl nm bty : bs) t) =
+      let bty' = if add then wrapExcept bty else bty
+          rest = goArrow wrapR ms (if null bs then t else Lean.Pi bs t)
+      in case rest of
+           Lean.Pi bs' t' -> Lean.Pi (Lean.PiBinder impl nm bty' : bs') t'
+           _              -> Lean.Pi [Lean.PiBinder impl nm bty'] rest
+    goArrow _ _ t = t

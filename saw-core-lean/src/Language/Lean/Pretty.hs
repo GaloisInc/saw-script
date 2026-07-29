@@ -17,6 +17,7 @@ alongside each diverging case.
 
 module Language.Lean.Pretty (prettyDecl) where
 
+import Data.List (isInfixOf)
 import Prettyprinter
 
 import Language.Lean.AST
@@ -98,6 +99,70 @@ prettyPiBinder b = case b of
     PiBinder Instance (Just x) ty ->
         brackets (prettyNameType x ty) <+> "->"
 
+-- | Drop the name from every EXPLICIT pi binder whose name nothing in
+-- its scope mentions, so it prints @A -> B@ rather than @(x : A) -> B@.
+--
+-- Filed 2026-07-26 out of F-8, landed 2026-07-29 in the Family-3
+-- emission pass. F-8's fix (take the Pi's type, not the lambda's) made
+-- three emitted signatures read @(_' : a) -> b@ where they used to read
+-- @a -> b@: semantically identical, uglier, and — the reason it belongs
+-- with the emission work rather than a cosmetics batch — a NAMED
+-- unreferenced binder is one of the two purely cosmetic axes that
+-- defeated the F-8 structural gate when it existed.
+--
+-- Deliberately conservative in the safe direction. Occurrence is
+-- decided by IDENTIFIER STRING over the binder's whole scope (the
+-- later binders' types and the body); shadowing therefore reads as
+-- "used" and the name is KEPT. Keeping a name is always well-formed
+-- Lean, so the only cost of a false "used" is the cosmetic status quo,
+-- while a false "unused" would drop a name a term references — so the
+-- analysis must never be sharpened past what it can prove.
+--
+-- Explicit binders only: @{x : A}@ and @[x : A]@ carry
+-- instance-resolution and named-argument meaning that anonymizing
+-- would change.
+anonymizeUnusedPiBinders :: [PiBinder] -> Term -> [PiBinder]
+anonymizeUnusedPiBinders bs body = go bs
+  where
+    go [] = []
+    go (b@(PiBinder impl mname ty) : rest) =
+      let scope = map piBinderType rest ++ [body]
+          b' = case (impl, mname) of
+                 (Explicit, Just (Ident n))
+                   | not (any (mentionsIdent n) scope) ->
+                       PiBinder Explicit Nothing ty
+                 _ -> b
+      in b' : go rest
+
+    piBinderType (PiBinder _ _ ty) = ty
+
+-- | Does the term mention the identifier @n@ anywhere, in any role?
+-- Over-approximates on purpose: see 'anonymizeUnusedPiBinders'.
+mentionsIdent :: String -> Term -> Bool
+mentionsIdent n = goT
+  where
+    isN (Ident s) = s == n
+    goT tm = case tm of
+      Lambda bs t        -> any goB bs || goT t
+      Pi bs t            -> any goP bs || goT t
+      Let x bs mty rhs b ->
+        isN x || any goB bs || maybe False goT mty || goT rhs || goT b
+      App f as           -> goT f || any goT as
+      List xs            -> any goT xs
+      Var x              -> isN x
+      ExplVar x          -> isN x
+      ExplVarUniv x _    -> isN x
+      Sort{}             -> False
+      NatLit{}           -> False
+      IntLit{}           -> False
+      StringLit{}        -> False
+      -- A tactic block is verbatim Lean source the printer cannot
+      -- parse. Treat any occurrence of the name as a use.
+      Tactic s           -> n `isInfixOf` s
+
+    goB (Binder _ x mty) = isN x || maybe False goT mty
+    goP (PiBinder _ mx ty) = maybe False isN mx || goT ty
+
 prettyBinders :: [Binder] -> Doc ann
 prettyBinders bs = hsep $ map prettyBinder bs
 
@@ -142,7 +207,7 @@ prettyTerm p e =
       in
       parensIf (p > PrecLambda) $ "fun" <+> bs' <+> "=>" <+> t'
     Pi bs t ->
-      let binderDocs = map prettyPiBinder bs
+      let binderDocs = map prettyPiBinder (anonymizeUnusedPiBinders bs t)
           t' = prettyTerm PrecLambda t
       in
       -- @fillSep@ breaks between binders if the whole line exceeds

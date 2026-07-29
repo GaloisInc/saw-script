@@ -32,6 +32,10 @@ import           SAWCentral.Prover.Exporter
 import           SAWCoreLean.Lean
 import           SAWCoreLean.SpecialTreatment (escapeIdent)
 import           SAWCoreLean.Term (FixClass(..), classifyFixShape)
+import           SAWCoreLean.Convention (ArgMode(..))
+import           SAWCoreLean.Signature (AnnotationAdjustment(..),
+                                       applyAnnotationAdjustment,
+                                       wrappedArrowAdjustment)
 
 import           Control.Exception   (try, SomeException, evaluate)
 import qualified Data.Set            as Set
@@ -1743,6 +1747,121 @@ fixClassifierTests sc = testGroup "classifyFixShape (Slice R0, inert)"
   ]
 
 --------------------------------------------------------------------------------
+-- The annotation invariant (Family-3, doc/2026-07-29_annotation-invariant.md)
+--------------------------------------------------------------------------------
+
+-- | 'applyAnnotationAdjustment' is the function that makes an emitted
+-- signature describe the body the translator actually produced. These
+-- pins are UNIT pins on the rule; the wiring that chooses the rule
+-- (BindingWrappedArrow -> AnnotateWrappedArrow) is pinned end-to-end
+-- by drivers/under_applied_partial_wrapper, which ELABORATES the
+-- artifact.
+--
+-- Each case below fails against the pre-fix behaviour (F-1 annotated
+-- raw: adjustment applied nothing), so a revert goes red here.
+-- | Render a type the way the emitter does — through a real 'Decl',
+-- since "Language.Lean.Pretty" exports only 'prettyDecl'.
+renderTy :: Lean.Type -> String
+renderTy ty =
+  render (Lean.prettyDecl
+    (Lean.Definition Lean.Computable [] "probe" [] (Just ty) (Lean.Var "b")))
+
+annotationInvariantTests :: SharedContext -> TestTree
+annotationInvariantTests sc = testGroup "annotation invariant (F-1)"
+  [ testCase "F-1: the DECISION — a Nat-family wrapper adds Except" $ do
+      -- `divNat : Nat -> Nat -> Nat`, wrapper modes [RuntimeArg,
+      -- RuntimeArg]. `shouldWrapBinder Nat` is False, so the
+      -- translated Pi carries raw `Nat` binders and a raw result
+      -- while `divNat_runtimeM` declares every slot `Except String
+      -- Nat`. Every flag must therefore be True.
+      ty <- scTypeOf sc =<< scGlobalDef sc "Prelude.divNat"
+      wrappedArrowAdjustment ty [RuntimeArg, RuntimeArg]
+        @?= AnnotateWrappedArrow [True, True] True
+
+  , testCase "F-1: the DECISION — a Vec-family wrapper adds NOTHING" $ do
+      -- `bvUDiv : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n
+      -- Bool`, wrapper modes [IndexArg, RuntimeArg, RuntimeArg].
+      -- THE REGRESSION THIS EXISTS FOR: `shouldWrapBinder (Vec n
+      -- Bool)` is True, so the translated Pi ALREADY wraps both
+      -- operands and the result. A rule that reads "the wrapper
+      -- declares this slot runtime, therefore wrap it" double-wraps
+      -- and emits `Except String (Except String (Vec n Bool))`. The
+      -- first version of the F-1 fix did exactly that; the divNat
+      -- shape alone could not catch it. The width binder is
+      -- raw-family and never wraps either way.
+      ty <- scTypeOf sc =<< scGlobalDef sc "Prelude.bvUDiv"
+      wrappedArrowAdjustment ty [IndexArg, RuntimeArg, RuntimeArg]
+        @?= AnnotateWrappedArrow [False, False, False] False
+
+  , testCase "F-1: the DECISION declines when the arities disagree" $ do
+      -- Fewer SAWCore binders than the wrapper has residual formals:
+      -- the two authorities disagree, so no signature is invented.
+      -- Loud at Lean, which is the intended ordering of bad outcomes.
+      ty <- scTypeOf sc =<< scGlobalDef sc "Prelude.divNat"
+      wrappedArrowAdjustment ty
+        [RuntimeArg, RuntimeArg, RuntimeArg, RuntimeArg]
+        @?= AnnotateAsIs
+
+  , testCase "F-1: one residual runtime formal wraps formal AND result" $ do
+      -- The historical F-1 shape. SAW type `Nat -> Nat`; body is
+      -- `divNat_runtimeM` applied to one actual, whose Lean type is
+      -- `Except String Nat -> Except String Nat`. Before the fix the
+      -- annotation was the raw arrow and the artifact was ill-typed.
+      let natTy = Lean.Var (Lean.Ident "Nat")
+          sawImage =
+            Lean.Pi [Lean.PiBinder Lean.Explicit Nothing natTy] natTy
+      assertContains "one residual runtime formal"
+        "Except String Nat -> Except String Nat"
+        (renderTy (applyAnnotationAdjustment
+                     (AnnotateWrappedArrow [True] True) sawImage))
+
+  , testCase "F-1: a raw-family residual formal stays RAW" $ do
+      -- The probe that would catch a "wrap every residual formal"
+      -- simplification. `bvUDiv_runtimeM` declares its width formal
+      -- raw (IndexArg), so the width binder must NOT be wrapped
+      -- while both operands and the result must be.
+      let natTy  = Lean.Var (Lean.Ident "Nat")
+          nVar   = Lean.Var (Lean.Ident "n")
+          bvTy   = Lean.App (Lean.Var (Lean.Ident "BitVec")) [nVar]
+          sawImage =
+            Lean.Pi [ Lean.PiBinder Lean.Explicit (Just (Lean.Ident "n")) natTy
+                    , Lean.PiBinder Lean.Explicit Nothing bvTy
+                    , Lean.PiBinder Lean.Explicit Nothing bvTy
+                    ] bvTy
+          out = renderTy (applyAnnotationAdjustment
+                  (AnnotateWrappedArrow [False, True, True] True)
+                  sawImage)
+      assertContains "width binder stays raw" "(n : Nat) ->" out
+      assertNotContains "width binder stays raw"
+        "(n : Except String Nat)" out
+      assertContains "operands and result wrap"
+        "Except String (BitVec n)" out
+
+  , testCase "F-1: too few binders for the declared modes adjusts NOTHING" $ do
+      -- The two authorities disagree about arity. The documented
+      -- ordering of bad outcomes is LOUD-at-Lean over
+      -- silently-plausible, so the adjustment is a no-op and the
+      -- pre-fix ill-typed emission is reproduced rather than a
+      -- signature being invented. Unreached for every contract in
+      -- the table; pinned so a future contract cannot make it
+      -- silently guess.
+      let natTy = Lean.Var (Lean.Ident "Nat")
+          sawImage =
+            Lean.Pi [Lean.PiBinder Lean.Explicit Nothing natTy] natTy
+          out = renderTy (applyAnnotationAdjustment
+                  (AnnotateWrappedArrow [True, True] True) sawImage)
+      assertContains "arity disagreement adjusts nothing" "Nat -> Nat" out
+      assertNotContains "arity disagreement adjusts nothing" "Except" out
+
+  , testCase "F-1: the other adjustments are unchanged" $ do
+      let natTy = Lean.Var (Lean.Ident "Nat")
+      assertContains "as-is" ": Nat :="
+        (renderTy (applyAnnotationAdjustment AnnotateAsIs natTy))
+      assertContains "wrapped" ": Except String Nat :="
+        (renderTy (applyAnnotationAdjustment AnnotateWrapped natTy))
+  ]
+
+--------------------------------------------------------------------------------
 -- Entry point
 --------------------------------------------------------------------------------
 
@@ -1756,4 +1875,5 @@ main = do
     , goalEmissionTests sc
     , antiRegressionLintTests
     , fixClassifierTests sc
+    , annotationInvariantTests sc
     ]

@@ -125,10 +125,10 @@ translateDef Def{..} = do
           -- top-level convention at all).
           ((body', tp'), univs, auxDecls) <- liftTermTranslationMonad $ mode $ do
             bodyResult <- TermTranslation.translateTermLetWithShape body
-            (b, wrapAnn) <- TermTranslation.topLevelDefConvention
+            (b, annAdj) <- TermTranslation.topLevelDefConvention
                               defType bodyResult
             t <- TermTranslation.translateTerm defType
-            pure (b, if wrapAnn then TermTranslation.wrapExcept t else t)
+            pure (b, TermTranslation.applyAnnotationAdjustment annAdj t)
           let decl = mkDefinitionWith Lean.Noncomputable univs name body' tp'
           pure (Prettyprinter.vcat (map Lean.prettyDecl (auxDecls ++ [decl])))
       AxiomQualifier -> rejectAxiomOrPrimitive name

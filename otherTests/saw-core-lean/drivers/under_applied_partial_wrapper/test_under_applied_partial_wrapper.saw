@@ -1,0 +1,44 @@
+enable_experimental;
+
+// F-1's COMPILING WITNESS (2026-07-29, Family-3 pass).
+//
+// The under-applied partial-op path had none anywhere in the tree:
+// its only pinned emission lived in saw-boundary/, which diffs the
+// SAW log and never elaborates the artifact — and that emission was
+// ill-typed (`: Nat -> Nat` annotating a body of type
+// `Except String Nat -> Except String Nat`). The failure was LOUD,
+// so the soundness verdict stood, but "audited safe" was recorded
+// over a path no test had ever compiled.
+//
+// This row is a drivers/ row precisely BECAUSE drivers/ elaborates
+// every emitted *.lean against the CryptolToLean Lake project. A
+// regression to the raw annotation now fails at Lean, not merely in
+// a golden diff a refresh could paper over.
+//
+// Three probes, chosen to cover the mode-directed half of the
+// annotation rule (doc/2026-07-29_annotation-invariant.md):
+//
+//   * `divNat 1`  — one residual RuntimeArg formal. The historical
+//                   F-1 shape, verbatim from
+//                   saw-boundary/partial_operation_obligations.
+//   * `bvUDiv 8`  — width already supplied; two residual RuntimeArg
+//                   formals over a bitvector carrier.
+//   * `bvUDiv`    — NOTHING supplied, so the residual modes are
+//                   [IndexArg, RuntimeArg, RuntimeArg]. This is the
+//                   probe that would catch a "wrap every residual
+//                   formal" simplification: the width binder must
+//                   stay a raw `Nat`, because `bvUDiv_runtimeM`
+//                   declares it raw. A uniform rule emits
+//                   `Except String Nat` there and fails to elaborate.
+
+let nat_probe = parse_core "divNat 1";
+write_lean_term "UnderAppliedDivNat" [] []
+  "test_under_applied_partial_wrapper.divNat.lean" nat_probe;
+
+let bv_applied_probe = parse_core "bvUDiv 8";
+write_lean_term "UnderAppliedBvUDivAtWidth" [] []
+  "test_under_applied_partial_wrapper.bvUDivAtWidth.lean" bv_applied_probe;
+
+let bv_bare_probe = parse_core "bvUDiv";
+write_lean_term "UnderAppliedBvUDivBare" [] []
+  "test_under_applied_partial_wrapper.bvUDivBare.lean" bv_bare_probe;

@@ -251,10 +251,10 @@ buildWrappedProofCarryingApplication head_ argModes argResults contract = do
     partialOpActual IndexArg result = case ttShape result of
       BindingRaw      -> pure (CheckedDirect (ttLean result))
       BindingWrapped  -> pure (CheckedBindIndex (ttLean result))
-      BindingFunction ->
+      shape ->
         Except.throwError (ForbiddenAdaptation
           "IndexArg (raw index position)"
-          "BindingFunction")
+          (Text.pack (show shape)))
     partialOpActual mode _ =
       Except.throwError (RejectedPrimitive "partial operation"
         ("wrapped partial-op contract used argument mode "

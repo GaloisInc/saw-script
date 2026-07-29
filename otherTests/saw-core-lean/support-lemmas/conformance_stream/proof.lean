@@ -20,7 +20,7 @@ def onesStream : Stream Nat :=
   Stream.MkStream (fun _ => 1)
 
 theorem stream_rec_mkStream_semantics :
-    @Stream.rec Nat (fun _ => Nat) (fun xs => xs 5) identityStream = 5 := by
+    @CryptolToLean.SAWCorePrimitives.Stream.rec Nat (fun _ => Nat) (fun xs => xs 5) identityStream = 5 := by
   rfl
 
 theorem stream_idx_mkStream_semantics :

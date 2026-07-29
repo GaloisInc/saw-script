@@ -3005,7 +3005,7 @@ noncomputable def goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro
-  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) (@Num.rec
+  CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) (@CryptolToLean.SAWCorePrimitives.Num.rec
   (fun (num : Num) => Type) (fun (n : Nat) => Vec n Bool) (Stream Bool) y'))
   (@Eq.refl.{2} Type (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
   (CryptolToLean.SAWCorePrimitives.bit0_macro

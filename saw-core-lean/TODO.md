@@ -51,18 +51,32 @@ what would make them stop.
 
 - [x] **S-3 narrowing** — landed 2026-07-28 (low-risk, strictly
   narrowing; see the S-3 entry).
-- [ ] **THE FAMILY-3 PASS — do this BEFORE the audit, as ONE pass,
-  not three drive-bys.** Contents: the `Term.hs` split (already
-  required pre-audit); a design note stating the annotation
-  invariant above and where its chokepoint lives; then the three
+- [x] **THE FAMILY-3 PASS — LANDED 2026-07-29** as one pass, not
+  three drive-bys. Contents as planned: the `Term.hs` split; a design
+  note stating the annotation invariant and where its chokepoint
+  lives (`doc/2026-07-29_annotation-invariant.md`); then the three
   open emission items folded in AS INSTANCES — F-1's top-level
   annotation, F-2 core's recursor-head qualification, and the
-  unused-Pi-binder printer cosmetic. Rationale for the ordering: an
-  audit is for finding what we do NOT know, and auditing first
+  unused-Pi-binder printer cosmetic. Rationale for the ordering was:
+  an audit is for finding what we do NOT know, and auditing first
   spends reviewer lanes rediscovering F-1-class issues in code
   we are about to restructure; the charter's "a defect exists until
   the surface is shown sound" is also much harder to satisfy for a
   surface with no stated invariant.
+  **What landed.** Split: `Calculus.hs` / `Signature.hs` /
+  `Obligations.hs` extracted, layered with zero upward edges, and
+  verified BEHAVIOURALLY INERT by the snapshot oracle (emitted Lean
+  byte-identical across all 350 artifacts) rather than asserted.
+  Invariant: *the emitted signature must derive from the same
+  authority as the emitted body*, with `SAWCoreLean.Signature` as its
+  named home. Instances: see the F-1, F-2 (core) and printer entries
+  below.
+  **What it did NOT close, for the panel to score:** the invariant is
+  STATED, not enforced by construction — there is no `adaptTo`
+  equivalent making a signature/body mismatch unrepresentable, and
+  `mkDefinitionWith`'s second caller (`emitImportedRealizationAlias`)
+  bypasses the chokepoint. Both are recorded in the design note's
+  closing section.
 - [ ] **Pre-release soundness review** (the panel below) — against
   the restructured, invariant-stated emitter. NOT skippable once
   the pass lands: Families 1 and 2 are deferred BY DECISION, not
@@ -480,6 +494,19 @@ until (a).**
   scrutinee type pins the inductive, so a wrong resolution produces
   an ill-typed application rather than a silently swapped branch.
   Take it with the naming pass (F-6/F-7), not alone.
+  **CLOSED 2026-07-29** in the Family-3 pass, where it belongs: it is
+  the same shape as F-1 — two emissions about the SAME object,
+  computed by two different authorities, agreeing only by accident.
+  The head now uses `translateIdentToQualifiedIdent`, the call the
+  assertion already used. Blast radius as measured, plus the
+  hand-written artifacts updated in the same commit.
+  **The user-visible price, recorded deliberately:** a discharge now
+  writes `@CryptolToLean.SAWCorePrimitives.Num.rec` rather than
+  `@Num.rec`. Uniform qualification was chosen over "qualify only
+  when the short name is ambiguous" because the latter is DETECTION
+  (it needs a model of Lean's root scope) where this is
+  by-construction — the F-8 lesson. `@Eq.rec` is unaffected: it
+  reaches emission through the hardcoded path F-3b documents.
 - [x] **F-6 / F-7 — CLOSED 2026-07-26**, with DIFFERENT treatments,
   because the two halves differ in whether the name is user-facing.
   `emitterBareNames` now enumerates what the emitter writes bare —
@@ -604,18 +631,34 @@ until (a).**
   but module/term emission still prints sorts at argument position.
   Loud (ill-typed artifact), never silent — fixed because it is two
   lines, not because it threatened soundness.
-- [~] **F-1 — claim CORRECTED (2026-07-25, in the wrapper design
-  doc) and loudness PINNED 2026-07-28**
-  (`negative/underapplied_partial_illtyped`: the golden emission
-  shape must stay ill-typed; if it ever elaborates, the loud
-  failure has become silent absorption and the probe fires —
-  re-audit before touching). REMAINING (design decision, flag for
-  the sign-off discussion): give the path a compiling witness
-  (annotate the definition at the wrapped-arrow convention the body
-  actually has) or delete the lowering and let under-application
-  reject by arity — it was built for dictionary-field partial ops
-  (rev.cry PIntegral), so deletion trades a plausible future
-  Cryptol capability for the S-2/F-9 withdrawal discipline.
+- [x] **F-1 — CLOSED 2026-07-29** in the Family-3 pass, as that
+  family's headline instance. History: claim CORRECTED 2026-07-25 in
+  the wrapper design doc; loudness PINNED 2026-07-28
+  (`negative/underapplied_partial_illtyped`). The 2026-07-25
+  correction named two honest fixes — a wrapped-convention signature,
+  or deleting the lowering. **The signature was taken**; deletion was
+  ruled out because `differential/cryptol_rev_module` is a live
+  consumer, so the lowering is not dead code and deleting it would
+  withdraw a working capability.
+  Root cause was the binding vocabulary, which is why this is
+  Family 3 and not a one-off: `BindingFunction` recorded nothing
+  about the formals' representation, so the annotation authority saw
+  a Pi-typed SAWCore type, saw a shape that was not `BindingWrapped`,
+  and annotated raw over an `Except`-arrow body. Fix:
+  `BindingWrappedArrow [ArgMode]` carries the residual argument
+  modes, and the annotation became an `AnnotationAdjustment` derived
+  from the body's shape instead of a Bool that could only say "wrap
+  the whole thing". Mode-DIRECTED, not uniform — a bitvector width
+  formal stays a raw `Nat`.
+  Evidence, closing the "no compiling witness anywhere in the tree"
+  gap the correction recorded: `drivers/under_applied_partial_wrapper`
+  (drivers/ rows ELABORATE) with three under-application shapes,
+  including the bare three-mode case that would catch a "wrap every
+  residual formal" simplification; plus four unit pins in the
+  smoketest. The `negative/underapplied_partial_illtyped` probe was
+  RETIRED in the same commit — it pinned the loudness of an ill-typed
+  emission that no longer exists, and its own text named this fix as
+  the reason it would be retired.
 - [x] **F-3 (contracts) — CLOSED 2026-07-25 as documentation.**
   Division-wrapper error messages have no SAWCore backing
   (`divNat_runtimeM` throws `"divNat: division by zero"`, which
@@ -733,17 +776,28 @@ until (a).**
   obligation it supplies no way to prove. Belongs with the
   fragment-semantics programme, which is where productivity
   obligations get a discharge route.
-- [ ] **Printer: drop unused Pi binder names** (filed 2026-07-26 out
-  of F-8). `prettyPiBinder` renders `PiBinder _ (Just x) ty` as
-  `(x : ty) ->` even when `x` is unreferenced, so the F-8 fix made
-  three emitted signatures read `(_' : a) -> b` where they used to
-  read `a -> b`. Semantically identical, uglier, and the right fix
-  is at the printer: a named binder nobody references SHOULD print
-  anonymously. Would also remove one of the two cosmetic axes that
-  defeated the F-8 gate. Measured: 70 occurrences across 9 golden
-  files. PURE COSMETICS — deliberately not folded into a soundness
-  batch, where it would have been 9 files of noise around the real
-  change.
+- [x] **Printer: drop unused Pi binder names — CLOSED 2026-07-29**
+  (filed 2026-07-26 out of F-8). `prettyPiBinder` rendered
+  `PiBinder _ (Just x) ty` as `(x : ty) ->` even when `x` is
+  unreferenced, so the F-8 fix made three emitted signatures read
+  `(_' : a) -> b` where they used to read `a -> b`. Semantically
+  identical, uglier, and the right fix was at the printer: a named
+  binder nobody references SHOULD print anonymously. Also removes one
+  of the two cosmetic axes that defeated the F-8 gate. Measured
+  before the fix: 70 occurrences across 9 golden files.
+  Landed as `anonymizeUnusedPiBinders`, called from the `Pi` case of
+  `prettyTerm`. EXPLICIT binders only — `{x : A}` and `[x : A]` carry
+  named-argument and instance-resolution meaning that anonymizing
+  would change. Occurrence is decided by identifier STRING over the
+  binder's whole scope, so shadowing reads as "used" and the name is
+  KEPT: a false "used" costs only the cosmetic status quo, while a
+  false "unused" would drop a name a term references, so the analysis
+  is deliberately not sharpened past what it can prove.
+  Folded into the Family-3 pass rather than a cosmetics batch because
+  the emission-convention surface was being restructured anyway —
+  which is the opposite of the original filing rationale and the
+  better call in hindsight: as a standalone batch it would have been
+  9 files of golden churn with no reviewer context.
 - [x] **Documentation corrections batch — CLOSED 2026-07-28**
   (survey + spot-checks; doc-claim-lint green corroborates). Every
   listed site had already been corrected by the close that owned it:
@@ -953,14 +1007,41 @@ until (a).**
 
 ## Backlog — engineering
 
-- [ ] **Split `Term.hs`** (SWE-quality review #2; now ~5,500 lines):
-  extract at least `Obligations.hs` and finish the `Convention.hs`
-  split along the existing banner sections. Pure reorganization; do
-  BEFORE the pre-release soundness review so the audit reviews the
-  final structure. **Promoted 2026-07-28 into the Family-3 pass at
-  the top of this file** — it is not merely tidying: Family 3's
-  defects live in this file, and the split is where the annotation
-  invariant gets a home to be stated in.
+- [x] **Split `Term.hs` — DONE 2026-07-29** (SWE-quality review #2;
+  was 5,647 lines, now 3,703). Promoted 2026-07-28 into the Family-3
+  pass — it was not merely tidying: Family 3's defects live in this
+  file, and the split is where the annotation invariant got a home to
+  be stated in.
+  Worth recording for the next split: "extract `Obligations.hs`" as
+  filed is NOT a free cut. Term.hs's 149 top-level definitions
+  contain a 56-member mutually-recursive knot, and the `lower*`
+  obligation emitters are IN it. What is extractable is exactly what
+  the knot does not reach, which a call-graph layering finds:
+  `Convention -> Calculus -> Signature -> Obligations -> Term`, zero
+  upward edges. `Obligations.hs` therefore holds the obligation
+  machinery that is NOT in the knot (proof-carrying application
+  builders, the OP-2 Nat interval domain, obligation placeholders);
+  the recursive emitters stay put. `Calculus.hs` is the
+  "finish the `Convention.hs` split" half — the rules, where
+  Convention.hs keeps the vocabulary.
+- [ ] **Demo proof project's Lean toolchain is STALE, and the drift
+  is destructive** (found 2026-07-29 in the Family-3 pass).
+  `examples/saw-lean/proof/lean-toolchain` pins
+  `leanprover/lean4:v4.29.1` while `saw-core-lean/lean/lean-toolchain`
+  pins `v4.32.0` — and the demo project `require`s the support
+  library by RELATIVE PATH, so `lake build` in the demo rebuilds the
+  SHARED `cryptol_to_lean` package under 4.29.1 and leaves
+  `saw-core-lean/lean/.lake/build/lib/lean/CryptolToLean.olean`
+  unreadable by the suite ("incompatible header"). It cost a full
+  suite run in this session: 16 rows reported elaboration failures
+  that were entirely an artifact of having built the demo first.
+  Two things to fix, and they are separable: bump the demo's
+  toolchain to match the library (it elaborates fine at 4.29.1
+  today, so this is a pin update plus a demo re-run), and decide
+  whether the demo should share the library's `.lake` build tree at
+  all — a demo that can invalidate the test suite's artifacts by
+  being run is a footgun independent of which toolchain it pins.
+
 - [ ] **lean-smt migration** (recorded resolution trigger for the
   native-eval trust tier): when lean-smt's BV proof reconstruction
   lands kernel-checked (its own BitVec tests stop admitting

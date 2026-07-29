@@ -197,7 +197,8 @@ namespace PointExercise
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) EmptyType)); Bind.bind
-    (Bind.bind (Bind.bind p1 (fun scrut_ => @RecordType.rec "x" (Vec
+    (Bind.bind (Bind.bind p1
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "x" (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -255,8 +256,9 @@ namespace PointExercise
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)) := (Pure.pure x); x)
-    scrut_)) (fun v_1 => Bind.bind (Bind.bind p2 (fun scrut_ => @RecordType.rec
-    "x" (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    scrut_)) (fun v_1 => Bind.bind (Bind.bind p2
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "x" (Vec
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -322,7 +324,7 @@ namespace PointExercise
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))))
     (fun v_3' => Bind.bind (Bind.bind (Bind.bind (Bind.bind (Bind.bind p1
-    (fun scrut_ => @RecordType.rec "x" (Vec
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "x" (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -380,8 +382,9 @@ namespace PointExercise
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)
-    EmptyType)) := (Pure.pure y); y) scrut_)) (fun scrut_ => @RecordType.rec "y"
-    (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    EmptyType)) := (Pure.pure y); y) scrut_))
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "y" (Vec
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -418,7 +421,7 @@ namespace PointExercise
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)) := (Pure.pure x); x)
     scrut_)) (fun v_1 => Bind.bind (Bind.bind (Bind.bind p2
-    (fun scrut_ => @RecordType.rec "x" (Vec
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "x" (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -476,8 +479,9 @@ namespace PointExercise
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)
-    EmptyType)) := (Pure.pure y); y) scrut_)) (fun scrut_ => @RecordType.rec "y"
-    (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    EmptyType)) := (Pure.pure y); y) scrut_))
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "y" (Vec
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -673,7 +677,8 @@ namespace PointExercise
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) EmptyType));
-    let x__'''''' := (Bind.bind p1 (fun scrut_ => @RecordType.rec "x" (Vec
+    let x__'''''' := (Bind.bind p1
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "x" (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -732,7 +737,7 @@ namespace PointExercise
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)) := (Pure.pure x); x)
     scrut_)); let x__''''''' := (Bind.bind (Bind.bind p1
-    (fun scrut_ => @RecordType.rec "x" (Vec
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "x" (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -790,8 +795,9 @@ namespace PointExercise
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)
-    EmptyType)) := (Pure.pure y); y) scrut_)) (fun scrut_ => @RecordType.rec "y"
-    (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    EmptyType)) := (Pure.pure y); y) scrut_))
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "y" (Vec
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -828,7 +834,7 @@ namespace PointExercise
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)) := (Pure.pure x); x)
     scrut_)); let x__'''''''' := (Bind.bind (Bind.bind p2
-    (fun scrut_ => @RecordType.rec "x" (Vec
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "x" (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -886,8 +892,9 @@ namespace PointExercise
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)
-    EmptyType)) := (Pure.pure y); y) scrut_)) (fun scrut_ => @RecordType.rec "y"
-    (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    EmptyType)) := (Pure.pure y); y) scrut_))
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "y" (Vec
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -923,8 +930,9 @@ namespace PointExercise
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)) := (Pure.pure x); x)
-    scrut_)); let x__''''''''' := (Bind.bind p2 (fun scrut_ => @RecordType.rec
-    "x" (Vec (CryptolToLean.SAWCorePrimitives.natPos_macro
+    scrut_)); let x__''''''''' := (Bind.bind p2
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "x" (Vec
+    (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro

@@ -32,7 +32,7 @@ noncomputable def streamFn :
     Bool)) => fun (i : Nat) => atWithDefaultM
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     CryptolToLean.SAWCorePrimitives.one_macro) Bool (Bind.bind allTrue
-    (fun scrut_ => @Stream.rec Bool (fun (strm' : Stream Bool) => Except String
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.Stream.rec Bool (fun (strm' : Stream Bool) => Except String
     Bool) (fun (s : Nat -> Bool) => let s := (fun η_arg_0 => Pure.pure (s
     η_arg_0)); s (subNat i (CryptolToLean.SAWCorePrimitives.natPos_macro
     CryptolToLean.SAWCorePrimitives.one_macro))) scrut_)) (vecSequenceM 1 Bool

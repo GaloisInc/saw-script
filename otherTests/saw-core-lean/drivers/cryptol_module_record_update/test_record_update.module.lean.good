@@ -45,7 +45,8 @@ namespace PointShift
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) EmptyType)) :=
-    Bind.bind (Bind.bind (Bind.bind p (fun scrut_ => @RecordType.rec "x" (Vec
+    Bind.bind (Bind.bind (Bind.bind p
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "x" (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -111,7 +112,8 @@ namespace PointShift
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))))
-    (fun v_3 => Bind.bind (Bind.bind p (fun scrut_ => @RecordType.rec "x" (Vec
+    (fun v_3 => Bind.bind (Bind.bind p
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "x" (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -223,7 +225,8 @@ namespace PointShift
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool) EmptyType)) :=
-    let x__ := (Bind.bind p (fun scrut_ => @RecordType.rec "x" (Vec
+    let x__ := (Bind.bind p
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "x" (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -282,7 +285,7 @@ namespace PointShift
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)
     EmptyType)) := (Pure.pure y); y) scrut_)); Bind.bind (Bind.bind p
-    (fun scrut_ => @RecordType.rec "x" (Vec
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "x" (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -341,7 +344,7 @@ namespace PointShift
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)) := (Pure.pure x); x)
     scrut_)) (fun v_3' => Bind.bind (Bind.bind (Bind.bind (Bind.bind x__
-    (fun scrut_ => @RecordType.rec "y" (Vec
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "y" (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -386,7 +389,8 @@ namespace PointShift
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) v_1 v_2))))
-    (fun v_3 => Bind.bind (Bind.bind x__ (fun scrut_ => @RecordType.rec "y" (Vec
+    (fun v_3 => Bind.bind (Bind.bind x__
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "y" (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
@@ -459,7 +463,8 @@ namespace PointShift
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     CryptolToLean.SAWCorePrimitives.one_macro)))))) Bool)) : Except String
     Bool :=
-    let x__ := (Bind.bind p (fun scrut_ => @RecordType.rec "x" (Vec
+    let x__ := (Bind.bind p
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.RecordType.rec "x" (Vec
     (CryptolToLean.SAWCorePrimitives.natPos_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro
     (CryptolToLean.SAWCorePrimitives.bit0_macro

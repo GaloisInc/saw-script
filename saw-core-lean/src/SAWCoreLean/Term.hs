@@ -34,6 +34,8 @@ module SAWCoreLean.Term
   , adaptToRuntime
   , translatedTermLean
   , topLevelDefConvention
+  , AnnotationAdjustment(..)
+  , applyAnnotationAdjustment
   , translateDefDoc
   , translateDefDocWithArity
   , translateDefDocWithTelescope
@@ -541,7 +543,17 @@ lowerPartialOpRuntimeWrapper contract args = do
   actuals <- zipWithM translateOne (pocRuntimeWrapperModes contract) args
   let head_ = Lean.Var (pocRuntimeWrapper contract)
       app   = if null actuals then head_ else Lean.App head_ actuals
-  pure (TranslatedTerm app BindingFunction)
+      -- F-1 (2026-07-29): record the RESIDUAL formal modes, not just
+      -- "a function". The wrapper's remaining formals are wrapped
+      -- exactly where its declared modes say 'RuntimeArg' (bitvector
+      -- widths stay raw), and its result is always wrapped — so this
+      -- list is precisely what the top-level annotation authority
+      -- needs to describe the body it was handed. Before this, the
+      -- shape was 'BindingFunction' and the annotation was derived
+      -- from the SAWCore type alone, emitting a raw arrow over a
+      -- wrapped-arrow body.
+      residual = drop (length actuals) (pocRuntimeWrapperModes contract)
+  pure (TranslatedTerm app (BindingWrappedArrow residual))
   where
     translateOne mode a = case mode of
       RuntimeArg -> adaptToRuntime =<< translateTermWithShape a
@@ -737,10 +749,10 @@ checkedApplicationActual ident mode arg = case mode of
       -- A runtime-computed index: legal via the error-preserving
       -- bind chain built by 'lowerCheckedApplicationHelperArgs'.
       BindingWrapped  -> pure (CheckedBindIndex (ttLean translated))
-      BindingFunction ->
+      shape ->
         Except.throwError (ForbiddenAdaptation
           "IndexArg (raw index position)"
-          "BindingFunction")
+          (Text.pack (show shape)))
   FunctionArg mconv -> do
     translated <- translateTermWithShape arg
     CheckedDirect . ttLean <$> adaptTo (ExpectFunctionPosition mconv) translated
@@ -2274,7 +2286,7 @@ translateRecursorAppWithShape crec args = do
                          [scrutTrans, lam])
                        BindingWrapped)
            | null postScrut
-           , recFinalShape convention == BindingFunction
+           , isFunctionShape (recFinalShape convention)
            , recursorFunctionResultCanPropagate (recursorSort crec) motiveBody -> do
                fn <- etaExpandWrappedScrutineeFunctionResult
                        motiveBody scrutTrans recCallWith
@@ -2326,7 +2338,7 @@ translateRecursorAppWithShape crec args = do
         (RecursorScrutineeWrapped, RecursorReturnsFunction) ->
           if finalShape == BindingWrapped ||
              (nPostArgs == 0 &&
-              finalShape == BindingFunction &&
+              isFunctionShape finalShape &&
               recursorFunctionResultCanPropagate (recursorSort rec) motiveBody)
              then pure convention
              else rejectWrappedRawRecursor rec convention
@@ -2646,7 +2658,7 @@ translateCaseHandler motiveReturnsRaw expectedWrappedResult casePlan caseTerm = 
       caseResult <- translateTermWithShape caseTerm'
       caseLean <-
             case ttShape caseResult of
-              BindingFunction -> pure (ttLean caseResult)
+              shape | isFunctionShape shape -> pure (ttLean caseResult)
               _ | expectedWrapped -> adaptToRuntime caseResult
               _ -> pure (ttLean caseResult)
       mFty <- functionTypeOfTerm caseTerm'
@@ -2748,8 +2760,24 @@ translateFTermF ftf = case ftf of
               \emission path; L-16 closes the scNormalize-unfolding \
               \path."
       _ -> pure ()
+    -- F-2 (core), fixed 2026-07-29 in the Family-3 pass. This used
+    -- 'translateIdentToIdent' — the SHORT spelling — while the
+    -- ctor-order assertion recorded just below uses
+    -- 'translateIdentToQualifiedIdent'. Two emissions about the SAME
+    -- inductive, computed by two different name authorities: exactly
+    -- the annotation invariant's shape
+    -- (doc/2026-07-29_annotation-invariant.md). The consequence was
+    -- that @\@Stream.rec@ is genuinely ambiguous against Lean core's
+    -- root-scope @Stream@ and got resolved by overload-by-elaboration
+    -- — and had it ever resolved to the core one, the assertion would
+    -- still have passed while checking a different inductive.
+    --
+    -- This changes the name a USER writes in a discharge, so it is a
+    -- naming-convention decision, not a drive-by: the hand-written
+    -- artifacts that reference these heads are updated in the same
+    -- commit.
     maybeDIdent <- case dInfo of
-      ModuleIdentifier ident -> translateIdentToIdent ident
+      ModuleIdentifier ident -> translateIdentToQualifiedIdent ident
       ImportedName{}         -> pure Nothing
     case maybeDIdent of
       Just (Lean.Ident i) -> do
@@ -3651,7 +3679,7 @@ translateDocWithTelescope ::
   Lean.Ident -> Term -> Term ->
   Either TranslationError (Doc ann, Int, [Lean.Type])
 translateDocWithTelescope kind configuration mm name body tp = do
-  ((bodyLean, wrapAnn, tp'), state) <-
+  ((bodyLean, annAdj, tp'), state) <-
     runTermTranslationMonad configuration Nothing mm [] [name] $ do
       -- P-1 (2026-05-06): use 'translateTermLet' on the body so
       -- shared subterms are emitted as let-bound variables rather
@@ -3660,9 +3688,9 @@ translateDocWithTelescope kind configuration mm name body tp = do
       -- Salsa20). Type-side rarely shares; plain 'translateTerm'
       -- is enough there.
       bodyResult <- translateTermLetWithShape body
-      (bodyLean, wrapAnn) <- topLevelDefConvention tp bodyResult
+      (bodyLean, annAdj) <- topLevelDefConvention tp bodyResult
       tpLean <- translateTerm tp
-      pure (bodyLean, wrapAnn, tpLean)
+      pure (bodyLean, annAdj, tpLean)
   let auxDecls = reverse (view topLevelDeclarations state)
       univs    = view universeVars state
   -- Goal-shape gates (audit-2 A-2/A-9, F-5). Ordered so the
@@ -3691,7 +3719,7 @@ translateDocWithTelescope kind configuration mm name body tp = do
            "instantiation class and the Lean statement is strictly WEAKER.")
   -- Annotation carrier decided by 'topLevelDefConvention' (the
   -- single definition-convention authority).
-  let tp'' = if wrapAnn then wrapExcept tp' else tp'
+  let tp'' = applyAnnotationAdjustment annAdj tp'
   let mainDecl = mkDefinitionWith Lean.Noncomputable univs name bodyLean tp''
       -- Each 'prettyDecl' already ends with 'hardline'; 'vcat' adds
       -- another between elements, yielding one blank line between

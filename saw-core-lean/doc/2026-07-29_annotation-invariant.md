@@ -147,12 +147,24 @@ it:
   derived from the body's production record, with the SAWCore type
   as a CHECK rather than an input — is the successor, and it is
   0.03-scale.
-- `mkDefinitionWith`'s second caller (`emitImportedRealizationAlias`)
-  does not go through `topLevelDefConvention`. That is currently
-  fine — an imported-realization alias declares the realization's own
-  type, so there is no second authority to disagree with — but it is
-  the one live path where the chokepoint is bypassed, and it should
-  be re-argued whenever that path grows.
+- `mkDefinitionWith`'s second caller,
+  `emitImportedRealizationAlias`, does not go through
+  `topLevelDefConvention`, and the reason is more interesting than a
+  missed call. That path has **no body-production record to derive
+  from**: the body is `Lean.Var targetIdent`, a bare reference to a
+  library realization, not a `TranslatedTerm`. So the invariant as
+  stated does not apply to it. What it has instead is
+  `translateConstantContractType`, which carries its OWN copy of the
+  wrap decision (`if shouldWrapBinder ty then wrapExcept …`) — a
+  fourth hand-copy of exactly what the 2026-07-18 exception hunt
+  consolidated in the other three emitters. Its correctness rests on
+  the realization's declared Lean type agreeing with the wrap rule,
+  which nothing checks; a disagreement is loud at Lean.
+  Not fixed here because the fix is not "call the chokepoint" — the
+  chokepoint's input does not exist on this path. The honest
+  successor is to give a realization alias an authority for its own
+  type (the realization's declared signature), which is the same
+  move as the by-construction chokepoint above.
 - `BindingShape` remains a three-plus-one enumeration rather than a
   representation type. A shape that carried the full arrow
   convention would make F-1's class unrepresentable; the refinement

@@ -65,10 +65,8 @@ translateTypedTermMap = mapM translateAndRegisterEntry
       -- definition-convention authority (2026-07-18 exception-hunt
       -- Finding 1: this site's hand-copied mirror had drifted —
       -- it was missing the wrapped-body annotation clause).
-      (tTrans', wrapAnn) <- TermTranslation.topLevelDefConvention tp tResult
-      let tpTrans' = if wrapAnn
-                        then TermTranslation.wrapExcept tpTrans
-                        else tpTrans
+      (tTrans', annAdj) <- TermTranslation.topLevelDefConvention tp tResult
+      let tpTrans' = TermTranslation.applyAnnotationAdjustment annAdj tpTrans
       -- Every translated def can transitively reference @coerce@ /
       -- @unsafeAssert@ / @error@ — all noncomputable axioms. Emit the
       -- user decl as @noncomputable def@ so Lean's code generator

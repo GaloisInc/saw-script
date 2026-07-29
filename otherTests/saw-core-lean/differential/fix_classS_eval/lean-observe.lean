@@ -31,7 +31,7 @@ a broken link fails at (1). Neither can pass silently. -/
 realization replaced by the unfold it is propositionally equal to. -/
 noncomputable def ObservedComputable : Except String Bool :=
   Bind.bind (Pure.pure (saw_stream_unfold Bool Bool.true (fun prev_ => prev_)))
-    (fun scrut_ => @Stream.rec Bool (fun (_strm' : Stream Bool) => Except String Bool)
+    (fun scrut_ => @CryptolToLean.SAWCorePrimitives.Stream.rec Bool (fun (_strm' : Stream Bool) => Except String Bool)
       (fun (s : Nat -> Bool) => Pure.pure (s 5)) scrut_)
 
 /-- The emitted term IS the computable counterpart. This is the check

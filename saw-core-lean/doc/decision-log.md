@@ -91,3 +91,36 @@ in the 2026-07-17 doc reorganization.
   F-1-class issues in code about to be restructured. The audit is
   NOT skipped: the deferred families' dispositions and the
   possibility of a fourth family are precisely its job.
+
+- [x] QUALIFY the emitted recursor head (F-2 core), 2026-07-29, in
+  the Family-3 pass. This is a NAMING-CONVENTION decision, not a
+  refactor: it changes what a user writes in a discharge, from
+  `@Num.rec` to `@CryptolToLean.SAWCorePrimitives.Num.rec`.
+  Context: the head was emitted SHORT while its ctor-order assertion
+  was emitted QUALIFIED, so `@Stream.rec` was genuinely ambiguous
+  against Lean core's root-scope `Stream` and resolved by
+  overload-by-elaboration — and had it ever resolved to the core
+  inductive, the assertion would still have passed while checking a
+  different one. Deferred 2026-07-25 with the blast radius measured
+  (15 emitted rows; five hand-written artifacts plus two demo
+  copies), explicitly to be taken "with the naming pass, not alone".
+  Alternative considered and rejected: qualify only when the short
+  name collides with something Lean's root scope provides. That is
+  DETECTION — it needs a model of the root scope, which is the shape
+  of machinery F-8 built and then deleted. Uniform qualification is
+  by-construction, at the cost of verbosity in user discharges.
+  Failure mode was LOUD either way (the scrutinee type pins the
+  inductive), so this buys argument, not a fixed unsoundness.
+
+- [x] RETIRE `negative/underapplied_partial_illtyped` (2026-07-29),
+  on landing F-1's fix. The probe pinned that the under-applied
+  partial-op emission stays ILL-TYPED, so that its failure mode is
+  loud rather than silently absorbed. The fix makes the emission
+  well-typed, so the probe's subject no longer exists — it is not a
+  probe that started passing for the wrong reason (the V-H1 class),
+  it is a probe whose question was answered. Its own text named this
+  outcome in advance: "the honest fixes are a wrapped-convention
+  signature or deleting the lowering". Replacement coverage is
+  POSITIVE and stronger: `drivers/under_applied_partial_wrapper`
+  elaborates three under-application shapes, so a regression to the
+  raw annotation fails at Lean rather than in a golden diff.
