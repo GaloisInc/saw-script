@@ -72,6 +72,109 @@ for f in Emitted.lean proof.lean completed.lean Generated.lean; do
 done
 STAGE="$WORK"
 
+# ---------------------------------------------------------------
+# ORDERING INVARIANT (B1, 0.02 release-gate audit, 2026-07-29):
+#
+#   NO USER-AUTHORED LEAN IS ELABORATED BEFORE EVERY PURE-TEXT GATE
+#   HAS RUN ON THE EXACT BYTES IT WILL LATER BE JUDGED ON.
+#
+# This used to be false, and it was a CRITICAL unsound-acceptance
+# path. The gates below (the sorry scan and the source lint) sat ~140
+# lines further down, AFTER step 1 ran `lake env lean` on
+# `Emitted.lean`. On the completed-outline path the SAW caller stages
+# the USER's `completed.lean` as BOTH `completed.lean` and
+# `Emitted.lean` (Builtins.hs), so step 1 elaborated user-authored
+# Lean as the kernel's FIRST Lean action.
+#
+# Lean elaboration executes commands. A `run_cmd` in that file runs
+# arbitrary IO at that moment, while `$WORK/completed.lean` (the only
+# copy the lint would ever read) and `$WORK/Generated.lean` (the
+# drift check's AUTHORITY — the sole thing binding the user's `def
+# goal` to the SAW obligation) both sit on disk, rewritable. Rewrite
+# both and the run yields CHECK-OK for a false obligation.
+#
+# Two changes close it. FIRST, the pure-text gates move here: neither
+# needs Lean or the built library, and both are the gates that exist
+# precisely to keep hostile constructs out of the elaborator. They
+# stay below `STAGE="$WORK"` so the lint's `sed "s|$STAGE/||g"` path
+# stripping still produces the deterministic diagnostic driver
+# goldens pin. SECOND, see the hash re-verification below: ordering
+# alone is a property of where statements sit in this file, and a
+# future edit could silently undo it, so the invariant is CHECKED
+# rather than merely arranged.
+# ---------------------------------------------------------------
+
+# Non-degradable digest guard, same discipline as the timeout guard
+# below: a trust kernel that cannot verify its inputs did not change
+# refuses rather than degrading to trusting them.
+if command -v sha256sum >/dev/null 2>&1; then
+    digest() { sha256sum "$1" | awk '{print $1}'; }
+elif command -v shasum >/dev/null 2>&1; then
+    digest() { shasum -a 256 "$1" | awk '{print $1}'; }
+else
+    fail "no-digest-guard"
+fi
+
+# Record the bytes as staged, BEFORE anything has had a chance to run.
+STAGED_DIGESTS=""
+for f in Emitted.lean proof.lean completed.lean Generated.lean; do
+    if [ -f "$STAGE/$f" ]; then
+        STAGED_DIGESTS="$STAGED_DIGESTS$f $(digest "$STAGE/$f")
+"
+    fi
+done
+
+# Re-verify that a file still has the bytes the text gates saw. Called
+# immediately before each gate that CONSUMES a file, so a rewrite by
+# anything that ran in between is caught rather than trusted.
+verify_unchanged() {
+    local f="$1" want have
+    [ -f "$STAGE/$f" ] || return 0
+    want=$(printf '%s' "$STAGED_DIGESTS" | awk -v k="$f" '$1==k{print $2}')
+    have=$(digest "$STAGE/$f")
+    if [ "$want" != "$have" ]; then
+        echo "$f changed after staging (expected $want, found $have)"
+        fail "user-file-mutated-mid-check"
+    fi
+}
+
+# GATE A (was step 4.5). Placeholder policy on the USER's files. See
+# the long note at the original site below for why `sorry` is
+# zero-tolerance on these two and not on Emitted.lean.
+for uf in proof.lean completed.lean; do
+    if [ -f "$STAGE/$uf" ] && grep -qn 'sorry' "$STAGE/$uf"; then
+        grep -n 'sorry' "$STAGE/$uf"
+        fail "sorry-in-user-file"
+    fi
+done
+
+# GATE B (was step 4.6). Axiom/macro-declaration lint on the USER's
+# files. This is the gate that bans `run_cmd` and every other escape
+# hatch into environment mutation — which is exactly why it must
+# precede the first elaboration rather than follow it.
+for uf in proof.lean completed.lean; do
+    if [ -f "$STAGE/$uf" ]; then
+        lint_out=$(LC_ALL=C awk -f "$(cd "$(dirname "$0")" && pwd)/proof-source-lint.awk" \
+                     "$STAGE/$uf" 2>&1) && lint_rc=0 || lint_rc=$?
+        bad_decl=$(printf '%s' "$lint_out" | sed "s|$STAGE/||g")
+        if [ "$lint_rc" -ne 0 ] || [ -n "$bad_decl" ]; then
+            echo "$bad_decl"
+            fail "axiom-or-macro-decl-in-user-file"
+        fi
+    fi
+done
+
+# On the completed path the caller stages the user's outline as
+# Emitted.lean too, so the bytes step 1 is about to elaborate have now
+# been linted. Assert that rather than leaving it to the reader: if a
+# future caller change breaks the correspondence, this fails loudly
+# instead of silently reopening B1.
+if [ -f "$STAGE/completed.lean" ] && [ -f "$STAGE/Emitted.lean" ]; then
+    if [ "$(digest "$STAGE/completed.lean")" != "$(digest "$STAGE/Emitted.lean")" ]; then
+        fail "completed-path-emitted-not-linted"
+    fi
+fi
+
 # Non-degradable timeout guard (seventh-audit amendment 2): the CI
 # wrapper degrades to unguarded when coreutils is absent; the trust
 # kernel refuses instead.
@@ -91,6 +194,9 @@ build_out=$( ( cd "$PROJ" && "${TO[@]}" lake build ) 2>&1 ) || {
     echo "$build_out"; fail "support-library-build"; }
 
 # 1. Emitted goal compiles.
+# B1: first Lean action of the whole check. The text gates have run;
+# assert the bytes about to be elaborated are still the ones they saw.
+verify_unchanged Emitted.lean
 emit_out=$(run_lean -o "$STAGE/Emitted.olean" "$STAGE/Emitted.lean") || {
     echo "$emit_out"; fail "emitted-does-not-compile"; }
 
@@ -190,6 +296,13 @@ fi
 # producing a doubled-namespace LHS a user def could satisfy. Removed
 # 2026-07-24 — the trust kernel has no goal-less completed path.)
 if [ -f "$STAGE/completed.lean" ]; then
+    # B1: Generated.lean is the AUTHORITY this check compares against —
+    # the only thing binding the user's `def goal` to the SAW
+    # obligation. It is also the file a metaprogram would rewrite to
+    # make a substituted goal pass. Re-verify both sides against their
+    # staged digests before compiling either.
+    verify_unchanged Generated.lean
+    verify_unchanged completed.lean
     gen_out=$(run_lean -o "$STAGE/Generated.olean" "$STAGE/Generated.lean") || {
         echo "$gen_out"; fail "generated-reference-does-not-compile"; }
     {
@@ -230,6 +343,13 @@ fi
 # the completed path. That is an EMITTER problem — the emitter should
 # not produce an obligation it has no route to discharge — and it is
 # filed as such in TODO.md rather than papered over here.
+# MOVED to GATE A above (B1, 2026-07-29) — it now runs BEFORE the
+# first elaboration. Re-run here, over bytes first re-verified against
+# their staged digests, so that (a) the pre-elaboration result cannot
+# have been invalidated by anything that ran since, and (b) deleting
+# the moved copy by mistake still leaves a gate in the path.
+verify_unchanged proof.lean
+verify_unchanged completed.lean
 for uf in proof.lean completed.lean; do
     if [ -f "$STAGE/$uf" ] && grep -qn 'sorry' "$STAGE/$uf"; then
         grep -n 'sorry' "$STAGE/$uf"
@@ -257,6 +377,8 @@ done
 # multibyte input. A nonzero awk exit must reject even with empty
 # output — an awk crash must never read as a lint pass (F1-fix
 # hardening, 2026-07-21).
+# MOVED to GATE B above (B1, 2026-07-29). Re-run over re-verified
+# bytes, for the same two reasons as the sorry scan.
 for uf in proof.lean completed.lean; do
     if [ -f "$STAGE/$uf" ]; then
         lint_out=$(LC_ALL=C awk -f "$(cd "$(dirname "$0")" && pwd)/proof-source-lint.awk" \

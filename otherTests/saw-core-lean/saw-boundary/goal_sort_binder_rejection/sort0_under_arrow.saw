@@ -1,0 +1,42 @@
+// B2 pin (0.02 release-gate audit, 2026-07-29, CRITICAL).
+//
+// The sibling rows pin a binder whose type IS a sort. This one pins a
+// binder whose type MENTIONS one: `(f : Nat -> sort 0)`. Before the
+// fix, `leanSortBinders` classified only the former — `report` fell
+// through to `go`, whose `Lean.Sort{} -> []` arm DISCARDS — so this
+// shape emitted `(f : Nat -> Type)` with NO diagnostic anywhere.
+//
+// It is the same soundness defect as the bare spelling, and not a
+// milder one: SAWCore admits `Prop <= sort 0` cumulativity AND
+// covariant Pi subtyping, so the SAW obligation genuinely ranges over
+// Prop-valued `f` (`\(n : Nat) -> EqTrue True` inhabits `Nat -> sort
+// 0`) while Lean 4, having no term cumulativity, quantifies over
+// strictly fewer. The emitted artifact is well-typed Lean, so a user
+// or `offline_lean_replay` discharges it and SAW admits the
+// obligation on the strength of a strictly WEAKER statement.
+//
+// Gate 1 (the universe-parameter gate) cannot cover this: `sort 0`
+// allocates no universe variable, so only this gate can fire. That is
+// also what makes the expected diagnostic discriminating — the
+// `sort1_binder` sibling trips gate 1 and emits a DIFFERENT message,
+// so a golden naming the sort-binder message pins WHICH gate fired.
+//
+// NON-VACUITY, and the trap that makes it non-obvious. Reverting
+// `report` in Signature.hs to its pre-fix form makes this shape emit
+// cleanly instead of refusing. But BOTH outcomes exit 2 — the
+// mutated run exits 2 via `prove: 1 unsolved subgoal(s)`, because
+// `offline_lean` is emission-only and leaves the goal unsolved. So
+// the `.expect-fail` marker ALONE does not discriminate, and a row
+// pinned on exit code would be VACUOUS here. What discriminates is
+// the `.log.good` diff: the fixed run's log carries the refusal
+// naming `f`, the mutated run's carries the unsolved-subgoal line.
+// Verified by mutation 2026-07-29, both directions.
+//
+// TRAP, recorded so a future edit does not silently defeat this row:
+// an `EqTrue`-terminated body dies earlier, in `predicateToProp`, and
+// never reaches the gate at all. The goal must stay Bool-terminated
+// (`True` here is SAWCore's Bool `True`, not a Prop) or the probe
+// becomes vacuous — it would then pass on the wrong rejection.
+enable_experimental;
+let g = parse_core "\\(f : Nat -> sort 0) -> \\(x : f 0) -> True";
+prove_print (offline_lean "sort0_under_arrow_goal") g;

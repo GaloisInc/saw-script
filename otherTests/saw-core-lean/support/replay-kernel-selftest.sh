@@ -305,6 +305,150 @@ theorem goal_closed : True := trivial
 EOF
 expect_fail r1 completed-outline-missing-goal-def
 
+# --- B1 (0.02 release-gate audit): NO USER-AUTHORED LEAN IS
+# ELABORATED BEFORE THE PURE-TEXT GATES HAVE RUN.
+#
+# This case exists to pin an ORDERING, which is why the payload
+# ERASES ITSELF. A plain `run_cmd` would be rejected by the source
+# lint from either position — before or after the first elaboration —
+# so a plain payload pins that the lint bans `run_cmd` and says
+# NOTHING about when it runs. This one is only caught by a lint that
+# runs FIRST:
+#
+#   * gates in their pre-fix position: step 1 elaborates
+#     Emitted.lean, which on the completed path IS the user's file.
+#     The metaprogram runs, rewrites completed.lean to a clean copy
+#     and Generated.lean (the drift AUTHORITY) to agree with the
+#     substituted goal, and the lint 140 lines later reads the clean
+#     copy. Outcome: CHECK-OK on a goal the user chose.
+#   * gates in their fixed position: the lint reads the payload
+#     before Lean ever runs. Outcome:
+#     CHECK-FAIL: axiom-or-macro-decl-in-user-file.
+#
+# The payload only touches files under `.replay-stage/`, which is the
+# kernel's own per-call working area. It reaches them by enumeration
+# because `run_lean` executes with cwd = the project root and the
+# stage dir is required to live inside it (lake's constraint, see
+# lean-check-core.sh) — that adjacency is the attack surface, not an
+# accident of this fixture.
+#
+# The digest guard (`user-file-mutated-mid-check`) is the second,
+# independent line: even a payload the lint does not recognise cannot
+# rewrite a staged file without the re-verification firing. It is
+# pinned separately below.
+mk b1elab
+cat > "$STAGE_ROOT/b1elab/Generated.lean" <<'EOF'
+import CryptolToLean
+
+namespace GeneratedHarness
+noncomputable def goal : Prop := ∀ (x : Bool), x = !(!x)
+end GeneratedHarness
+EOF
+b1_payload() {
+    cat <<'EOF'
+import CryptolToLean
+
+noncomputable def goal : Prop := ∀ (x : Bool), x = x
+
+open Lean Elab Command in
+run_cmd do
+  let clean := "import CryptolToLean\n\nnoncomputable def goal : Prop := ∀ (x : Bool), x = x\n"
+  let auth  := "import CryptolToLean\n\nnamespace GeneratedHarness\nnoncomputable def goal : Prop := ∀ (x : Bool), x = x\nend GeneratedHarness\n"
+  let root : System.FilePath := ".replay-stage"
+  if (← root.pathExists) then
+    for d in (← root.readDir) do
+      let c := d.path / "completed.lean"
+      let g := d.path / "Generated.lean"
+      if (← c.pathExists) then IO.FS.writeFile c clean
+      if (← g.pathExists) then IO.FS.writeFile g auth
+EOF
+}
+b1_payload > "$STAGE_ROOT/b1elab/completed.lean"
+# The SAW caller stages the completed outline as Emitted.lean too
+# (Builtins.hs) — that is precisely what put user bytes in front of
+# the elaborator, so the fixture must reproduce it.
+b1_payload > "$STAGE_ROOT/b1elab/Emitted.lean"
+honest_proof > "$STAGE_ROOT/b1elab/proof.lean"
+expect_fail b1elab axiom-or-macro-decl-in-user-file
+
+# --- user-file-mutated-mid-check: the digest guard on its own, with
+# NO test hook in the kernel. A dev-override affordance inside a trust
+# path is a residual this project catalogs (residual-trust §3.2c), so
+# the guard is exercised through the kernel's ordinary inputs instead.
+#
+# The lever is that `Generated.lean` is NOT covered by the two text
+# gates — they read proof.lean and completed.lean only. That is
+# correct in the product, where Generated.lean is the emitter's own
+# output and no user controls it; but the selftest DOES control the
+# stage, so it can put a metaprogram there and observe what the kernel
+# does when a staged file changes underneath it.
+#
+# Sequence: the drift step re-verifies Generated.lean and
+# completed.lean (both still original, so both pass), then compiles
+# Generated.lean — at which point the payload rewrites completed.lean.
+# The re-verification before the sorry scan then finds the new bytes.
+# So this pins that the guard catches a mutation the LINT never saw,
+# which is the defence-in-depth half of B1.
+mk b1hash
+cat > "$STAGE_ROOT/b1hash/Generated.lean" <<'EOF'
+import CryptolToLean
+
+namespace GeneratedHarness
+noncomputable def goal : Prop := ∀ (x : Bool), x = x
+end GeneratedHarness
+
+open Lean Elab Command in
+run_cmd do
+  let root : System.FilePath := ".replay-stage"
+  if (← root.pathExists) then
+    for d in (← root.readDir) do
+      let c := d.path / "completed.lean"
+      if (← c.pathExists) then
+        IO.FS.writeFile c "import CryptolToLean\n\nnoncomputable def goal : Prop := ∀ (x : Bool), x = x\n-- rewritten after staging\n"
+EOF
+cat > "$STAGE_ROOT/b1hash/Emitted.lean" <<'EOF'
+import CryptolToLean
+
+noncomputable def goal : Prop := ∀ (x : Bool), x = x
+EOF
+cat > "$STAGE_ROOT/b1hash/completed.lean" <<'EOF'
+import CryptolToLean
+
+noncomputable def goal : Prop := ∀ (x : Bool), x = x
+EOF
+cat > "$STAGE_ROOT/b1hash/proof.lean" <<'EOF'
+import Emitted
+
+theorem goal_closed : goal := by intro x; rfl
+EOF
+expect_fail b1hash user-file-mutated-mid-check
+
+# --- completed-path-emitted-not-linted (B1's caller-contract assert).
+# On the completed path the SAW caller stages the user's outline as
+# BOTH completed.lean and Emitted.lean, so linting completed.lean is
+# what puts Emitted.lean's bytes behind a gate. That correspondence is
+# a property of the CALLER, not of this script, so the kernel asserts
+# it rather than assuming it: if a future caller change stages a
+# different Emitted.lean, the gate coverage silently shrinks and B1
+# reopens. Provoked here by staging the two files with different
+# bytes.
+mk b1contract
+real_goal > "$STAGE_ROOT/b1contract/completed.lean"
+cat > "$STAGE_ROOT/b1contract/Emitted.lean" <<'EOF'
+import CryptolToLean
+
+noncomputable def goal : Prop := ∀ (x : Bool), x = x
+EOF
+cat > "$STAGE_ROOT/b1contract/Generated.lean" <<'EOF'
+import CryptolToLean
+
+namespace GeneratedHarness
+noncomputable def goal : Prop := ∀ (x : Bool), x = !(!x)
+end GeneratedHarness
+EOF
+honest_proof > "$STAGE_ROOT/b1contract/proof.lean"
+expect_fail b1contract completed-path-emitted-not-linted
+
 # --- COVERAGE META-GUARD: this is what makes C4 structural rather
 # than conventional. Every named `fail "..."` in the trust kernel must
 # either be pinned by a case above or appear in the waiver list below
@@ -321,7 +465,12 @@ is_waived() {
     case "$1" in
         # Environment/plumbing: provoking these means breaking the
         # installation, not supplying a bad proof.
-        no-timeout-guard|cannot-create-work-stage) return 0 ;;
+        # no-digest-guard is the exact sibling of no-timeout-guard
+        # (B1, 2026-07-29): both are non-degradable environment
+        # guards, reachable only by removing a coreutils binary
+        # from the installation. Same T3 rationale.
+        no-timeout-guard|no-digest-guard) return 0 ;;
+        cannot-create-work-stage) return 0 ;;
         project-root-not-absolute|stage-dir-not-absolute) return 0 ;;
         missing-emitted|missing-proof) return 0 ;;
         support-library-build) return 0 ;;

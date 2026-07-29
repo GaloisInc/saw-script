@@ -76,11 +76,22 @@ artifact the only throwing let-binding (`atRuntimeCheckedM …`) is
 bound INSIDE the element span it is used in, so span-local scanning
 already catches it; the two let-bound values actually referenced from
 its `vecSequenceM` element spans are non-throwing (`Pure.pure (bvNat
-8 7)` and `Pure.pure (bvNat 8 1)`), and its `gen` there is
+8 7)` and `Pure.pure (bvNat 8 3)`), and its `gen` there is
 zero-length, so that element function is never applied. An
 independent scan over all 350 baseline artifacts finds ZERO artifacts
 with a throwing let-RHS bound outside an element span and referenced
-inside. The retracted "`vecSequenceM` is 2 by span, ≥3 closed" named
+inside.
+
+(Two arithmetic corrections, 2026-07-29 release-gate audit finding F5,
+re-derived from the artifact rather than taken on report: the second
+value is `bvNat 8 3`, not `bvNat 8 1` — the emitted numeral is
+`natPos_macro (bit1_macro one_macro)` = 3, where the first is
+`natPos_macro (bit1_macro (bit1_macro one_macro))` = 7. And the
+baseline was 350 artifacts when this scan ran; it is 353 as of
+2026-07-29. Both figures, and the zero-escapes result, are now
+asserted by `otherTests/saw-core-lean/support/lib1-census.py`, which
+`test.sh` runs after every emission category — so the claim is
+re-derived on each full run instead of resting on this record.) The retracted "`vecSequenceM` is 2 by span, ≥3 closed" named
 a third artifact that does not exist.
 
 **What survives, and what the retraction costs.** The requirement is

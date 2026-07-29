@@ -137,8 +137,8 @@ because this project has shipped vacuous pins repeatedly.
 
 ### BLOCKS RELEASE
 
-- [ ] **B1/F1 (CRITICAL) — the trust kernel elaborates the user's
-  Lean BEFORE any gate reads it.** `replay/lean-check-core.sh:93-94`
+- [x] **B1/F1 (CRITICAL) — FIXED 2026-07-29, mutation-verified.**
+  The trust kernel elaborated the user's Lean BEFORE any gate read it. `replay/lean-check-core.sh:93-94`
   runs `lake env lean` as its first Lean action; the sorry scan
   (`:233-238`) and source lint (`:260-271`) come 140-180 lines later,
   and `Emitted.lean` is in no gate's file list on either path.
@@ -164,10 +164,36 @@ because this project has shipped vacuous pins repeatedly.
   `run_cmd`, expecting `CHECK-FAIL`; un-waive the guard for that
   path; plus a saw-boundary row driving the payload through
   `offline_lean_replay` so the PRODUCT path is pinned.
-  MUTATION: restoring today's gate order turns it green.
+  **LANDED.** Two independent changes: the pure-text gates moved
+  ahead of the first Lean invocation, AND the ordering became a
+  CHECKED invariant rather than a property of statement order — the
+  four staged files are digested before anything runs and each is
+  re-verified immediately before its consuming gate, `Generated.lean`
+  included. Plus an assert that the caller's completed-path contract
+  (staging the outline as `Emitted.lean` too) still holds, so gate
+  coverage cannot silently shrink if `Builtins.hs` changes.
+  **MUTATION VERIFIED:** with the pre-fix ordering restored, the
+  kernel ACCEPTED the self-erasing payload —
+  `FAIL[b1elab]: kernel ACCEPTED a stage the guard
+  'axiom-or-macro-decl-in-user-file' must reject`. The CRITICAL
+  reproduced in the project's own harness, then closed.
+  Four pins, none subsuming another: `b1elab` (ordering, script
+  level), `b1hash` (digest guard), `b1contract` (caller contract),
+  and `saw-boundary/replay_reject_elaboration_order` (product path).
+  Two notes worth keeping. (i) `b1hash`'s first draft used a
+  `MUTATE_STAGED_FILE` env hook; that was DROPPED — a dev-override
+  affordance inside a trust path is exactly the residual
+  `residual-trust.md` §3.2c catalogs. It now provokes the guard
+  through the kernel's ordinary inputs, using the fact that
+  `Generated.lean` is not covered by the text gates (correct in the
+  product, where no user controls it). (ii) the coverage meta-guard
+  immediately flagged both new `fail` names as unpinned, which is how
+  `completed-path-emitted-not-linted` got a case instead of a
+  comment — the meta-guard earning its keep.
 
-- [ ] **B2/F2 (CRITICAL) — F-5's goal-shape gate, recorded CLOSED,
-  misses sorts INSIDE a binder's type.** `Signature.hs:264-296`:
+- [x] **B2/F2 (CRITICAL) — FIXED 2026-07-29, mutation-verified.**
+  F-5's goal-shape gate, recorded CLOSED, missed sorts INSIDE a
+  binder's type. `Signature.hs:264-296`:
   classification happens only in `report`, reached only from a
   Lambda/Pi binder's own type; `report`'s fallthrough re-enters `go`,
   whose `Lean.Sort{} -> []` (`:274`) DISCARDS. Gate 1 cannot cover it
@@ -192,14 +218,27 @@ because this project has shipped vacuous pins repeatedly.
   PIN: `saw-boundary/goal_sort_binder_rejection/sort0_under_arrow.saw`,
   body `\(f : Nat -> sort 0) -> \(x : f 0) -> True`, `.log.good`
   naming `f`. MUTATION: reverting the arm flips it red->green.
-  TRAP: an `EqTrue`-terminated variant dies earlier in
-  `predicateToProp` and never reaches the gate — the goal must be
-  Bool-terminated or the probe is VACUOUS.
+  **LANDED** as a binder-type-scoped walk (`goTy`) whose sort arm
+  REPORTS. Deliberately not applied to `go`: the goal BODY can
+  legitimately carry a `Lean.Sort`, and reporting those would refuse
+  faithful emissions. Refuse-only, so over-approximating costs a
+  rejected emission and never an admitted one. `make conformance`
+  exit 0, so no live over-rejection.
+  **MUTATION VERIFIED**, and it exposed a trap the audit's pin spec
+  did not name: BOTH outcomes exit 2 — the mutated run exits 2 via
+  `prove: 1 unsolved subgoal(s)`, because `offline_lean` is
+  emission-only and leaves the goal unsolved. So `.expect-fail` ALONE
+  does not discriminate and an exit-code pin here would have been
+  VACUOUS. What discriminates is the `.log.good` diff. Recorded in
+  the row's own header so a future edit cannot quietly defeat it.
+  TRAP (from the audit, still live): an `EqTrue`-terminated variant
+  dies earlier in `predicateToProp` and never reaches the gate — the
+  goal must be Bool-terminated or the probe is vacuous.
 
-### HIGH
+### HIGH — F4 closed; F3/F5/F6/F7/F8 open
 
-- [ ] **F4 (HIGH) — the F-1 `isFunctionShape` sweep missed
-  `Term.hs:466-476`.** `(App{}, BindingFunction)` was not swept, so a
+- [x] **F4 (HIGH) — FIXED 2026-07-29, mutation-verified.**
+  The F-1 `isFunctionShape` sweep missed `Term.hs:466-476`. `(App{}, BindingFunction)` was not swept, so a
   `BindingWrappedArrow` at `foldr`/`foldl`'s `UseArgFunction` slot
   takes the eta-expansion branch and emits a doubly-wrapped ill-typed
   term where the pass-through arm emitted what `foldrM` wants. LOUD
@@ -209,7 +248,11 @@ because this project has shipped vacuous pins repeatedly.
   claim in 64fb0079c's own message. Reachable from PLAIN CRYPTOL:
   `{{ foldl (/) (1 : [16]) ([1,2,3,4] : [4][16]) }}`.
   PIN: a `drivers/` row (drivers elaborate) with that Cryptol form.
-  MUTATION: reverting `:467` to `(App{}, BindingFunction)`; also
+  **LANDED**, pinned by `drivers/foldl_under_applied_partial`.
+  **MUTATION VERIFIED:** reverting `:467` to
+  `(App{}, BindingFunction)` reproduces the audit's predicted failure
+  exactly — Lean rejects with `v_0 : Vec …` against
+  `Except String (Vec …)` at the `bvUDiv_runtimeM` application. Also
   catches dropping `BindingWrappedArrow` from `isFunctionShape`,
   which `under_applied_partial_wrapper` cannot.
 

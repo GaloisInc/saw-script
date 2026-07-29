@@ -464,7 +464,32 @@ translateFunctionToWrappedFormal primitiveName fnTerm =
               fnTranslated <- translateTermWithShape fnTerm
               let typeIxs = typeArgPositions fty
               case (unwrapTermF fnTerm, ttShape fnTranslated) of
-                (App{}, BindingFunction) ->
+                -- F4 (2026-07-29 release-gate audit, HIGH). This arm
+                -- read @BindingFunction@ literally and was MISSED by
+                -- the F-1 sweep that replaced every other
+                -- shape-equality test with 'isFunctionShape' — GHC's
+                -- exhaustiveness checker cannot see a miss here,
+                -- because the fallthrough absorbs it.
+                --
+                -- The consequence was a capability regression, not an
+                -- unsoundness: an under-applied partial op in a
+                -- @foldr@/@foldl@ function slot carries
+                -- 'BindingWrappedArrow', so it fell to the
+                -- eta-expansion branch below and emitted a
+                -- DOUBLY-WRAPPED term — @Bind.bind@ over formals that
+                -- are already @Except@ — where this pass-through arm
+                -- emits exactly what @foldrM@ wants. Loud at Lean
+                -- (translation succeeds, the artifact does not
+                -- elaborate). Reachable from plain Cryptol, not only
+                -- @parse_core@: see
+                -- drivers/foldl_under_applied_partial.
+                --
+                -- A wrapped-arrow function IS a function here for the
+                -- same reason a plain one is: the slot wants the
+                -- function value itself, and the callee's own
+                -- signature — not this eta-wrapper — decides how its
+                -- formals are represented.
+                (App{}, shape) | isFunctionShape shape ->
                   pure (ttLean fnTranslated)
                 _ ->
                   translateFunctionConventionBindersWith

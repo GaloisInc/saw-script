@@ -9,7 +9,8 @@ emission) so a failure's cause is obvious from the test name.
 
 module Main (main) where
 
-import           Data.List           (isInfixOf, isPrefixOf, tails)
+import           Data.List           (isInfixOf, isPrefixOf, isSuffixOf, sortOn, tails)
+import           System.Directory    (doesDirectoryExist, listDirectory)
 import qualified Data.Text           as Text
 import qualified Language.Lean.AST   as Lean
 import qualified Language.Lean.Pretty as Lean
@@ -1191,22 +1192,29 @@ goalEmissionTests sc = testGroup "SAWCoreLean.Lean.translateGoalAsDeclImports"
 -- Anti-regression source lint (plan Slice 7)
 --------------------------------------------------------------------------------
 
--- | Backend source files the lint sweeps.
-lintSourceFiles :: [FilePath]
-lintSourceFiles =
-  map ("saw-core-lean/src/" ++)
-    [ "SAWCoreLean/Term.hs"
-    , "SAWCoreLean/Convention.hs"
-    , "SAWCoreLean/Contracts.hs"
-    , "SAWCoreLean/FixRecognizer.hs"
-    , "SAWCoreLean/Monad.hs"
-    , "SAWCoreLean/SAWModule.hs"
-    , "SAWCoreLean/CryptolModule.hs"
-    , "SAWCoreLean/SpecialTreatment.hs"
-    , "SAWCoreLean/Lean.hs"
-    , "Language/Lean/AST.hs"
-    , "Language/Lean/Pretty.hs"
-    ]
+-- | Backend source files the lint sweeps: EVERY @.hs@ under
+-- @saw-core-lean/src@, discovered at run time.
+--
+-- F7 (0.02 release-gate audit, 2026-07-29, HIGH). This was a
+-- hardcoded eleven-file list, and the 2026-07-29 module split
+-- (Calculus.hs / Signature.hs / Obligations.hs) silently fell out of
+-- it — so @adaptTo@ and @topLevelDefConvention@, the two functions
+-- the Slice-7 lint most exists to watch, stopped being swept the
+-- moment they moved. A lint whose COVERAGE is a hand-maintained list
+-- degrades exactly when the code is reorganised, which is exactly
+-- when it is most needed. Enumerating removes the failure mode
+-- instead of correcting this instance of it.
+lintSourceFiles :: IO [FilePath]
+lintSourceFiles = sortOn id <$> go "saw-core-lean/src"
+  where
+    go dir = do
+      entries <- listDirectory dir
+      fmap concat $ mapM (visit dir) entries
+    visit dir e = do
+      let path = dir ++ "/" ++ e
+      isDir <- doesDirectoryExist path
+      if isDir then go path
+      else pure [ path | ".hs" `isSuffixOf` path ]
 
 -- | The Lean support library the emitted corpus imports. The
 -- transport distinctness-invariant lint scans every file: the
@@ -1266,10 +1274,11 @@ lintCodeLines source =
 antiRegressionLintTests :: TestTree
 antiRegressionLintTests = testGroup "anti-regression source lint (Slice 7)"
   [ testCase "deleted heuristics stay deleted" $ do
-      sources <- mapM readFile lintSourceFiles
+      files   <- lintSourceFiles
+      sources <- mapM readFile files
       let hits =
             [ (file, name, why)
-            | (file, source) <- zip lintSourceFiles sources
+            | (file, source) <- zip files sources
             , (name, why) <- lintForbiddenNames
             , any (name `isInfixOf`) (lintCodeLines source)
             ]
@@ -1279,7 +1288,8 @@ antiRegressionLintTests = testGroup "anti-regression source lint (Slice 7)"
          ++ show hits)
         (null hits)
   , testCase "emitted-type self-mirrors gain no new consumers" $ do
-      sources <- mapM readFile lintSourceFiles
+      files   <- lintSourceFiles
+      sources <- mapM readFile files
       let allCode = concatMap lintCodeLines sources
           counts =
             [ (name, ceiling_, length (filter (name `isInfixOf`) allCode))
@@ -1338,17 +1348,28 @@ antiRegressionLintTests = testGroup "anti-regression source lint (Slice 7)"
       -- means a new constructor or recognizer of the carrier —
       -- which must either route through wrapExcept or be added
       -- here DELIBERATELY with the backstop argument re-checked.
-      sources <- mapM readFile lintSourceFiles
+      files   <- lintSourceFiles
+      sources <- mapM readFile files
       let allCode = concatMap lintCodeLines sources
           n = length (filter ("\"Except\"" `isInfixOf`) allCode)
+      -- EXACT, not an upper bound (F7, 2026-07-29). The argument
+      -- above is an exact claim — ONE constructor, TWO recognizers —
+      -- so `<=` was the wrong relation, and it hid a real regression:
+      -- when the telescope's stripExcept moved to Signature.hs in the
+      -- module split, the swept count silently fell to 2 and the
+      -- assertion still passed. An exact count catches a site
+      -- APPEARING (a new carrier constructor) and a site VANISHING
+      -- (the lint quietly losing coverage of one) with the same test.
       assertBool
         ("Except-carrier mention count changed (found " ++ show n
-         ++ ", ceiling 3: wrapExcept def + isExceptStringType + \
-            \telescope stripExcept) — a new carrier \
-            \constructor/recognizer endangers the Prop backstop and \
-            \the transport distinctness invariant; route through \
-            \wrapExcept or update this lint deliberately")
-        (n <= 3)
+         ++ ", expected exactly 3: wrapExcept def + isExceptStringType \
+            \+ telescope stripExcept) — MORE means a new carrier \
+            \constructor/recognizer, which endangers the Prop backstop \
+            \and the transport distinctness invariant: route through \
+            \wrapExcept or update this lint deliberately. FEWER means a \
+            \site was removed or moved out of the swept set; confirm \
+            \which before lowering the number")
+        (n == 3)
   ]
 
 --------------------------------------------------------------------------------

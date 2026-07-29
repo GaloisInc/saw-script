@@ -119,3 +119,33 @@ rejection gate should not lean on it without a checked argument.
 `vecSequenceM` note: SAWCore vector LITERALS are also element-lazy
 in SAW (per-slot thunks), so literal elements are genuine element
 positions — confirmed by the pin row, whose literal collapses.
+
+## The census is now checked in (2026-07-29)
+
+The numbers above were produced by a one-off scratch script. A user
+bounds their exposure to LIB-1 by them, so they are now RE-DERIVED on
+every full run rather than re-asserted:
+`otherTests/saw-core-lean/support/lib1-census.py`, invoked by
+`test.sh` after every emission category. It asserts three facts and
+fails loudly on any change: in-element throwers = 59, reference-closure
+escapes = 0, and the corpus SIZE.
+
+The size assertion is not bookkeeping. The harness deletes and
+re-emits artifacts as it runs, so a census over a partial corpus
+reports a LOWER count — understating exposure, silently. That was
+found by making the mistake: scanning mid-sweep reported 27/324 and
+read as good news.
+
+**A blind spot the pin exposed, recorded rather than quietly patched.**
+The element scan recognises an element position spelled as a lambda
+(`(fun … )`), which is how the emitter writes `gen`/`fold` element
+functions — but not a bare partially-applied name in the same slot,
+which the under-applied partial-op path emits
+(`foldlM … (bvUDiv_runtimeM 16) …`, from the row added the same day).
+That shape is not a LIB-1 hazard for an independent reason — a left
+fold forces every element on both sides, so there is no unforced-slot
+divergence — which is why the published count is unaffected. But the
+two facts are independent, and a collapsing helper that is lazy in a
+bare-name element argument would be missed. Widening the scan would
+move the published number for a reason unrelated to the hazard; the
+honest fix is the (a) carrier, which removes the class.

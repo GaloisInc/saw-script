@@ -334,6 +334,26 @@ run_replay_kernel_selftest() {
     fi
 }
 
+run_lib1_census() {
+    echo
+    echo "=== support/lib1-census ==="
+    # MUST run after every emission category, and only in the full
+    # `test` verb: the harness deletes and re-emits artifacts as it
+    # goes, so a census over a partial corpus reports a LOWER
+    # in-element-thrower count — understating the exposure a user
+    # bounds by. The script asserts the corpus SIZE for exactly that
+    # reason (F5, 0.02 release-gate audit).
+    local rc=0
+    if ! command -v python3 >/dev/null 2>&1; then
+        record_failure "support/lib1-census (python3 not found — NO SILENT SKIPS)"
+        return
+    fi
+    python3 "$HERE/support/lib1-census.py" "$HERE" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        record_failure "support/lib1-census (exit=$rc)"
+    fi
+}
+
 record_gap_inventory_item() {
     local path="$1"
     local note="$2"
@@ -413,6 +433,7 @@ case "$verb" in
         run_trust_tier_selftest
         run_replay_kernel_selftest
         run_doc_claim_lint
+        run_lib1_census
         iterate_gap_inventory
         print_summary_and_exit
         ;;

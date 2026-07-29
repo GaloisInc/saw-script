@@ -1,0 +1,17 @@
+// B1 pin at the PRODUCT path (0.02 release-gate audit, 2026-07-29,
+// CRITICAL). The completed outline in rejected_proof/ carries a
+// self-erasing `run_cmd`. Before the fix the trust kernel elaborated
+// that file as its FIRST Lean action — the caller stages a completed
+// outline as both completed.lean and Emitted.lean — so the
+// metaprogram ran, rewrote the lint's target and the drift check's
+// authority, and the run returned CHECK-OK for a goal the user chose.
+//
+// The gates now run ahead of the first elaboration, so the lint reads
+// the payload and the run is refused. This row pins that end-to-end
+// through offline_lean_replay; the kernel selftest's b1elab case pins
+// the same property at the script level, and neither subsumes the
+// other — the selftest cannot see the SAW-side staging that put user
+// bytes in front of the elaborator in the first place.
+enable_experimental;
+fails (prove_print (offline_lean_replay "rejected_proof")
+  {{ \(x : [8]) (y : [8]) -> x + y == y + x }});

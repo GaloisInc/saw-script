@@ -284,11 +284,51 @@ leanSortBinders = go
     piBinder (Lean.PiBinder _ mnm ty) =
       report (maybe "_" leanIdentStr mnm) ty
 
-    -- A sort-typed binder is reported; anything else is descended into.
-    report nm ty = case ty of
-      Lean.Sort Lean.Prop -> []
-      Lean.Sort s         -> [nm ++ " : " ++ renderSort s]
-      _                   -> go ty
+    -- A binder whose TYPE mentions a sort is reported.
+    --
+    -- B2 (0.02 release-gate audit, 2026-07-29, CRITICAL). This used
+    -- to report only when the binder's type WAS a sort, and
+    -- otherwise fell through to 'go' — whose @Lean.Sort{} -> []@ arm
+    -- DISCARDS. So @(f : Nat -> sort 0)@ emitted @(f : Nat -> Type)@
+    -- with no diagnostic. That matters because SAWCore admits
+    -- @Prop <= sort 0@ cumulativity and covariant Pi subtyping, so
+    -- the SAW obligation genuinely ranges over Prop-valued @f@ while
+    -- the Lean goal does not: a strictly WEAKER statement, and a
+    -- well-typed artifact, so nothing downstream notices. Gate 1
+    -- cannot cover it either — @sort 0@ allocates no universe
+    -- variable.
+    --
+    -- The binder's type gets its own walk ('goTy') that REPORTS a
+    -- sort wherever it occurs. Deliberately NOT applied to 'go': the
+    -- goal BODY can legitimately carry a @Lean.Sort@ (a translated
+    -- type argument), and reporting those would refuse emissions
+    -- that are perfectly faithful.
+    report nm ty = map (\s -> nm ++ " : " ++ s) (goTy ty)
+
+    -- Walk a BINDER TYPE. Reports every non-Prop sort it can reach.
+    -- Refuse-only, so over-approximating here costs a rejected
+    -- emission, never an admitted one — which is the right direction
+    -- for a gate whose whole purpose is that the emitted quantifier
+    -- must not be narrower than SAWCore's.
+    goTy ty = case ty of
+      Lean.Sort Lean.Prop     -> []
+      Lean.Sort s             -> [renderSort s]
+      Lean.Pi bs b            ->
+        concatMap (\(Lean.PiBinder _ _ t) -> goTy t) bs ++ goTy b
+      Lean.Lambda bs b        ->
+        concatMap (\(Lean.Binder _ _ mt) -> concatMap goTy mt) bs ++ goTy b
+      Lean.Let _ bs mty rhs b ->
+        concatMap (\(Lean.Binder _ _ mt) -> concatMap goTy mt) bs
+          ++ concatMap goTy mty ++ goTy rhs ++ goTy b
+      Lean.App f as           -> goTy f ++ concatMap goTy as
+      Lean.List xs            -> concatMap goTy xs
+      Lean.Var{}              -> []
+      Lean.ExplVar{}          -> []
+      Lean.ExplVarUniv{}      -> []
+      Lean.NatLit{}           -> []
+      Lean.IntLit{}           -> []
+      Lean.StringLit{}        -> []
+      Lean.Tactic{}           -> []
 
     renderSort Lean.Prop        = "Prop"
     renderSort (Lean.TypeLvl 0) = "Type"

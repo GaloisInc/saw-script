@@ -594,6 +594,30 @@ the `GeneratedHarness` probe namespace are rejected — the
 closer↔goal binding check (`goal_closed : goal`) therefore ALWAYS
 runs on admitted replays.
 
+**Elaboration order on the completed path (B1, 0.02 release-gate
+audit, 2026-07-29 — CORRECTS this section's own premise).** Read
+plainly, the paragraphs above rest on "the staged `Emitted.lean` is
+the untouched fresh emission". On the completed-outline path that was
+FALSE: the SAW caller stages the user's outline as BOTH
+`completed.lean` and `Emitted.lean`, and the checker's first Lean
+action compiled `Emitted.lean` — so user-authored Lean was elaborated
+before any gate read it. Lean elaboration executes commands, so a
+metaprogram in that file ran while the lint's target and the drift
+check's authority were both on disk and rewritable; rewriting them
+yielded `CHECK-OK` for a false obligation. Demonstrated end-to-end in
+the project's own kernel selftest.
+
+Closed 2026-07-29 by moving the pure-text gates ahead of the first
+elaboration AND by making the ordering a CHECKED invariant: the
+staged files are digested before anything runs and re-verified
+immediately before each consuming gate. What a reader should take
+from this entry is not only the fix but the shape of the mistake —
+the section reasoned about WHICH files are trusted and never about
+WHEN each becomes trustworthy, and on a path where one file is a
+copy of another, order was the whole question. Pins: `b1elab`,
+`b1hash`, `b1contract` in the kernel selftest, and
+`saw-boundary/replay_reject_elaboration_order` on the product path.
+
 ### 3.2c Deployment trust: the dev-override affordances (2026-07-25)
 
 Named here because the plan's threat model (T3) treats them as OUT
@@ -677,10 +701,32 @@ behind an unread erring slot closes by `rfl` under
   `true/true/false` vs Lean `error ×3` through the real pipeline.
 - Corpus: 59 of 350 baseline artifacts carry a thrower inside an
   element position (58 via `atRuntimeCheckedM`) —
-  `doc/2026-07-28_lib1-scope-measurement.md`. The census must be
-  read REFERENCE-CLOSED: emitter let-sharing can move a thrower
-  textually outside the element (witness:
-  `differential/vector_literal_edges`).
+  `doc/2026-07-28_lib1-scope-measurement.md`.
+  **The 59 is EXACT for this corpus, not a floor** (corrected here
+  2026-07-29 by the release-gate audit, finding F5; the retraction
+  itself was made 2026-07-29 in the measurement doc and never
+  propagated to this catalog, so for one day the two documents gave
+  a reader OPPOSITE bounds on the same shipped number).
+  What was retracted: an earlier version named
+  differential/vector_literal_edges as a live witness of emitter
+  let-sharing moving a thrower textually outside its element. It is
+  not one — in that artifact the only throwing let-binding is bound
+  INSIDE the element span it is used in, the two let-bound values
+  actually referenced from its `vecSequenceM` element spans are
+  non-throwing, and its `gen` there is zero-length so the element
+  function is never applied. An independent scan over the whole
+  baseline finds ZERO artifacts with a throwing let-RHS bound
+  outside an element span and referenced inside.
+  What SURVIVES the retraction, and is the reason this bullet still
+  exists: "a gate must be REFERENCE-CLOSED" remains a real design
+  requirement — a property any future rejection gate must HAVE, not
+  an observed corpus escape. It prices in together with the
+  genuinely interprocedural half (module translation emits elements
+  that call module-local definitions, so "can this element throw"
+  must traverse the translated module's call graph).
+  **What a reader should take from the number:** it bounds THIS
+  CORPUS exactly. It is not a property of the emitter, and a new
+  artifact can add to it.
 - No landed discharge is affected: every landed proof closes at
   explicit `Except.ok` values, the shape the collapse cannot help.
 - Reachable from ordinary Cryptol (not `parse_core`-only), and an

@@ -1,0 +1,31 @@
+enable_experimental;
+
+// F4 pin (0.02 release-gate audit, 2026-07-29, HIGH).
+//
+// A partial op used UNDER-APPLIED as a fold's function argument. The
+// F-1 change gave such a value the shape `BindingWrappedArrow`, and
+// the sweep that replaced every `== BindingFunction` test with
+// `isFunctionShape` MISSED the one at Term.hs:466 — GHC's
+// exhaustiveness checker cannot see that miss, because the arm's
+// fallthrough absorbs it.
+//
+// With the miss present, this row's function argument falls to the
+// eta-expansion branch and emits a DOUBLY-WRAPPED term: `Bind.bind`
+// over formals that `bvUDiv_runtimeM` already declares `Except`. The
+// pass-through arm emits exactly what `foldlM` wants.
+//
+// This is a drivers/ row on purpose: drivers ELABORATE every emitted
+// .lean, so the mutation is caught by Lean rejecting the artifact,
+// not merely by a golden diff a refresh could paper over. Reverting
+// Term.hs:467 to `(App{}, BindingFunction)` turns this row red at
+// `v_0`. It also catches dropping `BindingWrappedArrow` from
+// `isFunctionShape` — which drivers/under_applied_partial_wrapper
+// cannot, because that row never puts the wrapper in a callee slot.
+//
+// PLAIN CRYPTOL, deliberately: `parse_core` reachability would have
+// let this be filed as an exotic-input concern. Cryptol `/` on `[16]`
+// normalizes to `bvUDiv`, and `foldl` supplies it under-applied.
+
+let fold_div = {{ foldl (/) (1 : [16]) ([1, 2, 3, 4] : [4][16]) }};
+write_lean_term "FoldlUnderAppliedPartial" [] []
+  "test_foldl_under_applied_partial.foldDiv.lean" fold_div;

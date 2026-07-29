@@ -1,0 +1,27 @@
+Loading file "sort0_under_arrow.saw"
+Stack trace:
+   (builtin) in offline_lean
+   sort0_under_arrow.saw:42:14-42:51 in (callback)
+   (builtin) in prove_print
+   sort0_under_arrow.saw:42:1-42:54 (at top level)
+Error translating: Refusing to emit a Lean proof goal containing a sort-typed binder (f : Type).
+
+Reason: SAWCore admits `Prop <= sort 0` cumulativity and instantiates a sort binder
+at propositions; Lean 4 has no term cumulativity, so the emitted `Type` binder
+omits that instantiation class and the Lean statement is strictly WEAKER.
+
+What this means: the emitted `goal` def and its `goal_holds`
+stub must state EXACTLY the SAWCore obligation. For this shape
+the Lean statement would differ from the SAWCore one, so
+discharging it in Lean would not discharge the SAW obligation.
+Translation is refused rather than emitting a mis-stated goal.
+
+Likely cause: the goal reached translation without being
+monomorphised. Goals produced by `prove_print` / `llvm_verify`
+are specialised first and do not quantify over sorts; a
+hand-written `parse_core` goal can.
+
+Workaround: instantiate the sort binder at the concrete type
+you care about and prove that instance. Sort-quantified goals
+are a deferred feature, not a supported one.
+
