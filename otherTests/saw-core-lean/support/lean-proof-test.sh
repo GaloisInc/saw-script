@@ -109,7 +109,7 @@ if [ -f .known-gap ] && [ -z "${SAW_LEAN_PROOF_KNOWN_GAP_INNER:-}" ]; then
         case "$expected" in
             ''|\#*) continue ;;
         esac
-        if ! grep -F "$expected" known-gap.actual >/dev/null 2>&1; then
+        if ! grep -F -- "$expected" known-gap.actual >/dev/null 2>&1; then
             echo "MISSING EXPECTED KNOWN-GAP DIAGNOSTIC: $expected" >&2
             missing=1
         fi
@@ -352,8 +352,8 @@ else
     set +e
     build_log=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake build ) 2>&1 )
     build_rc=$?
-    set -e
 fi
+set -e
 if [ "$build_rc" -ne 0 ]; then
     cat >&2 <<EOF
 FAIL: \`lake build\` failed in $LAKE_DIR (rc=$build_rc).

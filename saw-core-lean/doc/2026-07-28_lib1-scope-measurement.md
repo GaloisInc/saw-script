@@ -41,12 +41,35 @@ Per surface, structural hits:
 
 | surface | artifacts | thrower breakdown |
 |---|---|---|
-| `genWithBoundsM` | 59 | 57 × `atRuntimeCheckedM`; 1 × `saw_throw_error` (the LIB-1 pin row itself); `cryptol_rev_module` additionally `intDiv_runtimeM`/`intMod_runtimeM`; `fix_error_elem` (error deliberately REACHED) |
+| `genWithBoundsM` | 59 | 58 × `atRuntimeCheckedM`; 1 × `saw_throw_error` (the LIB-1 pin row itself); `cryptol_rev_module` additionally `intDiv_runtimeM`/`intMod_runtimeM` |
 | `vecSequenceM` | 2 | the LIB-1 pin row; `bitvector_order_width` (`atRuntimeCheckedM` in a literal element) |
 | `foldrM` | 0 | used in 28 artifacts, never with a thrower inside the folded function |
 | `foldlM` | 0 | used in 6 artifacts, same |
-| `sawLet` | 1 artifact uses it at all (prelude auto-emit); no thrower inside |
+| `sawLet` | 0 | **UNMEASURED, not clean — see below** |
 | `genM` | 0 | **dead surface — no artifact uses it** |
+
+**CORRECTIONS 2026-07-29 (session audit).** Three errors in the
+table as first published, none of which move the headline 59:
+
+- The `atRuntimeCheckedM` count was **58, not 57** — as first
+  published the sub-breakdown did not sum to its own headline
+  (57 + 1 = 58 ≠ 59). Recount: 58 artifacts with `atRuntimeCheckedM`
+  in a `genWithBoundsM` element position, plus the 1 with
+  `saw_throw_error`, = 59.
+- `fix_error_elem` was listed in the thrower breakdown as an "error
+  deliberately REACHED" entry. It contains **no `saw_throw_error`
+  at all**; its in-element thrower is `atRuntimeCheckedM`, so it is
+  an ordinary member of the 58 and the parenthetical was wrong.
+- `sawLet` is **unmeasured, not measured-clean.** Its single corpus
+  "hit" is a COMMENT line recording that `sawLet` was skipped
+  (`drivers/sawcore_prelude_auto_emit/…prelude.lean`), not a use.
+  The surface has zero emitted uses, so the corpus says nothing
+  about it either way — and `sawLet` is a DISTINCT instance of the
+  hazard, not a variant (SAW beta-reduces and DISCARDS a throwing
+  bound value when the body ignores it; the Lean realization
+  propagates it). It stays an open question for the (a) carrier
+  work, and the shipped user-facing framing (README,
+  residual-trust §3.2e) describes the vector carrier only.
 
 The 59 include the discharged proof corpus's flagship rows: all 32
 `llvm_s20hash_comp` safety assertions, `cryptol_running_sum_verify`,
@@ -67,8 +90,13 @@ Refined option space for the decision:
 
 - **(b-narrow)**: reject only elements that can reach
   `saw_throw_error` (user `error`) and the runtime division family.
-  Measured cost: ~2 real rows (`cryptol_rev_module` — its elements
-  do runtime `intDiv`/`intMod`; `fix_error_elem` — deliberate).
+  Measured cost: exactly 2 artifacts — `cryptol_rev_module`
+  (elements do runtime `intDiv`/`intMod`) and the LIB-1 pin row
+  itself, i.e. ONE real row plus the pin. (Corrected 2026-07-29,
+  session audit: the first version named `fix_error_elem` as the
+  second hit, but its only in-element thrower is
+  `atRuntimeCheckedM`, which (b-narrow) explicitly does not reject —
+  the count of 2 was right over the wrong membership.)
   Does NOT close the `atRuntimeCheckedM` half of the hazard.
 - **(b-evidence)**: like (b-full) but an element is admitted when
   its only throw sources are checked operations whose obligations

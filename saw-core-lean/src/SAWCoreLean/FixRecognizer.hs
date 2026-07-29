@@ -296,9 +296,18 @@ classifyFixShape typeArg bodyArg
 
     -- Walk the element term. Returns Left reason on a forbidden use,
     -- Right sawAnyUse otherwise. There is NO context flag: a
-    -- recursive reference is admissible only inside the spine of an
-    -- at-selection at the inner binder ('goAtSpine'), so every other
-    -- occurrence is a Left at the variable arm.
+    -- recursive reference is admissible only where 'goAtSpine'
+    -- admits it, beneath an at-selection at the inner binder.
+    --
+    -- Precisely (2026-07-29, session audit corrected an earlier
+    -- overstatement here): every rec occurrence the walk VISITS
+    -- outside that position is a Left at the variable arm. The walk
+    -- does not visit the `at`'s length and element-type slots — a
+    -- rec there is neither admitted nor rejected, merely unvisited.
+    -- That is unreachable from well-typed SAWCore, where those slots
+    -- are the recursive vector's own rec-free length and element
+    -- type, but the rule is "admissible only under goAtSpine", not
+    -- "every other occurrence is inspected".
     --
     -- S-3 NARROWING (2026-07-28), two defects in one walk:
     --
@@ -351,12 +360,22 @@ classifyFixShape typeArg bodyArg
           [] -> Right (or (rights rs))
 
         -- The rec-containing spine of an at-selection at the inner
-        -- binder must be EXACTLY the recursive vector, or a zip one
-        -- of whose operands is the BARE recursive vector (the
-        -- corpus's parallel-comprehension form). Anything else —
-        -- a wrapper above the zip, a wrapper inside the slot, a
-        -- different combinator — can permute or force beyond the
-        -- lookback, and is out of the recognized class.
+        -- binder must be EXACTLY the recursive vector, or a zip (the
+        -- corpus's parallel-comprehension form). Anything else — a
+        -- wrapper above the zip, a different combinator — can permute
+        -- or force beyond the lookback, and is out of the recognized
+        -- class.
+        --
+        -- Note what the zip case actually admits (2026-07-29, session
+        -- audit corrected an earlier overstatement): each operand goes
+        -- to 'goZipOperand', which admits the BARE recursive vector
+        -- and otherwise re-scans the operand with 'go'. So an operand
+        -- that is itself a qualifying at-selection at the inner binder
+        -- also passes, and an accepted spine need not contain a bare
+        -- rec at any depth. That is intended — such an operand has
+        -- already re-qualified through the same lookback rule — but
+        -- the admitted set is "bare rec, or anything 'go' admits",
+        -- not "bare rec only".
         goAtSpine vec
           | isExactVar recVn vec = Right True
           | Just [_a, _b, _m, _k, xs, ys] <- asGlobalApply "Prelude.zip" vec =

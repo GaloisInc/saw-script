@@ -86,8 +86,8 @@ else
   set +e
   build_log=$( ( cd "$LAKE_DIR" && $LAKE_TIMEOUT_CMD lake build ) 2>&1 )
   build_rc=$?
-  set -e
 fi
+set -e
 if [ "$build_rc" -ne 0 ]; then
   echo "lean-elaborate.sh: lake build failed for $LAKE_DIR (rc=$build_rc)" >&2
   echo "$build_log" >&2

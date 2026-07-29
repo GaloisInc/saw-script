@@ -20,7 +20,15 @@ doc/2026-07-18_underapplied-partial-op-wrapper.md, correction of
 2026-07-25).
 -/
 
-import CryptolToLean.SAWCorePrimitives
+-- Imports must match the ARTIFACT's (`import CryptolToLean`, the
+-- whole library), not just the module the wrapper lives in
+-- (2026-07-29, session audit). Instance resolution is
+-- import-closure-scoped: with the narrower import, an absorbing
+-- coercion added in any of the other five library modules would make
+-- the real emission compile silently while this probe stayed red and
+-- the row reported OK — the exact silent-absorption event the probe
+-- exists to catch.
+import CryptolToLean
 open CryptolToLean.SAWCorePrimitives
 
 noncomputable def UnderAppliedPartialProbe : Nat -> Nat :=

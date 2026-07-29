@@ -1625,6 +1625,81 @@ fixClassifierTests sc = testGroup "classifyFixShape (Slice R0, inert)"
       assertUnrecognized "wrapped rec in zip slot"
         (classifyFixShape vecTy body)
 
+    -- The two S-3 cases (2026-07-29). Added by the session audit,
+    -- which found that NONE of the pre-existing 15 recognizer probes
+    -- can distinguish the pre-S-3 scanner from the post-S-3 one: a
+    -- full revert of the narrowing left every one of them green, so
+    -- "all 15 green unchanged" was zero evidence for the change.
+    -- These two DO distinguish it — each was ACCEPTED (Class F)
+    -- before S-3 and is rejected now — so a revert now goes red.
+  , testCase "S-3: unconsumed zip of rec is Unrecognized" $ do
+      -- The zip is not selected from at the inner binder, so elt[i]
+      -- depends on ALL of rec rather than rec[i] alone: not a
+      -- lookback-1 recurrence at all. The pre-S-3 scanner blessed a
+      -- zip ANYWHERE in the element term and classified this Class F,
+      -- emitting an undischargeable obligation instead of rejecting.
+      (vecTy, body) <- mkFusedFixF sc
+        (\recVar _i2Var -> do
+            n7 <- scNat sc 7
+            n9 <- scNat sc 9
+            n8 <- scNat sc 8
+            boolTy <- scBoolType sc
+            n32 <- scNat sc 32
+            n0  <- scNat sc 0
+            elemTy <- scGlobalApply sc "Prelude.Vec" [n32, boolTy]
+            unitTy <- scGlobalApply sc "Prelude.UnitType" []
+            sndTy  <- scGlobalApply sc "Prelude.PairType" [elemTy, unitTy]
+            bv0    <- scGlobalApply sc "Prelude.bvNat" [n32, n0]
+            jName  <- scFreshVarName sc "j"
+            natTy  <- scNatType sc
+            constF <- scLambda sc jName natTy bv0
+            othVec <- scGlobalApply sc "Prelude.gen" [n8, elemTy, constF]
+            zipped <- scGlobalApply sc "Prelude.zip"
+                        [elemTy, elemTy, n9, n8, recVar, othVec]
+            pairTy <- scGlobalApply sc "Prelude.PairType" [elemTy, sndTy]
+            -- consumed by `head`, NOT by an at-selection at the inner
+            -- binder: the whole zipped vector is forced, so this reads
+            -- rec at every index, not just i-1.
+            hd     <- scGlobalApply sc "Prelude.head" [n7, pairTy, zipped]
+            scGlobalApply sc "Prelude.Pair_fst" [elemTy, sndTy, hd])
+        (shiftMinusOne sc)
+      assertUnrecognized "unconsumed zip"
+        (classifyFixShape vecTy body)
+
+  , testCase "S-3: permuting wrapper ABOVE the zip is Unrecognized" $ do
+      -- @at (reverse (zip rec xs)) i2@ — the mirror of the
+      -- wrapper-BELOW case sixth-audit Finding 0 closed. The reverse
+      -- flips the lookback direction just as surely from above the
+      -- zip as from inside a slot, but the pre-S-3 scan descended
+      -- generically through the wrapper and let the zip arm bless the
+      -- bare rec beneath it.
+      (vecTy, body) <- mkFusedFixF sc
+        (\recVar i2Var -> do
+            n9 <- scNat sc 9
+            n8 <- scNat sc 8
+            boolTy <- scBoolType sc
+            n32 <- scNat sc 32
+            n0  <- scNat sc 0
+            elemTy <- scGlobalApply sc "Prelude.Vec" [n32, boolTy]
+            unitTy <- scGlobalApply sc "Prelude.UnitType" []
+            sndTy  <- scGlobalApply sc "Prelude.PairType" [elemTy, unitTy]
+            bv0    <- scGlobalApply sc "Prelude.bvNat" [n32, n0]
+            jName  <- scFreshVarName sc "j"
+            natTy  <- scNatType sc
+            constF <- scLambda sc jName natTy bv0
+            othVec <- scGlobalApply sc "Prelude.gen" [n8, elemTy, constF]
+            zipped <- scGlobalApply sc "Prelude.zip"
+                        [elemTy, elemTy, n9, n8, recVar, othVec]
+            pairTy <- scGlobalApply sc "Prelude.PairType" [elemTy, sndTy]
+            revZip <- scGlobalApply sc "Prelude.reverse"
+                        [n8, pairTy, zipped]
+            sel    <- scGlobalApply sc "Prelude.at"
+                        [n8, pairTy, revZip, i2Var]
+            scGlobalApply sc "Prelude.Pair_fst" [elemTy, sndTy, sel])
+        (shiftMinusOne sc)
+      assertUnrecognized "permuting wrapper above the zip"
+        (classifyFixShape vecTy body)
+
   , testCase "index-permuting wrapper on the rec spine is Unrecognized" $ do
       -- @at (reverse rec) i2@ selects with the lookback direction
       -- FLIPPED — blessing the whole rec-containing spine as a zip

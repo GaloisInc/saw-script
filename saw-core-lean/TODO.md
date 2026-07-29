@@ -247,7 +247,7 @@ until (a).**
   collapses every case). The row flips to a rejection pin when the
   (b) fix lands. **Surfaces MEASURED 2026-07-28**
   (`doc/2026-07-28_lib1-scope-measurement.md`): 59 of 350 baseline
-  artifacts have a thrower inside an element position — 57 of them
+  artifacts have a thrower inside an element position — 58 of them
   `atRuntimeCheckedM` (the OP-2 evidence-less indexing route),
   including the whole discharged workflow corpus (s20hash ×32,
   running_sum, popcount, eq_u128, E6). So **(b) at its recorded
@@ -744,7 +744,19 @@ until (a).**
   files. PURE COSMETICS — deliberately not folded into a soundness
   batch, where it would have been 9 files of noise around the real
   change.
-- [ ] **Documentation corrections batch**: A-3's five-plus sites
+- [x] **Documentation corrections batch — CLOSED 2026-07-28**
+  (survey + spot-checks; doc-claim-lint green corroborates). Every
+  listed site had already been corrected by the close that owned it:
+  A-3's sites by 75c2acfc6 (C2), the residual-trust reversal by the
+  LIB-1 correction block at §3.2a, the `Float`/`Double` argument in
+  `SAWCorePrimitives.lean` by F-2, the `divNat 2 0` ledger entry by
+  F-3, and `bvSExt` "stays axiomatic" at SAWCorePrimitives.lean:669
+  (which now names itself as Phase-9 drift that MISDESCRIBED the
+  TCB). F-1's "audited safe" verdict was corrected in the wrapper
+  design doc 2026-07-25 and its loudness pinned 2026-07-28
+  (`negative/underapplied_partial_illtyped`). Original text kept
+  below for traceability.
+  ORIGINAL: A-3's five-plus sites
   (including the trust authority); the residual-trust sentence
   LIB-1 shows is BACKWARDS (`:496-503` says the eager carrier makes
   obligations "unprovable, not wrong" — when both sides surface the
@@ -794,22 +806,45 @@ until (a).**
 - [x] Red-before/green-after regression rows for A-1, A-2, A-5 and
   S-1 — CLOSED 2026-07-28 after a coverage audit found most already
   existed (this list predated the closes that carried their own
-  pins): A-2/R-1 runtime row = `saw-boundary/replay_reject_unbound_completed`
-  (landed with the R-1 fix); A-5 = the kernel-selftest coercion case
-  (drives the real `lean-check-core.sh` with the audit's own
-  vector); A-6/A-7 lint self-tests and the notation trust-tier case
-  = present in `trust-tier-selftest.sh` since fa842349b. ADDED
+  pins): R-1 runtime row = `saw-boundary/replay_reject_unbound_completed`;
+  A-5 = the kernel-selftest coercion case (drives the real
+  `lean-check-core.sh` with the audit's own vector); A-7 lint
+  self-test and the notation trust-tier case = present in
+  `trust-tier-selftest.sh` since fa842349b.
+  **CORRECTED 2026-07-29 (session audit), three claims here were
+  wrong:** (i) `replay_reject_unbound_completed` pins R-1 ONLY — it
+  stages a `completed.lean`, so the checker takes the
+  completed-outline branch and can never enter the plain-path branch
+  where A-2's fix lives; **an A-2 runtime pin is still OWED** (see
+  the row below). (ii) The trust-tier `axiom-escaped` case is
+  VACUOUS for A-6: it rejects identically with and without the
+  `gsub(/[«»]/, "", out)` line, because the guillemet bytes already
+  satisfy the rule's own delimiters, and it pins no required
+  diagnostic — **an A-6 pin is still OWED**. (iii) The stated reason
+  for declining an A-5 RUNTIME row was false; see that row below.
+  ADDED
   today: `saw-boundary/replay_reject_notation` (A-1 end-to-end
   through the runtime replay path — the wiring the lint-level cases
   cannot see; rejects `CHECK-FAIL: axiom-or-macro-decl-in-user-file`)
   and `negative/fix_obligation_erasure` (S-1: both pre-fix erased
   reducts must fail defeq — the F-2 probe discipline; a
   proof-irrelevant seed or proof-free body returning turns it
-  green). A bespoke A-5 RUNTIME row was considered and NOT added:
-  every laundering ingredient is caught by an earlier layer in a
-  way that would pin the wrong diagnostic, and the runtime wiring
-  is already proven by the four replay_reject rows + the kernel
-  selftest exercises the exact vector.
+  green).
+- [ ] **OWED (re-opened 2026-07-29 by the session audit): three
+  pins this ledger wrongly recorded as covered.**
+  (i) An **A-2** runtime row on the PLAIN path (a goal whose emitted
+  form escapes the goal-def detection), since the completed-outline
+  row cannot reach that branch. (ii) An **A-6** lint self-test that
+  actually distinguishes the `gsub` guillemet-stripping fix, with a
+  required diagnostic (today's case passes on any rejection and is
+  byte-identical with the fix removed). (iii) An **A-5** runtime row:
+  the earlier decision not to add one was justified by "every
+  laundering ingredient is caught by an earlier layer in a way that
+  would pin the wrong diagnostic", and that is FALSE — the A-5
+  vector passes the source lint and sorry scan untouched and fires
+  the CORRECT diagnostic (`axiom-outside-allowlist`), as the
+  project's own green selftest log records. The row is worth having;
+  the recorded justification for skipping it was refuted.
 - [x] A CI-harness negative row for the no-import decoy-`goal`
   vector (RK-5) — was ALREADY LANDED with the RK-5 close
   (389a55ec9: "Pinned by a decoy-goal case"); the owed entry was

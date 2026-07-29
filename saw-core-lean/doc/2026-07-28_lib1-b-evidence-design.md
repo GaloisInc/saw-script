@@ -10,7 +10,7 @@ under it.** What survives is a different (larger) design,
 The defects are recorded first — they are the durable content.
 
 Companion measurement: `doc/2026-07-28_lib1-scope-measurement.md`
-(59 of 350 artifacts have a thrower inside an element position; 57
+(59 of 350 artifacts have a thrower inside an element position; 58
 via `atRuntimeCheckedM`).
 
 ## The claim under scrutiny
@@ -32,7 +32,7 @@ positions "whose bound is NOT derivable at the emission site"
 (OP-2). The translator ALREADY splits on evidence: derivable bounds
 emit `atWithProof_checkedM … (h : i < n)` — total given `h`, no
 throw, and NOT a LIB-1 hazard at all; only underivable bounds emit
-the throwing runtime-checked form. So for the 57 dominant artifacts
+the throwing runtime-checked form. So for the 58 dominant artifacts
 there IS no in-artifact obligation to point at — **the throw is live
 precisely because evidence was unavailable.** "Admit when the
 obligation is discharged" is vacuous over the set it was designed to
@@ -60,22 +60,41 @@ this backend has. At best the translator names the construct and the
 artifact carries the failure — a two-place diagnostic no other
 rejection has.
 
-## B3: the syntactic scan must be reference-closed — demonstrated
+## B3: the syntactic scan must be reference-closed — in principle
 
 A thrower need not appear inside the element span: the emitter
-let-shares subterms (`let x__ … := RHS;`), and a throwing RHS
-referenced from inside an element is semantically in-element.
-**Live witness: `differential/vector_literal_edges/observed.lean`**
-— a let-bound thrower referenced inside both `genWithBoundsM` and
-`vecSequenceM` element spans (found by the reference-closure check
-this note forced; the span-only census undercounts, e.g.
-`vecSequenceM` is 2 by span, ≥3 closed). Worse, closure is
-INTERPROCEDURAL: module translation (`write_lean_cryptol_module`)
-emits elements that call module-local definitions
-(`cryptol_module_simple`, `cryptol_module_popcount` are in the 57),
-so "can this element throw" must traverse the translated module's
-call graph. That is an effect system for the emitted fragment — new
-delicate analysis in a trust path.
+let-shares subterms (`let x__ … := RHS;`), and a throwing RHS bound
+OUTSIDE an element but referenced from INSIDE it is semantically
+in-element while being invisible to a span-local scan. Any gate must
+therefore be reference-closed.
+
+**CORRECTION 2026-07-29 (session audit, finding `b3-witness-false`).**
+The first version of this section claimed
+`differential/vector_literal_edges/observed.lean` as a LIVE WITNESS of
+that escape. **It is not one, and the corpus contains none.** In that
+artifact the only throwing let-binding (`atRuntimeCheckedM …`) is
+bound INSIDE the element span it is used in, so span-local scanning
+already catches it; the two let-bound values actually referenced from
+its `vecSequenceM` element spans are non-throwing (`Pure.pure (bvNat
+8 7)` and `Pure.pure (bvNat 8 1)`), and its `gen` there is
+zero-length, so that element function is never applied. An
+independent scan over all 350 baseline artifacts finds ZERO artifacts
+with a throwing let-RHS bound outside an element span and referenced
+inside. The retracted "`vecSequenceM` is 2 by span, ≥3 closed" named
+a third artifact that does not exist.
+
+**What survives, and what the retraction costs.** The requirement is
+still real — it is a property a gate must HAVE, not an observed
+corpus escape — and it still prices into any gate design together
+with the genuinely interprocedural half: module translation
+(`write_lean_cryptol_module`) emits elements that call module-local
+definitions (`cryptol_module_simple`, `cryptol_module_popcount` are
+among the 58), so "can this element throw" must traverse the
+translated module's call graph. That is an effect system for the
+emitted fragment — new delicate analysis in a trust path. What the
+retraction DOES cost is the claim that the shipped 59/350 figure is
+an undercount: for this corpus it is EXACT, and a reader bounding
+their exposure should treat it as such.
 
 ## B4: guard-awareness, or the analysis over-rejects the safe idiom
 

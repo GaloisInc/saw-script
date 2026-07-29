@@ -107,10 +107,28 @@ run-tests() {
               { print }
             '
         }
-        diff -u \
-            <(normalize_counterexample_values <"$TEST.log.good") \
-            <(normalize_counterexample_values <"$TEST.log") \
-            >"$TEST.diff" 2>&1 || true
+        # A missing side must stay a SELF-DESCRIBING failure inside
+        # $TEST.diff (2026-07-29, session audit). Process
+        # substitutions are forked during word expansion, BEFORE the
+        # command's `>"$TEST.diff" 2>&1` redirection applies, so an
+        # unopenable file would report on the sweep's stderr and hand
+        # `diff` an empty stream instead — turning a hard failure into
+        # an ordinary content diff, or (when both sides are empty)
+        # into a PASS. The pre-normalization code got this for free by
+        # passing filenames straight to `diff`.
+        if [ ! -f "$TEST.log.good" ] || [ ! -f "$TEST.log" ]; then
+            {
+                [ -f "$TEST.log.good" ] || \
+                    echo "diff: $TEST.log.good: No such file or directory"
+                [ -f "$TEST.log" ] || \
+                    echo "diff: $TEST.log: No such file or directory"
+            } >"$TEST.diff" 2>&1
+        else
+            diff -u \
+                <(normalize_counterexample_values <"$TEST.log.good") \
+                <(normalize_counterexample_values <"$TEST.log") \
+                >"$TEST.diff" 2>&1 || true
+        fi
 
         # Diff each pinned .lean output. We discover them from the
         # presence of *.lean.good files so adding a new emitted

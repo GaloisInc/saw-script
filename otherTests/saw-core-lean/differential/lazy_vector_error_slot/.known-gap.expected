@@ -1,10 +1,24 @@
+# DIRECTION-SENSITIVE pins (2026-07-29, session audit). The earlier
+# version listed the bare observation strings, which the harness
+# matches with grep -F against the WHOLE transcript — and that
+# transcript contains the SAW block, the Lean block AND a unified
+# diff carrying both polarities, so every substring was present
+# regardless of which side produced which. A polarity swap (SAW
+# collapsing to error, Lean observing values) would have passed the
+# pin unchanged.
+#
+# These strings carry the unified diff's markers: `-` is the SAW
+# side, `+` is the Lean side. A swap makes them unmatchable, so the
+# row now pins the DIRECTION of the divergence — which is the whole
+# content of LIB-1: SAW sees values where Lean sees the collapse.
+#
 # SAW side: lazy evaluation never forces the index-1 error thunk.
-lazy_elem_A_eq_7 true
-lazy_elem_B_eq_9 true
-lazy_A_eq_B false
+-lazy_elem_A_eq_7 true
+-lazy_elem_B_eq_9 true
+-lazy_A_eq_B false
 # Lean side: the collapsed carrier makes every case error.
-lazy_elem_A_eq_7 error
-lazy_elem_B_eq_9 error
-lazy_A_eq_B error
-# The divergence itself.
++lazy_elem_A_eq_7 error
++lazy_elem_B_eq_9 error
++lazy_A_eq_B error
+# The divergence verdict itself.
 FAIL: SAW and Lean observations differ

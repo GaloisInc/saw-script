@@ -676,7 +676,7 @@ behind an unread erring slot closes by `rfl` under
 - Pinned witness: `differential/lazy_vector_error_slot` — SAW
   `true/true/false` vs Lean `error ×3` through the real pipeline.
 - Corpus: 59 of 350 baseline artifacts carry a thrower inside an
-  element position (57 via `atRuntimeCheckedM`) —
+  element position (58 via `atRuntimeCheckedM`) —
   `doc/2026-07-28_lib1-scope-measurement.md`. The census must be
   read REFERENCE-CLOSED: emitter let-sharing can move a thrower
   textually outside the element (witness:
