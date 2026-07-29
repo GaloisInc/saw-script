@@ -275,6 +275,48 @@ finding is how a ledger accumulates fiction.
   shape, and F-1 was a real defect. Wave 3 should decide it, and
   should not take my "may be benign" as a finding either way.
 
+- [x] **Convergence proposal §7.1 + §7.3 (2026-07-29): DONE.** The
+  three cheap hand-enumeration conversions landed, each
+  mutation-verified: `supportLibraryFiles` (directory walk +
+  root-import agreement test), `lintForbiddenNames` (derived from
+  `TOMBSTONE:` markers at the ten deletion sites), the self-mirror
+  ceilings (now exact counts). The replay selftest's waiver list is
+  now an evidence-carrying table with dead-waiver, redundant-waiver,
+  and evidence checks — whose first run caught two live rots (a
+  waiver made redundant by the b1elab case, and a waiver reason
+  citing an awk sibling that pins a different property). The
+  closure-claim rule is in `contributing.md` ("Closing a defect
+  class"). Wave 3's scorecard is proposal §5, updated by this batch:
+  the remaining hand enumerations are the two scoped in
+  `2026-07-29_unregistered-name-design.md`.
+
+- [x] **NEW (found closing §7.1, 2026-07-29): the cabal invocation
+  path of the test gate was silently broken for a month.** Test.hs
+  set `SAW="eval saw"`; the two row harnesses that correctly quote
+  `"$SAW"` (obligations, differential) ran it as a single not-found
+  command, so BOTH categories mass-failed — but only under
+  `cabal test saw-core-lean-tests` (the root-Makefile gate). Local
+  runs go through `otherTests/saw-core-lean/Makefile`, which sets a
+  path, so every green claim since 2026-06-30 was made on the
+  working path while the other rotted unwatched. Same class as the
+  enumeration failures: two paths, hand-kept in sync, no mechanism.
+  FIXED: SAW is now the discovered binary's absolute path (works
+  quoted and unquoted), the tasty timeout is a real hang-catcher
+  (2400s vs a green sweep's ~22 min; the old 500s could never fit
+  one and reported growth as failure), and the canonical gate runs
+  green end-to-end (1326s). Residual: nothing asserts the two
+  invocation paths stay equivalent — logged for wave 3.
+
+- [ ] **Convergence proposal §7.2: the two real conversions are
+  SCOPED, not done.** See `2026-07-29_unregistered-name-design.md`:
+  the `hardcodedBareNames` residue (128 inline `Lean.Ident`
+  spellings; lint first, registry-by-construction later) and
+  `leanOpaqueBuiltins` (dead-entry check + treatment-vs-opacity
+  coverage check; the live hazard shape is L-16). Wave 3 should
+  treat any CRITICAL landing in either as CONFIRMING the proposal's
+  diagnosis, and any CRITICAL landing in a *derived* enumeration or
+  by-construction chokepoint as REFUTING it.
+
 ### OTHER SURVIVORS (see the wave-2 report for the full list)
 
 - [x] **L-1 (HIGH, SILENT) — FIXED 2026-07-29, verified both

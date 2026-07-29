@@ -68,12 +68,23 @@ testParams base verbose = do
   -- audit (2026-05-04) made `lake build` failures fail loudly, so
   -- a missing toolchain manifests as a loud error instead of being
   -- silently swallowed.
+  -- SAW is the ABSOLUTE PATH of the discovered binary, not the
+  -- historical "eval saw" indirection. Two of the row harnesses
+  -- (lean-obligation-test.sh, lean-differential-test.sh) invoke
+  -- `"$SAW" test.saw` QUOTED — correct shell hygiene, but a
+  -- two-word SAW value is then a single "command not found". That
+  -- combination silently broke the ENTIRE obligations and
+  -- differential categories under this (cabal) invocation path from
+  -- 2026-06-30 until 2026-07-29, invisible because local runs go
+  -- through otherTests/saw-core-lean/Makefile, which always set a
+  -- path. A path value works for every harness, quoted or not. A
+  -- parent-exported SAW still overrides (addEnvVar below).
   let eVars0 = [ EV  "HOME"     absTestBase
                , EVp "PATH"     searchPathSeparator [takeDirectory sawExe]
                , EV  "TESTBASE" absTestBase
                , EV  "DIRSEP"   [pathSeparator]
                , EV  "CPSEP"    [searchPathSeparator]
-               , EVp "SAW"      ' ' ["eval", "saw"]
+               , EV  "SAW"      sawExe
                ]
       addEnvVar evs e = do v <- lookupEnv e
                            pure $ updEnvVars e (fromMaybe "" v) evs
@@ -100,7 +111,17 @@ main = do
   envVars <- testParams base verbose
   verbose $ "ENV: " <> show envVars
   defaultMain $
-    localOption (mkTimeout $ 500 * 1000 * 1000) $
+    -- Hang-catcher, not a performance budget. 500s was exceeded on
+    -- 2026-07-29 by ordinary suite growth (the wave-1/wave-2 audit
+    -- fixes added ~12 pin rows and the replay-kernel selftest's
+    -- Lean-driving cases): rows were all green and individually
+    -- normal speed, the TOTAL just crossed 500s, and the timeout
+    -- reported that as a FAIL with no failing row. A full green
+    -- sweep measures ~25-30 min wall; sized at roughly 1.5x that so
+    -- it still catches a wedged row without failing on honest
+    -- growth. If it trips again, check per-row timings in the
+    -- test.sh output before raising it further.
+    localOption (mkTimeout $ 2400 * 1000 * 1000) $
     mkTest envVars
   where
     base :: FilePath

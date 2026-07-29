@@ -205,6 +205,33 @@ Two further rules apply to what a check may *rely on*:
    `Classical.choose` binds (the predicate is a type-level implicit);
    `Classical.choice` does not (its argument is proof-irrelevant).
 
+### Closing a defect class (the enumeration rule)
+
+When a fix closes a *class* of defects — not just the instance an
+audit found — the closing commit must say **how the class was
+enumerated, and that sentence must name a mechanism, not a list**.
+"I checked all the sites" is the sentence that preceded every one of
+the five enumeration failures in
+`doc/2026-07-29_convergence-proposal.md` §2 (F-1, F-2, F-5, F-6/F-7,
+the Slice-7 lint): each was closed by a hand list that was correct
+when written and silent when it rotted. Acceptable mechanisms, in
+descending order of strength:
+
+1. **By construction** — the forbidden member is unrepresentable
+   (`adaptTo`; zero defects of its class across five audit rounds).
+2. **Derived enumeration** — the member list is recomputed from the
+   source of truth on every run, and the derivation's own assumption
+   is pinned by a test (`contractEmittedNames`, `lintSourceFiles`,
+   the `TOMBSTONE:` scan, the waiver-evidence audit, `lib1-census`).
+   Name the assumption; deriving moves it, it does not delete it.
+3. **Hand list + rot alarm** — only when neither is feasible, a hand
+   list whose staleness some check detects loudly (an exact count,
+   a dead-entry check). A bare hand list is not a closure; it is the
+   defect's next instance with a delay on it.
+
+This is rule 2 ("no claim without a mechanism") applied to closure
+claims instead of soundness claims.
+
 ## How to add an integration test
 
 Two patterns:

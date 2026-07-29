@@ -120,10 +120,15 @@ verb="${1:-test}"
 # (set -u catches it before any test silently skips), but the user
 # learns nothing actionable. Fail upfront with one clear diagnostic
 # instead. See task #134 (CI gap: SAW-invoking soundness tests must
-# run gated). cabal test path sets SAW=eval saw via Test.hs and puts
-# the saw binary on PATH via build-tool-depends; manual local runs
+# run gated). cabal test path sets SAW to the discovered binary's
+# ABSOLUTE PATH via Test.hs (2026-07-29 — it was "eval saw" for a
+# month, which every harness that correctly quotes "$SAW" ran as a
+# single not-found command, silently killing the obligations and
+# differential categories on that path only); manual local runs
 # need `make` (which discovers the dist-newstyle binary) or an
-# explicit `SAW=...`. Inventory-only and cleanup verbs do not need SAW.
+# explicit `SAW=...`. SAW must be ONE word: harnesses may invoke it
+# quoted or unquoted, and both must work.
+# Inventory-only and cleanup verbs do not need SAW.
 case "$verb" in
     gaps|proof-gaps|clean) ;;
     *)
