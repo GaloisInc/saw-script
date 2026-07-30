@@ -160,6 +160,18 @@ because breaking it produced a real defect, cited inline. Check all
 four when adding or reviewing anything in the trust path
 (`saw-core-lean/replay/`, `otherTests/saw-core-lean/support/`).
 
+**Scope rule (before the four): defend against error, not
+adversaries.** The trust path's threat model — decided 2026-07-30,
+stated citably in `2026-05-02_residual-trust.md` §Threat model — is
+backend error, user error, and tool failure. A new or extended
+guard must name the foreseeable *mistake* it catches. A guard whose
+only subject is deliberate circumvention (an author defeating the
+checker with metaprograms, elaboration-time IO, mid-check file
+rewrites) is out of scope: do not add it without an explicit
+threat-model change, and do not score its absence as
+release-blocking. The wave-3 record is the rationale — guards of
+that kind cost more defects than they retire.
+
 1. **No skip branch (C1).** A recognizer that cannot answer must
    FAIL, never skip the gate it guards. If a gate is conditional,
    the else-branch must either run an equivalent check or `fail` —

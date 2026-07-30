@@ -67,6 +67,23 @@ rejected after design scrutiny:
 `doc/2026-07-28_lib1-b-evidence-design.md`; trust-catalog entry:
 `doc/2026-05-02_residual-trust.md` §3.2e.
 
+## What the replay checks defend against (threat model)
+
+The `offline_lean_replay` gates defend against **mistakes**, not
+malice (decided 2026-07-30): ours — an emission bug that would make
+the checked Lean statement weaker than the SAW obligation — and
+yours — staging the wrong file, a leftover `sorry`, an axiom
+slipped in to make a proof close, a completed outline drifting out
+of sync with the fresh emission. They do **not** defend against an
+adversarial proof author. Elaborating a Lean file executes code
+(metaprograms, elaboration-time IO), so treat proof files from an
+untrusted source the way you would any untrusted program: review
+them before running replay. Likewise, `LeanReplayEvidence` produced
+by someone else is a claim, not a proof — re-establish it by
+re-running replay yourself from the SAW goal. The citable statement
+of the model, and the guard severities derived from it, live in
+`doc/2026-05-02_residual-trust.md` ("Threat model").
+
 ## Hypothesis-bearing goals are refused (not supported)
 
 If you build a goal with `goal_cut` / `goal_intro_hyp`, or reach

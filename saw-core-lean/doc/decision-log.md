@@ -124,3 +124,42 @@ in the 2026-07-17 doc reorganization.
   POSITIVE and stronger: `drivers/under_applied_partial_wrapper`
   elaborates three under-application shapes, so a regression to the
   raw annotation fails at Lean rather than in a golden diff.
+
+- [x] FIX the trust kernel's threat model as ERROR, NOT ADVERSARIAL
+  ACTION (D1, 2026-07-30, user decision during the down-scope
+  discussion after wave 3). The model was previously unstated, and
+  its absence is why three audit waves scored text-inspection
+  defects (exploitable only by an author deliberately defeating the
+  checker) as release-blocking CRITICALs alongside genuine
+  emission-side soundness holes. Citable statement, in/out-of-model
+  boundary, and the wave-3 findings re-scored under it:
+  `2026-05-02_residual-trust.md` §Threat model. User-facing
+  consequence in README ("What the replay checks defend against");
+  reviewer-facing scope rule in contributing.md (before C1–C4).
+
+- [x] NARROW the proof-source lint to its one closed job (D2 =
+  plan 3a, 2026-07-30, user decision): keep only the check the
+  error model needs — no top-level `axiom` declaration — and drop
+  the open-ended command-head denylist that K-1 showed cannot be
+  kept complete. Plan 3b (retiring the `native-eval` conformance
+  tier, which owns the lint's only other load-bearing rule) is held
+  IN RESERVE if the narrowed lint still cannot reach defect-free.
+  Basis measurement: `2026-07-30_proof-lint-head-measurement.md`.
+
+- [x] KEEP the completed-outline drift check, HARDENED (D3,
+  2026-07-30, user decision): drift between a completed outline and
+  the fresh emission is squarely in the error model, so the check
+  stays — upgraded from a `#check`-grade probe to a kernel-checked
+  declaration (`theorem __drift_binding : GeneratedHarness.goal =
+  goal := rfl`), per contributing.md rule 5 ("ask Lean, not the
+  text"; `#check` adds no declaration and is never kernel-checked).
+
+- [x] DISCARD the out-of-model wave-3 fixes; down-scope K-2 (D4,
+  2026-07-30, user decision — "we pivot here and where fixes are
+  obviated, we throw them out"). K-1's allowlist inversion and
+  CP-1's re-verification loop are dropped: both defend only against
+  an adversarial author, and three rounds of fix-audits found
+  defects in the fixes themselves faster than the fixes retired
+  risk. K-2 is cut down to its in-model residue, the ~3-line C3
+  fail-closed fix: `verify_unchanged` must FAIL when a staged file
+  has vanished. Path-latching is dropped with the rest.

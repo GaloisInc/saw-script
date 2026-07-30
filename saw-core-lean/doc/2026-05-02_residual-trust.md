@@ -19,6 +19,92 @@ shapes the translator accepts vs refuses, what mappings imply
 This catalog is the auditor-facing complement: where do we trust,
 and what does the trust depend on?
 
+## Threat model (decided 2026-07-30)
+
+*User decision, 2026-07-30, during the wave-3 down-scope: the
+replay trust kernel defends against **error, not adversarial
+action**. This section is the citable statement of that decision;
+guard severities — here, in the audit ledgers, and in future audit
+scoring — are derived from it. It was previously unstated, and its
+absence is why three audit waves scored text-inspection defects as
+release-blocking CRITICALs.*
+
+**In model — what the checks defend against.** Honest mistakes in
+the normal workflow, from either side of the boundary:
+
+- **Backend errors (ours).** An emission bug that makes the checked
+  Lean statement differ from — especially, weaker than — the SAW
+  obligation. This is why the goal-shape gates exist and why §3.2b
+  extends the replay TCB to the emission pipeline itself.
+- **User errors.** Staging the wrong file; leaving a `sorry` or a
+  placeholder; proving a statement other than the goal; editing a
+  completed outline's goal out of sync with the fresh emission; and
+  foreseeable shortcuts taken *without intent to defeat the
+  checker* — the classic being an `axiom` added to make a proof
+  close, which is why the axiom audit exact-matches names and the
+  proof-source lint bans top-level axiom declarations.
+- **Tool failures.** A subprocess dying, a staged file vanishing
+  mid-check, a timeout. These must fail closed (contributing.md
+  rule C3) — empty output from a crashed check must never read as
+  a clean result.
+
+**Out of model — what the checks do NOT defend against.** An
+adversarial proof author: someone who studies the checker in order
+to defeat it. Concretely: Lean elaboration executes user code, so a
+proof-side file can carry metaprograms, elaboration-time IO, and
+environment manipulation, and a determined author can construct a
+file whose *elaboration* rewrites what the gates inspect or forges
+what they look for. Text linting cannot close that class — the
+wave-3 record (K-1: a `simproc` escaping a denylist that its own
+author had audited twice) is the demonstration — and pursuing it
+produced fixes whose defect rate exceeded the risk they retired.
+
+**Three consequences:**
+
+1. **Severity derivation.** CRITICAL is reserved for defects
+   reachable from within the model — ordinary use, no deliberately
+   constructed circumvention. A defect exploitable only by an
+   author acting adversarially is OUT-OF-MODEL: documented here,
+   fixed when the fix is small and obviously stable, and never
+   release-blocking.
+2. **Load-bearing vs. courtesy.** The load-bearing checks are the
+   ones that ask Lean's kernel a question whose answer cannot be
+   faked from within the model: the `goal_closed : goal` binding
+   (§3.2b), the `#print axioms` exact-match audit, and the
+   completed-outline drift check. The text-inspection guards are a
+   courtesy layer that catches foreseeable shortcuts early with good
+   diagnostics; they must stay small enough to be kept honest
+   (the 2026-07-30 plan 3a narrows the proof-source lint
+   accordingly).
+3. **Trust-boundary consequence (user-facing).** `LeanReplayEvidence`
+   is only as strong as this model. Accepting evidence — or proof
+   files — across an adversarial trust boundary is out of scope: a
+   receiving party should review the proof source as they would any
+   code (elaborating a Lean file executes it) and re-run replay
+   themselves from the SAW goal. Stated in the README alongside the
+   LIB-1 caveat.
+
+**Wave-3 kernel findings re-scored under this model** (original
+scores in `2026-07-30_release-gate-audit-wave3.md`; dispositions
+D1–D4 recorded in TODO.md and the decision log):
+
+| finding | wave-3 score | under the error model | disposition |
+|---|---|---|---|
+| K-1 — lint denylist misses `simproc` | CRITICAL | out of model: requires an authored metaprogram | allowlist fix discarded (D4); lint narrowed instead (plan 3a) |
+| K-2 — deletion-blind digest + unlatched path | CRITICAL | split: a staged file vanishing is an in-model tool failure (C3); mid-check deletion as an attack is out | down-scoped to the C3 fail-closed fix; path-latching dropped |
+| CP-1 — digest not re-verified before post-elaboration consumers | HIGH | out of model: the rewriting agent is an authored metaprogram | discarded (D4) |
+| K-3 — elaboration-time IO routes | HIGH | out of model (same route as K-1) | reinstated in the ledger for the record; not release-blocking |
+| W2-UNRUN-1 — Except-carried hypothesis binder | CRITICAL | **in model**: reachable from ordinary Cryptol, no intent required | fixed — goal-shape gate 3, 2026-07-30 |
+| B1 — user code elaborated before text gates read files (wave 2) | CRITICAL | the demonstrated exploit was out of model | fix already landed and stable; retained (same logic as keeping the drift check, D3) |
+
+The pattern worth internalizing: in this table, exploiting any of
+the trust-kernel CRITICALs requires an out-of-model author, while
+the defects reachable from ordinary use — W2-UNRUN-1 here, LIB-1 in
+§3.2e — are **emission-side**: the emitted goal means less than the
+SAW obligation. Error lives where meaning is constructed; the
+gates that matter most are therefore the ones checking what was
+*emitted*, not what the user *wrote*.
+
 ## Categories
 
 Residual trust falls into four categories:
