@@ -345,6 +345,16 @@ leanPiSpineBinderTypes _ = []
 --     @sequentToProp@ cannot produce one (@scFun@ is non-dependent),
 --     so this is closed against the sequent route specifically; a
 --     future route that names a hypothesis binder would escape.
+--     Measured narrower than it first looks (2026-07-30): the
+--     carrier is not ADDRESSABLE from SAWCore — @parse_core
+--     "Except"@ fails with @Unbound name: Except@ — so a user
+--     cannot hand-write a SAWCore term whose named binder mentions
+--     it. Every carrier mention in a goal is introduced by this
+--     translator's own value wrapping, and the wrapping names a
+--     binder only when the SAWCore Pi it images is dependent, i.e.
+--     a quantified VALUE. An escape therefore needs a new
+--     TRANSLATOR route that both names hypothesis binders and wraps
+--     them — a change in this codebase, not a reachable input.
 --
 --  3. The VALUE-IMAGE test's failure direction is ADMISSION, not
 --     refusal: a false positive from 'isExceptStringType' here
