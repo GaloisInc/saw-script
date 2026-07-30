@@ -347,8 +347,23 @@ fi
 # deliberate availability-for-soundness trade on a pinned
 # toolchain, where phrasing changes arrive only with deliberate
 # toolchain bumps and their gate sweeps.
+# Second tightening (same day, third fix audit): a give-up can be
+# LAUNDERED behind an allowlist-matching line — SynthInstance
+# catches runtime exceptions and rethrows "failed to synthesize"
+# as a plain error, which the probe's tactic alternatives absorb,
+# surfacing the clean last-alternative refutation; and
+# throwNestedTacticEx formats give-ups as "Tactic X failed with a
+# nested error:" with the depth text on FOLLOWING lines. So the
+# allowlist is paired with a give-up DENYLIST over the WHOLE
+# transcript. Residual, recorded honestly: a future toolchain's
+# NEW launder phrasing behind an allowlist-matching line would
+# reopen this sliver — the four markers cover the pinned
+# toolchain's known channels, and toolchain bumps are deliberate
+# events with their own gate sweeps.
 if ! printf '%s\n' "$triv_out" \
-       | grep -qE 'triviality-probe\.lean:2:[0-9]+: error: (Tactic .* failed|unsolved goals)'; then
+       | grep -qE 'triviality-probe\.lean:2:[0-9]+: error: (Tactic .* failed|unsolved goals)' \
+   || printf '%s\n' "$triv_out" \
+       | grep -qE 'maximum recursion depth|\(deterministic\) timeout|nested error|failed to synthesize'; then
     printf '%s\n' "$triv_out" | tail -5
     fail "triviality-probe-inconclusive"
 fi

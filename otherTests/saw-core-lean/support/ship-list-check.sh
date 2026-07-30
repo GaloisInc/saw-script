@@ -126,8 +126,17 @@ fi
 # this equality is now the ONLY thing standing between the tree and
 # a recurrence of the destructive shared-library clobber (a path-dep
 # project building the shared library in place at a mismatched pin).
-if [ "$(cat examples/saw-lean/proof/lean-toolchain)" \
-     != "$(cat saw-core-lean/lean/lean-toolchain)" ]; then
+for tc in examples/saw-lean/proof/lean-toolchain saw-core-lean/lean/lean-toolchain; do
+    if [ ! -f "$tc" ]; then
+        # Existence guard (final-audit INFO): with both files missing,
+        # `$(cat …)` would compare "" = "" and print OK — fail-open in
+        # the one check standing between the tree and the clobber.
+        echo "FAIL[ship-list]: toolchain pin file missing: $tc"
+        status=1
+    fi
+done
+if [ "$(cat examples/saw-lean/proof/lean-toolchain 2>/dev/null)" \
+     != "$(cat saw-core-lean/lean/lean-toolchain 2>/dev/null)" ]; then
     echo "FAIL[ship-list]: demo/library lean-toolchain pins have diverged:"
     echo "  demo:    $(cat examples/saw-lean/proof/lean-toolchain)"
     echo "  library: $(cat saw-core-lean/lean/lean-toolchain)"

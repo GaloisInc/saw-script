@@ -509,8 +509,11 @@ entries.
 
 ### SHOULD FIX BEFORE RELEASE
 
-- [ ] **W3-REF-1 — re-scored 2026-07-30 (close-out arc step 2):
-  HIGH → LOW, still live; mechanism fix queued.** The count is
+- [x] **W3-REF-1 — re-scored 2026-07-30 (close-out arc step 2):
+  HIGH → LOW; mechanism fix LANDED same day in `aa7c06f24`** (the
+  ledger briefly said "queued" after the fix had landed — caught by
+  that commit's own audit, F3; the entry text below is the
+  re-score's record, its "fix to land" now reads "fix as landed"). The count is
   confirmed at HEAD: the extractor (`SmokeTest.hs` `marker =
   "Lean.Ident \""`) cannot see the tactic STRING built at
   `Contracts.hs` `checkedEvidenceScript`, and exactly nine of its
