@@ -210,7 +210,7 @@ for user_file in proof.lean completed.lean; do
         echo "--- $user_file (proof-side file could not be linted) ---"
         echo "$bad_decl"
         echo "(lint exit=$lint_rc)"
-        echo "FAIL: proof-side file rejected by the lint's lexer (fail-closed)"
+        echo "FAIL: proof-side file could not be linted (lexer rejection or lint failure — fail-closed)"
         exit 1
     fi
 done

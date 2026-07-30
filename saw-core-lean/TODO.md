@@ -1902,8 +1902,10 @@ until (a).**
   cannot see; rejects `CHECK-FAIL: axiom-or-macro-decl-in-user-file`)
   *(row and token both retired 2026-07-30 with the D2 narrowing —
   this pointer was the third the retirement commit missed, wave-4
-  DC-4; A-1's runtime coverage now rides the b1elab kernel-selftest
-  case and the surviving axiom saw-boundary rows)*
+  DC-4; A-1's coverage now rides the surviving axiom saw-boundary
+  rows for the RUNTIME path, plus the b1elab kernel-selftest case,
+  which drives the kernel script directly — kernel-direct, not
+  runtime, per this commit's own fix audit)*
   and `negative/fix_obligation_erasure` (S-1: both pre-fix erased
   reducts must fail defeq — the F-2 probe discipline; a
   proof-irrelevant seed or proof-free body returning turns it

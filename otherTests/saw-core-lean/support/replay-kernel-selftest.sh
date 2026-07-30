@@ -424,6 +424,22 @@ def s : String := "oops
 EOF
 expect_fail unlintable proof-source-unlintable
 
+# --- proof-source-unlintable, fatal() half (DC-2 fix-audit F2,
+# 2026-07-30): the case above pins only the lint's END-block path;
+# five of the seven lexer rejections reach exit 2 through fatal()
+# instead, and a one-line mutation there (code = 2 -> 1) reinstated
+# the DC-2 mis-token invisibly — every lint_case row is rc-blind
+# and stayed green. This case drives a fatal() rejection (raw
+# string literal) end-to-end through the kernel and pins its token.
+mk unlintable_fatal
+real_goal > "$STAGE_ROOT/unlintable_fatal/Emitted.lean"
+cat > "$STAGE_ROOT/unlintable_fatal/proof.lean" <<'EOF'
+import Emitted
+
+def r1 : String := r"x"
+EOF
+expect_fail unlintable_fatal proof-source-unlintable
+
 # --- user-file-mutated-mid-check: the digest guard on its own, with
 # NO test hook in the kernel. A dev-override affordance inside a trust
 # path is a residual this project catalogs (residual-trust §3.2c), so

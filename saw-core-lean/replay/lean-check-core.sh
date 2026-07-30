@@ -182,11 +182,16 @@ for uf in proof.lean completed.lean; do
                      "$STAGE/$uf" 2>&1) && lint_rc=0 || lint_rc=$?
         bad_decl=$(printf '%s' "$lint_out" | sed "s|$STAGE/||g")
         # Exit-code split (DC-2, 2026-07-30): 1 = axiom declaration
-        # found; anything else nonzero (2 = lexer-level rejection,
-        # >2 = awk itself failed) means the closed check COULD NOT
-        # RUN — fail closed under a token that says so, instead of
-        # accusing the file of an axiom it does not contain. rc=1
-        # with empty output is malformed lint behavior: also closed.
+        # found (wins over a later lexer rejection in the same
+        # file); any other nonzero = the closed check could not
+        # (fully) run — fail closed under a token that says so,
+        # instead of accusing the file of an axiom it does not
+        # contain. Caveat (fix-audit F3): an awk-IMPLEMENTATION
+        # failure can itself exit 1 or 2 (gawk syntax error is 1),
+        # so a crash may land on either token; the tokens name the
+        # likely cause, the guarantee is that EVERY branch rejects.
+        # rc=1 with empty output is malformed lint behavior: also
+        # closed.
         if [ "$lint_rc" -eq 1 ] && [ -n "$bad_decl" ]; then
             echo "$bad_decl"
             fail "axiom-decl-in-user-file"
@@ -423,11 +428,16 @@ for uf in proof.lean completed.lean; do
                      "$STAGE/$uf" 2>&1) && lint_rc=0 || lint_rc=$?
         bad_decl=$(printf '%s' "$lint_out" | sed "s|$STAGE/||g")
         # Exit-code split (DC-2, 2026-07-30): 1 = axiom declaration
-        # found; anything else nonzero (2 = lexer-level rejection,
-        # >2 = awk itself failed) means the closed check COULD NOT
-        # RUN — fail closed under a token that says so, instead of
-        # accusing the file of an axiom it does not contain. rc=1
-        # with empty output is malformed lint behavior: also closed.
+        # found (wins over a later lexer rejection in the same
+        # file); any other nonzero = the closed check could not
+        # (fully) run — fail closed under a token that says so,
+        # instead of accusing the file of an axiom it does not
+        # contain. Caveat (fix-audit F3): an awk-IMPLEMENTATION
+        # failure can itself exit 1 or 2 (gawk syntax error is 1),
+        # so a crash may land on either token; the tokens name the
+        # likely cause, the guarantee is that EVERY branch rejects.
+        # rc=1 with empty output is malformed lint behavior: also
+        # closed.
         if [ "$lint_rc" -eq 1 ] && [ -n "$bad_decl" ]; then
             echo "$bad_decl"
             fail "axiom-decl-in-user-file"

@@ -96,11 +96,15 @@
 # format). Exit contract (split 2026-07-30, wave-4 DC-2 — the single
 # exit code made the kernel report `axiom-decl-in-user-file` for
 # files containing no axiom):
-#   exit 1 — an `axiom` declaration was found (the one closed check);
-#   exit 2 — lexer-level rejection: the scanner cannot classify the
-#            file (raw/interpolated string, ambiguous quote,
-#            non-ASCII prime, unterminated string/comment at EOF),
-#            so the closed check could not run. Fail-closed.
+#   exit 1 — an `axiom` declaration was found (the one closed
+#            check). This WINS over a later lexer rejection in the
+#            same file: an axiom already seen is a real finding and
+#            must keep its token (fix-audit F1, 2026-07-30).
+#   exit 2 — lexer-level rejection before any axiom was seen: the
+#            scanner cannot classify the file (raw/interpolated
+#            string, ambiguous quote, non-ASCII prime, unterminated
+#            string/comment at EOF), so the closed check could not
+#            (fully) run. Fail-closed.
 # Lexer-level rejections print a diagnostic message instead of the
 # source line.
 
@@ -109,8 +113,8 @@ BEGIN { depth = 0; bad = 0; in_str = 0; code = 0 }
 function fatal(msg) {
   print FILENAME ":" FNR ": " msg
   bad = 1
-  code = 2
-  exit 2   # runs END, which exits with code
+  if (code == 0) code = 2   # an axiom already found keeps exit 1
+  exit code   # runs END, which exits with code
 }
 
 {
