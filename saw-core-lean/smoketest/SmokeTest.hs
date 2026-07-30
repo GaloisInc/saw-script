@@ -1883,9 +1883,12 @@ fixClassifierTests sc = testGroup "classifyFixShape (Slice R0, inert)"
         pure
       assertUnrecognized "same-index tail" (classifyFixShape vecTy body)
 
-  , testCase "computed inner at-index (addNat i2 1) pins the :350 guard" $ do
+  , testCase "computed inner at-index (addNat i2 1) pins the inner at-index guard" $ do
       -- FXC-1 pin (wave-4, 2026-07-30): the inner at-index guard
-      -- (isExactVar idxVn idx) previously had no test that goes red
+      -- (isExactVar idxVn idx in scanRecUses' at arm — cited as
+      -- ":350" in the wave-4 report, a line number that had already
+      -- shifted by the time this landed; name the guard, not the
+      -- line) previously had no test that goes red
       -- when it is deleted — every earlier case indexes the
       -- rec-containing `at` with the bare inner binder, and the
       -- index-perturbing cases perturb the TAIL index, which

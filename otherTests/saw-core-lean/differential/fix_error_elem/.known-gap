@@ -3,9 +3,10 @@ escaping runtime failure (eval_bool aborts with "Run-time error: at:
 index out of bounds"), so no comparable SAW_OBSERVED line can be
 printed; executable SAW-vs-Lean error-outcome comparison is not
 implemented in the differential harness. The Lean side of the corner
-was verified manually 2026-07-16: the emitted artifact's #reduce
-observation is `LEAN_OBSERVED: error: at: index out of bounds` —
-byte-identical message, agreeing outcome (the Except model surfaces
-the same error the lazy evaluator escapes with). The emitted artifact
+was verified manually 2026-07-16 and RE-ESTABLISHED mechanically
+2026-07-30 (procedure in test.saw's header): the emitted artifact's
+#reduce observation is `LEAN_OBSERVED: error: at: index out of
+bounds` — byte-identical message, agreeing outcome (the Except model
+surfaces the same error the lazy evaluator escapes with). The emitted artifact
 also still carries the H_prod `by sorry` placeholder (see
 fix_classF_eval), which independently blocks parity credit.

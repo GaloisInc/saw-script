@@ -1480,7 +1480,8 @@ resolveLeanReplayAssets = do
         , "Reinstall saw (the assets ship as Cabal data-files), or"
         , "set SAW_LEAN_ROOT to a saw-script checkout root — an"
         , "unpacked release-tarball root also works (it ships"
-        , "saw-core-lean/{lean,replay}, since 2026-07-30)."
+        , "saw-core-lean/{lean,replay}, since 2026-07-30) provided"
+        , "the tree is writable (replay builds and stages inside it)."
         ]
       libNames <- sort . filter (".lean" `isSuffixOf`)
                     <$> listDirectory (dataLean </> "CryptolToLean")
@@ -1494,7 +1495,13 @@ resolveLeanReplayAssets = do
           fpTag = map (\c -> if c == ':' then '-' else c)
                     (Text.unpack fpText)
       cacheBase <- getXdgDirectory XdgCache "saw-core-lean"
-      let cacheDir = cacheBase </> ("lean-" ++ fpTag)
+      -- "lean2-" (not "lean-"): schema bump with the SHIP-4 fix
+      -- (2026-07-30, its fix audit F1). Reuse is marker-EXISTENCE
+      -- only, so a cache published marker-plus-hole by the pre-fix
+      -- racing stager would short-circuit forever under the old
+      -- prefix; the bump orphans any such cache rather than
+      -- trusting it. Old "lean-*" dirs become inert debris.
+      let cacheDir = cacheBase </> ("lean2-" ++ fpTag)
           marker   = cacheDir </> ".staged-ok"
       staged <- doesFileExist marker
       unless staged $ do

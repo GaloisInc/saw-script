@@ -97,16 +97,25 @@
 # exit code made the kernel report `axiom-decl-in-user-file` for
 # files containing no axiom):
 #   exit 1 — an `axiom` declaration was found (the one closed
-#            check). This WINS over a later lexer rejection in the
-#            same file: an axiom already seen is a real finding and
-#            must keep its token (fix-audit F1, 2026-07-30).
-#   exit 2 — lexer-level rejection before any axiom was seen: the
-#            scanner cannot classify the file (raw/interpolated
-#            string, ambiguous quote, non-ASCII prime, unterminated
-#            string/comment at EOF), so the closed check could not
-#            (fully) run. Fail-closed.
+#            check). This wins over a lexer rejection on a LATER
+#            LINE: an axiom already seen is a real finding and must
+#            keep its token (fix-audit F1, 2026-07-30). The
+#            precedence is per-LINE, not per-token: the axiom rule
+#            runs after a line's scan completes, while lexer
+#            rejections abort mid-scan — so a lexer trigger on the
+#            SAME line as an axiom (e.g. `axiom v₁' : False`, where
+#            the primed non-ASCII identifier is the trigger)
+#            preempts it and exits 2. Fail-closed either way; the
+#            token names what the scan established before stopping
+#            (second fix audit, same day).
+#   exit 2 — lexer-level rejection before the axiom rule fired on
+#            any line: the scanner cannot classify the file
+#            (raw/interpolated string, ambiguous quote, non-ASCII
+#            prime, unterminated string/comment at EOF), so the
+#            closed check could not (fully) run. Fail-closed.
 # Lexer-level rejections print a diagnostic message instead of the
-# source line.
+# source line. An axiom-then-later-lexer-rejection file prints BOTH
+# (the axiom line(s), then the diagnostic) under exit 1.
 
 BEGIN { depth = 0; bad = 0; in_str = 0; code = 0 }
 

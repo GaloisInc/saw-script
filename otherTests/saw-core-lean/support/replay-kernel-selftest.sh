@@ -440,6 +440,26 @@ def r1 : String := r"x"
 EOF
 expect_fail unlintable_fatal proof-source-unlintable
 
+# --- axiom-first precedence (second DC-2 fix audit, F-B,
+# 2026-07-30): an axiom on an EARLIER line than a lexer-fatal must
+# keep the axiom token — the `if (code == 0)` guard in the lint's
+# fatal() is what preserves it, and mutation showed that guard was
+# otherwise unpinned (reverting it left every existing fixture
+# byte-identical). This file has a real axiom on line 3 and a raw
+# string (fatal trigger) on line 5: the lint must exit 1 with the
+# axiom line printed, and the kernel must say axiom, not
+# unlintable.
+mk axiom_then_fatal
+real_goal > "$STAGE_ROOT/axiom_then_fatal/Emitted.lean"
+cat > "$STAGE_ROOT/axiom_then_fatal/proof.lean" <<'EOF'
+import Emitted
+
+axiom smuggled_before_lexer_stop : goal
+
+def r1 : String := r"x"
+EOF
+expect_fail axiom_then_fatal axiom-decl-in-user-file
+
 # --- user-file-mutated-mid-check: the digest guard on its own, with
 # NO test hook in the kernel. A dev-override affordance inside a trust
 # path is a residual this project catalogs (residual-trust §3.2c), so
