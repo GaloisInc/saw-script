@@ -113,6 +113,33 @@ reduction) takes real damage — reassess the diagnosis in a doc
 before fixing the finding, per the §5-prediction discipline the
 convergence proposal established.
 
+## STATUS (2026-07-30, end of the first close-out session)
+
+**Steps 1 and 2 are COMPLETE and gate-swept green** (full
+cabal-path suite PASS at `e2d6b3871`, 1392s; smoketest 94/94; both
+kernel selftests ALL CASES OK; doc-claim-lint green; six commits
+`98e908559..e2d6b3871`, each fix under an opus audit, every audit
+finding fixed or dispositioned same-session). Highlights beyond the
+step definitions: the triviality gate was hardened through THREE
+audit rounds (fail-open → line-position check → refutation-shape
+allowlist → allowlist + give-up denylist over the transcript, with
+the launder channel proven from Lean's own source and the denylist
+mutation-verified); the audit chain also caught the recursive-glob
+semantics gap in both new checks, the cold-leg observation gap, and
+two ledger-lag instances. Recorded residuals: the launder
+denylist's future-phrasing sliver (pinned-toolchain argument, in
+the kernel comment); `:(glob)` red-direction unpinned; the
+trivgoal_deep harm-story assertion; elan-download time inside the
+120s cap (network-bound, not a CI exposure).
+
+**Step 3 (user)**: pending — one CI run answers the W5-2
+determination and exercises the fixed demo step + bindist assets.
+
+**Step 4 (wave 5)**: ready to run on this tree; its
+delta-composition lane is the designated cross-reader of this
+arc's commits (the per-fix audit recursion deliberately terminates
+there).
+
 ## Standing constraints for the arc
 
 Per-fix opus audits; no `cabal build` while a suite runs; kernel
