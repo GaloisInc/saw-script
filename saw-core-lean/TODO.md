@@ -167,6 +167,18 @@ items 3 (cabal ship-list) and 4 (consistency check) closed; items 1
   latter also remedies SHIP-1). The demo's
   `proof/replay/{invol,eq}/proof.lean` are user-authored proof-side
   files gated ONLY at demo time — ungated for twelve days.
+  **REMEDY LANDED 2026-07-30 (both halves): ci.yml demo step now
+  exports `SAW_LEAN_ROOT="$PWD"`; `bundle_files` ships
+  `saw-core-lean/{lean,replay}` into dist via `git archive`
+  (derived, not a hand list — tracked files only, no `.lake`),
+  which makes the unpacked dist root a valid `SAW_LEAN_ROOT` and
+  resolves the bundled demo lakefile's `../../../saw-core-lean/lean`
+  require. This also discharges SHIP-1's mechanism. STILL OPEN, the
+  determination half: whether the `saw-core-lean-tests` CI leg was
+  red or not running for the 07-18..07-30 window — needs network
+  access to CI history; record the answer here when available. Note
+  the fixed step is verifiable only by CI itself (this sandbox
+  cannot run GH Actions).**
 - [ ] **W5-3: cross-check `CONFORMANCE.md:60`'s pin inventory (GAP
   3).** The coverage lane surveyed ~half of it; its "nothing lets an
   unsound shape through at HEAD" is a partial-survey result.

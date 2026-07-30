@@ -820,14 +820,19 @@ jobs:
         shell: bash
         run: |
           export PATH="$PWD/bin:$PWD/dist/bin:$HOME/.elan/bin:$PATH"
+          # W5-2 (2026-07-30): demo.saw's offline_lean_replay steps
+          # need the replay assets. The dist/bin/saw binary's
+          # compiled-in datadir is the build machine's ~/.cabal/share
+          # (never installed), so without this export the replay
+          # resolution has no live branch and the step cannot pass.
+          export SAW_LEAN_ROOT="$PWD"
           cd examples/saw-lean
           saw demo.saw
-          # Refresh the Emitted.lean copies in the proof project
-          # from saw's freshly-generated out/ files. (The committed
-          # versions are namespace-wrapped — see proof/README — so
-          # we wrap here too before lake-building.)
-          # For now we just lake-build the existing committed
-          # Proofs/{Invol,Eq}Emitted.lean which are stable.
+          # Build the committed Proofs/{Invol,Eq}Emitted.lean copies.
+          # (The previous comment here claimed a refresh-from-out/
+          # step and cited a proof/README that does not exist —
+          # wave-4 DEMO-7. Refreshing remains a TODO; the copies were
+          # verified token-identical to fresh emission 2026-07-30.)
           cd proof
           lake build
 

@@ -179,6 +179,20 @@ bundle_files() {
   cp intTests/jars/galois.jar dist/lib
   cp -r deps/cryptol/lib/* dist/lib
   cp -r examples/* dist/examples
+
+  # saw-core-lean replay assets (wave-4 SHIP-1 / W5-2, 2026-07-30).
+  # The bindist binary is lifted out of dist-newstyle, so its
+  # compiled-in Cabal datadir points at the build machine and the
+  # data-files never ship; without these trees `offline_lean_replay`
+  # is unusable from the tarball. Shipping them checkout-shaped makes
+  # the unpacked dist root a valid SAW_LEAN_ROOT and lets the bundled
+  # examples/saw-lean/proof lakefile resolve its
+  # ../../../saw-core-lean/lean require. Derived from git (tracked
+  # files only — no .lake build state), same idiom as cryptol-specs
+  # above; do NOT replace with a hand-copied file list (TODO.md
+  # enumeration rule).
+  git archive --format=tar HEAD -- saw-core-lean/lean saw-core-lean/replay \
+    | (cd dist && tar x)
 }
 
 sign() {
