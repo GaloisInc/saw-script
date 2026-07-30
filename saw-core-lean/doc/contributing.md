@@ -264,6 +264,14 @@ To regenerate references after a change: `make -C
 otherTests/saw-core-lean good` (after a clean run-tests). Don't
 do this without inspecting the diff.
 
+To RETIRE a row, `git rm` is not enough: untracked run artifacts
+(`.log`, `.rawlog`, `.diff`) keep the directory alive, the glob
+discovery still finds it, and the harness fails-closed on a row
+with no driver — a red suite from a directory that no longer exists
+in git (2026-07-30 incident, replay_reject_notation). Remove the
+directory from disk, and record in the retirement note where the
+row's coverage went.
+
 If `lake` is on PATH and the directory has a `lean-elaborate` flag
 file, the framework also runs `lake env lean` on each emitted
 `.lean`.

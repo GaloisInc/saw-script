@@ -130,7 +130,12 @@ same day under the D1 threat model: the surviving in-model blocker,
 W2-UNRUN-1, is FIXED; K-1/CP-1/K-3 close out-of-model; K-2 drops to
 LOW. Agreed release posture: ship with the trust kernel declared
 WIP and health warnings to beta users, once the D2/D3 hardening —
-tasks #26, #27, #20 — lands.)*
+tasks #26, #27, #20 — lands. STATUS 2026-07-30 end of day: ALL
+LANDED (commits c0862d5c5, 6c3557cdc, 0c9451449), each followed by
+a focused opus fix-audit whose surviving findings were closed in
+0c9451449; full cabal-path suite GREEN at 0c9451449 (1361s, 72
+known gaps as pinned) plus smoketest PASS. The release precondition
+this note names is met.)*
 
 Report: `doc/2026-07-30_release-gate-audit-wave3.md` (five docket
 lanes + five fresh Opus lanes, refute-by-default, second lens on
