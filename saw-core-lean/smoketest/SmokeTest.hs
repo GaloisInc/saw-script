@@ -1883,6 +1883,38 @@ fixClassifierTests sc = testGroup "classifyFixShape (Slice R0, inert)"
         pure
       assertUnrecognized "same-index tail" (classifyFixShape vecTy body)
 
+  , testCase "computed inner at-index (addNat i2 1) pins the :350 guard" $ do
+      -- FXC-1 pin (wave-4, 2026-07-30): the inner at-index guard
+      -- (isExactVar idxVn idx) previously had no test that goes red
+      -- when it is deleted — every earlier case indexes the
+      -- rec-containing `at` with the bare inner binder, and the
+      -- index-perturbing cases perturb the TAIL index, which
+      -- rejects earlier at classifyTail. This element function
+      -- reads the recursive vector at (addNat i2 1), which under
+      -- the standard -1-shifted tail composes to the same-index
+      -- read result[i] = rec[i] — the exact shape the guard
+      -- refuses (its H_prod is kernel-checked FALSE:
+      -- otherTests/saw-core-lean/support-lemmas/
+      -- fix_hprod_refutation). Pin the EXACT reason: with the
+      -- guard deleted this term classifies FixClassF; a weaker
+      -- assertUnrecognized could stay green via a different Left.
+      (vecTy, body) <- mkFusedFixF sc
+        (\recVar i2Var -> do
+            n9 <- scNat sc 9
+            boolTy <- scBoolType sc
+            n32 <- scNat sc 32
+            n1 <- scNat sc 1
+            elemTy <- scGlobalApply sc "Prelude.Vec" [n32, boolTy]
+            idx <- scGlobalApply sc "Prelude.addNat" [i2Var, n1]
+            scGlobalApply sc "Prelude.at" [n9, elemTy, recVar, idx])
+        (shiftMinusOne sc)
+      case classifyFixShape vecTy body of
+        FixUnrecognized reason ->
+          reason @?= "rec-containing at-selection index is not the inner gen binder"
+        other ->
+          assertFailure ("computed inner at-index: expected \
+            \FixUnrecognized, got " ++ show other)
+
   , testCase "bare rec as a zip operand is Class F" $ do
       (vecTy, body) <- mkFusedFixF sc
         (\recVar i2Var -> do

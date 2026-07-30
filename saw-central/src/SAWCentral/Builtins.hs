@@ -1452,11 +1452,14 @@ leanReplayFingerprint txt =
 --     changed support library or toolchain pin changes the
 --     fingerprint and restages; the fingerprint covers file NAMES
 --     and CONTENTS of every shipped project file, so a stale cache
---     can never satisfy a newer saw. Staging is crash-safe: copy to
---     a temp sibling, write the trailing @.staged-ok@ marker, then
---     atomically rename — a directory without the marker is never
---     trusted, and losing a rename race to a concurrent stager is
---     fine because the same fingerprint implies the same contents.
+--     can never satisfy a newer saw. Staging is crash-safe AND
+--     concurrency-safe (SHIP-4 fix, 2026-07-30): copy to a
+--     PER-CALL-UNIQUE temp sibling, write the trailing @.staged-ok@
+--     marker, then atomically rename — a directory without the
+--     marker is never trusted, and losing a rename race to a
+--     concurrent stager is fine because the same fingerprint
+--     implies the same contents (each stager renames its own
+--     complete tree; no two ever share one).
 resolveLeanReplayAssets :: IO (FilePath, FilePath)
 resolveLeanReplayAssets = do
   mroot <- Env.lookupEnv "SAW_LEAN_ROOT"
@@ -1475,7 +1478,9 @@ resolveLeanReplayAssets = do
         [ "offline_lean_replay: bundled Lean assets not found at"
         , "  " ++ coreScript
         , "Reinstall saw (the assets ship as Cabal data-files), or"
-        , "set SAW_LEAN_ROOT to a saw-script checkout root."
+        , "set SAW_LEAN_ROOT to a saw-script checkout root — an"
+        , "unpacked release-tarball root also works (it ships"
+        , "saw-core-lean/{lean,replay}, since 2026-07-30)."
         ]
       libNames <- sort . filter (".lean" `isSuffixOf`)
                     <$> listDirectory (dataLean </> "CryptolToLean")
@@ -1494,9 +1499,21 @@ resolveLeanReplayAssets = do
       staged <- doesFileExist marker
       unless staged $ do
         createDirectoryIfMissing True cacheBase
-        let tmp = cacheBase </> ("staging-tmp-" ++ fpTag)
-        tmpLeft <- doesDirectoryExist tmp
-        when tmpLeft $ removeDirectoryRecursive tmp
+        -- Per-call-unique staging dir (wave-4 SHIP-4, the wave's one
+        -- CONFIRMED finding, fixed 2026-07-30): the previous fixed
+        -- name @staging-tmp-<fpTag>@ was shared by concurrent
+        -- same-fingerprint processes, and the "leftover" cleanup
+        -- (@removeDirectoryRecursive@ on an existing tmp) deleted a
+        -- live peer's mid-copy tree; one interleaving then published
+        -- a marker-bearing tree missing the head of @relFiles@ —
+        -- PERMANENTLY, since the marker short-circuits restaging.
+        -- Unique names close both, matching the per-call stage dir
+        -- below and the kernel's own WORK dir. Tradeoff: a crash
+        -- mid-copy now leaves debris under the cache base instead of
+        -- being adopted-then-deleted by the next run — cache
+        -- directory debris, never trust state (a markerless tree is
+        -- never consulted).
+        tmp <- createTempDirectory cacheBase ("staging-tmp-" ++ fpTag)
         createDirectoryIfMissing True (tmp </> "CryptolToLean")
         mapM_ (\rel -> copyFile (dataLean </> rel) (tmp </> rel))
               relFiles
