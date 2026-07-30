@@ -21,9 +21,16 @@ legacy); `saw-core-lean/doc/getting-started.md` walks this flow.
 >   SAW-side replay (`offline_lean_replay`) is WIRED IN as demo
 >   step 5: SAW re-emits each goal fresh, checks
 >   `proof/replay/{invol,eq}/proof.lean` under the factored trust
->   kernel, and genuinely SOLVES both goals on Lean's kernel
->   authority (not `fails`-wrapped). Run the demo with
->   `SAW_LEAN_ROOT=<saw-script checkout> saw demo.saw`.
+>   kernel, and SOLVES both goals on Lean's kernel authority (not
+>   `fails`-wrapped). What that does and does not establish —
+>   mistakes-not-malice, and why `LeanReplayEvidence` produced by
+>   someone else is a claim to re-establish by re-running replay
+>   yourself — is the threat-model section of
+>   `saw-core-lean/README.md`; read it before handing replay
+>   results to a second party.
+>   *(Blockquote verified current 2026-07-30, wave-4 demo audit:
+>   the committed Emitted copies are token-identical to fresh
+>   emission at HEAD.)*
 
 - `write_lean_term` — translate a single SAWCore term to a `.lean`.
 - `write_lean_cryptol_module` — translate every Cryptol top-level
@@ -37,12 +44,19 @@ legacy); `saw-core-lean/doc/getting-started.md` walks this flow.
 
 ## Files
 
-- `rev.cry` — Cryptol source. Three definitions (`idBool`, `implRev`
-  — a polymorphic reverse, `specRev` — its spec) and two `property`
-  declarations (`revInvolutive`, `impl_eq_spec`).
+- `rev.cry` — Cryptol source. Two definitions (`implRev` — a
+  polymorphic reverse, `specRev` — its spec) and three `property`
+  declarations (`revInvolutive`, `impl_eq_spec`, `sum_example`).
+  (`idBool` is a SAWScript `let` in `demo.saw`, not a Cryptol
+  definition.)
+- `rev_impl.cry` — the reduced module (`implRev` alone) that step
+  3b translates whole; deleting it breaks `demo.saw`.
 - `demo.saw` — the SAWScript driver. Translates two monomorphic
-  instances and both properties; the whole-module step is a
+  instances and both properties; the FULL-module step is a
   documented release-0.01 rejection (wrapped in `fails`, see below).
+- `depanalysis.saw` — a standalone dependency-analysis driver
+  (`enable_experimental` + `normalize_term`); run it the same way
+  as `demo.saw`. Not exercised by `demo.saw`.
 - `out/` — generated `.lean` files (gitignored).
 - `proof/` — a small Lake project that `require`s the saw-core-lean
   support library via relative path and discharges the two emitted
@@ -58,8 +72,19 @@ runnable instance of steps 2–3.
 
 ```bash
 cd examples/saw-lean
-../../dist-newstyle/build/<host-triple>/ghc-<v>/saw-<v>/x/saw/build/saw/saw demo.saw
+SAW_LEAN_ROOT=$(cd ../.. && pwd) \
+  ../../dist-newstyle/build/<host-triple>/ghc-<v>/saw-<v>/x/saw/build/saw/saw demo.saw
 ```
+
+`SAW_LEAN_ROOT` is REQUIRED for this invocation: the demo's replay
+steps (5) resolve the trust-kernel assets through it, and a
+dist-newstyle build's compiled-in data directory points at an
+uninstalled path — without the variable the run emits everything
+and then aborts at step 5. Point it at the checkout root (as
+above); from an unpacked release tarball, the tarball root works
+the same way (it ships `saw-core-lean/{lean,replay}`). Note the
+replay steps build the support library in `saw-core-lean/lean` —
+see the Step 3 warning below.
 
 The `out/` directory is created automatically. `saw` writes:
 
@@ -103,13 +128,26 @@ To regenerate after editing `rev.cry` / `demo.saw`:
 
 ```bash
 cd examples/saw-lean
-saw demo.saw
+SAW_LEAN_ROOT=$(cd ../.. && pwd) saw demo.saw
 # Paste out/invol_prove0.lean into proof/Proofs/InvolEmitted.lean
 # (keeping the `namespace InvolDemo` / `end InvolDemo` wrapper).
 # Similarly for out/eq_spec_prove0.lean → proof/Proofs/EqEmitted.lean.
 ```
 
 ### Step 3 — Discharge via `lake build`
+
+> **WARNING (shared-tree toolchain clobber).** This project pins
+> Lean `v4.29.1` (`proof/lean-toolchain`) while the shared support
+> library at `saw-core-lean/lean` pins `v4.32.0` — and the
+> `require` below builds that shared library IN PLACE. Running this
+> step (or Step 1's replay, which builds the same tree at 4.32.0)
+> inside a dev checkout leaves the library's build products at
+> whichever toolchain ran last; harnesses that consume the existing
+> build without rebuilding then fail with "incompatible header"
+> errors that read like translator regressions. Recovery is one
+> `lake build` in `saw-core-lean/lean`. Avoid running this step
+> concurrently with the test suites. (Tracked in
+> `saw-core-lean/TODO.md`; the pins should converge.)
 
 ```bash
 cd examples/saw-lean/proof
@@ -118,9 +156,10 @@ lake build
 
 Lake resolves the `require "cryptol_to_lean" path = "..."` in
 `proof/lakefile.toml` to the support library at
-`../../saw-core-lean/lean/`, builds it, then elaborates
-`Proofs/Invol.lean` and `Proofs/Eq.lean`. If either discharge
-fails, `lake build` fails — there is no separate proof-check step.
+`../../../saw-core-lean/lean/` (three levels up from `proof/`),
+builds it, then elaborates `Proofs/Invol.lean` and
+`Proofs/Eq.lean`. If either discharge fails, `lake build` fails —
+there is no separate proof-check step.
 
 ## Why this exists
 
@@ -131,4 +170,5 @@ Lean → discharge story, or (b) sanity-check that a backend change
 hasn't broken the surface for new users. The `proof/` Lake project
 is the canonical "how should my own project import saw-core-lean"
 pattern — the same `require` line works verbatim outside this
-checkout with an absolute path substituted for `../../saw-core-lean/lean`.
+checkout with an absolute path substituted for
+`../../../saw-core-lean/lean`.

@@ -123,7 +123,13 @@ few minutes); subsequent builds reuse the cache.
 > **In-repo demo of the same pattern**: `examples/saw-lean/proof/`
 > is a two-file Lake project using this exact `[[require]]` form
 > with a *relative* path (`../../../saw-core-lean/lean`). Copy its
-> `lakefile.toml` as a starting template for your own project.
+> `lakefile.toml` as a starting template for your own project —
+> but pin YOUR `lean-toolchain` to the support library's
+> (`saw-core-lean/lean/lean-toolchain`), not the demo's: the demo
+> currently pins an older toolchain, and building a path-dep
+> project against the shared library under a mismatched pin
+> rebuilds the library in place at that pin (the clobber warning in
+> `examples/saw-lean/README.md` Step 3).
 
 ## Step 3: discharge the goal
 

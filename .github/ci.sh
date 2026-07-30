@@ -190,7 +190,11 @@ bundle_files() {
   # ../../../saw-core-lean/lean require. Derived from git (tracked
   # files only — no .lake build state), same idiom as cryptol-specs
   # above; do NOT replace with a hand-copied file list (TODO.md
-  # enumeration rule).
+  # enumeration rule). Precondition the fix audit named: the
+  # SAW_LEAN_ROOT branch builds and stages INSIDE this tree, so the
+  # unpacked tarball must sit somewhere writable (a read-only
+  # prefix fails closed; the read-only-capable alternative is
+  # saw_datadir=<dist root>, which stages into the XDG cache).
   git archive --format=tar HEAD -- saw-core-lean/lean saw-core-lean/replay \
     | (cd dist && tar x)
 }

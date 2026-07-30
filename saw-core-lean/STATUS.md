@@ -357,4 +357,9 @@ detailed punch list in TODO.md):
    hardening follow-ups (CI-harness rebase onto the factored
    checker; binder-type telescope comparison). [Cabal data-files
    relocatable packaging: DONE 2026-07-23 — assets ship as package
-   data; `SAW_LEAN_ROOT` is now an optional dev override.]
+   data under `cabal install`; `SAW_LEAN_ROOT` is an optional dev
+   override THERE. Caveat recorded 2026-07-30 (wave-4 SHIP-1): the
+   release BINDIST bypasses cabal install — its binary bakes a
+   build-machine datadir — so for tarball users `SAW_LEAN_ROOT`
+   (pointed at the unpacked tarball root, which ships the assets
+   since 2026-07-30) is mandatory, not optional.]

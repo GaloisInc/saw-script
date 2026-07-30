@@ -277,14 +277,24 @@ classifyFixShape typeArg bodyArg
           , asNat bound == Just 1 -> True
         _ -> False
 
-    -- Amendment-C discipline, syntactic side: every occurrence of the
-    -- recursive binder inside the element function must sit inside a
-    -- zip application (the corpus's parallel-comprehension form), and
-    -- every at-selection whose vector spine CONTAINS the recursive
-    -- binder must be indexed by the constant -1 shift of the outer
-    -- gen binder (@subNat i 1@) — a same-index or computed-index body
-    -- must NOT classify (it would be unsound to lower, third/fourth
-    -- audits).
+    -- Amendment-C discipline, syntactic side (REWRITTEN 2026-07-30,
+    -- wave-4 FXC-3: the previous text here was a fossil of the
+    -- pre-R0 append-headed design — it required a zip around every
+    -- rec occurrence and a @subNat i 1@ index on rec-containing
+    -- at-selections, both false of this code and contradicted by
+    -- the module's own primary positive test; the correct rules
+    -- were already stated at the checks themselves and in
+    -- doc/2026-07-15_op3-successor-design.md). The actual rules:
+    -- a rec-containing at-selection must be indexed by EXACTLY the
+    -- inner gen binder (no arithmetic — the constant -1 shift lives
+    -- at the TAIL branch's @subNat i 1@, so inside the element
+    -- function the inner binder composes to the lookback-1 read),
+    -- and its vector spine must be the BARE recursive vector or a
+    -- zip with rec confined to operand slots. What is unchanged and
+    -- load-bearing: a same-index or computed-index body must NOT
+    -- classify (it would be unsound to lower, third/fourth audits;
+    -- reject-side discrimination pinned kernel-checked at
+    -- otherTests/saw-core-lean/support-lemmas/fix_hprod_refutation).
     recUseVerdict recVn idxVn elt =
       case scanRecUses recVn idxVn elt of
         Left reason -> FixUnrecognized reason
