@@ -112,6 +112,9 @@ mechanism — applied to closure claims rather than to soundness claims.
 
 ## 5. What this predicts
 
+> **SCORED 2026-07-30 — the prediction FAILED; see §8 for the
+> corrected diagnosis.** Original text kept unchanged below.
+
 If the diagnosis is right, **wave 3's CRITICALs will be in the six
 enumerations above**, and nowhere else. That is a falsifiable
 prediction and I would treat it as the test of this whole analysis.
@@ -121,6 +124,13 @@ by-construction chokepoint, the diagnosis is wrong and the problem is
 deeper than enumeration discipline.
 
 ## 6. What I am least sure of
+
+> **SCORED 2026-07-30:** the first bullet's worry did NOT
+> materialize — wave 3's claimed sixth member (`bitvector`) was
+> itself refuted post-audit
+> (`2026-07-30_bitvector-claim-refuted.md`); the sweep stands at
+> five. The last bullet was the load-bearing one: Family 1 is
+> where the prediction actually failed. See §8.
 
 - **The `IntMod` sweep is my own claim.** I asserted that the
   opaque-primitive-vs-reducible-alias class has exactly five members
@@ -153,3 +163,62 @@ deeper than enumeration discipline.
    without registering it.
 3. Adopt the closure-claim rule in §4.
 4. **Then** run wave 3, and use §5 as its scorecard.
+
+## 8. Postscript (2026-07-30): the prediction failed, and what the failure taught
+
+Wave 3 ran with §5 as its scorecard
+(`2026-07-30_release-gate-audit-wave3.md`). The prediction failed in
+both directions:
+
+- **K-2** is a CRITICAL in a *chokepoint* (the digest guard /
+  path-selection logic of `lean-check-core.sh`), not in any of §4's
+  six enumerations.
+- **W2-UNRUN-1** — reinstated after my wave-2 non-reproduction was
+  shown to be a single-test-case artifact — is a second chokepoint
+  CRITICAL, reachable from ordinary Cryptol.
+- Even the *confirming* finding, K-1, lives in
+  `proof-source-lint.awk`'s ban list, which §4's table does not
+  contain. "In the six and nowhere else" was false even where the
+  diagnosis looked right.
+
+### What survives
+
+The enumeration-rot story is **correct for the translator**. The
+derived conversions held; `adaptTo` is now six audit rounds without
+a defect of its class; and §6's first worry dissolved — wave 3's
+claimed sixth type-collapse member (`bitvector`) was refuted
+post-audit (SAWCore declares no such type;
+`2026-07-30_bitvector-claim-refuted.md`), so the five-member sweep
+stands. By the only measure this note proposed, **the translator
+converged**.
+
+### What was wrong
+
+§1 treated all CRITICALs as one population with one cause. They were
+two populations:
+
+- **Emission-side** defects (the translator) — enumeration rot,
+  fixed by derivation, converged as predicted.
+- **Trust-kernel** defects — a different mechanism entirely. The
+  kernel's text-inspection guards were defending against an
+  *unstated* threat model (an adversarial proof author), a job text
+  inspection cannot do; and fixing them generated new defects at
+  roughly 1:1 (the B1 fix introduced K-2 and CP-1; three fix-audit
+  rounds each found defects in the fix under audit). §6's last
+  bullet — "this does not touch the two deferred families" — was
+  the load-bearing caveat: Family 1 is exactly where the prediction
+  failed.
+
+### The replacement
+
+Convergence for the kernel was achieved by **scope reduction, not
+further fixing** (user decision, 2026-07-30, D1–D4 in the decision
+log): the threat model is now fixed as *error, not adversarial
+action* (`2026-05-02_residual-trust.md` §Threat model), under which
+the kernel's remaining CRITICALs re-score as out-of-model; the
+proof-source lint narrows to its one closed check; the
+kernel-checked ask-Lean gates (binding theorem, axiom audit,
+hardened drift check) carry the load. The in-model CRITICAL wave 3
+surfaced (W2-UNRUN-1) was emission-side and was closed the same day
+by goal-shape gate 3 — i.e. by this note's own discipline, on the
+population where that discipline actually applies.
