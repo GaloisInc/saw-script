@@ -117,8 +117,11 @@ Drop the emitted file into `Myproof.lean`:
 cp ../distrib_prove0.lean Myproof.lean
 ```
 
-Run `lake build`. The first build compiles `CryptolToLean.*` (a
-few minutes); subsequent builds reuse the cache.
+Run `lake build`. The first build compiles `CryptolToLean.*` —
+seconds on a machine that already has the pinned toolchain (a
+from-scratch library build measured ~3s, 2026-07-30); budget a few
+minutes only if elan must first DOWNLOAD the toolchain (network).
+Subsequent builds reuse the cache.
 
 > **In-repo demo of the same pattern**: `examples/saw-lean/proof/`
 > is a two-file Lake project using this exact `[[require]]` form

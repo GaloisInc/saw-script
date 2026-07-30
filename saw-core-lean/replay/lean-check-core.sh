@@ -326,18 +326,29 @@ triv_out=$(run_lean "$STAGE/triviality-probe.lean" 2>&1) && triv_rc=0 || triv_rc
 if [ "$triv_rc" -eq 0 ]; then
     fail "goal-formation-trivial"
 fi
-# CP-3 + K-5 fix (2026-07-30, close-out arc step 2): this probe was
+# CP-3 + K-5 fix (2026-07-30, close-out arc step 2; discriminator
+# TIGHTENED same day by its own fix audit): this probe was
 # fail-OPEN — ANY nonzero exit read as "not trivial", so a probe
 # that never genuinely ran (lean crash, 120s timeout, import
 # failure, OOM) silently waved a possibly-trivialized goal through:
 # tool failure failing open inside the trust kernel, against rule
-# C3. The only acceptable failure is the TACTIC failing inside the
-# probe, which Lean reports at the example's own line
-# (triviality-probe.lean:2). A timeout prints no such line, an
-# import failure reports line 1, a crash prints other text, and an
-# empty transcript is no evidence at all — every one of those is
-# inconclusive and must fail closed.
-if ! printf '%s\n' "$triv_out" | grep -q 'triviality-probe\.lean:2:'; then
+# C3. The first fix accepted any failure reported at the probe's
+# own line (triviality-probe.lean:2) — and its audit demonstrated
+# Lean reports resource GIVE-UPS ("maximum recursion depth") at
+# that same position, admitting a goal `rfl` provably closes at a
+# higher depth: exactly the collapsed-computation shape a
+# trivialized emission produces. So the accept condition is now an
+# ALLOWLIST of genuine refutation shapes, measured on the pinned
+# toolchain (v4.32.0: `first | rfl | trivial` refuses with
+# "error: Tactic `assumption` failed"; "unsolved goals" kept as the
+# other refutation family). Anything else — give-ups, warnings-only,
+# import errors (line 1), timeouts, empty transcripts, or a FUTURE
+# TOOLCHAIN'S changed phrasing — fails closed as inconclusive: a
+# deliberate availability-for-soundness trade on a pinned
+# toolchain, where phrasing changes arrive only with deliberate
+# toolchain bumps and their gate sweeps.
+if ! printf '%s\n' "$triv_out" \
+       | grep -qE 'triviality-probe\.lean:2:[0-9]+: error: (Tactic .* failed|unsolved goals)'; then
     printf '%s\n' "$triv_out" | tail -5
     fail "triviality-probe-inconclusive"
 fi

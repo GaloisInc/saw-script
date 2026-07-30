@@ -63,10 +63,17 @@ fi
 while IFS= read -r entry; do
     case "$entry" in
         *'*'*)
-            # expand the glob against TRACKED files only (matches the
-            # ship semantics: cabal sdist ships from the tree, the
-            # bindist ships from git archive)
-            git ls-files "$entry" >> "$scratch/declared"
+            # expand the glob against TRACKED files only, with
+            # NON-RECURSIVE semantics — ":(glob)" pathspec magic
+            # (step-1 fix audit F1/F2, 2026-07-30): bare git
+            # pathspecs glob recursively, Cabal's data-files globs
+            # do not, so a bare expansion would declare
+            # subdirectory files cabal never ships and pass a check
+            # cabal fails. With :(glob), a subdirectory .lean file
+            # shows up ONLY on the tracked side of the diff below —
+            # the check fails in the honest direction even without
+            # the separate no-subdir precondition above.
+            git ls-files ":(glob)$entry" >> "$scratch/declared"
             ;;
         *)  echo "$entry" >> "$scratch/declared" ;;
     esac
@@ -111,6 +118,23 @@ if ! grep -q 'git archive.*saw-core-lean/lean saw-core-lean/replay' .github/ci.s
     status=1
 else
     echo "OK[ship-list]: bundle_files ships the asset trees"
+fi
+
+# (e) toolchain pin equality (step-1 fix audit F6, 2026-07-30): the
+# pins converged the same day this check landed, and the convergence
+# retired the doc warnings that were the previous human guard — so
+# this equality is now the ONLY thing standing between the tree and
+# a recurrence of the destructive shared-library clobber (a path-dep
+# project building the shared library in place at a mismatched pin).
+if [ "$(cat examples/saw-lean/proof/lean-toolchain)" \
+     != "$(cat saw-core-lean/lean/lean-toolchain)" ]; then
+    echo "FAIL[ship-list]: demo/library lean-toolchain pins have diverged:"
+    echo "  demo:    $(cat examples/saw-lean/proof/lean-toolchain)"
+    echo "  library: $(cat saw-core-lean/lean/lean-toolchain)"
+    echo "  (bump BOTH in one commit — see examples/saw-lean/README.md Step 3)"
+    status=1
+else
+    echo "OK[ship-list]: demo and library toolchain pins agree"
 fi
 
 if [ "$status" -eq 0 ]; then

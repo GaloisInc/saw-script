@@ -195,6 +195,32 @@ theorem goal_closed : goal := trivial
 EOF
 expect_fail trivgoal goal-formation-trivial
 
+# --- triviality-probe-inconclusive (CP-3+K-5 second fix audit,
+# 2026-07-30): a goal whose rfl-closure blows the default
+# maxRecDepth makes Lean report a resource GIVE-UP at the probe's
+# own line 2 — the first fix's position-only discriminator read
+# that as "not trivial" and ADMITTED an rfl-closable goal (the
+# audit's end-to-end demonstration). With the refutation-shape
+# allowlist this must fail CLOSED. This case is the live pin for
+# the token (it replaced an env-class waiver whose rationale its
+# own audit found false for the timeout branch): deep-but-
+# rfl-closable goal, honest-looking proof, must reject as
+# inconclusive — never admit, never claim "trivial" it cannot
+# prove.
+mk trivgoal_deep
+cat > "$STAGE_ROOT/trivgoal_deep/Emitted.lean" <<'EOF'
+import CryptolToLean
+
+noncomputable def goal : Prop := (List.replicate 1000 true).length = 1000
+EOF
+cat > "$STAGE_ROOT/trivgoal_deep/proof.lean" <<'EOF'
+import Emitted
+
+theorem goal_closed : goal := by
+  set_option maxRecDepth 20000 in rfl
+EOF
+expect_fail trivgoal_deep triviality-probe-inconclusive
+
 # --- sorry-in-user-file.
 mk usersorry; real_goal > "$STAGE_ROOT/usersorry/Emitted.lean"
 cat > "$STAGE_ROOT/usersorry/proof.lean" <<'EOF'
@@ -658,16 +684,11 @@ generated-reference-does-not-compile|pin-row:drivers
 # vacuity count — the claim was decoration and is withdrawn.)
 axiom-audit-run|env
 axiom-audit-vacuous|env
-# Fail-closed half of the anti-trivialization gate (CP-3+K-5 fix,
-# 2026-07-30): fires only when the probe did NOT genuinely run —
-# lean crash, timeout, import failure, empty transcript — i.e. a
-# broken environment, not a crafted stage (the crafted-stage halves
-# are pinned live: trivgoal pins goal-formation-trivial, and every
-# accepting case pins the healthy tactic-failure-at-line-2 path).
-# Evidence: hand-mutation 2026-07-30 (close-out arc) — simulating a
-# timeout with an empty transcript (triv_rc=124, triv_out="") on the
-# honest control stage yields CHECK-FAIL: triviality-probe-inconclusive.
-triviality-probe-inconclusive|env
+# (triviality-probe-inconclusive: formerly waived here as env-class;
+# its own fix audit showed the rationale was false for the timeout
+# branch — stage content CAN provoke it — and the second fix gave it
+# a live crafted-stage pin, trivgoal_deep above. Waiver deleted per
+# the redundancy rule.)
 # axiom-decl-in-user-file needs NO row: the b1elab case above pins
 # it live in-kernel (since the 2026-07-29 B1 fix; token renamed with
 # the 2026-07-30 D2 lint narrowing), and the saw-boundary rows

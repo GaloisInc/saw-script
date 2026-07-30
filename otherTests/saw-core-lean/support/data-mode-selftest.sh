@@ -68,7 +68,13 @@ if [ ! -s "$scratch/stanza" ]; then
     exit 1
 fi
 while IFS= read -r entry; do
-    ( cd "$ROOT" && git ls-files "$entry" ) | while IFS= read -r f; do
+    # :(glob) = non-recursive, matching Cabal's data-files glob
+    # semantics (step-1 fix audit F1, 2026-07-30): a bare git
+    # pathspec globs recursively, which would stage subdirectory
+    # files into the synthetic install that a real `cabal install`
+    # would MISS — making this row green on a datadir no user can
+    # have, which is the exact blindness it exists to close.
+    ( cd "$ROOT" && git ls-files ":(glob)$entry" ) | while IFS= read -r f; do
         mkdir -p "$DATADIR/$(dirname "$f")"
         cp "$ROOT/$f" "$DATADIR/$f"
     done
@@ -76,44 +82,58 @@ done < "$scratch/stanza"
 nfiles=$(find "$DATADIR" -type f | wc -l)
 echo "OK[data-mode]: synthetic datadir staged ($nfiles declared files)"
 
-# 2. The E1 replay goal against the synthetic install.
+# 2/3. The E1 replay goal against the synthetic install, TWICE
+# (step-1 fix audit F3, 2026-07-30): the original single run against
+# the persistent cache degraded after its first local pass to "does
+# saw find an already-good cache dir" — the fingerprint covers
+# shipped BYTES only, so a regression in the STAGING CODE (the
+# SHIP-4 logic this row is billed as pinning) left the marker valid
+# and was never re-observed. The COLD leg uses a per-run scratch
+# XDG, so staging itself runs and is asserted on EVERY sweep
+# (measured ~7.5s; a from-scratch lake build of the staged library
+# is ~3.2s on this class of machine — the "few minutes" figure was
+# the elan toolchain-download case, see getting-started.md). The
+# WARM leg keeps the persistent cache and pins the marker-reuse
+# path.
 cat > "$scratch/test.saw" <<EOF
 enable_experimental;
 prove_print (offline_lean_replay "$ROOT/otherTests/saw-core-lean/proofs/E1_bvAdd_comm")
   {{ \\(x : [8]) (y : [8]) -> x + y == y + x }};
 EOF
-rc=0
-( cd "$scratch" &&
-  env -u SAW_LEAN_ROOT saw_datadir="$DATADIR" XDG_CACHE_HOME="$CACHE" \
-      timeout 900 "$SAW" test.saw ) > "$scratch/run.log" 2>&1 || rc=$?
-if [ "$rc" -ne 0 ]; then
-    echo "FAIL[data-mode]: saw exited $rc on the data-files branch"
-    tail -15 "$scratch/run.log" | sed 's/^/  /'
-    status=1
-elif ! grep -q "Lean kernel check passed" "$scratch/run.log"; then
-    echo "FAIL[data-mode]: exit 0 but no 'Lean kernel check passed' line"
-    tail -15 "$scratch/run.log" | sed 's/^/  /'
-    status=1
-else
-    echo "OK[data-mode]: E1 goal admitted through the data-files branch"
-fi
 
-# 3. Cache-schema assertions.
-markers=$(find "$CACHE/saw-core-lean" -maxdepth 2 -name .staged-ok -path "*/lean2-*" 2>/dev/null | wc -l)
-if [ "$markers" -lt 1 ]; then
-    echo "FAIL[data-mode]: no .staged-ok marker under a lean2-* cache dir"
-    find "$CACHE" -maxdepth 3 2>/dev/null | sed 's/^/  /'
-    status=1
-else
-    echo "OK[data-mode]: staged cache carries the lean2- schema marker"
-fi
-oldschema=$(find "$CACHE/saw-core-lean" -maxdepth 1 -type d -name 'lean-*' 2>/dev/null | wc -l)
-if [ "$oldschema" -ne 0 ]; then
-    echo "FAIL[data-mode]: an old-schema lean-* cache dir was created"
-    status=1
-else
-    echo "OK[data-mode]: no old-schema cache dir"
-fi
+run_leg() {
+    local xdg="$1" label="$2" rc=0 markers oldschema
+    ( cd "$scratch" &&
+      env -u SAW_LEAN_ROOT saw_datadir="$DATADIR" XDG_CACHE_HOME="$xdg" \
+          timeout 900 "$SAW" test.saw ) > "$scratch/run-$label.log" 2>&1 || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo "FAIL[data-mode:$label]: saw exited $rc on the data-files branch"
+        tail -15 "$scratch/run-$label.log" | sed 's/^/  /'
+        status=1
+    elif ! grep -q "Lean kernel check passed" "$scratch/run-$label.log"; then
+        echo "FAIL[data-mode:$label]: exit 0 but no 'Lean kernel check passed' line"
+        tail -15 "$scratch/run-$label.log" | sed 's/^/  /'
+        status=1
+    else
+        echo "OK[data-mode:$label]: E1 goal admitted through the data-files branch"
+    fi
+    markers=$(find "$xdg/saw-core-lean" -maxdepth 2 -name .staged-ok -path "*/lean2-*" 2>/dev/null | wc -l)
+    if [ "$markers" -lt 1 ]; then
+        echo "FAIL[data-mode:$label]: no .staged-ok marker under a lean2-* cache dir"
+        find "$xdg" -maxdepth 3 2>/dev/null | sed 's/^/  /'
+        status=1
+    else
+        echo "OK[data-mode:$label]: staged cache carries the lean2- schema marker"
+    fi
+    oldschema=$(find "$xdg/saw-core-lean" -maxdepth 1 -type d -name 'lean-*' 2>/dev/null | wc -l)
+    if [ "$oldschema" -ne 0 ]; then
+        echo "FAIL[data-mode:$label]: an old-schema lean-* cache dir was created"
+        status=1
+    fi
+}
+
+run_leg "$scratch/cold-xdg" cold
+run_leg "$CACHE" warm
 
 if [ "$status" -eq 0 ]; then
     echo "data-mode-selftest: ALL CHECKS OK"

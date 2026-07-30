@@ -238,16 +238,25 @@ items 3 (cabal ship-list) and 4 (consistency check) closed; items 1
   via `git archive`), the abort message names the unpacked-tarball
   root as a valid `SAW_LEAN_ROOT`, STATUS.md carries the bindist
   caveat, and the demo README documents the tarball flow.
-  Residues from the W5-2 fix audit, accepted at LOW/INFO: the
-  tarball tree must be writable (read-only prefixes fail closed;
-  `saw_datadir=<dist root>` is the read-only-capable alternative —
-  recorded in the ci.sh comment); the tarball now carries the
-  4.29.1/4.32.0 demo-pin divergence (warned in the demo README);
-  first tarball replay triggers a cold library build under the
-  kernel's 120s cap (unmeasured — needs a real tarball
-  environment); help text at `Interpreter.hs:5333` still says
-  "installed data-files" (true under cabal install, wrong for the
-  bindist — carried with the pin-convergence item).
+  Residues from the W5-2 fix audit, accepted at LOW/INFO
+  (annotated 2026-07-30 evening after the close-out step-1 audit
+  caught two of these gone stale): the tarball tree must be
+  writable (read-only prefixes fail closed; `saw_datadir=<dist
+  root>` is the read-only-capable alternative — recorded in the
+  ci.sh comment); ~~the demo-pin divergence~~ RETIRED — pins
+  converged 2026-07-30, the tarball ships both projects at
+  v4.32.0; ~~the 120s-cap concern~~ MEASURED AND RETIRED
+  2026-07-30 (step-1 audit F4 reconciliation): a from-scratch lake
+  build of the staged library is ~3.2s and the whole cold
+  data-mode leg ~7.5s — getting-started's "a few minutes" was the
+  elan toolchain-DOWNLOAD case, now stated as such; the one
+  unmeasured sliver is that download riding inside the kernel's
+  120s cap on a fresh machine (network-bound, unmeasurable from
+  this sandbox — CI installs elan before any replay runs, so CI is
+  not exposed); help text at `Interpreter.hs:5333`
+  still says "installed data-files" (true under cabal install,
+  wrong for the bindist) — OWN LINE now, no longer carried by the
+  closed pin-convergence item: fix with the next Haskell batch.
 
 ### LOW/INFO residue (fix-shortlist in report §6) — dispositions 2026-07-30
 
