@@ -66,7 +66,14 @@ produced fixes whose defect rate exceeded the risk they retired.
    constructed circumvention. A defect exploitable only by an
    author acting adversarially is OUT-OF-MODEL: documented here,
    fixed when the fix is small and obviously stable, and never
-   release-blocking.
+   release-blocking. The partition keys on exactly one question —
+   does reaching the defect require an adversarial author? — so a
+   defect that is not an evasion route at all (a wrong README line,
+   a stale comment, a misleading diagnostic) is IN-MODEL: ordinary
+   use encounters it with no one acting in bad faith. (Sentence
+   added 2026-07-30: wave 4 scored nine findings by an exhaustive
+   reading of the in-model bullet list and four by this rule; the
+   consistency check resolved the split in this rule's favor.)
 2. **Load-bearing vs. courtesy.** The load-bearing checks are the
    ones that ask Lean's kernel a question whose answer cannot be
    faked from within the model: the `goal_closed : goal` binding

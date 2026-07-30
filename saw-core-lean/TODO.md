@@ -187,9 +187,13 @@ items 3 (cabal ship-list) and 4 (consistency check) closed; items 1
   require. This also discharges SHIP-1's mechanism. STILL OPEN, the
   determination half: whether the `saw-core-lean-tests` CI leg was
   red or not running for the 07-18..07-30 window — needs network
-  access to CI history; record the answer here when available. Note
-  the fixed step is verifiable only by CI itself (this sandbox
-  cannot run GH Actions).**
+  access to CI history; record the answer here when available.
+  Narrowed by the fix audit (F4): the leg's matrix entry, os, and
+  `continue-on-error: false` are all live in-repo, so "not
+  running" is possible only if the workflow never ran on this
+  branch at all — in-repo config cannot explain a silently-skipped
+  leg. Note the fixed step is verifiable only by CI itself (this
+  sandbox cannot run GH Actions).**
 - [ ] **W5-3: cross-check `CONFORMANCE.md:60`'s pin inventory (GAP
   3).** The coverage lane surveyed ~half of it; its "nothing lets an
   unsound shape through at HEAD" is a partial-survey result.
@@ -198,56 +202,90 @@ items 3 (cabal ship-list) and 4 (consistency check) closed; items 1
   an error-carrying element in a recognized Class-F fix, sole
   evidence a one-time manual `#reduce` from 2026-07-16, four backend
   deltas since. In-model, never scored by any wave.
+  **PARTIAL 2026-07-30: the fix_error_elem half is DONE** — the
+  `#reduce` observation re-established mechanically at HEAD on the
+  currently-emitted artifact (bytes decode to the identical
+  message; procedure recorded in the row's KNOWN GAP comment), and
+  all nine skipped inventory rows confirmed present and riding the
+  green suite. STILL OPEN: the semantic re-read of those rows
+  (does each pin what the table says it pins) — wave-5 lane work,
+  not a mechanical check.
 
 ### Surviving MEDIUMs (non-blocking)
 
-- [ ] **SHIP-4 (MEDIUM, the wave's only CONFIRMED verdict)** — XDG
-  cache staging race: `staging-tmp-<fpTag>` shared by concurrent
-  same-fingerprint processes (`Builtins.hs:1497-1499`, no
+- [x] **SHIP-4 (MEDIUM, the wave's only CONFIRMED verdict) — FIXED
+  2026-07-30.** XDG cache staging race: `staging-tmp-<fpTag>` was
+  shared by concurrent same-fingerprint processes (no
   pid/lock/O_EXCL); verifier found a marker-plus-hole interleaving
-  the lane missed — P1 writes `.staged-ok` into P2's recreated tree,
-  renames a tree missing the head of `relFiles`, and the marker
-  short-circuit makes the broken cache PERMANENT (`CHECK-FAIL:
-  support-library-build` until an XDG path is hand-cleared).
-  Fail-closed, availability only. Fix: per-call uniquifier as the
-  kernel's own `WORK` dir already does.
-- [ ] **SHIP-1 (MEDIUM, was HIGH)** — the release bindist never
-  contains the data-files (`bundle_files` copies nothing from
-  `saw-core-lean/`; no `cabal install`/`sdist` in `.github/`);
-  `offline_lean_replay` unusable in the tarball while
-  `Interpreter.hs:5333` and `STATUS.md:359` claim otherwise.
-  Downgraded (fails closed+loud, two-`cp`-line fix) but W5-2 shows
-  the same defect breaks our own CI — revisit with W5-2.
+  the lane missed — P1 writes `.staged-ok` into P2's recreated
+  tree, renames a tree missing the head of `relFiles`, and the
+  marker short-circuit makes the broken cache PERMANENT. Fix: the
+  staging tmp dir is per-call-unique (`createTempDirectory`,
+  matching the per-call stage dir and the kernel's `WORK` dir) and
+  the shared-name leftover delete is gone — both the
+  delete-a-live-peer race and the marker-plus-hole publish are
+  structurally impossible. Tradeoff (crash debris under the cache
+  base; never trust state — markerless trees are never consulted)
+  recorded at the site. NOTE: the branch remains suite-unexercised
+  (SHIP-2); the fix is argued structurally, not pinned.
+- [x] **SHIP-1 (MEDIUM, was HIGH) — MECHANISM FIXED 2026-07-30
+  (with the W5-2 remedy).** Original filing: the release bindist
+  never contained the data-files (`bundle_files` copied nothing
+  from `saw-core-lean/`; no `cabal install`/`sdist` in
+  `.github/`); `offline_lean_replay` unusable in the tarball while
+  `Interpreter.hs:5333` and `STATUS.md:359` claimed otherwise.
+  Now: `bundle_files` ships `saw-core-lean/{lean,replay}` (derived
+  via `git archive`), the abort message names the unpacked-tarball
+  root as a valid `SAW_LEAN_ROOT`, STATUS.md carries the bindist
+  caveat, and the demo README documents the tarball flow.
+  Residues from the W5-2 fix audit, accepted at LOW/INFO: the
+  tarball tree must be writable (read-only prefixes fail closed;
+  `saw_datadir=<dist root>` is the read-only-capable alternative —
+  recorded in the ci.sh comment); the tarball now carries the
+  4.29.1/4.32.0 demo-pin divergence (warned in the demo README);
+  first tarball replay triggers a cold library build under the
+  kernel's 120s cap (unmeasured — needs a real tarball
+  environment); help text at `Interpreter.hs:5333` still says
+  "installed data-files" (true under cabal install, wrong for the
+  bindist — carried with the pin-convergence item).
 
-### LOW/INFO residue (fix-shortlist in report §6)
+### LOW/INFO residue (fix-shortlist in report §6) — dispositions 2026-07-30
 
-FXC-1/2 (unpinned admission guards `:350`/`:192` — LOW-provisional,
-see W5-1); FXC-3 (`:280-287` spec comment asserts two checks the
-code does not perform — the block THIS ledger cites at WAVE 4 SCOPE;
-correct rules at `:345-349`); FXC-4/5 (raw `Show TermF` truncation
-golden-pinned in user-facing text; iterate refusal names a
-true-but-not-the-limit cause); FXC-6/7/8, FXS-1/2 (scope-blind
-at-index test rests on unstated `VarIndex` global-uniqueness
-assumption, `Name.hs:249`); DEMO-1..8 (Step-1 block omits
-SAW_LEAN_ROOT — probe-confirmed; Step 3 steers into the toolchain
-clobber unwarned, and Step 1 already clobbers via replay's own lake
-build; header contradicts itself on Rev.lean; trust story frozen
-2026-07-18 with retired "closer-type probe" idiom and no link to the
-shipped trust story; require-path prose off by one level; Files
-section wrong; unpinned duplicate tactic/goal copies + phantom
-proof/README; demo in no ship list); SHIP-2 (data-files branch dead
-under every suite — but verifier EXECUTED it green end-to-end, so
-"unexercised", not "broken"; ~10-line row closes it); SHIP-3
-(ship-list duplication, both drift directions fail closed;
-`ship-list.sh` check sketched in finding); SHIP-5/6; DC-1 (§3.2b
-over-claims universal digest re-verification the same doc's CP-1 row
-discards — every concrete bypass backstopped, prose fix at `:698`
-and TODO.md:689); DC-2 (the D2 token rename reproduces the C2 defect
-it fixed: six non-axiom lexer rejections emit
-`axiom-decl-in-user-file`); DC-3 (lint END-block guards unpinned);
-DC-4 (third stale pointer to the retired notation row at
-`:1730-1733`); DC-5 (D2 zero-cost denominators irreconcilable, 103
-vs 112; re-measured: 112 files, 3 flagged, all fixtures).
+LANDED same day (each with an opus fix-audit; see the commits of
+2026-07-30 after the wave-4 report):
+- FXC-1: `:350` guard now pinned by a SmokeTest exact-reason case
+  (deleting the guard goes red), and its H_prod discrimination is
+  kernel-checked (W5-1 row). FXC-2's stream-side H_prod likewise;
+  the `isIdentityStreamRead` unit pin (needs `Stream#rec` term
+  construction in SmokeTest) remains OPEN below.
+- FXC-3: the `:280-287` spec comment rewritten to the implemented
+  rules, fossil provenance named.
+- DEMO-1..6: README/demo.saw truthfulness batch (SAW_LEAN_ROOT in
+  the command blocks + tarball flow; clobber warning; Rev.lean
+  header contradiction; trust-story link + retired idiom dropped;
+  require path; Files section). DEMO-7 partially (phantom
+  proof/README reference removed from ci.yml; the unpinned
+  duplicate copies remain OPEN below).
+- DC-1..5: prose narrowings, the token split (`axiom-decl-in-user-file`
+  vs new `proof-source-unlintable`, axiom-first precedence),
+  END-block + fatal-half pins, denominator correction.
+- SHIP-1/SHIP-4: see their entries above.
+
+STILL OPEN (small, none blocking):
+- FXC-2 unit pin for `isIdentityStreamRead` (`Stream#rec`
+  construction machinery in SmokeTest).
+- FXC-4/5 (raw `Show TermF` truncation golden-pinned in user-facing
+  text; iterate refusal names a true-but-not-the-limit cause).
+- FXC-6/7/8, FXS-1/2 (unqualified `"Stream"` ident test; dead
+  `fixVerdictReason` equations; blind-spot enumerations; the
+  scope-blind at-index test's unstated `VarIndex` global-uniqueness
+  assumption, `Name.hs:249` — record it in the module header).
+- DEMO-7 residue (two unpinned tactic/goal copy pairs), DEMO-8
+  (demo absent from cabal ship list while prose calls it canonical).
+- SHIP-2 (~10-line `saw_datadir` data-mode row — would also pin the
+  SHIP-4 fix), SHIP-3 (`ship-list.sh` closed check, sketch in the
+  finding), SHIP-5/6 (unguarded lean-dir reads after the probe; no
+  toolchain observation in the evidence record).
 
 ### Consistency-agent corrections (harness improvement: LANDED, worked)
 
