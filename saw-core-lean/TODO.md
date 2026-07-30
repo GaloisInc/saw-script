@@ -139,18 +139,20 @@ items 3 (cabal ship-list) and 4 (consistency check) closed; items 1
 
 ### WAVE 5 CHARGES (open)
 
-- [ ] **W5-1: reject-side H_prod pin (GAP 1 — bounds this whole
-  wave).** Every FixRecognizer severity rests on "a recognizer false
-  positive yields an *undischargeable* kernel obligation" — asserted
-  from reading `SAWCorePrimitives.lean:1396-1412/1511-1528`, never
-  mechanically checked: `lookback`/`faithful` appear 0 times in
-  otherTests/, every corpus H_prod occurrence is an accept-side
-  discharge, and `negative/{fix_contract,fix_obligation_erasure}`
-  pin only S-1 seed-binding. Add a ~15-line `.shouldfail` row that
-  tries to prove H_prod for the FXC-1 witness body
-  (`at rec (addNat i2 1)`) and pins the failure. Until it lands,
-  **FXC-1/FXC-2 are LOW-provisional**; if it fails to land, they
-  revert to MEDIUM and docket item 1 reopens.
+- [x] **W5-1: reject-side H_prod pin (GAP 1) — LANDED 2026-07-30**
+  as `support-lemmas/fix_hprod_refutation/proof.lean`, in a STRONGER
+  form than the charged `.shouldfail` row: kernel-checked POSITIVE
+  refutations (`¬ saw_fix_bounded_productive` for the same-index
+  body `fun v => v`; `¬ saw_stream_single_productive` for the
+  self-reference and transforming steps), so undischargeability is
+  a theorem, not one tactic's failure. Each refutation kills exactly
+  ONE obligation field with a companion proving the others hold —
+  `lookback` (Class F), stream `lookback`, and `faithful` are each
+  independently load-bearing. Row green via `lean-proof-test.sh`
+  (elaborates + axiom audit). **FXC-1/FXC-2's LOW is no longer
+  provisional**; the wave-4 severity architecture now rests on
+  kernel-checked evidence. Original charge text preserved in the
+  wave-4 report §3/§6.
 - [ ] **W5-2: the demo's CI gate cannot have been green since
   2026-07-18 (GAP 2 — verified at HEAD).** `ci.yml:817-833` runs
   `saw demo.saw` with no `SAW_LEAN_ROOT` anywhere in `.github/`, on
