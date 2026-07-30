@@ -123,6 +123,119 @@ what would make them stop.
   `doc/2026-07-24_soundness-audit-2.md`, findings tracked in the
   section below. Three further CRITICALs, two demonstrated
   end-to-end. The release gate is NOT met until those clear.
+## Release gate — WAVE 3 findings (2026-07-30): STILL DO NOT RELEASE
+
+Report: `doc/2026-07-30_release-gate-audit-wave3.md` (five docket
+lanes + five fresh Opus lanes, refute-by-default, second lens on
+surviving CRITICAL/HIGH, a skeptic per docket verdict, completeness
+critic. 87 agents, HEAD fd1201f9d.) 24 findings survived, 19 refuted.
+
+**THE SCORECARD: the convergence proposal's §5 prediction is
+REFUTED** — K-2 is a CRITICAL in a chokepoint, W2-UNRUN-1 is a second
+CRITICAL in a chokepoint, and even the confirming CRITICAL (K-1) is
+outside §4's six enumerations. The mechanism half survives (hand
+lists rot, and dominate by volume); the single-cause frame does not.
+This wave's CRITICALs cluster in the trust kernel's ORDERING and
+EXISTENCE assumptions. See the report §1.
+
+### BLOCKS RELEASE
+
+- [ ] **K-1 (CRITICAL, hand-enum)** — `replay/proof-source-lint.awk:208-211`
+  bans 22 command heads; `simproc`/`dsimproc`/`builtin_simproc` are
+  not among them (verified: zero occurrences in the file), and the
+  word-boundary class includes `_` so every `*_elab`-suffixed command
+  escapes too. Gives a proof-side file elaboration-time IO plus
+  unchecked `addDecl`. FIX: invert to an ALLOWLIST of permitted
+  top-level command heads so an unknown future command fails closed.
+  Mutation: the forging `simproc` probe the audit built.
+- [ ] **K-2 / CP-2 (CRITICAL, chokepoint)** — `verify_unchanged`
+  (`lean-check-core.sh:132`) returns SUCCESS for a file that no longer
+  exists, and completed-vs-plain is re-derived from filesystem state
+  at eight `[ -f … ]` sites. Deleting `completed.lean` mid-check
+  silently drops the drift check — the only binding between the user's
+  `def goal` and the SAW obligation. FIX: fail on staged-then-deleted;
+  latch the path decision once at staging.
+- [ ] **W2-UNRUN-1 (CRITICAL, chokepoint) — REPRODUCED; REINSTATED.**
+  My wave-2 non-reproduction was a single-test-case artifact. An
+  ordinary Cryptol module plus `goal_cut` emits a Pi spine with an
+  Except-carried uninhabited binder domain and a carrier-free false
+  consequent, while SAW proves the same hypothesis TRUE. The telescope
+  pin's ARITY half fires only on an antecedent repeat (let-hoist,
+  `Signature.hs:251-253`); a consequent repeat leaves the arrow
+  intact. `saw-boundary/goal_hypothesis_refusal` is GREEN FOR THE
+  WRONG REASON (its own log records arity 0) — a V-H1 on top of a real
+  hole. `Exporter.hs:1436-1461`'s "measured" claim is falsified by the
+  lane's error-free control. FIX: gate in `writeLeanProp` only
+  (`write_lean_term` rows legitimately carry the shape — see
+  `obligations/proof_bv_eq_to_eq/expected.txt:7`), correct the
+  comment, re-cut the row. Corpus cost zero.
+  **The README LIB-1 hold (below) is now discharged**, at MEDIUM
+  incompleteness rather than the falsity wave 2 claimed.
+- [ ] **CP-1 (HIGH, chokepoint)** — last `verify_unchanged proof.lean`
+  is `:351`; the `UserProof.lean` copies are `:418` and `:452`. The
+  audited artifact and closer list are built from bytes no text gate
+  saw.
+- [ ] **K-3 (HIGH, hand-enum) — REINSTATED by the critic.** Its
+  refutation rested on "no elaboration-time IO route survives GATE
+  B"; K-1 IS that route, confirmed by the same wave. K-7 scenario 2
+  returns at MEDIUM.
+
+### SHOULD FIX BEFORE RELEASE
+
+- [ ] **W3-REF-1 (HIGH, derived-enum)** — the spelling lint landed
+  2026-07-29 is spelling-bound (extractor matches the literal token
+  `Lean.Ident "`); nine bare citations escape both it and
+  `emitterBareNames`. A derived check with the wrong derivation source.
+- [ ] **W3-HR-4 / W3-REF-3 (HIGH/MEDIUM, derived-enum)** —
+  `supportLibraryFiles` walk is non-recursive (verified) and the
+  agreement test reads only the root's imports. Latent today, which is
+  how the previous five rotted.
+- [ ] **`bitvector` is an unswept type-collapse member**
+  (`SpecialTreatment.hs:685` → `SAWCoreBitvectors.lean:32`). My
+  "exactly five members" claim was wrong — proposal §6 predicted
+  exactly this failure.
+- [ ] **Anti-trivialization gate is fail-OPEN (CP-3 + K-5)** — any
+  non-zero probe exit reads as "not trivial".
+- [ ] **Gate-path divergences (13 confirmed)** — the cabal path
+  REPLACES the environment; `SAW_LEAN_FAIL_ON_KNOWN_GAPS` dropped on
+  one path; the paths can test DIFFERENT saw binaries; strictest verb
+  unwired; a THIRD path (CI) exists. One mechanism should own env
+  construction.
+- [ ] **LIB-W2-2 residue (MEDIUM-HIGH)** — `Obligations.hs:535-541`'s
+  guarantee still false; three latent unswept members.
+
+### CORRECTIONS TO THIS LEDGER (made by wave 3)
+
+- [x] **OBL-2 DOES NOT EXIST — phantom finding, removed.** `grep OBL-2`
+  returned exactly one hit whose body was OBL-1's content. The wave-2
+  report's finding list contains OBL-1/OBL-4/OBL-6 only. **OBL-1 is
+  MEDIUM, not HIGH** (five byte-identical `expected.txt`, md5
+  `a494642d…`; only three of six directives are live). A wave-3 lane
+  re-asserted it as "confirmed and stronger than filed" and its
+  skeptic caught that.
+- [x] **W2-UNRUN-2 CONFIRMED-DEBT** — the FpOther blindness is real
+  and is half of W2-UNRUN-1's mechanism.
+- [x] **Unapplied `coerce`: NOT UNSOUND** — unsound-SHAPED but loud
+  by construction. Disposition: accept-documented, plus one narrow
+  Phase-β follow-up. Closes the item logged 2026-07-29.
+
+### WAVE 4 SCOPE
+
+- [ ] **`FixRecognizer.hs` (461 lines) — read by NO wave-3 lane.**
+  `classifyFixShape` is a hand-written syntactic classifier whose own
+  comment (`:280-287`) says a same-index or computed-index body must
+  not classify because "it would be unsound to lower"; consumed at
+  `Term.hs:1303-1312` to choose lowering vs refusal. A CRITICAL-class
+  admissibility gate implemented as a hand enumeration, never audited.
+  **Wave 4's first charge.**
+- [ ] The shipped `examples/saw-lean/` demo as a replay consumer.
+- [ ] `saw.cabal:41-49` — hand list of shipped kernel files with a
+  non-recursive `CryptolToLean/*.lean` glob.
+- [ ] Harness improvement: a cross-finding CONSISTENCY check. Wave 3
+  simultaneously held "no IO route survives GATE B" (to refute K-3)
+  and "an IO route survives" (to confirm K-1). Only the end-stage
+  critic caught it.
+
 ## Release gate — WAVE 2 findings (2026-07-29): STILL DO NOT RELEASE
 
 Report: `doc/2026-07-29_release-gate-audit-wave2.md`. Six Opus lanes
