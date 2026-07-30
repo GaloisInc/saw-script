@@ -295,6 +295,12 @@ fi
 # awk read namespaces from the ALREADY-WRAPPED Generated.lean,
 # producing a doubled-namespace LHS a user def could satisfy. Removed
 # 2026-07-24 — the trust kernel has no goal-less completed path.)
+# The probe is a KERNEL-CHECKED DECLARATION, not a `#check` (D3
+# hardening, 2026-07-30, task #27): `#check` adds no declaration and
+# is decided by the elaborator alone — the A-5/RK-9 idiom this
+# kernel's own binding probe already abandoned, contributing.md
+# rule 5. Same collision property as `__replay_binding`: a user file
+# declaring `__drift_binding` fails to compile.
 if [ -f "$STAGE/completed.lean" ]; then
     # B1: Generated.lean is the AUTHORITY this check compares against —
     # the only thing binding the user's `def goal` to the SAW
@@ -309,7 +315,7 @@ if [ -f "$STAGE/completed.lean" ]; then
         echo "import Generated"
         echo "import Emitted"
         echo
-        echo "#check (show GeneratedHarness.goal = goal from rfl)"
+        echo "theorem __drift_binding : GeneratedHarness.goal = goal := rfl"
     } > "$STAGE/drift-check.lean"
     if ! drift_out=$(run_lean "$STAGE/drift-check.lean") \
        || printf '%s\n' "$drift_out" | grep -qE '^[^[:space:]]+: error'; then

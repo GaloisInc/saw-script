@@ -465,8 +465,13 @@ if [ -n "$STAGED_EMITTED_ABS" ]; then
             echo "import Generated"
             echo "import Emitted"
             echo
+            # Each probe is an anonymous `example`, which IS a
+            # kernel-checked declaration — `#check` adds none and is
+            # decided by the elaborator alone (contributing.md rule 5;
+            # D3 hardening 2026-07-30, task #27, mirroring the replay
+            # kernel's __drift_binding).
             if grep -qE '^[[:space:]]*(noncomputable[[:space:]]+)?def[[:space:]]+goal[[:space:]]*:' "$EMITTED_REF_ABS"; then
-                echo "#check (show GeneratedHarness.goal = goal from rfl)"
+                echo "example : GeneratedHarness.goal = goal := rfl"
             else
                 # Module-artifact row (R3b): no `def goal` — drift-check
                 # every top-level def instead, fully qualified through
@@ -482,7 +487,7 @@ if [ -n "$STAGED_EMITTED_ABS" ]; then
                     sub(/[:(].*/, "", name)
                     if (name != "") {
                       q = (ns != "" ? ns "." name : name)
-                      print "#check (show GeneratedHarness." q " = " q " from rfl)"
+                      print "example : GeneratedHarness." q " = " q " := rfl"
                     }
                   }
                 ' "$EMITTED_REF_ABS"
@@ -491,8 +496,8 @@ if [ -n "$STAGED_EMITTED_ABS" ]; then
         # R3b review finding F2: an imports-only check file compiles
         # cleanly and would PASS with zero checks performed. The
         # drift gate must never be vacuous.
-        if ! grep -q '^#check' "$PROBE_DIR/completed-outline.check.lean"; then
-            echo "FAIL: completed-outline drift check emitted no #check lines"
+        if ! grep -q '^example' "$PROBE_DIR/completed-outline.check.lean"; then
+            echo "FAIL: completed-outline drift check emitted no example lines"
             echo "(no 'def goal' and no extractable top-level defs in $EMITTED_REF_ABS)"
             rm -rf "$PROBE_DIR"
             exit 1
