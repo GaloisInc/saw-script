@@ -103,14 +103,18 @@ while IFS= read -r entry; do
     fi
 done < "$scratch/stanza"
 
-# (c) the relFiles hand-duplicates in Builtins.hs
+# (c) the relFiles hand-duplicates in Builtins.hs. Own verdict
+# variable (wave-5 DC5-5: this OK line was conditioned on the
+# GLOBAL status, so a run with an earlier failure printed no
+# verdict for (c) at all).
+relfiles_ok=1
 for f in lakefile.toml lean-toolchain lake-manifest.json CryptolToLean.lean; do
     if ! grep -q "\"$f\"" saw-central/src/SAWCentral/Builtins.hs; then
         echo "FAIL[ship-list]: Builtins.hs relFiles no longer names \"$f\""
-        status=1
+        status=1; relfiles_ok=0
     fi
 done
-[ "$status" -eq 0 ] && echo "OK[ship-list]: Builtins.hs relFiles names all four top-level assets"
+[ "$relfiles_ok" -eq 1 ] && echo "OK[ship-list]: Builtins.hs relFiles names all four top-level assets"
 
 # (d) the bindist still ships the trees (W5-2 remedy pin)
 if ! grep -q 'git archive.*saw-core-lean/lean saw-core-lean/replay' .github/ci.sh; then

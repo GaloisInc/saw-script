@@ -35,10 +35,17 @@ SAW_DIR="$(cd "$HERE/../../.." && pwd)"
 PROJ="$SAW_DIR/saw-core-lean/lean"
 CORE="$SAW_DIR/saw-core-lean/replay/lean-check-core.sh"
 STAGE_ROOT="${TMPDIR:-/tmp}/saw-lean-kernel-selftest.$$"
+# The clean verb removes ALL runs' stage roots, not this shell's:
+# `$$` of a cleaning invocation is by construction a different PID
+# from the run that created a directory, so `rm -rf "$STAGE_ROOT"`
+# could never remove anything (wave-5 DC5-4 — the verb had been a
+# no-op since it was written). The test verb still uses the
+# PID-unique root so concurrent runs cannot collide.
+STAGE_ROOT_GLOB="${TMPDIR:-/tmp}/saw-lean-kernel-selftest."
 
 case "$VERB" in
     good) echo "replay-kernel-selftest.sh: 'good' is a no-op"; exit 0 ;;
-    clean) rm -rf "$STAGE_ROOT"; exit 0 ;;
+    clean) rm -rf "$STAGE_ROOT_GLOB"*; exit 0 ;;
     test) ;;
     *) echo "replay-kernel-selftest.sh: unknown verb '$VERB'" >&2; exit 1 ;;
 esac

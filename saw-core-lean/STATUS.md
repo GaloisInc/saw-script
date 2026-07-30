@@ -287,9 +287,21 @@ Known holes, all loud or pinned:
   popcount discharged; Class S-single `saw_stream_realize` —
   rec_ones discharged), everything else rejects with a named
   diagnostic carrying the recognizer's reason. The wrapped
-  `saw_fix_unique_exists` contract is DELETED (raw variant retained
-  per Instance 3, census-checked); the sound-but-undischargeable
-  wrapped-fix tier is ELIMINATED. Paired streams (stream_fibs) and
+  `saw_fix_unique_exists` contract is DELETED; the
+  sound-but-undischargeable wrapped-fix tier is ELIMINATED.
+  (SUPERSEDED 2026-07-25, noted here 2026-07-30: this entry as
+  written said the raw variant was "retained per Instance 3,
+  census-checked". Audit finding S-2 withdrew the RAW contract too,
+  and the census hedge is explicitly overturned in source — a
+  census is not a proof, and uniqueness among all fixed points is
+  extensional, so it cannot observe SAW's operational divergence.
+  Raw-position fix now REJECTS; the lowering that emitted
+  saw_fix_unique_exists_raw was deleted, not bypassed; and the
+  `obligations/fix_raw_function`, `fix_raw_index`, `fix_raw_proof`
+  rows under `otherTests/saw-core-lean` are `.known-gap` rejection
+  pins. See the withdrawal census above and
+  doc/2026-07-30_release-gate-audit-wave5.md.) Paired streams
+  (stream_fibs) and
   the iterate family (stream_step) are pinned boundary rejections;
   the Bool divergence witness is pinned at
   `saw-boundary/fix_obligation` and can never emit again. Six seam

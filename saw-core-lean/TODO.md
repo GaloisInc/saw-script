@@ -123,6 +123,55 @@ what would make them stop.
   `doc/2026-07-24_soundness-audit-2.md`, findings tracked in the
   section below. Three further CRITICALs, two demonstrated
   end-to-end. The release gate is NOT met until those clear.
+## Release gate — WAVE 5 verdict (2026-07-30): gate NOT met at 237310fda — remediation in progress
+
+Report: `doc/2026-07-30_release-gate-audit-wave5.md`. Judged
+against the close-out plan's §5 exit criterion (fixed in advance).
+Zero CRITICALs, zero translator/kernel defects at MEDIUM+, failure
+clause did NOT fire — but clauses 1 and 2 fail on BOOKKEEPING:
+
+- **Clause 1**: W5C-1 (MEDIUM, in-model, CONFIRMED) — CONFORMANCE.md
+  advertised positive `obligation` coverage for the `*WithProof`
+  contracts withdrawn as unsound 2026-07-25 (LIB-2); the
+  propagation-failure class has instances in four files plus
+  shipped docstrings, and doc-claim-lint is structurally blind to
+  it. Remediation step 1 (documentation-propagation commit) is
+  applied on this branch; the consistency agent's calibration note
+  (W5C-1's MEDIUM is the outlier vs the same-class W5C-2 LOW) is
+  recorded in the report, not adjudicated.
+- **Clause 2**: the critic's ledger sweep found six in-model
+  MEDIUM+ items with neither fix-and-pin nor user-accepted
+  disposition. **PROPOSED dispositions — AWAITING USER
+  ACCEPTANCE** (per the clause's own wording, these are not
+  self-acceptable):
+  1. **OBL-1** (MEDIUM, live: five byte-identical `expected.txt`,
+     mutation-demonstrated) — PROPOSE: fix-and-pin in the 0.02
+     remediation (the critic's read: the only survivor with a
+     demonstrated mutation deserves the pin, not a carry).
+  2. **W2-UNRUN-2** (labeled HIGH pre-threat-model, FpOther
+     blindness live at `Signature.hs`) — PROPOSE: threat-model
+     re-score (same treatment the wave-3 SHOULD FIX list got);
+     it predates the model and has never been scored under it.
+  3. **F11** (MEDIUM, partial — architecture.md module map names
+     2 of 12 modules) — PROPOSE: explicit 0.03 carry.
+  4. **LIB-W2-3** (MEDIUM — Rational value-collapse loudness pin
+     owed) — PROPOSE: explicit 0.03 carry (LOUD today only by
+     accident of `Rat` division not kernel-reducing; the pin is
+     the 0.03 item).
+  5. **F8b** (MEDIUM) — PROPOSE: explicit 0.03 carry.
+  6. **F12 successor** (MEDIUM, `[~]`) — PROPOSE: explicit 0.03
+     carry.
+- **Clause 3**: green by inheritance at 237310fda; per-commit —
+  re-sweep owed at the post-remediation release commit.
+- **Clause 4**: pending merge/CI (user decision).
+
+Wave-5 residue dispositions are folded into the wave-4 section's
+STILL OPEN list below (14 dispositions, 3 closures, 2 sharpenings);
+the delta lane found the seventeen-commit composition SOUND (33
+tokens exactly pinned-or-waived, gate order re-derived); filed for
+0.03, mechanism-shaped: declaration-existence resolution for
+doc-claim-lint (the propagation class becomes a check).
+
 ## Release gate — WAVE 4 findings (2026-07-30): no blocker, two docket items NOT closed
 
 Report: `doc/2026-07-30_release-gate-audit-wave4.md`. Five Opus
@@ -280,21 +329,53 @@ LANDED same day (each with an opus fix-audit; see the commits of
   END-block + fatal-half pins, denominator correction.
 - SHIP-1/SHIP-4: see their entries above.
 
-STILL OPEN (small, none blocking):
-- FXC-2 unit pin for `isIdentityStreamRead` (`Stream#rec`
-  construction machinery in SmokeTest).
-- FXC-4/5 (raw `Show TermF` truncation golden-pinned in user-facing
-  text; iterate refusal names a true-but-not-the-limit cause).
-- FXC-6/7/8, FXS-1/2 (unqualified `"Stream"` ident test; dead
-  `fixVerdictReason` equations; blind-spot enumerations; the
-  scope-blind at-index test's unstated `VarIndex` global-uniqueness
-  assumption, `Name.hs:249` — record it in the module header).
-- DEMO-7 residue (two unpinned tactic/goal copy pairs), DEMO-8
-  (demo absent from cabal ship list while prose calls it canonical).
-- SHIP-2 (~10-line `saw_datadir` data-mode row — would also pin the
-  SHIP-4 fix), SHIP-3 (`ship-list.sh` closed check, sketch in the
-  finding), SHIP-5/6 (unguarded lean-dir reads after the probe; no
-  toolchain observation in the evidence record).
+STILL OPEN — re-sworn by wave 5's residue-adjudication lane
+(2026-07-30 evening; each carries a wave-5 disposition, all 0.03
+carries unless marked; the list previously understated progress in
+four places — FXC-6, SHIP-2, SHIP-3 landed in close-out step 1, and
+DEMO-8 closed — caught by the wave-5 critic, gap 4):
+- FXC-2 unit pin for `isIdentityStreamRead` — DEMOTED to INFO,
+  defer to 0.03 (R5-RES-1: protects only which diagnostic an
+  unrealizable stream fix is refused with; the false-positive
+  image is kernel-refuted by `fix_hprod_refutation` and the
+  dispatch fails closed twice over).
+- FXC-4 INFO (digit leak latent by margin AND reachability,
+  R5-RES-2); FXC-5 INFO (the precise diagnostic is parse_core-only
+  defense-in-depth, R5-RES-3).
+- ~~FXC-6~~ FIXED in close-out step 1 (`183bfd6c0`). FXC-7 INFO
+  (dead by pattern order, R5-RES-4); FXC-8/FXS-2 INFO (the
+  blind-spot note is still smaller than the truth — zip's four
+  slots, R5-RES-6); FXS-1 INFO KEPT OPEN — the module header still
+  does not record the `VarIndex` uniqueness assumption (R5-RES-5).
+- DEMO-7 LOW, SHARPENED by wave 5 (R5-RES-7): the drift does NOT
+  fail closed — each copy is checked against its own goal copy, so
+  a stale demo obligation stays green. 0.03 carry.
+  ~~DEMO-8~~ CLOSED (R5-RES-8: the bindist ships the demo in the
+  layout its `require` needs; the surviving gap is sdist-only and
+  no release path runs sdist).
+- ~~SHIP-2~~ / ~~SHIP-3~~ LANDED in close-out step 1
+  (data-mode-selftest with cold+warm legs; ship-list-check).
+  SHIP-5 INFO (unguarded reads, fail-closed, no supported
+  installer produces the partial install, R5-RES-9). ~~SHIP-6~~
+  CLOSED as already-catalogued (verbatim in residual-trust §3.2c,
+  R5-RES-10).
+- From this arc's own audits (wave-5 adjudicated): triviality
+  denylist future-phrasing sliver INFO + the denylist has NO live
+  selftest row (R5-RES-11 — trivgoal_deep fails the allowlist on
+  its own; the denylist's evidence is the recorded hand-mutation);
+  `:(glob)` red-direction row INFO (semantics now observed, value
+  bounded by the no-subdir precondition, R5-RES-12);
+  elan-download-inside-120s-cap LOW (R5-RES-13: real for a
+  first-run bindist user, not CI); trivgoal_deep harm story CLOSED
+  (demonstrated, R5-RES-14).
+- Wave-5 delta-lane LOW/INFO, 0.03 carries: DC5-2 (deleted
+  `Generated.lean` rejects under the caller-contract token, not
+  the deletion token — fail-closed, wrong name); DC5-3
+  (census/oracle "shared definition" is two different walks with
+  the same domain today); DC5-4 (`replay-kernel-selftest.sh clean`
+  can never remove anything — `$$` of the cleaning shell); DC5-5
+  (ship-list sub-check (c) prints no verdict after an earlier
+  failure); DC5-1 folded into the CP-3 entry above.
 
 ### Consistency-agent corrections (harness improvement: LANDED, worked)
 
@@ -570,9 +651,19 @@ entries.
   at `triviality-probe.lean:2`); anything else fails closed under
   `triviality-probe-inconclusive`. Hand-mutation verified (simulated
   empty-transcript timeout on the honest control stage yields the
-  token); waived in the coverage meta-guard with that evidence
-  (`env` class — provoking it for real needs a broken toolchain);
-  kernel selftest ALL CASES OK.
+  token). SUPERSESSIONS (recorded per wave-5 DC5-1 — this entry
+  originally described only the FIRST of what became three fixes):
+  the same-day fix audits then (2) replaced the position-only
+  check with a refutation-shape ALLOWLIST after demonstrating a
+  resource give-up at the probe's own line admitted an
+  rfl-closable goal, adding the live `trivgoal_deep` pin and
+  DELETING the env-class waiver this entry cited (redundancy
+  rule); and (3) paired the allowlist with a give-up DENYLIST
+  after the launder channel (SynthInstance rethrow;
+  nested-error formatting) was proven from Lean's source —
+  denylist evidence is a hand-mutation (no live row; R5-RES-11).
+  Final state: `lean-check-core.sh` accept = allowlist AND NOT
+  denylist; kernel selftest ALL CASES OK.
 - [ ] **Gate-path divergences (13 confirmed) — RE-SCORED 2026-07-30
   (close-out arc step 2): in-model tool-failure class, one
   divergence FIXED, remainder dispositioned-not-refactored.** The
@@ -1137,13 +1228,15 @@ because this project has shipped vacuous pins repeatedly.
   saturation) — those are where a rule and an evaluator most easily
   disagree. MUTATION for that future pin: drop any one guard.
 
-- [ ] **F7 (HIGH) — the Slice-7 source lint lost the three new
-  modules.** `SmokeTest.hs:1195-1209` hardcodes an 11-file list, so
-  `adaptTo` and `topLevelDefConvention` are no longer swept and the
-  `"Except"` ceiling has gone slack. FIX: enumerate `src/**/*.hs`;
-  re-derive ceilings. MUTATION: reintroduce `translatedTermAsWrapped`
-  inside `Calculus.adaptTo` — red before the split, green today, red
-  again after the fix.
+- [x] **F7 (HIGH) — the Slice-7 source lint lost the three new
+  modules. FIXED 2026-07-29** (this row went stale-open; caught by
+  the wave-5 critic's ledger sweep, gap 4): `lintSourceFiles` in
+  `SmokeTest.hs` now ENUMERATES every `.hs` under
+  `saw-core-lean/src` at run time, fails loudly on an empty
+  enumeration (V-H1 guard), and carries the F7 provenance in its
+  own comment. Original filing: a hardcoded 11-file list dropped
+  `adaptTo` and `topLevelDefConvention` the moment the 2026-07-29
+  module split moved them.
 
 - [x] **F8 (HIGH, ledger) — CLOSED 2026-07-29, and the audit's own
   remedy was wrong.** Owed-pin (ii) IS false: the A-6 guillemet pin

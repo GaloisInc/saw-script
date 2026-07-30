@@ -170,12 +170,25 @@ recurrences carry the per-instance obligation
 S-single streams carry `saw_stream_single_productive` — and
 unrecognized wrapped shapes REJECT at translation (the old wrapped
 `saw_fix_unique_exists` contract is retired). Raw-position fixes
-emit `saw_fix_unique_exists_raw α body`.
+(function/proof/index results) emit nothing at all — they REJECT.
 
-**Discharge:** prove the emitted contract in Lean. Small cases may close
-by unfolding the literal body and proving uniqueness directly; larger
-cases should use Lean-side recurrence lemmas or tactics whose generated
-proof terms are kernel checked.
+Corrected 2026-07-30: this pattern previously told you they emit
+saw_fix_unique_exists_raw α body. That contract has not been
+emitted since 2026-07-25, when audit finding S-2 withdrew it —
+uniqueness among all fixed points is purely extensional, so the
+obligation is honestly dischargeable for a fix whose SAW meaning is
+bottom, and the lowering that emitted it was deleted rather than
+bypassed. Its Lean definitions remain in the support library but no
+emitter produces them, so no proof script should target them. The
+pinned rejection is visible in the `obligations/fix_raw_function`,
+`fix_raw_index` and `fix_raw_proof` `.known-gap` rows under
+`otherTests/saw-core-lean`.
+
+**Discharge:** prove the emitted contract in Lean — in practice the
+per-instance productivity obligation of the recognized class. Small
+cases may close by unfolding the literal body; larger cases should
+use Lean-side recurrence lemmas or tactics whose generated proof
+terms are kernel checked.
 
 Do not rely on old structural helper names in proof scripts. Those helper
 surfaces were removed because they encoded semantic recurrence reasoning

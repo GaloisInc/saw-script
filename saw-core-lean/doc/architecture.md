@@ -187,8 +187,25 @@ user-facing summary is archived at
   unique-fixed-point contract (`saw_fix_unique_exists`) is RETIRED
   and no emitter may produce it (the driver harness's
   obsolete-helper scan enforces this). Raw-position fixes
-  (function/proof/index results) keep the raw proof-carrying
-  contract `saw_fix_unique_exists_raw`.
+  (function/proof/index results) REJECT — corrected 2026-07-30; the
+  previous text said they keep the raw proof-carrying contract
+  saw_fix_unique_exists_raw, which has not been emitted since
+  2026-07-25. That contract was WITHDRAWN (audit finding S-2)
+  because uniqueness among all fixed points is purely EXTENSIONAL:
+  it cannot observe SAW's operational divergence, so it is honestly
+  dischargeable for a fix whose SAW meaning is bottom (witness:
+  `fix Nat (\(n : Nat) -> mulNat n 0)`), and no checker hardening
+  catches that — every gate goes green. The lowering that emitted
+  it, lowerFixProofObligation, was DELETED rather than bypassed;
+  the tombstone recording that is in `Term.hs` immediately after
+  the wrapped-helper apply table, and the Lean definitions remain
+  in the support library unused by any emitter. Evidence at HEAD:
+  the `obligations/fix_raw_function`, `fix_raw_index` and
+  `fix_raw_proof` rows under `otherTests/saw-core-lean` are
+  `.known-gap` rejection pins whose expected diagnostics are
+  "Refusing to translate primitive Prelude.fix" / "raw-position
+  fix". Restoration requires the productivity-gated raw contract in
+  the 0.03 fragment-semantics programme, not the withdrawn one.
 - **Universes** (corrected 2026-07-24, audit finding A-3 — the
   previous text described a polymorphismResidual gate that has
   NOT existed since May, and mis-stated `translateSort`).

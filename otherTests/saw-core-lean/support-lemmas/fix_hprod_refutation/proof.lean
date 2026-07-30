@@ -17,12 +17,14 @@ the load-bearing barrier. Until this row, every corpus occurrence of
 `saw_fix_bounded_productive` / `saw_stream_single_productive` was an
 accept-side discharge — nothing pinned that the obligation
 DISCRIMINATES. These theorems are the kernel-checked evidence: for
-each obligation field, a body IN THE IMAGE of the mutated
-recognizer (the false positive the wave-4 findings describe) makes
-that field FALSE — hence unprovable in a consistent logic, hence a
-loud undischargeable placeholder (caught by the zero-tolerance
-sorry scan and the exact-match axiom audit), never a silent wrong
-value.
+each of the three REFUTED fields (Class F `lookback`; stream
+`lookback`; stream `faithful` — Class F's `seed`/`total` carry
+positive companions only, wave-5 W5C-9 wording fix), a body IN THE
+IMAGE of the mutated recognizer (the false positive the wave-4
+findings describe) makes that field FALSE — hence unprovable in a
+consistent logic, hence a loud undischargeable placeholder (caught
+by the zero-tolerance sorry scan and the exact-match axiom audit),
+never a silent wrong value.
 
 WITNESS SHAPE (fix-audit correction, 2026-07-30): every body the
 recognizer can admit — with or without the FXC-1/FXC-2 guard
