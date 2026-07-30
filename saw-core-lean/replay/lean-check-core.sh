@@ -68,7 +68,16 @@ WORK="$PROJ/.replay-stage/replay-$$-$(date +%s)-$RANDOM"
 mkdir -p "$WORK" || fail "cannot-create-work-stage"
 trap 'rm -rf "$WORK"' EXIT
 for f in Emitted.lean proof.lean completed.lean Generated.lean; do
-    [ -f "$STAGE/$f" ] && cp "$STAGE/$f" "$WORK/$f"
+    if [ -f "$STAGE/$f" ]; then
+        # A failed copy must FAIL, not fall through (rule C3; task-#26
+        # fix audit, 2026-07-30): before this check, a cp failure on
+        # completed.lean silently converted the run to the PLAIN path
+        # — dropping the drift check — before any digest was
+        # recorded, so nothing downstream could notice. Absence at
+        # copy time is indistinguishable from never-staged, which is
+        # exactly why the copy itself must be verified.
+        cp "$STAGE/$f" "$WORK/$f" || fail "stage-copy-failed"
+    fi
 done
 STAGE="$WORK"
 

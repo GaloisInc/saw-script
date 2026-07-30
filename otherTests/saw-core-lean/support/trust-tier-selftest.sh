@@ -200,9 +200,11 @@ awk_case noncanonical-prefix "native-eval" "evil._native.bv_decide.ax_1, goal_ho
 # The source lint's own lexer semantics (proof-source-lint.awk),
 # exercised directly on synthetic proof-side files. These pin the F1
 # fix at the layer that owns it: the lexer must track string/char
-# literals alongside comments, ban every known escape hatch into
-# environment mutation or kernel bypass, and reject loudly whatever
-# it cannot classify with certainty against Lean's lexer.
+# literals alongside comments, flag the one banned declaration form
+# (`axiom` — the lint's single rule since the 2026-07-30 D2
+# narrowing), preserve token boundaries across every elided
+# construct, and reject loudly whatever it cannot classify with
+# certainty against Lean's lexer.
 
 AWK_LINT="$(cd "$CATROOT/../../saw-core-lean/replay" && pwd)/proof-source-lint.awk"
 
@@ -298,6 +300,18 @@ lint_case ok-shapes accept
 # case, which is the moment to think rather than to adjust the pin).
 printf '\xc2\xabaxiom\xc2\xbb evil : False\n' > "$STAGE/lint-axiom-escaped.lean"
 lint_case axiom-escaped reject "axiom"
+
+# Comment-glued axiom (task-#26 fix audit, 2026-07-30): a same-line
+# block comment used to emit NOTHING into the stripped buffer
+# (strings and char literals emit a space), so `1/- pad -/axiom …`
+# glued the digit to the keyword and destroyed the left token
+# boundary — a demonstrated false negative that admitted a
+# tier-pattern axiom end-to-end. The lexer now leaves a separator
+# for every elided construct; this case pins it (red-before: drop
+# the `out = out " "` in the `/-` branch and this goes green-file).
+printf 'def pad : Nat := 1/- pad -/axiom evil._native.bv_decide.ax_1 : False\n' \
+    > "$STAGE/lint-comment-glued.lean"
+lint_case comment-glued-axiom reject "axiom"
 
 # No false positives: legitimate proof-side shapes that MENTION
 # `axiom` (and former ban-list words) in comments or strings, plus

@@ -112,6 +112,30 @@ mk control; real_goal > "$STAGE_ROOT/control/Emitted.lean"
 honest_proof > "$STAGE_ROOT/control/proof.lean"
 expect_ok control
 
+# Completed-outline ACCEPT control (2026-07-30, from the task-#27 fix
+# audit): the kernel's completed path had only REJECT-side coverage
+# here — both expect_ok cases were plain-path — so the drift probe's
+# accept side (`theorem __drift_binding … := rfl` succeeding on an
+# honest outline) was pinned only by the cabal-path workflow rows,
+# which exercise the harness's SEPARATE implementation of the gate.
+# This case stages an honest completed outline: completed.lean is
+# byte-identical to Emitted.lean (as the SAW caller stages it) and
+# Generated.lean is the same goal under the GeneratedHarness
+# namespace, so every completed-path gate must pass and the run must
+# be ADMITTED.
+mk completed_ok
+real_goal > "$STAGE_ROOT/completed_ok/Emitted.lean"
+real_goal > "$STAGE_ROOT/completed_ok/completed.lean"
+cat > "$STAGE_ROOT/completed_ok/Generated.lean" <<'EOF'
+import CryptolToLean
+
+namespace GeneratedHarness
+noncomputable def goal : Prop := ∀ (x : Bool), x = !(!x)
+end GeneratedHarness
+EOF
+honest_proof > "$STAGE_ROOT/completed_ok/proof.lean"
+expect_ok completed_ok
+
 # --- replay-emission-missing-goal-def (A-2; the C1 closure).
 # A universe-parameterized goal misses the goal-presence regex. Before
 # the fix this SILENTLY disabled the binding gate and admitted a proof
@@ -557,6 +581,12 @@ waivers() {
 no-timeout-guard|env
 no-digest-guard|env
 cannot-create-work-stage|env
+# Same family as cannot-create-work-stage: a cp failing mid-staging
+# (disk full, permissions) is an environment fault we cannot stage
+# portably in a fixture. The guard exists so a failed copy of
+# completed.lean cannot silently convert the run to the plain path
+# before digests are recorded (task-#26 fix audit, 2026-07-30).
+stage-copy-failed|env
 project-root-not-absolute|env
 stage-dir-not-absolute|env
 missing-emitted|env

@@ -71,6 +71,22 @@
 # string literal may mention the word freely (string CONTENT is data
 # — it is elided from the token scan).
 #
+# The token match depends on one lexer invariant, stated so it stays
+# checked rather than assumed (task-#26 fix audit, 2026-07-30):
+# EVERY ELIDED CONSTRUCT LEAVES A SEPARATOR in the scanned buffer —
+# strings, char literals, AND block comments each emit one space —
+# so eliding `1/- pad -/axiom` cannot glue `1` to `axiom` and
+# destroy the boundary the rule matches on. The block-comment case
+# was the audit's demonstrated false negative: comments used to emit
+# nothing. Pinned by the trust-tier `comment-glued-axiom` case.
+#
+# Known over-refusal (same audit, recorded not fixed): the boundary
+# class is ASCII-only, so a legal Lean identifier continuing with
+# non-ASCII characters (`axiom₁`, `axiomα`) is flagged. Fail-closed,
+# zero corpus cost (0 of 112 proof-side files), and distinguishing
+# it needs the Unicode identifier table the F1 design deliberately
+# refuses to model — a user who hits it renames the identifier.
+#
 # Output: one "<file>:<line>: <text>" per hit (goldens pin this
 # format); exit 1 if any. Lexer-level rejections print a diagnostic
 # message instead of the source line.
@@ -110,7 +126,12 @@ function fatal(msg) {
     two = substr(line, i, 2)
 
     if (two == "--") break                       # line comment
-    if (two == "/-") { depth++; i += 2; tok = 0; continue }
+    # A consumed block comment must leave a separator in `out`, like
+    # strings and char literals below — otherwise `1/- x -/axiom`
+    # glues the surrounding bytes and destroys the token boundary
+    # the rule depends on (task-#26 fix audit, 2026-07-30; pinned by
+    # the trust-tier `comment-glued-axiom` case).
+    if (two == "/-") { depth++; i += 2; tok = 0; out = out " "; continue }
 
     if (c == "\"") {
       # Raw string? token exactly `r` (+ optional #s) before the quote.

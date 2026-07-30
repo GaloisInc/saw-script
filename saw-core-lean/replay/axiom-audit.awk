@@ -22,8 +22,8 @@
 #                    toolchain print as <decl>._native.bv_decide.ax_N*
 #                    (declaration-dependent names, so this is the ONE
 #                    PATTERN rule; both consumers pair it with a source
-#                    lint — proof-source-lint.awk — forbidding
-#                    axiom/macro/elab declarations in proof-side files,
+#                    lint — proof-source-lint.awk — forbidding `axiom`
+#                    declarations in proof-side files,
 #                    so a hand-declared axiom cannot collide with the
 #                    pattern by name. This name-collision risk is why
 #                    bare patterns are not acceptable for the strict
@@ -36,14 +36,21 @@
 #                    wildcard.
 #                    The F1 gap (2026-07-21 soundness review: the
 #                    original lint was not string-literal aware) is
-#                    FIXED — the lint is now a lexer tracking
-#                    comments AND string/char literals, banning every
-#                    known escape hatch into environment mutation or
-#                    kernel bypass, and rejecting loudly whatever it
-#                    cannot classify. With source-level declaration
-#                    prevention airtight, a residual tier-pattern
-#                    axiom can only come from a genuine bv_decide
-#                    run. See doc/2026-07-21_soundness-review.md.
+#                    FIXED — the lint is a lexer tracking comments
+#                    AND string/char literals, preserving token
+#                    boundaries across every elided construct, and
+#                    rejecting loudly whatever it cannot classify.
+#                    Since 2026-07-30 (D2, threat model = error not
+#                    adversaries) it checks exactly ONE thing: no
+#                    `axiom` declaration — which is all this pattern
+#                    rule needs, since `axiom` is the only surface
+#                    form that mints an axiom, and an author
+#                    deliberately defeating the lexer is out of
+#                    model. Within that model a residual
+#                    tier-pattern axiom can only come from a genuine
+#                    bv_decide run. See
+#                    doc/2026-07-21_soundness-review.md and
+#                    residual-trust.md §Threat model.
 # Any other tier value fails loudly (UNKNOWN-TRUST-TIER sentinel).
 # A declared tier whose extra axioms never appear fails loudly too
 # (TRUST-TIER-UNUSED sentinel) — a tier marker must never be a

@@ -17,9 +17,12 @@ goal SAW emits, under the same checker the test suite trusts.
 
 `support/lean-proof-test.sh` already implements the entire trust
 kernel (staging, completed-outline drift check with the per-def
-module form and the no-vacuous-#check assertion, elaboration, named
-closer requirement, sorry scan, axiom audit against the fixed
-allowlist). Replay MUST NOT reimplement it: factor the check core
+module form and the no-vacuous-probe assertion — a `#check` fence
+when written, kernel-checked `example` declarations plus a
+`^example` fence since 2026-07-30 (task #27, contributing.md
+rule 5) — elaboration, named closer requirement, sorry scan, axiom
+audit against the fixed allowlist). Replay MUST NOT reimplement it:
+factor the check core
 into a shared entry point invoked by BOTH the CI harness and the
 SAW-side replay. A second checker would drift; the single-checker
 principle is this design's load-bearing decision.
@@ -36,8 +39,9 @@ principle is this design's load-bearing decision.
 3. **Checks** (all-or-nothing; any failure = ProofScript `fail` with
    the named check — never a silent SolveUnknown):
    a. completed-outline drift (if present): defeq-by-rfl against the
-      fresh emission; per-def form for module artifacts;
-      no-vacuous-#check assertion (R3b review finding F2's fix).
+      fresh emission; per-def form for module artifacts; no-vacuous
+      probe assertion (R3b review finding F2's fix; the probes are
+      kernel-checked declarations since 2026-07-30, task #27).
    b. `proof.lean` elaborates against the staged emission with
       LEAN_PATH pinned to {staging dir, repo support library} only —
       no import shadowing surface.
