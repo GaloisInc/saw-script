@@ -539,6 +539,18 @@ proofObligationPlaceholder =
 -- `rfl` (through the let-bound Prop, which whnf unfolds) closes them;
 -- a genuinely non-reflexive assertion stays a loud `sorry` — correct,
 -- it is a real obligation the user must discharge.
+--
+-- PRECISION (LIB-W2-2; mirrored 2026-07-30 from the Lean-side
+-- paragraph at SAWCorePrimitives.lean § saw_unsafeAssert, which
+-- gained it 2026-07-29 while this docstring stayed unconditional):
+-- "stays a loud sorry" holds exactly to the extent that two
+-- SAW-DISTINCT operands are not Lean-defeq. Where a realization
+-- collapses them, `rfl` closes a claim SAW cannot prove — silently,
+-- with a clean axiom audit. That is a property of the REALIZATIONS
+-- (every SAW-distinct type realized distinctly), not of this
+-- script; it was live for IntMod until the 2026-07-29 seal, and it
+-- is pinned by negative/intmod_type_collapse and
+-- negative/float_double_collapse.
 unsafeAssertProofScript :: Lean.Term
 unsafeAssertProofScript =
   Lean.Tactic "(first | rfl | skip); all_goals sorry"

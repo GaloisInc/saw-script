@@ -500,14 +500,44 @@ entries.
 
 ### SHOULD FIX BEFORE RELEASE
 
-- [ ] **W3-REF-1 (HIGH, derived-enum)** — the spelling lint landed
-  2026-07-29 is spelling-bound (extractor matches the literal token
-  `Lean.Ident "`); nine bare citations escape both it and
-  `emitterBareNames`. A derived check with the wrong derivation source.
-- [ ] **W3-HR-4 / W3-REF-3 (HIGH/MEDIUM, derived-enum)** —
+- [ ] **W3-REF-1 — re-scored 2026-07-30 (close-out arc step 2):
+  HIGH → LOW, still live; mechanism fix queued.** The count is
+  confirmed at HEAD: the extractor (`SmokeTest.hs` `marker =
+  "Lean.Ident \""`) cannot see the tactic STRING built at
+  `Contracts.hs` `checkedEvidenceScript`, and exactly nine of its
+  bare citations are in neither `emitterBareNames` nor
+  `hardcodedBareNames` (`natPos_macro`, `bit0_macro`, `bit1_macro`,
+  `one_macro`, `zero_macro`, `divNat_eq_div`, `modNat_eq_mod`,
+  `divNat_checked_eq_div`, `modNat_checked_eq_mod` — the macro five
+  registered only in their qualified spelling, the four bridge
+  lemmas nowhere). But all nine live inside a `by` script only —
+  the obligation STATEMENT is emitted fully qualified — so a
+  capture cannot change what an artifact means: user defs give
+  definitionally-true equations (still a kernel-checked term), or
+  the script falls to `all_goals sorry`, which the zero-tolerance
+  sorry scan and the `sorryAx`-rejecting axiom audit refuse loudly.
+  In-model, sound-or-loud, LOW. Fix to land (the re-score's
+  recommendation, ~10 lines, verified churn-free — no .cry/.sawcore
+  defines any of the nine): give `checkedEvidenceScript` a
+  `[Lean.Ident]` simp list, render the tactic from it, export it
+  into `contractEmittedNames` — registration by construction; and
+  narrow the over-claiming lint comment at
+  `SpecialTreatment.hs:477-481` to "inline `Lean.Ident` literals".
+- [x] **W3-HR-4 / W3-REF-3 (HIGH/MEDIUM, derived-enum) — RE-SCORED
+  AND CLOSED-BY-PIN 2026-07-30 (close-out arc step 2).**
   `supportLibraryFiles` walk is non-recursive (verified) and the
-  agreement test reads only the root's imports. Latent today, which is
-  how the previous five rotted.
+  agreement test reads only the root's imports. Latent today, which
+  is how the previous five rotted. Under the threat model the
+  latent trigger is one event — a subdirectory appearing under
+  `CryptolToLean/` — and that event now fails the suite loudly
+  BEFORE any non-recursive walk can silently miss:
+  `support/ship-list-check.sh` pins "no subdirectories" as a hard
+  check (it is also the cabal glob's and `relFiles`' shared
+  precondition). The walks stay non-recursive by design; the design
+  assumption is now checked instead of assumed. No longer
+  release-relevant; revisit only if the library ever wants
+  subdirectories, at which point every non-recursive consumer must
+  change together (the check's failure message is the list).
 - [x] **`bitvector` unswept-member claim — WITHDRAWN (refuted
   2026-07-30**, `doc/2026-07-30_bitvector-claim-refuted.md`; details
   in the supersession block above). SAWCore has no `bitvector`
@@ -517,15 +547,54 @@ entries.
   `sawCorePreludeSpecialTreatmentMap` key resolves to a real SAWCore
   declaration (extends `auditLeanOpaqueDeadEntries`), which retires
   the dead `Bit`/`bitvector` keys as a side effect.
-- [ ] **Anti-trivialization gate is fail-OPEN (CP-3 + K-5)** — any
-  non-zero probe exit reads as "not trivial".
-- [ ] **Gate-path divergences (13 confirmed)** — the cabal path
-  REPLACES the environment; `SAW_LEAN_FAIL_ON_KNOWN_GAPS` dropped on
-  one path; the paths can test DIFFERENT saw binaries; strictest verb
-  unwired; a THIRD path (CI) exists. One mechanism should own env
-  construction.
-- [ ] **LIB-W2-2 residue (MEDIUM-HIGH)** — `Obligations.hs:535-541`'s
-  guarantee still false; three latent unswept members.
+- [x] **Anti-trivialization gate is fail-OPEN (CP-3 + K-5) —
+  RE-SCORED in-model MEDIUM AND FIXED 2026-07-30 (close-out arc
+  step 2).** Any non-zero probe exit read as "not trivial" — tool
+  failure failing OPEN inside the trust kernel (a lean crash,
+  timeout, or import failure silently waved a possibly-trivialized
+  goal through), against rule C3; the one pre-threat-model item
+  whose shape was acceptance-adjacent. Fix: the only accepted probe
+  failure is the tactic failing INSIDE the probe (Lean reports it
+  at `triviality-probe.lean:2`); anything else fails closed under
+  `triviality-probe-inconclusive`. Hand-mutation verified (simulated
+  empty-transcript timeout on the honest control stage yields the
+  token); waived in the coverage meta-guard with that evidence
+  (`env` class — provoking it for real needs a broken toolchain);
+  kernel selftest ALL CASES OK.
+- [ ] **Gate-path divergences (13 confirmed) — RE-SCORED 2026-07-30
+  (close-out arc step 2): in-model tool-failure class, one
+  divergence FIXED, remainder dispositioned-not-refactored.** The
+  cabal path REPLACES the environment; `SAW_LEAN_FAIL_ON_KNOWN_GAPS`
+  was dropped on that path only — FIXED (added to Test.hs's
+  passthrough with a comment recording why `SAW_LEAN_ROOT` stays
+  deliberately absent). The remaining divergences (the paths can
+  test DIFFERENT saw binaries; strictest verb unwired; the CI third
+  path) are real but their failure direction is spurious
+  divergence/confusion between HARNESS paths, never an unsound
+  acceptance — and the memory-recorded discipline (name which path
+  a green claim came from) plus the W5-2 CI fix cover the observed
+  incidents. "One mechanism should own env construction" is a
+  refactor, not a small-and-obviously-stable fix; it fails the
+  pivot's churn test and moves below the line to 0.03. Not
+  release-blocking under consequence 1.
+- [x] **LIB-W2-2 residue — re-scored 2026-07-30 (close-out arc
+  step 2): MEDIUM-HIGH → LOW, comment fixed; the line reference was
+  wrong twice over.** The cited range drifted across a function
+  boundary: `proofObligationPlaceholder`'s comment IS kept (the
+  zero-tolerance sorry scan plus the `sorryAx`-rejecting axiom
+  audit — two independent gates), while the guarantee wave 2
+  actually cited is `unsafeAssertProofScript`'s docstring, which
+  was still stated unconditionally on the Haskell side after its
+  Lean twin gained the "PRECISION (LIB-W2-2)" injectivity paragraph
+  (`SAWCorePrimitives.lean:1634-1655`) — asymmetry now closed by
+  mirroring that paragraph into the docstring. "Three latent
+  unswept members" was stale: Float/Double and IntMod are sealed
+  (IntMod in `aff7fadb7`, pinned by `negative/intmod_type_collapse/*`),
+  `bitvector` withdrawn — leaving TWO: `Integer := Int` (latent, no
+  surviving SAW-distinct sibling, `integer.shouldfail` pin) and
+  `Rational := Rat` (live value-level collapse, LOUD only because
+  `Rat` division does not kernel-reduce — tracked under its own id
+  LIB-W2-3 MEDIUM with its loudness pin owed there, not here).
 
 ### CORRECTIONS TO THIS LEDGER (made by wave 3)
 

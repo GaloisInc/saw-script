@@ -29,7 +29,7 @@ module SAWCoreLean.Contracts
 
 import qualified Control.Monad.Except         as Except
 import           Control.Monad.Reader         (asks)
-import           Data.List                    (find)
+import           Data.List                    (find, intercalate)
 import qualified Data.Set                     as Set
 import qualified Data.Text                    as Text
 import           Data.Text                    (Text)
@@ -715,17 +715,38 @@ natLe lhs rhs =
 -- loud last resort for obligations that are genuinely not local
 -- arithmetic (runtime-symbolic divisors, eta positions pending OP-2);
 -- the check stage still rejects artifacts where it survives.
+-- | The simp set the checked-evidence script cites BARE — as a
+-- @[Lean.Ident]@, not a string (W3-REF-1 fix, 2026-07-30, close-out
+-- arc step 2). This tactic was the emitter's ONE emission of bare
+-- identifiers built as a raw string: invisible to the smoketest's
+-- @Lean.Ident "@ extractor, and nine of its names escaped the
+-- F-6/F-7 registration entirely (the macro five were registered
+-- only in their qualified spelling; the four div/mod bridge lemmas
+-- nowhere). Registration is now by construction: the script renders
+-- from THIS list and THIS list feeds 'contractEmittedNames', so a
+-- user definition named after any simp lemma is refused by the F-7
+-- gate instead of silently capturing it inside the script. Order is
+-- load-bearing: the rendered string must stay byte-identical to the
+-- pinned emission goldens.
+checkedEvidenceSimpSet :: [Lean.Ident]
+checkedEvidenceSimpSet = map Lean.Ident
+  [ "natPos_macro", "bit0_macro", "bit1_macro", "one_macro"
+  , "zero_macro", "succ_macro", "subNat", "addNat", "mulNat"
+  , "minNat", "maxNat", "divNat_eq_div", "modNat_eq_mod"
+  , "divNat_checked_eq_div", "modNat_checked_eq_mod"
+  , "Nat.sub_eq", "Nat.add_eq", "Nat.mul_eq" ]
+
 checkedEvidenceScript :: Lean.Ident -> Lean.Term
 checkedEvidenceScript (Lean.Ident propName) =
   Lean.Tactic $
     "(try unfold " ++ propName ++ "); " ++
     "(first | assumption | omega | " ++
-    "(simp only [natPos_macro, bit0_macro, bit1_macro, one_macro, " ++
-    "zero_macro, succ_macro, subNat, addNat, mulNat, minNat, maxNat, " ++
-    "divNat_eq_div, modNat_eq_mod, divNat_checked_eq_div, " ++
-    "modNat_checked_eq_mod, Nat.sub_eq, Nat.add_eq, Nat.mul_eq] " ++
+    "(simp only [" ++ simpList ++ "] " ++
     "at *; omega) | skip); " ++
     "all_goals sorry"
+  where
+    simpList =
+      intercalate ", " [ s | Lean.Ident s <- checkedEvidenceSimpSet ]
 
 partialOpProofScript :: Lean.Ident -> Set Lean.Ident -> Lean.Term
 partialOpProofScript propName _proofIdents =
@@ -758,6 +779,9 @@ contractEmittedNames = Set.fromList $ concat
   [ [ pocRuntimeWrapper c | c <- partialOpContracts ]
   , [ nm | c <- partialOpContracts, nm <- conventionTarget (pocConvention c) ]
   , [ cacHelperName c | c <- checkedApplicationContracts ]
+  -- W3-REF-1 (2026-07-30): the checked-evidence simp citations,
+  -- registered from the same list the tactic renders from.
+  , checkedEvidenceSimpSet
   ]
   where
     conventionTarget (PartialOpRaw nm)       = [nm]
