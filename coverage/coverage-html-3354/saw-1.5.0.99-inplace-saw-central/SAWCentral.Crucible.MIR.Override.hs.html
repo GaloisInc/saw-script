@@ -2187,11 +2187,11 @@ span.spaces    { background: white }
 <span class="lineno"> 2168 </span><span class="spaces">              </span><span class="istickedoff">\_off _sz shp' val' tval' -&gt; valueToSC sym <span class="nottickedoff">fail_</span> tval' (MIRVal shp' val')</span>
 <span class="lineno"> 2169 </span><span class="spaces">            </span><span class="istickedoff">liftIO (scTupleReduced sc terms)</span>
 <span class="lineno"> 2170 </span><span class="spaces">    </span><span class="istickedoff">(Cryptol.TVSeq n cryty, ArrayShape _ _ elemSz elemShp len)</span>
-<span class="lineno"> 2171 </span><span class="spaces">      </span><span class="istickedoff">-- When matching against the backing array of a slice, the length in the</span>
-<span class="lineno"> 2172 </span><span class="spaces">      </span><span class="istickedoff">-- TypeShape might differ from the actual length of the RegValue, so we</span>
-<span class="lineno"> 2173 </span><span class="spaces">      </span><span class="istickedoff">-- need to check both.</span>
-<span class="lineno"> 2174 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">toInteger len == n</span></span>
-<span class="lineno"> 2175 </span><span class="spaces">      </span><span class="istickedoff">, <span class="tickonlytrue">length (Mir.mirAggregate_entries <span class="nottickedoff">sym</span> val) &gt;= fromIntegral len</span></span>
+<span class="lineno"> 2171 </span><span class="spaces">      </span><span class="istickedoff">-- The lengths of the cryptol type, the MIR type/shape, and the aggregate</span>
+<span class="lineno"> 2172 </span><span class="spaces">      </span><span class="istickedoff">-- value should all match up.</span>
+<span class="lineno"> 2173 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">toInteger len == n</span></span>
+<span class="lineno"> 2174 </span><span class="spaces">      </span><span class="istickedoff">, entriesPerElem &lt;- length (expandAgElem $ AgElemShape <span class="nottickedoff">0</span> <span class="nottickedoff">elemSz</span> elemShp)</span>
+<span class="lineno"> 2175 </span><span class="spaces">      </span><span class="istickedoff">, <span class="tickonlytrue">length (Mir.mirAggregate_entries <span class="nottickedoff">sym</span> val) == fromIntegral len * entriesPerElem</span></span>
 <span class="lineno"> 2176 </span><span class="spaces">      </span><span class="istickedoff">-&gt; do terms &lt;- accessMirAggregateArray sym elemSz elemShp len val $</span>
 <span class="lineno"> 2177 </span><span class="spaces">              </span><span class="istickedoff">\_off val' -&gt; valueToSC sym <span class="nottickedoff">fail_</span> cryty (MIRVal elemShp val')</span>
 <span class="lineno"> 2178 </span><span class="spaces">            </span><span class="istickedoff">t &lt;- shapeToTerm sc elemShp</span>
