@@ -14,9 +14,9 @@
 #     `#print axioms` output): exact/tier accept, suffix/prefix
 #     look-alikes, native-under-strict, sorry-under-tier,
 #     noncanonical tier-pattern near-misses.
-#   Pure lint (proof-source-lint.awk lexer semantics): F1 string
-#     blindness, escape-hatch bans (run_tac, #eval,
-#     builtin_initialize, csimp, debug.*), cannot-classify rejections
+#   Pure lint (proof-source-lint.awk lexer semantics; narrowed to
+#     the single `axiom` check 2026-07-30, D2): F1 string blindness,
+#     the escaped-spelling boundary, cannot-classify rejections
 #     (raw/interpolated strings, non-ASCII primes, ambiguous ]'),
 #     and a no-false-positive acceptance of legitimate shapes.
 #   Completed-outline binding, R-1 (via lean-proof-test.sh):
@@ -101,7 +101,7 @@ axiom collide._native.bv_decide.ax_1 : False
 theorem tier_selftest_collide : False := collide._native.bv_decide.ax_1
 EOF
 printf 'native-eval\n' > "$STAGE/axiom-decl-lint/.trust-tier"
-run_case axiom-decl-lint "axiom/macro declaration in proof-side file"
+run_case axiom-decl-lint "axiom declaration in proof-side file"
 
 # Case 5 (2026-07-21 hardening pin): `private axiom` — the modifier
 # prefix bypassed the original line-anchored lint, and a private
@@ -114,7 +114,7 @@ private axiom goal_holds._native.bv_decide.ax_1 : False
 theorem tier_selftest_priv : False := goal_holds._native.bv_decide.ax_1
 EOF
 printf 'native-eval\n' > "$STAGE/private-axiom-decl/.trust-tier"
-run_case private-axiom-decl "axiom/macro declaration in proof-side file"
+run_case private-axiom-decl "axiom declaration in proof-side file"
 
 # Case 6 (2026-07-21 hardening pin): `set_option … in axiom` — a
 # command prefix on the same line also bypassed the original lint.
@@ -124,7 +124,7 @@ set_option pp.fullNames true in axiom goal_closed._native.bv_decide.ax_1 : False
 theorem tier_selftest_pref : False := goal_closed._native.bv_decide.ax_1
 EOF
 printf 'native-eval\n' > "$STAGE/prefixed-axiom-decl/.trust-tier"
-run_case prefixed-axiom-decl "axiom/macro declaration in proof-side file"
+run_case prefixed-axiom-decl "axiom declaration in proof-side file"
 
 # Case 7 (F1 fix pin, 2026-07-21 soundness review): string-literal
 # blindness — the original comment-stripping lint entered comment-skip
@@ -139,7 +139,7 @@ axiom goal_holds._native.bv_decide.ax_1 : False
 theorem tier_selftest_hidden : False := goal_holds._native.bv_decide.ax_1
 EOF
 printf 'native-eval\n' > "$STAGE/string-hidden-axiom-decl/.trust-tier"
-run_case string-hidden-axiom-decl "axiom/macro declaration in proof-side file"
+run_case string-hidden-axiom-decl "axiom declaration in proof-side file"
 
 # --- Pure-awk allowlist cases -------------------------------------
 # The audit layer's own rejection semantics, exercised directly on
@@ -243,31 +243,20 @@ axiom sneaky : (1 : Nat) = 2
 EOF
 lint_case string-blind reject "axiom sneaky"
 
-# Escape hatches added during the F1 fix: run_tac can addDecl an
-# axiom from inside a tactic block exactly the way bv_decide does;
-# #eval can run elab-monad actions; builtin_initialize slipped the
-# `initialize` token boundary; @[csimp] swaps native-eval
-# implementations; debug.* options can suspend kernel checking.
-printf 'theorem t : True := by run_tac pure ()\n' > "$STAGE/lint-run-tac.lean"
-lint_case run-tac reject "run_tac"
-printf '#eval (1 : Nat)\n' > "$STAGE/lint-hash-eval.lean"
-lint_case hash-eval reject "#eval"
-# v4.32.0 bump re-review additions (2026-07-22): run_meta/run_elab
-# exist as commands there, and #eval! previously slipped the #eval
-# boundary regex.
-printf 'run_meta pure ()\n' > "$STAGE/lint-run-meta.lean"
-lint_case run-meta reject "run_meta"
-printf 'run_elab pure ()\n' > "$STAGE/lint-run-elab.lean"
-lint_case run-elab reject "run_elab"
-printf '#eval! (1 : Nat)\n' > "$STAGE/lint-hash-eval-bang.lean"
-lint_case hash-eval-bang reject "#eval"
-printf 'builtin_initialize x : Nat <- pure 3\n' > "$STAGE/lint-builtin-init.lean"
-lint_case builtin-init reject "builtin_initialize"
-printf '@[csimp] theorem c : id = id := rfl\n' > "$STAGE/lint-csimp.lean"
-lint_case csimp reject "csimp"
-printf 'set_option debug.skipKernelTC true in\ntheorem t : True := trivial\n' \
-    > "$STAGE/lint-debug-option.lean"
-lint_case debug-option reject "debug.skipKernelTC"
+# RETIRED 2026-07-30 (D2 / plan 3a; decision log, residual-trust.md
+# §Threat model): the escape-hatch ban cases — run-tac, hash-eval,
+# run-meta, run-elab, hash-eval-bang, builtin-init, csimp,
+# debug-option (F1-era), debug-plain, debug-escaped (A-6), notation,
+# notation-local, infixl, syntax, export (A-1), attr-multiline,
+# attr-multiline-gap (A-7). Their subjects were removed from the
+# lint when it narrowed to the single `axiom` check: every one
+# pinned a rule that defended against a deliberately-authored
+# metaprogram, which the decided threat model puts out of scope, and
+# K-1 (wave 3) showed the underlying denylist cannot be kept
+# complete against the toolchain. These are probes whose question
+# was withdrawn, not probes gone vacuous (the V-H1 class); the
+# lexer-semantics and axiom-rule cases below are the surviving
+# coverage.
 
 # Constructs the byte-level lexer cannot certainly classify against
 # Lean's lexer must reject loudly, never guess.
@@ -298,76 +287,25 @@ theorem tier_ok : v_1'''' = 3 := rfl
 EOF
 lint_case ok-shapes accept
 
-# Lint rules added by the second audit (2026-07-24). Each new guard
-# ships with the mutation it catches (rule C4), and each was a live
-# evasion of the shipped lint before the fix.
-
-# A-6: Lean accepts escaped name components, so «debug».skipKernelTC
-# is the SAME Name as debug.skipKernelTC — it switched kernel
-# type-checking off for the whole file while the lint saw nothing.
-printf 'set_option debug.skipKernelTC true in\ntheorem t : True := trivial\n' \
-    > "$STAGE/lint-debug-plain.lean"
-lint_case debug-plain reject "debug.skipKernelTC"
-printf 'set_option \xc2\xabdebug\xc2\xbb.skipKernelTC true in\ntheorem t : True := trivial\n' \
-    > "$STAGE/lint-debug-escaped.lean"
-lint_case debug-escaped reject "skipKernelTC"
-# This case pins that the ESCAPED axiom spelling is rejected. It does
-# NOT pin the bracket-stripping, and its old comment ("the
-# bracket-stripping hardens every OTHER rule too") implied it did.
-#
-# Corrected 2026-07-29 (release-gate audit, F8) by measurement rather
-# than reasoning. Removing `gsub(/[«»]/, "", out)` from
-# proof-source-lint.awk turns `debug-escaped` RED — correctly — and
-# leaves THIS case green with BYTE-IDENTICAL output. So no required
-# diagnostic can make it discriminate; the audit's suggested "give it
-# a required diagnostic or delete it" does not work as stated.
-#
-# WHY it cannot discriminate, which is the durable part: the denylist
-# matches on byte boundaries under LC_ALL=C, and the guillemet bytes
-# (\xc2\xab / \xc2\xbb) are themselves non-letter boundaries — so
-# `«axiom»` satisfies the plain `axiom` rule with or without
-# stripping. It is caught by luck of encoding, not by the fix.
-# `«debug».skipKernelTC` is different: the option rule matches a
-# DOTTED name, which the interposed bracket bytes break, so stripping
-# is load-bearing there and `debug-escaped` is the case that pins it.
-#
-# Kept rather than deleted — rejecting the escaped spelling is a real
-# property worth holding — with a required diagnostic so it at least
-# pins its own message, and with the claim it cannot support removed.
+# Escaped-spelling acceptance boundary (kept through the 2026-07-30
+# narrowing, with the 07-29 F8 measurement note carried forward):
+# `«axiom»` is an ESCAPED IDENTIFIER, not the keyword — Lean would
+# not parse it as a declaration — but under LC_ALL=C the guillemet
+# bytes (\xc2\xab / \xc2\xbb) are non-letter boundaries, so the
+# plain `axiom` rule matches it anyway. That is an over-REFUSAL, the
+# safe direction, and this case pins that the behavior holds (a
+# future "fix" that made the match Unicode-aware would flip this
+# case, which is the moment to think rather than to adjust the pin).
 printf '\xc2\xabaxiom\xc2\xbb evil : False\n' > "$STAGE/lint-axiom-escaped.lean"
 lint_case axiom-escaped reject "axiom"
 
-# A-1: a syntax-declaring command in a proof file retargets the token
-# in every importing module — including the checker's own binding
-# probe — so `theorem goal_closed : goal := trivial` proved True.
-printf 'import Emitted\nnotation "goal" => True\ntheorem goal_closed : goal := trivial\n' \
-    > "$STAGE/lint-notation.lean"
-lint_case notation reject "notation"
-printf 'import Emitted\nlocal notation "goal" => True\n' > "$STAGE/lint-notation-local.lean"
-lint_case notation-local reject "notation"
-printf 'infixl:65 " ^^ " => Nat.add\n' > "$STAGE/lint-infixl.lean"
-lint_case infixl reject "infixl"
-printf 'syntax "mytac" : tactic\n' > "$STAGE/lint-syntax.lean"
-lint_case syntax reject "syntax"
-printf 'export Decoy (goal)\n' > "$STAGE/lint-export.lean"
-lint_case export reject "export"
-
-# A-7: the attribute rule was per-line by construction, so splitting
-# the attribute across lines evaded it.
-printf '@[\n  implemented_by evilImpl]\ndef f (x : Nat) : Nat := x\n' \
-    > "$STAGE/lint-attr-multiline.lean"
-lint_case attr-multiline reject "implemented_by"
-printf '@[\n\n  csimp]\ntheorem c : id = id := rfl\n' \
-    > "$STAGE/lint-attr-multiline-gap.lean"
-lint_case attr-multiline-gap reject "csimp"
-
-# No false positives from the new rules: these are legitimate
-# proof-side shapes that MENTION the banned words in comments or
-# strings, or use an attribute list that closes on its own line.
+# No false positives: legitimate proof-side shapes that MENTION
+# `axiom` (and former ban-list words) in comments or strings, plus
+# ordinary attributes.
 cat > "$STAGE/lint-newrules-ok.lean" <<'LINTOK'
 -- a comment mentioning notation, syntax, export and implemented_by
-/- and a block comment with infixl and «debug».skipKernelTC -/
-def s : String := "notation syntax export unif_hint"
+/- and a block comment with axiom and «debug».skipKernelTC -/
+def s : String := "notation syntax axiom unif_hint"
 @[simp]
 theorem fine : 1 + 1 = 2 := rfl
 def prefixLength : Nat := 3

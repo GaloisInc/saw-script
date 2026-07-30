@@ -3,7 +3,7 @@
 // named `cheat_vecToBitVec_bitVecToVec` (ending in an allowlisted
 // name) must reject. Since the 2026-07-21 source lint (introduced
 // with the trust tiers), the DECLARATION itself is rejected first
-// (CHECK-FAIL: axiom-or-macro-decl-in-user-file) — this row now pins
+// (CHECK-FAIL: axiom-decl-in-user-file) — this row now pins
 // that layer end-to-end. The exact-vs-suffix discipline at the audit
 // layer itself (which would catch a suffix-named axiom arriving
 // without a declaration in the user file) is pinned by the pure-awk

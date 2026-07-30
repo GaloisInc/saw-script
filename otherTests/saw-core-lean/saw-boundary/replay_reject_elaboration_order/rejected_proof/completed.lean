@@ -16,7 +16,17 @@
 
    With the gates moved ahead of the first elaboration, the lint reads
    THIS text and the run is refused:
-   CHECK-FAIL: axiom-or-macro-decl-in-user-file.
+   CHECK-FAIL: axiom-decl-in-user-file.
+
+   Retargeted 2026-07-30 with the D2 lint narrowing: the lint used to
+   refuse this file on the `run_cmd` itself; narrowed to the single
+   `axiom` check, it refuses the `axiom smuggled_after_staging` line
+   instead, which the run_cmd's rewrite would have scrubbed. The
+   ordering pin is unchanged in kind: if the gates ever move after
+   the first elaboration again, the payload erases the axiom before
+   the lint reads it, and the run fails with the WRONG diagnostic
+   (user-file-mutated-mid-check, from the staged-digest guard)
+   instead of this row's pinned one.
 
    This row pins the PRODUCT path. The kernel selftest's `b1elab`
    case pins the same property at the script level; this one pins the
@@ -61,6 +71,8 @@ noncomputable def GeneratedHarness.GeneratedHarness.goal : Prop :=
   (CryptolToLean.SAWCorePrimitives.bit0_macro
   CryptolToLean.SAWCorePrimitives.one_macro)))) v_1' v_2')))) (Pure.pure
   Bool.true)
+
+axiom smuggled_after_staging : True
 
 open Lean Elab Command in
 run_cmd do

@@ -182,8 +182,10 @@ fi
 # lint (replay/proof-source-lint.awk, single authority with the
 # replay trust kernel) tracks comments AND string/char literals
 # (F1 fix — a comment-stripper without string awareness was blinded
-# by a string containing the comment-open sequence) and bans every
-# known escape hatch into environment mutation or kernel bypass.
+# by a string containing the comment-open sequence). Narrowed
+# 2026-07-30 (D2 / plan 3a) to that ONE closed check — the
+# escape-hatch denylist it used to carry is retired with the threat
+# model decision (residual-trust.md §Threat model).
 SAW_DIR_EARLY="$(cd ../../../.. && pwd)"
 for user_file in proof.lean completed.lean; do
     [ -f "$user_file" ] || continue
@@ -195,10 +197,10 @@ for user_file in proof.lean completed.lean; do
     bad_decl=$(LC_ALL=C awk -f "$SAW_DIR_EARLY/saw-core-lean/replay/proof-source-lint.awk" "$user_file" 2>&1) \
         && lint_rc=0 || lint_rc=$?
     if [ "$lint_rc" -ne 0 ] || [ -n "$bad_decl" ]; then
-        echo "--- $user_file (proof-side files must not declare axioms or macro/elab machinery) ---"
+        echo "--- $user_file (proof-side files must not declare axioms) ---"
         echo "$bad_decl"
         echo "(lint exit=$lint_rc)"
-        echo "FAIL: axiom/macro declaration in proof-side file"
+        echo "FAIL: axiom declaration in proof-side file"
         exit 1
     fi
 done

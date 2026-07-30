@@ -309,21 +309,29 @@ expect_fail r1 completed-outline-missing-goal-def
 # ELABORATED BEFORE THE PURE-TEXT GATES HAVE RUN.
 #
 # This case exists to pin an ORDERING, which is why the payload
-# ERASES ITSELF. A plain `run_cmd` would be rejected by the source
+# ERASES ITSELF. A plain `axiom` would be rejected by the source
 # lint from either position — before or after the first elaboration —
-# so a plain payload pins that the lint bans `run_cmd` and says
-# NOTHING about when it runs. This one is only caught by a lint that
-# runs FIRST:
+# so a plain payload says NOTHING about when the lint runs. This one
+# is only caught by a lint that runs FIRST. (Retargeted 2026-07-30
+# with the D2 lint narrowing: the payload used to be a bare
+# self-erasing `run_cmd`, caught because the lint banned `run_cmd`
+# itself. The narrowed lint bans only `axiom`, so the payload now
+# carries an axiom declaration AND a `run_cmd` eraser that scrubs it
+# from every staged copy — the eraser is the vehicle, the axiom is
+# the subject. The ordering pin is unchanged in kind:)
 #
 #   * gates in their pre-fix position: step 1 elaborates
 #     Emitted.lean, which on the completed path IS the user's file.
-#     The metaprogram runs, rewrites completed.lean to a clean copy
-#     and Generated.lean (the drift AUTHORITY) to agree with the
-#     substituted goal, and the lint 140 lines later reads the clean
-#     copy. Outcome: CHECK-OK on a goal the user chose.
+#     The eraser runs, rewrites completed.lean to a clean copy and
+#     Generated.lean (the drift AUTHORITY) to agree with the
+#     substituted goal, and the lint later reads the clean copy —
+#     no axiom found. The staged-digest re-verification then fails
+#     the run (`user-file-mutated-mid-check`), so a regression of
+#     the ordering surfaces as the WRONG diagnostic here rather
+#     than as an admission.
 #   * gates in their fixed position: the lint reads the payload
 #     before Lean ever runs. Outcome:
-#     CHECK-FAIL: axiom-or-macro-decl-in-user-file.
+#     CHECK-FAIL: axiom-decl-in-user-file.
 #
 # The payload only touches files under `.replay-stage/`, which is the
 # kernel's own per-call working area. It reaches them by enumeration
@@ -335,7 +343,9 @@ expect_fail r1 completed-outline-missing-goal-def
 # The digest guard (`user-file-mutated-mid-check`) is the second,
 # independent line: even a payload the lint does not recognise cannot
 # rewrite a staged file without the re-verification firing. It is
-# pinned separately below.
+# pinned separately below, and the staged-then-DELETED variant
+# (`user-file-deleted-mid-check`, K-2's in-model residue) right
+# after it.
 mk b1elab
 cat > "$STAGE_ROOT/b1elab/Generated.lean" <<'EOF'
 import CryptolToLean
@@ -349,6 +359,8 @@ b1_payload() {
 import CryptolToLean
 
 noncomputable def goal : Prop := ∀ (x : Bool), x = x
+
+axiom b1_smuggled : goal
 
 open Lean Elab Command in
 run_cmd do
@@ -369,7 +381,7 @@ b1_payload > "$STAGE_ROOT/b1elab/completed.lean"
 # the elaborator, so the fixture must reproduce it.
 b1_payload > "$STAGE_ROOT/b1elab/Emitted.lean"
 honest_proof > "$STAGE_ROOT/b1elab/proof.lean"
-expect_fail b1elab axiom-or-macro-decl-in-user-file
+expect_fail b1elab axiom-decl-in-user-file
 
 # --- user-file-mutated-mid-check: the digest guard on its own, with
 # NO test hook in the kernel. A dev-override affordance inside a trust
@@ -422,6 +434,52 @@ import Emitted
 theorem goal_closed : goal := by intro x; rfl
 EOF
 expect_fail b1hash user-file-mutated-mid-check
+
+# --- user-file-deleted-mid-check: K-2's in-model residue (D4
+# down-scope, 2026-07-30; rule C3). Before the fix,
+# `verify_unchanged` opened with `[ -f ] || return 0`, so a staged
+# file that VANISHED mid-check read as unchanged — and because the
+# completed-vs-plain distinction is re-derived from the filesystem,
+# deleting completed.lean silently converted the run to the plain
+# path, dropping the drift check while every guard reported success.
+# The fix does not latch the path (out-of-model half, dropped);
+# it makes absence itself fail at the NEXT verify_unchanged naming
+# the file, whichever path the run has taken by then.
+#
+# Same vehicle as b1hash — a payload in Generated.lean, which no
+# text gate scans — but the payload deletes instead of rewriting.
+mk b1del
+cat > "$STAGE_ROOT/b1del/Generated.lean" <<'EOF'
+import CryptolToLean
+
+namespace GeneratedHarness
+noncomputable def goal : Prop := ∀ (x : Bool), x = x
+end GeneratedHarness
+
+open Lean Elab Command in
+run_cmd do
+  let root : System.FilePath := ".replay-stage"
+  if (← root.pathExists) then
+    for d in (← root.readDir) do
+      let c := d.path / "completed.lean"
+      if (← c.pathExists) then IO.FS.removeFile c
+EOF
+cat > "$STAGE_ROOT/b1del/Emitted.lean" <<'EOF'
+import CryptolToLean
+
+noncomputable def goal : Prop := ∀ (x : Bool), x = x
+EOF
+cat > "$STAGE_ROOT/b1del/completed.lean" <<'EOF'
+import CryptolToLean
+
+noncomputable def goal : Prop := ∀ (x : Bool), x = x
+EOF
+cat > "$STAGE_ROOT/b1del/proof.lean" <<'EOF'
+import Emitted
+
+theorem goal_closed : goal := by intro x; rfl
+EOF
+expect_fail b1del user-file-deleted-mid-check
 
 # --- completed-path-emitted-not-linted (B1's caller-contract assert).
 # On the completed path the SAW caller stages the user's outline as
@@ -517,10 +575,12 @@ generated-reference-does-not-compile|pin-row:drivers
 # vacuity count — the claim was decoration and is withdrawn.)
 axiom-audit-run|env
 axiom-audit-vacuous|env
-# axiom-or-macro-decl-in-user-file needs NO row: the b1elab case
-# above pins it live in-kernel (since the 2026-07-29 B1 fix), and
-# the saw-boundary rows (replay_reject_axiom, _suffix_axiom,
-# replay_reject_notation) pin it end-to-end through SAW besides.
+# axiom-decl-in-user-file needs NO row: the b1elab case above pins
+# it live in-kernel (since the 2026-07-29 B1 fix; token renamed with
+# the 2026-07-30 D2 lint narrowing), and the saw-boundary rows
+# (replay_reject_axiom, _suffix_axiom) pin it end-to-end through SAW
+# besides. (replay_reject_notation was retired with the narrowing —
+# its subject, the `notation` ban, no longer exists.)
 # The waiver that used to sit here was made redundant by b1elab;
 # the redundancy check below is what noticed.
 #

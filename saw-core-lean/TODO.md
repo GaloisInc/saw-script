@@ -161,20 +161,33 @@ consequence in README; reviewer-facing scope rule in
 contributing.md ahead of C1–C4; D1–D4 recorded verbatim in
 `doc/decision-log.md`.
 
-**D2. The proof-side lint narrows (plan 3a).** `proof-source-lint.awk`
-goes from a 22-command denylist + 221-line lexer to ONE closed check:
-no top-level `axiom` declaration. That is all the `native-eval` tier's
-single pattern rule needs protecting from; the strict tier is
-exact-match on five fully-qualified names and needs no lint at all.
-Plan 3b (retire `native-eval`, cost: 14 rows whose own comments
+**D2. The proof-side lint narrows (plan 3a). EXECUTED 2026-07-30
+(task #26).** `proof-source-lint.awk` goes from a 22-command denylist
++ 221-line lexer to ONE closed check: no `axiom` declaration. That is
+all the `native-eval` tier's single pattern rule needs protecting
+from; the strict tier is exact-match on five fully-qualified names
+and needs no lint at all. As executed, the F1-hardened lexer machine
+was kept VERBATIM (every post-F1 defect in the file was in the rules,
+never the lexer — rewriting a stable audited machine smaller is the
+churn this pivot stopped), so the file is ~186 lines rather than the
+estimated ~30; the RULES went from 22+3 to 1. Fail token renamed
+`axiom-or-macro-decl-in-user-file` -> `axiom-decl-in-user-file` (C2:
+the old name claimed macro coverage). Cost measured at zero: 0 of 103
+legitimate proof-side files flagged. Retired with their subjects:
+`replay_reject_notation` (row), 17 trust-tier lint_case rows, A-6's
+gsub. Plan 3b (retire `native-eval`, cost: 14 rows whose own comments
 already plan the `bv_decide` -> `smt` migration) is HELD IN RESERVE if
 defect-free proves unreachable.
 
-**D3. `completed-outline-drift` STAYS**, hardened. Its mechanism is
-sound — it asks Lean via a fixed-literal `rfl` probe, and the R-1 awk
-hole was removed in July. Its one weakness is that it uses `#check`,
-the idiom A-5 defeated and `contributing.md` rule 5 forbids; fix is
-one line, the same move that closed A-5 (task #27).
+**D3. `completed-outline-drift` STAYS**, hardened. **EXECUTED
+2026-07-30 (task #27).** Its mechanism is sound — it asks Lean via a
+fixed-literal `rfl` probe, and the R-1 awk hole was removed in July.
+Its one weakness was that it used `#check`, the idiom A-5 defeated
+and `contributing.md` rule 5 forbids. As executed: THREE sites, not
+one — the kernel probe is now `theorem __drift_binding`, and the
+suite harness's two sibling probes (fixed-literal + R3b per-def)
+became anonymous `example` declarations, with the harness's F2
+vacuity guard flipped to match in the same commit.
 
 **D4. Obviated fixes are thrown out, not parked.**
 - **K-1 (below): NOT A BLOCKER. Obviated by D2** — the allowlist
@@ -222,15 +235,20 @@ entries.
   discarded; the lint instead NARROWS per D2 (task #26), and the
   finding's real lesson (a denylist of Lean commands cannot be kept
   complete) is recorded as D2's rationale.
-- [ ] **K-2 / CP-2 — DOWN-SCOPED to LOW (D4, 2026-07-30); the
-  in-model residue is task #20.** Original filing (CRITICAL,
+- [x] **K-2 / CP-2 — DOWN-SCOPED to LOW (D4, 2026-07-30); in-model
+  residue LANDED same day (task #20).** Original filing (CRITICAL,
   chokepoint): `verify_unchanged` (`lean-check-core.sh:132`) returns
   SUCCESS for a file that no longer exists, and completed-vs-plain
   is re-derived from filesystem state at eight `[ -f … ]` sites.
   Under the threat model, mid-check deletion as an ATTACK is out of
   model; a staged file VANISHING is an in-model tool failure that
-  must fail closed (rule C3). KEEP: fail on staged-then-deleted
-  (~3 lines). DROP: path-latching.
+  must fail closed (rule C3). KEPT: `verify_unchanged` now fails
+  `user-file-deleted-mid-check` on staged-then-vanished, pinned by
+  kernel-selftest case `b1del` (red-before verified by mutation:
+  restoring the fail-open head turns b1del red). DROPPED:
+  path-latching — the vanished file is caught at the next
+  verify_unchanged naming it on either path, so latching is not
+  needed for the residue.
 - [x] **W2-UNRUN-1 (CRITICAL, chokepoint) — FIXED 2026-07-30,
   mutation-verified, then fix-audited and corrected twice.**
   My wave-2 non-reproduction was a single-test-case artifact: the
@@ -1701,7 +1719,9 @@ until (a).**
   VACUOUS for A-6: it rejects identically with and without the
   `gsub(/[«»]/, "", out)` line, because the guillemet bytes already
   satisfy the rule's own delimiters, and it pins no required
-  diagnostic — **an A-6 pin is still OWED**. (iii) The stated reason
+  diagnostic — **an A-6 pin is still OWED** (obviated 2026-07-30:
+  the D2 narrowing removed the option rule and the gsub with it;
+  A-6's subject no longer exists). (iii) The stated reason
   for declining an A-5 RUNTIME row was false; see that row below.
   ADDED
   today: `saw-boundary/replay_reject_notation` (A-1 end-to-end
@@ -1763,7 +1783,10 @@ until (a).**
   selftest runs the A-1/A-6/A-7 lint vectors, and the new
   `replay_reject_notation` row carries A-1 through the full runtime
   path. Nothing exercised under the audit's lake-substitution
-  remains unexercised without it.
+  remains unexercised without it. (Row retired 2026-07-30 with the
+  D2 lint narrowing — A-1's `notation` ban no longer exists; the
+  runtime-path wiring it exercised is carried by the two surviving
+  replay_reject_axiom rows and replay_reject_elaboration_order.)
 
 ## Release gate (continued)
 

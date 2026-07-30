@@ -129,8 +129,19 @@ done
 # anything that ran in between is caught rather than trusted.
 verify_unchanged() {
     local f="$1" want have
-    [ -f "$STAGE/$f" ] || return 0
     want=$(printf '%s' "$STAGED_DIGESTS" | awk -v k="$f" '$1==k{print $2}')
+    if [ ! -f "$STAGE/$f" ]; then
+        # Never staged: nothing to verify. Staged-then-vanished must
+        # FAIL (K-2 residue, D4 down-scope 2026-07-30; rule C3 —
+        # absence is a tool failure, not a clean result). The old
+        # `[ -f ] || return 0` quantified over mutation only, so a
+        # deleted file read as unchanged. No path-latching is needed
+        # for this residue: the vanished file is caught at the NEXT
+        # verify_unchanged call naming it, whichever path is taken.
+        [ -z "$want" ] && return 0
+        echo "$f was staged (digest $want) but no longer exists"
+        fail "user-file-deleted-mid-check"
+    fi
     have=$(digest "$STAGE/$f")
     if [ "$want" != "$have" ]; then
         echo "$f changed after staging (expected $want, found $have)"
@@ -148,10 +159,14 @@ for uf in proof.lean completed.lean; do
     fi
 done
 
-# GATE B (was step 4.6). Axiom/macro-declaration lint on the USER's
-# files. This is the gate that bans `run_cmd` and every other escape
-# hatch into environment mutation — which is exactly why it must
-# precede the first elaboration rather than follow it.
+# GATE B (was step 4.6). Axiom-declaration lint on the USER's files.
+# Narrowed 2026-07-30 (D2 / plan 3a — see the lint's own header and
+# residual-trust.md §Threat model) to its ONE closed check: no
+# `axiom` declaration. It still precedes the first elaboration so
+# the diagnostic points at what the user WROTE rather than at a
+# downstream symptom; the checks that hold against code running at
+# elaboration time are the staged-digest re-verifications and the
+# kernel-checked probes, not this lint.
 for uf in proof.lean completed.lean; do
     if [ -f "$STAGE/$uf" ]; then
         lint_out=$(LC_ALL=C awk -f "$(cd "$(dirname "$0")" && pwd)/proof-source-lint.awk" \
@@ -159,7 +174,7 @@ for uf in proof.lean completed.lean; do
         bad_decl=$(printf '%s' "$lint_out" | sed "s|$STAGE/||g")
         if [ "$lint_rc" -ne 0 ] || [ -n "$bad_decl" ]; then
             echo "$bad_decl"
-            fail "axiom-or-macro-decl-in-user-file"
+            fail "axiom-decl-in-user-file"
         fi
     fi
 done
@@ -364,18 +379,17 @@ for uf in proof.lean completed.lean; do
 done
 
 # 4.6 Axiom-declaration lint on the USER's files (2026-07-21,
-# introduced with the trust tiers; applies to ALL checks): proof-side
-# files must never DECLARE axioms or reach machinery that can add
-# declarations. The strict allowlist is exact-name so a hand-declared
-# axiom cannot collide with it, but the native-eval tier admits a
-# NAME PATTERN (declaration-dependent bv_decide axiom names) that a
-# hand-declared axiom of a matching name could satisfy — a `private
-# axiom` name even prints UNMANGLED in `#print axioms`. The shared
-# lexer-based token lint (proof-source-lint.awk, single authority
-# with the CI harness) tracks comments AND string/char literals
-# (F1 fix — a comment-stripper without string awareness was blinded
-# by a string containing the comment-open sequence) and bans every
-# known escape hatch into environment mutation or kernel bypass.
+# introduced with the trust tiers; applies to ALL checks; narrowed
+# to the single `axiom` check 2026-07-30, D2). The strict allowlist
+# is exact-name so a hand-declared axiom cannot collide with it, but
+# the native-eval tier admits a NAME PATTERN (declaration-dependent
+# bv_decide axiom names) that a hand-declared axiom of a matching
+# name could satisfy — a `private axiom` name even prints UNMANGLED
+# in `#print axioms`. The shared lexer-based token lint
+# (proof-source-lint.awk, single authority with the CI harness)
+# tracks comments AND string/char literals (F1 fix — a
+# comment-stripper without string awareness was blinded by a string
+# containing the comment-open sequence).
 # (The per-call-unique stage path is stripped from the lint output so
 # the diagnostic is deterministic — driver goldens pin it.)
 # LC_ALL=C: the lint is a byte-level lexer (its non-ASCII taint rule
@@ -392,7 +406,7 @@ for uf in proof.lean completed.lean; do
         bad_decl=$(printf '%s' "$lint_out" | sed "s|$STAGE/||g")
         if [ "$lint_rc" -ne 0 ] || [ -n "$bad_decl" ]; then
             echo "$bad_decl"
-            fail "axiom-or-macro-decl-in-user-file"
+            fail "axiom-decl-in-user-file"
         fi
     fi
 done
