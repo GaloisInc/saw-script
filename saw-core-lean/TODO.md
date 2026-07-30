@@ -123,7 +123,14 @@ what would make them stop.
   `doc/2026-07-24_soundness-audit-2.md`, findings tracked in the
   section below. Three further CRITICALs, two demonstrated
   end-to-end. The release gate is NOT met until those clear.
-## Release gate — WAVE 3 findings (2026-07-30): STILL DO NOT RELEASE
+## Release gate — WAVE 3 findings (2026-07-30): verdict since re-scored
+
+*(Original verdict at filing: STILL DO NOT RELEASE. Re-scored the
+same day under the D1 threat model: the surviving in-model blocker,
+W2-UNRUN-1, is FIXED; K-1/CP-1/K-3 close out-of-model; K-2 drops to
+LOW. Agreed release posture: ship with the trust kernel declared
+WIP and health warnings to beta users, once the D2/D3 hardening —
+tasks #26, #27, #20 — lands.)*
 
 Report: `doc/2026-07-30_release-gate-audit-wave3.md` (five docket
 lanes + five fresh Opus lanes, refute-by-default, second lens on
@@ -147,8 +154,12 @@ about what should be done.
 **D1. THREAT MODEL: the replay trust kernel defends against USER
 ERROR, not adversarial proof authors.** Previously unstated, which is
 why kernel guards were designed against an attacker and kept losing.
-Owed as a first-class citable statement (task #25) — until that lands,
-this line is the record.
+LANDED 2026-07-30 (task #25): the citable statement is
+`doc/2026-05-02_residual-trust.md` §Threat model, with the wave-3
+kernel findings re-scored under it in a table there; user-facing
+consequence in README; reviewer-facing scope rule in
+contributing.md ahead of C1–C4; D1–D4 recorded verbatim in
+`doc/decision-log.md`.
 
 **D2. The proof-side lint narrows (plan 3a).** `proof-source-lint.awk`
 goes from a 22-command denylist + 221-line lexer to ONE closed check:
@@ -198,21 +209,28 @@ entries.
 
 ### BLOCKS RELEASE
 
-- [ ] **K-1 (CRITICAL, hand-enum)** — `replay/proof-source-lint.awk:208-211`
-  bans 22 command heads; `simproc`/`dsimproc`/`builtin_simproc` are
-  not among them (verified: zero occurrences in the file), and the
-  word-boundary class includes `_` so every `*_elab`-suffixed command
-  escapes too. Gives a proof-side file elaboration-time IO plus
-  unchecked `addDecl`. FIX: invert to an ALLOWLIST of permitted
-  top-level command heads so an unknown future command fails closed.
-  Mutation: the forging `simproc` probe the audit built.
-- [ ] **K-2 / CP-2 (CRITICAL, chokepoint)** — `verify_unchanged`
-  (`lean-check-core.sh:132`) returns SUCCESS for a file that no longer
-  exists, and completed-vs-plain is re-derived from filesystem state
-  at eight `[ -f … ]` sites. Deleting `completed.lean` mid-check
-  silently drops the drift check — the only binding between the user's
-  `def goal` and the SAW obligation. FIX: fail on staged-then-deleted;
-  latch the path decision once at staging.
+- [x] **K-1 — CLOSED OUT-OF-MODEL (D1/D4, 2026-07-30), fix
+  discarded.** Original filing (CRITICAL, hand-enum):
+  `replay/proof-source-lint.awk:208-211` bans 22 command heads;
+  `simproc`/`dsimproc`/`builtin_simproc` are not among them
+  (verified: zero occurrences in the file), and the word-boundary
+  class includes `_` so every `*_elab`-suffixed command escapes too.
+  Gives a proof-side file elaboration-time IO plus unchecked
+  `addDecl`. Re-scored under the threat model
+  (`residual-trust.md` §Threat model): forging a `simproc` is
+  deliberate circumvention, out of model. The allowlist inversion is
+  discarded; the lint instead NARROWS per D2 (task #26), and the
+  finding's real lesson (a denylist of Lean commands cannot be kept
+  complete) is recorded as D2's rationale.
+- [ ] **K-2 / CP-2 — DOWN-SCOPED to LOW (D4, 2026-07-30); the
+  in-model residue is task #20.** Original filing (CRITICAL,
+  chokepoint): `verify_unchanged` (`lean-check-core.sh:132`) returns
+  SUCCESS for a file that no longer exists, and completed-vs-plain
+  is re-derived from filesystem state at eight `[ -f … ]` sites.
+  Under the threat model, mid-check deletion as an ATTACK is out of
+  model; a staged file VANISHING is an in-model tool failure that
+  must fail closed (rule C3). KEEP: fail on staged-then-deleted
+  (~3 lines). DROP: path-latching.
 - [x] **W2-UNRUN-1 (CRITICAL, chokepoint) — FIXED 2026-07-30,
   mutation-verified, then fix-audited and corrected twice.**
   My wave-2 non-reproduction was a single-test-case artifact: the
@@ -259,14 +277,21 @@ entries.
   which is an argument and not a check.
   **The README LIB-1 hold is now discharged**, at MEDIUM
   incompleteness rather than the falsity wave 2 claimed.
-- [ ] **CP-1 (HIGH, chokepoint)** — last `verify_unchanged proof.lean`
-  is `:351`; the `UserProof.lean` copies are `:418` and `:452`. The
-  audited artifact and closer list are built from bytes no text gate
-  saw.
-- [ ] **K-3 (HIGH, hand-enum) — REINSTATED by the critic.** Its
-  refutation rested on "no elaboration-time IO route survives GATE
-  B"; K-1 IS that route, confirmed by the same wave. K-7 scenario 2
-  returns at MEDIUM.
+- [x] **CP-1 — CLOSED OUT-OF-MODEL (D1/D4, 2026-07-30), fix
+  discarded.** Original filing (HIGH, chokepoint): last
+  `verify_unchanged proof.lean` is `:351`; the `UserProof.lean`
+  copies are `:418` and `:452`; the audited artifact and closer list
+  are built from bytes no text gate saw. The agent that could
+  rewrite those bytes between gate and copy is an authored
+  metaprogram — pure anti-mutation-mid-check, out of model.
+- [x] **K-3 — REINSTATED by the critic, then CLOSED OUT-OF-MODEL
+  (D1, 2026-07-30).** The reinstatement stands as a matter of
+  record: its refutation rested on "no elaboration-time IO route
+  survives GATE B" while K-1 confirmed such a route, and the
+  harness's inability to hold both was a real audit defect (see
+  WAVE 4 SCOPE, consistency check). But the route itself is
+  deliberate circumvention — same disposition as K-1. K-7
+  scenario 2 likewise.
 
 ### SHOULD FIX BEFORE RELEASE
 
@@ -278,10 +303,15 @@ entries.
   `supportLibraryFiles` walk is non-recursive (verified) and the
   agreement test reads only the root's imports. Latent today, which is
   how the previous five rotted.
-- [ ] **`bitvector` is an unswept type-collapse member**
-  (`SpecialTreatment.hs:685` → `SAWCoreBitvectors.lean:32`). My
-  "exactly five members" claim was wrong — proposal §6 predicted
-  exactly this failure.
+- [x] **`bitvector` unswept-member claim — WITHDRAWN (refuted
+  2026-07-30**, `doc/2026-07-30_bitvector-claim-refuted.md`; details
+  in the supersession block above). SAWCore has no `bitvector`
+  declaration; the class stands at five, closed; my "exactly five"
+  claim was RIGHT and proposal §6's hedge is withdrawn. Residue is
+  LOW and mechanism-shaped: derive a check that every
+  `sawCorePreludeSpecialTreatmentMap` key resolves to a real SAWCore
+  declaration (extends `auditLeanOpaqueDeadEntries`), which retires
+  the dead `Bit`/`bitvector` keys as a side effect.
 - [ ] **Anti-trivialization gate is fail-OPEN (CP-3 + K-5)** — any
   non-zero probe exit reads as "not trivial".
 - [ ] **Gate-path divergences (13 confirmed)** — the cabal path
