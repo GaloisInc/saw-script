@@ -181,9 +181,18 @@ for uf in proof.lean completed.lean; do
         lint_out=$(LC_ALL=C awk -f "$(cd "$(dirname "$0")" && pwd)/proof-source-lint.awk" \
                      "$STAGE/$uf" 2>&1) && lint_rc=0 || lint_rc=$?
         bad_decl=$(printf '%s' "$lint_out" | sed "s|$STAGE/||g")
-        if [ "$lint_rc" -ne 0 ] || [ -n "$bad_decl" ]; then
+        # Exit-code split (DC-2, 2026-07-30): 1 = axiom declaration
+        # found; anything else nonzero (2 = lexer-level rejection,
+        # >2 = awk itself failed) means the closed check COULD NOT
+        # RUN — fail closed under a token that says so, instead of
+        # accusing the file of an axiom it does not contain. rc=1
+        # with empty output is malformed lint behavior: also closed.
+        if [ "$lint_rc" -eq 1 ] && [ -n "$bad_decl" ]; then
             echo "$bad_decl"
             fail "axiom-decl-in-user-file"
+        elif [ "$lint_rc" -ne 0 ] || [ -n "$bad_decl" ]; then
+            echo "$bad_decl"
+            fail "proof-source-unlintable"
         fi
     fi
 done
@@ -413,9 +422,18 @@ for uf in proof.lean completed.lean; do
         lint_out=$(LC_ALL=C awk -f "$(cd "$(dirname "$0")" && pwd)/proof-source-lint.awk" \
                      "$STAGE/$uf" 2>&1) && lint_rc=0 || lint_rc=$?
         bad_decl=$(printf '%s' "$lint_out" | sed "s|$STAGE/||g")
-        if [ "$lint_rc" -ne 0 ] || [ -n "$bad_decl" ]; then
+        # Exit-code split (DC-2, 2026-07-30): 1 = axiom declaration
+        # found; anything else nonzero (2 = lexer-level rejection,
+        # >2 = awk itself failed) means the closed check COULD NOT
+        # RUN — fail closed under a token that says so, instead of
+        # accusing the file of an axiom it does not contain. rc=1
+        # with empty output is malformed lint behavior: also closed.
+        if [ "$lint_rc" -eq 1 ] && [ -n "$bad_decl" ]; then
             echo "$bad_decl"
             fail "axiom-decl-in-user-file"
+        elif [ "$lint_rc" -ne 0 ] || [ -n "$bad_decl" ]; then
+            echo "$bad_decl"
+            fail "proof-source-unlintable"
         fi
     fi
 done

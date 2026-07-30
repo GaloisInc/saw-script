@@ -407,6 +407,23 @@ b1_payload > "$STAGE_ROOT/b1elab/Emitted.lean"
 honest_proof > "$STAGE_ROOT/b1elab/proof.lean"
 expect_fail b1elab axiom-decl-in-user-file
 
+# --- proof-source-unlintable (DC-2 exit-code split, 2026-07-30): a
+# user file the lint's LEXER rejects — here an unterminated string
+# at EOF — must fail closed under a token that says the closed check
+# could not run, NOT under `axiom-decl-in-user-file` (the file
+# contains no axiom; before the split it was accused of one). This
+# also pins the lint's END-block `in_str` guard through the kernel
+# (wave-4 DC-3: the two END-block lexer-state checks were the only
+# lexer outcomes with no pin after the 17-row retirement).
+mk unlintable
+real_goal > "$STAGE_ROOT/unlintable/Emitted.lean"
+cat > "$STAGE_ROOT/unlintable/proof.lean" <<'EOF'
+import Emitted
+
+def s : String := "oops
+EOF
+expect_fail unlintable proof-source-unlintable
+
 # --- user-file-mutated-mid-check: the digest guard on its own, with
 # NO test hook in the kernel. A dev-override affordance inside a trust
 # path is a residual this project catalogs (residual-trust §3.2c), so

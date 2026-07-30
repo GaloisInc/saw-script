@@ -271,6 +271,17 @@ lint_case nonascii-prime reject "non-ASCII"
 printf "example (h' : 0 < 2) : zs[0]'h' = 1 := rfl\n" > "$STAGE/lint-ambiguous-idx.lean"
 lint_case ambiguous-idx reject "ambiguous"
 
+# END-block lexer-state guards (wave-4 DC-3: after the 17-row
+# retirement these were the only lexer outcomes with no pin). The
+# scanner must never reach EOF in literal/comment state silently —
+# else every line after the opener was elided from the token scan
+# and a hidden declaration would pass unseen (the F1 invariant the
+# lint's own header states at :34-38).
+printf 'def s : String := "oops\naxiom hidden : False\n' > "$STAGE/lint-unterm-string.lean"
+lint_case unterm-string reject "unterminated string literal at EOF"
+printf 'def pad : Nat := 1\n/- opened and never closed\naxiom hidden : False\n' > "$STAGE/lint-unterm-comment.lean"
+lint_case unterm-comment reject "unterminated block comment at EOF"
+
 # Legitimate proof-side shapes must stay accepted (no false
 # positives): strings are data even when they contain banned words or
 # comment delimiters; identifier primes; char literals with escapes;

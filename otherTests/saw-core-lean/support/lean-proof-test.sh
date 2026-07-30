@@ -196,11 +196,21 @@ for user_file in proof.lean completed.lean; do
     # (F1-fix hardening, 2026-07-21).
     bad_decl=$(LC_ALL=C awk -f "$SAW_DIR_EARLY/saw-core-lean/replay/proof-source-lint.awk" "$user_file" 2>&1) \
         && lint_rc=0 || lint_rc=$?
-    if [ "$lint_rc" -ne 0 ] || [ -n "$bad_decl" ]; then
+    # Exit-code split (DC-2, 2026-07-30), mirroring the trust kernel:
+    # 1 = axiom declaration; any other nonzero = the lint could not
+    # classify the file (or awk itself failed) — fail closed with a
+    # message that says which.
+    if [ "$lint_rc" -eq 1 ] && [ -n "$bad_decl" ]; then
         echo "--- $user_file (proof-side files must not declare axioms) ---"
         echo "$bad_decl"
         echo "(lint exit=$lint_rc)"
         echo "FAIL: axiom declaration in proof-side file"
+        exit 1
+    elif [ "$lint_rc" -ne 0 ] || [ -n "$bad_decl" ]; then
+        echo "--- $user_file (proof-side file could not be linted) ---"
+        echo "$bad_decl"
+        echo "(lint exit=$lint_rc)"
+        echo "FAIL: proof-side file rejected by the lint's lexer (fail-closed)"
         exit 1
     fi
 done

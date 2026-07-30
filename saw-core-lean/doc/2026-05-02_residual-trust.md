@@ -696,7 +696,15 @@ the project's own kernel selftest.
 Closed 2026-07-29 by moving the pure-text gates ahead of the first
 elaboration AND by making the ordering a CHECKED invariant: the
 staged files are digested before anything runs and re-verified
-immediately before each consuming gate. What a reader should take
+before the gates the B1 fix covers — `Emitted.lean` at its first
+elaboration, `Generated.lean` and `completed.lean` before the drift
+probe, `proof.lean` and `completed.lean` before the re-run text
+gates. (Narrowed 2026-07-30, wave-4 DC-1: the original sentence
+here claimed "each consuming gate" universally, which this same
+document's CP-1 row records as knowingly discarded — `Emitted.lean`
+is not re-verified before its post-elaboration grep gates; the
+verifier showed each such bypass is backstopped by the olean
+import, the drift probe, and the completed-path re-scans.) What a reader should take
 from this entry is not only the fix but the shape of the mistake —
 the section reasoned about WHICH files are trusted and never about
 WHEN each becomes trustworthy, and on a path where one file is a

@@ -83,20 +83,34 @@
 # Known over-refusal (same audit, recorded not fixed): the boundary
 # class is ASCII-only, so a legal Lean identifier continuing with
 # non-ASCII characters (`axiom₁`, `axiomα`) is flagged. Fail-closed,
-# zero corpus cost (0 of 112 proof-side files), and distinguishing
-# it needs the Unicode identifier table the F1 design deliberately
-# refuses to model — a user who hits it renames the identifier.
+# zero cost on legitimate proof-side files (re-swept 2026-07-30 over
+# every tracked proof.lean/completed.lean: the only flagged files
+# are the deliberate saw-boundary rejection fixtures — wave-4 DC-5
+# corrected the earlier irreconcilable 103/112 counts; re-derive
+# with `git ls-files | grep -E '(proof|completed)\.lean$'` rather
+# than trusting a baked number), and distinguishing it needs the
+# Unicode identifier table the F1 design deliberately refuses to
+# model — a user who hits it renames the identifier.
 #
 # Output: one "<file>:<line>: <text>" per hit (goldens pin this
-# format); exit 1 if any. Lexer-level rejections print a diagnostic
-# message instead of the source line.
+# format). Exit contract (split 2026-07-30, wave-4 DC-2 — the single
+# exit code made the kernel report `axiom-decl-in-user-file` for
+# files containing no axiom):
+#   exit 1 — an `axiom` declaration was found (the one closed check);
+#   exit 2 — lexer-level rejection: the scanner cannot classify the
+#            file (raw/interpolated string, ambiguous quote,
+#            non-ASCII prime, unterminated string/comment at EOF),
+#            so the closed check could not run. Fail-closed.
+# Lexer-level rejections print a diagnostic message instead of the
+# source line.
 
-BEGIN { depth = 0; bad = 0; in_str = 0 }
+BEGIN { depth = 0; bad = 0; in_str = 0; code = 0 }
 
 function fatal(msg) {
   print FILENAME ":" FNR ": " msg
   bad = 1
-  exit 1   # runs END, which exits with bad
+  code = 2
+  exit 2   # runs END, which exits with code
 }
 
 {
@@ -197,11 +211,12 @@ function fatal(msg) {
   if (out ~ /(^|[^A-Za-z0-9_'.])axiom([^A-Za-z0-9_'.]|$)/) {
     print FILENAME ":" FNR ": " $0
     bad = 1
+    if (code == 0) code = 1
   }
 }
 
 END {
-  if (bad == 0 && in_str)    { print FILENAME ": unterminated string literal at EOF"; bad = 1 }
-  if (bad == 0 && depth > 0) { print FILENAME ": unterminated block comment at EOF"; bad = 1 }
-  exit bad
+  if (bad == 0 && in_str)    { print FILENAME ": unterminated string literal at EOF"; bad = 1; code = 2 }
+  if (bad == 0 && depth > 0) { print FILENAME ": unterminated block comment at EOF"; bad = 1; code = 2 }
+  exit code
 }

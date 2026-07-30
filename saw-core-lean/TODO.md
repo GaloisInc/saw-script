@@ -139,20 +139,31 @@ items 3 (cabal ship-list) and 4 (consistency check) closed; items 1
 
 ### WAVE 5 CHARGES (open)
 
-- [x] **W5-1: reject-side H_prod pin (GAP 1) — LANDED 2026-07-30**
-  as `support-lemmas/fix_hprod_refutation/proof.lean`, in a STRONGER
-  form than the charged `.shouldfail` row: kernel-checked POSITIVE
-  refutations (`¬ saw_fix_bounded_productive` for the same-index
-  body `fun v => v`; `¬ saw_stream_single_productive` for the
-  self-reference and transforming steps), so undischargeability is
-  a theorem, not one tactic's failure. Each refutation kills exactly
-  ONE obligation field with a companion proving the others hold —
-  `lookback` (Class F), stream `lookback`, and `faithful` are each
-  independently load-bearing. Row green via `lean-proof-test.sh`
-  (elaborates + axiom audit). **FXC-1/FXC-2's LOW is no longer
-  provisional**; the wave-4 severity architecture now rests on
-  kernel-checked evidence. Original charge text preserved in the
-  wave-4 report §3/§6.
+- [x] **W5-1: reject-side H_prod pin (GAP 1) — LANDED 2026-07-30,
+  witnesses corrected same day by its fix audit.**
+  `support-lemmas/fix_hprod_refutation/proof.lean`: kernel-checked
+  POSITIVE refutations (stronger than the charged `.shouldfail`
+  form — undischargeability is a theorem, not one tactic's
+  failure). The FIRST cut was refuted by the opus fix audit on two
+  MEDIUMs: its witnesses all fired at index 0, which every
+  recognizer-admissible body pins to a rec-free seed
+  (`FixRecognizer.hs:240/:245/:134-152`), so they sat OUTSIDE the
+  mutated recognizer's image and pinned only "H_prod is not
+  vacuously true"; and one companion had beta-reduced into V-H1
+  vacuity. Corrected form: named witness `def`s (no beta-reduction
+  possible), all seed-guarded at index 0 and refuted at index 1 —
+  Class F at `n = 2` with `w[1] = v[1]` (the semantics of
+  `at rec (addNat i2 1)`, the read the `:350` guard refuses — the
+  first cut's docstring had the guard's polarity inverted, also
+  audit-caught); stream self-reference (kills stream `lookback`,
+  `faithful` holds) and iterate-transform (kills `faithful`,
+  `lookback` holds, companion stated with the witness applied).
+  Row green via `lean-proof-test.sh` (elaborates + axiom audit).
+  **FXC-1/FXC-2's LOW is no longer provisional.** Residue accepted
+  from the audit (its F4, INFO): companions are hand-stated field
+  shapes, so they track the witnesses but not field-shape drift;
+  only the `¬` theorems (which project `h.lookback`/`h.faithful`)
+  alarm on drift, and they are the load-bearing half.
 - [ ] **W5-2: the demo's CI gate cannot have been green since
   2026-07-18 (GAP 2 — verified at HEAD).** `ci.yml:817-833` runs
   `saw demo.saw` with no `SAW_LEAN_ROOT` anywhere in `.github/`, on
@@ -306,8 +317,12 @@ never the lexer — rewriting a stable audited machine smaller is the
 churn this pivot stopped), so the file is ~186 lines rather than the
 estimated ~30; the RULES went from 22+3 to 1. Fail token renamed
 `axiom-or-macro-decl-in-user-file` -> `axiom-decl-in-user-file` (C2:
-the old name claimed macro coverage). Cost measured at zero: 0 of 103
-legitimate proof-side files flagged. Retired with their subjects:
+the old name claimed macro coverage). Cost measured at zero: 0
+legitimate proof-side files flagged. (Denominator corrected by
+wave-4 DC-5: "103" was not reproducible; the 2026-07-30 re-sweep
+over every tracked proof.lean/completed.lean flags exactly the 3
+deliberate saw-boundary rejection fixtures and nothing else. The
+zero-cost property itself was verified true.) Retired with their subjects:
 `replay_reject_notation` (row), 17 trust-tier lint_case rows, A-6's
 gsub. Plan 3b (retire `native-eval`, cost: 14 rows whose own comments
 already plan the `bv_decide` -> `smt` migration) is HELD IN RESERVE if
@@ -835,9 +850,12 @@ because this project has shipped vacuous pins repeatedly.
   **LANDED.** Two independent changes: the pure-text gates moved
   ahead of the first Lean invocation, AND the ordering became a
   CHECKED invariant rather than a property of statement order — the
-  four staged files are digested before anything runs and each is
-  re-verified immediately before its consuming gate, `Generated.lean`
-  included. Plus an assert that the caller's completed-path contract
+  four staged files are digested before anything runs and re-verified
+  before the gates the B1 fix covers (`Emitted.lean` at first
+  elaboration; `Generated.lean`/`completed.lean` before the drift
+  probe; `proof.lean`/`completed.lean` before the re-run text gates
+  — NOT before Emitted's post-elaboration grep gates, per the CP-1
+  discard; narrowed 2026-07-30, wave-4 DC-1). Plus an assert that the caller's completed-path contract
   (staging the outline as `Emitted.lean` too) still holds, so gate
   coverage cannot silently shrink if `Builtins.hs` changes.
   **MUTATION VERIFIED:** with the pre-fix ordering restored, the
@@ -1882,6 +1900,10 @@ until (a).**
   today: `saw-boundary/replay_reject_notation` (A-1 end-to-end
   through the runtime replay path — the wiring the lint-level cases
   cannot see; rejects `CHECK-FAIL: axiom-or-macro-decl-in-user-file`)
+  *(row and token both retired 2026-07-30 with the D2 narrowing —
+  this pointer was the third the retirement commit missed, wave-4
+  DC-4; A-1's runtime coverage now rides the b1elab kernel-selftest
+  case and the surviving axiom saw-boundary rows)*
   and `negative/fix_obligation_erasure` (S-1: both pre-fix erased
   reducts must fail defeq — the F-2 probe discipline; a
   proof-irrelevant seed or proof-free body returning turns it
