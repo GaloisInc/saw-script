@@ -72,7 +72,7 @@ import qualified Mir.DefId as Mir
 import qualified Mir.FancyMuxTree as Mir
 import qualified Mir.Generator as Mir
 import qualified Mir.Intrinsics as Mir
-import Mir.Intrinsics (MIR)
+import Mir.Intrinsics (MIR, wordLit)
 import qualified Mir.Mir as Mir
 import qualified Mir.TransTy as Mir
 import qualified What4.Expr as W4
@@ -123,6 +123,15 @@ type SetupCondition = MS.SetupCondition MIR
 -- various functions in this module as arguments. So instead we put a 'ReaderT'
 -- on top, which can then be supplied with the right inputs at the call site of
 -- the "Mir.Intrinsics" operation.
+--
+-- Many operations on 'MirReferenceMux' (a.k.a. @RegValue sym MirReferenceRepr@)
+-- can fail if the input is an empty 'FancyMuxTree' (or, for operations with
+-- two inputs, if there is no condition under which both 'FancyMuxTree's have
+-- values).  This specifically applies to operations that return types other
+-- than 'MirReferenceMux', since these operations typically don't have good
+-- default values to return when the input 'FancyMuxTree' is empty.  Operations
+-- that take and return 'MirReferenceMux' can instead return an empty output
+-- when the input is empty.
 newtype MatchAssertM w a =
   MatchAssertM (ReaderT (MatchAssertEnv w) (OverrideMatcher' Sym MIR w IO) a)
   deriving (Functor, Applicative, Monad, MonadIO)
@@ -156,6 +165,18 @@ instance IsSymBackend Sym bak => Mir.MonadAssert Sym bak (MatchAssertM w) where
 runMatchAssert :: MatchAssertM w a -> MatchAssertEnv w -> OverrideMatcher MIR w a
 runMatchAssert (MatchAssertM m) = runReaderT m
 
+runMatchAssertSimple ::
+  MS.ConditionMetadata ->
+  (Crucible.SimErrorReason -> OverrideMatcher MIR w (OverrideFailureReason MIR)) ->
+  MatchAssertM w a ->
+  OverrideMatcher MIR w a
+runMatchAssertSimple md reason f =
+  runMatchAssert f $
+    MatchAssertEnv
+      { maeConditionMetadata = md
+      , maeFailureReason = reason
+      }
+
 assertTermEqualities ::
   SharedContext ->
   MIRCrucibleContext ->
@@ -183,7 +204,8 @@ assignVar cc md var sref@(Some ref) =
   do old <- OM (setupValueSub . at var <<.= Just sref)
      let loc = MS.conditionLoc md
      F.for_ old $ \(Some ref') ->
-       do p <- liftIO (Mir.mirRef_eqIO bak (ref^.mpRef) (ref'^.mpRef))
+       do p <- runMatchAssertSimple md (\_ -> pure BadEqualityComparison) $
+            Mir.mirRef_eqMA bak (ref^.mpRef) (ref'^.mpRef)
           addAssert p md (Crucible.SimError loc (Crucible.AssertFailureSimError "equality of aliased references" ""))
 
 -- | When a specification is used as a composition override, this function
@@ -428,19 +450,18 @@ cmpPathConcretely _ (Mir.ArrayIndex_RefPath _ _ _) _ = PC.LTF
 cmpPathConcretely _ _ (Mir.ArrayIndex_RefPath _ _ _) = PC.GTF
 
 -- AgElem_RefPath
-cmpPathConcretely sym (Mir.AgElem_RefPath off1 sz1 tpr1 p1) (Mir.AgElem_RefPath off2 sz2 tpr2 p2) =
+cmpPathConcretely sym (Mir.AgElem_RefPath off1 tpr1 p1) (Mir.AgElem_RefPath off2 tpr2 p2) =
   PC.compareF off1 off2 <<>>
-  PC.fromOrdering (compare sz1 sz2) <<>>
   PC.compareF tpr1 tpr2 <<>>
   cmpPathConcretely sym p1 p2 <<>>
   PC.EQF
 
-cmpPathConcretely sym (Mir.AggregateAsChunks_RefPath off1 sz1 cnt1 p1) (Mir.AggregateAsChunks_RefPath off2 sz2 cnt2 p2) =
-  PC.fromOrdering (compare off1 off2 <> compare sz1 sz2 <> compare cnt1 cnt2) <<>>
+cmpPathConcretely sym (Mir.AgOffset_RefPath off1 p1) (Mir.AgOffset_RefPath off2 p2) =
+  PC.compareF off1 off2 <<>>
   cmpPathConcretely sym p1 p2 <<>>
   PC.EQF
-cmpPathConcretely _ (Mir.AggregateAsChunks_RefPath _ _ _ _) _ = PC.LTF
-cmpPathConcretely _ _ (Mir.AggregateAsChunks_RefPath _ _ _ _) = PC.GTF
+cmpPathConcretely _ (Mir.AgOffset_RefPath _ _) _ = PC.LTF
+cmpPathConcretely _ _ (Mir.AgOffset_RefPath _ _) = PC.GTF
 
 -- | Compare two 'W4.SymBV' values that are known to be concrete. If they are
 -- not concrete, this function will panic.
@@ -613,9 +634,10 @@ enforceDisjointness cc loc ss =
               }
      -- Ensure that all regions are disjoint from each other.
      sequence_
-        [ do c <- liftIO $
-                    W4.notPred sym =<< Mir.mirRef_overlapsIO bak (p^.mpRef) (q^.mpRef)
-             addAssert c md a
+        [ do overlap <- runMatchAssertSimple md (\_ -> pure BadEqualityComparison) $
+                    Mir.mirRef_overlapsMA bak (p^.mpRef) (q^.mpRef)
+             notOverlap <- liftIO $ W4.notPred sym overlap
+             addAssert notOverlap md a
 
         | let a = Crucible.SimError loc $
                     Crucible.AssertFailureSimError "Memory regions not disjoint" ""
@@ -637,13 +659,13 @@ enforcePointerValidity cc ss =
   let mems = Map.intersectionWith (,) (view MS.csAllocs ss) sub
   F.for_ mems $ \(Some alloc, Some ptr) -> do
     -- For now, pointer is valid iff its constructor is MirReference
-    c <- liftIO $
+    let md = alloc^.maConditionMetadata
+    c <- runMatchAssertSimple md (\_ -> pure BadPointerCast) $
       Mir.readRefMuxMA bak (cc^.mccIntrinsicTypes) Crucible.BoolRepr
         (\case
           Mir.MirReference{} -> pure $ W4.truePred sym
           Mir.MirReference_Integer{} -> pure $ W4.falsePred sym)
         (ptr^.mpRef)
-    let md = alloc^.maConditionMetadata
     addAssert c md $
       Crucible.SimError (MS.conditionLoc md) $
         Crucible.AssertFailureSimError "Pointer not valid" ""
@@ -1114,8 +1136,9 @@ learnPointsTo opts sc cc spec prepost pointsTo@(MirPointsTo md reference target)
            [ "CrucibleMirCompPointsToTarget not implemented in SAW"
            ]
        MirPointsToSingleTarget referent -> do
+         let pointeeSize = tySize col referenceInnerMirTy
          v <- tryMirOperation
-           (Mir.readMirRefMA bak globals iTypes referenceInnerTpr referenceVal)
+           (Mir.readMirRefMA bak globals iTypes referenceInnerTpr (Mir.Width pointeeSize) referenceVal)
            Nothing
          matchArg opts sc cc spec prepost md (MIRVal innerShp v) referent
        MirPointsToMultiTarget referentArray -> do
@@ -1132,7 +1155,7 @@ learnPointsTo opts sc cc spec prepost pointsTo@(MirPointsTo md reference target)
                  tryMirOperation
                    (do
                      referenceVal' <- Mir.mirRef_offsetMA bak iTypes referenceVal i_sym elemSz
-                     Mir.readMirRefMA bak globals iTypes referenceInnerTpr referenceVal')
+                     Mir.readMirRefMA bak globals iTypes referenceInnerTpr (Mir.Width elemSz) referenceVal')
                    (Just ("When trying to read element at offset"
                           <+> PP.pretty i <+> "from pointer:"))
              let arrShp = ArrayShape referentArrayMirTy
@@ -1352,16 +1375,11 @@ matchArg opts sc cc cs prepost md = go False []
                         let elemSize = tySize col elemTy
                         -- get the reference to the containing aggregate and the
                         -- index of the current reference within it
-                        Ctx.Empty Ctx.:> Crucible.RV arrRef
-                                  Ctx.:> Crucible.RV i'_sym <-
-                          tryMirOperation $ Mir.mirRef_peelIndexMA bak iTypes elemRef elemSize
-                        -- the index should be concrete
-                        case fromInteger . BV.asUnsigned <$> W4.asBV i'_sym of
-                          Just i'
-                            -- make sure the expected and actual indices match
-                            | i == i' ->
-                              go inCast [] (MIRVal arrRefShp arrRef) z
-                          _ -> fail_
+                        let elemOff = fromIntegral i * elemSize
+                        originOff <- liftIO $ wordLit sym (negate elemOff)
+                        arrRef <- tryMirOperation $ do
+                          Mir.mirRef_agOffsetMA bak iTypes originOff elemRef
+                        go inCast [] (MIRVal arrRefShp arrRef) z
                     _ -> fail_
                 _ -> fail_
 
@@ -1429,10 +1447,11 @@ matchArg opts sc cc cs prepost md = go False []
                           TransparentShape _ _ ->
                             go inCast [] (MIRVal structRefShp fieldRef) z
                           StructShape _ elems -> do
-                            AgElemShape off sz _shp <-
+                            AgElemShape off _sz _shp <-
                               return $ agElemShapeAtIndex structTy elems iInt
                             structRef <- tryMirOperation $ do
-                              Mir.mirRef_peelAgElemMA bak iTypes off sz fieldRef
+                              originOff <- liftIO $ wordLit sym (negate off)
+                              Mir.mirRef_agOffsetMA bak iTypes originOff fieldRef
                             go inCast [] (MIRVal structRefShp structRef) z
                           _ -> fail_
                     _ -> fail_
@@ -1558,7 +1577,7 @@ matchArg opts sc cc cs prepost md = go False []
              -- See Note [Matching slices in overrides] for why we do this.
              let arrElemSize = tySize col actualElemTy
              Ctx.Empty Ctx.:> Crucible.RV actualArrRef Ctx.:> Crucible.RV actualStartSym <-
-               liftIO $ Mir.mirRef_peelIndexMA bak iTypes actualSliceRef arrElemSize
+               tryMirOperation $ Mir.mirRef_peelIndexMA bak iTypes actualSliceRef arrElemSize
 
              let -- Match the expected array reference value against the actual
                  -- array reference value.
@@ -1620,8 +1639,8 @@ matchArg opts sc cc cs prepost md = go False []
           case W4.testEquality xTpr (Crucible.globalType yGlobalVar) of
             Nothing -> fail_
             Just Refl -> do
-              pred_ <- liftIO $
-                Mir.mirRef_eqIO bak x y
+              pred_ <- tryMirOperation $
+                Mir.mirRef_eqMA bak x y
               addAssert pred_ md =<< notEq
         (_, MIRVal actualShp _, MS.SetupGlobalInitializer () name) -> do
           ppopts <- omGetPPOpts
@@ -2149,11 +2168,11 @@ valueToSC sym fail_ tval (MIRVal shp val) =
               \_off _sz shp' val' tval' -> valueToSC sym fail_ tval' (MIRVal shp' val')
             liftIO (scTupleReduced sc terms)
     (Cryptol.TVSeq n cryty, ArrayShape _ _ elemSz elemShp len)
-      -- When matching against the backing array of a slice, the length in the
-      -- TypeShape might differ from the actual length of the RegValue, so we
-      -- need to check both.
+      -- The lengths of the cryptol type, the MIR type/shape, and the aggregate
+      -- value should all match up.
       | toInteger len == n
-      , length (Mir.mirAggregate_entries sym val) == fromIntegral len
+      , entriesPerElem <- length (expandAgElem $ AgElemShape 0 elemSz elemShp)
+      , length (Mir.mirAggregate_entries sym val) == fromIntegral len * entriesPerElem
       -> do terms <- accessMirAggregateArray sym elemSz elemShp len val $
               \_off val' -> valueToSC sym fail_ cryty (MIRVal elemShp val')
             t <- shapeToTerm sc elemShp

@@ -65,8 +65,6 @@ import qualified Data.Foldable as F
 import qualified Data.Foldable.WithIndex as FWI
 import qualified Data.Functor.Product as Functor
 import           Data.Kind (Type)
-import           Data.IntMap (IntMap)
-import qualified Data.IntMap as IntMap
 import qualified Data.List.Extra as List (firstJust, unsnoc)
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map (Map)
@@ -210,8 +208,8 @@ prettyMIRVal sym (MIRVal shp val) =
       [AgElemShape] ->
       Mir.MirAggregate Sym ->
       PP.Doc ann
-    prettyAggregate elems (Mir.MirAggregate _sz m) =
-      PP.braces $ commaList (map (prettyAgElem m) elems)
+    prettyAggregate elems ag =
+      PP.braces $ commaList (map (prettyAgElem ag) elems)
 
     prettyAggregateArray ::
       Word ->
@@ -219,12 +217,12 @@ prettyMIRVal sym (MIRVal shp val) =
       Word ->
       Mir.MirAggregate Sym ->
       PP.Doc ann
-    prettyAggregateArray elemSz elemShp len (Mir.MirAggregate _sz m) =
+    prettyAggregateArray elemSz elemShp len ag =
       let elems = arrayAgElemShapes elemSz elemShp len in
-      PP.brackets $ commaList (map (prettyAgElem m) elems)
+      PP.brackets $ commaList (map (prettyAgElem ag) elems)
 
     prettyAgElem ::
-      IntMap (Mir.MirAggregateEntry Sym) ->
+      Mir.MirAggregate Sym ->
       AgElemShape ->
       PP.Doc ann
     prettyAgElem m e@(AgElemShape off _sz _shp') =
@@ -232,17 +230,16 @@ prettyMIRVal sym (MIRVal shp val) =
       PP.viaShow off PP.<+> "->" PP.<+> valDoc
 
     prettyAgElemValue ::
-      IntMap (Mir.MirAggregateEntry Sym) ->
+      Mir.MirAggregate Sym ->
       AgElemShape ->
       PP.Doc ann
-    prettyAgElemValue m (AgElemShape off _sz shp') =
-      case IntMap.lookup (fromIntegral off) m of
-        Just (Mir.MirAggregateEntry _sz tpr rv)
-          | Just Refl <- W4.testEquality tpr (shapeType shp') ->
+    prettyAgElemValue ag (AgElemShape off sz shp') = do
+      let tpr = shapeType shp'
+      case Mir.mirAggregate_lookup sym (fromIntegral off) sz tpr ag of
+        Right rv ->
               prettyMIRVal sym $ MIRVal shp' $
               readMaybeType sym "elem" tpr rv
-          | otherwise -> "<type mismatch>"
-        Nothing -> "<unset>"
+        Left _err -> "<err>"
 
 
 -- | Wrapper around `buildMirAggregate` for the case where the additional
@@ -252,12 +249,13 @@ prettyMIRVal sym (MIRVal shp val) =
 buildMirAggregateWithVal ::
   (HasCallStack, Monad m, MonadFail m) =>
   Sym ->
+  Word ->
   [AgElemShape] ->
   [MIRVal] ->
   (forall tp. Word -> Word -> TypeShape tp -> RegValue Sym tp -> m (RegValue Sym tp)) ->
   m (Mir.MirAggregate Sym)
-buildMirAggregateWithVal sym elems vals f =
-  buildMirAggregate sym elems vals $
+buildMirAggregateWithVal sym totalSize elems vals f =
+  buildMirAggregate sym totalSize elems vals $
     \off sz shp (MIRVal shp' rv) ->
       case W4.testEquality shp shp' of
         Just Refl -> f off sz shp rv
@@ -665,12 +663,13 @@ resolveSetupVal mcc env tyenv nameEnv val =
 
           -- Finally, construct a MIRVal of the appropriate shape.
           let mirTy = mirAdtToTy adt
+          let structSz = tySize col mirTy
           Some (structShp :: TypeShape tp) <- pure $ tyToShape col mirTy
           (elems :: [AgElemShape], Refl :: tp :~: Mir.MirAggregateType) <- case structShp of
             StructShape _ elems -> return (elems, Refl)
             _ -> panic "resolveSetupVal"
               ["TyAdt Struct produced non-StructShape", Text.pack $ show structShp]
-          ag <- buildMirAggregateWithVal sym elems flds' $ \_off _sz _shp rv -> return rv
+          ag <- buildMirAggregateWithVal sym structSz elems flds' $ \_off _sz _shp rv -> return rv
           pure $ MIRVal structShp ag
         Mir.Adt nm (Mir.Enum _) _ _ _ _ _ ->
           panic "resolveSetupVal" [
@@ -835,12 +834,13 @@ resolveSetupVal mcc env tyenv nameEnv val =
       flds' <- traverse (resolveSetupVal mcc env tyenv nameEnv) flds
       let fldMirTys = map (\(MIRVal shp _) -> shapeMirTy shp) flds'
       let mirTy = Mir.TyTuple fldMirTys
+      let tupleSz = tySize col mirTy
       Some (tupleShp :: TypeShape tp) <- pure $ tyToShape col mirTy
       (elems :: [AgElemShape], Refl :: tp :~: Mir.MirAggregateType) <- case tupleShp of
         TupleShape _ elems -> return (elems, Refl)
         _ -> panic "resolveSetupVal"
           ["TyTuple produced non-TupleShape", Text.pack $ show tupleShp]
-      ag <- buildMirAggregateWithVal sym elems flds' $ \_off _sz _shp rv -> return rv
+      ag <- buildMirAggregateWithVal sym tupleSz elems flds' $ \_off _sz _shp rv -> return rv
       pure $ MIRVal tupleShp ag
     MS.SetupSlice slice ->
       case slice of
@@ -916,7 +916,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
                 let elemSize = tySize col elemTy
                 elemOff <- W4.bvMul sym i_sym =<< usizeBvLit sym (fromIntegral elemSize)
                 MIRVal (RefShape elemPtrTy elemTy mutbl elemTpr) <$>
-                  Mir.mirRef_agElemIO bak iTypes elemOff elemSize elemTpr xsVal
+                  Mir.mirRef_agOffsetMA bak iTypes elemOff xsVal
               else do
                 let sc = sawCoreSharedContext sym
                 ppopts <- liftIO $ scGetPPOpts sc
@@ -957,10 +957,10 @@ resolveSetupVal mcc env tyenv nameEnv val =
                       fieldPtrTy = ptrKindToTy (tyToPtrKind structPtrTy) fieldValTy mutbl
               case tyToShapeEq col structValTy structRepr of
                 StructShape _ elems -> do
-                  AgElemShape off sz shp <- return $ agElemShapeAtIndex structValTy elems iInt
+                  AgElemShape off _sz shp <- return $ agElemShapeAtIndex structValTy elems iInt
                   offRV <- usizeBvLit sym (fromIntegral off)
                   fieldMIRVal (shapeType shp) <$>
-                    Mir.mirRef_agElemIO bak iTypes offRV sz (shapeType shp) structPtrRV
+                    Mir.mirRef_agOffsetMA bak iTypes offRV structPtrRV
                 TransparentShape _ _ ->
                   -- structRepr is the field's TypeRepr
                   pure $ fieldMIRVal structRepr structPtrRV
@@ -1128,8 +1128,7 @@ resolveSetupVal mcc env tyenv nameEnv val =
             Left err -> panic "resolveSetupSliceFromArrayRef" ["Unsupported type", Text.pack err]
             Right x -> return x
           zeroBV <- usizeBvLit sym 0
-          let elemSize = tySize col elemTy
-          refVal <- Mir.mirRef_agElemIO bak iTypes zeroBV elemSize elemTpr arrRefVal
+          refVal <- Mir.mirRef_agOffsetMA bak iTypes zeroBV arrRefVal
           let sliceShp = SliceShape (Mir.TyRef sliceTy mut) elemTy mut elemTpr
           pure $ SetupSliceFromArrayRef sliceShp refVal len
         _ -> do
@@ -1272,12 +1271,13 @@ resolveSAWTerm mcc tp tm =
       vals <- zipWithM (resolveSAWTerm mcc) tps tms
       let mirTys = map (\(MIRVal shp _) -> shapeMirTy shp) vals
       let mirTupleTy = Mir.TyTuple mirTys
+      let tupleSz = tySize col mirTupleTy
       Some (tupleShp :: TypeShape tp) <- pure $ tyToShape col mirTupleTy
       (elems :: [AgElemShape], Refl :: tp :~: Mir.MirAggregateType) <- case tupleShp of
         TupleShape _ elems -> return (elems, Refl)
         _ -> panic "resolveSAWTerm"
           ["TyTuple produced non-TupleShape", Text.pack $ show tupleShp]
-      ag <- buildMirAggregateWithVal sym elems vals $ \_off _sz _shp rv -> return rv
+      ag <- buildMirAggregateWithVal sym tupleSz elems vals $ \_off _sz _shp rv -> return rv
       pure $ MIRVal tupleShp ag
     Cryptol.TVRec _flds ->
       fail "resolveSAWTerm: unsupported record type"
@@ -1374,11 +1374,11 @@ indexMirArray ::
   TypeShape elemTp {- ^ 'TypeShape' of the array elements -} ->
   Mir.MirAggregate Sym {- ^ 'RegValue' of the 'MIRVal' -} ->
   Maybe MIRVal
-indexMirArray sym i elemSz elemShp (Mir.MirAggregate _totalSize m) = do
+indexMirArray sym i elemSz elemShp ag = do
   let off = fromIntegral i * elemSz
-  Mir.MirAggregateEntry sz' tpr' rvPart <- IntMap.lookup (fromIntegral off) m
-  Refl <- W4.testEquality (shapeType elemShp) tpr'
-  guard (elemSz == sz')
+  rvPart <- case Mir.mirAggregate_lookup sym off elemSz (shapeType elemShp) ag of
+    Left _err -> Nothing
+    Right rvP -> Just rvP
   rv <- readPartExprMaybe sym rvPart
   return $ MIRVal elemShp rv
 
@@ -1403,23 +1403,13 @@ accessMirStructFieldVal sym col fieldName (MIRVal structShp structRV) = do
   case structShp of
     StructShape structTy elems -> do
       (_, iInt) <- findStructField ppopts col (MirFieldAccessByVal, structTy) structTy fieldName
-      AgElemShape off _sz shp <- return $ agElemShapeAtIndex structTy elems iInt
-      let Mir.MirAggregate _ m = structRV
+      AgElemShape off sz shp <- return $ agElemShapeAtIndex structTy elems iInt
       pure $
-        case IntMap.lookup (fromIntegral off) m of
-          Nothing -> Nothing
-          Just (Mir.MirAggregateEntry _ tpr fieldRV)
-            | Just Refl <- W4.testEquality tpr (shapeType shp) ->
-              MIRVal shp <$> readPartExprMaybe sym fieldRV
-            | otherwise -> panic "accessMirStructFieldVal"
-              [ "Ill-typed aggregate entry"
-              , "Found: " <> Text.pack (show tpr)
-              , "Expected: " <> Text.pack (show shp)
-              , "Struct: " <> Text.pack (show structTy)
-              , "Field name: " <> Text.pack (show fieldName)
-              , "Index: " <> Text.pack (show iInt)
-              , "Field shapes: " <> Text.pack (show elems)
-              ]
+        case Mir.mirAggregate_lookup sym off sz (shapeType shp) structRV of
+          Left _err ->
+            Nothing
+          Right fieldRV ->
+            MIRVal shp <$> readPartExprMaybe sym fieldRV
     TransparentShape structTy innerShp -> do
       -- We still need to call findStructField, to check that the field exists
       -- and is the primary field
@@ -1477,7 +1467,7 @@ equalValsPred cc mv1 mv2 =
       goTy shp v1 v2
     goTy (RefShape _ _ _ _) ref1 ref2 =
       mccWithBackend cc $ \bak ->
-        liftIO $ Mir.mirRef_eqIO bak ref1 ref2
+        liftIO $ Mir.mirRef_eqMA bak ref1 ref2
     goTy (SliceShape _ ty mut tpr)
          (Ctx.Empty Ctx.:> RV ref1 Ctx.:> RV len1)
          (Ctx.Empty Ctx.:> RV ref2 Ctx.:> RV len2) = do
@@ -1652,10 +1642,10 @@ doAlloc cc globals (Some ma) =
      elemSize_sym <- usizeBvLit sym $ fromIntegral elemSize
      allocSize_sym <- W4.bvMul sym len_sym elemSize_sym
      ag <- Mir.mirAggregate_uninitIO bak allocSize_sym
-     globals' <- Mir.writeMirRefIO bak globals iTypes Mir.MirAggregateRepr ref ag
+     globals' <- Mir.writeMirRefIO bak globals iTypes Mir.MirAggregateRepr ref Mir.All ag
 
      zero <- W4.bvLit sym W4.knownRepr $ BV.mkBV W4.knownRepr 0
-     ptr <- Mir.mirRef_agElemIO bak iTypes zero elemSize tpr ref
+     ptr <- Mir.mirRef_agOffsetMA bak iTypes zero ref
      let mirPtr = Some MirPointer
            { _mpType = tpr
            , _mpKind = ma^.maPtrKind
@@ -1695,7 +1685,7 @@ doPointsTo mspec cc env globals (MirPointsTo _ reference target) =
     -- By the time we reach here, we have already checked (in mir_points_to)
     -- that we are in fact dealing with a reference value, so the call to
     -- `testRefShape` below should always succeed.
-    IsRefShape _ _ _ (referenceInnerTy :: TypeRepr referenceInnerTp) <-
+    IsRefShape _ referenceInnerMirTy _ (referenceInnerTy :: TypeRepr referenceInnerTp) <-
       case testRefShape referenceShp of
         Just irs -> pure irs
         Nothing ->
@@ -1727,34 +1717,24 @@ doPointsTo mspec cc env globals (MirPointsTo _ reference target) =
         MIRVal referentShp referentVal <-
           resolveSetupVal cc env tyenv nameEnv referent
         Refl <- testReferentShp referentShp
+        let pointeeSize = tySize col referenceInnerMirTy
         Mir.writeMirRefIO bak globals iTypes referenceInnerTy
-          referenceVal referentVal
+          referenceVal (Mir.Width pointeeSize) referentVal
       MirPointsToMultiTarget referentArray -> do
         MIRVal referentArrShp referentArrVal <-
           resolveSetupVal cc env tyenv nameEnv referentArray
         case referentArrShp of
           -- mir_points_to_multi should check that the RHS type is TyArray, so
           -- this case should always match.
-          ArrayShape _ _ elemSize referentElemShp _ -> do
+          ArrayShape _ _ _ referentElemShp _ -> do
             Refl <- testReferentShp referentElemShp
-            let write globals' i referentVal = do
-                  i_sym <- usizeBvLit sym i
-                  referenceVal' <- Mir.mirRef_offsetMA bak iTypes referenceVal i_sym elemSize
-                  Mir.writeMirRefIO bak globals' iTypes referenceInnerTy
-                    referenceVal' referentVal
-            let writeEntry globals' (off, Mir.MirAggregateEntry _sz tpr rvPart) = do
-                  Refl <- case W4.testEquality tpr (shapeType referentElemShp) of
-                    Just r -> pure r
-                    Nothing ->
-                      panic "doPointsTo" [
-                          "Unexpected type mismatch between referent outer and entry types",
-                          "Outer type: " <> Text.pack (show (shapeType referentElemShp)),
-                          "Entry type: " <> Text.pack (show tpr),
-                          "At offset " <> Text.pack (show off)
-                      ]
+            let writeEntry globals' (off, Mir.MirAggregateEntry sz tpr rvPart) = do
                   let rv = readMaybeType sym "array element" tpr rvPart
-                  let off' = off `div` elemSize
-                  write globals' (fromIntegral off') rv
+                  let off' = off `div` sz
+                  i_sym <- usizeBvLit sym (fromIntegral off')
+                  referenceVal' <- Mir.mirRef_offsetMA bak iTypes referenceVal i_sym sz
+                  Mir.writeMirRefIO bak globals' iTypes tpr
+                    referenceVal' (Mir.Width sz) rv
             foldM writeEntry globals (Mir.mirAggregate_entries sym referentArrVal)
           _ -> panic "doPointsTo"
             [ "Unexpected non-array shape resolved from MirPointsToMultiTarget:"
@@ -1764,6 +1744,7 @@ doPointsTo mspec cc env globals (MirPointsTo _ reference target) =
     iTypes = cc ^. mccIntrinsicTypes
     tyenv = MS.csAllocations mspec
     nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
+    col = cc ^. mccRustModule ^. Mir.rmCS ^. Mir.collection
 
 -- | Construct an 'Mir.TyAdt' from an 'Mir.Adt'.
 mirAdtToTy :: Mir.Adt -> Mir.Ty

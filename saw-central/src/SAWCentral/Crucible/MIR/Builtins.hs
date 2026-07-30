@@ -2133,7 +2133,8 @@ setupArg sc cc ecRef mty0 tp0 =
           IO (Crucible.RegValue Sym tp')
         termToMirRegValue shp scTp t =
           case shp of
-            TupleShape _ elems -> do
+            TupleShape ty elems -> do
+              let sz = tySize col ty
               eltScTps <-
                 case asTupleType scTp of
                   Just eltScTps -> pure eltScTps
@@ -2144,7 +2145,7 @@ setupArg sc cc ecRef mty0 tp0 =
                       [ "TupleShape with non-tuple type:"
                       , Text.pack $ scTp'
                       ]
-              buildMirAggregate sym elems (zip [0..] eltScTps) $
+              buildMirAggregate sym sz elems (zip [0..] eltScTps) $
                 \_off _sz shp' (idx, eltScTp) -> do
                   t' <- scTupleSelector sc t idx
                   termToMirRegValue shp' eltScTp t'
