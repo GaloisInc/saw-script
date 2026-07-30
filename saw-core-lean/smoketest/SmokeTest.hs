@@ -41,7 +41,9 @@ import           SAWCoreLean.Term (FixClass(..), classifyFixShape)
 import           SAWCoreLean.Convention (ArgMode(..))
 import           SAWCoreLean.Signature (AnnotationAdjustment(..),
                                        applyAnnotationAdjustment,
-                                       wrappedArrowAdjustment)
+                                       wrappedArrowAdjustment,
+                                       leanPiSpineArity,
+                                       leanExceptCarriedGoalBinders)
 
 import           Control.Exception   (try, SomeException, evaluate)
 import qualified Data.Set            as Set
@@ -1204,17 +1206,35 @@ translatorTests sc = testGroup "SAWCoreLean.Term"
 goalEmissionTests :: SharedContext -> TestTree
 goalEmissionTests sc = testGroup "SAWCoreLean.Lean.translateGoalAsDeclImports"
   [ testCase "emits theorem <name>_holds := by sorry" $ do
-      -- Use any well-typed proposition. 'True' in SAWCore is a Bool
-      -- constructor, not a Prop; easier to construct a closed Prop
-      -- as @(x : Bool) -> Bool@ and pretend it's a goal for the sake
-      -- of checking the shape of the theorem stub.
+      -- A REAL Prop-shaped goal: @(x : Bool) -> Eq Bool x x@.
+      --
+      -- This used to be @(x : Bool) -> Bool@ with the comment
+      -- "pretend it's a goal ... we don't have a real Prop here".
+      -- That shape is not one a real goal ever has — every SAW goal
+      -- is a Prop — and translating a Bool-valued arrow puts the
+      -- binder in the VALUE domain, so the emitted telescope domain
+      -- came out @Except String Bool@. Goal-shape gate 3
+      -- ('leanExceptCarriedGoalBinders', 2026-07-30) refuses exactly
+      -- that, correctly, so the fake shape started failing. Using a
+      -- genuine Prop exercises the same printer path against a
+      -- telescope a real goal can actually produce — a RAW first-order
+      -- binder domain.
+      --
+      -- Worth recording since I got it wrong once: changing this test
+      -- was the right call, but the reasoning I wrote at the time
+      -- ("every SAW goal is a Prop, so that shape never occurs") was
+      -- too strong, and it let me stop looking. The fix audit then
+      -- found a genuine Prop goal with a carrier-mentioning domain —
+      -- a function-typed binder, whose value image legitimately wraps
+      -- — which gate 3's first cut refused. Gate 3 now exempts value
+      -- images. One explained-away data point was the whole warning.
       boolTy  <- scBoolType sc
       xName   <- scFreshVarName sc "x"
-      goalTy  <- scPi sc xName boolTy boolTy
-      -- We don't have a real Prop here; just reuse the type for both
-      -- term and type to exercise the printer path.
+      xVar    <- scVariable sc xName boolTy
+      body    <- scGlobalApply sc "Prelude.Eq" [boolTy, xVar, xVar]
+      goalTy  <- scPi sc xName boolTy body
       mm      <- scGetModuleMap sc
-      goalTp  <- scSort sc (mkSort 0)
+      goalTp  <- scSort sc propSort
       case translateGoalAsDeclImports defaultConfig mm (Lean.Ident "goal") goalTy goalTp of
         Left err -> do
           msg <- ppTranslationError sc err
@@ -1224,6 +1244,67 @@ goalEmissionTests sc = testGroup "SAWCoreLean.Lean.translateGoalAsDeclImports"
           assertContains "goal def" "def goal" s
           assertContains "theorem stub" "theorem goal_holds : goal := by" s
           assertContains "sorry" "sorry" s
+
+    -- Unit pins for the two telescope-gate mechanisms (2026-07-30).
+    --
+    -- These exist because goal gate 3 now SHADOWS the arity half on
+    -- the let-hoisted class: gate 3 descends through `Let` and runs
+    -- first, so `saw-boundary/goal_hypothesis_refusal` no longer
+    -- exercises the arity half end-to-end. The arity half is still
+    -- load-bearing — it is the original telescope pin and catches
+    -- dropped/invented quantifiers generally — and the project rule
+    -- is that no load-bearing guard goes unwatched (C4). So its
+    -- mechanism gets pinned directly here.
+  , testCase "leanPiSpineArity scores a let-hoisted spine 0 (arity half)" $ do
+      -- THE mechanism behind every "quantifier telescope mismatch"
+      -- refusal of a hypothesis-bearing goal: P-1 sharing hoists the
+      -- let above the whole Pi, so the greedy spine walk sees `Let`
+      -- first and counts nothing. If this ever returns 1, the arity
+      -- half stops refusing that class and gate 3 becomes the only
+      -- thing standing there.
+      let piTm  = Lean.Pi [Lean.PiBinder Lean.Explicit Nothing
+                            (Lean.Var (Lean.Ident "Nat"))]
+                          (Lean.Var (Lean.Ident "Bool"))
+          hoisted = Lean.Let (Lean.Ident "x__") [] Nothing
+                      (Lean.Var (Lean.Ident "someShare")) piTm
+      leanPiSpineArity piTm   @?= 1
+      leanPiSpineArity hoisted @?= 0
+
+  , testCase "goal gate 3 sees through a hoisted let (Except carrier)" $ do
+      -- The fix-audit finding: gate 3's first cut stopped at the
+      -- first non-Pi, so this returned [] and the carrier-bearing
+      -- binder was invisible to it. Pinning both shapes means the
+      -- `Let` arm cannot be dropped silently.
+      let carrierDom =
+            Lean.App (Lean.Var (Lean.Ident "Eq"))
+              [ Lean.App (Lean.Var (Lean.Ident "Except"))
+                  [ Lean.Var (Lean.Ident "String")
+                  , Lean.Var (Lean.Ident "Bool") ]
+              , Lean.Var (Lean.Ident "lhs")
+              , Lean.Var (Lean.Ident "rhs") ]
+          piTm = Lean.Pi [Lean.PiBinder Lean.Explicit Nothing carrierDom]
+                         (Lean.Var (Lean.Ident "Bool"))
+          hoisted = Lean.Let (Lean.Ident "x__") [] Nothing
+                      (Lean.Var (Lean.Ident "someShare")) piTm
+      length (leanExceptCarriedGoalBinders piTm)    @?= 1
+      length (leanExceptCarriedGoalBinders hoisted) @?= 1
+
+  , testCase "goal gate 3 exempts a carrier-headed function domain" $ do
+      -- The over-refusal the audit found: the value image of a
+      -- SAWCore `Bool -> Bool` binder is
+      -- `Except String Bool -> Except String Bool`, which is
+      -- faithful (and stronger), not a hypothesis. Refusing it was a
+      -- false positive delivered with the wrong diagnosis.
+      let carrierTy =
+            Lean.App (Lean.Var (Lean.Ident "Except"))
+              [ Lean.Var (Lean.Ident "String")
+              , Lean.Var (Lean.Ident "Bool") ]
+          funDom = Lean.Pi [Lean.PiBinder Lean.Explicit Nothing carrierTy]
+                           carrierTy
+          piTm = Lean.Pi [Lean.PiBinder Lean.Explicit
+                            (Just (Lean.Ident "f")) funDom]
+                         (Lean.Var (Lean.Ident "Bool"))
+      leanExceptCarriedGoalBinders piTm @?= []
   ]
 
 --------------------------------------------------------------------------------
@@ -1326,10 +1407,43 @@ lintForbiddenNames = do
 lintSelfMirrorCounts :: [(String, Int)]
 lintSelfMirrorCounts =
   [ ("bindingShapeOfType", 7)   -- definition + binder-site Γ records
-  , ("isExceptStringType", 5)   -- definition + bindingShapeOfType
+  , ("isExceptStringType", 6)   -- definition + bindingShapeOfType
                                 -- + applyKnownFunctionWithShape result peel
+                                -- + goal gate 3's value-image exemption
   , ("peelLeanPiTypes",    6)   -- definition + the same result peel
   ]
+
+-- NOTE on the 5 -> 6 bump to 'isExceptStringType' (2026-07-30), since
+-- "do not add new consumers" is the standing rule and this adds one.
+--
+-- The rule exists because deriving an EMISSION DECISION from emitted
+-- Lean syntax is the Slice-2 / F-1 defect class: the emitted term is
+-- an output, so reading it back to decide what to emit loses the
+-- declared convention. The new consumer is not that. It sits in goal
+-- gate 3 ('leanExceptCarriedGoalBinders'), which only ever REFUSES —
+-- it cannot change what is emitted, only whether emission happens at
+-- all. Its sibling gate 2 ('leanSortBinders') reads emitted binder
+-- types the same way for the same reason.
+--
+-- Concretely it asks "is this emitted telescope domain a value image
+-- (carrier-headed after peeling Pis) rather than a proposition?", and
+-- the answer decides only whether to report the binder. The consumer
+-- is what makes the gate correct rather than a shortcut around a
+-- declared convention: the first cut, which lacked it, over-refused a
+-- faithful function-typed binder.
+--
+-- ITS FAILURE DIRECTION IS ADMISSION, and that must be said plainly
+-- because the first version of this note said the opposite ("getting
+-- it wrong costs a false refusal, never an unsound emission"). That
+-- was backwards, and the fix re-audit caught it. This consumer is the
+-- gate's EXEMPTION predicate, not its detection predicate: a false
+-- POSITIVE from 'isExceptStringType' here silently disarms gate 3 for
+-- that binder. Every other sub-predicate in
+-- 'leanExceptCarriedGoalBinders' fails toward over-refusal; this one
+-- alone fails toward letting an emission through. Its safety rests on
+-- "no producible hypothesis image is carrier-headed" (a hypothesis
+-- image is `Eq`/`EqTrue`-headed) — an argument, recorded with the
+-- function's other known limits, not a check.
 
 -- | Non-comment source lines of a file (drops whole-line @--@
 -- comments; block comments in these sources are file headers that
@@ -1506,12 +1620,28 @@ antiRegressionLintTests = testGroup "anti-regression source lint (Slice 7)"
       -- "T never emits Except-String-headed types") rest on the
       -- wrapping carrier being uniformly `Except String _`,
       -- constructed in exactly ONE place ('wrapExcept',
-      -- Convention.hs) and recognized in exactly TWO
+      -- Convention.hs) and recognized in exactly THREE
       -- ('isExceptStringType'; the telescope fingerprint's
-      -- stripExcept). A NEW site mentioning the Except identifier
+      -- stripExcept; and 'leanExceptCarriedGoalBinders''s two-line
+      -- head test). A NEW site mentioning the Except identifier
       -- means a new constructor or recognizer of the carrier —
       -- which must either route through wrapExcept or be added
       -- here DELIBERATELY with the backstop argument re-checked.
+      --
+      -- 3 -> 4 on 2026-07-30, deliberately, with that argument
+      -- re-checked. Goal-shape gate 3 ('leanExceptCarriedGoalBinders',
+      -- Signature.hs) needs a recognizer the existing two cannot
+      -- provide: 'isExceptStringType' matches a carrier-HEADED type,
+      -- and the W2-UNRUN-1 witness is `@Eq (Except String Bool) _ _`,
+      -- where the carrier is an ARGUMENT and the head is `Eq`. ONE new
+      -- line: matching the last dotted component covers the bare and
+      -- qualified spellings together. (The first cut had a second,
+      -- redundant `== "Except"` arm and this lint recorded 5 — dead
+      -- code counted as coverage, caught by the fix audit.)
+      -- It is a REFUSE-ONLY recognizer that constructs nothing, so
+      -- neither backstop is weakened: it can only reject an emission,
+      -- never admit one, and it never builds a carrier that would have
+      -- to be `wrapExcept`-shaped.
       files   <- lintSourceFiles
       sources <- mapM readFile files
       let allCode = concatMap lintCodeLines sources
@@ -1526,14 +1656,15 @@ antiRegressionLintTests = testGroup "anti-regression source lint (Slice 7)"
       -- (the lint quietly losing coverage of one) with the same test.
       assertBool
         ("Except-carrier mention count changed (found " ++ show n
-         ++ ", expected exactly 3: wrapExcept def + isExceptStringType \
-            \+ telescope stripExcept) — MORE means a new carrier \
+         ++ ", expected exactly 4: wrapExcept def + isExceptStringType \
+            \+ telescope stripExcept + leanExceptCarriedGoalBinders' \
+            \head-spelling line) — MORE means a new carrier \
             \constructor/recognizer, which endangers the Prop backstop \
             \and the transport distinctness invariant: route through \
             \wrapExcept or update this lint deliberately. FEWER means a \
             \site was removed or moved out of the swept set; confirm \
             \which before lowering the number")
-        (n == 3)
+        (n == 4)
   ]
 
 --------------------------------------------------------------------------------

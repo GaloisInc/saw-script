@@ -1,0 +1,29 @@
+// A THIRD reachability route into gate 3, and a genuinely distinct
+// one: `goal_insert` rather than `goal_cut`.
+//
+// Found by the fix re-audit (2026-07-30) while checking whether the
+// value-image exemption had been made too broad. It had not — but this
+// route emerged as a shape gate 3 catches that no row covered.
+//
+// Why it is a second PROPERTY and not just a second instance (unlike
+// the error-free/erring pair, which both refuse on the identical shape
+// test): the inserted hypothesis is a UNIVERSALLY QUANTIFIED lemma, so
+// the emitted domain is a CURRIED Pi —
+// `(x : Vec 8 Bool) -> @Eq (Except String Bool) …` — not a bare
+// equation. That exercises `finalCodomain`'s peeling: the value-image
+// exemption must peel to the `Eq` head and NOT exempt it. A bug that
+// made the exemption too eager (say, exempting any domain containing a
+// Pi) would pass the other two rows and fail here.
+//
+// MUTATION: make the value-image exemption test the domain's HEAD
+// instead of its final codomain, and this row emits while the other
+// two stay green.
+enable_experimental;
+thm <- prove_print z3 {{ \(x:[8]) -> x == x }};
+prove_print
+  (do {
+     goal_insert thm;
+     goal_num_when 0 (offline_lean "except_carried_goal_insert");
+     assume_unsat;
+   })
+  {{ (2:[8]) > 0 }};

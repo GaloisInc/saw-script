@@ -1,6 +1,12 @@
 // Pins that a HYPOTHESIS-BEARING goal is refused at emission
 // (2026-07-29, wave-2 release-gate audit).
 //
+// >>> HISTORICAL, AND WRONG AS OF 2026-07-30. The next paragraph
+// >>> describes the ARITY half as the refuser and the refusal as
+// >>> INCIDENTAL. Goal gate 3 now refuses this shape instead. Read
+// >>> "WHAT THIS ROW PINS" below for the current story; this opening
+// >>> is kept because the reasoning it records is why the row exists.
+//
 // This row exists because the refusal is currently INCIDENTAL and is
 // nonetheless relied upon. `sequentToProp` folds a sequent's
 // hypotheses into a SAWCore arrow chain; the emitter does not emit
@@ -8,24 +14,65 @@
 // disagreement and refuses. Nothing about that chain was designed to
 // police this shape — it falls out of a dropped binder.
 //
-// Why it is relied upon: wave 2 argued that IF such a binder were
-// emitted, its domain would be the hypothesis's `Except`-carried
-// image, and an erring-but-unforced computation makes that domain
-// UNINHABITED — so the implication is vacuously provable and
-// `offline_lean_replay` would admit an arbitrary conclusion. That
-// end-to-end claim did NOT reproduce and is logged for wave 3. Until
-// it is settled, this refusal is the boundary, so it gets a row.
+// CORRECTED 2026-07-30 (wave-3 audit). Three claims previously
+// written here were false, and the corrections matter more than the
+// row does:
 //
-// DELIBERATELY ERROR-FREE. An earlier draft used a vector with an
-// `error` in an unread slot, which would have made this row pass for
-// two possible reasons at once. With no error anywhere, the ONLY
-// thing that can refuse it is the shape — verified 2026-07-29 by
-// running both.
+//  1. This row said the wave-2 Except-carried-domain claim "did NOT
+//     reproduce". It DOES reproduce. Wave 3 built it from an ordinary
+//     Cryptol module plus `goal_cut`, and it is now fixed by GATE 3 of
+//     the goal-shape gates ('leanExceptCarriedGoalBinders'), pinned by
+//     `saw-boundary/goal_except_carried_binder_refusal`.
 //
-// MUTATION: teaching the emitter to emit hypothesis binders makes the
-// counts agree and this row emit cleanly. That is exactly the change
-// nobody should make until the Except-carried-domain question is
-// settled; this row is the tripwire.
+//  2. This row said "the ONLY thing that can refuse it is the shape —
+//     verified by running both". That verification was wrong. What
+//     refuses THIS script is the ARITY half, and only because `==` on
+//     a repeated literal hoists the P-1 `let` above the Pi so the
+//     emitted spine scores arity 0 — see its own .log.good, which
+//     reads "SAWCore goal binders: 1; emitted Lean goal binders: 0".
+//     Drop that repeat and the arrow survives, the arities agree, and
+//     pre-fix SAW EMITTED the goal. So this row passed for a reason
+//     other than the one it claimed, on top of a live hole — the V-H1
+//     class, self-inflicted.
+//
+//     (Precisely: P-1 share detection does not descend into Pi bodies,
+//     so only the OUTERMOST binder's domain can produce a hoistable
+//     share. "The repeat moves to the consequent" was a non-cause —
+//     the consequent is never walked. Corrected by the fix audit.)
+//
+//  3. Its stated MUTATION ("teaching the emitter to emit hypothesis
+//     binders makes this row emit cleanly") is no longer true: GATE 3
+//     would refuse it. The honest mutation for THIS row is narrower —
+//     see below.
+//
+// WHAT THIS ROW PINS, as of the 2026-07-30 fix audit's second round:
+// that a hypothesis-bearing goal on this route is REFUSED — now by
+// goal-shape GATE 3 ('leanExceptCarriedGoalBinders'), not by the
+// arity half.
+//
+// Why it moved: gate 3's first cut stopped its spine walk at the first
+// non-Pi, so the hoisted `let` hid the binder from it and the ARITY
+// half was the only refuser here. The audit called that coverage
+// accidental — correctly — so gate 3 now descends through `Let`. It
+// therefore fires on this shape too, and it runs first.
+//
+// CONSEQUENCE, recorded because it is a coverage LOSS and not just a
+// relabeling: the arity half is now SHADOWED on the let-hoisted class,
+// so no end-to-end row exercises it. The arity half is still
+// load-bearing (it is the original telescope pin and covers
+// dropped/invented quantifiers generally), so its mechanism is pinned
+// at the unit level instead — see the `leanPiSpineArity` cases in the
+// smoketest, which assert directly that a hoisted `Let (Pi ...)`
+// scores 0. An end-to-end row for the arity half with a
+// carrier-FREE domain is OWED; tracked in TODO.md's pins-owed section.
+//
+// MUTATION for this row as it now stands: neutralize gate 3's
+// `Let` descent (drop the `Lean.Let` arm of `goSpine`) and this row
+// falls back to the arity diagnostic — which is a DIFFERENT message,
+// so the row goes red rather than silently passing on the sibling
+// guard. That is the property worth having: the two gates are not
+// interchangeable here, and the row can tell which one fired.
+
 enable_experimental;
 prove_print
   (do {

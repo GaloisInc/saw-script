@@ -138,6 +138,64 @@ lists rot, and dominate by volume); the single-cause frame does not.
 This wave's CRITICALs cluster in the trust kernel's ORDERING and
 EXISTENCE assumptions. See the report §1.
 
+### >>> SUPERSEDED IN PART BY THE 2026-07-30 DOWN-SCOPE DECISION <<<
+
+Read this before acting on any kernel entry below. Four decisions were
+taken after wave 3 reported, and several entries below are now wrong
+about what should be done.
+
+**D1. THREAT MODEL: the replay trust kernel defends against USER
+ERROR, not adversarial proof authors.** Previously unstated, which is
+why kernel guards were designed against an attacker and kept losing.
+Owed as a first-class citable statement (task #25) — until that lands,
+this line is the record.
+
+**D2. The proof-side lint narrows (plan 3a).** `proof-source-lint.awk`
+goes from a 22-command denylist + 221-line lexer to ONE closed check:
+no top-level `axiom` declaration. That is all the `native-eval` tier's
+single pattern rule needs protecting from; the strict tier is
+exact-match on five fully-qualified names and needs no lint at all.
+Plan 3b (retire `native-eval`, cost: 14 rows whose own comments
+already plan the `bv_decide` -> `smt` migration) is HELD IN RESERVE if
+defect-free proves unreachable.
+
+**D3. `completed-outline-drift` STAYS**, hardened. Its mechanism is
+sound — it asks Lean via a fixed-literal `rfl` probe, and the R-1 awk
+hole was removed in July. Its one weakness is that it uses `#check`,
+the idiom A-5 defeated and `contributing.md` rule 5 forbids; fix is
+one line, the same move that closed A-5 (task #27).
+
+**D4. Obviated fixes are thrown out, not parked.**
+- **K-1 (below): NOT A BLOCKER. Obviated by D2** — the allowlist
+  inversion is unnecessary once the denylist shrinks to `axiom`, and
+  `simproc` forgery requires deliberate action, which D1 puts out of
+  model. The 7-head corpus measurement taken for it survives as the
+  rationale for D2.
+- **CP-1 (below): NOT A BLOCKER.** Pure anti-mutation-mid-check.
+- **K-2 (below): down-scoped to ~3 lines**, LOW not CRITICAL. Keep
+  only that `verify_unchanged` must FAIL when a staged file has
+  vanished — wrong under any threat model, per rule C3 — and drop the
+  path-latching half.
+
+**Also corrected: the wave-3 `bitvector` claim is WRONG.** The report
+(§1) cites `bitvector` as an unswept sixth member of the type-collapse
+class, vindicating the convergence proposal's §6 hedge. It is not a
+member: SAWCore has **no `bitvector` declaration at all** (the name
+occurs only in comments; instrument controlled against `Vec` and
+`IntMod`, which are found as `primitive`), it appears in **zero**
+emitted corpus artifacts, and the support-library `abbrev` is
+referenced nowhere outside its own file. **Do NOT seal it** — that
+would change the support library for no soundness gain. The class
+stands at FIVE members, closed. This does not rescue §5's prediction,
+which remains REFUTED on its other three counts; only §6's
+"I found a sixth" vindication is withdrawn. What IS real here is LOW:
+`Bit` and `bitvector` are dead treatment keys whose comment asserts
+routing that cannot occur — same family as F-W3-HE-3. The right fix is
+the mechanism (a derived check that every
+`sawCorePreludeSpecialTreatmentMap` key resolves to a real SAWCore
+declaration, extending `auditLeanOpaqueDeadEntries`), not deleting two
+entries.
+
 ### BLOCKS RELEASE
 
 - [ ] **K-1 (CRITICAL, hand-enum)** — `replay/proof-source-lint.awk:208-211`
@@ -155,21 +213,51 @@ EXISTENCE assumptions. See the report §1.
   silently drops the drift check — the only binding between the user's
   `def goal` and the SAW obligation. FIX: fail on staged-then-deleted;
   latch the path decision once at staging.
-- [ ] **W2-UNRUN-1 (CRITICAL, chokepoint) — REPRODUCED; REINSTATED.**
-  My wave-2 non-reproduction was a single-test-case artifact. An
-  ordinary Cryptol module plus `goal_cut` emits a Pi spine with an
-  Except-carried uninhabited binder domain and a carrier-free false
-  consequent, while SAW proves the same hypothesis TRUE. The telescope
-  pin's ARITY half fires only on an antecedent repeat (let-hoist,
-  `Signature.hs:251-253`); a consequent repeat leaves the arrow
-  intact. `saw-boundary/goal_hypothesis_refusal` is GREEN FOR THE
-  WRONG REASON (its own log records arity 0) — a V-H1 on top of a real
-  hole. `Exporter.hs:1436-1461`'s "measured" claim is falsified by the
-  lane's error-free control. FIX: gate in `writeLeanProp` only
-  (`write_lean_term` rows legitimately carry the shape — see
-  `obligations/proof_bv_eq_to_eq/expected.txt:7`), correct the
-  comment, re-cut the row. Corpus cost zero.
-  **The README LIB-1 hold (below) is now discharged**, at MEDIUM
+- [x] **W2-UNRUN-1 (CRITICAL, chokepoint) — FIXED 2026-07-30,
+  mutation-verified, then fix-audited and corrected twice.**
+  My wave-2 non-reproduction was a single-test-case artifact: the
+  telescope pin's ARITY half fires only when the OUTERMOST BINDER'S
+  DOMAIN has a repeated subterm (P-1 share detection does not descend
+  into Pi bodies), which hoists the `let` and collapses the emitted
+  arity to 0. Without that repeat the arrow survives and the goal
+  emits with an Except-carried, uninhabited binder domain while SAW
+  proves the same hypothesis TRUE — reachable from ordinary Cryptol,
+  and it bit EMISSION-ONLY users, who never touch replay.
+  FIX AS LANDED — deliberately broader than this ledger's own
+  prescription, which said "gate in `writeLeanProp` only": goal-shape
+  GATE 3 (`leanExceptCarriedGoalBinders`) inside
+  `SAWCoreLean.Term.translateDocWithTelescope`, so it applies to the
+  goal path itself rather than one call site. `write_lean_term` is
+  unaffected because it is `DefEmission`, so the
+  `obligations/proof_bv_eq_to_eq` row that legitimately carries the
+  shape still emits (verified).
+  PINNED by `saw-boundary/goal_except_carried_binder_refusal`
+  (error-free + erring probes). Mutation: neutralize the gate and both
+  probes emit the vacuous goal.
+  THE FIX AUDIT FOUND FOUR DEFECTS IN MY FIX, all corrected:
+  (a) HIGH over-refusal — it refused a function-typed goal binder,
+  whose value image legitimately wraps to
+  `Except String Bool -> Except String Bool` and is STRONGER than the
+  SAWCore type, not weaker; and it handed that user the hypothesis
+  diagnosis, blaming a `goal_cut` they never wrote — the very defect
+  the guidance refactor existed to prevent. Gate 3 now exempts value
+  images (final codomain carrier-headed). I had already seen this
+  shape in my own smoketest and explained it away.
+  (b) the spine walk stopped at the first non-Pi, so a hoisted `let`
+  DISARMED gate 3 entirely; coverage of that class was accidental
+  (the arity half). It now descends through `Let`, as
+  `leanSortBinders` always did.
+  (c) my `Exporter.hs` claim that gate 3 "covers every caller" was
+  false in both directions; the two halves are complementary and the
+  arity half's placement at the call site is positional safety.
+  (d) a dead guard, an over-precise mechanism claim, an overstated
+  row header, and a comment/code mismatch — all corrected.
+  KNOWN LIMIT, recorded not overclaimed: the gate tests for the
+  CARRIER, not for uninhabitedness. A raw uninhabited hypothesis
+  domain (`@Eq Bool Bool.false Bool.true`) still emits; that is
+  faithful rather than weaker, but it rests on "raw implies faithful",
+  which is an argument and not a check.
+  **The README LIB-1 hold is now discharged**, at MEDIUM
   incompleteness rather than the falsity wave 2 claimed.
 - [ ] **CP-1 (HIGH, chokepoint)** — last `verify_unchanged proof.lean`
   is `:351`; the `UserProof.lean` copies are `:418` and `:452`. The
@@ -325,8 +413,19 @@ leads with that verification, not with the panel's summary.
 
 ### NEEDS REPRODUCTION BEFORE IT IS ACTED ON
 
-- [ ] **W2-UNRUN-1 / W2-UNRUN-3 (claimed CRITICAL/HIGH) — hypothesis
-  vacuity. NOT REPRODUCED at the claimed reachability.** The verdict
+- [x] **W2-UNRUN-1 — REPRODUCED BY WAVE 3, FIXED 2026-07-30. The
+  "NOT REPRODUCED" analysis below is preserved as a record of how a
+  single test case produced a false negative. Everything after
+  "ORIGINAL (WRONG) ANALYSIS FOLLOWS" is superseded.** Wave 3 built the shape from ordinary
+  Cryptol (`v = [7, error "e"]`, `h = (v @ 0) < 100`, `goal_cut`).
+  What follows was my wave-2 reasoning; the fatal error is the word
+  "identically" in (i) — the control I ran had a repeated subterm in
+  the outermost binder's domain, which hoists the P-1 `let` and
+  collapses the emitted arity to 0. Without that repeat the arrow
+  survives and the goal EMITS. FIX: goal-shape gate 3
+  (`leanExceptCarriedGoalBinders`), pinned by
+  `saw-boundary/goal_except_carried_binder_refusal`.
+  ORIGINAL (WRONG) ANALYSIS FOLLOWS: The verdict
   leads with "demonstrated end-to-end from ordinary Cryptol with SAW
   exiting 0 on `Theorem (EqTrue False)`". I could not reproduce that;
   both constructible routes are BLOCKED:
@@ -355,7 +454,11 @@ leads with that verification, not with the panel's summary.
 Recorded here rather than acted on, because acting on an unconfirmed
 finding is how a ledger accumulates fiction.
 
-- [ ] **W2-UNRUN-1 / W2-UNRUN-3 — reproduce, or retract.** See the
+- [x] **W2-UNRUN-1 / W2-UNRUN-3 — SETTLED 2026-07-30: REPRODUCED
+  and FIXED, not retracted. Do NOT act on the retraction advice
+  below; it is kept only to show what the false negative looked
+  like.** See the wave-3 blocker entry above for the fix. Original:
+  See the
   entry above for why the claimed ordinary-Cryptol reachability did
   not reproduce. What wave 3 must do, concretely: build a goal whose
   emitted Lean Pi spine has a binder with an `Except`-carried domain.
@@ -1593,6 +1696,29 @@ until (a).**
   the CORRECT diagnostic (`axiom-outside-allowlist`), as the
   project's own green selftest log records. The row is worth having;
   the recorded justification for skipping it was refuted.
+
+- [ ] **OWED (created 2026-07-30 by the W2-UNRUN-1 fix): an
+  end-to-end row for the telescope pin's ARITY half with a
+  carrier-FREE domain.** Goal gate 3 now descends through the P-1
+  `let` (the fix audit showed its coverage of that class was
+  otherwise accidental), so it fires FIRST on the let-hoisted
+  hypothesis shape and SHADOWS the arity half. Consequence:
+  `saw-boundary/goal_hypothesis_refusal` no longer exercises the
+  arity half — its golden now records gate 3's diagnostic — and no
+  other row does either. The arity half is still load-bearing (it is
+  the original telescope pin and covers dropped/invented quantifiers
+  generally), so leaving it unwatched violates C4.
+  PARTIALLY MITIGATED: the `leanPiSpineArity` smoketest cases pin only
+  that the FUNCTION scores a hand-built `Let (Pi …)` as 0. They are
+  deliberately insensitive to the emitter — corrected here after the
+  fix re-audit caught the first version of this entry claiming they
+  are "what would break if the hoist behaviour changed". They are not:
+  if the emitter stopped hoisting, arities would agree, the arity half
+  would silently stop firing end-to-end, and these pins would stay
+  green. What is OWED is therefore load-bearing, not tidy-up: a
+  runtime row whose SAWCore and emitted arities disagree with NO
+  carrier mention anywhere, so gate 3 stays silent and the arity
+  diagnostic is the one observed.
 - [x] A CI-harness negative row for the no-import decoy-`goal`
   vector (RK-5) — was ALREADY LANDED with the RK-5 close
   (389a55ec9: "Pinned by a decoy-goal case"); the owed entry was

@@ -108,7 +108,17 @@ data TranslationError
     --
     --   Only goal emission is gated; module/term emission legitimately
     --   binds types and stays universe-polymorphic.
-  | UnrepresentableGoalShape Text Text
+    --
+    --   Fields are @shape@, @reason@ and @guidance@. The third exists
+    --   because it USED to be hardcoded in the renderer: sort-specific
+    --   "instantiate the sort binder" advice appended to every
+    --   instance of this error. When gate 3 (the Except-carried
+    --   telescope binder, W2-UNRUN-1) landed on 2026-07-30 that advice
+    --   became actively wrong — it told a @goal_cut@ user to
+    --   monomorphise a sort binder their goal does not contain. Each
+    --   gate now supplies its own actionable next step, so a future
+    --   gate cannot inherit another gate's diagnosis.
+  | UnrepresentableGoalShape Text Text Text
     -- | A SAWCore or Cryptol definition's name collides with a name
     --   the emitter writes BARE into the same file. Audit-2 F-7.
     --
@@ -247,7 +257,7 @@ ppTranslationError sc err = case err of
       "Lean discharge, and a silent rename would make your proof " <>
       "reference a name your\n" <>
       "source never mentions."
-  UnrepresentableGoalShape shape reason ->
+  UnrepresentableGoalShape shape reason guidance ->
     pure $
       "Refusing to emit a Lean proof goal containing " <> shape <> ".\n" <>
       "\n" <>
@@ -258,15 +268,7 @@ ppTranslationError sc err = case err of
       "the Lean statement would differ from the SAWCore one, so\n" <>
       "discharging it in Lean would not discharge the SAW obligation.\n" <>
       "Translation is refused rather than emitting a mis-stated goal.\n" <>
-      "\n" <>
-      "Likely cause: the goal reached translation without being\n" <>
-      "monomorphised. Goals produced by `prove_print` / `llvm_verify`\n" <>
-      "are specialised first and do not quantify over sorts; a\n" <>
-      "hand-written `parse_core` goal can.\n" <>
-      "\n" <>
-      "Workaround: instantiate the sort binder at the concrete type\n" <>
-      "you care about and prove that instance. Sort-quantified goals\n" <>
-      "are a deferred feature, not a supported one."
+      "\n" <> guidance
   LocalVarOutOfBounds t -> ppWithTerm
     ("Local variable reference is out of bounds — the term references a\n" <>
      "Variable that no Pi/Lambda in scope binds.\n" <>

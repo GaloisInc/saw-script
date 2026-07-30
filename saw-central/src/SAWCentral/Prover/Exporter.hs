@@ -1435,30 +1435,52 @@ writeLeanProp name notations skips path t = do
   -- shape this count does not model) fail loudly here and are the
   -- accepted cost.
   --
-  -- LOAD-BEARING BEYOND ITS ORIGINAL PURPOSE (2026-07-29, wave-2
-  -- release-gate audit). This arity check is currently the ONLY thing
-  -- refusing a HYPOTHESIS-BEARING goal — one built with `goal_cut` /
-  -- `goal_intro_hyp`, whose sequent hypotheses `sequentToProp` folds
-  -- into a SAWCore arrow chain. The emitter does not emit those
-  -- binders, so the counts disagree and this refuses. Measured: a
-  -- hypothesis-bearing goal with NO error anywhere is refused
-  -- identically, so the refusal is about the SHAPE, not about
-  -- anything going wrong in that particular goal.
+  -- CORRECTED 2026-07-30 (wave-3 audit). What stood here was wrong in
+  -- a way worth preserving as a warning: it claimed this arity check
+  -- is "the ONLY thing refusing a HYPOTHESIS-BEARING goal", and that
+  -- the claim was "Measured: a hypothesis-bearing goal with NO error
+  -- anywhere is refused identically, so the refusal is about the
+  -- SHAPE". Both were false, from a single test case.
   --
-  -- That refusal is INCIDENTAL — a side effect of the emitter
-  -- dropping a binder — and it is now relied upon, which is why it is
-  -- written down here. Wave 2 argued that if such a binder WERE
-  -- emitted, its domain would be the hypothesis's `Except`-carried
-  -- image, and an erring-but-unforced computation makes that domain
-  -- UNINHABITED — so the implication would be vacuously provable and
-  -- replay would admit an arbitrary conclusion. That end-to-end claim
-  -- did not reproduce (see TODO.md, wave-3 scope) and is unsettled.
+  -- The arity half refuses only when the OUTERMOST BINDER'S DOMAIN
+  -- contains a repeated subterm. P-1's share detection (`scTermCount
+  -- False`) does not descend into Pi/Lambda bodies, so shares can
+  -- only come from that domain; every share is then hoisted above the
+  -- whole Pi, so `leanPiSpineArity` scores 0 against a SAWCore arity
+  -- of 1. The old measurement used `==` on a repeated literal, which
+  -- has exactly that shape. Drop the repeat and the arrow survives,
+  -- the arities agree, and the goal EMITTED — carrying an anonymous
+  -- binder whose domain is an `@Eq` over the `Except String` carrier.
+  -- That domain is uninhabited for an erring-but-unforced element, so
+  -- the emitted implication was vacuously provable while SAW proved
+  -- the same hypothesis TRUE. Wave 2 raised exactly this; I failed to
+  -- reproduce it and recommended retraction; wave 3 reproduced it
+  -- from ordinary Cryptol. CRITICAL, and it bit emission-only users
+  -- who never touch replay.
   --
-  -- CONSEQUENCE FOR ANYONE "FIXING" THE EMITTER TO EMIT THESE
-  -- BINDERS: do not, until the `Except`-carried-domain question is
-  -- settled. Making the counts agree would remove the only thing
-  -- currently standing between a hypothesis-bearing goal and replay.
-  -- Pinned by `saw-boundary/goal_hypothesis_refusal`.
+  -- The shape gate is now GATE 3 of the goal-shape gates —
+  -- `leanExceptCarriedGoalBinders`, in
+  -- `SAWCoreLean.Term.translateDocWithTelescope`. Pinned by
+  -- `saw-boundary/goal_except_carried_binder_refusal`.
+  --
+  -- THE TWO HALVES ARE COMPLEMENTARY, not layered. An earlier draft
+  -- of this comment claimed gate 3 "covers every caller of the goal
+  -- path rather than this one call site". That was false in both
+  -- directions and the fix audit caught it:
+  --   * gate 3 walks the goal TELESCOPE (descending through the P-1
+  --     `let`), so it covers the un-hoisted spine;
+  --   * this arity check covers the let-hoisted spine, where the
+  --     emitted arity collapses to 0 — and it lives HERE, at the
+  --     call site, so `Lean.translateGoalAsDeclImports` callers that
+  --     bypass `writeLeanProp` (the smoketest is one) do not get it.
+  -- `writeLeanProp` is the only production caller today, so that gap
+  -- is not reachable in the product; it is written down because the
+  -- safety is positional rather than structural.
+  --
+  -- CONSEQUENCE FOR ANYONE CHANGING `leanPiSpineArity`: making it
+  -- count let-hoisted spines would make the arities agree on the
+  -- hoisted class, and gate 3 must then be the thing that refuses it.
+  -- Verify gate 3's `Let` descent still fires before touching this.
   let sawBinders = fst (asPiList tm')
       sawArity = length sawBinders
   case Lean.translateGoalAsDeclImportsWithTelescope configuration mm (Lean.Ident (Text.unpack name)) tm' tp of

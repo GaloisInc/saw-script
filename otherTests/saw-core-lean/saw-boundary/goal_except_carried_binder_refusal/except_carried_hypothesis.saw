@@ -1,0 +1,41 @@
+// Pins GATE 3 of the goal-shape gates: a goal-TELESCOPE binder whose
+// domain carries the `Except String` value carrier is refused at
+// emission (W2-UNRUN-1; raised wave 2, REPRODUCED and reinstated
+// CRITICAL by wave 3, fixed 2026-07-30).
+//
+// THIS EXACT SCRIPT EMITTED CLEANLY BEFORE THE FIX. That is why the
+// row exists and why it is this shape rather than a tidier one.
+//
+// Wave 2 raised the finding; I could not reproduce it and recommended
+// RETRACTION. My non-reproduction was a single-test-case artifact.
+// The pre-existing telescope pin's ARITY half fires only when the
+// ANTECEDENT contains a repeated subterm, which hoists the P-1 `let`
+// above the Pi so the emitted spine scores arity 0. I happened to
+// test `==` (repeated literal -> hoist -> refused) and concluded the
+// shape was gated. With `<` the repeat lands in the CONSEQUENT, the
+// arrow survives, and the goal emits with an anonymous binder whose
+// domain is an `@Eq` over the Except carrier. The binder-TYPE half is
+// structurally blind here (both sides fingerprint FpOther).
+//
+// DELIBERATELY ERROR-FREE: with no `error` anywhere the ONLY thing
+// that can refuse this is GATE 3's shape test.
+//
+// HONEST SCOPE (corrected 2026-07-30 by the fix re-audit, which found
+// the retraction had been applied to the sibling file only): the
+// erring variant in `except_carried_erring.saw` refuses on the SAME
+// shape test, so the two rows are two INSTANCES of one property, not
+// two properties. Neither demonstrates that the erring domain is
+// uninhabited — that argument lives in
+// 'leanExceptCarriedGoalBinders''s docstring, not in a test.
+//
+// MUTATION: delete the `leanExceptCarriedGoalBinders` case from
+// `translateDocWithTelescope` and this row emits
+// `a1_goal_prove.cutH0.lean` with the vacuous-hypothesis shape.
+enable_experimental;
+prove_print
+  (do {
+     goal_cut {{ (1:[8]) < 100 }};
+     goal_num_when 0 (offline_lean "except_carried_hypothesis");
+     z3;
+   })
+  {{ (2:[8]) > 0 }};

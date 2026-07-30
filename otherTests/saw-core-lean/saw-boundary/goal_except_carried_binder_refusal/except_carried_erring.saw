@@ -1,0 +1,43 @@
+// The REACHABILITY witness for W2-UNRUN-1: the shape arrives from an
+// ordinary Cryptol module, not a hand-built parse_core term.
+//
+// HONEST SCOPE, corrected by the fix audit 2026-07-30. An earlier
+// header called this "the actual UNSOUNDNESS witness" and claimed the
+// pair was "kept in separate files so neither passes for the other's
+// reason". That overstated it. Post-fix, gate 3 refuses on the SHAPE
+// alone, so this row and its error-free sibling refuse for the
+// IDENTICAL reason and their .log.good files are byte-identical apart
+// from names. The erring-ness contributes nothing to the refusal, and
+// nothing in the suite demonstrates that the erring domain is
+// uninhabited — that argument lives in
+// 'leanExceptCarriedGoalBinders''s docstring, not in a test.
+//
+// The row still earns its place: it is a second INSTANCE, from the
+// real Cryptol surface, and it is the script wave 3 actually used, so
+// it pins that this route stays refused. It is not a second PROPERTY.
+//
+// Wave 3 reproduced this end to end. SAW proves the hypothesis
+// `h` TRUE (lazy vectors: `v @ 0` is 7, the `error` slot is never
+// forced). The emitted Lean image of that same hypothesis is
+//
+//   @Eq (Except String Bool) (...saw_throw_error...) (Pure.pure true)
+//
+// which is UNINHABITED by constructor no-confusion, because the Lean
+// carrier is eager and collapses the whole vector to `Except.error`.
+// So the emitted implication was VACUOUSLY provable while SAW
+// asserted the hypothesis holds — discharge it in Lean and you have
+// proven nothing, and `offline_lean_replay` would have admitted an
+// arbitrary conclusion. Emission-only users are equally affected:
+// this needs no replay to bite.
+//
+// MUTATION: delete the `leanExceptCarriedGoalBinders` case and this
+// row emits the vacuous goal.
+enable_experimental;
+import "vac_carrier.cry";
+prove_print
+  (do {
+     goal_cut {{ h }};
+     goal_num_when 0 (offline_lean "except_carried_erring");
+     z3;
+   })
+  {{ False }};

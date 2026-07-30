@@ -38,6 +38,7 @@ module SAWCoreLean.Signature
   , leanPiSpineArity
   , leanPiSpineBinderTypes
   , leanSortBinders
+  , leanExceptCarriedGoalBinders
   , TelescopeFp(..)
   , sawBinderFp
   , leanBinderFp
@@ -260,6 +261,171 @@ leanPiSpineBinderTypes :: Lean.Term -> [Lean.Type]
 leanPiSpineBinderTypes (Lean.Pi bs t) =
   [ ty | Lean.PiBinder _ _ ty <- bs ] ++ leanPiSpineBinderTypes t
 leanPiSpineBinderTypes _ = []
+
+-- | Goal-telescope binders whose domain mentions the @Except String@
+-- VALUE CARRIER, outermost first, rendered as @"name : carrier-site"@.
+--
+-- W2-UNRUN-1 (raised wave 2, could not be reproduced then,
+-- REPRODUCED and reinstated CRITICAL by wave 3 on 2026-07-30).
+--
+-- THE INVARIANT THIS PINS — stated carefully, because the first cut
+-- (2026-07-30) stated it too broadly and over-refused; see the
+-- VALUE-IMAGE EXEMPTION below.
+--
+-- A goal-telescope domain is legitimately one of two things:
+--
+--   * a VALUE image — the type of something the goal quantifies over.
+--     Under the value-function convention this may be carrier-headed
+--     or a function INTO the carrier
+--     (@Except String Bool -> Except String Bool@ for a SAWCore
+--     @Bool -> Bool@ binder). Quantifying over a carrier-headed
+--     domain ranges over MORE inhabitants than the SAWCore type, so
+--     the Lean statement is STRONGER, never weaker. Safe.
+--
+--   * a PROPOSITION — a sequent HYPOTHESIS that @sequentToProp@
+--     folded into the SAWCore arrow chain. Here carrier mentions are
+--     dangerous: the hypothesis's carried image can be UNINHABITED,
+--     which makes the implication vacuous and the Lean statement
+--     strictly WEAKER.
+--
+-- So the gate reports a carrier mention only in a domain that is NOT
+-- a value image, where "value image" = after peeling every Pi layer,
+-- the final codomain is carrier-headed.
+--
+-- WHY IT IS UNSOUND, not merely odd: the hypothesis's Except-carried
+-- image can be UNINHABITED. Wave 3's witness is an ordinary Cryptol
+-- module (@v = [7, error "e"]@, @h = (v @@ 0) < 100@) plus
+-- @goal_cut@: the emitted domain is
+-- @\@Eq (Except String Bool) (…saw_throw_error…) (Pure.pure true)@,
+-- and @Except.error _ = Except.ok _@ is uninhabited by constructor
+-- no-confusion. The implication is therefore VACUOUSLY provable
+-- while SAW independently proves the same hypothesis TRUE — so the
+-- Lean theorem is strictly weaker than the obligation, and a replay
+-- of it admits an arbitrary conclusion.
+--
+-- Why the pre-existing telescope pin did not catch it: the ARITY
+-- half fires only when the ANTECEDENT contains a repeated subterm,
+-- which hoists the P-1 @let@ above the Pi so 'leanPiSpineArity'
+-- scores 0. A repeat in the CONSEQUENT leaves the arrow intact and
+-- the goal emits. The binder-TYPE half is structurally blind here:
+-- both sides fingerprint @FpOther@ and 'telescopeFpMismatch' skips
+-- any position where either side is @FpOther@.
+--
+-- Scope is the goal's own TELESCOPE — the binders the pin governs,
+-- and the only ones that become Lean hypotheses. The walk descends
+-- through @Lean.Let@ to reach it: a share arising in the OUTERMOST
+-- binder's domain hoists above the whole Pi
+-- (@translateTermLetAt@'s @foldr mkLet@), giving @Let … (Pi …)@,
+-- which a spine walk stopping at the first non-Pi would miss
+-- entirely. (Not "every let is outermost" — @translateTermLetAt@
+-- runs at every level and a share depending on a binder cannot
+-- escape it, so @Pi … (Let …)@ is the common shape. The re-audit
+-- corrected that over-generalisation.) The first cut
+-- (2026-07-30) did stop there, which disarmed this gate for the
+-- entire let-hoisted class; the arity half happens to refuse those
+-- today, so nothing was exploitable, but the coverage was
+-- ACCIDENTAL. 'leanSortBinders' already descended through @Let@ —
+-- the asymmetry was the bug.
+--
+-- Refuse-only, like its two sibling gates: over-approximating costs
+-- a rejected emission, never an admitted one.
+--
+-- KNOWN LIMITS, recorded rather than overclaimed. Three, and each is
+-- an ARGUMENT rather than a check, so each is where the next defect
+-- of this family would live:
+--
+--  1. This tests for the CARRIER, not for uninhabitedness. A raw
+--     hypothesis domain can also be uninhabited
+--     (@\@Eq Bool Bool.false Bool.true@) and emits past this gate.
+--     That is faithful rather than weaker — a raw domain means the
+--     same thing on both sides, so the SAWCore obligation is equally
+--     vacuous — but the safety rests on "raw implies faithful".
+--
+--  2. The ANONYMITY test would miss a NAMED folded hypothesis.
+--     @sequentToProp@ cannot produce one (@scFun@ is non-dependent),
+--     so this is closed against the sequent route specifically; a
+--     future route that names a hypothesis binder would escape.
+--
+--  3. The VALUE-IMAGE test's failure direction is ADMISSION, not
+--     refusal: a false positive from 'isExceptStringType' here
+--     disarms the gate for that binder. It is the only sub-predicate
+--     in this function with that polarity — 'carrier' and the walk
+--     both fail toward over-refusal. Safety rests on "no producible
+--     hypothesis image is carrier-headed", since a hypothesis image
+--     is @Eq@/@EqTrue@-headed.
+leanExceptCarriedGoalBinders :: Lean.Term -> [String]
+leanExceptCarriedGoalBinders = goSpine
+  where
+    goSpine (Lean.Pi bs t)          = concatMap piBinder bs ++ goSpine t
+    goSpine (Lean.Let _ _ _ _ body) = goSpine body
+    goSpine _                       = []
+
+    -- Two narrowing tests, both needed, both grounded. The first cut
+    -- had NEITHER and refused faithful function-typed binders; the
+    -- second cut had only the value-image test and still refused
+    -- faithful COMPOSITE binders (a record or tuple with a function
+    -- component is not carrier-headed after peeling Pis, so its
+    -- wrapped components were still reported). Both were regressions
+    -- on shapes that emitted before this gate existed.
+    piBinder (Lean.PiBinder _ mnm ty)
+      -- TEST 1, ANONYMITY — the principled one. A folded sequent
+      -- hypothesis is ALWAYS an anonymous binder: @sequentToProp@
+      -- builds the arrow chain with @scFun@ (Proof.hs), which makes a
+      -- NON-DEPENDENT function type and so binds no name. A
+      -- quantified VALUE binder, by contrast, is named — its body
+      -- refers to it. So a named domain is never a folded hypothesis,
+      -- whatever its type mentions.
+      | Just _ <- mnm = []
+      -- TEST 2, VALUE IMAGE — the backstop, for an ANONYMOUS domain
+      -- that is still a value: a non-dependent SAWCore arrow
+      -- @(Bool -> Bool) -> …@ emits an anonymous binder whose domain
+      -- is the wrapped function image. Carrier-headed after peeling
+      -- Pis means "delivers a value", which ranges over MORE
+      -- inhabitants than the SAWCore type and so is stronger, not
+      -- weaker.
+      | isExceptStringType (finalCodomain ty) = []
+      | otherwise = map (\s -> "_ : " ++ s) (goTy ty)
+
+    -- Peel every Pi layer; what remains is what the domain ultimately
+    -- delivers.
+    finalCodomain (Lean.Pi _ body) = finalCodomain body
+    finalCodomain t                = t
+
+    -- Walk a TELESCOPE DOMAIN, reporting every reachable mention of
+    -- the value carrier's head. Mirrors 'leanSortBinders'' @goTy@,
+    -- including its total case list: a new 'Lean.Term' constructor
+    -- must be classified here rather than silently ignored.
+    goTy ty = case ty of
+      Lean.Var nm             -> carrier (leanIdentStr nm)
+      Lean.ExplVar nm         -> carrier (leanIdentStr nm)
+      Lean.ExplVarUniv nm _   -> carrier (leanIdentStr nm)
+      Lean.Pi bs b            ->
+        concatMap (\(Lean.PiBinder _ _ t) -> goTy t) bs ++ goTy b
+      Lean.Lambda bs b        ->
+        concatMap (\(Lean.Binder _ _ mt) -> concatMap goTy mt) bs ++ goTy b
+      Lean.Let _ bs mty rhs b ->
+        concatMap (\(Lean.Binder _ _ mt) -> concatMap goTy mt) bs
+          ++ concatMap goTy mty ++ goTy rhs ++ goTy b
+      Lean.App f as           -> goTy f ++ concatMap goTy as
+      Lean.List xs            -> concatMap goTy xs
+      Lean.Sort{}             -> []
+      Lean.NatLit{}           -> []
+      Lean.IntLit{}           -> []
+      Lean.StringLit{}        -> []
+      Lean.Tactic{}           -> []
+
+    -- The carrier's HEAD as the emitter writes it. @Except@ is in
+    -- 'emitterBareNames' and emitted bare; matching on the last
+    -- dotted component accepts a qualified spelling too, so a future
+    -- change of emission style cannot silently disarm this gate.
+    -- (ONE guard, not two: the first cut had a separate @s ==
+    -- "Except"@ arm, which the last-component test already subsumes.
+    -- The fix audit caught it as dead code presented as coverage.)
+    carrier s
+      | lastComponent s == "Except" = [s]
+      | otherwise                   = []
+
+    lastComponent = reverse . takeWhile (/= '.') . reverse
 
 leanSortBinders :: Lean.Term -> [String]
 leanSortBinders = go

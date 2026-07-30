@@ -3749,9 +3749,23 @@ translateDocWithTelescope kind configuration mm name body tp = do
       pure (bodyLean, annAdj, tpLean)
   let auxDecls = reverse (view topLevelDeclarations state)
       univs    = view universeVars state
-  -- Goal-shape gates (audit-2 A-2/A-9, F-5). Ordered so the
-  -- universe report comes first: a sort-@k@ binder trips both, and
-  -- the universe message names the concrete Lean shape.
+  -- Goal-shape gates (audit-2 A-2/A-9, F-5; gate 3 added 2026-07-30).
+  -- Ordered so the universe report comes first: a sort-@k@ binder
+  -- trips both of the first two, and the universe message names the
+  -- concrete Lean shape.
+  --
+  -- Each gate supplies its own GUIDANCE (third field). Sharing one
+  -- hardcoded tail is what made gate 3's first cut tell a `goal_cut`
+  -- user to monomorphise a sort binder they never wrote.
+  let sortGuidance =
+        "Likely cause: the goal reached translation without being\n\
+        \monomorphised. Goals produced by `prove_print` / `llvm_verify`\n\
+        \are specialised first and do not quantify over sorts; a\n\
+        \hand-written `parse_core` goal can.\n\
+        \\n\
+        \Workaround: instantiate the sort binder at the concrete type\n\
+        \you care about and prove that instance. Sort-quantified goals\n\
+        \are a deferred feature, not a supported one."
   when (kind == GoalEmission) $ do
     unless (null univs) $
       Except.throwError $ UnrepresentableGoalShape
@@ -3763,6 +3777,7 @@ translateDocWithTelescope kind configuration mm name body tp = do
          Text.pack (leanIdentStr name) <>
          "`, proving it at one\ninferred level instead of universally — " <>
          "a strictly weaker theorem than the SAWCore obligation.")
+        sortGuidance
     case leanSortBinders bodyLean of
       []       -> pure ()
       offenders ->
@@ -3773,6 +3788,39 @@ translateDocWithTelescope kind configuration mm name body tp = do
            "a sort binder\nat propositions; Lean 4 has no term " <>
            "cumulativity, so the emitted `Type` binder\nomits that " <>
            "instantiation class and the Lean statement is strictly WEAKER.")
+          sortGuidance
+    -- Gate 3 (W2-UNRUN-1, wave-3 CRITICAL, 2026-07-30): a goal
+    -- TELESCOPE binder whose domain mentions the Except value
+    -- carrier. See 'leanExceptCarriedGoalBinders' for the invariant
+    -- (the goal boundary is raw by construction), the wave-3 witness,
+    -- and why neither half of the telescope pin catches this.
+    case leanExceptCarriedGoalBinders bodyLean of
+      []       -> pure ()
+      offenders ->
+        Except.throwError $ UnrepresentableGoalShape
+          (Text.pack ("a goal-telescope binder whose domain carries the \
+                      \`Except String` value carrier (" ++
+                      intercalate "; " offenders ++ ")"))
+          ("The goal boundary is RAW by construction, so this binder is a \
+           \sequent\nHYPOTHESIS folded into the SAWCore arrow chain. Its \
+           \Except-carried image\ncan be UNINHABITED — an \
+           \erring-but-unforced element makes\n`Except.error _ = Except.ok \
+           \_` uninhabited by constructor no-confusion —\nso the emitted \
+           \implication is VACUOUSLY provable while SAW proves the\nsame \
+           \hypothesis TRUE. The Lean statement would be strictly WEAKER \
+           \than\nthe obligation, and replaying it would admit an \
+           \arbitrary conclusion.")
+          ("Likely cause: the goal was built with `goal_cut` /\n\
+           \`goal_intro_hyp`, or reached here under\n\
+           \`enable_sequent_goals`. `sequentToProp` folds sequent\n\
+           \hypotheses into a SAWCore arrow chain, and this gate\n\
+           \refuses to carry one whose Lean image is an equation over\n\
+           \the `Except String` value carrier.\n\
+           \\n\
+           \Workaround: prove the hypothesis as its own goal and use\n\
+           \the unconditional statement, rather than cutting it in.\n\
+           \Hypothesis-bearing goal emission is a deferred feature,\n\
+           \not a supported one — see saw-core-lean/README.md.")
   -- Annotation carrier decided by 'topLevelDefConvention' (the
   -- single definition-convention authority).
   let tp'' = applyAnnotationAdjustment annAdj tp'

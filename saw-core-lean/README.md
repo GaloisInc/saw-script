@@ -67,6 +67,34 @@ rejected after design scrutiny:
 `doc/2026-07-28_lib1-b-evidence-design.md`; trust-catalog entry:
 `doc/2026-05-02_residual-trust.md` §3.2e.
 
+## Hypothesis-bearing goals are refused (not supported)
+
+If you build a goal with `goal_cut` / `goal_intro_hyp`, or reach
+emission under `enable_sequent_goals`, `offline_lean` and
+`offline_lean_replay` **refuse to emit it** whenever the hypothesis's
+Lean image mentions the `Except String` value carrier. The error names
+the binder and points back here.
+
+Why it is a refusal rather than a feature: SAW folds sequent
+hypotheses into an arrow chain, and the Lean image of such a
+hypothesis can be **uninhabited** where the SAW hypothesis is TRUE.
+SAW's vectors are lazy, so an `error` in an unforced slot leaves the
+hypothesis true; the Lean carrier is eager, so the same hypothesis
+becomes `Except.error _ = Except.ok _`, which no value inhabits. The
+implication would then be vacuously provable — you would discharge it
+in Lean and have proven nothing, with the emitted statement strictly
+weaker than the SAW obligation. This affects **emission-only** use as
+much as replay.
+
+Found by the wave-2 release-gate audit (2026-07-29), initially
+recorded as not reproducible, reproduced from ordinary Cryptol by
+wave 3, and gated on 2026-07-30. Details:
+`doc/2026-07-30_release-gate-audit-wave3.md`; the rule and its known
+limits: `doc/2026-05-02_residual-trust.md` (goal-shape rules).
+
+**Workaround:** prove the hypothesis as its own goal and emit the
+unconditional statement.
+
 `Prelude.fix` is handled by proof-carrying emission. The backend emits
 the literal fixed-point body plus explicit Lean obligations for the
 semantic facts needed to use it; shape-specific helper lowerings such as

@@ -895,6 +895,59 @@ across the change (71 before, 71 after), because specialization
 monomorphizes goals and the shape is reachable only from
 hand-written `parse_core`.
 
+### The second goal-shape rule — gate 3 (added 2026-07-30)
+
+> **A goal telescope may not take a PROPOSITION whose domain mentions
+> the `Except String` value carrier.**
+
+Same home, same refuse-only discipline, third gate:
+`leanExceptCarriedGoalBinders`. What it closes is **W2-UNRUN-1**, a
+CRITICAL raised by the wave-2 audit, wrongly recommended for
+retraction by me when I could not reproduce it, and reproduced by
+wave 3 from ordinary Cryptol.
+
+The shape: `sequentToProp` folds a `goal_cut` hypothesis into the
+SAWCore arrow chain, and the emitter carried it into the Lean
+statement as a binder whose domain is
+`@Eq (Except String Bool) (…saw_throw_error…) (Pure.pure true)`.
+SAW's vectors are lazy, so an erring element in an unforced slot
+leaves the hypothesis TRUE; the Lean carrier is eager, so the same
+hypothesis's image is `Except.error _ = Except.ok _` — uninhabited by
+constructor no-confusion. The implication is therefore vacuously
+provable and the Lean theorem is strictly WEAKER than the obligation.
+**This is an emission-path defect**: a user of emission-only
+`offline_lean` who discharges the goal in Lean has proven nothing,
+with no replay involved.
+
+Two distinctions the gate must make, both learned by getting them
+wrong first:
+
+- It exempts **value images**. A domain whose final codomain is
+  carrier-headed (`Except String Bool`, or
+  `Except String Bool -> Except String Bool` for a SAWCore
+  `Bool -> Bool` binder) is the faithful image of something the goal
+  quantifies over; it ranges over MORE inhabitants than the SAWCore
+  type, so the statement is stronger, not weaker. The first cut
+  refused these.
+- It descends through the P-1 `let`. A share arising in the outermost
+  binder's domain hoists above the whole Pi, so a spine walk stopping
+  at the first non-Pi sees nothing. The first cut stopped there,
+  leaving that class covered only by the arity half — accidentally.
+  (Lets are not universally outermost: `translateTermLetAt` runs at
+  every level, so `Pi … (Let …)` is the common emitted shape.)
+
+**Residual, stated because the gate does not check it:** the test is
+for the carrier, not for uninhabitedness. A raw uninhabited hypothesis
+domain (`@Eq Bool Bool.false Bool.true`) emits past this gate. That is
+faithful — a raw domain means the same thing on both sides, so the
+SAWCore obligation is equally vacuous — but the safety of that class
+rests on "raw implies faithful" as an argument, not as a mechanism.
+
+Pinned by `saw-boundary/goal_except_carried_binder_refusal`
+(error-free probe for the shape, erring probe for the ordinary-Cryptol
+route; both refuse on the shape alone, so they are two instances of
+one property, not two properties).
+
 **Historical text follows, retained as the record of what was
 believed:** the gate checked both Pi and Lambda binders for sort
 `k ≥ 1`, pinned by a smoketest for the Lambda-side case.

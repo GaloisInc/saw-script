@@ -1,0 +1,11 @@
+module vac_carrier where
+
+// An erring element in a slot the obligation never forces. SAW's
+// vectors are lazy, so `v @ 0` is 7 and the `error` is never reached;
+// the Lean carrier is eager, so the emitted image of this hypothesis
+// collapses to `Except.error`.
+v : [2][8]
+v = [7, error "e"]
+
+h : Bit
+h = (v @ (0:[8])) < 100
