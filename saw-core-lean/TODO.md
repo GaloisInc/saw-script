@@ -123,6 +123,121 @@ what would make them stop.
   `doc/2026-07-24_soundness-audit-2.md`, findings tracked in the
   section below. Three further CRITICALs, two demonstrated
   end-to-end. The release gate is NOT met until those clear.
+## Release gate — WAVE 4 findings (2026-07-30): no blocker, two docket items NOT closed
+
+Report: `doc/2026-07-30_release-gate-audit-wave4.md`. Five Opus
+docket lanes at HEAD `b5c75fd09`, per-finding adversarial verify,
+plus the two commissioned harness improvements: the cross-finding
+CONSISTENCY agent (ran; found and resolved 4 contradictions, two of
+which would have put false coverage claims in this ledger) and
+severity scored against the citable threat model (first wave). 29
+raw findings → after verification 2 MEDIUM, 27 LOW/INFO, 0 CRITICAL.
+
+**Verdict: nothing release-blocking under the threat model. Docket
+items 3 (cabal ship-list) and 4 (consistency check) closed; items 1
+(FixRecognizer) and 2 (demo) NOT closed — item 2 escalated.**
+
+### WAVE 5 CHARGES (open)
+
+- [ ] **W5-1: reject-side H_prod pin (GAP 1 — bounds this whole
+  wave).** Every FixRecognizer severity rests on "a recognizer false
+  positive yields an *undischargeable* kernel obligation" — asserted
+  from reading `SAWCorePrimitives.lean:1396-1412/1511-1528`, never
+  mechanically checked: `lookback`/`faithful` appear 0 times in
+  otherTests/, every corpus H_prod occurrence is an accept-side
+  discharge, and `negative/{fix_contract,fix_obligation_erasure}`
+  pin only S-1 seed-binding. Add a ~15-line `.shouldfail` row that
+  tries to prove H_prod for the FXC-1 witness body
+  (`at rec (addNat i2 1)`) and pins the failure. Until it lands,
+  **FXC-1/FXC-2 are LOW-provisional**; if it fails to land, they
+  revert to MEDIUM and docket item 1 reopens.
+- [ ] **W5-2: the demo's CI gate cannot have been green since
+  2026-07-18 (GAP 2 — verified at HEAD).** `ci.yml:817-833` runs
+  `saw demo.saw` with no `SAW_LEAN_ROOT` anywhere in `.github/`, on
+  a `dist/bin/saw` extracted from dist-newstyle with a baked
+  never-installed `~/.cabal/share` datadir; `demo.saw:66,69` call
+  `offline_lean_replay` (two branches only, `Builtins.hs:1461-1479`;
+  abort reproduced locally with same provenance); the leg is real
+  with `continue-on-error: [false]`. **Exactly one of: the
+  `saw-core-lean-tests` leg is red at HEAD, or that leg is not
+  running.** Undeterminable offline; determine which, then fix (one
+  `export` in ci.yml, or ship data-files in `bundle_files` — the
+  latter also remedies SHIP-1). The demo's
+  `proof/replay/{invol,eq}/proof.lean` are user-authored proof-side
+  files gated ONLY at demo time — ungated for twelve days.
+- [ ] **W5-3: cross-check `CONFORMANCE.md:60`'s pin inventory (GAP
+  3).** The coverage lane surveyed ~half of it; its "nothing lets an
+  unsound shape through at HEAD" is a partial-survey result.
+  Specifically re-establish or reclassify
+  `differential/fix_error_elem`: a SAW-vs-Lean agreement claim for
+  an error-carrying element in a recognized Class-F fix, sole
+  evidence a one-time manual `#reduce` from 2026-07-16, four backend
+  deltas since. In-model, never scored by any wave.
+
+### Surviving MEDIUMs (non-blocking)
+
+- [ ] **SHIP-4 (MEDIUM, the wave's only CONFIRMED verdict)** — XDG
+  cache staging race: `staging-tmp-<fpTag>` shared by concurrent
+  same-fingerprint processes (`Builtins.hs:1497-1499`, no
+  pid/lock/O_EXCL); verifier found a marker-plus-hole interleaving
+  the lane missed — P1 writes `.staged-ok` into P2's recreated tree,
+  renames a tree missing the head of `relFiles`, and the marker
+  short-circuit makes the broken cache PERMANENT (`CHECK-FAIL:
+  support-library-build` until an XDG path is hand-cleared).
+  Fail-closed, availability only. Fix: per-call uniquifier as the
+  kernel's own `WORK` dir already does.
+- [ ] **SHIP-1 (MEDIUM, was HIGH)** — the release bindist never
+  contains the data-files (`bundle_files` copies nothing from
+  `saw-core-lean/`; no `cabal install`/`sdist` in `.github/`);
+  `offline_lean_replay` unusable in the tarball while
+  `Interpreter.hs:5333` and `STATUS.md:359` claim otherwise.
+  Downgraded (fails closed+loud, two-`cp`-line fix) but W5-2 shows
+  the same defect breaks our own CI — revisit with W5-2.
+
+### LOW/INFO residue (fix-shortlist in report §6)
+
+FXC-1/2 (unpinned admission guards `:350`/`:192` — LOW-provisional,
+see W5-1); FXC-3 (`:280-287` spec comment asserts two checks the
+code does not perform — the block THIS ledger cites at WAVE 4 SCOPE;
+correct rules at `:345-349`); FXC-4/5 (raw `Show TermF` truncation
+golden-pinned in user-facing text; iterate refusal names a
+true-but-not-the-limit cause); FXC-6/7/8, FXS-1/2 (scope-blind
+at-index test rests on unstated `VarIndex` global-uniqueness
+assumption, `Name.hs:249`); DEMO-1..8 (Step-1 block omits
+SAW_LEAN_ROOT — probe-confirmed; Step 3 steers into the toolchain
+clobber unwarned, and Step 1 already clobbers via replay's own lake
+build; header contradicts itself on Rev.lean; trust story frozen
+2026-07-18 with retired "closer-type probe" idiom and no link to the
+shipped trust story; require-path prose off by one level; Files
+section wrong; unpinned duplicate tactic/goal copies + phantom
+proof/README; demo in no ship list); SHIP-2 (data-files branch dead
+under every suite — but verifier EXECUTED it green end-to-end, so
+"unexercised", not "broken"; ~10-line row closes it); SHIP-3
+(ship-list duplication, both drift directions fail closed;
+`ship-list.sh` check sketched in finding); SHIP-5/6; DC-1 (§3.2b
+over-claims universal digest re-verification the same doc's CP-1 row
+discards — every concrete bypass backstopped, prose fix at `:698`
+and TODO.md:689); DC-2 (the D2 token rename reproduces the C2 defect
+it fixed: six non-axiom lexer rejections emit
+`axiom-decl-in-user-file`); DC-3 (lint END-block guards unpinned);
+DC-4 (third stale pointer to the retired notation row at
+`:1730-1733`); DC-5 (D2 zero-cost denominators irreconcilable, 103
+vs 112; re-measured: 112 files, 3 flagged, all fixtures).
+
+### Consistency-agent corrections (harness improvement: LANDED, worked)
+
+Two verifier claims must NOT enter this ledger as coverage: "a
+marker-bearing cache dir is necessarily complete" (refuted by
+SHIP-4's interleaving) and "every harness runs lake build before
+lake env lean" (all five sites sit inside `SAW_LEAN_SUITE_LAKE_PREBUILT`
+skips; one build per sweep — which is why the 2026-07-29 16-row
+incident happened the day AFTER the prebuild hoist). Scoring seam
+found: `in_model` was scored under two mutually exclusive rules
+(9 findings vs 4); resolution — the operative test is consequence 1
+(`residual-trust.md:64-69`): does the defect require an adversarial
+author? Doc-only defects are in-model. One sentence at `:62` closes
+the seam.
+
 ## Release gate — WAVE 3 findings (2026-07-30): verdict since re-scored
 
 *(Original verdict at filing: STILL DO NOT RELEASE. Re-scored the
@@ -360,7 +475,7 @@ entries.
   by construction. Disposition: accept-documented, plus one narrow
   Phase-β follow-up. Closes the item logged 2026-07-29.
 
-### WAVE 4 SCOPE
+### WAVE 4 SCOPE — RAN 2026-07-30 (report: `doc/2026-07-30_release-gate-audit-wave4.md`)
 
 - [ ] **`FixRecognizer.hs` (461 lines) — read by NO wave-3 lane.**
   `classifyFixShape` is a hand-written syntactic classifier whose own
@@ -369,13 +484,34 @@ entries.
   `Term.hs:1303-1312` to choose lowering vs refusal. A CRITICAL-class
   admissibility gate implemented as a hand enumeration, never audited.
   **Wave 4's first charge.**
+  **AUDITED 2026-07-30, NOT CLOSED**: strong on the Haskell side (no
+  unsound classification constructed; fail-closed dispatch;
+  Left-dominant veto; derived recursive walk), but the severity
+  architecture rests on the unmechanized H_prod discrimination claim
+  (→ W5-1) and the coverage survey covered ~half of
+  `CONFORMANCE.md:60` (→ W5-3). Note: the `:280-287` comment this
+  entry cites is itself wrong in two of its three clauses (FXC-3);
+  the clause this entry quotes is the true, test-pinned one.
 - [ ] The shipped `examples/saw-lean/` demo as a replay consumer.
-- [ ] `saw.cabal:41-49` — hand list of shipped kernel files with a
+  **AUDITED 2026-07-30, ESCALATED, NOT CLOSED**: emission half
+  verified current at HEAD (committed Emitted copies token-identical
+  to fresh emission); 8 doc/workflow findings all LOW/INFO; but the
+  demo's CI gate provably cannot have been green since 2026-07-18
+  (→ W5-2).
+- [x] `saw.cabal:41-49` — hand list of shipped kernel files with a
   non-recursive `CryptolToLean/*.lean` glob.
-- [ ] Harness improvement: a cross-finding CONSISTENCY check. Wave 3
+  **CLOSED 2026-07-30**: list exact at HEAD, no subdirectories, no
+  dead entries, runtime consumer set closed. Residue: SHIP-1
+  (bindist omits data-files, MEDIUM, coupled to W5-2), SHIP-4
+  (staging race, CONFIRMED MEDIUM), SHIP-2/3/5/6 LOW.
+- [x] Harness improvement: a cross-finding CONSISTENCY check. Wave 3
   simultaneously held "no IO route survives GATE B" (to refute K-3)
   and "an IO route survives" (to confirm K-1). Only the end-stage
   critic caught it.
+  **LANDED AND VINDICATED 2026-07-30**: the agent found 4 real
+  contradictions (2 factual guard-existence, 2 scoring-discipline)
+  and resolved each at the code; two verifier claims were kept out
+  of the ledger as a result.
 
 ## Release gate — WAVE 2 findings (2026-07-29): STILL DO NOT RELEASE
 
