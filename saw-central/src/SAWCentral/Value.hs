@@ -507,7 +507,7 @@ type RefChain = [(SS.Pos, SS.Name)]
 --   applied to the builtin. This is purely for printing in stack
 --   traces. FUTURE: VLambda should have this as well, but it doesn't
 --   make sense to make such a list separate from the variable
---   environment handling, and that needs a through mucking-out of its
+--   environment handling, and that needs a thorough mucking-out of its
 --   own first. UPDATE: that's been done, this can be fixed now.
 --
 --   The flow for the position of last reference is as follows:
@@ -532,7 +532,7 @@ type RefChain = [(SS.Pos, SS.Name)]
 --      (e) The same goes for statements in do-blocks, using the
 --          position of the BindStmt, or for the last expression in a
 --          do-block, the position of the expression.
---      (f) When the Haskell-level monadic action in a plan monadic
+--      (f) When the Haskell-level monadic action in a plain monadic
 --          value is extracted with fromValue, we use the position to
 --          call setPosition to update the interpreter's last
 --          execution position.

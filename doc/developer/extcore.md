@@ -135,7 +135,7 @@ The previous section gave an example of a bit vector operation. The
 SAWCore prelude contains a number of built-in operations on both bit
 vectors and booleans.
 
-Th `bvNat` function constructs a constant bit vector, of a given size,
+The `bvNat` function constructs a constant bit vector, of a given size,
 from the given natural number. Conversely, the `bvToNat` function
 takes a bit vector length, a vector of this length, and returns the
 corresponding natural number.
@@ -150,7 +150,7 @@ operand. All signed bit vector operations take a natural number one
 smaller than the size of their remaining arguments (to ensure that
 their arguments have non-zero size). The `bvAppend` operator takes two
 natural numbers, corresponding to the lengths of its two bit vector
-arguments, and returns a bit vector with length correponding to the
+arguments, and returns a bit vector with length corresponding to the
 sum of the lengths of its arguments.
 
 The complete collection of bit vector operations appears in the
@@ -262,7 +262,7 @@ they rarely occur in terms exported for analysis by third-party tools.
 
 This section summarizes the built-in types, boolean functions, and bit
 vector functions defined in the SAWCore prelude. These types and
-functions will apppear in `extcore` files in the form
+functions will appear in `extcore` files in the form
 `Prelude.<name>`, but are listed below in the form `<name>`, without
 the `Prelude` prefix, for brevity and readability.
 
