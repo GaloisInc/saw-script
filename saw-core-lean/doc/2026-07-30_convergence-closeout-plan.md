@@ -135,10 +135,26 @@ trivgoal_deep harm-story assertion; elan-download time inside the
 **Step 3 (user)**: pending — one CI run answers the W5-2
 determination and exercises the fixed demo step + bindist assets.
 
-**Step 4 (wave 5)**: ready to run on this tree; its
-delta-composition lane is the designated cross-reader of this
-arc's commits (the per-fix audit recursion deliberately terminates
-there).
+**Step 4 (wave 5): RAN 2026-07-30 evening**
+(`doc/2026-07-30_release-gate-audit-wave5.md`). Verdict against §5:
+gate NOT met at `237310fda` — clauses 1+2 failed on bookkeeping
+(the S-2/LIB-2 documentation-propagation class, one CONFIRMED
+MEDIUM; six ledger MEDIUM+ items without accepted dispositions),
+zero CRITICALs, zero translator/kernel defects, failure clause did
+NOT fire. Remediation steps 1-2 applied same evening
+(`d8e0f8612`): propagation fixed across five files + shipped
+docstrings; ledger pass done; clause 3 re-established at
+`d8e0f8612` (full sweep PASS 1436s, smoketest 94/94, doc-lint +
+ship-list + selftests green).
+
+**§5 state at `d8e0f8612`**: clause 1 — wave 5 reported one MEDIUM
+(now fixed; the calibration note that it was the outlier vs the
+same-class LOW is recorded, unadjudicated); clause 2 — PENDING USER
+ACCEPTANCE of the six proposed dispositions (TODO.md WAVE 5
+section); clause 3 — MET at `d8e0f8612`; clause 4 — pending
+merge/CI (user decision). The declaration itself is therefore a
+user call: accept the dispositions (with or without the OBL-1 pin),
+settle clause 1's strict-vs-remediated reading, merge, observe CI.
 
 ## Standing constraints for the arc
 
