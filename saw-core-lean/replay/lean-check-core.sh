@@ -322,8 +322,24 @@ done
 # handles those; the pin guards the goal-formation layer.)
 printf 'import Emitted\nexample : goal := by first | rfl | trivial\n' \
     > "$STAGE/triviality-probe.lean"
-if run_lean "$STAGE/triviality-probe.lean" >/dev/null 2>&1; then
+triv_out=$(run_lean "$STAGE/triviality-probe.lean" 2>&1) && triv_rc=0 || triv_rc=$?
+if [ "$triv_rc" -eq 0 ]; then
     fail "goal-formation-trivial"
+fi
+# CP-3 + K-5 fix (2026-07-30, close-out arc step 2): this probe was
+# fail-OPEN — ANY nonzero exit read as "not trivial", so a probe
+# that never genuinely ran (lean crash, 120s timeout, import
+# failure, OOM) silently waved a possibly-trivialized goal through:
+# tool failure failing open inside the trust kernel, against rule
+# C3. The only acceptable failure is the TACTIC failing inside the
+# probe, which Lean reports at the example's own line
+# (triviality-probe.lean:2). A timeout prints no such line, an
+# import failure reports line 1, a crash prints other text, and an
+# empty transcript is no evidence at all — every one of those is
+# inconclusive and must fail closed.
+if ! printf '%s\n' "$triv_out" | grep -q 'triviality-probe\.lean:2:'; then
+    printf '%s\n' "$triv_out" | tail -5
+    fail "triviality-probe-inconclusive"
 fi
 
 # 4. Completed-outline drift (when staged): the completed goal must

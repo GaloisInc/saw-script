@@ -658,6 +658,16 @@ generated-reference-does-not-compile|pin-row:drivers
 # vacuity count — the claim was decoration and is withdrawn.)
 axiom-audit-run|env
 axiom-audit-vacuous|env
+# Fail-closed half of the anti-trivialization gate (CP-3+K-5 fix,
+# 2026-07-30): fires only when the probe did NOT genuinely run —
+# lean crash, timeout, import failure, empty transcript — i.e. a
+# broken environment, not a crafted stage (the crafted-stage halves
+# are pinned live: trivgoal pins goal-formation-trivial, and every
+# accepting case pins the healthy tactic-failure-at-line-2 path).
+# Evidence: hand-mutation 2026-07-30 (close-out arc) — simulating a
+# timeout with an empty transcript (triv_rc=124, triv_out="") on the
+# honest control stage yields CHECK-FAIL: triviality-probe-inconclusive.
+triviality-probe-inconclusive|env
 # axiom-decl-in-user-file needs NO row: the b1elab case above pins
 # it live in-kernel (since the 2026-07-29 B1 fix; token renamed with
 # the 2026-07-30 D2 lint narrowing), and the saw-boundary rows

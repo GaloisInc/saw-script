@@ -93,9 +93,17 @@ testParams base verbose = do
   -- macOS these resolve to /var/folders/... which is sandbox-permitted;
   -- without the passthrough, CaDiCaL fails with "operation not permitted"
   -- when trying to write its working files.
+  -- SAW_LEAN_FAIL_ON_KNOWN_GAPS (2026-07-30, close-out arc step 2,
+  -- gate-path divergence re-score): the strict verb's env var was
+  -- dropped on this path only — exported by a caller, honored by
+  -- test.sh under the Makefile path, silently ignored here. One of
+  -- the 13 wave-3 divergences; the passthrough is the fix for this
+  -- one. (SAW_LEAN_ROOT stays deliberately absent: this path's rows
+  -- must exercise the checkout the suite tests, which
+  -- lean-driver-test.sh pins by defaulting the variable itself.)
   e1 <- foldM addEnvVar eVars0
           [ "SAW", "PATH", "SAW_SOLVER_CACHE_PATH", "HOME"
-          , "TMPDIR", "TEMP", "TMP"]
+          , "TMPDIR", "TEMP", "TMP", "SAW_LEAN_FAIL_ON_KNOWN_GAPS"]
   pure $ envVarAssocList e1
 
 main :: IO ()
