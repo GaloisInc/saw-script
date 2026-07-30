@@ -41,3 +41,6 @@
 # Emitted-Lean baselines captured by support/emitted-lean-snapshot.sh
 # (the position-directed-refactor byte-diff oracle). Local dev state.
 .snapshots/
+
+# SHIP-2 data-mode selftest persistent cache (support/data-mode-selftest.sh)
+.data-mode-cache/

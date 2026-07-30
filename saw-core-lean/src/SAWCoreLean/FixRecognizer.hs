@@ -164,8 +164,13 @@ classifyFixShape typeArg bodyArg
       | Just (recFn, scrut) <- asApp dflt
       , Just (crec, _params, motive, [caseFn], []) <-
           asRecursorApp recFn
+      -- Module-qualified comparison (FXC-6, 2026-07-30): this was
+      -- `identName dtIdent == "Stream"`, the file's one unqualified
+      -- ident test (out-of-model reach only — the type dispatch
+      -- already requires a Prelude.Stream-typed fix — but the fix
+      -- is one line and restores the file's uniform idiom).
       , ModuleIdentifier dtIdent <- nameInfo (recursorDataType crec)
-      , identName dtIdent == "Stream"
+      , dtIdent == mkIdent preludeName "Stream"
       = if not (isExactVar recVn scrut)
           then FixUnrecognized
             "stream read scrutinee is not the recursive binder"

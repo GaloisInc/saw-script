@@ -82,9 +82,9 @@ dist-newstyle build's compiled-in data directory points at an
 uninstalled path — without the variable the run emits everything
 and then aborts at step 5. Point it at the checkout root (as
 above); from an unpacked release tarball, the tarball root works
-the same way (it ships `saw-core-lean/{lean,replay}`). Note the
-replay steps build the support library in `saw-core-lean/lean` —
-see the Step 3 warning below.
+the same way (it ships `saw-core-lean/{lean,replay}`). The replay
+steps build the support library in `saw-core-lean/lean` at its own
+pinned toolchain — see the Step 3 note below.
 
 The `out/` directory is created automatically. `saw` writes:
 
@@ -136,18 +136,15 @@ SAW_LEAN_ROOT=$(cd ../.. && pwd) saw demo.saw
 
 ### Step 3 — Discharge via `lake build`
 
-> **WARNING (shared-tree toolchain clobber).** This project pins
-> Lean `v4.29.1` (`proof/lean-toolchain`) while the shared support
-> library at `saw-core-lean/lean` pins `v4.32.0` — and the
-> `require` below builds that shared library IN PLACE. Running this
-> step (or Step 1's replay, which builds the same tree at 4.32.0)
-> inside a dev checkout leaves the library's build products at
-> whichever toolchain ran last; harnesses that consume the existing
-> build without rebuilding then fail with "incompatible header"
-> errors that read like translator regressions. Recovery is one
-> `lake build` in `saw-core-lean/lean`. Avoid running this step
-> concurrently with the test suites. (Tracked in
-> `saw-core-lean/TODO.md`; the pins should converge.)
+> **Note (shared build tree).** `proof/lean-toolchain` pins the
+> SAME toolchain as the shared support library
+> (`saw-core-lean/lean/lean-toolchain`) — converged 2026-07-30
+> after a period of destructive drift. Keep them in sync: the
+> `require` below builds the shared library IN PLACE, so a
+> mismatched pin here rebuilds it at the wrong toolchain and
+> breaks the test suites' build products ("incompatible header").
+> Same-pin builds are safe, but still avoid running this step
+> concurrently with a test sweep (two builders, one tree).
 
 ```bash
 cd examples/saw-lean/proof

@@ -2114,23 +2114,26 @@ until (a).**
   the recursive emitters stay put. `Calculus.hs` is the
   "finish the `Convention.hs` split" half — the rules, where
   Convention.hs keeps the vocabulary.
-- [ ] **Demo proof project's Lean toolchain is STALE, and the drift
+- [x] **Demo proof project's Lean toolchain is STALE, and the drift
   is destructive** (found 2026-07-29 in the Family-3 pass).
-  `examples/saw-lean/proof/lean-toolchain` pins
+  `examples/saw-lean/proof/lean-toolchain` pinned
   `leanprover/lean4:v4.29.1` while `saw-core-lean/lean/lean-toolchain`
   pins `v4.32.0` — and the demo project `require`s the support
-  library by RELATIVE PATH, so `lake build` in the demo rebuilds the
-  SHARED `cryptol_to_lean` package under 4.29.1 and leaves
-  `saw-core-lean/lean/.lake/build/lib/lean/CryptolToLean.olean`
-  unreadable by the suite ("incompatible header"). It cost a full
-  suite run in this session: 16 rows reported elaboration failures
-  that were entirely an artifact of having built the demo first.
-  Two things to fix, and they are separable: bump the demo's
-  toolchain to match the library (it elaborates fine at 4.29.1
-  today, so this is a pin update plus a demo re-run), and decide
-  whether the demo should share the library's `.lake` build tree at
-  all — a demo that can invalidate the test suite's artifacts by
-  being run is a footgun independent of which toolchain it pins.
+  library by RELATIVE PATH, so `lake build` in the demo rebuilt the
+  SHARED `cryptol_to_lean` package under 4.29.1 and left the
+  suite's oleans unreadable ("incompatible header"); cost a full
+  suite run on 2026-07-29 (16 spurious row failures).
+  **PIN CONVERGED 2026-07-30 (close-out arc, step 1): the demo now
+  pins v4.32.0; `lake build` in `proof/` succeeds and both
+  discharges elaborate. Building the demo now builds the shared
+  library at the SAME pin the suite uses, so the destructive half
+  of this item is structurally gone; the demo README/getting-started
+  warnings are retired to a keep-pins-in-sync note.** The separable
+  second question — whether the demo should share the library's
+  `.lake` build tree at all (a concurrent demo build during a
+  sweep still races the suite's artifacts, same-pin or not) —
+  remains open below the line as a 0.03-grade hygiene decision, no
+  longer a correctness footgun.
 
 - [ ] **lean-smt migration** (recorded resolution trigger for the
   native-eval trust tier): when lean-smt's BV proof reconstruction
