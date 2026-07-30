@@ -492,7 +492,7 @@ One can also write `let {{ ... }};`, in which the double-braces can
 contain not just an expression but any Cryptol declaration or
 let-binding.
 This is a convenient way to insert Cryptol type declarations; it also
-allows using Cryptol binding patterns that cannot readly be expressed
+allows using Cryptol binding patterns that cannot readily be expressed
 directly in SAWScript.
 
 (monad-bind)=

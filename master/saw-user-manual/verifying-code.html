@@ -464,7 +464,7 @@ in a SAWScript file:</p>
 </pre></div>
 </div>
 <p>This loads the compiler output, giving us an LLVM module handle <code class="docutils literal notranslate"><span class="pre">bc</span></code>,
-and them runs the verification by calling <code class="docutils literal notranslate"><span class="pre">llvm_verify</span></code>.</p>
+and then runs the verification by calling <code class="docutils literal notranslate"><span class="pre">llvm_verify</span></code>.</p>
 <p>(Note that <code class="docutils literal notranslate"><span class="pre">jvm_verify</span></code> and <code class="docutils literal notranslate"><span class="pre">mir_verify</span></code> are essentially the same,
 except that they work with JVM and MIR code modules and specs.)</p>
 <p>Running SAW on the resulting file gives the following output:</p>
@@ -1209,7 +1209,7 @@ that call this one.</p>
 </section>
 <section id="the-jvm-backend-and-jvm-specifications">
 <h2>The JVM Backend and JVM Specifications<a class="headerlink" href="#the-jvm-backend-and-jvm-specifications" title="Link to this heading"></a></h2>
-<p>In the JVM backend, types appear as values of SAWSCript type
+<p>In the JVM backend, types appear as values of SAWScript type
 <code class="docutils literal notranslate"><span class="pre">JavaType</span></code> (not <code class="docutils literal notranslate"><span class="pre">JVMType</span></code>, by historical accident), and values have
 the type <code class="docutils literal notranslate"><span class="pre">JVMValue</span></code>.
 JVM code modules are class files and thus have the type <code class="docutils literal notranslate"><span class="pre">JavaClass</span></code>.
