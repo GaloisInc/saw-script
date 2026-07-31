@@ -212,15 +212,45 @@ Consequences for §5, recorded honestly:
   read. The honest reading is not "clause 1 failed" but "clause 1
   was never a sufficient statement of readiness" — which is why
   the wave-6 charge below exists rather than a re-run of wave 5.
-- **NEW WAVE-6 CHARGE (pre-release):** the EMISSION-side
-  goal-shape gates get their own docket — gate 3's remaining
-  limits, `leanSortBinders`, the telescope arity/fingerprint pin,
-  `sequentToProp`'s contract — audited by lanes charged with
-  CONSTRUCTING WITNESSES, not reading comments. Scope: the gates
-  whose logic rests on premises about our own pipeline. This is
-  the one thing that should now precede the declaration; the fix
-  audit of `d4d4c4308` is already charged with a first pass at
-  sibling escapes.
+- **The emission-side gate work is NO LONGER a release blocker
+  (user decision D6, 2026-07-31).** Gate 3 took four cuts that day
+  (cuts 1–3 each refuted by a constructed witness; the third after
+  `offline_lean_replay` had ISSUED evidence for a false
+  obligation). Cut 4 (`8d9bdba61`) closes every witness built, the
+  suite is green with it, and four witnesses are pinned — but its
+  correctness is not legible, which is precisely what was believed
+  of cut 3. The user's call, taken on measured bounds rather than
+  confidence in the cut: **ship 0.02 on cut 4 and CATALOG the
+  residual** (`residual-trust.md` §3.2g) rather than hold for the
+  redesign. Bounds: one production consumer, no cascade;
+  `enable_experimental` opt-in; the Cryptol/LLVM/`goal_cut` routes
+  closed (anonymous binders only); zero exposure across all 78
+  goal goldens; every cut refusing a strict superset of its
+  predecessor, so being wrong can only mean incomplete, never
+  newly broken. Recorded against it: unlike §3.2f's residual, this
+  one is NOT mitigated by goal inspection — an escaped goal reads
+  as an ordinary conditional.
+  **Revisit at 0.03** (TODO.md § 0.03 program): the SAWCore-side
+  sort check, with a design doc and an ADVERSARIAL review of the
+  design BEFORE implementation — the order whose absence produced
+  four cuts in a day. The sibling surfaces (`leanSortBinders`, the
+  telescope pin, `sequentToProp`) were swept by the cut-3 audit
+  with no escape constructed, so they ride into 0.03 with the
+  redesign rather than blocking.
+
+**§5 FINAL STATE (2026-07-31, all clauses):** clause 1 — MET under
+the user-accepted reading (i), plus the post-wave CRITICAL found,
+fixed, pinned and cataloged. Clause 2 — MET; all six items
+dispositioned (OBL-1 fixed-and-pinned, F8b closed-unconstructible,
+W2-UNRUN-2 re-scored LOW with its CRITICAL fixed, and F11 /
+LIB-W2-3 / F12-successor accepted as explicit 0.03 carries).
+Clause 3 — MET at `8d9bdba61` (full suite PASS 1349.72s, smoketest
+94/94, both kernel selftests, doc-claim-lint, ship-list); doc-only
+commits after it do not disturb it, and any further CODE change
+re-opens it. Clause 4 — the ONLY clause outstanding: merge, then
+the REMOTE GitHub Actions run (which also answers the W5-2
+red-vs-not-running question and exercises the runner-built
+bindist).
 
 ## Standing constraints for the arc
 

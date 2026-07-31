@@ -2273,6 +2273,33 @@ until (a).**
 
 ## 0.03 program (scheduled, user decision 2026-07-22 — do NOT start early)
 
+- [ ] **GATE-3 REDESIGN: decide hypothesis-vs-value SAWCore-side
+  (the D6 revisit item, logged 2026-07-31 with the user decision to
+  ship 0.02 on the fourth cut and catalog the residual —
+  residual-trust.md §3.2g).** Today's gate RECONSTRUCTS "is this
+  telescope domain a folded hypothesis?" from the LEAN image; that
+  question was answered wrongly four times in one day (named →
+  printed-named → peels-to-carrier → recurse-into-domains), the
+  third time after `offline_lean_replay` had ISSUED evidence for a
+  false obligation. On the SAWCore side the same question is a SORT
+  CHECK — `EqTrue X` is a `Prop`, `Vec 8 Bool` is not — which is
+  decidable, does not rot, and is confirmable BY READING. That
+  legibility, not a new witness, is the point of the redesign.
+  **PROCESS REQUIREMENT, from the record:** design doc first, then
+  an ADVERSARIAL review of the design BEFORE implementation (the
+  triviality-gate deletion's process, D5), then implement, pin,
+  sweep, audit. Four same-day cuts happened precisely because that
+  order was skipped under release pressure. Inputs: the four pinned
+  witnesses under `saw-boundary/goal_except_carried_binder_refusal`
+  (any redesign must refuse all four), the over-refusal probes
+  (value / named-used / value→value function must still emit), the
+  accepted composite over-refusal, and
+  `doc/2026-07-31_why-gate3-escaped.md`.
+  Related, same family (fold in): W2-UNRUN-2's `FpOther` telescope
+  blindness (LOW) — the fingerprint alphabet cannot express a
+  Prop-binder mismatch, which is the same missing distinction seen
+  from the other side.
+
 - [ ] **LIB-1 remedy — the (a) faithful per-element carrier**
   (`Vec n (Except String T')`; user decision 2026-07-28 scheduled
   it here when dispositioning LIB-1 as ship-documented). The
