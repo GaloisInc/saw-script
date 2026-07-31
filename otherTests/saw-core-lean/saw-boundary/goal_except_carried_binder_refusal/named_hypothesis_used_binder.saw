@@ -1,0 +1,18 @@
+// Third witness (2026-07-31): a hypothesis binder that is named AND
+// GENUINELY USED, so no sharpening of "is this name used" could ever
+// have closed the class -- which is why the gate stopped keying on
+// names entirely rather than being patched again.
+//
+// `g` takes the hypothesis and is applied to `h` in the conclusion,
+// so `h` is a real mention. `g`'s own image peels through its Pi to
+// the value carrier and is correctly exempt (a function from an
+// uninhabited domain is inhabited); `h` is the folded hypothesis and
+// must be refused. Measured at the second cut: this EMITTED, the
+// obligation was FALSE (`and (bvEq 8 3 4) _` is False for all g, h),
+// and the emitted goal proved with [propext, Quot.sound].
+//
+// MUTATION (rule C4): exempt binders whose names are mentioned in
+// scope -- the second cut's behavior -- and this row emits.
+enable_experimental;
+prove_core (do { goal_num_when 0 (offline_lean "used_h"); assume_unsat; })
+  "(g : (EqTrue (bvult 8 (at 2 (Vec 8 Bool) [bvNat 8 7, error (Vec 8 Bool) \"e\"] 0) (bvNat 8 100))) -> Bool) -> (h : EqTrue (bvult 8 (at 2 (Vec 8 Bool) [bvNat 8 7, error (Vec 8 Bool) \"e\"] 0) (bvNat 8 100))) -> EqTrue (and (bvEq 8 (bvNat 8 3) (bvNat 8 4)) (g h))";

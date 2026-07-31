@@ -1,0 +1,19 @@
+// Second-cut pin (2026-07-31). The repair that asked the PRINTER
+// about names was ALSO unsound, and this row is its witness.
+//
+// That cut ran the printer's anonymizeUnusedPiBinders before the
+// anonymity test, so a named-but-UNUSED binder was treated as
+// anonymous. But mentionsIdent deliberately OVER-reports mentions
+// (safe for a cosmetic rename; ADMITTING for a gate) and its Tactic
+// arm is a SUBSTRING test -- so a binder named `h` counted as
+// "mentioned" by any goal whose conclusion carries an obligation
+// script containing `h_bounds_obligation_`. Measured at that cut:
+// binder `h` EMITTED, binder `zz` REFUSED, on structurally identical
+// goals. The conclusion here indexes a vector to carry such a script.
+//
+// MUTATION (rule C4): make piBinder consult binder names again in any
+// form -- including via the printer's own anonymization -- and this
+// row emits.
+enable_experimental;
+prove_core (do { goal_num_when 0 (offline_lean "tac_h"); assume_unsat; })
+  "(h : EqTrue (bvult 8 (at 2 (Vec 8 Bool) [bvNat 8 7, error (Vec 8 Bool) \"e\"] 0) (bvNat 8 100))) -> EqTrue (bvEq 8 (at 2 (Vec 8 Bool) [bvNat 8 3, bvNat 8 5] 0) (bvNat 8 4))";

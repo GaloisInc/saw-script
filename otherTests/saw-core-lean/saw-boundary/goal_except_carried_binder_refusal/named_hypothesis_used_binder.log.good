@@ -1,11 +1,11 @@
-Loading file "except_carried_named_hypothesis.saw"
+Loading file "named_hypothesis_used_binder.saw"
 Stack trace:
    (builtin) in offline_lean
-   except_carried_named_hypothesis.saw:19:35-19:59 in (callback)
+   named_hypothesis_used_binder.saw:17:35-17:56 in (callback)
    (builtin) in goal_num_when
-   except_carried_named_hypothesis.saw:19:18-19:59 in (callback)
+   named_hypothesis_used_binder.saw:17:18-17:56 in (callback)
    (builtin) in prove_core
-   except_carried_named_hypothesis.saw:19:1-20:144 (at top level)
+   named_hypothesis_used_binder.saw:17:1-18:266 (at top level)
 Error translating: Refusing to emit a Lean proof goal containing a goal-telescope binder whose domain carries the `Except String` value carrier (_ : Except).
 
 Reason: The goal boundary is RAW by construction, so this binder is a sequent
