@@ -339,6 +339,16 @@ leave it as an explicit proof obligation or mark the example as an expected
 proof gap. The emitted obligation is still meaningful and sound; only the
 automation is missing.
 
+## Before you rely on a discharged goal
+
+A proof that Lean accepts and replay admits still inherits the
+backend's documented limitations — one of which (LIB-1) can admit a
+SAW-false equation. If you have not read them, read
+[`../README.md`](../README.md) now: the `⚠ KNOWN SOUNDNESS
+LIMITATION` section, "What replay does NOT check", and the threat
+model. They matter most in exactly the situation this cookbook puts
+you in — holding a closed goal and about to believe it.
+
 ## When replay rejects your proof
 
 Every `offline_lean_replay` failure names one check and prints

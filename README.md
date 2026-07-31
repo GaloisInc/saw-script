@@ -26,6 +26,12 @@ There is also a longer
 [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/pdfs/saw-user-manual.pdf)
 that describes the breadth of SAW's features.
 
+There is an experimental backend that discharges SAW proof
+obligations in the Lean 4 kernel instead of an SMT solver; it has its
+own documentation, including known soundness limitations you should
+read before relying on it. See
+[`saw-core-lean/README.md`](saw-core-lean/README.md).
+
 ## Precompiled Binaries
 
 Precompiled SAW binaries for a variety of platforms are available

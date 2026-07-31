@@ -176,6 +176,13 @@ part of the live support library.
 
 What's punted (with diagnostics — translator refuses cleanly):
 
+- **A goal binder your property never uses** emits a file Lean
+  cannot elaborate (`typeclass instance problem is stuck` on a
+  `Pure` shadow) — e.g. `\(i : [8]) -> (3 : [8]) == 3`. Not a clean
+  refusal, which is the bug; found 2026-07-31 and tracked in
+  TODO.md. Workaround: drop the unused binder. It fails closed —
+  replay refuses with `emitted-does-not-compile`.
+
 - Large recursive Cryptol examples still need proof-side recurrence
   libraries over the generic `fix` obligations.
 - Bitvector-gated partial recursion (e.g. factorial on `[8]`) and
@@ -206,14 +213,23 @@ What's punted (with diagnostics — translator refuses cleanly):
 
 ## Documentation
 
-Top-level docs are the **current** as-of-today reference:
+**If you are trying to USE the backend, in order:**
 
-- [`STATUS.md`](STATUS.md) — what works today, what is punted, the
-  known-gap census, and recent history. The "is this usable for my
-  case?" page.
+1. [`doc/getting-started.md`](doc/getting-started.md) — a 30-minute
+   walkthrough from a Cryptol property to a goal SAW accepts on
+   Lean's authority. Start here.
+2. [`STATUS.md`](STATUS.md) — what works today and what is punted.
+   The "is this usable for my case?" page.
+3. [`doc/proof-cookbook.md`](doc/proof-cookbook.md) — tactics per
+   goal shape, and what to do when replay rejects your proof.
+4. The limitation sections above — read before you rely on a
+   replayed goal or hand `LeanReplayEvidence` to anyone.
+5. `:help offline_lean` / `:help offline_lean_replay` in the SAW
+   REPL — the authoritative command contracts.
+
+**If you are working ON the backend:**
+
 - [`doc/architecture.md`](doc/architecture.md) — design overview.
-- [`doc/getting-started.md`](doc/getting-started.md) — a 30-minute
-  walkthrough from a Cryptol property to a closed Lean theorem.
 - [`doc/contributing.md`](doc/contributing.md) — how to add a
   primitive, extend a soundness gate, write tests.
 - [`doc/2026-05-02_residual-trust.md`](doc/2026-05-02_residual-trust.md)

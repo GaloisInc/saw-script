@@ -264,6 +264,42 @@ To see what SAW recorded, add `enable_experimental;` at the top and
 under "Solvers Used" (that command is one of the ones needing the
 flag; `offline_lean_replay` itself does not).
 
+### Goals with obligation placeholders (`completed.lean`)
+
+The distributivity goal above needs no `completed.lean`. Many real
+goals do. If your Cryptol uses a **partial operation** — indexing,
+division, modulus — the emitted goal carries the side condition
+*inside its own statement*, as a `let` with a placeholder proof:
+
+```lean
+let h_bounds_obligation_ : (Prop) := (LT.lt …);
+let h_bounds_ : (h_bounds_obligation_) := ((by … all_goals sorry));
+```
+
+That `sorry` is emitted deliberately: the obligation is yours to
+discharge, and until you do, the statement is not proved. You cannot
+fix this from `proof.lean`, because the placeholder is part of the
+goal's own text — so you edit the outline itself and hand replay the
+edited copy as `completed.lean`:
+
+1. Copy the whole emitted file to `<proof dir>/completed.lean`.
+2. Replace each placeholder's tactic with a real proof, in place.
+   For a concrete bound, `by unfold h_bounds_obligation_; decide`
+   usually does it.
+3. **Leave the `def goal :` line exactly as emitted.** Replay
+   compares your outline against its own fresh emission; editing the
+   goal is what `completed-outline-drift` catches.
+4. Remove the trailing `theorem goal_holds := by sorry` stub — your
+   `proof.lean` supplies `goal_closed` instead. `completed.lean` must
+   contain **no `sorry` at all**; `proof.lean` still contains the
+   proof as before.
+
+Replay then stages your outline instead of its own and checks both.
+For worked examples, read the `completed.lean` files under
+`otherTests/saw-core-lean/proofs/` — `cryptol_running_sum_verify` and
+`offline_lean_popcount32` are two, both run on every CI build, so
+they cannot drift from what the checker accepts.
+
 If it fails, the message always names a specific check — see
 [`proof-cookbook.md`](proof-cookbook.md) ("When replay rejects your
 proof") for what each one means. `:help offline_lean_replay` in the
