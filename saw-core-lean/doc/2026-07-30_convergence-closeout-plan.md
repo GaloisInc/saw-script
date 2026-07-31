@@ -178,6 +178,50 @@ with your recommendations, go ahead with the fast path"):**
   satisfy the clause, answer the W5-2 history question, or
   exercise the runner-built bindist).
 
+**INTERRUPTION, 2026-07-31 — the fast path was STOPPED by a live
+CRITICAL** (`d4d4c4308`; root cause
+`doc/2026-07-31_why-gate3-escaped.md`). The clause-2 item 2
+re-score (W2-UNRUN-2) did not merely re-score: reading the code
+rather than the ledger text, it constructed a demonstrated
+unsound-acceptance path at HEAD — a NAMED hypothesis binder walked
+past goal-shape gate 3 while the identical anonymous goal was
+refused; the SAW obligation was false and the emitted goal proved
+in Lean with allowlisted axioms, so replay would have issued
+evidence for it. Verified independently before fixing. Now fixed
+(the gate inspects the binders the printer emits), pinned
+(`saw-boundary/…/except_carried_named_hypothesis`), and swept
+(full suite PASS 1368.98s at the fix commit; smoketest 94/94;
+doc-lint green; the new row ran and matched its golden).
+
+Consequences for §5, recorded honestly:
+- **The §5 failure clause FIRED** (a CRITICAL in a
+  previously-audited surface). Its deliverable — reassess the
+  diagnosis in a doc BEFORE treating the finding as routine — is
+  `2026-07-31_why-gate3-escaped.md`, written before the fix was
+  committed. Verdict there: the two-population diagnosis is not
+  refuted but is incomplete; the recurring root cause across both
+  populations is REASONING about a mechanism where EXERCISING it
+  was cheap. New rule C8 governs limit-narrowing.
+- **Clause 3** is re-established at `d4d4c4308` and must be
+  re-established again if anything further lands.
+- **Clause 2's last item is settled** (W2-UNRUN-2 → LOW 0.03
+  carry; the CRITICAL behind it fixed-and-pinned).
+- **Clause 1** now carries an asterisk the user should see: the
+  criterion quantified over WAVE 5, and wave 5 was clean of this.
+  This defect was found by post-wave work on a surface no wave
+  read. The honest reading is not "clause 1 failed" but "clause 1
+  was never a sufficient statement of readiness" — which is why
+  the wave-6 charge below exists rather than a re-run of wave 5.
+- **NEW WAVE-6 CHARGE (pre-release):** the EMISSION-side
+  goal-shape gates get their own docket — gate 3's remaining
+  limits, `leanSortBinders`, the telescope arity/fingerprint pin,
+  `sequentToProp`'s contract — audited by lanes charged with
+  CONSTRUCTING WITNESSES, not reading comments. Scope: the gates
+  whose logic rests on premises about our own pipeline. This is
+  the one thing that should now precede the declaration; the fix
+  audit of `d4d4c4308` is already charged with a first pass at
+  sibling escapes.
+
 ## Standing constraints for the arc
 
 Per-fix opus audits; no `cabal build` while a suite runs; kernel
