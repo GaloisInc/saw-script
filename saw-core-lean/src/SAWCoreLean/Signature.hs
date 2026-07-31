@@ -56,6 +56,7 @@ import           Prelude                      hiding (fail)
 import           Text.Encoding.Z              (zEncodeString)
 
 import qualified Language.Lean.AST            as Lean
+import           Language.Lean.Pretty         (anonymizeUnusedPiBinders)
 
 import           SAWCore.Name
 import           SAWCore.Recognizer
@@ -343,18 +344,39 @@ leanPiSpineBinderTypes _ = []
 --
 --  2. The ANONYMITY test would miss a NAMED folded hypothesis.
 --     @sequentToProp@ cannot produce one (@scFun@ is non-dependent),
---     so this is closed against the sequent route specifically; a
---     future route that names a hypothesis binder would escape.
---     Measured narrower than it first looks (2026-07-30): the
---     carrier is not ADDRESSABLE from SAWCore — @parse_core
---     "Except"@ fails with @Unbound name: Except@ — so a user
---     cannot hand-write a SAWCore term whose named binder mentions
---     it. Every carrier mention in a goal is introduced by this
---     translator's own value wrapping, and the wrapping names a
---     binder only when the SAWCore Pi it images is dependent, i.e.
---     a quantified VALUE. An escape therefore needs a new
---     TRANSLATOR route that both names hypothesis binders and wraps
---     them — a change in this codebase, not a reachable input.
+--     so that route is closed; a route that NAMES a hypothesis
+--     binder escaped — and one existed.
+--
+--     WAS (2026-07-30, FALSIFIED 2026-07-31): "Measured narrower
+--     than it first looks: the carrier is not ADDRESSABLE from
+--     SAWCore — @parse_core "Except"@ fails — so a user cannot
+--     hand-write a named binder mentioning it. Every carrier
+--     mention is introduced by this translator's own value
+--     wrapping, and the wrapping names a binder only when the
+--     SAWCore Pi it images is DEPENDENT, i.e. a quantified VALUE.
+--     An escape therefore needs a new TRANSLATOR route."
+--
+--     The measurement was real and its FIRST clause holds. The
+--     second clause was never measured, and is false: the Lean
+--     binder name is copied from the SAWCore @VarName@
+--     (@Convention.withSAWVar@) whether or not the Pi is dependent,
+--     and @parse_core@ preserves a hand-written name. So
+--     @prove_core (offline_lean …) "(h : EqTrue …) -> EqTrue …"@
+--     names a NON-dependent hypothesis binder, the translator wraps
+--     it into a carrier equation exactly as clause 1 concedes, and
+--     TEST 1 exempted it. Demonstrated end-to-end 2026-07-31: SAW
+--     proves the hypothesis and refutes the conclusion (so the
+--     obligation is FALSE), the emitted goal is provable in Lean
+--     with @[propext, Quot.sound]@ — both ALLOWLISTED — so replay
+--     would have issued evidence for a false claim. In-model
+--     CRITICAL; the anonymous spelling of the same goal was
+--     refused, which is what made the asymmetry invisible.
+--
+--     CLOSED by making the gate inspect the binders the printer
+--     emits (see 'goSpine'): the printer already anonymizes
+--     named-but-unused binders, so gate and artifact can no longer
+--     disagree. Pinned by
+--     @saw-boundary/goal_named_hypothesis_binder@.
 --
 --  3. The VALUE-IMAGE test's failure direction is ADMISSION, not
 --     refusal: a false positive from 'isExceptStringType' here
@@ -366,7 +388,18 @@ leanPiSpineBinderTypes _ = []
 leanExceptCarriedGoalBinders :: Lean.Term -> [String]
 leanExceptCarriedGoalBinders = goSpine
   where
-    goSpine (Lean.Pi bs t)          = concatMap piBinder bs ++ goSpine t
+    -- Inspect the binders the PRINTER EMITS, not the ones the AST
+    -- happens to carry (W2-UNRUN-2 re-score fix, 2026-07-31; see
+    -- limit 2 above for the falsified premise). 'prettyDecl' runs
+    -- 'anonymizeUnusedPiBinders' before printing, so a named-but-
+    -- UNUSED binder ships as a bare arrow; running the same function
+    -- here means TEST 1's anonymity question is asked of the shipped
+    -- text. Direction of the change is proceed -> reject (named
+    -- non-dependent hypotheses now reach TESTs 2/3 instead of being
+    -- exempted), which is the safe direction under contributing.md
+    -- rule C7.
+    goSpine (Lean.Pi bs t)          = concatMap piBinder (anonymizeUnusedPiBinders bs t)
+                                        ++ goSpine t
     goSpine (Lean.Let _ _ _ _ body) = goSpine body
     goSpine _                       = []
 

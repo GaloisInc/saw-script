@@ -17,6 +17,11 @@ absent:saw_unreachable_default
 # shift_l -> shift_r swap must fail HERE, on these two absents)
 contains:addNat
 contains:bit0_macro
+# positional+amount pin (OBL-1 fix audit, LOW residue): the shift
+# constant's tail immediately followed by the INDEX — kills both the
+# wrong-amount (4 = nested bit0 adds a paren) and dropped-index
+# mutants the audit built against the token-only positives.
+contains-normalized:bit0_macro CryptolToLean.SAWCorePrimitives.one_macro)) i)
 absent:atWithDefaultM
 absent:subNat
 absent:streamScanl

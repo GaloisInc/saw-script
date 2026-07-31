@@ -152,9 +152,27 @@ clause did NOT fire — but clauses 1 and 2 fail on BOOKKEEPING:
      the demonstrated shift_l→shift_r mutation, which now fails
      on `absent:atWithDefaultM`/`absent:subNat`). All five rows
      green through the real harness.
-  2. **W2-UNRUN-2 — threat-model re-score executed** (opus pass,
-     result recorded below in this section when it lands / at the
-     item's own entry).
+  2. **W2-UNRUN-2 — re-score DONE 2026-07-31, and it found a LIVE
+     in-model CRITICAL behind the filed item. THE RELEASE WAS
+     BLOCKED; the defect is now FIXED AND PINNED.** The filed
+     `FpOther` blindness is only LOW coverage debt (0.03 carry,
+     pin sketch at its entry). The live defect was gate 3's TEST 1
+     exempting every NAMED binder: `(h : EqTrue …) -> …` via
+     `parse_core`/`prove_core` emitted while the identical
+     anonymous goal was refused. Verified independently end-to-end
+     at the pre-fix HEAD: SAW proves the hypothesis and refutes
+     the conclusion (obligation FALSE), the emitted goal proves in
+     Lean with `[propext, Quot.sound]` — both ALLOWLISTED — so
+     replay would have issued evidence for a false claim. FIX: the
+     gate now runs the printer's own `anonymizeUnusedPiBinders`
+     before TEST 1's anonymity question, so it inspects the
+     binders the artifact ships (proceed → reject; C7-safe
+     direction). PIN: `saw-boundary/goal_except_carried_binder_refusal/`
+     `except_carried_named_hypothesis`, with the stated mutation.
+     Over-refusal checked: named-dependent and named-unused VALUE
+     binders still emit. Root-cause analysis (the §5 failure
+     clause deliverable): `doc/2026-07-31_why-gate3-escaped.md`;
+     new rule C8 governs limit-narrowing.
   3. **F11** — USER-ACCEPTED explicit 0.03 carry (architecture.md
      module-map completeness; doc-only).
   4. **LIB-W2-3** — USER-ACCEPTED explicit 0.03 carry, with the
@@ -1015,11 +1033,22 @@ finding is how a ledger accumulates fiction.
   (`unsafeAssert`, `error`, `fix`, `MkStream`, `if0Nat`, `natCase`,
   `coerce`) by running an unapplied occurrence of each. Five reject
   loudly. `coerce` EMITS — see the new open item below.
-- [ ] **W2-UNRUN-2 (HIGH)** — the telescope pin's binder-TYPE half
-  has zero teeth on hypothesis binders: a Prop-typed binder
-  fingerprints `FpOther` and `telescopeFpMismatch` skips any position
-  where either side is `FpOther`. Only the ARITY half has teeth
-  there — which is exactly what refused my B2 attempts.
+- [ ] **W2-UNRUN-2 — RE-SCORED 2026-07-31: HIGH → LOW (coverage
+  debt, 0.03 carry). The re-score's real product was a separate
+  live CRITICAL, now fixed — see the WAVE 5 section.** The filed
+  defect stands and is live: the telescope pin's binder-TYPE half
+  has zero teeth on hypothesis binders — a Prop-typed binder
+  fingerprints `FpOther` on BOTH sides (`sawBinderFp` has no Prop
+  arm; `leanBinderFp` heads at `Eq`) and `telescopeFpMismatch`
+  skips any position where either side is `FpOther`, so only the
+  ARITY half has teeth there. Sharpened by the re-score: the
+  fingerprint alphabet cannot EXPRESS a Prop-binder mismatch at
+  all, so giving this half teeth would not have caught
+  W2-UNRUN-1 and closes nothing by itself. In-model (a gate
+  checking less than its text implies), not an evasion route, no
+  constructible defect behind it once gate 3 is fixed — LOW.
+  0.03 pin sketch: a Prop-vs-value position fingerprint, pinning
+  only that a hypothesis STAYS a hypothesis (never its vacuity).
 - [x] **OBL-1 / OBL-2 (re-scored MEDIUM by wave 3; FIXED AND
   PINNED 2026-07-31, fast path)** — five stream-helper obligation
   rows shared one byte-identical `expected.txt` naming no stream
@@ -1281,14 +1310,24 @@ because this project has shipped vacuous pins repeatedly.
   worth holding) with a required diagnostic so it pins its own
   message, and with the claim it cannot support removed from its
   comment. **F8b — CLOSED AS UNCONSTRUCTIBLE 2026-07-31 (the F-9
-  treatment; user-accepted, fast path).** The owed pin's triggering
-  `.saw` script provably cannot be written: the emitter refuses the
-  shape before the pinned surface is reachable, so the pin would
-  test a state the pipeline cannot produce. The refusal itself IS
-  the guard, and it is upstream of the surface the pin was ordered
-  for. Recorded rather than carried: an unconstructible obligation
-  in the ledger reads as open debt and distorts the clause-2
-  census (wave-5 critic's sweep counted it).
+  treatment; user-accepted fast path — provenance note: the
+  clause-2 list proposed "0.03 carry" while this entry's own text
+  already said "close it with the F-9 treatment"; the fast-path
+  message put the closure option to the user explicitly and the
+  closure is what was executed — its own fix audit flagged the
+  mismatch, recorded here).** The owed pin's triggering `.saw`
+  script cannot be written FOR ANY EMISSION SHAPE REACHABLE TODAY:
+  the emitter refuses the shape before the pinned surface is
+  reachable (confidence medium per the source audit — "escapes the
+  goal-def detection" is an open-ended predicate, not a proof).
+  The refusal is upstream of the surface the pin was ordered for
+  and is itself pinned (kernel-selftest univgoal;
+  `saw-boundary/goal_sort_binder_rejection`). RE-OPEN TRIGGER:
+  relaxing the universe gate makes the row possible and required
+  (A-9 convention). Canonical owed-pins row (i) struck with the
+  same text. Recorded rather than carried: an unconstructible
+  obligation in the ledger reads as open debt and distorts the
+  clause-2 census.
 
 ### MEDIUM / LOW
 
@@ -2150,9 +2189,21 @@ until (a).**
   green).
 - [ ] **OWED (re-opened 2026-07-29 by the session audit): three
   pins this ledger wrongly recorded as covered.**
-  (i) An **A-2** runtime row on the PLAIN path (a goal whose emitted
-  form escapes the goal-def detection), since the completed-outline
-  row cannot reach that branch. (ii) An **A-6** lint self-test that
+  (i) ~~An **A-2** runtime row on the PLAIN path~~ **CLOSED AS
+  UNCONSTRUCTIBLE 2026-07-31 (= F8b; this row and the F8b entry
+  are the same obligation — the OBL-1 fix audit caught this
+  canonical row left open after the F8b entry closed).** Do NOT
+  try to build this row: the only way to make it "work" is to
+  weaken the emitter gate that closes A-2. The runtime shape is
+  unreachable for every emission shape reachable TODAY because the
+  emitter refuses it first (confidence medium, per the source
+  audit — "escapes the goal-def detection" is an open-ended
+  predicate, not a proof); the refusal itself is pinned by
+  `replay-kernel-selftest.sh`'s univgoal case and
+  `saw-boundary/goal_sort_binder_rejection`. RE-OPEN TRIGGER: a
+  row becomes possible AND required if the universe gate is ever
+  relaxed (same convention as A-9's stub-site note).
+  (ii) An **A-6** lint self-test that
   actually distinguishes the `gsub` guillemet-stripping fix, with a
   required diagnostic (today's case passes on any rejection and is
   byte-identical with the fix removed). (iii) An **A-5** runtime row:

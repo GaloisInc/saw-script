@@ -14,6 +14,8 @@ absent:mkStreamFix
 absent:saw_unreachable_default
 # operation pin: shift-right by 2 — bounded lookback with default fill
 contains:atWithDefaultM
-contains-normalized:subNat i
+# positional+amount pin (OBL-1 fix audit): the full lookback
+# subtraction including the constant — a respelled amount fails here.
+contains-normalized:subNat i (CryptolToLean.SAWCorePrimitives.natPos_macro (CryptolToLean.SAWCorePrimitives.bit0_macro CryptolToLean.SAWCorePrimitives.one_macro))
 contains:genWithBoundsM
 absent:streamScanl

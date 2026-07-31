@@ -15,7 +15,15 @@ Pretty printer for "Language.Lean.AST". Structured as a mirror of
 alongside each diverging case.
 -}
 
-module Language.Lean.Pretty (prettyDecl) where
+-- 'anonymizeUnusedPiBinders' is exported (2026-07-31, W2-UNRUN-2
+-- re-score) so the goal-shape gate can inspect the binders this
+-- printer ACTUALLY EMITS. Gate 3 previously exempted every NAMED
+-- domain, while this function silently anonymizes named-but-unused
+-- ones — so the gate and the shipped artifact disagreed about which
+-- binders are anonymous, and a named non-dependent hypothesis
+-- escaped the gate while printing as a bare arrow. Sharing the
+-- predicate makes that disagreement unrepresentable.
+module Language.Lean.Pretty (prettyDecl, anonymizeUnusedPiBinders) where
 
 import Data.List (isInfixOf)
 import Prettyprinter

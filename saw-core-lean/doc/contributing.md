@@ -234,6 +234,24 @@ Two further rules apply to what a check may *rely on*:
    outcome classes from reject to proceed and was refuted end-to-end
    — this rule is written to catch both directions.
 
+8. **Narrowing a stated limit (C8, 2026-07-31 — the gate-3
+   escape).** A guard's written limit may be narrowed only by a
+   measurement whose SCOPE is stated relative to the claim it
+   supports, and every clause of the narrowing argument must be
+   independently checkable. Where a clause is an assumption about
+   our own pipeline's behavior (where binder names come from, what
+   the printer emits, which shapes a builtin admits), say so
+   explicitly — an assumption inside a soundness argument is a PIN
+   obligation, not a comment. Provenance: gate 3's limit 2 was
+   narrowed by a real measurement (`parse_core "Except"` fails)
+   that answered a different question than the conclusion drawn
+   from it; the unmeasured second clause was false, and the
+   partial measurement converted an open question into a closed
+   one for three subsequent audit waves. A partially-measured
+   limit is more dangerous than an unmeasured one, because readers
+   correctly treat measurements as settled.
+   See `doc/2026-07-31_why-gate3-escaped.md`.
+
 ### Closing a defect class (the enumeration rule)
 
 When a fix closes a *class* of defects — not just the instance an
