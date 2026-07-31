@@ -668,7 +668,7 @@ emitted goal must compile (dropped binders cannot). (An
 anti-trivialization probe — an over-reduction guard rejecting
 goals closable by rfl/trivial — existed here 2026-07-24 to
 2026-07-31 and was DELETED by the kernel design review, user
-decision; the residual it leaves is §3.2e.) LeanReplayEvidence is
+decision; the residual it leaves is §3.2f.) LeanReplayEvidence is
 a NON-RECHECKABLE
 trust token: checkEvidence verifies sequent subsumption only; the
 recorded toolchain/hashes/axiom list document the one-shot kernel
@@ -856,7 +856,7 @@ library) in the design-scrutiny doc. This entry closes (and the
 README flag comes down) when that carrier lands and the pin row
 flips from known-gap to true differential coverage.
 
-### 3.2e Goal-formation trivialization at replay time (2026-07-31,
+### 3.2f Goal-formation trivialization at replay time (2026-07-31,
 gate deleted by design review — user decision)
 
 The anti-trivialization gate (a replay-time probe asking whether

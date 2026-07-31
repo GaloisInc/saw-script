@@ -119,7 +119,7 @@ goal's statement value). Four amendments:
    `doc/2026-07-31_kernel-design-review.md` §3.1 Option B; its
    decoder could not be kept honest through three audit rounds. The
    goal-formation amplification this paragraph names is now a
-   DOCUMENTED residual, residual-trust.md §3.2e, defended by the
+   DOCUMENTED residual, residual-trust.md §3.2f, defended by the
    differential corpus at development time and goal visibility at
    discharge time.)*
 2. **(Env re-pinning; contains the real import-shadowing hole.)**

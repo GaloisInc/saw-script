@@ -192,7 +192,7 @@ expect_fail anon no-named-closer
 # anti-trivialization gate itself — user decision, design review
 # doc/2026-07-31_kernel-design-review.md §3.1 Option B. Their
 # subject tokens no longer exist; the residual is documented at
-# residual-trust.md §3.2d.)
+# residual-trust.md §3.2f.)
 
 # --- sorry-in-user-file.
 mk usersorry; real_goal > "$STAGE_ROOT/usersorry/Emitted.lean"

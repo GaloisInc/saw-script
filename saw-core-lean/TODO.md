@@ -670,7 +670,7 @@ entries.
   could not be kept small-and-honest). The fail-open defect this
   entry closed cannot recur because the mechanism no longer
   exists; the class it guarded is now the DOCUMENTED residual at
-  residual-trust.md §3.2e, and contributing.md rule C7 governs any
+  residual-trust.md §3.2f, and contributing.md rule C7 governs any
   re-entry. trivgoal/trivgoal_deep retired with it; the denylist
   no-live-row item (R5-RES-11) and the future-phrasing sliver
   dissolve.

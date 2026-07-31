@@ -322,7 +322,7 @@ done
 # three same-day audit rounds and could not be kept small-and-
 # honest — the courtesy-layer condition the threat model sets. The
 # residual it leaves is DOCUMENTED, not silent:
-# residual-trust.md §3.2e (trivialized-emission admission requires
+# residual-trust.md §3.2f (trivialized-emission admission requires
 # an emitter bug AND an unnoticed discharge of a goal that visibly
 # says True; development-time defense is the differential corpus).
 # Do not reintroduce a message-parsing discriminator here — see
