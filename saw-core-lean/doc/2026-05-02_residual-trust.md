@@ -880,17 +880,29 @@ remains for this class: the binding check honestly binds the
 trivialized goal, the drift check compares two outputs of the same
 emitter, and the axiom audit sees a clean `rfl`.
 
-What defends the class instead:
+What defends the class instead — with each defense's limit stated
+(deletion-audit F-B: the defenses must not read stronger than the
+decision they record):
 1. Development time: the differential/conformance corpus — an
    emitter change that over-reduces breaks evaluation-comparison
-   and emission-golden rows before it ships.
-2. Discharge time: the goal is VISIBLE. A trivialized goal reads
-   `def goal : Prop := True` (or an evaluated closed equation) in
-   the Emitted.lean the user must open to discharge. The residual
-   is precisely the rubber-stamp case — automation or inattention
-   discharging without reading.
-3. The admission requires the CONJUNCTION of an in-model backend
-   error and that unnoticed discharge.
+   and emission-golden rows before it ships. LIMIT: the corpus
+   defends corpus rows. `offline_lean_replay`'s product use is
+   NOVEL goals — exactly the set the corpus cannot reach. The
+   design review stated this as the accepted cost verbatim:
+   "replay-time defense-in-depth for NOVEL user goals — the one
+   place the corpus cannot reach — is gone."
+2. Discharge time: the goal is often visible. A trivialized goal
+   may read `def goal : Prop := True` in the Emitted.lean the user
+   opens to discharge. LIMIT: visibility is not guaranteed — the
+   demonstration that decided the deletion was a goal trivial only
+   under DEEP EVALUATION (`(List.replicate 100000 true).length =
+   100000`-shape), which READS as a substantive claim; an attentive
+   reader can be defeated by an unreadable trivialization, so the
+   residual is broader than the rubber-stamp case.
+3. The admission still requires the CONJUNCTION of an in-model
+   backend error and a discharge of the trivialized goal — but per
+   limits 1 and 2, neither conjunct is independently guarded on the
+   novel-goal path.
 
 This is the D2 pattern deliberately repeated: scope reduction plus
 honest documentation, chosen over a hardened text discriminator

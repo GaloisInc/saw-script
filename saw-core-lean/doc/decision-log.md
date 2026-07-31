@@ -163,3 +163,20 @@ in the 2026-07-17 doc reorganization.
   risk. K-2 is cut down to its in-model residue, the ~3-line C3
   fail-closed fix: `verify_unchanged` must FAIL when a staged file
   has vanished. Path-latching is dropped with the rest.
+
+- [x] DELETE the anti-trivialization gate (D5, 2026-07-31, user
+  decision — "we want a clean design rather than something fancy
+  that itself is a source of bugs … delete it"). The gate was a
+  replay-time text-discriminated negative probe outside the threat
+  model's load-bearing list whose accept-condition decoder went
+  through three same-day audit rounds (fail-open → position check →
+  refutation allowlist → allowlist + give-up denylist), each
+  refuting the last — the empirical proof it could not be kept
+  "small enough to be kept honest". Deleted whole per the kernel
+  design review (`2026-07-31_kernel-design-review.md` §3.1 Option
+  B, adversarially reviewed, both options presented); the residual
+  — a trivialized emission discharged unnoticed is admitted, and
+  the accepted cost includes NOVEL replay goals the corpus cannot
+  reach — is cataloged at residual-trust.md §3.2f. Companion rule
+  C7 (contributing.md) governs any re-entry: emission-side
+  structural check, never a replay-side message parser.

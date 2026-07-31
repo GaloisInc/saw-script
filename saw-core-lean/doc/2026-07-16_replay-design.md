@@ -264,12 +264,15 @@ Recorded deviations for the reviewer:
    the product path had it wrong, so for that check the product was
    the looser consumer.
 
-   What actually bounds the risk today, stated as a claim that can be
+   What actually bounded the risk, stated as a claim that could be
    checked rather than a discipline: a trivializing emitter change
    turns the corresponding workflow golden red before the missing CI
-   probe would have fired. That is a real backstop for THIS guard and
-   an argument that must be re-made per guard — which is why the
-   rebase, not the discipline, is the fix. Tracked in TODO.md.
+   probe would have fired. (Past tense as of 2026-07-31: the guard
+   this paragraph argued about was deleted — design review §3.1
+   Option B — so the corpus backstop described here is now the
+   PRIMARY development-time defense, residual-trust §3.2f, and the
+   per-guard argument survives as the general lesson: backstop
+   arguments must be re-made per guard. Rebase tracking in TODO.md.)
 3. Reject-row v1 subset: sorry + axiom-introduce (the allowlist line
    that also catches native_decide's ofReduceBool). Env-overriding,
    stale-drift, timeout, and name-rebind rows deferred with the

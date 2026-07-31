@@ -202,12 +202,24 @@ never quietly become "ignore the answer".
 
 ## 5. End state (honest arithmetic)
 
-Under Option B + deferrals: kernel CODE ≈ 232 → ~185 (below the
-D2 baseline of 216), tokens 32 → 30, kernel cases 24 → 21, both
-regexes gone, zero text coupling to tool output anywhere in the
-trust path — with the residual documented, the rule of §3.3 in
-force, and the [K]+[M] core byte-unchanged. Under Option A:
-CODE-neutral, tokens unchanged, correctness improved; the first
-draft's "back at-or-below D2 baseline" claim is unreachable and
-withdrawn. Either way: one sweep + one focused audit of the
-change, then the release decisions.
+AS PREDICTED (Option B): kernel CODE ≈ 232 → ~185 (below the D2
+baseline of 216), tokens 32 → 30, cases 24 → 21, both regexes
+gone, zero text coupling to tool output anywhere in the trust
+path.
+
+AS MEASURED after implementation (deletion-audit F-D/F-E — this
+section's predictions are corrected, not quietly restated): kernel
+CODE 232 → **219** (the ~50 deleted lines were mostly comments,
+which CODE does not count — the D2 baseline of 216 was NOT
+reached); tokens 33 → **31** (this doc's 32 base used a different
+counting rule); cases 24 → **22** (the gate had two cases, not the
+three §3.1 claimed). Both ACCEPT-direction regexes are gone; the
+honest coupling claim is: **zero error-message text in any accept
+condition** — three reject-direction `error`-marker greps remain
+(drift, elaboration, binding), which can only tighten. Residual
+documented (§3.2f), rule C7 in force, [K]+[M] core byte-unchanged,
+full sweep green at the deletion commit, execution-fidelity audit
+run per C7's own requirement. Under Option A the end state would
+have been CODE-neutral with correctness improved. Either way the
+first draft's "back at-or-below D2 baseline" claim was unreachable
+and is withdrawn.

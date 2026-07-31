@@ -61,8 +61,11 @@ trap 'rm -rf "$STAGE_ROOT"' EXIT
 status=0
 SELFTEST_PINNED=""
 
-# A goal that is real (not rfl/trivial-closable, so it survives the
-# anti-trivialization gate) and easy to prove honestly.
+# A goal that is real (a genuine ∀-shape, not a collapsed
+# computation) and easy to prove honestly. (Its earlier rationale —
+# "survives the anti-trivialization gate" — named a gate deleted
+# 2026-07-31, design review §3.1 Option B; the shape stays because
+# an honest control goal should look like real emitted goals.)
 real_goal() {
     cat <<'EOF'
 import CryptolToLean
