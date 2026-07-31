@@ -455,9 +455,37 @@ leanExceptCarriedGoalBinders = goSpine
     -- SAWCore-side, where "is this domain a Prop" is unambiguous,
     -- instead of recovering it from the Lean image. Error lives
     -- where meaning is constructed.
-    piBinder (Lean.PiBinder _ _ ty)
-      | isExceptStringType (finalCodomain ty) = []
+    -- FOURTH CUT (2026-07-31): exempting a binder must NOT abandon
+    -- the walk. Cut 3 returned [] for any type whose finalCodomain
+    -- was carrier-headed, on the argument "it delivers a value, and
+    -- every such image is inhabited, so it cannot make the
+    -- implication vacuous". True — and IRRELEVANT: vacuity is not
+    -- the only way to be weaker. For a binder typed
+    -- @P -> Except String A@ the peeled codomain is a value, so cut 3
+    -- exempted the binder and never looked at @P@ — the binder's own
+    -- DOMAIN, which is a hypothesis position. With @P@'s image
+    -- uninhabited the LEAN function space collapses to one element
+    -- while the SAWCore one has many, so the emitted @forall@ ranges
+    -- over FEWER inhabitants: weaker, not stronger. Demonstrated
+    -- end-to-end (the audit ran it through @offline_lean_replay@,
+    -- which ISSUED LeanReplayEvidence for a false obligation):
+    -- @(g : EqTrue P -> Bool) -> (h : EqTrue P -> Bool) -> Eq _ g h@.
+    --
+    -- So classification is now RECURSIVE and uniform: at every Pi
+    -- level, what the type ultimately DELIVERS may be a value, but
+    -- each domain it consumes is itself a position to classify. Only
+    -- a final codomain is exempt; nothing is skipped.
+    piBinder (Lean.PiBinder _ _ ty) = classifyGoalDomain ty
+
+    classifyGoalDomain ty
+      | isExceptStringType (finalCodomain ty) =
+          concatMap classifyGoalDomain (piSpineDomains ty)
       | otherwise = map (\s -> "_ : " ++ s) (goTy ty)
+
+    -- Every domain in a Pi spine, at every level.
+    piSpineDomains (Lean.Pi bs b) =
+      [ t | Lean.PiBinder _ _ t <- bs ] ++ piSpineDomains b
+    piSpineDomains _ = []
 
     -- Peel every Pi layer; what remains is what the domain ultimately
     -- delivers.
