@@ -1,6 +1,19 @@
+# OBL-1 fix (2026-07-31, user-directed fast path): these five
+# stream-helper rows shared one byte-identical directive set that
+# named no stream operation — a demonstrated emitter mutation
+# (shift-left -> shift-right) passed every directive. Each row now
+# also pins its OPERATION by the lowered structure (not the probe
+# name, which an emitter mutation would keep), chosen so every
+# row's set FAILS on the other four rows' emissions (cross-matrix
+# verified at introduction).
 contains:saw_mkStream_total_exists
 contains:saw_mkStream_choose
 contains:h_mkStream_total_obligation_
 contains:h_mkStream_total_
 absent:mkStreamFix
 absent:saw_unreachable_default
+# operation pin: shift-right by 2 — bounded lookback with default fill
+contains:atWithDefaultM
+contains-normalized:subNat i
+contains:genWithBoundsM
+absent:streamScanl

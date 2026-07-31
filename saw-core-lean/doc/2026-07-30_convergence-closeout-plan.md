@@ -156,6 +156,28 @@ merge/CI (user decision). The declaration itself is therefore a
 user call: accept the dispositions (with or without the OBL-1 pin),
 settle clause 1's strict-vs-remediated reading, merge, observe CI.
 
+**§5 state update, 2026-07-31 (user fast-path decision — "I agree
+with your recommendations, go ahead with the fast path"):**
+- Clause 1 — USER-ACCEPTED reading (i): satisfied-by-remediation.
+  Wave 5's one MEDIUM was fixed, swept, and audited the same
+  evening it was reported; the consistency agent's calibration
+  note (the MEDIUM was the outlier against the same-class LOW)
+  stands on record; the failure clause never fired. Recorded here
+  so the reading is a decision, not a drift.
+- Clause 2 — dispositions accepted and executed: OBL-1
+  fixed-and-pinned (differentiated goldens, cross-matrix
+  verified); F8b closed as unconstructible (F-9 treatment); F11,
+  LIB-W2-3, F12-successor accepted as explicit 0.03 carries;
+  W2-UNRUN-2 threat-model re-score commissioned (result at its
+  ledger entry). Clause 2 is MET when that re-score's disposition
+  lands.
+- Clause 3 — to be re-established by a fresh full sweep at the
+  release commit (this update and the fixes move it).
+- Clause 4 — merge first, then the REMOTE CI run (user-confirmed:
+  the GitHub Actions run, not a local one — nothing local can
+  satisfy the clause, answer the W5-2 history question, or
+  exercise the runner-built bindist).
+
 ## Standing constraints for the arc
 
 Per-fix opus audits; no `cabal build` while a suite runs; kernel

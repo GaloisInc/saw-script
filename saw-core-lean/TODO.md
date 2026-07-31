@@ -141,26 +141,33 @@ clause did NOT fire — but clauses 1 and 2 fail on BOOKKEEPING:
   recorded in the report, not adjudicated.
 - **Clause 2**: the critic's ledger sweep found six in-model
   MEDIUM+ items with neither fix-and-pin nor user-accepted
-  disposition. **PROPOSED dispositions — AWAITING USER
-  ACCEPTANCE** (per the clause's own wording, these are not
-  self-acceptable):
-  1. **OBL-1** (MEDIUM, live: five byte-identical `expected.txt`,
-     mutation-demonstrated) — PROPOSE: fix-and-pin in the 0.02
-     remediation (the critic's read: the only survivor with a
-     demonstrated mutation deserves the pin, not a carry).
-  2. **W2-UNRUN-2** (labeled HIGH pre-threat-model, FpOther
-     blindness live at `Signature.hs`) — PROPOSE: threat-model
-     re-score (same treatment the wave-3 SHOULD FIX list got);
-     it predates the model and has never been scored under it.
-  3. **F11** (MEDIUM, partial — architecture.md module map names
-     2 of 12 modules) — PROPOSE: explicit 0.03 carry.
-  4. **LIB-W2-3** (MEDIUM — Rational value-collapse loudness pin
-     owed) — PROPOSE: explicit 0.03 carry (LOUD today only by
-     accident of `Rat` division not kernel-reducing; the pin is
-     the 0.03 item).
-  5. **F8b** (MEDIUM) — PROPOSE: explicit 0.03 carry.
-  6. **F12 successor** (MEDIUM, `[~]`) — PROPOSE: explicit 0.03
-     carry.
+  disposition. **DISPOSITIONS ACCEPTED BY THE USER 2026-07-31**
+  ("I agree with your recommendations, go ahead with the fast
+  path"), executed same day:
+  1. **OBL-1 — FIXED AND PINNED.** The five stream-helper rows'
+     byte-identical directive sets are differentiated: each now
+     pins its OPERATION by lowered structure (not probe name),
+     with a cross-matrix introduction check (every set accepts
+     only its own emission — all 20 cross-pairs fail, including
+     the demonstrated shift_l→shift_r mutation, which now fails
+     on `absent:atWithDefaultM`/`absent:subNat`). All five rows
+     green through the real harness.
+  2. **W2-UNRUN-2 — threat-model re-score executed** (opus pass,
+     result recorded below in this section when it lands / at the
+     item's own entry).
+  3. **F11** — USER-ACCEPTED explicit 0.03 carry (architecture.md
+     module-map completeness; doc-only).
+  4. **LIB-W2-3** — USER-ACCEPTED explicit 0.03 carry, with the
+     recorded risk note: LOUD today only by accident of `Rat`
+     division not kernel-reducing; the loudness pin is the 0.03
+     item, and a toolchain that makes `Rat` reduce removes the
+     accident with nothing watching.
+  5. **F8b — CLOSED AS UNCONSTRUCTIBLE** (the F-9 treatment; the
+     triggering script cannot be written because the emitter
+     refuses the shape upstream).
+  6. **F12 successor** — USER-ACCEPTED explicit 0.03 carry (joins
+     the lint-token collapse and the doc-claim-lint mechanism in
+     the 0.03 harness rework).
 - **Clause 3**: green by inheritance at 237310fda; per-commit —
   re-sweep owed at the post-remediation release commit.
 - **Clause 4**: pending merge/CI (user decision).
@@ -1013,10 +1020,15 @@ finding is how a ledger accumulates fiction.
   fingerprints `FpOther` and `telescopeFpMismatch` skips any position
   where either side is `FpOther`. Only the ARITY half has teeth
   there — which is exactly what refused my B2 attempts.
-- [ ] **OBL-1 / OBL-2 (HIGH)** — five stream-helper obligation rows
-  share one byte-identical `expected.txt` naming no stream operation;
-  a shift-left→shift-right mutation passes all six directives.
-  Coverage debt against a defect that does not exist today.
+- [x] **OBL-1 / OBL-2 (re-scored MEDIUM by wave 3; FIXED AND
+  PINNED 2026-07-31, fast path)** — five stream-helper obligation
+  rows shared one byte-identical `expected.txt` naming no stream
+  operation; a shift-left→shift-right mutation passed all six
+  directives. Now differentiated per operation by lowered
+  structure with a verified cross-matrix (each set accepts only
+  its own emission); the demonstrated mutation fails on the
+  shift_l row's new absents. (OBL-2 was the phantom duplicate,
+  removed by wave 3.)
 - [ ] **LIB-W2-2 (HIGH)** — `unsafeAssertProofScript`'s stated
   guarantee is not met wherever the two operands are defeq for a
   reason other than being the same assertion; LIB-W2-1 is the live
@@ -1268,11 +1280,15 @@ because this project has shipped vacuous pins repeatedly.
   Disposition: KEPT (rejecting the escaped spelling is a real property
   worth holding) with a required diagnostic so it pins its own
   message, and with the claim it cannot support removed from its
-  comment. **F8b (MEDIUM)** — owed-pin (i) unconstructible — remains
-  open below.
-  **F8b (MEDIUM):** owed-pin (i) is unconstructible as specified —
-  no `.saw` script can build it because the emitter refuses the shape
-  first. Close it with the F-9 treatment.
+  comment. **F8b — CLOSED AS UNCONSTRUCTIBLE 2026-07-31 (the F-9
+  treatment; user-accepted, fast path).** The owed pin's triggering
+  `.saw` script provably cannot be written: the emitter refuses the
+  shape before the pinned surface is reachable, so the pin would
+  test a state the pipeline cannot produce. The refusal itself IS
+  the guard, and it is upstream of the surface the pin was ordered
+  for. Recorded rather than carried: an unconstructible obligation
+  in the ledger reads as open debt and distorts the clause-2
+  census (wave-5 critic's sweep counted it).
 
 ### MEDIUM / LOW
 
