@@ -359,15 +359,14 @@ DEMO-8 closed — caught by the wave-5 critic, gap 4):
   installer produces the partial install, R5-RES-9). ~~SHIP-6~~
   CLOSED as already-catalogued (verbatim in residual-trust §3.2c,
   R5-RES-10).
-- From this arc's own audits (wave-5 adjudicated): triviality
-  denylist future-phrasing sliver INFO + the denylist has NO live
-  selftest row (R5-RES-11 — trivgoal_deep fails the allowlist on
-  its own; the denylist's evidence is the recorded hand-mutation);
-  `:(glob)` red-direction row INFO (semantics now observed, value
-  bounded by the no-subdir precondition, R5-RES-12);
-  elan-download-inside-120s-cap LOW (R5-RES-13: real for a
-  first-run bindist user, not CI); trivgoal_deep harm story CLOSED
-  (demonstrated, R5-RES-14).
+- From this arc's own audits (wave-5 adjudicated): ~~triviality
+  denylist future-phrasing sliver + no-live-row (R5-RES-11)~~
+  DISSOLVED 2026-07-31 — the gate was deleted (design review
+  Option B, user decision); `:(glob)` red-direction row INFO
+  (semantics now observed, value bounded by the no-subdir
+  precondition, R5-RES-12); elan-download-inside-120s-cap LOW
+  (R5-RES-13: real for a first-run bindist user, not CI);
+  ~~trivgoal_deep harm story (R5-RES-14)~~ moot with the gate.
 - Wave-5 delta-lane LOW/INFO, 0.03 carries: DC5-2 (deleted
   `Generated.lean` rejects under the caller-contract token, not
   the deletion token — fail-closed, wrong name); DC5-3
@@ -662,8 +661,19 @@ entries.
   after the launder channel (SynthInstance rethrow;
   nested-error formatting) was proven from Lean's source —
   denylist evidence is a hand-mutation (no live row; R5-RES-11).
-  Final state: `lean-check-core.sh` accept = allowlist AND NOT
+  Final state as of the close-out arc: accept = allowlist AND NOT
   denylist; kernel selftest ALL CASES OK.
+  **FINAL SUPERSESSION 2026-07-31: the GATE ITSELF WAS DELETED**
+  (user decision, kernel design review
+  `doc/2026-07-31_kernel-design-review.md` §3.1 Option B — three
+  decoder rounds in one day were the empirical proof the check
+  could not be kept small-and-honest). The fail-open defect this
+  entry closed cannot recur because the mechanism no longer
+  exists; the class it guarded is now the DOCUMENTED residual at
+  residual-trust.md §3.2e, and contributing.md rule C7 governs any
+  re-entry. trivgoal/trivgoal_deep retired with it; the denylist
+  no-live-row item (R5-RES-11) and the future-phrasing sliver
+  dissolve.
 - [ ] **Gate-path divergences (13 confirmed) — RE-SCORED 2026-07-30
   (close-out arc step 2): in-model tool-failure class, one
   divergence FIXED, remainder dispositioned-not-refactored.** The

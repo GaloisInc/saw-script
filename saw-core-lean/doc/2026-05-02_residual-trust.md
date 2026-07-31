@@ -664,9 +664,12 @@ the SAW-side emission pipeline itself (`propToTerm`, `scPiList`
 free-var abstraction, `scNormalizeForLean`): replay converts an
 emission bug into a false SAW theorem, so goal formation is
 soundness-critical on this path. Mitigations at admission time: the
-emitted goal must compile (dropped binders cannot), and an
-anti-trivialization probe rejects goals closable by rfl/trivial
-(over-reduction guard). LeanReplayEvidence is a NON-RECHECKABLE
+emitted goal must compile (dropped binders cannot). (An
+anti-trivialization probe — an over-reduction guard rejecting
+goals closable by rfl/trivial — existed here 2026-07-24 to
+2026-07-31 and was DELETED by the kernel design review, user
+decision; the residual it leaves is §3.2e.) LeanReplayEvidence is
+a NON-RECHECKABLE
 trust token: checkEvidence verifies sequent subsumption only; the
 recorded toolchain/hashes/axiom list document the one-shot kernel
 check and cannot re-verify it.
@@ -852,6 +855,50 @@ rest on the kernel-checkable element-totality lemma family proposed
 library) in the design-scrutiny doc. This entry closes (and the
 README flag comes down) when that carrier lands and the pin row
 flips from known-gap to true differential coverage.
+
+### 3.2e Goal-formation trivialization at replay time (2026-07-31,
+gate deleted by design review — user decision)
+
+The anti-trivialization gate (a replay-time probe asking whether
+`first | rfl | trivial` closes the emitted goal) was DELETED on
+2026-07-31 (`doc/2026-07-31_kernel-design-review.md` §3.1 Option
+B). Grounds: it was a text-discriminated negative probe outside
+the threat model's load-bearing list (consequence 2 names three
+checks; this was not among them), and it empirically could not be
+kept "small enough to be kept honest" — its accept-condition
+decoder went through three same-day audit rounds (fail-open →
+position check → refutation allowlist → allowlist + give-up
+denylist), each refuting the last, ending coupled to one
+toolchain's error phrasing with an unpinned denylist half.
+
+THE RESIDUAL, stated plainly: if an emission bug trivializes a
+goal (over-reduction collapsing it to `True`/`x = x`-class), and
+the user or their automation discharges that goal WITHOUT noticing
+what it says, replay admits `LeanReplayEvidence` for a claim whose
+SAW meaning was destroyed at emission. No kernel-side check
+remains for this class: the binding check honestly binds the
+trivialized goal, the drift check compares two outputs of the same
+emitter, and the axiom audit sees a clean `rfl`.
+
+What defends the class instead:
+1. Development time: the differential/conformance corpus — an
+   emitter change that over-reduces breaks evaluation-comparison
+   and emission-golden rows before it ships.
+2. Discharge time: the goal is VISIBLE. A trivialized goal reads
+   `def goal : Prop := True` (or an evaluated closed equation) in
+   the Emitted.lean the user must open to discharge. The residual
+   is precisely the rubber-stamp case — automation or inattention
+   discharging without reading.
+3. The admission requires the CONJUNCTION of an in-model backend
+   error and that unnoticed discharge.
+
+This is the D2 pattern deliberately repeated: scope reduction plus
+honest documentation, chosen over a hardened text discriminator
+whose fix-defect rate three audits demonstrated. If the class ever
+demonstrates in practice, the recorded re-entry path is an
+EMISSION-side structural check (where meaning is constructed), not
+a replay-side message parser — see contributing.md's
+courtesy-layer fix rule.
 
 ### 3.3 `scNormalizeForLean` semantics-preservation (Phase 5 Link 2)
 

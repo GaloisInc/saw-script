@@ -316,57 +316,17 @@ for uf in proof.lean completed.lean; do
     fi
 done
 
-# 3. Anti-trivialization (seventh-audit amendment 1): a goal the
-# emission pipeline has trivialized closes by rfl/trivial; reject.
-# (Genuinely trivial user goals are also rejected — loud, and SMT
-# handles those; the pin guards the goal-formation layer.)
-printf 'import Emitted\nexample : goal := by first | rfl | trivial\n' \
-    > "$STAGE/triviality-probe.lean"
-triv_out=$(run_lean "$STAGE/triviality-probe.lean" 2>&1) && triv_rc=0 || triv_rc=$?
-if [ "$triv_rc" -eq 0 ]; then
-    fail "goal-formation-trivial"
-fi
-# CP-3 + K-5 fix (2026-07-30, close-out arc step 2; discriminator
-# TIGHTENED same day by its own fix audit): this probe was
-# fail-OPEN — ANY nonzero exit read as "not trivial", so a probe
-# that never genuinely ran (lean crash, 120s timeout, import
-# failure, OOM) silently waved a possibly-trivialized goal through:
-# tool failure failing open inside the trust kernel, against rule
-# C3. The first fix accepted any failure reported at the probe's
-# own line (triviality-probe.lean:2) — and its audit demonstrated
-# Lean reports resource GIVE-UPS ("maximum recursion depth") at
-# that same position, admitting a goal `rfl` provably closes at a
-# higher depth: exactly the collapsed-computation shape a
-# trivialized emission produces. So the accept condition is now an
-# ALLOWLIST of genuine refutation shapes, measured on the pinned
-# toolchain (v4.32.0: `first | rfl | trivial` refuses with
-# "error: Tactic `assumption` failed"; "unsolved goals" kept as the
-# other refutation family). Anything else — give-ups, warnings-only,
-# import errors (line 1), timeouts, empty transcripts, or a FUTURE
-# TOOLCHAIN'S changed phrasing — fails closed as inconclusive: a
-# deliberate availability-for-soundness trade on a pinned
-# toolchain, where phrasing changes arrive only with deliberate
-# toolchain bumps and their gate sweeps.
-# Second tightening (same day, third fix audit): a give-up can be
-# LAUNDERED behind an allowlist-matching line — SynthInstance
-# catches runtime exceptions and rethrows "failed to synthesize"
-# as a plain error, which the probe's tactic alternatives absorb,
-# surfacing the clean last-alternative refutation; and
-# throwNestedTacticEx formats give-ups as "Tactic X failed with a
-# nested error:" with the depth text on FOLLOWING lines. So the
-# allowlist is paired with a give-up DENYLIST over the WHOLE
-# transcript. Residual, recorded honestly: a future toolchain's
-# NEW launder phrasing behind an allowlist-matching line would
-# reopen this sliver — the four markers cover the pinned
-# toolchain's known channels, and toolchain bumps are deliberate
-# events with their own gate sweeps.
-if ! printf '%s\n' "$triv_out" \
-       | grep -qE 'triviality-probe\.lean:2:[0-9]+: error: (Tactic .* failed|unsolved goals)' \
-   || printf '%s\n' "$triv_out" \
-       | grep -qE 'maximum recursion depth|\(deterministic\) timeout|nested error|failed to synthesize'; then
-    printf '%s\n' "$triv_out" | tail -5
-    fail "triviality-probe-inconclusive"
-fi
+# 3. Anti-trivialization gate: DELETED 2026-07-31 (user decision,
+# doc/2026-07-31_kernel-design-review.md §3.1 Option B). It was a
+# text-discriminated negative probe whose decoder went through
+# three same-day audit rounds and could not be kept small-and-
+# honest — the courtesy-layer condition the threat model sets. The
+# residual it leaves is DOCUMENTED, not silent:
+# residual-trust.md §3.2e (trivialized-emission admission requires
+# an emitter bug AND an unnoticed discharge of a goal that visibly
+# says True; development-time defense is the differential corpus).
+# Do not reintroduce a message-parsing discriminator here — see
+# contributing.md's courtesy-layer fix rule.
 
 # 4. Completed-outline drift (when staged): the completed goal must
 # be definitionally the generated goal. The completed path guarantees

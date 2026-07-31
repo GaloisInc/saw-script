@@ -114,7 +114,14 @@ goal's statement value). Four amendments:
    two cheap pins on every freshly-emitted goal: anti-trivialization
    (reject if the goal closes by trivial/rfl alone) and a
    Pi-telescope sanity check (binder arity/types match the sequent's
-   symbolic inputs).
+   symbolic inputs). *(Update 2026-07-31: the anti-trivialization
+   pin was DELETED by the kernel design review — user decision,
+   `doc/2026-07-31_kernel-design-review.md` §3.1 Option B; its
+   decoder could not be kept honest through three audit rounds. The
+   goal-formation amplification this paragraph names is now a
+   DOCUMENTED residual, residual-trust.md §3.2e, defended by the
+   differential corpus at development time and goal visibility at
+   discharge time.)*
 2. **(Env re-pinning; contains the real import-shadowing hole.)**
    The harness APPENDS ambient LEAN_PATH (a CI-clean-env assumption)
    — the factored core must CLEAR it; absolute project root; private
@@ -157,7 +164,7 @@ non-degradable timeout; CLEARED ambient LEAN_PATH; per-call-unique
 gitignored in-root staging with trap cleanup — lake requires in-root
 inputs, so amendment 2's no-collision/no-pollution intent is met via
 uniqueness + cleanup; emitted-compile; placeholder policy;
-anti-trivialization probe; completed-outline drift with the
+completed-outline drift with the
 no-vacuous assertion; user-file sorry scan; closer-type probe; axiom
 audit with multi-line-list parsing emitting CHECK-AXIOMS lines);
 `offline_lean_replay` in Builtins.hs (fresh in-process emission as
@@ -249,8 +256,10 @@ Recorded deviations for the reviewer:
    producing the drift as the thing preventing it.
 
    The drift is measurable, not hypothetical: `goal-formation-trivial`
-   (the anti-trivialization probe) exists in the core and has no CI
-   counterpart. B1 in the same audit is the same shape from the other
+   (the anti-trivialization probe) existed in the core with no CI
+   counterpart (the probe itself was deleted 2026-07-31 — design
+   review §3.1 Option B — which also dissolved this instance of the
+   divergence). B1 in the same audit is the same shape from the other
    direction — the CI harness had the elaboration ORDER right while
    the product path had it wrong, so for that check the product was
    the looser consumer.

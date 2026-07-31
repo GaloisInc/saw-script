@@ -217,6 +217,23 @@ Two further rules apply to what a check may *rely on*:
    `Classical.choose` binds (the predicate is a type-level implicit);
    `Classical.choice` does not (its argument is proof-irrelevant).
 
+7. **The courtesy-layer fix rule (C7, 2026-07-31 — kernel design
+   review, adopted with the reviewer's amendment).** Fix-audit
+   responses to courtesy-layer findings are resolved by deletion,
+   by conversion to a kernel question, by documentation, or by
+   making the mechanism's UNRECOGNIZED case fail closed. No fix may
+   change any outcome class's default from reject to proceed; a
+   change that does is a soundness change and requires its own
+   audit, not a deletion audit. Prefer mechanical discriminators
+   (exit codes, digests, existence) over text ones; a new text
+   discriminator in the trust kernel requires a written argument
+   that no mechanical one exists. Provenance: the triviality gate
+   accreted three text-discriminator rounds in one day and was then
+   deleted (`doc/2026-07-31_kernel-design-review.md`); the review's
+   own first draft proposed a "simplification" that flipped six
+   outcome classes from reject to proceed and was refuted end-to-end
+   — this rule is written to catch both directions.
+
 ### Closing a defect class (the enumeration rule)
 
 When a fix closes a *class* of defects — not just the instance an
