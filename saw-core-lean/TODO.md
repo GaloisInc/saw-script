@@ -268,6 +268,45 @@ items 3 (cabal ship-list) and 4 (consistency check) closed; items 1
   branch at all — in-repo config cannot explain a silently-skipped
   leg. Note the fixed step is verifiable only by CI itself (this
   sandbox cannot run GH Actions).**
+  **DETERMINATION MADE 2026-07-31 (network access, `gh`): NOT
+  RUNNING — the second disjunct, exactly as F4 narrowed it. Before
+  `7f573bf93` the workflow's push trigger was
+  `branches: [master, "release-**"]`, which never matched this
+  branch, and no PR run ever fired either; `gh run list` shows the
+  fork's entire run history as two runs, both on 2026-07-31. So the
+  leg was not red-and-ignored for 07-18..07-30: no run existed to
+  be red. The demo's user-authored `proof/replay/{invol,eq}` files
+  were ungated for the whole window, not twelve days.**
+  **STILL OPEN, the observation half:** the first real run
+  (`30651900851`, at `7f573bf93`) failed `integration-tests` on
+  both ubuntu-24.04 and macos-15 before reaching the demo, so the
+  `saw-lean-example demo` step was SKIPPED and remains unobserved.
+  The blocker was unrelated golden drift, fixed in `470b28082`
+  (see W5-2b). The demo step, the `SAW_LEAN_ROOT` export, and the
+  `bundle_files` bindist change have STILL never executed.
+- [x] **W5-2b: backend green claims never exercised the top-level
+  builtin-listing goldens (found 2026-07-31 by the first CI run).**
+  `integration-tests` (`hs-source-dirs: intTests`) and
+  `saw-core-lean-tests` (`otherTests/saw-core-lean`) are DISJOINT
+  cabal test-suites. Adding a SAWScript `prim` changes the
+  `:search` / builtin-listing output that `intTests/test1646` and
+  `intTests/test_search` pin, but no backend-local sweep runs
+  those. Goldens last synced `bd0bbe4c0` (2026-05-02); three Lean
+  prims landed after and were never resynced —
+  `write_lean_sawcore_prelude` (`b28547017`, 05-11),
+  `write_lean_cryptol_primitives_for_sawcore` (`0f08890c5`,
+  06-26), `offline_lean_replay` (`c39d45e41`, 07-14). So the tree
+  carried a ~2.5-month CI-red regression that every green sweep
+  reported as green, because the sweep path structurally could not
+  see it. FIXED in `470b28082` (verified both directions against
+  `bin/saw`: pre-edit goldens reproduce the CI diff line for line,
+  post-edit diff clean, `test.sh` exits 0 in both dirs).
+  **Standing consequence for C8 (limit-narrowing must state
+  measurement scope): a "suite green" claim sourced from the
+  backend path must name that path and must NOT be read as
+  "CI would be green" — the two suites do not overlap.** Any
+  future `prim` add/rename/re-document must resync these two
+  goldens in the same commit.
 - [ ] **W5-3: cross-check `CONFORMANCE.md:60`'s pin inventory (GAP
   3).** The coverage lane surveyed ~half of it; its "nothing lets an
   unsound shape through at HEAD" is a partial-survey result.
