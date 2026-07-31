@@ -1,0 +1,28 @@
+// FOURTH witness (2026-07-31), and the strongest: the audit ran this
+// through offline_lean_replay at the third cut and it ISSUED
+// LeanReplayEvidence for a FALSE SAWCore obligation — not "would
+// have", did.
+//
+// Cut 3 exempted any binder whose type peels to the value carrier,
+// and STOPPED WALKING there. Both binders here are typed
+// `(EqTrue P) -> Bool`, which peels to `Except String Bool` — so the
+// poisoned hypothesis `P` sitting in each binder's own DOMAIN was
+// never inspected. With P's Lean image uninhabited, the Lean function
+// space collapses to one element while SAWCore's has many, so
+// `Eq _ g h` is a Lean THEOREM and a SAW falsehood. The cut-3
+// argument ("delivers a value, therefore inhabited, therefore cannot
+// make the implication vacuous") was true and irrelevant: vacuity is
+// not the only way to be weaker.
+//
+// Note this goal is NOT checkable by SAW itself
+// (sequentToSATQuery refuses function-typed binders), so for this
+// whole class the gate is the ONLY thing between the user and false
+// evidence.
+//
+// MUTATION (rule C4): make the carrier-headed exemption return [] and
+// stop walking — i.e. restore cut 3's
+// `| isExceptStringType (finalCodomain ty) = []` — and this row
+// emits.
+enable_experimental;
+prove_core (do { goal_num_when 0 (offline_lean "poisoned_dom"); assume_unsat; })
+  "(g : (EqTrue (bvult 8 (at 2 (Vec 8 Bool) [bvNat 8 7, error (Vec 8 Bool) \"e\"] 0) (bvNat 8 100))) -> Bool) -> (h : (EqTrue (bvult 8 (at 2 (Vec 8 Bool) [bvNat 8 7, error (Vec 8 Bool) \"e\"] 0) (bvNat 8 100))) -> Bool) -> Eq ((EqTrue (bvult 8 (at 2 (Vec 8 Bool) [bvNat 8 7, error (Vec 8 Bool) \"e\"] 0) (bvNat 8 100))) -> Bool) g h";

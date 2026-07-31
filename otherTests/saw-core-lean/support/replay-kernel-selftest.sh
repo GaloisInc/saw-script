@@ -35,10 +35,17 @@ SAW_DIR="$(cd "$HERE/../../.." && pwd)"
 PROJ="$SAW_DIR/saw-core-lean/lean"
 CORE="$SAW_DIR/saw-core-lean/replay/lean-check-core.sh"
 STAGE_ROOT="${TMPDIR:-/tmp}/saw-lean-kernel-selftest.$$"
+# The clean verb removes ALL runs' stage roots, not this shell's:
+# `$$` of a cleaning invocation is by construction a different PID
+# from the run that created a directory, so `rm -rf "$STAGE_ROOT"`
+# could never remove anything (wave-5 DC5-4 — the verb had been a
+# no-op since it was written). The test verb still uses the
+# PID-unique root so concurrent runs cannot collide.
+STAGE_ROOT_GLOB="${TMPDIR:-/tmp}/saw-lean-kernel-selftest."
 
 case "$VERB" in
     good) echo "replay-kernel-selftest.sh: 'good' is a no-op"; exit 0 ;;
-    clean) rm -rf "$STAGE_ROOT"; exit 0 ;;
+    clean) rm -rf "$STAGE_ROOT_GLOB"*; exit 0 ;;
     test) ;;
     *) echo "replay-kernel-selftest.sh: unknown verb '$VERB'" >&2; exit 1 ;;
 esac
@@ -54,8 +61,11 @@ trap 'rm -rf "$STAGE_ROOT"' EXIT
 status=0
 SELFTEST_PINNED=""
 
-# A goal that is real (not rfl/trivial-closable, so it survives the
-# anti-trivialization gate) and easy to prove honestly.
+# A goal that is real (a genuine ∀-shape, not a collapsed
+# computation) and easy to prove honestly. (Its earlier rationale —
+# "survives the anti-trivialization gate" — named a gate deleted
+# 2026-07-31, design review §3.1 Option B; the shape stays because
+# an honest control goal should look like real emitted goals.)
 real_goal() {
     cat <<'EOF'
 import CryptolToLean
@@ -181,19 +191,11 @@ example : goal := by intro x; cases x <;> rfl
 EOF
 expect_fail anon no-named-closer
 
-# --- goal-formation-trivial: a goal the pipeline trivialized.
-mk trivgoal
-cat > "$STAGE_ROOT/trivgoal/Emitted.lean" <<'EOF'
-import CryptolToLean
-
-noncomputable def goal : Prop := True
-EOF
-cat > "$STAGE_ROOT/trivgoal/proof.lean" <<'EOF'
-import Emitted
-
-theorem goal_closed : goal := trivial
-EOF
-expect_fail trivgoal goal-formation-trivial
+# (trivgoal / trivgoal_deep: retired 2026-07-31 with the
+# anti-trivialization gate itself — user decision, design review
+# doc/2026-07-31_kernel-design-review.md §3.1 Option B. Their
+# subject tokens no longer exist; the residual is documented at
+# residual-trust.md §3.2f.)
 
 # --- sorry-in-user-file.
 mk usersorry; real_goal > "$STAGE_ROOT/usersorry/Emitted.lean"
@@ -658,6 +660,8 @@ generated-reference-does-not-compile|pin-row:drivers
 # vacuity count — the claim was decoration and is withdrawn.)
 axiom-audit-run|env
 axiom-audit-vacuous|env
+# (triviality-probe-inconclusive: waiver history retired with the
+# gate itself 2026-07-31 — design review §3.1 Option B.)
 # axiom-decl-in-user-file needs NO row: the b1elab case above pins
 # it live in-kernel (since the 2026-07-29 B1 fix; token renamed with
 # the 2026-07-30 D2 lint narrowing), and the saw-boundary rows

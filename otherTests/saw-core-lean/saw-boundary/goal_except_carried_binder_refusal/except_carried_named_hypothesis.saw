@@ -1,0 +1,20 @@
+// W2-UNRUN-2 re-score pin (2026-07-31). NAMED hypothesis binder.
+//
+// The sibling rows pin ANONYMOUS Except-carried hypothesis binders.
+// This one pins the NAMED spelling, which EMITTED until 2026-07-31
+// because gate 3 keyed on the binder's NAME. Measured at the pre-fix
+// HEAD: SAW proves the hypothesis and refutes the conclusion (the
+// obligation is FALSE), the emitted goal proves in Lean with
+// [propext, Quot.sound] -- both on the replay allowlist -- so
+// offline_lean_replay would have issued evidence for a false claim.
+//
+// MUTATION (rule C4): reintroduce ANY anonymity exemption in
+// leanExceptCarriedGoalBinders' piBinder -- e.g. a leading
+// `| Just _ <- mnm = []` guard -- and this row emits instead of
+// refusing. The gate no longer inspects binder names at all; see the
+// sibling rows named_hypothesis_tactic_conclusion (why asking the
+// PRINTER about names failed too) and named_hypothesis_used_binder
+// (why "is it used" could never have worked).
+enable_experimental;
+prove_core (do { goal_num_when 0 (offline_lean "named_hyp"); assume_unsat; })
+  "(h : EqTrue (bvult 8 (at 2 (Vec 8 Bool) [bvNat 8 7, error (Vec 8 Bool) \"e\"] 0) (bvNat 8 100))) -> EqTrue (bvEq 8 (bvNat 8 3) (bvNat 8 4))";

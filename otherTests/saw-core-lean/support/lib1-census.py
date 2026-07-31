@@ -174,8 +174,14 @@ def emitted_files(root):
         capture_output=True, text=True).stdout.split())
     out = []
     for dirpath, dirs, files in os.walk(root):
+        # .data-mode-cache holds the SHIP-2 selftest's staged copies
+        # of the shipped library (untracked by design) — suite
+        # infrastructure, not emitter output. Added 2026-07-30 the
+        # hard way: the first sweep after the selftest landed
+        # counted its 8 library copies as emitted artifacts.
         dirs[:] = [d for d in dirs
-                   if d not in (".snapshots", ".lake", ".elan", ".git")]
+                   if d not in (".snapshots", ".lake", ".elan", ".git",
+                                ".data-mode-cache")]
         for f in files:
             if not f.endswith(".lean"):
                 continue

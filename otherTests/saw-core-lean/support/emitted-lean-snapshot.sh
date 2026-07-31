@@ -39,8 +39,13 @@ emitted() {
   # frozen copies, not live emission. Before 2026-07-15 only "$dir"
   # was excluded, so cutting a new baseline swallowed every OTHER
   # baseline's copies and inflated the artifact count ~4x.
+  # .data-mode-cache: the SHIP-2 selftest's staged library copies
+  # (untracked suite infrastructure, same rationale as .snapshots —
+  # frozen copies, not live emission; 2026-07-30, found by the
+  # census's parallel walk counting them).
   comm -23 \
     <(find . -name '*.lean' -not -path './.elan/*' -not -path './.snapshots/*' \
+        -not -path './.data-mode-cache/*' \
         | sed 's|^\./||' | sort) \
     <(git ls-files '*.lean' | sort)
 }

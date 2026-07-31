@@ -15,8 +15,19 @@ the 2026-07-17 module split; the recognizer SURFACE IS FROZEN after
 Slice R3b — any growth requires the fragment reference semantics
 program first (doc/2026-07-16_fragment-semantics-scoping.md). The
 lowerings that consume these verdicts (@lowerClassFBounded@,
-@lowerClassSSingle@, @lowerFixProofObligation@) live in
-"SAWCoreLean.Term".
+@lowerClassSSingle@) live in "SAWCoreLean.Term".
+
+Corrected 2026-07-30: this header also named a third lowering,
+lowerFixProofObligation, which no longer exists. It emitted the raw
+unique-fixed-point contract at RAW-position fixes and was DELETED on
+2026-07-25 with audit finding S-2 — that contract is extensional and
+cannot observe SAW's operational divergence — so raw-position fix is
+now a hard rejection. The tombstone recording the deletion is in
+"SAWCoreLean.Term", immediately after the wrapped-helper apply table.
+A raw-position fix is still classified here, but the position test at
+the call site consumes the verdict only for WRAPPED binder types: a
+raw binder type routes to the S-2 rejection whatever the verdict says
+(the paired-stream verdict has its own named rejection either way).
 -}
 
 module SAWCoreLean.FixRecognizer
@@ -164,8 +175,13 @@ classifyFixShape typeArg bodyArg
       | Just (recFn, scrut) <- asApp dflt
       , Just (crec, _params, motive, [caseFn], []) <-
           asRecursorApp recFn
+      -- Module-qualified comparison (FXC-6, 2026-07-30): this was
+      -- `identName dtIdent == "Stream"`, the file's one unqualified
+      -- ident test (out-of-model reach only — the type dispatch
+      -- already requires a Prelude.Stream-typed fix — but the fix
+      -- is one line and restores the file's uniform idiom).
       , ModuleIdentifier dtIdent <- nameInfo (recursorDataType crec)
-      , identName dtIdent == "Stream"
+      , dtIdent == mkIdent preludeName "Stream"
       = if not (isExactVar recVn scrut)
           then FixUnrecognized
             "stream read scrutinee is not the recursive binder"

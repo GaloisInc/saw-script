@@ -316,15 +316,17 @@ for uf in proof.lean completed.lean; do
     fi
 done
 
-# 3. Anti-trivialization (seventh-audit amendment 1): a goal the
-# emission pipeline has trivialized closes by rfl/trivial; reject.
-# (Genuinely trivial user goals are also rejected — loud, and SMT
-# handles those; the pin guards the goal-formation layer.)
-printf 'import Emitted\nexample : goal := by first | rfl | trivial\n' \
-    > "$STAGE/triviality-probe.lean"
-if run_lean "$STAGE/triviality-probe.lean" >/dev/null 2>&1; then
-    fail "goal-formation-trivial"
-fi
+# 3. Anti-trivialization gate: DELETED 2026-07-31 (user decision,
+# doc/2026-07-31_kernel-design-review.md §3.1 Option B). It was a
+# text-discriminated negative probe whose decoder went through
+# three same-day audit rounds and could not be kept small-and-
+# honest — the courtesy-layer condition the threat model sets. The
+# residual it leaves is DOCUMENTED, not silent:
+# residual-trust.md §3.2f (trivialized-emission admission requires
+# an emitter bug AND an unnoticed discharge of a goal that visibly
+# says True; development-time defense is the differential corpus).
+# Do not reintroduce a message-parsing discriminator here — see
+# contributing.md's courtesy-layer fix rule.
 
 # 4. Completed-outline drift (when staged): the completed goal must
 # be definitionally the generated goal. The completed path guarantees

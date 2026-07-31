@@ -1295,28 +1295,50 @@ and every other wrapped fix rejects with a named diagnostic — no
 emitter may produce the retired names again (the driver harness's
 obsolete-helper scan enforces this).
 
-What remains is the RAW variant, covering raw result positions
-(function-shaped values, proofs, indices), retained per Instance 3:
-the obligation says the raw body has a unique fixed point, which
-under SAW's `fix_unfold` forces the chosen witness to coincide with
-the SAW value; if no unique fixed point exists the obligation is
-unprovable. Believed corpus-unreachable for divergent shapes and
-census-checked. -/
+The RAW variant below — covering raw result positions
+(function-shaped values, proofs, indices) — is likewise NO LONGER
+EMITTED. It was WITHDRAWN on 2026-07-25 by audit finding S-2, and
+the three definitions are RETAINED FOR COMPATIBILITY AND HISTORY
+ONLY: no emitter produces them, and the emitter refuses
+raw-position `Prelude.fix` outright with a named rejection.
+
+Why it was withdrawn: the obligation's sole condition is uniqueness
+among ALL fixed points, which is purely EXTENSIONAL. It therefore
+cannot observe SAW's operational divergence, so it is honestly
+dischargeable for a fix whose SAW meaning is bottom — the witness
+`fix Nat (\(n : Nat) -> mulNat n 0)` discharges it in three tokens
+while SAW's `mulNat` recurses on its first argument. The earlier
+"believed corpus-unreachable ... and census-checked" retention
+argument recorded here is overturned: a census is not a proof. The
+Haskell lowering that emitted these names was DELETED rather than
+bypassed (tombstone in `SAWCoreLean.Term`).
+
+Do not re-target these definitions from an emitter. Restoration
+means a productivity-gated raw contract in the 0.03
+fragment-semantics programme, the analogue of what the wrapped
+Class-F/Class-S realizations already have. Note also that the
+driver harness's obsolete-helper scan matches the un-suffixed
+wrapped names only, so it will NOT catch a `_raw` spelling. -/
 /-- The raw fix contract: `x` is a fixed point of `body` and every
-fixed point equals `x` (see the section comment for why uniqueness
-is the SAW link). -/
+fixed point equals `x`. RETAINED FOR COMPATIBILITY/HISTORY, NOT
+EMITTED since 2026-07-25 (S-2) — see the section comment. -/
 def saw_fix_unique_contract_raw.{u} (α : Sort u)
     (body : α → α) (x : α) : Prop :=
   body x = x ∧ ∀ y : α, body y = y → y = x
 
 /-- The raw fix proof obligation: some `x` satisfies
-`saw_fix_unique_contract_raw`. Emitted (and left to the prover) at
-every raw-position `Prelude.fix`. -/
+`saw_fix_unique_contract_raw`. This WAS emitted (and left to the
+prover) at every raw-position `Prelude.fix`; it is RETAINED FOR
+COMPATIBILITY/HISTORY and has NOT been emitted since 2026-07-25
+(S-2), when the emitter began refusing raw-position fix instead. -/
 def saw_fix_unique_exists_raw.{u} (α : Sort u) (body : α → α) : Prop :=
   ∃ x : α, saw_fix_unique_contract_raw α body x
 
-/-- The chosen unique fixed point — the emitted value of a
-raw-position `Prelude.fix`, consuming the discharged obligation. -/
+/-- The chosen unique fixed point — formerly the emitted value of a
+raw-position `Prelude.fix`, consuming the discharged obligation.
+RETAINED FOR COMPATIBILITY/HISTORY, NOT EMITTED since 2026-07-25
+(S-2): the emitter refuses raw-position fix, so nothing produces
+this. -/
 noncomputable def saw_fix_choose_raw.{u} (α : Sort u) (body : α → α)
     (h : saw_fix_unique_exists_raw α body) : α :=
   Classical.choose h

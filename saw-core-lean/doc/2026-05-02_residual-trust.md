@@ -664,9 +664,12 @@ the SAW-side emission pipeline itself (`propToTerm`, `scPiList`
 free-var abstraction, `scNormalizeForLean`): replay converts an
 emission bug into a false SAW theorem, so goal formation is
 soundness-critical on this path. Mitigations at admission time: the
-emitted goal must compile (dropped binders cannot), and an
-anti-trivialization probe rejects goals closable by rfl/trivial
-(over-reduction guard). LeanReplayEvidence is a NON-RECHECKABLE
+emitted goal must compile (dropped binders cannot). (An
+anti-trivialization probe — an over-reduction guard rejecting
+goals closable by rfl/trivial — existed here 2026-07-24 to
+2026-07-31 and was DELETED by the kernel design review, user
+decision; the residual it leaves is §3.2f.) LeanReplayEvidence is
+a NON-RECHECKABLE
 trust token: checkEvidence verifies sequent subsumption only; the
 recorded toolchain/hashes/axiom list document the one-shot kernel
 check and cannot re-verify it.
@@ -852,6 +855,142 @@ rest on the kernel-checkable element-totality lemma family proposed
 library) in the design-scrutiny doc. This entry closes (and the
 README flag comes down) when that carrier lands and the pin row
 flips from known-gap to true differential coverage.
+
+### 3.2f Goal-formation trivialization at replay time (2026-07-31,
+gate deleted by design review — user decision)
+
+The anti-trivialization gate (a replay-time probe asking whether
+`first | rfl | trivial` closes the emitted goal) was DELETED on
+2026-07-31 (`doc/2026-07-31_kernel-design-review.md` §3.1 Option
+B). Grounds: it was a text-discriminated negative probe outside
+the threat model's load-bearing list (consequence 2 names three
+checks; this was not among them), and it empirically could not be
+kept "small enough to be kept honest" — its accept-condition
+decoder went through three same-day audit rounds (fail-open →
+position check → refutation allowlist → allowlist + give-up
+denylist), each refuting the last, ending coupled to one
+toolchain's error phrasing with an unpinned denylist half.
+
+THE RESIDUAL, stated plainly: if an emission bug trivializes a
+goal (over-reduction collapsing it to `True`/`x = x`-class), and
+the user or their automation discharges that goal WITHOUT noticing
+what it says, replay admits `LeanReplayEvidence` for a claim whose
+SAW meaning was destroyed at emission. No kernel-side check
+remains for this class: the binding check honestly binds the
+trivialized goal, the drift check compares two outputs of the same
+emitter, and the axiom audit sees a clean `rfl`.
+
+What defends the class instead — with each defense's limit stated
+(deletion-audit F-B: the defenses must not read stronger than the
+decision they record):
+1. Development time: the differential/conformance corpus — an
+   emitter change that over-reduces breaks evaluation-comparison
+   and emission-golden rows before it ships. LIMIT: the corpus
+   defends corpus rows. `offline_lean_replay`'s product use is
+   NOVEL goals — exactly the set the corpus cannot reach. The
+   design review stated this as the accepted cost verbatim:
+   "replay-time defense-in-depth for NOVEL user goals — the one
+   place the corpus cannot reach — is gone."
+2. Discharge time: the goal is often visible. A trivialized goal
+   may read `def goal : Prop := True` in the Emitted.lean the user
+   opens to discharge. LIMIT: visibility is not guaranteed — the
+   demonstration that decided the deletion was a goal trivial only
+   under DEEP EVALUATION (`(List.replicate 100000 true).length =
+   100000`-shape), which READS as a substantive claim; an attentive
+   reader can be defeated by an unreadable trivialization, so the
+   residual is broader than the rubber-stamp case.
+3. The admission still requires the CONJUNCTION of an in-model
+   backend error and a discharge of the trivialized goal — but per
+   limits 1 and 2, neither conjunct is independently guarded on the
+   novel-goal path.
+
+This is the D2 pattern deliberately repeated: scope reduction plus
+honest documentation, chosen over a hardened text discriminator
+whose fix-defect rate three audits demonstrated. If the class ever
+demonstrates in practice, the recorded re-entry path is an
+EMISSION-side structural check (where meaning is constructed), not
+a replay-side message parser — see contributing.md's
+courtesy-layer fix rule.
+
+### 3.2g Goal-shape gate 3 rests on a reconstruction we cannot verify
+by reading (OPEN, shipped documented; user decision 2026-07-31)
+
+Gate 3 (`leanExceptCarriedGoalBinders`, `Signature.hs`) refuses a goal
+telescope binder whose Lean image is an equation over the
+`Except String` value carrier: such an image can be UNINHABITED, so
+the emitted implication is provable while the SAW obligation is false,
+or (the fourth witness) the Lean domain collapses to one element where
+SAWCore's has many, so the emitted `forall` is strictly weaker.
+
+**Why this is a catalog entry and not just a fixed bug.** The gate was
+cut FOUR times on 2026-07-31, and cuts 1–3 were each refuted by a
+constructed witness after its author stated a confident premise that
+turned out false:
+
+| cut | exemption keyed on | refuted by |
+|---|---|---|
+| 1 | binder is NAMED | `(h : EqTrue P) -> …` via `parse_core` emitted; the anonymous spelling was refused |
+| 2 | binder is named in the PRINTED text | `mentionsIdent`'s `Tactic` arm is a substring test — binder `h` emitted, `zz` refused, identical goals |
+| 3 | type peels to the value carrier (and stop walking) | a binder typed `(EqTrue P) -> Bool`: the poisoned domain was never inspected. `offline_lean_replay` ISSUED evidence for a false obligation |
+| 4 (current) | same, but classification RECURSES into every consumed domain | no witness — which is exactly what was true of cut 3 |
+
+Cut 4 closes every witness anyone has built, and the full suite is
+green with it. **What is NOT established is that no fifth shape
+exists.** Every cut has tried to RECONSTRUCT "is this domain a folded
+hypothesis?" from the Lean image, and that question has proved
+repeatedly harder to answer than it looks. The honest statement of
+trust is: gate 3's correctness is not legible — you cannot confirm it
+by reading it — and the project's own record shows four attempts at
+reading it wrongly.
+
+**Bounds on the residual, measured (2026-07-31):**
+
+1. **No cascade.** The gate has exactly ONE production consumer
+   (`Term.hs`, goal emission). It is not a precondition for any other
+   gate; the load-bearing checks (the `goal_closed : goal` binding,
+   the `#print axioms` exact-match audit, the drift check) are
+   independent and unaffected, as is translator correctness. A gate-3
+   failure stays inside gate-3-shaped goals.
+2. **Opt-in.** The emission path refuses without
+   `enable_experimental` (tested, not inferred).
+3. **The ordinary routes are closed.** Cryptol / LLVM / `goal_cut`
+   goals reach the gate through `sequentToProp`, which folds with
+   `scFun` and therefore emits only ANONYMOUS binders; anonymous
+   carrier-carrying domains have been refused since the gate landed
+   (measured end-to-end). Every escape built so far required
+   hand-written SAWCore via `parse_core`/`prove_core`.
+4. **Zero corpus exposure.** Across all 78 tracked goal goldens, 114
+   telescope binders, NONE mentions the carrier — the shape is absent
+   from everything the project itself exercises.
+5. **Monotone.** Each cut refuses a strict SUPERSET of its
+   predecessor, so "cut 4 is wrong" can only mean *still incomplete*,
+   never *newly broken*. Cut 4 cannot be worse than any earlier state.
+
+**Where this residual is WORSE than §3.2f's.** The trivialization
+residual leans on "a trivialized goal visibly reads `True`, so a
+reader would notice." That defense does NOT transfer here: an escaped
+goal reads as an ordinary conditional theorem
+(`(h : EqTrue …) -> EqTrue …`). Reading your emitted goal is weak
+protection for this class. State this to users rather than implying
+inspection covers it.
+
+**Disposition (user decision, 2026-07-31):** ship 0.02 on cut 4 with
+this residual documented, rather than holding the release for a
+redesign. Grounds: the blast radius above is narrow and
+non-cascading, cut 4 is monotonically safer than every predecessor,
+and the redesign carries its own risk of being wrong differently.
+
+**REVISIT — the durable fix (0.03, TODO.md):** decide
+hypothesis-vs-value on the SAWCore side, where it is a SORT CHECK
+(`EqTrue X` is a `Prop`; `Vec 8 Bool` is not) rather than a
+reconstruction from the Lean image. That gate would be legible: its
+correctness is confirmable by reading. Per the record above it must
+be DESIGNED AND ADVERSARIALLY REVIEWED BEFORE implementation — the
+process used for the triviality-gate deletion, and the one skipped
+on 2026-07-31 under release pressure, which is how four cuts
+happened in a day. Root-cause analysis:
+`doc/2026-07-31_why-gate3-escaped.md`; witnesses pinned as four rows
+under `saw-boundary/goal_except_carried_binder_refusal`.
 
 ### 3.3 `scNormalizeForLean` semantics-preservation (Phase 5 Link 2)
 

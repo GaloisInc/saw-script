@@ -1,6 +1,27 @@
+# OBL-1 fix (2026-07-31, user-directed fast path): these five
+# stream-helper rows shared one byte-identical directive set that
+# named no stream operation — a demonstrated emitter mutation
+# (shift-left -> shift-right) passed every directive. Each row now
+# also pins its OPERATION by the lowered structure (not the probe
+# name, which an emitter mutation would keep), chosen so every
+# row's set FAILS on the other four rows' emissions (cross-matrix
+# verified at introduction).
 contains:saw_mkStream_total_exists
 contains:saw_mkStream_choose
 contains:h_mkStream_total_obligation_
 contains:h_mkStream_total_
 absent:mkStreamFix
 absent:saw_unreachable_default
+# operation pin: shift-left by 2 — index arithmetic (constant 2 = bit0 one),
+# NO right-shift machinery (the demonstrated mutation direction: a
+# shift_l -> shift_r swap must fail HERE, on these two absents)
+contains:addNat
+contains:bit0_macro
+# positional+amount pin (OBL-1 fix audit, LOW residue): the shift
+# constant's tail immediately followed by the INDEX — kills both the
+# wrong-amount (4 = nested bit0 adds a paren) and dropped-index
+# mutants the audit built against the token-only positives.
+contains-normalized:bit0_macro CryptolToLean.SAWCorePrimitives.one_macro)) i)
+absent:atWithDefaultM
+absent:subNat
+absent:streamScanl

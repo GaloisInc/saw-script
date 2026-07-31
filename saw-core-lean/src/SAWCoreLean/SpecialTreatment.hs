@@ -478,7 +478,12 @@ treatmentDerivedBareNames configuration =
 -- spelling is registered or a generated binder" enforces it: an
 -- inline @Lean.Ident "…"@ reference whose head is missing here (or
 -- from the derived sets) fails the build, so this list can no
--- longer silently lag the spellings it mirrors.
+-- longer silently lag the INLINE spellings it mirrors. (Scope
+-- narrowed 2026-07-30, W3-REF-1 re-score: the lint's extractor
+-- matches the literal token @Lean.Ident "@, so names built into
+-- tactic STRINGS escape it — the one such site,
+-- Contracts.checkedEvidenceScript, now registers by construction
+-- from 'checkedEvidenceSimpSet' instead of relying on this lint.)
 hardcodedBareNames :: Set Lean.Ident
 hardcodedBareNames = Set.fromList $ map Lean.Ident $ concatMap words
     -- Value-convention carriers, and the names Lean itself supplies

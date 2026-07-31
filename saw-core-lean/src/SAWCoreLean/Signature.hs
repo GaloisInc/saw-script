@@ -343,18 +343,53 @@ leanPiSpineBinderTypes _ = []
 --
 --  2. The ANONYMITY test would miss a NAMED folded hypothesis.
 --     @sequentToProp@ cannot produce one (@scFun@ is non-dependent),
---     so this is closed against the sequent route specifically; a
---     future route that names a hypothesis binder would escape.
---     Measured narrower than it first looks (2026-07-30): the
---     carrier is not ADDRESSABLE from SAWCore — @parse_core
---     "Except"@ fails with @Unbound name: Except@ — so a user
---     cannot hand-write a SAWCore term whose named binder mentions
---     it. Every carrier mention in a goal is introduced by this
---     translator's own value wrapping, and the wrapping names a
---     binder only when the SAWCore Pi it images is dependent, i.e.
---     a quantified VALUE. An escape therefore needs a new
---     TRANSLATOR route that both names hypothesis binders and wraps
---     them — a change in this codebase, not a reachable input.
+--     so that route is closed; a route that NAMES a hypothesis
+--     binder escaped — and one existed.
+--
+--     WAS (2026-07-30, FALSIFIED 2026-07-31): "Measured narrower
+--     than it first looks: the carrier is not ADDRESSABLE from
+--     SAWCore — @parse_core "Except"@ fails — so a user cannot
+--     hand-write a named binder mentioning it. Every carrier
+--     mention is introduced by this translator's own value
+--     wrapping, and the wrapping names a binder only when the
+--     SAWCore Pi it images is DEPENDENT, i.e. a quantified VALUE.
+--     An escape therefore needs a new TRANSLATOR route."
+--
+--     The measurement was real and its FIRST clause holds. The
+--     second clause was never measured, and is false: the Lean
+--     binder name is copied from the SAWCore @VarName@
+--     (@Convention.withSAWVar@) whether or not the Pi is dependent,
+--     and @parse_core@ preserves a hand-written name. So
+--     @prove_core (offline_lean …) "(h : EqTrue …) -> EqTrue …"@
+--     names a NON-dependent hypothesis binder, the translator wraps
+--     it into a carrier equation exactly as clause 1 concedes, and
+--     TEST 1 exempted it. Demonstrated end-to-end 2026-07-31: SAW
+--     proves the hypothesis and refutes the conclusion (so the
+--     obligation is FALSE), the emitted goal is provable in Lean
+--     with @[propext, Quot.sound]@ — both ALLOWLISTED — so replay
+--     would have issued evidence for a false claim. In-model
+--     CRITICAL; the anonymous spelling of the same goal was
+--     refused, which is what made the asymmetry invisible.
+--
+--     FIRST REPAIR (same day) asked the anonymity question of the
+--     PRINTED text instead, and was ALSO unsound: it inherited
+--     'mentionsIdent''s deliberate over-reporting, whose @Tactic@
+--     arm is a substring test, so a binder named @h@ read as
+--     "mentioned" whenever the conclusion carried an obligation
+--     script containing @h_bounds_obligation_@ (binder @h@ emitted,
+--     binder @zz@ refused, structurally identical goals). A binder
+--     can also be named AND genuinely used, so no sharpening of
+--     "is it used" could close the class.
+--
+--     CLOSED (third cut) by DELETING the anonymity test: a binder
+--     NAME carries no soundness information about
+--     hypothesis-vs-value, and never did. The value-image test now
+--     applies to every binder — see 'piBinder'. Pinned by three
+--     rows under
+--     @saw-boundary/goal_except_carried_binder_refusal@:
+--     @except_carried_named_hypothesis@ (named-unused),
+--     @named_hypothesis_tactic_conclusion@ (the printer-coupling
+--     escape), @named_hypothesis_used_binder@ (named-and-used).
 --
 --  3. The VALUE-IMAGE test's failure direction is ADMISSION, not
 --     refusal: a false positive from 'isExceptStringType' here
@@ -377,24 +412,80 @@ leanExceptCarriedGoalBinders = goSpine
     -- component is not carrier-headed after peeling Pis, so its
     -- wrapped components were still reported). Both were regressions
     -- on shapes that emitted before this gate existed.
-    piBinder (Lean.PiBinder _ mnm ty)
-      -- TEST 1, ANONYMITY — the principled one. A folded sequent
-      -- hypothesis is ALWAYS an anonymous binder: @sequentToProp@
-      -- builds the arrow chain with @scFun@ (Proof.hs), which makes a
-      -- NON-DEPENDENT function type and so binds no name. A
-      -- quantified VALUE binder, by contrast, is named — its body
-      -- refers to it. So a named domain is never a folded hypothesis,
-      -- whatever its type mentions.
-      | Just _ <- mnm = []
-      -- TEST 2, VALUE IMAGE — the backstop, for an ANONYMOUS domain
-      -- that is still a value: a non-dependent SAWCore arrow
-      -- @(Bool -> Bool) -> …@ emits an anonymous binder whose domain
-      -- is the wrapped function image. Carrier-headed after peeling
-      -- Pis means "delivers a value", which ranges over MORE
-      -- inhabitants than the SAWCore type and so is stronger, not
-      -- weaker.
-      | isExceptStringType (finalCodomain ty) = []
+    -- THE ANONYMITY TEST IS GONE (2026-07-31, third cut). It keyed
+    -- the gate on the binder's NAME, and a name carries NO soundness
+    -- information about hypothesis-vs-value — it never did. Two
+    -- demonstrated in-model CRITICALs killed it, in two different
+    -- ways, the same day:
+    --
+    --   * NAMED-UNUSED: @(h : EqTrue X) -> …@ hand-written through
+    --     @parse_core@ named a NON-dependent hypothesis, which the
+    --     original test exempted while refusing the identical
+    --     anonymous goal.
+    --   * The first repair asked the question of the PRINTED text
+    --     instead (running the printer's 'anonymizeUnusedPiBinders'
+    --     first). That inherited the printer's opposite safety
+    --     polarity: 'mentionsIdent' deliberately OVER-reports
+    --     mentions (safe for a cosmetic rename, ADMITTING for a
+    --     gate), and its @Tactic@ arm is a substring test — so a
+    --     binder named @h@ counted as "mentioned" by any goal whose
+    --     conclusion carries an obligation script containing
+    --     @h_bounds_obligation_@. Measured: binder @h@ EMITTED,
+    --     binder @zz@ REFUSED, on structurally identical goals.
+    --   * And a binder can be named AND genuinely used
+    --     (@(g : EqTrue X -> Bool) -> (h : EqTrue X) -> … (g h)@),
+    --     so no sharpening of "is it used" could have closed it.
+    --
+    -- What remains is the VALUE-IMAGE test alone, applied to EVERY
+    -- binder: carrier-headed after peeling Pis means the domain
+    -- DELIVERS A VALUE, and every such image is inhabited
+    -- (@Except.error ""@), so it cannot make the implication
+    -- vacuous. Everything else that mentions the carrier is
+    -- reported. This is deliberately CONSERVATIVE: a composite
+    -- domain (a tuple with a function component) is not
+    -- carrier-headed after peeling, so it is now refused where the
+    -- anonymity test used to let it through. That is over-refusal —
+    -- the safe direction (rule C7) — and it is MEASURED, not
+    -- assumed: the full suite is green with this cut, so no corpus
+    -- shape pays for it. If a legitimate composite ever needs to
+    -- emit, the fix is a positive VALUE-shape classifier, never a
+    -- return to name-keying.
+    --
+    -- The principled successor (wave-6 charge): make this decision
+    -- SAWCore-side, where "is this domain a Prop" is unambiguous,
+    -- instead of recovering it from the Lean image. Error lives
+    -- where meaning is constructed.
+    -- FOURTH CUT (2026-07-31): exempting a binder must NOT abandon
+    -- the walk. Cut 3 returned [] for any type whose finalCodomain
+    -- was carrier-headed, on the argument "it delivers a value, and
+    -- every such image is inhabited, so it cannot make the
+    -- implication vacuous". True — and IRRELEVANT: vacuity is not
+    -- the only way to be weaker. For a binder typed
+    -- @P -> Except String A@ the peeled codomain is a value, so cut 3
+    -- exempted the binder and never looked at @P@ — the binder's own
+    -- DOMAIN, which is a hypothesis position. With @P@'s image
+    -- uninhabited the LEAN function space collapses to one element
+    -- while the SAWCore one has many, so the emitted @forall@ ranges
+    -- over FEWER inhabitants: weaker, not stronger. Demonstrated
+    -- end-to-end (the audit ran it through @offline_lean_replay@,
+    -- which ISSUED LeanReplayEvidence for a false obligation):
+    -- @(g : EqTrue P -> Bool) -> (h : EqTrue P -> Bool) -> Eq _ g h@.
+    --
+    -- So classification is now RECURSIVE and uniform: at every Pi
+    -- level, what the type ultimately DELIVERS may be a value, but
+    -- each domain it consumes is itself a position to classify. Only
+    -- a final codomain is exempt; nothing is skipped.
+    piBinder (Lean.PiBinder _ _ ty) = classifyGoalDomain ty
+
+    classifyGoalDomain ty
+      | isExceptStringType (finalCodomain ty) =
+          concatMap classifyGoalDomain (piSpineDomains ty)
       | otherwise = map (\s -> "_ : " ++ s) (goTy ty)
+
+    -- Every domain in a Pi spine, at every level.
+    piSpineDomains (Lean.Pi bs b) =
+      [ t | Lean.PiBinder _ _ t <- bs ] ++ piSpineDomains b
+    piSpineDomains _ = []
 
     -- Peel every Pi layer; what remains is what the domain ultimately
     -- delivers.

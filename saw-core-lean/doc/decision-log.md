@@ -163,3 +163,41 @@ in the 2026-07-17 doc reorganization.
   risk. K-2 is cut down to its in-model residue, the ~3-line C3
   fail-closed fix: `verify_unchanged` must FAIL when a staged file
   has vanished. Path-latching is dropped with the rest.
+
+- [x] DELETE the anti-trivialization gate (D5, 2026-07-31, user
+  decision — "we want a clean design rather than something fancy
+  that itself is a source of bugs … delete it"). The gate was a
+  replay-time text-discriminated negative probe outside the threat
+  model's load-bearing list whose accept-condition decoder went
+  through three same-day audit rounds (fail-open → position check →
+  refutation allowlist → allowlist + give-up denylist), each
+  refuting the last — the empirical proof it could not be kept
+  "small enough to be kept honest". Deleted whole per the kernel
+  design review (`2026-07-31_kernel-design-review.md` §3.1 Option
+  B, adversarially reviewed, both options presented); the residual
+  — a trivialized emission discharged unnoticed is admitted, and
+  the accepted cost includes NOVEL replay goals the corpus cannot
+  reach — is cataloged at residual-trust.md §3.2f. Companion rule
+  C7 (contributing.md) governs any re-entry: emission-side
+  structural check, never a replay-side message parser.
+
+- [x] SHIP 0.02 on gate 3's fourth cut, with the residual CATALOGED
+  rather than holding the release for a redesign (D6, 2026-07-31,
+  user decision — "I think we should just roll it into residual
+  trust, and log it as something to revisit"). Context: the gate was
+  cut four times that day; cuts 1-3 were each refuted by a
+  constructed witness, the third after `offline_lean_replay` had
+  ISSUED evidence for a false obligation. Cut 4 closes every witness
+  built and the suite is green, but its correctness is NOT legible —
+  the same thing was believed of cut 3. The decision was taken on
+  measured bounds, not on confidence in the cut: one production
+  consumer and no cascade; `enable_experimental` opt-in; the
+  Cryptol/LLVM/`goal_cut` routes closed (they emit only anonymous
+  binders); zero exposure across all 78 goal goldens; and each cut
+  refusing a strict superset of its predecessor, so being wrong can
+  only mean incomplete, never newly broken. Recorded honestly
+  alongside: this residual's harm is NOT mitigated by goal
+  inspection the way §3.2f's is, because an escaped goal reads as an
+  ordinary conditional. Catalog entry: residual-trust.md §3.2g.
+  REVISIT at 0.03: the SAWCore-side sort check, designed and
+  adversarially reviewed BEFORE implementation.

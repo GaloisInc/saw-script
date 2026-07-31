@@ -310,6 +310,32 @@ run_trust_tier_selftest() {
     fi
 }
 
+# Ship-list closed check (SHIP-3, 2026-07-30): saw.cabal data-files
+# ≡ tracked runtime assets; non-recursive-glob precondition;
+# Builtins.hs relFiles duplicates; bundle_files ships the trees.
+run_ship_list_check() {
+    echo
+    echo "=== support/ship-list-check ==="
+    local rc=0
+    bash "$HERE/support/ship-list-check.sh" test || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        record_failure "support/ship-list-check (exit=$rc)"
+    fi
+}
+
+# Data-files-branch selftest (SHIP-2, 2026-07-30): the only
+# execution of resolveLeanReplayAssets' installed/cache branch —
+# every row harness exports SAW_LEAN_ROOT and bypasses it.
+run_data_mode_selftest() {
+    echo
+    echo "=== support/data-mode-selftest ==="
+    local rc=0
+    bash "$HERE/support/data-mode-selftest.sh" test || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        record_failure "support/data-mode-selftest (exit=$rc)"
+    fi
+}
+
 # Doc-claim lint (2026-07-24, audit category C2): every code
 # identifier a MAINTAINED doc cites in backticks must exist in the
 # source. Catches the A-3 class — a soundness argument resting on a
@@ -455,6 +481,8 @@ case "$verb" in
         run_doc_claim_lint
         run_snapshot_oracle_selftest
         run_lib1_census
+        run_ship_list_check
+        run_data_mode_selftest
         iterate_gap_inventory
         print_summary_and_exit
         ;;
@@ -497,6 +525,7 @@ case "$verb" in
         iterate_negative clean
         bash "$HERE/support/trust-tier-selftest.sh" clean
         bash "$HERE/support/replay-kernel-selftest.sh" clean
+        bash "$HERE/support/data-mode-selftest.sh" clean
         print_summary_and_exit
         ;;
     *)

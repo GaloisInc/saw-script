@@ -114,7 +114,14 @@ goal's statement value). Four amendments:
    two cheap pins on every freshly-emitted goal: anti-trivialization
    (reject if the goal closes by trivial/rfl alone) and a
    Pi-telescope sanity check (binder arity/types match the sequent's
-   symbolic inputs).
+   symbolic inputs). *(Update 2026-07-31: the anti-trivialization
+   pin was DELETED by the kernel design review — user decision,
+   `doc/2026-07-31_kernel-design-review.md` §3.1 Option B; its
+   decoder could not be kept honest through three audit rounds. The
+   goal-formation amplification this paragraph names is now a
+   DOCUMENTED residual, residual-trust.md §3.2f, defended by the
+   differential corpus at development time and goal visibility at
+   discharge time.)*
 2. **(Env re-pinning; contains the real import-shadowing hole.)**
    The harness APPENDS ambient LEAN_PATH (a CI-clean-env assumption)
    — the factored core must CLEAR it; absolute project root; private
@@ -157,7 +164,7 @@ non-degradable timeout; CLEARED ambient LEAN_PATH; per-call-unique
 gitignored in-root staging with trap cleanup — lake requires in-root
 inputs, so amendment 2's no-collision/no-pollution intent is met via
 uniqueness + cleanup; emitted-compile; placeholder policy;
-anti-trivialization probe; completed-outline drift with the
+completed-outline drift with the
 no-vacuous assertion; user-file sorry scan; closer-type probe; axiom
 audit with multi-line-list parsing emitting CHECK-AXIOMS lines);
 `offline_lean_replay` in Builtins.hs (fresh in-process emission as
@@ -249,18 +256,23 @@ Recorded deviations for the reviewer:
    producing the drift as the thing preventing it.
 
    The drift is measurable, not hypothetical: `goal-formation-trivial`
-   (the anti-trivialization probe) exists in the core and has no CI
-   counterpart. B1 in the same audit is the same shape from the other
+   (the anti-trivialization probe) existed in the core with no CI
+   counterpart (the probe itself was deleted 2026-07-31 — design
+   review §3.1 Option B — which also dissolved this instance of the
+   divergence). B1 in the same audit is the same shape from the other
    direction — the CI harness had the elaboration ORDER right while
    the product path had it wrong, so for that check the product was
    the looser consumer.
 
-   What actually bounds the risk today, stated as a claim that can be
+   What actually bounded the risk, stated as a claim that could be
    checked rather than a discipline: a trivializing emitter change
    turns the corresponding workflow golden red before the missing CI
-   probe would have fired. That is a real backstop for THIS guard and
-   an argument that must be re-made per guard — which is why the
-   rebase, not the discipline, is the fix. Tracked in TODO.md.
+   probe would have fired. (Past tense as of 2026-07-31: the guard
+   this paragraph argued about was deleted — design review §3.1
+   Option B — so the corpus backstop described here is now the
+   PRIMARY development-time defense, residual-trust §3.2f, and the
+   per-guard argument survives as the general lesson: backstop
+   arguments must be re-made per guard. Rebase tracking in TODO.md.)
 3. Reject-row v1 subset: sorry + axiom-introduce (the allowlist line
    that also catches native_decide's ofReduceBool). Env-overriding,
    stale-drift, timeout, and name-rebind rows deferred with the

@@ -1,0 +1,36 @@
+Loading file "named_hypothesis_tactic_conclusion.saw"
+Stack trace:
+   (builtin) in offline_lean
+   named_hypothesis_tactic_conclusion.saw:18:35-18:55 in (callback)
+   (builtin) in goal_num_when
+   named_hypothesis_tactic_conclusion.saw:18:18-18:55 in (callback)
+   (builtin) in prove_core
+   named_hypothesis_tactic_conclusion.saw:18:1-19:177 (at top level)
+Error translating: Refusing to emit a Lean proof goal containing a goal-telescope binder whose domain carries the `Except String` value carrier (_ : Except).
+
+Reason: The goal boundary is RAW by construction, so this binder is a sequent
+HYPOTHESIS folded into the SAWCore arrow chain. Its Except-carried image
+can be UNINHABITED — an erring-but-unforced element makes
+`Except.error _ = Except.ok _` uninhabited by constructor no-confusion —
+so the emitted implication is VACUOUSLY provable while SAW proves the
+same hypothesis TRUE. The Lean statement would be strictly WEAKER than
+the obligation, and replaying it would admit an arbitrary conclusion.
+
+What this means: the emitted `goal` def and its `goal_holds`
+stub must state EXACTLY the SAWCore obligation. For this shape
+the Lean statement would differ from the SAWCore one, so
+discharging it in Lean would not discharge the SAW obligation.
+Translation is refused rather than emitting a mis-stated goal.
+
+Likely cause: the goal was built with `goal_cut` /
+`goal_intro_hyp`, or reached here under
+`enable_sequent_goals`. `sequentToProp` folds sequent
+hypotheses into a SAWCore arrow chain, and this gate
+refuses to carry one whose Lean image is an equation over
+the `Except String` value carrier.
+
+Workaround: prove the hypothesis as its own goal and use
+the unconditional statement, rather than cutting it in.
+Hypothesis-bearing goal emission is a deferred feature,
+not a supported one — see saw-core-lean/README.md.
+
