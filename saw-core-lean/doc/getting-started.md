@@ -10,9 +10,38 @@ The example: prove that Cryptol's `(a && b) || (a && c) == a && (b
 
 ## Prerequisites
 
-- `saw` on PATH (built from this repo).
-- `lake` on PATH (Lean 4 toolchain — install via
-  [elan](https://github.com/leanprover/elan) if you haven't).
+- **`saw` on PATH**, built from this repo (`cabal build exe:saw`).
+  The binary lands at
+  `dist-newstyle/build/<host-triple>/ghc-<ver>/saw-<ver>/x/saw/build/saw/saw`
+  — put that directory on PATH, or invoke it by full path.
+- **`lake` on PATH**, via
+  [elan](https://github.com/leanprover/elan).
+- **Pin the same Lean toolchain this backend pins.** elan installs
+  no default toolchain, so `lake new` fails outright until one is
+  chosen — and choosing a *different* one is worse than choosing
+  none, because your project builds the shared support library in
+  place at your pin (see the note in Step 2). Use exactly:
+
+  ```
+  leanprover/lean4:v4.32.0
+  ```
+
+  which is the content of `saw-core-lean/lean/lean-toolchain` — read
+  it from there rather than copying this line, in case it has moved
+  on. Step 2 shows where to put it.
+- **`SAW_LEAN_ROOT`** — needed only for the replay step at the end,
+  not for emission. Set it to your checkout root (the directory
+  containing `saw-core-lean/`), e.g.
+  `export SAW_LEAN_ROOT=/path/to/saw-script`. Without it, `saw`
+  looks for the assets in its installed data directory and, if they
+  are not there, aborts with a message naming both remedies. An
+  unpacked release tarball's root also works.
+
+None of the Lean commands need `enable_experimental` (verified
+2026-07-31). Some *other* SAWScript commands you might combine them
+with do — `goal_num_when`, for instance — so if you see "available
+only after running `enable_experimental`", it is coming from another
+command in your script, not from `offline_lean`.
 
 ## Step 1: emit the goal
 
@@ -33,11 +62,8 @@ fails with `1 unsolved subgoal(s)`, which the `fails` wrapper
 converts back to success so the script continues. SAW never claims a
 goal on the strength of an export (this deliberately differs from
 `offline_rocq` and the offline SMT exporters, which admit on
-emission). The proof happens in Lean, in steps 2–3 below. Once the
-proof is complete, `offline_lean_replay "<proof dir>"` is the
-SAW-side discharge path: it re-emits the goal fresh, kernel-checks
-your completed proof against it under the factored trust kernel,
-and only then admits the goal.
+emission). The proof happens in Lean, in Steps 2–3 below; Step 4
+then has SAW accept it via `offline_lean_replay`.
 
 The emitted file looks like this (regenerated 2026-07-15 from the
 exact script above):
@@ -89,10 +115,22 @@ There is exactly one supported workflow: a Lake project that
 runnable instance lives at `examples/saw-lean/proof/`; read that
 alongside this section.
 
+> **Pin the toolchain FIRST.** `lake new` fails on a fresh elan
+> install ("no default toolchain configured"), and the fix is not
+> `elan default stable` — that pins you to whatever is latest, and a
+> path-dep project with a mismatched pin **rebuilds the shared
+> support library in place at your pin**, breaking its build products
+> for everything else that uses it. Match the backend's pin instead:
+
 ```bash
-lake new myproof
-cd myproof
+mkdir myproof && cd myproof
+cp /path/to/saw-script/saw-core-lean/lean/lean-toolchain .
+lake init myproof
 ```
+
+(`lake init` in an existing directory is the `lake new` equivalent
+once `lean-toolchain` is in place. If you prefer `lake new`, set
+`ELAN_TOOLCHAIN` to the same string for that one command.)
 
 Edit the generated `lakefile.toml` so it depends on the
 saw-core-lean support library. Replace `/path/to/saw-script`
@@ -126,12 +164,9 @@ Subsequent builds reuse the cache.
 > **In-repo demo of the same pattern**: `examples/saw-lean/proof/`
 > is a two-file Lake project using this exact `[[require]]` form
 > with a *relative* path (`../../../saw-core-lean/lean`). Copy its
-> `lakefile.toml` as a starting template for your own project, and
-> pin YOUR `lean-toolchain` to the support library's
-> (`saw-core-lean/lean/lean-toolchain`, which the demo also pins
-> since 2026-07-30): a path-dep project with a mismatched pin
-> rebuilds the shared library in place at that pin and breaks its
-> existing build products.
+> `lakefile.toml` as a starting template. It pins the same toolchain
+> as the support library, as yours must (see the note at the top of
+> this step).
 
 ## Step 3: discharge the goal
 
@@ -158,11 +193,82 @@ What's happening:
    to the same `Except.ok` literal. The eight `rfl` calls discharge the eight
    resulting equalities.
 
-This is verified end-to-end by
-`otherTests/saw-core-lean/proofs/walkthrough/proof.lean`, which holds
-the worked example verbatim and is run on every CI build. If a
-future change to the support library or the translator breaks
-this proof, that test fails loud.
+The same tactic is verified end-to-end by
+`otherTests/saw-core-lean/proofs/walkthrough/proof.lean`, run on every
+CI build, so a support-library or translator change that breaks it
+fails loud. Note that row is in *replay* form, not the form above —
+it says `import Emitted` and `theorem goal_closed`, which is Step 4's
+shape, not Step 3's. The tactic body is what's shared.
+
+## Step 4: have SAW accept it (`offline_lean_replay`)
+
+Step 3 leaves you with a proof Lean accepts. SAW does not yet know
+that. `offline_lean_replay` closes the loop: it re-emits the goal
+itself, checks your proof against *its* emission, and only then
+admits the SAW goal.
+
+It takes a **proof directory**, and the directory's contents are a
+contract:
+
+| file | required? | must contain |
+|---|---|---|
+| `proof.lean` | yes | `import Emitted`, and a top-level `theorem goal_closed : goal` |
+| `completed.lean` | only for goals with obligation placeholders | your edited copy of the whole emitted outline, with every `sorry` replaced |
+
+Two things differ from Step 3 and they are the two that decide
+whether replay accepts:
+
+1. **The theorem must be named `goal_closed`**, not `goal_holds`.
+   (`goal_holds` is the emitted *placeholder*'s name; `goal_closed`
+   is what replay looks for.) A differently-named theorem gives
+   `CHECK-FAIL: missing-goal_closed`.
+2. **Do not carry a local `def goal`.** `proof.lean` must get `goal`
+   by `import Emitted` — replay stages its own fresh emission as
+   `Emitted.lean`. Keeping the emitted file's own `def goal` collides
+   with it (`environment already contains 'goal' from Emitted`) and
+   surfaces as `CHECK-FAIL: closer-wrong-type`.
+
+So the Step-3 file you iterated on in Lake and the `proof.lean` you
+hand to replay are two different files. Keep both: the Lake project
+is where you develop the tactic (you get real feedback from
+`lake build`), and `proof.lean` is the four-line replay wrapper
+around the finished tactic:
+
+```lean
+-- myproof-replay/proof.lean
+import Emitted
+
+theorem goal_closed : goal := by
+  intro a b c
+  cases a <;> cases b <;> cases c <;> rfl
+```
+
+Then, with `SAW_LEAN_ROOT` set (see Prerequisites):
+
+```saw
+// discharge.saw
+prove_print (offline_lean_replay "myproof-replay")
+  {{ \(a : Bit) (b : Bit) (c : Bit) ->
+       (a && b) || (a && c) == a && (b || c) }};
+```
+
+Note there is no `fails` wrapper this time — on success the goal is
+genuinely closed. You should see:
+
+```
+offline_lean_replay: Lean kernel check passed (leanprover/lean4:v4.32.0)
+```
+
+To see what SAW recorded, add `enable_experimental;` at the top and
+`summarize_verification;` at the end — the report lists `LEAN-REPLAY`
+under "Solvers Used" (that command is one of the ones needing the
+flag; `offline_lean_replay` itself does not).
+
+If it fails, the message always names a specific check — see
+[`proof-cookbook.md`](proof-cookbook.md) ("When replay rejects your
+proof") for what each one means. `:help offline_lean_replay` in the
+SAW REPL is the authoritative statement of this contract, including
+the axiom allowlist and the trust-tier rule.
 
 ## What works today, what doesn't
 
@@ -248,10 +354,36 @@ The harder remaining cases:
   recurrence lemmas that rewrite the literal obligation into an
   ergonomic form.
 
+## Before you rely on a replayed goal — read this
+
+You now have SAW admitting a goal on Lean's authority. Two known
+limitations bound what that means, and both are disclosed in
+[`../README.md`](../README.md) rather than here so they stay in one
+place:
+
+- **LIB-1**, a soundness limitation that can admit a SAW-false
+  equation whose falsity hides behind an unread erring vector slot.
+  Reachable from ordinary Cryptol. Read the `⚠ KNOWN SOUNDNESS
+  LIMITATION` section before handing `LeanReplayEvidence` to anyone.
+- **The hypothesis-goal refusal and what replay does *not* check** —
+  including why reading your emitted `def goal` is the right habit,
+  and the one class where reading will not save you.
+
+Also in the README: the threat model (these gates defend against
+mistakes, not an adversarial proof author — so review proof files you
+did not write before running replay, because elaborating Lean
+executes code).
+
 ## Where to read next
 
-- `doc/archive/2026-04-24_soundness-boundaries.md` — what the translator
-  guarantees and what residual trust you inherit.
+- [`../README.md`](../README.md) — status, the known soundness
+  limitations above, and the threat model. Start here for "what am I
+  trusting?".
+- `doc/2026-05-02_residual-trust.md` — the auditor-facing trust
+  catalog behind those summaries (including the current axiom
+  inventory). (`doc/archive/2026-04-24_soundness-boundaries.md` is
+  the superseded May-era snapshot — its trust model has since
+  changed materially; don't start there.)
 - `doc/2026-07-14_release-plan.md` — the plan-of-record for what's
   coming (0.01 coherence, 0.02 example-driven coverage). The
   proof-ergonomics thread is where this walkthrough generalizes

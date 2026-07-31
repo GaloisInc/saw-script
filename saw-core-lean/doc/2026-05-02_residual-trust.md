@@ -951,8 +951,19 @@ reading it wrongly.
    the `#print axioms` exact-match audit, the drift check) are
    independent and unaffected, as is translator correctness. A gate-3
    failure stays inside gate-3-shaped goals.
-2. **Opt-in.** The emission path refuses without
-   `enable_experimental` (tested, not inferred).
+2. ~~**Opt-in.**~~ **CORRECTED 2026-07-31, same day, and it WIDENS
+   this residual:** an earlier revision of this list claimed "the
+   emission path refuses without `enable_experimental` (tested, not
+   inferred)". That is FALSE. What had been tested was a different
+   command's flag requirement (`goal_num_when`). Re-measured:
+   `parse_core`, `prove_core`, `offline_lean` and
+   `offline_lean_replay` ALL run with no flag, and a
+   hypothesis-bearing goal reaches this gate with no flag. So there
+   is NO opt-in barrier — the escape route needs only ordinary use
+   of Current builtins. This is the C8 failure mode (a clause
+   asserted as measured whose measurement answered a different
+   question) committed in the very entry that records C8's
+   provenance; kept visible rather than silently edited.
 3. **The ordinary routes are closed.** Cryptol / LLVM / `goal_cut`
    goals reach the gate through `sequentToProp`, which folds with
    `scFun` and therefore emits only ANONYMOUS binders; anonymous

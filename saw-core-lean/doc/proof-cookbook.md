@@ -339,6 +339,36 @@ leave it as an explicit proof obligation or mark the example as an expected
 proof gap. The emitted obligation is still meaningful and sound; only the
 automation is missing.
 
+## When replay rejects your proof
+
+Every `offline_lean_replay` failure names one check and prints
+supporting output — there are no silent outcomes, and the printed
+detail (Lean's own error, the offending line) is usually the fastest
+route to the cause. The tokens below are the ones **you** can cause;
+the remainder in `replay/lean-check-core.sh` report a broken
+checkout, environment or toolchain rather than a problem with your
+proof.
+
+| `CHECK-FAIL:` | what happened | what to do |
+|---|---|---|
+| `missing-proof` | no `proof.lean` in the directory you passed | the argument is a *proof directory*, not a file and not your Lake project root |
+| `missing-goal_closed` | no theorem named `goal_closed` | rename your theorem; `goal_holds` is the emitted placeholder's name, `goal_closed` is what replay looks for |
+| `no-named-closer` | the goal is closed by an anonymous `example` | replay needs a *named* theorem so it can audit that name's axioms |
+| `closer-wrong-type` | `goal_closed` exists but does not prove the emitted `goal` | most often a local `def goal` colliding with the staged emission ("environment already contains 'goal'"): delete it and `import Emitted` instead. Otherwise your statement genuinely differs from SAW's |
+| `proof-does-not-elaborate` | Lean rejected `proof.lean` | the full Lean error and goal state are printed above the token — fix as you would any Lean error |
+| `sorry-in-user-file` | a `sorry` survives in `proof.lean` or `completed.lean` | the offending line is echoed; finish it. Zero tolerance in *your* files |
+| `axiom-decl-in-user-file` | your file declares an `axiom` | delete it. An axiom would let any statement through, so it is refused before elaboration |
+| `axiom-outside-allowlist` | your proof depends on an axiom outside the allowlist | usually `sorryAx` (a `sorry` somewhere in the chain) or a `native_decide`/`bv_decide` native axiom. Prove it without, or see the two-tier bitvector policy above |
+| `proof-source-unlintable` | the lint could not classify your file | a raw or interpolated string literal, an ambiguous quote, a non-ASCII primed identifier, or an unterminated string/comment. Rephrase the construct |
+| `completed-outline-drift` | your `completed.lean` goal is not the freshly emitted goal | you edited the goal, or the emitter moved under you. Re-emit and redo the edit; never hand-edit the `def goal` |
+| `completed-outline-missing-goal-def` | your `completed.lean` no longer presents the emitted `def goal :` line | same cause; keep that line verbatim |
+| `harness-namespace-in-user-file` | your file mentions `GeneratedHarness` | that namespace belongs to the checker's own probes; rename your declaration |
+
+`:help offline_lean_replay` in the SAW REPL is the authoritative
+contract (proof-directory layout, the axiom allowlist, the
+strict-tier rule). `getting-started.md` Step 4 walks the accepting
+case end to end.
+
 ## When the cookbook doesn't have your pattern
 
 If your goal doesn't match any pattern above:

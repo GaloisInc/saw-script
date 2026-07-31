@@ -112,6 +112,62 @@ limits: `doc/2026-05-02_residual-trust.md` (goal-shape rules).
 **Workaround:** prove the hypothesis as its own goal and emit the
 unconditional statement.
 
+**How complete is this refusal? Honestly: not established.** The
+check decides "is this binder a folded hypothesis?" by inspecting the
+EMITTED LEAN, and that reconstruction is harder than it looks. On
+2026-07-31 it was reimplemented four times in one day; the first
+three were each defeated by a constructed goal that the check
+admitted and should have refused — one of them reached the point of
+`offline_lean_replay` issuing evidence for a false obligation. The
+current implementation refuses every such goal anyone has built, the
+whole corpus is green with it, and each version has refused strictly
+more than the last — but nobody can confirm by reading it that no
+fifth shape slips through. If you are emitting hypothesis-bearing
+goals at all, you are standing next to that boundary: prefer the
+workaround above. Full disclosure, including the measured bounds
+(one consumer and no cascade; ordinary Cryptol/LLVM/`goal_cut` routes
+closed; zero occurrences across the project's own 78 goal goldens —
+but NO opt-in barrier: hand-written SAWCore reaches this gate with no
+`enable_experimental`):
+`doc/2026-05-02_residual-trust.md` §3.2g. The durable fix — deciding
+this on the SAWCore side, where it is a sort check rather than a
+reconstruction — is scheduled for the next release.
+
+## What replay does NOT check — read your emitted goal
+
+Replay checks that your Lean proof proves **the goal SAW emitted**.
+It does not check that the goal SAW emitted says what you *meant*.
+That gap is the backend's, not yours, but you are the one positioned
+to notice it, so:
+
+**Read the `def goal : Prop := …` line before you discharge it.** It
+is the statement you are about to prove, and no gate downstream will
+tell you it says less than you intended.
+
+That advice has a limit, and it is exactly the class above: for a
+hypothesis-bearing goal that escapes the refusal, reading will **not**
+save you. A trivialized goal is conspicuous — it says `True`, or an
+equation between two literals. An escaped hypothesis goal is not: it
+reads as a perfectly ordinary conditional theorem
+(`(h : …) -> …`), and the thing that makes it vacuous — that `h`'s
+Lean image is uninhabited — is not visible in the statement. So
+inspection covers the over-reduction class, and does not cover the
+hypothesis class. Prefer the workaround above for the latter.
+
+Concretely, there used to be a replay-time canary that refused any
+goal closable by `rfl`/`trivial` alone — the shape an
+over-reduction bug produces. It was **removed on 2026-07-31**: three
+audit rounds in a single day showed its implementation could not be
+kept honest, and it was not one of the checks that ask Lean's kernel
+a question (those are the goal binding, the exact-match axiom audit,
+and the completed-outline drift check). So today, if an emission bug
+collapses your goal to something trivial and you discharge it
+without reading it, replay will accept the result. What defends
+against this instead: the project's differential corpus catches
+emitter over-reduction before it ships, and a trivialized goal is
+visible in the file you open. Disclosure and the accepted cost:
+`doc/2026-05-02_residual-trust.md` §3.2f.
+
 `Prelude.fix` is handled by proof-carrying emission. The backend emits
 the literal fixed-point body plus explicit Lean obligations for the
 semantic facts needed to use it; shape-specific helper lowerings such as

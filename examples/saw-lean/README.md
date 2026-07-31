@@ -3,7 +3,9 @@
 End-to-end demo of SAW's Lean 4 backend, driven by `rev.cry`
 (reverse, its spec, and two properties). This is the CANONICAL copy
 (the untracked `saw-lean-example/` folder in the parent workspace is
-legacy); `saw-core-lean/doc/getting-started.md` walks this flow.
+legacy). For a step-by-step tutorial on a smaller example, see
+`saw-core-lean/doc/getting-started.md`; this demo is the larger
+worked instance of the same pipeline, not the tutorial's subject.
 
 > **STATUS 2026-07-18 (post recursor-convention + wrapper arc)**
 >
