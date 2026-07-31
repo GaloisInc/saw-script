@@ -2324,24 +2324,33 @@ until (a).**
 
 ## Backlog — emitter and coverage
 
-- [ ] **Unused goal binder emits a file that does not compile
-  (found 2026-07-31 by the docs pass).** A goal binder the body never
-  references gets a `let <x> := (Pure.pure <x>);` shadow whose type
-  Lean cannot infer, so elaboration fails with
-  `typeclass instance problem is stuck / Pure (?m.N <x>)`. Minimal
-  pair, both over `[8]`: `\(i : [8]) -> i == i` COMPILES;
-  `\(i : [8]) -> (3 : [8]) == 3` DOES NOT (the binder is unused).
-  With no binder at all, `(3 : [8]) == 3` compiles, so it is
-  specifically the unused-and-shadowed case. FAIL-CLOSED —
-  `offline_lean_replay` refuses with `emitted-does-not-compile`, and
-  `offline_lean` emits a file the user cannot build — so this is
-  completeness/diagnostic quality, not soundness. Likely fix: do not
-  emit the `Pure.pure` shadow for a binder the body does not
-  reference (or annotate it), the same "unused binder" question
-  `Pretty.anonymizeUnusedPiBinders` already answers on the type side.
-  A user hitting this gets a Lean error with no hint that the cause
-  is an unused Cryptol binder, so a named refusal would be better
-  than the current stuck instance.
+- [ ] **An unused goal binder emits a file that does not compile
+  (found 2026-07-31 by the docs pass; reach surveyed same day).** A
+  goal binder the body never references gets a
+  `let <x> := (Pure.pure <x>);` shadow whose type Lean cannot infer,
+  so elaboration fails with
+  `typeclass instance problem is stuck / Pure (?m.N <x>)`.
+  Verified, all over `[8]`: `\(i : [8]) -> i == i` COMPILES;
+  `\(i : [8]) -> (3 : [8]) == 3` DOES NOT; `(3 : [8]) == 3` with no
+  binder COMPILES. The reach is wider than that pair suggests — ANY
+  unused binder triggers it, including one among several used ones:
+  `\(x : [8]) (y : [8]) -> x == x` fails on `y` alone. So an ordinary
+  property with one parameter it happens not to reference hits this.
+  FAIL-CLOSED: `offline_lean_replay` refuses with
+  `emitted-does-not-compile`, and `offline_lean` writes a file the
+  user cannot build — completeness and diagnostic quality, not
+  soundness.
+  Bounding good news from the same survey: of eight shapes a newcomer
+  would reach for, the other SIX all emit files that compile (Bool
+  properties, symbolic bv equality, `x + y == y + x`, `x <= x`,
+  symbolic sequence indexing, concrete arithmetic) — so this is the
+  single failure class among common shapes, not one of many.
+  Likely fix: do not emit the `Pure.pure` shadow for a binder the
+  body does not reference (or annotate it) — the same "unused binder"
+  question `Pretty.anonymizeUnusedPiBinders` already answers on the
+  type side. Failing that, a NAMED refusal beats the current stuck
+  instance: a user gets a raw Lean error with no hint that an unused
+  Cryptol parameter is the cause.
 
 - [ ] **Lower `update` at concrete indices** (filed 2026-07-22).
   Cookbook Pattern 10 tells spec authors to avoid `update`-chain

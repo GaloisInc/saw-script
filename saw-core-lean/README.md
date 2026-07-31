@@ -176,12 +176,15 @@ part of the live support library.
 
 What's punted (with diagnostics — translator refuses cleanly):
 
-- **A goal binder your property never uses** emits a file Lean
-  cannot elaborate (`typeclass instance problem is stuck` on a
-  `Pure` shadow) — e.g. `\(i : [8]) -> (3 : [8]) == 3`. Not a clean
-  refusal, which is the bug; found 2026-07-31 and tracked in
-  TODO.md. Workaround: drop the unused binder. It fails closed —
-  replay refuses with `emitted-does-not-compile`.
+- **A parameter your property does not use.** Any unused binder
+  makes the emitted file fail to elaborate
+  (`typeclass instance problem is stuck` on a `Pure` shadow) — and it
+  need not be the only parameter: `\(x : [8]) (y : [8]) -> x == x`
+  fails on `y` alone. Workaround: drop parameters the property does
+  not reference. Fails closed (replay refuses with
+  `emitted-does-not-compile`), but you get a raw Lean instance error
+  instead of a named refusal, which is the actual defect — found and
+  surveyed 2026-07-31, tracked in TODO.md.
 
 - Large recursive Cryptol examples still need proof-side recurrence
   libraries over the generic `fix` obligations.
