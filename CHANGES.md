@@ -9,9 +9,11 @@ This release supports [version
 * `offline_lean` is now emission-only: it writes the Lean proof
   obligation and leaves the goal UNSOLVED, so SAW never claims a goal
   on the strength of an export (wrap in `fails` if the script should
-  continue). A new `offline_lean_replay` command reserves the future
-  SAW-side discharge interface; in this release it always fails with a
-  diagnostic. As part of this, LLVM verification now runs every
+  continue). The new `offline_lean_replay` command is the discharge
+  path: it re-emits the goal, checks a user-completed Lean proof
+  against it, and on success admits the goal with recorded
+  `LeanReplayEvidence`. Setup, known limitations, and the trust model
+  are in `saw-core-lean/README.md`. As part of this, LLVM verification now runs every
   verification condition's proof tactic before failing on unfinished
   proofs, so multi-obligation `llvm_verify` runs with offline
   exporters emit all obligation files in one pass (invalid proofs with

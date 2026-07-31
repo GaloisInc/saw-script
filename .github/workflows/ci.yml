@@ -820,21 +820,13 @@ jobs:
         shell: bash
         run: |
           export PATH="$PWD/bin:$PWD/dist/bin:$HOME/.elan/bin:$PATH"
-          # W5-2 (2026-07-30): demo.saw's offline_lean_replay steps
-          # need the replay assets. The dist/bin/saw binary's
-          # compiled-in datadir is the build machine's ~/.cabal/share
-          # (never installed), so without this export the replay
-          # resolution has no live branch and the step cannot pass.
+          # demo.saw's replay steps need the asset root: the
+          # extracted binary's compiled-in datadir is never installed.
           export SAW_LEAN_ROOT="$PWD"
           cd examples/saw-lean
           saw demo.saw
-          # Build the committed Proofs/{Invol,Eq}Emitted.lean copies.
-          # (The previous comment here claimed a refresh-from-out/
-          # step and cited a proof/README that does not exist —
-          # wave-4 DEMO-7. Refreshing remains a TODO; the copies
-          # were verified token-identical to fresh emission
-          # 2026-07-30 — recorded in saw-core-lean/doc/
-          # 2026-07-30_release-gate-audit-wave4.md §1 item 2.)
+          # Build the committed Emitted copies. Refreshing them
+          # from out/ is tracked in saw-core-lean/TODO.md.
           cd proof
           lake build
 

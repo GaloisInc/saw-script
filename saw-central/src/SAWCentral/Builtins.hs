@@ -1453,7 +1453,7 @@ leanReplayFingerprint txt =
 --     fingerprint and restages; the fingerprint covers file NAMES
 --     and CONTENTS of every shipped project file, so a stale cache
 --     can never satisfy a newer saw. Staging is crash-safe AND
---     concurrency-safe (SHIP-4 fix, 2026-07-30): copy to a
+--     concurrency-safe: copy to a
 --     PER-CALL-UNIQUE temp sibling, write the trailing @.staged-ok@
 --     marker, then atomically rename — a directory without the
 --     marker is never trusted, and losing a rename race to a
@@ -1480,7 +1480,7 @@ resolveLeanReplayAssets = do
         , "Reinstall saw (the assets ship as Cabal data-files), or"
         , "set SAW_LEAN_ROOT to a saw-script checkout root — an"
         , "unpacked release-tarball root also works (it ships"
-        , "saw-core-lean/{lean,replay}, since 2026-07-30) provided"
+        , "saw-core-lean/{lean,replay}) provided"
         , "the tree is writable (replay builds and stages inside it)."
         ]
       libNames <- sort . filter (".lean" `isSuffixOf`)
@@ -1495,31 +1495,22 @@ resolveLeanReplayAssets = do
           fpTag = map (\c -> if c == ':' then '-' else c)
                     (Text.unpack fpText)
       cacheBase <- getXdgDirectory XdgCache "saw-core-lean"
-      -- "lean2-" (not "lean-"): schema bump with the SHIP-4 fix
-      -- (2026-07-30, its fix audit F1). Reuse is marker-EXISTENCE
-      -- only, so a cache published marker-plus-hole by the pre-fix
-      -- racing stager would short-circuit forever under the old
-      -- prefix; the bump orphans any such cache rather than
-      -- trusting it. Old "lean-*" dirs become inert debris.
+      -- "lean2-", not "lean-": a schema bump. Reuse is
+      -- marker-EXISTENCE only, so any cache a pre-fix racing stager
+      -- published incomplete would short-circuit forever under the
+      -- old prefix; the bump orphans it. Old dirs are inert debris.
       let cacheDir = cacheBase </> ("lean2-" ++ fpTag)
           marker   = cacheDir </> ".staged-ok"
       staged <- doesFileExist marker
       unless staged $ do
         createDirectoryIfMissing True cacheBase
-        -- Per-call-unique staging dir (wave-4 SHIP-4, the wave's one
-        -- CONFIRMED finding, fixed 2026-07-30): the previous fixed
-        -- name @staging-tmp-<fpTag>@ was shared by concurrent
-        -- same-fingerprint processes, and the "leftover" cleanup
-        -- (@removeDirectoryRecursive@ on an existing tmp) deleted a
-        -- live peer's mid-copy tree; one interleaving then published
-        -- a marker-bearing tree missing the head of @relFiles@ —
-        -- PERMANENTLY, since the marker short-circuits restaging.
-        -- Unique names close both, matching the per-call stage dir
-        -- below and the kernel's own WORK dir. Tradeoff: a crash
-        -- mid-copy now leaves debris under the cache base instead of
-        -- being adopted-then-deleted by the next run — cache
-        -- directory debris, never trust state (a markerless tree is
-        -- never consulted).
+        -- Per-call-UNIQUE staging dir: a name shared by concurrent
+        -- same-fingerprint processes let one delete a live peer's
+        -- mid-copy tree, and could publish a marker-bearing tree with
+        -- files missing (permanently, since the marker short-circuits
+        -- restaging). A crash mid-copy now leaves debris under the
+        -- cache base rather than trust state — a markerless tree is
+        -- never consulted.
         tmp <- createTempDirectory cacheBase ("staging-tmp-" ++ fpTag)
         createDirectoryIfMissing True (tmp </> "CryptolToLean")
         mapM_ (\rel -> copyFile (dataLean </> rel) (tmp </> rel))
