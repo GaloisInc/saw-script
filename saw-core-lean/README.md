@@ -208,6 +208,9 @@ What's punted (with diagnostics — translator refuses cleanly):
 
 Top-level docs are the **current** as-of-today reference:
 
+- [`STATUS.md`](STATUS.md) — what works today, what is punted, the
+  known-gap census, and recent history. The "is this usable for my
+  case?" page.
 - [`doc/architecture.md`](doc/architecture.md) — design overview.
 - [`doc/getting-started.md`](doc/getting-started.md) — a 30-minute
   walkthrough from a Cryptol property to a closed Lean theorem.

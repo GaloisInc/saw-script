@@ -1,10 +1,16 @@
 # saw-core-lean status
 
-Last updated: 2026-07-29 (0.02 release-gate audit remediation: two
+Last updated: 2026-07-31 (audit waves 4 and 5, the 0.02 convergence
+close-out arc, a deletion-biased kernel design review, and one
+CRITICAL found-and-fixed. Release posture: **NOT RELEASED** — three
+of the four release-gate clauses are met; the outstanding one is a
+green CI run. Summary of the arc below under "Recent history"; the
+gate itself is `doc/2026-07-30_convergence-closeout-plan.md` §5.
+Previous entry 2026-07-29: 0.02 release-gate audit remediation: two
 CRITICAL unsound-acceptance paths closed — the trust kernel's
 elaboration order and the F-5 goal-shape gate's nested-sort hole —
-plus the Family-3 emission pass and the module split. Release
-posture: **NOT RELEASED**; see the findings ledger in TODO.md.
+plus the Family-3 emission pass and the module split. See the
+findings ledger in TODO.md.
 Previous entry 2026-07-23: 0.02 census pass: BV native-eval tier
 package complete, compositional replay chains, toolchain v4.32.0,
 W2(d) hardening, docstring lint; plan:
@@ -83,17 +89,20 @@ Passing (the standing fences):
   `#guard_msgs` behavior fences, and the `linter.missingDocs`
   build option (all 153 public declarations documented 2026-07-23;
   a new undocumented declaration warns in `lake build`).
-- `cabal test saw-core-lean-smoketest`: 73 tests, including the
-  Slice 7 anti-regression source lint (74 → 73 on 2026-07-28: the
-  Ascription pretty-printer case went with the `Lean.Ascription`
-  AST deletion, and the S-2 iterate test now pins the raw-position
-  rejection instead of the withdrawn `saw_fix_unique_exists_raw`
-  contract).
-- `otherTests/saw-core-lean`: `make conformance` exit 0 — 235 rows
-  in conformance scope (117 differential SAW-vs-Lean evaluation,
-  91 obligation shape, 27 saw-boundary; recounted from disk
-  2026-07-23 after the intmod boundary/rejection rows landed), with
-  emitted artifacts elaborated. Tree restructured 2026-07-15 (see
+- `cabal test saw-core-lean-smoketest`: **94 tests** (verified
+  2026-07-31), including the Slice 7 anti-regression source lint,
+  the 18-case fix-recognizer classifier group, and the
+  goal-shape-gate unit cases. (Was 73 on 2026-07-28.)
+- `otherTests/saw-core-lean`: `make conformance` exit 0, with
+  emitted artifacts elaborated. Row figure OWED A RE-MEASURE: the
+  last recount was 2026-07-23 (235 rows: 117 differential, 91
+  obligation, 27 saw-boundary) and rows have been added since,
+  including four goal-shape boundary rows on 2026-07-31. Not
+  restated here from a directory count, because saw-boundary
+  directories hold multiple rows each and the two units are not
+  interchangeable — the figure STATUS quotes must come from a
+  `make conformance` summary, per this file's own warning that a
+  stale count silently narrows a release claim. Tree restructured 2026-07-15 (see
   otherTests/saw-core-lean/README.md): `workflows/` split out of
   `drivers/` for the end-to-end SAWScript rows; `shape/` renamed
   (now `negative/`); the 17 legacy `drivers/conformance_*` litmus
@@ -125,7 +134,46 @@ Passing (the standing fences):
   restructured tree (72 gaps in full-suite inventory scope,
   census below).
 
-Known-gap census (**re-measured 2026-07-29**, release-gate audit
+## Recent history (2026-07-30 / 31)
+
+Two audit waves, a close-out arc, a design review, and one CRITICAL.
+Full record: `TODO.md` and the dated docs named below.
+
+- **Wave 4** (`doc/2026-07-30_release-gate-audit-wave4.md`) — first
+  wave with a citable threat model. No CRITICAL. Audited the
+  never-read `classifyFixShape` gate, the shipped demo, and the
+  cabal ship list.
+- **Wave 5** (`doc/2026-07-30_release-gate-audit-wave5.md`) — the
+  verdict wave. One MEDIUM: documentation advertising coverage for
+  contracts withdrawn as unsound (S-2/LIB-2 propagation). Fixed.
+- **Close-out arc**
+  (`doc/2026-07-30_convergence-closeout-plan.md`) — every wave-3
+  "should fix" item threat-model-scored; two real in-model defects
+  fixed and pinned; the demo/library Lean toolchain pins CONVERGED,
+  retiring the shared-build clobber hazard; new closed checks for
+  the ship list and the installed-assets code path.
+- **Kernel design review**
+  (`doc/2026-07-31_kernel-design-review.md`) — measured the trust
+  kernel's re-accretion since the earlier cut and DELETED the
+  anti-trivialization gate rather than hardening it a fourth time.
+  Residual: `doc/2026-05-02_residual-trust.md` §3.2f.
+- **One CRITICAL, found and fixed** — a named hypothesis binder
+  escaped goal-shape gate 3, so a false SAW obligation emitted a
+  Lean-provable goal. Root cause:
+  `doc/2026-07-31_why-gate3-escaped.md`. The gate took four cuts
+  that day; the residual on its completeness is
+  `doc/2026-05-02_residual-trust.md` §3.2g, and the SAWCore-side
+  redesign is scheduled for 0.03.
+
+**Two soundness residuals are shipped documented** and are the ones
+a user should read before relying on a replayed goal: §3.2f
+(goal-formation trivialization) and §3.2g (gate-3 completeness),
+alongside the older §3.2e (LIB-1). All three are summarized for
+users in `README.md`.
+
+Known-gap census (**re-verified 2026-07-31: still 72** — recounted
+from disk as 68 `.known-gap` markers plus 3 `proof-gaps/` and 1
+`stretch/` row; originally re-measured 2026-07-29, release-gate audit
 finding F11 — the previous figure was 58, taken 2026-07-23, and had
 drifted 14 rows behind what `make test` actually reports; the 0.02
 exit-criterion statement below is quantified over this census, so a
