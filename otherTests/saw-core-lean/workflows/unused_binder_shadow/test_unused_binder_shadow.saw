@@ -1,0 +1,72 @@
+// Regression row for the UNUSED-BINDER SHADOW defect (found
+// 2026-07-31, fixed 2026-08-01).
+//
+// THE DEFECT. 'quantifierShadow' (SAWCoreLean/Calculus.hs) opens a
+// goal body with a `let`-shadow chain that `Pure.pure`-lifts every
+// value-typed quantifier binder, so the body's Phase-beta bind chains
+// see wrapped values. The shadow is emitted with NO type annotation.
+// For a binder the body never references, that leaves Lean nothing to
+// infer the monad from, and elaboration dies:
+//
+//     error: typeclass instance problem is stuck
+//       Pure (?m.31 x y)
+//
+// WHY THIS ROW EXISTS AND NOT JUST A UNIT TEST. Every pre-existing
+// row in workflows/offline_lean uses all of its binders, so the whole
+// emission corpus was blind to this class. The defect was found by
+// EXECUTING the getting-started documentation, not by reading the
+// translator — three release-gate audit waves read this code and
+// missed it. A shape-only pin would not have caught it either: the
+// emitted text looked entirely reasonable. What catches it is the
+// harness's ELABORATION leg, which is why the row lives here (drivers/
+// and workflows/ elaborate; saw-boundary/ does not).
+//
+// REACH, measured rather than assumed (survey, 2026-07-31): this is
+// not the exotic "property that ignores its only parameter". ANY
+// unused binder trips it, including one unused parameter among
+// several used ones. So an ordinary property carrying a parameter it
+// happens not to reference hits it — a plausible first encounter for
+// a new user. Of eight common newcomer shapes surveyed, six emitted
+// files that compiled and both failures were this single class.
+//
+// SEVERITY. Completeness and diagnostic quality, NOT soundness:
+// `offline_lean_replay` refuses with `emitted-does-not-compile` and
+// `offline_lean` writes a file the user cannot build. Nothing false
+// is ever admitted. The user-visible cost was a raw Lean typeclass
+// error with no hint that an unused Cryptol parameter caused it.
+//
+// MUTATION. Drop the `Lean.identOccursIn name inner` guard from
+// 'quantifierShadow' and t1/t2/t3 go red at elaboration (t4 stays
+// green). Conversely, weaken 'identOccursIn' to under-report — e.g.
+// stop recursing into `Tactic` bodies — and t4 is the row that
+// notices, because a live shadow would be dropped.
+//
+// offline_lean is emission-only: it writes the file and leaves the
+// goal UNSOLVED, so every prove_print here fails and is wrapped in
+// `fails`, matching workflows/offline_lean.
+
+// t1 — the WIDE-REACH case: one unused binder (y) alongside a used
+// one (x). This is the shape that makes the defect ordinary rather
+// than exotic; it is deliberately first.
+fails (prove_print (offline_lean "test_unused_binder_shadow.t1")
+  {{ \(x : [8]) (y : [8]) -> x == x }});
+
+// t2 — the sole binder is unused. The original filing's example.
+// Note the emitted Pi binder is anonymized on the type side, so a
+// surviving shadow here would reference a name that is not even
+// bound.
+fails (prove_print (offline_lean "test_unused_binder_shadow.t2")
+  {{ \(i : [8]) -> (3 : [8]) == 3 }});
+
+// t3 — unused binder in the MIDDLE of used ones. Pins that the
+// decision is per-binder and position-independent, not a property of
+// the first or last binder.
+fails (prove_print (offline_lean "test_unused_binder_shadow.t3")
+  {{ \(x : [8]) (y : [8]) (z : [8]) -> x + z == z + x }});
+
+// t4 — CONTROL, and the load-bearing half of this row. Every binder
+// is used, so BOTH shadows must survive. Without this, "fix" the
+// defect by deleting the shadow chain outright and the row would
+// still pass while the wrapped-value convention broke.
+fails (prove_print (offline_lean "test_unused_binder_shadow.t4")
+  {{ \(x : [8]) (y : [8]) -> x + y == y + x }});

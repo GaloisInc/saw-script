@@ -138,6 +138,22 @@ typeArgPositions funType = go 0 binders retType
 -- Non-value-typed binders (Nat, Sort, Eq, …) are passed through
 -- unshadowed — the body's operations on them don't go through
 -- Phase-β lifts, so they stay raw.
+--
+-- A binder the inner term never mentions gets NO shadow. The shadow
+-- is emitted without a type annotation, so @let y := Pure.pure y@ for
+-- an unreferenced @y@ leaves Lean nothing to infer the monad from and
+-- elaboration dies with @typeclass instance problem is stuck /
+-- Pure (?m.N y)@. That is not a corner case: any Cryptol property
+-- carrying a parameter it happens not to use hits it, including one
+-- unused parameter among several used ones
+-- (@\\(x : [8]) (y : [8]) -> x == x@ failed on @y@ alone). Dropping
+-- the binding is safe rather than merely convenient: 'Lean.identOccursIn'
+-- over-reports by construction, so a 'False' answer means the name is
+-- absent from the term the @let@ would scope over, and @let n := e; b@
+-- with @n@ absent from @b@ is just @b@.
+--
+-- Found 2026-07-31 by executing the getting-started documentation
+-- rather than reading it; surveyed and filed in TODO.md the same day.
 quantifierShadow ::
   [(VarName, Term)] -> [Lean.PiBinder] -> Lean.Term -> Lean.Term
 quantifierShadow params piBinders body =
@@ -147,7 +163,8 @@ quantifierShadow params piBinders body =
     shadowOne :: ((VarName, Term), Lean.PiBinder) -> Lean.Term -> Lean.Term
     shadowOne ((_, ty), Lean.PiBinder _ mName _) inner
       | shouldWrapBinder ty
-      , Just name <- mName =
+      , Just name <- mName
+      , Lean.identOccursIn name inner =
           Lean.Let name [] Nothing
             (Lean.App pureVar [Lean.Var name])
             inner

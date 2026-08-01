@@ -1,0 +1,43 @@
+Loading file "test_unused_binder_shadow.saw"
+Warning: [warning] at test_unused_binder_shadow.saw:52:18--52:19
+    Unused name: y
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_unused_binder_shadow.saw:51:8-52:39 in (callback)
+   (builtin) in fails
+   test_unused_binder_shadow.saw:51:1-52:39 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+Warning: [warning] at test_unused_binder_shadow.saw:59:8--59:9
+    Unused name: i
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_unused_binder_shadow.saw:58:8-59:37 in (callback)
+   (builtin) in fails
+   test_unused_binder_shadow.saw:58:1-59:37 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+Warning: [warning] at test_unused_binder_shadow.saw:65:18--65:19
+    Unused name: y
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_unused_binder_shadow.saw:64:8-65:57 in (callback)
+   (builtin) in fails
+   test_unused_binder_shadow.saw:64:1-65:57 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in prove_print
+   test_unused_binder_shadow.saw:71:8-72:47 in (callback)
+   (builtin) in fails
+   test_unused_binder_shadow.saw:71:1-72:47 (at top level)
+prove: 1 unsolved subgoal(s)
+Unfinished: 1 goals remaining
+

@@ -15,6 +15,7 @@ Surface-syntax AST for Lean 4. Structured as a near-mirror of
 
 module Language.Lean.AST where
 
+import Data.Char (isAlphaNum)
 import Data.String (IsString(..))
 import Numeric.Natural (Natural)
 
@@ -142,6 +143,70 @@ data Binder
 data PiBinder
   = PiBinder BinderImplicity (Maybe Ident) Type
     deriving (Show)
+
+-- | Does @needle@ occur anywhere in the term?
+--
+-- Deliberately CONSERVATIVE. A 'False' result must mean "this name
+-- does not appear anywhere in this term, under any reading", because
+-- callers use it to justify DELETING a binding (see
+-- 'SAWCoreLean.Calculus.quantifierShadow'). So:
+--
+--   * binder positions count as occurrences, even though a binder
+--     shadows the name rather than using it;
+--   * 'Tactic' bodies are verbatim Lean source that this AST does not
+--     model, so any identifier-token match in the text counts;
+--   * sort- and universe-variable names are compared too, even though
+--     they live in a different namespace from term variables.
+--
+-- Over-reporting only costs a caller its rewrite; under-reporting
+-- would let a caller delete a live binding. The asymmetry is the
+-- whole point, so prefer 'True' whenever the traversal is unsure.
+identOccursIn :: Ident -> Term -> Bool
+identOccursIn needle@(Ident name) = goT
+  where
+    goT t = case t of
+      Lambda bs b        -> any goB bs || goT b
+      Pi bs b            -> any goP bs || goT b
+      Let n bs mty rhs b -> n == needle || any goB bs
+                              || maybe False goT mty || goT rhs || goT b
+      App f xs           -> goT f || any goT xs
+      Sort s             -> goS s
+      Var n              -> n == needle
+      ExplVar n          -> n == needle
+      ExplVarUniv n ls   -> n == needle || any goL ls
+      NatLit _           -> False
+      IntLit _           -> False
+      List xs            -> any goT xs
+      StringLit _        -> False
+      Tactic src         -> name `elem` identTokens src
+
+    goB (Binder _ n mty)   = n == needle || maybe False goT mty
+    goP (PiBinder _ mn ty) = mn == Just needle || goT ty
+
+    goS s = case s of
+      Prop      -> False
+      TypeLvl _ -> False
+      TypeVar u -> u == name
+      SortVar u -> u == name
+
+    goL l = case l of
+      LevelVar u   -> u == name
+      LevelLit _   -> False
+      LevelSucc l' -> goL l'
+      LevelMax ls  -> any goL ls
+      LevelIMax ls -> any goL ls
+
+-- | Split verbatim Lean source into identifier-shaped tokens, so that
+-- 'identOccursIn' asks about whole-name matches inside a 'Tactic'
+-- body rather than substring matches (@x@ must not match @xs@).
+-- @.@ is an identifier character here, so a qualified name lexes as
+-- one token and @pure@ does not match inside @Pure.pure@.
+identTokens :: String -> [String]
+identTokens s = case dropWhile (not . isIdentChar) s of
+  []  -> []
+  s'  -> let (tok, rest) = span isIdentChar s' in tok : identTokens rest
+  where
+    isIdentChar c = isAlphaNum c || c `elem` ("_'.!?" :: String)
 
 -- Because saw-core does not give very helpful access to the parameters and
 -- indices, we just follow their style and define the constructor by its fully

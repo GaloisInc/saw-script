@@ -77,7 +77,13 @@ EXPECT_REF_ESCAPES = 0
 # 2026-07-29: scanning mid-run gave 27/324 instead of 59/353 and
 # looked like good news. Run this only after a complete emission
 # (test.sh invokes it last).
-EXPECT_SCANNED = 354
+#
+# 354 -> 358 on 2026-08-01: workflows/unused_binder_shadow added four
+# emitted artifacts (t1..t4) as the regression pin for the unused-
+# binder shadow defect. Verified as the WHOLE delta rather than
+# inferred from arithmetic: moving exactly those four files aside
+# returns the scan to 354, restoring them returns it to 358.
+EXPECT_SCANNED = 358
 
 
 def strip_line_comments(src):

@@ -2363,8 +2363,9 @@ until (a).**
 
 ## Backlog — emitter and coverage
 
-- [ ] **An unused goal binder emits a file that does not compile
-  (found 2026-07-31 by the docs pass; reach surveyed same day).** A
+- [x] **An unused goal binder emits a file that does not compile
+  (found 2026-07-31 by the docs pass; reach surveyed same day; FIXED
+  2026-08-01).** A
   goal binder the body never references gets a
   `let <x> := (Pure.pure <x>);` shadow whose type Lean cannot infer,
   so elaboration fails with
@@ -2384,12 +2385,27 @@ until (a).**
   properties, symbolic bv equality, `x + y == y + x`, `x <= x`,
   symbolic sequence indexing, concrete arithmetic) — so this is the
   single failure class among common shapes, not one of many.
-  Likely fix: do not emit the `Pure.pure` shadow for a binder the
-  body does not reference (or annotate it) — the same "unused binder"
-  question `Pretty.anonymizeUnusedPiBinders` already answers on the
-  type side. Failing that, a NAMED refusal beats the current stuck
-  instance: a user gets a raw Lean error with no hint that an unused
-  Cryptol parameter is the cause.
+  FIXED 2026-08-01, the first of the two options above:
+  `quantifierShadow` now emits no shadow for a binder the inner term
+  never mentions, gated on a new `Lean.identOccursIn` in
+  `Language/Lean/AST.hs`. That helper is deliberately CONSERVATIVE —
+  binder positions, `Tactic` source text, and sort/universe names all
+  count as occurrences — because a `False` answer is what licenses
+  deleting the binding; over-reporting only keeps a harmless shadow,
+  under-reporting would drop a live one. `let n := e; b` with `n`
+  absent from `b` is just `b`, so the rewrite is meaning-preserving
+  by construction rather than by argument.
+  Pinned by `workflows/unused_binder_shadow` (t1 unused-among-used,
+  t2 sole-binder-unused, t3 unused in the MIDDLE, t4 all-used
+  control). The row lives in `workflows/` because that harness
+  ELABORATES emitted files — a shape-only pin would not have caught
+  this, since the bad emission read as perfectly reasonable text.
+  MUTATION VERIFIED, not asserted: removing the guard and rebuilding
+  turns t1/t2/t3 red with the stuck-instance error while t4 stays
+  green; restoring it returns the row to green.
+  Emission for all-binders-used goals is BYTE-IDENTICAL before and
+  after (checked against the pre-fix binary), so this is a strict
+  addition to what compiles.
 
 - [ ] **Lower `update` at concrete indices** (filed 2026-07-22).
   Cookbook Pattern 10 tells spec authors to avoid `update`-chain
