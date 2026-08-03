@@ -14,10 +14,10 @@ const a b x y = x;
 compose : (a b c : sort 0) -> (b -> c) -> (a -> b) -> (a -> c);
 compose _ _ _ f g x = f (g x);
 
-bvExp : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
-bvExp n x y = foldr Bool (Vec n Bool) n
-  (\ (b : Bool) -> \ (a : Vec n Bool) ->
-    ite (Vec n Bool) b (bvMul n x (bvMul n a a)) (bvMul n a a))
+bvExp : (n : Nat) -> Vec Bool n -> Vec Bool n -> Vec Bool n;
+bvExp n x y = foldr Bool (Vec Bool n) n
+  (\ (b : Bool) -> \ (a : Vec Bool n) ->
+    ite (Vec Bool n) b (bvMul n x (bvMul n a a)) (bvMul n a a))
   (bvNat n 1)
   (reverse n Bool y);
 
@@ -239,11 +239,11 @@ tcLt = binaryNumPred ltNat (\ (x:Nat) -> True) (\ (y:Nat) -> False) True;
 
 seq : Num -> sort 0 -> sort 0;
 seq num a =
-  Num#rec1 (\ (num:Num) -> sort 0) (\ (n:Nat) -> Vec n a) (Stream a) num;
+  Num#rec1 (\ (num:Num) -> sort 0) (\ (n:Nat) -> Vec a n) (Stream a) num;
 
 -- FIXME: this rule should be derived by scDefRewriteRules
-seq_TCNum : (n:Nat) -> (a:sort 0) -> Eq (sort 0) (seq (TCNum n) a) (Vec n a);
-seq_TCNum n a = Refl (sort 0) (Vec n a);
+seq_TCNum : (n:Nat) -> (a:sort 0) -> Eq (sort 0) (seq (TCNum n) a) (Vec a n);
+seq_TCNum n a = Refl (sort 0) (Vec a n);
 seq_TCInf : (a:sort 0) -> Eq (sort 0) (seq TCInf a) (Stream a);
 seq_TCInf a = Refl (sort 0) (Stream a);
 
@@ -364,25 +364,25 @@ from a b m n =
     (\ (m:Num) -> seq m a -> (a -> seq n b) -> seq (tcMul m n) #(a, b))
     (\ (m:Nat) ->
        Num#rec
-         (\ (n:Num) -> Vec m a -> (a -> seq n b) ->
+         (\ (n:Num) -> Vec a m -> (a -> seq n b) ->
                         seq (tcMul (TCNum m) n) #(a, b))
          -- Case 1: (TCNum m, TCNum n)
          (\ (n:Nat) ->
-            \ (xs : Vec m a) ->
-            \ (k : a -> Vec n b) ->
+            \ (xs : Vec a m) ->
+            \ (k : a -> Vec b n) ->
               join m n #(a, b)
-                   (map a (Vec n #(a, b))
+                   (map a (Vec #(a, b) n)
                         (\ (x : a) ->
                            map b #(a, b) (\ (y : b) -> (x, y)) n (k x))
                         m xs))
          -- Case 2: n = (TCNum m, TCInf)
          (natCase
-            (\ (m':Nat) -> (Vec m' a -> (a -> Stream b) ->
+            (\ (m':Nat) -> (Vec a m' -> (a -> Stream b) ->
                seq (if0Nat Num m' (TCNum 0) TCInf) #(a, b)))
-            (\ (xs : Vec 0 a) ->
+            (\ (xs : Vec a 0) ->
              \ (k : a -> Stream b) -> EmptyVec #(a, b))
             (\ (m' : Nat) ->
-             \ (xs : Vec (Succ m') a) ->
+             \ (xs : Vec a (Succ m')) ->
              \ (k : a -> Stream b) ->
                (\ (x : a) -> streamMap b #(a, b) (\ (y:b) -> (x, y)) (k x))
                (at (Succ m') a xs 0))
@@ -393,17 +393,17 @@ from a b m n =
        -- Case 3: (TCInf, TCNum n)
        (\ (n:Nat) ->
           natCase
-            (\ (n':Nat) -> (Stream a -> (a -> Vec n' b) ->
+            (\ (n':Nat) -> (Stream a -> (a -> Vec b n') ->
                 seq (if0Nat Num n' (TCNum 0) TCInf) #(a, b)))
             (\ (xs : Stream a) ->
-             \ (k : a -> Vec 0 b) -> EmptyVec #(a, b))
+             \ (k : a -> Vec b 0) -> EmptyVec #(a, b))
             (\ (n' : Nat) ->
              \ (xs : Stream a) ->
-             \ (k : a -> Vec (Succ n') b) ->
+             \ (k : a -> Vec b (Succ n')) ->
                streamJoin
                  #(a, b) n'
                  (streamMap
-                    a (Vec (Succ n') #(a, b))
+                    a (Vec #(a, b) (Succ n'))
                     (\ (x:a) ->
                        map b #(a, b) (\ (y:b) -> (x, y)) (Succ n') (k x))
                     xs))
@@ -421,7 +421,7 @@ mlet : (a b : isort 0) -> (n : Num) -> a -> (a -> seq n b) -> seq n #(a, b);
 mlet a b n =
   Num#rec
     (\ (n:Num) -> a -> (a -> seq n b) -> seq n #(a, b))
-    (\ (n:Nat) -> \ (x:a) -> \ (f:a -> Vec n b) ->
+    (\ (n:Nat) -> \ (x:a) -> \ (f:a -> Vec b n) ->
        map b #(a, b) (\ (y : b) -> (x, y)) n (f x))
     (\ (x:a) -> \ (f:a -> Stream b) ->
        streamMap b #(a, b) (\ (y : b) -> (x, y)) (f x))
@@ -434,21 +434,21 @@ seqZip a b m n =
     (\ (m:Num) -> seq m a -> seq n b -> seq (tcMin m n) #(a, b))
     (\ (m : Nat) ->
        Num#rec
-         (\ (n:Num) -> Vec m a -> seq n b -> seq (tcMin (TCNum m) n) #(a, b))
+         (\ (n:Num) -> Vec a m -> seq n b -> seq (tcMin (TCNum m) n) #(a, b))
          (\ (n:Nat) -> zip a b m n)
-         (\ (xs:Vec m a) -> \ (ys:Stream b) ->
+         (\ (xs:Vec a m) -> \ (ys:Stream b) ->
             gen m #(a, b) (\ (i : Nat) -> (at m a xs i, streamGet b ys i)))
          n)
     (Num#rec
        (\ (n:Num) -> Stream a -> seq n b -> seq (tcMin TCInf n) #(a, b))
        (\ (n:Nat) ->
-        \ (xs:Stream a) -> \ (ys:Vec n b) ->
+        \ (xs:Stream a) -> \ (ys:Vec b n) ->
           gen n #(a, b) (\ (i : Nat) -> (streamGet a xs i, at n b ys i)))
        (streamMap2 a b #(a, b) (\ (x:a) -> \ (y:b) -> (x, y)))
        n)
     m;
 
-zipSame : (a b : isort 0) -> (n : Nat) -> Vec n a -> Vec n b -> Vec n #(a, b);
+zipSame : (a b : isort 0) -> (n : Nat) -> Vec a n -> Vec b n -> Vec #(a, b) n;
 zipSame a b n x y = gen n #(a, b) (\ (i : Nat) -> (at n a x i, at n b y i));
 
 seqZipSame : (a b : isort 0) -> (n : Num) -> seq n a -> seq n b -> seq n #(a, b);
@@ -533,14 +533,14 @@ integerCmp x y k = or (intLt x y) (and (intEq x y) k);
 rationalCmp : Rational -> Rational -> Bool -> Bool;
 rationalCmp x y k = or (rationalLt x y) (and (rationalEq x y) k);
 
-bvCmp : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool -> Bool;
+bvCmp : (n : Nat) -> Vec Bool n -> Vec Bool n -> Bool -> Bool;
 bvCmp n x y k = or (bvult n x y) (and (bvEq n x y) k);
 
-bvSCmp : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool -> Bool;
+bvSCmp : (n : Nat) -> Vec Bool n -> Vec Bool n -> Bool -> Bool;
 bvSCmp n x y k = or (bvslt n x y) (and (bvEq n x y) k);
 
 vecCmp : (n : Nat) -> (a : isort 0) -> (a -> a -> Bool -> Bool)
-       -> (Vec n a -> Vec n a -> Bool -> Bool);
+       -> (Vec a n -> Vec a n -> Bool -> Bool);
 vecCmp n a f xs ys k =
   foldr (Bool -> Bool) Bool n (\ (f : Bool -> Bool) -> f) k
     (zipWith a a (Bool -> Bool) f n xs ys);
@@ -549,7 +549,7 @@ vecLt :
   (n : Nat) -> (a : isort 0) ->
   (a -> a -> Bool -> Bool) ->
   (a -> a -> Bool) ->
-  (Vec n a -> Vec n a -> Bool);
+  (Vec a n -> Vec a n -> Bool);
 vecLt n a f g xs ys =
   foldr (Bool -> Bool) Bool n (\ (f : Bool -> Bool) -> f) False
     (zipWith a a (Bool -> Bool) f n xs ys);
@@ -636,7 +636,8 @@ PEqIntModNum : (num : Num) -> PEq (IntModNum num);
 PEqIntModNum num =
   Num#rec1 (\ (n : Num) -> PEq (IntModNum n)) PEqIntMod PEqInteger num;
 
-PEqVec : (n : Nat) -> (a : isort 0) -> PEq a -> PEq (Vec n a);
+
+PEqVec : (n : Nat) -> (a : isort 0) -> PEq a -> PEq (Vec a n);
 PEqVec n a pa = { eq = vecEq n a pa.eq };
 
 PEqSeq : (n : Num) -> (a : isort 0) -> PEq a -> PEq (seq n a);
@@ -646,7 +647,7 @@ PEqSeq n =
            (\ (a:isort 0) (pa : PEq a) -> error (PEq (Stream a)) "invalid Eq instance")
            n;
 
-PEqWord : (n : Nat) -> PEq (Vec n Bool);
+PEqWord : (n : Nat) -> PEq (Vec Bool n);
 PEqWord n = { eq = bvEq n };
 
 PEqSeqBool : (n : Num) -> PEq (seq n Bool);
@@ -710,12 +711,12 @@ PCmpInteger = { cmpEq = PEqInteger, cmp = integerCmp, le = intLe, lt = intLt };
 PCmpRational : PCmp Rational;
 PCmpRational = { cmpEq = PEqRational, cmp = rationalCmp, le = rationalLe, lt = rationalLt };
 
-PCmpVec : (n : Nat) -> (a : isort 0) -> PCmp a -> PCmp (Vec n a);
+PCmpVec : (n : Nat) -> (a : isort 0) -> PCmp a -> PCmp (Vec a n);
 PCmpVec n a pa =
   { cmpEq = PEqVec n a pa.cmpEq
   , cmp = vecCmp n a pa.cmp
-  , le = \ (x : Vec n a) -> \ (y : Vec n a) -> vecCmp n a pa.cmp x y True
-  , lt = \ (x : Vec n a) -> \ (y : Vec n a) -> vecCmp n a pa.cmp x y False
+  , le = \ (x : Vec a n) -> \ (y : Vec a n) -> vecCmp n a pa.cmp x y True
+  , lt = \ (x : Vec a n) -> \ (y : Vec a n) -> vecCmp n a pa.cmp x y False
   };
 
 PCmpSeq : (n : Num) -> (a : isort 0) -> PCmp a -> PCmp (seq n a);
@@ -725,7 +726,7 @@ PCmpSeq n =
            (\ (a:isort 0) (pa : PCmp a) -> error (PCmp (Stream a)) "invalid Cmp instance")
            n;
 
-PCmpWord : (n : Nat) -> PCmp (Vec n Bool);
+PCmpWord : (n : Nat) -> PCmp (Vec Bool n);
 PCmpWord n = { cmpEq = PEqWord n, cmp = bvCmp n, le = bvule n, lt = bvult n };
 
 PCmpSeqBool : (n : Num) -> PCmp (seq n Bool);
@@ -823,12 +824,12 @@ PSignedCmp a =
     , slt : a -> a -> Bool
     };
 
-PSignedCmpVec : (n : Nat) -> (a : isort 0) -> PSignedCmp a -> PSignedCmp (Vec n a);
+PSignedCmpVec : (n : Nat) -> (a : isort 0) -> PSignedCmp a -> PSignedCmp (Vec a n);
 PSignedCmpVec n a pa =
    { signedCmpEq = PEqVec n a pa.signedCmpEq
    , scmp = vecCmp n a pa.scmp
-   , sle = \ (x : Vec n a) -> \ (y : Vec n a) -> vecCmp n a pa.scmp x y True
-   , slt = \ (x : Vec n a) -> \ (y : Vec n a) -> vecCmp n a pa.scmp x y False
+   , sle = \ (x : Vec a n) -> \ (y : Vec a n) -> vecCmp n a pa.scmp x y True
+   , slt = \ (x : Vec a n) -> \ (y : Vec a n) -> vecCmp n a pa.scmp x y False
    };
 
 PSignedCmpSeq : (n : Num) -> (a : isort 0) -> PSignedCmp a -> PSignedCmp (seq n a);
@@ -838,7 +839,7 @@ PSignedCmpSeq n =
            (\ (a:isort 0) (pa : PSignedCmp a) -> error (PSignedCmp (Stream a)) "invalid SignedCmp instance")
            n;
 
-PSignedCmpWord : (n : Nat) -> PSignedCmp (Vec n Bool);
+PSignedCmpWord : (n : Nat) -> PSignedCmp (Vec Bool n);
 PSignedCmpWord n = { signedCmpEq = PEqWord n, scmp = bvSCmp n, sle = bvsle n, slt = bvslt n };
 
 PSignedCmpSeqBool : (n : Num) -> PSignedCmp (seq n Bool);
@@ -981,7 +982,7 @@ PLogicBit =
   , not  = not
   };
 
-PLogicVec : (n : Nat) -> (a : isort 0) -> PLogic a -> PLogic (Vec n a);
+PLogicVec : (n : Nat) -> (a : isort 0) -> PLogic a -> PLogic (Vec a n);
 PLogicVec n a pa =
   { logicZero = replicate n a pa.logicZero
   , and  = zipWith a a a pa.and n
@@ -1006,7 +1007,7 @@ PLogicSeq n =
 	   (\ (a:isort 0) -> PLogicStream a)
 	   n;
 
-PLogicWord : (n : Nat) -> PLogic (Vec n Bool);
+PLogicWord : (n : Nat) -> PLogic (Vec Bool n);
 PLogicWord n =
   { logicZero = bvNat n 0
   , and  = bvAnd n
@@ -1113,7 +1114,7 @@ PRingRational =
   , int = integerToRational
   };
 
-PRingVec : (n : Nat) -> (a : isort 0) -> PRing a -> PRing (Vec n a);
+PRingVec : (n : Nat) -> (a : isort 0) -> PRing a -> PRing (Vec a n);
 PRingVec n a pa =
   { ringZero = replicate n a pa.ringZero
   , add = zipWith a a a pa.add n
@@ -1140,7 +1141,7 @@ PRingSeq n =
            (\ (a:isort 0) -> PRingStream a)
            n;
 
-PRingWord : (n : Nat) -> PRing (Vec n Bool);
+PRingWord : (n : Nat) -> PRing (Vec Bool n);
 PRingWord n =
   { ringZero = bvNat n 0
   , add = bvAdd n
@@ -1218,7 +1219,7 @@ PIntegral a =
    , posneg : a -> Either Nat Nat
    -- 'Left n' means non-negative, 'Right n' means negative.
    -- NOTE: 'posneg' could be computed from 'toInt', but keeping it
-   -- separate makes it possible to convert from e.g. 'Vec n Bool' to
+   -- separate makes it possible to convert from e.g. 'Vec Bool n' to
    -- 'Nat' without a symbolic comparison at type 'Integer'.
    };
 
@@ -1238,14 +1239,14 @@ PIntegralInteger =
 posNegCases : (a : sort 0) -> PIntegral a -> (r : sort 0) -> (Nat -> r) -> (Nat -> r) -> a -> r;
 posNegCases a p r pos neg x = either Nat Nat r pos neg (p.posneg x);
 
-PIntegralWord : (n : Nat) -> PIntegral (Vec n Bool);
+PIntegralWord : (n : Nat) -> PIntegral (Vec Bool n);
 PIntegralWord n =
    { integralRing = PRingWord n
    , div = bvUDiv n
    , mod = bvURem n
    , toInt = bvToInt n
    -- words are always considered non-negative
-   , posneg = \ (x : Vec n Bool) -> Left Nat Nat (bvToNat n x)
+   , posneg = \ (x : Vec Bool n) -> Left Nat Nat (bvToNat n x)
    };
 
 PIntegralSeqBool : (n : Num) -> PIntegral (seq n Bool);
@@ -1447,18 +1448,18 @@ ecLg2 n =
 ecSDiv : (n : Num) -> seq n Bool -> seq n Bool -> seq n Bool;
 ecSDiv n =
   Num#rec (\ (n:Num) -> seq n Bool -> seq n Bool -> seq n Bool)
-    (Nat__rec (\ (n:Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool)
-      (error (Vec 0 Bool -> Vec 0 Bool -> Vec 0 Bool) "ecSDiv: illegal 0-width word")
-      (\ (n':Nat) -> \ (_:Vec n' Bool -> Vec n' Bool -> Vec n' Bool) -> bvSDiv n'))
+    (Nat__rec (\ (n:Nat) -> Vec Bool n -> Vec Bool n -> Vec Bool n)
+      (error (Vec Bool 0 -> Vec Bool 0 -> Vec Bool 0) "ecSDiv: illegal 0-width word")
+      (\ (n':Nat) -> \ (_:Vec Bool n' -> Vec Bool n' -> Vec Bool n') -> bvSDiv n'))
     (error (Stream Bool -> Stream Bool -> Stream Bool) "ecSDiv: expected finite word")
     n;
 
 ecSMod : (n : Num) -> seq n Bool -> seq n Bool -> seq n Bool;
 ecSMod n =
   Num#rec (\ (n:Num) -> seq n Bool -> seq n Bool -> seq n Bool)
-    (Nat__rec (\ (n:Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool)
-      (error (Vec 0 Bool -> Vec 0 Bool -> Vec 0 Bool) "ecSMod: illegal 0-width word")
-      (\ (n':Nat) -> \ (_:Vec n' Bool -> Vec n' Bool -> Vec n' Bool) -> bvSRem n'))
+    (Nat__rec (\ (n:Nat) -> Vec Bool n -> Vec Bool n -> Vec Bool n)
+      (error (Vec Bool 0 -> Vec Bool 0 -> Vec Bool 0) "ecSMod: illegal 0-width word")
+      (\ (n':Nat) -> \ (_:Vec Bool n' -> Vec Bool n' -> Vec Bool n') -> bvSRem n'))
     (error (Stream Bool -> Stream Bool -> Stream Bool) "ecSMod: expected finite word")
     n;
 
@@ -1538,8 +1539,8 @@ ecShiftL m =
     (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a -> seq m a -> ix -> seq m a)
 
     -- Case for (TCNum m)
-    (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix : PIntegral ix) -> \ (pz:PZero a) -> \ (xs:Vec m a) ->
-        posNegCases ix pix (Vec m a)
+    (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix : PIntegral ix) -> \ (pz:PZero a) -> \ (xs:Vec a m) ->
+        posNegCases ix pix (Vec a m)
           (shiftL m a (ecZero a pz) xs)
           (shiftR m a (ecZero a pz) xs))
 
@@ -1558,8 +1559,8 @@ ecShiftR m =
     (\ (m : Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a -> seq m a -> ix -> seq m a)
 
     -- Case for (TCNum m)
-    (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix : PIntegral ix) -> \ (pz:PZero a) -> \ (xs:Vec m a) ->
-        posNegCases ix pix (Vec m a)
+    (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix : PIntegral ix) -> \ (pz:PZero a) -> \ (xs:Vec a m) ->
+        posNegCases ix pix (Vec a m)
           (shiftR m a (ecZero a pz) xs)
           (shiftL m a (ecZero a pz) xs))
 
@@ -1577,10 +1578,10 @@ ecSShiftR =
     (\ (n:Nat) ->
          (\ (ix : sort 0) -> \ (pix : PIntegral ix) ->
             natCase
-              (\ (w : Nat) -> Vec w Bool -> ix -> Vec w Bool)
-              (\ (xs : Vec 0 Bool) -> \ (_ : ix) -> xs)
-              (\ (w : Nat) -> \ (xs : Vec (Succ w) Bool) ->
-                   posNegCases ix pix (Vec (Succ w) Bool)
+              (\ (w : Nat) -> Vec Bool w -> ix -> Vec Bool w)
+              (\ (xs : Vec Bool 0) -> \ (_ : ix) -> xs)
+              (\ (w : Nat) -> \ (xs : Vec Bool (Succ w)) ->
+                   posNegCases ix pix (Vec Bool (Succ w))
                      (bvSShr w xs)
                      (bvShl (Succ w) xs))
               n));
@@ -1589,8 +1590,8 @@ ecRotL : (m : Num) -> (ix a : sort 0) -> PIntegral ix -> seq m a -> ix -> seq m 
 ecRotL =
   finNumRec
     (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> seq m a -> ix -> seq m a)
-    (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec m a) ->
-      posNegCases ix pix (Vec m a)
+    (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec a m) ->
+      posNegCases ix pix (Vec a m)
         (rotateL m a xs)
         (rotateR m a xs));
 
@@ -1598,8 +1599,8 @@ ecRotR : (m : Num) -> (ix a : sort 0) -> PIntegral ix -> seq m a -> ix -> seq m 
 ecRotR =
   finNumRec
     (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> seq m a -> ix -> seq m a)
-    (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec m a) ->
-      posNegCases ix pix (Vec m a)
+    (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec a m) ->
+      posNegCases ix pix (Vec a m)
         (rotateR m a xs)
         (rotateL m a xs));
 
@@ -1610,7 +1611,7 @@ ecCat =
        seq (tcAdd m n) a)
     (\ (m:Nat) ->
        Num_rec
-         (\ (n:Num) -> (a:isort 0) -> Vec m a -> seq n a ->
+         (\ (n:Num) -> (a:isort 0) -> Vec a m -> seq n a ->
             seq (tcAdd (TCNum m) n) a)
          -- Case for (TCNum m, TCNum n)
          (\ (n:Nat) -> \ (a:isort 0) -> append m n a)
@@ -1624,9 +1625,9 @@ ecTake =
 
     (\ (m:Nat) ->
        Num_rec
-         (\ (n:Num) -> (a:isort 0) -> seq (tcAdd (TCNum m) n) a -> Vec m a)
+         (\ (n:Num) -> (a:isort 0) -> seq (tcAdd (TCNum m) n) a -> Vec a m)
          -- The case (TCNum m, TCNum n)
-         (\ (n:Nat) -> \ (a:isort 0) -> \ (xs: Vec (addNat m n) a) -> take a m n xs)
+         (\ (n:Nat) -> \ (a:isort 0) -> \ (xs: Vec a (addNat m n)) -> take a m n xs)
          -- The case (TCNum m, infinity)
          (\ (a:isort 0) -> \ (xs: Stream a) -> streamTake a m xs))
 
@@ -1645,7 +1646,7 @@ ecDrop =
        Num_rec
          (\ (n:Num) -> (a:isort 0) -> seq (tcAdd (TCNum m) n) a -> seq n a)
          -- The case (TCNum n, TCNum m)
-         (\ (n:Nat) -> \ (a:isort 0) -> \ (xs: Vec (addNat m n) a) -> drop a m n xs)
+         (\ (n:Nat) -> \ (a:isort 0) -> \ (xs: Vec a (addNat m n)) -> drop a m n xs)
          -- The case (TCNum m, infinity)
          (\ (a:isort 0) -> \ (xs: Stream a) -> streamDrop a m xs));
 
@@ -1656,7 +1657,7 @@ ecJoin m =
        seq (tcMul m n) a)
     (\ (m:Nat) ->
        finNumRec
-         (\ (n:Num) -> (a:isort 0) -> Vec m (seq n a) ->
+         (\ (n:Num) -> (a:isort 0) -> Vec (seq n a) m ->
             seq (tcMul (TCNum m) n) a)
          -- Case for (TCNum m, TCNum n)
          (\ (n:Nat) -> \ (a:isort 0) -> join m n a))
@@ -1667,10 +1668,10 @@ ecJoin m =
        -- Case for (TCInf, TCNum n)
        (\ (n:Nat) -> \ (a:isort 0) ->
           natCase
-            (\ (n':Nat) -> Stream (Vec n' a) ->
+            (\ (n':Nat) -> Stream (Vec a n') ->
                seq (if0Nat Num n' (TCNum 0) TCInf) a)
-            (\ (s:Stream (Vec 0 a)) -> EmptyVec a)
-            (\ (n':Nat) -> \ (s:Stream (Vec (Succ n') a)) ->
+            (\ (s:Stream (Vec a 0)) -> EmptyVec a)
+            (\ (n':Nat) -> \ (s:Stream (Vec a (Succ n'))) ->
                streamJoin a n' s)
             n))
        -- No case for (TCInf, TCInf), shouldn't happen
@@ -1685,7 +1686,7 @@ ecSplit m =
     (\ (m:Nat) ->
        finNumRec
          (\ (n:Num) -> (a:isort 0) -> seq (tcMul (TCNum m) n) a ->
-            Vec m (seq n a))
+            Vec (seq n a) m)
          -- Case for (TCNum m, TCNum n)
          (\ (n:Nat) -> \ (a:isort 0) -> split m n a))
          -- No case for (TCNum m, TCInf), shouldn't happen
@@ -1697,8 +1698,8 @@ ecSplit m =
           natCase
             (\ (n':Nat) ->
                seq (if0Nat Num n' (TCNum 0) TCInf) a ->
-               Stream (Vec n' a))
-            (streamConst (Vec 0 a))
+               Stream (Vec a n'))
+            (streamConst (Vec a 0))
             (\ (n':Nat) -> streamSplit a (Succ n'))
             n))
        -- No case for (TCInf, TCInf), shouldn't happen
@@ -1716,20 +1717,20 @@ ecTranspose m n a =
     (\ (m : Num) -> seq m (seq n a) -> seq n (seq m a))
     (\ (m : Nat) ->
       Num#rec
-        (\ (n : Num) -> Vec m (seq n a) -> seq n (Vec m a))
+        (\ (n : Num) -> Vec (seq n a) m -> seq n (Vec a m))
         (\ (n : Nat) -> transpose m n a)
-        (\ (xss : Vec m (Stream a)) ->
-          MkStream (Vec m a) (\ (i : Nat) ->
+        (\ (xss : Vec (Stream a) m) ->
+          MkStream (Vec a m) (\ (i : Nat) ->
             gen m a (\ (j : Nat) ->
               streamGet a (at m (Stream a) xss j) i)))
         n
     )
     ( Num#rec
         (\ (n : Num) -> Stream (seq n a) -> seq n (Stream a))
-        (\ (n : Nat) -> \ (xss : Stream (Vec n a)) ->
+        (\ (n : Nat) -> \ (xss : Stream (Vec a n)) ->
           gen n (Stream a) (\ (i : Nat) ->
             MkStream a (\ (j : Nat) ->
-              at n a (streamGet (Vec n a) xss j) i)))
+              at n a (streamGet (Vec a n) xss j) i)))
         (\ (xss : Stream (Stream a)) ->
           MkStream (Stream a) (\ (i : Nat) ->
             MkStream a (\ (j : Nat) ->
@@ -1742,7 +1743,7 @@ ecAt : (n : Num) -> (a : isort 0) -> (ix: sort 0) -> PIntegral ix -> seq n a -> 
 ecAt n =
   Num#rec1
     (\ (n:Num) -> (a:isort 0) -> (ix: sort 0) -> PIntegral ix -> seq n a -> ix -> a)
-    (\ (n:Nat) -> \ (a:isort 0) -> \ (ix:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec n a) ->
+    (\ (n:Nat) -> \ (a:isort 0) -> \ (ix:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec a n) ->
           posNegCases ix pix a
             (at n a xs)
             (\ (_:Nat) -> at n a xs 0))
@@ -1900,21 +1901,21 @@ ecInfFromThen a pa x y =
 
 
 -- Run-time error
-ecError : (a : isort 0) -> (len : Num) -> seq len (Vec 8 Bool) -> a;
+ecError : (a : isort 0) -> (len : Num) -> seq len (Vec Bool 8) -> a;
 ecError a =
   finNumRec
-    (\ (len:Num) -> seq len (Vec 8 Bool) -> a)
-    (\ (len:Nat) (msg:Vec len (Vec 8 Bool)) ->
+    (\ (len:Num) -> seq len (Vec Bool 8) -> a)
+    (\ (len:Nat) (msg:Vec (Vec Bool 8) len) ->
        error a (appendString "encountered call to the Cryptol 'error' function: "
                              (bytesToString len msg))
     );
 
 -- Random values
-ecRandom : (a : isort 0) -> Vec 256 Bool -> a;
+ecRandom : (a : isort 0) -> Vec Bool 256 -> a;
 ecRandom a _ = error a "Cryptol.random";
 
 -- Trace function; simply return the final argument
-ecTrace : (n : Num) -> (a b : sort 0) -> seq n (Vec 8 Bool) -> a -> b -> b;
+ecTrace : (n : Num) -> (a b : sort 0) -> seq n (Vec Bool 8) -> a -> b -> b;
 ecTrace _ _ _ _ _ x = x;
 
 
@@ -1932,7 +1933,7 @@ ecDeepseq a b pa x y = y;
 ecParmap : (a:isort 0) -> (b:isort 0) -> (n: Num) -> PEq b -> (a -> b) -> seq n a -> seq n b;
 ecParmap a b n pb =
   Num#rec (\ (n:Num) -> (a -> b) -> seq n a -> seq n b)
-    ( \ (n:Nat) -> \ (f: a -> b) -> \ (xs: Vec n a) -> map a b f n xs )
+    ( \ (n:Nat) -> \ (f: a -> b) -> \ (xs: Vec a n) -> map a b f n xs )
     ( \ (f: a -> b) -> \ (xs:Stream a) -> error (Stream b) "Unexpected infinite stream in parmap" )
     n;
 
@@ -1940,7 +1941,7 @@ ecParmap a b n pb =
 ecFoldl : (n : Num) -> (a : sort 0) -> (b : isort 0) -> (a -> b -> a) -> a -> seq n b -> a;
 ecFoldl n a b f z =
   Num#rec (\ (n : Num) -> seq n b -> a)
-    (\ (n : Nat) -> \ (xs : Vec n b) -> foldl b a n f z xs)
+    (\ (n : Nat) -> \ (xs : Vec b n) -> foldl b a n f z xs)
     (\ (xs : Stream b) -> error a "Unexpected infinite stream in foldl" )
     n;
 
@@ -1954,7 +1955,7 @@ ecScanl :
   (n : Num) -> (a : sort 0) -> (b : sort 0) -> (a -> b -> a) -> a -> seq n b -> seq (tcAdd (TCNum 1) n) a;
 ecScanl n a b f z =
   Num#rec (\ (n : Num) -> seq n b -> seq (tcAdd (TCNum 1) n) a)
-    (\ (n:Nat) -> \ (xs : Vec n b) -> scanl b a n f z xs)
+    (\ (n:Nat) -> \ (xs : Vec b n) -> scanl b a n f z xs)
     (\ (xs : Stream b) -> streamScanl b a f z xs)
     n;
 
@@ -2027,22 +2028,22 @@ ecFpToBits e p _ = error (seq (tcAdd e p) Bool) "Unimplemented: fpToBits";
 ecFpEq : (e : Num) -> (p : Num) -> TCFloat e p -> TCFloat e p -> Bool;
 ecFpEq e p _ _ = error Bool "Unimplemented: =.=";
 
-ecFpAdd : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p;
+ecFpAdd : (e : Num) -> (p : Num) -> Vec Bool 3 -> TCFloat e p -> TCFloat e p -> TCFloat e p;
 ecFpAdd e p _ _ _ = error (TCFloat e p) "Unimplemented: fpAdd";
 
-ecFpSub : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p;
+ecFpSub : (e : Num) -> (p : Num) -> Vec Bool 3 -> TCFloat e p -> TCFloat e p -> TCFloat e p;
 ecFpSub e p _ _ _ = error (TCFloat e p) "Unimplemented: fpSub";
 
-ecFpMul : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p;
+ecFpMul : (e : Num) -> (p : Num) -> Vec Bool 3 -> TCFloat e p -> TCFloat e p -> TCFloat e p;
 ecFpMul e p _ _ _ = error (TCFloat e p) "Unimplemented: fpMul";
 
-ecFpDiv : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p;
+ecFpDiv : (e : Num) -> (p : Num) -> Vec Bool 3 -> TCFloat e p -> TCFloat e p -> TCFloat e p;
 ecFpDiv e p _ _ _ = error (TCFloat e p) "Unimplemented: fpDiv";
 
 ecFpToRational : (e : Num) -> (p : Num) -> TCFloat e p -> Rational;
 ecFpToRational e p _ = error Rational "Unimplemented: fpToRational";
 
-ecFpFromRational : (e : Num) -> (p : Num) -> Vec 3 Bool -> Rational -> TCFloat e p;
+ecFpFromRational : (e : Num) -> (p : Num) -> Vec Bool 3 -> Rational -> TCFloat e p;
 ecFpFromRational e p _ _ = error (TCFloat e p) "Unimplemented: fpFromRational";
 
 fpIsNaN : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
@@ -2064,14 +2065,14 @@ fpIsSubnormal : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
 fpIsSubnormal e p x = error Bool "Unimplemented: fpIsSubnormal";
 
 fpFMA :
-  (e : Num) -> (p : Num) -> Vec 3 Bool ->
+  (e : Num) -> (p : Num) -> Vec Bool 3 ->
   TCFloat e p -> TCFloat e p -> TCFloat e p -> TCFloat e p;
 fpFMA e p r x y z = error (TCFloat e p) "Unimplemented: fpFMA";
 
 fpAbs : (e : Num) -> (p : Num) -> TCFloat e p -> TCFloat e p;
 fpAbs e p x = error (TCFloat e p) "Unimplemented: fpAbs";
 
-fpSqrt : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p;
+fpSqrt : (e : Num) -> (p : Num) -> Vec Bool 3 -> TCFloat e p -> TCFloat e p;
 fpSqrt e p r x = error (TCFloat e p) "Unimplemented: fpSqrt";
 
 
@@ -2083,12 +2084,12 @@ ecUpdate : (n : Num) -> (a:isort 0) -> (ix: sort 0) -> PIntegral ix -> seq n a -
 ecUpdate n =
   Num#rec1
     (\ (n:Num) -> (a:isort 0) -> (ix : sort 0) -> PIntegral ix -> seq n a -> ix -> a -> seq n a)
-    (\ (n:Nat) -> \ (a:isort 0) -> \ (ix : sort 0) -> \ (pix:PIntegral ix) -> \ (xs : Vec n a) ->
+    (\ (n:Nat) -> \ (a:isort 0) -> \ (ix : sort 0) -> \ (pix:PIntegral ix) -> \ (xs : Vec a n) ->
        -- Case for (TCNum n, TCNum w)
-       posNegCases ix pix (a -> Vec n a)
+       posNegCases ix pix (a -> Vec a n)
          (upd n a xs)
          (\ (_:Nat) -> \ (_:a) -> xs))
-         -- (error (Nat -> a -> Vec n a) "ecUpdate: negative index"))
+         -- (error (Nat -> a -> Vec a n) "ecUpdate: negative index"))
     (\ (a:isort 0) -> \ (ix:sort 0) -> \ (pix:PIntegral ix) -> \ (xs : Stream a) ->
        posNegCases ix pix (a -> Stream a)
          (streamUpd a xs)
@@ -2101,11 +2102,11 @@ ecUpdateEnd : (n : Num) -> (a:isort 0) -> (ix: sort 0) -> PIntegral ix -> seq n 
 ecUpdateEnd =
   finNumRec
     (\ (n:Num) -> (a:isort 0) -> (ix: sort 0) -> PIntegral ix -> seq n a -> ix -> a -> seq n a)
-    (\ (n:Nat) -> \ (a:isort 0) -> \ (ix:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec n a) ->
-       posNegCases ix pix (a -> Vec n a)
+    (\ (n:Nat) -> \ (a:isort 0) -> \ (ix:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec a n) ->
+       posNegCases ix pix (a -> Vec a n)
          (\ (i:Nat) -> upd n a xs (subNat (subNat n 1) i))
          (\ (_:Nat) -> \ (_:a) -> xs));
-         -- (error (Nat -> a -> Vec n a) "ecUpdateEnd: negative index"))
+         -- (error (Nat -> a -> Vec a n) "ecUpdateEnd: negative index"))
     -- No TCInf case, shouldn't happen
 
 
@@ -2129,8 +2130,8 @@ ecSExt =
     (\ (m n : Num) -> seq n Bool -> seq (tcAdd m n) Bool)
     (\ (m n : Nat) ->
        natCase
-         (\ (n' : Nat) -> Vec n' Bool -> Vec (addNat m n') Bool)
-         (\ (_ : Vec 0 Bool) -> bvNat (addNat m 0) 0)
+         (\ (n' : Nat) -> Vec Bool n' -> Vec Bool (addNat m n'))
+         (\ (_ : Vec Bool 0) -> bvNat (addNat m 0) 0)
          (bvSExt m)
          n);
 
@@ -2168,7 +2169,7 @@ ecArrayCopy : (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool ->
 ecArrayCopy = finNumRec (\(n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> Array (seq n Bool) a -> seq n Bool -> seq n Bool -> Array (seq n Bool) a) arrayCopy;
 
 ecArrayEq : (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> Array (seq n Bool) a -> Bool;
-ecArrayEq = finNumRec (\ (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> Array (seq n Bool) a -> Bool) (\ (n:Nat) -> arrayEq (Vec n Bool));
+ecArrayEq = finNumRec (\ (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> Array (seq n Bool) a -> Bool) (\ (n:Nat) -> arrayEq (Vec Bool n));
 
 ecArraySet : (n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> a -> seq n Bool -> Array (seq n Bool) a;
 ecArraySet = finNumRec (\(n : Num) -> (a : sort 0) -> Array (seq n Bool) a -> seq n Bool -> a -> seq n Bool -> Array (seq n Bool) a) arraySet;
@@ -2202,8 +2203,8 @@ ecPmult =
    seq (tcAdd (TCNum 1) (tcAdd u v)) Bool
   )
   (\ (u v : Nat) ->
-   \ (x : Vec (addNat 1 u) Bool) ->
-   \ (y : Vec (addNat 1 v) Bool) ->
+   \ (x : Vec Bool (addNat 1 u)) ->
+   \ (y : Vec Bool (addNat 1 v)) ->
    coerceVec Bool (Succ (addNat u v)) (addNat 1 (addNat u v))
    (sym Nat (addNat 1 (addNat u v)) (Succ (addNat u v)) (addNat_1 (addNat u v)))
    (polyMul u v
@@ -2225,57 +2226,57 @@ ecPmod =
    seq v Bool
   )
   (\ (u v : Nat) ->
-   \ (x : Vec u Bool) ->
-   \ (y : Vec (addNat 1 v) Bool) ->
+   \ (x : Vec Bool u) ->
+   \ (y : Vec Bool (addNat 1 v)) ->
    polyMod u v x (coerceVec Bool (addNat 1 v) (Succ v) (addNat_1 v) y)
   );
 
 --------------------------------------------------------------------------------
 -- Suite-B Primitives
 
-AESEncRound : Vec 4 (Vec 32 Bool) -> Vec 4 (Vec 32 Bool);
+AESEncRound : Vec (Vec Bool 32) 4 -> Vec (Vec Bool 32) 4;
 AESEncRound x =
-  error (Vec 4 (Vec 32 Bool)) "Unimplemented: AESEncRound";
+  error (Vec (Vec Bool 32) 4) "Unimplemented: AESEncRound";
 
-AESEncFinalRound : Vec 4 (Vec 32 Bool) -> Vec 4 (Vec 32 Bool);
+AESEncFinalRound : Vec (Vec Bool 32) 4 -> Vec (Vec Bool 32) 4;
 AESEncFinalRound x =
-  error (Vec 4 (Vec 32 Bool)) "Unimplemented: AESEncFinalRound";
+  error (Vec (Vec Bool 32) 4) "Unimplemented: AESEncFinalRound";
 
-AESDecRound : Vec 4 (Vec 32 Bool) -> Vec 4 (Vec 32 Bool);
+AESDecRound : Vec (Vec Bool 32) 4 -> Vec (Vec Bool 32) 4;
 AESDecRound x =
-  error (Vec 4 (Vec 32 Bool)) "Unimplemented: AESDecRound";
+  error (Vec (Vec Bool 32) 4) "Unimplemented: AESDecRound";
 
-AESDecFinalRound : Vec 4 (Vec 32 Bool) -> Vec 4 (Vec 32 Bool);
+AESDecFinalRound : Vec (Vec Bool 32) 4 -> Vec (Vec Bool 32) 4;
 AESDecFinalRound x =
-  error (Vec 4 (Vec 32 Bool)) "Unimplemented: AESDecFinalRound";
+  error (Vec (Vec Bool 32) 4) "Unimplemented: AESDecFinalRound";
 
-AESInvMixColumns : Vec 4 (Vec 32 Bool) -> Vec 4 (Vec 32 Bool);
+AESInvMixColumns : Vec (Vec Bool 32) 4 -> Vec (Vec Bool 32) 4;
 AESInvMixColumns x =
-  error (Vec 4 (Vec 32 Bool)) "Unimplemented: AESInvMixColumns";
+  error (Vec (Vec Bool 32) 4) "Unimplemented: AESInvMixColumns";
 
 AESKeyExpand :
   (k : Num) ->
-  seq k (Vec 32 Bool) ->
-  seq (tcMul (TCNum 4) (tcAdd (TCNum 7) k)) (Vec 32 Bool);
+  seq k (Vec Bool 32) ->
+  seq (tcMul (TCNum 4) (tcAdd (TCNum 7) k)) (Vec Bool 32);
 AESKeyExpand k x =
-  error (seq (tcMul (TCNum 4) (tcAdd (TCNum 7) k)) (Vec 32 Bool))
+  error (seq (tcMul (TCNum 4) (tcAdd (TCNum 7) k)) (Vec Bool 32))
     "Unimplemented: AESKeyExpand";
 
-processSHA2_224 : (n : Num) -> seq n (Vec 16 (Vec 32 Bool)) -> Vec 7 (Vec 32 Bool);
+processSHA2_224 : (n : Num) -> seq n (Vec (Vec Bool 32) 16) -> Vec (Vec Bool 32) 7;
 processSHA2_224 n x =
-  error (Vec 7 (Vec 32 Bool)) "Unimplemented: processSHA2_224";
+  error (Vec (Vec Bool 32) 7) "Unimplemented: processSHA2_224";
 
-processSHA2_256 : (n : Num) -> seq n (Vec 16 (Vec 32 Bool)) -> Vec 8 (Vec 32 Bool);
+processSHA2_256 : (n : Num) -> seq n (Vec (Vec Bool 32) 16) -> Vec (Vec Bool 32) 8;
 processSHA2_256 n x =
-  error (Vec 8 (Vec 32 Bool)) "Unimplemented: processSHA2_256";
+  error (Vec (Vec Bool 32) 8) "Unimplemented: processSHA2_256";
 
-processSHA2_384 : (n : Num) -> seq n (Vec 16 (Vec 64 Bool)) -> Vec 6 (Vec 64 Bool);
+processSHA2_384 : (n : Num) -> seq n (Vec (Vec Bool 64) 16) -> Vec (Vec Bool 64) 6;
 processSHA2_384 n x =
-  error (Vec 6 (Vec 64 Bool)) "Unimplemented: processSHA2_384";
+  error (Vec (Vec Bool 64) 6) "Unimplemented: processSHA2_384";
 
-processSHA2_512 : (n : Num) -> seq n (Vec 16 (Vec 64 Bool)) -> Vec 8 (Vec 64 Bool);
+processSHA2_512 : (n : Num) -> seq n (Vec (Vec Bool 64) 16) -> Vec (Vec Bool 64) 8;
 processSHA2_512 n x =
-  error (Vec 8 (Vec 64 Bool)) "Unimplemented: processSHA2_512";
+  error (Vec (Vec Bool 64) 8) "Unimplemented: processSHA2_512";
 
 --------------------------------------------------------------------------------
 -- Prime-EC Primitives
@@ -2307,7 +2308,7 @@ ec_twin_mult p x y z =
 --------------------------------------------------------------------------------
 -- Rewrite rules
 
-axiom replicate_False : (n : Nat) -> Eq (Vec n Bool) (replicate n Bool False) (bvNat n 0);
+axiom replicate_False : (n : Nat) -> Eq (Vec Bool n) (replicate n Bool False) (bvNat n 0);
 
 axiom subNat_0 : (n : Nat) -> Eq Nat (subNat n 0) n;
 
@@ -2315,7 +2316,7 @@ axiom subNat_0 : (n : Nat) -> Eq Nat (subNat n 0) n;
 axiom demote_add_distr
   : (w : Nat)
   -> (x y : Num)
-  -> Eq (Vec w Bool)
+  -> Eq (Vec Bool w)
         (ecNumber (tcAdd x y) (TCNum w))
         (bvAdd w (ecNumber x (TCNum w)) (ecNumber y (TCNum w)));
 -}

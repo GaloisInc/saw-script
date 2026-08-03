@@ -443,14 +443,14 @@ asRationalType = isGlobalDef "Prelude.Rational"
 asVectorType :: Recognizer Term (Term, Term)
 asVectorType = fmap toPair . ((isGlobalDef "Prelude.Vec" @> return) <@> return)
 
-isVecType :: Recognizer Term a -> Recognizer Term (Natural :*: a)
-isVecType tp = (isGlobalDef "Prelude.Vec" @> asNat) <@> tp
+isVecType :: Recognizer Term a -> Recognizer Term (a :*: Natural)
+isVecType tp = (isGlobalDef "Prelude.Vec" @> tp) <@> asNat
 
-asVecType :: Recognizer Term (Natural :*: Term)
+asVecType :: Recognizer Term (Term :*: Natural)
 asVecType = isVecType return
 
 asBitvectorType :: Recognizer Term Natural
-asBitvectorType = (isGlobalDef "Prelude.Vec" @> asNat) <@ asBoolType
+asBitvectorType = (isGlobalDef "Prelude.Vec" @> asBoolType) @> asNat
 
 asMux :: Recognizer Term (Term :*: Term :*: Term :*: Term)
 asMux = isGlobalDef "Prelude.ite" @> return <@> return <@> return <@> return
