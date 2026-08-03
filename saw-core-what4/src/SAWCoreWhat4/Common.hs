@@ -128,7 +128,7 @@ termOfTValue sc val =
     VVecType n a ->
       do n' <- scNat sc n
          a' <- termOfTValue sc a
-         scVecType sc n' a'
+         scVecType sc a' n'
     VDataType "Prelude::UnitType" [] []
       -> scUnitType sc
     VDataType "Prelude::PairType" [TValue a, TValue b] []
