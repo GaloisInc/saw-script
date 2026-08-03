@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -Wno-missing-export-lists #-}
 
 {- |
 Module      : Language.Rocq.AST
@@ -9,7 +8,18 @@ Stability   : experimental
 Portability : portable
 -}
 
-module Language.Rocq.AST where
+module Language.Rocq.AST (
+    Ident(..),
+    Sort(..),
+    Term(..),
+    Type,
+    BinderImplicity(..),
+    Binder(..),
+    PiBinder(..),
+    Constructor(..),
+    Inductive(..),
+    Decl(..)
+  ) where
 
 import Data.String (IsString(..))
 
