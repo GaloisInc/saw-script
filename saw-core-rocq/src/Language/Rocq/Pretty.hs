@@ -3,11 +3,11 @@
 
 {- |
 Module      : Language.Rocq.Pretty
-Copyright   : Galois, Inc. 2018
+Description : Printer for Rocq AST
 License     : BSD3
 Maintainer  : atomb@galois.com
-Stability   : experimental
-Portability : portable
+
+Converts Rocq AST to prettyprinter documents.
 -}
 
 module Language.Rocq.Pretty (prettyDecl) where
@@ -19,18 +19,17 @@ import Data.Word
 import Numeric (showHex)
 import Prelude hiding ((<$>), (<>))
 
--- | Replace all occurrences of the double quote character @"@ with the string
--- @""@, i.e., two copies of it, as this is how Rocq escapes double quote
--- characters.
+-- | Replace all occurrences of the double quote character @"@ with
+--   the string @""@, i.e., two copies of it, as this is how Rocq
+--   escapes double quote characters.
 escapeStringLit :: String -> String
 escapeStringLit = concatMap (\c -> if c == '"' then "\"\"" else [c])
 
+-- | Wrapper for printing arbitrary text
 text :: String -> Doc ann
 text = pretty
 
-string :: String -> Doc ann
-string = pretty
-
+-- | Wrapper for printing integers
 integer :: Integer -> Doc ann
 integer = pretty
 
@@ -54,24 +53,23 @@ hsep' docs = case docs of
     [] -> emptyDoc
     _ : _ -> emptyDoc <+> hsep docs
 
--- This version glues the separator to the end of each element.
+
+-- | Print a list separated by @sepr@.
+--   Glues the separator to the end of each element.
 tightSepList :: Doc ann -> [Doc ann] -> Doc ann
 tightSepList _ [] = mempty
 tightSepList _ [d] = d
-tightSepList s (d:l) = d <> s <+> tightSepList s l
+tightSepList sepr (d:ds) = d <> sepr <+> tightSepList sepr ds
 
-semiSepList :: [Doc ann] -> Doc ann
-semiSepList = tightSepList semi
-
-period :: Doc ann
-period = "."
-
+-- | Print an `Ident`
 prettyIdent :: Ident -> Doc ann
-prettyIdent (Ident s) = pretty s
+prettyIdent (Ident s) = text s
 
+-- | Common code to print a name with a type
 prettyNameType :: Ident -> Type -> Doc ann
 prettyNameType x ty = prettyIdent x <+> colon <+> prettyTerm PrecNone ty
 
+-- | Print an ordinary (lambda/let) binder
 prettyBinder :: Binder -> Doc ann
 prettyBinder b = case b of
     Binder Explicit x Nothing   -> prettyIdent x
@@ -79,6 +77,8 @@ prettyBinder b = case b of
     Binder Implicit x Nothing    -> braces $ prettyIdent x
     Binder Implicit x (Just ty)  -> braces $ prettyNameType x ty
 
+-- | Print a pi (forall) binder
+--   (we don't seem to be able to represent @exists@)
 prettyPiBinder :: PiBinder -> Doc ann
 prettyPiBinder b = case b of
     PiBinder Explicit Nothing ty ->
@@ -90,22 +90,27 @@ prettyPiBinder b = case b of
     PiBinder Implicit (Just x) ty ->
         "forall" <+> braces (prettyNameType x ty) <> comma
 
+-- | Print a list of binders
 prettyBinders :: [Binder] -> Doc ann
 prettyBinders bs = hsep $ map prettyBinder bs
 
+-- | Print an optional type annotation
 prettyMaybeTy :: Maybe Type -> Doc ann
 prettyMaybeTy Nothing = mempty
 prettyMaybeTy (Just ty) = colon <+> prettyTerm PrecNone ty
 
+-- | Print a `sort`
 prettySort :: Sort -> Doc ann
 prettySort s = case s of
     Prop -> "Prop"
     Set -> "Set"
     Type -> "Type"
 
+-- | Print a list of pi-binders
 prettyPiBinders :: [PiBinder] -> Doc ann
 prettyPiBinders bs = hsep $ map prettyPiBinder bs
 
+-- | Type to hold the current expression precedence while printing
 data Prec
   = PrecNone
   | PrecLambda
@@ -113,9 +118,11 @@ data Prec
   | PrecAtom
   deriving (Eq, Ord)
 
+-- | Insert parens based on the first argument
 parensIf :: Bool -> Doc ann -> Doc ann
 parensIf p d = if p then parens d else d
 
+-- | Print a term
 prettyTerm :: Prec -> Term -> Doc ann
 prettyTerm p e =
   case e of
@@ -194,24 +201,26 @@ prettyTerm p e =
           text (show i ++ "%Z")
     List ts ->
       let ts' = map (prettyTerm PrecNone) ts in
-      brackets $ semiSepList ts'
+      brackets $ tightSepList ";" ts'
     StringLit s ->
-      dquotes (string $ escapeStringLit s)
+      dquotes (text $ escapeStringLit s)
     Scope term scope ->
       let term' = prettyTerm PrecAtom term
           scope' = text scope
       in
       term' <> "%" <> scope'
     Ltac s ->
-      "ltac:" <> parens (string s)
+      "ltac:" <> parens (text s)
 
+-- | Common code for the simple declarations
 prettyBasicDecl :: Doc ann -> Ident -> Type -> Doc ann
 prettyBasicDecl what nm ty =
   let nm' = prettyIdent nm
       ty' = prettyTerm PrecNone ty
   in
-  nest 2 (what <+> nm' <+> ":" <+> ty' <+> period) <> hardline
+  nest 2 (what <+> nm' <+> ":" <+> ty' <+> ".") <> hardline
 
+-- | Print a top-level declaration
 prettyDecl :: Decl -> Doc ann
 prettyDecl decl = case decl of
   Axiom nm ty -> prettyBasicDecl "Axiom" nm ty
@@ -228,7 +237,7 @@ prettyDecl decl = case decl of
     nest 2 (
       vsep [
           "Definition" <+> nm' <> bs' <+> mty' <+> ":=",
-          body' <> period
+          body' <> "."
       ]
     ) <> hardline
   InductiveDecl ind ->
@@ -236,8 +245,8 @@ prettyDecl decl = case decl of
   Section nm ds ->
     let nm' = prettyIdent nm
         ds' = map (indent 2 . prettyDecl) ds
-        header = "Section" <+> nm' <+> period
-        footer = "End" <+> nm' <+> period
+        header = "Section" <+> nm' <+> "."
+        footer = "End" <+> nm' <+> "."
     in
     -- XXX vsep issues soft newlines and there should be a hard newline
     -- after the head and after the foot. (Note that every other Decl
@@ -247,6 +256,7 @@ prettyDecl decl = case decl of
   Snippet s ->
     text s
 
+-- | Print a single constructor
 prettyConstructor :: Constructor -> Doc ann
 prettyConstructor (Constructor {..}) =
   let name' = prettyIdent constructorName
@@ -254,6 +264,7 @@ prettyConstructor (Constructor {..}) =
   in
   nest 2 $ "|" <+> name' <+> ":" <+> ty'
 
+-- | Print an inductive type declaration
 prettyInductive :: Inductive -> Doc ann
 prettyInductive (Inductive {..}) =
   let name' = prettyIdent inductiveName
@@ -263,5 +274,5 @@ prettyInductive (Inductive {..}) =
       ctors' = map prettyConstructor inductiveConstructors
       header = "Inductive" <+> name' <> params' <+> ":" <> indices' <+> sort' <+> ":="
   in
-  vsep ([nest 2 header] ++ ctors' ++ [period]) <> hardline
+  vsep ([nest 2 header] ++ ctors' ++ ["."]) <> hardline
 
