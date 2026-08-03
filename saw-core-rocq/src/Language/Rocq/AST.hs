@@ -12,11 +12,11 @@ of the Rocq exporter.
 module Language.Rocq.AST (
     Ident(..),
     Sort(..),
-    Term(..),
-    Type,
     BinderImplicity(..),
     Binder(..),
     PiBinder(..),
+    Term(..),
+    Type,
     Constructor(..),
     Inductive(..),
     Decl(..)
@@ -52,6 +52,22 @@ data Sort
   | Set
   | Type
   deriving (Show)
+
+-- | Is this a maximally-inserted implicit ("{}") or explicit binder?
+data BinderImplicity
+  = Implicit
+  | Explicit
+    deriving (Show)
+
+-- | Bound variable in a `Lambda` or `Let`, optionally with type
+data Binder
+  = Binder BinderImplicity Ident (Maybe Type)
+    deriving (Show)
+
+-- | Bound variable in a `Pi` (forall), optionally with a name
+data PiBinder
+  = PiBinder BinderImplicity (Maybe Ident) Type
+    deriving (Show)
 
 -- | Type to hold Gallina expressions
 --
@@ -110,22 +126,6 @@ data Term
 
 -- | Type synonym useful for indicating when a term is used as a type.
 type Type = Term
-
--- | Is this a maximally-inserted implicit ("{}") or explicit binder?
-data BinderImplicity
-  = Implicit
-  | Explicit
-    deriving (Show)
-
--- | Bound variable in a `Lambda` or `Let`, optionally with type
-data Binder
-  = Binder BinderImplicity Ident (Maybe Type)
-    deriving (Show)
-
--- | Bound variable in a `Pi` (forall), optionally with a name
-data PiBinder
-  = PiBinder BinderImplicity (Maybe Ident) Type
-    deriving (Show)
 
 -- | Single constructor declaration in an inductive type declaration.
 --
