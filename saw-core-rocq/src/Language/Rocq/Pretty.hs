@@ -12,12 +12,17 @@ Converts Rocq AST to prettyprinter documents.
 
 module Language.Rocq.Pretty (prettyDecl) where
 
+import Data.Word
+import Numeric (showHex)
+
 import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
 import Language.Rocq.AST
-import Data.Word
-import Numeric (showHex)
+
+
+------------------------------------------------------------
+-- Support
 
 -- | Replace all occurrences of the double quote character @"@ with
 --   the string @""@, i.e., two copies of it, as this is how Rocq
@@ -53,7 +58,6 @@ hsep' docs = case docs of
     [] -> PP.emptyDoc
     _ : _ -> PP.emptyDoc <+> PP.hsep docs
 
-
 -- | Print a list separated by @sepr@.
 --   Glues the separator to the end of each element.
 tightSepList :: PP.Doc ann -> [PP.Doc ann] -> PP.Doc ann
@@ -61,13 +65,36 @@ tightSepList _ [] = mempty
 tightSepList _ [d] = d
 tightSepList sepr (d:ds) = d <> sepr <+> tightSepList sepr ds
 
+-- | Common code to print a name with a type
+prettyNameType :: Ident -> Type -> PP.Doc ann
+prettyNameType x ty = prettyIdent x <+> ":" <+> prettyTerm PrecNone ty
+
+-- | Insert parens based on the first argument
+parensIf :: Bool -> PP.Doc ann -> PP.Doc ann
+parensIf p d = if p then PP.parens d else d
+
+
+------------------------------------------------------------
+-- Printers for AST elements
+
+-- | Type to hold the current expression precedence while printing
+data Prec
+  = PrecNone
+  | PrecLambda
+  | PrecApp
+  | PrecAtom
+  deriving (Eq, Ord)
+
 -- | Print an `Ident`
 prettyIdent :: Ident -> PP.Doc ann
 prettyIdent (Ident s) = text s
 
--- | Common code to print a name with a type
-prettyNameType :: Ident -> Type -> PP.Doc ann
-prettyNameType x ty = prettyIdent x <+> ":" <+> prettyTerm PrecNone ty
+-- | Print a `sort`
+prettySort :: Sort -> PP.Doc ann
+prettySort s = case s of
+    Prop -> "Prop"
+    Set -> "Set"
+    Type -> "Type"
 
 -- | Print an ordinary (lambda/let) binder
 prettyBinder :: Binder -> PP.Doc ann
@@ -94,33 +121,9 @@ prettyPiBinder b = case b of
 prettyBinders :: [Binder] -> PP.Doc ann
 prettyBinders bs = PP.hsep $ map prettyBinder bs
 
--- | Print an optional type annotation
-prettyMaybeTy :: Maybe Type -> PP.Doc ann
-prettyMaybeTy Nothing = PP.emptyDoc
-prettyMaybeTy (Just ty) = ":" <+> prettyTerm PrecNone ty
-
--- | Print a `sort`
-prettySort :: Sort -> PP.Doc ann
-prettySort s = case s of
-    Prop -> "Prop"
-    Set -> "Set"
-    Type -> "Type"
-
 -- | Print a list of pi-binders
 prettyPiBinders :: [PiBinder] -> PP.Doc ann
 prettyPiBinders bs = PP.hsep $ map prettyPiBinder bs
-
--- | Type to hold the current expression precedence while printing
-data Prec
-  = PrecNone
-  | PrecLambda
-  | PrecApp
-  | PrecAtom
-  deriving (Eq, Ord)
-
--- | Insert parens based on the first argument
-parensIf :: Bool -> PP.Doc ann -> PP.Doc ann
-parensIf p d = if p then PP.parens d else d
 
 -- | Print a term
 prettyTerm :: Prec -> Term -> PP.Doc ann
@@ -212,6 +215,31 @@ prettyTerm p e =
     Ltac s ->
       "ltac:" <> PP.parens (text s)
 
+-- | Print an optional type annotation
+prettyMaybeTy :: Maybe Type -> PP.Doc ann
+prettyMaybeTy Nothing = PP.emptyDoc
+prettyMaybeTy (Just ty) = ":" <+> prettyTerm PrecNone ty
+
+-- | Print a single constructor
+prettyConstructor :: Constructor -> PP.Doc ann
+prettyConstructor (Constructor {..}) =
+  let name' = prettyIdent constructorName
+      ty' = prettyTerm PrecNone constructorType
+  in
+  PP.nest 2 $ "|" <+> name' <+> ":" <+> ty'
+
+-- | Print an inductive type declaration
+prettyInductive :: Inductive -> PP.Doc ann
+prettyInductive (Inductive {..}) =
+  let name' = prettyIdent inductiveName
+      params' = hsep' $ map prettyBinder inductiveParameters
+      indices' = hsep' $ map prettyPiBinder inductiveIndices
+      sort' = prettySort inductiveSort
+      ctors' = map prettyConstructor inductiveConstructors
+      header = "Inductive" <+> name' <> params' <+> ":" <> indices' <+> sort' <+> ":="
+  in
+  PP.vsep ([PP.nest 2 header] ++ ctors' ++ ["."]) <> PP.hardline
+
 -- | Common code for the simple declarations
 prettyBasicDecl :: PP.Doc ann -> Ident -> Type -> PP.Doc ann
 prettyBasicDecl what nm ty =
@@ -255,24 +283,3 @@ prettyDecl decl = case decl of
     PP.vsep $ [header] ++ ds' ++ [footer]
   Snippet s ->
     text s
-
--- | Print a single constructor
-prettyConstructor :: Constructor -> PP.Doc ann
-prettyConstructor (Constructor {..}) =
-  let name' = prettyIdent constructorName
-      ty' = prettyTerm PrecNone constructorType
-  in
-  PP.nest 2 $ "|" <+> name' <+> ":" <+> ty'
-
--- | Print an inductive type declaration
-prettyInductive :: Inductive -> PP.Doc ann
-prettyInductive (Inductive {..}) =
-  let name' = prettyIdent inductiveName
-      params' = hsep' $ map prettyBinder inductiveParameters
-      indices' = hsep' $ map prettyPiBinder inductiveIndices
-      sort' = prettySort inductiveSort
-      ctors' = map prettyConstructor inductiveConstructors
-      header = "Inductive" <+> name' <> params' <+> ":" <> indices' <+> sort' <+> ":="
-  in
-  PP.vsep ([PP.nest 2 header] ++ ctors' ++ ["."]) <> PP.hardline
-
