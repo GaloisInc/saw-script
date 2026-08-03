@@ -678,7 +678,7 @@ translateAsType' t = alts "translateAsType" t
   , do (vn, _) <- mreturn $ asVariable t
        CryTParam nm <- lookupVar (SAW.vnIndex vn)
        return $ userT nm []
-  , do (n,a) <- mreturn $ asVectorType t
+  , do (a, n) <- mreturn $ asVectorType t
        n' <- translateAsType n
        commit $ do
         a' <- translateAsType a
