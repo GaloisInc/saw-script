@@ -605,7 +605,7 @@ ppTermError :: SharedContext -> TermError -> IO Text
 ppTermError sc err = do
   ppopts <- scGetPPOpts sc
   err' <- prettyTermError sc err
-  pure $ PPS.renderText ppopts err'  
+  pure $ PPS.renderText ppopts err'
 
 execSCM :: SharedContext -> SCM a -> IO a
 execSCM sc m =
@@ -1023,7 +1023,7 @@ instance IsMetadata PrettyOpts where
 
 -- | Update the prettyprinter options.
 scModifyPPOpts :: SharedContext -> (PPS.Opts -> PPS.Opts) -> IO ()
-scModifyPPOpts sc f = scUpdateData sc $ \(PrettyOpts opts) -> 
+scModifyPPOpts sc f = scUpdateData sc $ \(PrettyOpts opts) ->
   PrettyOpts $ f opts
 
 -- | Get the current prettyprinter options
@@ -1035,7 +1035,7 @@ scGetPPOpts sc = do
 -- | Wrap an operation in different prettyprinter options.
 scWithPPOpts :: SharedContext -> (PPS.Opts -> PPS.Opts) -> IO a -> IO a
 scWithPPOpts sc alter action = do
-  old <- scGetPPOpts sc 
+  old <- scGetPPOpts sc
   scModifyPPOpts sc alter
   a <- action
   scModifyPPOpts sc (\_ -> old)
