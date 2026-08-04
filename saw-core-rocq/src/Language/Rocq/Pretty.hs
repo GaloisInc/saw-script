@@ -58,13 +58,6 @@ hsep' docs = case docs of
     [] -> PP.emptyDoc
     _ : _ -> PP.emptyDoc <+> PP.hsep docs
 
--- | Print a list separated by @sepr@.
---   Glues the separator to the end of each element.
-tightSepList :: PP.Doc ann -> [PP.Doc ann] -> PP.Doc ann
-tightSepList _ [] = mempty
-tightSepList _ [d] = d
-tightSepList sepr (d:ds) = d <> sepr <+> tightSepList sepr ds
-
 -- | Common code to print a name with a type
 prettyNameType :: Ident -> Type -> PP.Doc ann
 prettyNameType x ty = prettyIdent x <+> ":" <+> prettyTerm PrecNone ty
@@ -105,7 +98,7 @@ prettyBinder b = case b of
     Binder Implicit x (Just ty)  -> PP.braces $ prettyNameType x ty
 
 -- | Print a pi (forall) binder
---   (we don't seem to be able to represent @exists@)
+--   (we don't seem to have a representation for @exists@)
 prettyPiBinder :: PiBinder -> PP.Doc ann
 prettyPiBinder b = case b of
     PiBinder Explicit Nothing ty ->
@@ -118,60 +111,125 @@ prettyPiBinder b = case b of
         "forall" <+> PP.braces (prettyNameType x ty) <> ","
 
 -- | Print a list of binders
-prettyBinders :: [Binder] -> PP.Doc ann
-prettyBinders bs = PP.hsep $ map prettyBinder bs
+prettyBinders :: [Binder] -> [PP.Doc ann]
+prettyBinders bs = map prettyBinder bs
 
 -- | Print a list of pi-binders
 prettyPiBinders :: [PiBinder] -> PP.Doc ann
 prettyPiBinders bs = PP.hsep $ map prettyPiBinder bs
 
+-- | Common code for printing things shaped like function headers
+--
+prettyFnHeader ::
+    PP.Doc ann -> [PP.Doc ann] -> Maybe (PP.Doc ann) -> PP.Doc ann ->
+    PP.Doc ann
+prettyFnHeader intro bindings mbRet sep =
+    -- Long form
+    --    fun x y z ...
+    --         a b c ...
+    --         : ty
+    --       =>
+    -- Short form:
+    --    fun x : ty =>
+    --
+    -- (the above where intro is "fun", sep is "=>")
+    --
+    let firstpieces = intro : bindings
+        shortHeader = case mbRet of
+            Nothing -> PP.group $ PP.hsep firstpieces <+> sep
+            Just ret -> PP.group $ PP.hsep firstpieces <+> ":" <+> ret <+> sep
+        longBindings = case mbRet of
+            Nothing -> PP.fillSep firstpieces
+            Just ret -> PP.fillSep firstpieces <> PP.line <> ":" <+> ret
+        longHeader = PP.nest 5 longBindings <> PP.line <> PP.indent 3 sep
+    in
+    PP.flatAlt longHeader shortHeader
+
+-- | Common code for printing things shaped like functions
+--   (@header@ will normally be the result of `prettyFnHeader`)
+prettyFunction :: PP.Doc ann -> PP.Doc ann -> PP.Doc ann
+prettyFunction header body =
+    -- Long form with long argument list and long body:
+    --    fun x y z ...
+    --         a b c ...
+    --       =>
+    --       ...
+    --       x + 1
+    -- Long form with short argument list and long body:
+    --    fun x =>
+    --       ...
+    --       x + 1
+    -- Long form with long argument list and short body:
+    --    fun x y z ...
+    --         a b c ...
+    --       => x + 1
+    -- Short form:
+    --    fun x => x + 1
+    --
+    let longbody = PP.line <> PP.indent 3 body <> PP.line
+        shortbody = PP.group body
+        body' = PP.flatAlt longbody shortbody
+        long = header <> body'
+        short = PP.group $ header <+> body
+    in
+    PP.flatAlt long short
+
 -- | Print a term
 prettyTerm :: Prec -> Term -> PP.Doc ann
-prettyTerm p e =
-  case e of
-    Lambda bs t ->
-      let bs' = prettyBinders bs
-          t' = prettyTerm PrecLambda t
+prettyTerm p e0 =
+  case e0 of
+    Lambda binders e1 ->
+      let binders' = prettyBinders binders
+          e1' = prettyTerm PrecLambda e1
+          header = prettyFnHeader "fun" binders' Nothing "=>"
       in
-      parensIf (p > PrecLambda) $ "fun" <+> bs' <+> "=>" <+> t'
+      parensIf (p > PrecLambda) $ prettyFunction header e1'
     Fix ident binders returnType body ->
       let ident' = prettyIdent ident
           binders' = prettyBinders binders
-          returnType' = prettyTerm PrecNone returnType
+          returnType' = Just $ prettyTerm PrecNone returnType
           body' = prettyTerm PrecLambda body
+          intro = "fix" <+> ident'
+          header = prettyFnHeader intro binders' returnType' ":="
       in
-      parensIf (p > PrecLambda) $
-          "fix" <+> ident' <+> binders' <+> ":" <+> returnType' <+> ":=" <+> body'
+      parensIf (p > PrecLambda) $ prettyFunction header body'
     Pi bs t ->
       let bs' = prettyPiBinders bs
           t' = prettyTerm PrecLambda t
+          long = bs' <> PP.line <> t'
+          short = PP.group $ bs' <+> t'
       in
-      parensIf (p > PrecLambda) $ bs' <+> t'
+      parensIf (p > PrecLambda) $ PP.flatAlt long short
     Let x bs mty t body ->
       let x' = prettyIdent x
           bs' = prettyBinders bs
-          mty' = prettyMaybeTy mty
+          mty' = prettyTerm PrecNone <$> mty
           t' = prettyTerm PrecNone t
           body' = prettyTerm PrecLambda body
+          intro = "let" <+> x'
+          header = prettyFnHeader intro bs' mty' ":="
+          longest = PP.vsep [header, PP.indent 3 t', "in", body']
+          second = PP.vsep [PP.group (header <+> t' <+> "in"), body']
+          shortest = PP.group (header <+> t' <+> "in" <+> body')
+          shorter = PP.flatAlt second shortest
       in
-      parensIf (p > PrecLambda) $ PP.fillSep [
-          "let" <+> x' <+> bs' <+> mty' <+> ":=" <+> t' <+> "in",
-          body'
-      ]
+      parensIf (p > PrecLambda) $ PP.flatAlt longest shorter
     If c t f ->
       let c' = prettyTerm PrecNone c
           t' = prettyTerm PrecNone t
           f' = prettyTerm PrecLambda f
+          first = "if" <+> c' <+> "then"
+          long = PP.vsep [first, PP.indent 3 t', "else", PP.indent 3 f']
+          short = PP.group (first <+> t' <+> "else" <+> f')
       in
-      parensIf (p > PrecLambda) $
-          "if" <+> c' <+> "then" <+> t' <+> "else" <+> f'
+      parensIf (p > PrecLambda) $ PP.flatAlt long short
     App f [] ->
       prettyTerm p f
     App f args ->
       let f' = prettyTerm PrecApp f
           args' = map (prettyTerm PrecAtom) args
       in
-      parensIf (p > PrecApp) $ PP.hsep (f' : args')
+      parensIf (p > PrecApp) $ PP.nest 5 $ PP.fillSep (f' : args')
     Sort s ->
       prettySort s
     Var x ->
@@ -182,8 +240,10 @@ prettyTerm p e =
     Ascription tm tp ->
       let tm' = prettyTerm PrecApp tm
           tp' = prettyTerm PrecApp tp
+          long = PP.nest 5 $ PP.fillSep [tm' <> ":", tp']
+          short = PP.group $ tm' <> ":" <+> tp'
       in
-      parensIf (p > PrecLambda) $ tm' <+> ":" <+> tp'
+      parensIf (p > PrecLambda) $ PP.flatAlt long short
     NatLit i ->
       if i > 1000 then
         -- Explicitly convert from Z if an integer is too big
@@ -203,8 +263,11 @@ prettyTerm p e =
       else
           text (show i ++ "%Z")
     List ts ->
-      let ts' = map (prettyTerm PrecNone) ts in
-      PP.brackets $ tightSepList ";" ts'
+      let ts' = PP.punctuate ";" $ map (prettyTerm PrecNone) ts
+          long = PP.brackets (PP.line <> PP.indent 3 (PP.vsep ts') <> PP.line)
+          short = PP.group $ PP.brackets $ PP.hsep ts'
+      in
+      PP.flatAlt long short
     StringLit s ->
       PP.dquotes (text $ escapeStringLit s)
     Scope term scope ->
