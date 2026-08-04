@@ -352,7 +352,7 @@ sbvToIntOp g =
 intToBvOp :: AIG.IsAIG l g => g s -> BPrim (l s)
 intToBvOp g =
   Prims.natFun $ \n ->
-  Prims.intFun $ \x -> Prims.Prim 
+  Prims.intFun $ \x -> Prims.Prim
     (VWord <$>
      if n >= 0 then return (AIG.bvFromInteger g (fromIntegral n) x)
                else AIG.neg g (AIG.bvFromInteger g (fromIntegral n) (negate x)))

@@ -35,7 +35,7 @@ we'd end up with:
   g_0 a0 .. a1023
   g_1 a0 .. a1023
   ..
-  g_1023 a0 .. a1023  
+  g_1023 a0 .. a1023
 
 Note that this has 1024 * 1024 terms.  With the array translation, we
 should end up with:
@@ -62,7 +62,7 @@ new uninterpreted symbols, but reuse the old ones.  This is not an optimization,
 but is crucial for the correct behavior of the algorithm.
 
 The `UnintApp` type is used to collect the arguments to a function, and also
-compute the root name for the function.   For ordinary (non-dependent) 
+compute the root name for the function.   For ordinary (non-dependent)
 function applications we just collect the arguments in the `UnintApp`.  However,
 for dependent applications (e.g., to handle a size polymorphic function),
 we instead modify the root name of the function.  This means that different
@@ -213,7 +213,7 @@ data ReturnTrip sym =
     -- ^ We should reinterpret terms back into SAW Core.
     -- The boolean flag indicates that this is a symbolic variable
     -- (instead of constant), which has special handling without arguments.
-  
+
 withSym :: IsSymExprBuilder sym => ReturnTrip sym -> (sym -> a) -> a
 withSym xs k =
   case xs of
@@ -272,7 +272,7 @@ parseUninterpretedTop rt@(DoReturnTrip _ True _ _ _) ref app@(UnintApp _ _ argTy
   case testEquality Ctx.empty argTys of
     Just Refl -> evalStateT (parseUninterpreted' rt ref app ty) MapF.empty
     Nothing   -> fail "At present, we do not support symbolic variables with parameters"
-    
+
 parseUninterpretedTop saw ref app ty =
   do
     count <-
@@ -295,10 +295,10 @@ parseUninterpretedTop saw ref app ty =
                   _   -> pure (UninterpMany ixW elTy (V.fromList terms))
 
     pure val
-    
+
 
 -- | Track how many uninterpreted results we need for each base type.
-newtype UnintCount (tc :: BaseType) = UnintCount Natural 
+newtype UnintCount (tc :: BaseType) = UnintCount Natural
 
 -- | Count how many uninterpreted symbols we need to represent a value
 -- of the given type.  Note that this function should match exactly what
@@ -458,7 +458,7 @@ parseUninterpreted' saw ref app ty =
       do
         -- See:
         -- https://github.com/GaloisInc/saw-script/issues/3206
-        -- https://github.com/GaloisInc/what4/issues/364 
+        -- https://github.com/GaloisInc/what4/issues/364
         -- Note that the `bad` would only matter if we use a rational in the
         -- result of an uninterpreted function, and we need to import the
         -- resulting What4 term back into What4
@@ -482,11 +482,11 @@ parseUninterpreted' saw ref app ty =
             elTy <- lift (termOfTValue sc et)
             V.generateM (fromIntegral n) (\i ->
               do
-                let newArg = ArgTermAt n elTy arg (fromIntegral i) 
+                let newArg = ArgTermAt n elTy arg (fromIntegral i)
                 el <- parseUninterpreted' (DoReturnTrip sym isVar st sc newArg) ref app et
                 pure (ready el)
               )
-          
+
     VArrayType ity ety
       | Just (Some idx_repr) <- valueAsBaseType ity
       , Just (Some elm_repr) <- valueAsBaseType ety
@@ -525,7 +525,7 @@ parseUninterpreted' saw ref app ty =
         Nothing
           | DoReturnTrip sym True st sc arg <- saw ->
             lift (bindSAWTerm sym st tyr =<< reconstructArgTerm arg sc [])
-            
+
         Just (Arr fn w (x : xs) atms) ->
           do
             let newTerm =
@@ -621,7 +621,7 @@ applyUnintApp sym app0 v =
 
 --------------------------------------------------------------------------------
 -- `ArgTerms` are used to remember the mappings between low-level symbolic
--- terms and SAW core terms. 
+-- terms and SAW core terms.
 
 
 -- | An 'ArgTerm' is a description of how to reassemble a saw-core
