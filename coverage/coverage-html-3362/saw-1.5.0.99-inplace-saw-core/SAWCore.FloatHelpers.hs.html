@@ -1,0 +1,229 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    2 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">    3 </span>{-# LANGUAGE TypeApplications #-}
+<span class="lineno">    4 </span>
+<span class="lineno">    5 </span>{- |
+<span class="lineno">    6 </span>Module      : SAWCore.FloatHelpers
+<span class="lineno">    7 </span>Copyright   : Galois, Inc. 2026
+<span class="lineno">    8 </span>License     : BSD3
+<span class="lineno">    9 </span>Maintainer  : huffman@galois.com
+<span class="lineno">   10 </span>Stability   : experimental
+<span class="lineno">   11 </span>Portability : non-portable (language extensions)
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>Utility functions for dealing with &quot;LibBF&quot;. This is heavily inspired by
+<span class="lineno">   14 </span>Cryptol's @Cryptol.Backend.FloatHelpers@ module.
+<span class="lineno">   15 </span>-}
+<span class="lineno">   16 </span>module SAWCore.FloatHelpers
+<span class="lineno">   17 </span>  ( fpCheckStatus
+<span class="lineno">   18 </span>  , fpOpts
+<span class="lineno">   19 </span>  , fpRound
+<span class="lineno">   20 </span>  , floatFromInteger
+<span class="lineno">   21 </span>  , floatFromRational
+<span class="lineno">   22 </span>  , floatToRational
+<span class="lineno">   23 </span>  , floatToInteger
+<span class="lineno">   24 </span>  , NotRationalError(..)
+<span class="lineno">   25 </span>  , ppNotRationalError
+<span class="lineno">   26 </span>  , floatFromBits
+<span class="lineno">   27 </span>  , floatToBits
+<span class="lineno">   28 </span>  , floatToBV
+<span class="lineno">   29 </span>  , floatToSBV
+<span class="lineno">   30 </span>  , NotBitvectorError(..)
+<span class="lineno">   31 </span>  , ppNotBitvectorError
+<span class="lineno">   32 </span>  ) where
+<span class="lineno">   33 </span>
+<span class="lineno">   34 </span>import Data.Bits (Bits(..))
+<span class="lineno">   35 </span>import Data.Ratio (numerator, denominator)
+<span class="lineno">   36 </span>import qualified Data.Text as Text
+<span class="lineno">   37 </span>import LibBF
+<span class="lineno">   38 </span>import Numeric.Natural (Natural)
+<span class="lineno">   39 </span>
+<span class="lineno">   40 </span>import SAWCore.Panic (panic)
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>-- | Check that we didn't get an unexpected status.
+<span class="lineno">   43 </span>fpCheckStatus :: (BigFloat, Status) -&gt; BigFloat
+<span class="lineno">   44 </span><span class="decl"><span class="istickedoff">fpCheckStatus (r,s) =</span>
+<span class="lineno">   45 </span><span class="spaces">  </span><span class="istickedoff">case s of</span>
+<span class="lineno">   46 </span><span class="spaces">    </span><span class="istickedoff">MemError  -&gt; <span class="nottickedoff">panic &quot;fpCheckStatus&quot; [ &quot;libBF: Memory error&quot; ]</span></span>
+<span class="lineno">   47 </span><span class="spaces">    </span><span class="istickedoff">_         -&gt; r</span></span>
+<span class="lineno">   48 </span>
+<span class="lineno">   49 </span>-- | Make LibBF options for the given precision and rounding mode.
+<span class="lineno">   50 </span>fpOpts :: Natural -&gt; Natural -&gt; RoundMode -&gt; BFOpts
+<span class="lineno">   51 </span><span class="decl"><span class="istickedoff">fpOpts e p r =</span>
+<span class="lineno">   52 </span><span class="spaces">  </span><span class="istickedoff">case ok of</span>
+<span class="lineno">   53 </span><span class="spaces">    </span><span class="istickedoff">Just opts -&gt; opts</span>
+<span class="lineno">   54 </span><span class="spaces">    </span><span class="istickedoff">Nothing   -&gt; <span class="nottickedoff">panic &quot;fpOpts&quot; [ &quot;Invalid Float size&quot;</span></span>
+<span class="lineno">   55 </span><span class="spaces">                                </span><span class="istickedoff"><span class="nottickedoff">, &quot;exponent: &quot; &lt;&gt; Text.pack (show e)</span></span>
+<span class="lineno">   56 </span><span class="spaces">                                </span><span class="istickedoff"><span class="nottickedoff">, &quot;precision: &quot; &lt;&gt; Text.pack (show p)</span></span>
+<span class="lineno">   57 </span><span class="spaces">                                </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">   58 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">   59 </span><span class="spaces">    </span><span class="istickedoff">ok :: Maybe BFOpts</span>
+<span class="lineno">   60 </span><span class="spaces">    </span><span class="istickedoff">ok = do eb &lt;- rng expBits expBitsMin expBitsMax e</span>
+<span class="lineno">   61 </span><span class="spaces">            </span><span class="istickedoff">pb &lt;- rng precBits precBitsMin precBitsMax p</span>
+<span class="lineno">   62 </span><span class="spaces">            </span><span class="istickedoff">pure (eb &lt;&gt; pb &lt;&gt; allowSubnormal &lt;&gt; rnd r)</span>
+<span class="lineno">   63 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">   64 </span><span class="spaces">    </span><span class="istickedoff">rng ::</span>
+<span class="lineno">   65 </span><span class="spaces">      </span><span class="istickedoff">forall a.</span>
+<span class="lineno">   66 </span><span class="spaces">      </span><span class="istickedoff">Integral a =&gt;</span>
+<span class="lineno">   67 </span><span class="spaces">      </span><span class="istickedoff">(a -&gt; BFOpts) -&gt;</span>
+<span class="lineno">   68 </span><span class="spaces">      </span><span class="istickedoff">Int -&gt;</span>
+<span class="lineno">   69 </span><span class="spaces">      </span><span class="istickedoff">Int -&gt;</span>
+<span class="lineno">   70 </span><span class="spaces">      </span><span class="istickedoff">Natural -&gt;</span>
+<span class="lineno">   71 </span><span class="spaces">      </span><span class="istickedoff">Maybe BFOpts</span>
+<span class="lineno">   72 </span><span class="spaces">    </span><span class="istickedoff">rng f a b x =</span>
+<span class="lineno">   73 </span><span class="spaces">      </span><span class="istickedoff">if <span class="tickonlytrue">fromIntegral @Int @Natural a &lt;= x &amp;&amp; x &lt;= fromIntegral @Int @Natural b</span></span>
+<span class="lineno">   74 </span><span class="spaces">        </span><span class="istickedoff">then Just (f (fromIntegral @Natural @a x))</span>
+<span class="lineno">   75 </span><span class="spaces">        </span><span class="istickedoff">else <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">   76 </span>
+<span class="lineno">   77 </span>-- | Mapping from the rounding modes defined in the @Float.cry@ module to the
+<span class="lineno">   78 </span>-- rounding modes of LibBF.
+<span class="lineno">   79 </span>fpRound :: Integer -&gt; Maybe RoundMode
+<span class="lineno">   80 </span><span class="decl"><span class="istickedoff">fpRound n =</span>
+<span class="lineno">   81 </span><span class="spaces">  </span><span class="istickedoff">case n of</span>
+<span class="lineno">   82 </span><span class="spaces">    </span><span class="istickedoff">0 -&gt; Just NearEven</span>
+<span class="lineno">   83 </span><span class="spaces">    </span><span class="istickedoff">1 -&gt; Just NearAway</span>
+<span class="lineno">   84 </span><span class="spaces">    </span><span class="istickedoff">2 -&gt; Just ToPosInf</span>
+<span class="lineno">   85 </span><span class="spaces">    </span><span class="istickedoff">3 -&gt; Just ToNegInf</span>
+<span class="lineno">   86 </span><span class="spaces">    </span><span class="istickedoff">4 -&gt; Just ToZero</span>
+<span class="lineno">   87 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">Nothing</span></span></span>
+<span class="lineno">   88 </span>
+<span class="lineno">   89 </span>-- | Make a floating point number from an integer, using the given rounding
+<span class="lineno">   90 </span>-- mode.
+<span class="lineno">   91 </span>floatFromInteger :: BFOpts -&gt; Integer -&gt; BigFloat
+<span class="lineno">   92 </span><span class="decl"><span class="nottickedoff">floatFromInteger opts i = fpCheckStatus (bfRoundFloat opts (bfFromInteger i))</span></span>
+<span class="lineno">   93 </span>
+<span class="lineno">   94 </span>-- | Make a floating point number from a rational, using the given rounding
+<span class="lineno">   95 </span>-- mode.
+<span class="lineno">   96 </span>floatFromRational :: Natural -&gt; Natural -&gt; RoundMode -&gt; Rational -&gt; BigFloat
+<span class="lineno">   97 </span><span class="decl"><span class="istickedoff">floatFromRational e p r rat =</span>
+<span class="lineno">   98 </span><span class="spaces">  </span><span class="istickedoff">fpCheckStatus $</span>
+<span class="lineno">   99 </span><span class="spaces">  </span><span class="istickedoff">if den == 1</span>
+<span class="lineno">  100 </span><span class="spaces">    </span><span class="istickedoff">then bfRoundFloat opts num</span>
+<span class="lineno">  101 </span><span class="spaces">    </span><span class="istickedoff">else bfDiv opts num (bfFromInteger den)</span>
+<span class="lineno">  102 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  103 </span><span class="spaces">    </span><span class="istickedoff">opts  = fpOpts e p r</span>
+<span class="lineno">  104 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  105 </span><span class="spaces">    </span><span class="istickedoff">num   = bfFromInteger (numerator rat)</span>
+<span class="lineno">  106 </span><span class="spaces">    </span><span class="istickedoff">den   = denominator rat</span></span>
+<span class="lineno">  107 </span>
+<span class="lineno">  108 </span>-- | Convert a floating-point number to a 'Rational' if possible. Return 'Left'
+<span class="lineno">  109 </span>-- if the input is infinite or NaN.
+<span class="lineno">  110 </span>floatToRational :: BigFloat -&gt; Either NotRationalError Rational
+<span class="lineno">  111 </span><span class="decl"><span class="istickedoff">floatToRational bf =</span>
+<span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">case bfToRep bf of</span>
+<span class="lineno">  113 </span><span class="spaces">    </span><span class="istickedoff">BFNaN -&gt; Left IsNaN</span>
+<span class="lineno">  114 </span><span class="spaces">    </span><span class="istickedoff">BFRep s num -&gt;</span>
+<span class="lineno">  115 </span><span class="spaces">      </span><span class="istickedoff">case num of</span>
+<span class="lineno">  116 </span><span class="spaces">        </span><span class="istickedoff">Inf  -&gt; Left IsInf</span>
+<span class="lineno">  117 </span><span class="spaces">        </span><span class="istickedoff">Zero -&gt; Right 0</span>
+<span class="lineno">  118 </span><span class="spaces">        </span><span class="istickedoff">Num i ev -&gt; Right $</span>
+<span class="lineno">  119 </span><span class="spaces">          </span><span class="istickedoff">case s of</span>
+<span class="lineno">  120 </span><span class="spaces">            </span><span class="istickedoff">Pos -&gt; ab</span>
+<span class="lineno">  121 </span><span class="spaces">            </span><span class="istickedoff">Neg -&gt; negate ab</span>
+<span class="lineno">  122 </span><span class="spaces">          </span><span class="istickedoff">where ab = fromInteger i * (2 ^^ ev)</span></span>
+<span class="lineno">  123 </span>
+<span class="lineno">  124 </span>-- | Convert a floating point number to an integer, if possible. Return 'Left'
+<span class="lineno">  125 </span>-- if the input is infinite or NaN.
+<span class="lineno">  126 </span>floatToInteger :: RoundMode -&gt; BigFloat -&gt; Either NotRationalError Integer
+<span class="lineno">  127 </span><span class="decl"><span class="istickedoff">floatToInteger r fp =</span>
+<span class="lineno">  128 </span><span class="spaces">  </span><span class="istickedoff">do rat &lt;- floatToRational fp</span>
+<span class="lineno">  129 </span><span class="spaces">     </span><span class="istickedoff">pure $</span>
+<span class="lineno">  130 </span><span class="spaces">       </span><span class="istickedoff">case r of</span>
+<span class="lineno">  131 </span><span class="spaces">         </span><span class="istickedoff">NearEven -&gt; <span class="nottickedoff">round rat</span></span>
+<span class="lineno">  132 </span><span class="spaces">         </span><span class="istickedoff">NearAway -&gt; roundAway rat</span>
+<span class="lineno">  133 </span><span class="spaces">         </span><span class="istickedoff">ToPosInf -&gt; ceiling rat</span>
+<span class="lineno">  134 </span><span class="spaces">         </span><span class="istickedoff">ToNegInf -&gt; floor rat</span>
+<span class="lineno">  135 </span><span class="spaces">         </span><span class="istickedoff">ToZero   -&gt; truncate rat</span>
+<span class="lineno">  136 </span><span class="spaces">         </span><span class="istickedoff">_        -&gt; <span class="nottickedoff">panic &quot;floatToInteger&quot;</span></span>
+<span class="lineno">  137 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">[&quot;Unexpected rounding mode&quot;, Text.pack (show r)]</span></span>
+<span class="lineno">  138 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  139 </span><span class="spaces">    </span><span class="istickedoff">-- | Evaluate a rational to an integer with rounding away from zero.</span>
+<span class="lineno">  140 </span><span class="spaces">    </span><span class="istickedoff">roundAway :: Rational -&gt; Integer</span>
+<span class="lineno">  141 </span><span class="spaces">    </span><span class="istickedoff">roundAway r' = truncate (r' + signum r' * 0.5)</span></span>
+<span class="lineno">  142 </span>
+<span class="lineno">  143 </span>-- | Why a floating-point value cannot be represented as a 'Rational'.
+<span class="lineno">  144 </span>data NotRationalError = IsNaN | IsInf
+<span class="lineno">  145 </span>
+<span class="lineno">  146 </span>ppNotRationalError :: NotRationalError -&gt; String
+<span class="lineno">  147 </span><span class="decl"><span class="nottickedoff">ppNotRationalError IsNaN = &quot;NaN value cannot be represented as a Rational&quot;</span>
+<span class="lineno">  148 </span><span class="spaces"></span><span class="nottickedoff">ppNotRationalError IsInf = &quot;Infinite value cannot be represented as a Rational&quot;</span></span>
+<span class="lineno">  149 </span>
+<span class="lineno">  150 </span>floatFromBits ::
+<span class="lineno">  151 </span>  Natural {- ^ Exponent width -} -&gt;
+<span class="lineno">  152 </span>  Natural {- ^ Precision width -} -&gt;
+<span class="lineno">  153 </span>  Integer {- ^ Raw bits -} -&gt;
+<span class="lineno">  154 </span>  BigFloat
+<span class="lineno">  155 </span><span class="decl"><span class="nottickedoff">floatFromBits e p bv = bfFromBits (fpOpts e p NearEven) bv</span></span>
+<span class="lineno">  156 </span>
+<span class="lineno">  157 </span>-- | Turn a float into raw bits.
+<span class="lineno">  158 </span>-- @NaN@ is represented as a positive &quot;quiet&quot; @NaN@
+<span class="lineno">  159 </span>-- (most significant bit in the significand is set, the rest of it is 0)
+<span class="lineno">  160 </span>floatToBits :: Natural -&gt; Natural -&gt; BigFloat -&gt; Integer
+<span class="lineno">  161 </span><span class="decl"><span class="nottickedoff">floatToBits e p bf = bfToBits (fpOpts e p NearEven) bf</span></span>
+<span class="lineno">  162 </span>
+<span class="lineno">  163 </span>-- | Convert a floating point number to an unsigned bitvector. If the value of
+<span class="lineno">  164 </span>-- the float does not lie within the range of possible unsigned bitvector
+<span class="lineno">  165 </span>-- values, then this will return 'Left'.
+<span class="lineno">  166 </span>floatToBV :: Natural -&gt; RoundMode -&gt; BigFloat -&gt; Either NotBitvectorError Integer
+<span class="lineno">  167 </span><span class="decl"><span class="nottickedoff">floatToBV w r bf =</span>
+<span class="lineno">  168 </span><span class="spaces">  </span><span class="nottickedoff">case floatToInteger r bf of</span>
+<span class="lineno">  169 </span><span class="spaces">    </span><span class="nottickedoff">Left e -&gt; Left $ IsSpecialValue e</span>
+<span class="lineno">  170 </span><span class="spaces">    </span><span class="nottickedoff">Right i -&gt;</span>
+<span class="lineno">  171 </span><span class="spaces">      </span><span class="nottickedoff">if 0 &lt;= i &amp;&amp; i &lt;= maxUnsigned</span>
+<span class="lineno">  172 </span><span class="spaces">        </span><span class="nottickedoff">then Right i</span>
+<span class="lineno">  173 </span><span class="spaces">        </span><span class="nottickedoff">else Left IsOutsideRange</span>
+<span class="lineno">  174 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  175 </span><span class="spaces">    </span><span class="nottickedoff">maxUnsigned :: Integer</span>
+<span class="lineno">  176 </span><span class="spaces">    </span><span class="nottickedoff">maxUnsigned = bit (fromIntegral @Natural @Int w) - 1</span></span>
+<span class="lineno">  177 </span>
+<span class="lineno">  178 </span>-- | Convert a floating point number to a signed bitvector. If the value of the
+<span class="lineno">  179 </span>-- float does not lie within the range of possible signed bitvector values,
+<span class="lineno">  180 </span>-- then this will return 'Left'.
+<span class="lineno">  181 </span>floatToSBV :: Natural -&gt; RoundMode -&gt; BigFloat -&gt; Either NotBitvectorError Integer
+<span class="lineno">  182 </span><span class="decl"><span class="nottickedoff">floatToSBV w r bf =</span>
+<span class="lineno">  183 </span><span class="spaces">  </span><span class="nottickedoff">case floatToInteger r bf of</span>
+<span class="lineno">  184 </span><span class="spaces">    </span><span class="nottickedoff">Left e -&gt; Left $ IsSpecialValue e</span>
+<span class="lineno">  185 </span><span class="spaces">    </span><span class="nottickedoff">Right i -&gt;</span>
+<span class="lineno">  186 </span><span class="spaces">      </span><span class="nottickedoff">if minSigned &lt;= i &amp;&amp; i &lt;= maxSigned</span>
+<span class="lineno">  187 </span><span class="spaces">        </span><span class="nottickedoff">then Right i</span>
+<span class="lineno">  188 </span><span class="spaces">        </span><span class="nottickedoff">else Left IsOutsideRange</span>
+<span class="lineno">  189 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  190 </span><span class="spaces">    </span><span class="nottickedoff">signedUpperBound :: Integer</span>
+<span class="lineno">  191 </span><span class="spaces">    </span><span class="nottickedoff">signedUpperBound = bit (fromIntegral @Natural @Int w - 1)</span>
+<span class="lineno">  192 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  193 </span><span class="spaces">    </span><span class="nottickedoff">minSigned, maxSigned :: Integer</span>
+<span class="lineno">  194 </span><span class="spaces">    </span><span class="nottickedoff">minSigned = negate signedUpperBound</span>
+<span class="lineno">  195 </span><span class="spaces">    </span><span class="nottickedoff">maxSigned = signedUpperBound - 1</span></span>
+<span class="lineno">  196 </span>
+<span class="lineno">  197 </span>-- | Why a floating-point value cannot be represented as a bitvector.
+<span class="lineno">  198 </span>data NotBitvectorError
+<span class="lineno">  199 </span>  = IsSpecialValue NotRationalError
+<span class="lineno">  200 </span>    -- ^ The value is infinite or NaN.
+<span class="lineno">  201 </span>  | IsOutsideRange
+<span class="lineno">  202 </span>    -- ^ The value lies outside the range of possible bitvector values.
+<span class="lineno">  203 </span>
+<span class="lineno">  204 </span>ppNotBitvectorError :: NotBitvectorError -&gt; String
+<span class="lineno">  205 </span><span class="decl"><span class="nottickedoff">ppNotBitvectorError (IsSpecialValue e) = ppNotRationalError e</span>
+<span class="lineno">  206 </span><span class="spaces"></span><span class="nottickedoff">ppNotBitvectorError IsOutsideRange = &quot;Float lies outside range of possible bitvector values&quot;</span></span>
+
+</pre>
+</body>
+</html>
