@@ -117,18 +117,17 @@ Definition caseVec_0 {a: Type} (P: Vec a 0 -> Type)
  * a corresponding proof about ConsVec. This allows unpacking the
  * vector without getting into trouble with other things of the same
  * type.
- *
- * FUTURE: in principle this should be able to go without using
- * dependent destruction and thus incurring axioms, but so far I can't
- * get it to work.
  *)
 Definition caseVec_S {a: Type} {n: nat} (P: Vec a (S n) -> Type)
      (H: forall x xs, P (ConsVec x xs))
-     (xs: Vec a (S n)) : P xs.
-Proof.
-   dependent destruction xs.
-   exact (H x xs).
-Defined.
+     (xs: Vec a (S n)) : P xs :=
+  match xs as xs' in Vec _ (S n') return
+    forall (P: Vec a (S n') -> Type) (H: forall x xs, P (ConsVec x xs)), P xs'
+  with
+  | NilVec _ => idProp
+  | ConsVec h t => fun P H => H h t
+  end P H.
+
 
 (*
  * Vectors of length 0 are always nil.
