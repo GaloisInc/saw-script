@@ -1,0 +1,348 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE DataKinds #-}
+<span class="lineno">    2 </span>{-# LANGUAGE GADTs #-}
+<span class="lineno">    3 </span>{-# LANGUAGE ImplicitParams #-}
+<span class="lineno">    4 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    5 </span>{-# LANGUAGE PatternSynonyms #-}
+<span class="lineno">    6 </span>{-# LANGUAGE RankNTypes #-}
+<span class="lineno">    7 </span>{-# LANGUAGE TypeApplications #-}
+<span class="lineno">    8 </span>{-# LANGUAGE TypeOperators #-}
+<span class="lineno">    9 </span>
+<span class="lineno">   10 </span>module SAWCentral.Crucible.LLVM.X86Support
+<span class="lineno">   11 </span>  ( X86Error(..)
+<span class="lineno">   12 </span>  , X86Unsupported(..)
+<span class="lineno">   13 </span>  , RelevantElf(..)
+<span class="lineno">   14 </span>  , getElf
+<span class="lineno">   15 </span>  , getRelevant
+<span class="lineno">   16 </span>  , findSymbols
+<span class="lineno">   17 </span>  , posFn
+<span class="lineno">   18 </span>  , loadGlobal
+<span class="lineno">   19 </span>  , Unit(..)
+<span class="lineno">   20 </span>  , freshRegister
+<span class="lineno">   21 </span>  , mkGlobalMap
+<span class="lineno">   22 </span>  ) where
+<span class="lineno">   23 </span>
+<span class="lineno">   24 </span>import GHC.Natural(Natural)
+<span class="lineno">   25 </span>
+<span class="lineno">   26 </span>import Control.Applicative ( (&lt;|&gt;) )
+<span class="lineno">   27 </span>import Control.Exception(Exception(..), throwIO)
+<span class="lineno">   28 </span>import Control.Monad (MonadPlus(..), join)
+<span class="lineno">   29 </span>
+<span class="lineno">   30 </span>import           Data.ByteString (ByteString)
+<span class="lineno">   31 </span>import qualified Data.ByteString as BS
+<span class="lineno">   32 </span>import qualified Data.ByteString.Char8 as BSC
+<span class="lineno">   33 </span>import           Data.Map (Map)
+<span class="lineno">   34 </span>import qualified Data.Map as Map
+<span class="lineno">   35 </span>import           Data.Text (Text)
+<span class="lineno">   36 </span>import qualified Data.Text as Text
+<span class="lineno">   37 </span>import           Data.Foldable (foldlM)
+<span class="lineno">   38 </span>
+<span class="lineno">   39 </span>import Data.Parameterized.NatRepr
+<span class="lineno">   40 </span>import qualified Data.Parameterized.Context as Ctx
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>import qualified Data.ElfEdit as Elf
+<span class="lineno">   43 </span>
+<span class="lineno">   44 </span>-- What4
+<span class="lineno">   45 </span>import What4.ProgramLoc(Position(OtherPos))
+<span class="lineno">   46 </span>import What4.Interface
+<span class="lineno">   47 </span>          (natEq, freshNat, natLit, asNat, userSymbol, freshConstant)
+<span class="lineno">   48 </span>
+<span class="lineno">   49 </span>-- Crucible
+<span class="lineno">   50 </span>import Lang.Crucible.Backend (HasSymInterface(backendGetSym))
+<span class="lineno">   51 </span>import Lang.Crucible.Simulator.RegMap
+<span class="lineno">   52 </span>import Lang.Crucible.Types (TypeRepr(..),BaseTypeRepr(..))
+<span class="lineno">   53 </span>import qualified Lang.Crucible.LLVM.MemModel as Crucible
+<span class="lineno">   54 </span>
+<span class="lineno">   55 </span>-- Macaw
+<span class="lineno">   56 </span>import Data.Macaw.Discovery.State (AddrSymMap)
+<span class="lineno">   57 </span>import Data.Macaw.Memory(
+<span class="lineno">   58 </span>    Memory, MemSegmentOff(..),
+<span class="lineno">   59 </span>    RegionIndex,
+<span class="lineno">   60 </span>    addrOffset, memWordToUnsigned,
+<span class="lineno">   61 </span>    segoffAddr, incAddr,
+<span class="lineno">   62 </span>    readWord8, readWord16le, readWord32le, readWord64le
+<span class="lineno">   63 </span> )
+<span class="lineno">   64 </span>import Data.Macaw.Memory.ElfLoader(
+<span class="lineno">   65 </span>    LoadOptions(..),
+<span class="lineno">   66 </span>    memoryForElfAllSymbols,
+<span class="lineno">   67 </span>    memoryForElf,
+<span class="lineno">   68 </span>    MemSymbol(..)
+<span class="lineno">   69 </span> )
+<span class="lineno">   70 </span>import Data.Macaw.Symbolic (GlobalMap(..))
+<span class="lineno">   71 </span>
+<span class="lineno">   72 </span>-- SAW Crucible
+<span class="lineno">   73 </span>import SAWCentral.Crucible.Common (Sym)
+<span class="lineno">   74 </span>import SAWCentral.Crucible.LLVM.CrucibleLLVM
+<span class="lineno">   75 </span>  ( doPtrAddOffset
+<span class="lineno">   76 </span>  , pattern LLVMPointerRepr
+<span class="lineno">   77 </span>  , LLVMPtr
+<span class="lineno">   78 </span>  , muxLLVMPtr
+<span class="lineno">   79 </span>  , Bytes, toBytes
+<span class="lineno">   80 </span>  , bytesToInteger
+<span class="lineno">   81 </span>  , pattern LLVMPointer
+<span class="lineno">   82 </span>  )
+<span class="lineno">   83 </span>
+<span class="lineno">   84 </span>
+<span class="lineno">   85 </span>------------------------------------------------------------
+<span class="lineno">   86 </span>
+<span class="lineno">   87 </span>data Unit = Bytes | Words | DWords | QWords | V128s | V256s deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">   88 </span>
+<span class="lineno">   89 </span>
+<span class="lineno">   90 </span>(*.) :: Integer -&gt; Unit -&gt; Bytes
+<span class="lineno">   91 </span><span class="decl"><span class="nottickedoff">n *. u = toBytes (fromInteger n * bs)</span>
+<span class="lineno">   92 </span><span class="spaces">  </span><span class="nottickedoff">where bs = unitByteSize u natValue :: Natural</span></span>
+<span class="lineno">   93 </span>
+<span class="lineno">   94 </span>unitByteSize :: Unit -&gt; (forall w. (1 &lt;= w) =&gt; NatRepr w -&gt; a) -&gt; a
+<span class="lineno">   95 </span><span class="decl"><span class="nottickedoff">unitByteSize u k =</span>
+<span class="lineno">   96 </span><span class="spaces">  </span><span class="nottickedoff">case u of</span>
+<span class="lineno">   97 </span><span class="spaces">    </span><span class="nottickedoff">Bytes  -&gt; k (knownNat @1)</span>
+<span class="lineno">   98 </span><span class="spaces">    </span><span class="nottickedoff">Words  -&gt; k (knownNat @2)</span>
+<span class="lineno">   99 </span><span class="spaces">    </span><span class="nottickedoff">DWords -&gt; k (knownNat @4)</span>
+<span class="lineno">  100 </span><span class="spaces">    </span><span class="nottickedoff">QWords -&gt; k (knownNat @8)</span>
+<span class="lineno">  101 </span><span class="spaces">    </span><span class="nottickedoff">V128s  -&gt; k (knownNat @16)</span>
+<span class="lineno">  102 </span><span class="spaces">    </span><span class="nottickedoff">V256s  -&gt; k (knownNat @32)</span></span>
+<span class="lineno">  103 </span>
+<span class="lineno">  104 </span>
+<span class="lineno">  105 </span>--------------------------------------------------------------------------------
+<span class="lineno">  106 </span>
+<span class="lineno">  107 </span>freshRegister :: Sym -&gt; Ctx.Index ctx tp -&gt; TypeRepr tp -&gt; IO (RegValue' Sym tp)
+<span class="lineno">  108 </span><span class="decl"><span class="istickedoff">freshRegister sym idx repr = RV &lt;$&gt; freshVal sym repr True (&quot;reg&quot; ++ show idx)</span></span>
+<span class="lineno">  109 </span>
+<span class="lineno">  110 </span>freshVal ::
+<span class="lineno">  111 </span>  Sym -&gt; TypeRepr t -&gt; Bool {- ptrOK ?-}-&gt; String -&gt; IO (RegValue Sym t)
+<span class="lineno">  112 </span><span class="decl"><span class="istickedoff">freshVal sym t ptrOk nm =</span>
+<span class="lineno">  113 </span><span class="spaces">  </span><span class="istickedoff">case t of</span>
+<span class="lineno">  114 </span><span class="spaces">    </span><span class="istickedoff">BoolRepr -&gt; do</span>
+<span class="lineno">  115 </span><span class="spaces">      </span><span class="istickedoff">sn &lt;- symName nm</span>
+<span class="lineno">  116 </span><span class="spaces">      </span><span class="istickedoff">freshConstant sym sn BaseBoolRepr</span>
+<span class="lineno">  117 </span><span class="spaces">    </span><span class="istickedoff">LLVMPointerRepr w</span>
+<span class="lineno">  118 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">ptrOk</span>, Just Refl &lt;- testEquality w (knownNat @64) -&gt; do</span>
+<span class="lineno">  119 </span><span class="spaces">          </span><span class="istickedoff">sn_base &lt;- symName (nm ++ &quot;_base&quot;)</span>
+<span class="lineno">  120 </span><span class="spaces">          </span><span class="istickedoff">sn_off &lt;- symName (nm ++ &quot;_off&quot;)</span>
+<span class="lineno">  121 </span><span class="spaces">          </span><span class="istickedoff">base &lt;- freshNat sym sn_base</span>
+<span class="lineno">  122 </span><span class="spaces">          </span><span class="istickedoff">off &lt;- freshConstant sym sn_off (BaseBVRepr w)</span>
+<span class="lineno">  123 </span><span class="spaces">          </span><span class="istickedoff">return (LLVMPointer base off)</span>
+<span class="lineno">  124 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; do</span>
+<span class="lineno">  125 </span><span class="spaces">          </span><span class="istickedoff">sn &lt;- symName nm</span>
+<span class="lineno">  126 </span><span class="spaces">          </span><span class="istickedoff">base &lt;- natLit sym 0</span>
+<span class="lineno">  127 </span><span class="spaces">          </span><span class="istickedoff">off &lt;- freshConstant sym sn (BaseBVRepr w)</span>
+<span class="lineno">  128 </span><span class="spaces">          </span><span class="istickedoff">return (LLVMPointer <span class="nottickedoff">base</span> <span class="nottickedoff">off</span>)</span>
+<span class="lineno">  129 </span><span class="spaces">    </span><span class="istickedoff">it -&gt; <span class="nottickedoff">fail (&quot;[freshVal] Unexpected type repr: &quot; ++ show it)</span></span>
+<span class="lineno">  130 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  131 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  132 </span><span class="spaces">  </span><span class="istickedoff">symName s =</span>
+<span class="lineno">  133 </span><span class="spaces">    </span><span class="istickedoff">case userSymbol (&quot;macaw_&quot; ++ s) of</span>
+<span class="lineno">  134 </span><span class="spaces">      </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">error (&quot;Invalid symbol name &quot; ++ show s ++ &quot;: &quot; ++ show err)</span></span>
+<span class="lineno">  135 </span><span class="spaces">      </span><span class="istickedoff">Right a -&gt; return a</span></span>
+<span class="lineno">  136 </span>
+<span class="lineno">  137 </span>
+<span class="lineno">  138 </span>--------------------------------------------------------------------------------
+<span class="lineno">  139 </span>
+<span class="lineno">  140 </span>-- | Implements a layer to map 'LLVMPtr's to their underlying allocations, as
+<span class="lineno">  141 </span>-- tracked by the 'RegionIndex' map
+<span class="lineno">  142 </span>--
+<span class="lineno">  143 </span>-- NOTE: If the initial obvious mapping (where the concrete nat is in the map)
+<span class="lineno">  144 </span>-- fails, there are two possibilities:
+<span class="lineno">  145 </span>--
+<span class="lineno">  146 </span>-- 1. The region ID is concrete but not in the map.  We should just pass it
+<span class="lineno">  147 </span>--    through without modifying it, since it is a valid LLVM pointer
+<span class="lineno">  148 </span>-- 2. The region ID is symbolic.  In this case, we need to generate a mux that
+<span class="lineno">  149 </span>--    dispatches to the entries in the map when they match, or otherwise passes
+<span class="lineno">  150 </span>--    the pointer through untouched.
+<span class="lineno">  151 </span>--
+<span class="lineno">  152 </span>-- If the region ID is concretely zero, it should be the case that the
+<span class="lineno">  153 </span>-- 'RegionIndex' map would translate it into a real 'LLVMPtr' since the only map
+<span class="lineno">  154 </span>-- entry (established in 'setupGlobals') is for 0.
+<span class="lineno">  155 </span>mkGlobalMap ::
+<span class="lineno">  156 </span>  (?memOpts::Crucible.MemOptions, Crucible.HasLLVMAnn Sym) =&gt;
+<span class="lineno">  157 </span>  Map RegionIndex (LLVMPtr Sym 64) -&gt;
+<span class="lineno">  158 </span>  GlobalMap Sym Crucible.Mem 64
+<span class="lineno">  159 </span><span class="decl"><span class="istickedoff">mkGlobalMap rmap = GlobalMap $ \bak mem region off -&gt;</span>
+<span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff">let</span>
+<span class="lineno">  161 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">sym = backendGetSym bak</span></span>
+<span class="lineno">  162 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  163 </span><span class="spaces">    </span><span class="istickedoff">mapConcreteRegion = maybe <span class="nottickedoff">mzero</span> id (addOffset &lt;$&gt; thisRegion)</span>
+<span class="lineno">  164 </span><span class="spaces">    </span><span class="istickedoff">thisRegion = join (findRegion &lt;$&gt; asNat region)</span>
+<span class="lineno">  165 </span><span class="spaces">    </span><span class="istickedoff">findRegion r = Map.lookup (fromIntegral r) rmap</span>
+<span class="lineno">  166 </span><span class="spaces">    </span><span class="istickedoff">addOffset p = doPtrAddOffset bak mem p off</span>
+<span class="lineno">  167 </span><span class="spaces">      </span><span class="istickedoff">where ?ptrWidth = knownNat</span>
+<span class="lineno">  168 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">passThroughConcreteRegion =</span></span>
+<span class="lineno">  169 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case asNat region of</span></span>
+<span class="lineno">  170 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; mzero</span></span>
+<span class="lineno">  171 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">Just _ -&gt; return (LLVMPointer region off)</span></span>
+<span class="lineno">  172 </span><span class="spaces">    </span><span class="istickedoff">-- If the symbolic nat is (symbolically) equal to any of the entries in the</span>
+<span class="lineno">  173 </span><span class="spaces">    </span><span class="istickedoff">-- rmap, we need to do the translation; otherwise, we pass it through</span>
+<span class="lineno">  174 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">mapSymbolicRegion = foldlM muxSymbolicRegion (LLVMPointer region off) (Map.toList rmap)</span></span>
+<span class="lineno">  175 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">muxSymbolicRegion others (regionNum, basePtr) = do</span></span>
+<span class="lineno">  176 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">thisRegionNat &lt;- natLit sym (fromIntegral regionNum)</span></span>
+<span class="lineno">  177 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">isEqRegion &lt;- natEq sym thisRegionNat region</span></span>
+<span class="lineno">  178 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">adjustedPtr &lt;- addOffset basePtr</span></span>
+<span class="lineno">  179 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">muxLLVMPtr sym isEqRegion adjustedPtr others</span></span>
+<span class="lineno">  180 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  181 </span><span class="spaces">  </span><span class="istickedoff">in mapConcreteRegion &lt;|&gt; <span class="nottickedoff">passThroughConcreteRegion</span> &lt;|&gt; <span class="nottickedoff">mapSymbolicRegion</span></span></span>
+<span class="lineno">  182 </span>
+<span class="lineno">  183 </span>
+<span class="lineno">  184 </span>--------------------------------------------------------------------------------
+<span class="lineno">  185 </span>-- ELF
+<span class="lineno">  186 </span>
+<span class="lineno">  187 </span>-- | These are the parts of the ELF file that we care about.
+<span class="lineno">  188 </span>data RelevantElf = RelevantElf
+<span class="lineno">  189 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">memory</span></span></span>    :: Memory 64
+<span class="lineno">  190 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">funSymMap</span></span></span> :: AddrSymMap 64
+<span class="lineno">  191 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">symMap</span></span></span>    :: AddrSymMap 64
+<span class="lineno">  192 </span>  }
+<span class="lineno">  193 </span>
+<span class="lineno">  194 </span>-- | Parse an elf file.
+<span class="lineno">  195 </span>getElf :: FilePath -&gt; IO (Elf.ElfHeaderInfo 64)
+<span class="lineno">  196 </span><span class="decl"><span class="istickedoff">getElf path =</span>
+<span class="lineno">  197 </span><span class="spaces">  </span><span class="istickedoff">do bs &lt;- BS.readFile path</span>
+<span class="lineno">  198 </span><span class="spaces">     </span><span class="istickedoff">case Elf.decodeElfHeaderInfo bs of</span>
+<span class="lineno">  199 </span><span class="spaces">       </span><span class="istickedoff">Left (off, msg) -&gt;</span>
+<span class="lineno">  200 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">malformed path $ &quot;Invalid ELF header at offset &quot; &lt;&gt; Text.pack (show off) &lt;&gt;</span></span>
+<span class="lineno">  201 </span><span class="spaces">                            </span><span class="istickedoff"><span class="nottickedoff">&quot;: &quot; &lt;&gt; Text.pack msg</span></span>
+<span class="lineno">  202 </span><span class="spaces">       </span><span class="istickedoff">Right (Elf.SomeElf hdr) -&gt;</span>
+<span class="lineno">  203 </span><span class="spaces">           </span><span class="istickedoff">let elfmachine = Elf.headerMachine (Elf.header hdr)</span>
+<span class="lineno">  204 </span><span class="spaces">               </span><span class="istickedoff">elfclass = Elf.headerClass (Elf.header hdr)</span>
+<span class="lineno">  205 </span><span class="spaces">           </span><span class="istickedoff">in case (elfmachine, elfclass) of</span>
+<span class="lineno">  206 </span><span class="spaces">               </span><span class="istickedoff">(Elf.EM_X86_64, Elf.ELFCLASS64) -&gt;</span>
+<span class="lineno">  207 </span><span class="spaces">                   </span><span class="istickedoff">pure hdr</span>
+<span class="lineno">  208 </span><span class="spaces">               </span><span class="istickedoff">(Elf.EM_X86_64, _) -&gt;</span>
+<span class="lineno">  209 </span><span class="spaces">                   </span><span class="istickedoff">-- Note that 32-bit x86 is a different machine; if</span>
+<span class="lineno">  210 </span><span class="spaces">                   </span><span class="istickedoff">-- we do see a 32-bit x86_64 bin though it might be</span>
+<span class="lineno">  211 </span><span class="spaces">                   </span><span class="istickedoff">-- one of the several 32-on-64 ABIs (akin to mips</span>
+<span class="lineno">  212 </span><span class="spaces">                   </span><span class="istickedoff">-- N32) that haven't caught on, so call it</span>
+<span class="lineno">  213 </span><span class="spaces">                   </span><span class="istickedoff">-- unsupported rather than malformed.</span>
+<span class="lineno">  214 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">unsupported path $ &quot;Unexpected ELF class &quot; ++ show elfclass</span></span>
+<span class="lineno">  215 </span><span class="spaces">               </span><span class="istickedoff">(_, _) -&gt;</span>
+<span class="lineno">  216 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">unsupported path $ &quot;Unexpected ELF machine &quot; ++ show elfmachine</span></span></span>
+<span class="lineno">  217 </span>
+<span class="lineno">  218 </span>
+<span class="lineno">  219 </span>-- | Extract a Macaw &quot;memory&quot; from an ELF file and resolve symbols.
+<span class="lineno">  220 </span>getRelevant :: FilePath -&gt; Elf.ElfHeaderInfo 64 -&gt; IO RelevantElf
+<span class="lineno">  221 </span><span class="decl"><span class="istickedoff">getRelevant path elf =</span>
+<span class="lineno">  222 </span><span class="spaces">  </span><span class="istickedoff">case (memoryForElf opts elf, memoryForElfAllSymbols opts elf) of</span>
+<span class="lineno">  223 </span><span class="spaces">    </span><span class="istickedoff">(Left err, _) -&gt; <span class="nottickedoff">malformed path $ Text.pack err</span></span>
+<span class="lineno">  224 </span><span class="spaces">    </span><span class="istickedoff">(_, Left err) -&gt; <span class="nottickedoff">malformed path $ Text.pack err</span></span>
+<span class="lineno">  225 </span><span class="spaces">    </span><span class="istickedoff">(Right (mem, faddrs, _warnings, _errs), Right (_, addrs, _, _)) -&gt;</span>
+<span class="lineno">  226 </span><span class="spaces">      </span><span class="istickedoff">do let toEntry msym = (memSymbolStart msym, memSymbolName msym)</span>
+<span class="lineno">  227 </span><span class="spaces">         </span><span class="istickedoff">return RelevantElf { memory = mem</span>
+<span class="lineno">  228 </span><span class="spaces">                            </span><span class="istickedoff">, funSymMap = Map.fromList (map toEntry faddrs)</span>
+<span class="lineno">  229 </span><span class="spaces">                            </span><span class="istickedoff">, symMap = Map.fromList (map toEntry addrs)</span>
+<span class="lineno">  230 </span><span class="spaces">                            </span><span class="istickedoff">}</span>
+<span class="lineno">  231 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  232 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  233 </span><span class="spaces">  </span><span class="istickedoff">-- XXX: What options do we want?</span>
+<span class="lineno">  234 </span><span class="spaces">  </span><span class="istickedoff">opts = LoadOptions { loadOffset = Just 0</span>
+<span class="lineno">  235 </span><span class="spaces">                     </span><span class="istickedoff">}</span></span>
+<span class="lineno">  236 </span>
+<span class="lineno">  237 </span>
+<span class="lineno">  238 </span>
+<span class="lineno">  239 </span>
+<span class="lineno">  240 </span>-- | Find the address(es) of a symbol by name.
+<span class="lineno">  241 </span>findSymbols :: AddrSymMap 64 -&gt; ByteString -&gt; [ MemSegmentOff 64 ]
+<span class="lineno">  242 </span><span class="decl"><span class="istickedoff">findSymbols addrs nm = Map.findWithDefault <span class="nottickedoff">[]</span> nm invertedMap</span>
+<span class="lineno">  243 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  244 </span><span class="spaces">  </span><span class="istickedoff">invertedMap = Map.fromListWith <span class="nottickedoff">(++)</span> [ (y,[x]) | (x,y) &lt;- Map.toList addrs ]</span></span>
+<span class="lineno">  245 </span>
+<span class="lineno">  246 </span>loadGlobal ::
+<span class="lineno">  247 </span>  RelevantElf -&gt;
+<span class="lineno">  248 </span>  (ByteString, Integer, Unit) -&gt;
+<span class="lineno">  249 </span>  IO [(String, Integer, Unit, [Integer])]
+<span class="lineno">  250 </span><span class="decl"><span class="nottickedoff">loadGlobal elf (nm,n,u) =</span>
+<span class="lineno">  251 </span><span class="spaces">  </span><span class="nottickedoff">case findSymbols (symMap elf) nm of</span>
+<span class="lineno">  252 </span><span class="spaces">    </span><span class="nottickedoff">[] -&gt; do print $ symMap elf</span>
+<span class="lineno">  253 </span><span class="spaces">             </span><span class="nottickedoff">err &quot;Global not found&quot;</span>
+<span class="lineno">  254 </span><span class="spaces">    </span><span class="nottickedoff">_  -&gt; mapM loadLoc (findSymbols (symMap elf) nm)</span>
+<span class="lineno">  255 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  256 </span><span class="spaces">  </span><span class="nottickedoff">mem   = memory elf</span>
+<span class="lineno">  257 </span><span class="spaces">  </span><span class="nottickedoff">sname = BSC.unpack nm</span>
+<span class="lineno">  258 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  259 </span><span class="spaces">  </span><span class="nottickedoff">readOne a = case u of</span>
+<span class="lineno">  260 </span><span class="spaces">                </span><span class="nottickedoff">Bytes  -&gt; check (readWord8    mem a)</span>
+<span class="lineno">  261 </span><span class="spaces">                </span><span class="nottickedoff">Words  -&gt; check (readWord16le mem a)</span>
+<span class="lineno">  262 </span><span class="spaces">                </span><span class="nottickedoff">DWords -&gt; check (readWord32le mem a)</span>
+<span class="lineno">  263 </span><span class="spaces">                </span><span class="nottickedoff">QWords -&gt; check (readWord64le mem a)</span>
+<span class="lineno">  264 </span><span class="spaces">                </span><span class="nottickedoff">_      -&gt; err (&quot;unsupported global size: &quot; ++ show u)</span>
+<span class="lineno">  265 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  266 </span><span class="spaces">  </span><span class="nottickedoff">nextAddr = incAddr (bytesToInteger (1 *. u))</span>
+<span class="lineno">  267 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  268 </span><span class="spaces">  </span><span class="nottickedoff">addrsFor o = take (fromIntegral n) (iterate nextAddr o)</span>
+<span class="lineno">  269 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  270 </span><span class="spaces">  </span><span class="nottickedoff">check :: (Show b, Integral a) =&gt; Either b a -&gt; IO Integer</span>
+<span class="lineno">  271 </span><span class="spaces">  </span><span class="nottickedoff">check res = case res of</span>
+<span class="lineno">  272 </span><span class="spaces">                </span><span class="nottickedoff">Left e  -&gt; err (show e)</span>
+<span class="lineno">  273 </span><span class="spaces">                </span><span class="nottickedoff">Right a -&gt; return (fromIntegral a)</span>
+<span class="lineno">  274 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  275 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  276 </span><span class="spaces">  </span><span class="nottickedoff">loadLoc off = do let start = segoffAddr off</span>
+<span class="lineno">  277 </span><span class="spaces">                       </span><span class="nottickedoff">a  = memWordToUnsigned (addrOffset start)</span>
+<span class="lineno">  278 </span><span class="spaces">                   </span><span class="nottickedoff">is &lt;- mapM readOne (addrsFor start)</span>
+<span class="lineno">  279 </span><span class="spaces">                   </span><span class="nottickedoff">return (sname, a, u, is)</span>
+<span class="lineno">  280 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  281 </span><span class="spaces">  </span><span class="nottickedoff">err :: [Char] -&gt; IO a</span>
+<span class="lineno">  282 </span><span class="spaces">  </span><span class="nottickedoff">err xs = fail $ unlines</span>
+<span class="lineno">  283 </span><span class="spaces">                    </span><span class="nottickedoff">[ &quot;Failed to load global.&quot;</span>
+<span class="lineno">  284 </span><span class="spaces">                    </span><span class="nottickedoff">, &quot;*** Global: &quot; ++ show nm</span>
+<span class="lineno">  285 </span><span class="spaces">                    </span><span class="nottickedoff">, &quot;*** Error: &quot; ++ xs</span>
+<span class="lineno">  286 </span><span class="spaces">                    </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  287 </span>
+<span class="lineno">  288 </span>-- | The position associated with a specific location.
+<span class="lineno">  289 </span>posFn :: MemSegmentOff 64 -&gt; Position
+<span class="lineno">  290 </span><span class="decl"><span class="istickedoff">posFn = OtherPos . Text.pack . show</span></span>
+<span class="lineno">  291 </span>
+<span class="lineno">  292 </span>
+<span class="lineno">  293 </span>--------------------------------------------------------------------------------
+<span class="lineno">  294 </span>-- Calling Convention
+<span class="lineno">  295 </span>-- see: http://refspecs.linuxfoundation.org/elf/x86_64-abi-0.99.pdf
+<span class="lineno">  296 </span>-- Need to preserve: %rbp, %rbx, %r12--%r15
+<span class="lineno">  297 </span>-- Preserve control bits in MXCSR
+<span class="lineno">  298 </span>-- Preserve x87 control word.
+<span class="lineno">  299 </span>-- On entry:
+<span class="lineno">  300 </span>--   CPU is in x87 mode
+<span class="lineno">  301 </span>--   DF in $rFLAGS is clear one entry and return.
+<span class="lineno">  302 </span>-- &quot;Red zone&quot; 128 bytes past the end of the stack %rsp.
+<span class="lineno">  303 </span>--    * not modified by interrupts
+<span class="lineno">  304 </span>
+<span class="lineno">  305 </span>
+<span class="lineno">  306 </span>--------------------------------------------------------------------------------
+<span class="lineno">  307 </span>-- Errors
+<span class="lineno">  308 </span>
+<span class="lineno">  309 </span>-- | Exception for hitting an unsupported object or feature. The arguments
+<span class="lineno">  310 </span>--   are the filename we were looking at, and a message.
+<span class="lineno">  311 </span>data X86Unsupported = X86Unsupported FilePath String deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  312 </span>
+<span class="lineno">  313 </span>-- | Exception for miscellaneous errors during verification. The arguments
+<span class="lineno">  314 </span>--   are the filename we were looking at, also optionally a function/symbol
+<span class="lineno">  315 </span>--   name, and a message.
+<span class="lineno">  316 </span>data X86Error       = X86Error FilePath (Maybe Text) Text deriving <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>
+<span class="lineno">  317 </span>
+<span class="lineno">  318 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Exception X86Unsupported</span></span></span></span></span></span>
+<span class="lineno">  319 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Exception X86Error</span></span></span></span></span></span>
+<span class="lineno">  320 </span>
+<span class="lineno">  321 </span>unsupported :: FilePath -&gt; String -&gt; IO a
+<span class="lineno">  322 </span><span class="decl"><span class="nottickedoff">unsupported path x = throwIO (X86Unsupported path x)</span></span>
+<span class="lineno">  323 </span>
+<span class="lineno">  324 </span>malformed :: FilePath -&gt; Text -&gt; IO a
+<span class="lineno">  325 </span><span class="decl"><span class="nottickedoff">malformed path x = throwIO (X86Error path Nothing x)</span></span>
+
+</pre>
+</body>
+</html>

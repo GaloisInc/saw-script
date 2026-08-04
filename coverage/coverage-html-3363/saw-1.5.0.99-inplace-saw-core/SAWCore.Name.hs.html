@@ -1,0 +1,423 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCore.Name
+<span class="lineno">    3 </span>Copyright   : Galois, Inc. 2012-2015
+<span class="lineno">    4 </span>License     : BSD3
+<span class="lineno">    5 </span>Maintainer  : huffman@galois.com
+<span class="lineno">    6 </span>Stability   : experimental
+<span class="lineno">    7 </span>Portability : non-portable (language extensions)
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>Various kinds of names.
+<span class="lineno">   10 </span>-}
+<span class="lineno">   11 </span>
+<span class="lineno">   12 </span>{-# LANGUAGE DeriveGeneric #-}
+<span class="lineno">   13 </span>{-# LANGUAGE DeriveLift #-}
+<span class="lineno">   14 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">   15 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">   16 </span>{-# LANGUAGE PatternSynonyms #-}
+<span class="lineno">   17 </span>
+<span class="lineno">   18 </span>module SAWCore.Name
+<span class="lineno">   19 </span>  ( -- * Module names
+<span class="lineno">   20 </span>    ModuleName, mkModuleName
+<span class="lineno">   21 </span>  , preludeName
+<span class="lineno">   22 </span>  , moduleNameText
+<span class="lineno">   23 </span>  , moduleNamePieces
+<span class="lineno">   24 </span>   -- * Identifiers
+<span class="lineno">   25 </span>  , Ident, identModule, identBaseName, identName, mkIdent, mkSafeIdent
+<span class="lineno">   26 </span>  , parseIdent
+<span class="lineno">   27 </span>  , identText
+<span class="lineno">   28 </span>  , identPieces
+<span class="lineno">   29 </span>    -- * NameInfo
+<span class="lineno">   30 </span>  , NameInfo
+<span class="lineno">   31 </span>  , pattern ModuleIdentifier
+<span class="lineno">   32 </span>  , pattern ImportedName
+<span class="lineno">   33 </span>  , mkImportedName
+<span class="lineno">   34 </span>  , toShortName
+<span class="lineno">   35 </span>  , toAbsoluteName
+<span class="lineno">   36 </span>  , moduleIdentToQualName
+<span class="lineno">   37 </span>  , toQualName
+<span class="lineno">   38 </span>  , nameAliases
+<span class="lineno">   39 </span>  , scFreshQualName
+<span class="lineno">   40 </span>    -- * Name
+<span class="lineno">   41 </span>  , VarIndex
+<span class="lineno">   42 </span>  , Name(..)
+<span class="lineno">   43 </span>    -- * VarName
+<span class="lineno">   44 </span>  , VarName(..)
+<span class="lineno">   45 </span>  , wildcardVarName
+<span class="lineno">   46 </span>  , VarCtx(..)
+<span class="lineno">   47 </span>  , emptyVarCtx
+<span class="lineno">   48 </span>  , consVarCtx
+<span class="lineno">   49 </span>  , lookupVarCtx
+<span class="lineno">   50 </span>    -- * Display Name Environments
+<span class="lineno">   51 </span>  , DisplayNameEnv(..)
+<span class="lineno">   52 </span>  , emptyDisplayNameEnv
+<span class="lineno">   53 </span>  , extendDisplayNameEnv
+<span class="lineno">   54 </span>  , filterDisplayNameEnv
+<span class="lineno">   55 </span>  , mergeDisplayNameEnv
+<span class="lineno">   56 </span>  , resolveDisplayName
+<span class="lineno">   57 </span>  , bestDisplayName
+<span class="lineno">   58 </span>  , allDisplayNames
+<span class="lineno">   59 </span>  , deleteDisplayNameEnv
+<span class="lineno">   60 </span>  ) where
+<span class="lineno">   61 </span>
+<span class="lineno">   62 </span>import           Numeric (showHex)
+<span class="lineno">   63 </span>import           Data.Char
+<span class="lineno">   64 </span>import           Data.Hashable
+<span class="lineno">   65 </span>import           Data.IntMap (IntMap)
+<span class="lineno">   66 </span>import qualified Data.IntMap as IntMap
+<span class="lineno">   67 </span>import           Data.IntSet (IntSet)
+<span class="lineno">   68 </span>import qualified Data.IntSet as IntSet
+<span class="lineno">   69 </span>import qualified Data.List as List
+<span class="lineno">   70 </span>import           Data.List.NonEmpty (NonEmpty(..))
+<span class="lineno">   71 </span>import           Data.Map (Map)
+<span class="lineno">   72 </span>import qualified Data.Map as Map
+<span class="lineno">   73 </span>import           Data.String (IsString(..))
+<span class="lineno">   74 </span>import           Data.Text (Text)
+<span class="lineno">   75 </span>import qualified Data.Text as Text
+<span class="lineno">   76 </span>-- import           GHC.Generics (Generic)
+<span class="lineno">   77 </span>import qualified Language.Haskell.TH.Syntax as TH
+<span class="lineno">   78 </span>
+<span class="lineno">   79 </span>import SAWCore.Panic (panic)
+<span class="lineno">   80 </span>import qualified SAWCore.QualName as QN
+<span class="lineno">   81 </span>
+<span class="lineno">   82 </span>-- Module Names ----------------------------------------------------------------
+<span class="lineno">   83 </span>
+<span class="lineno">   84 </span>newtype ModuleName = ModuleName QN.QualName
+<span class="lineno">   85 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Hashable</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">TH.Lift</span></span></span></span>)
+<span class="lineno">   86 </span>
+<span class="lineno">   87 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show ModuleName</span></span></span></span> where
+<span class="lineno">   88 </span>  <span class="decl"><span class="nottickedoff">show mn = Text.unpack (moduleNameText mn)</span></span>
+<span class="lineno">   89 </span>
+<span class="lineno">   90 </span>moduleNameText :: ModuleName -&gt; Text
+<span class="lineno">   91 </span><span class="decl"><span class="nottickedoff">moduleNameText (ModuleName qn) = QN.ppQualName (qn{ QN.namespace = Nothing })</span></span>
+<span class="lineno">   92 </span>
+<span class="lineno">   93 </span>moduleNamePieces :: ModuleName -&gt; [Text]
+<span class="lineno">   94 </span><span class="decl"><span class="istickedoff">moduleNamePieces (ModuleName qn) = QN.fullPath qn</span></span>
+<span class="lineno">   95 </span>
+<span class="lineno">   96 </span>-- | Create a module name given a list of strings with the top-most
+<span class="lineno">   97 </span>-- module name given first.
+<span class="lineno">   98 </span>mkModuleName :: [Text] -&gt; ModuleName
+<span class="lineno">   99 </span><span class="decl"><span class="istickedoff">mkModuleName [] = <span class="nottickedoff">panic &quot;mkModuleName&quot; [&quot;empty list&quot;]</span></span>
+<span class="lineno">  100 </span><span class="spaces"></span><span class="istickedoff">mkModuleName (nm:nms) = ModuleName $ QN.fromPath QN.NamespaceCore (nm :| nms)</span></span>
+<span class="lineno">  101 </span>
+<span class="lineno">  102 </span>preludeName :: ModuleName
+<span class="lineno">  103 </span><span class="decl"><span class="istickedoff">preludeName = mkModuleName [&quot;Prelude&quot;]</span></span>
+<span class="lineno">  104 </span>
+<span class="lineno">  105 </span>
+<span class="lineno">  106 </span>-- Identifiers -----------------------------------------------------------------
+<span class="lineno">  107 </span>
+<span class="lineno">  108 </span>newtype Ident = Ident QN.QualName
+<span class="lineno">  109 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff">Hashable</span></span></span></span>)
+<span class="lineno">  110 </span>
+<span class="lineno">  111 </span>identModule :: Ident -&gt; ModuleName
+<span class="lineno">  112 </span><span class="decl"><span class="istickedoff">identModule (Ident qn) = case QN.split qn of</span>
+<span class="lineno">  113 </span><span class="spaces">  </span><span class="istickedoff">Just (q, _, _) -&gt; ModuleName q</span>
+<span class="lineno">  114 </span><span class="spaces">  </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;identModule&quot; [&quot;invalid Ident&quot;]</span></span></span>
+<span class="lineno">  115 </span>
+<span class="lineno">  116 </span>identBaseName :: Ident -&gt; Text
+<span class="lineno">  117 </span><span class="decl"><span class="istickedoff">identBaseName (Ident qn) = QN.baseName qn</span></span>
+<span class="lineno">  118 </span>
+<span class="lineno">  119 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show Ident</span></span></span></span> where
+<span class="lineno">  120 </span>  <span class="decl"><span class="istickedoff">show i = Text.unpack (identText i)</span></span>
+<span class="lineno">  121 </span>
+<span class="lineno">  122 </span>identText :: Ident -&gt; Text
+<span class="lineno">  123 </span><span class="decl"><span class="istickedoff">identText (Ident qn) = QN.ppQualName (qn{ QN.namespace = Nothing })</span></span>
+<span class="lineno">  124 </span>
+<span class="lineno">  125 </span>identPieces :: Ident -&gt; NonEmpty Text
+<span class="lineno">  126 </span><span class="decl"><span class="nottickedoff">identPieces (Ident qn) = QN.fullPathNE qn</span></span>
+<span class="lineno">  127 </span>
+<span class="lineno">  128 </span>identName :: Ident -&gt; String
+<span class="lineno">  129 </span><span class="decl"><span class="istickedoff">identName = Text.unpack . identBaseName</span></span>
+<span class="lineno">  130 </span>
+<span class="lineno">  131 </span>mkIdent :: ModuleName -&gt; Text -&gt; Ident
+<span class="lineno">  132 </span><span class="decl"><span class="istickedoff">mkIdent (ModuleName m) s = Ident $ QN.qualify m s</span></span>
+<span class="lineno">  133 </span>
+<span class="lineno">  134 </span>-- | Make a \&quot;rocq-safe\&quot; identifier from a string that might contain
+<span class="lineno">  135 </span>-- non-identifier characters, where we use the SAW core notion of identifier
+<span class="lineno">  136 </span>-- characters as letters, digits, underscore and primes. Any disallowed
+<span class="lineno">  137 </span>-- character is mapped to the string @__xNN@, where @NN@ is the hexadecimal code
+<span class="lineno">  138 </span>-- for that character. Additionally, a SAW core identifier is not allowed to
+<span class="lineno">  139 </span>-- start with a prime, so a leading underscore is added in such a case.
+<span class="lineno">  140 </span>mkSafeIdent :: ModuleName -&gt; String -&gt; Ident
+<span class="lineno">  141 </span><span class="decl"><span class="nottickedoff">mkSafeIdent _ [] = fromString &quot;_&quot;</span>
+<span class="lineno">  142 </span><span class="spaces"></span><span class="nottickedoff">mkSafeIdent mnm nm =</span>
+<span class="lineno">  143 </span><span class="spaces">  </span><span class="nottickedoff">let is_safe_char c = isAlphaNum c || c == '_' || c == '\'' in</span>
+<span class="lineno">  144 </span><span class="spaces">  </span><span class="nottickedoff">mkIdent mnm $ Text.pack $</span>
+<span class="lineno">  145 </span><span class="spaces">  </span><span class="nottickedoff">(if nm!!0 == '\'' then ('_' :) else id) $</span>
+<span class="lineno">  146 </span><span class="spaces">  </span><span class="nottickedoff">concatMap</span>
+<span class="lineno">  147 </span><span class="spaces">  </span><span class="nottickedoff">(\c -&gt; if is_safe_char c then [c] else</span>
+<span class="lineno">  148 </span><span class="spaces">           </span><span class="nottickedoff">&quot;__x&quot; ++ showHex (ord c) &quot;&quot;)</span>
+<span class="lineno">  149 </span><span class="spaces">  </span><span class="nottickedoff">nm</span></span>
+<span class="lineno">  150 </span>
+<span class="lineno">  151 </span>-- | Parse a fully-qualified identifier. Supports either '.' or '::' as path separator.
+<span class="lineno">  152 </span>parseIdent :: String -&gt; Ident
+<span class="lineno">  153 </span><span class="decl"><span class="istickedoff">parseIdent s0 = Ident $ case (Text.splitOn sep t0) of</span>
+<span class="lineno">  154 </span><span class="spaces">  </span><span class="istickedoff">(t1:t2) -&gt; QN.fromPath QN.NamespaceCore (t1:|t2)</span>
+<span class="lineno">  155 </span><span class="spaces">  </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;parseIdent&quot; [&quot;invalid identifier: &quot; &lt;&gt; t0]</span></span>
+<span class="lineno">  156 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  157 </span><span class="spaces">    </span><span class="istickedoff">sep = case Text.any (\c -&gt; c=='.') t0 of</span>
+<span class="lineno">  158 </span><span class="spaces">      </span><span class="istickedoff">True -&gt; &quot;.&quot;</span>
+<span class="lineno">  159 </span><span class="spaces">      </span><span class="istickedoff">False -&gt; &quot;::&quot;</span>
+<span class="lineno">  160 </span><span class="spaces">    </span><span class="istickedoff">t0 = Text.pack s0</span></span>
+<span class="lineno">  161 </span>
+<span class="lineno">  162 </span>instance IsString Ident where
+<span class="lineno">  163 </span>  <span class="decl"><span class="istickedoff">fromString = parseIdent</span></span>
+<span class="lineno">  164 </span>
+<span class="lineno">  165 </span>--------------------------------------------------------------------------------
+<span class="lineno">  166 </span>-- NameInfo
+<span class="lineno">  167 </span>
+<span class="lineno">  168 </span>
+<span class="lineno">  169 </span>-- | Descriptions of the origins of names that may be in scope
+<span class="lineno">  170 </span>data NameInfo =
+<span class="lineno">  171 </span>  NameInfo { <span class="istickedoff"><span class="decl"><span class="istickedoff">nameInfoQualName</span></span></span> :: QN.QualName, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">nameInfoImported</span></span></span> :: Bool}
+<span class="lineno">  172 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>,<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>,<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  173 </span>
+<span class="lineno">  174 </span>-- | This name arises from an exported declaration from a module
+<span class="lineno">  175 </span>pattern ModuleIdentifier :: Ident -&gt; NameInfo
+<span class="lineno">  176 </span>pattern ModuleIdentifier i &lt;- <span class="istickedoff">NameInfo (Ident -&gt; i) False</span>  where
+<span class="lineno">  177 </span>  ModuleIdentifier i = <span class="istickedoff">NameInfo (moduleIdentToQualName i) False</span>
+<span class="lineno">  178 </span>
+<span class="lineno">  179 </span>-- | This name was imported from some other programming language/scope
+<span class="lineno">  180 </span>pattern ImportedName ::
+<span class="lineno">  181 </span>  QN.QualName -&gt; -- ^ An absolutely-qualified name, which is required to be unique
+<span class="lineno">  182 </span>  [Text] -&gt;  -- ^ A collection of aliases for this name.  Shorter or &quot;less-qualified&quot;
+<span class="lineno">  183 </span>             --   aliases should be nearer the front of the list
+<span class="lineno">  184 </span>  NameInfo
+<span class="lineno">  185 </span>pattern ImportedName qn as &lt;- <span class="istickedoff">NameInfo (qualNameWithAliases -&gt; (qn,as)) True</span>
+<span class="lineno">  186 </span>
+<span class="lineno">  187 </span>mkImportedName :: QN.QualName -&gt; NameInfo
+<span class="lineno">  188 </span><span class="decl"><span class="istickedoff">mkImportedName qn = NameInfo qn True</span></span>
+<span class="lineno">  189 </span>
+<span class="lineno">  190 </span>{-# COMPLETE ModuleIdentifier,ImportedName #-}
+<span class="lineno">  191 </span>
+<span class="lineno">  192 </span>qualNameWithAliases:: QN.QualName -&gt; (QN.QualName, [Text])
+<span class="lineno">  193 </span><span class="decl"><span class="istickedoff">qualNameWithAliases qn = (qn,<span class="nottickedoff">QN.aliases qn</span>)</span></span>
+<span class="lineno">  194 </span>
+<span class="lineno">  195 </span>instance <span class="decl"><span class="nottickedoff">Hashable NameInfo</span></span> where
+<span class="lineno">  196 </span>  <span class="decl"><span class="istickedoff">hashWithSalt x (NameInfo a b) = x `hashWithSalt` a `hashWithSalt` b</span></span>
+<span class="lineno">  197 </span>
+<span class="lineno">  198 </span>toQualName :: NameInfo -&gt; QN.QualName
+<span class="lineno">  199 </span><span class="decl"><span class="istickedoff">toQualName ni = nameInfoQualName ni</span></span>
+<span class="lineno">  200 </span>
+<span class="lineno">  201 </span>nameAliases :: NameInfo -&gt; [Text]
+<span class="lineno">  202 </span><span class="decl"><span class="nottickedoff">nameAliases ni = QN.aliases $ nameInfoQualName ni</span></span>
+<span class="lineno">  203 </span>
+<span class="lineno">  204 </span>toShortName :: NameInfo -&gt; Text
+<span class="lineno">  205 </span><span class="decl"><span class="istickedoff">toShortName ni = QN.baseName $ nameInfoQualName ni</span></span>
+<span class="lineno">  206 </span>
+<span class="lineno">  207 </span>toAbsoluteName :: NameInfo -&gt; Text
+<span class="lineno">  208 </span><span class="decl"><span class="nottickedoff">toAbsoluteName ni = QN.ppQualName $ nameInfoQualName ni</span></span>
+<span class="lineno">  209 </span>
+<span class="lineno">  210 </span>moduleIdentToQualName :: Ident -&gt; QN.QualName
+<span class="lineno">  211 </span><span class="decl"><span class="istickedoff">moduleIdentToQualName (Ident qn) = qn</span></span>
+<span class="lineno">  212 </span>
+<span class="lineno">  213 </span>scFreshQualName :: Text -&gt; VarIndex -&gt; QN.QualName
+<span class="lineno">  214 </span><span class="decl"><span class="istickedoff">scFreshQualName nm i = QN.fromNameIndex QN.NamespaceFresh (if <span class="tickonlyfalse">Text.null nm</span> then <span class="nottickedoff">&quot;_&quot;</span> else nm) i</span></span>
+<span class="lineno">  215 </span>
+<span class="lineno">  216 </span>-- Global Names ----------------------------------------------------------------
+<span class="lineno">  217 </span>
+<span class="lineno">  218 </span>type VarIndex = Int
+<span class="lineno">  219 </span>
+<span class="lineno">  220 </span>-- | A global name with a unique ID. We maintain a global invariant
+<span class="lineno">  221 </span>-- that the 'VarIndex' and the 'NameInfo' must be in a strict
+<span class="lineno">  222 </span>-- one-to-one correspondence: Each 'VarIndex' is paired with a unique
+<span class="lineno">  223 </span>-- 'NameInfo', and each 'NameInfo' is paired with a unique 'VarIndex'.
+<span class="lineno">  224 </span>data Name =
+<span class="lineno">  225 </span>  Name
+<span class="lineno">  226 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">nameIndex</span></span></span> :: !VarIndex
+<span class="lineno">  227 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">nameInfo</span></span></span> :: !NameInfo
+<span class="lineno">  228 </span>  }
+<span class="lineno">  229 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  230 </span>
+<span class="lineno">  231 </span>-- | Because of the global uniqueness invariant, comparing the
+<span class="lineno">  232 </span>-- 'VarIndex' is sufficient to ensure equality of names.
+<span class="lineno">  233 </span>instance <span class="decl"><span class="nottickedoff">Eq Name</span></span> where
+<span class="lineno">  234 </span>  <span class="decl"><span class="istickedoff">x == y = nameIndex x == nameIndex y</span></span>
+<span class="lineno">  235 </span>
+<span class="lineno">  236 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord Name</span></span></span></span></span></span></span></span></span></span></span></span> where
+<span class="lineno">  237 </span>  <span class="decl"><span class="nottickedoff">compare x y = compare (nameIndex x) (nameIndex y)</span></span>
+<span class="lineno">  238 </span>
+<span class="lineno">  239 </span>-- | For hashing, we consider only the 'NameInfo' and not the
+<span class="lineno">  240 </span>-- 'VarIndex'; this gives a stable hash value for a particular name,
+<span class="lineno">  241 </span>-- even if the unique IDs are assigned differently from run to run.
+<span class="lineno">  242 </span>instance <span class="decl"><span class="nottickedoff">Hashable Name</span></span> where
+<span class="lineno">  243 </span>  <span class="decl"><span class="istickedoff">hashWithSalt x nm = hashWithSalt x (nameInfo nm)</span></span>
+<span class="lineno">  244 </span>
+<span class="lineno">  245 </span>
+<span class="lineno">  246 </span>-- Variable Names --------------------------------------------------------------
+<span class="lineno">  247 </span>
+<span class="lineno">  248 </span>-- | A variable name with a unique ID.
+<span class="lineno">  249 </span>-- We assume a global uniqueness invariant: The 'VarIndex' determines the name.
+<span class="lineno">  250 </span>data VarName =
+<span class="lineno">  251 </span>  VarName
+<span class="lineno">  252 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">vnIndex</span></span></span> :: !VarIndex
+<span class="lineno">  253 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">vnName</span></span></span> :: !Text
+<span class="lineno">  254 </span>  }
+<span class="lineno">  255 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  256 </span>
+<span class="lineno">  257 </span>-- | Because of the global uniqueness invariant, comparing the
+<span class="lineno">  258 </span>-- 'VarIndex' is sufficient to ensure equality of variable names.
+<span class="lineno">  259 </span>instance <span class="decl"><span class="nottickedoff">Eq VarName</span></span> where
+<span class="lineno">  260 </span>  <span class="decl"><span class="istickedoff">x == y = vnIndex x == vnIndex y</span></span>
+<span class="lineno">  261 </span>
+<span class="lineno">  262 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord VarName</span></span></span></span></span></span></span></span></span></span></span></span> where
+<span class="lineno">  263 </span>  <span class="decl"><span class="istickedoff">compare x y = compare (vnIndex x) (vnIndex y)</span></span>
+<span class="lineno">  264 </span>
+<span class="lineno">  265 </span>-- | For hashing, we consider only the base name and not the
+<span class="lineno">  266 </span>-- 'VarIndex'; this gives a stable hash value for a particular name,
+<span class="lineno">  267 </span>-- even if the unique IDs are assigned differently from run to run.
+<span class="lineno">  268 </span>instance <span class="decl"><span class="nottickedoff">Hashable VarName</span></span> where
+<span class="lineno">  269 </span>  <span class="decl"><span class="istickedoff">hashWithSalt x vn = hashWithSalt x (vnName vn)</span></span>
+<span class="lineno">  270 </span>
+<span class="lineno">  271 </span>-- | A wildcard variable name consisting of an underscore &quot;_&quot;.
+<span class="lineno">  272 </span>wildcardVarName :: VarName
+<span class="lineno">  273 </span><span class="decl"><span class="istickedoff">wildcardVarName = VarName 0 &quot;_&quot;</span></span>
+<span class="lineno">  274 </span>
+<span class="lineno">  275 </span>-- | A data type representing a context of bound 'VarName's.
+<span class="lineno">  276 </span>-- It maps each 'VarName' to a de Bruijn index.
+<span class="lineno">  277 </span>data VarCtx =
+<span class="lineno">  278 </span>  VarCtx
+<span class="lineno">  279 </span>  !Int -- ^ Context size
+<span class="lineno">  280 </span>  !(IntMap Int) -- ^ Mapping from VarIndex to (size - de Bruijn index)
+<span class="lineno">  281 </span>
+<span class="lineno">  282 </span>-- | The empty 'VarName' context.
+<span class="lineno">  283 </span>emptyVarCtx :: VarCtx
+<span class="lineno">  284 </span><span class="decl"><span class="istickedoff">emptyVarCtx = VarCtx 0 IntMap.empty</span></span>
+<span class="lineno">  285 </span>
+<span class="lineno">  286 </span>-- | Extend a 'VarCtx' with a new bound 'VarName'.
+<span class="lineno">  287 </span>-- The new name has de Bruijn index 0; the index of each previous name
+<span class="lineno">  288 </span>-- is incremented by one.
+<span class="lineno">  289 </span>consVarCtx :: VarName -&gt; VarCtx -&gt; VarCtx
+<span class="lineno">  290 </span><span class="decl"><span class="istickedoff">consVarCtx x (VarCtx size m) =</span>
+<span class="lineno">  291 </span><span class="spaces">  </span><span class="istickedoff">let size' = size + 1</span>
+<span class="lineno">  292 </span><span class="spaces">  </span><span class="istickedoff">in VarCtx size' (IntMap.insert (vnIndex x) size' m)</span></span>
+<span class="lineno">  293 </span>
+<span class="lineno">  294 </span>-- | Look up the de Bruijn index of the given 'VarName' in a 'VarCtx'.
+<span class="lineno">  295 </span>-- Return 'Nothing' if the name is not present in the context.
+<span class="lineno">  296 </span>lookupVarCtx :: VarName -&gt; VarCtx -&gt; Maybe Int
+<span class="lineno">  297 </span><span class="decl"><span class="istickedoff">lookupVarCtx x (VarCtx size m) =</span>
+<span class="lineno">  298 </span><span class="spaces">  </span><span class="istickedoff">case IntMap.lookup (vnIndex x) m of</span>
+<span class="lineno">  299 </span><span class="spaces">    </span><span class="istickedoff">Just i -&gt; Just (size - i)</span>
+<span class="lineno">  300 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; Nothing</span></span>
+<span class="lineno">  301 </span>
+<span class="lineno">  302 </span>
+<span class="lineno">  303 </span>-- Display Name Environments --------------------------------------------------------
+<span class="lineno">  304 </span>
+<span class="lineno">  305 </span>-- | A 'DisplayNameEnv' encodes the mappings between display names (type
+<span class="lineno">  306 </span>-- 'Text') and internal names (type 'VarIndex'). Multiple display
+<span class="lineno">  307 </span>-- names may be associated with each internal name; these are stored
+<span class="lineno">  308 </span>-- in priority order, with preferred display names first.
+<span class="lineno">  309 </span>data DisplayNameEnv =
+<span class="lineno">  310 </span>  DisplayNameEnv
+<span class="lineno">  311 </span>  { <span class="istickedoff"><span class="decl"><span class="istickedoff">displayNames</span></span></span> :: !(IntMap [Text]) -- Keyed by VarIndex; preferred names come first.
+<span class="lineno">  312 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">displayIndexes</span></span></span> :: !(Map Text IntSet)
+<span class="lineno">  313 </span>  }
+<span class="lineno">  314 </span>-- Invariants: The 'displayNames' and 'displayIndexes' maps should be
+<span class="lineno">  315 </span>-- inverses of each other. That is, 'displayNames' maps @i@ to a list
+<span class="lineno">  316 </span>-- containing @x@ if and only if 'displayIndexes' maps @x@ to a set
+<span class="lineno">  317 </span>-- containing @i@.
+<span class="lineno">  318 </span>
+<span class="lineno">  319 </span>emptyDisplayNameEnv :: DisplayNameEnv
+<span class="lineno">  320 </span><span class="decl"><span class="istickedoff">emptyDisplayNameEnv = DisplayNameEnv mempty mempty</span></span>
+<span class="lineno">  321 </span>
+<span class="lineno">  322 </span>-- | Extend a 'DisplayNameEnv' by providing new 'Text' display names
+<span class="lineno">  323 </span>-- for a given 'VarIndex'. Display names should be provided in
+<span class="lineno">  324 </span>-- priority order, with preferred names first. If the 'VarIndex'
+<span class="lineno">  325 </span>-- already exists in the map, then add the new display names with
+<span class="lineno">  326 </span>-- higher priority while keeping the old ones.
+<span class="lineno">  327 </span>extendDisplayNameEnv :: VarIndex -&gt; [Text] -&gt; DisplayNameEnv -&gt; DisplayNameEnv
+<span class="lineno">  328 </span><span class="decl"><span class="istickedoff">extendDisplayNameEnv i aliases env =</span>
+<span class="lineno">  329 </span><span class="spaces">  </span><span class="istickedoff">DisplayNameEnv</span>
+<span class="lineno">  330 </span><span class="spaces">  </span><span class="istickedoff">{ displayNames = IntMap.insertWith <span class="nottickedoff">List.union</span> i aliases (displayNames env)</span>
+<span class="lineno">  331 </span><span class="spaces">  </span><span class="istickedoff">, displayIndexes = foldr insertAlias (displayIndexes env) aliases</span>
+<span class="lineno">  332 </span><span class="spaces">  </span><span class="istickedoff">}</span>
+<span class="lineno">  333 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  334 </span><span class="spaces">    </span><span class="istickedoff">insertAlias :: Text -&gt; Map Text IntSet -&gt; Map Text IntSet</span>
+<span class="lineno">  335 </span><span class="spaces">    </span><span class="istickedoff">insertAlias x m = Map.insertWith IntSet.union x (IntSet.singleton i) m</span></span>
+<span class="lineno">  336 </span>
+<span class="lineno">  337 </span>-- | Filter display names in a 'DisplayNameEnv' that satisfy a predicate.
+<span class="lineno">  338 </span>filterDisplayNameEnv :: (Text -&gt; Bool) -&gt; DisplayNameEnv -&gt; DisplayNameEnv
+<span class="lineno">  339 </span><span class="decl"><span class="istickedoff">filterDisplayNameEnv p env =</span>
+<span class="lineno">  340 </span><span class="spaces">  </span><span class="istickedoff">DisplayNameEnv</span>
+<span class="lineno">  341 </span><span class="spaces">  </span><span class="istickedoff">{ displayNames = IntMap.filter (not . null) $ fmap (filter p) $ displayNames env</span>
+<span class="lineno">  342 </span><span class="spaces">  </span><span class="istickedoff">, displayIndexes = Map.filterWithKey (\k _ -&gt; p <span class="nottickedoff">k</span>) $ displayIndexes env</span>
+<span class="lineno">  343 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
+<span class="lineno">  344 </span>
+<span class="lineno">  345 </span>-- | Delete a 'VarIndex' from the display environment, returning
+<span class="lineno">  346 </span>--   any aliases to it. Has no effect if the index is not present.
+<span class="lineno">  347 </span>deleteDisplayNameEnv :: VarIndex -&gt; DisplayNameEnv -&gt; ([Text], DisplayNameEnv)
+<span class="lineno">  348 </span><span class="decl"><span class="istickedoff">deleteDisplayNameEnv i env =</span>
+<span class="lineno">  349 </span><span class="spaces">  </span><span class="istickedoff">case IntMap.updateLookupWithKey (\_ _ -&gt; Nothing) i (displayNames env) of</span>
+<span class="lineno">  350 </span><span class="spaces">  </span><span class="istickedoff">(Nothing, _) -&gt; ([], env)</span>
+<span class="lineno">  351 </span><span class="spaces">  </span><span class="istickedoff">(Just names, displayNames') -&gt;</span>
+<span class="lineno">  352 </span><span class="spaces">    </span><span class="istickedoff">(names, DisplayNameEnv</span>
+<span class="lineno">  353 </span><span class="spaces">      </span><span class="istickedoff">{ displayNames = displayNames'</span>
+<span class="lineno">  354 </span><span class="spaces">      </span><span class="istickedoff">, displayIndexes = foldr (Map.update filter_idxs) (displayIndexes env) names</span>
+<span class="lineno">  355 </span><span class="spaces">      </span><span class="istickedoff">})</span>
+<span class="lineno">  356 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  357 </span><span class="spaces">    </span><span class="istickedoff">filter_idxs is =</span>
+<span class="lineno">  358 </span><span class="spaces">      </span><span class="istickedoff">let is' = IntSet.delete i is</span>
+<span class="lineno">  359 </span><span class="spaces">      </span><span class="istickedoff">in case IntSet.null is' of</span>
+<span class="lineno">  360 </span><span class="spaces">        </span><span class="istickedoff">True -&gt; Nothing</span>
+<span class="lineno">  361 </span><span class="spaces">        </span><span class="istickedoff">False -&gt; <span class="nottickedoff">Just is'</span></span></span>
+<span class="lineno">  362 </span>
+<span class="lineno">  363 </span>-- | Merge two 'DisplayNameEnv's, giving higher priority to display
+<span class="lineno">  364 </span>-- names from the first argument.
+<span class="lineno">  365 </span>mergeDisplayNameEnv :: DisplayNameEnv -&gt; DisplayNameEnv -&gt; DisplayNameEnv
+<span class="lineno">  366 </span><span class="decl"><span class="istickedoff">mergeDisplayNameEnv env1 env2 =</span>
+<span class="lineno">  367 </span><span class="spaces">  </span><span class="istickedoff">DisplayNameEnv</span>
+<span class="lineno">  368 </span><span class="spaces">  </span><span class="istickedoff">{ displayNames = IntMap.unionWith <span class="nottickedoff">List.union</span> (displayNames env1) (displayNames env2)</span>
+<span class="lineno">  369 </span><span class="spaces">  </span><span class="istickedoff">, displayIndexes = Map.unionWith <span class="nottickedoff">IntSet.union</span> (displayIndexes env1) (displayIndexes env2)</span>
+<span class="lineno">  370 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
+<span class="lineno">  371 </span>
+<span class="lineno">  372 </span>-- | Look up a 'Text' display name in an environment, returning the
+<span class="lineno">  373 </span>-- list of indexes it could resolve to.
+<span class="lineno">  374 </span>resolveDisplayName :: DisplayNameEnv -&gt; Text -&gt; [VarIndex]
+<span class="lineno">  375 </span><span class="decl"><span class="istickedoff">resolveDisplayName env x =</span>
+<span class="lineno">  376 </span><span class="spaces">  </span><span class="istickedoff">case Map.lookup x (displayIndexes env) of</span>
+<span class="lineno">  377 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; []</span>
+<span class="lineno">  378 </span><span class="spaces">    </span><span class="istickedoff">Just s -&gt; IntSet.elems s</span></span>
+<span class="lineno">  379 </span>
+<span class="lineno">  380 </span>-- | Return the first display name for the given 'VarIndex' that is
+<span class="lineno">  381 </span>-- unambiguous in the naming environment. If there is no unambiguous
+<span class="lineno">  382 </span>-- alias, then return 'Nothing'.
+<span class="lineno">  383 </span>bestDisplayName :: DisplayNameEnv -&gt; VarIndex -&gt; Maybe Text
+<span class="lineno">  384 </span><span class="decl"><span class="istickedoff">bestDisplayName env i =</span>
+<span class="lineno">  385 </span><span class="spaces">  </span><span class="istickedoff">do aliases &lt;- IntMap.lookup i (displayNames env)</span>
+<span class="lineno">  386 </span><span class="spaces">     </span><span class="istickedoff">go aliases</span>
+<span class="lineno">  387 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  388 </span><span class="spaces">    </span><span class="istickedoff">go [] = <span class="nottickedoff">Nothing</span></span>
+<span class="lineno">  389 </span><span class="spaces">    </span><span class="istickedoff">go (x : xs) =</span>
+<span class="lineno">  390 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup x (displayIndexes env) of</span>
+<span class="lineno">  391 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;bestDisplayName&quot; [&quot;Invariant violated: Missing key &quot; &lt;&gt; x]</span></span>
+<span class="lineno">  392 </span><span class="spaces">        </span><span class="istickedoff">Just vs</span>
+<span class="lineno">  393 </span><span class="spaces">          </span><span class="istickedoff">| IntSet.size vs == 1 -&gt; Just x</span>
+<span class="lineno">  394 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; go xs</span></span>
+<span class="lineno">  395 </span>
+<span class="lineno">  396 </span>allDisplayNames :: DisplayNameEnv -&gt; VarIndex -&gt; [Text]
+<span class="lineno">  397 </span><span class="decl"><span class="nottickedoff">allDisplayNames env i =</span>
+<span class="lineno">  398 </span><span class="spaces">  </span><span class="nottickedoff">case IntMap.lookup i (displayNames env) of</span>
+<span class="lineno">  399 </span><span class="spaces">    </span><span class="nottickedoff">Just nms -&gt; nms</span>
+<span class="lineno">  400 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; []</span></span>
+
+</pre>
+</body>
+</html>
