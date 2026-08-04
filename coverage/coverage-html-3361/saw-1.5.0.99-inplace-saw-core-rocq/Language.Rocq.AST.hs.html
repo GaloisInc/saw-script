@@ -1,0 +1,194 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>
+<span class="lineno">    2 </span>{- |
+<span class="lineno">    3 </span>Module      : Language.Rocq.AST
+<span class="lineno">    4 </span>Description : AST definition for Rocq exporter
+<span class="lineno">    5 </span>License     : BSD3
+<span class="lineno">    6 </span>Maintainer  : saw@galois.com
+<span class="lineno">    7 </span>
+<span class="lineno">    8 </span>This module declares a (simplified) Rocq/Gallina AST for the back end
+<span class="lineno">    9 </span>of the Rocq exporter.
+<span class="lineno">   10 </span>-}
+<span class="lineno">   11 </span>
+<span class="lineno">   12 </span>module Language.Rocq.AST (
+<span class="lineno">   13 </span>    Ident(..),
+<span class="lineno">   14 </span>    Sort(..),
+<span class="lineno">   15 </span>    BinderImplicity(..),
+<span class="lineno">   16 </span>    Binder(..),
+<span class="lineno">   17 </span>    PiBinder(..),
+<span class="lineno">   18 </span>    Term(..),
+<span class="lineno">   19 </span>    Type,
+<span class="lineno">   20 </span>    Constructor(..),
+<span class="lineno">   21 </span>    Inductive(..),
+<span class="lineno">   22 </span>    Decl(..)
+<span class="lineno">   23 </span>  ) where
+<span class="lineno">   24 </span>
+<span class="lineno">   25 </span>import Data.String (IsString(..))
+<span class="lineno">   26 </span>
+<span class="lineno">   27 </span>-- | An 'Ident' is a Rocq qualified identifier represented as a
+<span class="lineno">   28 </span>--   string, with the invariant that it is lexically valid.
+<span class="lineno">   29 </span>--
+<span class="lineno">   30 </span>--   A valid Rocq identifier is a sequence of letters, digits,
+<span class="lineno">   31 </span>--   underscores and primes that starts with a letter or underscore.
+<span class="lineno">   32 </span>--
+<span class="lineno">   33 </span>--   A /qualified/ identifier is a sequence of one or more identifiers
+<span class="lineno">   34 </span>--   separated by periods.
+<span class="lineno">   35 </span>--
+<span class="lineno">   36 </span>--   We don't enforce the distinction between qualified and unqualified
+<span class="lineno">   37 </span>--   identifiers in this representation.
+<span class="lineno">   38 </span>--
+<span class="lineno">   39 </span>newtype Ident = Ident String
+<span class="lineno">   40 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show Ident</span></span></span></span> where
+<span class="lineno">   43 </span>  <span class="decl"><span class="nottickedoff">show (Ident s) = show s</span></span>
+<span class="lineno">   44 </span>
+<span class="lineno">   45 </span>instance IsString Ident where
+<span class="lineno">   46 </span>  <span class="decl"><span class="istickedoff">fromString s = Ident s</span></span>
+<span class="lineno">   47 </span>
+<span class="lineno">   48 </span>-- | Type to hold universes
+<span class="lineno">   49 </span>--
+<span class="lineno">   50 </span>data Sort
+<span class="lineno">   51 </span>  = Prop
+<span class="lineno">   52 </span>  | Set
+<span class="lineno">   53 </span>  | Type
+<span class="lineno">   54 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   55 </span>
+<span class="lineno">   56 </span>-- | Is this a maximally-inserted implicit (&quot;{}&quot;) or explicit binder?
+<span class="lineno">   57 </span>data BinderImplicity
+<span class="lineno">   58 </span>  = Implicit
+<span class="lineno">   59 </span>  | Explicit
+<span class="lineno">   60 </span>    deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   61 </span>
+<span class="lineno">   62 </span>-- | Bound variable in a `Lambda` or `Let`, optionally with type
+<span class="lineno">   63 </span>data Binder
+<span class="lineno">   64 </span>  = Binder BinderImplicity Ident (Maybe Type)
+<span class="lineno">   65 </span>    deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   66 </span>
+<span class="lineno">   67 </span>-- | Bound variable in a `Pi` (forall), optionally with a name
+<span class="lineno">   68 </span>data PiBinder
+<span class="lineno">   69 </span>  = PiBinder BinderImplicity (Maybe Ident) Type
+<span class="lineno">   70 </span>    deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   71 </span>
+<span class="lineno">   72 </span>-- | Type to hold Gallina expressions
+<span class="lineno">   73 </span>--
+<span class="lineno">   74 </span>data Term
+<span class="lineno">   75 </span>
+<span class="lineno">   76 </span>    -- | fun x =&gt; e
+<span class="lineno">   77 </span>  = Lambda [Binder] Term
+<span class="lineno">   78 </span>
+<span class="lineno">   79 </span>    -- | Fix f x : ty := e
+<span class="lineno">   80 </span>  | Fix Ident [Binder] Type Term
+<span class="lineno">   81 </span>
+<span class="lineno">   82 </span>    -- | forall x, e
+<span class="lineno">   83 </span>  | Pi [PiBinder] Term
+<span class="lineno">   84 </span>
+<span class="lineno">   85 </span>    -- | let f arg [: ty] := e in e
+<span class="lineno">   86 </span>  | Let Ident [Binder] (Maybe Type) Term Term
+<span class="lineno">   87 </span>
+<span class="lineno">   88 </span>    -- | if e then e else e
+<span class="lineno">   89 </span>  | If Term Term Term
+<span class="lineno">   90 </span>
+<span class="lineno">   91 </span>    -- | f args
+<span class="lineno">   92 </span>  | App Term [Term]
+<span class="lineno">   93 </span>
+<span class="lineno">   94 </span>    -- | Prop or Type
+<span class="lineno">   95 </span>  | Sort Sort
+<span class="lineno">   96 </span>
+<span class="lineno">   97 </span>   -- | x
+<span class="lineno">   98 </span>  | Var Ident
+<span class="lineno">   99 </span>  
+<span class="lineno">  100 </span>    -- | @x, that is, Var with @ in order to explicitly apply implicit
+<span class="lineno">  101 </span>    --   arguments.
+<span class="lineno">  102 </span>  | ExplVar Ident
+<span class="lineno">  103 </span>
+<span class="lineno">  104 </span>    -- | Type annotation e: ty
+<span class="lineno">  105 </span>  | Ascription Term Type
+<span class="lineno">  106 </span>
+<span class="lineno">  107 </span>    -- | integer constant in nat
+<span class="lineno">  108 </span>  | NatLit Integer
+<span class="lineno">  109 </span>  
+<span class="lineno">  110 </span>    -- | integer constant in Z
+<span class="lineno">  111 </span>  | ZLit Integer
+<span class="lineno">  112 </span>
+<span class="lineno">  113 </span>    -- | [e1; e2; ...]
+<span class="lineno">  114 </span>  | List [Term]
+<span class="lineno">  115 </span>
+<span class="lineno">  116 </span>    -- | &quot;foo&quot;
+<span class="lineno">  117 </span>  | StringLit String
+<span class="lineno">  118 </span>
+<span class="lineno">  119 </span>    -- | e%scope
+<span class="lineno">  120 </span>  | Scope Term String
+<span class="lineno">  121 </span>
+<span class="lineno">  122 </span>    -- | Expression-level ltac invocation ltac:(text)
+<span class="lineno">  123 </span>  | Ltac String
+<span class="lineno">  124 </span>
+<span class="lineno">  125 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  126 </span>
+<span class="lineno">  127 </span>-- | Type synonym useful for indicating when a term is used as a type.
+<span class="lineno">  128 </span>type Type = Term
+<span class="lineno">  129 </span>
+<span class="lineno">  130 </span>-- | Single constructor declaration in an inductive type declaration.
+<span class="lineno">  131 </span>--
+<span class="lineno">  132 </span>--   Because saw-core does not give very helpful access to the parameters and
+<span class="lineno">  133 </span>--   indices, we just follow that style and define the constructor by its fully
+<span class="lineno">  134 </span>--   applied return type.
+<span class="lineno">  135 </span>--
+<span class="lineno">  136 </span>--   NOTE: constructor names must be unqualified.
+<span class="lineno">  137 </span>--
+<span class="lineno">  138 </span>data Constructor = Constructor
+<span class="lineno">  139 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">constructorName</span></span></span>    :: Ident
+<span class="lineno">  140 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">constructorType</span></span></span>    :: Type
+<span class="lineno">  141 </span>  }
+<span class="lineno">  142 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  143 </span>
+<span class="lineno">  144 </span>-- | Inductive type declaration
+<span class="lineno">  145 </span>--
+<span class="lineno">  146 </span>data Inductive = Inductive
+<span class="lineno">  147 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">inductiveName</span></span></span>         :: Ident
+<span class="lineno">  148 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">inductiveParameters</span></span></span>   :: [Binder]
+<span class="lineno">  149 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">inductiveIndices</span></span></span>      :: [PiBinder]
+<span class="lineno">  150 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">inductiveSort</span></span></span>         :: Sort
+<span class="lineno">  151 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">inductiveConstructors</span></span></span> :: [Constructor]
+<span class="lineno">  152 </span>  }
+<span class="lineno">  153 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  154 </span>
+<span class="lineno">  155 </span>-- | Arbitrary top-level declaration.
+<span class="lineno">  156 </span>--
+<span class="lineno">  157 </span>--   Does not support modules or functors.
+<span class="lineno">  158 </span>--
+<span class="lineno">  159 </span>--   `Snippet` inserts raw text, presumably for things this AST can't
+<span class="lineno">  160 </span>--   represent. XXX: probably shouldn't need that
+<span class="lineno">  161 </span>--
+<span class="lineno">  162 </span>data Decl
+<span class="lineno">  163 </span>  = Axiom Ident Type
+<span class="lineno">  164 </span>  | Comment String
+<span class="lineno">  165 </span>  | Definition Ident [Binder] (Maybe Type) Term
+<span class="lineno">  166 </span>  | Parameter Ident Type
+<span class="lineno">  167 </span>  | Variable Ident Type
+<span class="lineno">  168 </span>  | InductiveDecl Inductive
+<span class="lineno">  169 </span>  | Section Ident [Decl]
+<span class="lineno">  170 </span>  | Snippet String
+<span class="lineno">  171 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+
+</pre>
+</body>
+</html>
