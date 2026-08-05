@@ -6142,8 +6142,8 @@ primitives = Map.fromList $
   , prim "llvm_alias"          "String -> LLVMType"
     (pureVal llvm_alias)
     Current
-    [ "The type of an LLVM alias for the given name. This is often used"
-    , "to alias a struct type."
+    [ "Look up an LLVM type alias by name and return the LLVMType"
+    , "found. This is often used to look up struct types."
     ]
 
   , prim "llvm_struct"         "String -> LLVMType"
