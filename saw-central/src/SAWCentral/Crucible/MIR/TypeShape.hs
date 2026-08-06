@@ -1025,6 +1025,12 @@ data TyView
   | TyViewCoroutineClosure [TyView]
   | TyViewErased
   | TyViewInterned M.TyName
+  | TyViewError
+  | TyViewInfer
+  | TyViewBound
+  | TyViewPlaceholder
+  | TyViewCoroutineWitness
+  | TyViewAlias
   deriving Eq
 
 -- | Like 'M.BaseSize', but without a special case for @usize@/@isize@.
@@ -1103,6 +1109,12 @@ tyView (M.TyCoroutine ca) = TyViewCoroutine (coroutineArgsView ca)
 tyView (M.TyCoroutineClosure tys) = TyViewCoroutineClosure (map tyView tys)
 tyView M.TyErased = TyViewErased
 tyView (M.TyInterned nm) = TyViewInterned nm
+tyView M.TyError = TyViewError
+tyView M.TyInfer = TyViewInfer
+tyView M.TyBound = TyViewBound
+tyView M.TyPlaceholder = TyViewPlaceholder
+tyView M.TyCoroutineWitness = TyViewCoroutineWitness
+tyView M.TyAlias = TyViewAlias
 
 -- | Convert a 'M.BaseSize' value to a 'BaseSizeView' value.
 baseSizeView :: M.BaseSize -> BaseSizeView
