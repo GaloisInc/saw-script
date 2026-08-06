@@ -320,7 +320,48 @@ Qed.
  * forget to turn on display of implicit arguments when things start
  * behaving weirdly.
  *)
- 
+
+(*
+ * First, a tool from Clément Pit-Claudel that will, sometimes,
+ * replace a proof with one that will simplify away. We'll use this
+ * in coercions to increase the chances that we don't have to remove
+ * them manually.
+ *
+ * Note that sometimes to get this to go you need to use "cbn" rather
+ * than "simpl" to simplify.
+ *
+ * See this post: https://systemf.epfl.ch/blog/computing-with-opaque-proofs/
+ *)
+Definition nat_computable_eq {m n: nat} (opaque_eq: m = n) : m = n :=
+  match Nat.eq_dec m n with
+  | left transparent_eq => transparent_eq
+  | right _ => opaque_eq (* not reachable, since m = n *)
+  end.
+
+(*
+ * This should probably be in the stdlib
+ *)
+Lemma nat_eq_dec_refl: forall n, Nat.eq_dec n n = left (eq_refl n).
+Proof.
+   intros.
+   induction n; simpl; auto.
+   rewrite IHn. simpl; auto.
+Qed.
+
+(*
+ * Unfortunately, nat_computable_eq eq_refl will not reduce where just
+ * eq_refl will if we don't have values for m/n that can be evaluated in
+ * Nat.eq_dec. This will mostly be in the coercion-handling tools and not
+ * in actual uses.
+ *)
+Lemma nat_computable_eq_eq_refl: forall m,
+   nat_computable_eq (eq_refl m) = eq_refl m.
+Proof.
+   intros.
+   unfold nat_computable_eq.
+   rewrite nat_eq_dec_refl; auto.
+Qed.
+
 (*
  * Cast a vector to a different but equivalent length. Takes the new
  * size and an explicit proof of size equality.
@@ -333,7 +374,7 @@ Qed.
 Definition coerceVec {a: Type} {n: nat}
      (m: nat) (pf: m = n) (xs: Vec a n) : Vec a m :=
    match
-      pf in eq _ m'
+      nat_computable_eq pf in eq _ m'
       return Vec a m' -> Vec a m
    with
    | eq_refl => fun x => x
@@ -358,8 +399,10 @@ Lemma ConsVec_coerceVec: forall a n n' pf x (xs: Vec a n),
 Proof.
    intros.
    unfold coerceVec.
-   destruct pf.
-   simpl; auto.
+   destruct (nat_computable_eq pf).
+   rewrite (UIP_dec Nat.eq_dec (eq_S n' n' pf) eq_refl).
+   rewrite nat_computable_eq_eq_refl.
+   auto.
 Qed.
 
 (*
@@ -373,18 +416,31 @@ Proof.
    unfold coerceVec.
    destruct (eq_add_S n' n pf).
    rewrite (UIP_dec Nat.eq_dec pf eq_refl).
+   do 2 rewrite nat_computable_eq_eq_refl.
    auto.
 Qed.
 
 (*
- * Vacuous coerceVec can be removed.
+ * A coerceVec whose proof is eq_refl can just go away
+ *)
+Lemma coerceVec_eq_refl: forall a n (xs: Vec a n),
+   coerceVec n eq_refl xs = xs.
+Proof.
+   intros.
+   unfold coerceVec.
+   rewrite nat_computable_eq_eq_refl; auto.
+Qed.
+
+(*
+ * Vacuous coerceVec can be removed, even when the proof
+ * isn't (yet) eq_refl.
  *)
 Lemma coerceVec_vacuous: forall a n pf (xs: Vec a n),
    coerceVec n pf xs = xs.
 Proof.
    intros.
    rewrite (UIP_dec Nat.eq_dec pf eq_refl).
-   simpl; auto.
+   apply coerceVec_eq_refl.
 Qed.
 
 (*
@@ -396,7 +452,8 @@ Proof.
    intros.
    destruct pf1.
    destruct pf2.
-   simpl; auto.
+   simpl.
+   rewrite coerceVec_eq_refl; auto.
 Qed.
 
 (*
@@ -428,7 +485,7 @@ Proof.
    intros.
    destruct pf.
    rewrite (UIP_dec Nat.eq_dec pf' eq_refl).
-   simpl.
+   do 2 rewrite coerceVec_eq_refl.
    tauto.
 Qed.
 
@@ -444,6 +501,7 @@ Proof.
    destruct pf.
    simpl in H.
    subst.
+   rewrite coerceVec_eq_refl.
    tauto.
 Qed.
 
@@ -626,6 +684,7 @@ Proof.
    injection pf; intros; subst.
    rewrite (UIP_dec Nat.eq_dec pf eq_refl).
    simpl; auto.
+   rewrite coerceVec_vacuous; auto.
 Qed.
 
 (*
@@ -638,6 +697,7 @@ Proof.
    subst.
    rewrite (UIP_dec Nat.eq_dec pf eq_refl).
    simpl; auto.
+   do 2 rewrite coerceVec_vacuous; auto.
 Qed.
 
 (*
@@ -699,10 +759,9 @@ Lemma append_NilVec_r: forall a n (xs: Vec a n),
 Proof.
    intros.
    induction xs; simpl; auto.
-   - rewrite NilVec_unique. auto.
-   - rewrite IHxs.
-     rewrite ConsVec_coerceVec.
-     apply coerceVec_irr.
+   rewrite IHxs.
+   rewrite ConsVec_coerceVec.
+   apply coerceVec_irr.
 Qed.
 
 (*
@@ -744,6 +803,7 @@ Proof.
    destruct pf.
    rewrite (UIP_dec Nat.eq_dec pf' eq_refl).
    simpl; auto.
+   do 2 rewrite coerceVec_vacuous; auto.
 Qed.
 
 (*
@@ -756,6 +816,7 @@ Proof.
    destruct pf.
    rewrite (UIP_dec Nat.eq_dec pf' eq_refl).
    simpl; auto.
+   do 2 rewrite coerceVec_vacuous; auto.
 Qed.
 
 (*
@@ -1027,6 +1088,7 @@ Lemma revAppend_NilVec: forall a m (ys: Vec a m),
    revAppend (NilVec a) ys = ys.
 Proof.
    intros; simpl; auto.
+   rewrite coerceVec_vacuous; auto.
 Qed.
 
 (*
@@ -1050,6 +1112,7 @@ Proof.
    simpl.
    rewrite (UIP_dec Nat.eq_dec pf' eq_refl).
    simpl.
+   do 2 rewrite coerceVec_vacuous.
    auto.
 Qed.
 
@@ -1064,6 +1127,7 @@ Proof.
    simpl.
    rewrite (UIP_dec Nat.eq_dec pf' eq_refl).
    simpl.
+   do 2 rewrite coerceVec_vacuous. 
    auto.
 Qed.
 
@@ -1082,7 +1146,7 @@ Proof.
    revert pf.
    revert m l.
    induction xs; intros; simpl.
-   - rewrite coerceVec_vacuous. auto.
+   - do 2 rewrite coerceVec_vacuous. auto.
    - assert (S (n + m) + l = n + S m + l) as H by lia.
      rewrite (revAppend_coerceVec_l) with (pf' := H).
      assert (n + S m + l = S m + (n + l)) as H' by lia.
@@ -1105,7 +1169,7 @@ Proof.
    revert ys zs.
    revert m l.
    induction xs; intros; simpl.
-   - rewrite coerceVec_vacuous. auto.
+   - do 2 rewrite coerceVec_vacuous. auto.
    - assert (n + m + S l = m + (n + S l)) as H1 by lia.
      assert (m + S (n + l) = m + (n + S l)) as H2 by lia.
      rewrite IHxs with (pf := H1).
@@ -1128,7 +1192,7 @@ Proof.
    revert ys zs.
    revert m l.
    induction xs; intros; simpl.
-   - rewrite coerceVec_vacuous. auto.
+   - do 3 rewrite coerceVec_vacuous. auto.
    - (*
       * This is necessary, instead of just rewriting directly with
       * ConsVec_append, to update the implicit argument of revAppend
@@ -1167,7 +1231,7 @@ Proof.
    revert ys zs.
    revert m l.
    induction xs; intros; simpl.
-   - rewrite coerceVec_vacuous. auto.
+   - do 3 rewrite coerceVec_vacuous. auto.
    - rewrite coerceVec_coerceVec.
      assert (S (n + m) + l = n + S m + l) as NH1 by lia.
      assert (n + S m + l = n + (S m + l)) as NH2 by lia.
@@ -1190,8 +1254,8 @@ Proof.
    revert ys.
    revert f m.
    induction xs using Vec_ind_bothends; intros; rewrite Heqxs.
-   - do 2 rewrite gen_0_l. simpl; auto.
-   - simpl. rewrite coerceVec_vacuous. auto.
+   - do 2 rewrite gen_0_l. simpl. rewrite coerceVec_vacuous. auto.
+   - simpl. do 2 rewrite coerceVec_vacuous. auto.
    - assert (gen (S (n + 1)) (fun i => f (S (n + 1) - i - 1)) =
              gen (S (n + 1)) (fun i => f (S n - i))) as ->.
      { apply gen_extensionality. intros. f_equal. lia. }
@@ -1224,6 +1288,7 @@ Proof.
      assert (gen n (fun i => f (S (n - i - 1))) =
              gen n (fun i => f (n - i))) as ->.
      { apply gen_extensionality. intros. f_equal. lia. }
+     repeat rewrite coerceVec_vacuous.
      apply coerceVec_irr.
 Qed.
 
@@ -1271,7 +1336,7 @@ Proof.
    rewrite revAppend_revAppend with (pf := NH2).
    simpl.
    rewrite append_NilVec_r.
-   do 3 rewrite coerceVec_coerceVec.
+   do 4 rewrite coerceVec_coerceVec.
    rewrite coerceVec_vacuous.
    auto.
 Qed.
@@ -1487,7 +1552,7 @@ Proof.
    revert i.
    destruct xs; intros; simpl.
    - subst. rewrite NilVec_unique. simpl. auto.
-   - subst. simpl. auto.
+   - subst. rewrite coerceVec_vacuous. simpl. auto.
 Qed.
 
 (*
