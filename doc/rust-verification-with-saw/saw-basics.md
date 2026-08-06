@@ -234,8 +234,10 @@ This command returns a `MIRSetup Term`, which means that when you write `x <-
 mir_fresh_var ... ...` in a MIR specification, then `x` will be bound at type
 `Term`.
 
-Values of type `Term` have the property that they can be embedded into Cryptol
-expression that are enclosed in double curly braces `{{ ... }}`. This is why
+Values of type `Term` are Cryptol-level values and have the property
+that they can be embedded into Cryptol expression that are enclosed in
+double curly braces `{{ ... }}`.
+This is why
 our earlier `{{ 2 * x }}` example works, as `x` is of type `Term`.
 
 ## Preconditions and postconditions

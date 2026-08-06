@@ -6142,8 +6142,8 @@ primitives = Map.fromList $
   , prim "llvm_alias"          "String -> LLVMType"
     (pureVal llvm_alias)
     Current
-    [ "The type of an LLVM alias for the given name. This is often used"
-    , "to alias a struct type."
+    [ "Look up an LLVM type alias by name and return the LLVMType"
+    , "found. This is often used to look up struct types."
     ]
 
   , prim "llvm_struct"         "String -> LLVMType"
@@ -6374,6 +6374,12 @@ primitives = Map.fromList $
     Current
     [ "Create a fresh symbolic variable for use within an LLVM"
     , "specification. The name is used only for pretty-printing."
+    , ""
+    , "The type argument is an LLVM type, but must be an LLVM type with"
+    , "a corresponding Cryptol type. (See the `LLVM Types' section of"
+    , "the SAW manual for further info.)"
+    , ""
+    , "The resulting value is a Cryptol-level value of type Term."
     ]
   , prim "crucible_fresh_var" "String -> LLVMType -> LLVMSetup Term"
     (pureVal llvm_fresh_var)
@@ -6390,7 +6396,8 @@ primitives = Map.fromList $
     , "use within a Crucible specification. The given name is used only"
     , "for pretty-printing. Unlike 'llvm_fresh_var', this can be used"
     , "when there isn't an appropriate LLVM type, such as for the"
-    , "Cryptol Array type."
+    , "Cryptol Array type. The resulting value is a Cryptol-level value"
+    , "of type Term."
     ]
   , prim "crucible_fresh_cryptol_var" "String -> Type -> LLVMSetup Term"
     (pureVal llvm_fresh_cryptol_var)
@@ -6422,6 +6429,9 @@ primitives = Map.fromList $
     , "variables. Equivalent to allocating a new struct or array of the"
     , "given type and explicitly setting each field or element to"
     , "contain a fresh symbolic variable."
+    , ""
+    , "Produces an LLVM-level value and can handle types that do not"
+    , "have Cryptol-level representations."
     ]
   , prim "crucible_fresh_expanded_val" "LLVMType -> LLVMSetup LLVMValue"
     (pureVal llvm_fresh_expanded_val)
@@ -7370,6 +7380,12 @@ primitives = Map.fromList $
     Current
     [ "Create a fresh variable for use within a JVM specification. The"
     , "name is used only for pretty-printing."
+    , ""
+    , "The type argument is a JVM type, but must be a JVM type with a"
+    , "corresponding Cryptol type. (See the `JVM Types' section of the"
+    , "SAW manual for further info.)"
+    , ""
+    , "The resulting value is a Cryptol-level value of type Term."
     ]
 
     ------------------------------------------------------------
@@ -7986,7 +8002,7 @@ primitives = Map.fromList $
     , "use within a MIR specification. The given name is used only for"
     , "pretty-printing. Unlike 'mir_fresh_var', this can be used when"
     , "there isn't an appropriate MIR type, such as the Cryptol Array"
-    , "type."
+    , "type. The value produced is a Cryptol-level value of type Term."
     ]
 
   , prim "mir_fresh_expanded_value" "String -> MIRType -> MIRSetup MIRValue"
@@ -7997,6 +8013,9 @@ primitives = Map.fromList $
     , "will explicitly set each field or element to contain a fresh"
     , "symbolic variable. The String argument is used as a prefix in"
     , "each of the symbolic variables."
+    , ""
+    , "Produces a MIR-level value and can handle types that do not have"
+    , "Cryptol-level representations."
     ]
 
   , prim "mir_fresh_var" "String -> MIRType -> MIRSetup Term"
@@ -8004,6 +8023,12 @@ primitives = Map.fromList $
     Current
     [ "Create a fresh symbolic variable for use within a MIR"
     , "specification. The name is used only for pretty-printing."
+    , ""
+    , "The type argument is a MIR type, but must be a MIR type with a"
+    , "corresponding Cryptol type. (See the `MIR (Rust) Types' section"
+    , "of the SAW manual for further info.)"
+    , ""
+    , "The resulting value is a Cryptol-level value of type Term."
     ]
 
     ------------------------------------------------------------
