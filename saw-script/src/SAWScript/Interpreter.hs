@@ -6376,8 +6376,10 @@ primitives = Map.fromList $
     , "specification. The name is used only for pretty-printing."
     , ""
     , "The type argument is an LLVM type, but must be an LLVM type with"
-    , "a corresponding Cryptol type. The resulting value is a Cryptol-"
-    , "level value of type Term."
+    , "a corresponding Cryptol type. (See the `LLVM Types' section of"
+    , "the SAW manual for further info.)"
+    , ""
+    , "The resulting value is a Cryptol-level value of type Term."
     ]
   , prim "crucible_fresh_var" "String -> LLVMType -> LLVMSetup Term"
     (pureVal llvm_fresh_var)
@@ -7380,8 +7382,10 @@ primitives = Map.fromList $
     , "name is used only for pretty-printing."
     , ""
     , "The type argument is a JVM type, but must be a JVM type with a"
-    , "corresponding Cryptol type. The resulting value is a Cryptol-"
-    , "level value of type Term."
+    , "corresponding Cryptol type. (See the `JVM Types' section of the"
+    , "SAW manual for further info.)"
+    , ""
+    , "The resulting value is a Cryptol-level value of type Term."
     ]
 
     ------------------------------------------------------------
@@ -8021,8 +8025,10 @@ primitives = Map.fromList $
     , "specification. The name is used only for pretty-printing."
     , ""
     , "The type argument is a MIR type, but must be a MIR type with a"
-    , "corresponding Cryptol type. The resulting value is a Cryptol-"
-    , "level value of type Term."
+    , "corresponding Cryptol type. (See the `MIR (Rust) Types' section"
+    , "of the SAW manual for further info.)"
+    , ""
+    , "The resulting value is a Cryptol-level value of type Term."
     ]
 
     ------------------------------------------------------------
