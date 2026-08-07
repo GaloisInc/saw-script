@@ -298,8 +298,11 @@ prettyBasicDecl :: PP.Doc ann -> Ident -> Type -> PP.Doc ann
 prettyBasicDecl what nm ty =
   let nm' = prettyIdent nm
       ty' = prettyTerm PrecNone ty
+      lhs' = PP.group $ what <+> nm' <> ":"
+      long = PP.nest 3 $ lhs' <+> ty' <> "."
+      short = PP.group $ lhs' <+> ty' <> "."
   in
-  PP.nest 2 (what <+> nm' <+> ":" <+> ty' <+> ".") <> PP.hardline
+  PP.flatAlt long short
 
 -- | Print a Definition
 prettyDefinition :: Ident -> [Binder] -> Maybe Type -> Term -> PP.Doc ann
@@ -330,10 +333,15 @@ prettyDefinition nm params mty body =
 -- | Print a top-level declaration
 prettyDecl :: Decl -> PP.Doc ann
 prettyDecl decl = case decl of
-  Axiom nm ty -> prettyBasicDecl "Axiom" nm ty
-  Parameter nm ty -> prettyBasicDecl "Parameter" nm ty
-  Variable nm ty -> prettyBasicDecl "Variable" nm ty
+  Axiom nm ty ->
+      prettyBasicDecl "Axiom" nm ty <> PP.hardline
+  Parameter nm ty ->
+      prettyBasicDecl "Parameter" nm ty <> PP.hardline
+  Variable nm ty ->
+      prettyBasicDecl "Variable" nm ty <> PP.hardline
   Comment s ->
+    -- None of the comments we generate are multiline. If that ever
+    -- changes, we'll need more logic here to print them properly.
     "(*" <+> text s <+> "*)" <> PP.hardline
   Definition nm binders mty body ->
     prettyDefinition nm binders mty body <> PP.hardline
@@ -351,4 +359,10 @@ prettyDecl decl = case decl of
     -- (XXX: Does `PP.vsep` on top of `PP.hardline` generate two lines?)
     PP.vsep $ [header] ++ ds' ++ [footer]
   Snippet s ->
+    -- This assumes all the text snippets we have are multi-line blocks
+    -- that include newlines, including at the end.
+    --
+    -- FUTURE: nothing above this code should ever call PP.group, but if
+    -- that changes, we may need to go through the string and manually
+    -- replace each \n with PP.hardline.
     text s

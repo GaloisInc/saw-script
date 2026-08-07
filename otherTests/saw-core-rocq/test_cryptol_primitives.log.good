@@ -14841,14 +14841,14 @@ Definition ec_twin_mult: forall (p : Num), forall (_1 : IntModNum p),
            "Unimplemented: ec_twin_mult"%string
    .
 
-Axiom replicate_False : forall (n : Init.Datatypes.nat),
-  @Init.Logic.eq (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool)
-       (SAWCorePrelude.replicate n Init.Datatypes.bool Init.Datatypes.false)
-       (SAWCoreVectorsAsRocqVectors.bvNat n SAWCoreScaffolding.Zero) .
+Axiom replicate_False: forall (n : Init.Datatypes.nat),
+   @Init.Logic.eq (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool)
+        (SAWCorePrelude.replicate n Init.Datatypes.bool Init.Datatypes.false)
+        (SAWCoreVectorsAsRocqVectors.bvNat n SAWCoreScaffolding.Zero).
 
-Axiom subNat_0 : forall (n : Init.Datatypes.nat),
-  @Init.Logic.eq Init.Datatypes.nat (SAWCoreScaffolding.subNat n
-            SAWCoreScaffolding.Zero) n .
+Axiom subNat_0: forall (n : Init.Datatypes.nat),
+   @Init.Logic.eq Init.Datatypes.nat (SAWCoreScaffolding.subNat n
+             SAWCoreScaffolding.Zero) n.
 
 End CryptolPrimitivesForSAWCore.
 

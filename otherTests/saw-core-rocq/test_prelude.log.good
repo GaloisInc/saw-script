@@ -2331,10 +2331,10 @@ Definition pred: forall (_1 : Init.Datatypes.nat), Init.Datatypes.nat :=
 
 (* "Prelude::IsLeNat__rec@core" was skipped *)
 
-Axiom natCompareLe : forall (m : Init.Datatypes.nat),
-       forall (n : Init.Datatypes.nat),
-  Init.Datatypes.sum (SAWCoreScaffolding.IsLtNat m n)
-       (SAWCoreScaffolding.IsLeNat n m) .
+Axiom natCompareLe: forall (m : Init.Datatypes.nat),
+        forall (n : Init.Datatypes.nat),
+   Init.Datatypes.sum (SAWCoreScaffolding.IsLtNat m n)
+        (SAWCoreScaffolding.IsLeNat n m).
 
 Definition proveEqNat: forall (m : Init.Datatypes.nat),
         forall (n : Init.Datatypes.nat),
@@ -2386,9 +2386,9 @@ Definition proveEqNat: forall (m : Init.Datatypes.nat),
                 )
         ).
 
-Axiom proveLeNat : forall (x : Init.Datatypes.nat),
-       forall (y : Init.Datatypes.nat),
-  Maybe (SAWCoreScaffolding.IsLeNat x y) .
+Axiom proveLeNat: forall (x : Init.Datatypes.nat),
+        forall (y : Init.Datatypes.nat),
+   Maybe (SAWCoreScaffolding.IsLeNat x y).
 
 Definition proveLtNat: forall (x : Init.Datatypes.nat),
         forall (y : Init.Datatypes.nat),
@@ -2409,11 +2409,11 @@ Definition proveLtNat: forall (x : Init.Datatypes.nat),
 Definition equal0Nat: forall (_1 : Init.Datatypes.nat), Init.Datatypes.bool :=
    SAWCoreScaffolding.equalNat SAWCoreScaffolding.Zero.
 
-Axiom equalNatToEqNat : forall (m : Init.Datatypes.nat),
-       forall (n : Init.Datatypes.nat), forall (_1 : @Init.Logic.eq
-            Init.Datatypes.bool (SAWCoreScaffolding.equalNat m n)
-            Init.Datatypes.true),
-  eqNat m n .
+Axiom equalNatToEqNat: forall (m : Init.Datatypes.nat),
+        forall (n : Init.Datatypes.nat), forall (_1 : @Init.Logic.eq
+             Init.Datatypes.bool (SAWCoreScaffolding.equalNat m n)
+             Init.Datatypes.true),
+   eqNat m n.
 
 Definition ifEqNatWithProof: forall (a : Type), forall (m : Init.Datatypes.nat),
         forall (n : Init.Datatypes.nat), forall (_1 : a),
@@ -2452,10 +2452,10 @@ Definition natCase: forall (p : forall (_1 : Init.Datatypes.nat), Type),
 
 (* "Prelude::if0Nat@core" was skipped *)
 
-Axiom expByNat : forall (a : Type), forall (_1 : a),
-       forall (_2 : forall (_2 : a), forall (_3 : a), a), forall (_3 : a),
-       forall (_4 : Init.Datatypes.nat),
-  a .
+Axiom expByNat: forall (a : Type), forall (_1 : a),
+        forall (_2 : forall (_2 : a), forall (_3 : a), a), forall (_3 : a),
+        forall (_4 : Init.Datatypes.nat),
+   a.
 
 Definition IsLeNat_transitive: forall (n : Init.Datatypes.nat),
         forall (m : Init.Datatypes.nat), forall (o : Init.Datatypes.nat),
@@ -2758,13 +2758,13 @@ Definition vecEq: forall (n : Init.Datatypes.nat), forall (a : Type),
                 Init.Datatypes.bool eqFn n x y)
    .
 
-Axiom vecEq_refl : forall (n : Init.Datatypes.nat), forall (a : Type),
-       forall {Inh_a : SAWCoreScaffolding.Inhabited a},
-       forall (eqFn : forall (_1 : a), forall (_2 : a), Init.Datatypes.bool),
-       forall (_1 : forall (x : a),
-       @Init.Logic.eq Init.Datatypes.bool (eqFn x x) Init.Datatypes.true),
-       forall (x : SAWCoreVectorsAsRocqVectors.Vec n a),
-  @Init.Logic.eq Init.Datatypes.bool (vecEq n a eqFn x x) Init.Datatypes.true .
+Axiom vecEq_refl: forall (n : Init.Datatypes.nat), forall (a : Type),
+        forall {Inh_a : SAWCoreScaffolding.Inhabited a},
+        forall (eqFn : forall (_1 : a), forall (_2 : a), Init.Datatypes.bool),
+        forall (_1 : forall (x : a),
+        @Init.Logic.eq Init.Datatypes.bool (eqFn x x) Init.Datatypes.true),
+        forall (x : SAWCoreVectorsAsRocqVectors.Vec n a),
+   @Init.Logic.eq Init.Datatypes.bool (vecEq n a eqFn x x) Init.Datatypes.true.
 
 Definition take: forall (a : Type), forall {Inh_a : SAWCoreScaffolding.Inhabited
              a}, forall (m : Init.Datatypes.nat),
@@ -2948,14 +2948,14 @@ Definition pmux: forall (n : Init.Datatypes.nat), forall (a : Type),
 
 (* "Prelude::appendString@core" was skipped *)
 
-Axiom bytesToString : forall (n : Init.Datatypes.nat),
-       forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n
-            (SAWCoreVectorsAsRocqVectors.Vec (Stdlib.PArith.BinPos.Pos.to_nat
-                      (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                (Stdlib.PArith.BinPos.xO
-                                     Stdlib.PArith.BinPos.xH))))
-                 Init.Datatypes.bool)),
-  Stdlib.Strings.String.string .
+Axiom bytesToString: forall (n : Init.Datatypes.nat),
+        forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n
+             (SAWCoreVectorsAsRocqVectors.Vec (Stdlib.PArith.BinPos.Pos.to_nat
+                       (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                 (Stdlib.PArith.BinPos.xO
+                                      Stdlib.PArith.BinPos.xH))))
+                  Init.Datatypes.bool)),
+   Stdlib.Strings.String.string.
 
 (* "Prelude::equalString@core" was skipped *)
 
@@ -2984,11 +2984,11 @@ Definition lsb: forall (n : Init.Datatypes.nat),
 
 (* "Prelude::bvToNat@core" was skipped *)
 
-Axiom bvNat_bvToNat : forall (n : Init.Datatypes.nat),
-       forall (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-  @Init.Logic.eq (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool)
-       (SAWCoreVectorsAsRocqVectors.bvNat n (SAWCoreVectorsAsRocqVectors.bvToNat
-                 n x)) x .
+Axiom bvNat_bvToNat: forall (n : Init.Datatypes.nat),
+        forall (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+   @Init.Logic.eq (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool)
+        (SAWCoreVectorsAsRocqVectors.bvNat n
+             (SAWCoreVectorsAsRocqVectors.bvToNat n x)) x.
 
 Definition bvAt: forall (n : Init.Datatypes.nat), forall (a : Type),
         forall {Inh_a : SAWCoreScaffolding.Inhabited a},
@@ -4160,12 +4160,12 @@ Definition arrowsSort: forall (_1 : ListSort), Type :=
 
 (* "Prelude::unsafeAssertBVULe@core" was skipped *)
 
-Axiom bvEqToEq : forall (n : Init.Datatypes.nat),
-       forall (v1 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (v2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (_1 : @Init.Logic.eq Init.Datatypes.bool (bvEq n v1 v2)
-            Init.Datatypes.true),
-  @Init.Logic.eq (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) v1 v2 .
+Axiom bvEqToEq: forall (n : Init.Datatypes.nat),
+        forall (v1 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (v2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (_1 : @Init.Logic.eq Init.Datatypes.bool (bvEq n v1 v2)
+             Init.Datatypes.true),
+   @Init.Logic.eq (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) v1 v2.
 
 Definition ifBvEqWithProof: forall (a : Type), forall (n : Init.Datatypes.nat),
         forall (v1 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
@@ -4193,44 +4193,44 @@ Definition ifBvEqWithProof: forall (a : Type), forall (n : Init.Datatypes.nat),
            )
    .
 
-Axiom bvEqToEqNat : forall (n : Init.Datatypes.nat),
-       forall (v1 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (v2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (_1 : @Init.Logic.eq (SAWCoreVectorsAsRocqVectors.Vec n
-                 Init.Datatypes.bool) v1 v2),
-  eqNat (SAWCoreVectorsAsRocqVectors.bvToNat n v1)
-       (SAWCoreVectorsAsRocqVectors.bvToNat n v2) .
+Axiom bvEqToEqNat: forall (n : Init.Datatypes.nat),
+        forall (v1 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (v2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (_1 : @Init.Logic.eq (SAWCoreVectorsAsRocqVectors.Vec n
+                  Init.Datatypes.bool) v1 v2),
+   eqNat (SAWCoreVectorsAsRocqVectors.bvToNat n v1)
+        (SAWCoreVectorsAsRocqVectors.bvToNat n v2).
 
-Axiom bvultToIsLtNat : forall (n : Init.Datatypes.nat),
-       forall (v1 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (v2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (_1 : @Init.Logic.eq Init.Datatypes.bool
-            (SAWCoreVectorsAsRocqVectors.bvult n v1 v2) Init.Datatypes.true),
-  SAWCoreScaffolding.IsLtNat (SAWCoreVectorsAsRocqVectors.bvToNat n v1)
-       (SAWCoreVectorsAsRocqVectors.bvToNat n v2) .
+Axiom bvultToIsLtNat: forall (n : Init.Datatypes.nat),
+        forall (v1 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (v2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (_1 : @Init.Logic.eq Init.Datatypes.bool
+             (SAWCoreVectorsAsRocqVectors.bvult n v1 v2) Init.Datatypes.true),
+   SAWCoreScaffolding.IsLtNat (SAWCoreVectorsAsRocqVectors.bvToNat n v1)
+        (SAWCoreVectorsAsRocqVectors.bvToNat n v2).
 
 (* "Prelude::genWithProof@core" was skipped *)
 
 (* "Prelude::atWithProof@core" was skipped *)
 
-Axiom updWithProof : forall (n : Init.Datatypes.nat), forall (a : Type),
-       forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n a),
-       forall (i : Init.Datatypes.nat), forall (_2 : a),
-       forall (_3 : SAWCoreScaffolding.IsLtNat i n),
-  SAWCoreVectorsAsRocqVectors.Vec n a .
+Axiom updWithProof: forall (n : Init.Datatypes.nat), forall (a : Type),
+        forall (_1 : SAWCoreVectorsAsRocqVectors.Vec n a),
+        forall (i : Init.Datatypes.nat), forall (_2 : a),
+        forall (_3 : SAWCoreScaffolding.IsLtNat i n),
+   SAWCoreVectorsAsRocqVectors.Vec n a.
 
-Axiom sliceWithProof : forall (a : Type), forall (n : Init.Datatypes.nat),
-       forall (off : Init.Datatypes.nat), forall (len : Init.Datatypes.nat),
-       forall (_1 : SAWCoreScaffolding.IsLeNat (SAWCoreScaffolding.addNat off
-                 len) n), forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n a),
-  SAWCoreVectorsAsRocqVectors.Vec len a .
+Axiom sliceWithProof: forall (a : Type), forall (n : Init.Datatypes.nat),
+        forall (off : Init.Datatypes.nat), forall (len : Init.Datatypes.nat),
+        forall (_1 : SAWCoreScaffolding.IsLeNat (SAWCoreScaffolding.addNat off
+                  len) n), forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n a),
+   SAWCoreVectorsAsRocqVectors.Vec len a.
 
-Axiom updSliceWithProof : forall (a : Type), forall (n : Init.Datatypes.nat),
-       forall (off : Init.Datatypes.nat), forall (len : Init.Datatypes.nat),
-       forall (_1 : SAWCoreScaffolding.IsLeNat (SAWCoreScaffolding.addNat off
-                 len) n), forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n a),
-       forall (_3 : SAWCoreVectorsAsRocqVectors.Vec len a),
-  SAWCoreVectorsAsRocqVectors.Vec n a .
+Axiom updSliceWithProof: forall (a : Type), forall (n : Init.Datatypes.nat),
+        forall (off : Init.Datatypes.nat), forall (len : Init.Datatypes.nat),
+        forall (_1 : SAWCoreScaffolding.IsLeNat (SAWCoreScaffolding.addNat off
+                  len) n), forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n a),
+        forall (_3 : SAWCoreVectorsAsRocqVectors.Vec len a),
+   SAWCoreVectorsAsRocqVectors.Vec n a.
 
 Definition is_bvult: forall (n : Init.Datatypes.nat),
         forall (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
@@ -4256,47 +4256,47 @@ Definition is_bvule: forall (n : Init.Datatypes.nat),
                 y) Init.Datatypes.true
    .
 
-Axiom not_bvult_zero : forall (n : Init.Datatypes.nat),
-       forall (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-  @Init.Logic.eq Init.Datatypes.bool (SAWCoreVectorsAsRocqVectors.bvult n x
-            (SAWCoreVectorsAsRocqVectors.bvNat n SAWCoreScaffolding.Zero))
-       Init.Datatypes.false .
+Axiom not_bvult_zero: forall (n : Init.Datatypes.nat),
+        forall (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+   @Init.Logic.eq Init.Datatypes.bool (SAWCoreVectorsAsRocqVectors.bvult n x
+             (SAWCoreVectorsAsRocqVectors.bvNat n SAWCoreScaffolding.Zero))
+        Init.Datatypes.false.
 
-Axiom trans_bvult_bvule : forall (n : Init.Datatypes.nat),
-       forall (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (y : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (z : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (_1 : is_bvult n x y), forall (_2 : is_bvule n y z),
-  is_bvult n x z .
+Axiom trans_bvult_bvule: forall (n : Init.Datatypes.nat),
+        forall (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (y : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (z : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (_1 : is_bvult n x y), forall (_2 : is_bvule n y z),
+   is_bvult n x z.
 
-Axiom bvult_sub_add_bvult : forall (n : Init.Datatypes.nat),
-       forall (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (y : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (z : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (_1 : is_bvule n y z), forall (_2 : is_bvult n x
-            (SAWCoreVectorsAsRocqVectors.bvSub n z y)),
-  is_bvult n (SAWCoreVectorsAsRocqVectors.bvAdd n y x) z .
+Axiom bvult_sub_add_bvult: forall (n : Init.Datatypes.nat),
+        forall (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (y : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (z : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (_1 : is_bvule n y z), forall (_2 : is_bvult n x
+             (SAWCoreVectorsAsRocqVectors.bvSub n z y)),
+   is_bvult n (SAWCoreVectorsAsRocqVectors.bvAdd n y x) z.
 
-Axiom bvult_sum_bvult_sub : forall (n : Init.Datatypes.nat),
-       forall (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (y : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (z : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (_1 : is_bvult n x (SAWCoreVectorsAsRocqVectors.bvAdd n y z)),
-       forall (_2 : @Init.Logic.eq Init.Datatypes.bool
-            (SAWCoreVectorsAsRocqVectors.bvult n x y) Init.Datatypes.false),
-  is_bvult n (SAWCoreVectorsAsRocqVectors.bvSub n x y) z .
+Axiom bvult_sum_bvult_sub: forall (n : Init.Datatypes.nat),
+        forall (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (y : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (z : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (_1 : is_bvult n x (SAWCoreVectorsAsRocqVectors.bvAdd n y z)),
+        forall (_2 : @Init.Logic.eq Init.Datatypes.bool
+             (SAWCoreVectorsAsRocqVectors.bvult n x y) Init.Datatypes.false),
+   is_bvult n (SAWCoreVectorsAsRocqVectors.bvSub n x y) z.
 
-Axiom IsLtNat_to_bvult : forall (n : Init.Datatypes.nat),
-       forall (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (i : Init.Datatypes.nat), forall (_1 : SAWCoreScaffolding.IsLtNat
-            i (SAWCoreVectorsAsRocqVectors.bvToNat n x)),
-  is_bvult n (SAWCoreVectorsAsRocqVectors.bvNat n i) x .
+Axiom IsLtNat_to_bvult: forall (n : Init.Datatypes.nat),
+        forall (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (i : Init.Datatypes.nat), forall (_1 : SAWCoreScaffolding.IsLtNat
+             i (SAWCoreVectorsAsRocqVectors.bvToNat n x)),
+   is_bvult n (SAWCoreVectorsAsRocqVectors.bvNat n i) x.
 
-Axiom bvult_to_IsLtNat : forall (n : Init.Datatypes.nat),
-       forall (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (i : Init.Datatypes.nat), forall (_1 : is_bvult n
-            (SAWCoreVectorsAsRocqVectors.bvNat n i) x),
-  SAWCoreScaffolding.IsLtNat i (SAWCoreVectorsAsRocqVectors.bvToNat n x) .
+Axiom bvult_to_IsLtNat: forall (n : Init.Datatypes.nat),
+        forall (x : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (i : Init.Datatypes.nat), forall (_1 : is_bvult n
+             (SAWCoreVectorsAsRocqVectors.bvNat n i) x),
+   SAWCoreScaffolding.IsLtNat i (SAWCoreVectorsAsRocqVectors.bvToNat n x).
 
 Definition BV_complete_induction: forall (w : Init.Datatypes.nat),
         forall (p : forall (_1 : SAWCoreVectorsAsRocqVectors.Vec w
@@ -4357,51 +4357,51 @@ Definition BV_complete_induction: forall (w : Init.Datatypes.nat),
            ) var__0 x (SAWCoreScaffolding.IsLeNat_base var__0)
    .
 
-Axiom Array : forall (_1 : Type), forall (_2 : Type),
-  Type .
+Axiom Array: forall (_1 : Type), forall (_2 : Type),
+   Type.
 
-Axiom arrayConstant : forall (a : Type), forall (b : Type), forall (_1 : b),
-  Array a b .
+Axiom arrayConstant: forall (a : Type), forall (b : Type), forall (_1 : b),
+   Array a b.
 
-Axiom arrayLookup : forall (a : Type), forall (b : Type), forall (_1 : Array a
-            b), forall (_2 : a),
-  b .
+Axiom arrayLookup: forall (a : Type), forall (b : Type), forall (_1 : Array a
+             b), forall (_2 : a),
+   b.
 
-Axiom arrayUpdate : forall (a : Type), forall (b : Type), forall (_1 : Array a
-            b), forall (_2 : a), forall (_3 : b),
-  Array a b .
+Axiom arrayUpdate: forall (a : Type), forall (b : Type), forall (_1 : Array a
+             b), forall (_2 : a), forall (_3 : b),
+   Array a b.
 
-Axiom arrayCopy : forall (n : Init.Datatypes.nat), forall (a : Type),
-       forall (_1 : Array (SAWCoreVectorsAsRocqVectors.Vec n
-                 Init.Datatypes.bool) a),
-       forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (_3 : Array (SAWCoreVectorsAsRocqVectors.Vec n
-                 Init.Datatypes.bool) a),
-       forall (_4 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (_5 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-  Array (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) a .
+Axiom arrayCopy: forall (n : Init.Datatypes.nat), forall (a : Type),
+        forall (_1 : Array (SAWCoreVectorsAsRocqVectors.Vec n
+                  Init.Datatypes.bool) a),
+        forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (_3 : Array (SAWCoreVectorsAsRocqVectors.Vec n
+                  Init.Datatypes.bool) a),
+        forall (_4 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (_5 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+   Array (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) a.
 
-Axiom arraySet : forall (n : Init.Datatypes.nat), forall (a : Type),
-       forall (_1 : Array (SAWCoreVectorsAsRocqVectors.Vec n
-                 Init.Datatypes.bool) a),
-       forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (_3 : a), forall (_4 : SAWCoreVectorsAsRocqVectors.Vec n
-            Init.Datatypes.bool),
-  Array (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) a .
+Axiom arraySet: forall (n : Init.Datatypes.nat), forall (a : Type),
+        forall (_1 : Array (SAWCoreVectorsAsRocqVectors.Vec n
+                  Init.Datatypes.bool) a),
+        forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (_3 : a), forall (_4 : SAWCoreVectorsAsRocqVectors.Vec n
+             Init.Datatypes.bool),
+   Array (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) a.
 
-Axiom arrayRangeEq : forall (n : Init.Datatypes.nat), forall (a : Type),
-       forall (_1 : Array (SAWCoreVectorsAsRocqVectors.Vec n
-                 Init.Datatypes.bool) a),
-       forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (_3 : Array (SAWCoreVectorsAsRocqVectors.Vec n
-                 Init.Datatypes.bool) a),
-       forall (_4 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-       forall (_5 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-  Init.Datatypes.bool .
+Axiom arrayRangeEq: forall (n : Init.Datatypes.nat), forall (a : Type),
+        forall (_1 : Array (SAWCoreVectorsAsRocqVectors.Vec n
+                  Init.Datatypes.bool) a),
+        forall (_2 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (_3 : Array (SAWCoreVectorsAsRocqVectors.Vec n
+                  Init.Datatypes.bool) a),
+        forall (_4 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+        forall (_5 : SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+   Init.Datatypes.bool.
 
-Axiom arrayEq : forall (a : Type), forall (b : Type), forall (_1 : Array a b),
-       forall (_2 : Array a b),
-  Init.Datatypes.bool .
+Axiom arrayEq: forall (a : Type), forall (b : Type), forall (_1 : Array a b),
+        forall (_2 : Array a b),
+   Init.Datatypes.bool.
 
 (* "Prelude::Rational@core" was skipped *)
 
