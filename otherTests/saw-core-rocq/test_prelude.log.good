@@ -85,8 +85,7 @@ Definition uncurry : forall (a : Type), forall (b : Type), forall (c : Type), fo
   .
 
 Inductive PairType1 (a : Type) (b : Type) : Type :=
-| PairValue1 : forall (_1 : a), forall (_2 : b),
-  PairType1 a b
+| PairValue1: forall (_1 : a), forall (_2 : b), PairType1 a b
 .
 
 Definition fstPairType1 : forall (a : Type), forall (b : Type), forall (_1 : PairType1
@@ -226,10 +225,13 @@ Definition eq_inv_map : forall (a : Type), forall (b : Type), forall (a1 : a), f
                (f2 a2) var__1 eq_f (eq_cong a a2 a1 (sym a a1 a2 eq_a) b f2))
   .
 
-Inductive EqDep (t : Type) (P : forall (_1 : t),
-  Type) (x : t) (p : P x) : forall (y : t), forall (_1 : P y), Prop :=
-| ReflDep : 
-  EqDep t P x p x p
+Inductive EqDep
+     (t : Type)
+     (P : forall (_1 : t), Type)
+     (x : t)
+     (p : P x)
+   : forall (y : t), forall (_1 : P y), Prop :=
+| ReflDep:  EqDep t P x p x p
 .
 
 (* "Prelude::fix_unfold@core" was skipped *)
@@ -1876,10 +1878,8 @@ Definition boolToEither : forall (_1 : Init.Datatypes.bool),
   .
 
 Inductive Maybe (a : Type) : Type :=
-| Nothing : 
-  Maybe a
-| Just : forall (_1 : a),
-  Maybe a
+| Nothing:  Maybe a
+| Just: forall (_1 : a), Maybe a
 .
 
 Definition Maybe__rec : forall (a : Type), forall (p : forall (_1 : Maybe a),
@@ -3402,9 +3402,7 @@ Definition polyMod : forall (m : Init.Datatypes.nat), forall (n : Init.Datatypes
   .
 
 Inductive Stream (a : Type) : Type :=
-| MkStream : forall (_1 : forall (_1 : Init.Datatypes.nat),
-  a),
-  Stream a
+| MkStream: forall (_1 : forall (_1 : Init.Datatypes.nat), a), Stream a
 .
 
 #[global] Instance Inhabited_Stream (a:Type) (Ha:Inhabited a) : Inhabited (Stream a) := MkInhabited (Stream a) (MkStream a (fun _ => inhabitant)).
@@ -3757,10 +3755,9 @@ Definition foldList : forall (a : Type), forall (_1 : Init.Datatypes.sum
           )
   .
 
-Inductive ListSort : Type :=
-| LS_Nil : ListSort
-| LS_Cons : forall (_1 : Type), forall (_2 : ListSort),
-  ListSort
+Inductive ListSort: Type :=
+| LS_Nil: ListSort
+| LS_Cons: forall (_1 : Type), forall (_2 : ListSort), ListSort
 .
 
 Definition ListSort__rec : forall (P : forall (_1 : ListSort),
@@ -3929,11 +3926,10 @@ Definition eithers1 : forall (tp : Type), forall (tps : ListSort), forall (a : T
   .
 
 Inductive FunsTo (a : Type) : Type :=
-| FunsTo_Nil : 
-  FunsTo a
-| FunsTo_Cons : forall (tp : Type), forall (_1 : forall (_1 : tp),
-  a), forall (_2 : FunsTo a),
-  FunsTo a
+| FunsTo_Nil:  FunsTo a
+| FunsTo_Cons: forall (tp : Type), forall (_1 : forall (_1 : tp),
+     a), forall (_2 : FunsTo a),
+     FunsTo a
 .
 
 Definition FunsTo__rec : forall (a : Type), forall (P : forall (_1 : FunsTo a),

@@ -289,19 +289,35 @@ prettyConstructor (Constructor {..}) =
   let name' = prettyIdent constructorName
       ty' = prettyTerm PrecNone constructorType
   in
-  PP.nest 2 $ "|" <+> name' <+> ":" <+> ty'
+  PP.nest 5 $ "|" <+> PP.group (name' <> ":" <+> ty')
 
 -- | Print an inductive type declaration
 prettyInductive :: Inductive -> PP.Doc ann
 prettyInductive (Inductive {..}) =
   let name' = prettyIdent inductiveName
-      params' = hsep' $ map prettyBinder inductiveParameters
-      indices' = hsep' $ map prettyPiBinder inductiveIndices
+      params' = map (\p -> PP.group $ prettyBinder p) inductiveParameters
+      indices' = map prettyPiBinder inductiveIndices
       sort' = prettySort inductiveSort
       ctors' = map prettyConstructor inductiveConstructors
-      header = "Inductive" <+> name' <> params' <+> ":" <> indices' <+> sort' <+> ":="
+      intro' = "Inductive" <+> name'
+      lhs' = case params' of
+        [] -> intro' <> ":"
+        _ ->
+            let short = PP.group $ intro' <+> PP.hsep params' <+> ":"
+                longparams = PP.indent 5 (PP.vsep params')
+                long = PP.vsep [intro', longparams, PP.indent 3 ":"]
+            in
+            PP.flatAlt long short
+      rhs' = case indices' of
+        [] -> sort' <+> ":="
+        _ ->
+            let short = PP.group $ PP.hsep indices' <+> sort' <+> ":="
+                long = PP.nest 5 $ PP.fillSep $ indices' ++ [sort' <+> ":="]
+            in
+            PP.flatAlt long short
+      header = PP.group (lhs' <+> rhs')
   in
-  PP.vsep ([PP.nest 2 header] ++ ctors' ++ ["."]) <> PP.hardline
+  PP.vsep ([header] ++ ctors' ++ ["."])
 
 -- | Common code for the simple declarations
 prettyBasicDecl :: PP.Doc ann -> Ident -> Type -> PP.Doc ann
@@ -332,7 +348,7 @@ prettyDecl decl = case decl of
       ]
     ) <> PP.hardline
   InductiveDecl ind ->
-    prettyInductive ind
+    prettyInductive ind <> PP.hardline
   Section nm ds ->
     let nm' = prettyIdent nm
         ds' = map (PP.indent 2 . prettyDecl) ds

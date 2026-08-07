@@ -105,10 +105,9 @@ Definition updTailRecord : forall (s : Stdlib.Strings.String.string), forall (a 
                x) (f (@SAWCoreScaffolding.recordTail s a b x))
   .
 
-Inductive Num : Type :=
-| TCNum : forall (_1 : Init.Datatypes.nat),
-  Num
-| TCInf : Num
+Inductive Num: Type :=
+| TCNum: forall (_1 : Init.Datatypes.nat), Num
+| TCInf: Num
 .
 
 Definition Num__rec : forall (p : forall (_1 : Num),
