@@ -397,7 +397,9 @@ executed top-to-bottom when we run the verification.</p>
 the values pointed to by the pointers <code class="docutils literal notranslate"><span class="pre">x</span></code> and <code class="docutils literal notranslate"><span class="pre">y</span></code>.
 These are 32-bit LLVM integers; however, <code class="docutils literal notranslate"><span class="pre">llvm_fresh_var</span></code> creates
 them at the Cryptol level and the SAWScript <code class="docutils literal notranslate"><span class="pre">xval</span></code> and <code class="docutils literal notranslate"><span class="pre">yval</span></code>
-variables have type <code class="docutils literal notranslate"><span class="pre">Term</span></code>.</p>
+variables have type <code class="docutils literal notranslate"><span class="pre">Term</span></code>.
+(The <code class="docutils literal notranslate"><span class="pre">llvm</span></code> in the name indicates that it works in LLVM specifications
+and with LLVM-level <em>types</em>.)</p>
 <p>Then we allocate memory for the prestate.
 On entry, we want both pointers to be valid.
 In this specification we presume they should be disjoint, so we do two
@@ -708,7 +710,8 @@ type, because the result is a Cryptol-level SAWScript value.
 </div>
 <p>This produces a fresh 32-bit machine integer.</p>
 <p>There is also an experimental function <code class="docutils literal notranslate"><span class="pre">llvm_fresh_cryptol_var</span></code> that
-takes a Cryptol type instead.</p>
+takes a Cryptol type instead.
+Both of these functions produce Cryptol-level fresh values.</p>
 <p>It is reasonable to use the same identifier for the internal name and
 for the SAWScript variable, and, where applicable, to make it the same
 name as used for the same thing in the code under verification.</p>
@@ -718,8 +721,9 @@ name as used for the same thing in the code under verification.</p>
    something we want to advertise.
 -->
 <p>The function <code class="docutils literal notranslate"><span class="pre">llvm_fresh_expanded_val</span></code> <em><code class="docutils literal notranslate"><span class="pre">ty</span></code></em> creates a fresh value of
-LLVM-level type (thus, the type argument is an <code class="docutils literal notranslate"><span class="pre">LLVMType</span></code>) and populates
-it recursively with fresh variables.
+LLVM-level type (thus, the type argument is an <code class="docutils literal notranslate"><span class="pre">LLVMType</span></code>, and the
+result is an <code class="docutils literal notranslate"><span class="pre">LLVMValue</span></code>) and populates it recursively with fresh
+variables.
 This can be used for struct and array types.</p>
 <p>In general for values of compound type it is possible to create fresh
 primitive values for the elements and create compound values with
@@ -1997,13 +2001,15 @@ type, because the result is a Cryptol-level SAWScript value.
 </div>
 <p>This produces a fresh 32-bit machine integer.</p>
 <p>There is also an experimental function <code class="docutils literal notranslate"><span class="pre">mir_fresh_cryptol_var</span></code> that
-takes a Cryptol type instead.</p>
+takes a Cryptol type instead.
+Both of these functions produce Cryptol-level fresh values.</p>
 <p>It is reasonable to use the same identifier for the internal name and
 for the SAWScript variable, and, where applicable, to make it the same
 name as used for the same thing in the code under verification.</p>
 <p>The function <code class="docutils literal notranslate"><span class="pre">mir_fresh_expanded_value</span></code> <em><code class="docutils literal notranslate"><span class="pre">name</span></code></em> <em><code class="docutils literal notranslate"><span class="pre">ty</span></code></em> creates a
 fresh value of MIR-level type (thus, the type argument is an
-<code class="docutils literal notranslate"><span class="pre">MIRType</span></code>) and populates it recursively with fresh variables.
+<code class="docutils literal notranslate"><span class="pre">MIRType</span></code>, and the result is a <code class="docutils literal notranslate"><span class="pre">MIRValue</span></code>) and populates it
+recursively with fresh variables.
 The <em><code class="docutils literal notranslate"><span class="pre">name</span></code></em> argument is used as a prefix for the names of the
 generated fresh variables.
 This can be used for struct and array types.

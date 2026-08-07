@@ -239,6 +239,8 @@ the values pointed to by the pointers `x` and `y`.
 These are 32-bit LLVM integers; however, `llvm_fresh_var` creates
 them at the Cryptol level and the SAWScript `xval` and `yval`
 variables have type `Term`.
+(The `llvm` in the name indicates that it works in LLVM specifications
+and with LLVM-level _types_.)
 
 Then we allocate memory for the prestate.
 On entry, we want both pointers to be valid.
@@ -596,6 +598,7 @@ This produces a fresh 32-bit machine integer.
 
 There is also an experimental function `llvm_fresh_cryptol_var` that
 takes a Cryptol type instead.
+Both of these functions produce Cryptol-level fresh values.
 
 It is reasonable to use the same identifier for the internal name and
 for the SAWScript variable, and, where applicable, to make it the same
@@ -608,8 +611,9 @@ name as used for the same thing in the code under verification.
 -->
 
 The function `llvm_fresh_expanded_val` _`ty`_ creates a fresh value of
-LLVM-level type (thus, the type argument is an `LLVMType`) and populates
-it recursively with fresh variables.
+LLVM-level type (thus, the type argument is an `LLVMType`, and the
+result is an `LLVMValue`) and populates it recursively with fresh
+variables.
 This can be used for struct and array types.
 
 In general for values of compound type it is possible to create fresh
@@ -2073,6 +2077,7 @@ This produces a fresh 32-bit machine integer.
 
 There is also an experimental function `mir_fresh_cryptol_var` that
 takes a Cryptol type instead.
+Both of these functions produce Cryptol-level fresh values.
 
 It is reasonable to use the same identifier for the internal name and
 for the SAWScript variable, and, where applicable, to make it the same
@@ -2080,7 +2085,8 @@ name as used for the same thing in the code under verification.
 
 The function `mir_fresh_expanded_value` _`name`_ _`ty`_ creates a
 fresh value of MIR-level type (thus, the type argument is an
-`MIRType`) and populates it recursively with fresh variables.
+`MIRType`, and the result is a `MIRValue`) and populates it
+recursively with fresh variables.
 The _`name`_ argument is used as a prefix for the names of the
 generated fresh variables.
 This can be used for struct and array types.

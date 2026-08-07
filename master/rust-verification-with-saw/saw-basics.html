@@ -336,8 +336,10 @@ something interesting, as is the case with <code class="docutils literal notrans
 </div>
 <p>This command returns a <code class="docutils literal notranslate"><span class="pre">MIRSetup</span> <span class="pre">Term</span></code>, which means that when you write <code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">&lt;-</span> <span class="pre">mir_fresh_var</span> <span class="pre">...</span> <span class="pre">...</span></code> in a MIR specification, then <code class="docutils literal notranslate"><span class="pre">x</span></code> will be bound at type
 <code class="docutils literal notranslate"><span class="pre">Term</span></code>.</p>
-<p>Values of type <code class="docutils literal notranslate"><span class="pre">Term</span></code> have the property that they can be embedded into Cryptol
-expression that are enclosed in double curly braces <code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">...</span> <span class="pre">}}</span></code>. This is why
+<p>Values of type <code class="docutils literal notranslate"><span class="pre">Term</span></code> are Cryptol-level values and have the property
+that they can be embedded into Cryptol expression that are enclosed in
+double curly braces <code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">...</span> <span class="pre">}}</span></code>.
+This is why
 our earlier <code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">2</span> <span class="pre">*</span> <span class="pre">x</span> <span class="pre">}}</span></code> example works, as <code class="docutils literal notranslate"><span class="pre">x</span></code> is of type <code class="docutils literal notranslate"><span class="pre">Term</span></code>.</p>
 </section>
 <section id="preconditions-and-postconditions">
