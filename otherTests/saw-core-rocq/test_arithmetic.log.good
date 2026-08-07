@@ -458,8 +458,7 @@ Definition TestArith_Complement:
                            (Stdlib.PArith.BinPos.xO 
                               (Stdlib.PArith.BinPos.xI 
                                  (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))))))
-         var__1 
-         (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)).
+         var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -635,15 +634,14 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 Definition head
-        (n : CryptolPrimitivesForSAWCore.Num)
-        (a : Type)
-        {Inh_a : SAWCoreScaffolding.Inhabited a}
-        (xs : 
-        CryptolPrimitivesForSAWCore.seq 
-           (CryptolPrimitivesForSAWCore.tcAdd 
-              (CryptolPrimitivesForSAWCore.TCNum 
-                 (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) n)
-           a)
+        (n: CryptolPrimitivesForSAWCore.Num)
+        (a: Type)
+        {Inh_a: SAWCoreScaffolding.Inhabited a}
+        (xs: CryptolPrimitivesForSAWCore.seq 
+              (CryptolPrimitivesForSAWCore.tcAdd 
+                 (CryptolPrimitivesForSAWCore.TCNum 
+                    (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
+                 n) a)
       : a :=
    let var__0
       :=
@@ -661,8 +659,7 @@ Definition head
       (CryptolPrimitivesForSAWCore.tcAdd 
          (CryptolPrimitivesForSAWCore.TCNum 
             (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) n) a
-      var__1 
-      (CryptolPrimitivesForSAWCore.PIntegralSeqBool var__0) xs 
+      var__1 (CryptolPrimitivesForSAWCore.PIntegralSeqBool var__0) xs 
       (CryptolPrimitivesForSAWCore.ecNumber 
          (CryptolPrimitivesForSAWCore.TCNum SAWCoreScaffolding.Zero) var__1 
          (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)).
@@ -670,9 +667,9 @@ Definition head
 
 
 Definition sext
-        (m : CryptolPrimitivesForSAWCore.Num)
-        (n : CryptolPrimitivesForSAWCore.Num)
-        (x : CryptolPrimitivesForSAWCore.seq n Init.Datatypes.bool)
+        (m: CryptolPrimitivesForSAWCore.Num)
+        (n: CryptolPrimitivesForSAWCore.Num)
+        (x: CryptolPrimitivesForSAWCore.seq n Init.Datatypes.bool)
       : CryptolPrimitivesForSAWCore.seq m Init.Datatypes.bool :=
    let var__0
       :=
@@ -776,9 +773,9 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 Definition zext
-        (m : CryptolPrimitivesForSAWCore.Num)
-        (n : CryptolPrimitivesForSAWCore.Num)
-        (x : CryptolPrimitivesForSAWCore.seq n Init.Datatypes.bool)
+        (m: CryptolPrimitivesForSAWCore.Num)
+        (n: CryptolPrimitivesForSAWCore.Num)
+        (x: CryptolPrimitivesForSAWCore.seq n Init.Datatypes.bool)
       : CryptolPrimitivesForSAWCore.seq m Init.Datatypes.bool :=
    let var__0
       :=

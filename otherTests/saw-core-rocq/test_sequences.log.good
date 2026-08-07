@@ -132,8 +132,7 @@ Definition TestSeq_Single:
                            (Stdlib.PArith.BinPos.xI 
                               (Stdlib.PArith.BinPos.xI 
                                  (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)))))))))
-         var__1 
-         (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)
+         var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)
    ].
 
 
@@ -1201,13 +1200,13 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 Definition zip
-        (n : CryptolPrimitivesForSAWCore.Num)
-        (a : Type)
-        {Inh_a : SAWCoreScaffolding.Inhabited a}
-        (b : Type)
-        {Inh_b : SAWCoreScaffolding.Inhabited b}
-        (xs : CryptolPrimitivesForSAWCore.seq n a)
-        (ys : CryptolPrimitivesForSAWCore.seq n b)
+        (n: CryptolPrimitivesForSAWCore.Num)
+        (a: Type)
+        {Inh_a: SAWCoreScaffolding.Inhabited a}
+        (b: Type)
+        {Inh_b: SAWCoreScaffolding.Inhabited b}
+        (xs: CryptolPrimitivesForSAWCore.seq n a)
+        (ys: CryptolPrimitivesForSAWCore.seq n b)
       : CryptolPrimitivesForSAWCore.seq n 
       (SAWCoreScaffolding.PairType a 
          (SAWCoreScaffolding.PairType b SAWCoreScaffolding.UnitType)) :=
@@ -1217,14 +1216,13 @@ Definition zip
          (SAWCoreScaffolding.PairType b SAWCoreScaffolding.UnitType)
    in
    CryptolPrimitivesForSAWCore.seqMap var__0 var__0 n 
-      (SAWCorePrelude.uncurry a b var__0 (fun (x : a) (y : b)
+      (SAWCorePrelude.uncurry a b var__0 (fun (x: a) (y: b)
             =>
             SAWCoreScaffolding.PairValue a 
                (SAWCoreScaffolding.PairType b SAWCoreScaffolding.UnitType) x 
                (SAWCoreScaffolding.PairValue b SAWCoreScaffolding.UnitType y
                   SAWCoreScaffolding.Unit)
-         )) 
-      (CryptolPrimitivesForSAWCore.seqZipSame a b n xs ys).
+         )) (CryptolPrimitivesForSAWCore.seqZipSame a b n xs ys).
 
 
 
@@ -1319,18 +1317,15 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 Definition map
-        (n : CryptolPrimitivesForSAWCore.Num)
-        (a : Type)
-        {Inh_a : SAWCoreScaffolding.Inhabited a}
-        (b : Type)
-        {Inh_b : SAWCoreScaffolding.Inhabited b}
-        (f : forall (_1 : a), b)
-        (xs : CryptolPrimitivesForSAWCore.seq n a)
+        (n: CryptolPrimitivesForSAWCore.Num)
+        (a: Type)
+        {Inh_a: SAWCoreScaffolding.Inhabited a}
+        (b: Type)
+        {Inh_b: SAWCoreScaffolding.Inhabited b}
+        (f: forall (_1: a), b)
+        (xs: CryptolPrimitivesForSAWCore.seq n a)
       : CryptolPrimitivesForSAWCore.seq n b :=
-   CryptolPrimitivesForSAWCore.seqMap a b n (fun (x : a)
-         =>
-         f x
-      ) xs.
+   CryptolPrimitivesForSAWCore.seqMap a b n (fun (x: a) => f x) xs.
 
 
 
@@ -1368,7 +1363,7 @@ Definition TestSeq_Map:
          (Stdlib.PArith.BinPos.Pos.to_nat 
             (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
    in
-   map var__3 var__1 var__1 (fun (x : var__1)
+   map var__3 var__1 var__1 (fun (x: var__1)
           =>
           let var__4
              :=
@@ -1616,7 +1611,7 @@ Definition TestSeq_Comprehension:
       :=
       CryptolPrimitivesForSAWCore.PLiteralSeqBool var__1
    in
-   CryptolPrimitivesForSAWCore.seqMap var__2 var__2 var__0 (fun (x : var__2)
+   CryptolPrimitivesForSAWCore.seqMap var__2 var__2 var__0 (fun (x: var__2)
          =>
          let var__4
             :=

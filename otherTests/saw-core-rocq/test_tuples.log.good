@@ -323,8 +323,8 @@ Definition TestTuple_Nested: let var__0
       :=
       SAWCoreScaffolding.PairType var__0 SAWCoreScaffolding.UnitType
    in
-   SAWCoreScaffolding.PairType 
-      (SAWCoreScaffolding.PairType var__0 var__1) var__1 :=
+   SAWCoreScaffolding.PairType (SAWCoreScaffolding.PairType var__0 var__1)
+      var__1 :=
    let var__0
       :=
       CryptolPrimitivesForSAWCore.TCNum 

@@ -40,7 +40,13 @@ integer n = PP.pretty n
 
 -- | Common code to print a name with a type
 prettyNameType :: Ident -> Type -> PP.Doc ann
-prettyNameType x ty = prettyIdent x <+> ":" <+> prettyTerm PrecNone ty
+prettyNameType x ty =
+    let x' = prettyIdent x
+        ty' = prettyTerm PrecNone ty
+        long = PP.nest 3 $ x' <> ":" <+> ty'
+        short = PP.group $ x' <> ":" <+> ty'
+    in
+    PP.flatAlt long short
 
 -- | Insert parens based on the first argument
 parensIf :: Bool -> PP.Doc ann -> PP.Doc ann
@@ -89,10 +95,6 @@ prettyPiBinder b = case b of
         PP.braces (prettyTerm PrecApp ty) <+> "->"
     PiBinder Implicit (Just x) ty ->
         "forall" <+> PP.braces (prettyNameType x ty) <> ","
-
--- | Print a list of binders
-prettyBinders :: [Binder] -> [PP.Doc ann]
-prettyBinders bs = map prettyBinder bs
 
 -- | Common code for printing things shaped like function headers
 --
@@ -155,38 +157,38 @@ prettyTerm :: Prec -> Term -> PP.Doc ann
 prettyTerm p e0 =
   case e0 of
     Lambda binders e1 ->
-        let binders' = prettyBinders binders
+        let binders' = map (\b -> PP.group $ prettyBinder b) binders
             e1' = prettyTerm PrecLambda e1
             header = prettyFnHeader "fun" binders' Nothing "=>"
         in
         parensIf (p > PrecLambda) $ prettyFunction header e1'
     Fix ident binders returnType body ->
         let ident' = prettyIdent ident
-            binders' = prettyBinders binders
+            binders' = map (\b -> PP.group $ prettyBinder b) binders
             returnType' = Just $ prettyTerm PrecNone returnType
             body' = prettyTerm PrecLambda body
             intro = "fix" <+> ident'
             header = prettyFnHeader intro binders' returnType' ":="
         in
         parensIf (p > PrecLambda) $ prettyFunction header body'
-    Pi bs t ->
-        let bs' = map (\b -> PP.group $ prettyPiBinder b) bs
+    Pi binders t ->
+        let binders' = map (\b -> PP.group $ prettyPiBinder b) binders
             t' = prettyTerm PrecLambda t
-            longbs = PP.nest 5 $ PP.fillSep bs'
-            shortbs = PP.group $ PP.hsep bs'
+            longbs = PP.nest 5 $ PP.fillSep binders'
+            shortbs = PP.group $ PP.hsep binders'
             finalbs = PP.flatAlt longbs shortbs
-            long = finalbs <> PP.line <> t'
+            long = finalbs <> PP.line <> PP.indent 5 t'
             short = PP.group $ finalbs <+> t'
         in
         parensIf (p > PrecLambda) $ PP.flatAlt long short
-    Let x bs mty t body ->
+    Let x binders mty t body ->
         let x' = prettyIdent x
-            bs' = prettyBinders bs
+            binders' = map (\b -> PP.group $ prettyBinder b) binders
             mty' = prettyTerm PrecNone <$> mty
             t' = prettyTerm PrecNone t
             body' = prettyTerm PrecLambda body
             intro = "let" <+> x'
-            header = prettyFnHeader intro bs' mty' ":="
+            header = prettyFnHeader intro binders' mty' ":="
             longest = PP.vsep [header, PP.indent 3 t', "in", body']
             second = PP.vsep [PP.group (header <+> t' <+> "in"), body']
             shortest = PP.group (header <+> t' <+> "in" <+> body')
@@ -244,7 +246,7 @@ prettyTerm p e0 =
         --      (this is in long)
         --
         let f' = prettyTerm PrecApp f
-            args' = map (prettyTerm PrecAtom) args
+            args' = map (\a -> PP.group $ prettyTerm PrecAtom a) args
 
             short_a = PP.group $ PP.hsep (f' : args')
             short = parensIf (p > PrecApp) short_a
@@ -321,7 +323,7 @@ prettyInductive :: Inductive -> PP.Doc ann
 prettyInductive (Inductive {..}) =
     let name' = prettyIdent inductiveName
         params' = map (\p -> PP.group $ prettyBinder p) inductiveParameters
-        indices' = map prettyPiBinder inductiveIndices
+        indices' = map (\i -> PP.group $ prettyPiBinder i) inductiveIndices
         sort' = prettySort inductiveSort
         ctors' = map prettyConstructor inductiveConstructors
         intro' = "Inductive" <+> name'

@@ -645,9 +645,9 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 Definition TestRec_Nested
-        (u1305 : Type)
-        {Inh_u1305 : SAWCoreScaffolding.Inhabited u1305}
-        (_P : CryptolPrimitivesForSAWCore.PLiteral u1305)
+        (u1305: Type)
+        {Inh_u1305: SAWCoreScaffolding.Inhabited u1305}
+        (_P: CryptolPrimitivesForSAWCore.PLiteral u1305)
       : let var__0
       :=
       CryptolPrimitivesForSAWCore.seq 
@@ -935,7 +935,7 @@ Definition TestRec_RelativeUpdate: Init.Datatypes.bool :=
             CryptolPrimitivesForSAWCore.PEqEmpty)) 
       (CryptolPrimitivesForSAWCore.updHeadRecord "x"%string var__1 var__3 
          (CryptolPrimitivesForSAWCore.const var__1 var__1 
-            ((fun (x : var__1)
+            ((fun (x: var__1)
                =>
                let var__7
                   :=
@@ -1023,9 +1023,8 @@ Definition TestRec_NestedField1: Init.Datatypes.bool :=
    in
    let var__7
       :=
-      (fun (u1305 : Type) (Inh_u1305 : 
-           SAWCoreScaffolding.Inhabited u1305) (_P : 
-           CryptolPrimitivesForSAWCore.PLiteral u1305)
+      (fun (u1305: Type) (Inh_u1305: SAWCoreScaffolding.Inhabited u1305) (_P: 
+              CryptolPrimitivesForSAWCore.PLiteral u1305)
          =>
          let var__8
             :=
@@ -1085,7 +1084,7 @@ Definition TestRec_NestedField1: Init.Datatypes.bool :=
             CryptolPrimitivesForSAWCore.PEqEmpty)) 
       (CryptolPrimitivesForSAWCore.updHeadRecord "pt"%string var__4 var__6 
          (CryptolPrimitivesForSAWCore.const var__4 var__4 
-            ((fun (r : var__4)
+            ((fun (r: var__4)
                =>
                let var__8
                   :=
@@ -1204,9 +1203,8 @@ Definition TestRec_NestedField2: Init.Datatypes.bool :=
    in
    let var__7
       :=
-      (fun (u1305 : Type) (Inh_u1305 : 
-           SAWCoreScaffolding.Inhabited u1305) (_P : 
-           CryptolPrimitivesForSAWCore.PLiteral u1305)
+      (fun (u1305: Type) (Inh_u1305: SAWCoreScaffolding.Inhabited u1305) (_P: 
+              CryptolPrimitivesForSAWCore.PLiteral u1305)
          =>
          let var__8
             :=
@@ -1266,7 +1264,7 @@ Definition TestRec_NestedField2: Init.Datatypes.bool :=
             CryptolPrimitivesForSAWCore.PEqEmpty)) 
       (CryptolPrimitivesForSAWCore.updHeadRecord "pt"%string var__4 var__6 
          (CryptolPrimitivesForSAWCore.const var__4 var__4 
-            ((fun (r : var__4)
+            ((fun (r: var__4)
                =>
                let var__8
                   :=
@@ -1275,7 +1273,7 @@ Definition TestRec_NestedField2: Init.Datatypes.bool :=
                CryptolPrimitivesForSAWCore.updHeadRecord "x"%string var__8
                   var__3 
                   (CryptolPrimitivesForSAWCore.const var__8 var__8 
-                     ((fun (x : var__8)
+                     ((fun (x: var__8)
                         =>
                         let var__9
                            :=

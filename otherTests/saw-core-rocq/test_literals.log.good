@@ -1741,9 +1741,9 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 Definition TestLit_0254
-        (u1295 : Type)
-        {Inh_u1295 : SAWCoreScaffolding.Inhabited u1295}
-        (_P : CryptolPrimitivesForSAWCore.PLiteral u1295)
+        (u1295: Type)
+        {Inh_u1295: SAWCoreScaffolding.Inhabited u1295}
+        (_P: CryptolPrimitivesForSAWCore.PLiteral u1295)
       : u1295 :=
    CryptolPrimitivesForSAWCore.ecNumber 
       (CryptolPrimitivesForSAWCore.TCNum 
@@ -1984,7 +1984,7 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 Definition TestLit_Poly1
-        (u1301 : CryptolPrimitivesForSAWCore.Num)
+        (u1301: CryptolPrimitivesForSAWCore.Num)
       : CryptolPrimitivesForSAWCore.seq u1301 Init.Datatypes.bool :=
    CryptolPrimitivesForSAWCore.ecNumber 
       (CryptolPrimitivesForSAWCore.TCNum 
@@ -2021,7 +2021,7 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 Definition TestLit_Poly2
-        (u1303 : CryptolPrimitivesForSAWCore.Num)
+        (u1303: CryptolPrimitivesForSAWCore.Num)
       : CryptolPrimitivesForSAWCore.seq u1303 Init.Datatypes.bool :=
    CryptolPrimitivesForSAWCore.ecNumber 
       (CryptolPrimitivesForSAWCore.TCNum 

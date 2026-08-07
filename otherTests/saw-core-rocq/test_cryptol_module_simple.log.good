@@ -21,13 +21,13 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 Section Simple.
    Definition addOne
-           (x : CryptolPrimitivesForSAWCore.seq 
-              (CryptolPrimitivesForSAWCore.TCNum 
-                 (Stdlib.PArith.BinPos.Pos.to_nat 
-                    (Stdlib.PArith.BinPos.xO 
+           (x: CryptolPrimitivesForSAWCore.seq 
+                 (CryptolPrimitivesForSAWCore.TCNum 
+                    (Stdlib.PArith.BinPos.Pos.to_nat 
                        (Stdlib.PArith.BinPos.xO 
-                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-              Init.Datatypes.bool)
+                          (Stdlib.PArith.BinPos.xO 
+                             (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+                 Init.Datatypes.bool)
          : CryptolPrimitivesForSAWCore.seq 
          (CryptolPrimitivesForSAWCore.TCNum 
             (Stdlib.PArith.BinPos.Pos.to_nat 
@@ -55,20 +55,20 @@ Section Simple.
             (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)).
 
    Definition addTwo
-           (x : CryptolPrimitivesForSAWCore.seq 
-              (CryptolPrimitivesForSAWCore.TCNum 
-                 (Stdlib.PArith.BinPos.Pos.to_nat 
-                    (Stdlib.PArith.BinPos.xO 
+           (x: CryptolPrimitivesForSAWCore.seq 
+                 (CryptolPrimitivesForSAWCore.TCNum 
+                    (Stdlib.PArith.BinPos.Pos.to_nat 
                        (Stdlib.PArith.BinPos.xO 
-                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-              Init.Datatypes.bool)
-           (y : CryptolPrimitivesForSAWCore.seq 
-              (CryptolPrimitivesForSAWCore.TCNum 
-                 (Stdlib.PArith.BinPos.Pos.to_nat 
-                    (Stdlib.PArith.BinPos.xO 
+                          (Stdlib.PArith.BinPos.xO 
+                             (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+                 Init.Datatypes.bool)
+           (y: CryptolPrimitivesForSAWCore.seq 
+                 (CryptolPrimitivesForSAWCore.TCNum 
+                    (Stdlib.PArith.BinPos.Pos.to_nat 
                        (Stdlib.PArith.BinPos.xO 
-                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-              Init.Datatypes.bool)
+                          (Stdlib.PArith.BinPos.xO 
+                             (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+                 Init.Datatypes.bool)
          : CryptolPrimitivesForSAWCore.seq 
          (CryptolPrimitivesForSAWCore.TCNum 
             (Stdlib.PArith.BinPos.Pos.to_nat 
@@ -89,13 +89,13 @@ Section Simple.
          (CryptolPrimitivesForSAWCore.PRingSeqBool var__0) x y.
 
    Definition isZero
-           (x : CryptolPrimitivesForSAWCore.seq 
-              (CryptolPrimitivesForSAWCore.TCNum 
-                 (Stdlib.PArith.BinPos.Pos.to_nat 
-                    (Stdlib.PArith.BinPos.xO 
+           (x: CryptolPrimitivesForSAWCore.seq 
+                 (CryptolPrimitivesForSAWCore.TCNum 
+                    (Stdlib.PArith.BinPos.Pos.to_nat 
                        (Stdlib.PArith.BinPos.xO 
-                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-              Init.Datatypes.bool)
+                          (Stdlib.PArith.BinPos.xO 
+                             (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+                 Init.Datatypes.bool)
          : Init.Datatypes.bool :=
       let var__0
          :=
@@ -116,20 +116,20 @@ Section Simple.
             (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)).
 
    Definition maxVal
-           (x : CryptolPrimitivesForSAWCore.seq 
-              (CryptolPrimitivesForSAWCore.TCNum 
-                 (Stdlib.PArith.BinPos.Pos.to_nat 
-                    (Stdlib.PArith.BinPos.xO 
+           (x: CryptolPrimitivesForSAWCore.seq 
+                 (CryptolPrimitivesForSAWCore.TCNum 
+                    (Stdlib.PArith.BinPos.Pos.to_nat 
                        (Stdlib.PArith.BinPos.xO 
-                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-              Init.Datatypes.bool)
-           (y : CryptolPrimitivesForSAWCore.seq 
-              (CryptolPrimitivesForSAWCore.TCNum 
-                 (Stdlib.PArith.BinPos.Pos.to_nat 
-                    (Stdlib.PArith.BinPos.xO 
+                          (Stdlib.PArith.BinPos.xO 
+                             (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+                 Init.Datatypes.bool)
+           (y: CryptolPrimitivesForSAWCore.seq 
+                 (CryptolPrimitivesForSAWCore.TCNum 
+                    (Stdlib.PArith.BinPos.Pos.to_nat 
                        (Stdlib.PArith.BinPos.xO 
-                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-              Init.Datatypes.bool)
+                          (Stdlib.PArith.BinPos.xO 
+                             (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+                 Init.Datatypes.bool)
          : CryptolPrimitivesForSAWCore.seq 
          (CryptolPrimitivesForSAWCore.TCNum 
             (Stdlib.PArith.BinPos.Pos.to_nat 
@@ -156,24 +156,23 @@ Section Simple.
          y.
 
    Definition encrypt
-           (a : CryptolPrimitivesForSAWCore.Num)
-           (key : 
-           CryptolPrimitivesForSAWCore.seq 
-              (CryptolPrimitivesForSAWCore.TCNum 
-                 (Stdlib.PArith.BinPos.Pos.to_nat 
-                    (Stdlib.PArith.BinPos.xO 
-                       (Stdlib.PArith.BinPos.xO 
-                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-              Init.Datatypes.bool)
-           (plaintext : 
-           CryptolPrimitivesForSAWCore.seq a 
-              (CryptolPrimitivesForSAWCore.seq 
+           (a: CryptolPrimitivesForSAWCore.Num)
+           (key: CryptolPrimitivesForSAWCore.seq 
                  (CryptolPrimitivesForSAWCore.TCNum 
                     (Stdlib.PArith.BinPos.Pos.to_nat 
                        (Stdlib.PArith.BinPos.xO 
                           (Stdlib.PArith.BinPos.xO 
                              (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-                 Init.Datatypes.bool))
+                 Init.Datatypes.bool)
+           (plaintext: 
+              CryptolPrimitivesForSAWCore.seq a 
+                 (CryptolPrimitivesForSAWCore.seq 
+                    (CryptolPrimitivesForSAWCore.TCNum 
+                       (Stdlib.PArith.BinPos.Pos.to_nat 
+                          (Stdlib.PArith.BinPos.xO 
+                             (Stdlib.PArith.BinPos.xO 
+                                (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+                    Init.Datatypes.bool))
          : CryptolPrimitivesForSAWCore.seq a 
          (CryptolPrimitivesForSAWCore.seq 
             (CryptolPrimitivesForSAWCore.TCNum 
@@ -192,7 +191,7 @@ Section Simple.
                         (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
             Init.Datatypes.bool
       in
-      CryptolPrimitivesForSAWCore.seqMap var__0 var__0 a (fun (pt : var__0)
+      CryptolPrimitivesForSAWCore.seqMap var__0 var__0 a (fun (pt: var__0)
             =>
             let var__1
                :=
@@ -207,24 +206,23 @@ Section Simple.
          ) plaintext.
 
    Definition decrypt
-           (a : CryptolPrimitivesForSAWCore.Num)
-           (key : 
-           CryptolPrimitivesForSAWCore.seq 
-              (CryptolPrimitivesForSAWCore.TCNum 
-                 (Stdlib.PArith.BinPos.Pos.to_nat 
-                    (Stdlib.PArith.BinPos.xO 
-                       (Stdlib.PArith.BinPos.xO 
-                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-              Init.Datatypes.bool)
-           (ciphertext : 
-           CryptolPrimitivesForSAWCore.seq a 
-              (CryptolPrimitivesForSAWCore.seq 
+           (a: CryptolPrimitivesForSAWCore.Num)
+           (key: CryptolPrimitivesForSAWCore.seq 
                  (CryptolPrimitivesForSAWCore.TCNum 
                     (Stdlib.PArith.BinPos.Pos.to_nat 
                        (Stdlib.PArith.BinPos.xO 
                           (Stdlib.PArith.BinPos.xO 
                              (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-                 Init.Datatypes.bool))
+                 Init.Datatypes.bool)
+           (ciphertext: 
+              CryptolPrimitivesForSAWCore.seq a 
+                 (CryptolPrimitivesForSAWCore.seq 
+                    (CryptolPrimitivesForSAWCore.TCNum 
+                       (Stdlib.PArith.BinPos.Pos.to_nat 
+                          (Stdlib.PArith.BinPos.xO 
+                             (Stdlib.PArith.BinPos.xO 
+                                (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+                    Init.Datatypes.bool))
          : CryptolPrimitivesForSAWCore.seq a 
          (CryptolPrimitivesForSAWCore.seq 
             (CryptolPrimitivesForSAWCore.TCNum 
@@ -243,7 +241,7 @@ Section Simple.
                         (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
             Init.Datatypes.bool
       in
-      CryptolPrimitivesForSAWCore.seqMap var__0 var__0 a (fun (ct : var__0)
+      CryptolPrimitivesForSAWCore.seqMap var__0 var__0 a (fun (ct: var__0)
             =>
             let var__1
                :=
@@ -258,23 +256,22 @@ Section Simple.
          ) ciphertext.
 
    Definition roundtrip
-           (u944 : CryptolPrimitivesForSAWCore.Num)
-           (k : CryptolPrimitivesForSAWCore.seq 
-              (CryptolPrimitivesForSAWCore.TCNum 
-                 (Stdlib.PArith.BinPos.Pos.to_nat 
-                    (Stdlib.PArith.BinPos.xO 
-                       (Stdlib.PArith.BinPos.xO 
-                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-              Init.Datatypes.bool)
-           (ip : 
-           CryptolPrimitivesForSAWCore.seq u944 
-              (CryptolPrimitivesForSAWCore.seq 
+           (u944: CryptolPrimitivesForSAWCore.Num)
+           (k: CryptolPrimitivesForSAWCore.seq 
                  (CryptolPrimitivesForSAWCore.TCNum 
                     (Stdlib.PArith.BinPos.Pos.to_nat 
                        (Stdlib.PArith.BinPos.xO 
                           (Stdlib.PArith.BinPos.xO 
                              (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-                 Init.Datatypes.bool))
+                 Init.Datatypes.bool)
+           (ip: CryptolPrimitivesForSAWCore.seq u944 
+                 (CryptolPrimitivesForSAWCore.seq 
+                    (CryptolPrimitivesForSAWCore.TCNum 
+                       (Stdlib.PArith.BinPos.Pos.to_nat 
+                          (Stdlib.PArith.BinPos.xO 
+                             (Stdlib.PArith.BinPos.xO 
+                                (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+                    Init.Datatypes.bool))
          : Init.Datatypes.bool :=
       let var__0
          :=
@@ -292,8 +289,7 @@ Section Simple.
          (CryptolPrimitivesForSAWCore.seq u944 var__1) 
          (CryptolPrimitivesForSAWCore.PEqSeq u944 var__1 
             (CryptolPrimitivesForSAWCore.PEqSeqBool var__0)) 
-         (decrypt u944 k 
-            (encrypt u944 k ip)) ip.
+         (decrypt u944 k (encrypt u944 k ip)) ip.
 
 End Simple.
 
