@@ -205,10 +205,61 @@ prettyTerm p e0 =
     App f [] ->
         prettyTerm p f
     App f args ->
+        --
+        -- The short form of this is obviously "f arg arg arg".
+        --
+        -- For longer forms, I'd like it to pick either
+        --    blahblah
+        --    blah f arg arg
+        --           arg arg
+        -- or
+        --    blahblah
+        --    blahblah blub blub blub
+        --       f arg arg arg
+        --         arg
+        --
+        -- for short f, or
+        --    blahblah
+        --    blah fffff arg arg
+        --            arg arg
+        -- or
+        --    blahblah
+        --    blahblah blub blub blub
+        --       fffff arg arg arg
+        --          arg
+        --
+        -- depending on how far off to the right it is. This is
+        -- complicated by the fact that PP.width doesn't let you
+        -- examine the width of a subdocument without emitting it,
+        -- which is annoying and silly of it. (That is, the null
+        -- usage of PP.width is "PP.width doc $ \_ -> PP.empty",
+        -- not "PP.width doc $ \_ -> doc". The latter prints doc
+        -- twice.)
+        --
+        -- The logic below does the following:
+        --    - either indents by the width of f' (and a space) or by 3
+        --      (this is in long_a)
+        --    - inserts PP.line before f' if we'll be indenting the
+        --      args by more than 6 spaces
+        --      (this is in long)
+        --
         let f' = prettyTerm PrecApp f
             args' = map (prettyTerm PrecAtom) args
+
+            short_a = PP.group $ PP.hsep (f' : args')
+            short = parensIf (p > PrecApp) short_a
+
+            long_a = PP.width f' $ \w ->
+                let w' = if w <= 5 then w + 1 else 3 in
+                " " <> PP.nest w' (PP.fillSep args')
+            -- This must go here or the line break comes after the
+            -- parens, and that's one thing for C but very weird here.
+            long_b = parensIf (p > PrecApp) long_a
+            long = PP.nesting $ \nest -> PP.column $ \col ->
+                if col < nest + 6 then long_b
+                else PP.line <> long_b
         in
-        parensIf (p > PrecApp) $ PP.nest 5 $ PP.fillSep (f' : args')
+        PP.flatAlt long short
     Sort s ->
         prettySort s
     Var x ->
