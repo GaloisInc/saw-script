@@ -206,6 +206,8 @@ Qed.
 (* coerce *)
 
 (*
+
+(*
  * Because Rocq is very conservative about convertibility of dependent
  * types, in general we need coercions anywhere we have sizes that are
  * the same but not syntactically identical. This extends even to
@@ -504,6 +506,7 @@ Proof.
    rewrite coerceVec_eq_refl.
    tauto.
 Qed.
+*)
 
 
 (*************************************************************)
@@ -605,6 +608,206 @@ Proof.
 Qed.
 
 
+(**************************************************************)
+(* atOption (XXX tidy) *)
+
+(*
+ * Get the element at index i. If there is no such index, return None.
+ *)
+Fixpoint atOption {a: Type} {n: nat} (v: Vec a n) (index: nat) : option a :=
+   match v with
+   | NilVec _ => None
+   | ConsVec x xs' =>
+        match index with
+        | 0 => Some x
+        | S index' => atOption  xs' index'
+        end
+   end.
+
+(*
+ * atOption returns non-None if and only if the index is in bounds.
+ *)
+Lemma atOption_notNone: forall a n (v: Vec a n) i,
+   i < n <-> atOption v i <> None.
+Proof.
+   intros.
+   revert i.
+   induction v; intros; simpl.
+   - split; intro; try contradiction; lia.
+   - destruct i.
+     + split; intro; try discriminate; lia.
+     + split; intro.
+       * apply IHv; lia.
+       * rewrite <- IHv in H. lia.
+Qed.
+
+
+(**************************************************************)
+(* coerceVec (XXX alternate) *)
+
+Lemma coerceFunc_proof: forall a n m m' (xs: Vec a n),
+   m = n -> m = S m' -> atOption xs 0 = None -> False.
+Proof.
+   intros.
+   subst.
+   destruct xs using caseVec_S.
+   simpl in *; discriminate.
+Qed.
+
+Definition coerceFunc {a: Type} {n: nat} (m m': nat) (xs: Vec a n) (pf: m = n) (H: m = S m') (i: nat) :=
+   match atOption xs i with
+   | None =>
+        (* unreachable, only called with i < n, but we can't readily prove that *)
+        match atOption xs 0 as optx return atOption xs 0 = optx -> a with
+        | None => fun H0 => False_rect a (coerceFunc_proof a n m m' xs pf H H0)
+        | Some x => fun _ => x
+        end eq_refl
+   | Some x => x
+   end.
+
+Lemma coerceFunc_lt: forall a n m m' (xs: Vec a n) pf H i,
+   i < n ->
+   exists x,
+   atOption xs i = Some x /\ coerceFunc m m' xs pf H i = x.
+Proof.
+   intros * Hlt.
+   destruct (atOption xs i) eqn:Hat.
+   - rename a0 into x. exists x. split; auto.
+     unfold coerceFunc.
+     rewrite Hat. auto.
+   - rewrite atOption_notNone with (v := xs) in Hlt.
+     rewrite Hat in Hlt.
+     contradiction.
+Qed.
+
+Lemma coerceFunc_S: forall a n m m' x (xs: Vec a n) pf pf' H H' i,
+   i < n ->
+   coerceFunc (S m) (S m') (ConsVec x xs) pf H (S i) = coerceFunc m m' xs pf' H' i.
+Proof.
+   intros * Hlt.
+   unfold coerceFunc.
+   subst.
+   simpl.
+   destruct (atOption xs i) eqn:Hat; auto.
+   rewrite atOption_notNone with (v := xs) in Hlt.
+   rewrite Hat in Hlt. contradiction.
+Qed.
+
+Lemma gen_coerceFunc: forall a n (xs: Vec a (S n)),
+   gen (S n) (coerceFunc (S n) n xs eq_refl eq_refl) = xs.
+Proof.
+   intros.
+   unfold gen.
+   destruct xs using caseVec_S.
+   rewrite gen_visit_S_r.
+   assert (coerceFunc (S n) n (ConsVec x xs) eq_refl eq_refl (S n - S n) = x) as ->.
+   { rewrite Nat.sub_diag. unfold coerceFunc. simpl. auto. }
+   rewrite gen_visit_S_l; try lia.
+   f_equal.
+   revert x xs.
+   induction n; intros.
+   - destruct xs using caseVec_0. simpl; auto.
+   - destruct xs using caseVec_S.
+     rewrite gen_visit_S_r.
+     assert (coerceFunc (S (S n)) (S n) (ConsVec x (ConsVec x0 xs)) eq_refl eq_refl
+                        (S (S n - S n)) = x0) as ->.
+     { rewrite Nat.sub_diag. unfold coerceFunc. simpl. auto. }
+     f_equal.
+     rewrite gen_visit_S_l; try lia.
+     rewrite <- IHn with (x := x0).
+     apply gen_visit_extensionality; try lia.
+     intros j Hlt.
+     rewrite coerceFunc_S with (pf' := eq_refl) (H' := eq_refl); try lia.
+     auto.
+Qed.
+
+Definition coerceVec {a: Type} {n: nat}
+     (m: nat) (pf: m = n) (xs: Vec a n) : Vec a m :=
+   match m as m0 return m = m0 -> Vec a m0 with
+   | 0 => fun _ => NilVec a
+   | S m' => fun H => gen (S m') (coerceFunc m m' xs pf H)
+   end eq_refl.
+
+(*
+ * Much as you might think you'd want this to simpl so it might go away entirely,
+ * it doesn't. Instead you get a partially unfolded gen call that you can't do
+ * anything useful with.
+ *)
+Arguments coerceVec: simpl never.
+
+Lemma coerceVec_vacuous: forall a n pf (xs: Vec a n),
+   coerceVec n pf xs = xs.
+Proof.
+   intros.
+   rewrite (UIP_dec Nat.eq_dec pf eq_refl).
+   unfold coerceVec.
+   destruct n.
+   - destruct xs using caseVec_0. auto.
+   - apply gen_coerceFunc.
+Qed.
+
+Lemma NilVec_unique: forall a pf, coerceVec 0 pf (NilVec a) = NilVec a.
+Proof.
+   intros; simpl; auto.
+Qed.
+
+Lemma ConsVec_coerceVec: forall a n n' pf x (xs: Vec a n),
+   ConsVec x (coerceVec n' pf xs) =
+      coerceVec (S n') (eq_S n' n pf) (ConsVec x xs).
+Proof.
+   intros.
+   subst.
+   simpl; auto.
+   do 2 rewrite coerceVec_vacuous; auto.
+Qed.
+
+Lemma coerceVec_ConsVec: forall a n n' pf x (xs: Vec a n),
+   coerceVec (S n') pf (ConsVec x xs) =
+      ConsVec x (coerceVec n' (eq_add_S n' n pf) xs).
+Proof.
+   intros.
+   assert (n' = n) as -> by lia.
+   do 2 rewrite coerceVec_vacuous; auto.
+Qed.
+
+Lemma coerceVec_coerceVec: forall a n m l pf1 pf2 (xs: Vec a n),
+   coerceVec l pf2 (coerceVec m pf1 xs) = coerceVec l (eq_trans pf2 pf1) xs.
+Proof.
+   intros.
+   subst.
+   do 3 rewrite coerceVec_vacuous; auto.
+Qed.
+
+Lemma coerceVec_irr: forall a m n pf1 pf2 (xs: Vec a m),
+   coerceVec n pf1 xs = coerceVec n pf2 xs.
+Proof.
+   intros.
+   subst.
+   rewrite (UIP_dec Nat.eq_dec pf2 eq_refl).
+   auto.
+Qed.
+
+Lemma coerceVec_sym: forall a n n' (xs: Vec a n) (ys: Vec a n') pf pf',
+   xs = coerceVec n pf ys <-> coerceVec n' pf' xs = ys.
+Proof.
+   intros.
+   subst.
+   rewrite (UIP_dec Nat.eq_dec pf' eq_refl).
+   do 2 rewrite coerceVec_vacuous.
+   tauto.
+Qed.
+
+Lemma coerceVec_rewrite: forall (P: forall {a n}, Vec a n -> Prop)
+     a n m (xs: Vec a n) (ys: Vec a m) (pf: n = m),
+   xs = coerceVec n pf ys -> P xs <-> P ys.
+Proof.
+   intros.
+   subst.
+   rewrite coerceVec_vacuous.
+   tauto.
+Qed.
+
+
 (*************************************************************)
 (* Inhabited (depends on gen) *)
 
@@ -683,7 +886,6 @@ Proof.
    intros.
    injection pf; intros; subst.
    rewrite (UIP_dec Nat.eq_dec pf eq_refl).
-   simpl; auto.
    rewrite coerceVec_vacuous; auto.
 Qed.
 
@@ -696,7 +898,6 @@ Proof.
    intros.
    subst.
    rewrite (UIP_dec Nat.eq_dec pf eq_refl).
-   simpl; auto.
    do 2 rewrite coerceVec_vacuous; auto.
 Qed.
 
@@ -1145,10 +1346,11 @@ Proof.
    revert ys zs.
    revert pf.
    revert m l.
-   induction xs; intros; simpl.
-   - do 2 rewrite coerceVec_vacuous. auto.
+   induction xs; intros.
+   - simpl. do 2 rewrite coerceVec_vacuous. auto.
    - assert (S (n + m) + l = n + S m + l) as H by lia.
-     rewrite (revAppend_coerceVec_l) with (pf' := H).
+     rewrite revAppend_ConsVec.
+     erewrite (revAppend_coerceVec_l) with (pf' := H).
      assert (n + S m + l = S m + (n + l)) as H' by lia.
      rewrite IHxs with (pf := H').
      simpl.
@@ -1191,9 +1393,10 @@ Proof.
    revert pf.
    revert ys zs.
    revert m l.
-   induction xs; intros; simpl.
-   - do 3 rewrite coerceVec_vacuous. auto.
-   - (*
+   induction xs; intros.
+   - simpl. do 3 rewrite coerceVec_vacuous. auto.
+   - do 2 rewrite revAppend_ConsVec.
+     (*
       * This is necessary, instead of just rewriting directly with
       * ConsVec_append, to update the implicit argument of revAppend
       * that takes the size of the right argument. Otherwise, the size
@@ -1230,9 +1433,10 @@ Proof.
    revert pf.
    revert ys zs.
    revert m l.
-   induction xs; intros; simpl.
-   - do 3 rewrite coerceVec_vacuous. auto.
-   - rewrite coerceVec_coerceVec.
+   induction xs; intros.
+   - simpl. do 3 rewrite coerceVec_vacuous. auto.
+   - do 2 rewrite revAppend_ConsVec.
+     rewrite coerceVec_coerceVec.
      assert (S (n + m) + l = n + S m + l) as NH1 by lia.
      assert (n + S m + l = n + (S m + l)) as NH2 by lia.
      rewrite append_coerceVec_l with (pf' := NH1).
@@ -1433,18 +1637,7 @@ Qed.
  * functions.
  *)
 
-(*
- * Get the element at index i. If there is no such index, return None.
- *)
-Fixpoint atOption {a: Type} {n: nat} (v: Vec a n) (index: nat) : option a :=
-   match v with
-   | NilVec _ => None
-   | ConsVec x xs' =>
-        match index with
-        | 0 => Some x
-        | S index' => atOption  xs' index'
-        end
-   end.
+(* XXX moved *)
 
 (*
  * unfold lemma for atOption on nil
@@ -1487,22 +1680,7 @@ Proof.
      + rewrite <- IHv. lia.
 Qed.
 
-(*
- * atOption returns non-None if and only if the index is in bounds.
- *)
-Lemma atOption_notNone: forall a n (v: Vec a n) i,
-   i < n <-> atOption v i <> None.
-Proof.
-   intros.
-   revert i.
-   induction v; intros; simpl.
-   - split; intro; try contradiction; lia.
-   - destruct i.
-     + split; intro; try discriminate; lia.
-     + split; intro.
-       * apply IHv; lia.
-       * rewrite <- IHv in H. lia.
-Qed.
+(* atOption_notNone moved XXX *)
 
 (*
  * Separate forward and reverse cases of the previous.
@@ -3073,3 +3251,13 @@ Lemma zip_map_r: forall a b c n m (f: b -> c) (xs: Vec a n) (ys: Vec b m),
    zip xs (map f ys) = zipWith (fun x y => (x, f y)) xs ys.
 Proof.
 Admitted.
+
+(*
+ * XXX temporary bits for checking that coerceVec will compute
+ *)
+(*
+Definition xs := ConsVec 3 (ConsVec 2 (NilVec nat)).
+Definition ys := ConsVec 1 (ConsVec 0 (NilVec nat)).
+
+Eval vm_compute in reverse (append xs ys).
+*)
