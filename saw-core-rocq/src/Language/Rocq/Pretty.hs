@@ -38,26 +38,6 @@ text s = PP.pretty s
 integer :: Integer -> PP.Doc ann
 integer n = PP.pretty n
 
--- FUTURE: Move these to SAWSupport.Pretty
-
--- | Like hsep, but behaves usefully for lists that might be empty:
---   returns the empty doc like hsep for empty lists, but for
---   non-empty lists prepends horizontal space. The result can then
---   be inserted like this: x <> result <+> y, and will produce
---   either "x y" or "x result y" but not "x  y", which is what
---   happens if you do x <+> hsep ... <+> y.
---
---   This baloney arises because d1 <+> emptyDoc <+> d2 prints two
---   spaces instead of one, which I'd describe as a bug. If you
---   _really_ want to accumulate multiple spaces by concatenating
---   empty docs, which seems against the concept of prettyprinting
---   layout anyway, there can be another way to do that, like the
---   latex "phantom" object.
-hsep' :: [PP.Doc ann] -> PP.Doc ann
-hsep' docs = case docs of
-    [] -> PP.emptyDoc
-    _ : _ -> PP.emptyDoc <+> PP.hsep docs
-
 -- | Common code to print a name with a type
 prettyNameType :: Ident -> Type -> PP.Doc ann
 prettyNameType x ty = prettyIdent x <+> ":" <+> prettyTerm PrecNone ty
@@ -113,10 +93,6 @@ prettyPiBinder b = case b of
 -- | Print a list of binders
 prettyBinders :: [Binder] -> [PP.Doc ann]
 prettyBinders bs = map prettyBinder bs
-
--- | Print a list of pi-binders
-prettyPiBinders :: [PiBinder] -> PP.Doc ann
-prettyPiBinders bs = PP.hsep $ map prettyPiBinder bs
 
 -- | Common code for printing things shaped like function headers
 --
@@ -194,10 +170,13 @@ prettyTerm p e0 =
       in
       parensIf (p > PrecLambda) $ prettyFunction header body'
     Pi bs t ->
-      let bs' = prettyPiBinders bs
+      let bs' = map (\b -> PP.group $ prettyPiBinder b) bs
           t' = prettyTerm PrecLambda t
-          long = bs' <> PP.line <> t'
-          short = PP.group $ bs' <+> t'
+          longbs = PP.nest 5 $ PP.fillSep bs'
+          shortbs = PP.group $ PP.hsep bs'
+          finalbs = PP.flatAlt longbs shortbs
+          long = finalbs <> PP.line <> t'
+          short = PP.group $ finalbs <+> t'
       in
       parensIf (p > PrecLambda) $ PP.flatAlt long short
     Let x bs mty t body ->
@@ -278,11 +257,6 @@ prettyTerm p e0 =
     Ltac s ->
       "ltac:" <> PP.parens (text s)
 
--- | Print an optional type annotation
-prettyMaybeTy :: Maybe Type -> PP.Doc ann
-prettyMaybeTy Nothing = PP.emptyDoc
-prettyMaybeTy (Just ty) = ":" <+> prettyTerm PrecNone ty
-
 -- | Print a single constructor
 prettyConstructor :: Constructor -> PP.Doc ann
 prettyConstructor (Constructor {..}) =
@@ -327,6 +301,32 @@ prettyBasicDecl what nm ty =
   in
   PP.nest 2 (what <+> nm' <+> ":" <+> ty' <+> ".") <> PP.hardline
 
+-- | Print a Definition
+prettyDefinition :: Ident -> [Binder] -> Maybe Type -> Term -> PP.Doc ann
+prettyDefinition nm params mty body =
+    let nm' = prettyIdent nm
+        params' = map (\p -> PP.group $ prettyBinder p) params
+        mty' = prettyTerm PrecNone <$> mty
+        body' = prettyTerm PrecNone body
+        intro' = "Definition" <+> nm'
+        lhs' = case params' of
+          [] -> intro' <> ":"
+          _ ->
+              let short = PP.group $ intro' <+> PP.hsep params' <+> ":"
+                  longparams = PP.indent 5 (PP.vsep params')
+                  long = PP.vsep [intro', longparams, PP.indent 3 ":"]
+              in
+              PP.flatAlt long short
+        rhs' = case mty' of
+          Nothing -> ":="
+          Just ty' -> ty' <+> ":="
+        header = PP.group (lhs' <+> rhs')
+    in
+    let short = PP.group $ header <+> body' <> "."
+        long = PP.nest 3 $ PP.vsep [header, body' <> "."]
+    in
+    PP.flatAlt long short
+
 -- | Print a top-level declaration
 prettyDecl :: Decl -> PP.Doc ann
 prettyDecl decl = case decl of
@@ -335,18 +335,8 @@ prettyDecl decl = case decl of
   Variable nm ty -> prettyBasicDecl "Variable" nm ty
   Comment s ->
     "(*" <+> text s <+> "*)" <> PP.hardline
-  Definition nm bs mty body ->
-    let nm' = prettyIdent nm
-        bs' = hsep' $ map prettyBinder bs
-        mty' = prettyMaybeTy mty
-        body' = prettyTerm PrecNone body
-    in
-    PP.nest 2 (
-      PP.vsep [
-          "Definition" <+> nm' <> bs' <+> mty' <+> ":=",
-          body' <> "."
-      ]
-    ) <> PP.hardline
+  Definition nm binders mty body ->
+    prettyDefinition nm binders mty body <> PP.hardline
   InductiveDecl ind ->
     prettyInductive ind <> PP.hardline
   Section nm ds ->

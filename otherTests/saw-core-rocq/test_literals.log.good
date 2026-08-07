@@ -21,16 +21,16 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 
-Definition TestString_Empty : SAWCoreVectorsAsRocqVectors.Vec
-       SAWCoreScaffolding.Zero (CryptolPrimitivesForSAWCore.seq
-            (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
-                      (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                (Stdlib.PArith.BinPos.xO
-                                     Stdlib.PArith.BinPos.xH)))))
-            Init.Datatypes.bool) :=
-  [
-     
-  ].
+Definition TestString_Empty: SAWCoreVectorsAsRocqVectors.Vec
+        SAWCoreScaffolding.Zero (CryptolPrimitivesForSAWCore.seq
+             (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
+                       (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                 (Stdlib.PArith.BinPos.xO
+                                      Stdlib.PArith.BinPos.xH)))))
+             Init.Datatypes.bool) :=
+   [
+      
+   ].
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -54,294 +54,294 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 
-Definition TestString_Basic : SAWCoreVectorsAsRocqVectors.Vec
-       (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                 (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                           (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                     Stdlib.PArith.BinPos.xH))))))
-       (CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum
-                 (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                           (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                     Stdlib.PArith.BinPos.xH)))))
-            Init.Datatypes.bool) :=
-  let var__0
-     :=
-     CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
-               (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
-  in
-  let var__1
-     :=
-     CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool
-  in
-  let var__2
-     :=
-     CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0
-  in
-  let var__3
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  let var__4
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  let var__5
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  let var__6
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2
-  in
-  let var__7
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  let var__8
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  [
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xO
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__5;
-     var__4;
-     var__6;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__3;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__6;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__7;
-     var__8;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__6;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__8;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__6;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__3;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__6;
-     var__8;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__4;
-     var__7;
-     var__6;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__5;
-     var__4;
-     var__6;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__6;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__8;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  ].
+Definition TestString_Basic: SAWCoreVectorsAsRocqVectors.Vec
+        (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                  (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                            (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                      Stdlib.PArith.BinPos.xH))))))
+        (CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum
+                  (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                            (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                      Stdlib.PArith.BinPos.xH)))))
+             Init.Datatypes.bool) :=
+   let var__0
+      :=
+      CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
+                (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
+   in
+   let var__1
+      :=
+      CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool
+   in
+   let var__2
+      :=
+      CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0
+   in
+   let var__3
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   let var__4
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   let var__5
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   let var__6
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2
+   in
+   let var__7
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   let var__8
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   [
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xO
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__5;
+      var__4;
+      var__6;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__3;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__6;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__7;
+      var__8;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__6;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__8;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__6;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__3;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__6;
+      var__8;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__4;
+      var__7;
+      var__6;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__5;
+      var__4;
+      var__6;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__6;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__8;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   ].
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -365,267 +365,267 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 
-Definition TestString_Escapes : SAWCoreVectorsAsRocqVectors.Vec
-       (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                 (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                           (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                     Stdlib.PArith.BinPos.xH))))))
-       (CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum
-                 (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                           (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                     Stdlib.PArith.BinPos.xH)))))
-            Init.Datatypes.bool) :=
-  let var__0
-     :=
-     CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
-               (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
-  in
-  let var__1
-     :=
-     CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool
-  in
-  let var__2
-     :=
-     CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0
-  in
-  let var__3
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  let var__4
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  let var__5
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  let var__6
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2
-  in
-  let var__7
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  let var__8
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  let var__9
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  let var__10
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2
-  in
-  let var__11
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xO
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  let var__12
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   Stdlib.PArith.BinPos.xH))))) var__1 var__2
-  in
-  let var__13
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   Stdlib.PArith.BinPos.xH))))) var__1 var__2
-  in
-  let var__14
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xO
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  [
-     var__10;
-     var__11;
-     var__5;
-     var__3;
-     var__4;
-     var__6;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__10;
-     var__12;
-     var__11;
-     var__5;
-     var__3;
-     var__4;
-     var__6;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   Stdlib.PArith.BinPos.xH))))) var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xO
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__9;
-     var__7;
-     var__7;
-     var__4;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__13;
-     var__12;
-     var__11;
-     var__5;
-     var__3;
-     var__4;
-     var__6;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__13;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__9;
-     var__8;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__14;
-     var__8;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__14;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__5;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__4
-  ].
+Definition TestString_Escapes: SAWCoreVectorsAsRocqVectors.Vec
+        (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                  (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                            (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                      Stdlib.PArith.BinPos.xH))))))
+        (CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum
+                  (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                            (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                      Stdlib.PArith.BinPos.xH)))))
+             Init.Datatypes.bool) :=
+   let var__0
+      :=
+      CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
+                (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
+   in
+   let var__1
+      :=
+      CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool
+   in
+   let var__2
+      :=
+      CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0
+   in
+   let var__3
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   let var__4
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   let var__5
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   let var__6
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2
+   in
+   let var__7
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   let var__8
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   let var__9
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   let var__10
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2
+   in
+   let var__11
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xO
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   let var__12
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    Stdlib.PArith.BinPos.xH))))) var__1 var__2
+   in
+   let var__13
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    Stdlib.PArith.BinPos.xH))))) var__1 var__2
+   in
+   let var__14
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xO
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   [
+      var__10;
+      var__11;
+      var__5;
+      var__3;
+      var__4;
+      var__6;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__10;
+      var__12;
+      var__11;
+      var__5;
+      var__3;
+      var__4;
+      var__6;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    Stdlib.PArith.BinPos.xH))))) var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xO
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__9;
+      var__7;
+      var__7;
+      var__4;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__13;
+      var__12;
+      var__11;
+      var__5;
+      var__3;
+      var__4;
+      var__6;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__13;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__9;
+      var__8;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__14;
+      var__8;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__14;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__5;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__4
+   ].
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -649,332 +649,332 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 
-Definition TestString_Punct : SAWCoreVectorsAsRocqVectors.Vec
-       (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                 (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                           (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                     Stdlib.PArith.BinPos.xH))))))
-       (CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum
-                 (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                           (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                     Stdlib.PArith.BinPos.xH)))))
-            Init.Datatypes.bool) :=
-  let var__0
-     :=
-     CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
-               (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
-  in
-  let var__1
-     :=
-     CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool
-  in
-  let var__2
-     :=
-     CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0
-  in
-  let var__3
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  let var__4
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2
-  in
-  let var__5
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  let var__6
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  let var__7
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  let var__8
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  let var__9
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  let var__10
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  in
-  let var__11
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2
-  in
-  [
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xO
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__3;
-     var__9;
-     var__9;
-     var__5;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__4;
-     var__6;
-     var__5;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__9;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__4;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__11;
-     var__11;
-     var__6;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__10;
-     var__8;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__4;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xO
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__5;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__4;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__8;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__7;
-     var__4;
-     var__10;
-     var__4;
-     var__8;
-     var__3;
-     var__7;
-     var__8;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__4;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xO
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__8;
-     var__4;
-     var__9;
-     var__3;
-     var__10;
-     var__7;
-     var__8;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__4;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xO
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xO
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__4;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  ].
+Definition TestString_Punct: SAWCoreVectorsAsRocqVectors.Vec
+        (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                  (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                            (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                      Stdlib.PArith.BinPos.xH))))))
+        (CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum
+                  (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                            (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                      Stdlib.PArith.BinPos.xH)))))
+             Init.Datatypes.bool) :=
+   let var__0
+      :=
+      CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
+                (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
+   in
+   let var__1
+      :=
+      CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool
+   in
+   let var__2
+      :=
+      CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0
+   in
+   let var__3
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   let var__4
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2
+   in
+   let var__5
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   let var__6
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   let var__7
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   let var__8
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   let var__9
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   let var__10
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   in
+   let var__11
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2
+   in
+   [
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xO
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__3;
+      var__9;
+      var__9;
+      var__5;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__4;
+      var__6;
+      var__5;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__9;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__4;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__11;
+      var__11;
+      var__6;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__10;
+      var__8;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__4;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xO
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__5;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__4;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__8;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__7;
+      var__4;
+      var__10;
+      var__4;
+      var__8;
+      var__3;
+      var__7;
+      var__8;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__4;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xO
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__8;
+      var__4;
+      var__9;
+      var__3;
+      var__10;
+      var__7;
+      var__8;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__4;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xO
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xO
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__4;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   ].
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -998,267 +998,267 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 
-Definition TestString_Mathy : SAWCoreVectorsAsRocqVectors.Vec
-       (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                 (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                           (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                     Stdlib.PArith.BinPos.xH))))))
-       (CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum
-                 (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                           (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                     Stdlib.PArith.BinPos.xH)))))
-            Init.Datatypes.bool) :=
-  let var__0
-     :=
-     CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
-               (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
-  in
-  let var__1
-     :=
-     CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool
-  in
-  let var__2
-     :=
-     CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0
-  in
-  let var__3
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2
-  in
-  let var__4
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2
-  in
-  let var__5
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2
-  in
-  let var__6
-     :=
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2
-  in
-  [
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__3;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__3;
-     var__4;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xO
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__3;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__5;
-     var__3;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xO
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__4;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__3;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__3;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__3;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xO
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__4;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__3;
-     var__5;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__3;
-     var__4;
-     var__3;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__3;
-     var__6;
-     var__6;
-     var__6;
-     var__3;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__3;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xI
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__3;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-          var__1 var__2;
-     var__3;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__3;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     var__3;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xI
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2
-  ].
+Definition TestString_Mathy: SAWCoreVectorsAsRocqVectors.Vec
+        (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                  (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                            (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                      Stdlib.PArith.BinPos.xH))))))
+        (CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum
+                  (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                            (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                      Stdlib.PArith.BinPos.xH)))))
+             Init.Datatypes.bool) :=
+   let var__0
+      :=
+      CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
+                (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
+   in
+   let var__1
+      :=
+      CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool
+   in
+   let var__2
+      :=
+      CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0
+   in
+   let var__3
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2
+   in
+   let var__4
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2
+   in
+   let var__5
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2
+   in
+   let var__6
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2
+   in
+   [
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__3;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__3;
+      var__4;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xO
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__3;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__5;
+      var__3;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xO
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__4;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__3;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__3;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__3;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xO
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__4;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__3;
+      var__5;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__3;
+      var__4;
+      var__3;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__3;
+      var__6;
+      var__6;
+      var__6;
+      var__3;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__3;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xI
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__3;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+           var__1 var__2;
+      var__3;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__3;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      var__3;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xI
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2
+   ].
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -1282,63 +1282,63 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 
-Definition TestString_Accent : SAWCoreVectorsAsRocqVectors.Vec
-       (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                 (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))
-       (CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum
-                 (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                           (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                     Stdlib.PArith.BinPos.xH)))))
-            Init.Datatypes.bool) :=
-  let var__0
-     :=
-     CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
-               (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
-  in
-  let var__1
-     :=
-     CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool
-  in
-  let var__2
-     :=
-     CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0
-  in
-  [
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  Stdlib.PArith.BinPos.xH))))))))
-          var__1 var__2;
-     CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-               (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xI
-                                        (Stdlib.PArith.BinPos.xO
-                                             (Stdlib.PArith.BinPos.xI
-                                                  (Stdlib.PArith.BinPos.xI
-                                                       Stdlib.PArith.BinPos.xH)))))))))
-          var__1 var__2
-  ].
+Definition TestString_Accent: SAWCoreVectorsAsRocqVectors.Vec
+        (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                  (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))
+        (CryptolPrimitivesForSAWCore.seq (CryptolPrimitivesForSAWCore.TCNum
+                  (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                            (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                      Stdlib.PArith.BinPos.xH)))))
+             Init.Datatypes.bool) :=
+   let var__0
+      :=
+      CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
+                (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
+   in
+   let var__1
+      :=
+      CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool
+   in
+   let var__2
+      :=
+      CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0
+   in
+   [
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   Stdlib.PArith.BinPos.xH))))))))
+           var__1 var__2;
+      CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+                (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xI
+                                         (Stdlib.PArith.BinPos.xO
+                                              (Stdlib.PArith.BinPos.xI
+                                                   (Stdlib.PArith.BinPos.xI
+                                                        Stdlib.PArith.BinPos.xH)))))))))
+           var__1 var__2
+   ].
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -1362,89 +1362,89 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 
-Definition TestLit_Max64 : CryptolPrimitivesForSAWCore.seq
-       (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
-                 (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                           (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                     (Stdlib.PArith.BinPos.xO
-                                          (Stdlib.PArith.BinPos.xO
-                                               Stdlib.PArith.BinPos.xH))))))))
-       Init.Datatypes.bool :=
-  let var__0
-     :=
-     CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
-               (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                                   (Stdlib.PArith.BinPos.xO
-                                        (Stdlib.PArith.BinPos.xO
-                                             Stdlib.PArith.BinPos.xH)))))))
-  in
-  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-            (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                      (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                (Stdlib.PArith.BinPos.xI
-                                     (Stdlib.PArith.BinPos.xI
-                                          (Stdlib.PArith.BinPos.xI
-                                               (Stdlib.PArith.BinPos.xI
-                                                    (Stdlib.PArith.BinPos.xI
-                                                         (Stdlib.PArith.BinPos.xI
-                                                              (Stdlib.PArith.BinPos.xI
-                                                                   (Stdlib.PArith.BinPos.xI
-                                                                        (Stdlib.PArith.BinPos.xI
-                                                                             (Stdlib.PArith.BinPos.xI
-                                                                                  (Stdlib.PArith.BinPos.xI
-                                                                                       (Stdlib.PArith.BinPos.xI
-                                                                                            (Stdlib.PArith.BinPos.xI
-                                                                                                 (Stdlib.PArith.BinPos.xI
-                                                                                                      (Stdlib.PArith.BinPos.xI
-                                                                                                           (Stdlib.PArith.BinPos.xI
-                                                                                                                (Stdlib.PArith.BinPos.xI
-                                                                                                                     (Stdlib.PArith.BinPos.xI
-                                                                                                                          (Stdlib.PArith.BinPos.xI
-                                                                                                                               (Stdlib.PArith.BinPos.xI
-                                                                                                                                    (Stdlib.PArith.BinPos.xI
-                                                                                                                                         (Stdlib.PArith.BinPos.xI
-                                                                                                                                              (Stdlib.PArith.BinPos.xI
-                                                                                                                                                   (Stdlib.PArith.BinPos.xI
-                                                                                                                                                        (Stdlib.PArith.BinPos.xI
-                                                                                                                                                             (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                  (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                       (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                            (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                 (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                      (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                           (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                     (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                          (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                               (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                    (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                         (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                              (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                   (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                        (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                             (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                                  (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                                       (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                                            (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                                                 (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                                                      (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                                                           (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                                                                (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                                                                     (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                                                                          (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                                                                               (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                                                                                    (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                                                                                         (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                                                                                              (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                                                                                                   (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                                                                                                        (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                                                                                                             (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                                                                                                                  (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                                                                                                                       (Stdlib.PArith.BinPos.xI
-                                                                                                                                                                                                                                                                                                                                            Stdlib.PArith.BinPos.xH)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-       (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool)
-       (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0).
+Definition TestLit_Max64: CryptolPrimitivesForSAWCore.seq
+        (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
+                  (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                            (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                      (Stdlib.PArith.BinPos.xO
+                                           (Stdlib.PArith.BinPos.xO
+                                                Stdlib.PArith.BinPos.xH))))))))
+        Init.Datatypes.bool :=
+   let var__0
+      :=
+      CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
+                (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                                    (Stdlib.PArith.BinPos.xO
+                                         (Stdlib.PArith.BinPos.xO
+                                              Stdlib.PArith.BinPos.xH)))))))
+   in
+   CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+             (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                       (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                 (Stdlib.PArith.BinPos.xI
+                                      (Stdlib.PArith.BinPos.xI
+                                           (Stdlib.PArith.BinPos.xI
+                                                (Stdlib.PArith.BinPos.xI
+                                                     (Stdlib.PArith.BinPos.xI
+                                                          (Stdlib.PArith.BinPos.xI
+                                                               (Stdlib.PArith.BinPos.xI
+                                                                    (Stdlib.PArith.BinPos.xI
+                                                                         (Stdlib.PArith.BinPos.xI
+                                                                              (Stdlib.PArith.BinPos.xI
+                                                                                   (Stdlib.PArith.BinPos.xI
+                                                                                        (Stdlib.PArith.BinPos.xI
+                                                                                             (Stdlib.PArith.BinPos.xI
+                                                                                                  (Stdlib.PArith.BinPos.xI
+                                                                                                       (Stdlib.PArith.BinPos.xI
+                                                                                                            (Stdlib.PArith.BinPos.xI
+                                                                                                                 (Stdlib.PArith.BinPos.xI
+                                                                                                                      (Stdlib.PArith.BinPos.xI
+                                                                                                                           (Stdlib.PArith.BinPos.xI
+                                                                                                                                (Stdlib.PArith.BinPos.xI
+                                                                                                                                     (Stdlib.PArith.BinPos.xI
+                                                                                                                                          (Stdlib.PArith.BinPos.xI
+                                                                                                                                               (Stdlib.PArith.BinPos.xI
+                                                                                                                                                    (Stdlib.PArith.BinPos.xI
+                                                                                                                                                         (Stdlib.PArith.BinPos.xI
+                                                                                                                                                              (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                   (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                        (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                             (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                  (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                       (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                            (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                 (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                      (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                           (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                     (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                          (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                               (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                    (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                         (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                              (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                                   (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                                        (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                                             (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                                                  (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                                                       (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                                                            (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                                                                 (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                                                                      (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                                                                           (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                                                                                (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                                                                                     (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                                                                                          (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                                                                                               (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                                                                                                    (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                                                                                                         (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                                                                                                              (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                                                                                                                   (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                                                                                                                        (Stdlib.PArith.BinPos.xI
+                                                                                                                                                                                                                                                                                                                                             Stdlib.PArith.BinPos.xH)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+        (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool)
+        (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -1468,17 +1468,20 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 
-Definition TestLit_0254 (u1295 : Type) {Inh_u1295 : SAWCoreScaffolding.Inhabited
-       u1295} (_P : CryptolPrimitivesForSAWCore.PLiteral u1295) : u1295 :=
-  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-            (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                      (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                (Stdlib.PArith.BinPos.xI
-                                     (Stdlib.PArith.BinPos.xI
-                                          (Stdlib.PArith.BinPos.xI
-                                               (Stdlib.PArith.BinPos.xI
-                                                    Stdlib.PArith.BinPos.xH)))))))))
-       u1295 _P.
+Definition TestLit_0254
+        (u1295 : Type)
+        {Inh_u1295 : SAWCoreScaffolding.Inhabited u1295}
+        (_P : CryptolPrimitivesForSAWCore.PLiteral u1295)
+      : u1295 :=
+   CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+             (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                       (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                 (Stdlib.PArith.BinPos.xI
+                                      (Stdlib.PArith.BinPos.xI
+                                           (Stdlib.PArith.BinPos.xI
+                                                (Stdlib.PArith.BinPos.xI
+                                                     Stdlib.PArith.BinPos.xH)))))))))
+        u1295 _P.
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -1502,27 +1505,28 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 
-Definition TestLit_Bin : CryptolPrimitivesForSAWCore.seq
-       (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
-                 (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                           (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-       Init.Datatypes.bool :=
-  let var__0
-     :=
-     CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
-               (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
-  in
-  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-            (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                      (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                (Stdlib.PArith.BinPos.xI
-                                     (Stdlib.PArith.BinPos.xI
-                                          (Stdlib.PArith.BinPos.xI
-                                               (Stdlib.PArith.BinPos.xI
-                                                    Stdlib.PArith.BinPos.xH)))))))))
-       (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool)
-       (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0).
+Definition TestLit_Bin: CryptolPrimitivesForSAWCore.seq
+        (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
+                  (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                            (Stdlib.PArith.BinPos.xO
+                                 Stdlib.PArith.BinPos.xH)))))
+        Init.Datatypes.bool :=
+   let var__0
+      :=
+      CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
+                (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
+   in
+   CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+             (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                       (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                 (Stdlib.PArith.BinPos.xI
+                                      (Stdlib.PArith.BinPos.xI
+                                           (Stdlib.PArith.BinPos.xI
+                                                (Stdlib.PArith.BinPos.xI
+                                                     Stdlib.PArith.BinPos.xH)))))))))
+        (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool)
+        (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -1546,27 +1550,28 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 
-Definition TestLit_Oct : CryptolPrimitivesForSAWCore.seq
-       (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
-                 (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                           (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-       Init.Datatypes.bool :=
-  let var__0
-     :=
-     CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
-               (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
-  in
-  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-            (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                      (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                (Stdlib.PArith.BinPos.xI
-                                     (Stdlib.PArith.BinPos.xI
-                                          (Stdlib.PArith.BinPos.xI
-                                               (Stdlib.PArith.BinPos.xI
-                                                    Stdlib.PArith.BinPos.xH)))))))))
-       (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool)
-       (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0).
+Definition TestLit_Oct: CryptolPrimitivesForSAWCore.seq
+        (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
+                  (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                            (Stdlib.PArith.BinPos.xO
+                                 Stdlib.PArith.BinPos.xH)))))
+        Init.Datatypes.bool :=
+   let var__0
+      :=
+      CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
+                (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
+   in
+   CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+             (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                       (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                 (Stdlib.PArith.BinPos.xI
+                                      (Stdlib.PArith.BinPos.xI
+                                           (Stdlib.PArith.BinPos.xI
+                                                (Stdlib.PArith.BinPos.xI
+                                                     Stdlib.PArith.BinPos.xH)))))))))
+        (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool)
+        (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -1590,27 +1595,28 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 
-Definition TestLit_Hex1 : CryptolPrimitivesForSAWCore.seq
-       (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
-                 (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                           (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-       Init.Datatypes.bool :=
-  let var__0
-     :=
-     CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
-               (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
-  in
-  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-            (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                      (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                (Stdlib.PArith.BinPos.xI
-                                     (Stdlib.PArith.BinPos.xI
-                                          (Stdlib.PArith.BinPos.xI
-                                               (Stdlib.PArith.BinPos.xI
-                                                    Stdlib.PArith.BinPos.xH)))))))))
-       (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool)
-       (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0).
+Definition TestLit_Hex1: CryptolPrimitivesForSAWCore.seq
+        (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
+                  (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                            (Stdlib.PArith.BinPos.xO
+                                 Stdlib.PArith.BinPos.xH)))))
+        Init.Datatypes.bool :=
+   let var__0
+      :=
+      CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
+                (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
+   in
+   CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+             (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                       (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                 (Stdlib.PArith.BinPos.xI
+                                      (Stdlib.PArith.BinPos.xI
+                                           (Stdlib.PArith.BinPos.xI
+                                                (Stdlib.PArith.BinPos.xI
+                                                     Stdlib.PArith.BinPos.xH)))))))))
+        (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool)
+        (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -1634,27 +1640,28 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 
-Definition TestLit_Hex2 : CryptolPrimitivesForSAWCore.seq
-       (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
-                 (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                           (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-       Init.Datatypes.bool :=
-  let var__0
-     :=
-     CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
-               (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
-                         (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
-  in
-  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-            (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                      (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                (Stdlib.PArith.BinPos.xI
-                                     (Stdlib.PArith.BinPos.xI
-                                          (Stdlib.PArith.BinPos.xI
-                                               (Stdlib.PArith.BinPos.xI
-                                                    Stdlib.PArith.BinPos.xH)))))))))
-       (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool)
-       (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0).
+Definition TestLit_Hex2: CryptolPrimitivesForSAWCore.seq
+        (CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
+                  (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                            (Stdlib.PArith.BinPos.xO
+                                 Stdlib.PArith.BinPos.xH)))))
+        Init.Datatypes.bool :=
+   let var__0
+      :=
+      CryptolPrimitivesForSAWCore.TCNum (Stdlib.PArith.BinPos.Pos.to_nat
+                (Stdlib.PArith.BinPos.xO (Stdlib.PArith.BinPos.xO
+                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
+   in
+   CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+             (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                       (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                 (Stdlib.PArith.BinPos.xI
+                                      (Stdlib.PArith.BinPos.xI
+                                           (Stdlib.PArith.BinPos.xI
+                                                (Stdlib.PArith.BinPos.xI
+                                                     Stdlib.PArith.BinPos.xH)))))))))
+        (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool)
+        (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -1678,17 +1685,18 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 
-Definition TestLit_Poly1 (u1301 : CryptolPrimitivesForSAWCore.Num) : CryptolPrimitivesForSAWCore.seq
-       u1301 Init.Datatypes.bool :=
-  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-            (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
-                      (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
-                                (Stdlib.PArith.BinPos.xO
-                                     (Stdlib.PArith.BinPos.xI
-                                          (Stdlib.PArith.BinPos.xO
-                                               Stdlib.PArith.BinPos.xH))))))))
-       (CryptolPrimitivesForSAWCore.seq u1301 Init.Datatypes.bool)
-       (CryptolPrimitivesForSAWCore.PLiteralSeqBool u1301).
+Definition TestLit_Poly1
+        (u1301 : CryptolPrimitivesForSAWCore.Num)
+      : CryptolPrimitivesForSAWCore.seq u1301 Init.Datatypes.bool :=
+   CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+             (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xI
+                       (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xI
+                                 (Stdlib.PArith.BinPos.xO
+                                      (Stdlib.PArith.BinPos.xI
+                                           (Stdlib.PArith.BinPos.xO
+                                                Stdlib.PArith.BinPos.xH))))))))
+        (CryptolPrimitivesForSAWCore.seq u1301 Init.Datatypes.bool)
+        (CryptolPrimitivesForSAWCore.PLiteralSeqBool u1301).
 
 
 (** Mandatory imports from saw-core-rocq *)
@@ -1712,13 +1720,14 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 
-Definition TestLit_Poly2 (u1303 : CryptolPrimitivesForSAWCore.Num) : CryptolPrimitivesForSAWCore.seq
-       u1303 Init.Datatypes.bool :=
-  CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
-            (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
-                      (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
-                                (Stdlib.PArith.BinPos.xI
-                                     Stdlib.PArith.BinPos.xH))))))
-       (CryptolPrimitivesForSAWCore.seq u1303 Init.Datatypes.bool)
-       (CryptolPrimitivesForSAWCore.PLiteralSeqBool u1303).
+Definition TestLit_Poly2
+        (u1303 : CryptolPrimitivesForSAWCore.Num)
+      : CryptolPrimitivesForSAWCore.seq u1303 Init.Datatypes.bool :=
+   CryptolPrimitivesForSAWCore.ecNumber (CryptolPrimitivesForSAWCore.TCNum
+             (Stdlib.PArith.BinPos.Pos.to_nat (Stdlib.PArith.BinPos.xO
+                       (Stdlib.PArith.BinPos.xI (Stdlib.PArith.BinPos.xO
+                                 (Stdlib.PArith.BinPos.xI
+                                      Stdlib.PArith.BinPos.xH))))))
+        (CryptolPrimitivesForSAWCore.seq u1303 Init.Datatypes.bool)
+        (CryptolPrimitivesForSAWCore.PLiteralSeqBool u1303).
 
