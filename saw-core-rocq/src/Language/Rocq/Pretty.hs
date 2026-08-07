@@ -52,11 +52,11 @@ parensIf p d = if p then PP.parens d else d
 
 -- | Type to hold the current expression precedence while printing
 data Prec
-  = PrecNone
-  | PrecLambda
-  | PrecApp
-  | PrecAtom
-  deriving (Eq, Ord)
+    = PrecNone
+    | PrecLambda
+    | PrecApp
+    | PrecAtom
+    deriving (Eq, Ord)
 
 -- | Print an `Ident`
 prettyIdent :: Ident -> PP.Doc ann
@@ -155,154 +155,154 @@ prettyTerm :: Prec -> Term -> PP.Doc ann
 prettyTerm p e0 =
   case e0 of
     Lambda binders e1 ->
-      let binders' = prettyBinders binders
-          e1' = prettyTerm PrecLambda e1
-          header = prettyFnHeader "fun" binders' Nothing "=>"
-      in
-      parensIf (p > PrecLambda) $ prettyFunction header e1'
+        let binders' = prettyBinders binders
+            e1' = prettyTerm PrecLambda e1
+            header = prettyFnHeader "fun" binders' Nothing "=>"
+        in
+        parensIf (p > PrecLambda) $ prettyFunction header e1'
     Fix ident binders returnType body ->
-      let ident' = prettyIdent ident
-          binders' = prettyBinders binders
-          returnType' = Just $ prettyTerm PrecNone returnType
-          body' = prettyTerm PrecLambda body
-          intro = "fix" <+> ident'
-          header = prettyFnHeader intro binders' returnType' ":="
-      in
-      parensIf (p > PrecLambda) $ prettyFunction header body'
+        let ident' = prettyIdent ident
+            binders' = prettyBinders binders
+            returnType' = Just $ prettyTerm PrecNone returnType
+            body' = prettyTerm PrecLambda body
+            intro = "fix" <+> ident'
+            header = prettyFnHeader intro binders' returnType' ":="
+        in
+        parensIf (p > PrecLambda) $ prettyFunction header body'
     Pi bs t ->
-      let bs' = map (\b -> PP.group $ prettyPiBinder b) bs
-          t' = prettyTerm PrecLambda t
-          longbs = PP.nest 5 $ PP.fillSep bs'
-          shortbs = PP.group $ PP.hsep bs'
-          finalbs = PP.flatAlt longbs shortbs
-          long = finalbs <> PP.line <> t'
-          short = PP.group $ finalbs <+> t'
-      in
-      parensIf (p > PrecLambda) $ PP.flatAlt long short
+        let bs' = map (\b -> PP.group $ prettyPiBinder b) bs
+            t' = prettyTerm PrecLambda t
+            longbs = PP.nest 5 $ PP.fillSep bs'
+            shortbs = PP.group $ PP.hsep bs'
+            finalbs = PP.flatAlt longbs shortbs
+            long = finalbs <> PP.line <> t'
+            short = PP.group $ finalbs <+> t'
+        in
+        parensIf (p > PrecLambda) $ PP.flatAlt long short
     Let x bs mty t body ->
-      let x' = prettyIdent x
-          bs' = prettyBinders bs
-          mty' = prettyTerm PrecNone <$> mty
-          t' = prettyTerm PrecNone t
-          body' = prettyTerm PrecLambda body
-          intro = "let" <+> x'
-          header = prettyFnHeader intro bs' mty' ":="
-          longest = PP.vsep [header, PP.indent 3 t', "in", body']
-          second = PP.vsep [PP.group (header <+> t' <+> "in"), body']
-          shortest = PP.group (header <+> t' <+> "in" <+> body')
-          shorter = PP.flatAlt second shortest
-      in
-      parensIf (p > PrecLambda) $ PP.flatAlt longest shorter
+        let x' = prettyIdent x
+            bs' = prettyBinders bs
+            mty' = prettyTerm PrecNone <$> mty
+            t' = prettyTerm PrecNone t
+            body' = prettyTerm PrecLambda body
+            intro = "let" <+> x'
+            header = prettyFnHeader intro bs' mty' ":="
+            longest = PP.vsep [header, PP.indent 3 t', "in", body']
+            second = PP.vsep [PP.group (header <+> t' <+> "in"), body']
+            shortest = PP.group (header <+> t' <+> "in" <+> body')
+            shorter = PP.flatAlt second shortest
+        in
+        parensIf (p > PrecLambda) $ PP.flatAlt longest shorter
     If c t f ->
-      let c' = prettyTerm PrecNone c
-          t' = prettyTerm PrecNone t
-          f' = prettyTerm PrecLambda f
-          first = "if" <+> c' <+> "then"
-          long = PP.vsep [first, PP.indent 3 t', "else", PP.indent 3 f']
-          short = PP.group (first <+> t' <+> "else" <+> f')
-      in
-      parensIf (p > PrecLambda) $ PP.flatAlt long short
+        let c' = prettyTerm PrecNone c
+            t' = prettyTerm PrecNone t
+            f' = prettyTerm PrecLambda f
+            first = "if" <+> c' <+> "then"
+            long = PP.vsep [first, PP.indent 3 t', "else", PP.indent 3 f']
+            short = PP.group (first <+> t' <+> "else" <+> f')
+        in
+        parensIf (p > PrecLambda) $ PP.flatAlt long short
     App f [] ->
-      prettyTerm p f
+        prettyTerm p f
     App f args ->
-      let f' = prettyTerm PrecApp f
-          args' = map (prettyTerm PrecAtom) args
-      in
-      parensIf (p > PrecApp) $ PP.nest 5 $ PP.fillSep (f' : args')
+        let f' = prettyTerm PrecApp f
+            args' = map (prettyTerm PrecAtom) args
+        in
+        parensIf (p > PrecApp) $ PP.nest 5 $ PP.fillSep (f' : args')
     Sort s ->
-      prettySort s
+        prettySort s
     Var x ->
-      prettyIdent x
+        prettyIdent x
     ExplVar x ->
-      let x' = prettyIdent x in
-      parensIf (p > PrecApp) $ "@" <> x'
+        let x' = prettyIdent x in
+        parensIf (p > PrecApp) $ "@" <> x'
     Ascription tm tp ->
-      let tm' = prettyTerm PrecApp tm
-          tp' = prettyTerm PrecApp tp
-          long = PP.nest 5 $ PP.fillSep [tm' <> ":", tp']
-          short = PP.group $ tm' <> ":" <+> tp'
-      in
-      parensIf (p > PrecLambda) $ PP.flatAlt long short
+        let tm' = prettyTerm PrecApp tm
+            tp' = prettyTerm PrecApp tp
+            long = PP.nest 5 $ PP.fillSep [tm' <> ":", tp']
+            short = PP.group $ tm' <> ":" <+> tp'
+        in
+        parensIf (p > PrecLambda) $ PP.flatAlt long short
     NatLit i ->
-      if i > 1000 then
-        -- Explicitly convert from Z if an integer is too big
-        parensIf (p > PrecLambda) ("Z.to_nat" <+> integer i <> "%Z")
-      else
-        integer i
+        if i > 1000 then
+            -- Explicitly convert from Z if an integer is too big
+            parensIf (p > PrecLambda) ("Z.to_nat" <+> integer i <> "%Z")
+        else
+            integer i
     ZLit i ->
-      -- we use hex unless our integer is a positive or negative digit
-      -- XXX: this cannot possibly work as intended for negative values
-      if abs i > 9 then
-          let ui = toInteger (fromInteger i :: Word64)
-              ui' = showHex ui []
-          in
-          text ("0x" ++ ui' ++ "%Z")
-      else if i < 0 then
-          text ("(" ++ show i ++ ")%Z")
-      else
-          text (show i ++ "%Z")
+        -- we use hex unless our integer is a positive or negative digit
+        -- XXX: this cannot possibly work as intended for negative values
+        if abs i > 9 then
+            let ui = toInteger (fromInteger i :: Word64)
+                ui' = showHex ui []
+            in
+            text ("0x" ++ ui' ++ "%Z")
+        else if i < 0 then
+            text ("(" ++ show i ++ ")%Z")
+        else
+            text (show i ++ "%Z")
     List ts ->
-      let ts' = PP.punctuate ";" $ map (prettyTerm PrecNone) ts
-          long = PP.brackets (PP.line <> PP.indent 3 (PP.vsep ts') <> PP.line)
-          short = PP.group $ PP.brackets $ PP.hsep ts'
-      in
-      PP.flatAlt long short
+        let ts' = PP.punctuate ";" $ map (prettyTerm PrecNone) ts
+            long = PP.brackets (PP.line <> PP.indent 3 (PP.vsep ts') <> PP.line)
+            short = PP.group $ PP.brackets $ PP.hsep ts'
+        in
+        PP.flatAlt long short
     StringLit s ->
-      PP.dquotes (text $ escapeStringLit s)
+        PP.dquotes (text $ escapeStringLit s)
     Scope term scope ->
-      let term' = prettyTerm PrecAtom term
-          scope' = text scope
-      in
-      term' <> "%" <> scope'
+        let term' = prettyTerm PrecAtom term
+            scope' = text scope
+        in
+        term' <> "%" <> scope'
     Ltac s ->
-      "ltac:" <> PP.parens (text s)
+        "ltac:" <> PP.parens (text s)
 
 -- | Print a single constructor
 prettyConstructor :: Constructor -> PP.Doc ann
 prettyConstructor (Constructor {..}) =
-  let name' = prettyIdent constructorName
-      ty' = prettyTerm PrecNone constructorType
-  in
-  PP.nest 5 $ "|" <+> PP.group (name' <> ":" <+> ty')
+    let name' = prettyIdent constructorName
+        ty' = prettyTerm PrecNone constructorType
+    in
+    PP.nest 5 $ "|" <+> PP.group (name' <> ":" <+> ty')
 
 -- | Print an inductive type declaration
 prettyInductive :: Inductive -> PP.Doc ann
 prettyInductive (Inductive {..}) =
-  let name' = prettyIdent inductiveName
-      params' = map (\p -> PP.group $ prettyBinder p) inductiveParameters
-      indices' = map prettyPiBinder inductiveIndices
-      sort' = prettySort inductiveSort
-      ctors' = map prettyConstructor inductiveConstructors
-      intro' = "Inductive" <+> name'
-      lhs' = case params' of
-        [] -> intro' <> ":"
-        _ ->
-            let short = PP.group $ intro' <+> PP.hsep params' <+> ":"
-                longparams = PP.indent 5 (PP.vsep params')
-                long = PP.vsep [intro', longparams, PP.indent 3 ":"]
-            in
-            PP.flatAlt long short
-      rhs' = case indices' of
-        [] -> sort' <+> ":="
-        _ ->
-            let short = PP.group $ PP.hsep indices' <+> sort' <+> ":="
-                long = PP.nest 5 $ PP.fillSep $ indices' ++ [sort' <+> ":="]
-            in
-            PP.flatAlt long short
-      header = PP.group (lhs' <+> rhs')
-  in
-  PP.vsep ([header] ++ ctors' ++ ["."])
+    let name' = prettyIdent inductiveName
+        params' = map (\p -> PP.group $ prettyBinder p) inductiveParameters
+        indices' = map prettyPiBinder inductiveIndices
+        sort' = prettySort inductiveSort
+        ctors' = map prettyConstructor inductiveConstructors
+        intro' = "Inductive" <+> name'
+        lhs' = case params' of
+          [] -> intro' <> ":"
+          _ ->
+              let short = PP.group $ intro' <+> PP.hsep params' <+> ":"
+                  longparams = PP.indent 5 (PP.vsep params')
+                  long = PP.vsep [intro', longparams, PP.indent 3 ":"]
+              in
+              PP.flatAlt long short
+        rhs' = case indices' of
+          [] -> sort' <+> ":="
+          _ ->
+              let short = PP.group $ PP.hsep indices' <+> sort' <+> ":="
+                  long = PP.nest 5 $ PP.fillSep $ indices' ++ [sort' <+> ":="]
+              in
+              PP.flatAlt long short
+        header = PP.group (lhs' <+> rhs')
+    in
+    PP.vsep ([header] ++ ctors' ++ ["."])
 
 -- | Common code for the simple declarations
 prettyBasicDecl :: PP.Doc ann -> Ident -> Type -> PP.Doc ann
 prettyBasicDecl what nm ty =
-  let nm' = prettyIdent nm
-      ty' = prettyTerm PrecNone ty
-      lhs' = PP.group $ what <+> nm' <> ":"
-      long = PP.nest 3 $ lhs' <+> ty' <> "."
-      short = PP.group $ lhs' <+> ty' <> "."
-  in
-  PP.flatAlt long short
+    let nm' = prettyIdent nm
+        ty' = prettyTerm PrecNone ty
+        lhs' = PP.group $ what <+> nm' <> ":"
+        long = PP.nest 3 $ lhs' <+> ty' <> "."
+        short = PP.group $ lhs' <+> ty' <> "."
+    in
+    PP.flatAlt long short
 
 -- | Print a Definition
 prettyDefinition :: Ident -> [Binder] -> Maybe Type -> Term -> PP.Doc ann
@@ -333,36 +333,36 @@ prettyDefinition nm params mty body =
 -- | Print a top-level declaration
 prettyDecl :: Decl -> PP.Doc ann
 prettyDecl decl = case decl of
-  Axiom nm ty ->
-      prettyBasicDecl "Axiom" nm ty <> PP.hardline
-  Parameter nm ty ->
-      prettyBasicDecl "Parameter" nm ty <> PP.hardline
-  Variable nm ty ->
-      prettyBasicDecl "Variable" nm ty <> PP.hardline
-  Comment s ->
-    -- None of the comments we generate are multiline. If that ever
-    -- changes, we'll need more logic here to print them properly.
-    "(*" <+> text s <+> "*)" <> PP.hardline
-  Definition nm binders mty body ->
-    prettyDefinition nm binders mty body <> PP.hardline
-  InductiveDecl ind ->
-    prettyInductive ind <> PP.hardline
-  Section nm ds ->
-    let nm' = prettyIdent nm
-        header = "Section" <+> nm' <> "." <> PP.hardline
-        ds' = map prettyDecl ds
-        footer = "End" <+> nm' <> "." <> PP.hardline
-    in
-    -- Note that because every declaration ends with PP.hardline (or
-    -- at least PP.line, which we don't group away), we don't need
-    -- another one after ds'. Except, without one, the indent for the
-    -- declarations bleeds into the footer. (wut?)
-    header <> PP.indent 3 (PP.vsep ds') <> PP.hardline <> footer
-  Snippet s ->
-    -- This assumes all the text snippets we have are multi-line blocks
-    -- that include newlines, including at the end.
-    --
-    -- FUTURE: nothing above this code should ever call PP.group, but if
-    -- that changes, we may need to go through the string and manually
-    -- replace each \n with PP.hardline.
-    text s
+    Axiom nm ty ->
+        prettyBasicDecl "Axiom" nm ty <> PP.hardline
+    Parameter nm ty ->
+        prettyBasicDecl "Parameter" nm ty <> PP.hardline
+    Variable nm ty ->
+        prettyBasicDecl "Variable" nm ty <> PP.hardline
+    Comment s ->
+        -- None of the comments we generate are multiline. If that ever
+        -- changes, we'll need more logic here to print them properly.
+        "(*" <+> text s <+> "*)" <> PP.hardline
+    Definition nm binders mty body ->
+        prettyDefinition nm binders mty body <> PP.hardline
+    InductiveDecl ind ->
+        prettyInductive ind <> PP.hardline
+    Section nm ds ->
+        let nm' = prettyIdent nm
+            header = "Section" <+> nm' <> "." <> PP.hardline
+            ds' = map prettyDecl ds
+            footer = "End" <+> nm' <> "." <> PP.hardline
+        in
+        -- Note that because every declaration ends with PP.hardline (or
+        -- at least PP.line, which we don't group away), we don't need
+        -- another one after ds'. Except, without one, the indent for the
+        -- declarations bleeds into the footer. (wut?)
+        header <> PP.indent 3 (PP.vsep ds') <> PP.hardline <> footer
+    Snippet s ->
+        -- This assumes all the text snippets we have are multi-line blocks
+        -- that include newlines, including at the end.
+        --
+        -- FUTURE: nothing above this code should ever call PP.group, but if
+        -- that changes, we may need to go through the string and manually
+        -- replace each \n with PP.hardline.
+        text s
