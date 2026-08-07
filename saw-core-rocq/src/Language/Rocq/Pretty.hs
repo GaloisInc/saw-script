@@ -349,15 +349,15 @@ prettyDecl decl = case decl of
     prettyInductive ind <> PP.hardline
   Section nm ds ->
     let nm' = prettyIdent nm
-        ds' = map (PP.indent 2 . prettyDecl) ds
-        header = "Section" <+> nm' <+> "."
-        footer = "End" <+> nm' <+> "."
+        header = "Section" <+> nm' <> "." <> PP.hardline
+        ds' = map prettyDecl ds
+        footer = "End" <+> nm' <> "." <> PP.hardline
     in
-    -- XXX vsep issues soft newlines and there should be a hard newline
-    -- after the head and after the foot. (Note that every other Decl
-    -- always ends in a hard newline, so ds' is ok.)
-    -- (XXX: Does `PP.vsep` on top of `PP.hardline` generate two lines?)
-    PP.vsep $ [header] ++ ds' ++ [footer]
+    -- Note that because every declaration ends with PP.hardline (or
+    -- at least PP.line, which we don't group away), we don't need
+    -- another one after ds'. Except, without one, the indent for the
+    -- declarations bleeds into the footer. (wut?)
+    header <> PP.indent 3 (PP.vsep ds') <> PP.hardline <> footer
   Snippet s ->
     -- This assumes all the text snippets we have are multi-line blocks
     -- that include newlines, including at the end.
