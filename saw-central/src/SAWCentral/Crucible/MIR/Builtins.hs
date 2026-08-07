@@ -1502,14 +1502,13 @@ verifyObligations cc mspec tactic assumes asserts =
                        , goalName = nm
                        , goalLoc  = gloc
                        , goalDesc = msg
-                       , goalSequent = propToSequent goal'
+                       , goalProp = goal'
                        , goalTags = MS.conditionTags md
                        }
        res <- runProofScript tactic goal' proofgoal (Just ploc)
                 (Text.unwords
                  ["MIR verification condition:", Text.pack (show n), Text.pack goalname])
                 False -- do not record in the theorem database
-                False -- TODO, useSequentGoals...
        case res of
          ValidProof stats thm ->
            return (stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))

@@ -110,7 +110,7 @@ import SAWCentral.BisimulationTheorem
 import SAWCentral.Builtins (unfold_term)
 import SAWCentral.Options (Verbosity(..))
 import SAWCentral.Panic (panic)
-import SAWCentral.Proof
+import SAWCentral.Proof hiding (applyTheorem)
 import SAWCentral.Prover.Util (checkBooleanSchema)
 import SAWCentral.Value
 
@@ -154,10 +154,10 @@ proveAll script ts = do
               , goalName = "prove_bisim"
               , goalLoc  = show pos
               , goalDesc = ""
-              , goalSequent = propToSequent prop
+              , goalProp = prop
               , goalTags = mempty
               }
-    res <- runProofScript script prop goal Nothing "prove_bisim" True False
+    res <- runProofScript script prop goal Nothing "prove_bisim" True
     case res of
       UnfinishedProof {} -> failProof res
       ValidProof _ thm -> recordTheoremProof thm

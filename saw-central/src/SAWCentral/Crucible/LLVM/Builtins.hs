@@ -784,7 +784,6 @@ verifyObligations :: LLVMCrucibleContext arch
                   -> TopLevel (SolverStats, [MS.VCStats])
 verifyObligations cc mspec tactic assumes asserts =
   do let sc = sawCoreSharedContext (cc ^. ccSym)
-     useSequentGoals <- rwSequentGoals <$> getTopLevelRW
      let assumeTerms = toListOf (folded . Crucible.labeledPred) assumes
      assume <- io $ scAndList sc assumeTerms
      let nm  = mspec ^. csName
@@ -793,10 +792,6 @@ verifyObligations cc mspec tactic assumes asserts =
        do let msg' = Text.pack msg
           goal  <- io $ scImplies sc assume assert
           goal' <- io $ boolToProp sc [] goal
-          sqt <- if useSequentGoals then
-                    io $ booleansToSequent sc assumeTerms [assert]
-                 else
-                    return (propToSequent goal')
           let ploc = MS.conditionLoc md
           let gloc = (unwords [show (W4.plSourceLoc ploc)
                              ,"in"
@@ -810,14 +805,13 @@ verifyObligations cc mspec tactic assumes asserts =
                           , goalName = Text.unpack nm
                           , goalLoc  = gloc
                           , goalDesc = msg
-                          , goalSequent = sqt
+                          , goalProp = goal'
                           , goalTags = MS.conditionTags md
                           }
           res <- runProofScript tactic goal' proofgoal (Just ploc)
                     (Text.unwords
                       ["LLVM verification condition", Text.pack (show n), goalname])
                     False -- do not record this theorem in the database
-                    useSequentGoals
           case res of
             ValidProof stats thm ->
               return (stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))
