@@ -1878,6 +1878,12 @@ cryptolTypeOfActual mty =
     Mir.TyDynamic _    -> Nothing
     Mir.TyCoroutine {} -> Nothing
     Mir.TyCoroutineClosure _ -> Nothing
+    Mir.TyError -> Nothing
+    Mir.TyInfer -> Nothing
+    Mir.TyBound -> Nothing
+    Mir.TyPlaceholder -> Nothing
+    Mir.TyCoroutineWitness -> Nothing
+    Mir.TyAlias -> Nothing
   where
     baseSizeType :: Mir.BaseSize -> Maybe Cryptol.Type
     baseSizeType Mir.B8    = Just $ Cryptol.tWord $ Cryptol.tNum (8 :: Integer)
