@@ -76,6 +76,9 @@ This release supports [version
 
 ## Bug Fixes
 
+* The Rocq exporter now generates more or less normal width output
+  instead of cramming everything onto one very long line.
+
 * Fix bug in the `rme` solver causing the `<` operator to be treated as `<=`.
 
 * Avoid exponential blow-up when generating uninterpreted functions.
