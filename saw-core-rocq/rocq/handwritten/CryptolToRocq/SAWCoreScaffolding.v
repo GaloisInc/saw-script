@@ -276,6 +276,8 @@ Definition minNat := Nat.min.
 Definition maxNat := Nat.max.
 Definition Nat__rec := nat_rect.
 
+Definition ltNat_0_right (n : nat) : ltNat n Zero = false := eq_refl.
+
 Fixpoint expNat b n : nat :=
   match n with
   | 0 => S 0
