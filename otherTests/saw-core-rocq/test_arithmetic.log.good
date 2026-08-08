@@ -71,7 +71,6 @@ Definition TestArith:
                   (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) var__1
             var__2)).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -128,7 +127,6 @@ Definition TestArith_DivZero:
       (CryptolPrimitivesForSAWCore.ecNumber 
          (CryptolPrimitivesForSAWCore.TCNum SAWCoreScaffolding.Zero) var__1
          var__2).
-
 
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
@@ -190,7 +188,6 @@ Definition TestArith_Div:
                (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) var__1
          var__2).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -250,7 +247,6 @@ Definition TestArith_Mod:
             (Stdlib.PArith.BinPos.Pos.to_nat 
                (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))) var__1
          var__2).
-
 
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
@@ -333,7 +329,6 @@ Definition TestArith_AndOr:
                                  (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)))))))))
          var__1 var__2).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -404,7 +399,6 @@ Definition TestArith_Xor:
                                  (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))))))
          var__1 var__2).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -460,7 +454,6 @@ Definition TestArith_Complement:
                                  (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))))))
          var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -510,7 +503,6 @@ Definition TestArith_Negate:
                (Stdlib.PArith.BinPos.xI 
                   (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) var__1 
          (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)).
-
 
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
@@ -562,7 +554,6 @@ Definition TestArith_ShiftLeft:
          SAWCoreScaffolding.Integer
          CryptolPrimitivesForSAWCore.PLiteralInteger).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -612,7 +603,6 @@ Definition TestArith_ShiftRight:
                (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))
          SAWCoreScaffolding.Integer
          CryptolPrimitivesForSAWCore.PLiteralInteger).
-
 
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
@@ -752,7 +742,6 @@ Definition TestArith_SignExtend:
            (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool) 
            (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -828,4 +817,3 @@ Definition TestArith_ZeroExtend:
                     (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) 
            (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool) 
            (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)).
-

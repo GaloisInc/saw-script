@@ -4388,4 +4388,3 @@ Definition rationalRoundToEven: forall (_1: SAWCoreScaffolding.Rational),
 (* "Prelude::map_map@core" was skipped *)
 
 End SAWCorePrelude.
-

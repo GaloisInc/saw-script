@@ -68,7 +68,6 @@ Definition TestLambda_App:
                  (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) var__1 
         (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -137,7 +136,6 @@ Definition TestLambda_TwoArgs:
                  (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) var__1
         var__2).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -205,7 +203,6 @@ Definition TestLambda_Partial: forall (y:
                  (Stdlib.PArith.BinPos.xI 
                     (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) var__1
         (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)).
-
 
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
@@ -296,7 +293,6 @@ Definition TestLambda_Nested:
                   (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) var__1 
          (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0))).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -350,4 +346,3 @@ Definition TestLambda_Id:
                        (Stdlib.PArith.BinPos.xI 
                           (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))))
         var__1 (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)).
-

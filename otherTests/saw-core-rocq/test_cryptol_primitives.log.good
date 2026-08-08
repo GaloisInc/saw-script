@@ -12491,4 +12491,3 @@ Axiom subNat_0: forall (n: Init.Datatypes.nat),
            (SAWCoreScaffolding.subNat n SAWCoreScaffolding.Zero) n.
 
 End CryptolPrimitivesForSAWCore.
-

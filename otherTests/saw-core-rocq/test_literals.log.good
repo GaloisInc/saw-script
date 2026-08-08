@@ -34,7 +34,6 @@ Definition TestString_Empty:
       
    ].
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -408,7 +407,6 @@ Definition TestString_Basic:
          var__1 var__2
    ].
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -747,7 +745,6 @@ Definition TestString_Escapes:
          var__1 var__2;
       var__4
    ].
-
 
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
@@ -1166,7 +1163,6 @@ Definition TestString_Punct:
          var__1 var__2
    ].
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -1511,7 +1507,6 @@ Definition TestString_Mathy:
          var__1 var__2
    ].
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -1604,7 +1599,6 @@ Definition TestString_Accent:
                                  (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)))))))))
          var__1 var__2
    ].
-
 
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
@@ -1718,7 +1712,6 @@ Definition TestLit_Max64:
       (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool) 
       (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -1756,7 +1749,6 @@ Definition TestLit_0254
                            (Stdlib.PArith.BinPos.xI 
                               (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)))))))))
       u1295 _P.
-
 
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
@@ -1808,7 +1800,6 @@ Definition TestLit_Bin:
       (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool) 
       (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -1858,7 +1849,6 @@ Definition TestLit_Oct:
                               (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)))))))))
       (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool) 
       (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0).
-
 
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
@@ -1910,7 +1900,6 @@ Definition TestLit_Hex1:
       (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool) 
       (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -1961,7 +1950,6 @@ Definition TestLit_Hex2:
       (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool) 
       (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -1998,7 +1986,6 @@ Definition TestLit_Poly1
       (CryptolPrimitivesForSAWCore.seq u1301 Init.Datatypes.bool) 
       (CryptolPrimitivesForSAWCore.PLiteralSeqBool u1301).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -2032,4 +2019,3 @@ Definition TestLit_Poly2
                      (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)))))) 
       (CryptolPrimitivesForSAWCore.seq u1303 Init.Datatypes.bool) 
       (CryptolPrimitivesForSAWCore.PLiteralSeqBool u1303).
-

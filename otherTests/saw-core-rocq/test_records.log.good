@@ -65,7 +65,6 @@ Definition TestRec: let var__0
                   (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) var__1
             var__2) SAWCoreScaffolding.RecordNil).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -118,7 +117,6 @@ Definition TestRec_Single:
          (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool) 
          (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0))
       SAWCoreScaffolding.RecordNil.
-
 
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
@@ -194,7 +192,6 @@ Definition TestRec_Three: let var__0
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))) var__1
                var__2) SAWCoreScaffolding.RecordNil)).
-
 
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
@@ -272,7 +269,6 @@ Definition TestRec_MixedWidth:
             (CryptolPrimitivesForSAWCore.seq var__1 Init.Datatypes.bool) 
             (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__1))
          SAWCoreScaffolding.RecordNil).
-
 
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
@@ -355,7 +351,6 @@ Definition TestRec_Nested: let var__0
                   (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))) var__1
             var__2) SAWCoreScaffolding.RecordNil).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -429,7 +424,6 @@ Definition TestRec_ProjY:
                   (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool) 
                   (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0))
                SAWCoreScaffolding.RecordNil))).
-
 
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
@@ -514,7 +508,6 @@ Definition TestRec_NestedProj:
                   CryptolPrimitivesForSAWCore.PLiteralInteger)
                SAWCoreScaffolding.RecordNil))).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -589,7 +582,6 @@ Definition TestRec_Update1: let var__0
                      (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) var__1
                var__2) SAWCoreScaffolding.RecordNil)).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -621,7 +613,6 @@ Definition TestRec_Tuple:
       (SAWCoreScaffolding.PairValue Init.Datatypes.bool
          SAWCoreScaffolding.UnitType Init.Datatypes.true
          SAWCoreScaffolding.Unit).
-
 
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
@@ -713,7 +704,6 @@ Definition TestRec_Nested
                                  (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))))))))
             u1305 _P) SAWCoreScaffolding.RecordNil).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -804,7 +794,6 @@ Definition TestRec_Update2: Init.Datatypes.bool :=
                               (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))))
                var__1 var__2) SAWCoreScaffolding.RecordNil)).
 
-
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
 From Stdlib        Require Import String.
@@ -852,7 +841,6 @@ Definition TestRec_TupleUpdate: Init.Datatypes.bool :=
          (SAWCoreScaffolding.PairValue Init.Datatypes.bool
             SAWCoreScaffolding.UnitType Init.Datatypes.true
             SAWCoreScaffolding.Unit)).
-
 
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
@@ -963,7 +951,6 @@ Definition TestRec_RelativeUpdate: Init.Datatypes.bool :=
          (@SAWCoreScaffolding.RecordCons "y"%string var__1
             SAWCoreScaffolding.RecordTypeNil var__5
             SAWCoreScaffolding.RecordNil)).
-
 
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
@@ -1143,7 +1130,6 @@ Definition TestRec_NestedField1: Init.Datatypes.bool :=
                SAWCoreScaffolding.Integer
                CryptolPrimitivesForSAWCore.PLiteralInteger)
             SAWCoreScaffolding.RecordNil)).
-
 
 (** Mandatory imports from saw-core-rocq *)
 From Stdlib        Require Import Lists.List.
@@ -1335,4 +1321,3 @@ Definition TestRec_NestedField2: Init.Datatypes.bool :=
                SAWCoreScaffolding.Integer
                CryptolPrimitivesForSAWCore.PLiteralInteger)
             SAWCoreScaffolding.RecordNil)).
-

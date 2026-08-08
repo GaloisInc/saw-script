@@ -64,7 +64,7 @@ import System.IO.Temp(emptySystemTempFile)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as V
-import Prettyprinter (vcat)
+import qualified Prettyprinter as PP
 import Prettyprinter.Render.Text
 
 import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
@@ -453,6 +453,19 @@ withImportCryptolPrimitivesForSAWCoreExtra config@(Rocq.TranslationConfiguration
    ]
   }
 
+writeRocqDoc :: FilePath -> PP.Doc ann -> IO ()
+writeRocqDoc path doc =
+    let opts = PP.LayoutOptions $ PP.AvailablePerLine 80 1.0
+        doc' = PP.layoutPretty opts doc
+        issue h = renderIO h doc'
+    in
+    case path of
+        "" -> issue stdout
+        "-" -> issue stdout
+        _ -> do
+            h <- openFile path WriteMode
+            issue h
+            hClose h
 
 writeRocqTerm ::
   Text ->
@@ -474,10 +487,7 @@ writeRocqTerm name notations skips path t = do
     Left err -> do
       err' <- liftIO $ Rocq.ppTranslationError sc err
       throwTopLevel $ "Error translating: " ++ Text.unpack err'
-    Right doc -> io $ case path of
-      ""  -> print doc
-      "-" -> print doc
-      _   -> writeFile path (show doc)
+    Right doc -> io $ writeRocqDoc path doc
 
 writeRocqProp ::
   Text ->
@@ -529,11 +539,8 @@ writeRocqCryptolModule inputFile outputFile notations skips = io $ do
       err' <- Rocq.ppTranslationError sc err
       putStrLn $ Text.unpack err'
     Right cmDoc -> do
-      let doc = vcat [ Rocq.preamble configuration, cmDoc ]
-      case outputFile of
-        ""  -> print doc
-        "-" -> print doc
-        _   -> writeFile outputFile $ show doc
+      let doc = PP.vcat [ Rocq.preamble configuration, cmDoc ]
+      writeRocqDoc outputFile doc
 
 nameOfSAWCorePrelude :: Un.ModuleName
 nameOfSAWCorePrelude = Un.moduleName preludeModule
@@ -553,11 +560,8 @@ writeRocqSAWCorePrelude outputFile notations skips = do
   m   <- scFindModule sc nameOfSAWCorePrelude
   let configuration = rocqTranslationConfiguration notations skips
   m'  <- Rocq.translateSAWModule sc configuration mm m
-  let doc = vcat [ Rocq.preamble configuration, m']
-  case outputFile of
-    ""  -> print doc
-    "-" -> print doc
-    _   -> writeFile outputFile $ show doc
+  let doc = PP.vcat [ Rocq.preamble configuration, m']
+  writeRocqDoc outputFile doc
 
 writeRocqCryptolPrimitivesForSAWCore ::
   FilePath ->
@@ -576,11 +580,8 @@ writeRocqCryptolPrimitivesForSAWCore cryFile notations skips = do
         withImportSAWCorePrelude $
         rocqTranslationConfiguration notations skips
   m' <- Rocq.translateSAWModule sc configuration mm m
-  let doc = vcat [ Rocq.preamble configuration, m']
-  case cryFile of
-    ""  -> print doc
-    "-" -> print doc
-    _   -> writeFile cryFile $ show doc
+  let doc = PP.vcat [ Rocq.preamble configuration, m']
+  writeRocqDoc cryFile doc
 
 -- | Translate a SAWCore term into an AIG
 bitblastPrim :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> Term -> IO (AIG.Network l g)
