@@ -32,14 +32,7 @@ Definition Op_zezezg
 
 
 Definition goal: Prop :=
-   forall (x: CryptolPrimitivesForSAWCore.seq 
-              (CryptolPrimitivesForSAWCore.TCNum 
-                 (Stdlib.PArith.BinPos.Pos.to_nat 
-                    (Stdlib.PArith.BinPos.xO 
-                       (Stdlib.PArith.BinPos.xO 
-                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-              Init.Datatypes.bool), forall (y: 
-           CryptolPrimitivesForSAWCore.seq 
+   forall (x y: CryptolPrimitivesForSAWCore.seq 
               (CryptolPrimitivesForSAWCore.TCNum 
                  (Stdlib.PArith.BinPos.Pos.to_nat 
                     (Stdlib.PArith.BinPos.xO 
@@ -96,8 +89,7 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 Definition goal: Prop :=
-   forall (a: Init.Datatypes.bool), forall (b: Init.Datatypes.bool),
-        forall (c: Init.Datatypes.bool),
+   forall (a b c: Init.Datatypes.bool),
         SAWCorePrelude.EqTrue 
            (CryptolPrimitivesForSAWCore.ecEq Init.Datatypes.bool
               CryptolPrimitivesForSAWCore.PEqBit 
@@ -136,25 +128,8 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 Definition goal: Prop :=
-   forall (x: CryptolPrimitivesForSAWCore.seq 
-              (CryptolPrimitivesForSAWCore.TCNum 
-                 (Stdlib.PArith.BinPos.Pos.to_nat 
-                    (Stdlib.PArith.BinPos.xO 
-                       (Stdlib.PArith.BinPos.xO 
-                          (Stdlib.PArith.BinPos.xO 
-                             (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))))
-              Init.Datatypes.bool),
-        forall (y: 
-           CryptolPrimitivesForSAWCore.seq 
-              (CryptolPrimitivesForSAWCore.TCNum 
-                 (Stdlib.PArith.BinPos.Pos.to_nat 
-                    (Stdlib.PArith.BinPos.xO 
-                       (Stdlib.PArith.BinPos.xO 
-                          (Stdlib.PArith.BinPos.xO 
-                             (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))))
-              Init.Datatypes.bool),
-        forall (z: 
-           CryptolPrimitivesForSAWCore.seq 
+   forall
+        (x y z: CryptolPrimitivesForSAWCore.seq 
               (CryptolPrimitivesForSAWCore.TCNum 
                  (Stdlib.PArith.BinPos.Pos.to_nat 
                     (Stdlib.PArith.BinPos.xO 
@@ -211,14 +186,7 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 Definition goal: Prop :=
-   forall (b: Init.Datatypes.bool), forall (x: 
-           CryptolPrimitivesForSAWCore.seq 
-              (CryptolPrimitivesForSAWCore.TCNum 
-                 (Stdlib.PArith.BinPos.Pos.to_nat 
-                    (Stdlib.PArith.BinPos.xO 
-                       (Stdlib.PArith.BinPos.xO 
-                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-              Init.Datatypes.bool), forall (y: 
+   forall (b: Init.Datatypes.bool) (x y: 
            CryptolPrimitivesForSAWCore.seq 
               (CryptolPrimitivesForSAWCore.TCNum 
                  (Stdlib.PArith.BinPos.Pos.to_nat 
@@ -274,14 +242,7 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 Definition goal: Prop :=
-   forall (x: CryptolPrimitivesForSAWCore.seq 
-              (CryptolPrimitivesForSAWCore.TCNum 
-                 (Stdlib.PArith.BinPos.Pos.to_nat 
-                    (Stdlib.PArith.BinPos.xO 
-                       (Stdlib.PArith.BinPos.xO 
-                          (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-              Init.Datatypes.bool), forall (y: 
-           CryptolPrimitivesForSAWCore.seq 
+   forall (x y: CryptolPrimitivesForSAWCore.seq 
               (CryptolPrimitivesForSAWCore.TCNum 
                  (Stdlib.PArith.BinPos.Pos.to_nat 
                     (Stdlib.PArith.BinPos.xO 
@@ -346,8 +307,7 @@ Definition Op_zezezg
 
 
 Definition goal: Prop :=
-   forall (a: Init.Datatypes.bool), forall (b: Init.Datatypes.bool),
-        forall (c: Init.Datatypes.bool),
+   forall (a b c: Init.Datatypes.bool),
         SAWCorePrelude.EqTrue 
            (Op_zezezg 
               (CryptolPrimitivesForSAWCore.ecAnd Init.Datatypes.bool

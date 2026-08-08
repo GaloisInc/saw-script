@@ -29,8 +29,7 @@ Module SAWCorePrelude.
 
 (* "Prelude::PairType" was skipped *)
 
-Definition pair_example: forall (a: Type), forall (b: Type), forall (_1: a),
-        forall (_2: b),
+Definition pair_example: forall (a b: Type) (_1: a) (_2: b),
         SAWCoreScaffolding.PairType a b :=
    fun (a: Type) (b: Type) (x: a) (y: b)
       =>
@@ -39,8 +38,7 @@ Definition pair_example: forall (a: Type), forall (b: Type), forall (_1: a),
 
 (* "Prelude::Pair__rec@core" was skipped *)
 
-Definition Pair_fst: forall (a: Type), forall (b: Type), forall (_1: 
-           SAWCoreScaffolding.PairType a b),
+Definition Pair_fst: forall (a b: Type) (_1: SAWCoreScaffolding.PairType a b),
         a :=
    fun (a: Type) (b: Type)
       =>
@@ -50,8 +48,7 @@ Definition Pair_fst: forall (a: Type), forall (b: Type), forall (_1:
          ) (fun (x: a) (y: b) => x)
    .
 
-Definition Pair_snd: forall (a: Type), forall (b: Type), forall (_1: 
-           SAWCoreScaffolding.PairType a b),
+Definition Pair_snd: forall (a b: Type) (_1: SAWCoreScaffolding.PairType a b),
         b :=
    fun (a: Type) (b: Type)
       =>
@@ -65,12 +62,11 @@ Definition Pair_snd: forall (a: Type), forall (b: Type), forall (_1:
 
 (* "Prelude::snd@core" was skipped *)
 
-Definition uncurry: forall (a: Type), forall (b: Type), forall (c: Type),
-        forall (f: forall (_1: a), forall (_2: b), c), forall (_1: 
+Definition uncurry: forall (a b c: Type) (f: forall (_1: a) (_2: b), c) (_1: 
            SAWCoreScaffolding.PairType a 
               (SAWCoreScaffolding.PairType b SAWCoreScaffolding.UnitType)),
         c :=
-   fun (a: Type) (b: Type) (c: Type) (f: forall (_1: a), forall (_2: b), c) (x: 
+   fun (a: Type) (b: Type) (c: Type) (f: forall (_1: a) (_2: b), c) (x: 
            SAWCoreScaffolding.PairType a 
               (SAWCoreScaffolding.PairType b SAWCoreScaffolding.UnitType))
       =>
@@ -82,12 +78,10 @@ Definition uncurry: forall (a: Type), forall (b: Type), forall (c: Type),
    .
 
 Inductive PairType1 (a: Type) (b: Type) : Type :=
-| PairValue1: forall (_1: a), forall (_2: b), PairType1 a b
+| PairValue1: forall (_1: a) (_2: b), PairType1 a b
 .
 
-Definition fstPairType1: forall (a: Type), forall (b: Type), forall (_1: 
-           PairType1 a b),
-        a :=
+Definition fstPairType1: forall (a b: Type) (_1: PairType1 a b), a :=
    fun (a: Type) (b: Type)
       =>
       @SAWCorePrelude.PairType1_rect a b (fun (_1: PairType1 a b) => a) (fun
@@ -97,9 +91,7 @@ Definition fstPairType1: forall (a: Type), forall (b: Type), forall (_1:
          )
    .
 
-Definition sndPairType1: forall (a: Type), forall (b: Type), forall (_1: 
-           PairType1 a b),
-        b :=
+Definition sndPairType1: forall (a b: Type) (_1: PairType1 a b), b :=
    fun (a: Type) (b: Type)
       =>
       @SAWCorePrelude.PairType1_rect a b (fun (_1: PairType1 a b) => b) (fun
@@ -109,11 +101,10 @@ Definition sndPairType1: forall (a: Type), forall (b: Type), forall (_1:
          )
    .
 
-Definition uncurry1: forall (a: Type), forall (b: Type), forall (c: Type),
-        forall (f: forall (_1: a), forall (_2: b), c), forall (x: 
+Definition uncurry1: forall (a b c: Type) (f: forall (_1: a) (_2: b), c) (x: 
            PairType1 a b),
         c :=
-   fun (a: Type) (b: Type) (c: Type) (f: forall (_1: a), forall (_2: b), c) (x: 
+   fun (a: Type) (b: Type) (c: Type) (f: forall (_1: a) (_2: b), c) (x: 
            PairType1 a b)
       =>
       f (fstPairType1 a b x) (sndPairType1 a b x)
@@ -125,8 +116,7 @@ Definition uncurry1: forall (a: Type), forall (b: Type), forall (c: Type),
 
 (* "Prelude::Void" was skipped *)
 
-Definition elimVoid: forall (a: Type), forall (_1: Init.Datatypes.Empty_set),
-        a :=
+Definition elimVoid: forall (a: Type) (_1: Init.Datatypes.Empty_set), a :=
    fun (a: Type) (v: Init.Datatypes.Empty_set)
       =>
       @Init.Datatypes.Empty_set_rect (fun (_1: Init.Datatypes.Empty_set) => a) v
@@ -138,12 +128,12 @@ Definition elimVoid: forall (a: Type), forall (_1: Init.Datatypes.Empty_set),
 
 (* "Prelude::uip@core" was skipped *)
 
-Definition eq_cong: forall (t: Type), forall (x: t), forall (y: t), forall (_1: 
-           @Init.Logic.eq t x y), forall (u: Type), forall (f: forall (_2: t),
-                u),
+Definition eq_cong: forall (t: Type) (x y: t) (_1: @Init.Logic.eq t x y)
+        (u: Type) (f: forall (_2: t), u),
         @Init.Logic.eq u (f x) (f y) :=
-   fun (t: Type) (x: t) (y: t) (eq: @Init.Logic.eq t x y) (u: Type)
-        (f: forall (_1: t), u)
+   fun (t: Type) (x: t) (y: t) (eq: @Init.Logic.eq t x y) (u: Type) (f: forall
+                (_1: t),
+                u)
       =>
       SAWCoreScaffolding.Eq__rec t x (fun (y': t) (eq': @Init.Logic.eq t x y')
             =>
@@ -151,8 +141,7 @@ Definition eq_cong: forall (t: Type), forall (x: t), forall (y: t), forall (_1:
          ) (@Init.Logic.eq_refl u (f x)) y eq
    .
 
-Definition sym: forall (a: Type), forall (x: a), forall (y: a), forall (_1: 
-           @Init.Logic.eq a x y),
+Definition sym: forall (a: Type) (x y: a) (_1: @Init.Logic.eq a x y),
         @Init.Logic.eq a y x :=
    fun (a: Type) (x: a) (y: a) (eq: @Init.Logic.eq a x y)
       =>
@@ -162,8 +151,8 @@ Definition sym: forall (a: Type), forall (x: a), forall (y: a), forall (_1:
          ) (@Init.Logic.eq_refl a x) y eq
    .
 
-Definition trans: forall (a: Type), forall (x: a), forall (y: a), forall (z: a),
-        forall (_1: @Init.Logic.eq a x y), forall (_2: @Init.Logic.eq a y z),
+Definition trans: forall (a: Type) (x y z: a) (_1: @Init.Logic.eq a x y) (_2: 
+           @Init.Logic.eq a y z),
         @Init.Logic.eq a x z :=
    fun (a: Type) (x: a) (y: a) (z: a) (eq1: @Init.Logic.eq a x y) (eq2: 
            @Init.Logic.eq a y z)
@@ -174,8 +163,7 @@ Definition trans: forall (a: Type), forall (x: a), forall (y: a), forall (z: a),
          ) eq1 z eq2
    .
 
-Definition trans2: forall (a: Type), forall (x: a), forall (y: a),
-        forall (z: a), forall (_1: @Init.Logic.eq a x z), forall (_2: 
+Definition trans2: forall (a: Type) (x y z: a) (_1: @Init.Logic.eq a x z) (_2: 
            @Init.Logic.eq a y z),
         @Init.Logic.eq a x y :=
    fun (a: Type) (x: a) (y: a) (z: a) (eq1: @Init.Logic.eq a x z) (eq2: 
@@ -184,9 +172,8 @@ Definition trans2: forall (a: Type), forall (x: a), forall (y: a),
       trans a x z y eq1 (sym a y z eq2)
    .
 
-Definition trans4: forall (a: Type), forall (w: a), forall (x: a),
-        forall (y: a), forall (z: a), forall (_1: @Init.Logic.eq a w x),
-        forall (_2: @Init.Logic.eq a x y), forall (_3: @Init.Logic.eq a y z),
+Definition trans4: forall (a: Type) (w x y z: a) (_1: @Init.Logic.eq a w x)
+        (_2: @Init.Logic.eq a x y) (_3: @Init.Logic.eq a y z),
         @Init.Logic.eq a w z :=
    fun (a: Type) (w: a) (x: a) (y: a) (z: a) (eq1: @Init.Logic.eq a w x) (eq2: 
            @Init.Logic.eq a x y) (eq3: @Init.Logic.eq a y z)
@@ -194,10 +181,9 @@ Definition trans4: forall (a: Type), forall (w: a), forall (x: a),
       trans a w x z eq1 (trans a x y z eq2 eq3)
    .
 
-Definition eq_inv_map: forall (a: Type), forall (b: Type), forall (a1: a),
-        forall (a2: a), forall (_1: @Init.Logic.eq a a1 a2),
-        forall (f1: forall (_2: a), b), forall (f2: forall (_2: a), b),
-        forall (_2: @Init.Logic.eq b (f1 a2) (f2 a2)),
+Definition eq_inv_map: forall (a b: Type) (a1 a2: a) (_1: 
+           @Init.Logic.eq a a1 a2) (f1: forall (_2: a), b) (f2: forall (_2: a),
+                b) (_2: @Init.Logic.eq b (f1 a2) (f2 a2)),
         @Init.Logic.eq b (f1 a1) (f2 a1) :=
    fun (a: Type) (b: Type) (a1: a) (a2: a) (eq_a: @Init.Logic.eq a a1 a2)
         (f1: forall (_1: a), b) (f2: forall (_1: a), b) (eq_f: 
@@ -221,15 +207,15 @@ Inductive EqDep
      (P: forall (_1: t), Type)
      (x: t)
      (p: P x)
-   : forall (y: t), forall (_1: P y), Prop :=
+   : forall (y: t) (_1: P y), Prop :=
 | ReflDep:  EqDep t P x p x p
 .
 
 (* "Prelude::fix_unfold@core" was skipped *)
 
-Definition inverse_eta_rule: forall (a: Type), forall (b: Type),
-        forall (f: forall (_1: a), b), forall (g: forall (_1: a), b),
-        forall (_1: @Init.Logic.eq (forall (_1: a), b) f g), forall (x: a),
+Definition inverse_eta_rule: forall (a b: Type) (f: forall (_1: a), b)
+        (g: forall (_1: a), b) (_1: @Init.Logic.eq (forall (_1: a), b) f g)
+        (x: a),
         @Init.Logic.eq b (f x) (g x) :=
    fun (a: Type) (b: Type) (f: forall (_1: a), b) (g: forall (_1: a), b) (H: 
            @Init.Logic.eq (forall (_1: a), b) f g)
@@ -250,8 +236,7 @@ Definition inverse_eta_rule: forall (a: Type), forall (b: Type),
 
 (* "Prelude::coerce__eq@core" was skipped *)
 
-Definition coerce_same: forall (a: Type), forall (q: @Init.Logic.eq Type a a),
-        forall (x: a),
+Definition coerce_same: forall (a: Type) (q: @Init.Logic.eq Type a a) (x: a),
         @Init.Logic.eq a (SAWCoreScaffolding.coerce a a q x) x :=
    fun (a: Type) (q: @Init.Logic.eq Type a a) (x: a)
       =>
@@ -265,12 +250,11 @@ Definition coerce_same: forall (a: Type), forall (q: @Init.Logic.eq Type a a),
       in
       trans a (SAWCoreScaffolding.coerce a a q x) 
             (SAWCoreScaffolding.coerce a a q x) x 
-            (eq_cong (forall (a1: Type), forall (b: Type), forall (_1: 
-                       @Init.Logic.eq Type a1 b), forall (_2: a1),
+            (eq_cong (forall (a1 b: Type) (_1: @Init.Logic.eq Type a1 b)
+                    (_2: a1),
                     b) SAWCoreScaffolding.coerce SAWCoreScaffolding.coerce
-               eq_refl a (fun (f: forall (a1: Type), forall (b: Type),
-                            forall (_1: @Init.Logic.eq Type a1 b),
-                            forall (_2: a1),
+               eq_refl a (fun (f: forall (a1 b: Type) (_1: 
+                               @Init.Logic.eq Type a1 b) (_2: a1),
                             b)
                   =>
                   f a a q x
@@ -281,9 +265,8 @@ Definition coerce_same: forall (a: Type), forall (q: @Init.Logic.eq Type a a),
                ))
    .
 
-Definition coerce__def_trans: forall (a: Type), forall (b: Type),
-        forall (c: Type), forall (pf1: @Init.Logic.eq Type a b), forall (pf2: 
-           @Init.Logic.eq Type b c), forall (x: a),
+Definition coerce__def_trans: forall (a b c: Type) (pf1: 
+           @Init.Logic.eq Type a b) (pf2: @Init.Logic.eq Type b c) (x: a),
         @Init.Logic.eq c 
            (SAWCoreScaffolding.coerce b c pf2 
               (SAWCoreScaffolding.coerce a b pf1 x)) 
@@ -301,9 +284,8 @@ Definition coerce__def_trans: forall (a: Type), forall (b: Type),
          ) (@Init.Logic.eq_refl b (SAWCoreScaffolding.coerce a b pf1 x)) c pf2
    .
 
-Definition coerce_trans: forall (a: Type), forall (b: Type), forall (c: Type),
-        forall (pf1: @Init.Logic.eq Type a b), forall (pf2: 
-           @Init.Logic.eq Type b c), forall (x: a),
+Definition coerce_trans: forall (a b c: Type) (pf1: @Init.Logic.eq Type a b)
+        (pf2: @Init.Logic.eq Type b c) (x: a),
         @Init.Logic.eq c 
            (SAWCoreScaffolding.coerce b c pf2 
               (SAWCoreScaffolding.coerce a b pf1 x)) 
@@ -322,40 +304,34 @@ Definition coerce_trans: forall (a: Type), forall (b: Type), forall (c: Type),
             (SAWCoreScaffolding.coerce a b pf1 x)) 
          (SAWCoreScaffolding.coerce a c var__0 x) 
          (SAWCoreScaffolding.coerce a c var__0 x) 
-         (eq_cong (forall (t: Type), forall (u: Type), forall (_1: 
-                    @Init.Logic.eq Type t u), forall (_2: t),
-                 u) SAWCoreScaffolding.coerce SAWCoreScaffolding.coerce eq_refl
-            c (fun (f: forall (a1: Type), forall (b1: Type), forall (_1: 
-                            @Init.Logic.eq Type a1 b1), forall (_2: a1),
+         (eq_cong (forall (t u: Type) (_1: @Init.Logic.eq Type t u) (_2: t), u)
+            SAWCoreScaffolding.coerce SAWCoreScaffolding.coerce eq_refl c (fun
+                 (f: forall (a1 b1: Type) (_1: @Init.Logic.eq Type a1 b1)
+                         (_2: a1),
                          b1)
                =>
                f b c pf2 (f a b pf1 x)
             )) (coerce__def_trans a b c pf1 pf2 x) 
-         (eq_cong (forall (t: Type), forall (u: Type), forall (_1: 
-                    @Init.Logic.eq Type t u), forall (_2: t),
-                 u) SAWCoreScaffolding.coerce SAWCoreScaffolding.coerce 
-            (sym (forall (t: Type), forall (u: Type), forall (_1: 
-                        @Init.Logic.eq Type t u), forall (_2: t),
-                     u) SAWCoreScaffolding.coerce SAWCoreScaffolding.coerce
-                eq_refl) c (fun (f: forall (a1: Type), forall (b1: Type),
-                         forall (_1: @Init.Logic.eq Type a1 b1),
-                         forall (_2: a1),
+         (eq_cong (forall (t u: Type) (_1: @Init.Logic.eq Type t u) (_2: t), u)
+            SAWCoreScaffolding.coerce SAWCoreScaffolding.coerce 
+            (sym (forall (t u: Type) (_1: @Init.Logic.eq Type t u) (_2: t), u)
+                SAWCoreScaffolding.coerce SAWCoreScaffolding.coerce eq_refl) c
+            (fun (f: forall (a1 b1: Type) (_1: @Init.Logic.eq Type a1 b1)
+                         (_2: a1),
                          b1)
                =>
                f a c var__0 x
             ))
    .
 
-Definition rcoerce: forall (a: Type), forall (b: Type), forall (_1: 
-           @Init.Logic.eq Type a b), forall (_2: b),
+Definition rcoerce: forall (a b: Type) (_1: @Init.Logic.eq Type a b) (_2: b),
         a :=
    fun (a: Type) (b: Type) (q: @Init.Logic.eq Type a b)
       =>
       SAWCoreScaffolding.coerce b a (sym Type a b q)
    .
 
-Definition rcoerce_same: forall (a: Type), forall (q: @Init.Logic.eq Type a a),
-        forall (x: a),
+Definition rcoerce_same: forall (a: Type) (q: @Init.Logic.eq Type a a) (x: a),
         @Init.Logic.eq a (rcoerce a a q x) x :=
    fun (a: Type) (q: @Init.Logic.eq Type a a) (x: a)
       =>
@@ -366,8 +342,7 @@ Definition rcoerce_same: forall (a: Type), forall (q: @Init.Logic.eq Type a a),
 
 (* "Prelude::unsafeCoerce_same@core" was skipped *)
 
-Definition piCong0: forall (r: Type), forall (x: Type), forall (y: Type),
-        forall (_1: @Init.Logic.eq Type x y),
+Definition piCong0: forall (r x y: Type) (_1: @Init.Logic.eq Type x y),
         @Init.Logic.eq Type (forall (_2: x), r) (forall (_2: y), r) :=
    fun (r: Type) (x: Type) (y: Type) (eq: @Init.Logic.eq Type x y)
       =>
@@ -378,8 +353,7 @@ Definition piCong0: forall (r: Type), forall (x: Type), forall (y: Type),
          ) (@Init.Logic.eq_refl Type (forall (_1: x), r)) y eq
    .
 
-Definition piCong1: forall (r: Type), forall (x: Type), forall (y: Type),
-        forall (_1: @Init.Logic.eq Type x y),
+Definition piCong1: forall (r x y: Type) (_1: @Init.Logic.eq Type x y),
         @Init.Logic.eq Type (forall (_2: r), x) (forall (_2: r), y) :=
    fun (r: Type) (x: Type) (y: Type) (eq: @Init.Logic.eq Type x y)
       =>
@@ -390,7 +364,7 @@ Definition piCong1: forall (r: Type), forall (x: Type), forall (y: Type),
          ) (@Init.Logic.eq_refl Type (forall (_1: r), x)) y eq
    .
 
-Definition PairValue_fst_snd: forall (a: Type), forall (b: Type), forall (x: 
+Definition PairValue_fst_snd: forall (a b: Type) (x: 
            SAWCoreScaffolding.PairType a b),
         @Init.Logic.eq (SAWCoreScaffolding.PairType a b) 
            (SAWCoreScaffolding.PairValue a b (Pair_fst a b x) (Pair_snd a b x))
@@ -410,7 +384,7 @@ Definition PairValue_fst_snd: forall (a: Type), forall (b: Type), forall (x:
          )
    .
 
-Definition PairValue_fst_Unit: forall (a: Type), forall (x: 
+Definition PairValue_fst_Unit: forall (a: Type) (x: 
            SAWCoreScaffolding.PairType a SAWCoreScaffolding.UnitType),
         @Init.Logic.eq 
            (SAWCoreScaffolding.PairType a SAWCoreScaffolding.UnitType) 
@@ -457,8 +431,8 @@ Definition PairValue_fst_Unit: forall (a: Type), forall (x:
 
 (* "Prelude::tailRecord@core" was skipped *)
 
-Definition headRecord_RecordValue: forall (s: Stdlib.Strings.String.string),
-        forall (a: Type), forall (b: Type), forall (x: a), forall (y: b),
+Definition headRecord_RecordValue: forall (s: Stdlib.Strings.String.string)
+        (a b: Type) (x: a) (y: b),
         @Init.Logic.eq a 
            (@SAWCoreScaffolding.recordHead s a b 
               (@SAWCoreScaffolding.RecordCons s a b x y)) x :=
@@ -467,8 +441,8 @@ Definition headRecord_RecordValue: forall (s: Stdlib.Strings.String.string),
       @Init.Logic.eq_refl a x
    .
 
-Definition tailRecord_RecordValue: forall (s: Stdlib.Strings.String.string),
-        forall (a: Type), forall (b: Type), forall (x: a), forall (y: b),
+Definition tailRecord_RecordValue: forall (s: Stdlib.Strings.String.string)
+        (a b: Type) (x: a) (y: b),
         @Init.Logic.eq b 
            (@SAWCoreScaffolding.recordTail s a b 
               (@SAWCoreScaffolding.RecordCons s a b x y)) y :=
@@ -477,9 +451,8 @@ Definition tailRecord_RecordValue: forall (s: Stdlib.Strings.String.string),
       @Init.Logic.eq_refl b y
    .
 
-Definition RecordValue_head_tail: forall (s: Stdlib.Strings.String.string),
-        forall (a: Type), forall (b: Type), forall (x: 
-           SAWCoreScaffolding.RecordTypeCons s a b),
+Definition RecordValue_head_tail: forall (s: Stdlib.Strings.String.string)
+        (a b: Type) (x: SAWCoreScaffolding.RecordTypeCons s a b),
         @Init.Logic.eq (SAWCoreScaffolding.RecordTypeCons s a b) 
            (@SAWCoreScaffolding.RecordCons s a b 
               (@SAWCoreScaffolding.recordHead s a b x) 
@@ -500,8 +473,8 @@ Definition RecordValue_head_tail: forall (s: Stdlib.Strings.String.string),
          )
    .
 
-Definition RecordValue_head_Empty: forall (s: Stdlib.Strings.String.string),
-        forall (a: Type), forall (x: 
+Definition RecordValue_head_Empty: forall (s: Stdlib.Strings.String.string)
+        (a: Type) (x: 
            SAWCoreScaffolding.RecordTypeCons s a
               SAWCoreScaffolding.RecordTypeNil),
         @Init.Logic.eq 
@@ -560,7 +533,7 @@ Definition RecordValue_head_Empty: forall (s: Stdlib.Strings.String.string),
 
 (* "Prelude::ite_eq_iteDep@core" was skipped *)
 
-Definition ite_true: forall (a: Type), forall (x: a), forall (y: a),
+Definition ite_true: forall (a: Type) (x y: a),
         @Init.Logic.eq a (if Init.Datatypes.true then x else y) x :=
    fun (a: Type) (x: a) (y: a)
       =>
@@ -572,7 +545,7 @@ Definition ite_true: forall (a: Type), forall (x: a), forall (y: a),
                x y)
    .
 
-Definition ite_false: forall (a: Type), forall (x: a), forall (y: a),
+Definition ite_false: forall (a: Type) (x y: a),
         @Init.Logic.eq a (if Init.Datatypes.false then x else y) y :=
    fun (a: Type) (x: a) (y: a)
       =>
@@ -586,10 +559,9 @@ Definition ite_false: forall (a: Type), forall (x: a), forall (y: a),
                ) x y)
    .
 
-Definition iteWithProof: forall (a: Type), forall (b: Init.Datatypes.bool),
-        forall (_1: forall (_1: 
-                   @Init.Logic.eq Init.Datatypes.bool b Init.Datatypes.true),
-                a), forall (_2: forall (_2: 
+Definition iteWithProof: forall (a: Type) (b: Init.Datatypes.bool) (_1: forall
+                (_1: @Init.Logic.eq Init.Datatypes.bool b Init.Datatypes.true),
+                a) (_2: forall (_2: 
                    @Init.Logic.eq Init.Datatypes.bool b Init.Datatypes.false),
                 a),
         a :=
@@ -606,8 +578,8 @@ Definition iteWithProof: forall (a: Type), forall (b: Init.Datatypes.bool),
          ) b f1 f2 (@Init.Logic.eq_refl Init.Datatypes.bool b)
    .
 
-Definition ifWithProof: forall (a: Type), forall (b: Init.Datatypes.bool),
-        forall (_1: a), forall (_2: forall (_2: 
+Definition ifWithProof: forall (a: Type) (b: Init.Datatypes.bool) (_1: a)
+        (_2: forall (_2: 
                    @Init.Logic.eq Init.Datatypes.bool b Init.Datatypes.true),
                 a),
         a :=
@@ -642,16 +614,13 @@ Definition ifWithProof: forall (a: Type), forall (b: Init.Datatypes.bool),
 
 (* "Prelude::boolEq__eq@core" was skipped *)
 
-Definition implies: forall (_1: Init.Datatypes.bool),
-        forall (_2: Init.Datatypes.bool),
-        Init.Datatypes.bool :=
+Definition implies: forall (_1 _2: Init.Datatypes.bool), Init.Datatypes.bool :=
    fun (a: Init.Datatypes.bool) (b: Init.Datatypes.bool)
       =>
       Init.Datatypes.orb (Init.Datatypes.negb a) b
    .
 
-Definition implies__eq: forall (a: Init.Datatypes.bool),
-        forall (b: Init.Datatypes.bool),
+Definition implies__eq: forall (a b: Init.Datatypes.bool),
         @Init.Logic.eq Init.Datatypes.bool (implies a b) 
            (Init.Datatypes.orb (Init.Datatypes.negb a) b) :=
    fun (a: Init.Datatypes.bool) (b: Init.Datatypes.bool)
@@ -659,24 +628,20 @@ Definition implies__eq: forall (a: Init.Datatypes.bool),
       @Init.Logic.eq_refl Init.Datatypes.bool (implies a b)
    .
 
-Definition unitEq: forall (_1: SAWCoreScaffolding.UnitType),
-        forall (_2: SAWCoreScaffolding.UnitType),
+Definition unitEq: forall (_1 _2: SAWCoreScaffolding.UnitType),
         Init.Datatypes.bool :=
    fun (_1: SAWCoreScaffolding.UnitType) (_2: SAWCoreScaffolding.UnitType)
       =>
       Init.Datatypes.true
    .
 
-Definition pairEq: forall (a: Type), forall (b: Type),
-        forall (_1: forall (_1: a), forall (_2: a), Init.Datatypes.bool),
-        forall (_2: forall (_2: b), forall (_3: b), Init.Datatypes.bool),
-        forall (_3: SAWCoreScaffolding.PairType a b), forall (_4: 
-           SAWCoreScaffolding.PairType a b),
+Definition pairEq: forall (a b: Type) (_1: forall (_1 _2: a),
+                Init.Datatypes.bool) (_2: forall (_2 _3: b),
+                Init.Datatypes.bool) (_3 _4: SAWCoreScaffolding.PairType a b),
         Init.Datatypes.bool :=
-   fun (a: Type) (b: Type) (f: forall (_1: a), forall (_2: a),
-                Init.Datatypes.bool) (g: forall (_1: b), forall (_2: b),
-                Init.Datatypes.bool) (x: SAWCoreScaffolding.PairType a b) (y: 
-           SAWCoreScaffolding.PairType a b)
+   fun (a: Type) (b: Type) (f: forall (_1 _2: a), Init.Datatypes.bool)
+        (g: forall (_1 _2: b), Init.Datatypes.bool) (x: 
+           SAWCoreScaffolding.PairType a b) (y: SAWCoreScaffolding.PairType a b)
       =>
       Init.Datatypes.andb (f (Pair_fst a b x) (Pair_fst a b y)) 
          (g (Pair_snd a b x) (Pair_snd a b y))
@@ -780,8 +745,7 @@ Definition and_False2: forall (x: Init.Datatypes.bool),
          ) x (and_True1 Init.Datatypes.false) (and_False1 Init.Datatypes.false)
    .
 
-Definition and_assoc: forall (x: Init.Datatypes.bool),
-        forall (y: Init.Datatypes.bool), forall (z: Init.Datatypes.bool),
+Definition and_assoc: forall (x y z: Init.Datatypes.bool),
         @Init.Logic.eq Init.Datatypes.bool 
            (Init.Datatypes.andb x (Init.Datatypes.andb y z)) 
            (Init.Datatypes.andb (Init.Datatypes.andb x y) z) :=
@@ -885,8 +849,7 @@ Definition or_False2: forall (x: Init.Datatypes.bool),
          ) x (or_True1 Init.Datatypes.false) (or_False1 Init.Datatypes.false)
    .
 
-Definition or_assoc: forall (x: Init.Datatypes.bool),
-        forall (y: Init.Datatypes.bool), forall (z: Init.Datatypes.bool),
+Definition or_assoc: forall (x y z: Init.Datatypes.bool),
         @Init.Logic.eq Init.Datatypes.bool 
            (Init.Datatypes.orb x (Init.Datatypes.orb y z)) 
            (Init.Datatypes.orb (Init.Datatypes.orb x y) z) :=
@@ -1149,8 +1112,7 @@ Definition boolEq_same: forall (x: Init.Datatypes.bool),
                (boolEq_False1 Init.Datatypes.false) not_False)
    .
 
-Definition not_or: forall (x: Init.Datatypes.bool),
-        forall (y: Init.Datatypes.bool),
+Definition not_or: forall (x y: Init.Datatypes.bool),
         @Init.Logic.eq Init.Datatypes.bool 
            (Init.Datatypes.negb (Init.Datatypes.orb x y)) 
            (Init.Datatypes.andb (Init.Datatypes.negb x) 
@@ -1227,8 +1189,7 @@ Definition not_or: forall (x: Init.Datatypes.bool),
                             )) (and_True1 var__2))))
    .
 
-Definition not_and: forall (x: Init.Datatypes.bool),
-        forall (y: Init.Datatypes.bool),
+Definition not_and: forall (x y: Init.Datatypes.bool),
         @Init.Logic.eq Init.Datatypes.bool 
            (Init.Datatypes.negb (Init.Datatypes.andb x y)) 
            (Init.Datatypes.orb (Init.Datatypes.negb x) 
@@ -1306,8 +1267,7 @@ Definition not_and: forall (x: Init.Datatypes.bool),
                         ))))
    .
 
-Definition ite_not: forall (a: Type), forall (b: Init.Datatypes.bool),
-        forall (x: a), forall (y: a),
+Definition ite_not: forall (a: Type) (b: Init.Datatypes.bool) (x y: a),
         @Init.Logic.eq a (if Init.Datatypes.negb b then x else y) (if b then
               y
            else
@@ -1376,8 +1336,7 @@ Definition ite_not: forall (a: Type), forall (b: Init.Datatypes.bool),
                         )) (ite_true a x y)) (sym a var__4 x (ite_false a y x)))
    .
 
-Definition ite_nest1: forall (a: Type), forall (b: Init.Datatypes.bool),
-        forall (x: a), forall (y: a), forall (z: a),
+Definition ite_nest1: forall (a: Type) (b: Init.Datatypes.bool) (x y z: a),
         @Init.Logic.eq a (if b then if b then x else y else z) (if b then
               x
            else
@@ -1432,8 +1391,7 @@ Definition ite_nest1: forall (a: Type), forall (b: Init.Datatypes.bool),
                (ite_false a var__4 z) (sym a var__3 z (ite_false a x z)))
    .
 
-Definition ite_nest2: forall (a: Type), forall (b: Init.Datatypes.bool),
-        forall (x: a), forall (y: a), forall (z: a),
+Definition ite_nest2: forall (a: Type) (b: Init.Datatypes.bool) (x y z: a),
         @Init.Logic.eq a (if b then x else if b then y else z) (if b then
               x
            else
@@ -1490,8 +1448,7 @@ Definition ite_nest2: forall (a: Type), forall (b: Init.Datatypes.bool),
 
 (* "Prelude::ite_bit@core" was skipped *)
 
-Definition ite_bit_false_1: forall (b: Init.Datatypes.bool),
-        forall (c: Init.Datatypes.bool),
+Definition ite_bit_false_1: forall (b c: Init.Datatypes.bool),
         @Init.Logic.eq Init.Datatypes.bool (if b then
               Init.Datatypes.false
            else
@@ -1551,8 +1508,7 @@ Definition ite_bit_false_1: forall (b: Init.Datatypes.bool),
                             )) (and_True1 c))))
    .
 
-Definition ite_bit_true_1: forall (b: Init.Datatypes.bool),
-        forall (c: Init.Datatypes.bool),
+Definition ite_bit_true_1: forall (b c: Init.Datatypes.bool),
         @Init.Logic.eq Init.Datatypes.bool (if b then
               Init.Datatypes.true
            else
@@ -1625,8 +1581,7 @@ Definition ite_fold_not: forall (b: Init.Datatypes.bool),
                (sym Init.Datatypes.bool var__1 Init.Datatypes.true not_False))
    .
 
-Definition ite_eq: forall (a: Type), forall (b: Init.Datatypes.bool),
-        forall (x: a),
+Definition ite_eq: forall (a: Type) (b: Init.Datatypes.bool) (x: a),
         @Init.Logic.eq a (if b then x else x) x :=
    fun (a: Type) (b: Init.Datatypes.bool) (x: a)
       =>
@@ -1730,8 +1685,7 @@ Definition TrueProp: Prop :=
 Definition TrueI: EqTrue Init.Datatypes.true :=
    @Init.Logic.eq_refl Init.Datatypes.bool Init.Datatypes.true.
 
-Definition andI: forall (x: Init.Datatypes.bool),
-        forall (y: Init.Datatypes.bool), forall (_1: EqTrue x), forall (_2: 
+Definition andI: forall (x y: Init.Datatypes.bool) (_1: EqTrue x) (_2: 
            EqTrue y),
         EqTrue (Init.Datatypes.andb x y) :=
    fun (x: Init.Datatypes.bool) (y: Init.Datatypes.bool) (p: EqTrue x) (q: 
@@ -1743,8 +1697,8 @@ Definition andI: forall (x: Init.Datatypes.bool),
             Init.Datatypes.bool (Init.Datatypes.andb x)) (and_True2 x) p
    .
 
-Definition impliesI: forall (x: Init.Datatypes.bool),
-        forall (y: Init.Datatypes.bool), forall (_1: forall (_1: EqTrue x),
+Definition impliesI: forall (x y: Init.Datatypes.bool) (_1: forall (_1: 
+                   EqTrue x),
                 EqTrue y),
         EqTrue (implies x y) :=
    fun (x: Init.Datatypes.bool) (y: Init.Datatypes.bool)
@@ -1765,10 +1719,10 @@ Definition impliesI: forall (x: Init.Datatypes.bool),
 
 (* "Prelude::Either" was skipped *)
 
-Definition Either__rec: forall (s: Type), forall (t: Type),
-        forall (p: forall (_1: Init.Datatypes.sum s t), Type),
-        forall (_1: forall (l: s), p (@Init.Datatypes.inl s t l)),
-        forall (_2: forall (r: t), p (@Init.Datatypes.inr s t r)), forall (e: 
+Definition Either__rec: forall (s t: Type) (p: forall (_1: 
+                   Init.Datatypes.sum s t),
+                Type) (_1: forall (l: s), p (@Init.Datatypes.inl s t l))
+        (_2: forall (r: t), p (@Init.Datatypes.inr s t r)) (e: 
            Init.Datatypes.sum s t),
         p e :=
    fun (s: Type) (t: Type) (p: forall (_1: Init.Datatypes.sum s t), Type)
@@ -1778,9 +1732,9 @@ Definition Either__rec: forall (s: Type), forall (t: Type),
       @Init.Datatypes.sum_rect s t p f1 f2 e
    .
 
-Definition either: forall (a: Type), forall (b: Type), forall (c: Type),
-        forall (_1: forall (_1: a), c), forall (_2: forall (_2: b), c),
-        forall (_3: Init.Datatypes.sum a b),
+Definition either: forall (a b c: Type) (_1: forall (_1: a), c) (_2: forall
+                (_2: b),
+                c) (_3: Init.Datatypes.sum a b),
         c :=
    fun (a: Type) (b: Type) (c: Type) (f: forall (_1: a), c) (g: forall (_1: b),
                 c) (e: Init.Datatypes.sum a b)
@@ -1788,30 +1742,26 @@ Definition either: forall (a: Type), forall (b: Type), forall (c: Type),
       Either__rec a b (fun (p: Init.Datatypes.sum a b) => c) f g e
    .
 
-Definition left: forall (a: Type), forall (b: Type), forall (_1: a),
-        Init.Datatypes.sum a b :=
+Definition left: forall (a b: Type) (_1: a), Init.Datatypes.sum a b :=
    fun (a: Type) (b: Type) (x: a)
       =>
       @Init.Datatypes.inl a b x
    .
 
-Definition right: forall (a: Type), forall (b: Type), forall (_1: b),
-        Init.Datatypes.sum a b :=
+Definition right: forall (a b: Type) (_1: b), Init.Datatypes.sum a b :=
    fun (a: Type) (b: Type) (x: b)
       =>
       @Init.Datatypes.inr a b x
    .
 
-Definition eitherCong0: forall (t: Type), forall (x: Type), forall (y: Type),
-        forall (_1: @Init.Logic.eq Type x y),
+Definition eitherCong0: forall (t x y: Type) (_1: @Init.Logic.eq Type x y),
         @Init.Logic.eq Type (Init.Datatypes.sum x t) (Init.Datatypes.sum y t) :=
    fun (t: Type) (x: Type) (y: Type) (eq: @Init.Logic.eq Type x y)
       =>
       eq_cong Type x y eq Type (fun (y': Type) => Init.Datatypes.sum y' t)
    .
 
-Definition eitherCong1: forall (t: Type), forall (x: Type), forall (y: Type),
-        forall (_1: @Init.Logic.eq Type x y),
+Definition eitherCong1: forall (t x y: Type) (_1: @Init.Logic.eq Type x y),
         @Init.Logic.eq Type (Init.Datatypes.sum t x) (Init.Datatypes.sum t y) :=
    fun (t: Type) (x: Type) (y: Type) (eq: @Init.Logic.eq Type x y)
       =>
@@ -1836,18 +1786,18 @@ Inductive Maybe (a: Type) : Type :=
 | Just: forall (_1: a), Maybe a
 .
 
-Definition Maybe__rec: forall (a: Type), forall (p: forall (_1: Maybe a), Type),
-        forall (_1: p (Nothing a)), forall (_2: forall (x: a), p (Just a x)),
-        forall (m: Maybe a),
+Definition Maybe__rec: forall (a: Type) (p: forall (_1: Maybe a), Type) (_1: 
+           p (Nothing a)) (_2: forall (x: a), p (Just a x)) (m: Maybe a),
         p m :=
-   fun (a: Type) (p: forall (_1: Maybe a), Type) (f1: p (Nothing a))
-        (f2: forall (x: a), p (Just a x)) (m: Maybe a)
+   fun (a: Type) (p: forall (_1: Maybe a), Type) (f1: p (Nothing a)) (f2: forall
+                (x: a),
+                p (Just a x)) (m: Maybe a)
       =>
       @SAWCorePrelude.Maybe_rect a p f1 f2 m
    .
 
-Definition maybe: forall (a: Type), forall (b: Type), forall (_1: b),
-        forall (_2: forall (_2: a), b), forall (_3: Maybe a),
+Definition maybe: forall (a b: Type) (_1: b) (_2: forall (_2: a), b) (_3: 
+           Maybe a),
         b :=
    fun (a: Type) (b: Type) (f1: b) (f2: forall (_1: a), b) (m: Maybe a)
       =>
@@ -1866,8 +1816,7 @@ Definition maybe: forall (a: Type), forall (b: Type), forall (_1: b),
 
 (* "Prelude::posExp@core" was skipped *)
 
-Definition posEq: forall (_1: Stdlib.PArith.BinPos.positive),
-        forall (_2: Stdlib.PArith.BinPos.positive),
+Definition posEq: forall (_1 _2: Stdlib.PArith.BinPos.positive),
         Init.Datatypes.bool :=
    SAWCoreScaffolding.Pos_cases (forall (_1: Stdlib.PArith.BinPos.positive),
            Init.Datatypes.bool) 
@@ -1878,8 +1827,9 @@ Definition posEq: forall (_1: Stdlib.PArith.BinPos.positive),
          ) (fun (y: Stdlib.PArith.BinPos.positive) (_1: Init.Datatypes.bool)
             =>
             Init.Datatypes.false
-         )) (fun (x: Stdlib.PArith.BinPos.positive)
-           (rx: forall (_1: Stdlib.PArith.BinPos.positive), Init.Datatypes.bool)
+         )) (fun (x: Stdlib.PArith.BinPos.positive) (rx: forall
+                   (_1: Stdlib.PArith.BinPos.positive),
+                   Init.Datatypes.bool)
          =>
          SAWCoreScaffolding.Pos_cases Init.Datatypes.bool Init.Datatypes.false
             (fun (y: Stdlib.PArith.BinPos.positive) (_1: Init.Datatypes.bool)
@@ -1889,8 +1839,9 @@ Definition posEq: forall (_1: Stdlib.PArith.BinPos.positive),
                =>
                Init.Datatypes.false
             )
-      ) (fun (x: Stdlib.PArith.BinPos.positive)
-           (rx: forall (_1: Stdlib.PArith.BinPos.positive), Init.Datatypes.bool)
+      ) (fun (x: Stdlib.PArith.BinPos.positive) (rx: forall
+                   (_1: Stdlib.PArith.BinPos.positive),
+                   Init.Datatypes.bool)
          =>
          SAWCoreScaffolding.Pos_cases Init.Datatypes.bool Init.Datatypes.false
             (fun (y: Stdlib.PArith.BinPos.positive) (_1: Init.Datatypes.bool)
@@ -1902,77 +1853,74 @@ Definition posEq: forall (_1: Stdlib.PArith.BinPos.positive),
             )
       ).
 
-Definition posCmp: forall (_1: Stdlib.PArith.BinPos.positive),
-        forall (_2: Stdlib.PArith.BinPos.positive),
-        forall (_3: Init.Datatypes.bool),
+Definition posCmp: forall (_1 _2: Stdlib.PArith.BinPos.positive)
+        (_3: Init.Datatypes.bool),
         Init.Datatypes.bool :=
-   SAWCoreScaffolding.Pos_cases (forall (_1: Stdlib.PArith.BinPos.positive),
-           forall (_2: Init.Datatypes.bool),
+   SAWCoreScaffolding.Pos_cases (forall (_1: Stdlib.PArith.BinPos.positive)
+           (_2: Init.Datatypes.bool),
            Init.Datatypes.bool) 
       (SAWCoreScaffolding.Pos_cases (forall (_1: Init.Datatypes.bool),
               Init.Datatypes.bool) (fun (k: Init.Datatypes.bool) => k) (fun
-              (y: Stdlib.PArith.BinPos.positive)
-              (_1: forall (_1: Init.Datatypes.bool), Init.Datatypes.bool)
-              (k: Init.Datatypes.bool)
+              (y: Stdlib.PArith.BinPos.positive) (_1: forall
+                      (_1: Init.Datatypes.bool),
+                      Init.Datatypes.bool) (k: Init.Datatypes.bool)
             =>
             Init.Datatypes.true
-         ) (fun (y: Stdlib.PArith.BinPos.positive)
-              (_1: forall (_1: Init.Datatypes.bool), Init.Datatypes.bool)
-              (k: Init.Datatypes.bool)
+         ) (fun (y: Stdlib.PArith.BinPos.positive) (_1: forall
+                      (_1: Init.Datatypes.bool),
+                      Init.Datatypes.bool) (k: Init.Datatypes.bool)
             =>
             Init.Datatypes.true
-         )) (fun (x: Stdlib.PArith.BinPos.positive)
-           (rx: forall (_1: Stdlib.PArith.BinPos.positive),
-                   forall (_2: Init.Datatypes.bool),
+         )) (fun (x: Stdlib.PArith.BinPos.positive) (rx: forall
+                   (_1: Stdlib.PArith.BinPos.positive)
+                   (_2: Init.Datatypes.bool),
                    Init.Datatypes.bool)
          =>
          SAWCoreScaffolding.Pos_cases (forall (_1: Init.Datatypes.bool),
                  Init.Datatypes.bool) (fun (k: Init.Datatypes.bool)
                =>
                Init.Datatypes.false
-            ) (fun (y: Stdlib.PArith.BinPos.positive)
-                 (_1: forall (_1: Init.Datatypes.bool), Init.Datatypes.bool)
-                 (k: Init.Datatypes.bool)
+            ) (fun (y: Stdlib.PArith.BinPos.positive) (_1: forall
+                         (_1: Init.Datatypes.bool),
+                         Init.Datatypes.bool) (k: Init.Datatypes.bool)
                =>
                rx y k
-            ) (fun (y: Stdlib.PArith.BinPos.positive)
-                 (_1: forall (_1: Init.Datatypes.bool), Init.Datatypes.bool)
-                 (k: Init.Datatypes.bool)
+            ) (fun (y: Stdlib.PArith.BinPos.positive) (_1: forall
+                         (_1: Init.Datatypes.bool),
+                         Init.Datatypes.bool) (k: Init.Datatypes.bool)
                =>
                rx y Init.Datatypes.true
             )
-      ) (fun (x: Stdlib.PArith.BinPos.positive)
-           (rx: forall (_1: Stdlib.PArith.BinPos.positive),
-                   forall (_2: Init.Datatypes.bool),
+      ) (fun (x: Stdlib.PArith.BinPos.positive) (rx: forall
+                   (_1: Stdlib.PArith.BinPos.positive)
+                   (_2: Init.Datatypes.bool),
                    Init.Datatypes.bool)
          =>
          SAWCoreScaffolding.Pos_cases (forall (_1: Init.Datatypes.bool),
                  Init.Datatypes.bool) (fun (k: Init.Datatypes.bool)
                =>
                Init.Datatypes.false
-            ) (fun (y: Stdlib.PArith.BinPos.positive)
-                 (_1: forall (_1: Init.Datatypes.bool), Init.Datatypes.bool)
-                 (k: Init.Datatypes.bool)
+            ) (fun (y: Stdlib.PArith.BinPos.positive) (_1: forall
+                         (_1: Init.Datatypes.bool),
+                         Init.Datatypes.bool) (k: Init.Datatypes.bool)
                =>
                rx y Init.Datatypes.false
-            ) (fun (y: Stdlib.PArith.BinPos.positive)
-                 (_1: forall (_1: Init.Datatypes.bool), Init.Datatypes.bool)
-                 (k: Init.Datatypes.bool)
+            ) (fun (y: Stdlib.PArith.BinPos.positive) (_1: forall
+                         (_1: Init.Datatypes.bool),
+                         Init.Datatypes.bool) (k: Init.Datatypes.bool)
                =>
                rx y k
             )
       ).
 
-Definition posLe: forall (_1: Stdlib.PArith.BinPos.positive),
-        forall (_2: Stdlib.PArith.BinPos.positive),
+Definition posLe: forall (_1 _2: Stdlib.PArith.BinPos.positive),
         Init.Datatypes.bool :=
    fun (x: Stdlib.PArith.BinPos.positive) (y: Stdlib.PArith.BinPos.positive)
       =>
       posCmp x y Init.Datatypes.true
    .
 
-Definition posLt: forall (_1: Stdlib.PArith.BinPos.positive),
-        forall (_2: Stdlib.PArith.BinPos.positive),
+Definition posLt: forall (_1 _2: Stdlib.PArith.BinPos.positive),
         Init.Datatypes.bool :=
    fun (x: Stdlib.PArith.BinPos.positive) (y: Stdlib.PArith.BinPos.positive)
       =>
@@ -2003,10 +1951,10 @@ Definition posLt: forall (_1: Stdlib.PArith.BinPos.positive),
 
 (* "Prelude::Z" was skipped *)
 
-Definition Z_cases: forall (a: Type), forall (_1: a),
-        forall (_2: forall (_2: Stdlib.PArith.BinPos.positive), a),
-        forall (_3: forall (_3: Stdlib.PArith.BinPos.positive), a),
-        forall (_4: Stdlib.ZArith.BinInt.Z),
+Definition Z_cases: forall (a: Type) (_1: a) (_2: forall
+                (_2: Stdlib.PArith.BinPos.positive),
+                a) (_3: forall (_3: Stdlib.PArith.BinPos.positive), a)
+        (_4: Stdlib.ZArith.BinInt.Z),
         a :=
    fun (a: Type)
       =>
@@ -2049,8 +1997,7 @@ Definition dblZdec: forall (_1: Stdlib.ZArith.BinInt.Z),
          Stdlib.ZArith.BinInt.Zneg (Stdlib.PArith.BinPos.xI x)
       ).
 
-Definition posSub: forall (_1: Stdlib.PArith.BinPos.positive),
-        forall (_2: Stdlib.PArith.BinPos.positive),
+Definition posSub: forall (_1 _2: Stdlib.PArith.BinPos.positive),
         Stdlib.ZArith.BinInt.Z :=
    SAWCoreScaffolding.Pos_cases (forall (_1: Stdlib.PArith.BinPos.positive),
            Stdlib.ZArith.BinInt.Z) 
@@ -2062,8 +2009,8 @@ Definition posSub: forall (_1: Stdlib.PArith.BinPos.positive),
          ) (fun (y: Stdlib.PArith.BinPos.positive) (_1: Stdlib.ZArith.BinInt.Z)
             =>
             Stdlib.ZArith.BinInt.Zneg (Stdlib.PArith.BinPos.xO y)
-         )) (fun (x: Stdlib.PArith.BinPos.positive)
-           (rx: forall (_1: Stdlib.PArith.BinPos.positive),
+         )) (fun (x: Stdlib.PArith.BinPos.positive) (rx: forall
+                   (_1: Stdlib.PArith.BinPos.positive),
                    Stdlib.ZArith.BinInt.Z)
          =>
          SAWCoreScaffolding.Pos_cases Stdlib.ZArith.BinInt.Z 
@@ -2076,8 +2023,8 @@ Definition posSub: forall (_1: Stdlib.PArith.BinPos.positive),
                =>
                dblZdec (rx y)
             )
-      ) (fun (x: Stdlib.PArith.BinPos.positive)
-           (rx: forall (_1: Stdlib.PArith.BinPos.positive),
+      ) (fun (x: Stdlib.PArith.BinPos.positive) (rx: forall
+                   (_1: Stdlib.PArith.BinPos.positive),
                    Stdlib.ZArith.BinInt.Z)
          =>
          SAWCoreScaffolding.Pos_cases Stdlib.ZArith.BinInt.Z 
@@ -2109,9 +2056,7 @@ Definition ZtoNat: forall (_1: Stdlib.ZArith.BinInt.Z), Init.Datatypes.nat :=
 
 (* "Prelude::divModNat@core" was skipped *)
 
-Definition divNat: forall (_1: Init.Datatypes.nat),
-        forall (_2: Init.Datatypes.nat),
-        Init.Datatypes.nat :=
+Definition divNat: forall (_1 _2: Init.Datatypes.nat), Init.Datatypes.nat :=
    fun (x: Init.Datatypes.nat) (y: Init.Datatypes.nat)
       =>
       Pair_fst Init.Datatypes.nat 
@@ -2119,9 +2064,7 @@ Definition divNat: forall (_1: Init.Datatypes.nat),
             SAWCoreScaffolding.UnitType) (SAWCoreScaffolding.divModNat x y)
    .
 
-Definition modNat: forall (_1: Init.Datatypes.nat),
-        forall (_2: Init.Datatypes.nat),
-        Init.Datatypes.nat :=
+Definition modNat: forall (_1 _2: Init.Datatypes.nat), Init.Datatypes.nat :=
    fun (x: Init.Datatypes.nat) (y: Init.Datatypes.nat)
       =>
       Pair_fst Init.Datatypes.nat SAWCoreScaffolding.UnitType 
@@ -2146,37 +2089,33 @@ Definition modNat: forall (_1: Init.Datatypes.nat),
 
 (* "Prelude::Nat__rec@core" was skipped *)
 
-Definition Nat_cases: forall (a: Type), forall (_1: a),
-        forall (_2: forall (_2: Init.Datatypes.nat), forall (_3: a), a),
-        forall (_3: Init.Datatypes.nat),
+Definition Nat_cases: forall (a: Type) (_1: a) (_2: forall
+                (_2: Init.Datatypes.nat) (_3: a),
+                a) (_3: Init.Datatypes.nat),
         a :=
-   fun (a: Type) (f1: a) (f2: forall (_1: Init.Datatypes.nat), forall (_2: a),
-                a) (n: Init.Datatypes.nat)
+   fun (a: Type) (f1: a) (f2: forall (_1: Init.Datatypes.nat) (_2: a), a)
+        (n: Init.Datatypes.nat)
       =>
       SAWCoreScaffolding.Nat__rec (fun (n1: Init.Datatypes.nat) => a) f1 f2 n
    .
 
-Definition Nat_cases2: forall (a: Type),
-        forall (_1: forall (_1: Init.Datatypes.nat), a),
-        forall (_2: forall (_2: Init.Datatypes.nat), a),
-        forall (_3: forall (_3: Init.Datatypes.nat),
-                forall (_4: Init.Datatypes.nat), forall (_5: a),
-                a), forall (_4: Init.Datatypes.nat),
-        forall (_5: Init.Datatypes.nat),
+Definition Nat_cases2: forall (a: Type) (_1: forall (_1: Init.Datatypes.nat), a)
+        (_2: forall (_2: Init.Datatypes.nat), a) (_3: forall
+                (_3 _4: Init.Datatypes.nat) (_5: a),
+                a) (_4 _5: Init.Datatypes.nat),
         a :=
-   fun (a: Type) (f1: forall (_1: Init.Datatypes.nat), a)
-        (f2: forall (_1: Init.Datatypes.nat), a)
-        (f3: forall (_1: Init.Datatypes.nat), forall (_2: Init.Datatypes.nat),
-                forall (_3: a),
-                a) (n: Init.Datatypes.nat) (m: Init.Datatypes.nat)
+   fun (a: Type) (f1: forall (_1: Init.Datatypes.nat), a) (f2: forall
+                (_1: Init.Datatypes.nat),
+                a) (f3: forall (_1 _2: Init.Datatypes.nat) (_3: a), a)
+        (n: Init.Datatypes.nat) (m: Init.Datatypes.nat)
       =>
       SAWCoreScaffolding.Nat__rec (fun (n1: Init.Datatypes.nat)
             =>
             forall (_1: Init.Datatypes.nat),
                  a
-         ) f1 (fun (n1: Init.Datatypes.nat)
-              (f_rec: forall (_1: Init.Datatypes.nat), a)
-              (m1: Init.Datatypes.nat)
+         ) f1 (fun (n1: Init.Datatypes.nat) (f_rec: forall
+                      (_1: Init.Datatypes.nat),
+                      a) (m1: Init.Datatypes.nat)
             =>
             SAWCoreScaffolding.Nat__rec (fun (m': Init.Datatypes.nat) => a) 
                (f2 n1) (fun (m': Init.Datatypes.nat) (frec': a)
@@ -2186,16 +2125,13 @@ Definition Nat_cases2: forall (a: Type),
          ) n m
    .
 
-Definition eqNat: forall (_1: Init.Datatypes.nat),
-        forall (_2: Init.Datatypes.nat),
-        Prop :=
+Definition eqNat: forall (_1 _2: Init.Datatypes.nat), Prop :=
    fun (x: Init.Datatypes.nat) (y: Init.Datatypes.nat)
       =>
       @Init.Logic.eq Init.Datatypes.nat x y
    .
 
-Definition eqNatSucc: forall (x: Init.Datatypes.nat),
-        forall (y: Init.Datatypes.nat), forall (_1: eqNat x y),
+Definition eqNatSucc: forall (x y: Init.Datatypes.nat) (_1: eqNat x y),
         eqNat (SAWCoreScaffolding.Succ x) (SAWCoreScaffolding.Succ y) :=
    fun (x: Init.Datatypes.nat) (y: Init.Datatypes.nat) (eq: eqNat x y)
       =>
@@ -2224,13 +2160,11 @@ Definition pred: forall (_1: Init.Datatypes.nat), Init.Datatypes.nat :=
 
 (* "Prelude::IsLeNat__rec@core" was skipped *)
 
-Axiom natCompareLe: forall (m: Init.Datatypes.nat),
-        forall (n: Init.Datatypes.nat),
+Axiom natCompareLe: forall (m n: Init.Datatypes.nat),
         Init.Datatypes.sum (SAWCoreScaffolding.IsLtNat m n) 
            (SAWCoreScaffolding.IsLeNat n m).
 
-Definition proveEqNat: forall (m: Init.Datatypes.nat),
-        forall (n: Init.Datatypes.nat),
+Definition proveEqNat: forall (m n: Init.Datatypes.nat),
         Maybe (@Init.Logic.eq Init.Datatypes.nat m n) :=
    SAWCoreScaffolding.Nat__rec (fun (m: Init.Datatypes.nat)
          =>
@@ -2277,12 +2211,10 @@ Definition proveEqNat: forall (m: Init.Datatypes.nat),
             )
       ).
 
-Axiom proveLeNat: forall (x: Init.Datatypes.nat),
-        forall (y: Init.Datatypes.nat),
+Axiom proveLeNat: forall (x y: Init.Datatypes.nat),
         Maybe (SAWCoreScaffolding.IsLeNat x y).
 
-Definition proveLtNat: forall (x: Init.Datatypes.nat),
-        forall (y: Init.Datatypes.nat),
+Definition proveLtNat: forall (x y: Init.Datatypes.nat),
         Maybe (SAWCoreScaffolding.IsLtNat x y) :=
    fun (x: Init.Datatypes.nat) (y: Init.Datatypes.nat)
       =>
@@ -2300,16 +2232,13 @@ Definition proveLtNat: forall (x: Init.Datatypes.nat),
 Definition equal0Nat: forall (_1: Init.Datatypes.nat), Init.Datatypes.bool :=
    SAWCoreScaffolding.equalNat SAWCoreScaffolding.Zero.
 
-Axiom equalNatToEqNat: forall (m: Init.Datatypes.nat),
-        forall (n: Init.Datatypes.nat), forall (_1: 
+Axiom equalNatToEqNat: forall (m n: Init.Datatypes.nat) (_1: 
            @Init.Logic.eq Init.Datatypes.bool (SAWCoreScaffolding.equalNat m n)
               Init.Datatypes.true),
         eqNat m n.
 
-Definition ifEqNatWithProof: forall (a: Type), forall (m: Init.Datatypes.nat),
-        forall (n: Init.Datatypes.nat), forall (_1: a), forall (_2: forall (_2: 
-                   eqNat m n),
-                a),
+Definition ifEqNatWithProof: forall (a: Type) (m n: Init.Datatypes.nat) (_1: a)
+        (_2: forall (_2: eqNat m n), a),
         a :=
    fun (a: Type) (m: Init.Datatypes.nat) (n: Init.Datatypes.nat) (x: a)
         (f: forall (_1: eqNat m n), a)
@@ -2325,10 +2254,9 @@ Definition ifEqNatWithProof: forall (a: Type), forall (m: Init.Datatypes.nat),
          )
    .
 
-Definition natCase: forall (p: forall (_1: Init.Datatypes.nat), Type),
-        forall (_1: p SAWCoreScaffolding.Zero),
-        forall (_2: forall (n: Init.Datatypes.nat),
-                p (SAWCoreScaffolding.Succ n)), forall (n: Init.Datatypes.nat),
+Definition natCase: forall (p: forall (_1: Init.Datatypes.nat), Type) (_1: 
+           p SAWCoreScaffolding.Zero) (_2: forall (n: Init.Datatypes.nat),
+                p (SAWCoreScaffolding.Succ n)) (n: Init.Datatypes.nat),
         p n :=
    fun (p: forall (_1: Init.Datatypes.nat), Type) (z: p SAWCoreScaffolding.Zero)
         (s: forall (n: Init.Datatypes.nat), p (SAWCoreScaffolding.Succ n))
@@ -2341,15 +2269,12 @@ Definition natCase: forall (p: forall (_1: Init.Datatypes.nat), Type),
 
 (* "Prelude::if0Nat@core" was skipped *)
 
-Axiom expByNat: forall (a: Type), forall (_1: a), forall (_2: forall (_2: a),
-                forall (_3: a),
-                a), forall (_3: a), forall (_4: Init.Datatypes.nat),
+Axiom expByNat: forall (a: Type) (_1: a) (_2: forall (_2 _3: a), a) (_3: a)
+        (_4: Init.Datatypes.nat),
         a.
 
-Definition IsLeNat_transitive: forall (n: Init.Datatypes.nat),
-        forall (m: Init.Datatypes.nat), forall (o: Init.Datatypes.nat),
-        forall (_1: SAWCoreScaffolding.IsLeNat n m), forall (_2: 
-           SAWCoreScaffolding.IsLeNat m o),
+Definition IsLeNat_transitive: forall (n m o: Init.Datatypes.nat) (_1: 
+           SAWCoreScaffolding.IsLeNat n m) (_2: SAWCoreScaffolding.IsLeNat m o),
         SAWCoreScaffolding.IsLeNat n o :=
    fun (n: Init.Datatypes.nat) (m: Init.Datatypes.nat) (o: Init.Datatypes.nat)
         (Hnm: SAWCoreScaffolding.IsLeNat n m) (Hmo: 
@@ -2371,22 +2296,21 @@ Definition IsLeNat_transitive: forall (n: Init.Datatypes.nat),
 (* "Prelude::IsLeNat_SuccSucc@core" was skipped *)
 
 Definition Nat_complete_induction: forall (p: forall (_1: Init.Datatypes.nat),
-                Prop), forall (_1: forall (n: Init.Datatypes.nat),
-                forall (_1: forall (m: Init.Datatypes.nat), forall (_1: 
+                Prop) (_1: forall (n: Init.Datatypes.nat) (_1: forall
+                        (m: Init.Datatypes.nat) (_1: 
                            SAWCoreScaffolding.IsLtNat m n),
                         p m),
-                p n), forall (n: Init.Datatypes.nat),
+                p n) (n: Init.Datatypes.nat),
         p n :=
-   fun (p: forall (_1: Init.Datatypes.nat), Prop)
-        (f: forall (n: Init.Datatypes.nat),
-                forall (_1: forall (m: Init.Datatypes.nat), forall (_1: 
-                           SAWCoreScaffolding.IsLtNat m n),
+   fun (p: forall (_1: Init.Datatypes.nat), Prop) (f: forall
+                (n: Init.Datatypes.nat) (_1: forall (m: Init.Datatypes.nat)
+                        (_1: SAWCoreScaffolding.IsLtNat m n),
                         p m),
                 p n) (n: Init.Datatypes.nat)
       =>
       SAWCoreScaffolding.Nat__rec (fun (n1: Init.Datatypes.nat)
             =>
-            forall (m: Init.Datatypes.nat), forall (_1: 
+            forall (m: Init.Datatypes.nat) (_1: 
                     SAWCoreScaffolding.IsLeNat m n1),
                  p m
          ) (fun (n1: Init.Datatypes.nat) (Hn: 
@@ -2399,8 +2323,8 @@ Definition Nat_complete_induction: forall (p: forall (_1: Init.Datatypes.nat),
                     (IsLeNat_transitive (SAWCoreScaffolding.Succ m) n1
                        SAWCoreScaffolding.Zero Hm Hn)
               )
-         ) (fun (n1: Init.Datatypes.nat) (Hind: forall (m: Init.Datatypes.nat),
-                      forall (_1: SAWCoreScaffolding.IsLeNat m n1),
+         ) (fun (n1: Init.Datatypes.nat) (Hind: forall (m: Init.Datatypes.nat)
+                      (_1: SAWCoreScaffolding.IsLeNat m n1),
                       p m) (r: Init.Datatypes.nat) (Hr: 
                  SAWCoreScaffolding.IsLeNat r (SAWCoreScaffolding.Succ n1))
             =>
@@ -2426,24 +2350,23 @@ Definition Nat_complete_induction: forall (p: forall (_1: Init.Datatypes.nat),
 
 (* "Prelude::tail_gen@core" was skipped *)
 
-Definition atWithDefault': forall (n: Init.Datatypes.nat), forall (a: Type),
-        forall (_1: a), forall (_2: SAWCoreVectorsAsRocqVectors.Vec n a),
-        forall (_3: Init.Datatypes.nat),
+Definition atWithDefault': forall (n: Init.Datatypes.nat) (a: Type) (_1: a)
+        (_2: SAWCoreVectorsAsRocqVectors.Vec n a) (_3: Init.Datatypes.nat),
         a :=
    fun (n: Init.Datatypes.nat) (a: Type) (d: a)
       =>
       SAWCoreScaffolding.Nat__rec (fun (n1: Init.Datatypes.nat)
             =>
-            forall (_1: SAWCoreVectorsAsRocqVectors.Vec n1 a),
-                 forall (_2: Init.Datatypes.nat),
+            forall (_1: SAWCoreVectorsAsRocqVectors.Vec n1 a)
+                 (_2: Init.Datatypes.nat),
                  a
          ) (fun (_1: SAWCoreVectorsAsRocqVectors.Vec SAWCoreScaffolding.Zero a)
               (_2: Init.Datatypes.nat)
             =>
             d
          ) (fun (n1: Init.Datatypes.nat) (rec_f: forall (_1: 
-                         SAWCoreVectorsAsRocqVectors.Vec n1 a),
-                      forall (_2: Init.Datatypes.nat),
+                         SAWCoreVectorsAsRocqVectors.Vec n1 a)
+                      (_2: Init.Datatypes.nat),
                       a) (v: 
                  SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n1) a)
               (i: Init.Datatypes.nat)
@@ -2458,10 +2381,9 @@ Definition atWithDefault': forall (n: Init.Datatypes.nat), forall (a: Type),
 
 (* "Prelude::atWithDefault@core" was skipped *)
 
-Definition sawAt: forall (n: Init.Datatypes.nat), forall (a: Type),
-        forall {Inh_a: SAWCoreScaffolding.Inhabited a}, forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec n a),
-        forall (_2: Init.Datatypes.nat),
+Definition sawAt: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a: 
+           SAWCoreScaffolding.Inhabited a} (_1: 
+           SAWCoreVectorsAsRocqVectors.Vec n a) (_2: Init.Datatypes.nat),
         a :=
    fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
         (v: SAWCoreVectorsAsRocqVectors.Vec n a) (i: Init.Datatypes.nat)
@@ -2472,9 +2394,8 @@ Definition sawAt: forall (n: Init.Datatypes.nat), forall (a: Type),
 
 (* "Prelude::EmptyVec@core" was skipped *)
 
-Definition ConsVec: forall (a: Type), forall {Inh_a: 
-           SAWCoreScaffolding.Inhabited a}, forall (_1: a),
-        forall (n: Init.Datatypes.nat), forall (_2: 
+Definition ConsVec: forall (a: Type) {Inh_a: SAWCoreScaffolding.Inhabited a}
+        (_1: a) (n: Init.Datatypes.nat) (_2: 
            SAWCoreVectorsAsRocqVectors.Vec n a),
         SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n) a :=
    fun (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (x: a)
@@ -2487,10 +2408,10 @@ Definition ConsVec: forall (a: Type), forall {Inh_a:
             ))
    .
 
-Definition upd: forall (n: Init.Datatypes.nat), forall (a: Type),
-        forall {Inh_a: SAWCoreScaffolding.Inhabited a}, forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec n a),
-        forall (_2: Init.Datatypes.nat), forall (_3: a),
+Definition upd: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a: 
+           SAWCoreScaffolding.Inhabited a} (_1: 
+           SAWCoreVectorsAsRocqVectors.Vec n a) (_2: Init.Datatypes.nat)
+        (_3: a),
         SAWCoreVectorsAsRocqVectors.Vec n a :=
    fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
         (v: SAWCoreVectorsAsRocqVectors.Vec n a) (j: Init.Datatypes.nat) (x: a)
@@ -2504,13 +2425,13 @@ Definition upd: forall (n: Init.Datatypes.nat), forall (a: Type),
          )
    .
 
-Definition map: forall (a: Type), forall {Inh_a: 
-           SAWCoreScaffolding.Inhabited a}, forall (b: Type),
-        forall (_1: forall (_1: a), b), forall (n: Init.Datatypes.nat),
-        forall (_2: SAWCoreVectorsAsRocqVectors.Vec n a),
+Definition map: forall (a: Type) {Inh_a: SAWCoreScaffolding.Inhabited a}
+        (b: Type) (_1: forall (_1: a), b) (n: Init.Datatypes.nat) (_2: 
+           SAWCoreVectorsAsRocqVectors.Vec n a),
         SAWCoreVectorsAsRocqVectors.Vec n b :=
-   fun (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (b: Type)
-        (f: forall (_1: a), b) (n: Init.Datatypes.nat) (v: 
+   fun (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (b: Type) (f: forall
+                (_1: a),
+                b) (n: Init.Datatypes.nat) (v: 
            SAWCoreVectorsAsRocqVectors.Vec n a)
       =>
       SAWCoreVectorsAsRocqVectors.gen n b (fun (i: Init.Datatypes.nat)
@@ -2519,17 +2440,15 @@ Definition map: forall (a: Type), forall {Inh_a:
          )
    .
 
-Definition zipWith: forall (a: Type), forall {Inh_a: 
-           SAWCoreScaffolding.Inhabited a}, forall (b: Type), forall {Inh_b: 
-           SAWCoreScaffolding.Inhabited b}, forall (c: Type),
-        forall (_1: forall (_1: a), forall (_2: b), c),
-        forall (n: Init.Datatypes.nat), forall (_2: 
-           SAWCoreVectorsAsRocqVectors.Vec n a), forall (_3: 
+Definition zipWith: forall (a: Type) {Inh_a: SAWCoreScaffolding.Inhabited a}
+        (b: Type) {Inh_b: SAWCoreScaffolding.Inhabited b} (c: Type) (_1: forall
+                (_1: a) (_2: b),
+                c) (n: Init.Datatypes.nat) (_2: 
+           SAWCoreVectorsAsRocqVectors.Vec n a) (_3: 
            SAWCoreVectorsAsRocqVectors.Vec n b),
         SAWCoreVectorsAsRocqVectors.Vec n c :=
    fun (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (b: Type) (Inh_b: 
-           SAWCoreScaffolding.Inhabited b) (c: Type) (f: forall (_1: a),
-                forall (_2: b),
+           SAWCoreScaffolding.Inhabited b) (c: Type) (f: forall (_1: a) (_2: b),
                 c) (n: Init.Datatypes.nat) (x: 
            SAWCoreVectorsAsRocqVectors.Vec n a) (y: 
            SAWCoreVectorsAsRocqVectors.Vec n b)
@@ -2540,15 +2459,14 @@ Definition zipWith: forall (a: Type), forall {Inh_a:
          )
    .
 
-Definition replicate: forall (n: Init.Datatypes.nat), forall (a: Type),
-        forall (_1: a),
+Definition replicate: forall (n: Init.Datatypes.nat) (a: Type) (_1: a),
         SAWCoreVectorsAsRocqVectors.Vec n a :=
    fun (n: Init.Datatypes.nat) (a: Type) (x: a)
       =>
       SAWCoreVectorsAsRocqVectors.gen n a (fun (_1: Init.Datatypes.nat) => x)
    .
 
-Definition single: forall (a: Type), forall (_1: a),
+Definition single: forall (a: Type) (_1: a),
         SAWCoreVectorsAsRocqVectors.Vec 
            (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH) a :=
    replicate (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH).
@@ -2588,8 +2506,8 @@ Fixpoint zip (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)
 
 (* "Prelude::foldl_cons@core" was skipped *)
 
-Definition reverse: forall (n: Init.Datatypes.nat), forall (a: Type),
-        forall {Inh_a: SAWCoreScaffolding.Inhabited a}, forall (_1: 
+Definition reverse: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a: 
+           SAWCoreScaffolding.Inhabited a} (_1: 
            SAWCoreVectorsAsRocqVectors.Vec n a),
         SAWCoreVectorsAsRocqVectors.Vec n a :=
    fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
@@ -2605,9 +2523,8 @@ Definition reverse: forall (n: Init.Datatypes.nat), forall (a: Type),
          )
    .
 
-Definition transpose: forall (m: Init.Datatypes.nat),
-        forall (n: Init.Datatypes.nat), forall (a: Type), forall {Inh_a: 
-           SAWCoreScaffolding.Inhabited a}, forall (_1: 
+Definition transpose: forall (m n: Init.Datatypes.nat) (a: Type) {Inh_a: 
+           SAWCoreScaffolding.Inhabited a} (_1: 
            SAWCoreVectorsAsRocqVectors.Vec m 
               (SAWCoreVectorsAsRocqVectors.Vec n a)),
         SAWCoreVectorsAsRocqVectors.Vec n 
@@ -2629,14 +2546,13 @@ Definition transpose: forall (m: Init.Datatypes.nat),
          )
    .
 
-Definition vecEq: forall (n: Init.Datatypes.nat), forall (a: Type),
-        forall {Inh_a: SAWCoreScaffolding.Inhabited a},
-        forall (_1: forall (_1: a), forall (_2: a), Init.Datatypes.bool),
-        forall (_2: SAWCoreVectorsAsRocqVectors.Vec n a), forall (_3: 
+Definition vecEq: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a: 
+           SAWCoreScaffolding.Inhabited a} (_1: forall (_1 _2: a),
+                Init.Datatypes.bool) (_2 _3: 
            SAWCoreVectorsAsRocqVectors.Vec n a),
         Init.Datatypes.bool :=
    fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
-        (eqFn: forall (_1: a), forall (_2: a), Init.Datatypes.bool) (x: 
+        (eqFn: forall (_1 _2: a), Init.Datatypes.bool) (x: 
            SAWCoreVectorsAsRocqVectors.Vec n a) (y: 
            SAWCoreVectorsAsRocqVectors.Vec n a)
       =>
@@ -2645,19 +2561,17 @@ Definition vecEq: forall (n: Init.Datatypes.nat), forall (a: Type),
          (zipWith a a Init.Datatypes.bool eqFn n x y)
    .
 
-Axiom vecEq_refl: forall (n: Init.Datatypes.nat), forall (a: Type),
-        forall {Inh_a: SAWCoreScaffolding.Inhabited a},
-        forall (eqFn: forall (_1: a), forall (_2: a), Init.Datatypes.bool),
-        forall (_1: forall (x: a),
+Axiom vecEq_refl: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a: 
+           SAWCoreScaffolding.Inhabited a} (eqFn: forall (_1 _2: a),
+                Init.Datatypes.bool) (_1: forall (x: a),
                 @Init.Logic.eq Init.Datatypes.bool (eqFn x x)
-                   Init.Datatypes.true), forall (x: 
+                   Init.Datatypes.true) (x: 
            SAWCoreVectorsAsRocqVectors.Vec n a),
         @Init.Logic.eq Init.Datatypes.bool (vecEq n a eqFn x x)
            Init.Datatypes.true.
 
-Definition take: forall (a: Type), forall {Inh_a: 
-           SAWCoreScaffolding.Inhabited a}, forall (m: Init.Datatypes.nat),
-        forall (n: Init.Datatypes.nat), forall (_1: 
+Definition take: forall (a: Type) {Inh_a: SAWCoreScaffolding.Inhabited a}
+        (m n: Init.Datatypes.nat) (_1: 
            SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.addNat m n) a),
         SAWCoreVectorsAsRocqVectors.Vec m a :=
    fun (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (m: Init.Datatypes.nat)
@@ -2670,8 +2584,7 @@ Definition take: forall (a: Type), forall {Inh_a:
          )
    .
 
-Definition vecCong: forall (a: Type), forall (m: Init.Datatypes.nat),
-        forall (n: Init.Datatypes.nat), forall (_1: 
+Definition vecCong: forall (a: Type) (m n: Init.Datatypes.nat) (_1: 
            @Init.Logic.eq Init.Datatypes.nat m n),
         @Init.Logic.eq Type (SAWCoreVectorsAsRocqVectors.Vec m a) 
            (SAWCoreVectorsAsRocqVectors.Vec n a) :=
@@ -2688,9 +2601,8 @@ Definition vecCong: forall (a: Type), forall (m: Init.Datatypes.nat),
 
 (* "Prelude::take0@core" was skipped *)
 
-Definition drop: forall (a: Type), forall {Inh_a: 
-           SAWCoreScaffolding.Inhabited a}, forall (m: Init.Datatypes.nat),
-        forall (n: Init.Datatypes.nat), forall (_1: 
+Definition drop: forall (a: Type) {Inh_a: SAWCoreScaffolding.Inhabited a}
+        (m n: Init.Datatypes.nat) (_1: 
            SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.addNat m n) a),
         SAWCoreVectorsAsRocqVectors.Vec n a :=
    fun (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (m: Init.Datatypes.nat)
@@ -2706,10 +2618,8 @@ Definition drop: forall (a: Type), forall {Inh_a:
 
 (* "Prelude::drop0@core" was skipped *)
 
-Definition slice: forall (a: Type), forall {Inh_a: 
-           SAWCoreScaffolding.Inhabited a}, forall (m: Init.Datatypes.nat),
-        forall (n: Init.Datatypes.nat), forall (o: Init.Datatypes.nat),
-        forall (_1: 
+Definition slice: forall (a: Type) {Inh_a: SAWCoreScaffolding.Inhabited a}
+        (m n o: Init.Datatypes.nat) (_1: 
            SAWCoreVectorsAsRocqVectors.Vec 
               (SAWCoreScaffolding.addNat (SAWCoreScaffolding.addNat m n) o) a),
         SAWCoreVectorsAsRocqVectors.Vec n a :=
@@ -2721,9 +2631,8 @@ Definition slice: forall (a: Type), forall {Inh_a:
       drop a m n (take a (SAWCoreScaffolding.addNat m n) o v)
    .
 
-Definition join: forall (m: Init.Datatypes.nat), forall (n: Init.Datatypes.nat),
-        forall (a: Type), forall {Inh_a: SAWCoreScaffolding.Inhabited a},
-        forall (_1: 
+Definition join: forall (m n: Init.Datatypes.nat) (a: Type) {Inh_a: 
+           SAWCoreScaffolding.Inhabited a} (_1: 
            SAWCoreVectorsAsRocqVectors.Vec m 
               (SAWCoreVectorsAsRocqVectors.Vec n a)),
         SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.mulNat m n) a :=
@@ -2741,9 +2650,8 @@ Definition join: forall (m: Init.Datatypes.nat), forall (n: Init.Datatypes.nat),
          )
    .
 
-Definition split: forall (m: Init.Datatypes.nat),
-        forall (n: Init.Datatypes.nat), forall (a: Type), forall {Inh_a: 
-           SAWCoreScaffolding.Inhabited a}, forall (_1: 
+Definition split: forall (m n: Init.Datatypes.nat) (a: Type) {Inh_a: 
+           SAWCoreScaffolding.Inhabited a} (_1: 
            SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.mulNat m n) a),
         SAWCoreVectorsAsRocqVectors.Vec m 
            (SAWCoreVectorsAsRocqVectors.Vec n a) :=
@@ -2763,10 +2671,9 @@ Definition split: forall (m: Init.Datatypes.nat),
          )
    .
 
-Definition append: forall (m: Init.Datatypes.nat),
-        forall (n: Init.Datatypes.nat), forall (a: Type), forall {Inh_a: 
-           SAWCoreScaffolding.Inhabited a}, forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec m a), forall (_2: 
+Definition append: forall (m n: Init.Datatypes.nat) (a: Type) {Inh_a: 
+           SAWCoreScaffolding.Inhabited a} (_1: 
+           SAWCoreVectorsAsRocqVectors.Vec m a) (_2: 
            SAWCoreVectorsAsRocqVectors.Vec n a),
         SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.addNat m n) a :=
    fun (m: Init.Datatypes.nat) (n: Init.Datatypes.nat) (a: Type) (Inh_a: 
@@ -2792,9 +2699,8 @@ Definition append: forall (m: Init.Datatypes.nat),
 
 (* "Prelude::shiftR@core" was skipped *)
 
-Definition joinLittleEndian: forall (m: Init.Datatypes.nat),
-        forall (n: Init.Datatypes.nat), forall (a: Type), forall {Inh_a: 
-           SAWCoreScaffolding.Inhabited a}, forall (_1: 
+Definition joinLittleEndian: forall (m n: Init.Datatypes.nat) (a: Type) {Inh_a: 
+           SAWCoreScaffolding.Inhabited a} (_1: 
            SAWCoreVectorsAsRocqVectors.Vec m 
               (SAWCoreVectorsAsRocqVectors.Vec n a)),
         SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.mulNat m n) a :=
@@ -2806,9 +2712,8 @@ Definition joinLittleEndian: forall (m: Init.Datatypes.nat),
       join m n a (reverse m (SAWCoreVectorsAsRocqVectors.Vec n a) v)
    .
 
-Definition splitLittleEndian: forall (m: Init.Datatypes.nat),
-        forall (n: Init.Datatypes.nat), forall (a: Type), forall {Inh_a: 
-           SAWCoreScaffolding.Inhabited a}, forall (_1: 
+Definition splitLittleEndian: forall (m n: Init.Datatypes.nat) (a: Type)
+        {Inh_a: SAWCoreScaffolding.Inhabited a} (_1: 
            SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.mulNat m n) a),
         SAWCoreVectorsAsRocqVectors.Vec m 
            (SAWCoreVectorsAsRocqVectors.Vec n a) :=
@@ -2819,9 +2724,9 @@ Definition splitLittleEndian: forall (m: Init.Datatypes.nat),
       reverse m (SAWCoreVectorsAsRocqVectors.Vec n a) (split m n a v)
    .
 
-Definition pmux: forall (n: Init.Datatypes.nat), forall (a: Type), forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_2: 
-           SAWCoreVectorsAsRocqVectors.Vec n a), forall (_3: a),
+Definition pmux: forall (n: Init.Datatypes.nat) (a: Type) (_1: 
+           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (_2: 
+           SAWCoreVectorsAsRocqVectors.Vec n a) (_3: a),
         a :=
    fun (n: Init.Datatypes.nat) (a: Type) (conds: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (xs: 
@@ -2835,7 +2740,7 @@ Definition pmux: forall (n: Init.Datatypes.nat), forall (a: Type), forall (_1:
 
 (* "Prelude::appendString@core" was skipped *)
 
-Axiom bytesToString: forall (n: Init.Datatypes.nat), forall (_1: 
+Axiom bytesToString: forall (n: Init.Datatypes.nat) (_1: 
            SAWCoreVectorsAsRocqVectors.Vec n 
               (SAWCoreVectorsAsRocqVectors.Vec 
                  (Stdlib.PArith.BinPos.Pos.to_nat 
@@ -2847,7 +2752,7 @@ Axiom bytesToString: forall (n: Init.Datatypes.nat), forall (_1:
 
 (* "Prelude::equalString@core" was skipped *)
 
-Definition msb: forall (n: Init.Datatypes.nat), forall (_1: 
+Definition msb: forall (n: Init.Datatypes.nat) (_1: 
            SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n)
               Init.Datatypes.bool),
         Init.Datatypes.bool :=
@@ -2859,7 +2764,7 @@ Definition msb: forall (n: Init.Datatypes.nat), forall (_1:
          SAWCoreScaffolding.Zero
    .
 
-Definition lsb: forall (n: Init.Datatypes.nat), forall (_1: 
+Definition lsb: forall (n: Init.Datatypes.nat) (_1: 
            SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n)
               Init.Datatypes.bool),
         Init.Datatypes.bool :=
@@ -2874,16 +2779,15 @@ Definition lsb: forall (n: Init.Datatypes.nat), forall (_1:
 
 (* "Prelude::bvToNat@core" was skipped *)
 
-Axiom bvNat_bvToNat: forall (n: Init.Datatypes.nat), forall (x: 
+Axiom bvNat_bvToNat: forall (n: Init.Datatypes.nat) (x: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         @Init.Logic.eq (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) 
            (SAWCoreVectorsAsRocqVectors.bvNat n 
               (SAWCoreVectorsAsRocqVectors.bvToNat n x)) x.
 
-Definition bvAt: forall (n: Init.Datatypes.nat), forall (a: Type),
-        forall {Inh_a: SAWCoreScaffolding.Inhabited a},
-        forall (w: Init.Datatypes.nat), forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec n a), forall (_2: 
+Definition bvAt: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a: 
+           SAWCoreScaffolding.Inhabited a} (w: Init.Datatypes.nat) (_1: 
+           SAWCoreVectorsAsRocqVectors.Vec n a) (_2: 
            SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool),
         a :=
    fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
@@ -2893,12 +2797,10 @@ Definition bvAt: forall (n: Init.Datatypes.nat), forall (a: Type),
       SAWCorePrelude.sawAt n a xs (SAWCoreVectorsAsRocqVectors.bvToNat w i)
    .
 
-Definition bvUpd: forall (n: Init.Datatypes.nat), forall (a: Type),
-        forall {Inh_a: SAWCoreScaffolding.Inhabited a},
-        forall (w: Init.Datatypes.nat), forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec n a), forall (_2: 
-           SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool),
-        forall (_3: a),
+Definition bvUpd: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a: 
+           SAWCoreScaffolding.Inhabited a} (w: Init.Datatypes.nat) (_1: 
+           SAWCoreVectorsAsRocqVectors.Vec n a) (_2: 
+           SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool) (_3: a),
         SAWCoreVectorsAsRocqVectors.Vec n a :=
    fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
         (w: Init.Datatypes.nat) (xs: SAWCoreVectorsAsRocqVectors.Vec n a) (i: 
@@ -2907,10 +2809,9 @@ Definition bvUpd: forall (n: Init.Datatypes.nat), forall (a: Type),
       upd n a xs (SAWCoreVectorsAsRocqVectors.bvToNat w i) y
    .
 
-Definition bvRotateL: forall (n: Init.Datatypes.nat), forall (a: Type),
-        forall {Inh_a: SAWCoreScaffolding.Inhabited a},
-        forall (w: Init.Datatypes.nat), forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec n a), forall (_2: 
+Definition bvRotateL: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a: 
+           SAWCoreScaffolding.Inhabited a} (w: Init.Datatypes.nat) (_1: 
+           SAWCoreVectorsAsRocqVectors.Vec n a) (_2: 
            SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool),
         SAWCoreVectorsAsRocqVectors.Vec n a :=
    fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
@@ -2921,10 +2822,9 @@ Definition bvRotateL: forall (n: Init.Datatypes.nat), forall (a: Type),
          (SAWCoreVectorsAsRocqVectors.bvToNat w i)
    .
 
-Definition bvRotateR: forall (n: Init.Datatypes.nat), forall (a: Type),
-        forall {Inh_a: SAWCoreScaffolding.Inhabited a},
-        forall (w: Init.Datatypes.nat), forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec n a), forall (_2: 
+Definition bvRotateR: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a: 
+           SAWCoreScaffolding.Inhabited a} (w: Init.Datatypes.nat) (_1: 
+           SAWCoreVectorsAsRocqVectors.Vec n a) (_2: 
            SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool),
         SAWCoreVectorsAsRocqVectors.Vec n a :=
    fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
@@ -2935,10 +2835,9 @@ Definition bvRotateR: forall (n: Init.Datatypes.nat), forall (a: Type),
          (SAWCoreVectorsAsRocqVectors.bvToNat w i)
    .
 
-Definition bvShiftL: forall (n: Init.Datatypes.nat), forall (a: Type),
-        forall {Inh_a: SAWCoreScaffolding.Inhabited a},
-        forall (w: Init.Datatypes.nat), forall (_1: a), forall (_2: 
-           SAWCoreVectorsAsRocqVectors.Vec n a), forall (_3: 
+Definition bvShiftL: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a: 
+           SAWCoreScaffolding.Inhabited a} (w: Init.Datatypes.nat) (_1: a) (_2: 
+           SAWCoreVectorsAsRocqVectors.Vec n a) (_3: 
            SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool),
         SAWCoreVectorsAsRocqVectors.Vec n a :=
    fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
@@ -2949,10 +2848,9 @@ Definition bvShiftL: forall (n: Init.Datatypes.nat), forall (a: Type),
          (SAWCoreVectorsAsRocqVectors.bvToNat w i)
    .
 
-Definition bvShiftR: forall (n: Init.Datatypes.nat), forall (a: Type),
-        forall {Inh_a: SAWCoreScaffolding.Inhabited a},
-        forall (w: Init.Datatypes.nat), forall (_1: a), forall (_2: 
-           SAWCoreVectorsAsRocqVectors.Vec n a), forall (_3: 
+Definition bvShiftR: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a: 
+           SAWCoreScaffolding.Inhabited a} (w: Init.Datatypes.nat) (_1: a) (_2: 
+           SAWCoreVectorsAsRocqVectors.Vec n a) (_3: 
            SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool),
         SAWCoreVectorsAsRocqVectors.Vec n a :=
    fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
@@ -2963,11 +2861,10 @@ Definition bvShiftR: forall (n: Init.Datatypes.nat), forall (a: Type),
          (SAWCoreVectorsAsRocqVectors.bvToNat w i)
    .
 
-Definition bvSShiftR: forall (n: Init.Datatypes.nat), forall (a: Type),
-        forall {Inh_a: SAWCoreScaffolding.Inhabited a},
-        forall (w: Init.Datatypes.nat), forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n) a),
-        forall (_2: SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool),
+Definition bvSShiftR: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a: 
+           SAWCoreScaffolding.Inhabited a} (w: Init.Datatypes.nat) (_1: 
+           SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n) a) (_2: 
+           SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool),
         SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n) a :=
    fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
         (w: Init.Datatypes.nat) (xs: 
@@ -3008,8 +2905,7 @@ Definition bvSShiftR: forall (n: Init.Datatypes.nat), forall (a: Type),
 
 (* "Prelude::bvForall@core" was skipped *)
 
-Definition bvCarry: forall (n: Init.Datatypes.nat), forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_2: 
+Definition bvCarry: forall (n: Init.Datatypes.nat) (_1 _2: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         Init.Datatypes.bool :=
    fun (n: Init.Datatypes.nat) (x: 
@@ -3020,9 +2916,7 @@ Definition bvCarry: forall (n: Init.Datatypes.nat), forall (_1:
          (SAWCoreVectorsAsRocqVectors.bvAdd n x y) x
    .
 
-Definition bvSCarry: forall (n: Init.Datatypes.nat), forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n)
-              Init.Datatypes.bool), forall (_2: 
+Definition bvSCarry: forall (n: Init.Datatypes.nat) (_1 _2: 
            SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n)
               Init.Datatypes.bool),
         Init.Datatypes.bool :=
@@ -3042,8 +2936,7 @@ Definition bvSCarry: forall (n: Init.Datatypes.nat), forall (_1:
                    (SAWCoreScaffolding.Succ n) x y)))
    .
 
-Definition bvAddWithCarry: forall (n: Init.Datatypes.nat), forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_2: 
+Definition bvAddWithCarry: forall (n: Init.Datatypes.nat) (_1 _2: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         SAWCoreScaffolding.PairType Init.Datatypes.bool 
            (SAWCoreScaffolding.PairType 
@@ -3071,9 +2964,7 @@ Definition bvAddWithCarry: forall (n: Init.Datatypes.nat), forall (_1:
 
 (* "Prelude::bvSub@core" was skipped *)
 
-Definition bvSBorrow: forall (n: Init.Datatypes.nat), forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n)
-              Init.Datatypes.bool), forall (_2: 
+Definition bvSBorrow: forall (n: Init.Datatypes.nat) (_1 _2: 
            SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n)
               Init.Datatypes.bool),
         Init.Datatypes.bool :=
@@ -3115,39 +3006,33 @@ Definition bvSBorrow: forall (n: Init.Datatypes.nat), forall (_1:
 
 (* "Prelude::bvShiftR_bvShr@core" was skipped *)
 
-Definition bvZipWith: forall (_1: forall (_1: Init.Datatypes.bool),
-                forall (_2: Init.Datatypes.bool),
-                Init.Datatypes.bool), forall (n: Init.Datatypes.nat),
-        forall (_2: SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-        forall (_3: SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+Definition bvZipWith: forall (_1: forall (_1 _2: Init.Datatypes.bool),
+                Init.Datatypes.bool) (n: Init.Datatypes.nat) (_2 _3: 
+           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool :=
    zipWith Init.Datatypes.bool Init.Datatypes.bool Init.Datatypes.bool.
 
-Definition bvNot: forall (n: Init.Datatypes.nat), forall (_1: 
+Definition bvNot: forall (n: Init.Datatypes.nat) (_1: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool :=
    map Init.Datatypes.bool Init.Datatypes.bool Init.Datatypes.negb.
 
-Definition bvAnd: forall (n: Init.Datatypes.nat), forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_2: 
+Definition bvAnd: forall (n: Init.Datatypes.nat) (_1 _2: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool :=
    bvZipWith Init.Datatypes.andb.
 
-Definition bvOr: forall (n: Init.Datatypes.nat), forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_2: 
+Definition bvOr: forall (n: Init.Datatypes.nat) (_1 _2: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool :=
    bvZipWith Init.Datatypes.orb.
 
-Definition bvXor: forall (n: Init.Datatypes.nat), forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_2: 
+Definition bvXor: forall (n: Init.Datatypes.nat) (_1 _2: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool :=
    bvZipWith Init.Datatypes.xorb.
 
-Definition bvEq: forall (n: Init.Datatypes.nat), forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_2: 
+Definition bvEq: forall (n: Init.Datatypes.nat) (_1 _2: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         Init.Datatypes.bool :=
    fun (n: Init.Datatypes.nat) (x: 
@@ -3161,8 +3046,7 @@ Definition bvEq: forall (n: Init.Datatypes.nat), forall (_1:
 
 (* "Prelude::equalNat_bv@core" was skipped *)
 
-Definition bvBool: forall (n: Init.Datatypes.nat),
-        forall (_1: Init.Datatypes.bool),
+Definition bvBool: forall (n: Init.Datatypes.nat) (_1: Init.Datatypes.bool),
         SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool :=
    fun (n: Init.Datatypes.nat) (b: Init.Datatypes.bool)
       =>
@@ -3173,8 +3057,7 @@ Definition bvBool: forall (n: Init.Datatypes.nat),
          SAWCoreVectorsAsRocqVectors.bvNat n SAWCoreScaffolding.Zero
    .
 
-Definition bvNe: forall (n: Init.Datatypes.nat), forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_2: 
+Definition bvNe: forall (n: Init.Datatypes.nat) (_1 _2: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         Init.Datatypes.bool :=
    fun (n: Init.Datatypes.nat) (x: 
@@ -3184,7 +3067,7 @@ Definition bvNe: forall (n: Init.Datatypes.nat), forall (_1:
       Init.Datatypes.negb (bvEq n x y)
    .
 
-Definition bvNonzero: forall (n: Init.Datatypes.nat), forall (_1: 
+Definition bvNonzero: forall (n: Init.Datatypes.nat) (_1: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         Init.Datatypes.bool :=
    fun (n: Init.Datatypes.nat) (x: 
@@ -3193,15 +3076,13 @@ Definition bvNonzero: forall (n: Init.Datatypes.nat), forall (_1:
       bvNe n x (SAWCoreVectorsAsRocqVectors.bvNat n SAWCoreScaffolding.Zero)
    .
 
-Definition bvTrunc: forall (m: Init.Datatypes.nat),
-        forall (n: Init.Datatypes.nat), forall (_1: 
+Definition bvTrunc: forall (m n: Init.Datatypes.nat) (_1: 
            SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.addNat m n)
               Init.Datatypes.bool),
         SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool :=
    drop Init.Datatypes.bool.
 
-Definition bvUExt: forall (m: Init.Datatypes.nat),
-        forall (n: Init.Datatypes.nat), forall (_1: 
+Definition bvUExt: forall (m n: Init.Datatypes.nat) (_1: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.addNat m n)
            Init.Datatypes.bool :=
@@ -3212,8 +3093,8 @@ Definition bvUExt: forall (m: Init.Datatypes.nat),
          (SAWCoreVectorsAsRocqVectors.bvNat m SAWCoreScaffolding.Zero) x
    .
 
-Definition replicateBool: forall (n: Init.Datatypes.nat),
-        forall (_1: Init.Datatypes.bool),
+Definition replicateBool: forall (n: Init.Datatypes.nat)
+        (_1: Init.Datatypes.bool),
         SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool :=
    fun (n: Init.Datatypes.nat) (b: Init.Datatypes.bool)
       =>
@@ -3227,8 +3108,7 @@ Definition replicateBool: forall (n: Init.Datatypes.nat),
          var__0
    .
 
-Definition bvSExt: forall (m: Init.Datatypes.nat),
-        forall (n: Init.Datatypes.nat), forall (_1: 
+Definition bvSExt: forall (m n: Init.Datatypes.nat) (_1: 
            SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n)
               Init.Datatypes.bool),
         SAWCoreVectorsAsRocqVectors.Vec 
@@ -3242,8 +3122,7 @@ Definition bvSExt: forall (m: Init.Datatypes.nat),
          (replicateBool m (msb n x)) x
    .
 
-Definition bvMin: forall (n: Init.Datatypes.nat), forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_2: 
+Definition bvMin: forall (n: Init.Datatypes.nat) (_1 _2: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool :=
    fun (n: Init.Datatypes.nat) (x: 
@@ -3256,10 +3135,9 @@ Definition bvMin: forall (n: Init.Datatypes.nat), forall (_1:
          y
    .
 
-Definition polyMul: forall (m: Init.Datatypes.nat),
-        forall (n: Init.Datatypes.nat), forall (_1: 
+Definition polyMul: forall (m n: Init.Datatypes.nat) (_1: 
            SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ m)
-              Init.Datatypes.bool), forall (_2: 
+              Init.Datatypes.bool) (_2: 
            SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n)
               Init.Datatypes.bool),
         SAWCoreVectorsAsRocqVectors.Vec 
@@ -3322,9 +3200,8 @@ Definition polyMul: forall (m: Init.Datatypes.nat),
          ) (SAWCoreVectorsAsRocqVectors.bvNat var__0 SAWCoreScaffolding.Zero) y
    .
 
-Definition polyMod: forall (m: Init.Datatypes.nat),
-        forall (n: Init.Datatypes.nat), forall (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec m Init.Datatypes.bool), forall (_2: 
+Definition polyMod: forall (m n: Init.Datatypes.nat) (_1: 
+           SAWCoreVectorsAsRocqVectors.Vec m Init.Datatypes.bool) (_2: 
            SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n)
               Init.Datatypes.bool),
         SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool :=
@@ -3412,25 +3289,26 @@ Inductive Stream (a: Type) : Type :=
 .
 
 #[global] Instance Inhabited_Stream (a:Type) (Ha:Inhabited a) : Inhabited (Stream a) := MkInhabited (Stream a) (MkStream a (fun _ => inhabitant)).
-Definition Stream__rec: forall (a: Type), forall (p: forall (_1: Stream a),
-                Type), forall (_1: forall (f: forall (_1: Init.Datatypes.nat),
-                        a),
-                p (MkStream a f)), forall (str: Stream a),
+Definition Stream__rec: forall (a: Type) (p: forall (_1: Stream a), Type)
+        (_1: forall (f: forall (_1: Init.Datatypes.nat), a), p (MkStream a f))
+        (str: Stream a),
         p str :=
-   fun (a: Type) (p: forall (_1: Stream a), Type)
-        (f1: forall (f: forall (_1: Init.Datatypes.nat), a), p (MkStream a f))
-        (str: Stream a)
+   fun (a: Type) (p: forall (_1: Stream a), Type) (f1: forall (f: forall
+                        (_1: Init.Datatypes.nat),
+                        a),
+                p (MkStream a f)) (str: Stream a)
       =>
       @SAWCorePrelude.Stream_rect a p f1 str
    .
 
-Definition streamUpd: forall (a: Type), forall (_1: Stream a),
-        forall (_2: Init.Datatypes.nat), forall (_3: a),
+Definition streamUpd: forall (a: Type) (_1: Stream a) (_2: Init.Datatypes.nat)
+        (_3: a),
         Stream a :=
    fun (a: Type) (strm: Stream a) (i: Init.Datatypes.nat) (y: a)
       =>
-      Stream__rec a (fun (strm': Stream a) => Stream a) (fun
-              (s: forall (_1: Init.Datatypes.nat), a)
+      Stream__rec a (fun (strm': Stream a) => Stream a) (fun (s: forall
+                      (_1: Init.Datatypes.nat),
+                      a)
             =>
             MkStream a (fun (j: Init.Datatypes.nat)
                   =>
@@ -3442,10 +3320,8 @@ Definition streamUpd: forall (a: Type), forall (_1: Stream a),
          ) strm
    .
 
-Definition bvStreamUpd: forall (a: Type), forall (w: Init.Datatypes.nat),
-        forall (_1: Stream a), forall (_2: 
-           SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool),
-        forall (_3: a),
+Definition bvStreamUpd: forall (a: Type) (w: Init.Datatypes.nat) (_1: Stream a)
+        (_2: SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool) (_3: a),
         Stream a :=
    fun (a: Type) (w: Init.Datatypes.nat) (xs: Stream a) (i: 
            SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool) (y: a)
@@ -3453,38 +3329,36 @@ Definition bvStreamUpd: forall (a: Type), forall (w: Init.Datatypes.nat),
       streamUpd a xs (SAWCoreVectorsAsRocqVectors.bvToNat w i) y
    .
 
-Definition streamGet: forall (a: Type), forall (_1: Stream a),
-        forall (_2: Init.Datatypes.nat),
+Definition streamGet: forall (a: Type) (_1: Stream a) (_2: Init.Datatypes.nat),
         a :=
    fun (a: Type) (strm: Stream a) (i: Init.Datatypes.nat)
       =>
-      Stream__rec a (fun (strm': Stream a) => a) (fun
-              (s: forall (_1: Init.Datatypes.nat), a)
+      Stream__rec a (fun (strm': Stream a) => a) (fun (s: forall
+                      (_1: Init.Datatypes.nat),
+                      a)
             =>
             s i
          ) strm
    .
 
-Definition streamConst: forall (a: Type), forall (_1: a), Stream a :=
+Definition streamConst: forall (a: Type) (_1: a), Stream a :=
    fun (a: Type) (x: a)
       =>
       MkStream a (fun (i: Init.Datatypes.nat) => x)
    .
 
-Definition streamMap: forall (a: Type), forall (b: Type),
-        forall (_1: forall (_1: a), b), forall (_2: Stream a),
+Definition streamMap: forall (a b: Type) (_1: forall (_1: a), b) (_2: Stream a),
         Stream b :=
    fun (a: Type) (b: Type) (f: forall (_1: a), b) (xs: Stream a)
       =>
       MkStream b (fun (i: Init.Datatypes.nat) => f (streamGet a xs i))
    .
 
-Definition streamMap2: forall (a: Type), forall (b: Type), forall (c: Type),
-        forall (_1: forall (_1: a), forall (_2: b), c), forall (_2: Stream a),
-        forall (_3: Stream b),
+Definition streamMap2: forall (a b c: Type) (_1: forall (_1: a) (_2: b), c)
+        (_2: Stream a) (_3: Stream b),
         Stream c :=
-   fun (a: Type) (b: Type) (c: Type) (f: forall (_1: a), forall (_2: b), c)
-        (xs: Stream a) (ys: Stream b)
+   fun (a: Type) (b: Type) (c: Type) (f: forall (_1: a) (_2: b), c) (xs: 
+           Stream a) (ys: Stream b)
       =>
       MkStream c (fun (i: Init.Datatypes.nat)
             =>
@@ -3492,8 +3366,7 @@ Definition streamMap2: forall (a: Type), forall (b: Type), forall (c: Type),
          )
    .
 
-Definition streamTake: forall (a: Type), forall (n: Init.Datatypes.nat),
-        forall (_1: Stream a),
+Definition streamTake: forall (a: Type) (n: Init.Datatypes.nat) (_1: Stream a),
         SAWCoreVectorsAsRocqVectors.Vec n a :=
    fun (a: Type) (n: Init.Datatypes.nat) (xs: Stream a)
       =>
@@ -3503,8 +3376,7 @@ Definition streamTake: forall (a: Type), forall (n: Init.Datatypes.nat),
          )
    .
 
-Definition streamDrop: forall (a: Type), forall (n: Init.Datatypes.nat),
-        forall (_1: Stream a),
+Definition streamDrop: forall (a: Type) (n: Init.Datatypes.nat) (_1: Stream a),
         Stream a :=
    fun (a: Type) (n: Init.Datatypes.nat) (xs: Stream a)
       =>
@@ -3514,8 +3386,8 @@ Definition streamDrop: forall (a: Type), forall (n: Init.Datatypes.nat),
          )
    .
 
-Definition streamAppend: forall (a: Type), forall (n: Init.Datatypes.nat),
-        forall (_1: SAWCoreVectorsAsRocqVectors.Vec n a), forall (_2: Stream a),
+Definition streamAppend: forall (a: Type) (n: Init.Datatypes.nat) (_1: 
+           SAWCoreVectorsAsRocqVectors.Vec n a) (_2: Stream a),
         Stream a :=
    fun (a: Type) (n: Init.Datatypes.nat) (xs: 
            SAWCoreVectorsAsRocqVectors.Vec n a) (ys: Stream a)
@@ -3527,9 +3399,8 @@ Definition streamAppend: forall (a: Type), forall (n: Init.Datatypes.nat),
          )
    .
 
-Definition streamJoin: forall (a: Type), forall {Inh_a: 
-           SAWCoreScaffolding.Inhabited a}, forall (n: Init.Datatypes.nat),
-        forall (_1: 
+Definition streamJoin: forall (a: Type) {Inh_a: SAWCoreScaffolding.Inhabited a}
+        (n: Init.Datatypes.nat) (_1: 
            Stream (SAWCoreVectorsAsRocqVectors.Vec (SAWCoreScaffolding.Succ n)
                  a)),
         Stream a :=
@@ -3549,8 +3420,7 @@ Definition streamJoin: forall (a: Type), forall {Inh_a:
          )
    .
 
-Definition streamSplit: forall (a: Type), forall (n: Init.Datatypes.nat),
-        forall (_1: Stream a),
+Definition streamSplit: forall (a: Type) (n: Init.Datatypes.nat) (_1: Stream a),
         Stream (SAWCoreVectorsAsRocqVectors.Vec n a) :=
    fun (a: Type) (n: Init.Datatypes.nat) (xs: Stream a)
       =>
@@ -3566,16 +3436,16 @@ Definition streamSplit: forall (a: Type), forall (n: Init.Datatypes.nat),
          )
    .
 
-Definition streamShiftL: forall (a: Type), forall (_1: Stream a),
-        forall (_2: Init.Datatypes.nat),
+Definition streamShiftL: forall (a: Type) (_1: Stream a)
+        (_2: Init.Datatypes.nat),
         Stream a :=
    fun (a: Type) (xs: Stream a) (i: Init.Datatypes.nat)
       =>
       streamDrop a i xs
    .
 
-Definition streamShiftR: forall (a: Type), forall (_1: a), forall (_2: 
-           Stream a), forall (_3: Init.Datatypes.nat),
+Definition streamShiftR: forall (a: Type) (_1: a) (_2: Stream a)
+        (_3: Init.Datatypes.nat),
         Stream a :=
    fun (a: Type) (z: a) (xs: Stream a) (i: Init.Datatypes.nat)
       =>
@@ -3648,10 +3518,8 @@ Definition intEven: forall (_1: SAWCoreScaffolding.Integer),
 
 (* "Prelude::intModNeg@core" was skipped *)
 
-Definition updNatFun: forall (a: Type),
-        forall (_1: forall (_1: Init.Datatypes.nat), a),
-        forall (_2: Init.Datatypes.nat), forall (_3: a),
-        forall (_4: Init.Datatypes.nat),
+Definition updNatFun: forall (a: Type) (_1: forall (_1: Init.Datatypes.nat), a)
+        (_2: Init.Datatypes.nat) (_3: a) (_4: Init.Datatypes.nat),
         a :=
    fun (a: Type) (f: forall (_1: Init.Datatypes.nat), a) (i: Init.Datatypes.nat)
         (v: a) (x: Init.Datatypes.nat)
@@ -3662,13 +3530,10 @@ Definition updNatFun: forall (a: Type),
          f x
    .
 
-Definition updBvFun: forall (n: Init.Datatypes.nat), forall (a: Type),
-        forall (_1: forall (_1: 
+Definition updBvFun: forall (n: Init.Datatypes.nat) (a: Type) (_1: forall (_1: 
                    SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-                a), forall (_2: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-        forall (_3: a), forall (_4: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+                a) (_2: SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool)
+        (_3: a) (_4: SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         a :=
    fun (n: Init.Datatypes.nat) (a: Type) (f: forall (_1: 
                    SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
@@ -3693,7 +3558,7 @@ Definition updBvFun: forall (n: Init.Datatypes.nat), forall (a: Type),
 
 (* "Prelude::List__rec@core" was skipped *)
 
-Definition unfoldList: forall (a: Type), forall (_1: @Init.Datatypes.list a),
+Definition unfoldList: forall (a: Type) (_1: @Init.Datatypes.list a),
         Init.Datatypes.sum SAWCoreScaffolding.UnitType 
            (SAWCoreScaffolding.PairType a 
               (SAWCoreScaffolding.PairType (@Init.Datatypes.list a)
@@ -3731,7 +3596,7 @@ Definition unfoldList: forall (a: Type), forall (_1: @Init.Datatypes.list a),
          ) l
    .
 
-Definition foldList: forall (a: Type), forall (_1: 
+Definition foldList: forall (a: Type) (_1: 
            Init.Datatypes.sum SAWCoreScaffolding.UnitType 
               (SAWCoreScaffolding.PairType a 
                  (SAWCoreScaffolding.PairType (@Init.Datatypes.list a)
@@ -3767,23 +3632,21 @@ Definition foldList: forall (a: Type), forall (_1:
 
 Inductive ListSort: Type :=
 | LS_Nil: ListSort
-| LS_Cons: forall (_1: Type), forall (_2: ListSort), ListSort
+| LS_Cons: forall (_1: Type) (_2: ListSort), ListSort
 .
 
-Definition ListSort__rec: forall (P: forall (_1: ListSort), Type), forall (_1: 
-           P LS_Nil), forall (_2: forall (A: Type), forall (l: ListSort),
-                forall (_2: P l),
-                P (LS_Cons A l)), forall (l: ListSort),
+Definition ListSort__rec: forall (P: forall (_1: ListSort), Type) (_1: P LS_Nil)
+        (_2: forall (A: Type) (l: ListSort) (_2: P l), P (LS_Cons A l))
+        (l: ListSort),
         P l :=
-   fun (P: forall (_1: ListSort), Type) (f1: P LS_Nil) (f2: forall (A: Type),
-                forall (l: ListSort), forall (_1: P l),
+   fun (P: forall (_1: ListSort), Type) (f1: P LS_Nil) (f2: forall (A: Type)
+                (l: ListSort) (_1: P l),
                 P (LS_Cons A l)) (l: ListSort)
       =>
       @SAWCorePrelude.ListSort_rect P f1 f2 l
    .
 
-Definition listSortGet: forall (_1: ListSort), forall (_2: Init.Datatypes.nat),
-        Type :=
+Definition listSortGet: forall (_1: ListSort) (_2: Init.Datatypes.nat), Type :=
    ListSort__rec (fun (_1: ListSort) => forall (_2: Init.Datatypes.nat), Type)
       (fun (_1: Init.Datatypes.nat)
          =>
@@ -3795,18 +3658,17 @@ Definition listSortGet: forall (_1: ListSort), forall (_2: Init.Datatypes.nat),
          Nat_cases Type A (fun (n: Init.Datatypes.nat) (_2: Type) => rec n)
       ).
 
-Definition listSort_cases: forall (a: Type), forall (_1: a),
-        forall (_2: forall (_2: Type), forall (l: ListSort), forall (_3: a), a),
-        forall (_3: ListSort),
+Definition listSort_cases: forall (a: Type) (_1: a) (_2: forall (_2: Type)
+                (l: ListSort) (_3: a),
+                a) (_3: ListSort),
         a :=
-   fun (a: Type) (base: a) (f: forall (_1: Type), forall (l: ListSort),
-                forall (_2: a),
-                a) (ls: ListSort)
+   fun (a: Type) (base: a) (f: forall (_1: Type) (l: ListSort) (_2: a), a)
+        (ls: ListSort)
       =>
       ListSort__rec (fun (_1: ListSort) => a) base f ls
    .
 
-Definition listSortDrop: forall (_1: ListSort), forall (_2: Init.Datatypes.nat),
+Definition listSortDrop: forall (_1: ListSort) (_2: Init.Datatypes.nat),
         ListSort :=
    fun (ss: ListSort) (n: Init.Datatypes.nat)
       =>
@@ -3832,9 +3694,7 @@ Definition listSort_length: forall (_1: ListSort), Init.Datatypes.nat :=
          SAWCoreScaffolding.Succ n
       ).
 
-Definition ifLSNil: forall (a: Type), forall (_1: ListSort), forall (_2: a),
-        forall (_3: a),
-        a :=
+Definition ifLSNil: forall (a: Type) (_1: ListSort) (_2 _3: a), a :=
    fun (a: Type) (l: ListSort) (x: a) (y: a)
       =>
       ListSort__rec (fun (_1: ListSort) => a) x (fun (_1: Type) (_2: ListSort)
@@ -3847,7 +3707,7 @@ Definition ifLSNil: forall (a: Type), forall (_1: ListSort), forall (_2: a),
 Definition FalseProp: Prop :=
    @Init.Logic.eq Init.Datatypes.bool Init.Datatypes.true Init.Datatypes.false.
 
-Definition efq: forall (a: Type), forall (_1: FalseProp), a :=
+Definition efq: forall (a: Type) (_1: FalseProp), a :=
    fun (a: Type) (contra: FalseProp)
       =>
       let var__0
@@ -3884,32 +3744,29 @@ Definition Eithers: forall (_1: ListSort), Type :=
          ifLSNil Type tail tp (Init.Datatypes.sum tp rec)
       ).
 
-Definition eithers1: forall (tp: Type), forall (tps: ListSort),
-        forall (a: Type), forall (_1: Eithers (LS_Cons tp tps)),
-        forall (_2: forall (_2: tp), a), forall (_3: forall (_3: Eithers tps),
+Definition eithers1: forall (tp: Type) (tps: ListSort) (a: Type) (_1: 
+           Eithers (LS_Cons tp tps)) (_2: forall (_2: tp), a) (_3: forall (_3: 
+                   Eithers tps),
                 a),
         a :=
    fun (tp: Type) (tps: ListSort) (a: Type)
       =>
       ListSort__rec (fun (tps1: ListSort)
             =>
-            forall (_1: Eithers (LS_Cons tp tps1)), forall (_2: forall (_2: tp),
-                         a), forall (_3: forall (_3: Eithers tps1), a),
+            forall (_1: Eithers (LS_Cons tp tps1)) (_2: forall (_2: tp), a)
+                 (_3: forall (_3: Eithers tps1), a),
                  a
          ) (fun (eiths: tp) (f: forall (_1: tp), a) (_1: forall (_1: FalseProp),
                       a)
             =>
             f eiths
          ) (fun (tp2: Type) (tail: ListSort) (_1: forall (_1: 
-                         Eithers (LS_Cons tp tail)),
-                      forall (_2: forall (_2: tp), a), forall (_3: forall (_3: 
-                                 Eithers tail),
-                              a),
+                         Eithers (LS_Cons tp tail)) (_2: forall (_2: tp), a)
+                      (_3: forall (_3: Eithers tail), a),
                       a) (eiths: 
-                 Init.Datatypes.sum tp (Eithers (LS_Cons tp2 tail)))
-              (f1: forall (_2: tp), a) (f2: forall (_2: 
-                         Eithers (LS_Cons tp2 tail)),
-                      a)
+                 Init.Datatypes.sum tp (Eithers (LS_Cons tp2 tail))) (f1: forall
+                      (_2: tp),
+                      a) (f2: forall (_2: Eithers (LS_Cons tp2 tail)), a)
             =>
             either tp (Eithers (LS_Cons tp2 tail)) a f1 f2 eiths
          ) tps
@@ -3917,26 +3774,24 @@ Definition eithers1: forall (tp: Type), forall (tps: ListSort),
 
 Inductive FunsTo (a: Type) : Type :=
 | FunsTo_Nil:  FunsTo a
-| FunsTo_Cons: forall (tp: Type), forall (_1: forall (_1: tp), a), forall (_2: 
-             FunsTo a),
+| FunsTo_Cons: forall (tp: Type) (_1: forall (_1: tp), a) (_2: FunsTo a),
           FunsTo a
 .
 
-Definition FunsTo__rec: forall (a: Type), forall (P: forall (_1: FunsTo a),
-                Type), forall (_1: P (FunsTo_Nil a)),
-        forall (_2: forall (tp: Type), forall (f: forall (_2: tp), a),
-                forall (es: FunsTo a), forall (_2: P es),
-                P (FunsTo_Cons a tp f es)), forall (es: FunsTo a),
+Definition FunsTo__rec: forall (a: Type) (P: forall (_1: FunsTo a), Type) (_1: 
+           P (FunsTo_Nil a)) (_2: forall (tp: Type) (f: forall (_2: tp), a)
+                (es: FunsTo a) (_2: P es),
+                P (FunsTo_Cons a tp f es)) (es: FunsTo a),
         P es :=
    fun (a: Type) (P: forall (_1: FunsTo a), Type) (f1: P (FunsTo_Nil a))
-        (f2: forall (tp: Type), forall (f: forall (_1: tp), a), forall (es: 
-                   FunsTo a), forall (_1: P es),
+        (f2: forall (tp: Type) (f: forall (_1: tp), a) (es: FunsTo a) (_1: 
+                   P es),
                 P (FunsTo_Cons a tp f es)) (es: FunsTo a)
       =>
       @SAWCorePrelude.FunsTo_rect a P f1 f2 es
    .
 
-Definition FunsToIns: forall (a: Type), forall (_1: FunsTo a), ListSort :=
+Definition FunsToIns: forall (a: Type) (_1: FunsTo a), ListSort :=
    fun (a: Type)
       =>
       FunsTo__rec a (fun (_1: FunsTo a) => ListSort) LS_Nil (fun (tp: Type)
@@ -3946,7 +3801,7 @@ Definition FunsToIns: forall (a: Type), forall (_1: FunsTo a), ListSort :=
          )
    .
 
-Definition eithers: forall (a: Type), forall (elims: FunsTo a), forall (_1: 
+Definition eithers: forall (a: Type) (elims: FunsTo a) (_1: 
            Eithers (FunsToIns a elims)),
         a :=
    fun (a: Type)
@@ -3955,8 +3810,9 @@ Definition eithers: forall (a: Type), forall (elims: FunsTo a), forall (_1:
             =>
             forall (_1: Eithers (FunsToIns a elims)),
                  a
-         ) (fun (contra: FalseProp) => efq a contra) (fun (tp: Type)
-              (f: forall (_1: tp), a) (elims: FunsTo a) (rec: forall (_1: 
+         ) (fun (contra: FalseProp) => efq a contra) (fun (tp: Type) (f: forall
+                      (_1: tp),
+                      a) (elims: FunsTo a) (rec: forall (_1: 
                          Eithers (FunsToIns a elims)),
                       a) (eiths: Eithers (LS_Cons tp (FunsToIns a elims)))
             =>
@@ -3971,7 +3827,7 @@ Definition EithersV: forall (_1: ListSort), Type :=
          Init.Datatypes.sum tp rec
       ).
 
-Definition eithersV: forall (a: Type), forall (es: FunsTo a), forall (_1: 
+Definition eithersV: forall (a: Type) (es: FunsTo a) (_1: 
            EithersV (FunsToIns a es)),
         a :=
    fun (a: Type)
@@ -3989,7 +3845,7 @@ Definition eithersV: forall (a: Type), forall (es: FunsTo a), forall (_1:
          )
    .
 
-Definition arrowsType: forall (_1: ListSort), forall (_2: Type), Type :=
+Definition arrowsType: forall (_1: ListSort) (_2: Type), Type :=
    fun (as1: ListSort) (b: Type)
       =>
       ListSort__rec (fun (_1: ListSort) => Type) b (fun (a: Type) (_1: ListSort)
@@ -4015,18 +3871,16 @@ Definition arrowsSort: forall (_1: ListSort), Type :=
 
 (* "Prelude::unsafeAssertBVULe@core" was skipped *)
 
-Axiom bvEqToEq: forall (n: Init.Datatypes.nat), forall (v1: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (v2: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_1: 
+Axiom bvEqToEq: forall (n: Init.Datatypes.nat) (v1 v2: 
+           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (_1: 
            @Init.Logic.eq Init.Datatypes.bool (bvEq n v1 v2)
               Init.Datatypes.true),
         @Init.Logic.eq (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool)
            v1 v2.
 
-Definition ifBvEqWithProof: forall (a: Type), forall (n: Init.Datatypes.nat),
-        forall (v1: SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-        forall (v2: SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-        forall (_1: a), forall (_2: forall (_2: 
+Definition ifBvEqWithProof: forall (a: Type) (n: Init.Datatypes.nat) (v1 v2: 
+           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (_1: a)
+        (_2: forall (_2: 
                    @Init.Logic.eq 
                       (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) v1
                       v2),
@@ -4051,17 +3905,15 @@ Definition ifBvEqWithProof: forall (a: Type), forall (n: Init.Datatypes.nat),
          )
    .
 
-Axiom bvEqToEqNat: forall (n: Init.Datatypes.nat), forall (v1: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (v2: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_1: 
+Axiom bvEqToEqNat: forall (n: Init.Datatypes.nat) (v1 v2: 
+           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (_1: 
            @Init.Logic.eq 
               (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) v1 v2),
         eqNat (SAWCoreVectorsAsRocqVectors.bvToNat n v1) 
               (SAWCoreVectorsAsRocqVectors.bvToNat n v2).
 
-Axiom bvultToIsLtNat: forall (n: Init.Datatypes.nat), forall (v1: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (v2: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_1: 
+Axiom bvultToIsLtNat: forall (n: Init.Datatypes.nat) (v1 v2: 
+           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (_1: 
            @Init.Logic.eq Init.Datatypes.bool 
               (SAWCoreVectorsAsRocqVectors.bvult n v1 v2) Init.Datatypes.true),
         SAWCoreScaffolding.IsLtNat (SAWCoreVectorsAsRocqVectors.bvToNat n v1) 
@@ -4071,29 +3923,23 @@ Axiom bvultToIsLtNat: forall (n: Init.Datatypes.nat), forall (v1:
 
 (* "Prelude::atWithProof@core" was skipped *)
 
-Axiom updWithProof: forall (n: Init.Datatypes.nat), forall (a: Type),
-        forall (_1: SAWCoreVectorsAsRocqVectors.Vec n a),
-        forall (i: Init.Datatypes.nat), forall (_2: a), forall (_3: 
-           SAWCoreScaffolding.IsLtNat i n),
+Axiom updWithProof: forall (n: Init.Datatypes.nat) (a: Type) (_1: 
+           SAWCoreVectorsAsRocqVectors.Vec n a) (i: Init.Datatypes.nat) (_2: a)
+        (_3: SAWCoreScaffolding.IsLtNat i n),
         SAWCoreVectorsAsRocqVectors.Vec n a.
 
-Axiom sliceWithProof: forall (a: Type), forall (n: Init.Datatypes.nat),
-        forall (off: Init.Datatypes.nat), forall (len: Init.Datatypes.nat),
-        forall (_1: 
-           SAWCoreScaffolding.IsLeNat (SAWCoreScaffolding.addNat off len) n),
-        forall (_2: SAWCoreVectorsAsRocqVectors.Vec n a),
+Axiom sliceWithProof: forall (a: Type) (n off len: Init.Datatypes.nat) (_1: 
+           SAWCoreScaffolding.IsLeNat (SAWCoreScaffolding.addNat off len) n)
+        (_2: SAWCoreVectorsAsRocqVectors.Vec n a),
         SAWCoreVectorsAsRocqVectors.Vec len a.
 
-Axiom updSliceWithProof: forall (a: Type), forall (n: Init.Datatypes.nat),
-        forall (off: Init.Datatypes.nat), forall (len: Init.Datatypes.nat),
-        forall (_1: 
-           SAWCoreScaffolding.IsLeNat (SAWCoreScaffolding.addNat off len) n),
-        forall (_2: SAWCoreVectorsAsRocqVectors.Vec n a), forall (_3: 
+Axiom updSliceWithProof: forall (a: Type) (n off len: Init.Datatypes.nat) (_1: 
+           SAWCoreScaffolding.IsLeNat (SAWCoreScaffolding.addNat off len) n)
+        (_2: SAWCoreVectorsAsRocqVectors.Vec n a) (_3: 
            SAWCoreVectorsAsRocqVectors.Vec len a),
         SAWCoreVectorsAsRocqVectors.Vec n a.
 
-Definition is_bvult: forall (n: Init.Datatypes.nat), forall (x: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (y: 
+Definition is_bvult: forall (n: Init.Datatypes.nat) (x y: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         Prop :=
    fun (n: Init.Datatypes.nat) (x: 
@@ -4104,8 +3950,7 @@ Definition is_bvult: forall (n: Init.Datatypes.nat), forall (x:
          (SAWCoreVectorsAsRocqVectors.bvult n x y) Init.Datatypes.true
    .
 
-Definition is_bvule: forall (n: Init.Datatypes.nat), forall (x: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (y: 
+Definition is_bvule: forall (n: Init.Datatypes.nat) (x y: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         Prop :=
    fun (n: Init.Datatypes.nat) (x: 
@@ -4116,69 +3961,59 @@ Definition is_bvule: forall (n: Init.Datatypes.nat), forall (x:
          (SAWCoreVectorsAsRocqVectors.bvule n x y) Init.Datatypes.true
    .
 
-Axiom not_bvult_zero: forall (n: Init.Datatypes.nat), forall (x: 
+Axiom not_bvult_zero: forall (n: Init.Datatypes.nat) (x: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         @Init.Logic.eq Init.Datatypes.bool 
            (SAWCoreVectorsAsRocqVectors.bvult n x 
               (SAWCoreVectorsAsRocqVectors.bvNat n SAWCoreScaffolding.Zero))
            Init.Datatypes.false.
 
-Axiom trans_bvult_bvule: forall (n: Init.Datatypes.nat), forall (x: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (y: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (z: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_1: 
-           is_bvult n x y), forall (_2: is_bvule n y z),
+Axiom trans_bvult_bvule: forall (n: Init.Datatypes.nat) (x y z: 
+           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (_1: 
+           is_bvult n x y) (_2: is_bvule n y z),
         is_bvult n x z.
 
-Axiom bvult_sub_add_bvult: forall (n: Init.Datatypes.nat), forall (x: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (y: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (z: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_1: 
-           is_bvule n y z), forall (_2: 
+Axiom bvult_sub_add_bvult: forall (n: Init.Datatypes.nat) (x y z: 
+           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (_1: 
+           is_bvule n y z) (_2: 
            is_bvult n x (SAWCoreVectorsAsRocqVectors.bvSub n z y)),
         is_bvult n (SAWCoreVectorsAsRocqVectors.bvAdd n y x) z.
 
-Axiom bvult_sum_bvult_sub: forall (n: Init.Datatypes.nat), forall (x: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (y: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (z: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool), forall (_1: 
-           is_bvult n x (SAWCoreVectorsAsRocqVectors.bvAdd n y z)), forall (_2: 
+Axiom bvult_sum_bvult_sub: forall (n: Init.Datatypes.nat) (x y z: 
+           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (_1: 
+           is_bvult n x (SAWCoreVectorsAsRocqVectors.bvAdd n y z)) (_2: 
            @Init.Logic.eq Init.Datatypes.bool 
               (SAWCoreVectorsAsRocqVectors.bvult n x y) Init.Datatypes.false),
         is_bvult n (SAWCoreVectorsAsRocqVectors.bvSub n x y) z.
 
-Axiom IsLtNat_to_bvult: forall (n: Init.Datatypes.nat), forall (x: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-        forall (i: Init.Datatypes.nat), forall (_1: 
+Axiom IsLtNat_to_bvult: forall (n: Init.Datatypes.nat) (x: 
+           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool)
+        (i: Init.Datatypes.nat) (_1: 
            SAWCoreScaffolding.IsLtNat i 
               (SAWCoreVectorsAsRocqVectors.bvToNat n x)),
         is_bvult n (SAWCoreVectorsAsRocqVectors.bvNat n i) x.
 
-Axiom bvult_to_IsLtNat: forall (n: Init.Datatypes.nat), forall (x: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-        forall (i: Init.Datatypes.nat), forall (_1: 
+Axiom bvult_to_IsLtNat: forall (n: Init.Datatypes.nat) (x: 
+           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool)
+        (i: Init.Datatypes.nat) (_1: 
            is_bvult n (SAWCoreVectorsAsRocqVectors.bvNat n i) x),
         SAWCoreScaffolding.IsLtNat i (SAWCoreVectorsAsRocqVectors.bvToNat n x).
 
-Definition BV_complete_induction: forall (w: Init.Datatypes.nat),
-        forall (p: forall (_1: 
-                   SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool),
-                Prop), forall (_1: forall (x: 
-                   SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool),
-                forall (_1: forall (y: 
-                           SAWCoreVectorsAsRocqVectors.Vec w
-                              Init.Datatypes.bool), forall (_1: is_bvult w y x),
+Definition BV_complete_induction: forall (w: Init.Datatypes.nat) (p: forall
+                (_1: SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool),
+                Prop) (_1: forall (x: 
+                   SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool)
+                (_1: forall (y: SAWCoreVectorsAsRocqVectors.Vec w
+                              Init.Datatypes.bool) (_1: is_bvult w y x),
                         p y),
-                p x), forall (x: 
-           SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool),
+                p x) (x: SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool),
         p x :=
    fun (w: Init.Datatypes.nat) (p: forall (_1: 
                    SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool),
                 Prop) (f: forall (x: 
-                   SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool),
-                forall (_1: forall (y: 
-                           SAWCoreVectorsAsRocqVectors.Vec w
-                              Init.Datatypes.bool), forall (_1: is_bvult w y x),
+                   SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool)
+                (_1: forall (y: SAWCoreVectorsAsRocqVectors.Vec w
+                              Init.Datatypes.bool) (_1: is_bvult w y x),
                         p y),
                 p x) (x: SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool)
       =>
@@ -4188,16 +4023,14 @@ Definition BV_complete_induction: forall (w: Init.Datatypes.nat),
       in
       Nat_complete_induction (fun (n: Init.Datatypes.nat)
             =>
-            forall (x1: SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool),
-                 forall (_1: 
-                    SAWCoreScaffolding.IsLeNat 
+            forall (x1: SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool)
+                 (_1: SAWCoreScaffolding.IsLeNat 
                        (SAWCoreVectorsAsRocqVectors.bvToNat w x1) n),
                  p x1
-         ) (fun (n: Init.Datatypes.nat) (Hind: forall (m: Init.Datatypes.nat),
-                      forall (Hm: SAWCoreScaffolding.IsLtNat m n), forall (y: 
-                         SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool),
-                      forall (Hy: 
-                         SAWCoreScaffolding.IsLeNat 
+         ) (fun (n: Init.Datatypes.nat) (Hind: forall (m: Init.Datatypes.nat)
+                      (Hm: SAWCoreScaffolding.IsLtNat m n) (y: 
+                         SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool)
+                      (Hy: SAWCoreScaffolding.IsLeNat 
                             (SAWCoreVectorsAsRocqVectors.bvToNat w y) m),
                       p y) (x1: 
                  SAWCoreVectorsAsRocqVectors.Vec w Init.Datatypes.bool) (Hx: 
@@ -4220,48 +4053,39 @@ Definition BV_complete_induction: forall (w: Init.Datatypes.nat),
          ) var__0 x (SAWCoreScaffolding.IsLeNat_base var__0)
    .
 
-Axiom Array: forall (_1: Type), forall (_2: Type),
+Axiom Array: forall (_1 _2: Type),
         Type.
 
-Axiom arrayConstant: forall (a: Type), forall (b: Type), forall (_1: b),
+Axiom arrayConstant: forall (a b: Type) (_1: b),
         Array a b.
 
-Axiom arrayLookup: forall (a: Type), forall (b: Type), forall (_1: Array a b),
-        forall (_2: a),
+Axiom arrayLookup: forall (a b: Type) (_1: Array a b) (_2: a),
         b.
 
-Axiom arrayUpdate: forall (a: Type), forall (b: Type), forall (_1: Array a b),
-        forall (_2: a), forall (_3: b),
+Axiom arrayUpdate: forall (a b: Type) (_1: Array a b) (_2: a) (_3: b),
         Array a b.
 
-Axiom arrayCopy: forall (n: Init.Datatypes.nat), forall (a: Type), forall (_1: 
-           Array (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) a),
-        forall (_2: SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-        forall (_3: 
-           Array (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) a),
-        forall (_4: SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-        forall (_5: SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+Axiom arrayCopy: forall (n: Init.Datatypes.nat) (a: Type) (_1: 
+           Array (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) a)
+        (_2: SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (_3: 
+           Array (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) a)
+        (_4 _5: SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         Array (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) a.
 
-Axiom arraySet: forall (n: Init.Datatypes.nat), forall (a: Type), forall (_1: 
-           Array (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) a),
-        forall (_2: SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-        forall (_3: a), forall (_4: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+Axiom arraySet: forall (n: Init.Datatypes.nat) (a: Type) (_1: 
+           Array (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) a)
+        (_2: SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (_3: a)
+        (_4: SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         Array (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) a.
 
-Axiom arrayRangeEq: forall (n: Init.Datatypes.nat), forall (a: Type),
-        forall (_1: 
-           Array (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) a),
-        forall (_2: SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-        forall (_3: 
-           Array (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) a),
-        forall (_4: SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
-        forall (_5: SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
+Axiom arrayRangeEq: forall (n: Init.Datatypes.nat) (a: Type) (_1: 
+           Array (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) a)
+        (_2: SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (_3: 
+           Array (SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) a)
+        (_4 _5: SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         Init.Datatypes.bool.
 
-Axiom arrayEq: forall (a: Type), forall (b: Type), forall (_1: Array a b),
-        forall (_2: Array a b),
+Axiom arrayEq: forall (a b: Type) (_1 _2: Array a b),
         Init.Datatypes.bool.
 
 (* "Prelude::Rational@core" was skipped *)
@@ -4307,8 +4131,7 @@ Definition rationalHalf: SAWCoreScaffolding.Rational :=
 
 (* "Prelude::rationalRecip@core" was skipped *)
 
-Definition rationalDiv: forall (_1: SAWCoreScaffolding.Rational),
-        forall (_2: SAWCoreScaffolding.Rational),
+Definition rationalDiv: forall (_1 _2: SAWCoreScaffolding.Rational),
         SAWCoreScaffolding.Rational :=
    fun (x: SAWCoreScaffolding.Rational) (y: SAWCoreScaffolding.Rational)
       =>

@@ -26,6 +26,12 @@ import Language.Rocq.AST
 ------------------------------------------------------------
 -- Support
 
+-- | Mark the last entry in a list.
+markLast :: [a] -> [(Bool, a)]
+markLast xs =
+    let once x results = (null results, x) : results in
+    foldr once [] xs
+
 -- | Replace all occurrences of the double quote character @"@ with
 --   the string @""@, i.e., two copies of it, as this is how Rocq
 --   escapes double quote characters.
@@ -55,6 +61,119 @@ prettyNameType x ty =
 -- | Insert parens based on the first argument
 parensIf :: Bool -> PP.Doc ann -> PP.Doc ann
 parensIf p d = if p then PP.parens d else d
+
+
+------------------------------------------------------------
+-- AST tools
+
+-- | Check if two terms are the "same". This is used to fold together
+--   forall entries (like "forall (x y: nat)") and so can be
+--   conservative. It does only as much work as needed to make real
+--   occurrences work, and calls everything else false. In particular
+--   we make no attempt to handle alpha-equivalence.
+sameTerm :: Term -> Term -> Bool
+sameTerm e1 e2 =
+    case (e1, e2) of
+        -- Cases we do not handle
+        (Lambda{}, _) -> False
+        (_, Lambda{}) -> False
+        (Fix{}, _) -> False
+        (_, Fix{}) -> False
+        (Pi{}, _) -> False
+        (_, Pi{}) -> False
+        (Let{}, _) -> False
+        (_, Let{}) -> False
+        (Ltac{}, _) -> False
+        (_, Ltac{}) -> False
+
+        -- Matching cases we do handle
+        (If c1 t1 f1, If c2 t2 f2) ->
+            sameTerm c1 c2 && sameTerm t1 t2 && sameTerm f1 f2
+        (App f1 args1, App f2 args2) ->
+            sameTerm f1 f2 && length args1 == length args2 &&
+                and (zipWith sameTerm args1 args2)
+        (Sort s1, Sort s2) ->
+            s1 == s2
+        (Var x1, Var x2) ->
+            x1 == x2
+        (ExplVar x1, ExplVar x2) ->
+            x1 == x2
+        (Ascription e1' t1, Ascription e2' t2) ->
+            sameTerm e1' e2' && sameTerm t1 t2
+        (NatLit n1, NatLit n2) ->
+            n1 == n2
+        (ZLit n1, ZLit n2) ->
+            n1 == n2
+        (List xs1, List xs2) ->
+            length xs1 == length xs2 && and (zipWith sameTerm xs1 xs2)
+        (StringLit s1, StringLit s2) ->
+            s1 == s2
+        (Scope e1' s1, Scope e2' s2) ->
+            s1 == s2 && sameTerm e1' e2'
+
+        -- Fill out the cases so if a new constructor appears the
+        -- compiler reminds us to handle it.
+        (If{}, _) -> False
+        (App{}, _) -> False
+        (Sort{}, _) -> False
+        (Var{}, _) -> False
+        (ExplVar{}, _) -> False
+        (Ascription{}, _) -> False
+        (NatLit{}, _) -> False
+        (ZLit{}, _) -> False
+        (List{}, _) -> False
+        (StringLit{}, _) -> False
+        (Scope{}, _) -> False
+
+
+------------------------------------------------------------
+-- AST sugaring
+
+data PiBinder'
+    = AnonPiBinder' BinderImplicity Type
+    | NamedPiBinders' [(BinderImplicity, [Ident], Type)]
+
+-- | Fold together adjacent binders as allowed by the concrete syntax.
+--
+--   "Binders" without names can't be folded together, but names that
+--   share the same type can be, and a chain of named binders requires
+--   only one "forall" token.
+contractPiBinders :: [PiBinder] -> [PiBinder']
+contractPiBinders bs0 =
+    let newstate imp x ty = ([], imp, [x], ty)
+        addstate imp x ty (others, previmp, prevnames, prevty) =
+            if imp == previmp && sameTerm ty prevty then
+                (others, previmp, x : prevnames, prevty)
+            else
+                ((previmp, reverse prevnames, prevty) : others, imp, [x], ty)
+        popstate (others, imp, names, ty) =
+            let others' = (imp, reverse names, ty) : others in
+            NamedPiBinders' $ reverse others'
+    in
+
+    let once (results, state) b = case state of
+          Nothing -> case b of
+              PiBinder imp Nothing ty ->
+                  let here = AnonPiBinder' imp ty in
+                  (here : results, Nothing)
+              PiBinder imp (Just x) ty ->
+                  (results, Just $ newstate imp x ty)
+          Just s -> case b of
+              PiBinder imp Nothing ty ->
+                  let prev = popstate s
+                      here = AnonPiBinder' imp ty
+                  in
+                  (here : prev : results, Nothing)
+              PiBinder imp (Just x) ty ->
+                  let s' = addstate imp x ty s in
+                  (results, Just s')
+    in
+    let (results, state) = foldl once ([], Nothing) bs0
+        results' = case state of
+            Nothing -> results
+            Just s -> popstate s : results
+    in
+    reverse results'
 
 
 ------------------------------------------------------------
@@ -89,16 +208,43 @@ prettyBinder b = case b of
 
 -- | Print a pi (forall) binder
 --   (we don't seem to have a representation for @exists@)
-prettyPiBinder :: PiBinder -> PP.Doc ann
-prettyPiBinder b = case b of
-    PiBinder Explicit Nothing ty ->
-        prettyTerm PrecApp ty <+> "->"
-    PiBinder Explicit (Just x) ty ->
-        "forall" <+> PP.parens (prettyNameType x ty) <> ","
-    PiBinder Implicit Nothing ty ->
-        PP.braces (prettyTerm PrecApp ty) <+> "->"
-    PiBinder Implicit (Just x) ty ->
-        "forall" <+> PP.braces (prettyNameType x ty) <> ","
+prettyPiBinder' :: PiBinder' -> [PP.Doc ann]
+prettyPiBinder' b = case b of
+    AnonPiBinder' Explicit ty ->
+        [PP.group $ prettyTerm PrecApp ty <+> "->"]
+    AnonPiBinder' Implicit ty ->
+        [PP.group $ PP.braces (prettyTerm PrecApp ty) <+> "->"]
+    NamedPiBinders' entries ->
+        let prettyEntry (isLast, (imp, names, ty)) =
+              let names' = PP.hsep $ map prettyIdent names
+                  ty' = prettyTerm PrecNone ty
+                  long = PP.nest 3 $ names' <> ":" <+> ty'
+                  short = PP.group $ names' <> ":" <+> ty'
+                  entry = PP.flatAlt long short
+                  entry' = case imp of
+                      Explicit -> PP.parens entry
+                      Implicit -> PP.braces entry
+                  entry'' = if isLast then entry' <> "," else entry'
+              in
+              PP.group entry''
+        in
+        -- FUTURE: it won't matter for the current downstream uses but
+        -- we might want to graft the "forall" keyword to the first
+        -- entry instead of letting it float loose.
+        let entries' = map prettyEntry $ markLast entries in
+        "forall" : entries'
+
+-- | Print a chain of foralls. Contract the chain where syntactically
+--   possible, because it's a lot more readable that way.
+--
+--   The return value is one doc for each entry in the original list
+--   (plus one for each "forall" keyword) so they can be laid out as
+--   desired.
+--
+--
+prettyPiBinders :: [PiBinder] -> [PP.Doc ann]
+prettyPiBinders binders =
+    concatMap prettyPiBinder' $ contractPiBinders binders
 
 -- | Common code for printing things shaped like function headers
 --
@@ -176,7 +322,7 @@ prettyTerm p e0 =
         in
         parensIf (p > PrecLambda) $ prettyFunction header body'
     Pi binders t ->
-        let binders' = map (\b -> PP.group $ prettyPiBinder b) binders
+        let binders' = prettyPiBinders binders
             t' = prettyTerm PrecLambda t
             longbs = PP.nest 5 $ PP.fillSep binders'
             shortbs = PP.group $ PP.hsep binders'
@@ -327,7 +473,7 @@ prettyInductive :: Inductive -> PP.Doc ann
 prettyInductive (Inductive {..}) =
     let name' = prettyIdent inductiveName
         params' = map (\p -> PP.group $ prettyBinder p) inductiveParameters
-        indices' = map (\i -> PP.group $ prettyPiBinder i) inductiveIndices
+        indices' = prettyPiBinders inductiveIndices
         sort' = prettySort inductiveSort
         ctors' = map prettyConstructor inductiveConstructors
         intro' = "Inductive" <+> name'

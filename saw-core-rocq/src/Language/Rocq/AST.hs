@@ -54,13 +54,13 @@ data Sort
   = Prop
   | Set
   | Type
-  deriving (Show)
+  deriving (Eq, Show)
 
 -- | Is this a maximally-inserted implicit ("{}") or explicit binder?
 data BinderImplicity
   = Implicit
   | Explicit
-    deriving (Show)
+    deriving (Eq, Show)
 
 -- | Bound variable in a `Lambda` or `Let`, optionally with type
 data Binder
@@ -68,6 +68,9 @@ data Binder
     deriving (Show)
 
 -- | Bound variable in a `Pi` (forall), optionally with a name
+--
+--   XXX: we can't represent "exists". Currently we never generate it,
+--   but that could change.
 data PiBinder
   = PiBinder BinderImplicity (Maybe Ident) Type
     deriving (Show)
