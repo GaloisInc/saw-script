@@ -569,7 +569,7 @@ jobs:
           publish_dir: gh-pages
           keep_files: true
 
-  saw-core-rocq-tests:
+  rocq-builds:
     needs: [build]
     strategy:
       fail-fast: false
@@ -1197,7 +1197,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs:
       - build
-      - saw-core-rocq-tests
+      - rocq-builds
       - crux-mir-comp-tests
       - saw-remote-api-tests
       - cabal-test
