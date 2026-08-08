@@ -103,7 +103,7 @@ data Term
    -- | x
   | Var Ident
   
-    -- | @x, that is, Var with @ in order to explicitly apply implicit
+    -- | \@x, that is, Var with \@ in order to explicitly apply implicit
     --   arguments.
   | ExplVar Ident
 
