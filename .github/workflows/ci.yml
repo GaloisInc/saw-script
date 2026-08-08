@@ -626,6 +626,17 @@ jobs:
         shell: bash
         run: opam exec -- make -j
 
+      # Regenerate the test .v files, since we don't have the ones from the
+      # test run and rebuilding them isn't super expensive.
+      - working-directory: otherTests/saw-core-rocq
+        shell: bash
+        run: SAW=saw sh ./test.sh
+
+      # Now build, or try to build, all the output files.
+      - working-directory: otherTests/saw-core-rocq
+        shell: bash
+        run: opam exec -- make -j rocq
+
   crux-mir-comp-tests:
     needs: [build]
     strategy:
