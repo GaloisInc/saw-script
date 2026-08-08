@@ -65,7 +65,7 @@ translateCtor inductiveParameters (Ctor {..}) = do
       ImportedName{} -> pure Nothing
   let constructorName = case maybe_constructorName of
         -- Drop qualifiers from constructor name
-        Just (Rocq.Ident n) -> Rocq.Ident (reverse (takeWhile (/= '.') (reverse n)))
+        Just (Rocq.Ident n) -> Rocq.Ident $ Text.takeWhileEnd (/= '.') n
         Nothing -> error "translateCtor: unexpected translation for constructor"
   constructorType <-
     -- Unfortunately, `ctorType` qualifies the inductive type's name in the
@@ -87,12 +87,12 @@ translateDataType (DataType {..}) =
   case nameInfo dtName of
     ModuleIdentifier dtIdent ->
       atDefSite <$> findSpecialTreatment dtIdent >>= \case
-      DefPreserve            -> translateNamed $ Rocq.Ident (identName dtIdent)
+      DefPreserve            -> translateNamed $ Rocq.Ident (Text.pack $ identName dtIdent)
       DefRename   targetName -> translateNamed $ targetName
       DefReplace  str        -> return $ Rocq.Snippet str
       DefSkip                -> return $ skipped dtIdent
     ImportedName{} ->
-      translateNamed $ Rocq.Ident (Text.unpack (toShortName (nameInfo dtName)))
+      translateNamed $ Rocq.Ident $ toShortName (nameInfo dtName)
   where
     translateNamed :: ModuleTranslationMonad m => Rocq.Ident -> m Rocq.Decl
     translateNamed name = do
@@ -131,15 +131,15 @@ translateDataType (DataType {..}) =
 
 _mapped :: Ident -> Ident -> Rocq.Decl
 _mapped sawIdent newIdent =
-  Rocq.Comment $ show sawIdent ++ " is mapped to " ++ show newIdent
+  Rocq.Comment $ identText sawIdent <> " is mapped to " <> identText newIdent
 
 skipped' :: NameInfo -> Rocq.Decl
 skipped' nmi =
-  Rocq.Comment $ show (toAbsoluteName nmi) ++ " was skipped"
+  Rocq.Comment $ "\"" <> toAbsoluteName nmi <> "\" was skipped"
 
 skipped :: Ident -> Rocq.Decl
 skipped sawIdent =
-  Rocq.Comment $ show sawIdent ++ " was skipped"
+  Rocq.Comment $ "\"" <> identText sawIdent <> "\" was skipped"
 
 translateDef :: ModuleTranslationMonad m => Def -> m Rocq.Decl
 translateDef (Def {..}) = {- trace ("translateDef " ++ show defIdent) $ -} do
@@ -149,7 +149,7 @@ translateDef (Def {..}) = {- trace ("translateDef " ++ show defIdent) $ -} do
   where
 
     translateAccordingly :: ModuleTranslationMonad m => DefSiteTreatment -> m Rocq.Decl
-    translateAccordingly  DefPreserve           = translateNamed $ Rocq.Ident (Text.unpack (toShortName (nameInfo defName)))
+    translateAccordingly  DefPreserve           = translateNamed $ Rocq.Ident $ toShortName (nameInfo defName)
     translateAccordingly (DefRename targetName) = translateNamed $ targetName
     translateAccordingly (DefReplace  str)      = return $ Rocq.Snippet str
     translateAccordingly  DefSkip               = return $ skipped' (nameInfo defName)

@@ -415,42 +415,42 @@ rocqTranslationConfiguration ::
   [Text] ->
   Rocq.TranslationConfiguration
 rocqTranslationConfiguration renamings skips = Rocq.TranslationConfiguration
-  { Rocq.constantRenaming = map (\(a, b) -> (Text.unpack a, Text.unpack b)) renamings
-  , Rocq.constantSkips = map Text.unpack skips
+  { Rocq.constantRenaming = renamings
+  , Rocq.constantSkips = skips
   , Rocq.monadicTranslation = False
-  , Rocq.postPreamble = []
+  , Rocq.postPreamble = ""
   , Rocq.vectorModule = "SAWCoreVectorsAsRocqVectors"
   }
 
 withImportSAWCorePrelude :: Rocq.TranslationConfiguration  -> Rocq.TranslationConfiguration
 withImportSAWCorePrelude config@(Rocq.TranslationConfiguration { Rocq.postPreamble }) =
-  config { Rocq.postPreamble = postPreamble ++ unlines
-   [ "From CryptolToRocq Require Import SAWCorePrelude."
-   ]
+  config {
+      Rocq.postPreamble = postPreamble <> 
+          "From CryptolToRocq Require Import SAWCorePrelude.\n"
   }
 
 withImportSAWCorePreludeExtra :: Rocq.TranslationConfiguration  -> Rocq.TranslationConfiguration
 withImportSAWCorePreludeExtra config@(Rocq.TranslationConfiguration { Rocq.postPreamble }) =
-  config { Rocq.postPreamble = postPreamble ++ unlines
-   [ "From CryptolToRocq Require Import SAWCorePreludeExtra."
-   ]
+  config {
+      Rocq.postPreamble = postPreamble <>
+          "From CryptolToRocq Require Import SAWCorePreludeExtra.\n"
   }
 
 
 withImportCryptolPrimitivesForSAWCore ::
   Rocq.TranslationConfiguration  -> Rocq.TranslationConfiguration
 withImportCryptolPrimitivesForSAWCore config@(Rocq.TranslationConfiguration { Rocq.postPreamble }) =
-  config { Rocq.postPreamble = postPreamble ++ unlines
-   [ "From CryptolToRocq Require Import CryptolPrimitivesForSAWCore."
-   ]
+  config {
+      Rocq.postPreamble = postPreamble <>
+          "From CryptolToRocq Require Import CryptolPrimitivesForSAWCore.\n"
   }
 
 withImportCryptolPrimitivesForSAWCoreExtra ::
   Rocq.TranslationConfiguration  -> Rocq.TranslationConfiguration
 withImportCryptolPrimitivesForSAWCoreExtra config@(Rocq.TranslationConfiguration { Rocq.postPreamble }) =
-  config { Rocq.postPreamble = postPreamble ++ unlines
-   [ "From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra."
-   ]
+  config {
+      Rocq.postPreamble = postPreamble <>
+          "From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.\n"
   }
 
 writeRocqDoc :: FilePath -> PP.Doc ann -> IO ()
@@ -483,7 +483,7 @@ writeRocqTerm name notations skips path t = do
   sc <- getSharedContext
   mm <- io $ scGetModuleMap sc
   tp <- io $ scTypeOf sc t
-  case Rocq.translateTermAsDeclImports configuration mm (Rocq.Ident (Text.unpack name)) t tp of
+  case Rocq.translateTermAsDeclImports configuration mm (Rocq.Ident name) t tp of
     Left err -> do
       err' <- liftIO $ Rocq.ppTranslationError sc err
       throwTopLevel $ "Error translating: " ++ Text.unpack err'
@@ -532,7 +532,7 @@ writeRocqCryptolModule inputFile outputFile notations skips = io $ do
         withImportSAWCorePreludeExtra $
         withImportSAWCorePrelude $
         rocqTranslationConfiguration notations skips
-  let nm = Rocq.Ident (takeBaseName inputFile)
+  let nm = Rocq.Ident (Text.pack $ takeBaseName inputFile)
   res <- Rocq.translateCryptolModule sc nm configuration cryptolPreludeDecls cm
   case res of
     Left err -> do

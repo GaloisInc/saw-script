@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 
 {- |
 Module      : Language.Rocq.AST
@@ -23,6 +24,8 @@ module Language.Rocq.AST (
   ) where
 
 import Data.String (IsString(..))
+import Data.Text (Text)
+import qualified Data.Text as Text
 
 -- | An 'Ident' is a Rocq qualified identifier represented as a
 --   string, with the invariant that it is lexically valid.
@@ -36,14 +39,14 @@ import Data.String (IsString(..))
 --   We don't enforce the distinction between qualified and unqualified
 --   identifiers in this representation.
 --
-newtype Ident = Ident String
+newtype Ident = Ident Text
   deriving (Eq, Ord)
 
 instance Show Ident where
   show (Ident s) = show s
 
 instance IsString Ident where
-  fromString s = Ident s
+  fromString s = Ident $ Text.pack s
 
 -- | Type to hold universes
 --
@@ -114,13 +117,13 @@ data Term
   | List [Term]
 
     -- | "foo"
-  | StringLit String
+  | StringLit Text
 
     -- | e%scope
-  | Scope Term String
+  | Scope Term Text
 
     -- | Expression-level ltac invocation ltac:(text)
-  | Ltac String
+  | Ltac Text
 
   deriving (Show)
 
@@ -161,11 +164,11 @@ data Inductive = Inductive
 --
 data Decl
   = Axiom Ident Type
-  | Comment String
+  | Comment Text
   | Definition Ident [Binder] (Maybe Type) Term
   | Parameter Ident Type
   | Variable Ident Type
   | InductiveDecl Inductive
   | Section Ident [Decl]
-  | Snippet String
+  | Snippet Text
   deriving (Show)

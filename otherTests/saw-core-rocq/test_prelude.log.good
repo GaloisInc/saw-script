@@ -23,11 +23,11 @@ Module SAWCorePrelude.
 
 (* "Prelude::sawLet@core" was skipped *)
 
-(* Prelude::UnitType was skipped *)
+(* "Prelude::UnitType" was skipped *)
 
 (* "Prelude::UnitType__rec@core" was skipped *)
 
-(* Prelude::PairType was skipped *)
+(* "Prelude::PairType" was skipped *)
 
 Definition pair_example: forall (a: Type), forall (b: Type), forall (_1: a),
         forall (_2: b),
@@ -123,7 +123,7 @@ Definition uncurry1: forall (a: Type), forall (b: Type), forall (c: Type),
 
 (* "Prelude::error@core" was skipped *)
 
-(* Prelude::Void was skipped *)
+(* "Prelude::Void" was skipped *)
 
 Definition elimVoid: forall (a: Type), forall (_1: Init.Datatypes.Empty_set),
         a :=
@@ -132,7 +132,7 @@ Definition elimVoid: forall (a: Type), forall (_1: Init.Datatypes.Empty_set),
       @Init.Datatypes.Empty_set_rect (fun (_1: Init.Datatypes.Empty_set) => a) v
    .
 
-(* Prelude::Eq was skipped *)
+(* "Prelude::Eq" was skipped *)
 
 (* "Prelude::Eq__rec@core" was skipped *)
 
@@ -445,11 +445,11 @@ Definition PairValue_fst_Unit: forall (a: Type), forall (x:
          )
    .
 
-(* Prelude::EmptyType was skipped *)
+(* "Prelude::EmptyType" was skipped *)
 
 (* "Prelude::EmptyType__rec@core" was skipped *)
 
-(* Prelude::RecordType was skipped *)
+(* "Prelude::RecordType" was skipped *)
 
 (* "Prelude::RecordType__rec@core" was skipped *)
 
@@ -548,7 +548,7 @@ Definition RecordValue_head_Empty: forall (s: Stdlib.Strings.String.string),
          )
    .
 
-(* Prelude::Bool was skipped *)
+(* "Prelude::Bool" was skipped *)
 
 (* "Prelude::iteDep@core" was skipped *)
 
@@ -1763,7 +1763,7 @@ Definition impliesI: forall (x: Init.Datatypes.bool),
          )
    .
 
-(* Prelude::Either was skipped *)
+(* "Prelude::Either" was skipped *)
 
 Definition Either__rec: forall (s: Type), forall (t: Type),
         forall (p: forall (_1: Init.Datatypes.sum s t), Type),
@@ -1854,7 +1854,7 @@ Definition maybe: forall (a: Type), forall (b: Type), forall (_1: b),
       Maybe__rec a (fun (m': Maybe a) => b) f1 f2 m
    .
 
-(* Prelude::Pos was skipped *)
+(* "Prelude::Pos" was skipped *)
 
 (* "Prelude::Pos_cases@core" was skipped *)
 
@@ -1979,7 +1979,7 @@ Definition posLt: forall (_1: Stdlib.PArith.BinPos.positive),
       posCmp x y Init.Datatypes.false
    .
 
-(* Prelude::Nat was skipped *)
+(* "Prelude::Nat" was skipped *)
 
 (* "Prelude::Succ@core" was skipped *)
 
@@ -2001,7 +2001,7 @@ Definition posLt: forall (_1: Stdlib.PArith.BinPos.positive),
 
 (* "Prelude::widthNat@core" was skipped *)
 
-(* Prelude::Z was skipped *)
+(* "Prelude::Z" was skipped *)
 
 Definition Z_cases: forall (a: Type), forall (_1: a),
         forall (_2: forall (_2: Stdlib.PArith.BinPos.positive), a),
@@ -2130,7 +2130,7 @@ Definition modNat: forall (_1: Init.Datatypes.nat),
                SAWCoreScaffolding.UnitType) (SAWCoreScaffolding.divModNat x y))
    .
 
-(* Prelude::AccessiblePos was skipped *)
+(* "Prelude::AccessiblePos" was skipped *)
 
 (* "Prelude::AccessiblePos_Bit0@core" was skipped *)
 
@@ -2138,7 +2138,7 @@ Definition modNat: forall (_1: Init.Datatypes.nat),
 
 (* "Prelude::AccessiblePos_all@core" was skipped *)
 
-(* Prelude::AccessibleNat was skipped *)
+(* "Prelude::AccessibleNat" was skipped *)
 
 (* "Prelude::AccessibleNat_NatPos@core" was skipped *)
 
@@ -2218,7 +2218,7 @@ Definition pred: forall (_1: Init.Datatypes.nat), Init.Datatypes.nat :=
 
 (* "Prelude::eqNatPrec@core" was skipped *)
 
-(* Prelude::IsLeNat was skipped *)
+(* "Prelude::IsLeNat" was skipped *)
 
 (* "Prelude::IsLtNat@core" was skipped *)
 
@@ -3689,7 +3689,7 @@ Definition updBvFun: forall (n: Init.Datatypes.nat), forall (a: Type),
 
 (* "Prelude::mkDouble@core" was skipped *)
 
-(* Prelude::List was skipped *)
+(* "Prelude::List" was skipped *)
 
 (* "Prelude::List__rec@core" was skipped *)
 

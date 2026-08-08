@@ -22,7 +22,8 @@ module SAWCoreRocq.Rocq (
   ) where
 
 import           Data.String.Interpolate      (i)
-import qualified Data.Text                    as Text
+--import qualified Data.Text                    as Text
+import           Data.Text                    (Text)
 import           Prelude                      hiding (fail)
 import           Prettyprinter
 
@@ -101,8 +102,8 @@ translateCryptolModule sc nm configuration globalDecls m = do
   translated <- CMT.translateCryptolModule sc configuration globalDecls m
   return $ Rocq.prettyDecl . Rocq.Section (escapeIdent nm) <$> translated
 
--- | Extract out the 'String' name of a declaration in a SAW core module
-moduleDeclName :: ModuleDecl -> Maybe String
-moduleDeclName (TypeDecl (DataType { dtName })) = Just (Text.unpack (toShortName (nameInfo dtName)))
-moduleDeclName (DefDecl  (Def      { defName })) = Just (Text.unpack (toShortName (nameInfo defName)))
+-- | Extract out the 'Text' name of a declaration in a SAW core module
+moduleDeclName :: ModuleDecl -> Maybe Text
+moduleDeclName (TypeDecl (DataType { dtName })) = Just (toShortName (nameInfo dtName))
+moduleDeclName (DefDecl  (Def      { defName })) = Just (toShortName (nameInfo defName))
 moduleDeclName InjectCodeDecl{} = Nothing

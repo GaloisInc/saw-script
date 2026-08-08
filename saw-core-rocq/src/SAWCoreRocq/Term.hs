@@ -45,6 +45,8 @@ import           Data.Map                     (Map)
 import qualified Data.Set                     as Set
 import           Data.Set                     (Set)
 import qualified Data.Text                    as Text
+import           Data.Text                    (Text)
+import           Text.Read                    (readMaybe)
 import           Prelude                      hiding (fail)
 import           Prettyprinter
 
@@ -153,14 +155,19 @@ localTR f =
 -- | Take a Rocq identifier that ends in a number (i.e., a sequence of digits)
 -- and add 1 to that number, viewing an identifier with no trailing number as
 -- ending in 0
+--
+-- Note 20260807: that seems to be a lie, the output actually starts at 1.
 nextVariant :: Rocq.Ident -> Rocq.Ident
-nextVariant (Rocq.Ident s) = Rocq.Ident (reverse (go (reverse s)))
+nextVariant (Rocq.Ident s) = Rocq.Ident $ paste $ incr $ peel s
   where
-    go :: String -> String
-    go (c : cs)
-      | c == '9'  = '0' : go cs
-      | isDigit c = succ c : cs
-    go cs = '1' : cs
+    peel str = (Text.dropWhileEnd isDigit str, Text.takeWhileEnd isDigit str)
+    incr (str, num) =
+       let num' = case readMaybe (Text.unpack num) of
+             Nothing -> 1 :: Int
+             Just n -> n + 1
+       in
+       (str, Text.pack $ show num')
+    paste (str, num) = str <> num
 
 -- | Find an fresh, as-yet-unused variant of the given Rocq identifier
 freshVariant :: TermTranslationMonad m => Rocq.Ident -> m Rocq.Ident
@@ -178,7 +185,7 @@ withUsedRocqIdent ident m =
 
 -- | Translate a local name from a saw-core binder into a fresh Rocq identifier
 translateLocalIdent :: TermTranslationMonad m => LocalName -> m Rocq.Ident
-translateLocalIdent x = freshVariant (escapeIdent (Rocq.Ident (Text.unpack x)))
+translateLocalIdent x = freshVariant (escapeIdent (Rocq.Ident x))
 
 -- | Generate a fresh, unused Rocq identifier from a SAW core name and mark it as
 -- unavailable in the supplied translation computation
@@ -224,7 +231,7 @@ reservedIdents :: Set Rocq.Ident
 reservedIdents =
   Set.fromList $
   map Rocq.Ident $
-  concatMap words $
+  concatMap Text.words $
   [ "_ Axiom CoFixpoint Definition Fixpoint Hypothesis IF Parameter Prop"
   , "SProp Set Theorem Type Variable as at by cofix discriminated else"
   , "end exists exists2 fix for forall fun if in lazymatch let match"
@@ -280,11 +287,12 @@ runTermTranslationMonad configuration mname mm globalDecls localEnv =
                     })
 
 -- | Return a Rocq term for an error computation with the given string message
-errorTermM :: TermTranslationMonad m => String -> m Rocq.Term
+errorTermM :: TermTranslationMonad m => Text -> m Rocq.Term
 errorTermM str = return $ Rocq.App (Rocq.Var "error") [Rocq.StringLit str]
 
 qualify :: ModuleName -> Rocq.Ident -> Rocq.Ident
-qualify m (Rocq.Ident i) = Rocq.Ident (Text.unpack (Text.intercalate "." (moduleNamePieces m)) ++ "." ++ i)
+qualify m (Rocq.Ident i) =
+    Rocq.Ident $ Text.intercalate "." (moduleNamePieces m) <> "." <> i
 
 -- | Translate an 'Ident' with a given list of arguments to a Rocq term, using
 -- any special treatment for that identifier and qualifying it if necessary
@@ -295,7 +303,7 @@ translateIdentWithArgs i args = do
         if Just (identModule ident) == currentModuleName
           then base else qualify (translateModuleName (identModule ident)) base
         where
-          base = escapeIdent (Rocq.Ident (identName ident))
+          base = escapeIdent (Rocq.Ident (Text.pack $ identName ident))
   specialTreatment <- findSpecialTreatment i
   applySpecialTreatment identToRocq (atUseSite specialTreatment)
 
@@ -315,13 +323,13 @@ translateIdentWithArgs i args = do
         do f <- macroFun <$> mapM translateTerm m_args
            Rocq.App f <$> mapM translateTerm args'
     applySpecialTreatment _identToRocq (UseMacro n _) =
-      errorTermM (unwords
-        [ "Identifier"
-        , show i
-        , "not applied to required number of args, which is"
-        , show n
-        ]
-      )
+        let i' = Text.pack $ show i
+            n' = Text.pack $ show n
+        in
+        -- XXX shouldn't this fail and report an error rather than stuff an
+        -- error in the output?
+        errorTermM ("Identifier " <> i' <>
+                    "not applied to required number of args, which is " <> n')
 
 -- | Helper for 'translateIdentWithArgs' with no arguments
 translateIdent :: TermTranslationMonad m => Ident -> m Rocq.Term
@@ -340,7 +348,7 @@ translateConstant nm =
   do -- First, apply the constant renaming to get the name for this constant
      configuration <- asks translationConfiguration
      -- TODO short name seems wrong
-     let nm_str = Text.unpack $ toShortName $ nameInfo nm
+     let nm_str = toShortName $ nameInfo nm
      let renamed =
            escapeIdent $ Rocq.Ident $ fromMaybe nm_str $
            lookup nm_str $ constantRenaming configuration
@@ -378,7 +386,7 @@ translateConstant nm =
 translateIdentToIdent :: TermTranslationMonad m => Ident -> m (Maybe Rocq.Ident)
 translateIdentToIdent i =
   (atUseSite <$> findSpecialTreatment i) >>= \case
-    UsePreserve -> return $ Just (qualify translatedModuleName (Rocq.Ident (Text.unpack (identBaseName i))))
+    UsePreserve -> return $ Just (qualify translatedModuleName (Rocq.Ident (identBaseName i)))
     UseRename   targetModule targetName _ ->
       return $ Just $ qualify (fromMaybe translatedModuleName targetModule) targetName
     UseMacro _ _ -> return Nothing
@@ -401,12 +409,13 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
              ModuleIdentifier ident -> translateIdentToIdent ident
              ImportedName{} -> pure Nothing
          case maybe_d_trans of
-           Just (Rocq.Ident i) -> return $ Rocq.ExplVar (Rocq.Ident (i ++ "_rect"))
+           Just (Rocq.Ident i) -> return $ Rocq.ExplVar (Rocq.Ident (i <> "_rect"))
            Nothing -> do
              -- XXX: this should really use ppName but that's a can of worms
-             let d' = Text.unpack $ toAbsoluteName (nameInfo d)
-             errorTermM ("Recursor for " ++ d' ++
-                         " cannot be translated because the datatype " ++
+             -- XXX: shouldn't this fail rather than issue an error into the output?
+             let d' = toAbsoluteName (nameInfo d)
+             errorTermM ("Recursor for " <> d' <>
+                         " cannot be translated because the datatype " <>
                          "is mapped to an arbitrary Rocq term")
 
     Sort s _h -> pure (Rocq.Sort (translateSort s))
@@ -419,7 +428,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       elems <- Vector.toList <$> mapM translateTerm vec
       -- NOTE: with VectorNotations, this is actually a Rocq vector literal
       return $ Rocq.List elems
-    StringLit s -> pure (Rocq.Scope (Rocq.StringLit (Text.unpack s)) "string")
+    StringLit s -> pure (Rocq.Scope (Rocq.StringLit s) "string")
 
 
 -- | Run a translation in the top-level translation state with no free SAW
@@ -664,7 +673,7 @@ translateTermUnshared t =
          case Map.lookup nm nenv of
            Just ident -> pure (Rocq.Var ident)
            Nothing ->
-             do let nm_str = Text.unpack $ vnName nm
+             do let nm_str = vnName nm
                 let ident = escapeIdent $ Rocq.Ident $ nm_str
                 pure (Rocq.Var ident)
 

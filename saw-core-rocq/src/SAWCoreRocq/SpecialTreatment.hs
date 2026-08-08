@@ -29,6 +29,7 @@ import qualified Data.Map                as Map
 import           Data.Map                (Map)
 import           Data.String.Interpolate (i)
 import qualified Data.Text               as Text
+import            Data.Text              (Text)
 import           Prelude                 hiding (fail)
 import           Text.Encoding.Z         (zEncodeString)
 
@@ -47,7 +48,7 @@ data DefSiteTreatment
     --   and otherwise directly translate the associated SAWCore declaration.
     DefRename Rocq.Ident
   | -- | Replace the declaration of the identifier with the given text.
-    DefReplace  String
+    DefReplace Text
     -- | Skip the declartion of the identifier altogether.
   | DefSkip
 
@@ -102,7 +103,7 @@ findSpecialTreatment ident = do
         { atDefSite = DefPreserve
         , atUseSite = UsePreserve
         }
-  pure $ Map.findWithDefault defaultTreatment (identName ident) moduleMap
+  pure $ Map.findWithDefault defaultTreatment (Text.pack $ identName ident) moduleMap
 
 -- | Use `mapsTo` for identifiers whose definition has a matching definition
 -- already on the Rocq side.  As such, their definition can be skipped, and use
@@ -127,7 +128,7 @@ mapsToExpl targetModule targetName = IdentSpecialTreatment
 -- depended upon by following code in the same module. Such primitives can
 -- therefore *neither* be defined a priori, *nor* a posteriori, and must be
 -- realized where they were originally declared.
-realize :: String -> IdentSpecialTreatment
+realize :: Text -> IdentSpecialTreatment
 realize code = IdentSpecialTreatment
   { atDefSite = DefReplace code
   , atUseSite = UsePreserve
@@ -202,20 +203,20 @@ polyListModule = mkModuleName ["PolyList"]
 
 sawVectorDefinitionsModule :: TranslationConfiguration -> ModuleName
 sawVectorDefinitionsModule (TranslationConfiguration {..}) =
-  mkModuleName [Text.pack vectorModule]
+  mkModuleName [vectorModule]
 
 preludeExtraModule :: ModuleName
 preludeExtraModule = mkModuleName ["SAWCorePreludeExtra"]
 
 specialTreatmentMap :: TranslationConfiguration ->
-                       Map ModuleName (Map String IdentSpecialTreatment)
+                       Map ModuleName (Map Text IdentSpecialTreatment)
 specialTreatmentMap configuration = Map.fromList $
   over _1 (mkModuleName . (: [])) <$>
   [ ("Cryptol", cryptolPreludeSpecialTreatmentMap)
   , ("Prelude", sawCorePreludeSpecialTreatmentMap configuration)
   ]
 
-cryptolPreludeSpecialTreatmentMap :: Map String IdentSpecialTreatment
+cryptolPreludeSpecialTreatmentMap :: Map Text IdentSpecialTreatment
 cryptolPreludeSpecialTreatmentMap = Map.fromList $ []
   ++
   [ ("Num_rec",               rename "Num__rec")
@@ -231,7 +232,7 @@ cryptolPreludeSpecialTreatmentMap = Map.fromList $ []
 -- reserved keyword in Rocq), so that primitives' and axioms' types can be
 -- copy-pasted as is on the Rocq side.
 sawCorePreludeSpecialTreatmentMap :: TranslationConfiguration ->
-                                     Map String IdentSpecialTreatment
+                                     Map Text IdentSpecialTreatment
 sawCorePreludeSpecialTreatmentMap configuration =
   let vectorsModule = sawVectorDefinitionsModule configuration in
   Map.fromList $
@@ -436,6 +437,8 @@ sawCorePreludeSpecialTreatmentMap configuration =
   -- zip must be realized in-place because it both depends on definitions and is
   -- used by other definitions in the same file, so it can neither be pre- nor
   -- post-defined.
+  --
+  -- XXX 20260807: like what? don't see anything
   , ("zip",           realize zipSnippet)
   -- cannot map directly to Vector.t because arguments are in a different order
   , ("Vec",           mapsTo vectorsModule "Vec")
@@ -559,13 +562,16 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
 escapeIdent :: Rocq.Ident -> Rocq.Ident
 escapeIdent (Rocq.Ident str)
-  | all okChar str = Rocq.Ident str
-  | otherwise      = Rocq.Ident ("Op_" ++ zEncodeString str)
+  | Text.all okChar str = Rocq.Ident str
+  | otherwise           = Rocq.Ident $ "Op_" <> encodedStr
  where
-   okChar x = isAlphaNum x || x `elem` ("_'" :: String)
+   okChar x = isAlphaNum x || x == '_' || x == '\''
+   encodedStr = Text.pack $ zEncodeString $ Text.unpack str
 
-zipSnippet :: String
-zipSnippet = [i|
+-- XXX why is this here? There are already two copies of it in the
+-- handwritten files.
+zipSnippet' :: String
+zipSnippet' = [i|
 Fixpoint zip (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)
   : Vec (minNat m n) (a * (b * unit)) :=
   match
@@ -584,3 +590,8 @@ Fixpoint zip (a b : sort 0) (m n : nat) (xs : Vec m a) (ys : Vec n b)
   end
 .
 |]
+
+-- XXX the docs for this [i|] thing say it can produce Text, but it
+-- does not work.
+zipSnippet :: Text
+zipSnippet = Text.pack zipSnippet'

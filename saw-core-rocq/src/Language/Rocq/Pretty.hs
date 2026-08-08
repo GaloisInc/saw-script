@@ -13,6 +13,8 @@ Converts Rocq AST to prettyprinter documents.
 module Language.Rocq.Pretty (prettyDecl) where
 
 import Data.Word
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Numeric (showHex)
 
 import qualified Prettyprinter as PP
@@ -27,11 +29,13 @@ import Language.Rocq.AST
 -- | Replace all occurrences of the double quote character @"@ with
 --   the string @""@, i.e., two copies of it, as this is how Rocq
 --   escapes double quote characters.
-escapeStringLit :: String -> String
-escapeStringLit = concatMap (\c -> if c == '"' then "\"\"" else [c])
+escapeStringLit :: Text -> Text
+escapeStringLit str =
+    let oneChar c = if c == '"' then "\"\"" else Text.singleton c in
+    Text.concatMap oneChar str
 
 -- | Wrapper for printing arbitrary text
-text :: String -> PP.Doc ann
+text :: Text -> PP.Doc ann
 text s = PP.pretty s
 
 -- | Wrapper for printing integers
@@ -289,11 +293,11 @@ prettyTerm p e0 =
             let ui = toInteger (fromInteger i :: Word64)
                 ui' = showHex ui []
             in
-            text ("0x" ++ ui' ++ "%Z")
+            text ("0x" <> Text.pack ui' <> "%Z")
         else if i < 0 then
-            text ("(" ++ show i ++ ")%Z")
+            text ("(" <> Text.pack (show i) <> ")%Z")
         else
-            text (show i ++ "%Z")
+            text (Text.pack (show i) <> "%Z")
     List ts ->
         let ts' = PP.punctuate ";" $ map (prettyTerm PrecNone) ts
             long = PP.brackets (PP.line <> PP.indent 3 (PP.vsep ts') <> PP.line)
