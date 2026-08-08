@@ -28,7 +28,7 @@ span.spaces    { background: white }
 <span class="lineno">    9 </span>import qualified Data.Map                  as Map
 <span class="lineno">   10 </span>
 <span class="lineno">   11 </span>import           Cryptol.ModuleSystem.Name (Name, nameIdent)
-<span class="lineno">   12 </span>import           Cryptol.Utils.Ident       (unpackIdent)
+<span class="lineno">   12 </span>import           Cryptol.Utils.Ident       (identText)
 <span class="lineno">   13 </span>import qualified Language.Rocq.AST         as Rocq
 <span class="lineno">   14 </span>
 <span class="lineno">   15 </span>import           SAWCore.Term.Raw          (Term)
@@ -45,7 +45,7 @@ span.spaces    { background: white }
 <span class="lineno">   26 </span><span class="decl"><span class="nottickedoff">translateTypedTermMap defs = forM defs translateAndRegisterEntry</span>
 <span class="lineno">   27 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
 <span class="lineno">   28 </span><span class="spaces">    </span><span class="nottickedoff">translateAndRegisterEntry (name, t, tp) = do</span>
-<span class="lineno">   29 </span><span class="spaces">      </span><span class="nottickedoff">let nameStr = Rocq.Ident (unpackIdent (nameIdent name))</span>
+<span class="lineno">   29 </span><span class="spaces">      </span><span class="nottickedoff">let nameStr = Rocq.Ident (identText (nameIdent name))</span>
 <span class="lineno">   30 </span><span class="spaces">      </span><span class="nottickedoff">decl &lt;-</span>
 <span class="lineno">   31 </span><span class="spaces">        </span><span class="nottickedoff">do t_trans &lt;- TermTranslation.translateTerm t</span>
 <span class="lineno">   32 </span><span class="spaces">           </span><span class="nottickedoff">tp_trans &lt;- TermTranslation.translateTerm tp</span>
