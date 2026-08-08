@@ -456,7 +456,7 @@ withImportCryptolPrimitivesForSAWCoreExtra config@(Rocq.TranslationConfiguration
 writeRocqDoc :: FilePath -> PP.Doc ann -> IO ()
 writeRocqDoc path doc =
     let opts = PP.LayoutOptions $ PP.AvailablePerLine 80 1.0
-        doc' = PP.layoutPretty opts doc
+        doc' = PP.layoutSmart opts doc
         issue h = renderIO h doc'
     in
     case path of

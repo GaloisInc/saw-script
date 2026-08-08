@@ -277,7 +277,8 @@ Definition tcMod: forall (_1: Num), forall (_2: Num), Num :=
          TCNum SAWCoreScaffolding.Zero
       ) (TCNum SAWCoreScaffolding.Zero).
 
-Definition tcExp: forall (_1: Num), forall (_2: Num), Num :=
+Definition tcExp: forall (_1: Num), forall (_2: Num),
+        Num :=
    binaryNumFun SAWCoreScaffolding.expNat (fun (x: Init.Datatypes.nat)
          =>
          SAWCorePrelude.natCase (fun (_1: Init.Datatypes.nat) => Num) 
@@ -688,7 +689,8 @@ Definition from: forall (a: Type), forall {Inh_a:
                                        SAWCoreScaffolding.Unit)
                               ) n1 (k x)
                         ) m1 xs)
-               ) (SAWCorePrelude.natCase (fun (m': Init.Datatypes.nat)
+               )
+               (SAWCorePrelude.natCase (fun (m': Init.Datatypes.nat)
                      =>
                      forall (_1: SAWCoreVectorsAsRocqVectors.Vec m' a),
                           forall (_2: forall (_2: a), SAWCorePrelude.Stream b),
@@ -697,7 +699,8 @@ Definition from: forall (a: Type), forall {Inh_a:
                               (SAWCoreScaffolding.PairType a 
                                  (SAWCoreScaffolding.PairType b
                                     SAWCoreScaffolding.UnitType))
-                  ) (fun
+                  )
+                  (fun
                        (xs: SAWCoreVectorsAsRocqVectors.Vec SAWCoreScaffolding.Zero
                              a) (k: forall (_1: a), SAWCorePrelude.Stream b)
                      =>
@@ -727,7 +730,8 @@ Definition from: forall (a: Type), forall {Inh_a:
                      ) (SAWCorePrelude.sawAt (SAWCoreScaffolding.Succ m') a xs
                           SAWCoreScaffolding.Zero)
                   ) m1) n
-         ) (@CryptolPrimitivesForSAWCore.Num_rect (fun (n1: Num)
+         )
+         (@CryptolPrimitivesForSAWCore.Num_rect (fun (n1: Num)
                =>
                forall (_1: SAWCorePrelude.Stream a), forall (_2: forall (_2: a),
                             seq n1 b),
@@ -747,7 +751,10 @@ Definition from: forall (a: Type), forall {Inh_a:
                               (SAWCoreScaffolding.PairType a 
                                  (SAWCoreScaffolding.PairType b
                                     SAWCoreScaffolding.UnitType))
-                  ) (fun (xs: SAWCorePrelude.Stream a) (k: forall (_1: a),
+                  )
+                  (fun
+                       (xs: SAWCorePrelude.Stream a)
+                       (k: forall (_1: a),
                                SAWCoreVectorsAsRocqVectors.Vec SAWCoreScaffolding.Zero
                                   b)
                      =>
@@ -1848,9 +1855,11 @@ Definition PCmpVec: forall (n: Init.Datatypes.nat), forall (a: Type),
                                          Init.Datatypes.bool)
                                     SAWCoreScaffolding.RecordTypeNil))) pa)) x y
                      Init.Datatypes.true
-               ) (@SAWCoreScaffolding.RecordCons "lt"%string
-                  (forall (x: var__0), forall (y: var__0), Init.Datatypes.bool)
-                  SAWCoreScaffolding.RecordTypeNil (fun (x: var__0) (y: var__0)
+               )
+               (@SAWCoreScaffolding.RecordCons "lt"%string (forall (x: var__0),
+                       forall (y: var__0),
+                       Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil
+                  (fun (x: var__0) (y: var__0)
                      =>
                      vecCmp n a 
                         (@SAWCoreScaffolding.recordHead "cmp"%string
@@ -2573,7 +2582,8 @@ Definition PCmpEither: forall (a: Type), forall (b: Type), forall (_1: PCmp a),
                                  pb) y1 y2 k
                         ) e2
                   ) e1
-            ) (@SAWCoreScaffolding.RecordCons "le"%string (forall (e1: var__0),
+            )
+            (@SAWCoreScaffolding.RecordCons "le"%string (forall (e1: var__0),
                     forall (e2: var__0),
                     Init.Datatypes.bool) 
                (SAWCoreScaffolding.RecordTypeCons "lt"%string
@@ -2661,8 +2671,9 @@ Definition PCmpEither: forall (a: Type), forall (b: Type), forall (_1: PCmp a),
                                        pb)) y1 y2
                            ) e2
                      ) e1
-               ) (@SAWCoreScaffolding.RecordCons "lt"%string
-                  (forall (e1: var__0), forall (e2: var__0),
+               )
+               (@SAWCoreScaffolding.RecordCons "lt"%string (forall (e1: var__0),
+                       forall (e2: var__0),
                        Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil
                   (fun (e1: var__0) (e2: var__0)
                      =>
@@ -2868,9 +2879,11 @@ Definition PSignedCmpVec: forall (n: Init.Datatypes.nat), forall (a: Type),
                                          Init.Datatypes.bool)
                                     SAWCoreScaffolding.RecordTypeNil))) pa)) x y
                      Init.Datatypes.true
-               ) (@SAWCoreScaffolding.RecordCons "slt"%string
-                  (forall (x: var__0), forall (y: var__0), Init.Datatypes.bool)
-                  SAWCoreScaffolding.RecordTypeNil (fun (x: var__0) (y: var__0)
+               )
+               (@SAWCoreScaffolding.RecordCons "slt"%string (forall (x: var__0),
+                       forall (y: var__0),
+                       Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil
+                  (fun (x: var__0) (y: var__0)
                      =>
                      vecCmp n a 
                         (@SAWCoreScaffolding.recordHead "scmp"%string
@@ -3595,7 +3608,8 @@ Definition PSignedCmpEither: forall (a: Type), forall (b: Type), forall (_1:
                                  pb) y1 y2 k
                         ) e2
                   ) e1
-            ) (@SAWCoreScaffolding.RecordCons "sle"%string (forall (e1: var__0),
+            )
+            (@SAWCoreScaffolding.RecordCons "sle"%string (forall (e1: var__0),
                     forall (e2: var__0),
                     Init.Datatypes.bool) 
                (SAWCoreScaffolding.RecordTypeCons "slt"%string
@@ -3683,7 +3697,8 @@ Definition PSignedCmpEither: forall (a: Type), forall (b: Type), forall (_1:
                                        pb)) y1 y2
                            ) e2
                      ) e1
-               ) (@SAWCoreScaffolding.RecordCons "slt"%string
+               )
+               (@SAWCoreScaffolding.RecordCons "slt"%string
                   (forall (e1: var__0), forall (e2: var__0),
                        Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil
                   (fun (e1: var__0) (e2: var__0)
@@ -10091,7 +10106,8 @@ Definition ecJoin: forall (m: Num), forall (n: Num), forall (a: Type),
                   =>
                   SAWCorePrelude.join m1 n a
                )
-         ) (finNumRec (fun (n: Num)
+         )
+         (finNumRec (fun (n: Num)
                =>
                forall (a: Type), forall (Inh_a: SAWCoreScaffolding.Inhabited a),
                     forall (_1: SAWCorePrelude.Stream (seq n a)),
@@ -10105,7 +10121,9 @@ Definition ecJoin: forall (m: Num), forall (n: Num), forall (a: Type),
                                 (SAWCoreVectorsAsRocqVectors.Vec n' a)),
                           seq (SAWCoreScaffolding.if0Nat Num n' 
                                  (TCNum SAWCoreScaffolding.Zero) TCInf) a
-                  ) (fun (s: SAWCorePrelude.Stream 
+                  )
+                  (fun
+                       (s: SAWCorePrelude.Stream 
                              (SAWCoreVectorsAsRocqVectors.Vec SAWCoreScaffolding.Zero
                                 a))
                      =>
@@ -10881,8 +10899,10 @@ Definition ecError: forall (a: Type), forall {Inh_a:
                                     (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
                            Init.Datatypes.bool)),
                  a
-         ) (fun (len: Init.Datatypes.nat) (msg: 
-                 SAWCoreVectorsAsRocqVectors.Vec len 
+         )
+         (fun
+              (len: Init.Datatypes.nat)
+              (msg: SAWCoreVectorsAsRocqVectors.Vec len 
                     (SAWCoreVectorsAsRocqVectors.Vec 
                        (Stdlib.PArith.BinPos.Pos.to_nat 
                           (Stdlib.PArith.BinPos.xO 
@@ -10897,7 +10917,8 @@ Definition ecError: forall (a: Type), forall {Inh_a:
    .
 
 Definition ecRandom: forall (a: Type), forall {Inh_a: 
-           SAWCoreScaffolding.Inhabited a}, forall (_1: 
+           SAWCoreScaffolding.Inhabited a},
+        forall (_1: 
            SAWCoreVectorsAsRocqVectors.Vec 
               (Stdlib.PArith.BinPos.Pos.to_nat 
                  (Stdlib.PArith.BinPos.xO 
@@ -10910,8 +10931,9 @@ Definition ecRandom: forall (a: Type), forall {Inh_a:
                                       (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))))))
               Init.Datatypes.bool),
         a :=
-   fun (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec 
+   fun
+        (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
+        (_1: SAWCoreVectorsAsRocqVectors.Vec 
               (Stdlib.PArith.BinPos.Pos.to_nat 
                  (Stdlib.PArith.BinPos.xO 
                     (Stdlib.PArith.BinPos.xO 
@@ -11266,7 +11288,8 @@ Definition PRoundFloat: forall (e: Num), forall (p: Num),
                   =>
                   SAWCoreScaffolding.error SAWCoreScaffolding.Integer
                      "Unimplemented: floor Float"%string
-               ) (@SAWCoreScaffolding.RecordCons "ceiling"%string
+               )
+               (@SAWCoreScaffolding.RecordCons "ceiling"%string
                   (forall (x: var__0), SAWCoreScaffolding.Integer) 
                   (SAWCoreScaffolding.RecordTypeCons "trunc"%string
                      (forall (x: var__0), SAWCoreScaffolding.Integer) 
@@ -11278,7 +11301,8 @@ Definition PRoundFloat: forall (e: Num), forall (p: Num),
                      =>
                      SAWCoreScaffolding.error SAWCoreScaffolding.Integer
                         "Unimplemented: ceiling Float"%string
-                  ) (@SAWCoreScaffolding.RecordCons "trunc"%string
+                  )
+                  (@SAWCoreScaffolding.RecordCons "trunc"%string
                      (forall (x: var__0), SAWCoreScaffolding.Integer) 
                      (SAWCoreScaffolding.RecordTypeCons "roundAway"%string
                         (forall (x: var__0), SAWCoreScaffolding.Integer) 
@@ -11288,7 +11312,8 @@ Definition PRoundFloat: forall (e: Num), forall (p: Num),
                         =>
                         SAWCoreScaffolding.error SAWCoreScaffolding.Integer
                            "Unimplemented: trunc Float"%string
-                     ) (@SAWCoreScaffolding.RecordCons "roundAway"%string
+                     )
+                     (@SAWCoreScaffolding.RecordCons "roundAway"%string
                         (forall (x: var__0), SAWCoreScaffolding.Integer) 
                         (SAWCoreScaffolding.RecordTypeCons "roundToEven"%string
                            (forall (x: var__0), SAWCoreScaffolding.Integer)
@@ -11296,7 +11321,8 @@ Definition PRoundFloat: forall (e: Num), forall (p: Num),
                            =>
                            SAWCoreScaffolding.error SAWCoreScaffolding.Integer
                               "Unimplemented: roundAway Float"%string
-                        ) (@SAWCoreScaffolding.RecordCons "roundToEven"%string
+                        )
+                        (@SAWCoreScaffolding.RecordCons "roundToEven"%string
                            (forall (x: var__0), SAWCoreScaffolding.Integer)
                            SAWCoreScaffolding.RecordTypeNil (fun (x: var__0)
                               =>
@@ -11794,9 +11820,11 @@ Definition addNat_1: forall (n: Init.Datatypes.nat),
             (SAWCorePrelude.eqNatSucc var__0 var__1 ih)
       ).
 
-Definition ecPmult: forall (u: Num), forall (v: Num), forall (_1: 
+Definition ecPmult: forall (u: Num), forall (v: Num),
+        forall (_1: 
            seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
-                     u) Init.Datatypes.bool), forall (_2: 
+                     u) Init.Datatypes.bool),
+        forall (_2: 
            seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
                      v) Init.Datatypes.bool),
         seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
@@ -11805,7 +11833,8 @@ Definition ecPmult: forall (u: Num), forall (v: Num), forall (_1:
          =>
          forall (_1: seq (tcAdd (TCNum 
                                  (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
-                           u) Init.Datatypes.bool), forall (_2: 
+                           u) Init.Datatypes.bool),
+              forall (_2: 
                  seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
                            v) Init.Datatypes.bool),
               seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
@@ -11848,13 +11877,15 @@ Definition ecPmult: forall (u: Num), forall (v: Num), forall (_1:
       ).
 
 Definition ecPmod: forall (u: Num), forall (v: Num), forall (_1: 
-           seq u Init.Datatypes.bool), forall (_2: 
+           seq u Init.Datatypes.bool),
+        forall (_2: 
            seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
                      v) Init.Datatypes.bool),
         seq v Init.Datatypes.bool :=
    finNumRec2 (fun (u: Num) (v: Num)
          =>
-         forall (_1: seq u Init.Datatypes.bool), forall (_2: 
+         forall (_1: seq u Init.Datatypes.bool),
+              forall (_2: 
                  seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
                            v) Init.Datatypes.bool),
               seq v Init.Datatypes.bool
@@ -11897,7 +11928,8 @@ Definition AESEncRound: forall (_1:
                           (Stdlib.PArith.BinPos.xO 
                              (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))))
               Init.Datatypes.bool) :=
-   fun (x: SAWCoreVectorsAsRocqVectors.Vec 
+   fun
+        (x: SAWCoreVectorsAsRocqVectors.Vec 
               (Stdlib.PArith.BinPos.Pos.to_nat 
                  (Stdlib.PArith.BinPos.xO 
                     (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) 
@@ -11950,7 +11982,8 @@ Definition AESEncFinalRound: forall (_1:
                           (Stdlib.PArith.BinPos.xO 
                              (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))))
               Init.Datatypes.bool) :=
-   fun (x: SAWCoreVectorsAsRocqVectors.Vec 
+   fun
+        (x: SAWCoreVectorsAsRocqVectors.Vec 
               (Stdlib.PArith.BinPos.Pos.to_nat 
                  (Stdlib.PArith.BinPos.xO 
                     (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) 
@@ -12003,7 +12036,8 @@ Definition AESDecRound: forall (_1:
                           (Stdlib.PArith.BinPos.xO 
                              (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))))
               Init.Datatypes.bool) :=
-   fun (x: SAWCoreVectorsAsRocqVectors.Vec 
+   fun
+        (x: SAWCoreVectorsAsRocqVectors.Vec 
               (Stdlib.PArith.BinPos.Pos.to_nat 
                  (Stdlib.PArith.BinPos.xO 
                     (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) 
@@ -12056,7 +12090,8 @@ Definition AESDecFinalRound: forall (_1:
                           (Stdlib.PArith.BinPos.xO 
                              (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))))
               Init.Datatypes.bool) :=
-   fun (x: SAWCoreVectorsAsRocqVectors.Vec 
+   fun
+        (x: SAWCoreVectorsAsRocqVectors.Vec 
               (Stdlib.PArith.BinPos.Pos.to_nat 
                  (Stdlib.PArith.BinPos.xO 
                     (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) 
@@ -12109,7 +12144,8 @@ Definition AESInvMixColumns: forall (_1:
                           (Stdlib.PArith.BinPos.xO 
                              (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))))
               Init.Datatypes.bool) :=
-   fun (x: SAWCoreVectorsAsRocqVectors.Vec 
+   fun
+        (x: SAWCoreVectorsAsRocqVectors.Vec 
               (Stdlib.PArith.BinPos.Pos.to_nat 
                  (Stdlib.PArith.BinPos.xO 
                     (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))) 
@@ -12137,8 +12173,10 @@ Definition AESInvMixColumns: forall (_1:
                Init.Datatypes.bool)) "Unimplemented: AESInvMixColumns"%string
    .
 
-Definition AESKeyExpand: forall (k: Num), forall (_1: 
-           seq k (SAWCoreVectorsAsRocqVectors.Vec 
+Definition AESKeyExpand: forall (k: Num),
+        forall (_1: 
+           seq k
+               (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xO 
                         (Stdlib.PArith.BinPos.xO 
@@ -12161,8 +12199,10 @@ Definition AESKeyExpand: forall (k: Num), forall (_1:
                            (Stdlib.PArith.BinPos.xO 
                               (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))))
                Init.Datatypes.bool) :=
-   fun (k: Num) (x: 
-           seq k (SAWCoreVectorsAsRocqVectors.Vec 
+   fun
+        (k: Num)
+        (x: seq k
+               (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xO 
                         (Stdlib.PArith.BinPos.xO 
@@ -12189,8 +12229,10 @@ Definition AESKeyExpand: forall (k: Num), forall (_1:
                 Init.Datatypes.bool)) "Unimplemented: AESKeyExpand"%string
    .
 
-Definition processSHA2_224: forall (n: Num), forall (_1: 
-           seq n (SAWCoreVectorsAsRocqVectors.Vec 
+Definition processSHA2_224: forall (n: Num),
+        forall (_1: 
+           seq n
+               (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xO 
                         (Stdlib.PArith.BinPos.xO 
@@ -12216,8 +12258,10 @@ Definition processSHA2_224: forall (n: Num), forall (_1:
                           (Stdlib.PArith.BinPos.xO 
                              (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))))
               Init.Datatypes.bool) :=
-   fun (n: Num) (x: 
-           seq n (SAWCoreVectorsAsRocqVectors.Vec 
+   fun
+        (n: Num)
+        (x: seq n
+               (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xO 
                         (Stdlib.PArith.BinPos.xO 
@@ -12247,8 +12291,10 @@ Definition processSHA2_224: forall (n: Num), forall (_1:
                Init.Datatypes.bool)) "Unimplemented: processSHA2_224"%string
    .
 
-Definition processSHA2_256: forall (n: Num), forall (_1: 
-           seq n (SAWCoreVectorsAsRocqVectors.Vec 
+Definition processSHA2_256: forall (n: Num),
+        forall (_1: 
+           seq n
+               (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xO 
                         (Stdlib.PArith.BinPos.xO 
@@ -12275,8 +12321,10 @@ Definition processSHA2_256: forall (n: Num), forall (_1:
                           (Stdlib.PArith.BinPos.xO 
                              (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))))
               Init.Datatypes.bool) :=
-   fun (n: Num) (x: 
-           seq n (SAWCoreVectorsAsRocqVectors.Vec 
+   fun
+        (n: Num)
+        (x: seq n
+               (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xO 
                         (Stdlib.PArith.BinPos.xO 
@@ -12307,8 +12355,10 @@ Definition processSHA2_256: forall (n: Num), forall (_1:
                Init.Datatypes.bool)) "Unimplemented: processSHA2_256"%string
    .
 
-Definition processSHA2_384: forall (n: Num), forall (_1: 
-           seq n (SAWCoreVectorsAsRocqVectors.Vec 
+Definition processSHA2_384: forall (n: Num),
+        forall (_1: 
+           seq n
+               (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xO 
                         (Stdlib.PArith.BinPos.xO 
@@ -12336,8 +12386,10 @@ Definition processSHA2_384: forall (n: Num), forall (_1:
                              (Stdlib.PArith.BinPos.xO 
                                 (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))))
               Init.Datatypes.bool) :=
-   fun (n: Num) (x: 
-           seq n (SAWCoreVectorsAsRocqVectors.Vec 
+   fun
+        (n: Num)
+        (x: seq n
+               (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xO 
                         (Stdlib.PArith.BinPos.xO 
@@ -12369,8 +12421,10 @@ Definition processSHA2_384: forall (n: Num), forall (_1:
                Init.Datatypes.bool)) "Unimplemented: processSHA2_384"%string
    .
 
-Definition processSHA2_512: forall (n: Num), forall (_1: 
-           seq n (SAWCoreVectorsAsRocqVectors.Vec 
+Definition processSHA2_512: forall (n: Num),
+        forall (_1: 
+           seq n
+               (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xO 
                         (Stdlib.PArith.BinPos.xO 
@@ -12399,8 +12453,10 @@ Definition processSHA2_512: forall (n: Num), forall (_1:
                              (Stdlib.PArith.BinPos.xO 
                                 (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))))
               Init.Datatypes.bool) :=
-   fun (n: Num) (x: 
-           seq n (SAWCoreVectorsAsRocqVectors.Vec 
+   fun
+        (n: Num)
+        (x: seq n
+               (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xO 
                         (Stdlib.PArith.BinPos.xO 
