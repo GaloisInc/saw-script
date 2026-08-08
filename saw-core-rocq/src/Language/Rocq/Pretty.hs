@@ -237,6 +237,11 @@ contractBinders bs0 =
     in
     reverse results'
 
+-- | Type belonging to the internals of `contractPiBinders`.
+--
+--   (is there no way to put this inside the function?)
+type State = ([(BinderImplicity, [Ident], Type)], BinderImplicity, [Ident], Type)
+
 -- | Fold together adjacent pi-binders as allowed by the concrete
 --   syntax.
 --
@@ -246,19 +251,25 @@ contractBinders bs0 =
 contractPiBinders :: [PiBinder] -> [PiBinder']
 contractPiBinders bs0 =
     -- State frobs.
-    let newstate imp x ty = ([], imp, [x], ty)
+    let newstate :: BinderImplicity -> Ident -> Type -> State
+        newstate imp x ty = ([], imp, [x], ty)
+
+        addstate :: BinderImplicity -> Ident -> Type -> State -> State
         addstate imp x ty (others, previmp, prevnames, prevty) =
             if imp == previmp && sameTerm ty prevty then
                 (others, previmp, x : prevnames, prevty)
             else
                 ((previmp, reverse prevnames, prevty) : others, imp, [x], ty)
+
+        popstate :: State -> PiBinder'
         popstate (others, imp, names, ty) =
             let others' = (imp, reverse names, ty) : others in
             NamedPiBinders' $ reverse others'
     in
 
     -- fold function to do the contraction
-    let once (results, state) b = case state of
+    let once :: ([PiBinder'], Maybe State) -> PiBinder -> ([PiBinder'], Maybe State)
+        once (results, state) b = case state of
           Nothing -> case b of
               PiBinder imp Nothing ty ->
                   let here = AnonPiBinder' imp ty in
@@ -276,6 +287,7 @@ contractPiBinders bs0 =
                   (results, Just s')
     in
     let (results, state) = foldl once ([], Nothing) bs0
+        results' :: [PiBinder']
         results' = case state of
             Nothing -> results
             Just s -> popstate s : results
