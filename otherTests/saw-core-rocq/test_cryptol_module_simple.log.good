@@ -55,14 +55,7 @@ Section Simple.
             (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)).
 
    Definition addTwo
-           (x: CryptolPrimitivesForSAWCore.seq 
-                 (CryptolPrimitivesForSAWCore.TCNum 
-                    (Stdlib.PArith.BinPos.Pos.to_nat 
-                       (Stdlib.PArith.BinPos.xO 
-                          (Stdlib.PArith.BinPos.xO 
-                             (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-                 Init.Datatypes.bool)
-           (y: CryptolPrimitivesForSAWCore.seq 
+           (x y: CryptolPrimitivesForSAWCore.seq 
                  (CryptolPrimitivesForSAWCore.TCNum 
                     (Stdlib.PArith.BinPos.Pos.to_nat 
                        (Stdlib.PArith.BinPos.xO 
@@ -116,14 +109,7 @@ Section Simple.
             (CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0)).
 
    Definition maxVal
-           (x: CryptolPrimitivesForSAWCore.seq 
-                 (CryptolPrimitivesForSAWCore.TCNum 
-                    (Stdlib.PArith.BinPos.Pos.to_nat 
-                       (Stdlib.PArith.BinPos.xO 
-                          (Stdlib.PArith.BinPos.xO 
-                             (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-                 Init.Datatypes.bool)
-           (y: CryptolPrimitivesForSAWCore.seq 
+           (x y: CryptolPrimitivesForSAWCore.seq 
                  (CryptolPrimitivesForSAWCore.TCNum 
                     (Stdlib.PArith.BinPos.Pos.to_nat 
                        (Stdlib.PArith.BinPos.xO 

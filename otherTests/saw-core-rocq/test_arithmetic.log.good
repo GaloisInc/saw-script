@@ -657,8 +657,7 @@ Definition head
 
 
 Definition sext
-        (m: CryptolPrimitivesForSAWCore.Num)
-        (n: CryptolPrimitivesForSAWCore.Num)
+        (m n: CryptolPrimitivesForSAWCore.Num)
         (x: CryptolPrimitivesForSAWCore.seq n Init.Datatypes.bool)
       : CryptolPrimitivesForSAWCore.seq m Init.Datatypes.bool :=
    let var__0
@@ -762,8 +761,7 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 
 Definition zext
-        (m: CryptolPrimitivesForSAWCore.Num)
-        (n: CryptolPrimitivesForSAWCore.Num)
+        (m n: CryptolPrimitivesForSAWCore.Num)
         (x: CryptolPrimitivesForSAWCore.seq n Init.Datatypes.bool)
       : CryptolPrimitivesForSAWCore.seq m Init.Datatypes.bool :=
    let var__0

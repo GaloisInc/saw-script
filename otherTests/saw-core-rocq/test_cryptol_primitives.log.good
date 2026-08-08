@@ -20,7 +20,7 @@ From CryptolToRocq Require Import SAWCorePreludeExtra.
 Module CryptolPrimitivesForSAWCore.
 
 Definition const: forall (a b: Type) (_1: a) (_2: b), a :=
-   fun (a: Type) (b: Type) (x: a) (y: b)
+   fun (a b: Type) (x: a) (y: b)
       =>
       x
    .
@@ -29,8 +29,7 @@ Definition compose: forall (a b c: Type) (_1: forall (_1: b), c) (_2: forall
                 (_2: a),
                 b) (_3: a),
         c :=
-   fun (a: Type) (b: Type) (c: Type) (f: forall (_1: b), c) (g: forall (_1: a),
-                b) (x: a)
+   fun (a b c: Type) (f: forall (_1: b), c) (g: forall (_1: a), b) (x: a)
       =>
       f (g x)
    .
@@ -38,8 +37,7 @@ Definition compose: forall (a b c: Type) (_1: forall (_1: b), c) (_2: forall
 Definition bvExp: forall (n: Init.Datatypes.nat) (_1 _2: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool),
         SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool :=
-   fun (n: Init.Datatypes.nat) (x: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (y: 
+   fun (n: Init.Datatypes.nat) (x y: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool)
       =>
       SAWCoreVectorsAsRocqVectors.foldr Init.Datatypes.bool 
@@ -63,8 +61,7 @@ Definition bvExp: forall (n: Init.Datatypes.nat) (_1 _2:
 Definition updFst: forall (a b: Type) (_1: forall (_1: a), a) (_2: 
            SAWCoreScaffolding.PairType a b),
         SAWCoreScaffolding.PairType a b :=
-   fun (a: Type) (b: Type) (f: forall (_1: a), a) (x: 
-           SAWCoreScaffolding.PairType a b)
+   fun (a b: Type) (f: forall (_1: a), a) (x: SAWCoreScaffolding.PairType a b)
       =>
       SAWCoreScaffolding.PairValue a b (f (SAWCorePrelude.Pair_fst a b x)) 
          (SAWCorePrelude.Pair_snd a b x)
@@ -73,8 +70,7 @@ Definition updFst: forall (a b: Type) (_1: forall (_1: a), a) (_2:
 Definition updSnd: forall (a b: Type) (_1: forall (_1: b), b) (_2: 
            SAWCoreScaffolding.PairType a b),
         SAWCoreScaffolding.PairType a b :=
-   fun (a: Type) (b: Type) (f: forall (_1: b), b) (x: 
-           SAWCoreScaffolding.PairType a b)
+   fun (a b: Type) (f: forall (_1: b), b) (x: SAWCoreScaffolding.PairType a b)
       =>
       SAWCoreScaffolding.PairValue a b (SAWCorePrelude.Pair_fst a b x) 
          (f (SAWCorePrelude.Pair_snd a b x))
@@ -83,8 +79,8 @@ Definition updSnd: forall (a b: Type) (_1: forall (_1: b), b) (_2:
 Definition updHeadRecord: forall (s: Stdlib.Strings.String.string) (a b: Type)
         (_1: forall (_1: a), a) (_2: SAWCoreScaffolding.RecordTypeCons s a b),
         SAWCoreScaffolding.RecordTypeCons s a b :=
-   fun (s: Stdlib.Strings.String.string) (a: Type) (b: Type) (f: forall (_1: a),
-                a) (x: SAWCoreScaffolding.RecordTypeCons s a b)
+   fun (s: Stdlib.Strings.String.string) (a b: Type) (f: forall (_1: a), a) (x: 
+           SAWCoreScaffolding.RecordTypeCons s a b)
       =>
       @SAWCoreScaffolding.RecordCons s a b 
          (f (@SAWCoreScaffolding.recordHead s a b x)) 
@@ -94,8 +90,8 @@ Definition updHeadRecord: forall (s: Stdlib.Strings.String.string) (a b: Type)
 Definition updTailRecord: forall (s: Stdlib.Strings.String.string) (a b: Type)
         (_1: forall (_1: b), b) (_2: SAWCoreScaffolding.RecordTypeCons s a b),
         SAWCoreScaffolding.RecordTypeCons s a b :=
-   fun (s: Stdlib.Strings.String.string) (a: Type) (b: Type) (f: forall (_1: b),
-                b) (x: SAWCoreScaffolding.RecordTypeCons s a b)
+   fun (s: Stdlib.Strings.String.string) (a b: Type) (f: forall (_1: b), b) (x: 
+           SAWCoreScaffolding.RecordTypeCons s a b)
       =>
       @SAWCoreScaffolding.RecordCons s a b 
          (@SAWCoreScaffolding.recordHead s a b x) 
@@ -178,8 +174,8 @@ Definition binaryNumFun: forall (_1: forall (_1 _2: Init.Datatypes.nat),
         Num :=
    fun (f1: forall (_1 _2: Init.Datatypes.nat), Init.Datatypes.nat) (f2: forall
                 (_1: Init.Datatypes.nat),
-                Num) (f3: forall (_1: Init.Datatypes.nat), Num) (f4: Num)
-        (num1: Num) (num2: Num)
+                Num) (f3: forall (_1: Init.Datatypes.nat), Num)
+        (f4 num1 num2: Num)
       =>
       @CryptolPrimitivesForSAWCore.Num_rect (fun (num1': Num) => Num) (fun
               (n1: Init.Datatypes.nat)
@@ -196,8 +192,8 @@ Definition binaryNumFun: forall (_1: forall (_1 _2: Init.Datatypes.nat),
 Definition ternaryNumFun: forall (_1: forall (_1 _2 _3: Init.Datatypes.nat),
                 Init.Datatypes.nat) (_2 _3 _4 _5: Num),
         Num :=
-   fun (f1: forall (_1 _2 _3: Init.Datatypes.nat), Init.Datatypes.nat) (f2: Num)
-        (num1: Num) (num2: Num) (num3: Num)
+   fun (f1: forall (_1 _2 _3: Init.Datatypes.nat), Init.Datatypes.nat)
+        (f2 num1 num2 num3: Num)
       =>
       @CryptolPrimitivesForSAWCore.Num_rect (fun (num1': Num) => Num) (fun
               (n1: Init.Datatypes.nat)
@@ -244,20 +240,16 @@ Definition tcMul: forall (_1 _2: Num), Num :=
       ) TCInf.
 
 Definition tcDiv: forall (_1 _2: Num), Num :=
-   binaryNumFun (fun (x: Init.Datatypes.nat) (y: Init.Datatypes.nat)
-         =>
-         SAWCorePrelude.divNat x y
-      ) (fun (x: Init.Datatypes.nat) => TCNum SAWCoreScaffolding.Zero) (fun
+   binaryNumFun (fun (x y: Init.Datatypes.nat) => SAWCorePrelude.divNat x y)
+      (fun (x: Init.Datatypes.nat) => TCNum SAWCoreScaffolding.Zero) (fun
            (y: Init.Datatypes.nat)
          =>
          TCInf
       ) (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)).
 
 Definition tcMod: forall (_1 _2: Num), Num :=
-   binaryNumFun (fun (x: Init.Datatypes.nat) (y: Init.Datatypes.nat)
-         =>
-         SAWCorePrelude.modNat x y
-      ) (fun (x: Init.Datatypes.nat) => TCNum x) (fun (y: Init.Datatypes.nat)
+   binaryNumFun (fun (x y: Init.Datatypes.nat) => SAWCorePrelude.modNat x y)
+      (fun (x: Init.Datatypes.nat) => TCNum x) (fun (y: Init.Datatypes.nat)
          =>
          TCNum SAWCoreScaffolding.Zero
       ) (TCNum SAWCoreScaffolding.Zero).
@@ -291,7 +283,7 @@ Definition tcMax: forall (_1 _2: Num), Num :=
       (fun (y: Init.Datatypes.nat) => TCInf) TCInf.
 
 Definition ceilDivNat: forall (_1 _2: Init.Datatypes.nat), Init.Datatypes.nat :=
-   fun (x: Init.Datatypes.nat) (y: Init.Datatypes.nat)
+   fun (x y: Init.Datatypes.nat)
       =>
       SAWCorePrelude.divNat 
          (SAWCoreScaffolding.addNat x 
@@ -300,7 +292,7 @@ Definition ceilDivNat: forall (_1 _2: Init.Datatypes.nat), Init.Datatypes.nat :=
    .
 
 Definition ceilModNat: forall (_1 _2: Init.Datatypes.nat), Init.Datatypes.nat :=
-   fun (x: Init.Datatypes.nat) (y: Init.Datatypes.nat)
+   fun (x y: Init.Datatypes.nat)
       =>
       SAWCoreScaffolding.subNat (SAWCoreScaffolding.mulNat (ceilDivNat x y) y) x
    .
@@ -319,7 +311,7 @@ Definition tcCeilMod: forall (_1 _2: Num), Num :=
 
 Definition tcLenFromThenTo_Nat: forall (_1 _2 _3: Init.Datatypes.nat),
         Init.Datatypes.nat :=
-   fun (x: Init.Datatypes.nat) (y: Init.Datatypes.nat) (z: Init.Datatypes.nat)
+   fun (x y z: Init.Datatypes.nat)
       =>
       if SAWCoreScaffolding.ltNat x y then
          if SAWCoreScaffolding.ltNat z x then
@@ -350,8 +342,7 @@ Definition binaryNumPred: forall (_1: forall (_1 _2: Init.Datatypes.nat),
    fun (f1: forall (_1 _2: Init.Datatypes.nat), Init.Datatypes.bool) (f2: forall
                 (_1: Init.Datatypes.nat),
                 Init.Datatypes.bool) (f3: forall (_1: Init.Datatypes.nat),
-                Init.Datatypes.bool) (f4: Init.Datatypes.bool) (num1: Num)
-        (num2: Num)
+                Init.Datatypes.bool) (f4: Init.Datatypes.bool) (num1 num2: Num)
       =>
       @CryptolPrimitivesForSAWCore.Num_rect (fun (num1': Num)
             =>
@@ -454,8 +445,8 @@ Definition IntModNum: forall (num: Num), Type :=
 Definition seq_cong: forall (m n: Num) (a b: Type) (_1: @Init.Logic.eq Num m n)
         (_2: @Init.Logic.eq Type a b),
         @Init.Logic.eq Type (seq m a) (seq n b) :=
-   fun (m: Num) (n: Num) (a: Type) (b: Type) (eq_mn: @Init.Logic.eq Num m n)
-        (eq_ab: @Init.Logic.eq Type a b)
+   fun (m n: Num) (a b: Type) (eq_mn: @Init.Logic.eq Num m n) (eq_ab: 
+           @Init.Logic.eq Type a b)
       =>
       SAWCorePrelude.trans Type (seq m a) (seq n a) (seq n b) 
          (SAWCorePrelude.eq_cong Num m n eq_mn Type (fun (x: Num) => seq x a)) 
@@ -464,14 +455,14 @@ Definition seq_cong: forall (m n: Num) (a b: Type) (_1: @Init.Logic.eq Num m n)
 
 Definition seq_cong1: forall (m n: Num) (a: Type) (_1: @Init.Logic.eq Num m n),
         @Init.Logic.eq Type (seq m a) (seq n a) :=
-   fun (m: Num) (n: Num) (a: Type) (eq_mn: @Init.Logic.eq Num m n)
+   fun (m n: Num) (a: Type) (eq_mn: @Init.Logic.eq Num m n)
       =>
       SAWCorePrelude.eq_cong Num m n eq_mn Type (fun (x: Num) => seq x a)
    .
 
 Definition IntModNum_cong: forall (m n: Num) (_1: @Init.Logic.eq Num m n),
         @Init.Logic.eq Type (IntModNum m) (IntModNum n) :=
-   fun (m: Num) (n: Num) (eq_mn: @Init.Logic.eq Num m n)
+   fun (m n: Num) (eq_mn: @Init.Logic.eq Num m n)
       =>
       SAWCorePrelude.eq_cong Num m n eq_mn Type IntModNum
    .
@@ -479,8 +470,8 @@ Definition IntModNum_cong: forall (m n: Num) (_1: @Init.Logic.eq Num m n),
 Definition fun_cong: forall (a b c d: Type) (_1: @Init.Logic.eq Type a b) (_2: 
            @Init.Logic.eq Type c d),
         @Init.Logic.eq Type (forall (_3: a), c) (forall (_3: b), d) :=
-   fun (a: Type) (b: Type) (c: Type) (d: Type) (eq_ab: @Init.Logic.eq Type a b)
-        (eq_cd: @Init.Logic.eq Type c d)
+   fun (a b c d: Type) (eq_ab: @Init.Logic.eq Type a b) (eq_cd: 
+           @Init.Logic.eq Type c d)
       =>
       SAWCorePrelude.trans Type (forall (_1: a), c) (forall (_1: b), c) (forall
               (_1: b),
@@ -501,8 +492,8 @@ Definition pair_cong: forall (a a' b b': Type) (_1: @Init.Logic.eq Type a a')
         (_2: @Init.Logic.eq Type b b'),
         @Init.Logic.eq Type (SAWCoreScaffolding.PairType a b) 
            (SAWCoreScaffolding.PairType a' b') :=
-   fun (a: Type) (a': Type) (b: Type) (b': Type) (eq_a: 
-           @Init.Logic.eq Type a a') (eq_b: @Init.Logic.eq Type b b')
+   fun (a a' b b': Type) (eq_a: @Init.Logic.eq Type a a') (eq_b: 
+           @Init.Logic.eq Type b b')
       =>
       SAWCorePrelude.trans Type (SAWCoreScaffolding.PairType a b) 
          (SAWCoreScaffolding.PairType a' b) (SAWCoreScaffolding.PairType a' b') 
@@ -519,7 +510,7 @@ Definition pair_cong: forall (a a' b b': Type) (_1: @Init.Logic.eq Type a a')
 Definition pair_cong1: forall (a a' b: Type) (_1: @Init.Logic.eq Type a a'),
         @Init.Logic.eq Type (SAWCoreScaffolding.PairType a b) 
            (SAWCoreScaffolding.PairType a' b) :=
-   fun (a: Type) (a': Type) (b: Type) (eq_a: @Init.Logic.eq Type a a')
+   fun (a a' b: Type) (eq_a: @Init.Logic.eq Type a a')
       =>
       SAWCorePrelude.eq_cong Type a a' eq_a Type (fun (x: Type)
             =>
@@ -530,7 +521,7 @@ Definition pair_cong1: forall (a a' b: Type) (_1: @Init.Logic.eq Type a a'),
 Definition pair_cong2: forall (a b b': Type) (_1: @Init.Logic.eq Type b b'),
         @Init.Logic.eq Type (SAWCoreScaffolding.PairType a b) 
            (SAWCoreScaffolding.PairType a b') :=
-   fun (a: Type) (b: Type) (b': Type) (eq_b: @Init.Logic.eq Type b b')
+   fun (a b b': Type) (eq_b: @Init.Logic.eq Type b b')
       =>
       SAWCorePrelude.eq_cong Type b b' eq_b Type (fun (x: Type)
             =>
@@ -543,9 +534,8 @@ Definition record_cong: forall (s: Stdlib.Strings.String.string)
            @Init.Logic.eq Type b b'),
         @Init.Logic.eq Type (SAWCoreScaffolding.RecordTypeCons s a b) 
            (SAWCoreScaffolding.RecordTypeCons s a' b') :=
-   fun (s: Stdlib.Strings.String.string) (a: Type) (a': Type) (b: Type)
-        (b': Type) (eq_a: @Init.Logic.eq Type a a') (eq_b: 
-           @Init.Logic.eq Type b b')
+   fun (s: Stdlib.Strings.String.string) (a a' b b': Type) (eq_a: 
+           @Init.Logic.eq Type a a') (eq_b: @Init.Logic.eq Type b b')
       =>
       SAWCorePrelude.trans Type (SAWCoreScaffolding.RecordTypeCons s a b) 
          (SAWCoreScaffolding.RecordTypeCons s a' b) 
@@ -564,7 +554,7 @@ Definition record_cong1: forall (s: Stdlib.Strings.String.string) (a a' b: Type)
         (_1: @Init.Logic.eq Type a a'),
         @Init.Logic.eq Type (SAWCoreScaffolding.RecordTypeCons s a b) 
            (SAWCoreScaffolding.RecordTypeCons s a' b) :=
-   fun (s: Stdlib.Strings.String.string) (a: Type) (a': Type) (b: Type) (eq_a: 
+   fun (s: Stdlib.Strings.String.string) (a a' b: Type) (eq_a: 
            @Init.Logic.eq Type a a')
       =>
       SAWCorePrelude.eq_cong Type a a' eq_a Type (fun (x: Type)
@@ -577,7 +567,7 @@ Definition record_cong2: forall (s: Stdlib.Strings.String.string) (a b b': Type)
         (_1: @Init.Logic.eq Type b b'),
         @Init.Logic.eq Type (SAWCoreScaffolding.RecordTypeCons s a b) 
            (SAWCoreScaffolding.RecordTypeCons s a b') :=
-   fun (s: Stdlib.Strings.String.string) (a: Type) (b: Type) (b': Type) (eq_b: 
+   fun (s: Stdlib.Strings.String.string) (a b b': Type) (eq_b: 
            @Init.Logic.eq Type b b')
       =>
       SAWCorePrelude.eq_cong Type b b' eq_b Type (fun (x: Type)
@@ -608,7 +598,7 @@ Definition from: forall (a: Type) {Inh_a: SAWCoreScaffolding.Inhabited a}
             (SAWCoreScaffolding.PairType a 
                (SAWCoreScaffolding.PairType b SAWCoreScaffolding.UnitType)) :=
    fun (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (b: Type) (Inh_b: 
-           SAWCoreScaffolding.Inhabited b) (m: Num) (n: Num)
+           SAWCoreScaffolding.Inhabited b) (m n: Num)
       =>
       @CryptolPrimitivesForSAWCore.Num_rect (fun (m1: Num)
             =>
@@ -821,7 +811,7 @@ Definition seqZip: forall (a: Type) {Inh_a: SAWCoreScaffolding.Inhabited a}
             (SAWCoreScaffolding.PairType a 
                (SAWCoreScaffolding.PairType b SAWCoreScaffolding.UnitType)) :=
    fun (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (b: Type) (Inh_b: 
-           SAWCoreScaffolding.Inhabited b) (m: Num) (n: Num)
+           SAWCoreScaffolding.Inhabited b) (m n: Num)
       =>
       @CryptolPrimitivesForSAWCore.Num_rect (fun (m1: Num)
             =>
@@ -974,7 +964,7 @@ Definition unitUnary: forall (_1: SAWCoreScaffolding.UnitType),
 
 Definition unitBinary: forall (_1 _2: SAWCoreScaffolding.UnitType),
         SAWCoreScaffolding.UnitType :=
-   fun (_1: SAWCoreScaffolding.UnitType) (_2: SAWCoreScaffolding.UnitType)
+   fun (_1 _2: SAWCoreScaffolding.UnitType)
       =>
       SAWCoreScaffolding.Unit
    .
@@ -983,7 +973,7 @@ Definition pairUnary: forall (a b: Type) (_1: forall (_1: a), a) (_2: forall
                 (_2: b),
                 b) (_3: SAWCoreScaffolding.PairType a b),
         SAWCoreScaffolding.PairType a b :=
-   fun (a: Type) (b: Type) (f: forall (_1: a), a) (g: forall (_1: b), b) (xy: 
+   fun (a b: Type) (f: forall (_1: a), a) (g: forall (_1: b), b) (xy: 
            SAWCoreScaffolding.PairType a b)
       =>
       SAWCoreScaffolding.PairValue a b (f (SAWCorePrelude.Pair_fst a b xy)) 
@@ -994,9 +984,8 @@ Definition pairBinary: forall (a b: Type) (_1: forall (_1 _2: a), a) (_2: forall
                 (_2 _3: b),
                 b) (_3 _4: SAWCoreScaffolding.PairType a b),
         SAWCoreScaffolding.PairType a b :=
-   fun (a: Type) (b: Type) (f: forall (_1 _2: a), a) (g: forall (_1 _2: b), b)
-        (x12: SAWCoreScaffolding.PairType a b) (y12: 
-           SAWCoreScaffolding.PairType a b)
+   fun (a b: Type) (f: forall (_1 _2: a), a) (g: forall (_1 _2: b), b)
+        (x12 y12: SAWCoreScaffolding.PairType a b)
       =>
       SAWCoreScaffolding.PairValue a b 
          (f (SAWCorePrelude.Pair_fst a b x12) (SAWCorePrelude.Pair_fst a b y12))
@@ -1012,8 +1001,7 @@ Definition emptyUnary: forall (_1: SAWCoreScaffolding.RecordTypeNil),
 
 Definition emptyBinary: forall (_1 _2: SAWCoreScaffolding.RecordTypeNil),
         SAWCoreScaffolding.RecordTypeNil :=
-   fun (_1: SAWCoreScaffolding.RecordTypeNil)
-        (_2: SAWCoreScaffolding.RecordTypeNil)
+   fun (_1 _2: SAWCoreScaffolding.RecordTypeNil)
       =>
       SAWCoreScaffolding.RecordNil
    .
@@ -1022,9 +1010,8 @@ Definition recordUnary: forall (s: Stdlib.Strings.String.string) (a b: Type)
         (_1: forall (_1: a), a) (_2: forall (_2: b), b) (_3: 
            SAWCoreScaffolding.RecordTypeCons s a b),
         SAWCoreScaffolding.RecordTypeCons s a b :=
-   fun (s: Stdlib.Strings.String.string) (a: Type) (b: Type) (f: forall (_1: a),
-                a) (g: forall (_1: b), b) (x: 
-           SAWCoreScaffolding.RecordTypeCons s a b)
+   fun (s: Stdlib.Strings.String.string) (a b: Type) (f: forall (_1: a), a)
+        (g: forall (_1: b), b) (x: SAWCoreScaffolding.RecordTypeCons s a b)
       =>
       @SAWCoreScaffolding.RecordCons s a b 
          (f (@SAWCoreScaffolding.recordHead s a b x)) 
@@ -1035,11 +1022,8 @@ Definition recordBinary: forall (s: Stdlib.Strings.String.string) (a b: Type)
         (_1: forall (_1 _2: a), a) (_2: forall (_2 _3: b), b) (_3 _4: 
            SAWCoreScaffolding.RecordTypeCons s a b),
         SAWCoreScaffolding.RecordTypeCons s a b :=
-   fun (s: Stdlib.Strings.String.string) (a: Type) (b: Type) (f: forall
-                (_1 _2: a),
-                a) (g: forall (_1 _2: b), b) (x: 
-           SAWCoreScaffolding.RecordTypeCons s a b) (y: 
-           SAWCoreScaffolding.RecordTypeCons s a b)
+   fun (s: Stdlib.Strings.String.string) (a b: Type) (f: forall (_1 _2: a), a)
+        (g: forall (_1 _2: b), b) (x y: SAWCoreScaffolding.RecordTypeCons s a b)
       =>
       @SAWCoreScaffolding.RecordCons s a b 
          (f (@SAWCoreScaffolding.recordHead s a b x) 
@@ -1052,8 +1036,9 @@ Definition funBinary: forall (a b: Type) (_1: forall (_1 _2: b), b) (_2: forall
                 (_2: a),
                 b) (_3: forall (_3: a), b) (_4: a),
         b :=
-   fun (a: Type) (b: Type) (op: forall (_1 _2: b), b) (f: forall (_1: a), b)
-        (g: forall (_1: a), b) (x: a)
+   fun (a b: Type) (op: forall (_1 _2: b), b) (f: forall (_1: a), b) (g: forall
+                (_1: a),
+                b) (x: a)
       =>
       op (f x) (g x)
    .
@@ -1071,15 +1056,14 @@ Definition errorBinary: forall (s: Stdlib.Strings.String.string) (a: Type)
         {Inh_a: SAWCoreScaffolding.Inhabited a} (_1 _2: a),
         a :=
    fun (s: Stdlib.Strings.String.string) (a: Type) (Inh_a: 
-           SAWCoreScaffolding.Inhabited a) (_1: a) (_2: a)
+           SAWCoreScaffolding.Inhabited a) (_1 _2: a)
       =>
       SAWCoreScaffolding.error a s
    .
 
 Definition boolCmp: forall (_1 _2 _3: Init.Datatypes.bool),
         Init.Datatypes.bool :=
-   fun (x: Init.Datatypes.bool) (y: Init.Datatypes.bool)
-        (k: Init.Datatypes.bool)
+   fun (x y k: Init.Datatypes.bool)
       =>
       if x then
          Init.Datatypes.andb y k
@@ -1088,7 +1072,7 @@ Definition boolCmp: forall (_1 _2 _3: Init.Datatypes.bool),
    .
 
 Definition boolLt: forall (_1 _2: Init.Datatypes.bool), Init.Datatypes.bool :=
-   fun (x: Init.Datatypes.bool) (y: Init.Datatypes.bool)
+   fun (x y: Init.Datatypes.bool)
       =>
       Init.Datatypes.andb (Init.Datatypes.negb x) y
    .
@@ -1096,8 +1080,7 @@ Definition boolLt: forall (_1 _2: Init.Datatypes.bool), Init.Datatypes.bool :=
 Definition integerCmp: forall (_1 _2: SAWCoreScaffolding.Integer)
         (_3: Init.Datatypes.bool),
         Init.Datatypes.bool :=
-   fun (x: SAWCoreScaffolding.Integer) (y: SAWCoreScaffolding.Integer)
-        (k: Init.Datatypes.bool)
+   fun (x y: SAWCoreScaffolding.Integer) (k: Init.Datatypes.bool)
       =>
       Init.Datatypes.orb (SAWCoreScaffolding.intLt x y) 
          (Init.Datatypes.andb (SAWCoreScaffolding.intEqb x y) k)
@@ -1106,8 +1089,7 @@ Definition integerCmp: forall (_1 _2: SAWCoreScaffolding.Integer)
 Definition rationalCmp: forall (_1 _2: SAWCoreScaffolding.Rational)
         (_3: Init.Datatypes.bool),
         Init.Datatypes.bool :=
-   fun (x: SAWCoreScaffolding.Rational) (y: SAWCoreScaffolding.Rational)
-        (k: Init.Datatypes.bool)
+   fun (x y: SAWCoreScaffolding.Rational) (k: Init.Datatypes.bool)
       =>
       Init.Datatypes.orb (SAWCoreScaffolding.rationalLt x y) 
          (Init.Datatypes.andb (SAWCoreScaffolding.rationalEqb x y) k)
@@ -1117,8 +1099,7 @@ Definition bvCmp: forall (n: Init.Datatypes.nat) (_1 _2:
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool)
         (_3: Init.Datatypes.bool),
         Init.Datatypes.bool :=
-   fun (n: Init.Datatypes.nat) (x: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (y: 
+   fun (n: Init.Datatypes.nat) (x y: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool)
         (k: Init.Datatypes.bool)
       =>
@@ -1130,8 +1111,7 @@ Definition bvSCmp: forall (n: Init.Datatypes.nat) (_1 _2:
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool)
         (_3: Init.Datatypes.bool),
         Init.Datatypes.bool :=
-   fun (n: Init.Datatypes.nat) (x: 
-           SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool) (y: 
+   fun (n: Init.Datatypes.nat) (x y: 
            SAWCoreVectorsAsRocqVectors.Vec n Init.Datatypes.bool)
         (k: Init.Datatypes.bool)
       =>
@@ -1147,8 +1127,7 @@ Definition vecCmp: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a:
         Init.Datatypes.bool :=
    fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
         (f: forall (_1 _2: a) (_3: Init.Datatypes.bool), Init.Datatypes.bool)
-        (xs: SAWCoreVectorsAsRocqVectors.Vec n a) (ys: 
-           SAWCoreVectorsAsRocqVectors.Vec n a) (k: Init.Datatypes.bool)
+        (xs ys: SAWCoreVectorsAsRocqVectors.Vec n a) (k: Init.Datatypes.bool)
       =>
       SAWCoreVectorsAsRocqVectors.foldr (forall (_1: Init.Datatypes.bool),
               Init.Datatypes.bool) Init.Datatypes.bool n (fun (f1: forall
@@ -1169,8 +1148,7 @@ Definition vecLt: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a:
         Init.Datatypes.bool :=
    fun (n: Init.Datatypes.nat) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
         (f: forall (_1 _2: a) (_3: Init.Datatypes.bool), Init.Datatypes.bool)
-        (g: forall (_1 _2: a), Init.Datatypes.bool) (xs: 
-           SAWCoreVectorsAsRocqVectors.Vec n a) (ys: 
+        (g: forall (_1 _2: a), Init.Datatypes.bool) (xs ys: 
            SAWCoreVectorsAsRocqVectors.Vec n a)
       =>
       SAWCoreVectorsAsRocqVectors.foldr (forall (_1: Init.Datatypes.bool),
@@ -1187,22 +1165,21 @@ Definition vecLt: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a:
 Definition unitCmp: forall (_1 _2: SAWCoreScaffolding.UnitType)
         (_3: Init.Datatypes.bool),
         Init.Datatypes.bool :=
-   fun (_1: SAWCoreScaffolding.UnitType) (_2: SAWCoreScaffolding.UnitType)
-        (k: Init.Datatypes.bool)
+   fun (_1 _2: SAWCoreScaffolding.UnitType) (k: Init.Datatypes.bool)
       =>
       k
    .
 
 Definition unitLe: forall (_1 _2: SAWCoreScaffolding.UnitType),
         Init.Datatypes.bool :=
-   fun (_1: SAWCoreScaffolding.UnitType) (_2: SAWCoreScaffolding.UnitType)
+   fun (_1 _2: SAWCoreScaffolding.UnitType)
       =>
       Init.Datatypes.true
    .
 
 Definition unitLt: forall (_1 _2: SAWCoreScaffolding.UnitType),
         Init.Datatypes.bool :=
-   fun (_1: SAWCoreScaffolding.UnitType) (_2: SAWCoreScaffolding.UnitType)
+   fun (_1 _2: SAWCoreScaffolding.UnitType)
       =>
       Init.Datatypes.false
    .
@@ -1214,11 +1191,11 @@ Definition pairCmp: forall (a b: Type) (_1: forall (_1 _2: a)
                 Init.Datatypes.bool) (_3 _4: SAWCoreScaffolding.PairType a b)
         (_5: Init.Datatypes.bool),
         Init.Datatypes.bool :=
-   fun (a: Type) (b: Type) (f: forall (_1 _2: a) (_3: Init.Datatypes.bool),
+   fun (a b: Type) (f: forall (_1 _2: a) (_3: Init.Datatypes.bool),
                 Init.Datatypes.bool) (g: forall (_1 _2: b)
                 (_3: Init.Datatypes.bool),
-                Init.Datatypes.bool) (x12: SAWCoreScaffolding.PairType a b)
-        (y12: SAWCoreScaffolding.PairType a b) (k: Init.Datatypes.bool)
+                Init.Datatypes.bool) (x12 y12: SAWCoreScaffolding.PairType a b)
+        (k: Init.Datatypes.bool)
       =>
       f (SAWCorePrelude.Pair_fst a b x12) (SAWCorePrelude.Pair_fst a b y12) 
         (g (SAWCorePrelude.Pair_snd a b x12) (SAWCorePrelude.Pair_snd a b y12)
@@ -1230,10 +1207,9 @@ Definition pairLt: forall (a b: Type) (_1: forall (_1 _2: a)
                 Init.Datatypes.bool) (_2: forall (_2 _3: b),
                 Init.Datatypes.bool) (_3 _4: SAWCoreScaffolding.PairType a b),
         Init.Datatypes.bool :=
-   fun (a: Type) (b: Type) (f: forall (_1 _2: a) (_3: Init.Datatypes.bool),
+   fun (a b: Type) (f: forall (_1 _2: a) (_3: Init.Datatypes.bool),
                 Init.Datatypes.bool) (g: forall (_1 _2: b), Init.Datatypes.bool)
-        (x: SAWCoreScaffolding.PairType a b) (y: 
-           SAWCoreScaffolding.PairType a b)
+        (x y: SAWCoreScaffolding.PairType a b)
       =>
       f (SAWCorePrelude.Pair_fst a b x) (SAWCorePrelude.Pair_fst a b y) 
         (g (SAWCorePrelude.Pair_snd a b x) (SAWCorePrelude.Pair_snd a b y))
@@ -1242,24 +1218,21 @@ Definition pairLt: forall (a b: Type) (_1: forall (_1 _2: a)
 Definition emptyCmp: forall (_1 _2: SAWCoreScaffolding.RecordTypeNil)
         (_3: Init.Datatypes.bool),
         Init.Datatypes.bool :=
-   fun (_1: SAWCoreScaffolding.RecordTypeNil)
-        (_2: SAWCoreScaffolding.RecordTypeNil) (k: Init.Datatypes.bool)
+   fun (_1 _2: SAWCoreScaffolding.RecordTypeNil) (k: Init.Datatypes.bool)
       =>
       k
    .
 
 Definition emptyLe: forall (_1 _2: SAWCoreScaffolding.RecordTypeNil),
         Init.Datatypes.bool :=
-   fun (_1: SAWCoreScaffolding.RecordTypeNil)
-        (_2: SAWCoreScaffolding.RecordTypeNil)
+   fun (_1 _2: SAWCoreScaffolding.RecordTypeNil)
       =>
       Init.Datatypes.true
    .
 
 Definition emptyLt: forall (_1 _2: SAWCoreScaffolding.RecordTypeNil),
         Init.Datatypes.bool :=
-   fun (_1: SAWCoreScaffolding.RecordTypeNil)
-        (_2: SAWCoreScaffolding.RecordTypeNil)
+   fun (_1 _2: SAWCoreScaffolding.RecordTypeNil)
       =>
       Init.Datatypes.false
    .
@@ -1269,11 +1242,9 @@ Definition recordEq: forall (s: Stdlib.Strings.String.string) (a b: Type)
                 Init.Datatypes.bool) (_3 _4: 
            SAWCoreScaffolding.RecordTypeCons s a b),
         Init.Datatypes.bool :=
-   fun (s: Stdlib.Strings.String.string) (a: Type) (b: Type) (f: forall
-                (_1 _2: a),
+   fun (s: Stdlib.Strings.String.string) (a b: Type) (f: forall (_1 _2: a),
                 Init.Datatypes.bool) (g: forall (_1 _2: b), Init.Datatypes.bool)
-        (x: SAWCoreScaffolding.RecordTypeCons s a b) (y: 
-           SAWCoreScaffolding.RecordTypeCons s a b)
+        (x y: SAWCoreScaffolding.RecordTypeCons s a b)
       =>
       Init.Datatypes.andb 
          (f (@SAWCoreScaffolding.recordHead s a b x) 
@@ -1288,12 +1259,11 @@ Definition recordCmp: forall (s: Stdlib.Strings.String.string) (a b: Type)
         (_3 _4: SAWCoreScaffolding.RecordTypeCons s a b)
         (_5: Init.Datatypes.bool),
         Init.Datatypes.bool :=
-   fun (s: Stdlib.Strings.String.string) (a: Type) (b: Type) (f: forall
-                (_1 _2: a) (_3: Init.Datatypes.bool),
+   fun (s: Stdlib.Strings.String.string) (a b: Type) (f: forall (_1 _2: a)
+                (_3: Init.Datatypes.bool),
                 Init.Datatypes.bool) (g: forall (_1 _2: b)
                 (_3: Init.Datatypes.bool),
-                Init.Datatypes.bool) (x: 
-           SAWCoreScaffolding.RecordTypeCons s a b) (y: 
+                Init.Datatypes.bool) (x y: 
            SAWCoreScaffolding.RecordTypeCons s a b) (k: Init.Datatypes.bool)
       =>
       f (@SAWCoreScaffolding.recordHead s a b x) 
@@ -1307,11 +1277,10 @@ Definition recordLt: forall (s: Stdlib.Strings.String.string) (a b: Type)
         (_2: forall (_2 _3: b), Init.Datatypes.bool) (_3 _4: 
            SAWCoreScaffolding.RecordTypeCons s a b),
         Init.Datatypes.bool :=
-   fun (s: Stdlib.Strings.String.string) (a: Type) (b: Type) (f: forall
-                (_1 _2: a) (_3: Init.Datatypes.bool),
+   fun (s: Stdlib.Strings.String.string) (a b: Type) (f: forall (_1 _2: a)
+                (_3: Init.Datatypes.bool),
                 Init.Datatypes.bool) (g: forall (_1 _2: b), Init.Datatypes.bool)
-        (x: SAWCoreScaffolding.RecordTypeCons s a b) (y: 
-           SAWCoreScaffolding.RecordTypeCons s a b)
+        (x y: SAWCoreScaffolding.RecordTypeCons s a b)
       =>
       f (@SAWCoreScaffolding.recordHead s a b x) 
         (@SAWCoreScaffolding.recordHead s a b y) 
@@ -1420,14 +1389,14 @@ Definition PEqUnit: PEq SAWCoreScaffolding.UnitType :=
    @SAWCoreScaffolding.RecordCons "eq"%string (forall
            (x y: SAWCoreScaffolding.UnitType),
            Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil (fun
-           (x: SAWCoreScaffolding.UnitType) (y: SAWCoreScaffolding.UnitType)
+           (x y: SAWCoreScaffolding.UnitType)
          =>
          Init.Datatypes.true
       ) SAWCoreScaffolding.RecordNil.
 
 Definition PEqPair: forall (a b: Type) (_1: PEq a) (_2: PEq b),
         PEq (SAWCoreScaffolding.PairType a b) :=
-   fun (a: Type) (b: Type) (pa: PEq a) (pb: PEq b)
+   fun (a b: Type) (pa: PEq a) (pb: PEq b)
       =>
       @SAWCoreScaffolding.RecordCons "eq"%string (forall (_1 _2: 
                  SAWCoreScaffolding.PairType a b),
@@ -1444,8 +1413,7 @@ Definition PEqEmpty: PEq SAWCoreScaffolding.RecordTypeNil :=
    @SAWCoreScaffolding.RecordCons "eq"%string (forall
            (x y: SAWCoreScaffolding.RecordTypeNil),
            Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil (fun
-           (x: SAWCoreScaffolding.RecordTypeNil)
-           (y: SAWCoreScaffolding.RecordTypeNil)
+           (x y: SAWCoreScaffolding.RecordTypeNil)
          =>
          Init.Datatypes.true
       ) SAWCoreScaffolding.RecordNil.
@@ -1453,8 +1421,7 @@ Definition PEqEmpty: PEq SAWCoreScaffolding.RecordTypeNil :=
 Definition PEqRecord: forall (s: Stdlib.Strings.String.string) (a b: Type) (_1: 
            PEq a) (_2: PEq b),
         PEq (SAWCoreScaffolding.RecordTypeCons s a b) :=
-   fun (s: Stdlib.Strings.String.string) (a: Type) (b: Type) (pa: PEq a) (pb: 
-           PEq b)
+   fun (s: Stdlib.Strings.String.string) (a b: Type) (pa: PEq a) (pb: PEq b)
       =>
       @SAWCoreScaffolding.RecordCons "eq"%string (forall (_1 _2: 
                  SAWCoreScaffolding.RecordTypeCons s a b),
@@ -1476,12 +1443,12 @@ Definition PEqVoid: PEq Init.Datatypes.Empty_set :=
 
 Definition PEqEither: forall (a b: Type) (_1: PEq a) (_2: PEq b),
         PEq (Init.Datatypes.sum a b) :=
-   fun (a: Type) (b: Type) (pa: PEq a) (pb: PEq b)
+   fun (a b: Type) (pa: PEq a) (pb: PEq b)
       =>
       @SAWCoreScaffolding.RecordCons "eq"%string (forall (e1 e2: 
                  Init.Datatypes.sum a b),
-              Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil (fun (e1: 
-                 Init.Datatypes.sum a b) (e2: Init.Datatypes.sum a b)
+              Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil (fun
+              (e1 e2: Init.Datatypes.sum a b)
             =>
             SAWCorePrelude.either a b Init.Datatypes.bool (fun (x1: a)
                   =>
@@ -1693,7 +1660,7 @@ Definition PCmpVec: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a:
                (SAWCoreScaffolding.RecordTypeCons "lt"%string (forall
                        (x y: var__0),
                        Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil)
-               (fun (x: var__0) (y: var__0)
+               (fun (x y: var__0)
                   =>
                   vecCmp n a 
                      (@SAWCoreScaffolding.recordHead "cmp"%string (forall
@@ -1719,7 +1686,7 @@ Definition PCmpVec: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a:
                (@SAWCoreScaffolding.RecordCons "lt"%string (forall
                        (x y: var__0),
                        Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil
-                  (fun (x: var__0) (y: var__0)
+                  (fun (x y: var__0)
                      =>
                      vecCmp n a 
                         (@SAWCoreScaffolding.recordHead "cmp"%string (forall
@@ -1857,7 +1824,7 @@ Definition PCmpUnit: PCmp SAWCoreScaffolding.UnitType :=
 
 Definition PCmpPair: forall (a b: Type) (_1: PCmp a) (_2: PCmp b),
         PCmp (SAWCoreScaffolding.PairType a b) :=
-   fun (a: Type) (b: Type) (pa: PCmp a) (pb: PCmp b)
+   fun (a b: Type) (pa: PCmp a) (pb: PCmp b)
       =>
       let var__0
          :=
@@ -2054,8 +2021,7 @@ Definition PCmpEmpty: PCmp SAWCoreScaffolding.RecordTypeNil :=
 Definition PCmpRecord: forall (s: Stdlib.Strings.String.string) (a b: Type)
         (_1: PCmp a) (_2: PCmp b),
         PCmp (SAWCoreScaffolding.RecordTypeCons s a b) :=
-   fun (s: Stdlib.Strings.String.string) (a: Type) (b: Type) (pa: PCmp a) (pb: 
-           PCmp b)
+   fun (s: Stdlib.Strings.String.string) (a b: Type) (pa: PCmp a) (pb: PCmp b)
       =>
       let var__0
          :=
@@ -2254,7 +2220,7 @@ Definition PCmpVoid: PCmp Init.Datatypes.Empty_set :=
 
 Definition PCmpEither: forall (a b: Type) (_1: PCmp a) (_2: PCmp b),
         PCmp (Init.Datatypes.sum a b) :=
-   fun (a: Type) (b: Type) (pa: PCmp a) (pb: PCmp b)
+   fun (a b: Type) (pa: PCmp a) (pb: PCmp b)
       =>
       let var__0
          :=
@@ -2302,7 +2268,7 @@ Definition PCmpEither: forall (a b: Type) (_1: PCmp a) (_2: PCmp b),
                (SAWCoreScaffolding.RecordTypeCons "lt"%string (forall
                        (e1 e2: var__0),
                        Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil))
-            (fun (e1: var__0) (e2: var__0) (k: Init.Datatypes.bool)
+            (fun (e1 e2: var__0) (k: Init.Datatypes.bool)
                =>
                SAWCorePrelude.either a b Init.Datatypes.bool (fun (x1: a)
                      =>
@@ -2366,7 +2332,7 @@ Definition PCmpEither: forall (a b: Type) (_1: PCmp a) (_2: PCmp b),
                (SAWCoreScaffolding.RecordTypeCons "lt"%string (forall
                        (e1 e2: var__0),
                        Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil)
-               (fun (e1: var__0) (e2: var__0)
+               (fun (e1 e2: var__0)
                   =>
                   SAWCorePrelude.either a b Init.Datatypes.bool (fun (x1: a)
                         =>
@@ -2448,7 +2414,7 @@ Definition PCmpEither: forall (a b: Type) (_1: PCmp a) (_2: PCmp b),
                (@SAWCoreScaffolding.RecordCons "lt"%string (forall
                        (e1 e2: var__0),
                        Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil
-                  (fun (e1: var__0) (e2: var__0)
+                  (fun (e1 e2: var__0)
                      =>
                      SAWCorePrelude.either a b Init.Datatypes.bool (fun (x1: a)
                            =>
@@ -2618,7 +2584,7 @@ Definition PSignedCmpVec: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a:
                (SAWCoreScaffolding.RecordTypeCons "slt"%string (forall
                        (x y: var__0),
                        Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil)
-               (fun (x: var__0) (y: var__0)
+               (fun (x y: var__0)
                   =>
                   vecCmp n a 
                      (@SAWCoreScaffolding.recordHead "scmp"%string (forall
@@ -2645,7 +2611,7 @@ Definition PSignedCmpVec: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a:
                (@SAWCoreScaffolding.RecordCons "slt"%string (forall
                        (x y: var__0),
                        Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil
-                  (fun (x: var__0) (y: var__0)
+                  (fun (x y: var__0)
                      =>
                      vecCmp n a 
                         (@SAWCoreScaffolding.recordHead "scmp"%string (forall
@@ -2785,7 +2751,7 @@ Definition PSignedCmpUnit: PSignedCmp SAWCoreScaffolding.UnitType :=
 Definition PSignedCmpPair: forall (a b: Type) (_1: PSignedCmp a) (_2: 
            PSignedCmp b),
         PSignedCmp (SAWCoreScaffolding.PairType a b) :=
-   fun (a: Type) (b: Type) (pa: PSignedCmp a) (pb: PSignedCmp b)
+   fun (a b: Type) (pa: PSignedCmp a) (pb: PSignedCmp b)
       =>
       let var__0
          :=
@@ -2983,8 +2949,8 @@ Definition PSignedCmpEmpty: PSignedCmp SAWCoreScaffolding.RecordTypeNil :=
 Definition PSignedCmpRecord: forall (s: Stdlib.Strings.String.string)
         (a b: Type) (_1: PSignedCmp a) (_2: PSignedCmp b),
         PSignedCmp (SAWCoreScaffolding.RecordTypeCons s a b) :=
-   fun (s: Stdlib.Strings.String.string) (a: Type) (b: Type) (pa: PSignedCmp a)
-        (pb: PSignedCmp b)
+   fun (s: Stdlib.Strings.String.string) (a b: Type) (pa: PSignedCmp a) (pb: 
+           PSignedCmp b)
       =>
       let var__0
          :=
@@ -3186,7 +3152,7 @@ Definition PSignedCmpVoid: PSignedCmp Init.Datatypes.Empty_set :=
 Definition PSignedCmpEither: forall (a b: Type) (_1: PSignedCmp a) (_2: 
            PSignedCmp b),
         PSignedCmp (Init.Datatypes.sum a b) :=
-   fun (a: Type) (b: Type) (pa: PSignedCmp a) (pb: PSignedCmp b)
+   fun (a b: Type) (pa: PSignedCmp a) (pb: PSignedCmp b)
       =>
       let var__0
          :=
@@ -3234,7 +3200,7 @@ Definition PSignedCmpEither: forall (a b: Type) (_1: PSignedCmp a) (_2:
                (SAWCoreScaffolding.RecordTypeCons "slt"%string (forall
                        (e1 e2: var__0),
                        Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil))
-            (fun (e1: var__0) (e2: var__0) (k: Init.Datatypes.bool)
+            (fun (e1 e2: var__0) (k: Init.Datatypes.bool)
                =>
                SAWCorePrelude.either a b Init.Datatypes.bool (fun (x1: a)
                      =>
@@ -3299,7 +3265,7 @@ Definition PSignedCmpEither: forall (a b: Type) (_1: PSignedCmp a) (_2:
                (SAWCoreScaffolding.RecordTypeCons "slt"%string (forall
                        (e1 e2: var__0),
                        Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil)
-               (fun (e1: var__0) (e2: var__0)
+               (fun (e1 e2: var__0)
                   =>
                   SAWCorePrelude.either a b Init.Datatypes.bool (fun (x1: a)
                         =>
@@ -3379,7 +3345,7 @@ Definition PSignedCmpEither: forall (a b: Type) (_1: PSignedCmp a) (_2:
                (@SAWCoreScaffolding.RecordCons "slt"%string (forall
                        (e1 e2: var__0),
                        Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil
-                  (fun (e1: var__0) (e2: var__0)
+                  (fun (e1 e2: var__0)
                      =>
                      SAWCorePrelude.either a b Init.Datatypes.bool (fun (x1: a)
                            =>
@@ -3521,7 +3487,7 @@ Definition PZeroSeqBool: forall (n: Num), PZero (seq n Init.Datatypes.bool) :=
 
 Definition PZeroFun: forall (a b: Type) (_1: PZero b),
         PZero (forall (_2: a), b) :=
-   fun (a: Type) (b: Type) (pb: PZero b) (_1: a)
+   fun (a b: Type) (pb: PZero b) (_1: a)
       =>
       pb
    .
@@ -4092,7 +4058,7 @@ Definition PLogicSeqBool: forall (n: Num), PLogic (seq n Init.Datatypes.bool) :=
 
 Definition PLogicFun: forall (a b: Type) (_1: PLogic b),
         PLogic (forall (_2: a), b) :=
-   fun (a: Type) (b: Type) (pb: PLogic b)
+   fun (a b: Type) (pb: PLogic b)
       =>
       @SAWCoreScaffolding.RecordCons "logicZero"%string 
          (PZero (forall (_1: a), b)) 
@@ -4345,7 +4311,7 @@ Definition PLogicUnit: PLogic SAWCoreScaffolding.UnitType :=
 
 Definition PLogicPair: forall (a b: Type) (_1: PLogic a) (_2: PLogic b),
         PLogic (SAWCoreScaffolding.PairType a b) :=
-   fun (a: Type) (b: Type) (pa: PLogic a) (pb: PLogic b)
+   fun (a b: Type) (pa: PLogic a) (pb: PLogic b)
       =>
       @SAWCoreScaffolding.RecordCons "logicZero"%string 
          (SAWCoreScaffolding.PairType a b) 
@@ -4741,8 +4707,8 @@ Definition PLogicEmpty: PLogic SAWCoreScaffolding.RecordTypeNil :=
 Definition PLogicRecord: forall (s: Stdlib.Strings.String.string) (a b: Type)
         (_1: PLogic a) (_2: PLogic b),
         PLogic (SAWCoreScaffolding.RecordTypeCons s a b) :=
-   fun (s: Stdlib.Strings.String.string) (a: Type) (b: Type) (pa: PLogic a)
-        (pb: PLogic b)
+   fun (s: Stdlib.Strings.String.string) (a b: Type) (pa: PLogic a) (pb: 
+           PLogic b)
       =>
       @SAWCoreScaffolding.RecordCons "logicZero"%string 
          (SAWCoreScaffolding.RecordTypeCons s a b) 
@@ -6127,7 +6093,7 @@ Definition PRingSeqBool: forall (n: Num), PRing (seq n Init.Datatypes.bool) :=
 
 Definition PRingFun: forall (a b: Type) (_1: PRing b),
         PRing (forall (_2: a), b) :=
-   fun (a: Type) (b: Type) (pb: PRing b)
+   fun (a b: Type) (pb: PRing b)
       =>
       @SAWCoreScaffolding.RecordCons "ringZero"%string 
          (PZero (forall (_1: a), b)) 
@@ -6528,7 +6494,7 @@ Definition PRingUnit: PRing SAWCoreScaffolding.UnitType :=
 
 Definition PRingPair: forall (a b: Type) (_1: PRing a) (_2: PRing b),
         PRing (SAWCoreScaffolding.PairType a b) :=
-   fun (a: Type) (b: Type) (pa: PRing a) (pb: PRing b)
+   fun (a b: Type) (pa: PRing a) (pb: PRing b)
       =>
       @SAWCoreScaffolding.RecordCons "ringZero"%string 
          (SAWCoreScaffolding.PairType a b) 
@@ -7177,8 +7143,7 @@ Definition PRingEmpty: PRing SAWCoreScaffolding.RecordTypeNil :=
 Definition PRingRecord: forall (s: Stdlib.Strings.String.string) (a b: Type)
         (_1: PRing a) (_2: PRing b),
         PRing (SAWCoreScaffolding.RecordTypeCons s a b) :=
-   fun (s: Stdlib.Strings.String.string) (a: Type) (b: Type) (pa: PRing a) (pb: 
-           PRing b)
+   fun (s: Stdlib.Strings.String.string) (a b: Type) (pa: PRing a) (pb: PRing b)
       =>
       @SAWCoreScaffolding.RecordCons "ringZero"%string 
          (SAWCoreScaffolding.RecordTypeCons s a b) 
@@ -8039,8 +8004,7 @@ Definition PFieldIntMod: forall (n: Init.Datatypes.nat),
                   "Unimplemented: recip IntMod"%string
             ) (@SAWCoreScaffolding.RecordCons "fieldDiv"%string (forall
                     (x y: var__0),
-                    var__0) SAWCoreScaffolding.RecordTypeNil (fun (x: var__0)
-                    (y: var__0)
+                    var__0) SAWCoreScaffolding.RecordTypeNil (fun (x y: var__0)
                   =>
                   SAWCoreScaffolding.error var__0
                      "Unimplemented: (/.) IntMod"%string
@@ -8209,7 +8173,7 @@ Definition PLiteralInteger: PLiteral SAWCoreScaffolding.Integer :=
 
 Definition PLiteralIntMod: forall (n: Init.Datatypes.nat),
         PLiteral (SAWCoreScaffolding.IntMod n) :=
-   fun (n: Init.Datatypes.nat) (x: Init.Datatypes.nat)
+   fun (n x: Init.Datatypes.nat)
       =>
       SAWCoreScaffolding.toIntMod n (SAWCoreScaffolding.natToInt x)
    .
@@ -8237,7 +8201,7 @@ Definition PFLiteral: forall (a: Type), Type :=
    .
 
 Definition PFLiteralRational: PFLiteral SAWCoreScaffolding.Rational :=
-   fun (m: Init.Datatypes.nat) (n: Init.Datatypes.nat) (r: Init.Datatypes.nat)
+   fun (m n r: Init.Datatypes.nat)
       =>
       SAWCoreScaffolding.ratio (SAWCoreScaffolding.natToInt m) 
          (SAWCoreScaffolding.natToInt n)
@@ -8601,7 +8565,7 @@ Definition ecMod: forall (a: Type) (_1: PIntegral a) (_2 _3: a), a :=
 Definition ecExp: forall (a b: Type) (_1: PRing a) (_2: PIntegral b) (_3: a)
         (_4: b),
         a :=
-   fun (a: Type) (b: Type) (pa: PRing a) (pi: PIntegral b) (x: a)
+   fun (a b: Type) (pa: PRing a) (pi: PIntegral b) (x: a)
       =>
       posNegCases b pi a 
          (SAWCorePrelude.expByNat a 
@@ -9232,7 +9196,7 @@ Definition ecEq: forall (a: Type) (_1: PEq a) (_2 _3: a), Init.Datatypes.bool :=
 
 Definition ecNotEq: forall (a: Type) (_1: PEq a) (_2 _3: a),
         Init.Datatypes.bool :=
-   fun (a: Type) (pa: PEq a) (x: a) (y: a)
+   fun (a: Type) (pa: PEq a) (x y: a)
       =>
       Init.Datatypes.negb (ecEq a pa x y)
    .
@@ -9272,7 +9236,7 @@ Definition ecLt: forall (a: Type) (_1: PCmp a) (_2 _3: a),
 
 Definition ecGt: forall (a: Type) (_1: PCmp a) (_2 _3: a),
         Init.Datatypes.bool :=
-   fun (a: Type) (pa: PCmp a) (x: a) (y: a)
+   fun (a: Type) (pa: PCmp a) (x y: a)
       =>
       ecLt a pa y x
    .
@@ -9308,7 +9272,7 @@ Definition ecLtEq: forall (a: Type) (_1: PCmp a) (_2 _3: a),
 
 Definition ecGtEq: forall (a: Type) (_1: PCmp a) (_2 _3: a),
         Init.Datatypes.bool :=
-   fun (a: Type) (pa: PCmp a) (x: a) (y: a)
+   fun (a: Type) (pa: PCmp a) (x y: a)
       =>
       ecLtEq a pa y x
    .
@@ -9485,8 +9449,8 @@ Definition ecZero: forall (a: Type) (_1: PZero a), a :=
 Definition ecFraction: forall (m n r: Num) (a: Type) {Inh_a: 
            SAWCoreScaffolding.Inhabited a} (_1: PFLiteral a),
         a :=
-   fun (m: Num) (n: Num) (r: Num) (a: Type) (Inh_a: 
-           SAWCoreScaffolding.Inhabited a) (pa: PFLiteral a)
+   fun (m n r: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (pa: 
+           PFLiteral a)
       =>
       @CryptolPrimitivesForSAWCore.Num_rect (fun (_1: Num) => a) (fun
               (m1: Init.Datatypes.nat)
@@ -9514,9 +9478,8 @@ Definition ecShiftL: forall (m: Num) (ix a: Type) (_1: PIntegral ix) (_2:
             forall (ix a: Type) (_1: PIntegral ix) (_2: PZero a) (_3: seq m1 a)
                  (_4: ix),
                  seq m1 a
-         ) (fun (m1: Init.Datatypes.nat) (ix: Type) (a: Type) (pix: 
-                 PIntegral ix) (pz: PZero a) (xs: 
-                 SAWCoreVectorsAsRocqVectors.Vec m1 a)
+         ) (fun (m1: Init.Datatypes.nat) (ix a: Type) (pix: PIntegral ix) (pz: 
+                 PZero a) (xs: SAWCoreVectorsAsRocqVectors.Vec m1 a)
             =>
             let var__0
                :=
@@ -9525,7 +9488,7 @@ Definition ecShiftL: forall (m: Num) (ix a: Type) (_1: PIntegral ix) (_2:
             posNegCases ix pix (SAWCoreVectorsAsRocqVectors.Vec m1 a) 
                (SAWCoreVectorsAsRocqVectors.shiftL m1 a var__0 xs) 
                (SAWCoreVectorsAsRocqVectors.shiftR m1 a var__0 xs)
-         ) (fun (ix: Type) (a: Type) (pix: PIntegral ix) (pz: PZero a) (xs: 
+         ) (fun (ix a: Type) (pix: PIntegral ix) (pz: PZero a) (xs: 
                  SAWCorePrelude.Stream a)
             =>
             posNegCases ix pix (SAWCorePrelude.Stream a) 
@@ -9544,9 +9507,8 @@ Definition ecShiftR: forall (m: Num) (ix a: Type) (_1: PIntegral ix) (_2:
             forall (ix a: Type) (_1: PIntegral ix) (_2: PZero a) (_3: seq m1 a)
                  (_4: ix),
                  seq m1 a
-         ) (fun (m1: Init.Datatypes.nat) (ix: Type) (a: Type) (pix: 
-                 PIntegral ix) (pz: PZero a) (xs: 
-                 SAWCoreVectorsAsRocqVectors.Vec m1 a)
+         ) (fun (m1: Init.Datatypes.nat) (ix a: Type) (pix: PIntegral ix) (pz: 
+                 PZero a) (xs: SAWCoreVectorsAsRocqVectors.Vec m1 a)
             =>
             let var__0
                :=
@@ -9555,7 +9517,7 @@ Definition ecShiftR: forall (m: Num) (ix a: Type) (_1: PIntegral ix) (_2:
             posNegCases ix pix (SAWCoreVectorsAsRocqVectors.Vec m1 a) 
                (SAWCoreVectorsAsRocqVectors.shiftR m1 a var__0 xs) 
                (SAWCoreVectorsAsRocqVectors.shiftL m1 a var__0 xs)
-         ) (fun (ix: Type) (a: Type) (pix: PIntegral ix) (pz: PZero a) (xs: 
+         ) (fun (ix a: Type) (pix: PIntegral ix) (pz: PZero a) (xs: 
                  SAWCorePrelude.Stream a)
             =>
             posNegCases ix pix (SAWCorePrelude.Stream a) 
@@ -9605,8 +9567,8 @@ Definition ecRotL: forall (m: Num) (ix a: Type) (_1: PIntegral ix) (_2: seq m a)
          =>
          forall (ix a: Type) (_1: PIntegral ix) (_2: seq m a) (_3: ix),
               seq m a
-      ) (fun (m: Init.Datatypes.nat) (ix: Type) (a: Type) (pix: PIntegral ix)
-           (xs: SAWCoreVectorsAsRocqVectors.Vec m a)
+      ) (fun (m: Init.Datatypes.nat) (ix a: Type) (pix: PIntegral ix) (xs: 
+              SAWCoreVectorsAsRocqVectors.Vec m a)
          =>
          posNegCases ix pix (SAWCoreVectorsAsRocqVectors.Vec m a) 
             (SAWCoreVectorsAsRocqVectors.rotateL m a xs) 
@@ -9620,8 +9582,8 @@ Definition ecRotR: forall (m: Num) (ix a: Type) (_1: PIntegral ix) (_2: seq m a)
          =>
          forall (ix a: Type) (_1: PIntegral ix) (_2: seq m a) (_3: ix),
               seq m a
-      ) (fun (m: Init.Datatypes.nat) (ix: Type) (a: Type) (pix: PIntegral ix)
-           (xs: SAWCoreVectorsAsRocqVectors.Vec m a)
+      ) (fun (m: Init.Datatypes.nat) (ix a: Type) (pix: PIntegral ix) (xs: 
+              SAWCoreVectorsAsRocqVectors.Vec m a)
          =>
          posNegCases ix pix (SAWCoreVectorsAsRocqVectors.Vec m a) 
             (SAWCoreVectorsAsRocqVectors.rotateR m a xs) 
@@ -9833,7 +9795,7 @@ Definition ecReverse: forall (n: Num) (a: Type) {Inh_a:
 Definition ecTranspose: forall (m n: Num) (a: Type) {Inh_a: 
            SAWCoreScaffolding.Inhabited a} (_1: seq m (seq n a)),
         seq n (seq m a) :=
-   fun (m: Num) (n: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
+   fun (m n: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
       =>
       @CryptolPrimitivesForSAWCore.Num_rect (fun (m1: Num)
             =>
@@ -9972,8 +9934,7 @@ Definition ecFromTo: forall (first last: Num) (a: Type) {Inh_a:
 Definition ecFromToLessThan: forall (first bound: Num) (a: Type) {Inh_a: 
            SAWCoreScaffolding.Inhabited a} (_1: PLiteralLessThan a),
         seq (tcSub bound first) a :=
-   fun (first: Num) (bound: Num) (a: Type) (Inh_a: 
-           SAWCoreScaffolding.Inhabited a)
+   fun (first bound: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
       =>
       finNumRec (fun (first1: Num)
             =>
@@ -10006,12 +9967,10 @@ Definition ecFromToLessThan: forall (first bound: Num) (a: Type) {Inh_a:
 Definition ecFromThenTo: forall (first next last: Num) (a: Type) {Inh_a: 
            SAWCoreScaffolding.Inhabited a} (len: Num) (_1 _2 _3: PLiteral a),
         seq len a :=
-   fun (first: Num) (next: Num) (_1: Num) (a: Type) (Inh_a: 
-           SAWCoreScaffolding.Inhabited a)
+   fun (first next _1: Num) (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a)
       =>
       finNumRec (fun (len: Num) => forall (_2 _3 _4: PLiteral a), seq len a)
-         (fun (len: Init.Datatypes.nat) (pa: PLiteral a) (_2: PLiteral a) (_3: 
-                 PLiteral a)
+         (fun (len: Init.Datatypes.nat) (pa _2 _3: PLiteral a)
             =>
             SAWCoreVectorsAsRocqVectors.gen len a (fun (i: Init.Datatypes.nat)
                   =>
@@ -10318,7 +10277,7 @@ Definition ecInfFrom: forall (a: Type) (_1: PIntegral a) (_2: a),
 
 Definition ecInfFromThen: forall (a: Type) (_1: PIntegral a) (_2 _3: a),
         seq TCInf a :=
-   fun (a: Type) (pa: PIntegral a) (x: a) (y: a)
+   fun (a: Type) (pa: PIntegral a) (x y: a)
       =>
       SAWCorePrelude.MkStream a (fun (i: Init.Datatypes.nat)
             =>
@@ -10595,7 +10554,7 @@ Definition ecTrace: forall (n: Num) (a b: Type) (_1:
                            (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
                   Init.Datatypes.bool)) (_2: a) (_3: b),
         b :=
-   fun (n: Num) (a: Type) (b: Type) (_1: 
+   fun (n: Num) (a b: Type) (_1: 
            seq n (SAWCoreVectorsAsRocqVectors.Vec 
                   (Stdlib.PArith.BinPos.Pos.to_nat 
                      (Stdlib.PArith.BinPos.xO 
@@ -10607,7 +10566,7 @@ Definition ecTrace: forall (n: Num) (a b: Type) (_1:
    .
 
 Definition ecDeepseq: forall (a b: Type) (_1: PEq a) (_2: a) (_3: b), b :=
-   fun (a: Type) (b: Type) (pa: PEq a) (x: a) (y: b)
+   fun (a b: Type) (pa: PEq a) (x: a) (y: b)
       =>
       y
    .
@@ -10638,8 +10597,9 @@ Definition ecFoldl: forall (n: Num) (a b: Type) {Inh_b:
            SAWCoreScaffolding.Inhabited b} (_1: forall (_1: a) (_2: b), a)
         (_2: a) (_3: seq n b),
         a :=
-   fun (n: Num) (a: Type) (b: Type) (Inh_b: SAWCoreScaffolding.Inhabited b)
-        (f: forall (_1: a) (_2: b), a) (z: a)
+   fun (n: Num) (a b: Type) (Inh_b: SAWCoreScaffolding.Inhabited b) (f: forall
+                (_1: a) (_2: b),
+                a) (z: a)
       =>
       @CryptolPrimitivesForSAWCore.Num_rect (fun (n1: Num)
             =>
@@ -10661,8 +10621,7 @@ Definition ecFoldlPrime: forall (n: Num) (a b: Type) {Inh_b:
                 (_3: b),
                 a) (_3: a) (_4: seq n b),
         a :=
-   fun (n: Num) (a: Type) (b: Type) (Inh_b: SAWCoreScaffolding.Inhabited b)
-        (pa: PEq a)
+   fun (n: Num) (a b: Type) (Inh_b: SAWCoreScaffolding.Inhabited b) (pa: PEq a)
       =>
       ecFoldl n a b
    .
@@ -10671,7 +10630,7 @@ Definition ecScanl: forall (n: Num) (a b: Type) (_1: forall (_1: a) (_2: b), a)
         (_2: a) (_3: seq n b),
         seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
                   n) a :=
-   fun (n: Num) (a: Type) (b: Type) (f: forall (_1: a) (_2: b), a) (z: a)
+   fun (n: Num) (a b: Type) (f: forall (_1: a) (_2: b), a) (z: a)
       =>
       @CryptolPrimitivesForSAWCore.Num_rect (fun (n1: Num)
             =>
@@ -10689,17 +10648,17 @@ Definition ecScanl: forall (n: Num) (a b: Type) (_1: forall (_1: a) (_2: b), a)
    .
 
 Definition TCFloat: forall (_1 _2: Num), Type :=
-   fun (_1: Num) (_2: Num)
+   fun (_1 _2: Num)
       =>
       SAWCoreScaffolding.UnitType
    .
 
 Definition PEqFloat: forall (e p: Num), PEq (TCFloat e p) :=
-   fun (e: Num) (p: Num)
+   fun (e p: Num)
       =>
       @SAWCoreScaffolding.RecordCons "eq"%string (forall (x y: TCFloat e p),
-              Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil (fun (x: 
-                 TCFloat e p) (y: TCFloat e p)
+              Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil (fun (x y: 
+                 TCFloat e p)
             =>
             SAWCoreScaffolding.error Init.Datatypes.bool
                "Unimplemented: (==) Float"%string
@@ -10707,7 +10666,7 @@ Definition PEqFloat: forall (e p: Num), PEq (TCFloat e p) :=
    .
 
 Definition PCmpFloat: forall (e p: Num), PCmp (TCFloat e p) :=
-   fun (e: Num) (p: Num)
+   fun (e p: Num)
       =>
       let var__0
          :=
@@ -10733,7 +10692,7 @@ Definition PCmpFloat: forall (e p: Num), PCmp (TCFloat e p) :=
                (SAWCoreScaffolding.RecordTypeCons "lt"%string (forall
                        (x y: var__0),
                        Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil))
-            (fun (x: var__0) (y: var__0) (k: Init.Datatypes.bool)
+            (fun (x y: var__0) (k: Init.Datatypes.bool)
                =>
                SAWCoreScaffolding.error Init.Datatypes.bool
                   "Unimplemented: Cmp Float"%string
@@ -10742,14 +10701,14 @@ Definition PCmpFloat: forall (e p: Num), PCmp (TCFloat e p) :=
                (SAWCoreScaffolding.RecordTypeCons "lt"%string (forall
                        (x y: var__0),
                        Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil)
-               (fun (x: var__0) (y: var__0)
+               (fun (x y: var__0)
                   =>
                   SAWCoreScaffolding.error Init.Datatypes.bool
                      "Unimplemented: Cmp Float"%string
                ) (@SAWCoreScaffolding.RecordCons "lt"%string (forall
                        (x y: var__0),
                        Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil
-                  (fun (x: var__0) (y: var__0)
+                  (fun (x y: var__0)
                      =>
                      SAWCoreScaffolding.error Init.Datatypes.bool
                         "Unimplemented: Cmp Float"%string
@@ -10757,13 +10716,13 @@ Definition PCmpFloat: forall (e p: Num), PCmp (TCFloat e p) :=
    .
 
 Definition PZeroFloat: forall (e p: Num), PZero (TCFloat e p) :=
-   fun (e: Num) (p: Num)
+   fun (e p: Num)
       =>
       SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: Zero Float"%string
    .
 
 Definition PRingFloat: forall (e p: Num), PRing (TCFloat e p) :=
-   fun (e: Num) (p: Num)
+   fun (e p: Num)
       =>
       let var__0
          :=
@@ -10799,7 +10758,7 @@ Definition PRingFloat: forall (e p: Num), PRing (TCFloat e p) :=
                      (SAWCoreScaffolding.RecordTypeCons "int"%string (forall
                              (i: SAWCoreScaffolding.Integer),
                              var__0) SAWCoreScaffolding.RecordTypeNil)))) (fun
-                 (x: var__0) (y: var__0)
+                 (x y: var__0)
                =>
                SAWCoreScaffolding.error var__0 "Unimplemented: (+) Float"%string
             ) (@SAWCoreScaffolding.RecordCons "sub"%string (forall
@@ -10814,7 +10773,7 @@ Definition PRingFloat: forall (e p: Num), PRing (TCFloat e p) :=
                      (SAWCoreScaffolding.RecordTypeCons "int"%string (forall
                              (i: SAWCoreScaffolding.Integer),
                              var__0) SAWCoreScaffolding.RecordTypeNil))) (fun
-                    (x: var__0) (y: var__0)
+                    (x y: var__0)
                   =>
                   SAWCoreScaffolding.error var__0
                      "Unimplemented: (-) Float"%string
@@ -10827,7 +10786,7 @@ Definition PRingFloat: forall (e p: Num), PRing (TCFloat e p) :=
                      (SAWCoreScaffolding.RecordTypeCons "int"%string (forall
                              (i: SAWCoreScaffolding.Integer),
                              var__0) SAWCoreScaffolding.RecordTypeNil)) (fun
-                       (x: var__0) (y: var__0)
+                       (x y: var__0)
                      =>
                      SAWCoreScaffolding.error var__0
                         "Unimplemented: (*) Float"%string
@@ -10852,7 +10811,7 @@ Definition PRingFloat: forall (e p: Num), PRing (TCFloat e p) :=
    .
 
 Definition PFieldFloat: forall (e p: Num), PField (TCFloat e p) :=
-   fun (e: Num) (p: Num)
+   fun (e p: Num)
       =>
       let var__0
          :=
@@ -10874,8 +10833,7 @@ Definition PFieldFloat: forall (e p: Num), PField (TCFloat e p) :=
                   "Unimplemented: recip Float"%string
             ) (@SAWCoreScaffolding.RecordCons "fieldDiv"%string (forall
                     (x y: var__0),
-                    var__0) SAWCoreScaffolding.RecordTypeNil (fun (x: var__0)
-                    (y: var__0)
+                    var__0) SAWCoreScaffolding.RecordTypeNil (fun (x y: var__0)
                   =>
                   SAWCoreScaffolding.error var__0
                      "Unimplemented: (/.) Float"%string
@@ -10884,7 +10842,7 @@ Definition PFieldFloat: forall (e p: Num), PField (TCFloat e p) :=
 
 Definition PRoundFloat: forall (e p: Num),
         PRound (TCFloat e p) :=
-   fun (e: Num) (p: Num)
+   fun (e p: Num)
       =>
       let var__0
          :=
@@ -10986,27 +10944,26 @@ Definition PRoundFloat: forall (e p: Num),
    .
 
 Definition PLiteralFloat: forall (e p: Num), PLiteral (TCFloat e p) :=
-   fun (e: Num) (p: Num) (x: Init.Datatypes.nat)
+   fun (e p: Num) (x: Init.Datatypes.nat)
       =>
       SAWCoreScaffolding.error (TCFloat e p)
          "Unimplemented: Literal Float"%string
    .
 
 Definition PFLiteralFloat: forall (e p: Num), PFLiteral (TCFloat e p) :=
-   fun (e: Num) (p: Num) (m: Init.Datatypes.nat) (n: Init.Datatypes.nat)
-        (r: Init.Datatypes.nat)
+   fun (e p: Num) (m n r: Init.Datatypes.nat)
       =>
       SAWCoreScaffolding.Unit
    .
 
 Definition ecFpNaN: forall (e p: Num), TCFloat e p :=
-   fun (e: Num) (p: Num)
+   fun (e p: Num)
       =>
       SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpNaN"%string
    .
 
 Definition ecFpPosInf: forall (e p: Num), TCFloat e p :=
-   fun (e: Num) (p: Num)
+   fun (e p: Num)
       =>
       SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpPosInf"%string
    .
@@ -11014,14 +10971,14 @@ Definition ecFpPosInf: forall (e p: Num), TCFloat e p :=
 Definition ecFpFromBits: forall (e p: Num) (_1: 
            seq (tcAdd e p) Init.Datatypes.bool),
         TCFloat e p :=
-   fun (e: Num) (p: Num) (_1: seq (tcAdd e p) Init.Datatypes.bool)
+   fun (e p: Num) (_1: seq (tcAdd e p) Init.Datatypes.bool)
       =>
       SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpFromBits"%string
    .
 
 Definition ecFpToBits: forall (e p: Num) (_1: TCFloat e p),
         seq (tcAdd e p) Init.Datatypes.bool :=
-   fun (e: Num) (p: Num) (_1: TCFloat e p)
+   fun (e p: Num) (_1: TCFloat e p)
       =>
       SAWCoreScaffolding.error (seq (tcAdd e p) Init.Datatypes.bool)
          "Unimplemented: fpToBits"%string
@@ -11029,7 +10986,7 @@ Definition ecFpToBits: forall (e p: Num) (_1: TCFloat e p),
 
 Definition ecFpEq: forall (e p: Num) (_1 _2: TCFloat e p),
         Init.Datatypes.bool :=
-   fun (e: Num) (p: Num) (_1: TCFloat e p) (_2: TCFloat e p)
+   fun (e p: Num) (_1 _2: TCFloat e p)
       =>
       SAWCoreScaffolding.error Init.Datatypes.bool "Unimplemented: =.="%string
    .
@@ -11040,11 +10997,11 @@ Definition ecFpAdd: forall (e p: Num) (_1:
                  (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
               Init.Datatypes.bool) (_2 _3: TCFloat e p),
         TCFloat e p :=
-   fun (e: Num) (p: Num) (_1: 
+   fun (e p: Num) (_1: 
            SAWCoreVectorsAsRocqVectors.Vec 
               (Stdlib.PArith.BinPos.Pos.to_nat 
                  (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
-              Init.Datatypes.bool) (_2: TCFloat e p) (_3: TCFloat e p)
+              Init.Datatypes.bool) (_2 _3: TCFloat e p)
       =>
       SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpAdd"%string
    .
@@ -11055,11 +11012,11 @@ Definition ecFpSub: forall (e p: Num) (_1:
                  (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
               Init.Datatypes.bool) (_2 _3: TCFloat e p),
         TCFloat e p :=
-   fun (e: Num) (p: Num) (_1: 
+   fun (e p: Num) (_1: 
            SAWCoreVectorsAsRocqVectors.Vec 
               (Stdlib.PArith.BinPos.Pos.to_nat 
                  (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
-              Init.Datatypes.bool) (_2: TCFloat e p) (_3: TCFloat e p)
+              Init.Datatypes.bool) (_2 _3: TCFloat e p)
       =>
       SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpSub"%string
    .
@@ -11070,11 +11027,11 @@ Definition ecFpMul: forall (e p: Num) (_1:
                  (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
               Init.Datatypes.bool) (_2 _3: TCFloat e p),
         TCFloat e p :=
-   fun (e: Num) (p: Num) (_1: 
+   fun (e p: Num) (_1: 
            SAWCoreVectorsAsRocqVectors.Vec 
               (Stdlib.PArith.BinPos.Pos.to_nat 
                  (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
-              Init.Datatypes.bool) (_2: TCFloat e p) (_3: TCFloat e p)
+              Init.Datatypes.bool) (_2 _3: TCFloat e p)
       =>
       SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpMul"%string
    .
@@ -11085,18 +11042,18 @@ Definition ecFpDiv: forall (e p: Num) (_1:
                  (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
               Init.Datatypes.bool) (_2 _3: TCFloat e p),
         TCFloat e p :=
-   fun (e: Num) (p: Num) (_1: 
+   fun (e p: Num) (_1: 
            SAWCoreVectorsAsRocqVectors.Vec 
               (Stdlib.PArith.BinPos.Pos.to_nat 
                  (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
-              Init.Datatypes.bool) (_2: TCFloat e p) (_3: TCFloat e p)
+              Init.Datatypes.bool) (_2 _3: TCFloat e p)
       =>
       SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpDiv"%string
    .
 
 Definition ecFpToRational: forall (e p: Num) (_1: TCFloat e p),
         SAWCoreScaffolding.Rational :=
-   fun (e: Num) (p: Num) (_1: TCFloat e p)
+   fun (e p: Num) (_1: TCFloat e p)
       =>
       SAWCoreScaffolding.error SAWCoreScaffolding.Rational
          "Unimplemented: fpToRational"%string
@@ -11108,7 +11065,7 @@ Definition ecFpFromRational: forall (e p: Num) (_1:
                  (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
               Init.Datatypes.bool) (_2: SAWCoreScaffolding.Rational),
         TCFloat e p :=
-   fun (e: Num) (p: Num) (_1: 
+   fun (e p: Num) (_1: 
            SAWCoreVectorsAsRocqVectors.Vec 
               (Stdlib.PArith.BinPos.Pos.to_nat 
                  (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
@@ -11119,28 +11076,28 @@ Definition ecFpFromRational: forall (e p: Num) (_1:
    .
 
 Definition fpIsNaN: forall (e p: Num) (_1: TCFloat e p), Init.Datatypes.bool :=
-   fun (e: Num) (p: Num) (x: TCFloat e p)
+   fun (e p: Num) (x: TCFloat e p)
       =>
       SAWCoreScaffolding.error Init.Datatypes.bool
          "Unimplemented: fpIsNaN"%string
    .
 
 Definition fpIsInf: forall (e p: Num) (_1: TCFloat e p), Init.Datatypes.bool :=
-   fun (e: Num) (p: Num) (x: TCFloat e p)
+   fun (e p: Num) (x: TCFloat e p)
       =>
       SAWCoreScaffolding.error Init.Datatypes.bool
          "Unimplemented: fpIsInf"%string
    .
 
 Definition fpIsZero: forall (e p: Num) (_1: TCFloat e p), Init.Datatypes.bool :=
-   fun (e: Num) (p: Num) (x: TCFloat e p)
+   fun (e p: Num) (x: TCFloat e p)
       =>
       SAWCoreScaffolding.error Init.Datatypes.bool
          "Unimplemented: fpIsZero"%string
    .
 
 Definition fpIsNeg: forall (e p: Num) (_1: TCFloat e p), Init.Datatypes.bool :=
-   fun (e: Num) (p: Num) (x: TCFloat e p)
+   fun (e p: Num) (x: TCFloat e p)
       =>
       SAWCoreScaffolding.error Init.Datatypes.bool
          "Unimplemented: fpIsNeg"%string
@@ -11148,7 +11105,7 @@ Definition fpIsNeg: forall (e p: Num) (_1: TCFloat e p), Init.Datatypes.bool :=
 
 Definition fpIsNormal: forall (e p: Num) (_1: TCFloat e p),
         Init.Datatypes.bool :=
-   fun (e: Num) (p: Num) (x: TCFloat e p)
+   fun (e p: Num) (x: TCFloat e p)
       =>
       SAWCoreScaffolding.error Init.Datatypes.bool
          "Unimplemented: fpIsNormal"%string
@@ -11156,7 +11113,7 @@ Definition fpIsNormal: forall (e p: Num) (_1: TCFloat e p),
 
 Definition fpIsSubnormal: forall (e p: Num) (_1: TCFloat e p),
         Init.Datatypes.bool :=
-   fun (e: Num) (p: Num) (x: TCFloat e p)
+   fun (e p: Num) (x: TCFloat e p)
       =>
       SAWCoreScaffolding.error Init.Datatypes.bool
          "Unimplemented: fpIsSubnormal"%string
@@ -11168,18 +11125,17 @@ Definition fpFMA: forall (e p: Num) (_1:
                  (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
               Init.Datatypes.bool) (_2 _3 _4: TCFloat e p),
         TCFloat e p :=
-   fun (e: Num) (p: Num) (r: 
+   fun (e p: Num) (r: 
            SAWCoreVectorsAsRocqVectors.Vec 
               (Stdlib.PArith.BinPos.Pos.to_nat 
                  (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
-              Init.Datatypes.bool) (x: TCFloat e p) (y: TCFloat e p) (z: 
-           TCFloat e p)
+              Init.Datatypes.bool) (x y z: TCFloat e p)
       =>
       SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpFMA"%string
    .
 
 Definition fpAbs: forall (e p: Num) (_1: TCFloat e p), TCFloat e p :=
-   fun (e: Num) (p: Num) (x: TCFloat e p)
+   fun (e p: Num) (x: TCFloat e p)
       =>
       SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpAbs"%string
    .
@@ -11190,7 +11146,7 @@ Definition fpSqrt: forall (e p: Num) (_1:
                  (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
               Init.Datatypes.bool) (_2: TCFloat e p),
         TCFloat e p :=
-   fun (e: Num) (p: Num) (r: 
+   fun (e p: Num) (r: 
            SAWCoreVectorsAsRocqVectors.Vec 
               (Stdlib.PArith.BinPos.Pos.to_nat 
                  (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
@@ -11260,7 +11216,7 @@ Definition ecUpdateEnd: forall (n: Num) (a: Type) {Inh_a:
 
 Definition ecTrunc: forall (m n: Num) (_1: seq (tcAdd m n) Init.Datatypes.bool),
         seq n Init.Datatypes.bool :=
-   finNumRec2 (fun (m: Num) (n: Num)
+   finNumRec2 (fun (m n: Num)
          =>
          forall (_1: seq (tcAdd m n) Init.Datatypes.bool),
               seq n Init.Datatypes.bool
@@ -11268,7 +11224,7 @@ Definition ecTrunc: forall (m n: Num) (_1: seq (tcAdd m n) Init.Datatypes.bool),
 
 Definition ecUExt: forall (m n: Num) (_1: seq n Init.Datatypes.bool),
         seq (tcAdd m n) Init.Datatypes.bool :=
-   finNumRec2 (fun (m: Num) (n: Num)
+   finNumRec2 (fun (m n: Num)
          =>
          forall (_1: seq n Init.Datatypes.bool),
               seq (tcAdd m n) Init.Datatypes.bool
@@ -11276,11 +11232,11 @@ Definition ecUExt: forall (m n: Num) (_1: seq n Init.Datatypes.bool),
 
 Definition ecSExt: forall (m n: Num) (_1: seq n Init.Datatypes.bool),
         seq (tcAdd m n) Init.Datatypes.bool :=
-   finNumRec2 (fun (m: Num) (n: Num)
+   finNumRec2 (fun (m n: Num)
          =>
          forall (_1: seq n Init.Datatypes.bool),
               seq (tcAdd m n) Init.Datatypes.bool
-      ) (fun (m: Init.Datatypes.nat) (n: Init.Datatypes.nat)
+      ) (fun (m n: Init.Datatypes.nat)
          =>
          SAWCorePrelude.natCase (fun (n': Init.Datatypes.nat)
                =>
@@ -11446,7 +11402,7 @@ Definition ecPmult: forall (u v: Num)
                      v) Init.Datatypes.bool),
         seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
                   (tcAdd u v)) Init.Datatypes.bool :=
-   finNumRec2 (fun (u: Num) (v: Num)
+   finNumRec2 (fun (u v: Num)
          =>
          forall
               (_1: seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
@@ -11455,7 +11411,7 @@ Definition ecPmult: forall (u v: Num)
                            v) Init.Datatypes.bool),
               seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
                         (tcAdd u v)) Init.Datatypes.bool
-      ) (fun (u: Init.Datatypes.nat) (v: Init.Datatypes.nat) (x: 
+      ) (fun (u v: Init.Datatypes.nat) (x: 
               SAWCoreVectorsAsRocqVectors.Vec 
                  (SAWCoreScaffolding.addNat 
                     (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH) u)
@@ -11496,13 +11452,13 @@ Definition ecPmod: forall (u v: Num) (_1: seq u Init.Datatypes.bool)
         (_2: seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
                      v) Init.Datatypes.bool),
         seq v Init.Datatypes.bool :=
-   finNumRec2 (fun (u: Num) (v: Num)
+   finNumRec2 (fun (u v: Num)
          =>
          forall (_1: seq u Init.Datatypes.bool)
               (_2: seq (tcAdd (TCNum (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))
                            v) Init.Datatypes.bool),
               seq v Init.Datatypes.bool
-      ) (fun (u: Init.Datatypes.nat) (v: Init.Datatypes.nat) (x: 
+      ) (fun (u v: Init.Datatypes.nat) (x: 
               SAWCoreVectorsAsRocqVectors.Vec u Init.Datatypes.bool) (y: 
               SAWCoreVectorsAsRocqVectors.Vec 
                  (SAWCoreScaffolding.addNat 
@@ -12120,7 +12076,7 @@ Definition ec_double: forall (p: Num) (_1: ProjectivePoint p),
 
 Definition ec_add_nonzero: forall (p: Num) (_1 _2: ProjectivePoint p),
         ProjectivePoint p :=
-   fun (p: Num) (x: ProjectivePoint p) (y: ProjectivePoint p)
+   fun (p: Num) (x y: ProjectivePoint p)
       =>
       SAWCoreScaffolding.error (ProjectivePoint p)
          "Unimplemented: ec_add_nonzero"%string
@@ -12137,7 +12093,7 @@ Definition ec_mult: forall (p: Num) (_1: IntModNum p) (_2: ProjectivePoint p),
 Definition ec_twin_mult: forall (p: Num) (_1: IntModNum p) (_2 _3: 
            ProjectivePoint p),
         ProjectivePoint p :=
-   fun (p: Num) (x: IntModNum p) (y: ProjectivePoint p) (z: ProjectivePoint p)
+   fun (p: Num) (x: IntModNum p) (y z: ProjectivePoint p)
       =>
       SAWCoreScaffolding.error (ProjectivePoint p)
          "Unimplemented: ec_twin_mult"%string

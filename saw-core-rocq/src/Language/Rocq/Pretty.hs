@@ -48,13 +48,13 @@ text s = PP.pretty s
 integer :: Integer -> PP.Doc ann
 integer n = PP.pretty n
 
--- | Common code to print a name with a type
-prettyNameType :: Ident -> Type -> PP.Doc ann
-prettyNameType x ty =
-    let x' = prettyIdent x
+-- | Common code to print some names with a type
+prettyNamesAndType :: [Ident] -> Type -> PP.Doc ann
+prettyNamesAndType names ty =
+    let names' = PP.hsep $ map prettyIdent names
         ty' = prettyTerm PrecNone ty
-        long = PP.nest 3 $ x' <> ":" <+> ty'
-        short = PP.group $ x' <> ":" <+> ty'
+        long = PP.nest 3 $ names' <> ":" <+> ty'
+        short = PP.group $ names' <> ":" <+> ty'
     in
     PP.flatAlt long short
 
@@ -125,21 +125,127 @@ sameTerm e1 e2 =
         (StringLit{}, _) -> False
         (Scope{}, _) -> False
 
+-- | Maybe wrapper for sameTerm
+sameMaybeTerm :: Maybe Term -> Maybe Term -> Bool
+sameMaybeTerm me1 me2 = case (me1, me2) of
+    (Nothing, Nothing) -> True
+    (Nothing, Just _) -> False
+    (Just _, Nothing) -> False
+    (Just e1, Just e2) -> sameTerm e1 e2
+
 
 ------------------------------------------------------------
 -- AST sugaring
 
+-- | Contracted regular binder.
+--
+--   Explicit parameters with no type are printed loose: "x"
+--   Explicit parameters with a type are grouped by type: "(x y: a)"
+--   Implicit parameters are grouped by maybe-type: "{x y}", "{x y: a}".
+--
+data Binder'
+    = ExplicitUntypedBinder' Ident
+    | ExplicitTypedBinders' [Ident] Type
+    | ImplicitBinders' [Ident] (Maybe Type)
+
+-- | Contracted pi-binder.
+--
+--   Anonymous pi "binders" are just type names and are printed loose,
+--   with or without braces.
+--
+--   Named pi binders are grouped first by type, and then all together
+--   with a single "forall" keyword: "forall (x y: a) {z: b}, ..."
+--
 data PiBinder'
     = AnonPiBinder' BinderImplicity Type
     | NamedPiBinders' [(BinderImplicity, [Ident], Type)]
 
 -- | Fold together adjacent binders as allowed by the concrete syntax.
+contractBinders :: [Binder] -> [Binder']
+contractBinders bs0 =
+    -- state frobs for when we're looking at implicit binders
+    -- (Just $ Left s in the state)
+    let newImplicit x mty = ([x], mty)
+        addImplicit x mty (prevnames, prevmty) =
+            if sameMaybeTerm mty prevmty then
+                Just (x : prevnames, prevmty)
+            else
+                Nothing
+        popImplicit (names, mty) =
+            ImplicitBinders' (reverse names) mty
+    in
+    -- state frobs for when we're looking at explicit binders
+    -- with types (Just $ right s in the state)
+    let newExplicit x ty = ([x], ty)
+        addExplicit x ty (prevnames, prevty) =
+            if sameTerm ty prevty then
+                Just (x : prevnames, prevty)
+            else
+                Nothing
+        popExplicit (names, ty) =
+            ExplicitTypedBinders' (reverse names) ty
+    in
+
+    -- fold function to do the contraction
+    let once (results, state) b = case state of
+          Nothing -> case b of
+              Binder Implicit x mty ->
+                  (results, Just $ Left $ newImplicit x mty)
+              Binder Explicit x Nothing ->
+                  let here = ExplicitUntypedBinder' x in
+                  (here : results, Nothing)
+              Binder Explicit x (Just ty) ->
+                  (results, Just $ Right $ newExplicit x ty)
+          Just (Left s) -> case b of
+              Binder Implicit x mty ->
+                  case addImplicit x mty s of
+                      Nothing ->
+                          let prev = popImplicit s in
+                          (prev : results, Just $ Left $ newImplicit x mty)
+                      Just s' ->
+                          (results, Just $ Left s')
+              Binder Explicit x Nothing ->
+                  let prev = popImplicit s
+                      here = ExplicitUntypedBinder' x
+                  in
+                  (here : prev : results, Nothing)
+              Binder Explicit x (Just ty) ->
+                  let prev = popImplicit s in
+                  (prev : results, Just $ Right $ newExplicit x ty)
+          Just (Right s) -> case b of
+              Binder Implicit x mty ->
+                  let prev = popExplicit s in
+                  (prev : results, Just $ Left $ newImplicit x mty)
+              Binder Explicit x Nothing ->
+                  let prev = popExplicit s
+                      here = ExplicitUntypedBinder' x
+                  in
+                  (here : prev : results, Nothing)
+              Binder Explicit x (Just ty) ->
+                  case addExplicit x ty s of
+                      Nothing ->
+                          let prev = popExplicit s in
+                          (prev : results, Just $ Right $ newExplicit x ty)
+                      Just s' ->
+                          (results, Just $ Right s')
+    in
+    let (results, state) = foldl once ([], Nothing) bs0
+        results' = case state of
+            Nothing -> results
+            Just (Left s) -> popImplicit s : results
+            Just (Right s) -> popExplicit s : results
+    in
+    reverse results'
+
+-- | Fold together adjacent pi-binders as allowed by the concrete
+--   syntax.
 --
 --   "Binders" without names can't be folded together, but names that
 --   share the same type can be, and a chain of named binders requires
 --   only one "forall" token.
 contractPiBinders :: [PiBinder] -> [PiBinder']
 contractPiBinders bs0 =
+    -- State frobs.
     let newstate imp x ty = ([], imp, [x], ty)
         addstate imp x ty (others, previmp, prevnames, prevty) =
             if imp == previmp && sameTerm ty prevty then
@@ -151,6 +257,7 @@ contractPiBinders bs0 =
             NamedPiBinders' $ reverse others'
     in
 
+    -- fold function to do the contraction
     let once (results, state) b = case state of
           Nothing -> case b of
               PiBinder imp Nothing ty ->
@@ -199,12 +306,21 @@ prettySort s = case s of
     Type -> "Type"
 
 -- | Print an ordinary (lambda/let) binder
-prettyBinder :: Binder -> PP.Doc ann
-prettyBinder b = case b of
-    Binder Explicit x Nothing   -> prettyIdent x
-    Binder Explicit x (Just ty) -> PP.parens $ prettyNameType x ty
-    Binder Implicit x Nothing    -> PP.braces $ prettyIdent x
-    Binder Implicit x (Just ty)  -> PP.braces $ prettyNameType x ty
+prettyBinder' :: Binder' -> PP.Doc ann
+prettyBinder' b = case b of
+    ExplicitUntypedBinder' x ->
+        prettyIdent x
+    ExplicitTypedBinders' names ty ->
+        PP.group $ PP.parens $ prettyNamesAndType names ty
+    ImplicitBinders' names Nothing ->
+        let names' = PP.hsep $ map prettyIdent names
+            long = PP.nest 3 names'
+            short = PP.group names'
+            entry = PP.flatAlt long short
+        in
+        PP.group $ PP.parens entry
+    ImplicitBinders' names (Just ty) ->
+        PP.group $ PP.braces $ prettyNamesAndType names ty
 
 -- | Print a pi (forall) binder
 --   (we don't seem to have a representation for @exists@)
@@ -216,11 +332,7 @@ prettyPiBinder' b = case b of
         [PP.group $ PP.braces (prettyTerm PrecApp ty) <+> "->"]
     NamedPiBinders' entries ->
         let prettyEntry (isLast, (imp, names, ty)) =
-              let names' = PP.hsep $ map prettyIdent names
-                  ty' = prettyTerm PrecNone ty
-                  long = PP.nest 3 $ names' <> ":" <+> ty'
-                  short = PP.group $ names' <> ":" <+> ty'
-                  entry = PP.flatAlt long short
+              let entry = prettyNamesAndType names ty
                   entry' = case imp of
                       Explicit -> PP.parens entry
                       Implicit -> PP.braces entry
@@ -234,13 +346,22 @@ prettyPiBinder' b = case b of
         let entries' = map prettyEntry $ markLast entries in
         "forall" : entries'
 
+-- | Print a chain of bindings. Contract the chain where syntactically
+--   possible, because it's a lot more readable that way.
+--
+--   The return value is one doc for each contracted group so they can
+--   be laid out as desired.
+--
+prettyBinders :: [Binder] -> [PP.Doc ann]
+prettyBinders binders =
+    map prettyBinder' $ contractBinders binders
+
 -- | Print a chain of foralls. Contract the chain where syntactically
 --   possible, because it's a lot more readable that way.
 --
---   The return value is one doc for each entry in the original list
---   (plus one for each "forall" keyword) so they can be laid out as
---   desired.
---
+--   The return value is one doc for each contracted group, meaning
+--   that each entry under a "forall" keyword is sent back separately,
+--   so they can be laid out as desired.
 --
 prettyPiBinders :: [PiBinder] -> [PP.Doc ann]
 prettyPiBinders binders =
@@ -307,14 +428,14 @@ prettyTerm :: Prec -> Term -> PP.Doc ann
 prettyTerm p e0 =
   case e0 of
     Lambda binders e1 ->
-        let binders' = map (\b -> PP.group $ prettyBinder b) binders
+        let binders' = prettyBinders binders
             e1' = prettyTerm PrecLambda e1
             header = prettyFnHeader "fun" binders' Nothing "=>"
         in
         parensIf (p > PrecLambda) $ prettyFunction header e1'
     Fix ident binders returnType body ->
         let ident' = prettyIdent ident
-            binders' = map (\b -> PP.group $ prettyBinder b) binders
+            binders' = prettyBinders binders
             returnType' = Just $ prettyTerm PrecNone returnType
             body' = prettyTerm PrecLambda body
             intro = "fix" <+> ident'
@@ -333,7 +454,7 @@ prettyTerm p e0 =
         parensIf (p > PrecLambda) $ PP.flatAlt long short
     Let x binders mty t body ->
         let x' = prettyIdent x
-            binders' = map (\b -> PP.group $ prettyBinder b) binders
+            binders' = prettyBinders binders
             mty' = prettyTerm PrecNone <$> mty
             t' = prettyTerm PrecNone t
             body' = prettyTerm PrecLambda body
@@ -472,7 +593,7 @@ prettyConstructor (Constructor {..}) =
 prettyInductive :: Inductive -> PP.Doc ann
 prettyInductive (Inductive {..}) =
     let name' = prettyIdent inductiveName
-        params' = map (\p -> PP.group $ prettyBinder p) inductiveParameters
+        params' = prettyBinders inductiveParameters
         indices' = prettyPiBinders inductiveIndices
         sort' = prettySort inductiveSort
         ctors' = map prettyConstructor inductiveConstructors
@@ -511,7 +632,7 @@ prettyBasicDecl what nm ty =
 prettyDefinition :: Ident -> [Binder] -> Maybe Type -> Term -> PP.Doc ann
 prettyDefinition nm params mty body =
     let nm' = prettyIdent nm
-        params' = map (\p -> PP.group $ prettyBinder p) params
+        params' = prettyBinders params
         mty' = prettyTerm PrecNone <$> mty
         body' = prettyTerm PrecNone body
         intro' = "Definition" <+> nm'

@@ -113,7 +113,7 @@ Definition TestLambda_TwoArgs:
       :=
       CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0
    in
-   (fun (x: var__1) (y: var__1)
+   (fun (x y: var__1)
       =>
       let var__3
          :=
@@ -184,7 +184,7 @@ Definition TestLambda_Partial: forall (y:
       :=
       CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool
    in
-   (fun (x: var__1) (y: var__1)
+   (fun (x y: var__1)
       =>
       let var__2
          :=
