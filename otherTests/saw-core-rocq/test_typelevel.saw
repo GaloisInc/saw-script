@@ -1,13 +1,13 @@
 // Test: Cryptol built-in type-level operations.
 let t1 = {{ `(max (width (width 9)) (width 9)) == 4 }};
-write_rocq_term "TestTypelvl_MaxWidth" [] [] "" t1;
+write_rocq_term "TestTypelvl_MaxWidth" [] [] "test_typelevel_1.v" t1;
 
 let t2 = {{ `(min (width (width 9)) (width 9)) == 3 }};
-write_rocq_term "TestTypelvl_MinWidth" [] [] "" t2;
+write_rocq_term "TestTypelvl_MinWidth" [] [] "test_typelevel_2.v" t2;
 
 let t3 = {{ `((1 + (2 * 3) % 3) / 3) }};
-write_rocq_term "TestTypelvl_Arith1" [] [] "" t3;
+write_rocq_term "TestTypelvl_Arith1" [] [] "test_typelevel_3.v" t3;
 
 let t4 = {{ `(lg2 ((3^^3 /^ 3) %^ 3)) }};
-write_rocq_term "TestTypelvl_Arith2" [] [] "" t4;
+write_rocq_term "TestTypelvl_Arith2" [] [] "test_typelevel_4.v" t4;
 

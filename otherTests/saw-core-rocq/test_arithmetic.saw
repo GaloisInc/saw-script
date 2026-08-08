@@ -1,36 +1,36 @@
 // Test: Arithmetic, bitwise operations.
 let t1 = {{ (5 : [8]) + (3 - 3) * 2 }};
-write_rocq_term "TestArith" [] [] "" t1;
+write_rocq_term "TestArith" [] [] "test_arithmetic_1.v" t1;
 
 let t2 = {{ (5 : [8]) / 0 }};
-write_rocq_term "TestArith_DivZero" [] [] "" t2;
+write_rocq_term "TestArith_DivZero" [] [] "test_arithmetic_2.v" t2;
 
 let t3 = {{ (10 : [8]) / 2 }};
-write_rocq_term "TestArith_Div" [] [] "" t3;
+write_rocq_term "TestArith_Div" [] [] "test_arithmetic_3.v" t3;
 
 let t4 = {{ (10 : [8]) % 3 }};
-write_rocq_term "TestArith_Mod" [] [] "" t4;
+write_rocq_term "TestArith_Mod" [] [] "test_arithmetic_4.v" t4;
 
 let t5 = {{ ((0xFF : [8]) && 0x0F) || 0xE0 }};
-write_rocq_term "TestArith_AndOr" [] [] "" t5;
+write_rocq_term "TestArith_AndOr" [] [] "test_arithmetic_5.v" t5;
 
 let t6 = {{ (0xFF : [8]) ^ 0xAA }};
-write_rocq_term "TestArith_Xor" [] [] "" t6;
+write_rocq_term "TestArith_Xor" [] [] "test_arithmetic_6.v" t6;
 
 let t7 = {{ ~(0xAA : [8]) }};
-write_rocq_term "TestArith_Complement" [] [] "" t7;
+write_rocq_term "TestArith_Complement" [] [] "test_arithmetic_7.v" t7;
 
 let t8 = {{ -(5 : [8]) }};
-write_rocq_term "TestArith_Negate" [] [] "" t8;
+write_rocq_term "TestArith_Negate" [] [] "test_arithmetic_8.v" t8;
 
 let t9 = {{ (8 : [8]) << 2 }};
-write_rocq_term "TestArith_ShiftLeft" [] [] "" t9;
+write_rocq_term "TestArith_ShiftLeft" [] [] "test_arithmetic_9.v" t9;
 
 let t10 = {{ (8 : [8]) >> 2 }};
-write_rocq_term "TestArith_ShiftRight" [] [] "" t10;
+write_rocq_term "TestArith_ShiftRight" [] [] "test_arithmetic_10.v" t10;
 
 let t11 = {{ sext`{16} (5 : [8]) }};
-write_rocq_term "TestArith_SignExtend" [] [] "" t11;
+write_rocq_term "TestArith_SignExtend" [] [] "test_arithmetic_11.v" t11;
 
 let t12 = {{ zext`{16} (5 : [8]) }};
-write_rocq_term "TestArith_ZeroExtend" [] [] "" t12;
+write_rocq_term "TestArith_ZeroExtend" [] [] "test_arithmetic_12.v" t12;

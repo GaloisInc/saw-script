@@ -1,4 +1,5 @@
 test_offline_rocq*_prove0.v
 *.log
-*.rawlog
+*.v
 *.log.diff
+*.v.diff

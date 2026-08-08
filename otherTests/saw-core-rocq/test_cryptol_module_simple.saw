@@ -1,2 +1,2 @@
 // Test: write_rocq_cryptol_module command
-write_rocq_cryptol_module "Simple.cry" "" [] [];
+write_rocq_cryptol_module "Simple.cry" "test_cryptol_module_simple_1.v" [] [];

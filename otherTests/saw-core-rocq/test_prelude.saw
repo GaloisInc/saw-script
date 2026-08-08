@@ -1,1 +1,1 @@
-write_rocq_sawcore_prelude "" [] [];
+write_rocq_sawcore_prelude "test_prelude_1.v" [] [];
