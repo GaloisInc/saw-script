@@ -143,7 +143,7 @@ sameMaybeTerm me1 me2 = case (me1, me2) of
 --   Explicit parameters with a type are grouped by type: "(x y: a)"
 --   Implicit parameters are grouped by maybe-type: "{x y}", "{x y: a}".
 --
-data Binder'
+data Binders'
     = ExplicitUntypedBinder' Ident
     | ExplicitTypedBinders' [Ident] Type
     | ImplicitBinders' [Ident] (Maybe Type)
@@ -156,12 +156,12 @@ data Binder'
 --   Named pi binders are grouped first by type, and then all together
 --   with a single "forall" keyword: "forall (x y: a) {z: b}, ..."
 --
-data PiBinder'
+data PiBinders'
     = AnonPiBinder' BinderImplicity Type
     | NamedPiBinders' [(BinderImplicity, [Ident], Type)]
 
 -- | Fold together adjacent binders as allowed by the concrete syntax.
-contractBinders :: [Binder] -> [Binder']
+contractBinders :: [Binder] -> [Binders']
 contractBinders bs0 =
     -- state frobs for when we're looking at implicit binders
     -- (Just $ Left s in the state)
@@ -248,7 +248,7 @@ type State = ([(BinderImplicity, [Ident], Type)], BinderImplicity, [Ident], Type
 --   "Binders" without names can't be folded together, but names that
 --   share the same type can be, and a chain of named binders requires
 --   only one "forall" token.
-contractPiBinders :: [PiBinder] -> [PiBinder']
+contractPiBinders :: [PiBinder] -> [PiBinders']
 contractPiBinders bs0 =
     -- State frobs.
     let newstate :: BinderImplicity -> Ident -> Type -> State
@@ -261,14 +261,14 @@ contractPiBinders bs0 =
             else
                 ((previmp, reverse prevnames, prevty) : others, imp, [x], ty)
 
-        popstate :: State -> PiBinder'
+        popstate :: State -> PiBinders'
         popstate (others, imp, names, ty) =
             let others' = (imp, reverse names, ty) : others in
             NamedPiBinders' $ reverse others'
     in
 
     -- fold function to do the contraction
-    let once :: ([PiBinder'], Maybe State) -> PiBinder -> ([PiBinder'], Maybe State)
+    let once :: ([PiBinders'], Maybe State) -> PiBinder -> ([PiBinders'], Maybe State)
         once (results, state) b = case state of
           Nothing -> case b of
               PiBinder imp Nothing ty ->
@@ -287,7 +287,7 @@ contractPiBinders bs0 =
                   (results, Just s')
     in
     let (results, state) = foldl once ([], Nothing) bs0
-        results' :: [PiBinder']
+        results' :: [PiBinders']
         results' = case state of
             Nothing -> results
             Just s -> popstate s : results
@@ -317,8 +317,8 @@ prettySort s = case s of
     Set -> "Set"
     Type -> "Type"
 
--- | Print an ordinary (lambda/let) binder
-prettyBinder' :: Binder' -> PP.Doc ann
+-- | Print an ordinary (lambda/let) binder (group)
+prettyBinder' :: Binders' -> PP.Doc ann
 prettyBinder' b = case b of
     ExplicitUntypedBinder' x ->
         prettyIdent x
@@ -336,7 +336,7 @@ prettyBinder' b = case b of
 
 -- | Print a pi (forall) binder
 --   (we don't seem to have a representation for @exists@)
-prettyPiBinder' :: PiBinder' -> [PP.Doc ann]
+prettyPiBinder' :: PiBinders' -> [PP.Doc ann]
 prettyPiBinder' b = case b of
     AnonPiBinder' Explicit ty ->
         [PP.group $ prettyTerm PrecApp ty <+> "->"]
