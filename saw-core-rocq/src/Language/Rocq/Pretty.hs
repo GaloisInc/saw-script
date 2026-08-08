@@ -66,8 +66,8 @@ parensIf p d = if p then PP.parens d else d
 ------------------------------------------------------------
 -- AST tools
 
--- | Check if two terms are the "same". This is used to fold together
---   forall entries (like "forall (x y: nat)") and so can be
+-- | Check if two terms are the \"same\". This is used to fold together
+--   forall entries (like @forall (x y: nat)@) and so can be
 --   conservative. It does only as much work as needed to make real
 --   occurrences work, and calls everything else false. In particular
 --   we make no attempt to handle alpha-equivalence.
