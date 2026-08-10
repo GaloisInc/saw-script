@@ -44,7 +44,7 @@ span.spaces    { background: white }
 <span class="lineno">   25 </span>  , scFirstOrderValue
 <span class="lineno">   26 </span>  )
 <span class="lineno">   27 </span>
-<span class="lineno">   28 </span>import SAWCore.FloatHelpers (fpCheckStatus, fpOpts)
+<span class="lineno">   28 </span>import SAWCore.FloatHelpers (fpOpts)
 <span class="lineno">   29 </span>import SAWCore.Module (ModuleMap)
 <span class="lineno">   30 </span>import SAWCore.Name (VarName(..))
 <span class="lineno">   31 </span>import SAWCore.SATQuery
@@ -62,7 +62,7 @@ span.spaces    { background: white }
 <span class="lineno">   43 </span>import qualified Data.IntMap as IntMap
 <span class="lineno">   44 </span>import qualified Data.Map as Map
 <span class="lineno">   45 </span>import Data.Map (Map)
-<span class="lineno">   46 </span>import Data.Ratio ((%), numerator, denominator)
+<span class="lineno">   46 </span>import Data.Ratio ((%))
 <span class="lineno">   47 </span>import qualified Data.Set as Set
 <span class="lineno">   48 </span>import LibBF
 <span class="lineno">   49 </span>import Numeric.Natural (Natural)
@@ -122,19 +122,19 @@ span.spaces    { background: white }
 <span class="lineno">  103 </span><span class="spaces">     </span><span class="istickedoff">| x &lt; 10   -&gt; pure bfNegZero</span>
 <span class="lineno">  104 </span><span class="spaces">     </span><span class="istickedoff">| <span class="tickonlyfalse">x &lt;= sz</span>       -&gt; <span class="nottickedoff">randomSubnormal</span>  -- about 10% of the time</span>
 <span class="lineno">  105 </span><span class="spaces">     </span><span class="istickedoff">| x &lt;= 4*(sz+1) -&gt; randomBinary     -- about 40%</span>
-<span class="lineno">  106 </span><span class="spaces">     </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>     -&gt; randomNormal (toInteger sz)  -- remaining ~50%</span>
+<span class="lineno">  106 </span><span class="spaces">     </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>     -&gt; randomNormal     -- remaining ~50%</span>
 <span class="lineno">  107 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  108 </span><span class="spaces">    </span><span class="istickedoff">opts = fpOpts e p NearEven</span>
 <span class="lineno">  109 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  110 </span><span class="spaces">    </span><span class="istickedoff">eInt = fromIntegral @Natural @Int e</span>
 <span class="lineno">  111 </span><span class="spaces">    </span><span class="istickedoff">pInt = fromIntegral @Natural @Int p</span>
 <span class="lineno">  112 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  113 </span><span class="spaces">    </span><span class="istickedoff">emax = bit eInt - 1</span>
-<span class="lineno">  114 </span><span class="spaces">    </span><span class="istickedoff">smax = bit pInt - 1</span>
-<span class="lineno">  115 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  116 </span><span class="spaces">    </span><span class="istickedoff">-- Generates floats uniformly chosen from among all bitpatterns.</span>
-<span class="lineno">  117 </span><span class="spaces">    </span><span class="istickedoff">randomBinary :: m BigFloat</span>
-<span class="lineno">  118 </span><span class="spaces">    </span><span class="istickedoff">randomBinary = do</span>
+<span class="lineno">  113 </span><span class="spaces">    </span><span class="istickedoff">-- Generates floats uniformly chosen from among all bitpatterns.</span>
+<span class="lineno">  114 </span><span class="spaces">    </span><span class="istickedoff">randomBinary :: m BigFloat</span>
+<span class="lineno">  115 </span><span class="spaces">    </span><span class="istickedoff">randomBinary = do</span>
+<span class="lineno">  116 </span><span class="spaces">      </span><span class="istickedoff">-- NB: Use the size (e+p) below: 1 bit for the sign bit, e bits for the</span>
+<span class="lineno">  117 </span><span class="spaces">      </span><span class="istickedoff">-- exponent, and (p - 1) bits for the mantissa for a total of</span>
+<span class="lineno">  118 </span><span class="spaces">      </span><span class="istickedoff">-- (1 + e + (p - 1)) = (e+p) bits.</span>
 <span class="lineno">  119 </span><span class="spaces">      </span><span class="istickedoff">v &lt;- getRandomR (0, bit (eInt+pInt) - 1)</span>
 <span class="lineno">  120 </span><span class="spaces">      </span><span class="istickedoff">pure $ bfFromBits opts v</span>
 <span class="lineno">  121 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -143,89 +143,76 @@ span.spaces    { background: white }
 <span class="lineno">  124 </span><span class="spaces">    </span><span class="istickedoff">randomSubnormal :: m BigFloat</span>
 <span class="lineno">  125 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">randomSubnormal = do</span></span>
 <span class="lineno">  126 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">sgn &lt;- getRandom</span></span>
-<span class="lineno">  127 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">v &lt;- getRandomR (1, bit pInt - 1)</span></span>
-<span class="lineno">  128 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let bf = bfFromBits opts v</span></span>
-<span class="lineno">  129 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let bf' = if sgn then bfNeg bf else bf</span></span>
-<span class="lineno">  130 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">pure bf'</span></span>
-<span class="lineno">  131 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  132 </span><span class="spaces">    </span><span class="istickedoff">-- Generates floats where the exponent and mantissa are scaled by the size.</span>
-<span class="lineno">  133 </span><span class="spaces">    </span><span class="istickedoff">randomNormal :: Integer -&gt; m BigFloat</span>
-<span class="lineno">  134 </span><span class="spaces">    </span><span class="istickedoff">randomNormal sz = do</span>
-<span class="lineno">  135 </span><span class="spaces">      </span><span class="istickedoff">sgn &lt;- getRandom</span>
-<span class="lineno">  136 </span><span class="spaces">      </span><span class="istickedoff">ex &lt;- getRandomR ((1-emax)*sz `div` 100, (sz*emax) `div` 100)</span>
-<span class="lineno">  137 </span><span class="spaces">      </span><span class="istickedoff">mag &lt;- getRandomR (1, max 1 ((sz*smax) `div` 100))</span>
-<span class="lineno">  138 </span><span class="spaces">      </span><span class="istickedoff">let r  = fromInteger mag ^^ (ex - widthInteger mag)</span>
-<span class="lineno">  139 </span><span class="spaces">      </span><span class="istickedoff">let r' = if sgn then negate r else r</span>
-<span class="lineno">  140 </span><span class="spaces">      </span><span class="istickedoff">let bf = fpCheckStatus $</span>
-<span class="lineno">  141 </span><span class="spaces">               </span><span class="istickedoff">bfDiv</span>
-<span class="lineno">  142 </span><span class="spaces">                 </span><span class="istickedoff">opts</span>
-<span class="lineno">  143 </span><span class="spaces">                 </span><span class="istickedoff">(bfFromInteger (numerator r'))</span>
-<span class="lineno">  144 </span><span class="spaces">                 </span><span class="istickedoff">(bfFromInteger (denominator r'))</span>
-<span class="lineno">  145 </span><span class="spaces">      </span><span class="istickedoff">pure bf</span>
-<span class="lineno">  146 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  147 </span><span class="spaces">    </span><span class="istickedoff">-- Compute the number of bits required to represent the given integer.</span>
-<span class="lineno">  148 </span><span class="spaces">    </span><span class="istickedoff">widthInteger :: Integer -&gt; Integer</span>
-<span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff">widthInteger x = go' 0 (if <span class="tickonlyfalse">x &lt; 0</span> then <span class="nottickedoff">complement x</span> else x)</span>
-<span class="lineno">  150 </span><span class="spaces">      </span><span class="istickedoff">where</span>
-<span class="lineno">  151 </span><span class="spaces">        </span><span class="istickedoff">go s 0 = s</span>
-<span class="lineno">  152 </span><span class="spaces">        </span><span class="istickedoff">go s n = let s' = s + 1 in s' `seq` go s' (n `shiftR` 1)</span>
-<span class="lineno">  153 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  154 </span><span class="spaces">        </span><span class="istickedoff">go' s n</span>
-<span class="lineno">  155 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">n &lt; bit 32</span> = go s n</span>
-<span class="lineno">  156 </span><span class="spaces">          </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span>  = <span class="nottickedoff">let s' = s + 32 in s' `seq` go' s' (n `shiftR` 32)</span></span></span>
-<span class="lineno">  157 </span>
-<span class="lineno">  158 </span>execTest ::
-<span class="lineno">  159 </span>  (F.MonadFail m, MonadRandom m, MonadIO m) =&gt;
-<span class="lineno">  160 </span>  SharedContext -&gt;
-<span class="lineno">  161 </span>  ModuleMap -&gt;
-<span class="lineno">  162 </span>  Map VarName (m FirstOrderValue) -&gt;
-<span class="lineno">  163 </span>  Term -&gt;
-<span class="lineno">  164 </span>  m (Maybe [(VarName, FirstOrderValue)])
-<span class="lineno">  165 </span><span class="decl"><span class="istickedoff">execTest sc mmap vars tm =</span>
-<span class="lineno">  166 </span><span class="spaces">  </span><span class="istickedoff">do testVec &lt;- sequence vars</span>
-<span class="lineno">  167 </span><span class="spaces">     </span><span class="istickedoff">tm' &lt;- liftIO $</span>
-<span class="lineno">  168 </span><span class="spaces">             </span><span class="istickedoff">do argMap0 &lt;- traverse (scFirstOrderValue sc) testVec</span>
-<span class="lineno">  169 </span><span class="spaces">                </span><span class="istickedoff">let argMap = IntMap.fromList [ (vnIndex x, v) | (x, v) &lt;- Map.toList argMap0 ]</span>
-<span class="lineno">  170 </span><span class="spaces">                </span><span class="istickedoff">scInstantiate sc argMap tm</span>
-<span class="lineno">  171 </span><span class="spaces">     </span><span class="istickedoff">case evalSharedTerm mmap Map.empty <span class="nottickedoff">Map.empty</span> tm' of</span>
-<span class="lineno">  172 </span><span class="spaces">       </span><span class="istickedoff">-- satisfaible, return counterexample</span>
-<span class="lineno">  173 </span><span class="spaces">       </span><span class="istickedoff">VBool True  -&gt; <span class="nottickedoff">return (Just (Map.toList testVec))</span></span>
-<span class="lineno">  174 </span><span class="spaces">       </span><span class="istickedoff">-- not satisfied by this test vector</span>
-<span class="lineno">  175 </span><span class="spaces">       </span><span class="istickedoff">VBool False -&gt; return Nothing</span>
-<span class="lineno">  176 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;execTest: expected boolean result from random testing&quot;</span></span></span>
-<span class="lineno">  177 </span>
-<span class="lineno">  178 </span>prepareSATQuery ::
-<span class="lineno">  179 </span>  (MonadRandom m, F.MonadFail m, MonadIO m) =&gt;
-<span class="lineno">  180 </span>  SharedContext -&gt;
-<span class="lineno">  181 </span>  SATQuery -&gt;
-<span class="lineno">  182 </span>  IO (m (Maybe [(VarName, FirstOrderValue)]))
-<span class="lineno">  183 </span><span class="decl"><span class="istickedoff">prepareSATQuery sc satq</span>
-<span class="lineno">  184 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">Set.null (satUninterp satq)</span> =</span>
-<span class="lineno">  185 </span><span class="spaces">       </span><span class="istickedoff">do varmap &lt;- traverse prepareVar (satVariables satq)</span>
-<span class="lineno">  186 </span><span class="spaces">          </span><span class="istickedoff">t &lt;- satQueryAsTerm <span class="nottickedoff">sc</span> satq</span>
-<span class="lineno">  187 </span><span class="spaces">          </span><span class="istickedoff">mmap &lt;- scGetModuleMap sc</span>
-<span class="lineno">  188 </span><span class="spaces">          </span><span class="istickedoff">return (execTest sc mmap varmap t)</span>
-<span class="lineno">  189 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">fail &quot;Random testing cannot handle uninterpreted functions&quot;</span></span>
-<span class="lineno">  190 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  191 </span><span class="spaces"> </span><span class="istickedoff">where</span>
-<span class="lineno">  192 </span><span class="spaces">   </span><span class="istickedoff">prepareVar fot =</span>
-<span class="lineno">  193 </span><span class="spaces">     </span><span class="istickedoff">case randomFirstOrderValue fot of</span>
-<span class="lineno">  194 </span><span class="spaces">       </span><span class="istickedoff">Compose (Just v) -&gt; pure v</span>
-<span class="lineno">  195 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail (&quot;Cannot randomly test argument of type: &quot; ++ show fot)</span></span></span>
-<span class="lineno">  196 </span>
-<span class="lineno">  197 </span>runManyTests ::
-<span class="lineno">  198 </span>  RandT TFGen IO (Maybe [(VarName, FirstOrderValue)]) -&gt;
-<span class="lineno">  199 </span>  Integer -&gt;
-<span class="lineno">  200 </span>  IO (Maybe [(VarName, FirstOrderValue)])
-<span class="lineno">  201 </span><span class="decl"><span class="istickedoff">runManyTests m numtests = evalRandT (loop numtests) =&lt;&lt; newTFGen</span>
-<span class="lineno">  202 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  203 </span><span class="spaces">    </span><span class="istickedoff">loop n</span>
-<span class="lineno">  204 </span><span class="spaces">      </span><span class="istickedoff">| n &gt; 0 =</span>
-<span class="lineno">  205 </span><span class="spaces">          </span><span class="istickedoff">m &gt;&gt;= \case</span>
-<span class="lineno">  206 </span><span class="spaces">            </span><span class="istickedoff">Nothing  -&gt; loop (n-1)</span>
-<span class="lineno">  207 </span><span class="spaces">            </span><span class="istickedoff">Just cex -&gt; <span class="nottickedoff">return (Just cex)</span></span>
-<span class="lineno">  208 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  209 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = return Nothing</span></span>
+<span class="lineno">  127 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">-- NB: Use size (p - 1) bits below. `p` includes the implicit leading bit</span></span>
+<span class="lineno">  128 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">-- of the mantissa, which isn't explicitly included in the overall bit</span></span>
+<span class="lineno">  129 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">-- pattern.</span></span>
+<span class="lineno">  130 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">v &lt;- getRandomR (1, bit (pInt - 1) - 1)</span></span>
+<span class="lineno">  131 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">let bf = bfFromBits opts v</span></span>
+<span class="lineno">  132 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">pure $ if sgn then bfNeg bf else bf</span></span>
+<span class="lineno">  133 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  134 </span><span class="spaces">    </span><span class="istickedoff">-- Generates floats corresponding to normal values. These are values where</span>
+<span class="lineno">  135 </span><span class="spaces">    </span><span class="istickedoff">-- the exponent bits are not all zeros and not all ones.</span>
+<span class="lineno">  136 </span><span class="spaces">    </span><span class="istickedoff">randomNormal :: m BigFloat</span>
+<span class="lineno">  137 </span><span class="spaces">    </span><span class="istickedoff">randomNormal = do</span>
+<span class="lineno">  138 </span><span class="spaces">      </span><span class="istickedoff">sgn &lt;- getRandom</span>
+<span class="lineno">  139 </span><span class="spaces">      </span><span class="istickedoff">ex &lt;- getRandomR (1, bit eInt - 2)</span>
+<span class="lineno">  140 </span><span class="spaces">      </span><span class="istickedoff">si &lt;- getRandomR (0, bit (pInt - 1) - 1)</span>
+<span class="lineno">  141 </span><span class="spaces">      </span><span class="istickedoff">let v = (ex `shiftL` (pInt - 1)) .|. si</span>
+<span class="lineno">  142 </span><span class="spaces">      </span><span class="istickedoff">let bf = bfFromBits opts v</span>
+<span class="lineno">  143 </span><span class="spaces">      </span><span class="istickedoff">pure $ if sgn then bfNeg bf else bf</span></span>
+<span class="lineno">  144 </span>
+<span class="lineno">  145 </span>execTest ::
+<span class="lineno">  146 </span>  (F.MonadFail m, MonadRandom m, MonadIO m) =&gt;
+<span class="lineno">  147 </span>  SharedContext -&gt;
+<span class="lineno">  148 </span>  ModuleMap -&gt;
+<span class="lineno">  149 </span>  Map VarName (m FirstOrderValue) -&gt;
+<span class="lineno">  150 </span>  Term -&gt;
+<span class="lineno">  151 </span>  m (Maybe [(VarName, FirstOrderValue)])
+<span class="lineno">  152 </span><span class="decl"><span class="istickedoff">execTest sc mmap vars tm =</span>
+<span class="lineno">  153 </span><span class="spaces">  </span><span class="istickedoff">do testVec &lt;- sequence vars</span>
+<span class="lineno">  154 </span><span class="spaces">     </span><span class="istickedoff">tm' &lt;- liftIO $</span>
+<span class="lineno">  155 </span><span class="spaces">             </span><span class="istickedoff">do argMap0 &lt;- traverse (scFirstOrderValue sc) testVec</span>
+<span class="lineno">  156 </span><span class="spaces">                </span><span class="istickedoff">let argMap = IntMap.fromList [ (vnIndex x, v) | (x, v) &lt;- Map.toList argMap0 ]</span>
+<span class="lineno">  157 </span><span class="spaces">                </span><span class="istickedoff">scInstantiate sc argMap tm</span>
+<span class="lineno">  158 </span><span class="spaces">     </span><span class="istickedoff">case evalSharedTerm mmap Map.empty <span class="nottickedoff">Map.empty</span> tm' of</span>
+<span class="lineno">  159 </span><span class="spaces">       </span><span class="istickedoff">-- satisfaible, return counterexample</span>
+<span class="lineno">  160 </span><span class="spaces">       </span><span class="istickedoff">VBool True  -&gt; <span class="nottickedoff">return (Just (Map.toList testVec))</span></span>
+<span class="lineno">  161 </span><span class="spaces">       </span><span class="istickedoff">-- not satisfied by this test vector</span>
+<span class="lineno">  162 </span><span class="spaces">       </span><span class="istickedoff">VBool False -&gt; return Nothing</span>
+<span class="lineno">  163 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;execTest: expected boolean result from random testing&quot;</span></span></span>
+<span class="lineno">  164 </span>
+<span class="lineno">  165 </span>prepareSATQuery ::
+<span class="lineno">  166 </span>  (MonadRandom m, F.MonadFail m, MonadIO m) =&gt;
+<span class="lineno">  167 </span>  SharedContext -&gt;
+<span class="lineno">  168 </span>  SATQuery -&gt;
+<span class="lineno">  169 </span>  IO (m (Maybe [(VarName, FirstOrderValue)]))
+<span class="lineno">  170 </span><span class="decl"><span class="istickedoff">prepareSATQuery sc satq</span>
+<span class="lineno">  171 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">Set.null (satUninterp satq)</span> =</span>
+<span class="lineno">  172 </span><span class="spaces">       </span><span class="istickedoff">do varmap &lt;- traverse prepareVar (satVariables satq)</span>
+<span class="lineno">  173 </span><span class="spaces">          </span><span class="istickedoff">t &lt;- satQueryAsTerm <span class="nottickedoff">sc</span> satq</span>
+<span class="lineno">  174 </span><span class="spaces">          </span><span class="istickedoff">mmap &lt;- scGetModuleMap sc</span>
+<span class="lineno">  175 </span><span class="spaces">          </span><span class="istickedoff">return (execTest sc mmap varmap t)</span>
+<span class="lineno">  176 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">fail &quot;Random testing cannot handle uninterpreted functions&quot;</span></span>
+<span class="lineno">  177 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  178 </span><span class="spaces"> </span><span class="istickedoff">where</span>
+<span class="lineno">  179 </span><span class="spaces">   </span><span class="istickedoff">prepareVar fot =</span>
+<span class="lineno">  180 </span><span class="spaces">     </span><span class="istickedoff">case randomFirstOrderValue fot of</span>
+<span class="lineno">  181 </span><span class="spaces">       </span><span class="istickedoff">Compose (Just v) -&gt; pure v</span>
+<span class="lineno">  182 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail (&quot;Cannot randomly test argument of type: &quot; ++ show fot)</span></span></span>
+<span class="lineno">  183 </span>
+<span class="lineno">  184 </span>runManyTests ::
+<span class="lineno">  185 </span>  RandT TFGen IO (Maybe [(VarName, FirstOrderValue)]) -&gt;
+<span class="lineno">  186 </span>  Integer -&gt;
+<span class="lineno">  187 </span>  IO (Maybe [(VarName, FirstOrderValue)])
+<span class="lineno">  188 </span><span class="decl"><span class="istickedoff">runManyTests m numtests = evalRandT (loop numtests) =&lt;&lt; newTFGen</span>
+<span class="lineno">  189 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  190 </span><span class="spaces">    </span><span class="istickedoff">loop n</span>
+<span class="lineno">  191 </span><span class="spaces">      </span><span class="istickedoff">| n &gt; 0 =</span>
+<span class="lineno">  192 </span><span class="spaces">          </span><span class="istickedoff">m &gt;&gt;= \case</span>
+<span class="lineno">  193 </span><span class="spaces">            </span><span class="istickedoff">Nothing  -&gt; loop (n-1)</span>
+<span class="lineno">  194 </span><span class="spaces">            </span><span class="istickedoff">Just cex -&gt; <span class="nottickedoff">return (Just cex)</span></span>
+<span class="lineno">  195 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  196 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = return Nothing</span></span>
 
 </pre>
 </body>
