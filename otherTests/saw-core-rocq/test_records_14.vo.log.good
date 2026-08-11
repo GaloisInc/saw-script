@@ -1,0 +1,20 @@
+File "./test_records_14.v", line 106, characters 35-78:
+Error:
+In environment
+var__0 := BinPos.Pos.to_nat (BinNums.xO (BinNums.xO (BinNums.xO BinNums.xH)))
+  : CryptolPrimitivesForSAWCore.Num
+var__1 := CryptolPrimitivesForSAWCore.seq var__0 bool : Type
+var__2 := CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0 :
+  CryptolPrimitivesForSAWCore.PLiteral
+    (CryptolPrimitivesForSAWCore.seq var__0 bool)
+var__3 := RecordTypeCons "y" var__1 RecordTypeNil : Type
+var__4 := RecordTypeCons "x" var__1 var__3 : Type
+var__5 := CryptolPrimitivesForSAWCore.PEqSeqBool var__0 :
+  CryptolPrimitivesForSAWCore.PEq
+    (CryptolPrimitivesForSAWCore.seq var__0 bool)
+var__6 := RecordTypeCons "size" Integer RecordTypeNil : Type
+The term "CryptolPrimitivesForSAWCore.PLiteralInteger" has type
+ "CryptolPrimitivesForSAWCore.PLiteral Integer"
+while it is expected to have type "Inhabited Integer".
+
+FAILED

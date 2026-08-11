@@ -1,2 +1,2 @@
 // Test: write_rocq_cryptol_primitives_for_sawcore command
-write_rocq_cryptol_primitives_for_sawcore "" [] [];
+write_rocq_cryptol_primitives_for_sawcore "test_cryptol_primitives_1.v" [] [];

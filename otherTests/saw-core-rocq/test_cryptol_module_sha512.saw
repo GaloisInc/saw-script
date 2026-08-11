@@ -1,2 +1,2 @@
 // Test: write_rocq_cryptol_module command
-write_rocq_cryptol_module "../../exercises/sha512/SHA512.cry" "" [] [];
+write_rocq_cryptol_module "../../exercises/sha512/SHA512.cry" "test_cryptol_module_sha512_1.v" [] [];

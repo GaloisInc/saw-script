@@ -137,7 +137,6 @@ Definition coerce (a b : sort 0) (p : @eq (sort 0) a b) (x : a) : b :=
   | @eq_refl _ _ => x
   end
 .
-Check eq_sym.
 
 Definition rcoerce (a b : sort 0) (p : @eq (sort 0) b a) (x : a) : b :=
   coerce a b (eq_sym p) x

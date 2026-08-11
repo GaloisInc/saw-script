@@ -9,7 +9,7 @@ import           Control.Monad.State       (modify)
 import qualified Data.Map                  as Map
 
 import           Cryptol.ModuleSystem.Name (Name, nameIdent)
-import           Cryptol.Utils.Ident       (unpackIdent)
+import           Cryptol.Utils.Ident       (identText)
 import qualified Language.Rocq.AST         as Rocq
 
 import           SAWCore.Term.Raw          (Term)
@@ -26,7 +26,7 @@ translateTypedTermMap ::
 translateTypedTermMap defs = forM defs translateAndRegisterEntry
   where
     translateAndRegisterEntry (name, t, tp) = do
-      let nameStr = Rocq.Ident (unpackIdent (nameIdent name))
+      let nameStr = Rocq.Ident (identText (nameIdent name))
       decl <-
         do t_trans <- TermTranslation.translateTerm t
            tp_trans <- TermTranslation.translateTerm tp

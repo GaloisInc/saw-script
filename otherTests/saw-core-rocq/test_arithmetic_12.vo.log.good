@@ -1,0 +1,323 @@
+File "./test_arithmetic_12.v", line 21, characters 0-874:
+Error:
+The following term contains unresolved implicit arguments:
+  (fun (m n : CryptolPrimitivesForSAWCore.Num)
+     (x : CryptolPrimitivesForSAWCore.seq n bool) =>
+   let var__0 := CryptolPrimitivesForSAWCore.tcSub m n in
+   let var__1 := CryptolPrimitivesForSAWCore.tcAdd var__0 n in
+   coerce (CryptolPrimitivesForSAWCore.seq var__1 bool)
+     (CryptolPrimitivesForSAWCore.seq m bool)
+     (CryptolPrimitivesForSAWCore.seq_cong1 var__1 m bool
+        ((match var__1 with
+          | CryptolPrimitivesForSAWCore.TCNum _1 =>
+              (fun _2 : nat =>
+               match var__0 with
+               | CryptolPrimitivesForSAWCore.TCNum _3 =>
+                   (fun _0 : nat =>
+                    match
+                      n as n0
+                      return
+                        (CryptolPrimitivesForSAWCore.seq n0 bool ->
+                         CryptolPrimitivesForSAWCore.tcAdd
+                           (CryptolPrimitivesForSAWCore.tcSub m n0) n0 =
+                         m)
+                    with
+                    | CryptolPrimitivesForSAWCore.TCNum _4 =>
+                        (fun (_5 : nat)
+                           (x0 : CryptolPrimitivesForSAWCore.seq _5 bool) =>
+                         match
+                           m as n0
+                           return
+                             (CryptolPrimitivesForSAWCore.tcAdd
+                                (CryptolPrimitivesForSAWCore.tcSub n0 _5) _5 =
+                              n0)
+                         with
+                         | CryptolPrimitivesForSAWCore.TCNum _6 =>
+                             (fun _7 : nat =>
+                              eq_ind_r (fun n0 : nat => n0 = _7)
+                                (eq_ind_r (fun n0 : nat => n0 + _5 = _7)
+                                   (Eq_TCNum (_7 - _5 + _5) _7
+                                      (?Goal3@{_3:=_7; _2:=_5; x:=x0; _1:=_2}
+                                       :
+                                       _7 - _5 + _5 = _7))
+                                   (SAWCorePreludeExtra.subNat_sub _7 _5))
+                                (SAWCorePreludeExtra.addNat_add
+                                   (subNat _7 _5) _5)
+                              :
+                              CryptolPrimitivesForSAWCore.tcAdd
+                                (CryptolPrimitivesForSAWCore.tcSub _7 _5) _5 =
+                              _7) _6
+                         | CryptolPrimitivesForSAWCore.TCInf => eq_refl
+                         end) _4
+                    | CryptolPrimitivesForSAWCore.TCInf =>
+                        fun
+                          x0 : CryptolPrimitivesForSAWCore.seq
+                                 CryptolPrimitivesForSAWCore.TCInf bool =>
+                        match
+                          m as n0
+                          return
+                            (CryptolPrimitivesForSAWCore.tcAdd
+                               (CryptolPrimitivesForSAWCore.tcSub n0
+                                  CryptolPrimitivesForSAWCore.TCInf)
+                               CryptolPrimitivesForSAWCore.TCInf =
+                             n0)
+                        with
+                        | CryptolPrimitivesForSAWCore.TCNum _4 =>
+                            (fun _5 : nat =>
+                             ?Goal@{_2:=_5; x:=x0; _1:=_2}
+                             :
+                             CryptolPrimitivesForSAWCore.tcAdd
+                               (CryptolPrimitivesForSAWCore.tcSub _5
+                                  CryptolPrimitivesForSAWCore.TCInf)
+                               CryptolPrimitivesForSAWCore.TCInf =
+                             _5) _4
+                        | CryptolPrimitivesForSAWCore.TCInf => eq_refl
+                        end
+                    end x) _3
+               | CryptolPrimitivesForSAWCore.TCInf =>
+                   match
+                     n as n0
+                     return
+                       (CryptolPrimitivesForSAWCore.seq n0 bool ->
+                        CryptolPrimitivesForSAWCore.tcAdd
+                          (CryptolPrimitivesForSAWCore.tcSub m n0) n0 =
+                        m)
+                   with
+                   | CryptolPrimitivesForSAWCore.TCNum _3 =>
+                       (fun (_0 : nat)
+                          (x0 : CryptolPrimitivesForSAWCore.seq _0 bool) =>
+                        match
+                          m as n0
+                          return
+                            (CryptolPrimitivesForSAWCore.tcAdd
+                               (CryptolPrimitivesForSAWCore.tcSub n0 _0) _0 =
+                             n0)
+                        with
+                        | CryptolPrimitivesForSAWCore.TCNum _4 =>
+                            (fun _5 : nat =>
+                             eq_ind_r (fun n0 : nat => n0 = _5)
+                               (eq_ind_r (fun n0 : nat => n0 + _0 = _5)
+                                  (Eq_TCNum (_5 - _0 + _0) _5
+                                     (?Goal4@{_2:=_5; x:=x0; _1:=_2}
+                                      :
+                                      _5 - _0 + _0 = _5))
+                                  (SAWCorePreludeExtra.subNat_sub _5 _0))
+                               (SAWCorePreludeExtra.addNat_add 
+                                  (subNat _5 _0) _0)
+                             :
+                             CryptolPrimitivesForSAWCore.tcAdd
+                               (CryptolPrimitivesForSAWCore.tcSub _5 _0) _0 =
+                             _5) _4
+                        | CryptolPrimitivesForSAWCore.TCInf => eq_refl
+                        end) _3
+                   | CryptolPrimitivesForSAWCore.TCInf =>
+                       fun
+                         x0 : CryptolPrimitivesForSAWCore.seq
+                                CryptolPrimitivesForSAWCore.TCInf bool =>
+                       match
+                         m as n0
+                         return
+                           (CryptolPrimitivesForSAWCore.tcAdd
+                              (CryptolPrimitivesForSAWCore.tcSub n0
+                                 CryptolPrimitivesForSAWCore.TCInf)
+                              CryptolPrimitivesForSAWCore.TCInf =
+                            n0)
+                       with
+                       | CryptolPrimitivesForSAWCore.TCNum _3 =>
+                           (fun _0 : nat =>
+                            ?Goal0@{x:=x0; _1:=_2}
+                            :
+                            CryptolPrimitivesForSAWCore.tcAdd
+                              (CryptolPrimitivesForSAWCore.tcSub _0
+                                 CryptolPrimitivesForSAWCore.TCInf)
+                              CryptolPrimitivesForSAWCore.TCInf =
+                            _0) _3
+                       | CryptolPrimitivesForSAWCore.TCInf => eq_refl
+                       end
+                   end x
+               end) _1
+          | CryptolPrimitivesForSAWCore.TCInf =>
+              match var__0 with
+              | CryptolPrimitivesForSAWCore.TCNum _1 =>
+                  (fun _2 : nat =>
+                   match
+                     n as n0
+                     return
+                       (CryptolPrimitivesForSAWCore.seq n0 bool ->
+                        CryptolPrimitivesForSAWCore.tcAdd
+                          (CryptolPrimitivesForSAWCore.tcSub m n0) n0 =
+                        m)
+                   with
+                   | CryptolPrimitivesForSAWCore.TCNum _3 =>
+                       (fun (_0 : nat)
+                          (x0 : CryptolPrimitivesForSAWCore.seq _0 bool) =>
+                        match
+                          m as n0
+                          return
+                            (CryptolPrimitivesForSAWCore.tcAdd
+                               (CryptolPrimitivesForSAWCore.tcSub n0 _0) _0 =
+                             n0)
+                        with
+                        | CryptolPrimitivesForSAWCore.TCNum _4 =>
+                            (fun _5 : nat =>
+                             eq_ind_r (fun n0 : nat => n0 = _5)
+                               (eq_ind_r (fun n0 : nat => n0 + _0 = _5)
+                                  (Eq_TCNum (_5 - _0 + _0) _5
+                                     (?Goal5@{_2:=_5; x:=x0; _1:=_2}
+                                      :
+                                      _5 - _0 + _0 = _5))
+                                  (SAWCorePreludeExtra.subNat_sub _5 _0))
+                               (SAWCorePreludeExtra.addNat_add 
+                                  (subNat _5 _0) _0)
+                             :
+                             CryptolPrimitivesForSAWCore.tcAdd
+                               (CryptolPrimitivesForSAWCore.tcSub _5 _0) _0 =
+                             _5) _4
+                        | CryptolPrimitivesForSAWCore.TCInf => eq_refl
+                        end) _3
+                   | CryptolPrimitivesForSAWCore.TCInf =>
+                       fun
+                         x0 : CryptolPrimitivesForSAWCore.seq
+                                CryptolPrimitivesForSAWCore.TCInf bool =>
+                       match
+                         m as n0
+                         return
+                           (CryptolPrimitivesForSAWCore.tcAdd
+                              (CryptolPrimitivesForSAWCore.tcSub n0
+                                 CryptolPrimitivesForSAWCore.TCInf)
+                              CryptolPrimitivesForSAWCore.TCInf =
+                            n0)
+                       with
+                       | CryptolPrimitivesForSAWCore.TCNum _3 =>
+                           (fun _0 : nat =>
+                            ?Goal1@{x:=x0; _1:=_2}
+                            :
+                            CryptolPrimitivesForSAWCore.tcAdd
+                              (CryptolPrimitivesForSAWCore.tcSub _0
+                                 CryptolPrimitivesForSAWCore.TCInf)
+                              CryptolPrimitivesForSAWCore.TCInf =
+                            _0) _3
+                       | CryptolPrimitivesForSAWCore.TCInf => eq_refl
+                       end
+                   end x) _1
+              | CryptolPrimitivesForSAWCore.TCInf =>
+                  match
+                    n as n0
+                    return
+                      (CryptolPrimitivesForSAWCore.seq n0 bool ->
+                       CryptolPrimitivesForSAWCore.tcAdd
+                         (CryptolPrimitivesForSAWCore.tcSub m n0) n0 =
+                       m)
+                  with
+                  | CryptolPrimitivesForSAWCore.TCNum _1 =>
+                      (fun (_2 : nat)
+                         (x0 : CryptolPrimitivesForSAWCore.seq _2 bool) =>
+                       match
+                         m as n0
+                         return
+                           (CryptolPrimitivesForSAWCore.tcAdd
+                              (CryptolPrimitivesForSAWCore.tcSub n0 _2) _2 =
+                            n0)
+                       with
+                       | CryptolPrimitivesForSAWCore.TCNum _3 =>
+                           (fun _0 : nat =>
+                            eq_ind_r (fun n0 : nat => n0 = _0)
+                              (eq_ind_r (fun n0 : nat => n0 + _2 = _0)
+                                 (Eq_TCNum (_0 - _2 + _2) _0
+                                    (?Goal6@{_1:=_2; x:=x0}
+                                     :
+                                     _0 - _2 + _2 = _0))
+                                 (SAWCorePreludeExtra.subNat_sub _0 _2))
+                              (SAWCorePreludeExtra.addNat_add 
+                                 (subNat _0 _2) _2)
+                            :
+                            CryptolPrimitivesForSAWCore.tcAdd
+                              (CryptolPrimitivesForSAWCore.tcSub _0 _2) _2 =
+                            _0) _3
+                       | CryptolPrimitivesForSAWCore.TCInf => eq_refl
+                       end) _1
+                  | CryptolPrimitivesForSAWCore.TCInf =>
+                      fun
+                        x0 : CryptolPrimitivesForSAWCore.seq
+                               CryptolPrimitivesForSAWCore.TCInf bool =>
+                      match
+                        m as n0
+                        return
+                          (CryptolPrimitivesForSAWCore.tcAdd
+                             (CryptolPrimitivesForSAWCore.tcSub n0
+                                CryptolPrimitivesForSAWCore.TCInf)
+                             CryptolPrimitivesForSAWCore.TCInf =
+                           n0)
+                      with
+                      | CryptolPrimitivesForSAWCore.TCNum _1 =>
+                          (fun _2 : nat =>
+                           ?Goal2@{_1:=_2; x:=x0}
+                           :
+                           CryptolPrimitivesForSAWCore.tcAdd
+                             (CryptolPrimitivesForSAWCore.tcSub _2
+                                CryptolPrimitivesForSAWCore.TCInf)
+                             CryptolPrimitivesForSAWCore.TCInf =
+                           _2) _1
+                      | CryptolPrimitivesForSAWCore.TCInf => eq_refl
+                      end
+                  end x
+              end
+          end
+          :
+          CryptolPrimitivesForSAWCore.tcAdd var__0 n = m)
+         :
+         var__1 = m))
+     (CryptolPrimitivesForSAWCore.ecCat var__0 n bool
+        (CryptolPrimitivesForSAWCore.ecZero
+           (CryptolPrimitivesForSAWCore.seq var__0 bool)
+           (CryptolPrimitivesForSAWCore.PZeroSeqBool var__0))
+        x))
+More precisely: 
+- ?Goal: Cannot infer an existential variable of type
+  "CryptolPrimitivesForSAWCore.TCInf = _2" in
+  environment:
+  _2 : nat
+  x : CryptolPrimitivesForSAWCore.seq CryptolPrimitivesForSAWCore.TCInf bool
+  _0, _1 : nat
+- ?Goal0: Cannot infer an existential variable of type
+  "CryptolPrimitivesForSAWCore.TCInf = _0" in
+  environment:
+  _0 : nat
+  x : CryptolPrimitivesForSAWCore.seq CryptolPrimitivesForSAWCore.TCInf bool
+  _1 : nat
+- ?Goal1: Cannot infer an existential variable of type
+  "CryptolPrimitivesForSAWCore.TCInf = _0" in
+  environment:
+  _0 : nat
+  x : CryptolPrimitivesForSAWCore.seq CryptolPrimitivesForSAWCore.TCInf bool
+  _1 : nat
+- ?Goal2: Cannot infer an existential variable of type
+  "CryptolPrimitivesForSAWCore.TCInf = _1" in
+  environment:
+  _1 : nat
+  x : CryptolPrimitivesForSAWCore.seq CryptolPrimitivesForSAWCore.TCInf bool
+- ?Goal3: Cannot infer an existential variable of type 
+  "_3 - _2 + _2 = _3" in
+  environment:
+  _3, _2 : nat
+  x : CryptolPrimitivesForSAWCore.seq _2 bool
+  _0, _1 : nat
+- ?Goal4: Cannot infer an existential variable of type 
+  "_2 - _0 + _0 = _2" in
+  environment:
+  _2, _0 : nat
+  x : CryptolPrimitivesForSAWCore.seq _0 bool
+  _1 : nat
+- ?Goal5: Cannot infer an existential variable of type 
+  "_2 - _0 + _0 = _2" in
+  environment:
+  _2, _0 : nat
+  x : CryptolPrimitivesForSAWCore.seq _0 bool
+  _1 : nat
+- ?Goal6: Cannot infer an existential variable of type 
+  "_0 - _1 + _1 = _0" in
+  environment:
+  _0, _1 : nat
+  x : CryptolPrimitivesForSAWCore.seq _1 bool
+
+FAILED
