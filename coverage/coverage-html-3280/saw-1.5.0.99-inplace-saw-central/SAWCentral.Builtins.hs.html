@@ -948,14 +948,14 @@ span.spaces    { background: white }
 <span class="lineno">  929 </span><span class="spaces">       </span><span class="istickedoff">return (sqt', HoistIfsEvidence)</span></span>
 <span class="lineno">  930 </span>
 <span class="lineno">  931 </span>term_type :: TypedTerm -&gt; TopLevel C.Schema
-<span class="lineno">  932 </span><span class="decl"><span class="nottickedoff">term_type tt =</span>
-<span class="lineno">  933 </span><span class="spaces">  </span><span class="nottickedoff">case ttType tt of</span>
-<span class="lineno">  934 </span><span class="spaces">    </span><span class="nottickedoff">TypedTermSchema sch -&gt; pure sch</span>
-<span class="lineno">  935 </span><span class="spaces">    </span><span class="nottickedoff">tp -&gt; do</span>
-<span class="lineno">  936 </span><span class="spaces">        </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  937 </span><span class="spaces">        </span><span class="nottickedoff">opts &lt;- SV.getPPOpts</span>
-<span class="lineno">  938 </span><span class="spaces">        </span><span class="nottickedoff">tp' &lt;- liftIO $ prettyTypedTermType sc tp</span>
-<span class="lineno">  939 </span><span class="spaces">        </span><span class="nottickedoff">fail $ PPS.render opts $ &quot;Term does not have a Cryptol type:&quot; &lt;+&gt; tp'</span></span>
+<span class="lineno">  932 </span><span class="decl"><span class="istickedoff">term_type tt =</span>
+<span class="lineno">  933 </span><span class="spaces">  </span><span class="istickedoff">case ttType tt of</span>
+<span class="lineno">  934 </span><span class="spaces">    </span><span class="istickedoff">TypedTermSchema sch -&gt; pure sch</span>
+<span class="lineno">  935 </span><span class="spaces">    </span><span class="istickedoff">tp -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  936 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">sc &lt;- getSharedContext</span></span>
+<span class="lineno">  937 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">opts &lt;- SV.getPPOpts</span></span>
+<span class="lineno">  938 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">tp' &lt;- liftIO $ prettyTypedTermType sc tp</span></span>
+<span class="lineno">  939 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">fail $ PPS.render opts $ &quot;Term does not have a Cryptol type:&quot; &lt;+&gt; tp'</span></span></span>
 <span class="lineno">  940 </span>
 <span class="lineno">  941 </span>goal_eval :: [Text] -&gt; ProofScript ()
 <span class="lineno">  942 </span><span class="decl"><span class="istickedoff">goal_eval unints =</span>

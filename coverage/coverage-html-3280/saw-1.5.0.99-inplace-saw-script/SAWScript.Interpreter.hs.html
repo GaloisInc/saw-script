@@ -2278,11 +2278,11 @@ span.spaces    { background: white }
 <span class="lineno"> 2259 </span><span class="spaces">    </span><span class="istickedoff">fromValue _ _ = <span class="nottickedoff">error &quot;fromValue SharedTerm&quot;</span></span></span>
 <span class="lineno"> 2260 </span>
 <span class="lineno"> 2261 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">IsValue Cryptol.Schema</span></span></span></span> where
-<span class="lineno"> 2262 </span>    <span class="decl"><span class="nottickedoff">toValue ty _name s = case ty of</span>
-<span class="lineno"> 2263 </span><span class="spaces">        </span><span class="nottickedoff">SS.TyCon _ SS.TypeCon [] -&gt;</span>
-<span class="lineno"> 2264 </span><span class="spaces">            </span><span class="nottickedoff">VType s</span>
-<span class="lineno"> 2265 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt;</span>
-<span class="lineno"> 2266 </span><span class="spaces">            </span><span class="nottickedoff">toValuePanic &quot;Type&quot; ty</span></span>
+<span class="lineno"> 2262 </span>    <span class="decl"><span class="istickedoff">toValue ty _name s = case ty of</span>
+<span class="lineno"> 2263 </span><span class="spaces">        </span><span class="istickedoff">SS.TyCon _ SS.TypeCon [] -&gt;</span>
+<span class="lineno"> 2264 </span><span class="spaces">            </span><span class="istickedoff">VType s</span>
+<span class="lineno"> 2265 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno"> 2266 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">toValuePanic &quot;Type&quot; ty</span></span></span>
 <span class="lineno"> 2267 </span>
 <span class="lineno"> 2268 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">FromValue Cryptol.Schema</span></span></span></span> where
 <span class="lineno"> 2269 </span>    <span class="decl"><span class="istickedoff">fromValue _ (VType s) = s</span>
@@ -3495,7 +3495,7 @@ span.spaces    { background: white }
 <span class="lineno"> 3476 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Print the value of the given expression.&quot; ]</span></span>
 <span class="lineno"> 3477 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 3478 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;type&quot;                &quot;Term -&gt; Type&quot;</span>
-<span class="lineno"> 3479 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(funVal1 term_type)</span></span>
+<span class="lineno"> 3479 </span><span class="spaces">    </span><span class="istickedoff">(funVal1 term_type)</span>
 <span class="lineno"> 3480 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 3481 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Return the type of the given term.&quot; ]</span></span>
 <span class="lineno"> 3482 </span><span class="spaces"></span><span class="istickedoff"></span>
