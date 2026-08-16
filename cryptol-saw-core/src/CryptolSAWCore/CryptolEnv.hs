@@ -305,7 +305,6 @@ ioParseResult res = case res of
 --   on with `MR.shadowing` so they hide any imported occurrences.
 --   The environment for each scoping level then shadows everything
 --   above it.
-
 --
 --   Note that while each `sImports` is (mostly) maintained with more
 --   recent imports at the front of the list, this should be
@@ -321,9 +320,9 @@ getNamingEnv sc env = do
            mempty
            (eImports env))
 
--- | Extend the `MR.NamingEnv` for a single `T.Import`.
+-- | Extend the `MR.NamingEnv` for a single import (`ImportData)
 getNamingEnvForImport :: ME.ModuleEnv
-                      -> (C.ImportInfo, ImportVisibility, T.Import)
+                      -> ImportData
                       -> MR.NamingEnv
                       -> MR.NamingEnv
 getNamingEnvForImport modEnv (importInfo, vis, imprt) nmEnv0 =
@@ -902,7 +901,7 @@ importCryptolModule sc env src as isSubmodule vis imps =
           -- importing submodule by name:
           do
           let modNameTxt = C.modNameToText modName
-          mName <- resolveIdentifier' C.NSModule env modNameTxt
+          mName <- resolveIdentifier' sc env C.NSModule modNameTxt
           name <- case mName of
               Nothing -> fail $ "submodule `"
                                 <> Text.unpack modNameTxt
@@ -924,10 +923,10 @@ importCryptolModule sc env src as isSubmodule vis imps =
             putStrLn $ "name = " ++ show (name :: T.Name)
             putStrLn $ "submodule: "
                         ++ (Text.unpack $ C.identText $ MN.nameIdent name)
-            debugImportMT env import'
+            debugImportMT sc import'
 
-          return $ env {eImports = import' : eImports env }
-            -- FIXME: need to do the `C.mapImports` here also?
+          return $ C.mapImports (\imports -> import':imports) env
+            -- FIXME[MT]: Verify you understand what's happening.
 
   else -- importing full module (by path or name):
     do
@@ -937,7 +936,7 @@ importCryptolModule sc env src as isSubmodule vis imps =
 
     -- DEBUG:
     when debug $ putStrLn $ "modName= " ++ show modName
-    when debug $ debugImportMT env' import'
+    when debug $ debugImportMT sc import'
 
     return $ C.mapImports (\imports -> import':imports) env
 
@@ -949,13 +948,16 @@ printNamingEnv :: MN.NamingEnv -> IO ()
 printNamingEnv = putStrLn . pretty
 
 {-
-DEBUG: print what users of the import will get (~ dup-ing getNamingEnvForImport)
+DEBUG: print what users of the import will get (someawhat duplicating
+       getNamingEnvForImport)
 -}
-debugImportMT :: CryptolEnv
-              -> (C.ImportInfo, ImportVisibility, T.Import)
+debugImportMT :: SharedContext
+              -> ImportData
               -> IO ()
-debugImportMT env (info,vis,imprt) =
+debugImportMT sc (info,vis,imprt) =
   do
+  modEnv <- eModuleEnv sc
+
   putStrLn $ "vis: " ++ show vis
   case vis of
     OnlyPublic -> return ()
@@ -973,15 +975,17 @@ debugImportMT env (info,vis,imprt) =
   printNamingEnv ne1
 
   where
-  modEnv = eModuleEnv env
 
+  {-
   modName :: C.ModName
   modName = P.thing $ T.iModule imprt
 
+   -- FIXME[MT]: what was this: ?
   _lm = case ME.lookupModule modName modEnv of
          Just lm' -> lm'
          Nothing  -> panic "debugImportMT: getNamingEnvForImport"
                        ["cannot lookupModule: " <> CryPP.pp modName]
+  -}
 
 -- | Create an entry for the `eImports` list in `CryptolEnv`.
 mkImport :: C.ImportInfo
@@ -989,7 +993,7 @@ mkImport :: C.ImportInfo
          -> P.Located C.ModName
          -> Maybe C.ModName
          -> Maybe T.ImportSpec
-         -> (C.ImportInfo, ImportVisibility, T.Import)
+         -> ImportData
 mkImport importInfo vis nm as imps =
     let im = T.Import { T.iModule = nm
                       , T.iAs     = as
@@ -1101,7 +1105,7 @@ resolveIdentifier sc env = resolveIdentifier' sc env C.NSValue
 
 resolveIdentifier' ::
   (HasCallStack) =>
-  SharedContext -> CryptolEnv -> C.NameSpace -> Text -> IO (Maybe T.Name)
+  SharedContext -> CryptolEnv -> C.Namespace -> Text -> IO (Maybe T.Name)
 resolveIdentifier' sc env nameSpace nm =
   case splitOn (pack "::") nm of
     []  -> panic "resolveIdentifier'" ["splitOn returning []!"]

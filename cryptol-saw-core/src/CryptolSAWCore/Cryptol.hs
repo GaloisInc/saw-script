@@ -27,7 +27,6 @@ between these two modules is mostly a function of historical accident.
 module CryptolSAWCore.Cryptol
   ( module CryptolSAWCore.GlobalCryptolEnv
   , ImportVisibility(..)
-  , IsSubmodule
   , ImportInfo(..)
 
   , isErasedProp
@@ -121,10 +120,6 @@ import CryptolSAWCore.Panic
 import qualified CryptolSAWCore.Pretty as CryPP
 import CryptolSAWCore.GlobalCryptolEnv
 
-
--- | capture extra information needed for "import submodule"
-data ImportInfo = ImportNested C.Name  -- ^ "import submodule ..."
-                | ImportTop            -- ^ "import ...
 
 -- | bindTParam' - create a binding for a type parameter, returning 3-tuple:
 --                 - environment
