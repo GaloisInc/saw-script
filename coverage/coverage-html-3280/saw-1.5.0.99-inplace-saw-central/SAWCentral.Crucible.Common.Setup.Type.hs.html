@@ -143,8 +143,8 @@ span.spaces    { background: white }
 <span class="lineno">  124 </span>  Text          {- ^ variable name  -} -&gt;
 <span class="lineno">  125 </span>  Cryptol.Type  {- ^ variable type  -} -&gt;
 <span class="lineno">  126 </span>  CrucibleSetupT arch m TypedVariable
-<span class="lineno">  127 </span><span class="decl"><span class="istickedoff">freshTypedVariable sc env name cty =</span>
-<span class="lineno">  128 </span><span class="spaces">  </span><span class="istickedoff">do ty &lt;- liftIO $ Cryptol.translateType sc env cty</span>
+<span class="lineno">  127 </span><span class="decl"><span class="istickedoff">freshTypedVariable sc _env name cty =</span>
+<span class="lineno">  128 </span><span class="spaces">  </span><span class="istickedoff">do ty &lt;- liftIO $ Cryptol.translateType sc cty</span>
 <span class="lineno">  129 </span><span class="spaces">     </span><span class="istickedoff">vn &lt;- liftIO $ scFreshInventedVar sc name ty</span>
 <span class="lineno">  130 </span><span class="spaces">     </span><span class="istickedoff">let tt = TypedVariable cty vn ty</span>
 <span class="lineno">  131 </span><span class="spaces">     </span><span class="istickedoff">currentState . MS.csFreshVars %= cons tt</span>
@@ -160,7 +160,7 @@ span.spaces    { background: white }
 <span class="lineno">  141 </span>  Cryptol.Type  {- ^ variable type  -} -&gt;
 <span class="lineno">  142 </span>  CrucibleSetupT arch m TypedTerm
 <span class="lineno">  143 </span><span class="decl"><span class="istickedoff">freshVariable sc env name cty =</span>
-<span class="lineno">  144 </span><span class="spaces">  </span><span class="istickedoff">do tec &lt;- freshTypedVariable sc env name cty</span>
+<span class="lineno">  144 </span><span class="spaces">  </span><span class="istickedoff">do tec &lt;- freshTypedVariable sc <span class="nottickedoff">env</span> name cty</span>
 <span class="lineno">  145 </span><span class="spaces">     </span><span class="istickedoff">liftIO $ typedTermOfVariable sc tec</span></span>
 <span class="lineno">  146 </span>
 <span class="lineno">  147 </span>setupWithTag :: Text -&gt; CrucibleSetupT arch m a -&gt; CrucibleSetupT arch m a

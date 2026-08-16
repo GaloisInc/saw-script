@@ -196,8 +196,8 @@ span.spaces    { background: white }
 <span class="lineno">  177 </span>
 <span class="lineno">  178 </span>-- | Import a Cryptol type and define a fresh variable of that type.
 <span class="lineno">  179 </span>importFresh :: SharedContext -&gt; C.CryptolEnv -&gt; Text.Text -&gt; C.Type -&gt; IO Term
-<span class="lineno">  180 </span><span class="decl"><span class="istickedoff">importFresh sc cryenv name t = do</span>
-<span class="lineno">  181 </span><span class="spaces">  </span><span class="istickedoff">t' &lt;- C.translateType sc <span class="nottickedoff">cryenv</span> t</span>
+<span class="lineno">  180 </span><span class="decl"><span class="istickedoff">importFresh sc _cryenv name t = do</span>
+<span class="lineno">  181 </span><span class="spaces">  </span><span class="istickedoff">t' &lt;- C.translateType sc t</span>
 <span class="lineno">  182 </span><span class="spaces">  </span><span class="istickedoff">scFreshVariable sc name t'</span></span>
 <span class="lineno">  183 </span>
 <span class="lineno">  184 </span>-- | Build the COMPOSITION SIDE CONDITION for 'bc' and 'bt'.  See the
@@ -785,28 +785,27 @@ span.spaces    { background: white }
 <span class="lineno">  766 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">[&quot;rsApp should always exist when rsVariable exists&quot;]</span></span>
 <span class="lineno">  767 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; do</span>
 <span class="lineno">  768 </span><span class="spaces">              </span><span class="istickedoff">sc &lt;- lift getSharedContext</span>
-<span class="lineno">  769 </span><span class="spaces">              </span><span class="istickedoff">cryenv &lt;- lift getCryptolEnv</span>
-<span class="lineno">  770 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  771 </span><span class="spaces">              </span><span class="istickedoff">-- Generate a 'Variable' and return it, thereby replacing 'termF'</span>
-<span class="lineno">  772 </span><span class="spaces">              </span><span class="istickedoff">-- with it.</span>
-<span class="lineno">  773 </span><span class="spaces">              </span><span class="istickedoff">tp &lt;- liftIO $ C.translateType sc <span class="nottickedoff">cryenv</span> constantRetType</span>
-<span class="lineno">  774 </span><span class="spaces">              </span><span class="istickedoff">name &lt;- lift $ constantName $ unwrapTermF x</span>
-<span class="lineno">  775 </span><span class="spaces">              </span><span class="istickedoff">v &lt;- liftIO $ scFreshVariable sc name tp</span>
-<span class="lineno">  776 </span><span class="spaces">              </span><span class="istickedoff">State.modify $ \st -&gt; st { rsVariable = Just v, rsApp = Just termF }</span>
-<span class="lineno">  777 </span><span class="spaces">              </span><span class="istickedoff">return $ unwrapTermF v</span>
-<span class="lineno">  778 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno">  779 </span><span class="spaces">          </span><span class="istickedoff">-- Recurse</span>
-<span class="lineno">  780 </span><span class="spaces">          </span><span class="istickedoff">mapM (replaceConstantTerm constant constantRetType) termF</span></span>
-<span class="lineno">  781 </span>
-<span class="lineno">  782 </span>-- Extract the name from a 'Constant'. Fails if provided another kind of 'TermF'
-<span class="lineno">  783 </span>constantName :: TermF Term -&gt; TopLevel Text.Text
-<span class="lineno">  784 </span><span class="decl"><span class="istickedoff">constantName (Constant e) =</span>
-<span class="lineno">  785 </span><span class="spaces">  </span><span class="istickedoff">return $ toShortName $ nameInfo e</span>
-<span class="lineno">  786 </span><span class="spaces"></span><span class="istickedoff">constantName tf = do</span>
-<span class="lineno">  787 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  788 </span><span class="spaces">  </span><span class="istickedoff">term &lt;- io $ scTermF sc tf</span>
-<span class="lineno">  789 </span><span class="spaces">  </span><span class="istickedoff">term' &lt;- io $ ppTerm sc term</span>
-<span class="lineno">  790 </span><span class="spaces">  </span><span class="istickedoff">fail $ &quot;Error: Expected a constant, but got: &quot; ++ term'</span></span>
+<span class="lineno">  769 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  770 </span><span class="spaces">              </span><span class="istickedoff">-- Generate a 'Variable' and return it, thereby replacing 'termF'</span>
+<span class="lineno">  771 </span><span class="spaces">              </span><span class="istickedoff">-- with it.</span>
+<span class="lineno">  772 </span><span class="spaces">              </span><span class="istickedoff">tp &lt;- liftIO $ C.translateType sc constantRetType</span>
+<span class="lineno">  773 </span><span class="spaces">              </span><span class="istickedoff">name &lt;- lift $ constantName $ unwrapTermF x</span>
+<span class="lineno">  774 </span><span class="spaces">              </span><span class="istickedoff">v &lt;- liftIO $ scFreshVariable sc name tp</span>
+<span class="lineno">  775 </span><span class="spaces">              </span><span class="istickedoff">State.modify $ \st -&gt; st { rsVariable = Just v, rsApp = Just termF }</span>
+<span class="lineno">  776 </span><span class="spaces">              </span><span class="istickedoff">return $ unwrapTermF v</span>
+<span class="lineno">  777 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno">  778 </span><span class="spaces">          </span><span class="istickedoff">-- Recurse</span>
+<span class="lineno">  779 </span><span class="spaces">          </span><span class="istickedoff">mapM (replaceConstantTerm constant constantRetType) termF</span></span>
+<span class="lineno">  780 </span>
+<span class="lineno">  781 </span>-- Extract the name from a 'Constant'. Fails if provided another kind of 'TermF'
+<span class="lineno">  782 </span>constantName :: TermF Term -&gt; TopLevel Text.Text
+<span class="lineno">  783 </span><span class="decl"><span class="istickedoff">constantName (Constant e) =</span>
+<span class="lineno">  784 </span><span class="spaces">  </span><span class="istickedoff">return $ toShortName $ nameInfo e</span>
+<span class="lineno">  785 </span><span class="spaces"></span><span class="istickedoff">constantName tf = do</span>
+<span class="lineno">  786 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- getSharedContext</span>
+<span class="lineno">  787 </span><span class="spaces">  </span><span class="istickedoff">term &lt;- io $ scTermF sc tf</span>
+<span class="lineno">  788 </span><span class="spaces">  </span><span class="istickedoff">term' &lt;- io $ ppTerm sc term</span>
+<span class="lineno">  789 </span><span class="spaces">  </span><span class="istickedoff">fail $ &quot;Error: Expected a constant, but got: &quot; ++ term'</span></span>
 
 </pre>
 </body>

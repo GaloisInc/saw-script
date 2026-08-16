@@ -115,12 +115,12 @@ span.spaces    { background: white }
 <span class="lineno">   96 </span>
 <span class="lineno">   97 </span>    , <span class="istickedoff"><span class="decl"><span class="istickedoff">saw_elt_cache</span></span></span> :: B.IdxCache n SAWExpr
 <span class="lineno">   98 </span>      -- ^ cache mapping a What4 variable nonce to its corresponding SAWCore term.
-<span class="lineno">   99 </span>
-<span class="lineno">  100 </span>    , <span class="istickedoff"><span class="decl"><span class="istickedoff">saw_elt_cache_r</span></span></span> :: IORef (IntMap (Some (B.Expr n)))
-<span class="lineno">  101 </span>      -- ^ reverse cache mapping a SAWCore TermIndex to its corresponding What4 variable.
-<span class="lineno">  102 </span>      -- 'saw_elt_cache' and 'saw_elt_cache_r' implement a bidirectional map between
-<span class="lineno">  103 </span>      -- SAWCore terms and What4 variables.
-<span class="lineno">  104 </span>
+<span class="lineno">   99 </span>      -- We use this when mapping from What4 to SAWCore, to avoid redoing work.
+<span class="lineno">  100 </span>
+<span class="lineno">  101 </span>    , <span class="istickedoff"><span class="decl"><span class="istickedoff">saw_elt_cache_r</span></span></span> :: IORef (IntMap (Some (B.Expr n)))
+<span class="lineno">  102 </span>      -- ^ Maps SAWCore TermIndex-es to a What expression corresponding to it.
+<span class="lineno">  103 </span>      -- We use this during symbolic simulation (when translating SAWCore to What4)
+<span class="lineno">  104 </span>      -- To deal with variables that have associated `What4` definitions.
 <span class="lineno">  105 </span>    }
 <span class="lineno">  106 </span>
 <span class="lineno">  107 </span>data UninterpResult =
