@@ -62,6 +62,7 @@ import Control.Monad (foldM, forM, zipWithM, join, unless, zipWithM)
 import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
+import qualified Data.IntMap as IntMap
 import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -2635,8 +2636,17 @@ exportValue ty v = case ty of
   TV.TVNominal _ _ fields ->
     case fields of
       TV.TVStruct fs   -> exportValue (TV.TVRec fs) v
-      TV.TVEnum {}     -> error ("exportValue: TODO enum: " ++ show v)
       TV.TVAbstract {} -> error "exportValue: TODO abstract types"
+      TV.TVEnum infos ->
+        case v of
+          SC.VCtorApp i _ args ->
+            case infos Vector.! i of
+              TV.ConInfo ident argTs ->
+                do let args' = Vector.fromList (map (SC.runIdentity . force) args)
+                   let vs = Vector.zipWith exportValue argTs args'
+                   let tag = V.mkBv (TV.enumTagWidth infos) (toInteger i)
+                   pure (V.VEnum tag (IntMap.singleton i (TV.ConInfo ident vs)))
+          _ -> error $ "exportValue (on enum type " ++ Text.unpack (CryPP.pp ty) ++ ")"
 
 
 exportTupleValue :: [TV.TValue] -> SC.CValue -> [V.Eval V.Value]
