@@ -446,8 +446,8 @@ basicTypeInfo (FFIBasicVal ffiBasicValType) = pure
     FFIFloat _ _ ffiFloatSize ->
       let (ffiLLVMType, ffiLLVMCoreType) =
             case ffiFloatSize of
-              FFIFloat32 -> (llvm_float, OT.global "Prelude.Float")
-              FFIFloat64 -> (llvm_double, OT.global "Prelude.Double")
+              FFIFloat32 -> (llvm_float, OT.floatType (8 :: Natural) (24 :: Natural))
+              FFIFloat64 -> (llvm_double, OT.floatType (11 :: Natural) (53 :: Natural))
       in  FFITypeInfo
             { ffiConv = Nothing
             , .. }

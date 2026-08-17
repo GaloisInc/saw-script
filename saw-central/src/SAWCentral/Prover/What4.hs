@@ -78,10 +78,12 @@ setupWhat4_sym ::
   IO (B.ExprBuilder
       GlobalNonceGenerator
       St
-      (B.Flags B.FloatReal))
+      -- TODO RGS: Justify the choice of FloatIEEE below
+      (B.Flags B.FloatIEEE))
 setupWhat4_sym hashConsing what4PushMuxOps =
   do -- TODO: get rid of GlobalNonceGenerator ???
-     sym <- B.newExprBuilder B.FloatRealRepr St globalNonceGenerator
+     -- TODO RGS: Justify the choice of FloatIEEE below
+     sym <- B.newExprBuilder B.FloatIEEERepr St globalNonceGenerator
      let cfg = getConfiguration sym
      cacheTermsSetting <- getOptionSetting B.cacheTerms cfg
      _ <- setOpt cacheTermsSetting hashConsing

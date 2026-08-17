@@ -5,6 +5,7 @@
 module SAWCentral.Crucible.Common.ResolveSetupValue (
   resolveBoolTerm, resolveBoolTerm',
   resolveBitvectorTerm, resolveBitvectorTerm',
+  resolveFloatTerm, resolveFloatTerm',
   ResolveRewrite(..),
   ) where
 
@@ -34,7 +35,7 @@ import SAWCentral.Proof (TheoremAnnotation)
 import SAWCore.Rewriter (Simpset, rewriteSharedTerm)
 import SAWCoreWhat4.What4(w4EvalAny, valueToSymExpr)
 
-import Cryptol.TypeCheck.Type (tIsBit, tIsSeq, tIsNum)
+import Cryptol.TypeCheck.Type (tIsBit, tIsFloat, tIsSeq, tIsNum)
 import CryptolSAWCore.TypedTerm (mkTypedTerm, ttType, ttIsMono, prettyTypedTermType)
 import qualified CryptolSAWCore.Pretty as CryPP
 
@@ -107,6 +108,12 @@ resolveTerm sym unint bt rr tm =
             | Just (n,el) <- (tIsSeq ty)
             , tIsBit el, Just i <- tIsNum n, W4.BaseBVRepr w <- bt
             , intValue w == i -> pure ()
+            | Just (e,p) <- tIsFloat ty
+            , Just eExpected <- tIsNum e
+            , Just pExpected <- tIsNum p
+            , W4.BaseFloatRepr (W4.FloatingPointPrecisionRepr eActual pActual) <- bt
+            , eExpected == intValue eActual
+            , pExpected == intValue pActual -> pure ()
             | otherwise -> typeError (Text.unpack (CryPP.pp ty)) :: IO ()
           Nothing -> do
             ppopts <- scGetPPOpts sc
@@ -140,3 +147,18 @@ resolveBitvectorTerm' sym unint w = resolveTerm sym unint (W4.BaseBVRepr w)
 resolveBitvectorTerm ::
   (1 W4.<= w) => Sym -> Set VarIndex -> W4.NatRepr w -> Term -> IO (W4.SymBV Sym w)
 resolveBitvectorTerm sym unint w = resolveBitvectorTerm' sym unint w noResolveRewrite
+
+-- 'resolveTerm' specialized to floats.
+resolveFloatTerm' ::
+  (2 W4.<= e, 2 W4.<= p) =>
+  Sym -> Set VarIndex -> W4.NatRepr e -> W4.NatRepr p -> ResolveRewrite ->
+  Term -> IO (W4.SymFloat Sym (Crucible.FloatingPointPrecision e p))
+resolveFloatTerm' sym unint e p =
+  resolveTerm sym unint (W4.BaseFloatRepr (Crucible.FloatingPointPrecisionRepr e p))
+
+-- 'resolveTerm' specialized to floats, without rewriting.
+resolveFloatTerm ::
+  (2 W4.<= e, 2 W4.<= p) =>
+  Sym -> Set VarIndex -> W4.NatRepr e -> W4.NatRepr p ->
+  Term -> IO (W4.SymFloat Sym (Crucible.FloatingPointPrecision e p))
+resolveFloatTerm sym unint e p = resolveFloatTerm' sym unint e p noResolveRewrite

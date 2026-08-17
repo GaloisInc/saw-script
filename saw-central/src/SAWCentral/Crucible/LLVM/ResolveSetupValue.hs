@@ -24,6 +24,7 @@ module SAWCentral.Crucible.LLVM.ResolveSetupValue
   , resolveTypedTerm
   , resolveSAWPred
   , resolveSAWSymBV
+  , resolveSAWSymFloat
   , recoverStructFieldInfo
   , resolveSetupValueInfo
   , BitfieldIndex(..)
@@ -305,7 +306,7 @@ ppLLVMSetupError sc ppopts err = case err of
                 L.Unknown -> "Perhaps you need to compile with debug symbols enabled."
                 _ -> prettyLLVMInfo ppopts info
         in
-        pure $ PPS.renderText ppopts $ PP.vsep [      
+        pure $ PPS.renderText ppopts $ PP.vsep [
             "Unable to resolve struct field name:" <+> n',
             "Could not resolve setup value debug information into a struct type.",
             info'
@@ -579,7 +580,7 @@ reverseBaseTypeInfo dibt =
        _   -> Nothing
 
    Dwarf.DW_ATE_signed ->
-     case L.dibtSize dibt of 
+     case L.dibtSize dibt of
          Just (L.ValMdValue (L.Typed _ (L.ValInteger sz))) -> Just $ L.PrimType $ L.Integer (fromIntegral sz)
          _ -> Nothing
 
@@ -587,7 +588,7 @@ reverseBaseTypeInfo dibt =
      Just $ L.PrimType $ L.Integer 8
 
    Dwarf.DW_ATE_unsigned ->
-     case L.dibtSize dibt of 
+     case L.dibtSize dibt of
         Just (L.ValMdValue (L.Typed _ (L.ValInteger sz))) -> Just $ L.PrimType $ L.Integer (fromIntegral sz)
         _ -> Nothing
 
@@ -1026,6 +1027,20 @@ resolveSAWSymBV cc w =
     Common.rrWhat4Eval = doW4Eval ?w4EvalTactic
   }
 
+resolveSAWSymFloat ::
+  (?w4EvalTactic :: W4EvalTactic, 2 <= e, 2 <= p) =>
+  LLVMCrucibleContext arch ->
+  NatRepr e ->
+  NatRepr p ->
+  Term ->
+  IO (W4.SymFloat Sym (W4.FloatingPointPrecision e p))
+resolveSAWSymFloat cc e p =
+  Common.resolveFloatTerm' (cc ^. ccSym) (cc ^. ccUninterp) e p
+  Common.ResolveRewrite {
+    Common.rrBasicSS = Just (cc ^. ccBasicSS),
+    Common.rrWhat4Eval = doW4Eval ?w4EvalTactic
+  }
+
 resolveSAWTerm ::
   (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch ->
@@ -1040,8 +1055,6 @@ resolveSAWTerm cc tp tm =
         fail "resolveSAWTerm: unimplemented type Integer (FIXME)"
       Cryptol.TVIntMod _ ->
         fail "resolveSAWTerm: unimplemented type Z n (FIXME)"
-      Cryptol.TVFloat{} ->
-        fail "resolveSAWTerm: unimplemented type Float e p (FIXME)"
       Cryptol.TVArray{} ->
         fail "resolveSAWTerm: unimplemented type Array a b (FIXME)"
       Cryptol.TVRational ->
@@ -1087,6 +1100,20 @@ resolveSAWTerm cc tp tm =
                Crucible.Struct fields -> return fields
                _ -> fail "resolveSAWTerm: impossible: expected struct"
            return (Crucible.LLVMValStruct (V.zip fields (V.fromList vals)))
+      Cryptol.TVFloat e p
+        | 8 <- e, 24 <- p ->
+          do v <- resolveSAWSymFloat cc (knownNat @8) (knownNat @24) tm
+             pure $ Crucible.LLVMValFloat Crucible.SingleSize v
+        | 11 <- e, 53 <- p ->
+          do v <- resolveSAWSymFloat cc (knownNat @11) (knownNat @53) tm
+             pure $ Crucible.LLVMValFloat Crucible.DoubleSize v
+        | otherwise ->
+          fail $ unlines
+            [ "Unsupported float size"
+            , "Exponent bits: " ++ show e
+            , "Precision bits: " ++ show p
+            ]
+
       Cryptol.TVRec _flds ->
         fail "resolveSAWTerm: unimplemented record type (FIXME)"
       Cryptol.TVFun _ _ ->
@@ -1128,7 +1155,6 @@ toLLVMType dl tp =
     Cryptol.TVBit -> Left (UnsupportedTranslation "bit") -- FIXME
     Cryptol.TVInteger -> Left (UnsupportedTranslation "integer")
     Cryptol.TVIntMod _ -> Left (UnsupportedTranslation "integer-mod-n")
-    Cryptol.TVFloat{} -> Left (UnsupportedTranslation "float")
     Cryptol.TVArray{} -> Left (UnsupportedTranslation "array")
     Cryptol.TVRational -> Left (UnsupportedTranslation "rational")
 
@@ -1144,6 +1170,14 @@ toLLVMType dl tp =
       tps' <- mapM (toLLVMType dl) tps
       let si = Crucible.mkStructInfo dl False tps'
       return (Crucible.StructType si)
+    Cryptol.TVFloat e p
+      | 8 <- e, 24 <- p ->
+        Right Crucible.FloatType
+      | 11 <- e, 53 <- p ->
+        Right Crucible.DoubleType
+      | otherwise ->
+        Left (UnsupportedTranslation "non-standard float")
+
     Cryptol.TVRec _flds -> Left (UnsupportedTranslation "record")
     Cryptol.TVFun _ _ -> Left (Impossible "function")
     Cryptol.TVNominal {} -> Left (Impossible "nominal")

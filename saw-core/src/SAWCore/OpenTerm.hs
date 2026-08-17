@@ -59,7 +59,7 @@ module SAWCore.OpenTerm (
   unit, unitType,
   stringLit, stringType,
   true, false, bool, boolType,
-  arrayValue, vectorType, bvLit, bvType,
+  arrayValue, vectorType, bvLit, bvType, floatType,
   pair, pairType, pairLeft, pairRight,
   tuple, tupleType, projTuple,
   tuple', tupleType', projTuple',
@@ -168,6 +168,12 @@ bvType :: Integral a => a -> OpenTerm
 bvType n =
   apply (global "Prelude.Vec")
   [nat (fromIntegral n), boolType]
+
+-- | Create a SAW core term for the type of a float
+floatType :: Integral a => a -> a -> OpenTerm
+floatType e p =
+  apply (global "Prelude.Float")
+  [nat (fromIntegral e), nat (fromIntegral p)]
 
 -- | Build an 'OpenTerm' for a pair
 pair :: OpenTerm -> OpenTerm -> OpenTerm

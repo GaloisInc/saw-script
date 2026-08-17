@@ -1244,7 +1244,7 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
             ppopts <- liftIO $ scGetPPOpts sc
             err <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
             failure ppopts loc err
-              
+
 
     _ -> do
         ppopts <- liftIO $ scGetPPOpts sc
@@ -1275,8 +1275,14 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
 
 zeroValueSC :: SharedContext -> Crucible.StorageType -> IO Term
 zeroValueSC sc tp = case Crucible.storageTypeF tp of
-  Crucible.Float -> fail "zeroValueSC: float unsupported"
-  Crucible.Double -> fail "zeroValueSC: double unsupported"
+  Crucible.Float ->
+    do e <- scNat sc 8
+       p <- scNat sc 24
+       scFpPosZero sc e p
+  Crucible.Double ->
+    do e <- scNat sc 11
+       p <- scNat sc 53
+       scFpPosZero sc e p
   Crucible.X86_FP80 -> fail "zeroValueSC: X86_FP80 unsupported"
   Crucible.Bitvector bs ->
     do n <- scNat sc (Crucible.bytesToBits bs)
@@ -1345,8 +1351,8 @@ valueToSC sym md failMsg tval@(Cryptol.TVSeq n (Cryptol.TVSeq 8 Cryptol.TVBit)) 
   = do explodedVal <- liftIO $ Crucible.explodeStringValue sym str
        valueToSC sym md failMsg tval explodedVal
 
-valueToSC _ _ _ _ Crucible.LLVMValFloat{} =
-  fail  "valueToSC: Real not supported"
+valueToSC sym _ _ (Cryptol.TVFloat _e _p) (Crucible.LLVMValFloat _sz val) =
+  liftIO $ toSC sym (sym ^. W4.userState) val
 
 valueToSC sym md failMsg _tval _val = do
   let sc = sawCoreSharedContext sym
@@ -1359,8 +1365,14 @@ typeToSC :: SharedContext -> Crucible.StorageType -> IO Term
 typeToSC sc t =
   case Crucible.storageTypeF t of
     Crucible.Bitvector sz -> scBitvector sc (Crucible.bytesToBits sz)
-    Crucible.Float -> fail "typeToSC: float not supported"
-    Crucible.Double -> fail "typeToSC: double not supported"
+    Crucible.Float ->
+      do e <- scNat sc 8
+         p <- scNat sc 24
+         scFloatType sc e p
+    Crucible.Double ->
+      do e <- scNat sc 11
+         p <- scNat sc 53
+         scFloatType sc e p
     Crucible.X86_FP80 -> fail "typeToSC: X86_FP80 not supported"
     Crucible.Array sz ty ->
       do n <- scNat sc (fromIntegral sz)

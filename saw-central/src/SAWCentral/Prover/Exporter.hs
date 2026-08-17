@@ -314,7 +314,8 @@ writeSMTLib2What4 f satq = do
   sc <- getSharedContext
   what4PushMuxOps <- gets rwWhat4PushMuxOps
   io $ do
-     sym <- W4.newExprBuilder W4.FloatRealRepr St globalNonceGenerator
+     -- TODO RGS: Justify the choice of FloatIEEE below
+     sym <- W4.newExprBuilder W4.FloatIEEERepr St globalNonceGenerator
      (_varMap, lits) <- W.w4Solve sym sc satq
      let cfg = getConfiguration sym
      extendConfig smtParseOptions cfg

@@ -1864,19 +1864,31 @@ setupArg sc sym ecRef tp = do
         let cty = Cryptol.tWord (Cryptol.tNum (natValue w))
         scTp <- scBitvector sc (natValue w)
         pure (cty, scTp)
+      Crucible.FloatRepr fpp -> do
+        Crucible.FloatingPointPrecisionRepr e p <-
+          pure $ Crucible.floatInfoToPrecisionRepr fpp
+        let e' = natValue e
+        let p' = natValue p
+        let cty = Cryptol.tFloat (Cryptol.tNum e') (Cryptol.tNum p')
+        scE <- scNat sc e'
+        scP <- scNat sc p'
+        scTp <- scFloatType sc scE scP
+        pure (cty, scTp)
       _ -> Common.typeReprToSAWTypes sym sc tp
 
   ecs <- readIORef ecRef
   vn <- scFreshVarName sc ("arg_" <> Text.pack (show (length ecs)))
   writeIORef ecRef (ecs Seq.|> TypedVariable cty vn scTp)
 
+  let st = sawCoreState sym
   t <- scVariable sc vn scTp
   elt <-
     case tp of
       Crucible.LLVMPointerRepr w -> do
-        let st = sawCoreState sym
         elt <- bindSAWTerm sym st (Crucible.BaseBVRepr w) t
         Crucible.llvmPointer_bv sym elt
+      Crucible.FloatRepr fpp ->
+        bindSAWTerm sym st (Crucible.BaseFloatRepr (Crucible.floatInfoToPrecisionRepr fpp)) t
       _ -> Common.termToRegValue sym tp t
   pure $ Crucible.RegEntry tp elt
 
@@ -1923,6 +1935,13 @@ extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
                 Crucible.BVRepr w ->
                   do t <- toSC sym st rv
                      let cty = Cryptol.tWord (Cryptol.tNum (natValue w))
+                     pure $ TypedTerm (TypedTermSchema (Cryptol.tMono cty)) t
+                Crucible.FloatRepr fpp ->
+                  do t <- toSC sym st rv
+                     Crucible.FloatingPointPrecisionRepr e p <-
+                       pure $ Crucible.floatInfoToPrecisionRepr fpp
+                     let cty = Cryptol.tFloat (Cryptol.tNum (natValue e))
+                                              (Cryptol.tNum (natValue p))
                      pure $ TypedTerm (TypedTermSchema (Cryptol.tMono cty)) t
                 _ -> fail $ unwords ["Unexpected return type:", show rt]
             tt' <- abstractTypedVars sc (toList ecs) tt
@@ -2066,9 +2085,9 @@ cryptolTypeOfActual dl mt =
     Crucible.IntType w ->
       return $ Cryptol.tWord (Cryptol.tNum w)
     Crucible.FloatType ->
-      Nothing -- FIXME: update when Cryptol gets float types
+      pure $ Cryptol.tFloat (Cryptol.tNum (8 :: Int)) (Cryptol.tNum (24 :: Int))
     Crucible.DoubleType ->
-      Nothing -- FIXME: update when Cryptol gets float types
+      pure $ Cryptol.tFloat (Cryptol.tNum (11 :: Int)) (Cryptol.tNum (53 :: Int))
     Crucible.ArrayType n ty ->
       do cty <- cryptolTypeOfActual dl ty
          return $ Cryptol.tSeq (Cryptol.tNum n) cty
@@ -2183,8 +2202,18 @@ constructExpandedSetupValue cc sc loc t =
         replicateM (fromIntegral n) (constructExpandedSetupValue cc sc loc memTy)
       pure $ mkAllLLVM $ SetupArray () $ map (\a -> getAllLLVM a) elements_
 
-    Crucible.FloatType      -> failUnsupportedType "Float"
-    Crucible.DoubleType     -> failUnsupportedType "Double"
+    Crucible.FloatType ->
+      do let cty = Cryptol.tFloat (Cryptol.tNum (8 :: Int)) (Cryptol.tNum (24 :: Int))
+         cryenv <- lift $ lift getCryptolEnv
+         fv <- Setup.freshVariable sc cryenv "" cty
+         pure $ mkAllLLVM (SetupTerm fv)
+
+    Crucible.DoubleType ->
+      do let cty = Cryptol.tFloat (Cryptol.tNum (11 :: Int)) (Cryptol.tNum (53 :: Int))
+         cryenv <- lift $ lift getCryptolEnv
+         fv <- Setup.freshVariable sc cryenv "" cty
+         pure $ mkAllLLVM (SetupTerm fv)
+
     Crucible.MetadataType   -> failUnsupportedType "Metadata"
     Crucible.VecType{}      -> failUnsupportedType "Vec"
     Crucible.X86_FP80Type{} -> failUnsupportedType "X86_FP80"

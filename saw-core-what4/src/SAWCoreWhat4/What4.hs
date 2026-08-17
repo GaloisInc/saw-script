@@ -361,6 +361,7 @@ valueToSymExpr = \case
   VInt i -> Just $ Some i
   VWord (DBV w) -> Just $ Some w
   VArray (SArray a) -> Just $ Some a
+  VFloat (SFloat f) -> Just $ Some f
   _ -> Nothing
 
 symExprToValue ::

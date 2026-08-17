@@ -71,12 +71,13 @@ import qualified SAWCore.SharedTerm as SC
 import           SAWCoreWhat4.Panic
 
 -- | The What4 `B.ExprBuilder` we use for SAW verification
-type SAWCoreExprBuilder = B.ExprBuilder GlobalNonceGenerator SAWCoreState (B.Flags B.FloatReal)
+-- TODO RGS: Justify the choice of FloatIEEE below
+type SAWCoreExprBuilder = B.ExprBuilder GlobalNonceGenerator SAWCoreState (B.Flags B.FloatIEEE)
 
 newSAWCoreExprBuilder :: SC.SharedContext -> Bool -> IO SAWCoreExprBuilder
 newSAWCoreExprBuilder sc what4PushMuxOps =
   do st <- newSAWCoreState sc
-     sym <- B.newExprBuilder B.FloatRealRepr st globalNonceGenerator
+     sym <- B.newExprBuilder B.FloatIEEERepr st globalNonceGenerator
      pushMuxOpsSetting <- W4Cfg.getOptionSetting B.pushMuxOpsOption $ getConfiguration sym
      _ <- W4Cfg.setOpt pushMuxOpsSetting what4PushMuxOps
      pure sym

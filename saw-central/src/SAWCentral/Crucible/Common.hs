@@ -77,7 +77,8 @@ data PathSatSolver
 
 -- | The symbolic backend we use for SAW verification
 type Sym = SAWCoreExprBuilder
-type Backend solver = OnlineBackend solver Nonce.GlobalNonceGenerator SAWCoreState (W4.Flags W4.FloatReal)
+-- TODO RGS: Justify the choice of FloatIEEE below
+type Backend solver = OnlineBackend solver Nonce.GlobalNonceGenerator SAWCoreState (W4.Flags W4.FloatIEEE)
 
 data SomeOnlineBackend =
   forall solver. OnlineSolver solver =>
@@ -166,7 +167,8 @@ baseCryptolType bt =
     Crucible.BaseBVRepr w -> pure $ Cryptol.tWord (Cryptol.tNum (natValue w))
     Crucible.BaseIntegerRepr -> pure $ Cryptol.tInteger
     Crucible.BaseArrayRepr {} -> Nothing
-    Crucible.BaseFloatRepr _ -> Nothing
+    Crucible.BaseFloatRepr (Crucible.FloatingPointPrecisionRepr e p) ->
+      pure $ Cryptol.tFloat (Cryptol.tNum (natValue e)) (Cryptol.tNum (natValue p))
     Crucible.BaseStringRepr _ -> Nothing
     Crucible.BaseComplexRepr  -> Nothing
     Crucible.BaseRealRepr     -> Nothing
