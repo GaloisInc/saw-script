@@ -772,7 +772,7 @@ resolveNameIO sc cenv nm =
               ImportedName qn _ ->
                 do resolvedName <- scResolveQualName sc qn
                    case resolvedName of
-                     Just vi -> pure (vi : scnms)
+                     Just n -> pure (nameIndex n : scnms)
                      Nothing -> pure scnms
               _ -> pure scnms
        Nothing -> pure scnms
@@ -801,7 +801,7 @@ normalize_term_opaque opaque tt =
      -- Also exclude defined SAWCore constants that are implemented as primitives
      let primQualNames = map moduleIdentToQualName (Map.keys constMap)
      primIdxs <- io $ traverse (scResolveQualName sc) primQualNames
-     let opaqueSet = Set.fromList (catMaybes primIdxs ++ idxs)
+     let opaqueSet = Set.fromList (map nameIndex (catMaybes primIdxs) ++ idxs)
      let unfold nm = Set.notMember (nameIndex nm) opaqueSet
      tm' <- io $ scNormalize sc unfold (ttTerm tt)
      pure tt{ ttTerm = tm' }
@@ -814,7 +814,7 @@ goal_normalize opaque =
        -- Also exclude defined SAWCore constants that are implemented as primitives
        let primQualNames = map moduleIdentToQualName (Map.keys constMap)
        primIdxs <- io $ traverse (scResolveQualName sc) primQualNames
-       let opaqueSet = Set.fromList (catMaybes primIdxs ++ idxs)
+       let opaqueSet = Set.fromList (map nameIndex (catMaybes primIdxs) ++ idxs)
        sqt' <- io $ traverseSequentWithFocus (normalizeProp sc opaqueSet) (goalSequent goal)
        return (sqt', NormalizePropEvidence opaqueSet)
 

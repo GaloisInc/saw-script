@@ -156,6 +156,7 @@ import Numeric.Natural (Natural)
 import SAWCore.SharedTerm
 import SAWCore.Simulator.Value
 import SAWCore.Module (ResolvedName(..), ctorName, dtCtors, lookupVarIndexInMap)
+import SAWCore.Name (nameIndex)
 import SAWCore.Term.Functor (FieldName)
 
 -- what4
@@ -787,14 +788,14 @@ mkArgTerm sc ty val =
          pure (ArgTermRecord fname x1 x2)
 
     (VDataType nmi ps _, VCtorApp n _ vv) ->
-      do mvi <- scResolveQualName sc (toQualName nmi)
-         vi <-
-           case mvi of
-             Just vi -> pure vi
+      do mnm <- scResolveQualName sc (toQualName nmi)
+         nm <-
+           case mnm of
+             Just nm -> pure nm
              Nothing -> panic "mkArgTerm" ["Data type name not found: " <> toAbsoluteName nmi]
          mm <- scGetModuleMap sc
          dt <-
-           case lookupVarIndexInMap vi mm of
+           case lookupVarIndexInMap (nameIndex nm) mm of
              Just (ResolvedDataType dt) -> pure dt
              _ -> panic "mkArgTerm" ["Data type not found: " <> toAbsoluteName nmi]
          let ctor = dtCtors dt !! n

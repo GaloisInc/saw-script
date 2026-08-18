@@ -188,11 +188,11 @@ scReadExternal sc input =
          case nmi of
            ModuleIdentifier ident ->
              lift (scResolveQualName sc (moduleIdentToQualName ident)) >>= \case
-               Just vi' -> pure (Name vi' nmi)
+               Just nm  -> pure nm
                Nothing  -> lift $ fail $ "scReadExternal: missing module identifier: " ++ show ident
            ImportedName qn _aliases ->
              lift (scResolveQualName sc qn) >>= \case
-               Just vi' -> pure (Name vi' nmi)
+               Just nm -> pure nm
                Nothing -> case Map.lookup vi vs of
                  Just vi' -> pure $ Name vi' nmi
                  Nothing ->
