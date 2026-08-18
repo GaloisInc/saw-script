@@ -54,7 +54,7 @@ module CryptolSAWCore.Cryptol
   , exportValueWithSchema
   ) where
 
-import Control.Monad (foldM, forM, zipWithM, join, unless, zipWithM)
+import Control.Monad (foldM, forM, zipWithM, join, unless)
 import Control.Exception (catch, SomeException)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
@@ -62,6 +62,7 @@ import qualified Data.IntMap as IntMap
 import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as Vector
@@ -110,7 +111,8 @@ import SAWCore.Prim (BitVector(..))
 import SAWCore.Recognizer
 import SAWCore.SharedTerm
 import SAWCore.Simulator.MonadLazy (force)
-import SAWCore.Name (preludeName)
+import SAWCore.Module (CtorArg(..))
+import SAWCore.Name (toQualName, wildcardVarName)
 import SAWCore.Term.Functor (mkSort, FieldName, LocalName)
 import qualified SAWCore.QualName as QN
 
@@ -298,7 +300,11 @@ importType sc ty = do
            C.Enum {} ->
              -- The (parameterized) type should be in the sc env,
              -- just apply types to it:
-             scGlobalApply sc (identOfEnumType n) =<< traverse go ts
+             do ni <- importName n
+                mnm <- scResolveQualName sc (toQualName ni)
+                case mnm of
+                  Just nm -> scConstApply sc nm =<< traverse go ts
+                  Nothing -> panic "importType" ["Type name not found:", CryPP.pp n]
            C.Abstract
              | Just prim' <- C.asPrim n
              , Just t <- Map.lookup prim' primTypes ->
@@ -2633,274 +2639,45 @@ genCodeForEnum ::
   HasCallStack =>
   SharedContext -> NominalType -> [C.EnumCon] -> IO [(C.Name,Term)]
 genCodeForEnum sc nt ctors =
-  do
-  let ntName'  = ntName nt
-      numCtors = length ctors
+  do tyParamsVars <- traverse (bindTParam sc) (C.ntParams nt)
 
-  -------------------------------------------------------------
-  -- Common code to handle type parameters of the nominal type:
-  --  - `Variable`s are used to capture each of the type variables.
+     let importCtorSpec :: C.EnumCon -> IO CtorSpec
+         importCtorSpec c =
+           do nmi <- importName (C.ecName c)
+              args <-
+                forM (C.ecFields c) $ \ct ->
+                do ty <- importType sc ct
+                   vn <- scFreshVarName sc "_"
+                   pure (vn, ConstArg ty)
+              pure $
+                CtorSpec
+                { cspecNameInfo = nmi
+                , cspecArgs = args -- [ (wildcardVarName, ConstArg t) | t <- tys ]
+                , cspecIndices = []
+                }
 
-  -- The type parameters (`ts` in the example above)
-  let tyParamsInfo  = C.ntParams nt
+     ctorSpecs <- traverse importCtorSpec ctors
 
-  -- | the kinds of the type Params:
-  -- tyParamsKinds <- forM tyParamsInfo $ \tpi ->
-  --                   importKind sc (C.tpKind tpi)
-  -- | create variables for the type Params:
-  -- tyParamsVars  <- mapM (scVariable sc) tyParamsECs
+     nmi <- importName (ntName nt)
+     motiveName <- scFreshVarName sc "p"
+     argName <- scFreshVarName sc "arg"
+     let dtSpec =
+           DataTypeSpec
+           { dtsNameInfo = nmi
+           , dtsParams = mapMaybe asVariable tyParamsVars
+           , dtsIndices = []
+           , dtsSort = mkSort 0
+           , dtsCtors = ctorSpecs
+           , dtsMotiveName = motiveName
+           , dtsArgName = argName
+           }
 
-  (tyParamsVars, tyParamsKinds) <- unzip <$> mapM (bindTParam' sc) tyParamsInfo
-
-  let
-      -- | @addTypeAbstractions t@ - create the SAWCore type
-      --   abstractions around @t@ (holding the type Param references)
-      addTypeAbstractions :: Term -> IO Term
-      addTypeAbstractions t = scAbstractTerms sc tyParamsVars t
-
-  -------------------------------------------------------------
-  -- Common naming conventions:
-  let sumTy_ident = identOfEnumType ntName'
-      case_ident  = identOfEnumCase ntName'
-      tl_ident    = newIdent ntName' "__LS"
-                    -- name for the 'type list', type is ListSort (thus LS)
-
-  -------------------------------------------------------------
-  -- Definitions to access needed SAWCore Prelude types & definitions:
-  sort0          <- scSort sc (mkSort 0)
-  scListSort     <- scGlobalApply sc "Prelude.ListSort" []
-  scLS_Nil       <- scGlobalApply sc "Prelude.LS_Nil"  []
-
-  let scLS_Cons s ls   = scGlobalApply sc "Prelude.LS_Cons" [s,ls]
-
-      scEithersV ls    = scGlobalApply sc "Prelude.EithersV" [ls]
-      sc_eithersV b ls = scGlobalApply sc "Prelude.eithersV" [b,ls]
-
-     -- to create values of the Either type:
-      scLeft  a b x    = scGlobalApply sc "Prelude.Left"  [a,b,x]
-      scRight a b x    = scGlobalApply sc "Prelude.Right" [a,b,x]
-
-      scMakeListSort :: [Term] -> IO Term
-      scMakeListSort = Fold.foldrM scLS_Cons scLS_Nil
-
-      -- | scMakeFunsTo b tvs - create FunsTo list of type `FunsTo b`, given
-      --    the list of (type, val :: type->b) pairs
-      scMakeFunsTo :: Term -> [(Term,Term)] -> IO Term
-      scMakeFunsTo b tvs =
-        do
-        scFunsTo_Nil <- scGlobalApply sc "Prelude.FunsTo_Nil"  [b]
-        let scFunsTo_Cons (t,v) r =
-              scGlobalApply sc "Prelude.FunsTo_Cons" [b,t,v,r]
-        Fold.foldrM scFunsTo_Cons scFunsTo_Nil tvs
-
-  -------------------------------------------------------------
-  -- Create TypeList(tl) for the Enum, add to SAWCore environment:
-  --  - elements of list are the elements of the Sum.
-  --  - the types maintain the same exact type vars (see tyParamsInfo)
-  -- Using the running example, we want to add the following to the
-  -- SAWCore environment:
-  --
-  --   > ETT__LS : sort 0 -> ListSort;
-  --   > ETT__LS ts = LS_Cons     (scTupleType [])
-  --   >               (LS_Cons  (scTupleType [Nat])
-  --   >                (LS_Cons (scTupleType [Bool,ts])
-  --   >                  LS_Nil));
-
-  --  cheating a little in the above syntax.
-  --   - scTupleType is not SAWCore, it represents what's created with
-  --     `scTupleType' function
-  --   - using list syntax for the ListSort lists that are the arguments
-  --     to the above.
-
-  -- argTypes_eachCtor is the sum-of-products matrix for this enum type:
-  (argTypes_eachCtor :: [[Term]]) <-
-    forM ctors $ \c->     -- for each constructor
-      forM (C.ecFields c) -- for each constructor field (type)
-         (importType sc)
-
-  -- map the list of types to the product type:
-  represType_eachCtor <- forM argTypes_eachCtor $ \ts ->
-                           scTupleType sc ts
-
-  tl_rhs   <- addTypeAbstractions =<< scMakeListSort represType_eachCtor
-  tl_type  <- scFunAll sc tyParamsKinds scListSort
-  tl_rhs'  <- scAscribe sc tl_rhs tl_type
-  tl_tm    <- scDefineConstant sc (ModuleIdentifier tl_ident) tl_rhs'
-
-  -------------------------------------------------------------
-  -- Create the definition for the SAWCore sum (to which we map the
-  -- enum type).  For the running example we would see this:
-  --
-  -- > ETT : (ts : sort 0) -> sort 0;
-  -- > ETT ts = EithersV (ETT__LS ts);
-  --
-
-  -- the Typelist(tl) applied to the type parameters.
-  tl_applied <- scApplyAll sc tl_tm tyParamsVars
-
-  sumTy_type <- scFunAll sc tyParamsKinds sort0
-  sumTy_rhs  <- addTypeAbstractions =<< scEithersV tl_applied
-  sumTy_rhs' <- scAscribe sc sumTy_rhs sumTy_type
-  sumTy_tm   <- scDefineConstant sc (ModuleIdentifier sumTy_ident) sumTy_rhs'
-
-  -------------------------------------------------------------
-  -- Create a `case` function specialized to the enum type.
-  -- For the running example, we will define this:
-  --
-  --   > ETT_case  : (ts : sort 0)
-  --   >          -> (b: sort 0)
-  --   >          -> (arrowsType []        b)
-  --   >          -> (arrowsType [Nat]     b)
-  --   >          -> (arrowsType [Bool,ts] b)
-  --   >          -> ETT ts
-  --   >          -> b;
-  --   > ETT_case ts b f1 f2 f3 =
-  --   >   eithersV b
-  --   >     (FunsTo_Cons b (ETT__ArgType_C1 ts) (\(x: scTupleType []       ) -> f1)
-  --   >     (FunsTo_Cons b (ETT__ArgType_C2 ts) (\(x: scTupleType [Nat]    ) -> f2 x.1)
-  --   >     (FunsTo_Cons b (ETT__ArgType_C3 ts) (\(x: scTupleType [Bool,ts]) -> f3 x.1 x.2)
-  --   >     (FunsTo_Nil b))));
-  --
-  -- Using the same syntax cheats we did above.
-
-  sumTy_applied <- scApplyAll sc sumTy_tm tyParamsVars
-
-  let mkAltFuncTypes b = mapM (\ts->scFunAll sc ts b) argTypes_eachCtor
-  case_type <-
-      do
-      b <- scFreshVariable sc "b" sort0
-           -- all uses are direct under the 'Pi'
-      altFuncTypes <- mkAltFuncTypes b
-      scGeneralizeTerms sc tyParamsVars
-        =<< scGeneralizeTerms sc [b] -- the scPi construct
-        =<< scFunAll sc altFuncTypes
-        =<< scFun sc sumTy_applied b
-
-  case_rhs <-
-      do
-      -- Create needed vars for SAWCore expression
-      --  - generating something like:
-      --    \tyvars..-> \(b: sort)->(\f1 f2 ... ->
-      --       eithersV b (FunsToCons b ... (\x-> f1 ...) ...)
-
-      b <- scFreshVariable sc "b" sort0
-      let funcNames = map (\n-> Text.pack ("f" ++ show n)) [1..numCtors]
-      funcTypes <- mkAltFuncTypes b
-      funcVars  <- zipWithM (scFreshVariable sc) funcNames funcTypes
-      funcDefs  <- forM (zip3 funcVars represType_eachCtor ctors) $
-                     \(funcVar,ty,ctor) ->
-                         do
-                         x <- scFreshVariable sc "x" ty
-                         let n = length (C.ecFields ctor)
-                         scAbstractTerms sc [x]
-                           =<< scApplyAll sc funcVar
-                           =<< forM [0..n-1] (scTupleSelector sc x)
-
-      addTypeAbstractions
-        =<< scAbstractTerms sc [b]
-        =<< scAbstractTerms sc funcVars
-        =<< sc_eithersV b
-        =<< scMakeFunsTo b (zip represType_eachCtor funcDefs)
-
-  case_rhs' <- scAscribe sc case_rhs case_type
-  _ <- scDefineConstant sc (ModuleIdentifier case_ident) case_rhs'
-
-  -------------------------------------------------------------
-  -- There's a bit of 'tedium' in creating the constructors, let's look at our
-  -- running example, the SAWCore constructors we want are these:
-  --
-  --   > ```
-  --   > C1 : (ts : sort 0) -> listSortGet (ETT__LS ts) 0 -> ETT ts;
-  --   > C1 ts x =
-  --   >   Left (listSortGet (ETT__LS ts) 0) (EithersV (listSortDrop (ETT__LS ts) 1))
-  --   >        x;
-  --   >
-  --   > C2 : (ts : sort 0) -> listSortGet (ETT__LS ts) 1 -> ETT ts;
-  --   > C2 ts x =
-  --   >   Right (listSortGet (ETT__LS ts) 0) (EithersV (listSortDrop (ETT__LS ts) 1))
-  --   >   (Left (listSortGet (ETT__LS ts) 1) (EithersV (listSortDrop (ETT__LS ts) 2))
-  --   >    x);
-  --   >
-  --   > C3 : (ts : sort 0) -> listSortGet (ETT__LS ts) 2 -> ETT ts;
-  --   > C3 ts x =
-  --   >  Right   (listSortGet (ETT__LS ts) 0) (EithersV (listSortDrop (ETT__LS ts) 1))
-  --   >   (Right (listSortGet (ETT__LS ts) 1) (EithersV (listSortDrop (ETT__LS ts) 2))
-  --   >    (Left (listSortGet (ETT__LS ts) 2) (EithersV (listSortDrop (ETT__LS ts) 3))
-  --   >    x));
-  --   > ```
-  --
-  -- One can see that we try to encapsulate all the enum specific data in the
-  -- @ETT__LS ts@ structure.
-
-
--------------------------------------------------------------
-  -- Define function for N-th injection into the whole Sum (nested Either's):
-
-  scNthInjection <-
-      do
-      -- Create needed SAWCore types for the Left/Right constructors
-      -- (each Either in the nested Either's needs a pair of types):
-      tps <- Vector.generateM numCtors $ \i->
-               do
-               typeLeft  <- do
-                            n <- scNat sc (fromIntegral i)
-                            scGlobalApply sc "Prelude.listSortGet"
-                              [tl_applied, n]
-
-               typeRight <- do
-                            n <- scNat sc (fromIntegral i + 1)
-                            tl_remainder <-
-                              scGlobalApply sc "Prelude.listSortDrop"
-                                [tl_applied, n]
-                            scEithersV tl_remainder
-
-               return (typeLeft, typeRight)
-
-      let
-        scInjectRight :: Int -> Term -> IO Term
-        scInjectRight n x | n < 0     = return x
-                          | otherwise = do
-                              y <- scRight (fst (tps Vector.! n)) (snd (tps Vector.! n)) x
-                              scInjectRight (n-1) y
-
-        scNthInjection :: Int -> Term -> IO Term
-        scNthInjection n x = do
-                             y <- scLeft (fst (tps Vector.! n)) (snd (tps Vector.! n)) x
-                             scInjectRight (n-1) y
-
-      return scNthInjection
-
-  -------------------------------------------------------------
-  -- Create the definition for each constructor:
-  defn_eachCtor <-
-    forM (zip argTypes_eachCtor ctors) $
-        \(argTypes, ctor)->
-        do
-        let
-          ctorName   = C.ecName ctor
-          ctorNumber = C.ecNumber ctor
-          numArgs    = length argTypes
-
-        -- NOTE: we don't add the constructor arguments to the CryptolEnv, as
-        -- the only references to these arguments are in the generated
-        -- SAWCore code.
-
-        -- create the vars (& names) for constructor arguments:
-        let argNames = map (\x-> Text.pack ("x" ++ show x)) [0..numArgs-1]
-        argVars <- zipWithM (scFreshVariable sc) argNames argTypes
-
-        -- create the constructor:
-        ctorBody <- addTypeAbstractions
-                      =<< scAbstractTerms sc argVars
-                      =<< scNthInjection ctorNumber
-                      =<< scTuple sc argVars
-        return (ctorName, ctorBody)
-
-  return defn_eachCtor
+     (_sumTy_tm, ctor_tms) <- scDefineDataType sc dtSpec -- IO (Term, [Term])
+     pure (zip (map C.ecName ctors) ctor_tms)
 
 
 -- | importCase - translates a Cryptol case expr to SAWCore: an application
---   of the generated SAWCore <NAME>__case function to appropriate arguments.
+--   of the SAWCore <NAME>#rec recursor function to appropriate arguments.
 --
 --   - Note missing functionality: (FIXME)
 --     - not implemented yet: default case alternatives that bind the whole scrutinee,
@@ -3031,9 +2808,9 @@ importCase sc tyResult scrutinee altsMap mDfltAlt =
 
   And what we will do next is transform this last into this SAWCore:
 
-    > ETT_case
+    > ETT#rec
     >   T1                          -- type application, the instantiation of 'a1'
-    >   B                           -- type application, the result of the whole case
+    >   (\_ -> B)                   -- type application, the result of the whole case
     >   RHS1                        -- deconstructor for C1
     >   (\(_: Nat)         -> DFLT) -- deconstructor for C2
     >   (\(_: Bool) (_:T1) -> DFLT) -- deconstructor for C3
@@ -3056,37 +2833,30 @@ importCase sc tyResult scrutinee altsMap mDfltAlt =
   tyArgs'    <- mapM (importType sc) tyArgs
   tyResult'  <- importType sc tyResult      -- type of whole case expr
   scrutinee' <- importExpr sc scrutinee
+
+  -- The recursor
+  nmi        <- importName nm
+  mName      <- scResolveQualName sc (toQualName nmi)
+  recursor   <- case mName of
+                  Just dtName -> scRecursor sc dtName (mkSort 0)
+                  Nothing -> panic "importCase" ["Type name not found:", CryPP.pp nm]
+
   -- The deconstructors. Note that we import them with known types (using
   -- importExpr') to resolve any type mismatches that arise between the
   -- scrutinee type and the case alternatives' field binders. (See the comments
   -- on `fieldTysAndAlts` above.)
+
+  tyInput    <- scTypeOf sc scrutinee'
+  motive     <- scLambda sc wildcardVarName tyInput tyResult'
   funcs'     <- zipWithM
                   (\funcTy func -> importExpr' sc (C.tMono funcTy) func)
                   funcTys
                   funcs
-  caseExpr   <- scGlobalApply sc (identOfEnumCase nm) $
-                  tyArgs'             -- case is expecting the type arguments
+  caseExpr   <- scApplyAll sc recursor $
+                  tyArgs'             -- recursor is expecting the type arguments
                                       --   that the enumtype is instantiated to
-                  ++ [tyResult']      -- the result type of the case expression
+                  ++ [motive]         -- the result type of the case expression
                   ++ funcs'           -- the eliminator funcs, one for each constructor
                   ++ [scrutinee']     -- scrutinee of case, of enum type
 
   return caseExpr
-
-
--- Shared naming conventions for Enum support:
-
-identOfEnumType :: C.Name -> Ident
-identOfEnumType nt = newIdent nt "__TY"
-
-identOfEnumCase :: C.Name -> Ident
-identOfEnumCase nt = newIdent nt "__case"
-
-newIdent :: C.Name -> Text -> Ident
-newIdent name suffix =
-  mkIdent
-    preludeName
-       -- FIXME: These generated definitions should not be added to
-       --        the prelude but to the module where the Enum (or ...)
-       --        is defined.
-    (C.identText (C.nameIdent name) `Text.append` suffix)
