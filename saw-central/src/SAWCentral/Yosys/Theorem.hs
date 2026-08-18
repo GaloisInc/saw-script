@@ -158,15 +158,15 @@ applyOverride ::
   SC.Term ->
   IO SC.Term
 applyOverride sc thm t = do
-  tidx <-
+  tnm <-
     do result <- SC.scResolveQualName sc $ thm ^. theoremQualName
        case result of
          Nothing -> yosysError . YosysErrorOverrideNameNotFound . QN.ppQualName $ thm ^. theoremQualName
-         Just i -> pure i
+         Just nm -> pure nm
   -- unfold everything except for theoremQualName and prelude constants
   let isPreludeName (SC.ModuleIdentifier ident) = SC.identModule ident == SC.preludeModuleName
       isPreludeName _ = False
-  let unfold nm = SC.nameIndex nm /= tidx && not (isPreludeName (SC.nameInfo nm))
+  let unfold nm = nm /= tnm && not (isPreludeName (SC.nameInfo nm))
   unfolded <- SC.scUnfoldConstants sc unfold t
   cache <- SC.newIntCache
   let
@@ -174,8 +174,8 @@ applyOverride sc thm t = do
     go s =
       SC.useIntCache cache (SC.termIndex s) $
       case SC.unwrapTermF s of
-        SC.Constant (SC.Name idx _)
-          | idx == tidx -> theoremReplacement sc thm
+        SC.Constant nm
+          | nm == tnm -> theoremReplacement sc thm
           | otherwise -> pure s
         _ -> SC.scTermF sc =<< traverse go (SC.unwrapTermF s)
   go unfolded

@@ -105,6 +105,7 @@ module SAWCore.SharedTerm
   , scConst
   , scConstApply
   , scGlobalDef
+  , scGlobalConst
   , scGlobalApply
     -- ** Sorts
   , scSort
@@ -444,6 +445,8 @@ prettyTermErrorPure opts ne err =
       [ "No such constant:" PP.<+> prettyNameWithEnv opts ne nm ]
     IdentNotFound ident ->
       [ "No such global:" PP.<+> PP.pretty (show ident) ]
+    QualNameNotFound qn ->
+      [ "No such global name:" PP.<+> PP.pretty (QN.ppQualName qn) ]
     NotPairType t ->
       [ "Tuple field projection with non-tuple"
       , withFrees [t] $
@@ -729,6 +732,10 @@ scFreshVarName sc x = execSCM sc (scmFreshVarName x)
 -- | Create a 'Term' for the global constant with the given 'Ident'.
 scGlobalDef :: SharedContext -> Ident -> IO Term
 scGlobalDef sc ident = execSCM sc (scmGlobalDef ident)
+
+-- | Create a 'Term' for the global constant with the given 'QN.QualName'.
+scGlobalConst :: SharedContext -> QN.QualName -> IO Term
+scGlobalConst sc qn = execSCM sc (scmGlobalConst qn)
 
 -- | Create a recursor for the data type of the given 'Name', which
 -- eliminates to the given 'Sort'.

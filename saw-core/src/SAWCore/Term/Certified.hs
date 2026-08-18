@@ -56,6 +56,7 @@ module SAWCore.Term.Certified
   , scmPiList
   , scmConst
   , scmGlobalDef
+  , scmGlobalConst
   , scmVariable
   , scmUnitValue
   , scmUnitType
@@ -200,6 +201,7 @@ data TermError
   | NotPairType Term
   | NameNotFound Name
   | IdentNotFound Ident
+  | QualNameNotFound QN.QualName
   | NotRecord Term
   | FieldNotFound Term FieldName
   | VectorNotSubtype Term Term -- expected type, element
@@ -344,7 +346,7 @@ data SharedContext = SharedContext
   { scModuleMap      :: IORef ModuleMap
   , scAppCache       :: AppCacheRef
   , scDisplayNameEnv :: IORef DisplayNameEnv
-  , scQualNameEnv    :: IORef (Map QN.QualName VarIndex)
+  , scQualNameEnv    :: IORef (Map QN.QualName Name)
   , scGlobalEnv      :: IORef (HashMap Ident Term)
   , scNextVarIndex   :: IORef VarIndex
   , scNextTermIndex  :: IORef TermIndex
@@ -409,7 +411,7 @@ data SharedContextCheckpoint =
   SCC
   { sccModuleMap :: ModuleMap
   , sccNamingEnv :: DisplayNameEnv
-  , sccQualNameEnv :: Map QN.QualName VarIndex
+  , sccQualNameEnv :: Map QN.QualName Name
   , sccGlobalEnv :: HashMap Ident Term
   , sccTermIndex :: TermIndex
   , sccMetadata :: TypedStore (Metadata Identity)
@@ -790,16 +792,20 @@ scmFreshVarIndex =
      liftIO $ atomicModifyIORef' (scNextVarIndex sc) (\i -> (i + 1, i))
 
 -- | Internal function to register a name with a caller-provided
--- 'VarIndex'. Valid alises are generated based on the provided 'QN.POpts'.
---  Not exported.
-scmRegisterNameWithIndex :: VarIndex -> QN.POpts -> QN.QualName -> SCM ()
-scmRegisterNameWithIndex i opts qn =
+-- 'VarIndex'.
+-- Valid aliases are generated based on the provided 'QN.POpts'.
+-- Not exported.
+scmRegisterNameInfoWithIndex :: VarIndex -> QN.POpts -> NameInfo -> SCM Name
+scmRegisterNameInfoWithIndex i opts nmi =
   do sc <- scmSharedContext
+     let qn = toQualName nmi
      qns <- liftIO $ readIORef (scQualNameEnv sc)
      when (Map.member qn qns) $ scmError (DuplicateQualName qn)
-     liftIO $ writeIORef (scQualNameEnv sc) (Map.insert qn i qns)
+     let nm = Name i nmi
+     liftIO $ writeIORef (scQualNameEnv sc) (Map.insert qn nm qns)
      let aliases = QN.aliasesOpts opts qn
      liftIO $ modifyIORef' (scDisplayNameEnv sc) $ extendDisplayNameEnv i aliases
+     pure nm
 
 -- | Generate a 'Name' with a fresh 'VarIndex' for the given
 -- 'NameInfo' and register everything together in the naming
@@ -807,10 +813,9 @@ scmRegisterNameWithIndex i opts qn =
 scmRegisterName :: NameInfo -> SCM Name
 scmRegisterName nmi =
   do i <- scmFreshVarIndex
-     scmRegisterNameWithIndex i QN.allAliasesPOpts (toQualName nmi)
-     pure (Name i nmi)
+     scmRegisterNameInfoWithIndex i QN.allAliasesPOpts nmi
 
-scResolveQualName :: SharedContext -> QN.QualName -> IO (Maybe VarIndex)
+scResolveQualName :: SharedContext -> QN.QualName -> IO (Maybe Name)
 scResolveQualName sc qn =
   do env <- readIORef (scQualNameEnv sc)
      pure $! Map.lookup qn env
@@ -820,8 +825,8 @@ scmFreshName :: Text -> SCM Name
 scmFreshName x =
   do i <- scmFreshVarIndex
      let qn = scFreshQualName x i
-     scmRegisterNameWithIndex i QN.allAliasesPOpts qn
-     pure (Name i (mkImportedName qn))
+     let nmi = mkImportedName qn
+     scmRegisterNameInfoWithIndex i QN.allAliasesPOpts nmi
 
 -- | Create a 'VarName' with the given identifier (which may be "_").
 scmFreshVarName :: Text -> SCM VarName
@@ -850,8 +855,9 @@ scmFreshInventedVar name ty = do
         Right qn_@(QN.QualName _ _ _ Nothing Nothing) -> qn_
         _ -> QN.simpleName name
     qn' = qn { QN.index = Just (vnIndex vn), QN.namespace = Just QN.NamespaceFresh }
-  scmRegisterNameWithIndex (vnIndex vn) popts qn'
-  scmUpdateData $ \(InventedVars m) -> 
+    nmi = mkImportedName qn'
+  _nm <- scmRegisterNameInfoWithIndex (vnIndex vn) popts nmi
+  scmUpdateData $ \(InventedVars m) ->
     InventedVars (IntMap.insert (vnIndex vn) ty m)
   return vn
 
@@ -879,6 +885,16 @@ scmGlobalDef ident =
      case HMap.lookup ident m of
        Nothing -> scmError (IdentNotFound ident)
        Just t -> pure t
+
+-- | Return the constant 'Term' named by the given 'QN.QualName'.
+-- Raise an error if the 'QN.QualName' is not found in the context.
+scmGlobalConst :: QN.QualName -> SCM Term
+scmGlobalConst qn =
+  do sc <- scmSharedContext
+     m <- liftIO $ readIORef (scQualNameEnv sc)
+     case Map.lookup qn m of
+       Nothing -> scmError (QualNameNotFound qn)
+       Just nm -> scmConst nm
 
 -- | Internal function to register an 'Ident' with a 'Term' (which
 -- must be a 'Constant' term with the same 'Ident') in the
