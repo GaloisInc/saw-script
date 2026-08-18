@@ -56,6 +56,7 @@ module SAWCore.Term.Certified
   , scmPiList
   , scmConst
   , scmGlobalDef
+  , scmGlobalConst
   , scmVariable
   , scmUnitValue
   , scmUnitType
@@ -200,6 +201,7 @@ data TermError
   | NotPairType Term
   | NameNotFound Name
   | IdentNotFound Ident
+  | QualNameNotFound QN.QualName
   | NotRecord Term
   | FieldNotFound Term FieldName
   | VectorNotSubtype Term Term -- expected type, element
@@ -883,6 +885,16 @@ scmGlobalDef ident =
      case HMap.lookup ident m of
        Nothing -> scmError (IdentNotFound ident)
        Just t -> pure t
+
+-- | Return the constant 'Term' named by the given 'QN.QualName'.
+-- Raise an error if the 'QN.QualName' is not found in the context.
+scmGlobalConst :: QN.QualName -> SCM Term
+scmGlobalConst qn =
+  do sc <- scmSharedContext
+     m <- liftIO $ readIORef (scQualNameEnv sc)
+     case Map.lookup qn m of
+       Nothing -> scmError (QualNameNotFound qn)
+       Just nm -> scmConst nm
 
 -- | Internal function to register an 'Ident' with a 'Term' (which
 -- must be a 'Constant' term with the same 'Ident') in the
