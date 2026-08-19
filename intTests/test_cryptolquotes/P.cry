@@ -1,0 +1,9 @@
+module P where
+
+p1 = "p1"
+
+submodule P2 where
+  p2 = "p2"
+
+  submodule P3 where
+    p3 = "p3"
