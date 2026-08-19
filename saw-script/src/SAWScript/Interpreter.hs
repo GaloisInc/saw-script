@@ -45,6 +45,8 @@ import System.FilePath ( (</>) )
 import System.Environment (lookupEnv)
 import System.Process (readProcess)
 
+import Prettyprinter ((<+>))
+
 import Data.Parameterized.Some
 
 import qualified Data.AIG.CompactGraph as AIG
@@ -487,15 +489,18 @@ instance InterpreterMonad MIRSetupM where
 -- XXX: this code should probably live inside the typechecker.
 --
 -- Usage is processTypeCheck $ checkStmt ...
-type MsgList = [(SS.Pos, String)]
+type MsgList = [(SS.Pos, PPS.Doc)]
 processTypeCheck :: InterpreterMonad m => (Either MsgList a, MsgList) -> m a
 processTypeCheck (errs_or_output, warns) =
   liftTopLevel $ do
-    let issueWarning (pos, msg) =
+    ppopts <- getPPOpts
+    let issueWarning (pos, msg) = do
           -- XXX the print functions should be what knows how to show positions...
-          printOutLnTop Warn (show pos ++ ": Warning: " ++ msg)
+          let pos' = prettyPosition pos
+              msg' = pos' <> ": Warning:" <+> msg
+          printOutLnTop Warn $ PPS.render ppopts msg'
     mapM_ issueWarning warns
-    either failTypecheck return errs_or_output
+    either (failTypecheck ppopts) return errs_or_output
 
 
 ------------------------------------------------------------
