@@ -161,13 +161,13 @@ bvLit bits =
 
 -- | Create a SAW core term for a vector type
 vectorType :: OpenTerm -> OpenTerm -> OpenTerm
-vectorType n a = applyGlobal "Prelude.Vec" [n,a]
+vectorType a n = applyGlobal "Prelude.Vec" [a, n]
 
 -- | Create a SAW core term for the type of a bitvector
 bvType :: Integral a => a -> OpenTerm
 bvType n =
   apply (global "Prelude.Vec")
-  [nat (fromIntegral n), boolType]
+  [boolType, nat (fromIntegral n)]
 
 -- | Build an 'OpenTerm' for a pair
 pair :: OpenTerm -> OpenTerm -> OpenTerm
@@ -336,7 +336,7 @@ sawLet x tp tp_ret rhs body_f =
 -- | Build a bitvector type with the given length
 bitvectorType :: OpenTerm -> OpenTerm
 bitvectorType w =
-  applyGlobal "Prelude.Vec" [w, global "Prelude.Bool"]
+  applyGlobal "Prelude.Vec" [global "Prelude.Bool", w]
 
 -- | Build a SAW core term for a list with the given element type
 list :: OpenTerm -> [OpenTerm] -> OpenTerm

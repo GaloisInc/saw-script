@@ -1365,7 +1365,7 @@ typeToSC sc t =
     Crucible.Array sz ty ->
       do n <- scNat sc (fromIntegral sz)
          ty' <- typeToSC sc ty
-         scVecType sc n ty'
+         scVecType sc ty' n
     Crucible.Struct fields ->
       do fields' <- V.toList <$> traverse (typeToSC sc . view Crucible.fieldVal) fields
          scTupleType sc fields'

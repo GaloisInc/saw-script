@@ -198,12 +198,12 @@ composeYosysSequentialHelper sc s n =
      width <- SC.scNat sc $ fromIntegral n
      extendedInputFields <-
        forM (s ^. yosysSequentialInputFields) $ \(ty, cty) ->
-       do exty <- SC.scVecType sc width ty
+       do exty <- SC.scVecType sc ty width
           let excty = C.tSeq (C.tNum n) cty
           pure (exty, excty)
      extendedOutputFields <-
        forM (s ^. yosysSequentialOutputFields) $ \(ty, cty) ->
-       do exty <- SC.scVecType sc width ty
+       do exty <- SC.scVecType sc ty width
           let excty = C.tSeq (C.tNum n) cty
           pure (exty, excty)
      extendedInputType <- fieldsToType sc extendedInputFields

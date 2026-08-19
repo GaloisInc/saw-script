@@ -1331,7 +1331,7 @@ importExpr sc expr =
                 -- of type `seq (TCNum 2) a`.
                if | Just (n, a) <- asSeqType t ->
                       return (n, a)
-                  | Just (n, a) <- asVectorType t -> do
+                  | Just (a, n) <- asVectorType t -> do
                       n' <- scGlobalApply sc "Cryptol.TCNum" [n]
                       return (n', a)
                   | otherwise -> do
