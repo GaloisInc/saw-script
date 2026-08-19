@@ -1,0 +1,8 @@
+// Test: Error case - trying to import with 'as' using invalid path syntax
+
+import "D.cry";
+
+// Invalid: empty component in path
+import submodule D2 as A::::B;
+
+print "done";

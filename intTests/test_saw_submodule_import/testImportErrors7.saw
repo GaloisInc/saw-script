@@ -1,0 +1,8 @@
+// Test: Error case - hiding and importing list together (should conflict)
+
+import "D.cry";
+
+// This should be an error: can't have both hiding and import list
+import submodule D2 (d2) hiding (D2TySy);
+
+print "done";
