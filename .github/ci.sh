@@ -217,7 +217,6 @@ zip_dist_with_solvers() {
   cp "$BIN/abc"        dist/bin/
   cp "$BIN/bitwuzla"   dist/bin/
   cp "$BIN/boolector"  dist/bin/
-  cp "$BIN/cvc4"       dist/bin/
   cp "$BIN/cvc5"       dist/bin/
   cp "$BIN/yices"      dist/bin/
   cp "$BIN/yices-smt2" dist/bin/

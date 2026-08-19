@@ -112,7 +112,6 @@ In addition, it is capable of using the following other external solvers:
  - [Bitwuzla](https://github.com/bitwuzla/bitwuzla)
  - [Boolector](https://github.com/Boolector/boolector) (superseded upstream by bitwuzla, deprecated in SAW)
  - [CVC5](https://github.com/cvc5/cvc5)
- - [CVC4](https://github.com/CVC4/CVC4-archived) (superseded upstream by cvc5, deprecated in SAW)
  - MathSAT
  - [Yices](https://github.com/SRI-CSL/yices2)
 

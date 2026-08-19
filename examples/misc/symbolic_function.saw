@@ -19,5 +19,5 @@ let {{
 
 enc <- fresh_symbolic "enc" {| [64] -> [64] |};
 
-prove_print cvc4 {{ prop1 enc : [64] -> [100][64] -> Bit }};
-prove_print cvc4 {{ prop2 enc : [64] -> [100][64] -> Bit }};
+prove_print cvc5 {{ prop1 enc : [64] -> [100][64] -> Bit }};
+prove_print cvc5 {{ prop2 enc : [64] -> [100][64] -> Bit }};

@@ -3,7 +3,7 @@ module SAWCentral.Prover.SBV
   ( proveUnintSBV
   , proveUnintSBVIO
   , SBV.SMTConfig
-  , SBV.z3, SBV.cvc4, SBV.cvc5, SBV.yices, SBV.mathSAT, SBV.boolector, SBV.bitwuzla
+  , SBV.z3, SBV.cvc5, SBV.yices, SBV.mathSAT, SBV.boolector, SBV.bitwuzla
   ) where
 
 import           Control.Monad

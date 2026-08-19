@@ -3,4 +3,4 @@ let picosat = external_cnf_solver "picosat" ["%f"];
 sat_print abc thm;
 sat_print picosat thm;
 sat_print yices thm;
-sat_print cvc4 thm;
+sat_print cvc5 thm;
