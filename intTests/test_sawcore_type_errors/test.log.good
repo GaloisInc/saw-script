@@ -25,7 +25,7 @@ Stack trace:
 While typechecking term:
   String#rec Bool True False
 .:1:0:
-No such data type: Cryptol::String
+No such data type: Prelude::String@core
 
 Partially-applied recursors are permitted
 Either#rec Nat
