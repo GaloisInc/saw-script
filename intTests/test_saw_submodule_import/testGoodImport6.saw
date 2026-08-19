@@ -1,0 +1,14 @@
+// Test: Import nested submodule with 'as' and 'hiding' together
+
+import "D.cry";
+
+// Test importing deeply nested submodule with both 'as' and 'hiding'
+import submodule D2::D3 as MyD3 hiding (D3TySy);
+
+// Should work: d3 is imported
+print {{MyD3::d3}};
+
+// Should fail: D3TySy is hidden
+fails ( do { print {{0 : MyD3::D3TySy}}; } );
+
+print "done";

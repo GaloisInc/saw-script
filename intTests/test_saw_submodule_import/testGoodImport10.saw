@@ -1,0 +1,13 @@
+// Test: Import with empty hiding list (should import everything)
+
+import "D.cry";
+
+import submodule D2 hiding ();
+
+// Everything should be accessible
+print {{d2}};
+print {{D3::d3}};
+print {{0 : D2TySy}};
+print {{0 : D3::D3TySy}};
+
+print "done";

@@ -1,4 +1,29 @@
 Loading file "testGoodImport5.saw"
 14229
 0
+14229
+Error: Cryptol: [error] at testGoodImport5.saw:17:23--17:25
+    Value not in scope: d3
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testGoodImport5.saw:17:1-17:31 (at top level)
+
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testGoodImport5.saw:18:23--18:31
+    Value not in scope: Y::Z::d3
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testGoodImport5.saw:18:1-18:37 (at top level)
+
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testGoodImport5.saw:19:23--19:31
+    Value not in scope: X::Y::d3
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testGoodImport5.saw:19:1-19:37 (at top level)
+
+(Failure was expected, continuing)
 done
