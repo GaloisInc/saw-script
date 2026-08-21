@@ -331,8 +331,11 @@ getNamingEnvForImport modEnv (importInfo, vis, imprt) nmEnv0 =
   where
   nmEnv1 =
       MN.interpImportEnv'
-        nameToPName (T.iAs imprt) (T.iSpec imprt)
-           -- adjusting for qualified imports
+        nameToPName (T.iAs imprt) Nothing
+           -- adjusting for qualified imports.
+           -- NOTE: `Nothing` for the import spec: we apply it ourselves,
+           -- via `restrictToImportSpec`, just below.
+    $ restrictToImportSpec (T.iSpec imprt) nameToPName
     $ MN.namingEnvNames
     $ baseNamingEnvToAdd
 
@@ -391,6 +394,37 @@ stripSubmodulePrefix submodName name =
   nmIdent = MN.nameIdent name
   submodPath = C.Nested (MN.nameModPath submodName)
                         (MN.nameIdent submodName)
+
+-- | Restrict a set of imported names per an import spec, i.e., the
+--   @(a,b)@ or @hiding (a,b)@ of an import.
+--
+--   NOTE: we cannot use the filtering that `MN.interpImportEnv'` would
+--   do for us: it matches each name's `MN.nameIdent`, but names nested
+--   inside submodules are brought into scope under *qualified* `P.PName`s
+--   (e.g., @D2@'s nested @d3@ is imported as @D3::d3@).  Naming a
+--   submodule in an import spec should include (or hide) everything
+--   nested inside it, so we match the first component of the `P.PName`
+--   under which each name is imported.
+--
+restrictToImportSpec :: Maybe P.ImportSpec    -- ^ the import spec, if any
+                     -> (MN.Name -> P.PName)  -- ^ how names get imported
+                     -> Set MN.Name
+                     -> Set MN.Name
+restrictToImportSpec spec nameToPName names =
+  case spec of
+    Nothing            -> names
+    Just (P.Only   is) -> Set.filter (      inSpec is) names
+    Just (P.Hiding is) -> Set.filter (not . inSpec is) names
+
+  where
+  inSpec is nm = firstComponent (nameToPName nm) `elem` map identText is
+
+  -- | first component of a `P.PName`: "D3" for `D3::d3`, "d2" for `d2`
+  firstComponent :: P.PName -> Text
+  firstComponent pn =
+    case C.modNameChunksText <$> P.getModName pn of
+      Just (chunk : _) -> chunk
+      _                -> identText (P.getIdent pn)
 
 -- | Compute a `MR.NamingEnv` for a loaded module based on the
 --   `ImportVisibility`.
