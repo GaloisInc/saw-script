@@ -1,0 +1,3 @@
+Loading file "testImportErrors6.saw"
+testImportErrors6.saw:6:27-6:29: Error: Syntax error: missing name
+FAILED

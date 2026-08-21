@@ -1,0 +1,4 @@
+import "D.cry";
+
+// import submodule D2::D3;   // this would work
+import submodule D3;          // this should *not* work

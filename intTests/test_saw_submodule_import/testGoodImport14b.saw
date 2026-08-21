@@ -1,0 +1,19 @@
+// Test: Import nested submodule, then separately import its parent
+//    - Differs from testGoodImport14.saw: 1st `import submodule` has no `as`
+
+import "D.cry";
+
+// First import the nested D3
+import submodule D2::D3;
+print {{d3}};
+
+// Now import its parent D2
+import submodule D2;
+print {{d2}};
+
+// All paths to D::D2::D3::d should work:
+print {{d3}};
+print {{D3::d3}};
+print {{D2::D3::d3}};
+
+print "done";

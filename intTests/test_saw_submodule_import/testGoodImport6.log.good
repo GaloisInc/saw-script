@@ -1,0 +1,11 @@
+Loading file "testGoodImport6.saw"
+14229
+Error: Cryptol: [error] at testGoodImport6.saw:12:26--12:38
+    Type not in scope: MyD3::D3TySy
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testGoodImport6.saw:12:1-12:43 (at top level)
+
+(Failure was expected, continuing)
+done

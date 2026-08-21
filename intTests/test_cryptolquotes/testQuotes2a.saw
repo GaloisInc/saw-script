@@ -1,0 +1,12 @@
+let p1 = {{ "ss: p1a" }};
+print p1;
+print {{ p1 }};
+
+import "P.cry";
+
+print p1;
+print {{ p1 }};
+
+let p1 = {{ "ss: p1b" }};
+print p1;
+print {{ p1 }};

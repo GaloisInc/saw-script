@@ -1,0 +1,3 @@
+Loading file "testImportErrors4.saw"
+testImportErrors4.saw:6:24-6:26: Error: Syntax error: missing ')'
+FAILED

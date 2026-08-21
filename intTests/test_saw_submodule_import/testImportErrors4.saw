@@ -1,0 +1,8 @@
+// Test: Error case - trying to import submodule with wrong qualification
+
+import "D.cry";
+
+// This should error: trying to use full qualified path in import spec list
+import submodule D2 (D2::d2);
+
+print "done";

@@ -1,0 +1,40 @@
+import "M.cry";
+
+print {{ t2 }};
+print {{ t2 : T2 }};
+print {{ T2{x=3} : T2 }};
+
+/* *******************************
+  errors:
+ */
+
+print "\n";
+print "errors follow:";
+print "\n";
+
+// cannot access t11 (in submodule)
+fails (do{print {{ t11 }};}) ;
+
+// cannot access T1 type (in submodule)
+fails (do{print {{ t2 : T1 }};}) ;
+
+// cannot access T1 constructor (in submodule)
+fails (do{print {{ T1{x=3} }};}) ;
+
+print "\n";
+
+/* *******************************
+   import the submodule and test:
+ */
+
+import submodule S1;
+
+print (type {{t11}}) ;
+print {{t11}}  ;
+print {{t2}}   ;
+print {{t2 : T2}} ;
+print {{t2 : T1}} ;
+print {{t2 : S1::T1}} ;
+print {{ T2{x=3} }} ;
+print {{ T1{x=3} }} ;
+print {{ T1{x=3} : T1 }} ;
