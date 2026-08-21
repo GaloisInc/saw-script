@@ -1,0 +1,10 @@
+// Test: Multiple sequential imports of same submodule with different specs
+
+import "D.cry";
+
+import submodule D2 (D3);           // doesn't work!
+
+print {{D3::d3}};
+   // FIXME: should print 14229, but gives "not in scope' error.
+
+print "done";

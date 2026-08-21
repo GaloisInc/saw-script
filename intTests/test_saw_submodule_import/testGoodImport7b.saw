@@ -1,0 +1,9 @@
+// Test: Multiple sequential imports of same submodule with different specs
+
+import "D.cry";
+
+import submodule D2 hiding (d2);
+
+print {{D3::d3}};
+
+print "done";
