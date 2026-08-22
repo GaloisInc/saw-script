@@ -232,11 +232,12 @@ initCryptolEnv sc = do
   let preludeName'          = locatedUnknown preludeName
       preludeReferenceName' = locatedUnknown preludeReferenceName
       arrayName'            = locatedUnknown arrayName
+      mkImportTop nm mNm    = mkImport C.ImportTop OnlyPublic nm mNm Nothing
 
   let env0 = C.mapImports (\_ ->
-            [ mkImport C.ImportTop OnlyPublic preludeName'          Nothing Nothing
-            , mkImport C.ImportTop OnlyPublic preludeReferenceName' (Just preludeReferenceName) Nothing
-            , mkImport C.ImportTop OnlyPublic arrayName'            Nothing Nothing
+            [ mkImportTop preludeName'          Nothing
+            , mkImportTop preludeReferenceName' (Just preludeReferenceName)
+            , mkImportTop arrayName'            Nothing
             ]) $ C.initEnv
   C.addRefPrims sc refPrims
   -- Generate SAWCore translations for all values in scope
@@ -372,10 +373,10 @@ getNamingEnvOfImport modEnv (importInfo, vis, imprt) =
   --   - For top-level modules, use nameToPNameWithQualifiers to preserve
   --     paths.
   nameToPName :: MN.Name -> P.PName
-  nameToPName nm' =
+  nameToPName =
     case importInfo of
-      C.ImportNested nm -> stripSubmodulePrefix nm nm'
-      C.ImportTop       -> MN.nameToPNameWithQualifiers nm'
+      C.ImportNested nm -> stripSubmodulePrefix nm
+      C.ImportTop       -> MN.nameToPNameWithQualifiers
 
 
 -- | Strip the submodule path prefix from a Name.
