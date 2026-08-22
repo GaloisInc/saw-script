@@ -70,7 +70,8 @@ import           Data.Text (Text, pack, splitOn)
 import           GHC.Stack
 import           System.Environment (lookupEnv)
 import           System.Environment.Executable (splitExecutablePath)
-import           System.FilePath ((</>), normalise, joinPath, splitPath, splitSearchPath)
+import           System.FilePath
+                   ((</>), normalise, joinPath, splitPath, splitSearchPath)
 
 -- pretty-printer pkg:
 import qualified Prettyprinter as PP
@@ -224,11 +225,16 @@ initCryptolEnv sc = do
   let refDecls = T.mDecls refMod
   let nms = Set.toList (MI.ifsPublic (TIface.genIfaceNames refMod))
 
-  let refPrims = Map.fromList
-                  [ (prelPrim (identText (MN.nameIdent nm)), T.EWhere (T.EVar nm) refDecls)
-                  | nm <- nms ]
+  let refPrims =
+        Map.fromList
+          [ ( prelPrim (identText (MN.nameIdent nm))
+            , T.EWhere (T.EVar nm) refDecls
+            )
+          | nm <- nms
+          ]
 
-  -- The module names in P.Import are now Located, so give them an empty position.
+  -- The module names in P.Import are now Located, so give them an
+  -- empty position.
   let preludeName'          = locatedUnknown preludeName
       preludeReferenceName' = locatedUnknown preludeReferenceName
       arrayName'            = locatedUnknown arrayName
@@ -291,7 +297,8 @@ ioParseGeneric parse inp = ioParseResult (parse cfg str)
 ioParseResult :: Either P.ParseError a -> IO a
 ioParseResult res = case res of
   Right a -> return a
-  Left e  -> fail $ "Cryptol parse error:\n" ++ show (P.ppError e) -- X.throwIO (ParseError e)
+  Left e  -> fail $ "Cryptol parse error:\n" ++ show (P.ppError e)
+               -- X.throwIO (ParseError e)
 
 
 -- NamingEnv and Related -------------------------------------------------------
@@ -674,6 +681,7 @@ mkCryptolModule sc m = do
              allterms
         )
 
+
 -- | bindExtCryptolModule - add extra bindings to the Cryptol
 --     environment {{-}}; this happens when an `ExtCryptolModule` is
 --     bound in the SAWScript code.  (This may be referred to as a
@@ -715,13 +723,17 @@ bindExtCryptolModule sc (modName, ecm) =
     ECM_CryptolModule cm   -> bindCryptolModule sc (modName, cm)
     ECM_LoadedModule  nm _ -> bindLoadedModule sc (modName, nm)
 
+
 -- | bindLoadedModule - when we have a @cryptol_load@ created object,
 -- add the module into the import list.
-bindLoadedModule ::
-  SharedContext -> (P.ModName, P.Located C.ModName) -> CryptolEnv -> IO CryptolEnv
+bindLoadedModule :: SharedContext
+                 -> (P.ModName, P.Located C.ModName)
+                 -> CryptolEnv
+                 -> IO CryptolEnv
 bindLoadedModule _ (asName, origName) env =
   return $ C.mapImports
     ((:) (mkImport C.ImportTop PublicAndPrivate origName (Just asName) Nothing)) env
+
 
 -- | bindCryptolModule - when we have the @cryptol_prims ()@ created
 --   object, add the `CryptolModule` to the relevant maps in the
@@ -734,7 +746,8 @@ bindLoadedModule _ (asName, origName) env =
 --   to handle that stuff better / more like a real module (#2645), it
 --   can and should be removed.
 --
-bindCryptolModule :: SharedContext -> (P.ModName, CryptolModule) -> CryptolEnv -> IO CryptolEnv
+bindCryptolModule ::
+  SharedContext -> (P.ModName, CryptolModule) -> CryptolEnv -> IO CryptolEnv
 bindCryptolModule sc (modName, CryptolModule sm tm) env0 = do
   addExtraTySyns sc sm
   addExtraVars sc (fmap fst tm')
