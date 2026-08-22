@@ -316,46 +316,33 @@ getNamingEnv sc env = do
   modEnv <- eModuleEnv sc
   return $ eExtraNaming env
     `MR.shadowing`
-    (foldr (getNamingEnvForImport modEnv)
+    (foldr (\i ne-> getNamingEnvOfImport modEnv i <> ne)
            mempty
            (eImports env))
 
--- | Extend the `MR.NamingEnv` for a single import (`ImportData)
-getNamingEnvForImport :: ME.ModuleEnv
-                      -> ImportData
-                      -> MR.NamingEnv
-                      -> MR.NamingEnv
-getNamingEnvForImport modEnv (importInfo, vis, imprt) nmEnv0 =
-  nmEnv1 <> nmEnv0
-
-  where
-  nmEnv1 =
-      MN.interpImportEnv'
-        nameToPName (T.iAs imprt) Nothing
-           -- adjusting for qualified imports.
-           -- NOTE: `Nothing` for the import spec: we apply it ourselves,
-           -- via `restrictToImportSpec`, just below.
-    $ restrictToImportSpec (T.iSpec imprt) nameToPName
-    $ MN.namingEnvNames
-    $ baseNamingEnvToAdd
-
-  -- For submodules, strip the submodule nesting to get unqualified names.
-  -- For top-level modules, use nameToPNameWithQualifiers to preserve paths.
-  nameToPName =
-    case importInfo of
-      C.ImportNested nm -> stripSubmodulePrefix nm
-      C.ImportTop       -> MN.nameToPNameWithQualifiers
-
-  baseNamingEnvToAdd =
-    case importInfo of
+-- | Get the `MR.NamingEnv` for a single import (`ImportData`)
+getNamingEnvOfImport :: ME.ModuleEnv
+                     -> ImportData
+                     -> MR.NamingEnv
+getNamingEnvOfImport modEnv (importInfo, vis, imprt) =
+    MN.interpImportEnv'
+      nameToPName (T.iAs imprt) Nothing
+         -- adjusting for qualified imports.
+         -- NOTE: `Nothing` for the import spec: we apply it ourselves,
+         -- via `restrictToImportSpec`, just below.
+  $ restrictToImportSpec (T.iSpec imprt) nameToPName
+  $ MN.namingEnvNames
+  $ case importInfo of
       C.ImportNested nm ->
-          -- find the submodule in the current environment and compute namingEnv
-          -- respecting the visibility parameter (PublicAndPrivate vs OnlyPublic)
+          -- find the submodule in the current module environment and
+          -- compute a NamingEnv respecting the visibility parameter
+          -- (PublicAndPrivate vs OnlyPublic)
           case ME.modContextOf (P.ImpNested nm) modEnv of
               Just mc ->
                 case vis of
                   PublicAndPrivate ->
-                    -- Include all names (public and private) from the submodule
+                    -- Include all names (public and private) from the
+                    -- submodule
                     ME.mctxNames mc
                   OnlyPublic ->
                     -- Include only exported names
@@ -366,7 +353,6 @@ getNamingEnvForImport modEnv (importInfo, vis, imprt) nmEnv0 =
 
       C.ImportTop ->
           -- find the top-level loaded module and compute NamingEnv:
-          --   NOTE: does not depend on `nmEnv0`
           let
             modName :: C.ModName
             modName = P.thing $ T.iModule imprt
@@ -377,6 +363,19 @@ getNamingEnvForImport modEnv (importInfo, vis, imprt) nmEnv0 =
                                  ["cannot lookupModule: " <> CryPP.pp modName]
           in
             computeNamingEnv lm vis
+
+  where
+
+  -- | nameToPName -
+  --   - For submodules, strip the submodule nesting to get a
+  --     'less' qualified name.
+  --   - For top-level modules, use nameToPNameWithQualifiers to preserve
+  --     paths.
+  nameToPName :: MN.Name -> P.PName
+  nameToPName nm' =
+    case importInfo of
+      C.ImportNested nm -> stripSubmodulePrefix nm nm'
+      C.ImportTop       -> MN.nameToPNameWithQualifiers nm'
 
 
 -- | Strip the submodule path prefix from a Name.
@@ -395,7 +394,8 @@ stripSubmodulePrefix submodName name =
   submodPath = C.Nested (MN.nameModPath submodName)
                         (MN.nameIdent submodName)
 
--- | Restrict a set of imported names per an import spec, i.e., the
+
+-- | Restrict a set of imported names per an import spec. I.e., the
 --   @(a,b)@ or @hiding (a,b)@ of an import.
 --
 --   NOTE: we cannot use the filtering that `MN.interpImportEnv'` would
@@ -410,8 +410,8 @@ restrictToImportSpec :: Maybe P.ImportSpec    -- ^ the import spec, if any
                      -> (MN.Name -> P.PName)  -- ^ how names get imported
                      -> Set MN.Name
                      -> Set MN.Name
-restrictToImportSpec spec nameToPName names =
-  case spec of
+restrictToImportSpec importSpec nameToPName names =
+  case importSpec of
     Nothing            -> names
     Just (P.Only   is) -> Set.filter (      inSpec is) names
     Just (P.Hiding is) -> Set.filter (not . inSpec is) names
@@ -425,6 +425,7 @@ restrictToImportSpec spec nameToPName names =
     case C.modNameChunksText <$> P.getModName pn of
       Just (chunk : _) -> chunk
       _                -> identText (P.getIdent pn)
+
 
 -- | Compute a `MR.NamingEnv` for a loaded module based on the
 --   `ImportVisibility`.
@@ -982,8 +983,8 @@ printNamingEnv :: MN.NamingEnv -> IO ()
 printNamingEnv = putStrLn . pretty
 
 {-
-DEBUG: print what users of the import will get (someawhat duplicating
-       getNamingEnvForImport)
+DEBUG: print what users of the import will get (somewhat duplicating
+       getNamingEnvOfImport)
 -}
 debugImportMT :: SharedContext
               -> ImportData
@@ -997,12 +998,12 @@ debugImportMT sc (info,vis,imprt) =
     OnlyPublic -> return ()
     _          ->
         do
-        let ne1_OP =
-                getNamingEnvForImport modEnv (info,OnlyPublic,imprt) mempty
-        putStrLn "ne1_OP (ne1 but only public):"
-        printNamingEnv ne1_OP -- OnlyPublic
+        let ne1_OnlyPub =
+              getNamingEnvOfImport modEnv (info,OnlyPublic,imprt)
+        putStrLn "ne1_OnlyPub (ne1 but only public):"
+        printNamingEnv ne1_OnlyPub -- OnlyPublic
 
-  let ne1    = getNamingEnvForImport modEnv (info,vis,imprt) mempty
+  let ne1    = getNamingEnvOfImport modEnv (info,vis,imprt)
   putStrLn "\nimprt:"
   print imprt
   putStrLn "\nne1:"
