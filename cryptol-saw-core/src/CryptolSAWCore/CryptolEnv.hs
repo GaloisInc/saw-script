@@ -340,28 +340,34 @@ getNamingEnvOfImport modEnv (importInfo, vis, imprt) =
          -- qualification, as it names the members of the module being
          -- imported, not the qualified names we end up with.
   $ MN.namingEnvFromNames' nameToPName
-  $ MN.namingEnvNames
-  $ case importInfo of
+  $ importedNames
+
+  where
+
+  -- | the names the import brings in, before any of the renaming above
+  importedNames :: Set MN.Name
+  importedNames =
+    case importInfo of
       C.ImportNested nm ->
-          -- find the submodule in the current module environment and
-          -- compute a NamingEnv respecting the visibility parameter
+          -- find the submodule in the current module environment and get
+          -- its names, respecting the visibility parameter
           -- (PublicAndPrivate vs OnlyPublic)
           case ME.modContextOf (P.ImpNested nm) modEnv of
               Just mc ->
                 case vis of
                   PublicAndPrivate ->
-                    -- Include all names (public and private) from the
-                    -- submodule
-                    ME.mctxNames mc
+                    nms
                   OnlyPublic ->
-                    -- Include only exported names
-                    MN.filterUNames (`Set.member` ME.mctxExported mc)
-                                    (ME.mctxNames mc)
+                    Set.intersection nms (ME.mctxExported mc)
+                where
+                nms = MN.namingEnvNames (ME.mctxNames mc)
+                        -- what's in scope inside the submodule
+
               Nothing -> panic "getNamingEnvOfImport"
                                ["name: " <> Text.pack (show nm)]
 
       C.ImportTop ->
-          -- find the top-level loaded module and compute NamingEnv:
+          -- find a top-level loaded module and get its names:
           let
             modName :: C.ModName
             modName = P.thing $ T.iModule imprt
@@ -371,9 +377,7 @@ getNamingEnvOfImport modEnv (importInfo, vis, imprt) =
                    Nothing  -> panic "getNamingEnvOfImport"
                                  ["cannot lookupModule: " <> CryPP.pp modName]
           in
-            computeNamingEnv lm vis
-
-  where
+            namesOfLoadedModule lm vis
 
   -- | nameToPName -
   --   - For submodules, strip the submodule nesting to get a
@@ -417,10 +421,6 @@ stripSubmodulePrefix submodName name =
 --   spec; naming a submodule thus includes (or hides) everything nested
 --   inside it.
 --
---   NOTE: we cannot use the filtering that `MN.interpImportEnv'` would
---   do for us: it matches each name's `MN.nameIdent`, which for @m::x@ is
---   @x@, not @m@.
---
 restrictToImportSpec :: Maybe P.ImportSpec -> MR.NamingEnv -> MR.NamingEnv
 restrictToImportSpec importSpec =
   case importSpec of
@@ -439,44 +439,25 @@ restrictToImportSpec importSpec =
       _                -> identText (P.getIdent pn)
 
 
--- | Compute a `MR.NamingEnv` for a loaded module based on the
---   `ImportVisibility`.
-computeNamingEnv :: ME.LoadedModule -> ImportVisibility -> MR.NamingEnv
-computeNamingEnv lm vis =
+-- | The names that a loaded (top-level) module brings in when imported,
+--   based on the `ImportVisibility`.
+namesOfLoadedModule :: ME.LoadedModule -> ImportVisibility -> Set MN.Name
+namesOfLoadedModule lm vis =
   case vis of
-    PublicAndPrivate -> envPublicAndPrivate  -- all names defined, pub & pri
-    OnlyPublic       -> envPublic            -- i.e., what's exported.
+    PublicAndPrivate -> nmsDefined  -- all names defined, pub & pri
+    OnlyPublic       -> Set.intersection nmsTopLevels nmsPublic
+                          -- i.e., what's exported: note that
+                          -- `nmsTopLevels` excludes anything defined
+                          -- inside a submodule.
+                          -- FIXME: could simplify if nmsPublic `subset` nmsTopLevels
 
   where
-  -- NamingEnvs: --
-
-    -- | envTopLevels
-    --    - Does not include privates in submodules (which makes for
-    --      much of the complications of this function).
-    --    - Includes everything in scope at the toplevel of 'lm' module
-    envTopLevels :: MR.NamingEnv
-    envTopLevels = ME.lmNamingEnv lm
-
-    -- | envPublicAndPrivate - awkward as envTopLevels excludes privates
-    envPublicAndPrivate :: MR.NamingEnv
-    envPublicAndPrivate =
-       -- nab all the names defined in module (from toplevel scope):
-       MN.filterUNames (`Set.member` nmsDefined) envTopLevels
-       <>
-       -- we must create a new NamingEnv (since the privates are not
-       -- in `envTopLevels`):
-       MN.namingEnvFromNames' MN.nameToPNameWithQualifiers nmsPrivate
-
-    envPublic :: MR.NamingEnv
-    envPublic = MN.filterUNames
-                  (`Set.member` nmsPublic)
-                  envTopLevels
-
-  -- Name Sets: --
-
     -- | names in scope at Top level of module
+    --    - Does not include privates in submodules.
+    --    - Includes everything in scope at the toplevel of 'lm' module,
+    --      i.e., including what the module itself imports.
     nmsTopLevels :: Set MN.Name
-    nmsTopLevels = MN.namingEnvNames envTopLevels
+    nmsTopLevels = MN.namingEnvNames (ME.lmNamingEnv lm)
 
     -- | names defined in module and in submodules
     --   - this includes `PublicAndPrivate` names!
@@ -496,9 +477,6 @@ computeNamingEnv lm vis =
 
     nmsPublic :: Set MN.Name
     nmsPublic = MI.ifsPublic $ MI.ifNames $ ME.lmInterface lm
-
-    nmsPrivate :: Set MN.Name
-    nmsPrivate = nmsDefined Set.\\ nmsTopLevels
 
 
 -- | Like Cryptol's 'ME.loadedNominalTypes', except that it only returns
