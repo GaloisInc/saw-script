@@ -333,12 +333,13 @@ getNamingEnvOfImport :: ME.ModuleEnv
                      -> ImportData
                      -> MR.NamingEnv
 getNamingEnvOfImport modEnv (importInfo, vis, imprt) =
-    MN.interpImportEnv'
-      nameToPName (T.iAs imprt) Nothing
-         -- adjusting for qualified imports.
-         -- NOTE: `Nothing` for the import spec: we apply it ourselves,
-         -- via `restrictToImportSpec`, just below.
-  $ restrictToImportSpec (T.iSpec imprt) nameToPName
+    maybe id MN.qualify (T.iAs imprt)
+         -- adjusting for qualified imports, i.e. `import ... as ...`
+  $ restrictToImportSpec (T.iSpec imprt)
+         -- NOTE: the import spec must be applied *before* the above
+         -- qualification, as it names the members of the module being
+         -- imported, not the qualified names we end up with.
+  $ MN.namingEnvFromNames' nameToPName
   $ MN.namingEnvNames
   $ case importInfo of
       C.ImportNested nm ->
@@ -356,7 +357,7 @@ getNamingEnvOfImport modEnv (importInfo, vis, imprt) =
                     -- Include only exported names
                     MN.filterUNames (`Set.member` ME.mctxExported mc)
                                     (ME.mctxNames mc)
-              Nothing -> panic "getNamingEnvForImport"
+              Nothing -> panic "getNamingEnvOfImport"
                                ["name: " <> Text.pack (show nm)]
 
       C.ImportTop ->
@@ -367,7 +368,7 @@ getNamingEnvOfImport modEnv (importInfo, vis, imprt) =
 
             lm = case ME.lookupModule modName modEnv of
                    Just lm' -> lm'
-                   Nothing  -> panic "getNamingEnvForImport"
+                   Nothing  -> panic "getNamingEnvOfImport"
                                  ["cannot lookupModule: " <> CryPP.pp modName]
           in
             computeNamingEnv lm vis
@@ -403,29 +404,32 @@ stripSubmodulePrefix submodName name =
                         (MN.nameIdent submodName)
 
 
--- | Restrict a set of imported names per an import spec. I.e., the
---   @(a,b)@ or @hiding (a,b)@ of an import.
+-- | Restrict a `MR.NamingEnv` per an import spec. I.e., the @(a,b)@ or
+--   @hiding (a,b)@ of an import.
+--
+--   The `Ident`s in an import spec are always unqualified (the grammar
+--   allows nothing else) and they name the members of the module being
+--   imported.  In the `MR.NamingEnv`s we build here, such a member @m@
+--   appears as
+--     - @m@, when it is a value, type, or submodule name, and
+--     - @m::...@, for the (possibly nested) contents of a submodule @m@.
+--   So we keep (or drop) the names whose *first* component is in the
+--   spec; naming a submodule thus includes (or hides) everything nested
+--   inside it.
 --
 --   NOTE: we cannot use the filtering that `MN.interpImportEnv'` would
---   do for us: it matches each name's `MN.nameIdent`, but names nested
---   inside submodules are brought into scope under *qualified* `P.PName`s
---   (e.g., @D2@'s nested @d3@ is imported as @D3::d3@).  Naming a
---   submodule in an import spec should include (or hide) everything
---   nested inside it, so we match the first component of the `P.PName`
---   under which each name is imported.
+--   do for us: it matches each name's `MN.nameIdent`, which for @m::x@ is
+--   @x@, not @m@.
 --
-restrictToImportSpec :: Maybe P.ImportSpec    -- ^ the import spec, if any
-                     -> (MN.Name -> P.PName)  -- ^ how names get imported
-                     -> Set MN.Name
-                     -> Set MN.Name
-restrictToImportSpec importSpec nameToPName names =
+restrictToImportSpec :: Maybe P.ImportSpec -> MR.NamingEnv -> MR.NamingEnv
+restrictToImportSpec importSpec =
   case importSpec of
-    Nothing            -> names
-    Just (P.Only   is) -> Set.filter (      inSpec is) names
-    Just (P.Hiding is) -> Set.filter (not . inSpec is) names
+    Nothing            -> id
+    Just (P.Only   is) -> MN.filterPNames (      inSpec is)
+    Just (P.Hiding is) -> MN.filterPNames (not . inSpec is)
 
   where
-  inSpec is nm = firstComponent (nameToPName nm) `elem` map identText is
+  inSpec is pn = firstComponent pn `elem` map identText is
 
   -- | first component of a `P.PName`: "D3" for `D3::d3`, "d2" for `d2`
   firstComponent :: P.PName -> Text
