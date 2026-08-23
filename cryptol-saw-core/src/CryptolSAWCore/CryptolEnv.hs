@@ -66,7 +66,7 @@ import           Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import           Data.Set (Set)
 import qualified Data.Text as Text
-import           Data.Text (Text, pack, splitOn)
+import           Data.Text (Text)
 import           GHC.Stack
 import           System.Environment (lookupEnv)
 import           System.Environment.Executable (splitExecutablePath)
@@ -1082,7 +1082,10 @@ resolveIdentifier sc env = resolveIdentifier' sc env C.NSValue
 resolveIdentifier' ::
   (HasCallStack) =>
   SharedContext -> CryptolEnv -> C.Namespace -> Text -> IO (Maybe T.Name)
-resolveIdentifier' sc env nameSpace nm = doResolve (textToPName nm)
+resolveIdentifier' sc env nameSpace nm =
+  case textToPName nm of
+    Nothing  -> pure Nothing
+    Just pnm -> doResolve pnm
   where
   doResolve pnm = do
     nameEnv <- getNamingEnv sc env
@@ -1105,20 +1108,21 @@ resolveIdentifierNames ::
   (HasCallStack) =>
   SharedContext -> CryptolEnv -> C.Namespace -> Text -> IO (Maybe MN.Names)
 resolveIdentifierNames sc env nameSpace nm =
-  do
-  nameEnv <- getNamingEnv sc env
-  return $ MN.lookupNS nameSpace (textToPName nm) nameEnv
+  case textToPName nm of
+    Nothing  -> return Nothing
+    Just pnm ->
+      do
+      nameEnv <- getNamingEnv sc env
+      return $ MN.lookupNS nameSpace pnm nameEnv
 
--- | Parse `Text` into a `P.PName`, splitting off any module qualifier.
+-- | Parse `Text` into a `P.PName`, splitting off any module qualifier;
+--   returns `Nothing` if @nm@ is not a syntactically valid name.
 --
--- FIXME: Is there no function in Cryptol that parses Text into PName?
-textToPName :: (HasCallStack) => Text -> P.PName
-textToPName nm =
-  case splitOn (pack "::") nm of
-    []  -> panic "textToPName" ["splitOn returning []!"]
-    [i] -> P.mkUnqual (C.mkIdent i)
-    xs  -> let (qs,i) = (init xs, last xs)
-           in  P.Qual (C.packModName qs) (C.mkIdent i)
+--   NOTE: `P.parseHelpName` is Cryptol's parser for a (possibly
+--   qualified) name typed by a user, e.g. for the REPL's @:help@; it
+--   also accepts operators, both bare (@+@) and parenthesized (@(+)@).
+textToPName :: Text -> Maybe P.PName
+textToPName nm = P.parseHelpName (Text.unpack nm)
 
 -- | Read a Cryptol expression from `InputText` and return it as a
 --   `TypedTerm`.
