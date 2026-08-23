@@ -1,3 +1,11 @@
 Loading file "testGoodImport7.saw"
+Error: Cryptol: [error] at testGoodImport7.saw:7:23--7:25
+    Value not in scope: d3
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testGoodImport7.saw:7:1-7:31 (at top level)
+
+(Failure was expected, continuing)
 14229
 done

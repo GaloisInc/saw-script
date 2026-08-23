@@ -1,10 +1,9 @@
-// Test: Multiple sequential imports of same submodule with different specs
+// Test: Verify submodule names work in import lists.
 
 import "D.cry";
 
-import submodule D2 (D3);           // doesn't work!
+import submodule D2 (D3);           // D3 in scope (not its contents)
 
-print {{D3::d3}};
-   // FIXME: should print 14229, but gives "not in scope' error.
-
+fails ( do { print {{ d3 }}; } );
+print {{D3::d3}};                   // but can access elements w/ D3::
 print "done";

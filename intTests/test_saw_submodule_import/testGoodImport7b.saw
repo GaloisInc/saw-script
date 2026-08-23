@@ -1,9 +1,9 @@
-// Test: Multiple sequential imports of same submodule with different specs
+// Test: Verify submodules work when "not hidden" in import lists:
 
 import "D.cry";
 
-import submodule D2 hiding (d2);
+import submodule D2 hiding (d2);      // D3 in scope (not its contents)
 
-print {{D3::d3}};
-
+fails ( do { print {{ d3 }}; } );
+print {{D3::d3}};                     // but can access elements w/ D3::
 print "done";
