@@ -1,0 +1,6 @@
+module E where
+
+// NOTE: the submodule name `D2` is deliberately the same as the one in
+// `D.cry`, so that importing both modules makes `D2` ambiguous.
+submodule D2 where
+  e2 = 42

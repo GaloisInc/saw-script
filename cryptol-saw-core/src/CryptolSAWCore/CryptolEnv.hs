@@ -85,6 +85,7 @@ import qualified Cryptol.ModuleSystem.Exports as MEx
 import qualified Cryptol.ModuleSystem.Interface as MI
 import qualified Cryptol.ModuleSystem.Monad as MM
 import qualified Cryptol.ModuleSystem.Name      as MN
+import qualified Cryptol.ModuleSystem.Names     as MN
 import qualified Cryptol.ModuleSystem.NamingEnv as MN
 import qualified Cryptol.ModuleSystem.Renamer as MR
 import qualified Cryptol.Parser as P
@@ -945,13 +946,20 @@ importCryptolModule sc env src as isSubmodule vis imps =
             -- importing submodule by name:
             do
             let modNameTxt = C.modNameToText modName
-            mName <- resolveIdentifier' sc env C.NSModule modNameTxt
-            name <- case mName of
-                Nothing -> fail $ "submodule `"
-                                  <> Text.unpack modNameTxt
-                                  <> "` is not in scope or ambiguous"
-                           -- FIXME: distinguish dups from not in scope!
-                Just nm -> return nm
+            mNames <- resolveIdentifierNames sc env C.NSModule modNameTxt
+            name <- case mNames of
+                Just (MN.One nm)    -> return nm
+                Nothing             -> fail $ "submodule `"
+                                              <> Text.unpack modNameTxt
+                                              <> "` is not in scope"
+                Just (MN.Ambig nms) -> fail $
+                    "submodule `"
+                    <> Text.unpack modNameTxt
+                    <> "` is ambiguous, it could refer to"
+                    <> concat
+                         [ "\n  " <> pretty nm <> " (defined at "
+                                  <> pretty (MN.nameLoc nm) <> ")"
+                         | nm <- Set.toList nms ]
 
             let import' = mkImport
                             (C.ImportNested name)
@@ -1127,14 +1135,7 @@ resolveIdentifier sc env = resolveIdentifier' sc env C.NSValue
 resolveIdentifier' ::
   (HasCallStack) =>
   SharedContext -> CryptolEnv -> C.Namespace -> Text -> IO (Maybe T.Name)
-resolveIdentifier' sc env nameSpace nm =
-  case splitOn (pack "::") nm of
-    []  -> panic "resolveIdentifier'" ["splitOn returning []!"]
-    [i] -> doResolve (P.mkUnqual (C.mkIdent i))
-    xs  -> let (qs,i) = (init xs, last xs)
-           in  doResolve (P.Qual (C.packModName qs) (C.mkIdent i))
-    -- FIXME: Is there no function that parses Text into PName?
-
+resolveIdentifier' sc env nameSpace nm = doResolve (textToPName nm)
   where
   doResolve pnm = do
     nameEnv <- getNamingEnv sc env
@@ -1144,6 +1145,33 @@ resolveIdentifier' sc env nameSpace nm =
     case res of
       Left _  -> pure Nothing
       Right x -> pure (Just x)
+
+-- | Like `resolveIdentifier'`, but instead of collapsing every failure
+--   into `Nothing`, it returns *all* the in-scope names that @nm@ could
+--   refer to; this lets callers distinguish "not in scope" (`Nothing`)
+--   from "ambiguous" (`Just (MN.Ambig ...)`).
+--
+--   NOTE: unlike `resolveIdentifier'` this does not implement the
+--   renamer's fallback of looking in `C.NSConstructor` when resolving a
+--   `C.NSValue` name.
+resolveIdentifierNames ::
+  (HasCallStack) =>
+  SharedContext -> CryptolEnv -> C.Namespace -> Text -> IO (Maybe MN.Names)
+resolveIdentifierNames sc env nameSpace nm =
+  do
+  nameEnv <- getNamingEnv sc env
+  return $ MN.lookupNS nameSpace (textToPName nm) nameEnv
+
+-- | Parse `Text` into a `P.PName`, splitting off any module qualifier.
+--
+-- FIXME: Is there no function in Cryptol that parses Text into PName?
+textToPName :: (HasCallStack) => Text -> P.PName
+textToPName nm =
+  case splitOn (pack "::") nm of
+    []  -> panic "textToPName" ["splitOn returning []!"]
+    [i] -> P.mkUnqual (C.mkIdent i)
+    xs  -> let (qs,i) = (init xs, last xs)
+           in  P.Qual (C.packModName qs) (C.mkIdent i)
 
 -- | Read a Cryptol expression from `InputText` and return it as a
 --   `TypedTerm`.
