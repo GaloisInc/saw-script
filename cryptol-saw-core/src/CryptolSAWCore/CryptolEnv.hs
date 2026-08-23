@@ -119,8 +119,6 @@ import           SAWCore.SharedTerm (NameInfo, SharedContext, Term, ppTerm)
 import           SAWSupport.Console
 import qualified SAWSupport.Pretty as PPS
 
--- FIXME: temporary:
--- import qualified Debug.Trace as TR
 
 ---- Key Types -----------------------------------------------------------------
 
@@ -920,72 +918,71 @@ importCryptolModule ::
   Maybe P.ImportSpec        {- ^ What to import -} ->
   IO CryptolEnv
 importCryptolModule sc env src as isSubmodule vis imps =
-  if isSubmodule then
-    -- importing submodule (which is in current scope):
-    case src of
-      Left _ ->
-          fail $ "`import submodule PATHNAME` is not allowed."
-          -- NOTE: this is allowed by parser (thus we can reach this code).
-          -- FIXME: Would we want to implement this check in the typechecker?
+  do
+  import' <-
+    if not isSubmodule then
+      -- importing full module (by path or name):
+      do
+      mod' <- loadAndTranslateModule sc src
+      let modName = locatedUnknown (T.mName mod')
+      let import' = mkImport C.ImportTop vis modName as imps
 
-      Right modName ->
-          -- importing submodule by name:
-          do
-          let modNameTxt = C.modNameToText modName
-          mName <- resolveIdentifier' sc env C.NSModule modNameTxt
-          name <- case mName of
-              Nothing -> fail $ "submodule `"
-                                <> Text.unpack modNameTxt
-                                <> "` is not in scope or ambiguous"
-                         -- FIXME: distinguish dups from not in scope!
-              Just nm -> return nm
+      -- DEBUG:
+      when debug $ putStrLn $ "modName= " ++ show modName
+      when debug $ printImport_MT sc import'
 
-          let import' = mkImport
-                          (C.ImportNested name)
-                          vis (locatedUnknown modName) as imps
-                        -- FIXME[MT]: verify the above works.
-                        -- FIXME: modname unused?
-                        --   Refactor to make unnecessary?
+      return import'
 
-          -- DEBUG:
-          when debug $
+    else
+      -- importing submodule (which is in current scope):
+      case src of
+        Left _ ->
+            fail $ "`import submodule PATHNAME` is not allowed."
+            -- NOTE: this is allowed by parser (thus we can reach this code).
+            -- FIXME: Desirable to implement this check in the typechecker?
+
+        Right modName ->
+            -- importing submodule by name:
             do
-            putStrLn $ "modName = " ++ show modName
-            putStrLn $ "name = " ++ show (name :: T.Name)
-            putStrLn $ "submodule: "
-                        ++ (Text.unpack $ C.identText $ MN.nameIdent name)
-            debugImportMT sc import'
+            let modNameTxt = C.modNameToText modName
+            mName <- resolveIdentifier' sc env C.NSModule modNameTxt
+            name <- case mName of
+                Nothing -> fail $ "submodule `"
+                                  <> Text.unpack modNameTxt
+                                  <> "` is not in scope or ambiguous"
+                           -- FIXME: distinguish dups from not in scope!
+                Just nm -> return nm
 
-          return $ C.mapImports (\imports -> import':imports) env
-            -- FIXME[MT]: Verify you understand what's happening.
+            let import' = mkImport
+                            (C.ImportNested name)
+                            vis (locatedUnknown modName) as imps
+                          -- FIXME[MT]: verify the above works.
+                          -- FIXME: modname unused?
+                          --   Refactor to make unnecessary?
 
-  else -- importing full module (by path or name):
-    do
-    mod' <- loadAndTranslateModule sc src
-    let modName = locatedUnknown (T.mName mod')
-    let import' = mkImport C.ImportTop vis modName as imps
+            -- DEBUG:
+            when debug $
+              do
+              putStrLn $ "modName = " ++ show modName
+              putStrLn $ "name = " ++ show (name :: T.Name)
+              putStrLn $ "submodule: "
+                          ++ (Text.unpack $ C.identText $ MN.nameIdent name)
+              printImport_MT sc import'
 
-    -- DEBUG:
-    when debug $ putStrLn $ "modName= " ++ show modName
-    when debug $ debugImportMT sc import'
+            return import'
 
-    return $ C.mapImports (\imports -> import':imports) env
+  return $ C.mapImports (\imports -> import':imports) env
 
 debug :: Bool
 debug = False
 
--- Function to print a NamingEnv to stdout
-printNamingEnv :: MN.NamingEnv -> IO ()
-printNamingEnv = putStrLn . pretty
-
 {-
-DEBUG: print what users of the import will get (somewhat duplicating
-       getNamingEnvOfImport)
+DEBUG: print what users of the import will get
 -}
-debugImportMT :: SharedContext
-              -> ImportData
-              -> IO ()
-debugImportMT sc (info,vis,imprt) =
+printImport_MT :: SharedContext
+               -> ImportData
+               -> IO ()
+printImport_MT sc (info,vis,imprt) =
   do
   modEnv <- eModuleEnv sc
 
@@ -1006,17 +1003,10 @@ debugImportMT sc (info,vis,imprt) =
   printNamingEnv ne1
 
   where
+  -- Function to print a NamingEnv to stdout
+  printNamingEnv :: MN.NamingEnv -> IO ()
+  printNamingEnv = putStrLn . pretty
 
-  {-
-  modName :: C.ModName
-  modName = P.thing $ T.iModule imprt
-
-   -- FIXME[MT]: what was this: ?
-  _lm = case ME.lookupModule modName modEnv of
-         Just lm' -> lm'
-         Nothing  -> panic "debugImportMT: getNamingEnvForImport"
-                       ["cannot lookupModule: " <> CryPP.pp modName]
-  -}
 
 -- | Create an entry for the `eImports` list in `CryptolEnv`.
 mkImport :: C.ImportInfo
