@@ -927,13 +927,7 @@ importCryptolModule sc env src as isSubmodule vis imps =
       do
       mod' <- loadAndTranslateModule sc src
       let modName = locatedUnknown (T.mName mod')
-      let import' = mkImport C.ImportTop vis modName as imps
-
-      -- DEBUG:
-      when debug $ putStrLn $ "modName= " ++ show modName
-      when debug $ printImport_MT sc import'
-
-      return import'
+      return $ mkImport C.ImportTop vis modName as imps
 
     else
       -- importing submodule (which is in current scope):
@@ -962,59 +956,11 @@ importCryptolModule sc env src as isSubmodule vis imps =
                                   <> pretty (MN.nameLoc nm) <> ")"
                          | nm <- Set.toList nms ]
 
-            let import' = mkImport
-                            (C.ImportNested name)
-                            vis (locatedUnknown modName) as imps
-                          -- FIXME[MT]: verify the above works.
-                          -- FIXME: modname unused?
-                          --   Refactor to make unnecessary?
-
-            -- DEBUG:
-            when debug $
-              do
-              putStrLn $ "modName = " ++ show modName
-              putStrLn $ "name = " ++ show (name :: T.Name)
-              putStrLn $ "submodule: "
-                          ++ (Text.unpack $ C.identText $ MN.nameIdent name)
-              printImport_MT sc import'
-
-            return import'
+            return $ mkImport
+                       (C.ImportNested name)
+                       vis (locatedUnknown modName) as imps
 
   return $ C.mapImports (\imports -> import':imports) env
-
-debug :: Bool
-debug = False
-
-{-
-DEBUG: print what users of the import will get
--}
-printImport_MT :: SharedContext
-               -> ImportData
-               -> IO ()
-printImport_MT sc (info,vis,imprt) =
-  do
-  modEnv <- eModuleEnv sc
-
-  putStrLn $ "vis: " ++ show vis
-  case vis of
-    OnlyPublic -> return ()
-    _          ->
-        do
-        let ne1_OnlyPub =
-              getNamingEnvOfImport modEnv (info,OnlyPublic,imprt)
-        putStrLn "ne1_OnlyPub (ne1 but only public):"
-        printNamingEnv ne1_OnlyPub -- OnlyPublic
-
-  let ne1    = getNamingEnvOfImport modEnv (info,vis,imprt)
-  putStrLn "\nimprt:"
-  print imprt
-  putStrLn "\nne1:"
-  printNamingEnv ne1
-
-  where
-  -- Function to print a NamingEnv to stdout
-  printNamingEnv :: MN.NamingEnv -> IO ()
-  printNamingEnv = putStrLn . pretty
 
 
 -- | Create an entry for the `eImports` list in `CryptolEnv`.
