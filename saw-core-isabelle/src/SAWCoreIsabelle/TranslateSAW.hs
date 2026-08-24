@@ -29,6 +29,7 @@ import           SAWCore.Term.Pretty (termVarNames)
 
 import qualified CryptolSAWCore.SAWCoreCryptol as SAW
 import qualified CryptolSAWCore.CryptolEnv as SAW
+import qualified CryptolSAWCore.GlobalCryptolEnv as SAW
 
 import qualified Language.Isabelle.Name as Isabelle
 import qualified Language.Isabelle.Syntax as Isabelle
@@ -40,7 +41,6 @@ import Cryptol.Parser.AST (Located(..), ModName)
 import Cryptol.ModuleSystem.Env (LoadedModules(..), ModuleEnv (..))
 import qualified Cryptol.ModuleSystem.Base as MB
 import Cryptol.TypeCheck.AST (tcTopEntitytName)
-import qualified Data.ByteString as BS
 
 
 data TopTTEnv = 
@@ -63,8 +63,7 @@ execTopTT env f = runTopTT env f >>= \case
 prettyTerm :: Term -> TopTT PPS.Doc
 prettyTerm t = do
   sc <- asks ttSc
-  opts <- asks ttPPOpts
-  liftIO $ SAW.prettyTerm sc opts t
+  liftIO $ SAW.prettyTerm sc t
 
 -- | Lift any free variables into a bound Pi. Has no effect on closed terms.
 liftFrees :: Term -> TopTT Term
@@ -94,9 +93,9 @@ writeTerm tnm dest t = do
         _ -> SAW.termToSchemaExpr
   (liftIO $ mkterm sc cenv t') >>= \case
     Left err -> do
-      msg <- liftIO $ SAW.prettyTTError opts err 
+      msg <- liftIO $ SAW.prettyTTError err 
       fail (PPS.render opts msg)
-    Right (s,e) -> do
+    Right (_,e,s) -> do
       let 
         thynm = takeBaseName dest
         thynm' = Isabelle.TheoryName thynm False
@@ -109,12 +108,10 @@ withCryptolModule mm f = case mm of
   Left (SAW.ECM_LoadedModule m _) -> f (thing m)
   Left _ -> fail $ "Cannot translate SAW internal cryptol module"
   Right fp -> do
-    modEnv <- asks (SAW.eModuleEnv . ttCryEnv)
-    let ?fileReader = BS.readFile
-    (nm, modEnv') <- liftIO $ SAW.liftModuleM modEnv $
+    sc <- asks ttSc
+    nm <- liftIO $ SAW.liftModuleM sc $
       tcTopEntitytName <$> MB.loadModuleByPath True fp
-    local (\env -> env { ttCryEnv = (ttCryEnv env){SAW.eModuleEnv = modEnv'}}) $ 
-      f nm
+    f nm
 
 writeCryptolModules ::
   [SAW.ExtCryptolModule] ->
@@ -129,9 +126,9 @@ writeCryptolModules extmods sources dest = go [] $ map Left extmods ++ map Right
 
 writeTarget :: FilePath -> TargetSelect -> TopTT ()
 writeTarget dest sel = do
-  cenv <- asks ttCryEnv
+  sc <- asks ttSc
+  me <- liftIO $ SAW.eModuleEnv sc
   let
-    me = SAW.eModuleEnv cenv
     mods = lmLoadedModules $ meLoadedModules me
 
     opts = emptyOpts 

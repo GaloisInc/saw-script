@@ -80,7 +80,7 @@ import SAWCore.Recognizer (asPi)
 import SAWCore.SATQuery
 import SAWCore.SharedTerm as SC
 
-import CryptolSAWCore.CryptolEnv (loadCryptolModule)
+import CryptolSAWCore.CryptolEnv (loadCryptolModule, ExtCryptolModule)
 import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import CryptolSAWCore.TypedTerm
 
@@ -110,6 +110,7 @@ import What4.Protocol.SMTLib2.Response (smtParseOptions)
 import What4.Protocol.VerilogWriter (exprsVerilog)
 import What4.Solver.Adapter
 import qualified What4.SWord as W4Sim
+import qualified SAWCoreIsabelle.TranslateSAW as Isabelle
 
 proveWithSATExporter ::
   (FilePath -> SATQuery -> TopLevel a) ->
@@ -601,7 +602,7 @@ execIsabelleTT :: Isabelle.TopTT () -> TopLevel ()
 execIsabelleTT f = do
   sc <- getSharedContext
   cenv <- getCryptolEnv
-  opts <- gets rwPPOpts
+  opts <- getPPOpts
   merr <- io $ Isabelle.execTopTT (Isabelle.TopTTEnv sc cenv opts) f
   case merr of
     Just er -> fail er

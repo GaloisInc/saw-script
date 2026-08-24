@@ -1,4 +1,7 @@
-module Language.Isabelle.Binding where
+module Language.Isabelle.Binding
+ ( Binding(..)
+ , prettyBindOuter
+ ) where
 
 import           Language.Isabelle.Expr (Type)
 

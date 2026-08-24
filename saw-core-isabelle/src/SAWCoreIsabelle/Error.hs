@@ -1,7 +1,15 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GADTs #-}
-module SAWCoreIsabelle.Error where
+module SAWCoreIsabelle.Error 
+  ( TranslationError(..)
+  , stripLocation
+  , showErr
+  , addLocation
+  , innerErrors
+  , ppNames
+  , pp
+  ) where
 import           Data.List (intercalate)
 import qualified Data.List.NonEmpty as NE
 

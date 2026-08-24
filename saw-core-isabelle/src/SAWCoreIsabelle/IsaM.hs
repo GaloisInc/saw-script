@@ -3,7 +3,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
-
+{-# OPTIONS_GHC -Wno-missing-export-lists #-}
 module SAWCoreIsabelle.IsaM where
 
 import Control.Applicative

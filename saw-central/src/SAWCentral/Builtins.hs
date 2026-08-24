@@ -130,6 +130,7 @@ module SAWCentral.Builtins (
     offline_cnf,
     offline_cnf_external,
     offline_rocq,
+    offline_isabelle,
     offline_extcore,
     offline_smtlib2,
     offline_w4_smtlib2,

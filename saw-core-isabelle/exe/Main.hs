@@ -3,7 +3,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-
+{-# OPTIONS_GHC -Wno-missing-export-lists #-}
 module Main where
 
 import           Prelude hiding (log)
