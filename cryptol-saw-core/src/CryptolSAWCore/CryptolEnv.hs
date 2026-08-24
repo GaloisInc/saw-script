@@ -45,6 +45,7 @@ module CryptolSAWCore.CryptolEnv
   , bindIntegerType
   , parseTypedTerm
   , pExprToTypedTerm
+  , pExprToExprSchema
   , parseDecls
   , parseSchema
   , declareName
@@ -1005,11 +1006,26 @@ parseTypedTerm sc env input = do
 pExprToTypedTerm ::
   SharedContext -> CryptolEnv -> P.Expr P.PName -> IO TypedTerm
 pExprToTypedTerm sc env pexpr = do
+  -- Resolve names and infer types
+  (expr, schema) <- pExprToExprSchema sc env pexpr
+
+  -- Translate
+  trm <- C.translateExpr sc expr
+  return (TypedTerm (TypedTermSchema schema) trm)
+
+-- | Convert a parsed, untyped Cryptol expression to a type-checked 
+-- `Expr` and its `Schema`, using Cryptol's type inference.
+--
+-- This is exported because it is used in the final stage when
+-- converting SAWCore terms back into Cryptol.
+pExprToExprSchema ::
+  SharedContext -> CryptolEnv -> P.Expr P.PName -> IO (T.Expr, T.Schema)
+pExprToExprSchema sc env pexpr = do
   nameEnv <- getNamingEnv sc env
   extraVars <- eExtraVars sc
   extraTySyns <- eExtraTySyns sc
 
-  (expr, schema) <- liftModuleM sc $ do
+  liftModuleM sc $ do
     -- Eliminate patterns:
     npe <- MM.interactive (MB.noPat pexpr)
 
@@ -1030,10 +1046,6 @@ pExprToTypedTerm sc env pexpr = do
 
     out <- MM.io (T.tcExpr re tcEnv')
     MM.interactive (runInferOutput out)
-
-  -- Translate
-  trm <- C.translateExpr sc expr
-  return (TypedTerm (TypedTermSchema schema) trm)
 
 -- | Read Cryptol declarations from `InputText` and ingest them into
 --   the `CryptolEnv`.
