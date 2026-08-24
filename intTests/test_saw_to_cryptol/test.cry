@@ -1,0 +1,16 @@
+tcPlusTest : {n, m} (fin n, fin m) => [n] -> [m] -> [m + n]
+tcPlusTest _ _ = 0
+
+tcMinusTest : {n, m} (fin n, fin m, n <= m) => [n] -> [m] -> [m - n]
+tcMinusTest _ _ = 0
+
+
+sharedTest : {n} (fin n, n >= 1) => [n] -> [n]
+sharedTest x = (z - y) * z
+  where
+    y = x + 1
+    z = y * y
+
+
+unaryMinusTest : {n} (fin n) => [n] -> [n]
+unaryMinusTest x = -x

@@ -35,6 +35,7 @@ module SAWCentral.Builtins (
     show_term,
     print_term,
     print_term_depth,
+    show_cryptol_term,
     write_goal,
     print_goal,
     print_goal_inline,
@@ -261,6 +262,7 @@ import Text.Read (readMaybe)
 import Prettyprinter ((<+>))
 
 import qualified CryptolSAWCore.Simpset as Cryptol
+import qualified CryptolSAWCore.SAWCoreCryptol as Cryptol
 
 -- saw-support
 import qualified SAWSupport.PanicSupport as PanicSupport
@@ -316,7 +318,7 @@ import qualified Cryptol.Eval.Value as C (fromVBit, fromVWord)
 import qualified Cryptol.Eval.Concrete as C (Concrete(..), bvVal)
 import qualified Cryptol.Utils.Ident as C (packModName,
                                            textToModName, PrimIdent(..))
-
+import qualified Cryptol.Parser.AST as P
 -- crucible
 import Lang.Crucible.CFG.Common (freshGlobalVar)
 
@@ -637,6 +639,47 @@ print_term_depth d t =
      output <- SV.withPPOpts adjust $ ppTerm sc t
      printOutLnTop Info output
 
+data CryptolResult =
+    CryptolResultErr String
+  | CryptolResultPartial String (P.Expr P.PName)
+  -- ^ Translation into an untyped Cryptol expression succeeded,
+  -- but the result did not re-translate back into the source
+  -- term.
+  | CryptolResultSuccess (P.Expr P.PName) C.Expr C.Schema
+  -- ^ The untyped and typechecked expression, with the corresponding
+  -- schema. Indicates that both the expression and schema will translate
+  -- back into the source 'Term' and its type, respectively.
+
+saw_to_cryptol :: Term -> TopLevel CryptolResult
+saw_to_cryptol t = do
+  sc <- getSharedContext
+  cenv <- SV.getCryptolEnv
+  ppopts <- io $ scGetPPOpts sc
+  res <- io $ Cryptol.termToSchemaExpr sc cenv t
+  case res of
+    Left er -> do
+      msg <- io $ Cryptol.prettyTTError er
+      let errtxt = PPS.render ppopts msg
+      pres <- io $ Cryptol.termToPExpr sc cenv t
+      case pres of
+        Left{} -> return $ CryptolResultErr errtxt
+        Right pe -> return $ CryptolResultPartial errtxt pe
+    Right (pe,e,s) -> return $ CryptolResultSuccess pe e s
+
+show_cryptol_term :: TypedTerm -> TopLevel Text
+show_cryptol_term tt = do
+  sc <- getSharedContext
+  ppopts <- io $ scGetPPOpts sc
+  res <- saw_to_cryptol (ttTerm tt)
+  case res of
+    CryptolResultErr er -> fail er
+    CryptolResultPartial er pe -> do
+      printOutLnTop Warn $ unlines
+        [ "Cryptol extraction failed during type-checking:", er]
+      return $ PPS.renderText ppopts $ CryPP.pretty pe
+    CryptolResultSuccess pe _ _ ->
+      return $ PPS.renderText ppopts $ CryPP.pretty pe
+
 goalSummary :: ProofGoal -> String
 goalSummary goal = unlines $ concat
   [ [ "Goal " ++ goalName goal ++ " (goal number " ++ (show $ goalNum goal) ++ "): " ++ goalType goal
@@ -933,10 +976,14 @@ term_type tt =
   case ttType tt of
     TypedTermSchema sch -> pure sch
     tp -> do
-        sc <- getSharedContext
-        opts <- SV.getPPOpts
-        tp' <- liftIO $ prettyTypedTermType sc tp
-        fail $ PPS.render opts $ "Term does not have a Cryptol type:" <+> tp'
+      res <- saw_to_cryptol (ttTerm tt)
+      case res of
+        CryptolResultSuccess _ _ sch -> return sch
+        _ -> do
+          sc <- getSharedContext
+          opts <- SV.getPPOpts
+          tp' <- liftIO $ prettyTypedTermType sc tp
+          fail $ PPS.render opts $ "Term does not have a Cryptol type:" <+> tp'
 
 goal_eval :: [Text] -> ProofScript ()
 goal_eval unints =
