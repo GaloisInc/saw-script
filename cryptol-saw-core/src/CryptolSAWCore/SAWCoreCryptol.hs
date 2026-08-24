@@ -132,7 +132,7 @@ initTTEnv sc env = do
         gvmap = IntMap.fromList $
           mapMaybe (\(nm,t) -> (\(vn,_) -> (SAW.vnIndex vn, nm)) <$> asVariable t)
           (Map.toList allTerms)
-      nenv <- CrySAW.getCompleteNamingEnv sc env
+      nenv <- CrySAW.getNamingEnv sc env
       return $
         TTEnv
           { ttAllEnvVars = envVarsRef
@@ -199,7 +199,10 @@ inferSchemaExpr :: Term -> TT (Expr, C.Expr, C.Schema)
 inferSchemaExpr t = do
   sc <- asks ttSc
   (pe,ttout) <- listen $ translateAsExprShared t
-  (res,_) <- liftIO $ CrySAW.inferExpr sc (ttNamingEnv ttout) pe
+  extraVars <- liftIO $ CrySAW.eExtraVars sc
+  extraTySyns <- liftIO $ CrySAW.eExtraTySyns sc
+  (res,_) <- liftIO $ CrySAW.runModuleM sc $ 
+    CrySAW.pExprToExprSchema (ttNamingEnv ttout) extraVars extraTySyns pe
   case res of
     Left e -> errMsg (pretty e)
     Right (expr,schema) -> do

@@ -118,6 +118,7 @@ import           SAWCore.Recognizer (asConstant)
 import           SAWCore.SharedTerm (NameInfo, SharedContext, Term, ppTerm)
 import           SAWSupport.Console
 import qualified SAWSupport.Pretty as PPS
+import Control.Monad.IO.Class (liftIO)
 
 ---- Key Types -----------------------------------------------------------------
 
@@ -1006,8 +1007,12 @@ parseTypedTerm sc env input = do
 pExprToTypedTerm ::
   SharedContext -> CryptolEnv -> P.Expr P.PName -> IO TypedTerm
 pExprToTypedTerm sc env pexpr = do
+  nameEnv <- liftIO $ getNamingEnv sc env
+  extraVars <- liftIO $ eExtraVars sc
+  extraTySyns <- liftIO $ eExtraTySyns sc
   -- Resolve names and infer types
-  (expr, schema) <- pExprToExprSchema sc env pexpr
+  (expr, schema) <- liftModuleM sc $
+    pExprToExprSchema nameEnv extraVars extraTySyns pexpr
 
   -- Translate
   trm <- C.translateExpr sc expr
@@ -1019,33 +1024,32 @@ pExprToTypedTerm sc env pexpr = do
 -- This is exported because it is used in the final stage when
 -- converting SAWCore terms back into Cryptol.
 pExprToExprSchema ::
-  SharedContext -> CryptolEnv -> P.Expr P.PName -> IO (T.Expr, T.Schema)
-pExprToExprSchema sc env pexpr = do
-  nameEnv <- getNamingEnv sc env
-  extraVars <- eExtraVars sc
-  extraTySyns <- eExtraTySyns sc
+  MR.NamingEnv ->
+  Map T.Name T.Schema ->
+  Map T.Name T.TySyn ->
+  P.Expr P.PName ->
+  MM.ModuleM (T.Expr, T.Schema)
+pExprToExprSchema nameEnv extraVars extraTySyns pexpr = do
+  -- Eliminate patterns:
+  npe <- MM.interactive (MB.noPat pexpr)
 
-  liftModuleM sc $ do
-    -- Eliminate patterns:
-    npe <- MM.interactive (MB.noPat pexpr)
+  
+  let npe' = MR.rename npe
+  re <- MM.interactive (MB.rename interactiveName nameEnv npe')
+    -- NOTE: if a name is not in scope, it is reported here.
 
-    
-    let npe' = MR.rename npe
-    re <- MM.interactive (MB.rename interactiveName nameEnv npe')
-      -- NOTE: if a name is not in scope, it is reported here.
+  -- Infer types
+  ifDecls <- C.getAllIfaceDecls <$> MM.getModuleEnv
+  let range = fromMaybe P.emptyRange (P.getLoc re)
+  prims <- MB.getPrimMap
+  -- noIfaceParams because we don't support functors yet
+  tcEnv <- MB.genInferInput range prims NoParams ifDecls
+  let tcEnv' = tcEnv { TM.inpVars = Map.union extraVars (TM.inpVars tcEnv)
+                    , TM.inpTSyns = Map.union extraTySyns (TM.inpTSyns tcEnv)
+                    }
 
-    -- Infer types
-    ifDecls <- C.getAllIfaceDecls <$> MM.getModuleEnv
-    let range = fromMaybe P.emptyRange (P.getLoc re)
-    prims <- MB.getPrimMap
-    -- noIfaceParams because we don't support functors yet
-    tcEnv <- MB.genInferInput range prims NoParams ifDecls
-    let tcEnv' = tcEnv { TM.inpVars = Map.union extraVars (TM.inpVars tcEnv)
-                       , TM.inpTSyns = Map.union extraTySyns (TM.inpTSyns tcEnv)
-                       }
-
-    out <- MM.io (T.tcExpr re tcEnv')
-    MM.interactive (runInferOutput out)
+  out <- MM.io (T.tcExpr re tcEnv')
+  MM.interactive (runInferOutput out)
 
 -- | Read Cryptol declarations from `InputText` and ingest them into
 --   the `CryptolEnv`.
