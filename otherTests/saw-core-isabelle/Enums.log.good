@@ -1,5 +1,7 @@
 Loading file "Enums.saw"
 Loading file "saw/isa_test.saw"
+Warning: [warning] at ../cryptol/Enums.cry:28:10--28:11
+    Unused name: b
 Successfully translated theory Enums
 Translation successful. Generating theory files...
 Generating Enums.thy

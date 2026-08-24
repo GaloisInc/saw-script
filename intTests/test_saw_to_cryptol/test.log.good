@@ -18,32 +18,32 @@ where
 \(x : [n]) -> -x
 {n} (fin n) => [n] -> [n]
 \(xs : [n][a]) (ys : [n][a]) ->
-Main::sum`{n, a} (Main::zip`{n, [a]} (*)`{[a]} xs ys)
+sum`{n, a} (zip`{n, [a]} (*)`{[a]} xs ys)
 {n, a} (fin n, fin a) => [n][a] -> [n][a] -> [a]
 Warning: [warning] at ../../examples/ecdsa/cryptol-spec/bv.cry:33:9--33:12
     This binding for `sum` shadows the existing binding at
-    Cryptol:1177:1--1177:4
+    Cryptol:1193:1--1193:4
 Warning: [warning] at ../../examples/ecdsa/cryptol-spec/mul_java.cry:149:36--149:44
     Unused name: ij_final
 Warning: [warning] at ../../examples/ecdsa/cryptol-spec/ref_ec_mul.cry:31:4--31:5
     Unused name: f
 [warning] at ../../examples/ecdsa/cryptol-spec/ref_ec_mul.cry:96:13--96:16
     This binding for `abs` shadows the existing binding at
-    Cryptol:605:1--605:4
+    Cryptol:608:1--608:4
 [warning] at ../../examples/ecdsa/cryptol-spec/ref_ec_mul.cry:97:12--97:15
     Unused name: c00
 [warning] at ../../examples/ecdsa/cryptol-spec/ref_ec_mul.cry:97:44--97:47
     Unused name: c10
 Warning: [warning] at ../../examples/ecdsa/cryptol-spec/p384_ec_mul.cry:20:13--20:16
     This binding for `sum` shadows the existing binding at
-    Cryptol:1177:1--1177:4
+    Cryptol:1193:1--1193:4
 [warning] at ../../examples/ecdsa/cryptol-spec/p384_ec_mul.cry:189:4--189:5
     Unused name: f
 [warning] at ../../examples/ecdsa/cryptol-spec/p384_ec_mul.cry:190:4--190:5
     Unused name: g
 Warning: [warning] at ../../examples/ecdsa/cryptol-spec/ecc.cry:119:5--119:8
     This binding for `sum` shadows the existing binding at
-    Cryptol:1177:1--1177:4
+    Cryptol:1193:1--1193:4
 ({affinify :
    {x : [384], y : [384], z : [384]} -> {x : [384], y : [384]},
   base : {x : [384], y : [384]},
