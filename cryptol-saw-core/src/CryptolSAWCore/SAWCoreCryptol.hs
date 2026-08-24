@@ -142,7 +142,7 @@ inferSchemaExpr :: Term -> TT (C.Schema, C.Expr)
 inferSchemaExpr t = let ?fileReader = BS.readFile in do
   pe <- translateAsExpr t
   cenv <- asks ttCryEnv
-  (r,cenv') <- liftIO $ CrySAW.inferExpr cenv pe
+  (r,cenv') <- return $ error "CrySAW.inferExpr" -- CrySAW.inferExpr cenv pe
   -- the order of the guards is somewhat inconsistent, so we try
   -- either the original or reverse orderings and return the one that validates
   local (\env -> env { ttCryEnv = cenv' }) $

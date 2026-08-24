@@ -71,11 +71,6 @@ import Prettyprinter.Render.Text
 
 import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 
-<<<<<<< HEAD
-=======
-import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadCryptolModule, mkCryEnv, ExtCryptolModule)
-import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
->>>>>>> 1219df093 (add saw script commands for isabelle translation)
 import SAWCore.ExternalFormat(scWriteExternal)
 import SAWCore.FiniteValue
 import SAWCore.Module (emptyModule, moduleDecls)
