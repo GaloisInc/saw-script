@@ -62,6 +62,7 @@ module CryptolSAWCore.CryptolEnv
 
 -- base & standard modules:
 import           Control.Monad(when)
+import           Control.Monad.IO.Class (liftIO)
 import qualified Data.Map as Map
 import           Data.Map (Map)
 import           Data.Maybe (fromMaybe)
@@ -118,7 +119,6 @@ import           SAWCore.Recognizer (asConstant)
 import           SAWCore.SharedTerm (NameInfo, SharedContext, Term, ppTerm)
 import           SAWSupport.Console
 import qualified SAWSupport.Pretty as PPS
-import Control.Monad.IO.Class (liftIO)
 
 ---- Key Types -----------------------------------------------------------------
 
