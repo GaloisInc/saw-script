@@ -1,20 +1,10 @@
-module Language.Isabelle.Panic
-  (HasCallStack, IsabellePanic, Isabelle, Panic, panic) where
+{-# LANGUAGE OverloadedStrings #-}
 
-import Panic hiding (panic)
-import qualified Panic as Panic
+module Language.Isabelle.Panic (panic) where
 
-data Isabelle = Isabelle
+import qualified Data.Text as Text
 
-type IsabellePanic = Panic Isabelle
+import SAWSupport.PanicSupport
 
 panic :: HasCallStack => String -> [String] -> a
-panic = Panic.panic Isabelle
-
-
-instance PanicComponent Isabelle where
-  panicComponentName _ = "Isabelle"
-  panicComponentIssues _ = "https://github.com/GaloisInc/cryptol/issues"
-
-  {-# Noinline panicComponentRevision #-}
-  panicComponentRevision = \_ -> ("0","0")
+panic loc msgs = doPanic "saw-core-isabelle" (Text.pack loc) (map Text.pack msgs)
