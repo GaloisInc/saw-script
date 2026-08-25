@@ -109,9 +109,48 @@ This release supports [version
 
 ## Deprecations
 
+* As noted above, `prove_extcore` is deprecated in favor of just using
+  `prove_print`.
+
+* `add_prelude_eqs` and `add_cryptol_eqs` are now deprecated; use
+  `add_core_thms` instead.
+
 * The `assume_unsat` builtin has been deprecated, after five years' notice
   that this was coming.
   Use `admit` instead.
+
+* The old type names `CrucibleSetup` and `CrucibleMethodSpec` have
+  been deprecated and will now cause warnings.
+  Use `LLVMSetup` and `LLVMSpec` instead respectively.
+  `CrucibleSetup` remains a reserved word, and will likely remain one until
+  it is finally removed.
+
+* The (less old) name `SetupValue` is deprecated and will now cause
+  warnings.
+  USe `LLVMValue` instead.
+
+* The deprecated CVC4 builtins are now hidden by default. Use CVC5.
+  Boolector remains for now.
+
+* The old `crucible_*` names that have long been changed to `llvm_*` names
+  are now hidden by default, except for the ones that never made it past
+  `experimental` and were already hidden by default; those have now been
+  removed.
+  Exception: `crucible_verify_llvm_x86` was left off the original
+  deprecation list and is now hidden by default.
+
+* `llvm_declare_ghost_state` and `crucible_declare_ghost_state`, which
+  are old names for `declare_ghost_state`, are now hidden by default.
+
+* The following other deprecated items are also now hidden by default:
+  * The `coq`-based names for the Rocq exporter.
+    Use the `rocq` versions instead.
+  * `external_aig_solver` (old name for `arbitrary_aig`)
+  * `external_cnf_solver` (old name for `arbitrary_cnf`)
+  * `w4_offline_smtlib2` (old name for `offline_w4_smtlib2`)
+
+* The deprecated `env` builtin has been removed.
+  Use the `:env` REPL command instead.
 
 ## Other changes
 

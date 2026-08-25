@@ -38,60 +38,11 @@ codegen : String -> [String] -> String -> Term -> TopLevel ()
 concat : {a} [a] -> [a] -> [a]
 core_axiom : String -> Theorem
 core_thm : String -> Theorem
-crucible_alloc : LLVMType -> LLVMSetup LLVMValue
-crucible_alloc_aligned : Int -> LLVMType -> LLVMSetup LLVMValue
-crucible_alloc_global : String -> LLVMSetup ()
-crucible_alloc_readonly : LLVMType -> LLVMSetup LLVMValue
-crucible_alloc_readonly_aligned :
-   Int -> LLVMType -> LLVMSetup LLVMValue
-crucible_array : [LLVMValue] -> LLVMValue
-crucible_conditional_points_to :
-   Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
-crucible_conditional_points_to_untyped :
-   Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
-crucible_declare_ghost_state : String -> TopLevel Ghost
-crucible_elem : LLVMValue -> Int -> LLVMValue
-crucible_equal : LLVMValue -> LLVMValue -> LLVMSetup ()
-crucible_execute_func : [LLVMValue] -> LLVMSetup ()
-crucible_field : LLVMValue -> String -> LLVMValue
-crucible_fresh_expanded_val : LLVMType -> LLVMSetup LLVMValue
-crucible_fresh_pointer : LLVMType -> LLVMSetup LLVMValue
-crucible_fresh_var : String -> LLVMType -> LLVMSetup Term
-crucible_ghost_value : Ghost -> Term -> LLVMSetup ()
-crucible_global : String -> LLVMValue
-crucible_global_initializer : String -> LLVMValue
-crucible_java_extract : JavaClass -> String -> TopLevel Term
-crucible_llvm_extract : LLVMModule -> String -> TopLevel Term
-crucible_llvm_unsafe_assume_spec :
-   LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
-crucible_llvm_verify :
-   LLVMModule ->
-   String ->
-   [LLVMSpec] ->
-   Bool ->
-   LLVMSetup () ->
-   ProofScript () ->
-   TopLevel LLVMSpec
-crucible_null : LLVMValue
-crucible_packed_struct : [LLVMValue] -> LLVMValue
-crucible_points_to : LLVMValue -> LLVMValue -> LLVMSetup ()
-crucible_points_to_untyped :
-   LLVMValue -> LLVMValue -> LLVMSetup ()
-crucible_postcond : Term -> LLVMSetup ()
-crucible_precond : Term -> LLVMSetup ()
-crucible_return : LLVMValue -> LLVMSetup ()
-crucible_spec_size : LLVMSpec -> Int
-crucible_spec_solvers : LLVMSpec -> [String]
-crucible_struct : [LLVMValue] -> LLVMValue
-crucible_symbolic_alloc :
-   Bool -> Int -> Term -> LLVMSetup LLVMValue
-crucible_term : Term -> LLVMValue
 cryptol_add_path : String -> TopLevel ()
 cryptol_extract : CryptolModule -> String -> TopLevel Term
 cryptol_load : String -> TopLevel CryptolModule
 cryptol_prims : () -> CryptolModule
 cryptol_ss : () -> Simpset
-cvc4 : ProofScript ()
 cvc5 : ProofScript ()
 declare_ghost_state : String -> TopLevel Ghost
 default_x86_preserved_reg : TopLevel ()
@@ -126,8 +77,6 @@ eval_list : Term -> [Term]
 eval_size : Type -> Int
 exec : String -> [String] -> String -> TopLevel String
 exit : Int -> TopLevel ()
-external_aig_solver : String -> [String] -> ProofScript ()
-external_cnf_solver : String -> [String] -> ProofScript ()
 fail : {a} String -> TopLevel a
 fails : {a} TopLevel a -> TopLevel ()
 false : Bool
@@ -210,7 +159,6 @@ llvm_conditional_points_to_at_type :
    Term -> LLVMValue -> LLVMType -> LLVMValue -> LLVMSetup ()
 llvm_conditional_points_to_untyped :
    Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
-llvm_declare_ghost_state : String -> TopLevel Ghost
 llvm_double : LLVMType
 llvm_elem : LLVMValue -> Int -> LLVMValue
 llvm_equal : LLVMValue -> LLVMValue -> LLVMSetup ()
@@ -240,7 +188,6 @@ llvm_return : LLVMValue -> LLVMSetup ()
 llvm_sizeof : LLVMModule -> LLVMType -> Int
 llvm_spec_size : LLVMSpec -> Int
 llvm_spec_solvers : LLVMSpec -> [String]
-llvm_struct : String -> LLVMType
 llvm_struct_type : [LLVMType] -> LLVMType
 llvm_struct_value : [LLVMValue] -> LLVMValue
 llvm_symbol_exists : LLVMModule -> String -> TopLevel Bool
@@ -352,14 +299,12 @@ offline_aig : String -> ProofScript ()
 offline_aig_external : String -> ProofScript ()
 offline_cnf : String -> ProofScript ()
 offline_cnf_external : String -> ProofScript ()
-offline_coq : String -> ProofScript ()
 offline_extcore : String -> ProofScript ()
 offline_rocq : String -> ProofScript ()
 offline_smtlib2 : String -> ProofScript ()
 offline_unint_smtlib2 : [String] -> String -> ProofScript ()
 offline_w4_smtlib2 : String -> ProofScript ()
 offline_w4_unint_bitwuzla : [String] -> String -> ProofScript ()
-offline_w4_unint_cvc4 : [String] -> String -> ProofScript ()
 offline_w4_unint_cvc5 : [String] -> String -> ProofScript ()
 offline_w4_unint_yices : [String] -> String -> ProofScript ()
 offline_w4_unint_z3 : [String] -> String -> ProofScript ()
@@ -399,11 +344,9 @@ save_aig_as_cnf : String -> AIG -> TopLevel ()
 sbv_abc : ProofScript ()
 sbv_bitwuzla : ProofScript ()
 sbv_boolector : ProofScript ()
-sbv_cvc4 : ProofScript ()
 sbv_cvc5 : ProofScript ()
 sbv_mathsat : ProofScript ()
 sbv_unint_bitwuzla : [String] -> ProofScript ()
-sbv_unint_cvc4 : [String] -> ProofScript ()
 sbv_unint_cvc5 : [String] -> ProofScript ()
 sbv_unint_yices : [String] -> ProofScript ()
 sbv_unint_z3 : [String] -> ProofScript ()
@@ -450,7 +393,6 @@ unfold_term : [String] -> Term -> Term
 unfolding : [String] -> ProofScript ()
 unfolding_fix_once : [String] -> ProofScript ()
 unint_bitwuzla : [String] -> ProofScript ()
-unint_cvc4 : [String] -> ProofScript ()
 unint_cvc5 : [String] -> ProofScript ()
 unint_yices : [String] -> ProofScript ()
 unint_z3 : [String] -> ProofScript ()
@@ -458,9 +400,7 @@ w4 : ProofScript ()
 w4_abc_aiger : ProofScript ()
 w4_abc_smtlib2 : ProofScript ()
 w4_abc_verilog : ProofScript ()
-w4_offline_smtlib2 : String -> ProofScript ()
 w4_unint_bitwuzla : [String] -> ProofScript ()
-w4_unint_cvc4 : [String] -> ProofScript ()
 w4_unint_cvc5 : [String] -> ProofScript ()
 w4_unint_rme : [String] -> ProofScript ()
 w4_unint_yices : [String] -> ProofScript ()
@@ -471,23 +411,6 @@ write_aig : String -> Term -> TopLevel ()
 write_aig_external : String -> Term -> TopLevel ()
 write_cnf : String -> Term -> TopLevel ()
 write_cnf_external : String -> Term -> TopLevel ()
-write_coq_cryptol_module :
-   String ->
-   String ->
-   [(String, String)] ->
-   [String] ->
-   TopLevel ()
-write_coq_cryptol_primitives_for_sawcore :
-   String -> [(String, String)] -> [String] -> TopLevel ()
-write_coq_sawcore_prelude :
-   String -> [(String, String)] -> [String] -> TopLevel ()
-write_coq_term :
-   String ->
-   [(String, String)] ->
-   [String] ->
-   String ->
-   Term ->
-   TopLevel ()
 write_core : String -> Term -> TopLevel ()
 write_goal : String -> ProofScript ()
 write_rocq_cryptol_module :
