@@ -358,9 +358,6 @@ library saw-core-isabelle
     saw:saw-support
 
   hs-source-dirs: saw-core-isabelle/src
-  other-modules:
-    -- backported from upstream Cryptol
-    Cryptol.IR.TraverseExprs
   exposed-modules:
     Language.Isabelle.Binding
     Language.Isabelle.Builtins
