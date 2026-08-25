@@ -1,7 +1,9 @@
-File "./test_arithmetic_12.v", line 21, characters 0-874:
+File "./test_arithmetic_12.v", line 21, characters 0-1033:
 Error:
 The following term contains unresolved implicit arguments:
   (fun (m n : CryptolPrimitivesForSAWCore.Num)
+     (_P : CryptolPrimitivesForSAWCore.PFin m)
+     (_P1 : CryptolPrimitivesForSAWCore.PGeq m n)
      (x : CryptolPrimitivesForSAWCore.seq n bool) =>
    let var__0 := CryptolPrimitivesForSAWCore.tcSub m n in
    let var__1 := CryptolPrimitivesForSAWCore.tcAdd var__0 n in
@@ -17,27 +19,34 @@ The following term contains unresolved implicit arguments:
                     match
                       n as n0
                       return
-                        (CryptolPrimitivesForSAWCore.seq n0 bool ->
+                        (CryptolPrimitivesForSAWCore.PGeq m n0 ->
+                         CryptolPrimitivesForSAWCore.seq n0 bool ->
                          CryptolPrimitivesForSAWCore.tcAdd
                            (CryptolPrimitivesForSAWCore.tcSub m n0) n0 =
                          m)
                     with
                     | CryptolPrimitivesForSAWCore.TCNum _4 =>
                         (fun (_5 : nat)
+                           (_P2 : CryptolPrimitivesForSAWCore.PGeq m _5)
                            (x0 : CryptolPrimitivesForSAWCore.seq _5 bool) =>
                          match
                            m as n0
                            return
-                             (CryptolPrimitivesForSAWCore.tcAdd
+                             (CryptolPrimitivesForSAWCore.PFin n0 ->
+                              CryptolPrimitivesForSAWCore.PGeq n0 _5 ->
+                              CryptolPrimitivesForSAWCore.tcAdd
                                 (CryptolPrimitivesForSAWCore.tcSub n0 _5) _5 =
                               n0)
                          with
                          | CryptolPrimitivesForSAWCore.TCNum _6 =>
-                             (fun _7 : nat =>
+                             (fun (_7 : nat)
+                                (_P0 : CryptolPrimitivesForSAWCore.PFin _7)
+                                (_P3 : CryptolPrimitivesForSAWCore.PGeq _7 _5) =>
                               eq_ind_r (fun n0 : nat => n0 = _7)
                                 (eq_ind_r (fun n0 : nat => n0 + _5 = _7)
                                    (Eq_TCNum (_7 - _5 + _5) _7
-                                      (?Goal3@{_3:=_7; _2:=_5; x:=x0; _1:=_2}
+                                      (?Goal3@{_3:=_7; _2:=_5; _P:=_P0;
+                                               _P1:=_P3; x:=x0; _1:=_2}
                                        :
                                        _7 - _5 + _5 = _7))
                                    (SAWCorePreludeExtra.subNat_sub _7 _5))
@@ -47,58 +56,86 @@ The following term contains unresolved implicit arguments:
                               CryptolPrimitivesForSAWCore.tcAdd
                                 (CryptolPrimitivesForSAWCore.tcSub _7 _5) _5 =
                               _7) _6
-                         | CryptolPrimitivesForSAWCore.TCInf => eq_refl
-                         end) _4
+                         | CryptolPrimitivesForSAWCore.TCInf =>
+                             fun
+                               (_ : CryptolPrimitivesForSAWCore.PFin
+                                      CryptolPrimitivesForSAWCore.TCInf)
+                               (_ : CryptolPrimitivesForSAWCore.PGeq
+                                      CryptolPrimitivesForSAWCore.TCInf _5) =>
+                             eq_refl
+                         end _P _P2) _4
                     | CryptolPrimitivesForSAWCore.TCInf =>
                         fun
-                          x0 : CryptolPrimitivesForSAWCore.seq
-                                 CryptolPrimitivesForSAWCore.TCInf bool =>
+                          (_P2 : CryptolPrimitivesForSAWCore.PGeq m
+                                   CryptolPrimitivesForSAWCore.TCInf)
+                          (x0 : CryptolPrimitivesForSAWCore.seq
+                                  CryptolPrimitivesForSAWCore.TCInf bool) =>
                         match
                           m as n0
                           return
-                            (CryptolPrimitivesForSAWCore.tcAdd
+                            (CryptolPrimitivesForSAWCore.PFin n0 ->
+                             CryptolPrimitivesForSAWCore.PGeq n0
+                               CryptolPrimitivesForSAWCore.TCInf ->
+                             CryptolPrimitivesForSAWCore.tcAdd
                                (CryptolPrimitivesForSAWCore.tcSub n0
                                   CryptolPrimitivesForSAWCore.TCInf)
                                CryptolPrimitivesForSAWCore.TCInf =
                              n0)
                         with
                         | CryptolPrimitivesForSAWCore.TCNum _4 =>
-                            (fun _5 : nat =>
-                             ?Goal@{_2:=_5; x:=x0; _1:=_2}
+                            (fun (_5 : nat)
+                               (_P0 : CryptolPrimitivesForSAWCore.PFin _5)
+                               (_P3 : CryptolPrimitivesForSAWCore.PGeq _5
+                                        CryptolPrimitivesForSAWCore.TCInf) =>
+                             ?Goal@{_2:=_5; _P:=_P0; _P1:=_P3; x:=x0; _1:=_2}
                              :
                              CryptolPrimitivesForSAWCore.tcAdd
                                (CryptolPrimitivesForSAWCore.tcSub _5
                                   CryptolPrimitivesForSAWCore.TCInf)
                                CryptolPrimitivesForSAWCore.TCInf =
                              _5) _4
-                        | CryptolPrimitivesForSAWCore.TCInf => eq_refl
-                        end
-                    end x) _3
+                        | CryptolPrimitivesForSAWCore.TCInf =>
+                            fun
+                              (_ : CryptolPrimitivesForSAWCore.PFin
+                                     CryptolPrimitivesForSAWCore.TCInf)
+                              (_ : CryptolPrimitivesForSAWCore.PGeq
+                                     CryptolPrimitivesForSAWCore.TCInf
+                                     CryptolPrimitivesForSAWCore.TCInf) =>
+                            eq_refl
+                        end _P _P2
+                    end _P1 x) _3
                | CryptolPrimitivesForSAWCore.TCInf =>
                    match
                      n as n0
                      return
-                       (CryptolPrimitivesForSAWCore.seq n0 bool ->
+                       (CryptolPrimitivesForSAWCore.PGeq m n0 ->
+                        CryptolPrimitivesForSAWCore.seq n0 bool ->
                         CryptolPrimitivesForSAWCore.tcAdd
                           (CryptolPrimitivesForSAWCore.tcSub m n0) n0 =
                         m)
                    with
                    | CryptolPrimitivesForSAWCore.TCNum _3 =>
                        (fun (_0 : nat)
+                          (_P2 : CryptolPrimitivesForSAWCore.PGeq m _0)
                           (x0 : CryptolPrimitivesForSAWCore.seq _0 bool) =>
                         match
                           m as n0
                           return
-                            (CryptolPrimitivesForSAWCore.tcAdd
+                            (CryptolPrimitivesForSAWCore.PFin n0 ->
+                             CryptolPrimitivesForSAWCore.PGeq n0 _0 ->
+                             CryptolPrimitivesForSAWCore.tcAdd
                                (CryptolPrimitivesForSAWCore.tcSub n0 _0) _0 =
                              n0)
                         with
                         | CryptolPrimitivesForSAWCore.TCNum _4 =>
-                            (fun _5 : nat =>
+                            (fun (_5 : nat)
+                               (_P0 : CryptolPrimitivesForSAWCore.PFin _5)
+                               (_P3 : CryptolPrimitivesForSAWCore.PGeq _5 _0) =>
                              eq_ind_r (fun n0 : nat => n0 = _5)
                                (eq_ind_r (fun n0 : nat => n0 + _0 = _5)
                                   (Eq_TCNum (_5 - _0 + _0) _5
-                                     (?Goal4@{_2:=_5; x:=x0; _1:=_2}
+                                     (?Goal4@{_2:=_5; _P:=_P0; _P1:=_P3;
+                                              x:=x0; _1:=_2}
                                       :
                                       _5 - _0 + _0 = _5))
                                   (SAWCorePreludeExtra.subNat_sub _5 _0))
@@ -108,33 +145,54 @@ The following term contains unresolved implicit arguments:
                              CryptolPrimitivesForSAWCore.tcAdd
                                (CryptolPrimitivesForSAWCore.tcSub _5 _0) _0 =
                              _5) _4
-                        | CryptolPrimitivesForSAWCore.TCInf => eq_refl
-                        end) _3
+                        | CryptolPrimitivesForSAWCore.TCInf =>
+                            fun
+                              (_ : CryptolPrimitivesForSAWCore.PFin
+                                     CryptolPrimitivesForSAWCore.TCInf)
+                              (_ : CryptolPrimitivesForSAWCore.PGeq
+                                     CryptolPrimitivesForSAWCore.TCInf _0) =>
+                            eq_refl
+                        end _P _P2) _3
                    | CryptolPrimitivesForSAWCore.TCInf =>
                        fun
-                         x0 : CryptolPrimitivesForSAWCore.seq
-                                CryptolPrimitivesForSAWCore.TCInf bool =>
+                         (_P2 : CryptolPrimitivesForSAWCore.PGeq m
+                                  CryptolPrimitivesForSAWCore.TCInf)
+                         (x0 : CryptolPrimitivesForSAWCore.seq
+                                 CryptolPrimitivesForSAWCore.TCInf bool) =>
                        match
                          m as n0
                          return
-                           (CryptolPrimitivesForSAWCore.tcAdd
+                           (CryptolPrimitivesForSAWCore.PFin n0 ->
+                            CryptolPrimitivesForSAWCore.PGeq n0
+                              CryptolPrimitivesForSAWCore.TCInf ->
+                            CryptolPrimitivesForSAWCore.tcAdd
                               (CryptolPrimitivesForSAWCore.tcSub n0
                                  CryptolPrimitivesForSAWCore.TCInf)
                               CryptolPrimitivesForSAWCore.TCInf =
                             n0)
                        with
                        | CryptolPrimitivesForSAWCore.TCNum _3 =>
-                           (fun _0 : nat =>
-                            ?Goal0@{x:=x0; _1:=_2}
+                           (fun (_0 : nat)
+                              (_P0 : CryptolPrimitivesForSAWCore.PFin _0)
+                              (_P3 : CryptolPrimitivesForSAWCore.PGeq _0
+                                       CryptolPrimitivesForSAWCore.TCInf) =>
+                            ?Goal0@{_P:=_P0; _P1:=_P3; x:=x0; _1:=_2}
                             :
                             CryptolPrimitivesForSAWCore.tcAdd
                               (CryptolPrimitivesForSAWCore.tcSub _0
                                  CryptolPrimitivesForSAWCore.TCInf)
                               CryptolPrimitivesForSAWCore.TCInf =
                             _0) _3
-                       | CryptolPrimitivesForSAWCore.TCInf => eq_refl
-                       end
-                   end x
+                       | CryptolPrimitivesForSAWCore.TCInf =>
+                           fun
+                             (_ : CryptolPrimitivesForSAWCore.PFin
+                                    CryptolPrimitivesForSAWCore.TCInf)
+                             (_ : CryptolPrimitivesForSAWCore.PGeq
+                                    CryptolPrimitivesForSAWCore.TCInf
+                                    CryptolPrimitivesForSAWCore.TCInf) =>
+                           eq_refl
+                       end _P _P2
+                   end _P1 x
                end) _1
           | CryptolPrimitivesForSAWCore.TCInf =>
               match var__0 with
@@ -143,27 +201,34 @@ The following term contains unresolved implicit arguments:
                    match
                      n as n0
                      return
-                       (CryptolPrimitivesForSAWCore.seq n0 bool ->
+                       (CryptolPrimitivesForSAWCore.PGeq m n0 ->
+                        CryptolPrimitivesForSAWCore.seq n0 bool ->
                         CryptolPrimitivesForSAWCore.tcAdd
                           (CryptolPrimitivesForSAWCore.tcSub m n0) n0 =
                         m)
                    with
                    | CryptolPrimitivesForSAWCore.TCNum _3 =>
                        (fun (_0 : nat)
+                          (_P2 : CryptolPrimitivesForSAWCore.PGeq m _0)
                           (x0 : CryptolPrimitivesForSAWCore.seq _0 bool) =>
                         match
                           m as n0
                           return
-                            (CryptolPrimitivesForSAWCore.tcAdd
+                            (CryptolPrimitivesForSAWCore.PFin n0 ->
+                             CryptolPrimitivesForSAWCore.PGeq n0 _0 ->
+                             CryptolPrimitivesForSAWCore.tcAdd
                                (CryptolPrimitivesForSAWCore.tcSub n0 _0) _0 =
                              n0)
                         with
                         | CryptolPrimitivesForSAWCore.TCNum _4 =>
-                            (fun _5 : nat =>
+                            (fun (_5 : nat)
+                               (_P0 : CryptolPrimitivesForSAWCore.PFin _5)
+                               (_P3 : CryptolPrimitivesForSAWCore.PGeq _5 _0) =>
                              eq_ind_r (fun n0 : nat => n0 = _5)
                                (eq_ind_r (fun n0 : nat => n0 + _0 = _5)
                                   (Eq_TCNum (_5 - _0 + _0) _5
-                                     (?Goal5@{_2:=_5; x:=x0; _1:=_2}
+                                     (?Goal5@{_2:=_5; _P:=_P0; _P1:=_P3;
+                                              x:=x0; _1:=_2}
                                       :
                                       _5 - _0 + _0 = _5))
                                   (SAWCorePreludeExtra.subNat_sub _5 _0))
@@ -173,58 +238,85 @@ The following term contains unresolved implicit arguments:
                              CryptolPrimitivesForSAWCore.tcAdd
                                (CryptolPrimitivesForSAWCore.tcSub _5 _0) _0 =
                              _5) _4
-                        | CryptolPrimitivesForSAWCore.TCInf => eq_refl
-                        end) _3
+                        | CryptolPrimitivesForSAWCore.TCInf =>
+                            fun
+                              (_ : CryptolPrimitivesForSAWCore.PFin
+                                     CryptolPrimitivesForSAWCore.TCInf)
+                              (_ : CryptolPrimitivesForSAWCore.PGeq
+                                     CryptolPrimitivesForSAWCore.TCInf _0) =>
+                            eq_refl
+                        end _P _P2) _3
                    | CryptolPrimitivesForSAWCore.TCInf =>
                        fun
-                         x0 : CryptolPrimitivesForSAWCore.seq
-                                CryptolPrimitivesForSAWCore.TCInf bool =>
+                         (_P2 : CryptolPrimitivesForSAWCore.PGeq m
+                                  CryptolPrimitivesForSAWCore.TCInf)
+                         (x0 : CryptolPrimitivesForSAWCore.seq
+                                 CryptolPrimitivesForSAWCore.TCInf bool) =>
                        match
                          m as n0
                          return
-                           (CryptolPrimitivesForSAWCore.tcAdd
+                           (CryptolPrimitivesForSAWCore.PFin n0 ->
+                            CryptolPrimitivesForSAWCore.PGeq n0
+                              CryptolPrimitivesForSAWCore.TCInf ->
+                            CryptolPrimitivesForSAWCore.tcAdd
                               (CryptolPrimitivesForSAWCore.tcSub n0
                                  CryptolPrimitivesForSAWCore.TCInf)
                               CryptolPrimitivesForSAWCore.TCInf =
                             n0)
                        with
                        | CryptolPrimitivesForSAWCore.TCNum _3 =>
-                           (fun _0 : nat =>
-                            ?Goal1@{x:=x0; _1:=_2}
+                           (fun (_0 : nat)
+                              (_P0 : CryptolPrimitivesForSAWCore.PFin _0)
+                              (_P3 : CryptolPrimitivesForSAWCore.PGeq _0
+                                       CryptolPrimitivesForSAWCore.TCInf) =>
+                            ?Goal1@{_P:=_P0; _P1:=_P3; x:=x0; _1:=_2}
                             :
                             CryptolPrimitivesForSAWCore.tcAdd
                               (CryptolPrimitivesForSAWCore.tcSub _0
                                  CryptolPrimitivesForSAWCore.TCInf)
                               CryptolPrimitivesForSAWCore.TCInf =
                             _0) _3
-                       | CryptolPrimitivesForSAWCore.TCInf => eq_refl
-                       end
-                   end x) _1
+                       | CryptolPrimitivesForSAWCore.TCInf =>
+                           fun
+                             (_ : CryptolPrimitivesForSAWCore.PFin
+                                    CryptolPrimitivesForSAWCore.TCInf)
+                             (_ : CryptolPrimitivesForSAWCore.PGeq
+                                    CryptolPrimitivesForSAWCore.TCInf
+                                    CryptolPrimitivesForSAWCore.TCInf) =>
+                           eq_refl
+                       end _P _P2
+                   end _P1 x) _1
               | CryptolPrimitivesForSAWCore.TCInf =>
                   match
                     n as n0
                     return
-                      (CryptolPrimitivesForSAWCore.seq n0 bool ->
+                      (CryptolPrimitivesForSAWCore.PGeq m n0 ->
+                       CryptolPrimitivesForSAWCore.seq n0 bool ->
                        CryptolPrimitivesForSAWCore.tcAdd
                          (CryptolPrimitivesForSAWCore.tcSub m n0) n0 =
                        m)
                   with
                   | CryptolPrimitivesForSAWCore.TCNum _1 =>
                       (fun (_2 : nat)
+                         (_P2 : CryptolPrimitivesForSAWCore.PGeq m _2)
                          (x0 : CryptolPrimitivesForSAWCore.seq _2 bool) =>
                        match
                          m as n0
                          return
-                           (CryptolPrimitivesForSAWCore.tcAdd
+                           (CryptolPrimitivesForSAWCore.PFin n0 ->
+                            CryptolPrimitivesForSAWCore.PGeq n0 _2 ->
+                            CryptolPrimitivesForSAWCore.tcAdd
                               (CryptolPrimitivesForSAWCore.tcSub n0 _2) _2 =
                             n0)
                        with
                        | CryptolPrimitivesForSAWCore.TCNum _3 =>
-                           (fun _0 : nat =>
+                           (fun (_0 : nat)
+                              (_P0 : CryptolPrimitivesForSAWCore.PFin _0)
+                              (_P3 : CryptolPrimitivesForSAWCore.PGeq _0 _2) =>
                             eq_ind_r (fun n0 : nat => n0 = _0)
                               (eq_ind_r (fun n0 : nat => n0 + _2 = _0)
                                  (Eq_TCNum (_0 - _2 + _2) _0
-                                    (?Goal6@{_1:=_2; x:=x0}
+                                    (?Goal6@{_1:=_2; _P:=_P0; _P1:=_P3; x:=x0}
                                      :
                                      _0 - _2 + _2 = _0))
                                  (SAWCorePreludeExtra.subNat_sub _0 _2))
@@ -234,33 +326,54 @@ The following term contains unresolved implicit arguments:
                             CryptolPrimitivesForSAWCore.tcAdd
                               (CryptolPrimitivesForSAWCore.tcSub _0 _2) _2 =
                             _0) _3
-                       | CryptolPrimitivesForSAWCore.TCInf => eq_refl
-                       end) _1
+                       | CryptolPrimitivesForSAWCore.TCInf =>
+                           fun
+                             (_ : CryptolPrimitivesForSAWCore.PFin
+                                    CryptolPrimitivesForSAWCore.TCInf)
+                             (_ : CryptolPrimitivesForSAWCore.PGeq
+                                    CryptolPrimitivesForSAWCore.TCInf _2) =>
+                           eq_refl
+                       end _P _P2) _1
                   | CryptolPrimitivesForSAWCore.TCInf =>
                       fun
-                        x0 : CryptolPrimitivesForSAWCore.seq
-                               CryptolPrimitivesForSAWCore.TCInf bool =>
+                        (_P2 : CryptolPrimitivesForSAWCore.PGeq m
+                                 CryptolPrimitivesForSAWCore.TCInf)
+                        (x0 : CryptolPrimitivesForSAWCore.seq
+                                CryptolPrimitivesForSAWCore.TCInf bool) =>
                       match
                         m as n0
                         return
-                          (CryptolPrimitivesForSAWCore.tcAdd
+                          (CryptolPrimitivesForSAWCore.PFin n0 ->
+                           CryptolPrimitivesForSAWCore.PGeq n0
+                             CryptolPrimitivesForSAWCore.TCInf ->
+                           CryptolPrimitivesForSAWCore.tcAdd
                              (CryptolPrimitivesForSAWCore.tcSub n0
                                 CryptolPrimitivesForSAWCore.TCInf)
                              CryptolPrimitivesForSAWCore.TCInf =
                            n0)
                       with
                       | CryptolPrimitivesForSAWCore.TCNum _1 =>
-                          (fun _2 : nat =>
-                           ?Goal2@{_1:=_2; x:=x0}
+                          (fun (_2 : nat)
+                             (_P0 : CryptolPrimitivesForSAWCore.PFin _2)
+                             (_P3 : CryptolPrimitivesForSAWCore.PGeq _2
+                                      CryptolPrimitivesForSAWCore.TCInf) =>
+                           ?Goal2@{_1:=_2; _P:=_P0; _P1:=_P3; x:=x0}
                            :
                            CryptolPrimitivesForSAWCore.tcAdd
                              (CryptolPrimitivesForSAWCore.tcSub _2
                                 CryptolPrimitivesForSAWCore.TCInf)
                              CryptolPrimitivesForSAWCore.TCInf =
                            _2) _1
-                      | CryptolPrimitivesForSAWCore.TCInf => eq_refl
-                      end
-                  end x
+                      | CryptolPrimitivesForSAWCore.TCInf =>
+                          fun
+                            (_ : CryptolPrimitivesForSAWCore.PFin
+                                   CryptolPrimitivesForSAWCore.TCInf)
+                            (_ : CryptolPrimitivesForSAWCore.PGeq
+                                   CryptolPrimitivesForSAWCore.TCInf
+                                   CryptolPrimitivesForSAWCore.TCInf) =>
+                          eq_refl
+                      end _P _P2
+                  end _P1 x
               end
           end
           :
@@ -268,6 +381,7 @@ The following term contains unresolved implicit arguments:
          :
          var__1 = m))
      (CryptolPrimitivesForSAWCore.ecCat var__0 n bool
+        (CryptolPrimitivesForSAWCore.PFin_tcSub m n _P)
         (CryptolPrimitivesForSAWCore.ecZero
            (CryptolPrimitivesForSAWCore.seq var__0 bool)
            (CryptolPrimitivesForSAWCore.PZeroSeqBool var__0))
@@ -277,47 +391,63 @@ More precisely:
   "CryptolPrimitivesForSAWCore.TCInf = _2" in
   environment:
   _2 : nat
+  _P : CryptolPrimitivesForSAWCore.PFin _2
+  _P1 : CryptolPrimitivesForSAWCore.PGeq _2 CryptolPrimitivesForSAWCore.TCInf
   x : CryptolPrimitivesForSAWCore.seq CryptolPrimitivesForSAWCore.TCInf bool
   _0, _1 : nat
 - ?Goal0: Cannot infer an existential variable of type
   "CryptolPrimitivesForSAWCore.TCInf = _0" in
   environment:
   _0 : nat
+  _P : CryptolPrimitivesForSAWCore.PFin _0
+  _P1 : CryptolPrimitivesForSAWCore.PGeq _0 CryptolPrimitivesForSAWCore.TCInf
   x : CryptolPrimitivesForSAWCore.seq CryptolPrimitivesForSAWCore.TCInf bool
   _1 : nat
 - ?Goal1: Cannot infer an existential variable of type
   "CryptolPrimitivesForSAWCore.TCInf = _0" in
   environment:
   _0 : nat
+  _P : CryptolPrimitivesForSAWCore.PFin _0
+  _P1 : CryptolPrimitivesForSAWCore.PGeq _0 CryptolPrimitivesForSAWCore.TCInf
   x : CryptolPrimitivesForSAWCore.seq CryptolPrimitivesForSAWCore.TCInf bool
   _1 : nat
 - ?Goal2: Cannot infer an existential variable of type
   "CryptolPrimitivesForSAWCore.TCInf = _1" in
   environment:
   _1 : nat
+  _P : CryptolPrimitivesForSAWCore.PFin _1
+  _P1 : CryptolPrimitivesForSAWCore.PGeq _1 CryptolPrimitivesForSAWCore.TCInf
   x : CryptolPrimitivesForSAWCore.seq CryptolPrimitivesForSAWCore.TCInf bool
 - ?Goal3: Cannot infer an existential variable of type 
   "_3 - _2 + _2 = _3" in
   environment:
   _3, _2 : nat
+  _P : CryptolPrimitivesForSAWCore.PFin _3
+  _P1 : CryptolPrimitivesForSAWCore.PGeq _3 _2
   x : CryptolPrimitivesForSAWCore.seq _2 bool
   _0, _1 : nat
 - ?Goal4: Cannot infer an existential variable of type 
   "_2 - _0 + _0 = _2" in
   environment:
   _2, _0 : nat
+  _P : CryptolPrimitivesForSAWCore.PFin _2
+  _P1 : CryptolPrimitivesForSAWCore.PGeq _2 _0
   x : CryptolPrimitivesForSAWCore.seq _0 bool
   _1 : nat
 - ?Goal5: Cannot infer an existential variable of type 
   "_2 - _0 + _0 = _2" in
   environment:
   _2, _0 : nat
+  _P : CryptolPrimitivesForSAWCore.PFin _2
+  _P1 : CryptolPrimitivesForSAWCore.PGeq _2 _0
   x : CryptolPrimitivesForSAWCore.seq _0 bool
   _1 : nat
 - ?Goal6: Cannot infer an existential variable of type 
   "_0 - _1 + _1 = _0" in
   environment:
   _0, _1 : nat
+  _P : CryptolPrimitivesForSAWCore.PFin _0
+  _P1 : CryptolPrimitivesForSAWCore.PGeq _0 _1
   x : CryptolPrimitivesForSAWCore.seq _1 bool
 
 FAILED
