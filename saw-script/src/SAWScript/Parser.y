@@ -281,7 +281,7 @@ BaseType :: { Type }
  | 'MIRSpec'                            { tMIRSpec (getPos $1)             }
  | 'ProofScript'                        { tContext (getPos $1) ProofScript }
  | 'TopLevel'                           { tContext (getPos $1) TopLevel    }
- | 'CrucibleSetup'                      { tVar (getPos $1) "LLVMSetup"     }
+ | 'CrucibleSetup'                      { tVar (getPos $1) "CrucibleSetup" }
  | '(' Type ')'                         { $2                               }
  | '(' commas2(Type) ')'                { tTuple (maxSpan [$1, $3]) $2     }
  | '[' Type ']'                         { tArray (maxSpan [$1, $3]) $2     }

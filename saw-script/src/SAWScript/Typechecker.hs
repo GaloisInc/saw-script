@@ -2389,6 +2389,48 @@ checkType kind ty = case ty of
             fields' <- traverse (checkType kindStar) fields
             return $ TyRecord pos fields'
 
+    -- Special-case CrucibleSetup to mark it deprecated. It is an alias
+    -- for LLVMSetup, and it would be nice if it could just be a
+    -- typedef, but we don't support typedefs of kind * -> *.
+    --
+    -- (In principle, we could just open a loophole in the check for
+    -- typedefs of kind other than * below, but I don't think that's the
+    -- only thing that would be needed for it to actually work.)
+    --
+    -- So it is still a reserved word in the parser, which sends it to
+    -- us as "CrucibleSetup", and we intercept it specially here to turn
+    -- it into LLVMSetup and also issue the deprecation warning.
+    --
+    -- CrucibleSetup is warn-deprecated in SAW 1.6, and should be hidden
+    -- by default in 1.7, which should require nothing other than
+    -- changing the binding for @lc@ immediately below. Then after 1.7
+    -- is released we can delete this hackery. When doing so, be sure to
+    -- remove it from the parser as well.
+    TyVar pos "CrucibleSetup" -> do
+        let x = "CrucibleSetup"
+            lc = WarnDeprecated
+            kindFound = kindStarToStar
+
+        avail <- asks tiPrimsAvail
+        if Set.member lc avail then do
+            recordWarning pos $ "Type is deprecated:" <+> x
+            if kind /= kindFound then do
+                let kind' = prettyKind kind
+                    kindFound' = prettyKind kindFound
+                recordError pos $ "Kind mismatch: expected" <+> kind' <+>
+                                  "but found" <+> kindFound'
+                getErrorTyVar pos
+            else
+                -- Expand to LLVMSetup. Even though we don't expand
+                -- typedefs here, this isn't an ordinary typedef.
+                pure $ TyVar pos "LLVMSetup"
+        else do
+            let x' = PP.dquotes x
+            recordError pos $ "Inaccessible type:" <+> x'
+            recordError pos $ "This type is available only after" <+>
+                              "running `enable_deprecated`."
+            getErrorTyVar pos
+
     TyVar pos x -> do
         avail <- asks tiPrimsAvail
         tyenv <- gets tiTyEnv
