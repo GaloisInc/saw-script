@@ -261,6 +261,7 @@ library cryptol-saw-core
     CryptolSAWCore.CryptolEnv
     CryptolSAWCore.FileReader
     CryptolSAWCore.GlobalCryptolEnv
+    CryptolSAWCore.IntroRule
     CryptolSAWCore.Prelude
     CryptolSAWCore.Pretty
     CryptolSAWCore.Simpset

@@ -124,6 +124,7 @@ import qualified SAWCore.QualName as QN
 import CryptolSAWCore.Panic
 import qualified CryptolSAWCore.Pretty as CryPP
 import CryptolSAWCore.GlobalCryptolEnv
+import CryptolSAWCore.IntroRule
 
 -- | Environment for bindings that are local to a Cryptol expression.
 data LocalEnv =
@@ -521,577 +522,143 @@ importSchema :: SharedContext -> LocalEnv -> C.Schema -> IO Term
 importSchema sc env (C.Forall tparams props ty) =
   importPolyType sc env tparams props ty
 
+classIntroIdents :: [Ident]
+classIntroIdents =
+  [ "Cryptol.PZeroBit"
+  , "Cryptol.PZeroInteger"
+  , "Cryptol.PZeroIntModNum"
+  , "Cryptol.PZeroRational"
+  , "Cryptol.PZeroSeqBool"
+  , "Cryptol.PZeroFloat"
+  , "Cryptol.PZeroSeq"
+  , "Cryptol.PZeroFun"
+  , "Cryptol.PZeroUnit"
+  , "Cryptol.PZeroPair"
+  , "Cryptol.PZeroEmpty"
+  , "Cryptol.PZeroRecord"
+  , "Cryptol.PLogicBit"
+  , "Cryptol.PLogicSeqBool"
+  , "Cryptol.PLogicSeq"
+  , "Cryptol.PLogicFun"
+  , "Cryptol.PLogicUnit"
+  , "Cryptol.PLogicPair"
+  , "Cryptol.PLogicEmpty"
+  , "Cryptol.PLogicRecord"
+  , "Cryptol.PRingInteger"
+  , "Cryptol.PRingIntModNum"
+  , "Cryptol.PRingRational"
+  , "Cryptol.PRingSeqBool"
+  , "Cryptol.PRingFloat"
+  , "Cryptol.PRingSeq"
+  , "Cryptol.PRingFun"
+  , "Cryptol.PRingUnit"
+  , "Cryptol.PRingPair"
+  , "Cryptol.PRingEmpty"
+  , "Cryptol.PRingRecord"
+  , "Cryptol.PIntegralInteger"
+  , "Cryptol.PIntegralSeqBool"
+  , "Cryptol.PFieldRational"
+  , "Cryptol.PFieldIntModNum"
+  , "Cryptol.PFieldFloat"
+  , "Cryptol.PRoundRational"
+  , "Cryptol.PRoundFloat"
+  , "Cryptol.PEqBit"
+  , "Cryptol.PEqInteger"
+  , "Cryptol.PEqIntModNum"
+  , "Cryptol.PEqRational"
+  , "Cryptol.PEqFloat"
+  , "Cryptol.PEqSeqBool"
+  , "Cryptol.PEqSeq"
+  , "Cryptol.PEqUnit"
+  , "Cryptol.PEqPair"
+  , "Cryptol.PEqEmpty"
+  , "Cryptol.PEqRecord"
+  , "Cryptol.PEqVoid"
+  , "Cryptol.PEqEither"
+  , "Cryptol.PCmpBit"
+  , "Cryptol.PCmpInteger"
+  , "Cryptol.PCmpRational"
+  , "Cryptol.PCmpFloat"
+  , "Cryptol.PCmpSeqBool"
+  , "Cryptol.PCmpSeq"
+  , "Cryptol.PCmpUnit"
+  , "Cryptol.PCmpPair"
+  , "Cryptol.PCmpEmpty"
+  , "Cryptol.PCmpRecord"
+  , "Cryptol.PCmpVoid"
+  , "Cryptol.PCmpEither"
+  , "Cryptol.PSignedCmpSeqBool"
+  , "Cryptol.PSignedCmpSeq"
+  , "Cryptol.PSignedCmpUnit"
+  , "Cryptol.PSignedCmpPair"
+  , "Cryptol.PSignedCmpEmpty"
+  , "Cryptol.PSignedCmpRecord"
+  , "Cryptol.PSignedCmpVoid"
+  , "Cryptol.PSignedCmpEither"
+  , "Cryptol.PLiteralBit"
+  , "Cryptol.PLiteralInteger"
+  , "Cryptol.PLiteralIntModNum"
+  , "Cryptol.PLiteralRational"
+  , "Cryptol.PLiteralSeqBool"
+  , "Cryptol.PLiteralFloat"
+  , "Cryptol.PFLiteralRational"
+  , "Cryptol.PFLiteralFloat"
+  , "Cryptol.PFin_TCNum"
+  , "Cryptol.PFin_tcAdd"
+  , "Cryptol.PFin_tcMul"
+  , "Cryptol.PFin_tcSub"
+  , "Cryptol.PFin_tcDiv"
+  , "Cryptol.PFin_tcCeilDiv"
+  , "Cryptol.unsafeAssumePFin"
+  , "Prelude.Refl"
+  , "Prelude.unsafeAssert"
+  , "Cryptol.PGeq_0"
+  , "Cryptol.unsafeAssumePGeq"
+  , "Cryptol.unsafeAssumePNeq"
+  , "Prelude.TrueI"
+  ]
+
+initializeInstances :: SharedContext -> IO ()
+initializeInstances sc =
+  do result <- eInstances sc
+     case result of
+       Just _ -> pure ()
+       Nothing -> mapM_ initializeRule classIntroIdents
+  where
+    initializeRule :: Ident -> IO ()
+    initializeRule i =
+      do t <- scGlobalDef sc i
+         r <- mkIntroRule sc t
+         addInstance sc r
+
 -- | Find the SAWCore dictionary for a Cryptol typeclass.
 proveProp :: HasCallStack => SharedContext -> LocalEnv -> C.Prop -> IO Term
-proveProp sc env prop = provePropRec sc env prop prop
-
--- internal recursive version
---
--- (we carry around the original prop when recursing as "prop0", in
--- case we get stuck and need to bail out, at which point we want to
--- be able to print it)
-provePropRec :: HasCallStack => SharedContext -> LocalEnv -> C.Prop -> C.Prop -> IO Term
-provePropRec sc env prop0 prop =
-  case Map.lookup (normalizeProp prop) (leProps env) of
-
-    -- Class dictionary was provided as an argument
-    Just (prf, fs) ->
-       do -- apply field projections as necessary to compute superclasses
-          -- NB: reverse the order of the fields
-          foldM (scRecordSelect sc) prf (reverse fs)
-
-    -- Class dictionary not provided, compute it from the structure of types
-    Nothing ->
-      case prop of
-        -- instance Zero Bit
-        (C.pIsZero -> Just (C.tIsBit -> True))
-          -> do scGlobalApply sc "Cryptol.PZeroBit" []
-        -- instance Zero Integer
-        (C.pIsZero -> Just (C.tIsInteger -> True))
-          -> do scGlobalApply sc "Cryptol.PZeroInteger" []
-        -- instance Zero (Z n)
-        (C.pIsZero -> Just (C.tIsIntMod -> Just n))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PZeroIntModNum" [n']
-        -- instance Zero Rational
-        (C.pIsZero -> Just (C.tIsRational -> True))
-          -> do scGlobalApply sc "Cryptol.PZeroRational" []
-        -- instance Zero [n]
-        (C.pIsZero -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PZeroSeqBool" [n']
-        -- instance ValidFloat e p => Zero (Float e p)
-        (C.pIsZero -> Just (C.tIsFloat -> Just (e, p)))
-          -> do e' <- importType sc env e
-                p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PZeroFloat" [e', p']
-        -- instance (Zero a) => Zero [n]a
-        (C.pIsZero -> Just (C.tIsSeq -> Just (n, a)))
-          -> do n' <- importType sc env n
-                a' <- importType sc env a
-                pa <- provePropRec sc env prop0 (C.pZero a)
-                scGlobalApply sc "Cryptol.PZeroSeq" [n', a', pa]
-        -- instance (Zero b) => Zero (a -> b)
-        (C.pIsZero -> Just (C.tIsFun -> Just (a, b)))
-          -> do a' <- importType sc env a
-                b' <- importType sc env b
-                pb <- provePropRec sc env prop0 (C.pZero b)
-                scGlobalApply sc "Cryptol.PZeroFun" [a', b', pb]
-        -- instance (Zero a, Zero b, ...) => Zero (a, b, ...)
-        (C.pIsZero -> Just (C.tIsTuple -> Just ts))
-          -> do ps <- traverse (provePropRec sc env prop0 . C.pZero) ts
-                scTuple sc ps
-        -- instance (Zero a, Zero b, ...) => Zero { x : a, y : b, ... }
-        (C.pIsZero -> Just (C.tIsRec -> Just fm))
-          -> buildRecord C.pZero fm
-        -- Derived Zero instances
-        (C.pIsZero -> Just (C.tIsNominal -> Just (nt, ts)))
-          -- Newtypes
-          |  C.Struct con <- C.ntDef nt
-          -> buildRecord C.pZero (newtypeRecordFields nt ts con)
-
-        -- instance Logic Bit
-        (C.pIsLogic -> Just (C.tIsBit -> True))
-          -> do scGlobalApply sc "Cryptol.PLogicBit" []
-        -- instance Logic [n]
-        (C.pIsLogic -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PLogicSeqBool" [n']
-        -- instance (Logic a) => Logic [n]a
-        (C.pIsLogic -> Just (C.tIsSeq -> Just (n, a)))
-          -> do n' <- importType sc env n
-                a' <- importType sc env a
-                pa <- provePropRec sc env prop0 (C.pLogic a)
-                scGlobalApply sc "Cryptol.PLogicSeq" [n', a', pa]
-        -- instance (Logic b) => Logic (a -> b)
-        (C.pIsLogic -> Just (C.tIsFun -> Just (a, b)))
-          -> do a' <- importType sc env a
-                b' <- importType sc env b
-                pb <- provePropRec sc env prop0 (C.pLogic b)
-                scGlobalApply sc "Cryptol.PLogicFun" [a', b', pb]
-        -- instance Logic ()
-        (C.pIsLogic -> Just (C.tIsTuple -> Just []))
-          -> do scGlobalApply sc "Cryptol.PLogicUnit" []
-        -- instance (Logic a, Logic b) => Logic (a, b)
-        (C.pIsLogic -> Just (C.tIsTuple -> Just (t : ts)))
-          -> do a <- importType sc env t
-                b <- importType sc env (C.tTuple ts)
-                pa <- provePropRec sc env prop0 (C.pLogic t)
-                pb <- provePropRec sc env prop0 (C.pLogic (C.tTuple ts))
-                scGlobalApply sc "Cryptol.PLogicPair" [a, b, pa, pb]
-        -- instance (Logic a, Logic b, ...) => instance Logic { x : a, y : b, ... }
-        (C.pIsLogic -> Just (C.tIsRec -> Just fm))
-          -> foldRecord C.pLogic "Cryptol.PLogicEmpty" "Cryptol.PLogicRecord" fm
-        -- Derived Logic instances
-        (C.pIsLogic -> Just (C.tIsNominal -> Just (nt, ts)))
-          -- Newtypes
-          |  C.Struct con <- C.ntDef nt
-          -> foldRecord C.pLogic "Cryptol.PLogicEmpty" "Cryptol.PLogicRecord"
-               (newtypeRecordFields nt ts con)
-
-        -- instance Ring Integer
-        (C.pIsRing -> Just (C.tIsInteger -> True))
-          -> do scGlobalApply sc "Cryptol.PRingInteger" []
-        -- instance Ring (Z n)
-        (C.pIsRing -> Just (C.tIsIntMod -> Just n))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PRingIntModNum" [n']
-        -- instance Ring Rational
-        (C.pIsRing -> Just (C.tIsRational -> True))
-          -> do scGlobalApply sc "Cryptol.PRingRational" []
-        -- instance (fin n) => Ring [n]
-        (C.pIsRing -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PRingSeqBool" [n']
-        -- instance ValidFloat e p => Ring (Float e p)
-        (C.pIsRing -> Just (C.tIsFloat -> Just (e, p)))
-          -> do e' <- importType sc env e
-                p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PRingFloat" [e', p']
-        -- instance (Ring a) => Ring [n]a
-        (C.pIsRing -> Just (C.tIsSeq -> Just (n, a)))
-          -> do n' <- importType sc env n
-                a' <- importType sc env a
-                pa <- provePropRec sc env prop0 (C.pRing a)
-                scGlobalApply sc "Cryptol.PRingSeq" [n', a', pa]
-        -- instance (Ring b) => Ring (a -> b)
-        (C.pIsRing -> Just (C.tIsFun -> Just (a, b)))
-          -> do a' <- importType sc env a
-                b' <- importType sc env b
-                pb <- provePropRec sc env prop0 (C.pRing b)
-                scGlobalApply sc "Cryptol.PRingFun" [a', b', pb]
-        -- instance Ring ()
-        (C.pIsRing -> Just (C.tIsTuple -> Just []))
-          -> do scGlobalApply sc "Cryptol.PRingUnit" []
-        -- instance (Ring a, Ring b) => Ring (a, b)
-        (C.pIsRing -> Just (C.tIsTuple -> Just (t : ts)))
-          -> do a <- importType sc env t
-                b <- importType sc env (C.tTuple ts)
-                pa <- provePropRec sc env prop0 (C.pRing t)
-                pb <- provePropRec sc env prop0 (C.pRing (C.tTuple ts))
-                scGlobalApply sc "Cryptol.PRingPair" [a, b, pa, pb]
-        -- instance (Ring a, Ring b, ...) => instance Ring { x : a, y : b, ... }
-        (C.pIsRing -> Just (C.tIsRec -> Just fm))
-          -> foldRecord C.pRing "Cryptol.PRingEmpty" "Cryptol.PRingRecord" fm
-        -- Derived Ring instances
-        (C.pIsRing -> Just (C.tIsNominal -> Just (nt, ts)))
-          -- Newtypes
-          |  C.Struct con <- C.ntDef nt
-          -> foldRecord C.pRing "Cryptol.PRingEmpty" "Cryptol.PRingRecord"
-               (newtypeRecordFields nt ts con)
-
-        -- instance Integral Integer
-        (C.pIsIntegral -> Just (C.tIsInteger -> True))
-          -> do scGlobalApply sc "Cryptol.PIntegralInteger" []
-        -- instance Integral [n]
-        (C.pIsIntegral -> Just (C.tIsSeq -> (Just (n, C.tIsBit -> True))))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PIntegralSeqBool" [n']
-
-        -- instance Field Rational
-        (C.pIsField -> Just (C.tIsRational -> True))
-          -> do scGlobalApply sc "Cryptol.PFieldRational" []
-        -- instance (prime p) => Field (Z p)
-        (C.pIsField -> Just (C.tIsIntMod -> Just n))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PFieldIntModNum" [n']
-        -- instance (ValidFloat e p) => Field (Float e p)
-        (C.pIsField -> Just (C.tIsFloat -> Just (e, p)))
-          -> do e' <- importType sc env e
-                p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PFieldFloat" [e', p']
-
-        -- instance Round Rational
-        (C.pIsRound -> Just (C.tIsRational -> True))
-          -> do scGlobalApply sc "Cryptol.PRoundRational" []
-        -- instance (ValidFloat e p) => Round (Float e p)
-        (C.pIsRound -> Just (C.tIsFloat -> Just (e, p)))
-          -> do e' <- importType sc env e
-                p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PRoundFloat" [e', p']
-
-        -- instance Eq Bit
-        (C.pIsEq -> Just (C.tIsBit -> True))
-          -> do scGlobalApply sc "Cryptol.PEqBit" []
-        -- instance Eq Integer
-        (C.pIsEq -> Just (C.tIsInteger -> True))
-          -> do scGlobalApply sc "Cryptol.PEqInteger" []
-        -- instance Eq (Z n)
-        (C.pIsEq -> Just (C.tIsIntMod -> Just n))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PEqIntModNum" [n']
-        -- instance Eq Rational
-        (C.pIsEq -> Just (C.tIsRational -> True))
-          -> do scGlobalApply sc "Cryptol.PEqRational" []
-        -- instance Eq (Float e p)
-        (C.pIsEq -> Just (C.tIsFloat -> Just (e, p)))
-          -> do e' <- importType sc env e
-                p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PEqFloat" [e', p']
-        -- instance (fin n) => Eq [n]
-        (C.pIsEq -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PEqSeqBool" [n']
-        -- instance (fin n, Eq a) => Eq [n]a
-        (C.pIsEq -> Just (C.tIsSeq -> Just (n, a)))
-          -> do n' <- importType sc env n
-                a' <- importType sc env a
-                pa <- provePropRec sc env prop0 (C.pEq a)
-                scGlobalApply sc "Cryptol.PEqSeq" [n', a', pa]
-        -- instance Eq ()
-        (C.pIsEq -> Just (C.tIsTuple -> Just []))
-          -> do scGlobalApply sc "Cryptol.PEqUnit" []
-        -- instance (Eq a, Eq b) => Eq (a, b)
-        (C.pIsEq -> Just (C.tIsTuple -> Just (t : ts)))
-          -> do a <- importType sc env t
-                b <- importType sc env (C.tTuple ts)
-                pa <- provePropRec sc env prop0 (C.pEq t)
-                pb <- provePropRec sc env prop0 (C.pEq (C.tTuple ts))
-                scGlobalApply sc "Cryptol.PEqPair" [a, b, pa, pb]
-        -- instance (Eq a, Eq b, ...) => instance Eq { x : a, y : b, ... }
-        (C.pIsEq -> Just (C.tIsRec -> Just fm))
-          -> foldRecord C.pEq "Cryptol.PEqEmpty" "Cryptol.PEqRecord" fm
-        -- Derived Eq instances
-        (C.pIsEq -> Just (C.tIsNominal -> Just (nt, ts)))
-          -- Newtypes
-          |  C.Struct con <- C.ntDef nt
-          -> foldRecord C.pEq "Cryptol.PEqEmpty" "Cryptol.PEqRecord"
-               (newtypeRecordFields nt ts con)
-          -- Enums
-          |  C.Enum cons <- C.ntDef nt
-          -> foldEnum C.pEq
-               "Cryptol.PEqVoid" "Cryptol.PEqEither"
-               "Cryptol.PEqUnit" "Cryptol.PEqPair"
-               (instantiatedEnumCons nt ts cons)
-
-        -- instance Cmp Bit
-        (C.pIsCmp -> Just (C.tIsBit -> True))
-          -> do scGlobalApply sc "Cryptol.PCmpBit" []
-        -- instance Cmp Integer
-        (C.pIsCmp -> Just (C.tIsInteger -> True))
-          -> do scGlobalApply sc "Cryptol.PCmpInteger" []
-        -- instance Cmp Rational
-        (C.pIsCmp -> Just (C.tIsRational -> True))
-          -> do scGlobalApply sc "Cryptol.PCmpRational" []
-        -- instance Cmp (Float e p)
-        (C.pIsCmp -> Just (C.tIsFloat -> Just (e, p)))
-          -> do e' <- importType sc env e
-                p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PCmpFloat" [e', p']
-        -- instance (fin n) => Cmp [n]
-        (C.pIsCmp -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PCmpSeqBool" [n']
-        -- instance (fin n, Cmp a) => Cmp [n]a
-        (C.pIsCmp -> Just (C.tIsSeq -> Just (n, a)))
-          -> do n' <- importType sc env n
-                a' <- importType sc env a
-                pa <- provePropRec sc env prop0 (C.pCmp a)
-                scGlobalApply sc "Cryptol.PCmpSeq" [n', a', pa]
-        -- instance Cmp ()
-        (C.pIsCmp -> Just (C.tIsTuple -> Just []))
-          -> do scGlobalApply sc "Cryptol.PCmpUnit" []
-        -- instance (Cmp a, Cmp b) => Cmp (a, b)
-        (C.pIsCmp -> Just (C.tIsTuple -> Just (t : ts)))
-          -> do a <- importType sc env t
-                b <- importType sc env (C.tTuple ts)
-                pa <- provePropRec sc env prop0 (C.pCmp t)
-                pb <- provePropRec sc env prop0 (C.pCmp (C.tTuple ts))
-                scGlobalApply sc "Cryptol.PCmpPair" [a, b, pa, pb]
-        -- instance (Cmp a, Cmp b, ...) => instance Cmp { x : a, y : b, ... }
-        (C.pIsCmp -> Just (C.tIsRec -> Just fm))
-          -> foldRecord C.pCmp "Cryptol.PCmpEmpty" "Cryptol.PCmpRecord" fm
-        -- Derived Cmp instances
-        (C.pIsCmp -> Just (C.tIsNominal -> Just (nt, ts)))
-          -- Newtypes
-          |  C.Struct con <- C.ntDef nt
-          -> foldRecord C.pCmp "Cryptol.PCmpEmpty" "Cryptol.PCmpRecord"
-               (newtypeRecordFields nt ts con)
-          -- Enums
-          |  C.Enum cons <- C.ntDef nt
-          -> foldEnum C.pCmp
-               "Cryptol.PCmpVoid" "Cryptol.PCmpEither"
-               "Cryptol.PCmpUnit" "Cryptol.PCmpPair"
-               (instantiatedEnumCons nt ts cons)
-
-        -- instance (fin n) => SignedCmp [n]
-        (C.pIsSignedCmp -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PSignedCmpSeqBool" [n']
-        -- instance (fin n, SignedCmp a) => SignedCmp [n]a
-        (C.pIsSignedCmp -> Just (C.tIsSeq -> Just (n, a)))
-          -> do n' <- importType sc env n
-                a' <- importType sc env a
-                pa <- provePropRec sc env prop0 (C.pSignedCmp a)
-                scGlobalApply sc "Cryptol.PSignedCmpSeq" [n', a', pa]
-        -- instance SignedCmp ()
-        (C.pIsSignedCmp -> Just (C.tIsTuple -> Just []))
-          -> do scGlobalApply sc "Cryptol.PSignedCmpUnit" []
-        -- instance (SignedCmp a, SignedCmp b) => SignedCmp (a, b)
-        (C.pIsSignedCmp -> Just (C.tIsTuple -> Just (t : ts)))
-          -> do a <- importType sc env t
-                b <- importType sc env (C.tTuple ts)
-                pa <- provePropRec sc env prop0 (C.pSignedCmp t)
-                pb <- provePropRec sc env prop0 (C.pSignedCmp (C.tTuple ts))
-                scGlobalApply sc "Cryptol.PSignedCmpPair" [a, b, pa, pb]
-        -- instance (SignedCmp a, SignedCmp b, ...) => instance SignedCmp { x : a, y : b, ... }
-        (C.pIsSignedCmp -> Just (C.tIsRec -> Just fm))
-          -> foldRecord C.pSignedCmp "Cryptol.PSignedCmpEmpty" "Cryptol.PSignedCmpRecord" fm
-        -- Derived SignedCmp instances
-        (C.pIsSignedCmp -> Just (C.tIsNominal -> Just (nt, ts)))
-          -- Newtypes
-          |  C.Struct con <- C.ntDef nt
-          -> foldRecord C.pSignedCmp "Cryptol.PSignedCmpEmpty" "Cryptol.PSignedCmpRecord"
-               (newtypeRecordFields nt ts con)
-          -- Enums
-          |  C.Enum cons <- C.ntDef nt
-          -> foldEnum C.pSignedCmp
-               "Cryptol.PSignedCmpVoid" "Cryptol.PSignedCmpEither"
-               "Cryptol.PSignedCmpUnit" "Cryptol.PSignedCmpPair"
-               (instantiatedEnumCons nt ts cons)
-
-        -- Note that in the Literal/LiteralLessThan instances below, we
-        -- intentionally do not translate the first argument.
-        -- See Note [Literal, LiteralLessThan, and FLiteral in SAWCore].
-
-        -- instance Literal val Bit
-        (C.pIsLiteral -> Just (_, C.tIsBit -> True))
-          -> do scGlobalApply sc "Cryptol.PLiteralBit" []
-        -- instance Literal val Integer
-        (C.pIsLiteral -> Just (_, C.tIsInteger -> True))
-          -> do scGlobalApply sc "Cryptol.PLiteralInteger" []
-        -- instance Literal val (Z n)
-        (C.pIsLiteral -> Just (_, C.tIsIntMod -> Just n))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PLiteralIntModNum" [n']
-        -- instance Literal val Rational
-        (C.pIsLiteral -> Just (_, C.tIsRational -> True))
-          -> do scGlobalApply sc "Cryptol.PLiteralRational" []
-        -- instance (fin n, n >= width val) => Literal val [n]
-        (C.pIsLiteral -> Just (_, C.tIsSeq -> Just (n, C.tIsBit -> True)))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PLiteralSeqBool" [n']
-        -- instance ValidFloat e p => Literal val (Float e p) (with extra constraints)
-        (C.pIsLiteral -> Just (_, C.tIsFloat -> Just (e, p)))
-          -> do e' <- importType sc env e
-                p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PLiteralFloat" [e', p']
-
-        -- instance (2 >= val) => LiteralLessThan val Bit
-        (C.pIsLiteralLessThan -> Just (_, C.tIsBit -> True))
-          -> do scGlobalApply sc "Cryptol.PLiteralBit" []
-        -- instance LiteralLessThan val Integer
-        (C.pIsLiteralLessThan -> Just (_, C.tIsInteger -> True))
-          -> do scGlobalApply sc "Cryptol.PLiteralInteger" []
-        -- instance (fin n, n >= 1, n >= val) LiteralLessThan val (Z n)
-        (C.pIsLiteralLessThan -> Just (_, C.tIsIntMod -> Just n))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PLiteralIntModNum" [n']
-        -- instance Literal val Rational
-        (C.pIsLiteralLessThan -> Just (_, C.tIsRational -> True))
-          -> do scGlobalApply sc "Cryptol.PLiteralRational" []
-        -- instance (fin n, n >= lg2 val) => Literal val [n]
-        (C.pIsLiteralLessThan -> Just (_, C.tIsSeq -> Just (n, C.tIsBit -> True)))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PLiteralSeqBool" [n']
-        -- instance ValidFloat e p => Literal val (Float e p) (with extra constraints)
-        (C.pIsLiteralLessThan -> Just (_, C.tIsFloat -> Just (e, p)))
-          -> do e' <- importType sc env e
-                p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PLiteralFloat" [e', p']
-
-        -- Note that in the FLiteral instances below, we intentionally do not
-        -- translate the first three arguments.
-        -- See Note [Literal, LiteralLessThan, and FLiteral in SAWCore].
-
-        -- instance (fin m, fin n, n >= 1) => FLiteral m n r Rational
-        (C.pIsFLiteral -> Just (_, _, _, C.tIsRational -> True))
-          -> do scGlobalApply sc "Cryptol.PFLiteralRational" []
-        -- instance ValidFloat e p => FLiteral m n r (Float e p) (with extra constraints)
-        (C.pIsFLiteral -> Just (_, _, _, C.tIsFloat -> Just (e, p)))
-          -> do e' <- importType sc env e
-                p' <- importType sc env p
-                scGlobalApply sc "Cryptol.PFLiteralFloat" [e', p']
-
-        -- instance fin <numeral>
-        (C.pIsFin -> Just (C.tIsNum -> Just n))
-          -> do a <- scNat sc (fromInteger n)
-                scGlobalApply sc "Cryptol.PFin_TCNum" [a]
-        -- instance (fin m, fin n) => fin (m + n)
-        (C.pIsFin -> Just (C.tIsBinFun C.TCAdd -> Just (m, n)))
-          -> do a <- importType sc env m
-                b <- importType sc env n
-                pa <- provePropRec sc env prop0 (pFin m)
-                pb <- provePropRec sc env prop0 (pFin n)
-                scGlobalApply sc "Cryptol.PFin_tcAdd" [a, b, pa, pb]
-        -- instance (fin m, fin n) => fin (m * n)
-        -- NOTE: It is possible to have `fin (m * n)` without both
-        -- `fin m` and `fin n` if one of the multiplicands is 0. Yet
-        -- it should be safe to apply this rule in practice, because
-        -- Cryptol would have simplified `m * n` to 0 if one of them
-        -- was 0.
-        (C.pIsFin -> Just (C.tIsBinFun C.TCMul -> Just (m, n)))
-          -> do a <- importType sc env m
-                b <- importType sc env n
-                pa <- provePropRec sc env prop0 (pFin m)
-                pb <- provePropRec sc env prop0 (pFin n)
-                scGlobalApply sc "Cryptol.PFin_tcMul" [a, b, pa, pb]
-        -- instance fin m => fin (m - n)
-        (C.pIsFin -> Just (C.tIsBinFun C.TCSub -> Just (m, n)))
-          -> do a <- importType sc env m
-                b <- importType sc env n
-                pa <- provePropRec sc env prop0 (pFin m)
-                scGlobalApply sc "Cryptol.PFin_tcSub" [a, b, pa]
-        -- instance fin m => fin (m / n)
-        (C.pIsFin -> Just (C.tIsBinFun C.TCDiv -> Just (m, n)))
-          -> do a <- importType sc env m
-                b <- importType sc env n
-                pa <- provePropRec sc env prop0 (pFin m)
-                scGlobalApply sc "Cryptol.PFin_tcDiv" [a, b, pa]
-        -- instance fin m => fin (m /^ n)
-        (C.pIsFin -> Just (C.tIsBinFun C.TCCeilDiv -> Just (m, n)))
-          -> do a <- importType sc env m
-                b <- importType sc env n
-                pa <- provePropRec sc env prop0 (pFin m)
-                scGlobalApply sc "Cryptol.PFin_tcCeilDiv" [a, b, pa]
-        -- instance fin n (fallback case, trusting Cryptol type checker)
-        (C.pIsFin -> Just n)
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.unsafeAssumePFin" [n']
-
-        -- instance (n == n)
-        (C.pIsEqual -> Just (m, n))
-          -> do num <- scGlobalDef sc "Cryptol.Num"
-                m' <- importType sc env m
-                n' <- importType sc env n
-                conv <- scConvertible sc m' n'
-                if conv
-                  then scGlobalApply sc "Prelude.Refl" [num, m']
-                  else scGlobalApply sc "Prelude.unsafeAssert" [num, m', n']
-        -- instance (n >= 0)
-        (C.pIsGeq -> Just (n, C.tIsNum -> Just 0))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PGeq_0" [n']
-        -- instance (m >= n) (fallback case, trusting Cryptol type checker)
-        (C.pIsGeq -> Just (m, n))
-          -> do m' <- importType sc env m
-                n' <- importType sc env n
-                scGlobalApply sc "Cryptol.unsafeAssumePGeq" [m', n']
-
-        -- instance (<numeral> != <numeral>)
-        (C.pIsNeq -> Just (C.tIsNum -> Just m, C.tIsNum -> Just n)) | m /= n
-          -> do bool <- scBoolType sc
-                false <- scBool sc False
-                scGlobalApply sc "Prelude.Refl" [bool, false]
-        -- instance (m != n) (fallback case, trusting Cryptol type checker)
-        (C.pIsNeq -> Just (m, n))
-          -> do m' <- importType sc env m
-                n' <- importType sc env n
-                scGlobalApply sc "Cryptol.unsafeAssumePNeq" [m', n']
-
-        -- instance True
-        (C.pIsTrue -> True)
-          -> do ty <- scGlobalDef sc "Prelude.Bool"
-                t <- scGlobalDef sc "Prelude.True"
-                scGlobalApply sc "Prelude.Refl" [ty, t]
-
-        _ -> do
-            let prop0' = "   " <> CryPP.pp prop0
-                prop' = "   " <> CryPP.pp prop
-                env' = map (\p -> "   " <> CryPP.pp p) $ Map.keys $ leProps env
+proveProp sc env prop =
+  do let tyProps = leProps env
+     initializeInstances sc
+     net0 <- maybe emptyIntroRuleSet id <$> eInstances sc
+     prfs <-
+       forM (Map.elems tyProps) $ \(prf, fs) ->
+         foldM (scRecordSelect sc) prf (reverse fs)
+     rules <- traverse (mkIntroRule sc) prfs
+     let net = foldr insertIntroRuleSet net0 rules
+     p <- importType sc env prop
+     result <- proveWithIntros sc net p
+     case result of
+       Left e ->
+         do let prop0' = "   " <> CryPP.pp prop
+            prop' <- ppTerm sc e
+            let env' = map (\p' -> "   " <> CryPP.pp p') $ Map.keys $ tyProps
                 message = [
                     "Cannot find or infer typeclass instance",
                     "Property needed:",
                     prop',
                     "Original property:",
-                    prop0',
+                    Text.unpack prop0',
                     "Available propositions in the environment:"
-                 ] ++ env'
-            panic "proveProp" message
-  where
-    -- | NOTE: C.pFin does extra simplifications we don't want.
-    pFin :: C.Type -> C.Prop
-    pFin ty = C.TCon (C.PC C.PFin) [ty]
-
-    -- Construct a record value. This is used to import Zero instances for
-    -- record types and newtypes.
-    buildRecord :: (C.Type -> C.Type) -> C.RecordMap C.Ident C.Type -> IO Term
-    buildRecord p fm =
-      do let fields = map (\(i, t) -> (C.identText i, t)) (C.canonicalFields fm)
-         fields' <- traverse (traverse (provePropRec sc env prop0 . p)) fields
-         scRecordValue sc fields'
-
-    -- Fold over a record value field by field and return a value representing
-    -- a class instance (e.g., a @PEq@ value). This is used to import various
-    -- instances for record types and newtypes.
-    foldRecord :: (C.Type -> C.Type) -> Ident -> Ident -> C.RecordMap C.Ident C.Type -> IO Term
-    foldRecord p nil cons fm = snd <$> go (C.canonicalFields fm)
-      where
-        go :: [(C.Ident, C.Type)] -> IO (Term, Term)
-        go [] =
-          do a <- scRecordType sc []
-             pa <- scGlobalDef sc nil
-             pure (a, pa)
-        go ((i, t) : ts) =
-          do s <- scString sc (C.identText i)
-             a <- importType sc env t
-             pa <- provePropRec sc env prop0 (p t)
-             (b, pb) <- go ts
-             c <- scGlobalApply sc "Prelude.RecordType" [s, a, b]
-             pc <- scGlobalApply sc cons [s, a, b, pa, pb]
-             pure (c, pc)
-
-    -- Fold over an enum constructor by constructor, field by field, and return
-    -- a value representing a class instance (e.g., a @PEq@ value).
-    foldEnum ::
-      (C.Type -> C.Type) ->
-      -- | The SAWCore name of the instance to apply when there are no
-      -- constructors left (e.g., @PEqVoid@).
-      Ident ->
-      -- | The SAWCore name of the instance to apply for a single constructor
-      -- (e.g., @PEqEither@).
-      Ident ->
-      -- | The SAWCore name of the instance to apply when there are no fields
-      -- left (e.g., @PEqUnit@).
-      Ident ->
-      -- | The SAWCore name of the instance to apply for a single field (e.g.,
-      -- @PEqPair@).
-      Ident ->
-      [C.EnumCon] ->
-      IO Term
-    foldEnum p noConstructors addConstructor noFields addField = fmap snd . go
-      where
-        go :: [C.EnumCon] -> IO (Term, Term)
-        go [] =
-          do a <- scGlobalDef sc "Prelude.Void"
-             pa <- scGlobalDef sc noConstructors
-             pure (a, pa)
-        go (con : cons) =
-          do (a, pa) <- foldEnumCon p noFields addField (C.ecFields con)
-             (b, pb) <- go cons
-             c <- scGlobalApply sc "Prelude.Either" [a, b]
-             pc <- scGlobalApply sc addConstructor [a, b, pa, pb]
-             pure (c, pc)
-
-    -- Fold over an enum constructor, field by field. Return two things:
-    --
-    -- 1. A pair type comprising all of the fields' types.
-    -- 2. A class instance (e.g., @PEq@) for the pair type.
-    foldEnumCon :: (C.Type -> C.Type) -> Ident -> Ident -> [C.Type] -> IO (Term, Term)
-    foldEnumCon p nil cons = go
-      where
-        go :: [C.Type] -> IO (Term, Term)
-        go [] =
-          do a <- scUnitType sc
-             pa <- scGlobalDef sc nil
-             pure (a, pa)
-        go (t : ts) =
-          do a <- importType sc env t
-             pa <- provePropRec sc env prop0 (p t)
-             (b, pb) <- go ts
-             c <- scPairType sc a b
-             pc <- scGlobalApply sc cons [a, b, pa, pb]
-             pure (c, pc)
+                 ] ++ map Text.unpack env'
+            fail (unlines message)
+       Right prf -> pure prf
 
 {-
 Note [Literal, LiteralLessThan, and FLiteral in SAWCore]
@@ -2258,23 +1825,6 @@ newtypeRecordFields ::
 newtypeRecordFields nt params con =
   let su = C.listParamSubst $ zip (C.ntParams nt) params in
   plainSubst su <$> C.ntFields con
-
--- | Apply a substitution to the fields types of an enum's constructors.
-instantiatedEnumCons ::
-  -- | The enum definition.
-  NominalType ->
-  -- | The types used to instantiate the enum's parameters.
-  [C.Type] ->
-  -- | The enum's constructors.
-  [C.EnumCon] ->
-  [C.EnumCon]
-instantiatedEnumCons nt params = map instantiateEnumCon
-  where
-    su = C.listParamSubst $ zip (C.ntParams nt) params
-
-    instantiateEnumCon :: C.EnumCon -> C.EnumCon
-    instantiateEnumCon con =
-      con { C.ecFields = plainSubst su <$> C.ecFields con }
 
 -- | Deconstruct a Cryptol tuple type as a pair according to the
 -- SAWCore tuple type encoding.
