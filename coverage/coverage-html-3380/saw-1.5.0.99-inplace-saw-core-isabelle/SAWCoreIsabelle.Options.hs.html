@@ -1,0 +1,125 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    2 </span>{-# LANGUAGE ImplicitParams #-}
+<span class="lineno">    3 </span>{-# LANGUAGE ConstraintKinds #-}
+<span class="lineno">    4 </span>{-# LANGUAGE RankNTypes #-}
+<span class="lineno">    5 </span>
+<span class="lineno">    6 </span>module SAWCoreIsabelle.Options
+<span class="lineno">    7 </span>  ( Options(..)
+<span class="lineno">    8 </span>  , emptyOpts
+<span class="lineno">    9 </span>  , HasOptions
+<span class="lineno">   10 </span>  , ImportPrefix(..)
+<span class="lineno">   11 </span>  , TargetSelect(..)
+<span class="lineno">   12 </span>  , withOptions
+<span class="lineno">   13 </span>  , crySources
+<span class="lineno">   14 </span>  , isaDestDir
+<span class="lineno">   15 </span>  , isaImportPrefix
+<span class="lineno">   16 </span>  , verbosity
+<span class="lineno">   17 </span>  , keepGoing
+<span class="lineno">   18 </span>  , cryptolDirs
+<span class="lineno">   19 </span>  , targetSelect
+<span class="lineno">   20 </span>  , functionStubs
+<span class="lineno">   21 </span>  , allOptions
+<span class="lineno">   22 </span>  , addLogger
+<span class="lineno">   23 </span>  , addErrLogger
+<span class="lineno">   24 </span>  , log
+<span class="lineno">   25 </span>  , logErr
+<span class="lineno">   26 </span>  ) where
+<span class="lineno">   27 </span>
+<span class="lineno">   28 </span>import           Prelude hiding (log)
+<span class="lineno">   29 </span>
+<span class="lineno">   30 </span>import qualified Control.Monad.IO.Class as IO
+<span class="lineno">   31 </span>import qualified Cryptol.Parser.AST as Cry (ModName)
+<span class="lineno">   32 </span>import qualified Cryptol.TypeCheck.AST as Cry
+<span class="lineno">   33 </span>
+<span class="lineno">   34 </span>import qualified Language.Isabelle.Name as Isabelle
+<span class="lineno">   35 </span>
+<span class="lineno">   36 </span>data ImportPrefix = NoPrefix | CryptolImage | CustomPrefix String
+<span class="lineno">   37 </span>
+<span class="lineno">   38 </span>data TargetSelect = 
+<span class="lineno">   39 </span>      AllModules 
+<span class="lineno">   40 </span>    | NamedModules [String] 
+<span class="lineno">   41 </span>    | ModuleNames [Cry.ModName]
+<span class="lineno">   42 </span>    | TargetExpr Isabelle.Name Cry.Schema Cry.Expr
+<span class="lineno">   43 </span>
+<span class="lineno">   44 </span>data Options = Options {
+<span class="lineno">   45 </span>  <span class="nottickedoff"><span class="decl"><span class="nottickedoff">crySources_</span></span></span> :: [FilePath]
+<span class="lineno">   46 </span>, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">isaDestDir_</span></span></span> :: FilePath
+<span class="lineno">   47 </span>, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">isaImportPrefix_</span></span></span> :: ImportPrefix
+<span class="lineno">   48 </span>, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">verbosity_</span></span></span> :: Integer
+<span class="lineno">   49 </span>, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">keepGoing_</span></span></span> :: Bool
+<span class="lineno">   50 </span>, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">cryptolDirs_</span></span></span> :: [FilePath]
+<span class="lineno">   51 </span>, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">targetSelect_</span></span></span> :: TargetSelect
+<span class="lineno">   52 </span>, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">functionStubs_</span></span></span> :: [String]
+<span class="lineno">   53 </span>, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">loggerMsg_</span></span></span> :: String -&gt; IO ()
+<span class="lineno">   54 </span>, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">loggerErr_</span></span></span> :: String -&gt; IO ()
+<span class="lineno">   55 </span>}
+<span class="lineno">   56 </span>
+<span class="lineno">   57 </span>emptyOpts :: Options 
+<span class="lineno">   58 </span><span class="decl"><span class="nottickedoff">emptyOpts = Options [] &quot;&quot; NoPrefix 0 False [] (NamedModules []) [] (\_ -&gt; return ()) (\_ -&gt; return ())</span></span>
+<span class="lineno">   59 </span>
+<span class="lineno">   60 </span>type HasOptions = (?options :: Options)
+<span class="lineno">   61 </span>
+<span class="lineno">   62 </span>crySources :: HasOptions =&gt; [FilePath]
+<span class="lineno">   63 </span><span class="decl"><span class="nottickedoff">crySources = crySources_ ?options</span></span>
+<span class="lineno">   64 </span>
+<span class="lineno">   65 </span>isaDestDir :: HasOptions =&gt; FilePath
+<span class="lineno">   66 </span><span class="decl"><span class="nottickedoff">isaDestDir = isaDestDir_ ?options</span></span>
+<span class="lineno">   67 </span>
+<span class="lineno">   68 </span>isaImportPrefix :: HasOptions =&gt; ImportPrefix
+<span class="lineno">   69 </span><span class="decl"><span class="nottickedoff">isaImportPrefix = isaImportPrefix_ ?options</span></span>
+<span class="lineno">   70 </span>
+<span class="lineno">   71 </span>verbosity :: HasOptions =&gt; Integer
+<span class="lineno">   72 </span><span class="decl"><span class="nottickedoff">verbosity = verbosity_ ?options</span></span>
+<span class="lineno">   73 </span>
+<span class="lineno">   74 </span>allOptions :: HasOptions =&gt; Options
+<span class="lineno">   75 </span><span class="decl"><span class="nottickedoff">allOptions = ?options</span></span>
+<span class="lineno">   76 </span>
+<span class="lineno">   77 </span>keepGoing :: HasOptions =&gt; Bool
+<span class="lineno">   78 </span><span class="decl"><span class="nottickedoff">keepGoing = keepGoing_ ?options</span></span>
+<span class="lineno">   79 </span>
+<span class="lineno">   80 </span>cryptolDirs :: HasOptions =&gt; [FilePath]
+<span class="lineno">   81 </span><span class="decl"><span class="nottickedoff">cryptolDirs = cryptolDirs_ ?options</span></span>
+<span class="lineno">   82 </span>
+<span class="lineno">   83 </span>targetSelect :: HasOptions =&gt; TargetSelect
+<span class="lineno">   84 </span><span class="decl"><span class="nottickedoff">targetSelect = targetSelect_ ?options</span></span>
+<span class="lineno">   85 </span>
+<span class="lineno">   86 </span>functionStubs :: HasOptions =&gt; [String]
+<span class="lineno">   87 </span><span class="decl"><span class="nottickedoff">functionStubs = functionStubs_ ?options</span></span>
+<span class="lineno">   88 </span>
+<span class="lineno">   89 </span>log :: (HasOptions, IO.MonadIO m) =&gt; Integer -&gt; String -&gt; m ()
+<span class="lineno">   90 </span><span class="decl"><span class="nottickedoff">log v msg = IO.liftIO $ if v &lt; verbosity then loggerMsg_ ?options msg else return ()</span></span>
+<span class="lineno">   91 </span>
+<span class="lineno">   92 </span>logErr :: (HasOptions, IO.MonadIO m) =&gt; Integer -&gt; String -&gt; m ()
+<span class="lineno">   93 </span><span class="decl"><span class="nottickedoff">logErr v msg = IO.liftIO $ if v &lt; verbosity then loggerErr_ ?options msg else return ()</span></span>
+<span class="lineno">   94 </span>
+<span class="lineno">   95 </span>addLogger :: (String -&gt; IO ()) -&gt; Options -&gt; Options
+<span class="lineno">   96 </span><span class="decl"><span class="nottickedoff">addLogger f opts = opts { loggerMsg_ = (\msg -&gt; loggerMsg_ opts msg &gt;&gt; f msg)}</span></span>
+<span class="lineno">   97 </span>
+<span class="lineno">   98 </span>addErrLogger :: (String -&gt; IO ()) -&gt; Options -&gt; Options
+<span class="lineno">   99 </span><span class="decl"><span class="nottickedoff">addErrLogger f opts = opts { loggerErr_ = (\msg -&gt; loggerErr_ opts msg &gt;&gt; f msg)}</span></span>
+<span class="lineno">  100 </span>
+<span class="lineno">  101 </span>withOptions :: Options -&gt; (HasOptions =&gt; a) -&gt; a
+<span class="lineno">  102 </span><span class="decl"><span class="nottickedoff">withOptions opts f = let ?options = opts in f</span></span>
+
+</pre>
+</body>
+</html>
