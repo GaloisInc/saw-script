@@ -207,11 +207,11 @@ span.spaces    { background: white }
 <span class="lineno">  188 </span><span class="spaces">         </span><span class="istickedoff">case nmi of</span>
 <span class="lineno">  189 </span><span class="spaces">           </span><span class="istickedoff">ModuleIdentifier ident -&gt;</span>
 <span class="lineno">  190 </span><span class="spaces">             </span><span class="istickedoff">lift (scResolveQualName sc (moduleIdentToQualName ident)) &gt;&gt;= \case</span>
-<span class="lineno">  191 </span><span class="spaces">               </span><span class="istickedoff">Just vi' -&gt; pure (Name vi' nmi)</span>
+<span class="lineno">  191 </span><span class="spaces">               </span><span class="istickedoff">Just nm  -&gt; pure nm</span>
 <span class="lineno">  192 </span><span class="spaces">               </span><span class="istickedoff">Nothing  -&gt; <span class="nottickedoff">lift $ fail $ &quot;scReadExternal: missing module identifier: &quot; ++ show ident</span></span>
 <span class="lineno">  193 </span><span class="spaces">           </span><span class="istickedoff">ImportedName qn _aliases -&gt;</span>
 <span class="lineno">  194 </span><span class="spaces">             </span><span class="istickedoff">lift (scResolveQualName sc qn) &gt;&gt;= \case</span>
-<span class="lineno">  195 </span><span class="spaces">               </span><span class="istickedoff">Just vi' -&gt; pure (Name vi' nmi)</span>
+<span class="lineno">  195 </span><span class="spaces">               </span><span class="istickedoff">Just nm -&gt; pure nm</span>
 <span class="lineno">  196 </span><span class="spaces">               </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">case Map.lookup vi vs of</span></span>
 <span class="lineno">  197 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">Just vi' -&gt; pure $ Name vi' nmi</span></span>
 <span class="lineno">  198 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt;</span></span>

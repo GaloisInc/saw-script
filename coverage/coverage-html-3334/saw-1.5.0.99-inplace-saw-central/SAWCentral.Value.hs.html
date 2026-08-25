@@ -526,7 +526,7 @@ span.spaces    { background: white }
 <span class="lineno">  507 </span>--   applied to the builtin. This is purely for printing in stack
 <span class="lineno">  508 </span>--   traces. FUTURE: VLambda should have this as well, but it doesn't
 <span class="lineno">  509 </span>--   make sense to make such a list separate from the variable
-<span class="lineno">  510 </span>--   environment handling, and that needs a through mucking-out of its
+<span class="lineno">  510 </span>--   environment handling, and that needs a thorough mucking-out of its
 <span class="lineno">  511 </span>--   own first. UPDATE: that's been done, this can be fixed now.
 <span class="lineno">  512 </span>--
 <span class="lineno">  513 </span>--   The flow for the position of last reference is as follows:
@@ -551,7 +551,7 @@ span.spaces    { background: white }
 <span class="lineno">  532 </span>--      (e) The same goes for statements in do-blocks, using the
 <span class="lineno">  533 </span>--          position of the BindStmt, or for the last expression in a
 <span class="lineno">  534 </span>--          do-block, the position of the expression.
-<span class="lineno">  535 </span>--      (f) When the Haskell-level monadic action in a plan monadic
+<span class="lineno">  535 </span>--      (f) When the Haskell-level monadic action in a plain monadic
 <span class="lineno">  536 </span>--          value is extracted with fromValue, we use the position to
 <span class="lineno">  537 </span>--          call setPosition to update the interpreter's last
 <span class="lineno">  538 </span>--          execution position.

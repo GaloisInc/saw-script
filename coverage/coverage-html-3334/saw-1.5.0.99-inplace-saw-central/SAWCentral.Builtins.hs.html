@@ -791,7 +791,7 @@ span.spaces    { background: white }
 <span class="lineno">  772 </span><span class="spaces">              </span><span class="istickedoff">ImportedName qn _ -&gt;</span>
 <span class="lineno">  773 </span><span class="spaces">                </span><span class="istickedoff">do resolvedName &lt;- scResolveQualName sc qn</span>
 <span class="lineno">  774 </span><span class="spaces">                   </span><span class="istickedoff">case resolvedName of</span>
-<span class="lineno">  775 </span><span class="spaces">                     </span><span class="istickedoff">Just vi -&gt; pure (vi : scnms)</span>
+<span class="lineno">  775 </span><span class="spaces">                     </span><span class="istickedoff">Just n -&gt; pure (nameIndex n : scnms)</span>
 <span class="lineno">  776 </span><span class="spaces">                     </span><span class="istickedoff">Nothing -&gt; pure scnms</span>
 <span class="lineno">  777 </span><span class="spaces">              </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">pure scnms</span></span>
 <span class="lineno">  778 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure scnms</span></span>
@@ -820,7 +820,7 @@ span.spaces    { background: white }
 <span class="lineno">  801 </span><span class="spaces">     </span><span class="istickedoff">-- Also exclude defined SAWCore constants that are implemented as primitives</span>
 <span class="lineno">  802 </span><span class="spaces">     </span><span class="istickedoff">let primQualNames = map moduleIdentToQualName (Map.keys constMap)</span>
 <span class="lineno">  803 </span><span class="spaces">     </span><span class="istickedoff">primIdxs &lt;- io $ traverse (scResolveQualName sc) primQualNames</span>
-<span class="lineno">  804 </span><span class="spaces">     </span><span class="istickedoff">let opaqueSet = Set.fromList (catMaybes primIdxs ++ idxs)</span>
+<span class="lineno">  804 </span><span class="spaces">     </span><span class="istickedoff">let opaqueSet = Set.fromList (map nameIndex (catMaybes primIdxs) ++ idxs)</span>
 <span class="lineno">  805 </span><span class="spaces">     </span><span class="istickedoff">let unfold nm = Set.notMember (nameIndex nm) opaqueSet</span>
 <span class="lineno">  806 </span><span class="spaces">     </span><span class="istickedoff">tm' &lt;- io $ scNormalize sc unfold (ttTerm tt)</span>
 <span class="lineno">  807 </span><span class="spaces">     </span><span class="istickedoff">pure tt{ ttTerm = tm' }</span></span>
@@ -833,7 +833,7 @@ span.spaces    { background: white }
 <span class="lineno">  814 </span><span class="spaces">       </span><span class="istickedoff">-- Also exclude defined SAWCore constants that are implemented as primitives</span>
 <span class="lineno">  815 </span><span class="spaces">       </span><span class="istickedoff">let primQualNames = map moduleIdentToQualName (Map.keys constMap)</span>
 <span class="lineno">  816 </span><span class="spaces">       </span><span class="istickedoff">primIdxs &lt;- io $ traverse (scResolveQualName sc) primQualNames</span>
-<span class="lineno">  817 </span><span class="spaces">       </span><span class="istickedoff">let opaqueSet = Set.fromList (catMaybes primIdxs ++ idxs)</span>
+<span class="lineno">  817 </span><span class="spaces">       </span><span class="istickedoff">let opaqueSet = Set.fromList (map nameIndex (catMaybes primIdxs) ++ idxs)</span>
 <span class="lineno">  818 </span><span class="spaces">       </span><span class="istickedoff">sqt' &lt;- io $ traverseSequentWithFocus (normalizeProp sc opaqueSet) (goalSequent goal)</span>
 <span class="lineno">  819 </span><span class="spaces">       </span><span class="istickedoff">return (sqt', NormalizePropEvidence opaqueSet)</span></span>
 <span class="lineno">  820 </span>
