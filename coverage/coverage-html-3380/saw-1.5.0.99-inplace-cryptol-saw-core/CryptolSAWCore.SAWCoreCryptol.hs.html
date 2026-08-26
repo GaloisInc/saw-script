@@ -221,7 +221,7 @@ span.spaces    { background: white }
 <span class="lineno">  202 </span><span class="spaces">  </span><span class="istickedoff">k' &lt;- case k of</span>
 <span class="lineno">  203 </span><span class="spaces">    </span><span class="istickedoff">P.KNum -&gt; return $ C.KNum</span>
 <span class="lineno">  204 </span><span class="spaces">    </span><span class="istickedoff">P.KType -&gt; <span class="nottickedoff">return $ C.KType</span></span>
-<span class="lineno">  205 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;mkTParam: unsupported type kind: &quot; ++ show k</span></span>
+<span class="lineno">  205 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail &quot;blork&quot;</span></span>
 <span class="lineno">  206 </span><span class="spaces">  </span><span class="istickedoff">tp &lt;- C.newSchemaParam tnm k' </span>
 <span class="lineno">  207 </span><span class="spaces">  </span><span class="istickedoff">return (tnm, tp)</span></span>
 <span class="lineno">  208 </span>
