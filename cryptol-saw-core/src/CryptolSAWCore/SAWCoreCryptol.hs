@@ -195,8 +195,8 @@ revConstraints (pe, e,s) = (pe, revTopProofs e, s { C.sProps = reverse (C.sProps
 validateImport :: Term -> (Expr, C.Expr, C.Schema) -> TT (Expr, C.Expr, C.Schema)
 validateImport t (pe, e, s) = do
   sc <- asks ttSc
-  s' <- liftIO $ CrySAW.importSchema sc s
-  e' <- liftIO $ CrySAW.importExpr' sc s e
+  s' <- liftIO $ CrySAW.translateSchema sc s
+  e' <- liftIO $ CrySAW.translateExpr' sc s e
   tT <- liftIO $ scTypeOf sc t
   checkConvertible tT s'
   checkConvertible e' t
