@@ -358,9 +358,9 @@ span.spaces    { background: white }
 <span class="lineno">  339 </span>
 <span class="lineno">  340 </span>-- | Concatenate n copies of a doc.
 <span class="lineno">  341 </span>replicate :: Integer -&gt; PP.Doc ann -&gt; PP.Doc ann
-<span class="lineno">  342 </span><span class="decl"><span class="istickedoff">replicate n d</span>
-<span class="lineno">  343 </span><span class="spaces">  </span><span class="istickedoff">| n &lt; 1 = PP.emptyDoc</span>
-<span class="lineno">  344 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">True</span>  = d &lt;&gt; replicate (n-1) d</span></span>
+<span class="lineno">  342 </span><span class="decl"><span class="nottickedoff">replicate n d</span>
+<span class="lineno">  343 </span><span class="spaces">  </span><span class="nottickedoff">| n &lt; 1 = PP.emptyDoc</span>
+<span class="lineno">  344 </span><span class="spaces">  </span><span class="nottickedoff">| True  = d &lt;&gt; replicate (n-1) d</span></span>
 <span class="lineno">  345 </span>
 <span class="lineno">  346 </span>-- | Add a comma to d1 and append d2.
 <span class="lineno">  347 </span>--   (Functionally internal to commaSepAll.)
