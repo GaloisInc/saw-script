@@ -1,0 +1,2 @@
+let modname = "Foreign";
+include "./saw/isa_test.saw";

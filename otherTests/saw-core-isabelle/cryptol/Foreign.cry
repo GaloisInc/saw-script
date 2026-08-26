@@ -1,0 +1,8 @@
+module Foreign where
+
+foreign my_add : [32] -> [32] -> [32]
+
+foreign my_mul : [32] -> [32] -> [32]
+
+foreign my_test : [32] -> [32] -> [32]
+my_test x y = my_mul (my_add x y) y

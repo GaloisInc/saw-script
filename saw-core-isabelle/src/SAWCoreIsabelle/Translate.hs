@@ -290,39 +290,54 @@ extraGuard ctx tv = case Cry.tpKind tv of
   where
     tp = Cry.TVar (Cry.TVBound tv)
 
-withDeclBinding :: Cry.Decl -> (Binding.Binding -> Cry.Expr -> IsaM a) -> IsaM a
-withDeclBinding d f = rethrow' (UnsupportedDecl d) $ case Cry.dDefinition d of
-  Cry.DPrim -> throwError $ UnsupportedEntity $ "DeclDef.DPrim"
-  Cry.DForeign{} -> throwError $ UnsupportedEntity $ "DeclDef.Foreign"
-  Cry.DExpr e -> withSchemaExpr (Cry.dSignature d) e $ \t body -> do
-    nm <- translateName (Cry.dName d)
-    f (Binding.Binding nm t) body
+declDefExpr :: Cry.DeclDef -> Maybe Cry.Expr
+declDefExpr d = case d of
+  Cry.DPrim -> Nothing
+  Cry.DForeign _ me -> me
+  Cry.DExpr e -> Just e
 
-withSchemaExpr :: Cry.Schema -> Cry.Expr -> (Type -> Cry.Expr -> IsaM a) -> IsaM a
-withSchemaExpr s e f = do
+withDeclBinding' :: Cry.Decl -> (Binding.Binding -> Maybe Cry.Expr -> IsaM a) -> IsaM a
+withDeclBinding' d f = case declDefExpr (Cry.dDefinition d) of
+  Just e -> withSchemaExpr (Cry.dSignature d) e $ \t body -> do
+    nm <- translateName (Cry.dName d)
+    f (Binding.Binding nm t) (Just body)
+  Nothing -> withSchema (Cry.dSignature d) $ \t -> do
+    nm <- translateName (Cry.dName d)
+    f (Binding.Binding nm t)  Nothing
+
+withDeclBinding :: Cry.Decl -> (Binding.Binding -> Cry.Expr -> IsaM a) -> IsaM a
+withDeclBinding d f = withDeclBinding' d $ \b me -> case me of
+  Just e -> f b e
+  Nothing -> throwError (UnsupportedDecl d)
+
+withSchema :: Cry.Schema -> (Type -> IsaM a) -> IsaM a
+withSchema s f = do
   let 
-    (tparams, body) = stripETAbs e
     props = Cry.sProps s
     ctx = Cry.buildSolverCtxt props
   guards <- catMaybes <$> mapM (extraGuard ctx) (Cry.sVars s)
   let s' = addGuards guards s
-
-  case tparams == (Cry.sVars s') of
-    True -> withTParams (Cry.sVars s') $ do
+  withTParams (Cry.sVars s') $ do
       t <- translateSchema s'
-      f t body
-    _ -> throwError $ UnexpectedSignature s' e
+      f t
+
+withSchemaExpr :: Cry.Schema -> Cry.Expr -> (Type -> Cry.Expr -> IsaM a) -> IsaM a
+withSchemaExpr s e f = do
+  let
+    (tparams, body) = stripETAbs e
+  case tparams == (Cry.sVars s) of
+    True -> withSchema s $ \t -> f t body
+    False -> throwError $ UnexpectedSignature s e
 
 tryError :: MonadError e m => m a -> m (Either e a)
 tryError action = (Right <$> action) `catchError` (pure . Left)
 
 translateDecl :: Cry.Decl -> IsaM (Binding.Binding, Either TranslationError ([Binding.Binding], Expr))
-translateDecl d = withDeclBinding d $ \b body -> do
-  case isStubbedFnName b of
-    True -> return (b, Left $ StubbedFunction d)
-    False -> do
-      res <- (tryError $ translateAbs body)
-      return $ (b, res)
+translateDecl d = withDeclBinding' d $ \b mbody -> case mbody of
+  Just body | not (isStubbedFnName b) -> do
+    res <- (tryError $ translateAbs body)
+    return $ (b, res)
+  _ -> return (b, Left $ StubbedFunction d)
 
 -- | Returns Undefined if translation fails
 translateDecl' :: Cry.Decl -> IsaM (Binding.Binding, Expr)
