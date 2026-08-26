@@ -3489,7 +3489,10 @@ primitives = Map.fromList $
   , prim "type"                "Term -> Type"
     (funVal1 term_type)
     Current
-    [ "Return the type of the given term." ]
+    [ "Return the Cryptol type of the given term."
+    , "May fail if the term does not have an associated Cryptol type,"
+    , "and one cannot be inferred."
+    ]
 
   , prim "print_type"          "Term -> TopLevel ()"
     (pureVal print_type)
