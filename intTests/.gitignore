@@ -6,4 +6,5 @@ logs
 results.xml
 results.xml.tmp
 tmp
-
+# The abc solver can leave these scattered about:
+abc.history
