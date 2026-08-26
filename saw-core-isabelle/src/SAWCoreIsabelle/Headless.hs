@@ -123,7 +123,7 @@ checkTargetSelect env = case Options.targetSelect of
     go :: [String] -> [String] -> IO ()
     go [] _ = return ()
     go (m:ms) lms | elem m lms = go ms lms
-    go (m:_) _ = fatalErr $ "Could not find module " ++ show m ++ " in module imports."
+    go (m:_) _ = fatalErr $ "Could not find module \"" ++ m ++ "\" in module imports."
 
 loadModules ::
   HasOptions =>
