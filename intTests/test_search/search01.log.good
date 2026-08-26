@@ -1,11 +1,8 @@
 --------------------------------
 -- (LLVMSpec -> _)
-crucible_spec_size : LLVMSpec -> Int  (DEPRECATED AND WILL WARN)
-crucible_spec_solvers :
-   LLVMSpec -> [String]
-   (DEPRECATED AND WILL WARN)
 llvm_spec_size : LLVMSpec -> Int
 llvm_spec_solvers : LLVMSpec -> [String]
+2 more matches tagged deprecated; use enable_deprecated to see them
 --------------------------------
 -- (_ Int)
 goal_num : ProofScript Int

@@ -1,21 +1,5 @@
 --------------------------------
 -- LLVMSpec
-crucible_llvm_unsafe_assume_spec :
-   LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
-   (DEPRECATED AND WILL WARN)
-crucible_llvm_verify :
-   LLVMModule ->
-   String ->
-   [LLVMSpec] ->
-   Bool ->
-   LLVMSetup () ->
-   ProofScript () ->
-   TopLevel LLVMSpec
-   (DEPRECATED AND WILL WARN)
-crucible_spec_size : LLVMSpec -> Int  (DEPRECATED AND WILL WARN)
-crucible_spec_solvers :
-   LLVMSpec -> [String]
-   (DEPRECATED AND WILL WARN)
 llvm_spec_size : LLVMSpec -> Int
 llvm_spec_solvers : LLVMSpec -> [String]
 llvm_unsafe_assume_spec :
@@ -28,85 +12,14 @@ llvm_verify :
    LLVMSetup () ->
    ProofScript () ->
    TopLevel LLVMSpec
-8 more matches tagged experimental; use enable_experimental to see them
-2 more matches tagged deprecated; use enable_deprecated to see them
+7 more matches tagged experimental; use enable_experimental to see them
+5 more matches tagged deprecated; use enable_deprecated to see them
 --------------------------------
 -- (LLVMSpec -> [String])
-crucible_spec_solvers :
-   LLVMSpec -> [String]
-   (DEPRECATED AND WILL WARN)
 llvm_spec_solvers : LLVMSpec -> [String]
+1 more match tagged deprecated; use enable_deprecated to see them
 --------------------------------
 -- LLVMSetup
-crucible_alloc :
-   LLVMType -> LLVMSetup LLVMValue
-   (DEPRECATED AND WILL WARN)
-crucible_alloc_aligned :
-   Int -> LLVMType -> LLVMSetup LLVMValue
-   (DEPRECATED AND WILL WARN)
-crucible_alloc_global :
-   String -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_alloc_readonly :
-   LLVMType -> LLVMSetup LLVMValue
-   (DEPRECATED AND WILL WARN)
-crucible_alloc_readonly_aligned :
-   Int -> LLVMType -> LLVMSetup LLVMValue
-   (DEPRECATED AND WILL WARN)
-crucible_conditional_points_to :
-   Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_conditional_points_to_untyped :
-   Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_equal :
-   LLVMValue -> LLVMValue -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_execute_func :
-   [LLVMValue] -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_fresh_expanded_val :
-   LLVMType -> LLVMSetup LLVMValue
-   (DEPRECATED AND WILL WARN)
-crucible_fresh_pointer :
-   LLVMType -> LLVMSetup LLVMValue
-   (DEPRECATED AND WILL WARN)
-crucible_fresh_var :
-   String -> LLVMType -> LLVMSetup Term
-   (DEPRECATED AND WILL WARN)
-crucible_ghost_value :
-   Ghost -> Term -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_llvm_unsafe_assume_spec :
-   LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
-   (DEPRECATED AND WILL WARN)
-crucible_llvm_verify :
-   LLVMModule ->
-   String ->
-   [LLVMSpec] ->
-   Bool ->
-   LLVMSetup () ->
-   ProofScript () ->
-   TopLevel LLVMSpec
-   (DEPRECATED AND WILL WARN)
-crucible_points_to :
-   LLVMValue -> LLVMValue -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_points_to_untyped :
-   LLVMValue -> LLVMValue -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_postcond :
-   Term -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_precond :
-   Term -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_return :
-   LLVMValue -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_symbolic_alloc :
-   Bool -> Int -> Term -> LLVMSetup LLVMValue
-   (DEPRECATED AND WILL WARN)
 llvm_alloc : LLVMType -> LLVMSetup LLVMValue
 llvm_alloc_aligned : Int -> LLVMType -> LLVMSetup LLVMValue
 llvm_alloc_global : String -> LLVMSetup ()
@@ -145,55 +58,10 @@ llvm_verify :
    LLVMSetup () ->
    ProofScript () ->
    TopLevel LLVMSpec
-25 more matches tagged experimental; use enable_experimental to see them
-5 more matches tagged deprecated; use enable_deprecated to see them
+24 more matches tagged experimental; use enable_experimental to see them
+22 more matches tagged deprecated; use enable_deprecated to see them
 --------------------------------
 -- (LLVMSetup ())
-crucible_alloc_global :
-   String -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_conditional_points_to :
-   Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_conditional_points_to_untyped :
-   Term -> LLVMValue -> LLVMValue -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_equal :
-   LLVMValue -> LLVMValue -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_execute_func :
-   [LLVMValue] -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_ghost_value :
-   Ghost -> Term -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_llvm_unsafe_assume_spec :
-   LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec
-   (DEPRECATED AND WILL WARN)
-crucible_llvm_verify :
-   LLVMModule ->
-   String ->
-   [LLVMSpec] ->
-   Bool ->
-   LLVMSetup () ->
-   ProofScript () ->
-   TopLevel LLVMSpec
-   (DEPRECATED AND WILL WARN)
-crucible_points_to :
-   LLVMValue -> LLVMValue -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_points_to_untyped :
-   LLVMValue -> LLVMValue -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_postcond :
-   Term -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_precond :
-   Term -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
-crucible_return :
-   LLVMValue -> LLVMSetup ()
-   (DEPRECATED AND WILL WARN)
 llvm_alloc_global : String -> LLVMSetup ()
 llvm_assert : Term -> LLVMSetup ()
 llvm_conditional_points_to :
@@ -223,18 +91,20 @@ llvm_verify :
    LLVMSetup () ->
    ProofScript () ->
    TopLevel LLVMSpec
-16 more matches tagged experimental; use enable_experimental to see them
-3 more matches tagged deprecated; use enable_deprecated to see them
+15 more matches tagged experimental; use enable_experimental to see them
+14 more matches tagged deprecated; use enable_deprecated to see them
 --------------------------------
 -- Int String
 get_opt : Int -> String
 write_saig' : String -> Term -> Int -> TopLevel ()
-6 more matches tagged experimental; use enable_experimental to see them
+5 more matches tagged experimental; use enable_experimental to see them
+1 more match tagged deprecated; use enable_deprecated to see them
 --------------------------------
 -- String Int
 get_opt : Int -> String
 write_saig' : String -> Term -> Int -> TopLevel ()
-6 more matches tagged experimental; use enable_experimental to see them
+5 more matches tagged experimental; use enable_experimental to see them
+1 more match tagged deprecated; use enable_deprecated to see them
 --------------------------------
 -- (TopLevel Int)
 sharpSAT : Term -> TopLevel Int

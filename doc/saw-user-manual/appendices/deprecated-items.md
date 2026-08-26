@@ -4,32 +4,18 @@ This appendix attempts to document the things in SAW that have been
 deprecated and removed over recent releases, in more detail than will
 fit in the change log and release notes.
 
+<!--
 ## Upcoming
 
-The following elements are expected to be deprecated in SAW 1.6 such
+The following elements are expected to be deprecated in SAW 1.7 such
 that they will warn when used, but have not yet been tagged:
-
-- The type `SetupValue` (an old name for `LLVMValue`)
-
-- The type `CrucibleMethodSpec` (an old name for `LLVMSpec`)
-
-- The type `CrucibleSetup` (an old name for `LLVMSetup`)
-
-The following experimental element is expected to be deprecated in SAW
-1.6 such that it will be hidden by default, but has not yet been
-tagged:
-
-- The experimental builtin `crucible_llvm_verify_x86` (an old name for
-  `llvm_verify_x86`), which was left in place in SAW 1.5 due to some
-  downstream uses that needed to be migrated first.
-
-Migration for all of these is as simple as updating the name.
+-->
 
 ## Warning When Used
 
 The following elements are currently deprecated and warn when used;
-this has happened since SAW 1.5 was released, so they will be that way
-in SAW 1.6.
+this has happened since SAW 1.5 was released, so they will be/are that
+way in SAW 1.6.
 They are expected to be hidden by default in SAW 1.7.
 
 - The `prove_extcore` builtin; you can just use `prove_print` instead
@@ -43,18 +29,40 @@ They are expected to be hidden by default in SAW 1.7.
   `admit` takes an extra string argument that's supposed to state why
   you're admitting the theorem without proof.
 
+- The type `SetupValue` (an old name for `LLVMValue`)
+
+- The type `CrucibleMethodSpec` (an old name for `LLVMSpec`)
+
+- The type `CrucibleSetup` (an old name for `LLVMSetup`)
+
 The following elements were deprecated as of SAW 1.5, and currently
 warn.
 They will be hidden by default when we remove Boolector from
-what4-solvers, which will not happen _before_ SAW 1.6; after that
-point the time frame depends mostly on the maintenance burden.
+what4-solvers.
+This will happen at some point after SAW 1.6; the time frame depends
+mostly on the maintenance burden.
 
 - The commands related to the Boolector solver, which has been
   replaced upstream with Bitwuzla.
   All `boolector` commands have equivalent `bitwuzla` commands.
 
+## Hidden by Default
+
+The following elements were previously experimental and will be
+deprecated and hidden by default as of SAW 1.6:
+
+- The experimental builtin `crucible_llvm_verify_x86` (an old name for
+  `llvm_verify_x86`), which was left in place in SAW 1.5 due to some
+  downstream uses that needed to be migrated first.
+
+There are not yet any (non-experimental) elements that were first deprecated
+as of SAW 1.6 and are now hidden by default.
+(Such elements would continue to be hidden by default in SAW 1.7 and
+would be removed in SAW 1.8.)
+
 The following elements were deprecated as of SAW 1.5 (or earlier),
-currently warn, but are expected to be hidden by default in SAW 1.6:
+and are hidden by default as of SAW 1.6.
+They are expected to be removed in SAW 1.7.
 
 - The commands related to the CVC4 solver; proofs should be migrated
   to CVC5.
@@ -85,14 +93,9 @@ currently warn, but are expected to be hidden by default in SAW 1.6:
 - Similarly, the `crucible_java_extract` builtin, which is an old
   name for `jvm_extract`.
 
-## Hidden by Default
+## Removed
 
-There are no elements that were deprecated as of SAW 1.5 (or earlier)
-and are now hidden by default, with the expectation that they will
-be hidden by default in SAW 1.6 and removed in SAW 1.7.
-
-The following elements were deprecated as of SAW 1.4 (or earlier), are
-now hidden by default, and will be removed in SAW 1.6:
+The following elements have been removed entirely:
 
 - The `env` builtin (use the `:env` REPL command instead)
 
@@ -103,10 +106,6 @@ now hidden by default, and will be removed in SAW 1.6:
   - `crucible_points_to_array_prefix`
   - `crucible_llvm_compositional_extract`
   - `crucible_llvm_array_size_profile`
-
-## Removed
-
-The following elements have been removed entirely:
 
 - The `addsimp'` and `addsimps'` builtins, which added unproven rewrite
   rules to a `Simpset`.
