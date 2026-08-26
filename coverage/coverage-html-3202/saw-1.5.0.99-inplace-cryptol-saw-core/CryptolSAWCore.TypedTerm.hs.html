@@ -75,7 +75,7 @@ span.spaces    { background: white }
 <span class="lineno">   56 </span>import qualified SAWSupport.Pretty as PPS (Opts, renderText)
 <span class="lineno">   57 </span>
 <span class="lineno">   58 </span>import qualified CryptolSAWCore.Pretty as CryPP
-<span class="lineno">   59 </span>import CryptolSAWCore.Cryptol (scCryptolType, CryptolEnv, importKind, translateSchema)
+<span class="lineno">   59 </span>import CryptolSAWCore.Cryptol (scCryptolType, importKind, translateSchema)
 <span class="lineno">   60 </span>import SAWCore.FiniteValue
 <span class="lineno">   61 </span>import SAWCore.Name (VarName(..))
 <span class="lineno">   62 </span>import SAWCore.Recognizer (asVariable)
@@ -192,11 +192,11 @@ span.spaces    { background: white }
 <span class="lineno">  173 </span>
 <span class="lineno">  174 </span>
 <span class="lineno">  175 </span>-- | Convert the 'ttType' field of a 'TypedTerm' to a SAWCore term
-<span class="lineno">  176 </span>ttTypeAsTerm :: SharedContext -&gt; CryptolEnv -&gt; TypedTerm -&gt; IO Term
-<span class="lineno">  177 </span><span class="decl"><span class="nottickedoff">ttTypeAsTerm sc env (TypedTerm (TypedTermSchema schema) _) =</span>
-<span class="lineno">  178 </span><span class="spaces">  </span><span class="nottickedoff">translateSchema sc env schema</span>
-<span class="lineno">  179 </span><span class="spaces"></span><span class="nottickedoff">ttTypeAsTerm sc _ (TypedTerm (TypedTermKind k) _) = importKind sc k</span>
-<span class="lineno">  180 </span><span class="spaces"></span><span class="nottickedoff">ttTypeAsTerm _ _ (TypedTerm (TypedTermOther tp) _) = return tp</span></span>
+<span class="lineno">  176 </span>ttTypeAsTerm :: SharedContext -&gt; TypedTerm -&gt; IO Term
+<span class="lineno">  177 </span><span class="decl"><span class="nottickedoff">ttTypeAsTerm sc (TypedTerm (TypedTermSchema schema) _) =</span>
+<span class="lineno">  178 </span><span class="spaces">  </span><span class="nottickedoff">translateSchema sc schema</span>
+<span class="lineno">  179 </span><span class="spaces"></span><span class="nottickedoff">ttTypeAsTerm sc (TypedTerm (TypedTermKind k) _) = importKind sc k</span>
+<span class="lineno">  180 </span><span class="spaces"></span><span class="nottickedoff">ttTypeAsTerm _ (TypedTerm (TypedTermOther tp) _) = return tp</span></span>
 <span class="lineno">  181 </span>
 <span class="lineno">  182 </span>ttTermLens :: Functor f =&gt; (Term -&gt; f Term) -&gt; TypedTerm -&gt; f TypedTerm
 <span class="lineno">  183 </span><span class="decl"><span class="istickedoff">ttTermLens f tt = tt `seq` fmap (\x -&gt; tt{ttTerm = x}) (f (ttTerm tt))</span></span>
@@ -216,7 +216,7 @@ span.spaces    { background: white }
 <span class="lineno">  197 </span><span class="spaces">  </span><span class="istickedoff">ct &lt;- scCryptolType sc ty</span>
 <span class="lineno">  198 </span><span class="spaces">  </span><span class="istickedoff">let ttt = case ct of</span>
 <span class="lineno">  199 </span><span class="spaces">        </span><span class="istickedoff">Nothing        -&gt; TypedTermOther <span class="nottickedoff">ty</span></span>
-<span class="lineno">  200 </span><span class="spaces">        </span><span class="istickedoff">Just (Left k)  -&gt; <span class="nottickedoff">TypedTermKind k</span></span>
+<span class="lineno">  200 </span><span class="spaces">        </span><span class="istickedoff">Just (Left k)  -&gt; TypedTermKind <span class="nottickedoff">k</span></span>
 <span class="lineno">  201 </span><span class="spaces">        </span><span class="istickedoff">Just (Right t) -&gt; TypedTermSchema (C.tMono t)</span>
 <span class="lineno">  202 </span><span class="spaces">  </span><span class="istickedoff">return (TypedTerm ttt trm)</span></span>
 <span class="lineno">  203 </span>

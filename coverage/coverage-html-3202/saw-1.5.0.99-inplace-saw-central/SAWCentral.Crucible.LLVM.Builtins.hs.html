@@ -2141,7 +2141,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2122 </span><span class="spaces">       </span><span class="istickedoff">Cryptol.Forall [] [] ty -&gt;</span>
 <span class="lineno"> 2123 </span><span class="spaces">         </span><span class="istickedoff">do sc &lt;- lift $ lift getSharedContext</span>
 <span class="lineno"> 2124 </span><span class="spaces">            </span><span class="istickedoff">cryenv &lt;- lift $ lift getCryptolEnv</span>
-<span class="lineno"> 2125 </span><span class="spaces">            </span><span class="istickedoff">Setup.freshVariable sc cryenv name ty</span>
+<span class="lineno"> 2125 </span><span class="spaces">            </span><span class="istickedoff">Setup.freshVariable sc <span class="nottickedoff">cryenv</span> name ty</span>
 <span class="lineno"> 2126 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt;</span>
 <span class="lineno"> 2127 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">throwCrucibleSetup loc $ &quot;Unsupported polymorphic Cryptol type schema: &quot; ++ show s</span></span></span>
 <span class="lineno"> 2128 </span>

@@ -117,7 +117,7 @@ span.spaces    { background: white }
 <span class="lineno">   98 </span>  Maybe SC.TypedTerm -&gt;
 <span class="lineno">   99 </span>  SC.TypedTerm -&gt;
 <span class="lineno">  100 </span>  IO YosysTheorem
-<span class="lineno">  101 </span><span class="decl"><span class="istickedoff">buildTheorem sc env ymod newmod precond body = do</span>
+<span class="lineno">  101 </span><span class="decl"><span class="istickedoff">buildTheorem sc _env ymod newmod precond body = do</span>
 <span class="lineno">  102 </span><span class="spaces">  </span><span class="istickedoff">cty &lt;-</span>
 <span class="lineno">  103 </span><span class="spaces">    </span><span class="istickedoff">case SC.ttType ymod of</span>
 <span class="lineno">  104 </span><span class="spaces">      </span><span class="istickedoff">SC.TypedTermSchema (C.Forall [] [] cty) -&gt; pure cty</span>
@@ -126,8 +126,8 @@ span.spaces    { background: white }
 <span class="lineno">  107 </span><span class="spaces">    </span><span class="istickedoff">case cty of</span>
 <span class="lineno">  108 </span><span class="spaces">      </span><span class="istickedoff">C.TCon (C.TC C.TCFun) [ci, co] -&gt; pure (ci, co)</span>
 <span class="lineno">  109 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">yosysError YosysErrorInvalidOverrideTarget</span></span>
-<span class="lineno">  110 </span><span class="spaces">  </span><span class="istickedoff">inpTy &lt;- CSC.translateType sc <span class="nottickedoff">env</span> cinpTy</span>
-<span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">outTy &lt;- CSC.translateType sc <span class="nottickedoff">env</span> coutTy</span>
+<span class="lineno">  110 </span><span class="spaces">  </span><span class="istickedoff">inpTy &lt;- CSC.translateType sc cinpTy</span>
+<span class="lineno">  111 </span><span class="spaces">  </span><span class="istickedoff">outTy &lt;- CSC.translateType sc coutTy</span>
 <span class="lineno">  112 </span><span class="spaces">  </span><span class="istickedoff">nmi &lt;-</span>
 <span class="lineno">  113 </span><span class="spaces">    </span><span class="istickedoff">case reduceSelectors (SC.ttTerm ymod) of</span>
 <span class="lineno">  114 </span><span class="spaces">      </span><span class="istickedoff">(R.asConstant -&gt; Just (SC.Name _ nmi)) -&gt; pure nmi</span>
@@ -177,15 +177,15 @@ span.spaces    { background: white }
 <span class="lineno">  158 </span>  SC.Term -&gt;
 <span class="lineno">  159 </span>  IO SC.Term
 <span class="lineno">  160 </span><span class="decl"><span class="istickedoff">applyOverride sc thm t = do</span>
-<span class="lineno">  161 </span><span class="spaces">  </span><span class="istickedoff">tidx &lt;-</span>
+<span class="lineno">  161 </span><span class="spaces">  </span><span class="istickedoff">tnm &lt;-</span>
 <span class="lineno">  162 </span><span class="spaces">    </span><span class="istickedoff">do result &lt;- SC.scResolveQualName sc $ thm ^. theoremQualName</span>
 <span class="lineno">  163 </span><span class="spaces">       </span><span class="istickedoff">case result of</span>
 <span class="lineno">  164 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">yosysError . YosysErrorOverrideNameNotFound . QN.ppQualName $ thm ^. theoremQualName</span></span>
-<span class="lineno">  165 </span><span class="spaces">         </span><span class="istickedoff">Just i -&gt; pure i</span>
+<span class="lineno">  165 </span><span class="spaces">         </span><span class="istickedoff">Just nm -&gt; pure nm</span>
 <span class="lineno">  166 </span><span class="spaces">  </span><span class="istickedoff">-- unfold everything except for theoremQualName and prelude constants</span>
 <span class="lineno">  167 </span><span class="spaces">  </span><span class="istickedoff">let isPreludeName (SC.ModuleIdentifier ident) = SC.identModule ident == SC.preludeModuleName</span>
 <span class="lineno">  168 </span><span class="spaces">      </span><span class="istickedoff">isPreludeName _ = False</span>
-<span class="lineno">  169 </span><span class="spaces">  </span><span class="istickedoff">let unfold nm = SC.nameIndex nm /= tidx &amp;&amp; not (isPreludeName (SC.nameInfo nm))</span>
+<span class="lineno">  169 </span><span class="spaces">  </span><span class="istickedoff">let unfold nm = nm /= tnm &amp;&amp; not (isPreludeName (SC.nameInfo nm))</span>
 <span class="lineno">  170 </span><span class="spaces">  </span><span class="istickedoff">unfolded &lt;- SC.scUnfoldConstants sc unfold t</span>
 <span class="lineno">  171 </span><span class="spaces">  </span><span class="istickedoff">cache &lt;- SC.newIntCache</span>
 <span class="lineno">  172 </span><span class="spaces">  </span><span class="istickedoff">let</span>
@@ -193,8 +193,8 @@ span.spaces    { background: white }
 <span class="lineno">  174 </span><span class="spaces">    </span><span class="istickedoff">go s =</span>
 <span class="lineno">  175 </span><span class="spaces">      </span><span class="istickedoff">SC.useIntCache cache (SC.termIndex s) $</span>
 <span class="lineno">  176 </span><span class="spaces">      </span><span class="istickedoff">case SC.unwrapTermF s of</span>
-<span class="lineno">  177 </span><span class="spaces">        </span><span class="istickedoff">SC.Constant (SC.Name idx _)</span>
-<span class="lineno">  178 </span><span class="spaces">          </span><span class="istickedoff">| idx == tidx -&gt; theoremReplacement sc thm</span>
+<span class="lineno">  177 </span><span class="spaces">        </span><span class="istickedoff">SC.Constant nm</span>
+<span class="lineno">  178 </span><span class="spaces">          </span><span class="istickedoff">| nm == tnm -&gt; theoremReplacement sc thm</span>
 <span class="lineno">  179 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; pure s</span>
 <span class="lineno">  180 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; SC.scTermF sc =&lt;&lt; traverse go (SC.unwrapTermF s)</span>
 <span class="lineno">  181 </span><span class="spaces">  </span><span class="istickedoff">go unfolded</span></span>

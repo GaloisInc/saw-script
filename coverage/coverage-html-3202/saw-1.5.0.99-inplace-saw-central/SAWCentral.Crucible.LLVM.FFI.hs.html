@@ -91,7 +91,7 @@ span.spaces    { background: white }
 <span class="lineno">   72 </span>import           SAWCentral.Panic
 <span class="lineno">   73 </span>import           SAWCentral.Value
 <span class="lineno">   74 </span>import qualified CryptolSAWCore.Pretty as CryPP
-<span class="lineno">   75 </span>import           CryptolSAWCore.CryptolEnv
+<span class="lineno">   75 </span>import           CryptolSAWCore.GlobalCryptolEnv
 <span class="lineno">   76 </span>import           SAWCore.Module (Def(..), ResolvedName(..), lookupVarIndexInMap)
 <span class="lineno">   77 </span>import           SAWCore.Name (Name(..))
 <span class="lineno">   78 </span>import           SAWCore.OpenTerm (OpenTerm)
@@ -175,9 +175,9 @@ span.spaces    { background: white }
 <span class="lineno">  156 </span><span class="spaces">  </span><span class="istickedoff">let tyArgTerms = filter (not . isProofTerm) allArgTerms</span>
 <span class="lineno">  157 </span><span class="spaces">  </span><span class="istickedoff">sc &lt;- lll getSharedContext</span>
 <span class="lineno">  158 </span><span class="spaces">  </span><span class="istickedoff">let ?ctx = FFISetupCtx {<span class="nottickedoff">..</span>}</span>
-<span class="lineno">  159 </span><span class="spaces">  </span><span class="istickedoff">cryEnv &lt;- lll getCryptolEnv</span>
+<span class="lineno">  159 </span><span class="spaces">  </span><span class="istickedoff">ffiTypes &lt;- lio $ eFFITypes sc</span>
 <span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff">case asConstant funTerm of</span>
-<span class="lineno">  161 </span><span class="spaces">    </span><span class="istickedoff">Just nm -&gt; case Map.lookup (nameInfo nm) (eFFITypes cryEnv) of</span>
+<span class="lineno">  161 </span><span class="spaces">    </span><span class="istickedoff">Just nm -&gt; case Map.lookup (nameInfo nm) ffiTypes of</span>
 <span class="lineno">  162 </span><span class="spaces">      </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">do</span></span>
 <span class="lineno">  163 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">opts &lt;- lll $ getPPOpts</span></span>
 <span class="lineno">  164 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">nm' &lt;- lio $ ppName sc opts nm</span></span>
