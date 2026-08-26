@@ -117,7 +117,7 @@ instance Show OuterTranslationError where
     MissingCryName nm -> "No entry in cryptol environment for name: " ++ pp nm
     CryptolTypeOfError e msg -> "Could not determine type of Cryptol expression: \n" 
       ++ pp e ++ "\n" ++ msg
-    ModuleTranslationFailure mnm -> "Failed to translate Cryptol module: " ++ pp mnm
+    ModuleTranslationFailure mnm -> "Errors were raised when translating Cryptol module: " ++ pp mnm
     LocatedError rng e -> pp rng ++ "\n" ++ showErr e
     InnerErrors e [] -> showErr e
     InnerErrors e es -> showErr e ++ "\n" ++ (intercalate "\n" $ map showErr es)

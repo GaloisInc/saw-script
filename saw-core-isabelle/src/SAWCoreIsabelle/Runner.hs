@@ -171,7 +171,6 @@ writeResult ers res = do
         let errMsg = "Translating was unsuccessful for theory " ++ (show $ Theory.thyNm res)
         err errMsg
         printErrs st
-        log (-1) $ "Set 'keep-going' flag to attempt an incomplete translation."
         IO.liftIO $ throw (RunnerError errMsg)
 
 processModules ::

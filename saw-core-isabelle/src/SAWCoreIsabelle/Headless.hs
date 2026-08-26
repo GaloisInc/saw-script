@@ -9,6 +9,7 @@ module SAWCoreIsabelle.Headless(
 ) where
 
 import           Prelude hiding (log)
+import           Control.Monad (unless)
 import           Control.Exception (catch, throw, IOException)
 import qualified Control.Monad.IO.Class as IO
 
@@ -44,7 +45,11 @@ debug msg = log 2 $ "[DEBUG]: " ++ msg ++ "\n"
 
 runTranslator :: Options.Options -> IO Bool
 runTranslator opts = Options.withOptions opts $
-  processFile' `catch` (\(_ :: RunnerError) -> return False)
+  processFile' `catch` (\(_ :: RunnerError) -> suggestKeepGoing >> return False)
+
+suggestKeepGoing :: HasOptions => IO ()
+suggestKeepGoing = unless Options.keepGoing $ log 0 $
+  "Use '--keep-going' to attempt an incomplete translation."
 
 processFile' :: HasOptions => IO Bool
 processFile' = do
