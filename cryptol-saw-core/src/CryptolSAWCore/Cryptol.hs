@@ -41,6 +41,7 @@ module CryptolSAWCore.Cryptol
   , importType
   , importSchema
   , importExpr
+  , importExpr'
   , importTopLevelDeclGroups
 
   , translateType

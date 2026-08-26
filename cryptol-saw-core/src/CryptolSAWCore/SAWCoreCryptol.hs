@@ -190,7 +190,7 @@ validateImport :: Term -> (Expr, C.Expr, C.Schema) -> TT (Expr, C.Expr, C.Schema
 validateImport t (pe, e, s) = do
   sc <- asks ttSc
   s' <- liftIO $ CrySAW.importSchema sc s
-  e' <- liftIO $ CrySAW.importExpr sc e
+  e' <- liftIO $ CrySAW.importExpr' sc s e
   tT <- liftIO $ scTypeOf sc t
   checkConvertible tT s'
   checkConvertible e' t
@@ -254,7 +254,7 @@ doInferExprSchema nameEnv0 extraVars extraTySyns tvars pexpr = do
     let goalProps = map C.goal goals
     case res of
       [d] | C.DExpr e <- C.dDefinition d -> 
-        return (foldr C.ETAbs e tps, (C.dSignature d){ C.sVars = tps ++ C.sVars (C.dSignature d), C.sProps = goalProps ++ (C.sProps (C.dSignature d)) })
+        return (foldr C.ETAbs (foldr C.EProofAbs e goalProps) tps, (C.dSignature d){ C.sVars = tps ++ C.sVars (C.dSignature d), C.sProps = goalProps ++ (C.sProps (C.dSignature d)) })
       _ -> Panic.panic "doInferExprSchema" ("Unexpected result: ": map pp res)
   CrySAW.runInferOutput out
 

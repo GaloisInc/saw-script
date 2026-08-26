@@ -8,8 +8,8 @@ imports "Cryptol.Cryptol"
 begin
 
 context includes cryptol_translation_syntax begin
-cryptol_definition goal :: "{'a} ((Eq 'a,Ring 'a) =?> ('a \<Rightarrow> ('a \<Rightarrow> Bit)))" where
-"goal x y \<equiv> (x +`{'a} y) ==`{'a} (y +`{'a} x)"
+cryptol_definition goal :: "{'u} ((Eq 'u,Ring 'u) =?> ('u \<Rightarrow> ('u \<Rightarrow> Bit)))" where
+"goal x y \<equiv> (x +`{'u} y) ==`{'u} (y +`{'u} x)"
 
 end
 end
