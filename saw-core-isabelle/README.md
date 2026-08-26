@@ -220,6 +220,29 @@ Isabelle. The resulting Isabelle theory will also depend on the
 `Unsupported` theory from the Cryptol library. This theory is *not*
 logically consistent, and should only be used for testing purposes.
 
+## Recursive where-bindings
+
+Cryptol's where-bindings are translated directly into let-bindings in
+Isabelle, which cannot be mutually recursive.
+
+## Newtype abstraction
+
+Newtypes are implicitly rewritten into simple type aliases during translation.
+This breaks the abstraction boundary that was originally imposed, but otherwise
+does not create compatibility issues. In particular, any additional constraints
+imposed by the newtype will still be present in any Cryptol signatures, and
+thus will appear in the resulting Isabelle.
+
+## Infix function definitions
+
+User-defined Cryptol functions with infix syntax are not supported.
+
+## Submodules and Functors
+
+The module structure of the source Cryptol is flattened during translation.
+Each top-level Cryptol module results in a single Isabelle theory, and each
+instance of a parameterized module will result in a distinct copy during translation.
+
 # Word vs. Seq
 
 The `seq` type is a generalization of the existing `HOL-Library.Word.word` type. Specifically, 
