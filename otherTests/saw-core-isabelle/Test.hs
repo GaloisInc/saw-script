@@ -7,7 +7,7 @@
 Module      : Main
 Copyright   : Galois, Inc. 2019
 License     : BSD3
-Maintainer  : val@galois.com
+Maintainer  : saw@galois.com
 Stability   : experimental
 Portability : portable
 -}
