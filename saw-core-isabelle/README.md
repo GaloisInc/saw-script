@@ -78,7 +78,7 @@ from type-checked Cryptol expressions to structurally-equivalent Isabelle expres
 These resulting expressions require the syntax extensions from the supporting library
 in order to parse correctly.
 
-For example, the Cryptol function from `bv.cry` is defined as:
+For example, the uext function from `bv.cry` is defined as:
 
 ```
 uext : {a, b} (fin a, fin b) => [a] -> [a+b]
@@ -197,6 +197,28 @@ into formal definitions/semantics. This is a brief overview of the core theories
   * tools for manipulating class constraints in theorems and proofs
   * the `constrain` method allows for performing case-split based on a type
     satisfying the constraints of a class
+* Unsupported.thy
+  * stub definitions for unsupported Cryptol features
+  * not logically consistent - only suitable for testing purposes
+  * *do not use for proofs*
+
+# Unsupported Features
+
+## Infinite Sequences
+
+In contrast to Cryptol, the `seq` Isabelle type does not support
+infinite sequence lengths. Type parameters that do not satisfy the
+`fin` constraint will raise a warning during translation, and will be
+explicitly annotated with `fin` in the resulting Isabelle.
+
+The `inf` Cryptol type is not supported by the translator. A Cryptol
+module containing `inf` will raise an error and fail to translate. This
+can be relaxed into a warning in the standalone `cryptol-to-isabelle`
+executable by providing the `--keep-going` flag. This will translate
+the `inf` type into a fresh, uninterpreted `Inf` type in the resulting
+Isabelle. The resulting Isabelle theory will also depend on the
+`Unsupported` theory from the Cryptol library. This theory is *not*
+logically consistent, and should only be used for testing purposes.
 
 # Word vs. Seq
 

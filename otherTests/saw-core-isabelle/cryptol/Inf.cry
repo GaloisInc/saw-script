@@ -1,0 +1,10 @@
+module Inf where
+
+any_seq_refl : {a} [a] -> Bit
+any_seq_refl x = (x @ (0 : Integer)) == (x @ (0 : Integer))
+
+inf_seq_refl : [inf] -> Bit
+inf_seq_refl x = any_seq_refl x
+
+bounded_seq_refl : {a} (a < 3) => [a] -> Bit
+bounded_seq_refl x = any_seq_refl x
