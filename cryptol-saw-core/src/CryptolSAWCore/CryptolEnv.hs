@@ -45,7 +45,7 @@ module CryptolSAWCore.CryptolEnv
   , bindIntegerType
   , parseTypedTerm
   , pExprToTypedTerm
-  , pExprToExprSchema
+  , runInferOutput
   , parseDecls
   , parseSchema
   , declareName
@@ -62,7 +62,6 @@ module CryptolSAWCore.CryptolEnv
 
 -- base & standard modules:
 import           Control.Monad(when)
-import           Control.Monad.IO.Class (liftIO)
 import qualified Data.Map as Map
 import           Data.Map (Map)
 import           Data.Maybe (fromMaybe)
@@ -1007,50 +1006,35 @@ parseTypedTerm sc env input = do
 pExprToTypedTerm ::
   SharedContext -> CryptolEnv -> P.Expr P.PName -> IO TypedTerm
 pExprToTypedTerm sc env pexpr = do
-  nameEnv <- liftIO $ getNamingEnv sc env
-  extraVars <- liftIO $ eExtraVars sc
-  extraTySyns <- liftIO $ eExtraTySyns sc
-  -- Resolve names and infer types
-  (expr, schema) <- liftModuleM sc $
-    pExprToExprSchema nameEnv extraVars extraTySyns pexpr
+  nameEnv <- getNamingEnv sc env
+  extraVars <- eExtraVars sc
+  extraTySyns <- eExtraTySyns sc
+
+  (expr, schema) <- liftModuleM sc $ do
+    -- Eliminate patterns:
+    npe <- MM.interactive (MB.noPat pexpr)
+
+    
+    let npe' = MR.rename npe
+    re <- MM.interactive (MB.rename interactiveName nameEnv npe')
+      -- NOTE: if a name is not in scope, it is reported here.
+
+    -- Infer types
+    ifDecls <- C.getAllIfaceDecls <$> MM.getModuleEnv
+    let range = fromMaybe P.emptyRange (P.getLoc re)
+    prims <- MB.getPrimMap
+    -- noIfaceParams because we don't support functors yet
+    tcEnv <- MB.genInferInput range prims NoParams ifDecls
+    let tcEnv' = tcEnv { TM.inpVars = Map.union extraVars (TM.inpVars tcEnv)
+                       , TM.inpTSyns = Map.union extraTySyns (TM.inpTSyns tcEnv)
+                       }
+
+    out <- MM.io (T.tcExpr re tcEnv')
+    MM.interactive (runInferOutput out)
 
   -- Translate
   trm <- C.translateExpr sc expr
   return (TypedTerm (TypedTermSchema schema) trm)
-
--- | Convert a parsed, untyped Cryptol expression to a type-checked 
--- `Expr` and its `Schema`, using Cryptol's type inference.
---
--- This is exported because it is used in the final stage when
--- converting SAWCore terms back into Cryptol.
-pExprToExprSchema ::
-  MR.NamingEnv ->
-  Map T.Name T.Schema ->
-  Map T.Name T.TySyn ->
-  P.Expr P.PName ->
-  MM.ModuleM (T.Expr, T.Schema)
-pExprToExprSchema nameEnv extraVars extraTySyns pexpr = do
-  -- Eliminate patterns:
-  npe <- MM.interactive (MB.noPat pexpr)
-
-  
-  let npe' = MR.rename npe
-  re <- MM.interactive (MB.rename interactiveName nameEnv npe')
-    -- NOTE: if a name is not in scope, it is reported here.
-
-  -- Infer types
-  ifDecls <- C.getAllIfaceDecls <$> MM.getModuleEnv
-  let range = fromMaybe P.emptyRange (P.getLoc re)
-  prims <- MB.getPrimMap
-  -- noIfaceParams because we don't support functors yet
-  tcEnv <- MB.genInferInput range prims NoParams ifDecls
-  let tcEnv' = tcEnv { TM.inpVars = Map.union extraVars (TM.inpVars tcEnv)
-                    , TM.inpTSyns = Map.union extraTySyns (TM.inpTSyns tcEnv)
-                    }
-
-  out <- MM.io (T.tcExpr re tcEnv')
-  MM.interactive (runInferOutput out)
-
 -- | Read Cryptol declarations from `InputText` and ingest them into
 --   the `CryptolEnv`.
 parseDecls ::

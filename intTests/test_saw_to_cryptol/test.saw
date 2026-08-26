@@ -23,6 +23,7 @@ let {{ x = (0 : [32]) }};
 
 roundtrip {{ if (x : [32]) <$ (100 : [32]) then (100 : [32]) else x }};
 roundtrip (parse_core "let { x`1 = bvNat 32 100;} in ite (Vec 32 Bool) (bvslt 32 x x`1) x`1 x");
+roundtrip {{ 1 # 2 }};
 
 import "test.cry";
 

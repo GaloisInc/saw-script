@@ -9,7 +9,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-
-Provides a (very) partial mapping from SAWCore terms back to Cryptol expressions.
+Provides a partial mapping from SAWCore terms back to Cryptol expressions.
 -}
 
 module CryptolSAWCore.SAWCoreCryptol
@@ -27,27 +27,40 @@ import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Control.Monad.Writer
 
+import           Data.Char (isDigit)
 import           Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import           Data.IORef
 import qualified Data.List.NonEmpty as NE
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.Maybe (mapMaybe,catMaybes, isJust)
+import           Data.Maybe (mapMaybe,catMaybes, isJust, fromMaybe)
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as Text
 
-import qualified Cryptol.Parser.AST as P
-import qualified Cryptol.Parser.Position as P
+import qualified Prettyprinter as PP
+
+import qualified Cryptol.IR.Builder as C (newSchemaParam)
+import qualified Cryptol.ModuleSystem.Base as MB
+import qualified Cryptol.ModuleSystem.Env as C
+import qualified Cryptol.ModuleSystem.Interface as C
 import qualified Cryptol.ModuleSystem.Name as C
 import qualified Cryptol.ModuleSystem.Names as C
 import qualified Cryptol.ModuleSystem.NamingEnv as C
+import qualified Cryptol.ModuleSystem.Monad as MM
+import qualified Cryptol.ModuleSystem.Renamer as MR
+import qualified Cryptol.Parser.AST as P
+import qualified Cryptol.Parser.Position as P
 import qualified Cryptol.Parser.Position as Pos
-import qualified Cryptol.Utils.Ident as C
 import qualified Cryptol.TypeCheck.AST as C
+import qualified Cryptol.TypeCheck.Monad as C hiding (lookupModule)
+import qualified Cryptol.TypeCheck.Infer as C
+import qualified Cryptol.Utils.Ident as C
 import qualified Cryptol.Utils.RecordMap as C
+
+import qualified SAWSupport.Pretty as PPS
 
 import qualified SAWCore.Name as SAW
 import           SAWCore.Recognizer
@@ -55,21 +68,11 @@ import           SAWCore.SharedTerm
 import           SAWCore.Term.Functor
 import qualified SAWCore.Term.Pretty as SAW
 
-import qualified SAWSupport.Pretty as PPS
-
 import qualified CryptolSAWCore.CryptolEnv as CrySAW
 import qualified CryptolSAWCore.Cryptol as CrySAW
 import           CryptolSAWCore.GlobalCryptolEnv (CryptolEnv)
-
-import qualified Prettyprinter as PP
-import           Cryptol.TypeCheck.PP (pp, pretty)
-
-
-import Cryptol.ModuleSystem.Env (lookupModule, lmInterface)
-import Cryptol.ModuleSystem.Interface (ifacePrimMap)
-
-
-
+import qualified CryptolSAWCore.Panic as Panic
+import           CryptolSAWCore.Pretty (pp)
 
 revMap :: (Ord k, Ord u) => (v -> Maybe u) -> Map k v -> Map u k
 revMap f m = Map.fromList $ mapMaybe (\(k,v) -> (,k) <$> (f v)) (Map.toList m)
@@ -114,7 +117,7 @@ extraPrims pm = map go
 initTTEnv :: SharedContext -> CryptolEnv -> IO TTEnv
 initTTEnv sc env = do
   modEnv <- CrySAW.eModuleEnv sc
-  case lookupModule C.preludeName modEnv of
+  case C.lookupModule C.preludeName modEnv of
     Just prelude -> do
       allPrims <- CrySAW.ePrims sc
       allPrimTypes <- CrySAW.ePrimTypes sc
@@ -125,7 +128,7 @@ initTTEnv sc env = do
       tCacheRef <- newIORef IntMap.empty
       constTypesRef <- newIORef Map.empty
       let
-        pmap = ifacePrimMap $ lmInterface prelude
+        pmap = C.ifacePrimMap $ C.lmInterface prelude
         exprPrims = fmap (\x -> C.lookupPrimDecl x pmap) $ revMap asConstant allPrims
         typePrims = fmap (\x -> C.lookupPrimType x pmap) $ revMap asConstant allPrimTypes
         gvmap = IntMap.fromList $
@@ -178,10 +181,10 @@ revTopProofs = go []
       C.EProofAbs prf e -> go (prf:prfs) e
       e -> unwind prfs e
 
--- | SAW sometimes reverses the guards when importing expressions, in which case we need to reverse the
+-- | SAW sometimes reverses the constraints importing expressions, in which case we need to reverse the
 --   result after type inference in order to recover the original type/term
-revGuards :: (Expr, C.Expr, C.Schema) -> (Expr, C.Expr, C.Schema)
-revGuards (pe, e,s) = (pe, revTopProofs e, s { C.sProps = reverse (C.sProps s)})
+revConstraints :: (Expr, C.Expr, C.Schema) -> (Expr, C.Expr, C.Schema)
+revConstraints (pe, e,s) = (pe, revTopProofs e, s { C.sProps = reverse (C.sProps s)})
 
 validateImport :: Term -> (Expr, C.Expr, C.Schema) -> TT (Expr, C.Expr, C.Schema)
 validateImport t (pe, e, s) = do
@@ -193,23 +196,85 @@ validateImport t (pe, e, s) = do
   checkConvertible e' t
   return (pe,e,s)
 
+mkTParam :: (Name,P.Kind) -> MM.ModuleM (C.Name, C.TParam)
+mkTParam (pnm,k) = do
+  tnm <- C.liftSupply (C.mkLocalPName C.NSType pnm Pos.emptyRange)
+  k' <- case k of
+    P.KNum -> return $ C.KNum
+    P.KType -> return $ C.KType
+    _ -> fail $ "mkTParam: unsupported type kind: " ++ show k
+  tp <- C.newSchemaParam tnm k' 
+  return (tnm, tp)
+
+simplePBind :: name -> P.Expr name-> P.Bind name
+simplePBind nm re = P.Bind
+  { P.bName      = noLoc nm
+  , P.bParams    = P.noParams
+  , P.bDef       = noLoc (P.exprDef re)
+  , P.bPragmas   = []
+  , P.bSignature = Nothing
+  , P.bMono      = False
+  , P.bInfix     = False
+  , P.bFixity    = Nothing
+  , P.bDoc       = Nothing
+  , P.bExport    = C.Public
+  }
+
+doInferExprSchema ::
+  C.NamingEnv ->
+  Map C.Name C.Schema ->
+  Map C.Name C.TySyn ->
+  [(Name, P.Kind)] ->
+  P.Expr P.PName ->
+  MM.ModuleM (C.Expr, C.Schema)
+doInferExprSchema nameEnv0 extraVars extraTySyns tvars pexpr = do
+  tparams <- mapM mkTParam tvars
+  let 
+    nms = foldMap (\((pnm,_),(nm,_)) -> (C.singletonNS (C.nameNamespace nm) pnm nm)) 
+        (zip tvars tparams)
+    nameEnv = nms <> nameEnv0
+    tps = map snd tparams
+
+  npe <- MM.interactive (MB.noPat pexpr)
+  let npe' = MR.rename npe
+  re <- MM.interactive (MB.rename C.interactiveName nameEnv npe')
+  let range = fromMaybe P.emptyRange (P.getLoc re)
+  prims <- MB.getPrimMap
+  ifDecls <- CrySAW.getAllIfaceDecls <$> MM.getModuleEnv
+  tcEnv <- MB.genInferInput range prims C.NoParams ifDecls
+  let tcEnv' = tcEnv  { C.inpVars = Map.union extraVars (C.inpVars tcEnv)
+                      , C.inpTSyns = Map.union extraTySyns (C.inpTSyns tcEnv)
+                      }
+  (out :: C.InferOutput (C.Expr,C.Schema)) <- MM.io $ C.runInferM tcEnv' $ do
+    let loc = Pos.emptyRange
+    fresh <- C.liftSupply $ C.mkDeclared C.NSValue (C.TopModule C.exprModName) C.SystemName
+      (C.packIdent "(expression)") Nothing loc
+    (res, goals) <- C.withTParams tps $ C.collectGoals $ C.inferBinds True False
+      [ simplePBind fresh re ]
+    let goalProps = map C.goal goals
+    case res of
+      [d] | C.DExpr e <- C.dDefinition d -> 
+        return (foldr C.ETAbs e tps, (C.dSignature d){ C.sVars = tps ++ C.sVars (C.dSignature d), C.sProps = goalProps ++ (C.sProps (C.dSignature d)) })
+      _ -> Panic.panic "doInferExprSchema" ("Unexpected result: ": map pp res)
+  CrySAW.runInferOutput out
 
 inferSchemaExpr :: Term -> TT (Expr, C.Expr, C.Schema)
 inferSchemaExpr t = do
   sc <- asks ttSc
-  (pe,ttout) <- listen $ translateAsExprShared t
+  let (vars, t') = asLambdaList t
+  ((tvars, pe),ttout) <- listen $ translateLambda vars t'
   extraVars <- liftIO $ CrySAW.eExtraVars sc
   extraTySyns <- liftIO $ CrySAW.eExtraTySyns sc
-  (res,_) <- liftIO $ CrySAW.runModuleM sc $ 
-    CrySAW.pExprToExprSchema (ttNamingEnv ttout) extraVars extraTySyns pe
+  (res,_) <- liftIO $ CrySAW.runModuleM sc $ do
+    doInferExprSchema (ttNamingEnv ttout) extraVars extraTySyns tvars pe
   case res of
-    Left e -> errMsg (pretty e)
+    Left e -> errMsg (Text.unpack $ pp e)
     Right (expr,schema) -> do
       let r = (pe,expr,schema)
-      -- the order of the guards is somewhat inconsistent, so we try
+      -- the order of the constraints is somewhat inconsistent, so we try
       -- either the original or reverse orderings and return the one that validates
       -- in most cases the reversed order seems to be preferred
-      validateImport t (revGuards r) <|> validateImport t r
+      validateImport t (revConstraints r) <|> validateImport t r
 
 -- | Attempt to convert a SAWCore term into an equivalent Cryptol expression and corresponding
 --   schema. Validates that the resulting type-checked expression and schema will
@@ -239,8 +304,8 @@ lookupPrim :: Text -> TT Term
 lookupPrim nm = do
   sc <- asks ttSc
   modEnv <- liftIO $ CrySAW.eModuleEnv sc
-  prelude <- mreturn $ lookupModule C.preludeName modEnv
-  let pmap = ifacePrimMap $ lmInterface prelude
+  prelude <- mreturn $ C.lookupModule C.preludeName modEnv
+  let pmap = C.ifacePrimMap $ C.lmInterface prelude
   let pnm = C.prelPrim nm
   cnm <- mreturn $ Map.lookup pnm (C.primDecls pmap)
   lookupName cnm
@@ -385,14 +450,18 @@ constToName nm = do
     ]
 
 mkFreshName :: Text -> TT Name
-mkFreshName txt = go 0
+mkFreshName txt0 = go 0
   where
+    -- clean up anonymous type parameter names
+    txt1 = case Text.uncons txt0 of
+      Just (c, rest) | Text.all isDigit rest -> Text.singleton c
+      _ -> txt0
     go :: Integer -> TT Name
     go i = do
       let 
-        txt' = if i == 0 then txt else (txt <> Text.pack (show i))
-        nm = P.UnQual' (C.mkIdent txt') C.SystemName
-        nm' = P.UnQual' (C.mkIdent txt') C.UserName
+        txt2 = if i == 0 then txt1 else (txt1 <> Text.pack (show i))
+        nm = P.UnQual' (C.mkIdent txt2) C.SystemName
+        nm' = P.UnQual' (C.mkIdent txt2) C.UserName
       m <- deref ttUsedNames
       ne <- asks ttGlobalNamingEnv
       case Set.member nm m of
@@ -801,18 +870,25 @@ translateAsExprShared t = do
       Nothing -> go ts acc
       Just (nm,e,tT) -> go ts ((nm,e,tT):acc)
 
-translateLambda :: [(SAW.VarName, Term)] -> Term -> TT Expr
+translateLambda :: [(SAW.VarName, Term)] -> Term -> TT ([(Name,P.Kind)], Expr)
 translateLambda vars fn = withVars vars $ do
   let asParam (vn,tT) =
         (do CryParam nm <- lookupVar (SAW.vnIndex vn)
             tT' <- translateAsType tT
             return $ Just $ P.PTyped (P.PVar (noLoc nm)) tT')
         <|> return Nothing
+  let asTParam (vn,tT) =
+        (do CryTParam nm <- lookupVar (SAW.vnIndex vn)
+            tK <- translateAsKind tT
+            return $ Just (nm, tK))
+        <|> return Nothing
   vars' <- catMaybes <$> mapM asParam vars
-  fn' <- translateAsExprShared fn
-  case vars' of
-    [] -> return fn'
-    _ -> return $ P.EFun P.emptyFunDesc vars' fn'
+  tvars' <- catMaybes <$> mapM asTParam vars
+  fn1 <- translateAsExprShared fn
+  let fn2 = case vars' of
+        [] -> fn1
+        _ -> P.EFun P.emptyFunDesc vars' fn1
+  return (tvars', fn2)
 
 lookupSAWConst :: Ident -> TT SAW.Name
 lookupSAWConst i = do
@@ -1070,7 +1146,7 @@ translateAsExpr' t = unNumber =<< alts "translateAsExpr'" t
          (argTs,argEs) <- translateApp False args
          return $ eApps (P.EAppT fn' (map P.PosInst argTs)) argEs
   , do (vars@(_:_), fn) <- return $ asLambdaList t
-       commit $ translateLambda vars fn
+       commit $ snd <$> translateLambda vars fn
   , do (vn,_) <- mreturn $ asVariable t
        CryParam nm <- lookupVar (SAW.vnIndex vn)
        return $ P.EVar nm
