@@ -8,7 +8,13 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
-{-
+
+{- |
+Module      : CryptolSAWCore.SAWCoreCryptol
+Description : Lift back to Cryptol
+License     : BSD3
+Maintainer  : saw@galois.com
+Stability   : provisional
 Provides a partial mapping from SAWCore terms back to Cryptol expressions.
 -}
 
