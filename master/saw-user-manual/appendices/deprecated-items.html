@@ -90,7 +90,6 @@
 <li class="toctree-l2 current"><a class="reference internal" href="index.html">Appendices</a><ul class="current">
 <li class="toctree-l3"><a class="reference internal" href="formal-deprecation-process.html">Formal Deprecation Process</a></li>
 <li class="toctree-l3 current"><a class="current reference internal" href="#">Deprecated Items</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#upcoming">Upcoming</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#warning-when-used">Warning When Used</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#hidden-by-default">Hidden by Default</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#removed">Removed</a></li>
@@ -134,30 +133,17 @@
 <p>This appendix attempts to document the things in SAW that have been
 deprecated and removed over recent releases, in more detail than will
 fit in the change log and release notes.</p>
-<section id="upcoming">
-<h2>Upcoming<a class="headerlink" href="#upcoming" title="Link to this heading"></a></h2>
-<p>The following elements are expected to be deprecated in SAW 1.6 such
-that they will warn when used, but have not yet been tagged:</p>
-<ul class="simple">
-<li><p>The type <code class="docutils literal notranslate"><span class="pre">SetupValue</span></code> (an old name for <code class="docutils literal notranslate"><span class="pre">LLVMValue</span></code>)</p></li>
-<li><p>The type <code class="docutils literal notranslate"><span class="pre">CrucibleMethodSpec</span></code> (an old name for <code class="docutils literal notranslate"><span class="pre">LLVMSpec</span></code>)</p></li>
-<li><p>The type <code class="docutils literal notranslate"><span class="pre">CrucibleSetup</span></code> (an old name for <code class="docutils literal notranslate"><span class="pre">LLVMSetup</span></code>)</p></li>
-</ul>
-<p>The following experimental element is expected to be deprecated in SAW
-1.6 such that it will be hidden by default, but has not yet been
-tagged:</p>
-<ul class="simple">
-<li><p>The experimental builtin <code class="docutils literal notranslate"><span class="pre">crucible_llvm_verify_x86</span></code> (an old name for
-<code class="docutils literal notranslate"><span class="pre">llvm_verify_x86</span></code>), which was left in place in SAW 1.5 due to some
-downstream uses that needed to be migrated first.</p></li>
-</ul>
-<p>Migration for all of these is as simple as updating the name.</p>
-</section>
+<!--
+## Upcoming
+
+The following elements are expected to be deprecated in SAW 1.7 such
+that they will warn when used, but have not yet been tagged:
+-->
 <section id="warning-when-used">
 <h2>Warning When Used<a class="headerlink" href="#warning-when-used" title="Link to this heading"></a></h2>
 <p>The following elements are currently deprecated and warn when used;
-this has happened since SAW 1.5 was released, so they will be that way
-in SAW 1.6.
+this has happened since SAW 1.5 was released, so they will be/are that
+way in SAW 1.6.
 They are expected to be hidden by default in SAW 1.7.</p>
 <ul class="simple">
 <li><p>The <code class="docutils literal notranslate"><span class="pre">prove_extcore</span></code> builtin; you can just use <code class="docutils literal notranslate"><span class="pre">prove_print</span></code> instead
@@ -168,19 +154,38 @@ now.</p></li>
 ago; use <code class="docutils literal notranslate"><span class="pre">admit</span></code> instead.
 <code class="docutils literal notranslate"><span class="pre">admit</span></code> takes an extra string argument that’s supposed to state why
 you’re admitting the theorem without proof.</p></li>
+<li><p>The type <code class="docutils literal notranslate"><span class="pre">SetupValue</span></code> (an old name for <code class="docutils literal notranslate"><span class="pre">LLVMValue</span></code>)</p></li>
+<li><p>The type <code class="docutils literal notranslate"><span class="pre">CrucibleMethodSpec</span></code> (an old name for <code class="docutils literal notranslate"><span class="pre">LLVMSpec</span></code>)</p></li>
+<li><p>The type <code class="docutils literal notranslate"><span class="pre">CrucibleSetup</span></code> (an old name for <code class="docutils literal notranslate"><span class="pre">LLVMSetup</span></code>)</p></li>
 </ul>
 <p>The following elements were deprecated as of SAW 1.5, and currently
 warn.
 They will be hidden by default when we remove Boolector from
-what4-solvers, which will not happen <em>before</em> SAW 1.6; after that
-point the time frame depends mostly on the maintenance burden.</p>
+what4-solvers.
+This will happen at some point after SAW 1.6; the time frame depends
+mostly on the maintenance burden.</p>
 <ul class="simple">
 <li><p>The commands related to the Boolector solver, which has been
 replaced upstream with Bitwuzla.
 All <code class="docutils literal notranslate"><span class="pre">boolector</span></code> commands have equivalent <code class="docutils literal notranslate"><span class="pre">bitwuzla</span></code> commands.</p></li>
 </ul>
+</section>
+<section id="hidden-by-default">
+<h2>Hidden by Default<a class="headerlink" href="#hidden-by-default" title="Link to this heading"></a></h2>
+<p>The following elements were previously experimental and will be
+deprecated and hidden by default as of SAW 1.6:</p>
+<ul class="simple">
+<li><p>The experimental builtin <code class="docutils literal notranslate"><span class="pre">crucible_llvm_verify_x86</span></code> (an old name for
+<code class="docutils literal notranslate"><span class="pre">llvm_verify_x86</span></code>), which was left in place in SAW 1.5 due to some
+downstream uses that needed to be migrated first.</p></li>
+</ul>
+<p>There are not yet any (non-experimental) elements that were first deprecated
+as of SAW 1.6 and are now hidden by default.
+(Such elements would continue to be hidden by default in SAW 1.7 and
+would be removed in SAW 1.8.)</p>
 <p>The following elements were deprecated as of SAW 1.5 (or earlier),
-currently warn, but are expected to be hidden by default in SAW 1.6:</p>
+and are hidden by default as of SAW 1.6.
+They are expected to be removed in SAW 1.7.</p>
 <ul class="simple">
 <li><p>The commands related to the CVC4 solver; proofs should be migrated
 to CVC5.
@@ -205,13 +210,9 @@ Most of these names have been outdated for years.</p></li>
 name for <code class="docutils literal notranslate"><span class="pre">jvm_extract</span></code>.</p></li>
 </ul>
 </section>
-<section id="hidden-by-default">
-<h2>Hidden by Default<a class="headerlink" href="#hidden-by-default" title="Link to this heading"></a></h2>
-<p>There are no elements that were deprecated as of SAW 1.5 (or earlier)
-and are now hidden by default, with the expectation that they will
-be hidden by default in SAW 1.6 and removed in SAW 1.7.</p>
-<p>The following elements were deprecated as of SAW 1.4 (or earlier), are
-now hidden by default, and will be removed in SAW 1.6:</p>
+<section id="removed">
+<h2>Removed<a class="headerlink" href="#removed" title="Link to this heading"></a></h2>
+<p>The following elements have been removed entirely:</p>
 <ul class="simple">
 <li><p>The <code class="docutils literal notranslate"><span class="pre">env</span></code> builtin (use the <code class="docutils literal notranslate"><span class="pre">:env</span></code> REPL command instead)</p></li>
 <li><p>Certain old <code class="docutils literal notranslate"><span class="pre">crucible</span></code> names for LLVM backend functions that never
@@ -224,12 +225,6 @@ made it past “experimental”:</p>
 <li><p><code class="docutils literal notranslate"><span class="pre">crucible_llvm_array_size_profile</span></code></p></li>
 </ul>
 </li>
-</ul>
-</section>
-<section id="removed">
-<h2>Removed<a class="headerlink" href="#removed" title="Link to this heading"></a></h2>
-<p>The following elements have been removed entirely:</p>
-<ul class="simple">
 <li><p>The <code class="docutils literal notranslate"><span class="pre">addsimp'</span></code> and <code class="docutils literal notranslate"><span class="pre">addsimps'</span></code> builtins, which added unproven rewrite
 rules to a <code class="docutils literal notranslate"><span class="pre">Simpset</span></code>.
 Don’t do that; it’s borrowing trouble.
