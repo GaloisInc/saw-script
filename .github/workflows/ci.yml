@@ -1306,7 +1306,6 @@ jobs:
     needs:
       - build
       - rocq-builds
-      - isabelle-builds
       - crux-mir-comp-tests
       - saw-remote-api-tests
       - cabal-test
