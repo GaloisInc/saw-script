@@ -343,7 +343,7 @@ getNamingEnvOfImport modEnv (importInfo, vis, imprt) =
 
   where
 
-  -- | the names the import brings in, before any of the renaming above
+  -- the names the import brings in, before any of the renaming above:
   importedNames :: Set MN.Name
   importedNames =
     case importInfo of
@@ -378,7 +378,7 @@ getNamingEnvOfImport modEnv (importInfo, vis, imprt) =
           in
             namesOfLoadedModule lm vis
 
-  -- | nameToPName -
+  -- nameToPName -
   --   - For submodules, strip the submodule nesting to get a
   --     'less' qualified name.
   --   - For top-level modules, use nameToPNameWithQualifiers to preserve
@@ -430,7 +430,7 @@ restrictToImportSpec importSpec =
   where
   inSpec is pn = firstComponent pn `elem` map identText is
 
-  -- | first component of a `P.PName`: "D3" for `D3::d3`, "d2" for `d2`
+  -- first component of a `P.PName`: "D3" for `D3::d3`, "d2" for `d2`
   firstComponent :: P.PName -> Text
   firstComponent pn =
     case C.modNameChunksText <$> P.getModName pn of
@@ -452,7 +452,7 @@ namesOfLoadedModule lm vis =
                           --   nmsPublic `subset` nmsTopLevels
 
   where
-    -- | names in scope at Top level of module
+    -- names in scope at Top level of module
     --    - Does not include privates in submodules.
     --    - Includes everything in scope at the toplevel of 'lm' module,
     --      i.e., including what the module itself imports.
