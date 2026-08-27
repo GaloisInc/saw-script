@@ -639,7 +639,7 @@ jobs:
         run: opam exec -- make -j rocq
 
   isabelle-builds:
-    needs: [build]
+    needs: [config]
     strategy:
       fail-fast: false
       matrix:
