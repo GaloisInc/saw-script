@@ -65,7 +65,7 @@ doTranslation ::
   IsaM () ->
   IO ([Error.TranslationError], Theory.Theory)
 doTranslation cryEnv imports thyNm f = do
-  env <- initIsaEnv cryEnv Nothing thyNm
+  env <- initIsaEnv cryEnv thyNm
   (st, iout) <- execIsaM env $ do
     addDecl (Decl.Import cryThy)
     mapM_ importModName imports

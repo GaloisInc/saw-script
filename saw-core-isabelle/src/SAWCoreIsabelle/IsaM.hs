@@ -3,8 +3,46 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
-{-# OPTIONS_GHC -Wno-missing-export-lists #-}
-module SAWCoreIsabelle.IsaM where
+
+{- |
+Module      : SAWCoreIsabelle.IsaM
+Description : Cryptol to Isabelle translation monad
+License     : BSD3
+Maintainer  : saw@galois.com
+Stability   : provisional
+
+The Isabelle Monad 'IsaM' is the core monad for translating Cryptol
+into Isabelle.
+-}
+
+module SAWCoreIsabelle.IsaM
+  ( IsaM_
+  , IsaM
+  , IsaOut(..)
+  , IsaState(..)
+  , IsaEnv(..)
+  , mreturn
+  , execIsaM
+  , addDecl
+  , withTheory
+  , curTheory
+  , withPosition
+  , withBindings
+  , withDecl
+  , withDeclGroups
+  , withFreshName
+  , lookupName
+  , simpleNameExpr
+  , simpleNameType
+  , rethrow'
+  , rethrow
+  , warn
+  , catchMaybe
+  , initIsaEnv
+  , maybeWith
+  , addHashDecl
+  , withNames
+  ) where
 
 import Control.Applicative
 import Control.Monad
@@ -16,7 +54,6 @@ import qualified Control.Monad.RWS as RWS
 import qualified Control.Monad.IO.Class as IO
 import qualified Control.Concurrent as IO
 
-import           Data.Hashable
 import           Data.List (find)
 import qualified Data.Map as Map
 import           Data.Maybe (fromJust)
@@ -25,7 +62,6 @@ import qualified Data.Set as Set
 import qualified Cryptol.ModuleSystem.Name as Cry
 import qualified Cryptol.Parser.Position as Position
 import qualified Cryptol.TypeCheck.AST as Cry
-import           Cryptol.Utils.PP (pp)
 
 import qualified Language.Isabelle.Decl as Decl
 import qualified Language.Isabelle.Name as Name
@@ -35,10 +71,6 @@ import qualified Language.Isabelle.Theory as Theory
 import qualified SAWCoreIsabelle.CryptolDeps as Deps
 import qualified SAWCoreIsabelle.Error as Error
 import qualified SAWCoreIsabelle.Options as Options
-import           SAWCore.SAWCore (SharedContext)
-import           CryptolSAWCore.CryptolEnv (CryptolEnv)
-
-
 
 data NameEnv = NameEnv
   { nameToIdent :: Map.Map Name.Name Int, identToName :: Map.Map Int Name.Name, minIdent :: Int }
@@ -62,11 +94,6 @@ insertName midx nm env = case midx of
     in (nm', NameEnv { nameToIdent = Map.insert nm' idx (nameToIdent env), identToName = Map.insert idx nm' (identToName env), minIdent = min idx (minIdent env) })
 
 
-data SAWEnv = SAWEnv
-  { envCryptolSAW :: CryptolEnv
-  , envSharedContext :: SharedContext
-  }
-
 data IsaEnv = IsaEnv
   { envCurTheory :: Name.TheoryName
   , envSourceRange :: Position.Range
@@ -75,7 +102,6 @@ data IsaEnv = IsaEnv
   , envCryDeps ::  Deps.CryptolDeps
   , envHashCache :: IO.MVar (Map.Map Cry.Name Int)
   , envOptions :: Options.Options
-  , envSAW :: Maybe SAWEnv
   }
 
 data IsaState = IsaState { stThy :: Theory.Theory }
@@ -111,20 +137,14 @@ initIsaState env = IsaState (Theory.mkTheory $ envCurTheory env)
 
 initIsaEnv :: Options.HasOptions 
            => Deps.CryptolDeps
-           -> Maybe SAWEnv
            -> Name.TheoryName
            -> IO IsaEnv
-initIsaEnv cryEnv sawEnv thyNm = do
+initIsaEnv cryEnv thyNm = do
   let tyenv = Deps.mkTyEnv cryEnv
   hashCacheRef <- IO.newMVar Map.empty
   return $ IsaEnv thyNm
     Position.emptyRange tyenv emptyNameEnv cryEnv 
-    hashCacheRef Options.allOptions sawEnv
-
-getSAWEnv :: IsaM SAWEnv
-getSAWEnv = asks envSAW >>= \case
-  Just env -> return env
-  Nothing -> fail "Missing SAW environment"
+    hashCacheRef Options.allOptions
 
 execIsaM :: IsaEnv -> IsaM () -> IO (IsaState, IsaOut)
 execIsaM env f = 
@@ -136,11 +156,6 @@ execIsaM env f =
 runIsaM :: IsaEnv -> IsaState -> IsaM a -> IO (Either Error.TranslationError (a, IsaState, IsaOut))
 runIsaM env st f = Options.withOptions (envOptions env) $ do
   CME.runExceptT $  RWS.runRWST (unIsaM f) env st
-
-withConstraints :: IsaM a -> IsaM_ a
-withConstraints f = do
-  opts <- asks envOptions
-  Options.withOptions opts $ f
 
 instance MonadFail IsaM_ where
   fail str = CME.throwError $ Error.MonadFailure str
@@ -233,36 +248,3 @@ warn err = do
 
 catchMaybe :: IsaM a -> (Error.TranslationError -> IsaM a) -> IsaM a
 catchMaybe f hdl = if Options.keepGoing then CME.catchError f hdl else f
-
-
-shallowHashOf :: Cry.Name -> IsaM Int
-shallowHashOf crynm = do
-  ref <- asks envHashCache
-  cache <- IO.liftIO $ IO.readMVar ref
-  case Map.lookup crynm cache of
-    Just h -> return h
-    Nothing -> getCryEntity crynm >>= \case
-      Just (ce,_) -> do
-        let h = hash ce
-        IO.liftIO $ IO.modifyMVar_ ref (\cache_ -> return $ Map.insert crynm h cache_)
-        return h
-      Nothing -> return $ hash (show $ pp crynm)
-
-deepHashOf :: Cry.Name -> IsaM Int
-deepHashOf crynm = getCryEntity crynm >>= \case
-  Just (ce,deps) -> do
-    ce_deps <- mapM shallowHashOf (Set.toList deps)
-    return $ (hash (ce, ce_deps))
-  Nothing -> CME.throwError $ Error.MissingCryName crynm
-
-getCryEntity :: Cry.Name -> IsaM  (Maybe (Deps.CryEntity, Set.Set Cry.Name))
-getCryEntity crynm = do
-  m <- asks envCryDeps
-  return $ Map.lookup crynm (Deps.entityDeps m)
-
-deepHashFromEnv :: Deps.CryptolDeps -> Cry.Name -> IO (Maybe Int)
-deepHashFromEnv cryEnv cryNm = Options.withOptions Options.emptyOpts $ do
-  env <- initIsaEnv cryEnv Nothing (Name.TheoryName "<interactive>" False)
-  runIsaM env (initIsaState env) (deepHashOf cryNm) >>= \case
-    Right (a,_,_) -> return $ Just a
-    Left{} -> return Nothing
