@@ -648,85 +648,52 @@ jobs:
     defaults:
       run:
         shell: bash
-
+    env:
+      # commits with Isabelle2025-2 tag in mercurial repos
+      ISABELLE_COMMIT: '8d9ad3f2984ab945542dad1a0802f0c1b0517337'
+      AFP_COMMIT: '9db853f97465cce2ce1ed731b4c8ba94187ea650'
     steps:
-      - uses: actions/cache/restore@v4
-        name: Restore isabelle source cache
+      - name: Checkout Isabelle
+        uses: actions/checkout@v4
         with:
-          path: |
-            Isabelle2025-2.tar.gz
-            afp-current.tar.gz
-          key: isabelle-sources-${{ matrix.os }}-${{ runner.arch }}-${{ github.sha }}
+          repository: 'isabelle-prover/mirror-isabelle'
+          ref: ${{ env.ISABELLE_COMMIT }}
+          path: isabelle
+
+      - name: Checkout AFP
+        uses: actions/checkout@v4
+        with:
+          repository: 'isabelle-prover/mirror-afp-devel'
+          ref: ${{ env.AFP_COMMIT }}
+          path: afp
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl perl
+
+      - name: Cache Isabelle user directory
+        uses: actions/cache@v4
+        with:
+          path: ~/.isabelle
+          key: ${{ runner.os }}-isabelle-${{ env.ISABELLE_COMMIT }}-afp-${{ env.AFP_COMMIT }}
           restore-keys: |
-            isabelle-sources-${{ matrix.os }}-${{ runner.arch }}-
+            ${{ runner.os }}-isabelle-${{ env.ISABELLE_COMMIT }}-
+            ${{ runner.os }}-isabelle-
 
-      - run: |
-          [ -e Isabelle2025-2.tar.gz ] || touch -d "2020-01-01 12:00:00" Isabelle2025-2.tar.gz
-          [ -e afp-current.tar.gz ] || touch -d "2020-01-01 12:00:00" afp-current.tar.gz
+      - name: Initialize Isabelle components
+        run: ./isabelle/Admin/init
 
-      - name: "Download Isabelle2025-2 for Linux (X64)"
-        if: runner.os == 'Linux' && runner.arch == 'X64'
+      - name: Add Isabelle to PATH
+        run: echo "${{ github.workspace }}/isabelle/bin" >> $GITHUB_PATH
+
+      - name: Add AFP as Isabelle Component
+        run: isabelle components -u ${{ github.workspace }}/afp/thys
+
+      - name: "Build base Cryptol image"
         run: |
-          curl -z Isabelle2025-2.tar.gz -sL "https://isabelle.in.tum.de/dist/Isabelle2025-2_linux.tar.gz" --output Isabelle2025-2.tar.gz
-
-      - name: "Download Isabelle2025-2 for Linux (ARM64)"
-        if: runner.os == 'Linux' && runner.arch == 'ARM64'
-        run: |
-          curl -z Isabelle2025-2.tar.gz -sL "https://isabelle.in.tum.de/dist/Isabelle2025-2_linux_arm.tar.gz" --output Isabelle2025-2.tar.gz
-
-      - name: "Download Isabelle2025-2 for macOS"
-        if: runner.os == 'macOS'
-        run: |
-          curl -z Isabelle2025-2.tar.gz -sL "https://isabelle.in.tum.de/dist/Isabelle2025-2_macos.tar.gz" --output Isabelle2025-2.tar.gz
-
-      - name: "Download afp"
-        run: |
-          curl -z afp-current.tar.gz -sL "https://www.isa-afp.org/release/afp-current.tar.gz" -O
-
-      - uses: actions/cache/save@v4
-        name: Save isabelle source cache
-        with:
-          path: |
-            Isabelle2025-2.tar.gz
-            afp-current.tar.gz
-          key: isabelle-sources-${{ matrix.os }}-${{ runner.arch }}-${{ github.sha }}
-
-      - name: "Unpack"
-        run: |
-          tar -xzf Isabelle2025-2.tar.gz
-          mkdir afp-current
-          tar -xzf afp-current.tar.gz -C afp-current --strip-components=1
-          echo "$PWD/Isabelle2025-2/bin" >> $GITHUB_PATH
-
-      - name: "Add afp component"
-        run: |
-          isabelle components -u "./afp-current/thys"
-
-      - uses: actions/checkout@v4
-      
-      - name : "Add cryptol component"
-        run: |
-          isabelle components -u "./saw-core-isabelle/isabelle"
-
-      - uses: actions/cache/restore@v4
-        name: Restore isabelle heap cache
-        with:
-          path: |
-            ~/.isabelle/
-          key: isabelle-heaps-${{ matrix.os }}-${{ hashFiles('Isabelle2025-2.tar.gz','afp-current.tar.gz') }}-${{ github.sha }}
-          restore-keys: |
-            isabelle-heaps-${{ matrix.os }}-${{ hashFiles('Isabelle2025-2.tar.gz','afp-current.tar.gz') }}-
-
-      - name: "Build base image"
-        run: |
+          isabelle components -u "$PWD/saw-core-isabelle/isabelle"
           isabelle build -b Cryptol_Base
-
-      - uses: actions/cache/save@v4
-        name: Save isabelle heap cache
-        with:
-          path: |
-            ~/.isabelle/
-          key: isabelle-heaps-${{ matrix.os }}-${{ hashFiles('Isabelle2025-2.tar.gz','afp-current.tar.gz') }}-${{ github.sha }}
 
       - name: "Build Test image"
         run: |
@@ -1306,6 +1273,7 @@ jobs:
     needs:
       - build
       - rocq-builds
+      - isabelle-builds
       - crux-mir-comp-tests
       - saw-remote-api-tests
       - cabal-test
