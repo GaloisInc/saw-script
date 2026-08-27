@@ -1,8 +1,8 @@
 Loading file "testImportErrors9.saw"
 Stack trace:
    (builtin) (at top level)
-submodule `D2` is ambiguous, it could refer to
-  D::D2 (defined at D.cry:10:11--10:13)
-  E::D2 (defined at E.cry:5:11--5:13)
+submodule 'D2' is ambiguous; it could refer to any of these:
+   D::D2 (defined at D.cry:10:11--10:13)
+   E::D2 (defined at E.cry:5:11--5:13)
 
 FAILED

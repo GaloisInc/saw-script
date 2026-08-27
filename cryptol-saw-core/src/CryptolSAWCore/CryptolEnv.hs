@@ -105,7 +105,6 @@ import           Cryptol.Utils.Ident
                            , mkIdent, interactiveName, identText
                            , textToModName
                            , prelPrim)
-import           Cryptol.Utils.PP (pretty) -- pp, Doc
 
 -- local:
 import qualified CryptolSAWCore.Cryptol as C
@@ -116,7 +115,8 @@ import qualified CryptolSAWCore.Pretty as CryPP
 import           CryptolSAWCore.TypedTerm
 import           SAWCore.Name (nameInfo)
 import           SAWCore.Recognizer (asConstant)
-import           SAWCore.SharedTerm (NameInfo, SharedContext, Term, ppTerm)
+import           SAWCore.SharedTerm ( NameInfo, SharedContext, Term
+                                    , scGetPPOpts, ppTerm)
 import           SAWSupport.Console
 import qualified SAWSupport.Pretty as PPS
 
@@ -452,9 +452,9 @@ namesOfLoadedModule lm vis =
 
   where
     -- names in scope at Top level of module
-    --    - Does not include privates in submodules.
-    --    - Includes everything in scope at the toplevel of 'lm' module,
-    --      i.e., including what the module itself imports.
+    --   - Does not include privates in submodules.
+    --   - Includes everything in scope at the toplevel of 'lm' module,
+    --     i.e., including what the module itself imports.
     nmsTopLevels :: Set MN.Name
     nmsTopLevels = MN.namingEnvNames (ME.lmNamingEnv lm)
 
@@ -952,14 +952,19 @@ importCryptolModule sc env src as isSubmodule vis imps =
                 Nothing             -> fail $ "submodule `"
                                               <> Text.unpack modNameTxt
                                               <> "` is not in scope"
-                Just (MN.Ambig nms) -> fail $
-                    "submodule `"
-                    <> Text.unpack modNameTxt
-                    <> "` is ambiguous, it could refer to"
-                    <> concat
-                         [ "\n  " <> pretty nm <> " (defined at "
-                                  <> pretty (MN.nameLoc nm) <> ")"
-                         | nm <- Set.toList nms ]
+                Just (MN.Ambig nms) -> do
+                    ppopts <- scGetPPOpts sc
+                    let modNameTxt' = PP.squotes $ CryPP.pretty modNameTxt
+                    let heading = "submodule" <+> modNameTxt' <+>
+                          "is ambiguous; it could refer to any of these:"
+                        once nm =
+                          let nm'  = CryPP.pretty nm
+                              loc' = CryPP.pretty $ MN.nameLoc nm
+                          in
+                          PP.indent 3 $ nm' <+> "(defined at" <+> loc' <> ")"
+                        nms' = map once $ Set.toList nms
+                        msg = PP.vsep (heading : nms')
+                    fail $ PPS.render ppopts msg
 
             return $ mkImport
                        (C.ImportNested name)
