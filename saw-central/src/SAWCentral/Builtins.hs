@@ -169,7 +169,6 @@ module SAWCentral.Builtins (
     lambdas,
     implies_term,
     generalize_term,
-    envCmd,
     exitPrim,
     withTimePrim,
     timePrim,
@@ -234,7 +233,7 @@ import Control.Monad.State (MonadState(..), gets, modify)
 import qualified Control.Exception as Ex
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
-import Data.List (isPrefixOf, isInfixOf, sort, intersperse)
+import Data.List (isPrefixOf, isInfixOf, sort)
 import qualified Data.Map as Map
 import Data.Maybe (catMaybes)
 import Data.Parameterized.Classes (KnownRepr(..))
@@ -267,8 +266,6 @@ import qualified CryptolSAWCore.SAWCoreCryptol as Cryptol
 
 -- saw-support
 import qualified SAWSupport.PanicSupport as PanicSupport
-import qualified SAWSupport.ScopedMap as ScopedMap
---import SAWSupport.ScopedMap (ScopedMap)
 import qualified SAWSupport.Pretty as PPS
 import qualified SAWSupport.ConsoleSupport as Cons
 
@@ -330,7 +327,6 @@ import SAWCentral.Panic (panic)
 import SAWCentral.Proof
 import SAWCentral.Crucible.Common (PathSatSolver(..))
 import SAWCentral.TopLevel
-import qualified SAWCentral.AST as SAST
 import qualified SAWCentral.Value as SV
 import SAWCentral.Value (ProofScript, printOutLnTop, AIGNetwork)
 import SAWCentral.SolverCache
@@ -1797,36 +1793,6 @@ generalize_term vars tt =
       case asTypedVariable v of
         Just tv -> pure tv
         Nothing -> fail "generalize_term: argument not a valid symbolic variable"
-
-envCmd :: TopLevel ()
-envCmd = do
-  opts <- getOptions
-  ppopts <- SV.getPPOpts
-  avail <- gets rwPrimsAvail
-  SV.Environ varenv _tyenv _cryenv <- gets rwEnviron
-  rbenv <- gets rwRebindables
-
-  -- print rebindables first if there are any
-  unless (Map.null rbenv) $ do
-      io $ printOutLn opts Info $ "Rebindable globals:"
-      io $ printOutLn opts Info $ ""
-      let printRB (x, (_pos, ty, _v)) = do
-              let str = x <> " : rebindable " <> SAST.ppSchema ppopts ty
-              printOutLn opts Info $ Text.unpack str
-      io $ mapM_ printRB $ Map.assocs rbenv
-
-  let printItem (x, (_pos, _lc, ty, _v, _doc)) =
-          printOutLn opts Info $ Text.unpack (x <> " : " <> SAST.ppSchema ppopts ty)
-      -- Print only the visible objects
-      keep (_x, (_pos, lc, _ty, _v, _doc)) = Set.member lc avail
-      -- Insert a blank line in the output where there's a scope boundary
-      printScope mItems = case mItems of
-          Nothing -> printOutLn opts Info ""
-          Just items -> mapM_ printItem $ filter keep items
-      -- Reverse the list of scopes so the innermost prints last,
-      -- because that's what people will expect to see.
-      itemses = reverse $ ScopedMap.scopedAssocs varenv
-  io $ mapM_ printScope $ intersperse Nothing $ map Just itemses
 
 exitPrim :: Integer -> IO ()
 exitPrim code = Exit.exitWith exitCode

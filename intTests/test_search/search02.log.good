@@ -16,12 +16,6 @@ addsimps : [Theorem] -> Simpset -> Simpset
 beta_reduce_term : Term -> Term
 caseSatResult : {b} SatResult -> b -> (Term -> b) -> b
 concat : {a} [a] -> [a] -> [a]
-crucible_elem :
-   LLVMValue -> Int -> LLVMValue
-   (DEPRECATED AND WILL WARN)
-crucible_field :
-   LLVMValue -> String -> LLVMValue
-   (DEPRECATED AND WILL WARN)
 get_env : String -> String
 java_array : Int -> JavaType -> JavaType
 label_term : String -> Term -> Term
@@ -65,6 +59,7 @@ timeout_handle :
    {a} Int -> TopLevel a -> TopLevel a -> TopLevel a
 unfold_term : [String] -> Term -> Term
 12 more matches tagged experimental; use enable_experimental to see them
+2 more matches tagged deprecated; use enable_deprecated to see them
 --------------------------------
 -- {a} (a -> String)
 show : {a} a -> String

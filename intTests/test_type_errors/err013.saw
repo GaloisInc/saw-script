@@ -5,5 +5,8 @@
 //
 // We can do this by doing something with a list and its element type
 // that require them to be the same.
+//
+// See also err072. (If anyone ever renumbers the test dir, it might
+// make sense to group these two together.)
 
 let paste xs = concat (head xs) xs;

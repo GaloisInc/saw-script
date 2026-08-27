@@ -1,0 +1,15 @@
+Loading file "err072.saw"
+Type errors:
+  err072.saw:18:15-18:16: Error: Occurs check failure.
+    Cannot unify [t.6] with t.6 because t.6 appears within [t.6].
+    Expected: [t.6]
+    Found:    t.6
+
+    Expected: { a : [t.6], b : [t.6] }
+    Found:    { a : [t.6], b : t.6 }
+
+  err072.saw:15:16-15:18: Note: The type [t.6] arises from the type of this term
+  err072.saw:15:16-15:18: Note: The type t.6 arises from a fresh type variable introduced here
+
+
+FAILED

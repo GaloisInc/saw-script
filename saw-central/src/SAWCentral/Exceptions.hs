@@ -1,4 +1,5 @@
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module SAWCentral.Exceptions
   ( TypeErrors(..), failTypecheck
@@ -14,22 +15,28 @@ import Data.Typeable (cast)
 
 import What4.ProgramLoc (ProgramLoc)
 
+import SAWSupport.Position
+import qualified SAWSupport.Pretty as PPS
 import SAWCentral.Position (Pos(..))
 import SAWCentral.Trace (Trace, ppTrace)
 
-newtype TypeErrors = TypeErrors [(Pos, String)]
+newtype TypeErrors = TypeErrors [String]
 
 instance Show TypeErrors where
   show (TypeErrors []) = "Unspecified type error"
-  show (TypeErrors [(pos, msg)]) = show pos ++ ": " ++ msg
-  show (TypeErrors errs) = "Type errors:\n" ++ showErrs errs
-    where showErrs = unlines . map showErr
-          showErr (pos, msg) = "  " ++ show pos ++ ": " ++ msg
+  show (TypeErrors [msg]) = msg
+  show (TypeErrors errs) = "Type errors:\n" ++ unlines errs'
+    where errs' = map (\e -> "  " ++ e) errs
 
 instance Exception TypeErrors where
 
-failTypecheck :: [(Pos, String)] -> a
-failTypecheck = throw . TypeErrors
+failTypecheck :: PPS.Opts -> [(Pos, PPS.Doc)] -> a
+failTypecheck ppopts msgs =
+    let once (pos, msg) =
+            let pos' = prettyPosition pos in
+            PPS.render ppopts $ pos' <> ": " <> msg
+    in
+    throw $ TypeErrors $ map once msgs
 
 data TopLevelException
   = TopLevelException Pos String

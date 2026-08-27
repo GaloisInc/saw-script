@@ -1,6 +1,6 @@
 Loading file "err051.saw"
 Type errors:
-  err051.saw:8:9-8:12: Inaccessible variable: "env" (err051.saw:8:9-8:12)
-  err051.saw:8:9-8:12: This command is available only after running `enable_deprecated`.
+  err051.saw:8:9-8:28: Inaccessible variable: "external_cnf_solver"
+  err051.saw:8:9-8:28: This command is available only after running `enable_deprecated`.
 
 FAILED
