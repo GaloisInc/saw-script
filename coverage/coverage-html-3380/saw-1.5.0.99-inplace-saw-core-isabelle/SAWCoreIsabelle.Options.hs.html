@@ -24,8 +24,8 @@ span.spaces    { background: white }
 <span class="lineno">    5 </span>
 <span class="lineno">    6 </span>module SAWCoreIsabelle.Options
 <span class="lineno">    7 </span>  ( Options(..)
-<span class="lineno">    8 </span>  , emptyOpts
-<span class="lineno">    9 </span>  , HasOptions
+<span class="lineno">    8 </span>  , empty
+<span class="lineno">    9 </span>  , Available
 <span class="lineno">   10 </span>  , ImportPrefix(..)
 <span class="lineno">   11 </span>  , TargetSelect(..)
 <span class="lineno">   12 </span>  , withOptions
@@ -73,42 +73,42 @@ span.spaces    { background: white }
 <span class="lineno">   54 </span>, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">loggerErr_</span></span></span> :: String -&gt; IO ()
 <span class="lineno">   55 </span>}
 <span class="lineno">   56 </span>
-<span class="lineno">   57 </span>emptyOpts :: Options 
-<span class="lineno">   58 </span><span class="decl"><span class="nottickedoff">emptyOpts = Options [] &quot;&quot; NoPrefix 0 False [] (NamedModules []) [] (\_ -&gt; return ()) (\_ -&gt; return ())</span></span>
+<span class="lineno">   57 </span>empty :: Options
+<span class="lineno">   58 </span><span class="decl"><span class="nottickedoff">empty = Options [] &quot;&quot; NoPrefix 0 False [] (NamedModules []) [] (\_ -&gt; return ()) (\_ -&gt; return ())</span></span>
 <span class="lineno">   59 </span>
-<span class="lineno">   60 </span>type HasOptions = (?options :: Options)
+<span class="lineno">   60 </span>type Available = (?options :: Options)
 <span class="lineno">   61 </span>
-<span class="lineno">   62 </span>crySources :: HasOptions =&gt; [FilePath]
+<span class="lineno">   62 </span>crySources :: Available =&gt; [FilePath]
 <span class="lineno">   63 </span><span class="decl"><span class="nottickedoff">crySources = crySources_ ?options</span></span>
 <span class="lineno">   64 </span>
-<span class="lineno">   65 </span>isaDestDir :: HasOptions =&gt; FilePath
+<span class="lineno">   65 </span>isaDestDir :: Available =&gt; FilePath
 <span class="lineno">   66 </span><span class="decl"><span class="nottickedoff">isaDestDir = isaDestDir_ ?options</span></span>
 <span class="lineno">   67 </span>
-<span class="lineno">   68 </span>isaImportPrefix :: HasOptions =&gt; ImportPrefix
+<span class="lineno">   68 </span>isaImportPrefix :: Available =&gt; ImportPrefix
 <span class="lineno">   69 </span><span class="decl"><span class="nottickedoff">isaImportPrefix = isaImportPrefix_ ?options</span></span>
 <span class="lineno">   70 </span>
-<span class="lineno">   71 </span>verbosity :: HasOptions =&gt; Integer
+<span class="lineno">   71 </span>verbosity :: Available =&gt; Integer
 <span class="lineno">   72 </span><span class="decl"><span class="nottickedoff">verbosity = verbosity_ ?options</span></span>
 <span class="lineno">   73 </span>
-<span class="lineno">   74 </span>allOptions :: HasOptions =&gt; Options
+<span class="lineno">   74 </span>allOptions :: Available =&gt; Options
 <span class="lineno">   75 </span><span class="decl"><span class="nottickedoff">allOptions = ?options</span></span>
 <span class="lineno">   76 </span>
-<span class="lineno">   77 </span>keepGoing :: HasOptions =&gt; Bool
+<span class="lineno">   77 </span>keepGoing :: Available =&gt; Bool
 <span class="lineno">   78 </span><span class="decl"><span class="nottickedoff">keepGoing = keepGoing_ ?options</span></span>
 <span class="lineno">   79 </span>
-<span class="lineno">   80 </span>cryptolDirs :: HasOptions =&gt; [FilePath]
+<span class="lineno">   80 </span>cryptolDirs :: Available =&gt; [FilePath]
 <span class="lineno">   81 </span><span class="decl"><span class="nottickedoff">cryptolDirs = cryptolDirs_ ?options</span></span>
 <span class="lineno">   82 </span>
-<span class="lineno">   83 </span>targetSelect :: HasOptions =&gt; TargetSelect
+<span class="lineno">   83 </span>targetSelect :: Available =&gt; TargetSelect
 <span class="lineno">   84 </span><span class="decl"><span class="nottickedoff">targetSelect = targetSelect_ ?options</span></span>
 <span class="lineno">   85 </span>
-<span class="lineno">   86 </span>functionStubs :: HasOptions =&gt; [String]
+<span class="lineno">   86 </span>functionStubs :: Available =&gt; [String]
 <span class="lineno">   87 </span><span class="decl"><span class="nottickedoff">functionStubs = functionStubs_ ?options</span></span>
 <span class="lineno">   88 </span>
-<span class="lineno">   89 </span>log :: (HasOptions, IO.MonadIO m) =&gt; Integer -&gt; String -&gt; m ()
+<span class="lineno">   89 </span>log :: (Available, IO.MonadIO m) =&gt; Integer -&gt; String -&gt; m ()
 <span class="lineno">   90 </span><span class="decl"><span class="nottickedoff">log v msg = IO.liftIO $ if v &lt; verbosity then loggerMsg_ ?options msg else return ()</span></span>
 <span class="lineno">   91 </span>
-<span class="lineno">   92 </span>logErr :: (HasOptions, IO.MonadIO m) =&gt; Integer -&gt; String -&gt; m ()
+<span class="lineno">   92 </span>logErr :: (Available, IO.MonadIO m) =&gt; Integer -&gt; String -&gt; m ()
 <span class="lineno">   93 </span><span class="decl"><span class="nottickedoff">logErr v msg = IO.liftIO $ if v &lt; verbosity then loggerErr_ ?options msg else return ()</span></span>
 <span class="lineno">   94 </span>
 <span class="lineno">   95 </span>addLogger :: (String -&gt; IO ()) -&gt; Options -&gt; Options
@@ -117,7 +117,7 @@ span.spaces    { background: white }
 <span class="lineno">   98 </span>addErrLogger :: (String -&gt; IO ()) -&gt; Options -&gt; Options
 <span class="lineno">   99 </span><span class="decl"><span class="nottickedoff">addErrLogger f opts = opts { loggerErr_ = (\msg -&gt; loggerErr_ opts msg &gt;&gt; f msg)}</span></span>
 <span class="lineno">  100 </span>
-<span class="lineno">  101 </span>withOptions :: Options -&gt; (HasOptions =&gt; a) -&gt; a
+<span class="lineno">  101 </span>withOptions :: Options -&gt; (Available =&gt; a) -&gt; a
 <span class="lineno">  102 </span><span class="decl"><span class="nottickedoff">withOptions opts f = let ?options = opts in f</span></span>
 
 </pre>

@@ -2408,275 +2408,317 @@ span.spaces    { background: white }
 <span class="lineno"> 2389 </span><span class="spaces">            </span><span class="istickedoff">fields' &lt;- traverse (checkType kindStar) fields</span>
 <span class="lineno"> 2390 </span><span class="spaces">            </span><span class="istickedoff">return $ TyRecord pos fields'</span>
 <span class="lineno"> 2391 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2392 </span><span class="spaces">    </span><span class="istickedoff">TyVar pos x -&gt; do</span>
-<span class="lineno"> 2393 </span><span class="spaces">        </span><span class="istickedoff">avail &lt;- asks tiPrimsAvail</span>
-<span class="lineno"> 2394 </span><span class="spaces">        </span><span class="istickedoff">tyenv &lt;- gets tiTyEnv</span>
-<span class="lineno"> 2395 </span><span class="spaces">        </span><span class="istickedoff">case ScopedMap.lookup x tyenv of</span>
-<span class="lineno"> 2396 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; do</span>
-<span class="lineno"> 2397 </span><span class="spaces">                </span><span class="istickedoff">recordError pos $ &quot;Unbound type variable&quot; &lt;+&gt; PP.pretty x</span>
-<span class="lineno"> 2398 </span><span class="spaces">                </span><span class="istickedoff">getErrorTyVar <span class="nottickedoff">pos</span></span>
-<span class="lineno"> 2399 </span><span class="spaces">            </span><span class="istickedoff">Just (lc, ty')</span>
-<span class="lineno"> 2400 </span><span class="spaces">              </span><span class="istickedoff">| Set.member lc avail -&gt; do</span>
-<span class="lineno"> 2401 </span><span class="spaces">                  </span><span class="istickedoff">when (Util.isDeprecated lc) $</span>
-<span class="lineno"> 2402 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">recordWarning pos $ &quot;Type is deprecated:&quot; &lt;+&gt; PP.pretty x</span></span>
-<span class="lineno"> 2403 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2404 </span><span class="spaces">                  </span><span class="istickedoff">-- For typedefs, which appear here as ConcreteType</span>
-<span class="lineno"> 2405 </span><span class="spaces">                  </span><span class="istickedoff">-- expansions, assume ty' was checked when it was</span>
-<span class="lineno"> 2406 </span><span class="spaces">                  </span><span class="istickedoff">-- entered.</span>
-<span class="lineno"> 2407 </span><span class="spaces">                  </span><span class="istickedoff">--</span>
-<span class="lineno"> 2408 </span><span class="spaces">                  </span><span class="istickedoff">-- (If we entered it that's true, if it was in the</span>
-<span class="lineno"> 2409 </span><span class="spaces">                  </span><span class="istickedoff">-- initial environment we were given that depends on the</span>
-<span class="lineno"> 2410 </span><span class="spaces">                  </span><span class="istickedoff">-- interpreter not doing unfortunate things. This isn't</span>
-<span class="lineno"> 2411 </span><span class="spaces">                  </span><span class="istickedoff">-- currently seeming like a very good bet.)</span>
-<span class="lineno"> 2412 </span><span class="spaces">                  </span><span class="istickedoff">--</span>
-<span class="lineno"> 2413 </span><span class="spaces">                  </span><span class="istickedoff">-- For now at least we require typedefs to be kind *</span>
-<span class="lineno"> 2414 </span><span class="spaces">                  </span><span class="istickedoff">-- (they can't have parameters and the expansions are thus</span>
-<span class="lineno"> 2415 </span><span class="spaces">                  </span><span class="istickedoff">-- restricted) so just fail if we use one in a context</span>
-<span class="lineno"> 2416 </span><span class="spaces">                  </span><span class="istickedoff">-- expecting something else.</span>
-<span class="lineno"> 2417 </span><span class="spaces">                  </span><span class="istickedoff">--</span>
-<span class="lineno"> 2418 </span><span class="spaces">                  </span><span class="istickedoff">-- Abstract types may have any kind, because some are</span>
-<span class="lineno"> 2419 </span><span class="spaces">                  </span><span class="istickedoff">-- monads; we carry the kind around.</span>
-<span class="lineno"> 2420 </span><span class="spaces">                  </span><span class="istickedoff">-- </span>
-<span class="lineno"> 2421 </span><span class="spaces">                  </span><span class="istickedoff">let kindFound = case ty' of</span>
-<span class="lineno"> 2422 </span><span class="spaces">                        </span><span class="istickedoff">ConcreteType _ -&gt; kindStar</span>
-<span class="lineno"> 2423 </span><span class="spaces">                        </span><span class="istickedoff">AbstractType kf -&gt; kf</span>
-<span class="lineno"> 2424 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2425 </span><span class="spaces">                  </span><span class="istickedoff">if kind /= kindFound then do</span>
-<span class="lineno"> 2426 </span><span class="spaces">                      </span><span class="istickedoff">let kind' = prettyKind kind</span>
-<span class="lineno"> 2427 </span><span class="spaces">                          </span><span class="istickedoff">kindFound' = prettyKind kindFound</span>
-<span class="lineno"> 2428 </span><span class="spaces">                      </span><span class="istickedoff">recordError pos $ &quot;Kind mismatch: expected&quot; &lt;+&gt; kind' &lt;+&gt;</span>
-<span class="lineno"> 2429 </span><span class="spaces">                                       </span><span class="istickedoff">&quot;but found&quot; &lt;+&gt; kindFound'</span>
-<span class="lineno"> 2430 </span><span class="spaces">                      </span><span class="istickedoff">getErrorTyVar <span class="nottickedoff">pos</span></span>
-<span class="lineno"> 2431 </span><span class="spaces">                  </span><span class="istickedoff">else</span>
-<span class="lineno"> 2432 </span><span class="spaces">                      </span><span class="istickedoff">-- We do _not_ want to expand typedefs when checking,</span>
-<span class="lineno"> 2433 </span><span class="spaces">                      </span><span class="istickedoff">-- so return the original TyVar.</span>
-<span class="lineno"> 2434 </span><span class="spaces">                      </span><span class="istickedoff">return ty</span>
-<span class="lineno"> 2435 </span><span class="spaces">              </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; do</span>
-<span class="lineno"> 2436 </span><span class="spaces">                  </span><span class="istickedoff">let x' = PP.dquotes (PP.pretty x)</span>
-<span class="lineno"> 2437 </span><span class="spaces">                  </span><span class="istickedoff">recordError pos $ &quot;Inaccessible type:&quot; &lt;+&gt; x'</span>
-<span class="lineno"> 2438 </span><span class="spaces">                  </span><span class="istickedoff">let how = if lc == HideDeprecated then &quot;deprecated&quot;</span>
-<span class="lineno"> 2439 </span><span class="spaces">                            </span><span class="istickedoff">else &quot;experimental&quot;</span>
-<span class="lineno"> 2440 </span><span class="spaces">                      </span><span class="istickedoff">cmd = &quot;`enable_&quot; &lt;&gt; how &lt;&gt; &quot;`&quot;</span>
-<span class="lineno"> 2441 </span><span class="spaces">                  </span><span class="istickedoff">recordError pos $ &quot;This type is available only after&quot; &lt;+&gt;</span>
-<span class="lineno"> 2442 </span><span class="spaces">                                    </span><span class="istickedoff">&quot;running&quot; &lt;+&gt; cmd &lt;&gt; &quot;.&quot;</span>
-<span class="lineno"> 2443 </span><span class="spaces">                  </span><span class="istickedoff">t' &lt;- getFreshTyVar <span class="nottickedoff">pos</span></span>
-<span class="lineno"> 2444 </span><span class="spaces">                  </span><span class="istickedoff">return <span class="nottickedoff">t'</span></span>
+<span class="lineno"> 2392 </span><span class="spaces">    </span><span class="istickedoff">-- Special-case CrucibleSetup to mark it deprecated. It is an alias</span>
+<span class="lineno"> 2393 </span><span class="spaces">    </span><span class="istickedoff">-- for LLVMSetup, and it would be nice if it could just be a</span>
+<span class="lineno"> 2394 </span><span class="spaces">    </span><span class="istickedoff">-- typedef, but we don't support typedefs of kind * -&gt; *.</span>
+<span class="lineno"> 2395 </span><span class="spaces">    </span><span class="istickedoff">--</span>
+<span class="lineno"> 2396 </span><span class="spaces">    </span><span class="istickedoff">-- (In principle, we could just open a loophole in the check for</span>
+<span class="lineno"> 2397 </span><span class="spaces">    </span><span class="istickedoff">-- typedefs of kind other than * below, but I don't think that's the</span>
+<span class="lineno"> 2398 </span><span class="spaces">    </span><span class="istickedoff">-- only thing that would be needed for it to actually work.)</span>
+<span class="lineno"> 2399 </span><span class="spaces">    </span><span class="istickedoff">--</span>
+<span class="lineno"> 2400 </span><span class="spaces">    </span><span class="istickedoff">-- So it is still a reserved word in the parser, which sends it to</span>
+<span class="lineno"> 2401 </span><span class="spaces">    </span><span class="istickedoff">-- us as &quot;CrucibleSetup&quot;, and we intercept it specially here to turn</span>
+<span class="lineno"> 2402 </span><span class="spaces">    </span><span class="istickedoff">-- it into LLVMSetup and also issue the deprecation warning.</span>
+<span class="lineno"> 2403 </span><span class="spaces">    </span><span class="istickedoff">--</span>
+<span class="lineno"> 2404 </span><span class="spaces">    </span><span class="istickedoff">-- CrucibleSetup is warn-deprecated in SAW 1.6, and should be hidden</span>
+<span class="lineno"> 2405 </span><span class="spaces">    </span><span class="istickedoff">-- by default in 1.7, which should require nothing other than</span>
+<span class="lineno"> 2406 </span><span class="spaces">    </span><span class="istickedoff">-- changing the binding for @lc@ immediately below. Then after 1.7</span>
+<span class="lineno"> 2407 </span><span class="spaces">    </span><span class="istickedoff">-- is released we can delete this hackery. When doing so, be sure to</span>
+<span class="lineno"> 2408 </span><span class="spaces">    </span><span class="istickedoff">-- remove it from the parser as well.</span>
+<span class="lineno"> 2409 </span><span class="spaces">    </span><span class="istickedoff">TyVar pos &quot;CrucibleSetup&quot; -&gt; do</span>
+<span class="lineno"> 2410 </span><span class="spaces">        </span><span class="istickedoff">let x = &quot;CrucibleSetup&quot;</span>
+<span class="lineno"> 2411 </span><span class="spaces">            </span><span class="istickedoff">lc = WarnDeprecated</span>
+<span class="lineno"> 2412 </span><span class="spaces">            </span><span class="istickedoff">kindFound = kindStarToStar</span>
+<span class="lineno"> 2413 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2414 </span><span class="spaces">        </span><span class="istickedoff">avail &lt;- asks tiPrimsAvail</span>
+<span class="lineno"> 2415 </span><span class="spaces">        </span><span class="istickedoff">if <span class="tickonlytrue">Set.member lc avail</span> then do</span>
+<span class="lineno"> 2416 </span><span class="spaces">            </span><span class="istickedoff">recordWarning pos $ &quot;Type is deprecated:&quot; &lt;+&gt; x</span>
+<span class="lineno"> 2417 </span><span class="spaces">            </span><span class="istickedoff">if <span class="tickonlyfalse">kind /= kindFound</span> then <span class="nottickedoff">do</span></span>
+<span class="lineno"> 2418 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">let kind' = prettyKind kind</span></span>
+<span class="lineno"> 2419 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">kindFound' = prettyKind kindFound</span></span>
+<span class="lineno"> 2420 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">recordError pos $ &quot;Kind mismatch: expected&quot; &lt;+&gt; kind' &lt;+&gt;</span></span>
+<span class="lineno"> 2421 </span><span class="spaces">                                  </span><span class="istickedoff"><span class="nottickedoff">&quot;but found&quot; &lt;+&gt; kindFound'</span></span>
+<span class="lineno"> 2422 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">getErrorTyVar pos</span></span>
+<span class="lineno"> 2423 </span><span class="spaces">            </span><span class="istickedoff">else</span>
+<span class="lineno"> 2424 </span><span class="spaces">                </span><span class="istickedoff">-- Expand to LLVMSetup. Even though we don't expand</span>
+<span class="lineno"> 2425 </span><span class="spaces">                </span><span class="istickedoff">-- typedefs here, this isn't an ordinary typedef.</span>
+<span class="lineno"> 2426 </span><span class="spaces">                </span><span class="istickedoff">pure $ TyVar <span class="nottickedoff">pos</span> &quot;LLVMSetup&quot;</span>
+<span class="lineno"> 2427 </span><span class="spaces">        </span><span class="istickedoff">else <span class="nottickedoff">do</span></span>
+<span class="lineno"> 2428 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">let x' = PP.dquotes x</span></span>
+<span class="lineno"> 2429 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">recordError pos $ &quot;Inaccessible type:&quot; &lt;+&gt; x'</span></span>
+<span class="lineno"> 2430 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">recordError pos $ &quot;This type is available only after&quot; &lt;+&gt;</span></span>
+<span class="lineno"> 2431 </span><span class="spaces">                              </span><span class="istickedoff"><span class="nottickedoff">&quot;running `enable_deprecated`.&quot;</span></span>
+<span class="lineno"> 2432 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">getErrorTyVar pos</span></span>
+<span class="lineno"> 2433 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2434 </span><span class="spaces">    </span><span class="istickedoff">TyVar pos x -&gt; do</span>
+<span class="lineno"> 2435 </span><span class="spaces">        </span><span class="istickedoff">avail &lt;- asks tiPrimsAvail</span>
+<span class="lineno"> 2436 </span><span class="spaces">        </span><span class="istickedoff">tyenv &lt;- gets tiTyEnv</span>
+<span class="lineno"> 2437 </span><span class="spaces">        </span><span class="istickedoff">case ScopedMap.lookup x tyenv of</span>
+<span class="lineno"> 2438 </span><span class="spaces">            </span><span class="istickedoff">Nothing -&gt; do</span>
+<span class="lineno"> 2439 </span><span class="spaces">                </span><span class="istickedoff">recordError pos $ &quot;Unbound type variable&quot; &lt;+&gt; PP.pretty x</span>
+<span class="lineno"> 2440 </span><span class="spaces">                </span><span class="istickedoff">getErrorTyVar <span class="nottickedoff">pos</span></span>
+<span class="lineno"> 2441 </span><span class="spaces">            </span><span class="istickedoff">Just (lc, ty')</span>
+<span class="lineno"> 2442 </span><span class="spaces">              </span><span class="istickedoff">| Set.member lc avail -&gt; do</span>
+<span class="lineno"> 2443 </span><span class="spaces">                  </span><span class="istickedoff">when (Util.isDeprecated lc) $</span>
+<span class="lineno"> 2444 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">recordWarning pos $ &quot;Type is deprecated:&quot; &lt;+&gt; PP.pretty x</span></span>
 <span class="lineno"> 2445 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2446 </span><span class="spaces">    </span><span class="istickedoff">TyUnifyVar _pos _ix -&gt;</span>
-<span class="lineno"> 2447 </span><span class="spaces">        </span><span class="istickedoff">-- for now at least we don't track the kinds of unification vars</span>
-<span class="lineno"> 2448 </span><span class="spaces">        </span><span class="istickedoff">-- (types of mismatched kinds can't be the same types, so they</span>
-<span class="lineno"> 2449 </span><span class="spaces">        </span><span class="istickedoff">-- won't ever unify, so the possible mischief is limited) and all</span>
-<span class="lineno"> 2450 </span><span class="spaces">        </span><span class="istickedoff">-- possible unification var numbers are well formed, so we don't</span>
-<span class="lineno"> 2451 </span><span class="spaces">        </span><span class="istickedoff">-- need to do anything.</span>
-<span class="lineno"> 2452 </span><span class="spaces">        </span><span class="istickedoff">return ty</span></span>
-<span class="lineno"> 2453 </span>
-<span class="lineno"> 2454 </span>
-<span class="lineno"> 2455 </span>------------------------------------------------------------
-<span class="lineno"> 2456 </span>-- External interface
-<span class="lineno"> 2457 </span>
-<span class="lineno"> 2458 </span>-- | Check a single statement. (This is an external interface.)
-<span class="lineno"> 2459 </span>--
-<span class="lineno"> 2460 </span>--   The first two arguments are the starting variable and typedef
-<span class="lineno"> 2461 </span>--   environments to use.
-<span class="lineno"> 2462 </span>--
-<span class="lineno"> 2463 </span>--   The third is a current position, and the fourth is the
-<span class="lineno"> 2464 </span>--   context/monad type associated with the execution.
-<span class="lineno"> 2465 </span>checkStmt ::
-<span class="lineno"> 2466 </span>      PPS.Opts -&gt;
-<span class="lineno"> 2467 </span>      Set PrimitiveLifecycle -&gt;
-<span class="lineno"> 2468 </span>      VarEnv -&gt;
-<span class="lineno"> 2469 </span>      TyEnv -&gt;
-<span class="lineno"> 2470 </span>      Context -&gt;
-<span class="lineno"> 2471 </span>      Stmt -&gt;
-<span class="lineno"> 2472 </span>      Result Stmt
-<span class="lineno"> 2473 </span><span class="decl"><span class="istickedoff">checkStmt ppopts avail env tenv ctx stmt =</span>
-<span class="lineno"> 2474 </span><span class="spaces">    </span><span class="istickedoff">-- XXX: we shouldn't need this position here.</span>
-<span class="lineno"> 2475 </span><span class="spaces">    </span><span class="istickedoff">-- The position is used for the following things:</span>
-<span class="lineno"> 2476 </span><span class="spaces">    </span><span class="istickedoff">--</span>
-<span class="lineno"> 2477 </span><span class="spaces">    </span><span class="istickedoff">--    - to be the position associated with the monad context, which</span>
-<span class="lineno"> 2478 </span><span class="spaces">    </span><span class="istickedoff">--      in a tidy world should just be PosRepl (as in, the only</span>
-<span class="lineno"> 2479 </span><span class="spaces">    </span><span class="istickedoff">--      time we should be typechecking a single statement is when</span>
-<span class="lineno"> 2480 </span><span class="spaces">    </span><span class="istickedoff">--      it was just typed interactively, and which monad we're in</span>
-<span class="lineno"> 2481 </span><span class="spaces">    </span><span class="istickedoff">--      is a direct property of that context) but this is not</span>
-<span class="lineno"> 2482 </span><span class="spaces">    </span><span class="istickedoff">--      currently true and will require a good bit of interpreter</span>
-<span class="lineno"> 2483 </span><span class="spaces">    </span><span class="istickedoff">--      cleanup to make it true;</span>
-<span class="lineno"> 2484 </span><span class="spaces">    </span><span class="istickedoff">--</span>
-<span class="lineno"> 2485 </span><span class="spaces">    </span><span class="istickedoff">--    - to pass to inferStmt, which also uses it as part of the</span>
-<span class="lineno"> 2486 </span><span class="spaces">    </span><span class="istickedoff">--      position associated with the monad context. (This part is a</span>
-<span class="lineno"> 2487 </span><span class="spaces">    </span><span class="istickedoff">--      result of BlockCon existing and can go away when BlockCon is</span>
-<span class="lineno"> 2488 </span><span class="spaces">    </span><span class="istickedoff">--      removed.)</span>
-<span class="lineno"> 2489 </span><span class="spaces">    </span><span class="istickedoff">--</span>
-<span class="lineno"> 2490 </span><span class="spaces">    </span><span class="istickedoff">-- XXX: using the position of the statement as the position</span>
-<span class="lineno"> 2491 </span><span class="spaces">    </span><span class="istickedoff">-- associated with the monad context is not correct (or at least,</span>
-<span class="lineno"> 2492 </span><span class="spaces">    </span><span class="istickedoff">-- will be confusing) and we should figure something else out if the</span>
-<span class="lineno"> 2493 </span><span class="spaces">    </span><span class="istickedoff">-- interpreter cleanup doesn't come through soon. Note that</span>
-<span class="lineno"> 2494 </span><span class="spaces">    </span><span class="istickedoff">-- currently we come through here only for syntactically top-level</span>
-<span class="lineno"> 2495 </span><span class="spaces">    </span><span class="istickedoff">-- statements in the interpreter; these are TopLevel except when in</span>
-<span class="lineno"> 2496 </span><span class="spaces">    </span><span class="istickedoff">-- the ProofScript repl. So perhaps we should use PosRepl when in</span>
-<span class="lineno"> 2497 </span><span class="spaces">    </span><span class="istickedoff">-- ProofScript, and then either PosRepl or PosBuiltin for TopLevel?</span>
-<span class="lineno"> 2498 </span><span class="spaces">    </span><span class="istickedoff">-- But we don't have a good way of knowing here whether we're</span>
-<span class="lineno"> 2499 </span><span class="spaces">    </span><span class="istickedoff">-- actually in the repl.</span>
-<span class="lineno"> 2500 </span><span class="spaces">    </span><span class="istickedoff">let pos = Pos.getPos stmt</span>
-<span class="lineno"> 2501 </span><span class="spaces">        </span><span class="istickedoff">ctxtype = TyCon pos (ContextCon ctx) []</span>
-<span class="lineno"> 2502 </span><span class="spaces">    </span><span class="istickedoff">in</span>
-<span class="lineno"> 2503 </span><span class="spaces">    </span><span class="istickedoff">runTI ppopts avail env tenv (inferSingleStmt pos ctxtype stmt)</span></span>
-<span class="lineno"> 2504 </span>
-<span class="lineno"> 2505 </span>-- | Check a single declaration. (This is an external interface.)
-<span class="lineno"> 2506 </span>--
-<span class="lineno"> 2507 </span>--   The first two arguments are the starting variable and typedef
-<span class="lineno"> 2508 </span>--   environments to use.
-<span class="lineno"> 2509 </span>checkDecl ::
-<span class="lineno"> 2510 </span>      PPS.Opts -&gt;
-<span class="lineno"> 2511 </span>      Set PrimitiveLifecycle -&gt;
-<span class="lineno"> 2512 </span>      VarEnv -&gt;
-<span class="lineno"> 2513 </span>      TyEnv -&gt;
-<span class="lineno"> 2514 </span>      Decl -&gt;
-<span class="lineno"> 2515 </span>      Result Decl
-<span class="lineno"> 2516 </span><span class="decl"><span class="istickedoff">checkDecl ppopts avail env tenv decl =</span>
-<span class="lineno"> 2517 </span><span class="spaces">    </span><span class="istickedoff">runTI <span class="nottickedoff">ppopts</span> avail env tenv (inferDecl <span class="nottickedoff">ReadOnlyVar</span> decl)</span></span>
-<span class="lineno"> 2518 </span>
-<span class="lineno"> 2519 </span>-- | Check a found type (first argument) against an expected type
-<span class="lineno"> 2520 </span>--   (second argument) and return True if they can be unified.
-<span class="lineno"> 2521 </span>--
-<span class="lineno"> 2522 </span>--   Both types are schemes because that's what we need upstream.
-<span class="lineno"> 2523 </span>--
-<span class="lineno"> 2524 </span>--   (This is an external interface.)
-<span class="lineno"> 2525 </span>typesMatch ::
-<span class="lineno"> 2526 </span>      PPS.Opts -&gt;
-<span class="lineno"> 2527 </span>      Set PrimitiveLifecycle -&gt;
-<span class="lineno"> 2528 </span>      TyEnv -&gt;
-<span class="lineno"> 2529 </span>      Schema -&gt;
-<span class="lineno"> 2530 </span>      Schema -&gt;
-<span class="lineno"> 2531 </span>      Bool
-<span class="lineno"> 2532 </span><span class="decl"><span class="istickedoff">typesMatch ppopts avail tenv schema'found schema'expected =</span>
-<span class="lineno"> 2533 </span><span class="spaces">  </span><span class="istickedoff">let unpack (Forall as ty) = do</span>
-<span class="lineno"> 2534 </span><span class="spaces">        </span><span class="istickedoff">-- Generate unification vars for all the forall-bindings</span>
-<span class="lineno"> 2535 </span><span class="spaces">        </span><span class="istickedoff">let generate (pos'a, a) = do</span>
-<span class="lineno"> 2536 </span><span class="spaces">              </span><span class="istickedoff">ty'a &lt;- getFreshTyVar <span class="nottickedoff">pos'a</span></span>
-<span class="lineno"> 2537 </span><span class="spaces">              </span><span class="istickedoff">return (a, (Current, ConcreteType ty'a))</span>
-<span class="lineno"> 2538 </span><span class="spaces">        </span><span class="istickedoff">substs &lt;- mapM generate as</span>
-<span class="lineno"> 2539 </span><span class="spaces">        </span><span class="istickedoff">-- Substitute them into the type</span>
-<span class="lineno"> 2540 </span><span class="spaces">        </span><span class="istickedoff">let ty' = Util.substituteTyVars' avail (Map.fromList substs) ty</span>
-<span class="lineno"> 2541 </span><span class="spaces">        </span><span class="istickedoff">return ty'</span>
-<span class="lineno"> 2542 </span><span class="spaces">      </span><span class="istickedoff">match = do</span>
-<span class="lineno"> 2543 </span><span class="spaces">        </span><span class="istickedoff">-- Unpack the schemas and check if they match</span>
-<span class="lineno"> 2544 </span><span class="spaces">        </span><span class="istickedoff">ty'found &lt;- unpack schema'found</span>
-<span class="lineno"> 2545 </span><span class="spaces">        </span><span class="istickedoff">ty'expected &lt;- unpack schema'expected</span>
-<span class="lineno"> 2546 </span><span class="spaces">        </span><span class="istickedoff">matches <span class="nottickedoff">(Pos.getPos ty'found)</span> ty'found ty'expected</span>
-<span class="lineno"> 2547 </span><span class="spaces">  </span><span class="istickedoff">in</span>
-<span class="lineno"> 2548 </span><span class="spaces">  </span><span class="istickedoff">case runTI <span class="nottickedoff">ppopts</span> avail <span class="nottickedoff">ScopedMap.empty</span> tenv match of</span>
-<span class="lineno"> 2549 </span><span class="spaces">      </span><span class="istickedoff">(Left _errors, _warnings) -&gt; <span class="nottickedoff">False</span>        -- not actually reachable</span>
-<span class="lineno"> 2550 </span><span class="spaces">      </span><span class="istickedoff">(Right b, _warnings) -&gt; b</span></span>                 -- return match success/failure
-<span class="lineno"> 2551 </span>
-<span class="lineno"> 2552 </span>-- | Check a schema (type) as used when constructing the builtins
-<span class="lineno"> 2553 </span>--   table. (This is an external interface.)
-<span class="lineno"> 2554 </span>--
-<span class="lineno"> 2555 </span>--   The first argument is the lifecycle context the type is being used
-<span class="lineno"> 2556 </span>--   in. More on that below. The second is the typedef environment to
-<span class="lineno"> 2557 </span>--   use. The third argument is the schema to check.
-<span class="lineno"> 2558 </span>--
-<span class="lineno"> 2559 </span>--   All types found should be of kind *.
-<span class="lineno"> 2560 </span>--
-<span class="lineno"> 2561 </span>--   Purely a validity check; there's no updates it can make to the
-<span class="lineno"> 2562 </span>--   schema that are of use to the caller, on the assumption that the
-<span class="lineno"> 2563 </span>--   caller doesn't want to do stuff with the schema before exiting on
-<span class="lineno"> 2564 </span>--   errors, which it doesn't. Thus, return the original schema and not
-<span class="lineno"> 2565 </span>--   one with the potentially updated type.
-<span class="lineno"> 2566 </span>--
-<span class="lineno"> 2567 </span>--   (Otherwise we'd need to rerun `generalize` to build a new schema,
-<span class="lineno"> 2568 </span>--   and that's a headache and not worthwhile given that the result
-<span class="lineno"> 2569 </span>--   isn't going to be used.)
-<span class="lineno"> 2570 </span>--
-<span class="lineno"> 2571 </span>--   Do however return the original schema and not unit to make sure
-<span class="lineno"> 2572 </span>--   the code actually gets evaluated.
-<span class="lineno"> 2573 </span>--
-<span class="lineno"> 2574 </span>--   This is called for the types of objects that may themselves not be
-<span class="lineno"> 2575 </span>--   visible, so rather than using the caller's set of visible lifecycle
-<span class="lineno"> 2576 </span>--   states, construct the set based on the lifecycle state of the
-<span class="lineno"> 2577 </span>--   declaration context. Deprecated objects can see equally or less
-<span class="lineno"> 2578 </span>--   deprecated types; experimental objects can see experimental types;
-<span class="lineno"> 2579 </span>--   everything can see current types.
-<span class="lineno"> 2580 </span>--
-<span class="lineno"> 2581 </span>checkSchema ::
-<span class="lineno"> 2582 </span>      PPS.Opts -&gt;
-<span class="lineno"> 2583 </span>      PrimitiveLifecycle -&gt;
-<span class="lineno"> 2584 </span>      TyEnv -&gt;
-<span class="lineno"> 2585 </span>      Schema -&gt;
-<span class="lineno"> 2586 </span>      Result Schema
-<span class="lineno"> 2587 </span><span class="decl"><span class="istickedoff">checkSchema ppopts contextLC tyenv schema = do</span>
-<span class="lineno"> 2588 </span><span class="spaces">    </span><span class="istickedoff">let check = do</span>
-<span class="lineno"> 2589 </span><span class="spaces">          </span><span class="istickedoff">let Forall tyvars ty = schema</span>
-<span class="lineno"> 2590 </span><span class="spaces">          </span><span class="istickedoff">-- Generate unification vars for all the forall-bindings</span>
-<span class="lineno"> 2591 </span><span class="spaces">          </span><span class="istickedoff">let generate (pos'a, a) = do</span>
-<span class="lineno"> 2592 </span><span class="spaces">                </span><span class="istickedoff">ty'a &lt;- getFreshTyVar <span class="nottickedoff">pos'a</span></span>
-<span class="lineno"> 2593 </span><span class="spaces">                </span><span class="istickedoff">return (a, (Current, ConcreteType ty'a))</span>
-<span class="lineno"> 2594 </span><span class="spaces">          </span><span class="istickedoff">substs &lt;- mapM generate tyvars</span>
-<span class="lineno"> 2595 </span><span class="spaces">          </span><span class="istickedoff">-- Substitute them into the type</span>
-<span class="lineno"> 2596 </span><span class="spaces">          </span><span class="istickedoff">let ty' = Util.substituteTyVars' everythingAvailable (Map.fromList substs) ty</span>
-<span class="lineno"> 2597 </span><span class="spaces">          </span><span class="istickedoff">-- The only way checking can return an updated type is if</span>
-<span class="lineno"> 2598 </span><span class="spaces">          </span><span class="istickedoff">-- there's also an error, so discard the type</span>
-<span class="lineno"> 2599 </span><span class="spaces">          </span><span class="istickedoff">_ &lt;- checkType kindStar ty'</span>
-<span class="lineno"> 2600 </span><span class="spaces">          </span><span class="istickedoff">return schema</span>
-<span class="lineno"> 2601 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2602 </span><span class="spaces">    </span><span class="istickedoff">let avail = Set.fromList $ case contextLC of</span>
-<span class="lineno"> 2603 </span><span class="spaces">          </span><span class="istickedoff">Current -&gt; [Current]</span>
-<span class="lineno"> 2604 </span><span class="spaces">          </span><span class="istickedoff">WarnDeprecated -&gt; [Current, WarnDeprecated]</span>
-<span class="lineno"> 2605 </span><span class="spaces">          </span><span class="istickedoff">HideDeprecated -&gt; [Current, WarnDeprecated, HideDeprecated, Experimental]</span>
-<span class="lineno"> 2606 </span><span class="spaces">          </span><span class="istickedoff">Experimental -&gt; [Current, Experimental]</span>
-<span class="lineno"> 2607 </span><span class="spaces">    </span><span class="istickedoff">runTI <span class="nottickedoff">ppopts</span> avail <span class="nottickedoff">ScopedMap.empty</span> tyenv check</span></span>
-<span class="lineno"> 2608 </span>
-<span class="lineno"> 2609 </span>-- | Check a schema (type) pattern as used by :search. (This is an
-<span class="lineno"> 2610 </span>--   external interface.)
-<span class="lineno"> 2611 </span>--
-<span class="lineno"> 2612 </span>--   The first two arguments are the starting variable and typedef
-<span class="lineno"> 2613 </span>--   environments to use. The third argument is the pattern.
-<span class="lineno"> 2614 </span>--
-<span class="lineno"> 2615 </span>--   Returns a possibly updated pattern.
-<span class="lineno"> 2616 </span>--
-<span class="lineno"> 2617 </span>checkSchemaPattern ::
-<span class="lineno"> 2618 </span>      Set PrimitiveLifecycle -&gt;
-<span class="lineno"> 2619 </span>      VarEnv -&gt;
-<span class="lineno"> 2620 </span>      TyEnv -&gt;
-<span class="lineno"> 2621 </span>      SchemaPattern -&gt;
-<span class="lineno"> 2622 </span>      Result SchemaPattern
-<span class="lineno"> 2623 </span><span class="decl"><span class="istickedoff">checkSchemaPattern _avail _env _tenv pat =</span>
-<span class="lineno"> 2624 </span><span class="spaces">    </span><span class="istickedoff">-- For the time being, do nothing -- we specifically don't want it</span>
-<span class="lineno"> 2625 </span><span class="spaces">    </span><span class="istickedoff">-- to reject unbound/free type variables (see Search.hs for a</span>
-<span class="lineno"> 2626 </span><span class="spaces">    </span><span class="istickedoff">-- discussion of why) or underapplied type constructors, so the</span>
-<span class="lineno"> 2627 </span><span class="spaces">    </span><span class="istickedoff">-- only check in checkType that makes sense to apply is the one</span>
-<span class="lineno"> 2628 </span><span class="spaces">    </span><span class="istickedoff">-- for _overapplied_ type constructors, and that is (a) not</span>
-<span class="lineno"> 2629 </span><span class="spaces">    </span><span class="istickedoff">-- critical (an overapplied type constructor will never match</span>
-<span class="lineno"> 2630 </span><span class="spaces">    </span><span class="istickedoff">-- anything valid) and (b) as noted in checkType not currently</span>
-<span class="lineno"> 2631 </span><span class="spaces">    </span><span class="istickedoff">-- actually reasonable because of limitations in the concrete</span>
-<span class="lineno"> 2632 </span><span class="spaces">    </span><span class="istickedoff">-- syntax. Point (b) will probably change eventually, so we want</span>
-<span class="lineno"> 2633 </span><span class="spaces">    </span><span class="istickedoff">-- to keep this hook and keep knowledge of its internals private</span>
-<span class="lineno"> 2634 </span><span class="spaces">    </span><span class="istickedoff">-- here even though for now it's a nop.</span>
-<span class="lineno"> 2635 </span><span class="spaces">    </span><span class="istickedoff">(Right pat, [])</span></span>
-<span class="lineno"> 2636 </span>
-<span class="lineno"> 2637 </span>
-<span class="lineno"> 2638 </span>{-
-<span class="lineno"> 2639 </span>Note [-Wincomplete-uni-patterns and irrefutable patterns]
-<span class="lineno"> 2640 </span>~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-<span class="lineno"> 2641 </span>Various parts of SAW use irrefutable patterns in functions that assume that
-<span class="lineno"> 2642 </span>their arguments have particular shapes. For example, inferDecl in this module
-<span class="lineno"> 2643 </span>matches on ~[(e1,s)] with an irrefutable pattern because it assumes the
-<span class="lineno"> 2644 </span>invariant that the list will have exactly one element. This lets inferDecl be
-<span class="lineno"> 2645 </span>slightly lazier when evaluated.
-<span class="lineno"> 2646 </span>
-<span class="lineno"> 2647 </span>Unfortunately, this use of irrefutable patterns is at odds with the
-<span class="lineno"> 2648 </span>-Wincomplete-uni-patterns warning. At present, -Wincomplete-uni-patterns will
-<span class="lineno"> 2649 </span>produce a warning for any irrefutable pattern that does not cover all possible
-<span class="lineno"> 2650 </span>data constructors. While we could rewrite functions like `inferDecl` to
-<span class="lineno"> 2651 </span>explicitly provide a fall-through case, that would change its strictness
-<span class="lineno"> 2652 </span>properties. As a result, we simply disable -Wincomplete-uni-patterns warnings
-<span class="lineno"> 2653 </span>in each part of SAW that uses irrefutable patterns.
-<span class="lineno"> 2654 </span>
-<span class="lineno"> 2655 </span>Arguably, -Wincomplete-uni-patterns shouldn't be producing warnings for
-<span class="lineno"> 2656 </span>irrefutable patterns at all. GHC issue #14800
-<span class="lineno"> 2657 </span>(https://gitlab.haskell.org/ghc/ghc/-/issues/14800) proposes this idea.
-<span class="lineno"> 2658 </span>If that issue is fixed in the future, we may want to reconsider whether we want
-<span class="lineno"> 2659 </span>to disable -Wincomplete-uni-patterns.
-<span class="lineno"> 2660 </span>-}
+<span class="lineno"> 2446 </span><span class="spaces">                  </span><span class="istickedoff">-- For typedefs, which appear here as ConcreteType</span>
+<span class="lineno"> 2447 </span><span class="spaces">                  </span><span class="istickedoff">-- expansions, assume ty' was checked when it was</span>
+<span class="lineno"> 2448 </span><span class="spaces">                  </span><span class="istickedoff">-- entered.</span>
+<span class="lineno"> 2449 </span><span class="spaces">                  </span><span class="istickedoff">--</span>
+<span class="lineno"> 2450 </span><span class="spaces">                  </span><span class="istickedoff">-- (If we entered it that's true, if it was in the</span>
+<span class="lineno"> 2451 </span><span class="spaces">                  </span><span class="istickedoff">-- initial environment we were given that depends on the</span>
+<span class="lineno"> 2452 </span><span class="spaces">                  </span><span class="istickedoff">-- interpreter not doing unfortunate things. This isn't</span>
+<span class="lineno"> 2453 </span><span class="spaces">                  </span><span class="istickedoff">-- currently seeming like a very good bet.)</span>
+<span class="lineno"> 2454 </span><span class="spaces">                  </span><span class="istickedoff">--</span>
+<span class="lineno"> 2455 </span><span class="spaces">                  </span><span class="istickedoff">-- For now at least we require typedefs to be kind *</span>
+<span class="lineno"> 2456 </span><span class="spaces">                  </span><span class="istickedoff">-- (they can't have parameters and the expansions are thus</span>
+<span class="lineno"> 2457 </span><span class="spaces">                  </span><span class="istickedoff">-- restricted) so just fail if we use one in a context</span>
+<span class="lineno"> 2458 </span><span class="spaces">                  </span><span class="istickedoff">-- expecting something else.</span>
+<span class="lineno"> 2459 </span><span class="spaces">                  </span><span class="istickedoff">--</span>
+<span class="lineno"> 2460 </span><span class="spaces">                  </span><span class="istickedoff">-- Abstract types may have any kind, because some are</span>
+<span class="lineno"> 2461 </span><span class="spaces">                  </span><span class="istickedoff">-- monads; we carry the kind around.</span>
+<span class="lineno"> 2462 </span><span class="spaces">                  </span><span class="istickedoff">-- </span>
+<span class="lineno"> 2463 </span><span class="spaces">                  </span><span class="istickedoff">let kindFound = case ty' of</span>
+<span class="lineno"> 2464 </span><span class="spaces">                        </span><span class="istickedoff">ConcreteType _ -&gt; kindStar</span>
+<span class="lineno"> 2465 </span><span class="spaces">                        </span><span class="istickedoff">AbstractType kf -&gt; kf</span>
+<span class="lineno"> 2466 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2467 </span><span class="spaces">                  </span><span class="istickedoff">if kind /= kindFound then do</span>
+<span class="lineno"> 2468 </span><span class="spaces">                      </span><span class="istickedoff">let kind' = prettyKind kind</span>
+<span class="lineno"> 2469 </span><span class="spaces">                          </span><span class="istickedoff">kindFound' = prettyKind kindFound</span>
+<span class="lineno"> 2470 </span><span class="spaces">                      </span><span class="istickedoff">recordError pos $ &quot;Kind mismatch: expected&quot; &lt;+&gt; kind' &lt;+&gt;</span>
+<span class="lineno"> 2471 </span><span class="spaces">                                       </span><span class="istickedoff">&quot;but found&quot; &lt;+&gt; kindFound'</span>
+<span class="lineno"> 2472 </span><span class="spaces">                      </span><span class="istickedoff">getErrorTyVar <span class="nottickedoff">pos</span></span>
+<span class="lineno"> 2473 </span><span class="spaces">                  </span><span class="istickedoff">else</span>
+<span class="lineno"> 2474 </span><span class="spaces">                      </span><span class="istickedoff">-- We do _not_ want to expand typedefs when checking,</span>
+<span class="lineno"> 2475 </span><span class="spaces">                      </span><span class="istickedoff">-- so return the original TyVar.</span>
+<span class="lineno"> 2476 </span><span class="spaces">                      </span><span class="istickedoff">return ty</span>
+<span class="lineno"> 2477 </span><span class="spaces">              </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; do</span>
+<span class="lineno"> 2478 </span><span class="spaces">                  </span><span class="istickedoff">let x' = PP.dquotes (PP.pretty x)</span>
+<span class="lineno"> 2479 </span><span class="spaces">                  </span><span class="istickedoff">recordError pos $ &quot;Inaccessible type:&quot; &lt;+&gt; x'</span>
+<span class="lineno"> 2480 </span><span class="spaces">                  </span><span class="istickedoff">let how = if lc == HideDeprecated then &quot;deprecated&quot;</span>
+<span class="lineno"> 2481 </span><span class="spaces">                            </span><span class="istickedoff">else &quot;experimental&quot;</span>
+<span class="lineno"> 2482 </span><span class="spaces">                      </span><span class="istickedoff">cmd = &quot;`enable_&quot; &lt;&gt; how &lt;&gt; &quot;`&quot;</span>
+<span class="lineno"> 2483 </span><span class="spaces">                  </span><span class="istickedoff">recordError pos $ &quot;This type is available only after&quot; &lt;+&gt;</span>
+<span class="lineno"> 2484 </span><span class="spaces">                                    </span><span class="istickedoff">&quot;running&quot; &lt;+&gt; cmd &lt;&gt; &quot;.&quot;</span>
+<span class="lineno"> 2485 </span><span class="spaces">                  </span><span class="istickedoff">t' &lt;- getFreshTyVar <span class="nottickedoff">pos</span></span>
+<span class="lineno"> 2486 </span><span class="spaces">                  </span><span class="istickedoff">return <span class="nottickedoff">t'</span></span>
+<span class="lineno"> 2487 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2488 </span><span class="spaces">    </span><span class="istickedoff">TyUnifyVar _pos _ix -&gt;</span>
+<span class="lineno"> 2489 </span><span class="spaces">        </span><span class="istickedoff">-- for now at least we don't track the kinds of unification vars</span>
+<span class="lineno"> 2490 </span><span class="spaces">        </span><span class="istickedoff">-- (types of mismatched kinds can't be the same types, so they</span>
+<span class="lineno"> 2491 </span><span class="spaces">        </span><span class="istickedoff">-- won't ever unify, so the possible mischief is limited) and all</span>
+<span class="lineno"> 2492 </span><span class="spaces">        </span><span class="istickedoff">-- possible unification var numbers are well formed, so we don't</span>
+<span class="lineno"> 2493 </span><span class="spaces">        </span><span class="istickedoff">-- need to do anything.</span>
+<span class="lineno"> 2494 </span><span class="spaces">        </span><span class="istickedoff">return ty</span></span>
+<span class="lineno"> 2495 </span>
+<span class="lineno"> 2496 </span>
+<span class="lineno"> 2497 </span>------------------------------------------------------------
+<span class="lineno"> 2498 </span>-- External interface
+<span class="lineno"> 2499 </span>
+<span class="lineno"> 2500 </span>-- | Check a single statement. (This is an external interface.)
+<span class="lineno"> 2501 </span>--
+<span class="lineno"> 2502 </span>--   The first two arguments are the starting variable and typedef
+<span class="lineno"> 2503 </span>--   environments to use.
+<span class="lineno"> 2504 </span>--
+<span class="lineno"> 2505 </span>--   The third is a current position, and the fourth is the
+<span class="lineno"> 2506 </span>--   context/monad type associated with the execution.
+<span class="lineno"> 2507 </span>checkStmt ::
+<span class="lineno"> 2508 </span>      PPS.Opts -&gt;
+<span class="lineno"> 2509 </span>      Set PrimitiveLifecycle -&gt;
+<span class="lineno"> 2510 </span>      VarEnv -&gt;
+<span class="lineno"> 2511 </span>      TyEnv -&gt;
+<span class="lineno"> 2512 </span>      Context -&gt;
+<span class="lineno"> 2513 </span>      Stmt -&gt;
+<span class="lineno"> 2514 </span>      Result Stmt
+<span class="lineno"> 2515 </span><span class="decl"><span class="istickedoff">checkStmt ppopts avail env tenv ctx stmt =</span>
+<span class="lineno"> 2516 </span><span class="spaces">    </span><span class="istickedoff">-- XXX: we shouldn't need this position here.</span>
+<span class="lineno"> 2517 </span><span class="spaces">    </span><span class="istickedoff">-- The position is used for the following things:</span>
+<span class="lineno"> 2518 </span><span class="spaces">    </span><span class="istickedoff">--</span>
+<span class="lineno"> 2519 </span><span class="spaces">    </span><span class="istickedoff">--    - to be the position associated with the monad context, which</span>
+<span class="lineno"> 2520 </span><span class="spaces">    </span><span class="istickedoff">--      in a tidy world should just be PosRepl (as in, the only</span>
+<span class="lineno"> 2521 </span><span class="spaces">    </span><span class="istickedoff">--      time we should be typechecking a single statement is when</span>
+<span class="lineno"> 2522 </span><span class="spaces">    </span><span class="istickedoff">--      it was just typed interactively, and which monad we're in</span>
+<span class="lineno"> 2523 </span><span class="spaces">    </span><span class="istickedoff">--      is a direct property of that context) but this is not</span>
+<span class="lineno"> 2524 </span><span class="spaces">    </span><span class="istickedoff">--      currently true and will require a good bit of interpreter</span>
+<span class="lineno"> 2525 </span><span class="spaces">    </span><span class="istickedoff">--      cleanup to make it true;</span>
+<span class="lineno"> 2526 </span><span class="spaces">    </span><span class="istickedoff">--</span>
+<span class="lineno"> 2527 </span><span class="spaces">    </span><span class="istickedoff">--    - to pass to inferStmt, which also uses it as part of the</span>
+<span class="lineno"> 2528 </span><span class="spaces">    </span><span class="istickedoff">--      position associated with the monad context. (This part is a</span>
+<span class="lineno"> 2529 </span><span class="spaces">    </span><span class="istickedoff">--      result of BlockCon existing and can go away when BlockCon is</span>
+<span class="lineno"> 2530 </span><span class="spaces">    </span><span class="istickedoff">--      removed.)</span>
+<span class="lineno"> 2531 </span><span class="spaces">    </span><span class="istickedoff">--</span>
+<span class="lineno"> 2532 </span><span class="spaces">    </span><span class="istickedoff">-- XXX: using the position of the statement as the position</span>
+<span class="lineno"> 2533 </span><span class="spaces">    </span><span class="istickedoff">-- associated with the monad context is not correct (or at least,</span>
+<span class="lineno"> 2534 </span><span class="spaces">    </span><span class="istickedoff">-- will be confusing) and we should figure something else out if the</span>
+<span class="lineno"> 2535 </span><span class="spaces">    </span><span class="istickedoff">-- interpreter cleanup doesn't come through soon. Note that</span>
+<span class="lineno"> 2536 </span><span class="spaces">    </span><span class="istickedoff">-- currently we come through here only for syntactically top-level</span>
+<span class="lineno"> 2537 </span><span class="spaces">    </span><span class="istickedoff">-- statements in the interpreter; these are TopLevel except when in</span>
+<span class="lineno"> 2538 </span><span class="spaces">    </span><span class="istickedoff">-- the ProofScript repl. So perhaps we should use PosRepl when in</span>
+<span class="lineno"> 2539 </span><span class="spaces">    </span><span class="istickedoff">-- ProofScript, and then either PosRepl or PosBuiltin for TopLevel?</span>
+<span class="lineno"> 2540 </span><span class="spaces">    </span><span class="istickedoff">-- But we don't have a good way of knowing here whether we're</span>
+<span class="lineno"> 2541 </span><span class="spaces">    </span><span class="istickedoff">-- actually in the repl.</span>
+<span class="lineno"> 2542 </span><span class="spaces">    </span><span class="istickedoff">let pos = Pos.getPos stmt</span>
+<span class="lineno"> 2543 </span><span class="spaces">        </span><span class="istickedoff">ctxtype = TyCon pos (ContextCon ctx) []</span>
+<span class="lineno"> 2544 </span><span class="spaces">    </span><span class="istickedoff">in</span>
+<span class="lineno"> 2545 </span><span class="spaces">    </span><span class="istickedoff">runTI ppopts avail env tenv (inferSingleStmt pos ctxtype stmt)</span></span>
+<span class="lineno"> 2546 </span>
+<span class="lineno"> 2547 </span>-- | Check a single declaration. (This is an external interface.)
+<span class="lineno"> 2548 </span>--
+<span class="lineno"> 2549 </span>--   The first two arguments are the starting variable and typedef
+<span class="lineno"> 2550 </span>--   environments to use.
+<span class="lineno"> 2551 </span>checkDecl ::
+<span class="lineno"> 2552 </span>      PPS.Opts -&gt;
+<span class="lineno"> 2553 </span>      Set PrimitiveLifecycle -&gt;
+<span class="lineno"> 2554 </span>      VarEnv -&gt;
+<span class="lineno"> 2555 </span>      TyEnv -&gt;
+<span class="lineno"> 2556 </span>      Decl -&gt;
+<span class="lineno"> 2557 </span>      Result Decl
+<span class="lineno"> 2558 </span><span class="decl"><span class="istickedoff">checkDecl ppopts avail env tenv decl =</span>
+<span class="lineno"> 2559 </span><span class="spaces">    </span><span class="istickedoff">runTI <span class="nottickedoff">ppopts</span> avail env tenv (inferDecl <span class="nottickedoff">ReadOnlyVar</span> decl)</span></span>
+<span class="lineno"> 2560 </span>
+<span class="lineno"> 2561 </span>-- | Check a found type (first argument) against an expected type
+<span class="lineno"> 2562 </span>--   (second argument) and return True if they can be unified.
+<span class="lineno"> 2563 </span>--
+<span class="lineno"> 2564 </span>--   Both types are schemes because that's what we need upstream.
+<span class="lineno"> 2565 </span>--
+<span class="lineno"> 2566 </span>--   (This is an external interface.)
+<span class="lineno"> 2567 </span>typesMatch ::
+<span class="lineno"> 2568 </span>      PPS.Opts -&gt;
+<span class="lineno"> 2569 </span>      Set PrimitiveLifecycle -&gt;
+<span class="lineno"> 2570 </span>      TyEnv -&gt;
+<span class="lineno"> 2571 </span>      Schema -&gt;
+<span class="lineno"> 2572 </span>      Schema -&gt;
+<span class="lineno"> 2573 </span>      Bool
+<span class="lineno"> 2574 </span><span class="decl"><span class="istickedoff">typesMatch ppopts avail tenv schema'found schema'expected =</span>
+<span class="lineno"> 2575 </span><span class="spaces">  </span><span class="istickedoff">let unpack (Forall as ty) = do</span>
+<span class="lineno"> 2576 </span><span class="spaces">        </span><span class="istickedoff">-- Generate unification vars for all the forall-bindings</span>
+<span class="lineno"> 2577 </span><span class="spaces">        </span><span class="istickedoff">let generate (pos'a, a) = do</span>
+<span class="lineno"> 2578 </span><span class="spaces">              </span><span class="istickedoff">ty'a &lt;- getFreshTyVar <span class="nottickedoff">pos'a</span></span>
+<span class="lineno"> 2579 </span><span class="spaces">              </span><span class="istickedoff">return (a, (Current, ConcreteType ty'a))</span>
+<span class="lineno"> 2580 </span><span class="spaces">        </span><span class="istickedoff">substs &lt;- mapM generate as</span>
+<span class="lineno"> 2581 </span><span class="spaces">        </span><span class="istickedoff">-- Substitute them into the type</span>
+<span class="lineno"> 2582 </span><span class="spaces">        </span><span class="istickedoff">let ty' = Util.substituteTyVars' avail (Map.fromList substs) ty</span>
+<span class="lineno"> 2583 </span><span class="spaces">        </span><span class="istickedoff">return ty'</span>
+<span class="lineno"> 2584 </span><span class="spaces">      </span><span class="istickedoff">match = do</span>
+<span class="lineno"> 2585 </span><span class="spaces">        </span><span class="istickedoff">-- Unpack the schemas and check if they match</span>
+<span class="lineno"> 2586 </span><span class="spaces">        </span><span class="istickedoff">ty'found &lt;- unpack schema'found</span>
+<span class="lineno"> 2587 </span><span class="spaces">        </span><span class="istickedoff">ty'expected &lt;- unpack schema'expected</span>
+<span class="lineno"> 2588 </span><span class="spaces">        </span><span class="istickedoff">matches <span class="nottickedoff">(Pos.getPos ty'found)</span> ty'found ty'expected</span>
+<span class="lineno"> 2589 </span><span class="spaces">  </span><span class="istickedoff">in</span>
+<span class="lineno"> 2590 </span><span class="spaces">  </span><span class="istickedoff">case runTI <span class="nottickedoff">ppopts</span> avail <span class="nottickedoff">ScopedMap.empty</span> tenv match of</span>
+<span class="lineno"> 2591 </span><span class="spaces">      </span><span class="istickedoff">(Left _errors, _warnings) -&gt; <span class="nottickedoff">False</span>        -- not actually reachable</span>
+<span class="lineno"> 2592 </span><span class="spaces">      </span><span class="istickedoff">(Right b, _warnings) -&gt; b</span></span>                 -- return match success/failure
+<span class="lineno"> 2593 </span>
+<span class="lineno"> 2594 </span>-- | Check a schema (type) as used when constructing the builtins
+<span class="lineno"> 2595 </span>--   table. (This is an external interface.)
+<span class="lineno"> 2596 </span>--
+<span class="lineno"> 2597 </span>--   The first argument is the lifecycle context the type is being used
+<span class="lineno"> 2598 </span>--   in. More on that below. The second is the typedef environment to
+<span class="lineno"> 2599 </span>--   use. The third argument is the schema to check.
+<span class="lineno"> 2600 </span>--
+<span class="lineno"> 2601 </span>--   All types found should be of kind *.
+<span class="lineno"> 2602 </span>--
+<span class="lineno"> 2603 </span>--   Purely a validity check; there's no updates it can make to the
+<span class="lineno"> 2604 </span>--   schema that are of use to the caller, on the assumption that the
+<span class="lineno"> 2605 </span>--   caller doesn't want to do stuff with the schema before exiting on
+<span class="lineno"> 2606 </span>--   errors, which it doesn't. Thus, return the original schema and not
+<span class="lineno"> 2607 </span>--   one with the potentially updated type.
+<span class="lineno"> 2608 </span>--
+<span class="lineno"> 2609 </span>--   (Otherwise we'd need to rerun `generalize` to build a new schema,
+<span class="lineno"> 2610 </span>--   and that's a headache and not worthwhile given that the result
+<span class="lineno"> 2611 </span>--   isn't going to be used.)
+<span class="lineno"> 2612 </span>--
+<span class="lineno"> 2613 </span>--   Do however return the original schema and not unit to make sure
+<span class="lineno"> 2614 </span>--   the code actually gets evaluated.
+<span class="lineno"> 2615 </span>--
+<span class="lineno"> 2616 </span>--   This is called for the types of objects that may themselves not be
+<span class="lineno"> 2617 </span>--   visible, so rather than using the caller's set of visible lifecycle
+<span class="lineno"> 2618 </span>--   states, construct the set based on the lifecycle state of the
+<span class="lineno"> 2619 </span>--   declaration context. Deprecated objects can see equally or less
+<span class="lineno"> 2620 </span>--   deprecated types; experimental objects can see experimental types;
+<span class="lineno"> 2621 </span>--   everything can see current types.
+<span class="lineno"> 2622 </span>--
+<span class="lineno"> 2623 </span>checkSchema ::
+<span class="lineno"> 2624 </span>      PPS.Opts -&gt;
+<span class="lineno"> 2625 </span>      PrimitiveLifecycle -&gt;
+<span class="lineno"> 2626 </span>      TyEnv -&gt;
+<span class="lineno"> 2627 </span>      Schema -&gt;
+<span class="lineno"> 2628 </span>      Result Schema
+<span class="lineno"> 2629 </span><span class="decl"><span class="istickedoff">checkSchema ppopts contextLC tyenv schema = do</span>
+<span class="lineno"> 2630 </span><span class="spaces">    </span><span class="istickedoff">let check = do</span>
+<span class="lineno"> 2631 </span><span class="spaces">          </span><span class="istickedoff">let Forall tyvars ty = schema</span>
+<span class="lineno"> 2632 </span><span class="spaces">          </span><span class="istickedoff">-- Generate unification vars for all the forall-bindings</span>
+<span class="lineno"> 2633 </span><span class="spaces">          </span><span class="istickedoff">let generate (pos'a, a) = do</span>
+<span class="lineno"> 2634 </span><span class="spaces">                </span><span class="istickedoff">ty'a &lt;- getFreshTyVar <span class="nottickedoff">pos'a</span></span>
+<span class="lineno"> 2635 </span><span class="spaces">                </span><span class="istickedoff">return (a, (Current, ConcreteType ty'a))</span>
+<span class="lineno"> 2636 </span><span class="spaces">          </span><span class="istickedoff">substs &lt;- mapM generate tyvars</span>
+<span class="lineno"> 2637 </span><span class="spaces">          </span><span class="istickedoff">-- Substitute them into the type</span>
+<span class="lineno"> 2638 </span><span class="spaces">          </span><span class="istickedoff">let ty' = Util.substituteTyVars' everythingAvailable (Map.fromList substs) ty</span>
+<span class="lineno"> 2639 </span><span class="spaces">          </span><span class="istickedoff">-- The only way checking can return an updated type is if</span>
+<span class="lineno"> 2640 </span><span class="spaces">          </span><span class="istickedoff">-- there's also an error, so discard the type</span>
+<span class="lineno"> 2641 </span><span class="spaces">          </span><span class="istickedoff">_ &lt;- checkType kindStar ty'</span>
+<span class="lineno"> 2642 </span><span class="spaces">          </span><span class="istickedoff">return schema</span>
+<span class="lineno"> 2643 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2644 </span><span class="spaces">    </span><span class="istickedoff">let avail = Set.fromList $ case contextLC of</span>
+<span class="lineno"> 2645 </span><span class="spaces">          </span><span class="istickedoff">Current -&gt; [Current]</span>
+<span class="lineno"> 2646 </span><span class="spaces">          </span><span class="istickedoff">WarnDeprecated -&gt; [Current, WarnDeprecated]</span>
+<span class="lineno"> 2647 </span><span class="spaces">          </span><span class="istickedoff">HideDeprecated -&gt; [Current, WarnDeprecated, HideDeprecated, Experimental]</span>
+<span class="lineno"> 2648 </span><span class="spaces">          </span><span class="istickedoff">Experimental -&gt; [Current, Experimental]</span>
+<span class="lineno"> 2649 </span><span class="spaces">    </span><span class="istickedoff">runTI <span class="nottickedoff">ppopts</span> avail <span class="nottickedoff">ScopedMap.empty</span> tyenv check</span></span>
+<span class="lineno"> 2650 </span>
+<span class="lineno"> 2651 </span>-- | Check a schema (type) pattern as used by :search. (This is an
+<span class="lineno"> 2652 </span>--   external interface.)
+<span class="lineno"> 2653 </span>--
+<span class="lineno"> 2654 </span>--   The first two arguments are the starting variable and typedef
+<span class="lineno"> 2655 </span>--   environments to use. The third argument is the pattern.
+<span class="lineno"> 2656 </span>--
+<span class="lineno"> 2657 </span>--   Returns a possibly updated pattern.
+<span class="lineno"> 2658 </span>--
+<span class="lineno"> 2659 </span>checkSchemaPattern ::
+<span class="lineno"> 2660 </span>      Set PrimitiveLifecycle -&gt;
+<span class="lineno"> 2661 </span>      VarEnv -&gt;
+<span class="lineno"> 2662 </span>      TyEnv -&gt;
+<span class="lineno"> 2663 </span>      SchemaPattern -&gt;
+<span class="lineno"> 2664 </span>      Result SchemaPattern
+<span class="lineno"> 2665 </span><span class="decl"><span class="istickedoff">checkSchemaPattern _avail _env _tenv pat =</span>
+<span class="lineno"> 2666 </span><span class="spaces">    </span><span class="istickedoff">-- For the time being, do nothing -- we specifically don't want it</span>
+<span class="lineno"> 2667 </span><span class="spaces">    </span><span class="istickedoff">-- to reject unbound/free type variables (see Search.hs for a</span>
+<span class="lineno"> 2668 </span><span class="spaces">    </span><span class="istickedoff">-- discussion of why) or underapplied type constructors, so the</span>
+<span class="lineno"> 2669 </span><span class="spaces">    </span><span class="istickedoff">-- only check in checkType that makes sense to apply is the one</span>
+<span class="lineno"> 2670 </span><span class="spaces">    </span><span class="istickedoff">-- for _overapplied_ type constructors, and that is (a) not</span>
+<span class="lineno"> 2671 </span><span class="spaces">    </span><span class="istickedoff">-- critical (an overapplied type constructor will never match</span>
+<span class="lineno"> 2672 </span><span class="spaces">    </span><span class="istickedoff">-- anything valid) and (b) as noted in checkType not currently</span>
+<span class="lineno"> 2673 </span><span class="spaces">    </span><span class="istickedoff">-- actually reasonable because of limitations in the concrete</span>
+<span class="lineno"> 2674 </span><span class="spaces">    </span><span class="istickedoff">-- syntax. Point (b) will probably change eventually, so we want</span>
+<span class="lineno"> 2675 </span><span class="spaces">    </span><span class="istickedoff">-- to keep this hook and keep knowledge of its internals private</span>
+<span class="lineno"> 2676 </span><span class="spaces">    </span><span class="istickedoff">-- here even though for now it's a nop.</span>
+<span class="lineno"> 2677 </span><span class="spaces">    </span><span class="istickedoff">(Right pat, [])</span></span>
+<span class="lineno"> 2678 </span>
+<span class="lineno"> 2679 </span>
+<span class="lineno"> 2680 </span>{-
+<span class="lineno"> 2681 </span>Note [-Wincomplete-uni-patterns and irrefutable patterns]
+<span class="lineno"> 2682 </span>~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<span class="lineno"> 2683 </span>Various parts of SAW use irrefutable patterns in functions that assume that
+<span class="lineno"> 2684 </span>their arguments have particular shapes. For example, inferDecl in this module
+<span class="lineno"> 2685 </span>matches on ~[(e1,s)] with an irrefutable pattern because it assumes the
+<span class="lineno"> 2686 </span>invariant that the list will have exactly one element. This lets inferDecl be
+<span class="lineno"> 2687 </span>slightly lazier when evaluated.
+<span class="lineno"> 2688 </span>
+<span class="lineno"> 2689 </span>Unfortunately, this use of irrefutable patterns is at odds with the
+<span class="lineno"> 2690 </span>-Wincomplete-uni-patterns warning. At present, -Wincomplete-uni-patterns will
+<span class="lineno"> 2691 </span>produce a warning for any irrefutable pattern that does not cover all possible
+<span class="lineno"> 2692 </span>data constructors. While we could rewrite functions like `inferDecl` to
+<span class="lineno"> 2693 </span>explicitly provide a fall-through case, that would change its strictness
+<span class="lineno"> 2694 </span>properties. As a result, we simply disable -Wincomplete-uni-patterns warnings
+<span class="lineno"> 2695 </span>in each part of SAW that uses irrefutable patterns.
+<span class="lineno"> 2696 </span>
+<span class="lineno"> 2697 </span>Arguably, -Wincomplete-uni-patterns shouldn't be producing warnings for
+<span class="lineno"> 2698 </span>irrefutable patterns at all. GHC issue #14800
+<span class="lineno"> 2699 </span>(https://gitlab.haskell.org/ghc/ghc/-/issues/14800) proposes this idea.
+<span class="lineno"> 2700 </span>If that issue is fixed in the future, we may want to reconsider whether we want
+<span class="lineno"> 2701 </span>to disable -Wincomplete-uni-patterns.
+<span class="lineno"> 2702 </span>-}
 
 </pre>
 </body>
