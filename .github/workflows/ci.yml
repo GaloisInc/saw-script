@@ -653,15 +653,19 @@ jobs:
       ISABELLE_COMMIT: '8d9ad3f2984ab945542dad1a0802f0c1b0517337'
       AFP_COMMIT: '9db853f97465cce2ce1ed731b4c8ba94187ea650'
     steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+
       - name: Checkout Isabelle
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: 'isabelle-prover/mirror-isabelle'
           ref: ${{ env.ISABELLE_COMMIT }}
           path: isabelle
 
       - name: Checkout AFP
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: 'isabelle-prover/mirror-afp-devel'
           ref: ${{ env.AFP_COMMIT }}
@@ -672,13 +676,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y curl perl
 
-      - name: Cache Isabelle user directory
-        uses: actions/cache@v4
+      - name: Restore Isabelle user directory
+        id: cache-isabelle-restore
+        uses: actions/cache/restore@v6
         with:
-          path: ~/.isabelle
+          path: |
+            ~/.isabelle/contrib
+            ~/.isabelle/heaps
           key: ${{ runner.os }}-isabelle-${{ env.ISABELLE_COMMIT }}-afp-${{ env.AFP_COMMIT }}
           restore-keys: |
-            ${{ runner.os }}-isabelle-${{ env.ISABELLE_COMMIT }}-
             ${{ runner.os }}-isabelle-
 
       - name: Initialize Isabelle components
@@ -700,6 +706,14 @@ jobs:
           isabelle components -u "$PWD/otherTests/saw-core-isabelle"
           isabelle build Cryptol_Tests
 
+      - name: Save Isabelle user directory
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.isabelle/contrib
+            ~/.isabelle/heaps
+          key: ${{ steps.cache-isabelle-restore.outputs.cache-primary-key }}
 
   crux-mir-comp-tests:
     needs: [build]
