@@ -297,7 +297,6 @@ ioParseResult :: Either P.ParseError a -> IO a
 ioParseResult res = case res of
   Right a -> return a
   Left e  -> fail $ "Cryptol parse error:\n" ++ show (P.ppError e)
-               -- X.throwIO (ParseError e)
 
 
 -- NamingEnv and Related -------------------------------------------------------
@@ -713,8 +712,14 @@ bindLoadedModule :: SharedContext
                  -> CryptolEnv
                  -> IO CryptolEnv
 bindLoadedModule _ (asName, origName) env =
-  return $ C.mapImports
-    ((:) (mkImport C.ImportTop PublicAndPrivate origName (Just asName) Nothing)) env
+  return $
+    C.mapImports
+      -- insert a new ImportData entry into the CryptolEnv:
+      (\is->
+          mkImport C.ImportTop PublicAndPrivate origName (Just asName) Nothing
+        : is
+      )
+      env
 
 
 -- | bindCryptolModule - when we have the @cryptol_prims ()@ created
@@ -915,7 +920,7 @@ importCryptolModule ::
   CryptolEnv                {- ^ Extend this environment -} ->
   Either FilePath P.ModName {- ^ Where to find the module -} ->
   Maybe P.ModName           {- ^ Name qualifier -} ->
-  C.IsSubmodule             {- ^ isSubmodule: True if 'import submodule ...' -} ->
+  C.IsSubmodule             {- ^ True if 'import submodule ...' -} ->
   ImportVisibility          {- ^ What visibility to give symbols from this module -} ->
   Maybe P.ImportSpec        {- ^ What to import -} ->
   IO CryptolEnv
