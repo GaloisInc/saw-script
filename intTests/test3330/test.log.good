@@ -1,6 +1,6 @@
 Loading file "test.saw"
-Verifying test/d0657a98::g[0] ...
-Simulating test/d0657a98::g[0] ...
+Verifying test/54123856::g[0] ...
+Simulating test/54123856::g[0] ...
 == Anticipated failure message ==
 Stack trace:
    (builtin) in mir_verify
@@ -10,13 +10,13 @@ Stack trace:
    test.saw:12:1-12:16 (at top level)
 Symbolic execution failed.
 Abort due to assertion failure:
-  test.rs:2:14: 2:16: error: in test/d0657a98::f[0]
+  test.rs:2:14: 2:16: error: in test/54123856::f[0]
   attempted to read empty mux tree
 
 
 
-Verifying test/d0657a98::g[0] ...
-Simulating test/d0657a98::g[0] ...
+Verifying test/54123856::g[0] ...
+Simulating test/54123856::g[0] ...
 == Anticipated failure message ==
 Stack trace:
    (builtin) in mir_verify
@@ -26,16 +26,16 @@ Stack trace:
    test.saw:15:1-15:16 (at top level)
 Symbolic execution failed.
 Abort due to assertion failure:
-  test.rs:2:14: 2:16: error: in test/d0657a98::f[0]
+  test.rs:2:14: 2:16: error: in test/54123856::f[0]
   attempted to read empty mux tree
   Context:
-    test.rs:2:14: 2:16: test/d0657a98::f[0]
+    test.rs:2:14: 2:16: test/54123856::f[0]
     ... 1 calling frames omitted
 
 
 
-Verifying test/d0657a98::g[0] ...
-Simulating test/d0657a98::g[0] ...
+Verifying test/54123856::g[0] ...
+Simulating test/54123856::g[0] ...
 == Anticipated failure message ==
 Stack trace:
    (builtin) in mir_verify
@@ -45,11 +45,11 @@ Stack trace:
    test.saw:18:1-18:16 (at top level)
 Symbolic execution failed.
 Abort due to assertion failure:
-  test.rs:2:14: 2:16: error: in test/d0657a98::f[0]
+  test.rs:2:14: 2:16: error: in test/54123856::f[0]
   attempted to read empty mux tree
   Context:
-    test.rs:2:14: 2:16: test/d0657a98::f[0]
-    test.rs:8:5: 8:9: test/d0657a98::g[0]
+    test.rs:2:14: 2:16: test/54123856::f[0]
+    test.rs:8:5: 8:9: test/54123856::g[0]
 
 
 

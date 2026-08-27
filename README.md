@@ -168,7 +168,7 @@ SAW uses this environment variable to find them; it must be set to use the
 Rust verification subsystem.
 
 Currently, SAW supports [version
-12](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#12) of
+13](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#13) of
 `mir-json`'s schema.
 
 ## Notes on Windows
