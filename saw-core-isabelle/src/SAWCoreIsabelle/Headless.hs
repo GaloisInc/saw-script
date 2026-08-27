@@ -106,9 +106,9 @@ loadModuleInput file input = do
   tryIO (Cry.runModuleM input (CryBase.loadModuleByPath True file)) >>= \case
     Left ioerr -> fatalErr $ "Failed to read input file: " ++ show ioerr
     Right (resultEither, warnings) -> do
-      mapM_ (logErr 0 . show . pp) warnings
+      mapM_ (logErr 0 . T.unpack . pp) warnings
       case resultEither of
-          Left er -> logErr (-1) (show $ pp er) >> throw (RunnerError (show $ pp er))
+          Left er -> logErr (-1) (T.unpack $ pp er) >> throw (RunnerError (show $ pp er))
           Right (topEntity,env) -> return $ (topEntity, input{Cry.minpModuleEnv = env})
 
 checkTargetSelect :: IsaOpts.Available => Cry.ModuleEnv -> IO ()
