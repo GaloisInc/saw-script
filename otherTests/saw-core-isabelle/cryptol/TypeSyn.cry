@@ -1,0 +1,9 @@
+module TypeSyn where
+
+type Div2T k = k / 2
+
+// Div2T n implicitly requires fin n
+
+seq_noop : {n} (fin n) => [Div2T n] -> [Div2T n]
+seq_noop x = x
+

@@ -1,0 +1,2 @@
+res <- exec "bash" ["-c","cryptol-to-isabelle ./cryptol/Inf.cry -d ./isabelle --keep-going --all-modules 2>&1 || true"] "";
+print res;

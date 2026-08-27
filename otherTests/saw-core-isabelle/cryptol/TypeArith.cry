@@ -1,0 +1,48 @@
+module TypeArith where
+
+width_val : {a} (fin a) => [a] -> [a]
+width_val x | a < 2 => x
+            | a >= 2 => lg2 (x+1)
+
+lg2_valid : {a} (fin a) => [a] -> Bit
+lg2_valid x | a < 2 => lg2 x == 0
+            | a >= 2 =>  (lg2 ((2:[a+1]) ^^ lg2 ((zext x):[a+1])) == lg2 ((zext x):[a+1]))
+                         /\ (lg2 ((zext x : [a+1]) + 1) == 1 + lg2 (zext x) ==> ((2:[a+1]) ^^ lg2 x) == zext x)
+
+lg2_concrete_test : Bit
+lg2_concrete_test = 
+  map lg2 [0 : [64], 1, 2,30,31,32,33,34,35,36,62,63,64,65] == 
+          [0       , 0, 1, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 7]
+
+type_width : {a} (fin a) => Bit
+type_width =  (`(width a) : [a]) == width_val (`(a) : [a])
+
+type_add: {a,b} (fin a, fin b) => Bit
+type_add = (`(a + b) : Integer) == `(a) + `(b)
+
+type_mul: {a,b} (fin a, fin b) => Bit
+type_mul = (`(a * b) : Integer) == `(a) * `(b)
+
+type_exp: {a,b} (fin a, fin b) => Bit
+type_exp = (`(a ^^ b) : Integer) == `(a) ^^ `(b)
+
+type_sub: {a,b} (fin a, fin b, a >= b) => Bit
+type_sub = (`(a - b) : Integer) == `(a) - `(b)
+
+type_div: {a,b} (fin a, fin b, b >= 1) => Bit
+type_div = (`(a / b) : Integer) == `(a) / `(b)
+
+type_mod: {a,b} (fin a, fin b, b >= 1) => Bit
+type_mod = (`(a % b) : Integer) == `(a) % `(b)
+
+type_min : {a,b} (fin a, fin b) => Bit
+type_min = (`(min a b) : Integer) == min `(a) `(b)
+
+type_max : {a,b} (fin a, fin b) => Bit
+type_max = (`(min a b) : Integer) == min `(a) `(b)
+
+type_lg2 : {a} (fin a) => Bit
+type_lg2 = (`(lg2 a) : [a]) == lg2 `(a)
+
+type_lits: Bit
+type_lits = `(0) == (0 : Integer) /\ `(1) == (1 : Integer) /\ `(2) == (2 : Integer) /\ `(1234) == (1234 : Integer)

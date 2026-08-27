@@ -1,0 +1,48 @@
+
+context notes [[typedef_overloaded]] begin
+datatype ($2) $1 = $3
+end
+end
+
+instantiation $1 :: ($10) strip_type begin
+definition "strip_type_$1 \<equiv> (\<lambda>(_ :: ($2) $1 itself). T [$4] (STR ''$1''))"
+instance ..
+end
+
+context includes cryptol_translation_syntax begin
+lemma $1_same_type[simp]: 
+  "same_type TYPE(($11) $1) TYPE(($12) $1) = ($13)"
+  by (simp add: same_type_def strip_type_$1_def strip_type_seq_def)
+end
+
+instantiation $1 :: ($6) coercible
+begin
+definition strip_$1 :: "($2) $1 => stripped" where
+  "strip_$1 \<equiv> case_$1 $7"
+
+definition unstrip_$1 :: "stripped => ($2) $1" where
+  "unstrip_$1 \<equiv> (\<lambda> r. let (a :: nat, b :: stripped) = unstrip r in 
+     (case a of $8) b)"
+
+instance
+  apply standard
+  apply (simp add: strip_$1_def unstrip_$1_def)
+  by (auto split: $1.splits)
+end
+
+instance $1 :: ($6) coercible_atom
+  apply standard
+  by (auto simp add: strip_$1_def split: $1.splits)
+
+interpretation $1: coercion "case_$1 $15"
+  apply standard
+  supply [simp] = unstrip_$1_def strip_$1_def coerce_to_def
+  by (auto split: $1.splits)
+
+instantiation $1 :: ($9) not_bool begin
+definition "is_bool0_$1 (_ :: ($2) $1 itself) \<equiv> False"
+instance by (rule not_bool_class[OF is_bool0_$1_def])
+end
+interpretation not_bool_code "TYPE(($2) $1)" .
+
+context includes cryptol_translation_syntax begin

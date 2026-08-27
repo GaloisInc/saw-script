@@ -1,0 +1,25 @@
+module Negate where
+
+negate_logic : {a} (Logic a) => a -> a
+negate_logic x = ~x
+
+negate_valid : {a} (Logic a, Eq a) => a -> Bit
+negate_valid x = (negate_logic x == ~x)
+
+negate_valid_bit : Bit -> Bit
+negate_valid_bit = negate_valid
+
+negate_valid_word : {a} (fin a) => [a] -> Bit
+negate_valid_word = negate_valid
+
+negate_valid_seq : {a, b} (fin a, Logic b, Eq b) => [a]b -> Bit
+negate_valid_seq = negate_valid
+
+negate_valid_seq_seq_word : [32][16][8] -> Bit
+negate_valid_seq_seq_word = negate_valid_seq`{32,[16][8]}
+
+negate_true_is_false : Bit
+negate_true_is_false = (~True) == False
+
+negate_word_lit : Bit
+negate_word_lit = ~[True,True,False,True] == [False,False,True,False]

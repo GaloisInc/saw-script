@@ -1,0 +1,2 @@
+let modname = "Comprehension";
+include "./saw/isa_test.saw";

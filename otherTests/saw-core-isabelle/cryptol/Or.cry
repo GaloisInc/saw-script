@@ -1,0 +1,32 @@
+module Or where
+
+or_logic : {a} (Logic a) => a -> a -> a
+or_logic x y = x || y
+
+or_valid : {a} (Logic a, Eq a) => a -> a -> Bit
+or_valid x y = (or_logic x y == (x || y))
+
+or_valid_Bit : Bit -> Bit -> Bit
+or_valid_Bit = or_valid
+
+or_valid_word : {a} (fin a) => [a] -> [a] -> Bit
+or_valid_word = or_valid
+
+or_valid_seq : {a, b} (fin a, Logic b, Eq b) => [a]b -> [a]b -> Bit
+or_valid_seq = or_valid
+
+or_valid_seq_seq_word : [32][16][8] -> [32][16][8] -> Bit
+or_valid_seq_seq_word = or_valid_seq`{32,[16][8]}
+
+or_truth_table : Bit
+or_truth_table =
+     (False || False == False)
+  && (True || False == True)
+  && (False || True == True)
+  && (True || True == True)
+
+or_word_lit : Bit
+or_word_lit =
+    [True,True,False,True] ||
+    [False,True,False,True] ==
+    [True,True,False,True]

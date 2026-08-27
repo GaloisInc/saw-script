@@ -45,6 +45,7 @@ module CryptolSAWCore.CryptolEnv
   , bindIntegerType
   , parseTypedTerm
   , pExprToTypedTerm
+  , runInferOutput
   , parseDecls
   , parseSchema
   , declareName
@@ -55,6 +56,7 @@ module CryptolSAWCore.CryptolEnv
   , meSolverConfig
   , C.ImportPrimitiveOptions(..)
   , C.defaultPrimitiveOptions
+  , liftModuleM
   )
   where
 
@@ -1194,7 +1196,6 @@ pExprToTypedTerm sc env pexpr = do
   -- Translate
   trm <- C.translateExpr sc expr
   return (TypedTerm (TypedTermSchema schema) trm)
-
 -- | Read Cryptol declarations from `InputText` and ingest them into
 --   the `CryptolEnv`.
 parseDecls ::

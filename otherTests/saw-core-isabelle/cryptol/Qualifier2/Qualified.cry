@@ -1,0 +1,5 @@
+module Qualifier2::Qualified where
+
+import RecordDecls as RD
+
+type R n = RD::R n

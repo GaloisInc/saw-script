@@ -151,6 +151,7 @@ The following can be run with `cabal test`:
 - `saw-core-tests`
 - `cryptol-saw-core-tests`
 - `saw-core-rocq-tests`
+- `saw-core-isabelle-tests`
 - `crux-mir-comp-tests`
 
 There is one other set of tests:

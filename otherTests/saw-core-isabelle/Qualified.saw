@@ -1,0 +1,12 @@
+
+enable_experimental;
+cryptol_add_path "./cryptol";
+let q1 = "./cryptol/Qualifier1/Qualified.cry";
+let q2 = "./cryptol/Qualifier2/Qualified.cry";
+
+write_isabelle_cryptol_modules [] [q1, q2] "./isabelle";
+thys <- exec "cat" 
+ [ "./isabelle/Qualifier1_Qualified.thy"
+ , "./isabelle/Qualifier2_Qualified.thy"
+ ] "";
+print thys;

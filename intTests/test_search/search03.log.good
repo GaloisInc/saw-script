@@ -101,7 +101,7 @@ w4_unint_z3_using : String -> [String] -> ProofScript ()
 write_goal : String -> ProofScript ()
 yices : ProofScript ()
 z3 : ProofScript ()
-42 more matches tagged experimental; use enable_experimental to see them
+43 more matches tagged experimental; use enable_experimental to see them
 12 more matches tagged deprecated; use enable_deprecated to see them
 --------------------------------
 -- (ProofScript)
@@ -206,7 +206,7 @@ w4_unint_z3_using : String -> [String] -> ProofScript ()
 write_goal : String -> ProofScript ()
 yices : ProofScript ()
 z3 : ProofScript ()
-42 more matches tagged experimental; use enable_experimental to see them
+43 more matches tagged experimental; use enable_experimental to see them
 12 more matches tagged deprecated; use enable_deprecated to see them
 --------------------------------
 -- ProofScript Int

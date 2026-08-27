@@ -1,0 +1,32 @@
+module XOR where
+
+xor_logic : {a} (Logic a) => a -> a -> a
+xor_logic x y = x ^ y
+
+xor_valid : {a} (Logic a, Eq a) => a -> a -> Bit
+xor_valid x y = (xor_logic x y == (x ^ y))
+
+xor_valid_Bit : Bit -> Bit -> Bit
+xor_valid_Bit = xor_valid
+
+xor_valid_word : {a} (fin a) => [a] -> [a] -> Bit
+xor_valid_word = xor_valid
+
+xor_valid_seq : {a, b} (fin a, Logic b, Eq b) => [a]b -> [a]b -> Bit
+xor_valid_seq = xor_valid
+
+xor_valid_seq_seq_word : [32][16][8] -> [32][16][8] -> Bit
+xor_valid_seq_seq_word = xor_valid_seq`{32,[16][8]}
+
+xor_truth_table : Bit
+xor_truth_table =
+     (False ^ False == False)
+  && (True ^ False == True)
+  && (False ^ True == True)
+  && (True ^ True == False)
+
+xor_word_lit : Bit
+xor_word_lit =
+    [True,True,False,True] ^
+    [False,True,False,True] ==
+    [True,False,False,False]

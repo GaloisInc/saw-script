@@ -1,0 +1,30 @@
+Loading file "Qualified.saw"
+Successfully translated theory Qualifier1_Qualified
+Successfully translated theory RecordDecls
+Successfully translated theory Qualifier2_Qualified
+Translation successful. Generating theory files...
+Generating b_w_recordT.thy
+Successfully wrote './isabelle/b_w_recordT.thy'
+Generating s_s_recordT.thy
+Successfully wrote './isabelle/s_s_recordT.thy'
+Generating Qualifier1_Qualified.thy
+Successfully wrote './isabelle/Qualifier1_Qualified.thy'
+Generating Qualifier2_Qualified.thy
+Successfully wrote './isabelle/Qualifier2_Qualified.thy'
+Generating RecordDecls.thy
+Successfully wrote './isabelle/RecordDecls.thy'
+theory "Qualifier1_Qualified"
+imports "Cryptol.Cryptol"
+begin
+
+end
+theory "Qualifier2_Qualified"
+imports "Cryptol.Cryptol" RecordDecls
+begin
+
+context includes cryptol_translation_syntax begin
+type_synonym ('n) R = "('n) RecordDecls.R"
+
+end
+end
+

@@ -1,0 +1,14 @@
+end
+
+locale $1 =
+  assumes $2
+begin
+
+$3
+end
+
+$4
+
+$5
+
+context includes cryptol_translation_syntax begin

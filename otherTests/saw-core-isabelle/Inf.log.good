@@ -1,0 +1,16 @@
+Loading file "Inf.saw"
+[error] Errors raised while translating theory Inf
+[error] Errors raised during translation:
+[error] cryptol/Inf.cry:1:1--1:1
+Errors were raised when translating Cryptol module: Inf
+cryptol/Inf.cry:7:18--7:30
+Unsupported cryptol type: inf
+Reading cryptol input files:
+cryptol/Inf.cry
+
+[warning] at cryptol/Inf.cry:3:17--3:18
+ Type parameter is not constrained to fin: a`895
+Resulting theories will be incomplete. Generating theory files...
+Generating Inf.thy
+Successfully wrote 'isabelle/Inf.thy'
+

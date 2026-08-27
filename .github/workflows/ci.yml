@@ -217,6 +217,7 @@ jobs:
             cryptol-saw-core-tests
             crux-mir-comp-tests
             saw-core-rocq-tests
+            saw-core-isabelle-tests
           dest: dist-tests
 
       # In the next 2 steps, we upload to different names depending on whether
@@ -636,6 +637,83 @@ jobs:
       - working-directory: otherTests/saw-core-rocq
         shell: bash
         run: opam exec -- make -j rocq
+
+  isabelle-builds:
+    needs: [config]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      # commits with Isabelle2025-2 tag in mercurial repos
+      ISABELLE_COMMIT: '8d9ad3f2984ab945542dad1a0802f0c1b0517337'
+      AFP_COMMIT: '9db853f97465cce2ce1ed731b4c8ba94187ea650'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+
+      - name: Checkout Isabelle
+        uses: actions/checkout@v7
+        with:
+          repository: 'isabelle-prover/mirror-isabelle'
+          ref: ${{ env.ISABELLE_COMMIT }}
+          path: isabelle
+
+      - name: Checkout AFP
+        uses: actions/checkout@v7
+        with:
+          repository: 'isabelle-prover/mirror-afp-devel'
+          ref: ${{ env.AFP_COMMIT }}
+          path: afp
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl perl
+
+      - name: Restore Isabelle user directory
+        id: cache-isabelle-restore
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.isabelle/contrib
+            ~/.isabelle/heaps
+          key: ${{ runner.os }}-isabelle-${{ env.ISABELLE_COMMIT }}-afp-${{ env.AFP_COMMIT }}
+          restore-keys: |
+            ${{ runner.os }}-isabelle-
+
+      - name: Initialize Isabelle components
+        run: ./isabelle/Admin/init
+
+      - name: Add Isabelle to PATH
+        run: echo "${{ github.workspace }}/isabelle/bin" >> $GITHUB_PATH
+
+      - name: Add AFP as Isabelle Component
+        run: isabelle components -u ${{ github.workspace }}/afp/thys
+
+      - name: "Build base Cryptol image"
+        run: |
+          isabelle components -u "$PWD/saw-core-isabelle/isabelle"
+          isabelle build -b Cryptol_Base
+
+      - name: "Build Test image"
+        run: |
+          isabelle components -u "$PWD/otherTests/saw-core-isabelle"
+          isabelle build Cryptol_Tests
+
+      - name: Save Isabelle user directory
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.isabelle/contrib
+            ~/.isabelle/heaps
+          key: ${{ steps.cache-isabelle-restore.outputs.cache-primary-key }}
 
   crux-mir-comp-tests:
     needs: [build]
@@ -1209,6 +1287,7 @@ jobs:
     needs:
       - build
       - rocq-builds
+      - isabelle-builds
       - crux-mir-comp-tests
       - saw-remote-api-tests
       - cabal-test

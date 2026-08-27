@@ -1,0 +1,60 @@
+module RecordDecls where
+
+type R n = { b : Bit, w : [n] }
+
+flipR : {n} (fin n) => R n -> R n
+flipR { b = x, w = y } = { b = ~x, w= ~y}
+
+flipR_valid : {n} (fin n) => R n -> Bit
+flipR_valid w = (w == (flipR (flipR w)))
+
+type S = { b : Integer, w : Integer }
+
+flipS : S -> S
+flipS { b = x, w = y } = { b = -x, w= -y}
+
+flipS_valid : S -> Bit
+flipS_valid w = (w == (flipS (flipS w)))
+
+type R2 n = { b : Bit, w : [n * 2] }
+
+flipR2 : {n,m} (fin n, fin m, m == n + n) => R m -> R2 n
+flipR2 x = flipR x
+
+flipR2_valid : {n,m} (fin n, fin m, m == n + n) => R m -> Bit
+flipR2_valid x = (x == flipR2 (flipR2 x))
+
+R1_R2_zip : {n,m} (fin n, fin m) => [n](R (m*2)) -> [n](R2 m) -> [n](R2 m)
+R1_R2_zip = zipWith (\r r2 -> { b = r.b || r2.b, w = r.w || r2.w})
+
+R1_R2_zip_concrete : Bit
+R1_R2_zip_concrete = 
+ (R1_R2_zip 
+  ([{b = True, w = 100}, {b = False, w = 2}] : [2](R 32))
+  ([{b = True, w = 500}, {b = True, w = 5}] : [2](R2 16))) ==
+  ([{b = True, w = 0x000001f4}, {b = True, w = 0x00000007}])
+
+type Z = { s : Bit }
+
+Z_test : Z -> Bit
+Z_test r = r.s
+
+newtype RN n = { b : Bit, w : [n] }
+
+flipRN : {n} (fin n) => RN n -> RN n
+flipRN r = RN { b = ~r.b, w= ~r.w}
+
+flipRN_valid : {n} (fin n) => RN n -> Bit
+flipRN_valid r = (r.b == (flipRN (flipRN r)).b) && (r.w == (flipRN (flipRN r)).w) 
+
+swapS : S -> S
+swapS s = { { s | b = s.w } | w = s.b }
+
+swapS_valid : S -> Bit
+swapS_valid s = swapS (swapS s) == s
+
+rSet : {n, m} (fin n, n == m) => R n -> [m] -> R m
+rSet r x = { r | w = x }
+
+rSet_valid : {n} (fin n) => R n -> Bit
+rSet_valid r = rSet r (r.w) == r

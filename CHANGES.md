@@ -161,6 +161,26 @@ This release supports [version
 * `crux-mir-comp` has been unbundled from the SAW release distribution
   in preparation for creating [a standalone Crux release](https://github.com/GaloisInc/crux).
 
+# 1.5.1 -- 2026-05-22
+
+This release adds experimental support for translating Cryptol modules into
+Isabelle theories, with limited support for translating SAWCore terms.
+See `saw-core-isabelle/README.md`.
+
+## New Features
+
+* SAW now has the following commands for generating Isabelle theories 
+  (requires `enable_experimental`):
+  - `write_isabelle_cryptol_modules` for translating Cryptol modules
+  - `offline_isabelle` for translating SAW subgoals
+  - `write_isabelle_term` for translating SAWCore terms
+
+  Supporting theories are in `saw-core-isabelle/isabelle/theories`.
+  
+  Additionally, the release includes a standalone binary
+  `cryptol-to-isabelle` for translating Cryptol modules into Isabelle
+  theories.
+
 # 1.5 -- 2026-01-31
 
 This release supports [version

@@ -3113,6 +3113,14 @@ do_offline_rocq :: Text -> ProofScript ()
 do_offline_rocq f =
   offline_rocq (Text.unpack f)
 
+do_offline_isabelle :: Text -> ProofScript ()
+do_offline_isabelle t = 
+  offline_isabelle (Text.unpack t)
+
+do_write_isabelle_term :: Text -> Text -> Term -> TopLevel ()
+do_write_isabelle_term name filename t =
+  writeIsabelleTerm name (Text.unpack filename) t
+
 do_auto_match :: Text -> Text -> TopLevel ()
 do_auto_match f1 f2 =
   autoMatch stmtInterpreter (Text.unpack f1) (Text.unpack f2)
@@ -3242,6 +3250,9 @@ do_write_vcd :: Text -> TypedTerm -> TopLevel ()
 do_write_vcd fpath t =
   write_vcd (Text.unpack fpath) t
 
+do_write_isabelle_cryptol_modules :: [CEnv.ExtCryptolModule] -> [Text] -> Text -> TopLevel ()
+do_write_isabelle_cryptol_modules inmods sources outdir =
+  writeIsabelleCryptolModules inmods (map Text.unpack sources) (Text.unpack outdir)
 
 ------------------------------------------------------------
 -- Primitive tables
@@ -3476,7 +3487,10 @@ primitives = Map.fromList $
   , prim "type"                "Term -> Type"
     (funVal1 term_type)
     Current
-    [ "Return the type of the given term." ]
+    [ "Return the Cryptol type of the given term."
+    , "May fail if the term does not have an associated Cryptol type,"
+    , "and one cannot be inferred."
+    ]
 
   , prim "print_type"          "Term -> TopLevel ()"
     (pureVal print_type)
@@ -4254,6 +4268,14 @@ primitives = Map.fromList $
     (pureVal print_term)
     Current
     [ "Pretty-print the given term in SAWCore syntax." ]
+
+  , prim "show_cryptol_term"         "Term -> String"
+    (funVal1 show_cryptol_term)
+    Experimental
+    [ "Pretty-print the given term in Cryptol syntax, yielding a"
+    , "String. Fails if the term cannot be represented as"
+    , "a Cryptol expression."
+    ]
 
   , prim "print_term_depth"    "Int -> Term -> TopLevel ()"
     (pureVal print_term_depth)
@@ -5985,6 +6007,32 @@ primitives = Map.fromList $
     HideDeprecated
     [ "Legacy alternative name for 'offline_rocq'."
     , "Expected to be removed in SAW 1.7."
+    ]
+
+    ------------------------------------------------------------
+    -- Translation to Isabelle
+
+  , prim "write_isabelle_cryptol_modules"  "[CryptolModule] -> [String] -> String -> TopLevel ()"
+    (pureVal do_write_isabelle_cryptol_modules)
+    Experimental
+    [ "Translate a collection of Cryptol modules to Isabelle"
+    , "theories, and write them into the given directory."
+    , " - The second argument is a list of Cryptol source files to be translated."
+    , " - If no modules or sources are specified, all currently imported Cryptol modules are translated."
+    , " - The third argument is the target directory for the resulting theory files."
+    ]
+  , prim "offline_isabelle" "String -> ProofScript ()"
+    (pureVal do_offline_isabelle)
+    Experimental
+    [ "Write out a representation of the current goal in Isabelle syntax."
+    , "The argument is a prefix to use for file names."
+    ]
+  , prim "write_isabelle_term" ("String -> String -> Term -> TopLevel ()")
+    (pureVal do_write_isabelle_term)
+    Experimental
+    [ "Write out a representation of a SAWCore term in Isabelle syntax as a defined constant."
+    , " - The first argument is both the name of the theory and the new constant."
+    , " - The second argument is the output directory path."
     ]
 
     ------------------------------------------------------------
@@ -8289,13 +8337,10 @@ primitives = Map.fromList $
 
   , prim "mir_unint" "[String] -> MIRSetup ()"
     (pureVal mir_unint) Current unint_help
-  ]
-  ++
-  [
     ------------------------------------------------------------
     -- Other miscellaneous features
 
-    prim "auto_match" "String -> String -> TopLevel ()"
+  , prim "auto_match" "String -> String -> TopLevel ()"
     (pureVal do_auto_match)
     Current
     [ "Interactively decides how to align two modules of potentially"

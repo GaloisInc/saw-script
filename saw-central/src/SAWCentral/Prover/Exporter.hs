@@ -41,7 +41,9 @@ module SAWCentral.Prover.Exporter
   , writeVerilogSAT
   , write_verilog
   , writeCoreProp
-
+  , writeIsabelleCryptolModules
+  , writeIsabelleProp
+  , writeIsabelleTerm
     -- * Misc
   , bitblastPrim
   ) where
@@ -78,7 +80,7 @@ import SAWCore.Recognizer (asPi)
 import SAWCore.SATQuery
 import SAWCore.SharedTerm as SC
 
-import CryptolSAWCore.CryptolEnv (loadCryptolModule)
+import CryptolSAWCore.CryptolEnv (loadCryptolModule, ExtCryptolModule)
 import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import CryptolSAWCore.TypedTerm
 
@@ -90,7 +92,6 @@ import qualified SAWCoreWhat4.What4 as W4Sim
 import qualified SAWCoreSBV.SBV as SBV
 import qualified SAWCoreWhat4.What4 as W -- XXX duplicate!?
 import SAWCoreWhat4.ReturnTrip (newSAWCoreExprBuilder, sawCoreState)
-
 import qualified SAWCore.Parser.AST as Un
 
 import SAWCentral.Proof
@@ -109,6 +110,7 @@ import What4.Protocol.SMTLib2.Response (smtParseOptions)
 import What4.Protocol.VerilogWriter (exprsVerilog)
 import What4.Solver.Adapter
 import qualified What4.SWord as W4Sim
+import qualified SAWCoreIsabelle.TranslateSAW as Isabelle
 
 proveWithSATExporter ::
   (FilePath -> SATQuery -> TopLevel a) ->
@@ -594,3 +596,40 @@ bitblastPrim proxy sc t = do
 -}
   BBSim.withBitBlastedTerm proxy sc mempty t $ \be ls -> do
     return (AIG.Network be (toList ls))
+
+
+execIsabelleTT :: Isabelle.TopTT () -> TopLevel ()
+execIsabelleTT f = do
+  sc <- getSharedContext
+  cenv <- getCryptolEnv
+  opts <- getPPOpts
+  merr <- io $ Isabelle.execTopTT (Isabelle.TopTTEnv sc cenv opts) f
+  case merr of
+    Just er -> fail er
+    Nothing -> return ()
+
+writeIsabelleProp ::
+  Text ->
+  FilePath ->
+  Prop ->
+  TopLevel ()
+writeIsabelleProp tnm dest p = do
+  sc <- getSharedContext
+  t <- io (propToTerm sc p)
+  execIsabelleTT $ Isabelle.writeTerm tnm dest t
+
+writeIsabelleTerm ::
+  Text ->
+  FilePath ->
+  Term ->
+  TopLevel ()
+writeIsabelleTerm tnm dest t = 
+  execIsabelleTT $ Isabelle.writeTerm tnm dest t
+
+writeIsabelleCryptolModules ::
+  [ExtCryptolModule] ->
+  [FilePath] ->
+  FilePath ->
+  TopLevel ()
+writeIsabelleCryptolModules extmods sources dest =
+  execIsabelleTT $ Isabelle.writeCryptolModules extmods sources dest

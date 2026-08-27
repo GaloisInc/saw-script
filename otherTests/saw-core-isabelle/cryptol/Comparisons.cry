@@ -1,0 +1,51 @@
+module Comparisons where
+
+eq_logic : {a} (Eq a) => a -> a -> Bit
+eq_logic x y = (x == y)
+
+eq_valid : {a} (Eq a) => a -> a -> Bit
+eq_valid x y = (eq_logic x y == (x == y))
+
+neq_valid : {a} (Eq a) => a -> a -> Bit
+neq_valid x y = ( ~(x == y) == (x != y))
+
+eq_bit_table : Bit
+eq_bit_table =
+  ~(True == False) /\
+  ~(False == True) /\
+  (True == True) /\
+  (False == False)
+
+eq_words_len_mismatch: {a, b} (fin a, fin b, a == b) => [a] -> [b] -> Bit
+eq_words_len_mismatch x y =
+  (x == y) == (eq_logic`{[a]} x y)
+
+lt_logic : {a} (Cmp a) => a -> a -> Bit
+lt_logic x y = (x < y)
+
+lt_valid : {a} (Cmp a) => a -> a -> Bit
+lt_valid x y = (lt_logic x y == (x < y))
+
+lt_bit : Bit
+lt_bit = (False < True) /\ ~(True < True)
+
+comparison_idents: {a} (Cmp a) => a -> a -> Bit
+comparison_idents x y =
+  ((x < y) == (x <= y /\ x != y)) /\
+  ((x < y) == ~(x >= y)) /\
+  ((x > y) == ~(x <= y)) /\
+  ((x > y) == (x >= y /\ x != y))
+
+signed_comparison_idents: {a} (SignedCmp a) => a -> a -> Bit
+signed_comparison_idents x y =
+  ((x <$ y) == (x <=$ y /\ x != y)) /\
+  ((x <$ y) == ~(x >=$ y)) /\
+  ((x >$ y) == ~(x <=$ y)) /\
+  ((x >$ y) == (x >=$ y /\ x != y))
+
+
+min_max_idents: {a} (Cmp a) => a -> a -> Bit
+min_max_idents x y =
+  (x < y ==> (min x y == x /\ max x y == y)) /\
+  (x <= y ==> (min x y == x /\ max x y == y)) /\
+  (min x y <= max x y)
