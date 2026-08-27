@@ -12,11 +12,14 @@ module SAWCoreIsabelle.Error
   ) where
 import           Data.List (intercalate)
 import qualified Data.List.NonEmpty as NE
+import qualified Data.Text as Text
 
 import qualified Cryptol.TypeCheck.AST as Cry
-import           Cryptol.TypeCheck.PP (pretty, PP)
+import           Cryptol.TypeCheck.PP (PP)
 import qualified Cryptol.Parser.Position as Position
 import qualified Cryptol.Utils.Ident as Cry
+
+import qualified CryptolSAWCore.Pretty as CryPP
 
 import qualified Language.Isabelle.Name as Name
 import qualified SAWCoreIsabelle.Options as IsaOpts
@@ -78,7 +81,11 @@ data OuterTranslationError where
   OuterTranslationError :: IsaOpts.Available => TranslationError -> OuterTranslationError
 
 pp :: (IsaOpts.Available, Show a, PP a) => a -> String
-pp a = if IsaOpts.verbosity >= 3 then pretty a ++ "\n (" ++ show a ++ ")" else pretty a
+pp a | IsaOpts.verbosity >= 3 =
+  -- we use the 'Show' instance here to get a detailed dump of the value,
+  -- which may contain information that the pretty representation doesn't
+  Text.unpack (CryPP.pp a) ++ "\n (" ++ show a ++ ")"
+pp a = Text.unpack (CryPP.pp a)
 
 ppList :: (IsaOpts.Available, Show a, PP a) => [a] -> String
 ppList a = intercalate "\n" $ map pp a
