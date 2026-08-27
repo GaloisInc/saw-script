@@ -16,7 +16,7 @@ module CryptolSAWCore.GlobalCryptolEnv
   ( ImportVisibility(..)
   , IsSubmodule
   , ImportInfo(..)
-  , ImportData
+  , ImportData(..)
   , isToplevel
   , sameHeight
   , pushScope
@@ -119,8 +119,11 @@ type IsSubmodule = Bool
 data ImportInfo = ImportNested C.Name  -- ^ "import submodule ..."
                 | ImportTop            -- ^ "import ...
 
-type ImportData = (ImportInfo, ImportVisibility, C.Import)
-  -- FIXME: change to datatype.
+data ImportData = ImportData
+    { importInfo :: ImportInfo        -- ^ nested or top
+    , importVis  :: ImportVisibility  -- ^ public or pub & private
+    , importCmd  :: C.Import          -- ^ all the "import line info"
+    }
 
 -- | The global environment for capturing the Cryptol state, both
 --   Cryptol's own state and the state associated with

@@ -237,7 +237,8 @@ initCryptolEnv sc = do
   let preludeName'          = locatedUnknown preludeName
       preludeReferenceName' = locatedUnknown preludeReferenceName
       arrayName'            = locatedUnknown arrayName
-      mkImportTop nm mNm    = mkImport C.ImportTop OnlyPublic nm mNm Nothing
+      mkImportTop nm mNm    = mkImportData C.ImportTop OnlyPublic
+                                           nm mNm Nothing
 
   let env0 = C.mapImports (\_ ->
             [ mkImportTop preludeName'          Nothing
@@ -330,7 +331,7 @@ getNamingEnv sc env = do
 getNamingEnvOfImport :: ME.ModuleEnv
                      -> ImportData
                      -> MR.NamingEnv
-getNamingEnvOfImport modEnv (importInfo, vis, imprt) =
+getNamingEnvOfImport modEnv impData =
     maybe id MN.qualify (T.iAs imprt)
          -- adjusting for qualified imports, i.e. `import ... as ...`
   $ restrictToImportSpec (T.iSpec imprt)
@@ -342,10 +343,14 @@ getNamingEnvOfImport modEnv (importInfo, vis, imprt) =
 
   where
 
+  info  = importInfo impData
+  vis   = importVis  impData
+  imprt = importCmd  impData
+
   -- the names the import brings in, before any of the renaming above:
   importedNames :: Set MN.Name
   importedNames =
-    case importInfo of
+    case info of
       C.ImportNested nm ->
           -- find the submodule in the current module environment and get
           -- its names, respecting the visibility parameter
@@ -384,7 +389,7 @@ getNamingEnvOfImport modEnv (importInfo, vis, imprt) =
   --     paths.
   nameToPName :: MN.Name -> P.PName
   nameToPName =
-    case importInfo of
+    case info of
       C.ImportNested nm -> stripSubmodulePrefix nm
       C.ImportTop       -> MN.nameToPNameWithQualifiers
 
@@ -716,7 +721,8 @@ bindLoadedModule _ (asName, origName) env =
     C.mapImports
       -- insert a new ImportData entry into the CryptolEnv:
       (\is->
-          mkImport C.ImportTop PublicAndPrivate origName (Just asName) Nothing
+          mkImportData C.ImportTop PublicAndPrivate origName
+                       (Just asName) Nothing
         : is
       )
       env
@@ -932,7 +938,7 @@ importCryptolModule sc env src as isSubmodule vis imps =
       do
       mod' <- loadAndTranslateModule sc src
       let modName = locatedUnknown (T.mName mod')
-      return $ mkImport C.ImportTop vis modName as imps
+      return $ mkImportData C.ImportTop vis modName as imps
 
     else
       -- importing submodule (which is in current scope):
@@ -966,21 +972,22 @@ importCryptolModule sc env src as isSubmodule vis imps =
                         msg = PP.vsep (heading : nms')
                     fail $ PPS.render ppopts msg
 
-            return $ mkImport
+            return $ mkImportData
                        (C.ImportNested name)
                        vis (locatedUnknown modName) as imps
 
   return $ C.mapImports (\imports -> import':imports) env
 
 
--- | Create an entry for the `eImports` list in `CryptolEnv`.
-mkImport :: C.ImportInfo
-         -> ImportVisibility
-         -> P.Located C.ModName
-         -> Maybe C.ModName
-         -> Maybe T.ImportSpec
-         -> ImportData
-mkImport importInfo vis nm as imps =
+-- | Smart constructor for ImportData.
+--   NOTE: there is a list of ImportData's implicit inside `CryptolEnv`.
+mkImportData :: C.ImportInfo
+             -> ImportVisibility
+             -> P.Located C.ModName
+             -> Maybe C.ModName
+             -> Maybe T.ImportSpec
+             -> ImportData
+mkImportData info vis nm as imps =
     let im = T.Import { T.iModule = nm
                       , T.iAs     = as
                       , T.iSpec   = imps
@@ -988,7 +995,10 @@ mkImport importInfo vis nm as imps =
                       , T.iDoc    = Nothing
                       }
     in
-    (importInfo, vis, im)
+    ImportData { importInfo = info
+               , importVis  = vis
+               , importCmd  = im
+               }
 
 
 ---- Binding -------------------------------------------------------------------
