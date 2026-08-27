@@ -105,32 +105,32 @@ simpleError e = case NE.nonEmpty (flatErrors e) of
   Just es | NE.length es > 1 -> InnerErrors (NE.head es) [NE.last es]
   _ -> e
 
-instance Show OuterTranslationError where
-  show (OuterTranslationError er) = case er of
-    UnsupportedDecl d -> "Unsupported cryptol declaration: " ++ pp d
-    UnsupportedExpr e -> "Unsupported cryptol expression: " ++ pp e
-    UnsupportedType t -> "Unsupported cryptol type: " ++ pp t
-    UnsupportedTypeDecl nm t -> "Unsupported type declaration: " ++ pp nm ++ " = " ++ pp t
-    UnsupportedEntity nm -> "Unsupported translation entity: " ++ show nm
-    UnexpectedSignature s e -> "Unexpected signature: " ++ pp s ++ " for cryptol declaration: " ++ pp e
-    UnsupportedRecursion ds -> "Unsupported recursive declarations:\n" ++ ppList ds
-    UnknownVariableIdent idx -> "Unknown variable identifier: " ++ show idx
-    UnsupportedMatchShape matches ->
-      "Unsupported match shape: " ++ show (map length matches)
-    TypeMismatch t1 t2 -> "Type mismatch: " ++ pp t1 ++ " vs. " ++ pp t2
-    UnexpectedPolymorphism s -> "Unexpected polymorphic type: " ++ pp s
-    TypeCheckFailure e -> "Failed to type check cryptol expression: " ++ pp e
-    StubbedFunction d -> "Unexpected function stub: " ++ pp d
-    MissingCryName nm -> "No entry in cryptol environment for name: " ++ pp nm
-    CryptolTypeOfError e msg -> "Could not determine type of Cryptol expression: \n" 
-      ++ pp e ++ "\n" ++ msg
-    ModuleTranslationFailure mnm -> "Errors were raised when translating Cryptol module: " ++ pp mnm
-    LocatedError rng e -> pp rng ++ "\n" ++ showErr e
-    InnerErrors e [] -> showErr e
-    InnerErrors e es -> showErr e ++ "\n" ++ (intercalate "\n" $ map showErr es)
-    MonadFailure msg -> msg
+ppOuterTranslationErr :: OuterTranslationError -> String
+ppOuterTranslationErr (OuterTranslationError er) = case er of
+  UnsupportedDecl d -> "Unsupported cryptol declaration: " ++ pp d
+  UnsupportedExpr e -> "Unsupported cryptol expression: " ++ pp e
+  UnsupportedType t -> "Unsupported cryptol type: " ++ pp t
+  UnsupportedTypeDecl nm t -> "Unsupported type declaration: " ++ pp nm ++ " = " ++ pp t
+  UnsupportedEntity nm -> "Unsupported translation entity: " ++ show nm
+  UnexpectedSignature s e -> "Unexpected signature: " ++ pp s ++ " for cryptol declaration: " ++ pp e
+  UnsupportedRecursion ds -> "Unsupported recursive declarations:\n" ++ ppList ds
+  UnknownVariableIdent idx -> "Unknown variable identifier: " ++ show idx
+  UnsupportedMatchShape matches ->
+    "Unsupported match shape: " ++ show (map length matches)
+  TypeMismatch t1 t2 -> "Type mismatch: " ++ pp t1 ++ " vs. " ++ pp t2
+  UnexpectedPolymorphism s -> "Unexpected polymorphic type: " ++ pp s
+  TypeCheckFailure e -> "Failed to type check cryptol expression: " ++ pp e
+  StubbedFunction d -> "Unexpected function stub: " ++ pp d
+  MissingCryName nm -> "No entry in cryptol environment for name: " ++ pp nm
+  CryptolTypeOfError e msg -> "Could not determine type of Cryptol expression: \n"
+    ++ pp e ++ "\n" ++ msg
+  ModuleTranslationFailure mnm -> "Errors were raised when translating Cryptol module: " ++ pp mnm
+  LocatedError rng e -> pp rng ++ "\n" ++ showErr e
+  InnerErrors e [] -> showErr e
+  InnerErrors e es -> showErr e ++ "\n" ++ (intercalate "\n" $ map showErr es)
+  MonadFailure msg -> msg
 
 showErr :: IsaOpts.Available => TranslationError -> String
 showErr er = case IsaOpts.verbosity < 2 of
-  True -> show (OuterTranslationError (simpleError er))
-  False -> show (OuterTranslationError er)
+  True -> ppOuterTranslationErr (OuterTranslationError (simpleError er))
+  False -> ppOuterTranslationErr (OuterTranslationError er)
