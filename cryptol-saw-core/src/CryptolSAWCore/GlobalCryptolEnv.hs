@@ -12,8 +12,11 @@ Portability : non-portable (language extensions)
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module CryptolSAWCore.GlobalCryptolEnv 
+module CryptolSAWCore.GlobalCryptolEnv
   ( ImportVisibility(..)
+  , IsSubmodule
+  , ImportInfo(..)
+  , ImportData(..)
   , isToplevel
   , sameHeight
   , pushScope
@@ -109,6 +112,18 @@ data ImportVisibility
                      --   and (arbitrarily nested) submodules.
   deriving (Eq, Show)
 
+-- | type synonym indicating module is nested (is submodule)
+type IsSubmodule = Bool
+
+-- | capture extra information needed for "import submodule"
+data ImportInfo = ImportNested C.Name  -- ^ "import submodule ..."
+                | ImportTop            -- ^ "import ...
+
+data ImportData = ImportData
+    { importInfo :: ImportInfo        -- ^ nested or top
+    , importVis  :: ImportVisibility  -- ^ public or pub & private
+    , importCmd  :: C.Import          -- ^ all the "import line info"
+    }
 
 -- | The global environment for capturing the Cryptol state, both
 --   Cryptol's own state and the state associated with
@@ -137,7 +152,7 @@ data GlobalCryptolEnv = GlobalCryptolEnv
 initGlobalEnv :: ME.ModuleEnv -> GlobalCryptolEnv
 initGlobalEnv modEnv = refreshCryptolEnv $
     GlobalCryptolEnv modEnv
-      mempty mempty mempty mempty mempty mempty mempty mempty mempty 
+      mempty mempty mempty mempty mempty mempty mempty mempty mempty
       mempty
 
 instance IsMetadata GlobalCryptolEnv where
@@ -167,9 +182,9 @@ instance IsMetadata GlobalCryptolEnv where
   restoreMetadata chk now = return $
     let newMEnv = geModuleEnv now
         chkMEnv = geModuleEnv chk
-    in chk { geModuleEnv = chkMEnv 
+    in chk { geModuleEnv = chkMEnv
                { ME.meNameSeeds = ME.meNameSeeds newMEnv
-               , ME.meSupply = ME.meSupply newMEnv 
+               , ME.meSupply = ME.meSupply newMEnv
                }
            }
 
@@ -182,7 +197,7 @@ instance IsMetadata GlobalCryptolEnv where
 
 data CryptolFrame =
   CryptolFrame { fNamingEnv :: MR.NamingEnv
-               , fImports :: [(ImportVisibility, C.Import)] 
+               , fImports :: [ImportData]
                }
 
 initFrame :: CryptolFrame
@@ -203,12 +218,12 @@ isToplevel (CryptolEnv (_ :| frames)) = null frames
 
 -- | Test if the scopes have the same number of frames pushed.
 sameHeight :: CryptolEnv -> CryptolEnv -> Bool
-sameHeight (CryptolEnv scope1) (CryptolEnv scope2) = 
+sameHeight (CryptolEnv scope1) (CryptolEnv scope2) =
   NE.length scope1 == NE.length scope2
 
-mapCurFrame :: 
-  (CryptolFrame -> CryptolFrame) -> 
-  CryptolEnv -> 
+mapCurFrame ::
+  (CryptolFrame -> CryptolFrame) ->
+  CryptolEnv ->
   CryptolEnv
 mapCurFrame f (CryptolEnv (frame :| frames)) =
   CryptolEnv (f frame :| frames)
@@ -225,30 +240,30 @@ popScope (CryptolEnv frames) = case snd (NE.uncons frames) of
   Just frames' -> CryptolEnv frames'
 
 -- | Map the naming environment of the frame currently in scope.
-mapNaming :: 
-  (MR.NamingEnv -> MR.NamingEnv) -> 
-  CryptolEnv -> 
+mapNaming ::
+  (MR.NamingEnv -> MR.NamingEnv) ->
+  CryptolEnv ->
   CryptolEnv
-mapNaming f = mapCurFrame $ 
+mapNaming f = mapCurFrame $
       \fr -> fr {fNamingEnv = f (fNamingEnv fr) }
 
 -- | Map the module imports of the frame currently in scope.
-mapImports :: 
-  ([(ImportVisibility, C.Import)] -> [(ImportVisibility, C.Import)] ) -> 
-  CryptolEnv -> 
+mapImports ::
+  ([ImportData] -> [ImportData]) ->
+  CryptolEnv ->
   CryptolEnv
-mapImports f = mapCurFrame $ 
+mapImports f = mapCurFrame $
       \fr -> fr {fImports = f (fImports fr) }
 
 -- | Run the inner action bracketed new frame pushed/popped on
 --   the 'CryptolScope' stack.
 --   Fails if the inner action changes the scope height
 --   (i.e. it does not properly bracket its pushes and pops).
-withFreshScope :: 
+withFreshScope ::
   MonadFail m =>
-  CryptolEnv -> 
-  (CryptolEnv -> 
-  m (a, CryptolEnv)) -> 
+  CryptolEnv ->
+  (CryptolEnv ->
+  m (a, CryptolEnv)) ->
   m (a, CryptolEnv)
 withFreshScope env0 f = do
   let env1 = pushScope env0
@@ -319,7 +334,7 @@ eRefPrims = getGlobal geRefPrims
 
 -- | Add entries to 'eRefPrims'
 addRefPrims :: SharedContext -> Map C.PrimIdent C.Expr -> IO ()
-addRefPrims sc m = mapGlobal sc $ \genv -> 
+addRefPrims sc m = mapGlobal sc $ \genv ->
   genv { geRefPrims = Map.union m (geRefPrims genv) }
 
 -- | Map from names of Cryptol primitives to their implementations
@@ -329,7 +344,7 @@ ePrims = getGlobal gePrims
 
 -- | Add entries to 'ePrims'
 addPrims :: SharedContext -> Map C.PrimIdent Term -> IO ()
-addPrims sc m = mapGlobal sc $ \genv -> 
+addPrims sc m = mapGlobal sc $ \genv ->
   genv { gePrims = Map.union m (gePrims genv) }
 
 -- | Map from names of Cryptol primitive types to their
@@ -339,7 +354,7 @@ ePrimTypes = getGlobal gePrimTypes
 
 -- | Add entries to 'ePrimTypes'
 addPrimTypes :: SharedContext -> Map C.PrimIdent Term -> IO ()
-addPrimTypes sc m = mapGlobal sc $ \genv -> 
+addPrimTypes sc m = mapGlobal sc $ \genv ->
   genv { gePrimTypes = Map.union m (gePrimTypes genv) }
 
 
@@ -362,8 +377,8 @@ meSolverConfig env = TM.defaultSolverConfig (ME.meSearchPath env)
 -- | Add an entry to the 'ME.meSearchPath' of the 'eModuleEnv'.
 addSearchPath :: SharedContext -> FilePath -> IO ()
 addSearchPath sc fp = mapGlobal sc $ \genv ->
-  genv { geModuleEnv = (geModuleEnv genv) 
-    { ME.meSearchPath = fp : ME.meSearchPath (geModuleEnv genv) } } 
+  genv { geModuleEnv = (geModuleEnv genv)
+    { ME.meSearchPath = fp : ME.meSearchPath (geModuleEnv genv) } }
 
 -- | Run an 'MM.ModuleM' action using the module environment from
 -- 'eModuleEnv'. If the action is successful, updates the module
@@ -401,7 +416,7 @@ eExtraTySyns = getGlobal geExtraTySyns
 
 -- | Add entries to 'eExtraTySyns'
 addExtraTySyns :: SharedContext -> Map C.Name C.TySyn -> IO ()
-addExtraTySyns sc m = mapGlobal sc $ \genv -> 
+addExtraTySyns sc m = mapGlobal sc $ \genv ->
   genv { geExtraTySyns = Map.union m (geExtraTySyns genv) }
 
 -- | Formerly @eExtraTypes@, holds the Cryptol-level
@@ -412,9 +427,9 @@ eExtraVars = getGlobal geExtraVars
 
 -- | Add entries to both 'eExtraVars' and 'eAllVars'
 addExtraVars :: SharedContext -> Map C.Name C.Schema -> IO ()
-addExtraVars sc m = mapGlobal sc $ \genv -> 
+addExtraVars sc m = mapGlobal sc $ \genv ->
   genv { geExtraVars = Map.union m (geExtraVars genv)
-       , geAllVars = Map.union m (geAllVars genv) 
+       , geAllVars = Map.union m (geAllVars genv)
        }
 
 -- | Map from Cryptol names to Cryptol types. This is
@@ -457,7 +472,7 @@ eTyVars = getGlobal geTyVars
 
 -- | Add entries to 'eTyVars'
 addTyVars :: SharedContext -> Map Int Term -> IO ()
-addTyVars sc m = mapGlobal sc $ \genv -> 
+addTyVars sc m = mapGlobal sc $ \genv ->
   genv { geTyVars = Map.union m (geTyVars genv) }
 
 -- | Map from Cryptol `C.Prop`, which are type constraints, to
@@ -483,7 +498,7 @@ eTyProps = getGlobal geTyProps
 --   This is not expensive, but would become problematic
 --   if we wanted to enforce a write-once policy.
 addTyProps :: SharedContext -> Map C.Prop (Term, [FieldName]) -> IO ()
-addTyProps sc m = mapGlobal sc $ \genv -> 
+addTyProps sc m = mapGlobal sc $ \genv ->
   genv { geTyProps = Map.union m (geTyProps genv)  }
 
 -- | The translations for all Cryptol names in scope. It maps names to
@@ -508,7 +523,7 @@ eFFITypes = getGlobal geFFITypes
 
 -- | Add entries to 'eFFITypes'
 addFFITypes :: SharedContext -> Map NameInfo C.FFI -> IO ()
-addFFITypes sc m = mapGlobal sc $ \genv -> 
+addFFITypes sc m = mapGlobal sc $ \genv ->
   genv { geFFITypes = Map.union m (geFFITypes genv) }
 
 --
@@ -530,7 +545,7 @@ addFFITypes sc m = mapGlobal sc $ \genv ->
 -- irregularities that can creep in when we reimplement Cryptol name
 -- resolution.
 eExtraNaming :: CryptolEnv -> MR.NamingEnv
-eExtraNaming (CryptolEnv (frame :| frames)) = 
+eExtraNaming (CryptolEnv (frame :| frames)) =
   foldr (\fr ne -> ne `MR.shadowing` (fNamingEnv fr)) (fNamingEnv frame) frames
 
 -- | The list of Cryptol modules which have been brought into the
@@ -540,8 +555,8 @@ eExtraNaming (CryptolEnv (frame :| frames)) =
 --   according to the associated 'ImportVisibility'. The modules here
 --   should only correspond to modules that are present in the module
 --   environment *and* have been translated into SAWCore.
-eImports :: CryptolEnv -> [(ImportVisibility, C.Import)]
-eImports (CryptolEnv frames) = 
+eImports :: CryptolEnv -> [ImportData]
+eImports (CryptolEnv frames) =
   concat $ map fImports $ NE.toList frames
 
 

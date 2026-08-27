@@ -1,0 +1,9 @@
+Loading file "testQuotes2a.saw"
+[115, 115, 58, 32, 112, 49, 97]
+[115, 115, 58, 32, 112, 49, 97]
+[115, 115, 58, 32, 112, 49, 97]
+[115, 115, 58, 32, 112, 49, 97]
+testQuotes2a.saw:10:5-10:7: Warning: Redeclaration of p1
+testQuotes2a.saw:1:5-1:7: Warning: Previous declaration was here
+[115, 115, 58, 32, 112, 49, 98]
+[115, 115, 58, 32, 112, 49, 98]

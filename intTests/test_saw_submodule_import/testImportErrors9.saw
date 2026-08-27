@@ -1,0 +1,9 @@
+// Test: Error case - importing an ambiguous submodule
+
+import "D.cry";
+import "E.cry";
+
+// both D and E define a submodule named D2:
+import submodule D2;
+
+print "done";

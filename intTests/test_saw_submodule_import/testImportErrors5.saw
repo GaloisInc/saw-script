@@ -1,0 +1,8 @@
+// Test: Error case - importing nonexistent submodule
+
+import "D.cry";
+
+// D2 exists, but D2::D4 does not
+import submodule D2::D4;
+
+print "done";

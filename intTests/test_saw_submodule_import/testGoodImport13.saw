@@ -1,0 +1,12 @@
+// Test: Import with parenthesized empty list (different from no parens)
+
+import "D.cry";
+
+// Empty list means import nothing
+import submodule D2 ();
+
+// Should fail - nothing was imported
+fails ( do { print {{d2}}; } );
+fails ( do { print {{D3::d3}}; } );
+
+print "done";

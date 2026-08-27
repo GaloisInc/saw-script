@@ -1,0 +1,17 @@
+// Test: Import nested submodule, then separately import its parent
+
+import "D.cry";
+
+// First import the nested D3
+import submodule D2::D3 as MyD3;
+print {{MyD3::d3}};
+
+// Now import its parent D2
+import submodule D2;
+print {{d2}};
+
+// Both paths to D3 should work:
+print {{MyD3::d3}};
+print {{D3::d3}};
+
+print "done";

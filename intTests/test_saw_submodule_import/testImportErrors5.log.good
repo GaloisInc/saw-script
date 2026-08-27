@@ -1,0 +1,6 @@
+Loading file "testImportErrors5.saw"
+Stack trace:
+   (builtin) (at top level)
+submodule `D2::D4` is not in scope
+
+FAILED

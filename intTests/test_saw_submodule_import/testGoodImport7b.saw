@@ -1,0 +1,9 @@
+// Test: Verify submodules work when "not hidden" in import lists:
+
+import "D.cry";
+
+import submodule D2 hiding (d2);      // D3 in scope (not its contents)
+
+fails ( do { print {{ d3 }}; } );
+print {{D3::d3}};                     // but can access elements w/ D3::
+print "done";

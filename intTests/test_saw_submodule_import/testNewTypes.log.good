@@ -1,0 +1,44 @@
+Loading file "testNewTypes.saw"
+{x = 2}
+{x = 2}
+{x = 3}
+
+
+errors follow:
+
+
+Error: Cryptol: [error] at testNewTypes.saw:16:20--16:23
+    Value not in scope: t11
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testNewTypes.saw:16:1-16:28 (at top level)
+
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testNewTypes.saw:19:25--19:27
+    Type not in scope: T1
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testNewTypes.saw:19:1-19:32 (at top level)
+
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testNewTypes.saw:22:20--22:22
+    Value not in scope: T1
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testNewTypes.saw:22:1-22:32 (at top level)
+
+(Failure was expected, continuing)
+
+
+M::S1::T1
+{x = 1}
+{x = 2}
+{x = 2}
+{x = 2}
+{x = 2}
+{x = 3}
+{x = 3}
+{x = 3}

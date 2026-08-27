@@ -1,0 +1,9 @@
+Loading file "testGoodImport11.saw"
+12114
+("MYSTRING", 5)
+12114
+testGoodImport11.saw:23:5-23:7: Warning: Redeclaration of d2
+testGoodImport11.saw:13:5-13:7: Warning: Previous declaration was here
+12115
+12115
+done

@@ -1,0 +1,21 @@
+// Test: Import same submodule with multiple different qualifications
+
+import "D.cry";
+
+// Import D2 unqualified
+import submodule D2;
+
+// Also import D2 with qualification
+import submodule D2 as D2_Alias;
+
+// Both should work:
+print {{d2}};           // from unqualified import
+print {{D2::d2}};       // original qualified path
+print {{D2_Alias::d2}}; // from aliased import
+
+// Nested submodule should work through all paths:
+print {{D3::d3}};
+print {{D2::D3::d3}};
+print {{D2_Alias::D3::d3}};
+
+print "done";

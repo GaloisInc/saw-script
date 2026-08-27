@@ -1,0 +1,19 @@
+// Test: Import submodule qualified, then import nested submodule
+//       from the qualified name
+
+import "D.cry";
+
+// Import D2 qualified as MyD2
+import submodule D2 as MyD2;
+
+// Now import the nested D3 via the qualified path
+import submodule MyD2::D3 as MyD3;
+
+// Both should work:
+print {{MyD2::d2}};
+print {{MyD3::d3}};
+
+// Test accessing via full path through MyD2
+print {{MyD2::D3::d3}};
+
+print "done";

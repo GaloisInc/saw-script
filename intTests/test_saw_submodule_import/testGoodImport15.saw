@@ -1,0 +1,14 @@
+// Test: Selective import of type synonym but not values
+
+import "D.cry";
+
+// Import only the type synonym, not the value
+import submodule D2 (D2TySy);
+
+// Should work: type is imported
+print {{0 : D2TySy}};
+
+// Should fail: value was not imported
+fails ( do { print {{d2}}; } );
+
+print "done";
