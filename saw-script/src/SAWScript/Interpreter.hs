@@ -6012,6 +6012,32 @@ primitives = Map.fromList $
     ]
 
     ------------------------------------------------------------
+    -- Translation to Isabelle
+
+  , prim "write_isabelle_cryptol_modules"  "[CryptolModule] -> [String] -> String -> TopLevel ()"
+    (pureVal do_write_isabelle_cryptol_modules)
+    Experimental
+    [ "Translate a collection of Cryptol modules to Isabelle"
+    , "theories, and write them into the given directory."
+    , " - The second argument is a list of Cryptol source files to be translated."
+    , " - If no modules or sources are specified, all currently imported Cryptol modules are translated."
+    , " - The third argument is the target directory for the resulting theory files."
+    ]
+  , prim "offline_isabelle" "String -> ProofScript ()"
+    (pureVal do_offline_isabelle)
+    Experimental
+    [ "Write out a representation of the current goal in Isabelle syntax."
+    , "The argument is a prefix to use for file names."
+    ]
+  , prim "write_isabelle_term" ("String -> String -> Term -> TopLevel ()")
+    (pureVal do_write_isabelle_term)
+    Experimental
+    [ "Write out a representation of a SAWCore term in Isabelle syntax as a defined constant."
+    , " - The first argument is both the name of the theory and the new constant."
+    , " - The second argument is the output directory path."
+    ]
+
+    ------------------------------------------------------------
     -- Additional output forms
 
   , prim "write_smtlib2"       "String -> Term -> TopLevel ()"
@@ -8357,39 +8383,10 @@ primitives = Map.fromList $
 
   , prim "mir_unint" "[String] -> MIRSetup ()"
     (pureVal mir_unint) Current unint_help
-  ]
-  ++
-    ------------------------------------------------------------
-    -- Translation to Isabelle
-  [ prim "write_isabelle_cryptol_modules"  "[CryptolModule] -> [String] -> String -> TopLevel ()"
-    (pureVal do_write_isabelle_cryptol_modules)
-    Experimental
-    [ "Translate a collection of Cryptol modules to Isabelle"
-    , "theories, and write them into the given directory."
-    , " - The second argument is a list of Cryptol source files to be translated."
-    , " - If no modules or sources are specified, all currently imported Cryptol modules are translated."
-    , " - The third argument is the target directory for the resulting theory files."
-    ]
-  , prim "offline_isabelle" "String -> ProofScript ()"
-    (pureVal do_offline_isabelle)
-    Experimental
-    [ "Write out a representation of the current goal in Isabelle syntax."
-    , "The argument is a prefix to use for file names."
-    ]
-  , prim "write_isabelle_term" ("String -> String -> Term -> TopLevel ()")
-    (pureVal do_write_isabelle_term)
-    Experimental
-    [ "Write out a representation of a SAWCore term in Isabelle syntax as a defined constant." 
-    , " - The first argument is both the name of the theory and the new constant."
-    , " - The second argument is the output directory path."
-    ]
-  ]
-  ++
-  [
     ------------------------------------------------------------
     -- Other miscellaneous features
 
-    prim "auto_match" "String -> String -> TopLevel ()"
+  , prim "auto_match" "String -> String -> TopLevel ()"
     (pureVal do_auto_match)
     Current
     [ "Interactively decides how to align two modules of potentially"
