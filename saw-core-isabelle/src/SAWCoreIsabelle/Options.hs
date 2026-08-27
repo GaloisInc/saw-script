@@ -5,8 +5,8 @@
 
 module SAWCoreIsabelle.Options
   ( Options(..)
-  , emptyOpts
-  , HasOptions
+  , empty
+  , Available
   , ImportPrefix(..)
   , TargetSelect(..)
   , withOptions
@@ -54,42 +54,42 @@ data Options = Options {
 , loggerErr_ :: String -> IO ()
 }
 
-emptyOpts :: Options 
-emptyOpts = Options [] "" NoPrefix 0 False [] (NamedModules []) [] (\_ -> return ()) (\_ -> return ())
+empty :: Options
+empty = Options [] "" NoPrefix 0 False [] (NamedModules []) [] (\_ -> return ()) (\_ -> return ())
 
-type HasOptions = (?options :: Options)
+type Available = (?options :: Options)
 
-crySources :: HasOptions => [FilePath]
+crySources :: Available => [FilePath]
 crySources = crySources_ ?options
 
-isaDestDir :: HasOptions => FilePath
+isaDestDir :: Available => FilePath
 isaDestDir = isaDestDir_ ?options
 
-isaImportPrefix :: HasOptions => ImportPrefix
+isaImportPrefix :: Available => ImportPrefix
 isaImportPrefix = isaImportPrefix_ ?options
 
-verbosity :: HasOptions => Integer
+verbosity :: Available => Integer
 verbosity = verbosity_ ?options
 
-allOptions :: HasOptions => Options
+allOptions :: Available => Options
 allOptions = ?options
 
-keepGoing :: HasOptions => Bool
+keepGoing :: Available => Bool
 keepGoing = keepGoing_ ?options
 
-cryptolDirs :: HasOptions => [FilePath]
+cryptolDirs :: Available => [FilePath]
 cryptolDirs = cryptolDirs_ ?options
 
-targetSelect :: HasOptions => TargetSelect
+targetSelect :: Available => TargetSelect
 targetSelect = targetSelect_ ?options
 
-functionStubs :: HasOptions => [String]
+functionStubs :: Available => [String]
 functionStubs = functionStubs_ ?options
 
-log :: (HasOptions, IO.MonadIO m) => Integer -> String -> m ()
+log :: (Available, IO.MonadIO m) => Integer -> String -> m ()
 log v msg = IO.liftIO $ if v < verbosity then loggerMsg_ ?options msg else return ()
 
-logErr :: (HasOptions, IO.MonadIO m) => Integer -> String -> m ()
+logErr :: (Available, IO.MonadIO m) => Integer -> String -> m ()
 logErr v msg = IO.liftIO $ if v < verbosity then loggerErr_ ?options msg else return ()
 
 addLogger :: (String -> IO ()) -> Options -> Options
@@ -98,5 +98,5 @@ addLogger f opts = opts { loggerMsg_ = (\msg -> loggerMsg_ opts msg >> f msg)}
 addErrLogger :: (String -> IO ()) -> Options -> Options
 addErrLogger f opts = opts { loggerErr_ = (\msg -> loggerErr_ opts msg >> f msg)}
 
-withOptions :: Options -> (HasOptions => a) -> a
+withOptions :: Options -> (Available => a) -> a
 withOptions opts f = let ?options = opts in f

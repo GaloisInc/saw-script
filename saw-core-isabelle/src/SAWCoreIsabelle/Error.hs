@@ -75,12 +75,12 @@ innerErrors er ers = case filter nontrivial ers of
   ers' -> InnerErrors er ers'
 
 data OuterTranslationError where
-  OuterTranslationError :: IsaOpts.HasOptions => TranslationError -> OuterTranslationError
+  OuterTranslationError :: IsaOpts.Available => TranslationError -> OuterTranslationError
 
-pp :: (IsaOpts.HasOptions, Show a, PP a) => a -> String
+pp :: (IsaOpts.Available, Show a, PP a) => a -> String
 pp a = if IsaOpts.verbosity >= 3 then pretty a ++ "\n (" ++ show a ++ ")" else pretty a
 
-ppList :: (IsaOpts.HasOptions, Show a, PP a) => [a] -> String
+ppList :: (IsaOpts.Available, Show a, PP a) => [a] -> String
 ppList a = intercalate "\n" $ map pp a
 
 ppNames :: [Name.Name] -> String
@@ -123,7 +123,7 @@ instance Show OuterTranslationError where
     InnerErrors e es -> showErr e ++ "\n" ++ (intercalate "\n" $ map showErr es)
     MonadFailure msg -> msg
 
-showErr :: IsaOpts.HasOptions => TranslationError -> String
+showErr :: IsaOpts.Available => TranslationError -> String
 showErr er = case IsaOpts.verbosity < 2 of
   True -> show (OuterTranslationError (simpleError er))
   False -> show (OuterTranslationError er)

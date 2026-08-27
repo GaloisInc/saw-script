@@ -130,12 +130,12 @@ mreturn :: Alternative m => Maybe a -> m a
 mreturn (Just a) = pure a
 mreturn Nothing = empty
 
-type IsaM a = IsaOpts.HasOptions => IsaM_ a
+type IsaM a = IsaOpts.Available => IsaM_ a
 
 initIsaState :: IsaEnv -> IsaState
 initIsaState env = IsaState (Theory.mkTheory $ envCurTheory env)
 
-initIsaEnv :: IsaOpts.HasOptions
+initIsaEnv :: IsaOpts.Available
            => Deps.CryptolDeps
            -> Name.TheoryName
            -> IO IsaEnv

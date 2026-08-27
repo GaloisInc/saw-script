@@ -58,7 +58,7 @@ import qualified Cryptol.ModuleSystem.Env as Cry
 
 
 doTranslation ::
-  IsaOpts.HasOptions =>
+  IsaOpts.Available =>
   Deps.CryptolDeps ->
   [Cry.ModName] ->
   Name.TheoryName ->
@@ -73,7 +73,7 @@ doTranslation cryEnv imports thyNm f = do
   return $ (outWarns iout, stThy st)
 
 translateModuleIO ::
-  IsaOpts.HasOptions =>
+  IsaOpts.Available =>
   Deps.CryptolDeps ->
   [Cry.ModName] ->
   Cry.Module ->
@@ -84,7 +84,7 @@ translateModuleIO cryEnv imports crymod  = do
     translateModule crymod
 
 translateSingleExprIO ::
-  IsaOpts.HasOptions =>
+  IsaOpts.Available =>
   Deps.CryptolDeps ->
   Name.Name ->
   Cry.Schema ->
@@ -209,7 +209,7 @@ translateSchema s = do
   body <- translateType (Cry.sType s)
   return $ tAbs tyArgs (tGuard guards body)
 
-isStubbedFnName :: IsaOpts.HasOptions => Binding.Binding -> Bool
+isStubbedFnName :: IsaOpts.Available => Binding.Binding -> Bool
 isStubbedFnName b = elem (Name.qualifiedIdent b) IsaOpts.functionStubs
 
 translateDeclGroup :: Cry.DeclGroup -> IsaM ()
@@ -463,7 +463,7 @@ unNumber e ts = case (e,ts) of
       Just (i, t2)
   _ -> Nothing
 
-debugEnable :: IsaOpts.HasOptions => Bool
+debugEnable :: IsaOpts.Available => Bool
 debugEnable = IsaOpts.verbosity >= 3
 
 _debug :: String -> IsaM ()

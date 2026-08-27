@@ -48,7 +48,7 @@ import qualified Language.Isabelle.Theory as Theory
 import qualified Language.Isabelle.Output as Output
 
 import qualified SAWCoreIsabelle.Error as Error
-import           SAWCoreIsabelle.Options (HasOptions, log, logErr)
+import           SAWCoreIsabelle.Options (log, logErr)
 import qualified SAWCoreIsabelle.Options as IsaOpts
 import qualified SAWCoreIsabelle.Translate as Translate
 import qualified SAWCoreIsabelle.CryptolDeps as Deps
@@ -62,10 +62,10 @@ instance Show RunnerError where
 
 instance Exception RunnerError
 
-err :: (HasOptions, IO.MonadIO m) => String -> m ()
+err :: (IsaOpts.Available, IO.MonadIO m) => String -> m ()
 err msg = logErr (-1) $ "[error] " ++ msg
 
-fatalErr :: (HasOptions, IO.MonadIO m) => String -> m a
+fatalErr :: (IsaOpts.Available, IO.MonadIO m) => String -> m a
 fatalErr msg = IO.liftIO $ err msg >> throw (RunnerError msg)
 
 unused_thys :: [String]
@@ -100,7 +100,7 @@ isBuiltinThy :: String -> Bool
 isBuiltinThy str = List.any (\(nm,_) -> nm == str <> ".thy") isaThys
 
 renameImports ::
-  HasOptions => Theory.Theory -> IO Theory.Theory
+  IsaOpts.Available => Theory.Theory -> IO Theory.Theory
 renameImports thy = do
   decls <- Decl.traverseImports (Theory.thyDecls thy) $ \nm -> 
     case isBuiltinThy (Name.thyNm nm) of
@@ -153,10 +153,10 @@ instance Semigroup TranslateState where
   TranslateState errs1 thys1 <> TranslateState errs2 thys2 =
     TranslateState (errs1 <> errs2) (thys1 <> thys2)
 
-printErrs :: (HasOptions, IO.MonadIO m) => TranslateState -> m ()
+printErrs :: (IsaOpts.Available, IO.MonadIO m) => TranslateState -> m ()
 printErrs st = forM_ (trErrs st) $ \terr -> err $ Error.showErr terr
 
-writeResult :: HasOptions => [Error.TranslationError] -> Theory.Theory -> WriterT TranslateState IO ()
+writeResult :: IsaOpts.Available => [Error.TranslationError] -> Theory.Theory -> WriterT TranslateState IO ()
 writeResult ers res = do
   let st = resultState ers res
   case ers of

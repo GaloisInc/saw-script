@@ -33,7 +33,7 @@ import qualified Cryptol.Utils.Logger as Cry
 
 import           CryptolSAWCore.Pretty (pp)
 
-import           SAWCoreIsabelle.Options (HasOptions, log, logErr)
+import           SAWCoreIsabelle.Options (log, logErr)
 import qualified SAWCoreIsabelle.Options as IsaOpts
 import           SAWCoreIsabelle.Runner (RunnerError(..), processModules, fatalErr)
 
@@ -41,18 +41,18 @@ import           SAWCoreIsabelle.Runner (RunnerError(..), processModules, fatalE
 -- Code specific to running translator independently 
 -- (i.e. no existing Cryptol environment)
 
-debug :: (HasOptions, IO.MonadIO m) => String -> m ()
+debug :: (IsaOpts.Available, IO.MonadIO m) => String -> m ()
 debug msg = log 2 $ "[DEBUG]: " ++ msg ++ "\n"
 
 runTranslator :: IsaOpts.Options -> IO Bool
 runTranslator opts = IsaOpts.withOptions opts $
   processFile' `catch` (\(_ :: RunnerError) -> suggestKeepGoing >> return False)
 
-suggestKeepGoing :: HasOptions => IO ()
+suggestKeepGoing :: IsaOpts.Available => IO ()
 suggestKeepGoing = unless IsaOpts.keepGoing $ log 0 $
   "Use '--keep-going' to attempt an incomplete translation."
 
-processFile' :: HasOptions => IO Bool
+processFile' :: IsaOpts.Available => IO Bool
 processFile' = do
   let inputFiles = IsaOpts.crySources
   log 0 $ "Reading cryptol input files: \n" ++ (List.intercalate "\n" $ inputFiles) ++ "\n"
@@ -85,7 +85,7 @@ processFile' = do
   processModules IsaOpts.allOptions (Cry.lmLoadedModules (Cry.meLoadedModules modEnv)) extraDecls extraTys
 
 
-initialModuleEnv :: HasOptions => IO Cry.ModuleEnv
+initialModuleEnv :: IsaOpts.Available => IO Cry.ModuleEnv
 initialModuleEnv = do
   env <- Cry.initialModuleEnv
   return $ env { Cry.meSearchPath = IsaOpts.cryptolDirs ++ (Cry.meSearchPath env) }
@@ -96,7 +96,7 @@ data LoadModulesState  = LoadModulesState
     }
 
 loadModuleInput ::
-  HasOptions =>
+  IsaOpts.Available =>
   FilePath ->
   Cry.ModuleInput IO ->
   IO (Cry.TCTopEntity, Cry.ModuleInput IO)
@@ -111,7 +111,7 @@ loadModuleInput file input = do
           Left er -> logErr (-1) (show $ pp er) >> throw (RunnerError (show $ pp er))
           Right (topEntity,env) -> return $ (topEntity, input{Cry.minpModuleEnv = env})
 
-checkTargetSelect :: HasOptions => Cry.ModuleEnv -> IO ()
+checkTargetSelect :: IsaOpts.Available => Cry.ModuleEnv -> IO ()
 checkTargetSelect env = case IsaOpts.targetSelect of
   IsaOpts.AllModules -> return ()
   IsaOpts.NamedModules namedMods -> do
@@ -127,7 +127,7 @@ checkTargetSelect env = case IsaOpts.targetSelect of
     go (m:_) _ = fatalErr $ "Could not find module \"" ++ m ++ "\" in module imports."
 
 loadModules ::
-  HasOptions =>
+  IsaOpts.Available =>
   [FilePath] ->
   LoadModulesState ->
   IO (LoadModulesState)

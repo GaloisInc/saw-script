@@ -131,7 +131,7 @@ writeTarget dest sel = do
   let
     mods = lmLoadedModules $ meLoadedModules me
 
-    opts = IsaOpts.emptyOpts
+    opts = IsaOpts.empty
         { IsaOpts.isaDestDir_ = dest
         , IsaOpts.isaImportPrefix_ = IsaOpts.CryptolImage
         , IsaOpts.verbosity_ = 1
