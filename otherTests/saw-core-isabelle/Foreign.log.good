@@ -18,3 +18,4 @@ cryptol_definition my_test :: "([32]) \<Rightarrow> (([32]) \<Rightarrow> ([32])
 
 end
 end
+

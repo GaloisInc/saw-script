@@ -55,7 +55,7 @@ suggestKeepGoing = unless IsaOpts.keepGoing $ log 0 $
 processFile' :: IsaOpts.Available => IO Bool
 processFile' = do
   let inputFiles = IsaOpts.crySources
-  log 0 $ "Reading cryptol input files: \n" ++ (List.intercalate "\n" $ inputFiles) ++ "\n"
+  log 0 $ "Reading cryptol input files:\n" ++ (List.intercalate "\n" $ inputFiles) ++ "\n"
 
   initialEnv <- initialModuleEnv
   debug $ (show (Cry.meSearchPath initialEnv))

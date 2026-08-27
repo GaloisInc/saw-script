@@ -13,3 +13,4 @@ cryptol/Inf.cry
 Resulting theories will be incomplete. Generating theory files...
 Generating Inf.thy
 Successfully wrote 'isabelle/Inf.thy'
+
