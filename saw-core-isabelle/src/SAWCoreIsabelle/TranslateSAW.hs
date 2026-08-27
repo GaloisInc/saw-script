@@ -34,7 +34,7 @@ import qualified CryptolSAWCore.GlobalCryptolEnv as SAW
 import qualified Language.Isabelle.Name as Isabelle
 import qualified Language.Isabelle.Syntax as Isabelle
 
-import           SAWCoreIsabelle.Options
+import qualified SAWCoreIsabelle.Options as IsaOpts
 import           SAWCoreIsabelle.Runner
 
 import Cryptol.Parser.AST (Located(..), ModName)
@@ -100,7 +100,7 @@ writeTerm tnm dest t = do
         thynm = takeBaseName dest
         thynm' = Isabelle.TheoryName thynm False
         tnm' = Isabelle.Name thynm' (Text.unpack tnm) Isabelle.NoSyn Isabelle.Term
-        sel = TargetExpr tnm' s e
+        sel = IsaOpts.TargetExpr tnm' s e
       writeTarget (takeDirectory dest) sel 
 
 withCryptolModule :: Either SAW.ExtCryptolModule FilePath -> (ModName -> TopTT a) -> TopTT a
@@ -122,22 +122,22 @@ writeCryptolModules extmods sources dest = go [] $ map Left extmods ++ map Right
   where
     go nms = \case
       (m:ms) -> withCryptolModule m $ \nm -> go (nm:nms) ms
-      [] -> writeTarget dest (ModuleNames nms)
+      [] -> writeTarget dest (IsaOpts.ModuleNames nms)
 
-writeTarget :: FilePath -> TargetSelect -> TopTT ()
+writeTarget :: FilePath -> IsaOpts.TargetSelect -> TopTT ()
 writeTarget dest sel = do
   sc <- asks ttSc
   me <- liftIO $ SAW.eModuleEnv sc
   let
     mods = lmLoadedModules $ meLoadedModules me
 
-    opts = emptyOpts 
-        { isaDestDir_ = dest
-        , isaImportPrefix_ = CryptolImage
-        , verbosity_ = 1
-        , targetSelect_ = sel
-        , loggerMsg_ = putStrLn
-        , loggerErr_ = putStrLn
+    opts = IsaOpts.emptyOpts
+        { IsaOpts.isaDestDir_ = dest
+        , IsaOpts.isaImportPrefix_ = IsaOpts.CryptolImage
+        , IsaOpts.verbosity_ = 1
+        , IsaOpts.targetSelect_ = sel
+        , IsaOpts.loggerMsg_ = putStrLn
+        , IsaOpts.loggerErr_ = putStrLn
         }
   liftIO $ processModules opts mods [] [] >>= \case
     True -> return ()

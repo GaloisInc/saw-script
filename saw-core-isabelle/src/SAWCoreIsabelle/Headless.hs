@@ -34,7 +34,7 @@ import qualified Cryptol.Utils.Logger as Cry
 import           CryptolSAWCore.Pretty (pp)
 
 import           SAWCoreIsabelle.Options (HasOptions, log, logErr)
-import qualified SAWCoreIsabelle.Options as Options
+import qualified SAWCoreIsabelle.Options as IsaOpts
 import           SAWCoreIsabelle.Runner (RunnerError(..), processModules, fatalErr)
 
 
@@ -44,17 +44,17 @@ import           SAWCoreIsabelle.Runner (RunnerError(..), processModules, fatalE
 debug :: (HasOptions, IO.MonadIO m) => String -> m ()
 debug msg = log 2 $ "[DEBUG]: " ++ msg ++ "\n"
 
-runTranslator :: Options.Options -> IO Bool
-runTranslator opts = Options.withOptions opts $
+runTranslator :: IsaOpts.Options -> IO Bool
+runTranslator opts = IsaOpts.withOptions opts $
   processFile' `catch` (\(_ :: RunnerError) -> suggestKeepGoing >> return False)
 
 suggestKeepGoing :: HasOptions => IO ()
-suggestKeepGoing = unless Options.keepGoing $ log 0 $
+suggestKeepGoing = unless IsaOpts.keepGoing $ log 0 $
   "Use '--keep-going' to attempt an incomplete translation."
 
 processFile' :: HasOptions => IO Bool
 processFile' = do
-  let inputFiles = Options.crySources
+  let inputFiles = IsaOpts.crySources
   log 0 $ "Reading cryptol input files: \n" ++ (List.intercalate "\n" $ inputFiles) ++ "\n"
 
   initialEnv <- initialModuleEnv
@@ -82,13 +82,13 @@ processFile' = do
   checkTargetSelect modEnv
   let extraDecls = (Cry.deDecls $ Cry.meDynEnv modEnv)
   let extraTys = (Map.elems $ Cry.deTySyns $ Cry.meDynEnv modEnv)
-  processModules Options.allOptions (Cry.lmLoadedModules (Cry.meLoadedModules modEnv)) extraDecls extraTys
+  processModules IsaOpts.allOptions (Cry.lmLoadedModules (Cry.meLoadedModules modEnv)) extraDecls extraTys
 
 
 initialModuleEnv :: HasOptions => IO Cry.ModuleEnv
 initialModuleEnv = do
   env <- Cry.initialModuleEnv
-  return $ env { Cry.meSearchPath = Options.cryptolDirs ++ (Cry.meSearchPath env) }
+  return $ env { Cry.meSearchPath = IsaOpts.cryptolDirs ++ (Cry.meSearchPath env) }
 
 data LoadModulesState  = LoadModulesState
     { loadedTopEntities :: [Cry.TCTopEntity]
@@ -112,9 +112,9 @@ loadModuleInput file input = do
           Right (topEntity,env) -> return $ (topEntity, input{Cry.minpModuleEnv = env})
 
 checkTargetSelect :: HasOptions => Cry.ModuleEnv -> IO ()
-checkTargetSelect env = case Options.targetSelect of
-  Options.AllModules -> return ()
-  Options.NamedModules namedMods -> do
+checkTargetSelect env = case IsaOpts.targetSelect of
+  IsaOpts.AllModules -> return ()
+  IsaOpts.NamedModules namedMods -> do
     let
       loaded = Cry.lmLoadedModules (Cry.meLoadedModules env)
       loadedNames = map (T.unpack . Cry.modNameToText . Cry.lmName) loaded

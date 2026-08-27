@@ -19,7 +19,7 @@ import qualified Cryptol.Parser.Position as Position
 import qualified Cryptol.Utils.Ident as Cry
 
 import qualified Language.Isabelle.Name as Name
-import qualified SAWCoreIsabelle.Options as Options
+import qualified SAWCoreIsabelle.Options as IsaOpts
 
 data TranslationError =
     UnsupportedDecl Cry.Decl
@@ -75,12 +75,12 @@ innerErrors er ers = case filter nontrivial ers of
   ers' -> InnerErrors er ers'
 
 data OuterTranslationError where
-  OuterTranslationError :: Options.HasOptions => TranslationError -> OuterTranslationError
+  OuterTranslationError :: IsaOpts.HasOptions => TranslationError -> OuterTranslationError
 
-pp :: (Options.HasOptions, Show a, PP a) => a -> String
-pp a = if Options.verbosity >= 3 then pretty a ++ "\n (" ++ show a ++ ")" else pretty a
+pp :: (IsaOpts.HasOptions, Show a, PP a) => a -> String
+pp a = if IsaOpts.verbosity >= 3 then pretty a ++ "\n (" ++ show a ++ ")" else pretty a
 
-ppList :: (Options.HasOptions, Show a, PP a) => [a] -> String
+ppList :: (IsaOpts.HasOptions, Show a, PP a) => [a] -> String
 ppList a = intercalate "\n" $ map pp a
 
 ppNames :: [Name.Name] -> String
@@ -123,7 +123,7 @@ instance Show OuterTranslationError where
     InnerErrors e es -> showErr e ++ "\n" ++ (intercalate "\n" $ map showErr es)
     MonadFailure msg -> msg
 
-showErr :: Options.HasOptions => TranslationError -> String
-showErr er = case Options.verbosity < 2 of
+showErr :: IsaOpts.HasOptions => TranslationError -> String
+showErr er = case IsaOpts.verbosity < 2 of
   True -> show (OuterTranslationError (simpleError er))
   False -> show (OuterTranslationError er)

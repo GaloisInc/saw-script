@@ -20,9 +20,8 @@ import           System.IO (hPutStrLn, stderr)
 
 import qualified Cryptol.Version as Cry
 
-import qualified SAWCoreIsabelle.Options as Options
-import           SAWCoreIsabelle.Options 
-  (Options(..), ImportPrefix(..), TargetSelect(..))
+import qualified SAWCoreIsabelle.Options as IsaOpts
+import           SAWCoreIsabelle.Options (ImportPrefix(..), TargetSelect(..))
 import qualified SAWCoreIsabelle.Runner as Runner
 import           SAWCoreIsabelle.Headless (runTranslator)
 
@@ -31,12 +30,12 @@ import           Paths_saw ( version )
 main :: IO ()
 main = do
   opts <- parseOptions
-  let opts' = Options.addLogger putStrLn $ Options.addErrLogger (hPutStrLn stderr) $ opts
+  let opts' = IsaOpts.addLogger putStrLn $ IsaOpts.addErrLogger (hPutStrLn stderr) $ opts
   (runTranslator opts') >>= \case
     True -> exitSuccess
     False -> exitFailure
 
-parseOptions :: IO Options.Options
+parseOptions :: IO IsaOpts.Options
 parseOptions = do
   args <- getArgs
   curDir <- getCurrentDirectory
@@ -45,13 +44,13 @@ parseOptions = do
     Just opts -> postProcess opts
     Nothing -> OA.handleParseResult result
 
-postProcess :: Options -> IO Options
+postProcess :: IsaOpts.Options -> IO IsaOpts.Options
 postProcess opts = do
-  srcs <- mapM resolvePath (crySources_ opts)
-  dest <- resolvePath $ isaDestDir_ opts
+  srcs <- mapM resolvePath (IsaOpts.crySources_ opts)
+  dest <- resolvePath $ IsaOpts.isaDestDir_ opts
   cryDirsEnv <- maybe [] splitSearchPath <$> lookupEnv cryptolPathEnv
-  cryDirs <- mapM resolvePath (cryDirsEnv ++ cryptolDirs_ opts)
-  return $ opts { crySources_ = srcs, isaDestDir_ = dest, cryptolDirs_ = cryDirs }
+  cryDirs <- mapM resolvePath (cryDirsEnv ++ IsaOpts.cryptolDirs_ opts)
+  return $ opts { IsaOpts.crySources_ = srcs, IsaOpts.isaDestDir_ = dest, IsaOpts.cryptolDirs_ = cryDirs }
 
 initIsabelleInfo :: String
 initIsabelleInfo = List.intercalate ";\n" $ [
@@ -60,7 +59,7 @@ initIsabelleInfo = List.intercalate ";\n" $ [
   , "isabelle build -bv Cryptol"
   ]
 
-parseInfoOptions :: FilePath -> String -> OA.ParserInfo Options.Options
+parseInfoOptions :: FilePath -> String -> OA.ParserInfo IsaOpts.Options
 parseInfoOptions curDir thyHash =  OA.info (fullVersion <*> shortVersion <*> initIsabelle <*> cryThyInfo <*> OA.helper <*> parser)
   (  OA.fullDesc
   <> OA.progDesc "Generate an Isabelle theory from Cryptol source"
@@ -69,7 +68,7 @@ parseInfoOptions curDir thyHash =  OA.info (fullVersion <*> shortVersion <*> ini
   initIsabelle = OA.infoOption initIsabelleInfo $ (OA.long "init-isabelle" <> OA.help "Print Isabelle setup commands")
   cryThyInfo = OA.infoOption thyHash $ (OA.long "theory-hash" <> OA.help "Print SHA1 hash of Cryptol theories")
   fullVersion = OA.infoOption fullVersionString $ (OA.long "full-version" <> OA.help "Show full version information")
-  parser = pure Options.Options
+  parser = pure IsaOpts.Options
     <*> (OA.many ((OA.strOption
     (  OA.long "source"
     <> OA.short 's'

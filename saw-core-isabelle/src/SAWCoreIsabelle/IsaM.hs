@@ -70,7 +70,7 @@ import qualified Language.Isabelle.Theory as Theory
 
 import qualified SAWCoreIsabelle.CryptolDeps as Deps
 import qualified SAWCoreIsabelle.Error as Error
-import qualified SAWCoreIsabelle.Options as Options
+import qualified SAWCoreIsabelle.Options as IsaOpts
 
 data NameEnv = NameEnv
   { nameToIdent :: Map.Map Name.Name Int, identToName :: Map.Map Int Name.Name, minIdent :: Int }
@@ -101,7 +101,7 @@ data IsaEnv = IsaEnv
   , envNameEnv :: NameEnv
   , envCryDeps ::  Deps.CryptolDeps
   , envHashCache :: IO.MVar (Map.Map Cry.Name Int)
-  , envOptions :: Options.Options
+  , envOptions :: IsaOpts.Options
   }
 
 data IsaState = IsaState { stThy :: Theory.Theory }
@@ -130,12 +130,12 @@ mreturn :: Alternative m => Maybe a -> m a
 mreturn (Just a) = pure a
 mreturn Nothing = empty
 
-type IsaM a = Options.HasOptions => IsaM_ a
+type IsaM a = IsaOpts.HasOptions => IsaM_ a
 
 initIsaState :: IsaEnv -> IsaState
 initIsaState env = IsaState (Theory.mkTheory $ envCurTheory env)
 
-initIsaEnv :: Options.HasOptions 
+initIsaEnv :: IsaOpts.HasOptions
            => Deps.CryptolDeps
            -> Name.TheoryName
            -> IO IsaEnv
@@ -144,7 +144,7 @@ initIsaEnv cryEnv thyNm = do
   hashCacheRef <- IO.newMVar Map.empty
   return $ IsaEnv thyNm
     Position.emptyRange tyenv emptyNameEnv cryEnv 
-    hashCacheRef Options.allOptions
+    hashCacheRef IsaOpts.allOptions
 
 execIsaM :: IsaEnv -> IsaM () -> IO (IsaState, IsaOut)
 execIsaM env f = 
@@ -154,7 +154,7 @@ execIsaM env f =
       Right ((), st', w) -> return (st', w)
 
 runIsaM :: IsaEnv -> IsaState -> IsaM a -> IO (Either Error.TranslationError (a, IsaState, IsaOut))
-runIsaM env st f = Options.withOptions (envOptions env) $ do
+runIsaM env st f = IsaOpts.withOptions (envOptions env) $ do
   CME.runExceptT $  RWS.runRWST (unIsaM f) env st
 
 instance MonadFail IsaM_ where
@@ -247,4 +247,4 @@ warn err = do
   RWS.tell (IsaOut $ [Error.addLocation rng err])
 
 catchMaybe :: IsaM a -> (Error.TranslationError -> IsaM a) -> IsaM a
-catchMaybe f hdl = if Options.keepGoing then CME.catchError f hdl else f
+catchMaybe f hdl = if IsaOpts.keepGoing then CME.catchError f hdl else f

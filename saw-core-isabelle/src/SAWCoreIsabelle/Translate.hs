@@ -52,13 +52,13 @@ import qualified Language.Isabelle.Syntax as Syntax
 import qualified SAWCoreIsabelle.Error as Error
 import           SAWCoreIsabelle.Error (TranslationError(..), pp)
 import           SAWCoreIsabelle.IsaM
-import qualified SAWCoreIsabelle.Options as Options
+import qualified SAWCoreIsabelle.Options as IsaOpts
 import qualified SAWCoreIsabelle.CryptolDeps as Deps
 import qualified Cryptol.ModuleSystem.Env as Cry
 
 
 doTranslation ::
-  Options.HasOptions =>
+  IsaOpts.HasOptions =>
   Deps.CryptolDeps ->
   [Cry.ModName] ->
   Name.TheoryName ->
@@ -73,7 +73,7 @@ doTranslation cryEnv imports thyNm f = do
   return $ (outWarns iout, stThy st)
 
 translateModuleIO ::
-  Options.HasOptions =>
+  IsaOpts.HasOptions =>
   Deps.CryptolDeps ->
   [Cry.ModName] ->
   Cry.Module ->
@@ -84,7 +84,7 @@ translateModuleIO cryEnv imports crymod  = do
     translateModule crymod
 
 translateSingleExprIO ::
-  Options.HasOptions =>
+  IsaOpts.HasOptions =>
   Deps.CryptolDeps ->
   Name.Name ->
   Cry.Schema ->
@@ -209,8 +209,8 @@ translateSchema s = do
   body <- translateType (Cry.sType s)
   return $ tAbs tyArgs (tGuard guards body)
 
-isStubbedFnName :: Options.HasOptions => Binding.Binding -> Bool
-isStubbedFnName b = elem (Name.qualifiedIdent b) Options.functionStubs
+isStubbedFnName :: IsaOpts.HasOptions => Binding.Binding -> Bool
+isStubbedFnName b = elem (Name.qualifiedIdent b) IsaOpts.functionStubs
 
 translateDeclGroup :: Cry.DeclGroup -> IsaM ()
 translateDeclGroup = \case
@@ -231,7 +231,7 @@ translateDeclGroup = \case
         Left (StubbedFunction{}) | isStubbedFnName b -> do
           addDecl (Decl.Commented ("Stubbed Function") (Decl.ConstDecl False b))
           return Nothing
-        Left er | Options.keepGoing -> do
+        Left er | IsaOpts.keepGoing -> do
           addDecl (Decl.Commented ("Incomplete translation: " ++ Error.showErr er) (Decl.ConstDecl False b))
           return Nothing
         Left er -> throwError er
@@ -242,7 +242,7 @@ translateDeclGroup = \case
     (b,mbody) <- translateDecl d
     case mbody of
       Left (StubbedFunction{}) -> addDecl (Decl.ConstDecl False b)
-      Left er -> case Options.keepGoing of
+      Left er -> case IsaOpts.keepGoing of
         True -> addDecl (Decl.Commented ("Incomplete translation: " ++ Error.showErr er) (Decl.ConstDecl False b))
         False -> throwError er
       Right (args, body) -> do
@@ -283,7 +283,7 @@ extraGuard ctx tv = case Cry.tpKind tv of
     Cry.SolvedIf [] -> return Nothing
     _ -> do
       let rng = Cry.tvarSource $ Cry.tpInfo tv
-      Options.log (-1) $  "[warning] at " ++ pp rng ++ "\n Type parameter is not constrained to fin: " ++ pp tp
+      IsaOpts.log (-1) $  "[warning] at " ++ pp rng ++ "\n Type parameter is not constrained to fin: " ++ pp tp
       return $ Just $ Cry.TCon (Cry.PC Cry.PFin) [tp]
   Cry.KType -> return $ Just $ Cry.TCon (Cry.PC Cry.PEq) [tp]
   _ -> return Nothing
@@ -412,7 +412,7 @@ translateTCon tc es = case (tc, es) of
   _ | Just e1 <- asWordType (Cry.TCon tc es) -> tWord <$> translateType e1
   (Cry.TC Cry.TCSeq, [e1, e2]) -> tSeq <$> translateType e1 <*> translateType e2
   (Cry.TC Cry.TCInteger, []) -> return $ tInt
-  (Cry.TC Cry.TCInf, []) | Options.keepGoing -> do
+  (Cry.TC Cry.TCInf, []) | IsaOpts.keepGoing -> do
     warn (UnsupportedType (Cry.TCon tc es))
     mkUnsupportedT "Inf"
 
@@ -463,8 +463,8 @@ unNumber e ts = case (e,ts) of
       Just (i, t2)
   _ -> Nothing
 
-debugEnable :: Options.HasOptions => Bool
-debugEnable = Options.verbosity >= 3
+debugEnable :: IsaOpts.HasOptions => Bool
+debugEnable = IsaOpts.verbosity >= 3
 
 _debug :: String -> IsaM ()
 _debug msg = if debugEnable then (IO.liftIO $ putStrLn $ "[DEBUG]: " ++ msg ++ "\n") else return ()
@@ -787,7 +787,7 @@ translateExpr = rethrow UnsupportedExpr $ \case
           -- in general this can be detected by examining the bindings themselves,
           -- but this handles the common case where only one binding exists
           Cry.Recursive [d] -> (:[]) <$> translateDecl' d
-          Cry.Recursive ds | Options.keepGoing -> do
+          Cry.Recursive ds | IsaOpts.keepGoing -> do
             undef <- mkUndefined (UnsupportedRecursion ds)
             forM ds $ \d -> withDeclBinding d $ \b _ ->
               return (b, undef (Binding.bindType b))

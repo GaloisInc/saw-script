@@ -49,7 +49,7 @@ import qualified Language.Isabelle.Output as Output
 
 import qualified SAWCoreIsabelle.Error as Error
 import           SAWCoreIsabelle.Options (HasOptions, log, logErr)
-import qualified SAWCoreIsabelle.Options as Options
+import qualified SAWCoreIsabelle.Options as IsaOpts
 import qualified SAWCoreIsabelle.Translate as Translate
 import qualified SAWCoreIsabelle.CryptolDeps as Deps
 import qualified Data.Text as Text
@@ -104,11 +104,11 @@ renameImports ::
 renameImports thy = do
   decls <- Decl.traverseImports (Theory.thyDecls thy) $ \nm -> 
     case isBuiltinThy (Name.thyNm nm) of
-      True -> case Options.isaImportPrefix of
-        Options.NoPrefix -> return nm
-        Options.CryptolImage ->
+      True -> case IsaOpts.isaImportPrefix of
+        IsaOpts.NoPrefix -> return nm
+        IsaOpts.CryptolImage ->
           return $ nm { Name.thyNm = "\"Cryptol." ++ Name.thyNm nm ++ "\"" }
-        Options.CustomPrefix s ->
+        IsaOpts.CustomPrefix s ->
           return $ nm { Name.thyNm = "\"" ++ s ++ Name.thyNm nm ++ "\"" }
       False -> return nm
   return $ thy { Theory.thyDecls = decls }
@@ -163,7 +163,7 @@ writeResult ers res = do
     [] -> do
       log 0 $ "Successfully translated theory " ++ (show $ Theory.thyNm res)
       tell st
-    _ -> case Options.keepGoing of
+    _ -> case IsaOpts.keepGoing of
       True -> do
         err $ "Errors raised while translating theory " ++ (show $ Theory.thyNm res)
         tell st
@@ -174,25 +174,25 @@ writeResult ers res = do
         IO.liftIO $ throw (RunnerError errMsg)
 
 processModules ::
-  Options.Options ->
+  IsaOpts.Options ->
   [Cry.LoadedModule] ->
   [Cry.DeclGroup] -> 
   [Cry.TySyn]  ->
   IO Bool
-processModules opts loadedModules extraDecls extraTys = Options.withOptions opts $ do
+processModules opts loadedModules extraDecls extraTys = IsaOpts.withOptions opts $ do
   let
-    outDir = Options.isaDestDir
+    outDir = IsaOpts.isaDestDir
     cryDeps = Deps.mkCryptolDeps loadedModules extraDecls extraTys
     allMods =  map Cry.lmName loadedModules
     
   trresult <- execWriterT $ do 
-    imports <- case Options.targetSelect of
-      Options.AllModules -> return allMods
-      Options.NamedModules nms -> 
+    imports <- case IsaOpts.targetSelect of
+      IsaOpts.AllModules -> return allMods
+      IsaOpts.NamedModules nms ->
         return $ filter (\m -> elem (Text.unpack $ Cry.modNameToText m) nms) allMods
-      Options.ModuleNames nms ->
+      IsaOpts.ModuleNames nms ->
         return $ filter (\m -> elem m nms) allMods
-      Options.TargetExpr nm sch e -> do
+      IsaOpts.TargetExpr nm sch e -> do
         (errs,res) <- IO.liftIO $ Translate.translateSingleExprIO cryDeps nm sch e
         writeResult errs res
         let deps = Theory.thyImports res
