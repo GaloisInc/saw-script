@@ -30,7 +30,8 @@ import qualified Cryptol.TypeCheck.AST as Cry
 import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 import qualified Cryptol.Utils.Ident as Cry
 import qualified Cryptol.Utils.Logger as Cry
-import           Cryptol.Utils.PP (pretty)
+
+import           CryptolSAWCore.Pretty (pp)
 
 import           SAWCoreIsabelle.Options (HasOptions, log, logErr)
 import qualified SAWCoreIsabelle.Options as Options
@@ -105,9 +106,9 @@ loadModuleInput file input = do
   tryIO (Cry.runModuleM input (CryBase.loadModuleByPath True file)) >>= \case
     Left ioerr -> fatalErr $ "Failed to read input file: " ++ show ioerr
     Right (resultEither, warnings) -> do
-      mapM_ (logErr 0 . pretty) warnings
+      mapM_ (logErr 0 . show . pp) warnings
       case resultEither of
-          Left er -> logErr (-1) (pretty er) >> throw (RunnerError (pretty er))
+          Left er -> logErr (-1) (show $ pp er) >> throw (RunnerError (show $ pp er))
           Right (topEntity,env) -> return $ (topEntity, input{Cry.minpModuleEnv = env})
 
 checkTargetSelect :: HasOptions => Cry.ModuleEnv -> IO ()
