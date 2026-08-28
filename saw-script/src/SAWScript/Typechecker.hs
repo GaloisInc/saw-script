@@ -1254,7 +1254,7 @@ inferExpr expr = case expr of
     Block pos body -> do
         ctx <- getFreshTyVar pos
         tyResult <- getFreshTyVar pos
-        let ty = tBlock (PosInferred InfTerm pos) ctx tyResult
+        let ty = tApply (PosInferred InfTerm pos) ctx tyResult
         pushScope
         body' <- inferBlock pos ctx ty body
         popScope
@@ -1833,7 +1833,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
             -- straightforward way to proceed here is to unify both
             -- the monad type (ctx) and the result type expected by
             -- the pattern (pty), like this:
-            --    e' <- checkExpr e (tBlock blockpos ctx pty)
+            --    e' <- checkExpr e (tApply blockpos ctx pty)
             --
             -- However, historically when at the syntactic top level
             -- (only), the monad type was left off, meaning that
@@ -1868,7 +1868,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
             let restrictToCorrect = do
                   -- unify the type of e with the expected monad and
                   -- pattern types
-                  unify (tBlock blockpos ctx pty) (Pos.getPos e') ty
+                  unify (tApply blockpos ctx pty) (Pos.getPos e') ty
                   return e'
 
             -- The special case for non-monadic values
@@ -1894,8 +1894,8 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
                   -- The historic behavior is that the pattern gets bound
                   -- to a value of type m t instead of type t. This means:
                   --    - we should unify pty, which is the type of the
-                  --      pattern, with m t, which is tBlock ctx' valty'
-                  --      (rather than tBlock ctx valty', which is the
+                  --      pattern, with m t, which is tApply ctx' valty'
+                  --      (rather than tApply ctx valty', which is the
                   --      type we should be getting)
                   --    - this will fail if the pattern includes a type
                   --      signature with a non-monad type, but that's ok
@@ -1905,7 +1905,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
                   --    - we _do_ need to wrap the expression in "return"
                   --      so that the ultimate results are well-typed and
                   --      happen in the TopLevel monad
-                  unify pty (Pos.getPos e') (tBlock spos ctx' valty')
+                  unify pty (Pos.getPos e') (tApply spos ctx' valty')
 
                   -- Wrap the expression in "return" to produce an
                   -- expression of type TopLevel (m t).
@@ -1916,7 +1916,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
                 if not atSyntacticTopLevel then
                     restrictToCorrect
                 else do
-                    ok <- matches blockpos (tBlock blockpos ctx pty) ty
+                    ok <- matches blockpos (tApply blockpos ctx pty) ty
                     if ok then
                         restrictToCorrect
                     else
@@ -1959,7 +1959,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
             let spos' = PosInferred InfTerm spos
             let tm = TyCon spos' (ContextCon TopLevel) []
             tx <- getFreshTyVar spos
-            unify (tBlock blockpos ctx tx) spos (tBlock spos tm tx)
+            unify (tApply blockpos ctx tx) spos (tApply spos tm tx)
             return s
         StmtTypedef allpos apos a ty -> do
             ty' <- checkType kindStar ty
