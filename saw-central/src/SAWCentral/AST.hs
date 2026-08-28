@@ -55,6 +55,11 @@ module SAWCentral.AST
      , tContext
      , tRecord, tVar
      , tMono, tForall
+     , txTuple, txArray, txFun
+     , txString, txTerm, txType, txBool, txInt, txApply
+     , txAIG, txCFG, txJVMSpec, txLLVMSpec, txMIRSpec
+     , txContext
+     , txRecord, txVar
 
      , isContext
      ) where
@@ -833,6 +838,9 @@ prettyWholeModule ppopts stmts =
 
 ------------------------------------------------------------
 -- Type formers
+--
+-- The @tx@ forms wrap in `TypeExplicit` and are mostly used by the
+-- parser.
 
 tUnit :: Pos -> Type
 tUnit pos = tTuple pos []
@@ -889,11 +897,64 @@ tRecord pos fields = TyRecord pos (Map.fromList fields)
 tVar :: Pos -> Name -> Type
 tVar pos n = TyVar pos n
 
+
 tMono :: Type -> Schema
-tMono = Forall []
+tMono t = Forall [] t
 
 tForall :: [(Pos, Name)] -> Schema -> Schema
 tForall xs (Forall ys t) = Forall (xs ++ ys) t
+
+
+txTuple :: Pos -> [Type] -> Type
+txTuple pos ts = tTuple pos ts
+
+txArray :: Pos -> Type -> Type
+txArray pos t = tArray pos t
+
+txFun :: Pos -> NamedParamInfo -> [Type] -> Map Name Type -> Type -> Type
+txFun pos n p np r = tFun pos n p np r
+
+txString :: Pos -> Type
+txString pos = tString pos
+
+txTerm :: Pos -> Type
+txTerm pos = tTerm pos
+
+txType :: Pos -> Type
+txType pos = tType pos
+
+txBool :: Pos -> Type
+txBool pos = tBool pos
+
+txInt :: Pos -> Type
+txInt pos = tInt pos
+
+txApply :: Pos -> Type -> Type -> Type
+txApply pos c t = tApply pos c t
+
+txAIG :: Pos -> Type
+txAIG pos = tAIG pos
+
+txCFG :: Pos -> Type
+txCFG pos = tCFG pos
+
+txJVMSpec :: Pos -> Type
+txJVMSpec pos = tJVMSpec pos
+
+txLLVMSpec :: Pos -> Type
+txLLVMSpec pos = tLLVMSpec pos
+
+txMIRSpec :: Pos -> Type
+txMIRSpec pos = tMIRSpec pos
+
+txContext :: Pos -> Context -> Type
+txContext pos c = tContext pos c
+
+txRecord :: Pos -> [(Name, Type)] -> Type
+txRecord pos fields = tRecord pos fields
+
+txVar :: Pos -> Name -> Type
+txVar pos a = tVar pos a
 
 
 ------------------------------------------------------------
