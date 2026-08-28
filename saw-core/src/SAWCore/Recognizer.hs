@@ -51,6 +51,8 @@ module SAWCore.Recognizer
   , asLambdaList
   , asPi
   , asPiList
+  , asFun
+  , asFunAll
   , asConstant
   , asVariable
   , asSort
@@ -80,6 +82,7 @@ import Prelude hiding (Foldable(..))
 import Control.Lens
 import Control.Monad
 import Data.Foldable (Foldable(..)) -- for foldl'
+import qualified Data.IntMap as IntMap
 import qualified Data.Vector as V
 import Data.Text (Text)
 import Numeric.Natural (Natural)
@@ -390,6 +393,25 @@ asPiList :: Term -> ([(VarName, Term)], Term)
 asPiList = go []
   where go r (asPi -> Just (nm,tp,rhs)) = go ((nm,tp):r) rhs
         go r rhs = (reverse r, rhs)
+
+-- | Recognize a term with a non-dependent Pi form @a -> b@.
+asFun :: Term -> Maybe (Term, Term)
+asFun t =
+  case asPi t of
+    Nothing -> Nothing
+    Just (x, ty, body)
+      | IntMap.member (vnIndex x) (varTypes body) -> Nothing
+      | otherwise -> Just (ty, body)
+
+-- | Decompose a term of the form @t1 -> t2 -> ... tn -> t@ into its
+-- list of non-dependent argument types and its conclusion type.
+asFunAll :: Term -> ([Term], Term)
+asFunAll = go []
+  where
+    go ts t =
+      case asFun t of
+        Just (t1, t2) -> go (t1 : ts) t2
+        Nothing -> (reverse ts, t)
 
 asConstant :: Recognizer Term Name
 asConstant (unlabel -> unwrapTermF -> Constant nm) = pure nm
