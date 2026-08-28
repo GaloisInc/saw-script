@@ -50,7 +50,7 @@ module SAWCentral.AST
      , prettyWholeModule
 
      , tUnit, tTuple, tArray, tFun
-     , tString, tTerm, tType, tBool, tInt, tBlock
+     , tString, tTerm, tType, tBool, tInt, tApply
      , tAIG, tCFG, tJVMSpec, tLLVMSpec, tMIRSpec
      , tContext
      , tRecord, tVar
@@ -862,8 +862,8 @@ tBool pos = TyCon pos BoolCon []
 tInt :: Pos -> Type
 tInt pos = TyCon pos IntCon []
 
-tBlock :: Pos -> Type -> Type -> Type
-tBlock pos c t = TyCon pos BlockCon [c,t]
+tApply :: Pos -> Type -> Type -> Type
+tApply pos c t = TyCon pos BlockCon [c, t]
 
 tAIG :: Pos -> Type
 tAIG pos = TyCon pos AIGCon []

@@ -257,7 +257,7 @@ FunctionType :: { [(Maybe (Token Pos), Type)] }
 
 AppliedType :: { Type }
  : BaseType                             { $1                            }
- | AppliedType BaseType                 { tBlock (maxSpan' $1 $2) $1 $2 }
+ | AppliedType BaseType                 { tApply (maxSpan' $1 $2) $1 $2 }
 
 -- special case of function type that can be followed by more base types
 -- without requiring parens

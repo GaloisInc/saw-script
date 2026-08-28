@@ -1469,7 +1469,7 @@ interpretMain = do
       -- they call prove_print or prove_sat or whatever and don't
       -- explicitly throw away the result.
       tyRet = SS.TyVar pos "a"
-      tyMonadic = SS.tBlock pos (SS.tContext pos SS.TopLevel) tyRet
+      tyMonadic = SS.tApply pos (SS.tContext pos SS.TopLevel) tyRet
       tyExpected = SS.Forall [(pos, "a")] tyMonadic
   let main = case ScopedMap.lookup "main" varenv of
           Just (_defpos, lc, tyFound, v, _doc) -> Just (lc, tyFound, v)
