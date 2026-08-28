@@ -262,7 +262,7 @@ span.spaces    { background: white }
 <span class="lineno">  243 </span><span class="spaces">    </span><span class="istickedoff">go :: Term -&gt; Int -&gt; (Term, Int)</span>
 <span class="lineno">  244 </span><span class="spaces">    </span><span class="istickedoff">go x !i =</span>
 <span class="lineno">  245 </span><span class="spaces">      </span><span class="istickedoff">case asPairSelector x of</span>
-<span class="lineno">  246 </span><span class="spaces">        </span><span class="istickedoff">Just (x', True) -&gt; <span class="nottickedoff">go x' (i+1)</span></span>
+<span class="lineno">  246 </span><span class="spaces">        </span><span class="istickedoff">Just (x', True) -&gt; go x' (i+1)</span>
 <span class="lineno">  247 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; (x, i)</span></span>
 <span class="lineno">  248 </span>
 <span class="lineno">  249 </span>asRecordType :: Recognizer Term [(FieldName, Term)]
@@ -446,9 +446,9 @@ span.spaces    { background: white }
 <span class="lineno">  427 </span><span class="decl"><span class="istickedoff">asBoolType = isGlobalDef &quot;Prelude.Bool&quot;</span></span>
 <span class="lineno">  428 </span>
 <span class="lineno">  429 </span>asNatType :: Recognizer Term ()
-<span class="lineno">  430 </span><span class="decl"><span class="nottickedoff">asNatType (asConstant -&gt; Just o)</span>
-<span class="lineno">  431 </span><span class="spaces">  </span><span class="nottickedoff">| nameInfo o == ModuleIdentifier preludeNatIdent = pure ()</span>
-<span class="lineno">  432 </span><span class="spaces"></span><span class="nottickedoff">asNatType _ = Nothing</span></span>
+<span class="lineno">  430 </span><span class="decl"><span class="istickedoff">asNatType (asConstant -&gt; Just o)</span>
+<span class="lineno">  431 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlyfalse">nameInfo o == ModuleIdentifier preludeNatIdent</span> = <span class="nottickedoff">pure ()</span></span>
+<span class="lineno">  432 </span><span class="spaces"></span><span class="istickedoff">asNatType _ = Nothing</span></span>
 <span class="lineno">  433 </span>
 <span class="lineno">  434 </span>asIntegerType :: Recognizer Term ()
 <span class="lineno">  435 </span><span class="decl"><span class="nottickedoff">asIntegerType = isGlobalDef &quot;Prelude.Integer&quot;</span></span>
@@ -472,7 +472,7 @@ span.spaces    { background: white }
 <span class="lineno">  453 </span><span class="decl"><span class="istickedoff">asBitvectorType = (isGlobalDef &quot;Prelude.Vec&quot; @&gt; asNat) &lt;@ asBoolType</span></span>
 <span class="lineno">  454 </span>
 <span class="lineno">  455 </span>asMux :: Recognizer Term (Term :*: Term :*: Term :*: Term)
-<span class="lineno">  456 </span><span class="decl"><span class="nottickedoff">asMux = isGlobalDef &quot;Prelude.ite&quot; @&gt; return &lt;@&gt; return &lt;@&gt; return &lt;@&gt; return</span></span>
+<span class="lineno">  456 </span><span class="decl"><span class="istickedoff">asMux = isGlobalDef &quot;Prelude.ite&quot; @&gt; return &lt;@&gt; return &lt;@&gt; return &lt;@&gt; return</span></span>
 <span class="lineno">  457 </span>
 <span class="lineno">  458 </span>asEq :: Recognizer Term (Term, Term, Term)
 <span class="lineno">  459 </span><span class="decl"><span class="istickedoff">asEq t =</span>
