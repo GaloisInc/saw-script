@@ -476,7 +476,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
               pos
               func_name
               ReadOnlyVar
-              (tMono $ tTerm pos)
+              (tMono $ tTerm $ TypeInferred InfTerm pos)
               Nothing             -- FUTURE: slot for doc string, could put something here
               (VTerm typed_extracted_func_const)
 

@@ -229,9 +229,9 @@ AExpr :: { Expr }
 Field :: { (Name, Expr) }
  : name '=' Expression                  { (tokStr $1, $3) }
 
-Names :: { [(Pos, Name)] }
- : name                                 { [(getPos $1, tokStr $1)] }
- | name ',' Names                       { (getPos $1, tokStr $1) : $3 }
+Names :: { [(TypeProvenance, Name)] }
+ : name                                 { [(TypeExplicit (getPos $1), tokStr $1)] }
+ | name ',' Names                       { (TypeExplicit (getPos $1), tokStr $1) : $3 }
 
 PolyType :: { Schema }
  : Type                                 { tMono $1     }

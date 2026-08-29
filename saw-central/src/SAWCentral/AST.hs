@@ -67,7 +67,7 @@ module SAWCentral.AST
 import qualified SAWSupport.Pretty as PPS
 
 import SAWCentral.Panic (panic)
-import SAWCentral.Position (Pos(..), Positioned(..), maxSpan)
+import SAWCentral.Position (Pos(..), Positioned(..), maxSpan, TypeProvenance(..))
 
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -229,21 +229,21 @@ instance Semigroup NamedParamInfo where
 -- notes in Position.hs.
 --
 data Type
-  = TyCon Pos TyCon [Type]
-  | TyFunc Pos NamedParamInfo [Type] (Map Name Type) Type
-  | TyRecord Pos (Map Name Type)
-  | TyVar Pos Name
-  | TyUnifyVar Pos TypeIndex       -- ^ For internal typechecker use only
+  = TyCon TypeProvenance TyCon [Type]
+  | TyFunc TypeProvenance NamedParamInfo [Type] (Map Name Type) Type
+  | TyRecord TypeProvenance (Map Name Type)
+  | TyVar TypeProvenance Name
+  | TyUnifyVar TypeProvenance TypeIndex       -- ^ For internal typechecker use only
   deriving Show
 
-data Schema = Forall [(Pos, Name)] Type
+data Schema = Forall [(TypeProvenance, Name)] Type
   deriving Show
 
 -- | A schema pattern is like a schema but has potentially multiple
 -- type entries that are meant to match fragments of a complete
 -- schema. (We don't, for now at least, need a separate type for type
 -- patterns and can just use Type.)
-data SchemaPattern = SchemaPattern [(Pos, Name)] [Type]
+data SchemaPattern = SchemaPattern [(TypeProvenance, Name)] [Type]
 
 -- | The things a (named) TyVar can refer to by its name.
 --
@@ -393,13 +393,19 @@ data DeclGroup
 ------------------------------------------------------------
 -- Position extraction
 
+-- | This is used by the parser where all the provenance is
+--   `TypeExplicit`, and should not really be used downstream from
+--   there. The locations without the accompanying provenance
+--   annotations aren't too meaningful and may be confusing.
+--
 instance Positioned Type where
-  getPos (TyCon pos _ _) = pos
-  getPos (TyFunc pos _ _ _ _) = pos
-  getPos (TyRecord pos _) = pos
-  getPos (TyVar pos _) = pos
-  getPos (TyUnifyVar pos _) = pos
-
+  getPos ty = case ty of
+      TyCon prov _ _ -> getPos prov
+      TyFunc prov _ _ _ _ -> getPos prov
+      TyRecord prov _ -> getPos prov
+      TyVar prov _ -> getPos prov
+      TyUnifyVar prov _ -> getPos prov
+ 
 instance Positioned Expr where
   getPos (Bool pos _) = pos
   getPos (String pos _) = pos
@@ -842,119 +848,119 @@ prettyWholeModule ppopts stmts =
 -- The @tx@ forms wrap in `TypeExplicit` and are mostly used by the
 -- parser.
 
-tUnit :: Pos -> Type
-tUnit pos = tTuple pos []
+tUnit :: TypeProvenance -> Type
+tUnit prov = tTuple prov []
 
-tTuple :: Pos -> [Type] -> Type
-tTuple pos ts = TyCon pos (TupleCon $ fromIntegral $ length ts) ts
+tTuple :: TypeProvenance -> [Type] -> Type
+tTuple prov ts = TyCon prov (TupleCon $ fromIntegral $ length ts) ts
 
-tArray :: Pos -> Type -> Type
-tArray pos t = TyCon pos ArrayCon [t]
+tArray :: TypeProvenance -> Type -> Type
+tArray prov t = TyCon prov ArrayCon [t]
 
 -- | Create a function type a1 -> a2 -> ... -> b.
-tFun :: Pos -> NamedParamInfo -> [Type] -> Map Name Type -> Type -> Type
-tFun pos names params namedParams ret = TyFunc pos names params namedParams ret
+tFun :: TypeProvenance -> NamedParamInfo -> [Type] -> Map Name Type -> Type -> Type
+tFun prov names params namedParams ret = TyFunc prov names params namedParams ret
 
-tString :: Pos -> Type
-tString pos = TyCon pos StringCon []
+tString :: TypeProvenance -> Type
+tString prov = TyCon prov StringCon []
 
-tTerm :: Pos -> Type
-tTerm pos = TyCon pos TermCon []
+tTerm :: TypeProvenance -> Type
+tTerm prov = TyCon prov TermCon []
 
-tType :: Pos -> Type
-tType pos = TyCon pos TypeCon []
+tType :: TypeProvenance -> Type
+tType prov = TyCon prov TypeCon []
 
-tBool :: Pos -> Type
-tBool pos = TyCon pos BoolCon []
+tBool :: TypeProvenance -> Type
+tBool prov = TyCon prov BoolCon []
 
-tInt :: Pos -> Type
-tInt pos = TyCon pos IntCon []
+tInt :: TypeProvenance -> Type
+tInt prov = TyCon prov IntCon []
 
-tApply :: Pos -> Type -> Type -> Type
-tApply pos c t = TyCon pos BlockCon [c, t]
+tApply :: TypeProvenance -> Type -> Type -> Type
+tApply prov c t = TyCon prov BlockCon [c, t]
 
-tAIG :: Pos -> Type
-tAIG pos = TyCon pos AIGCon []
+tAIG :: TypeProvenance -> Type
+tAIG prov = TyCon prov AIGCon []
 
-tCFG :: Pos -> Type
-tCFG pos = TyCon pos CFGCon []
+tCFG :: TypeProvenance -> Type
+tCFG prov = TyCon prov CFGCon []
 
-tJVMSpec :: Pos -> Type
-tJVMSpec pos = TyCon pos JVMSpecCon []
+tJVMSpec :: TypeProvenance -> Type
+tJVMSpec prov = TyCon prov JVMSpecCon []
 
-tLLVMSpec :: Pos -> Type
-tLLVMSpec pos = TyCon pos LLVMSpecCon []
+tLLVMSpec :: TypeProvenance -> Type
+tLLVMSpec prov = TyCon prov LLVMSpecCon []
 
-tMIRSpec :: Pos -> Type
-tMIRSpec pos = TyCon pos MIRSpecCon []
+tMIRSpec :: TypeProvenance -> Type
+tMIRSpec prov = TyCon prov MIRSpecCon []
 
-tContext :: Pos -> Context -> Type
-tContext pos c = TyCon pos (ContextCon c) []
+tContext :: TypeProvenance -> Context -> Type
+tContext prov c = TyCon prov (ContextCon c) []
 
-tRecord :: Pos -> [(Name, Type)] -> Type
-tRecord pos fields = TyRecord pos (Map.fromList fields)
+tRecord :: TypeProvenance -> [(Name, Type)] -> Type
+tRecord prov fields = TyRecord prov (Map.fromList fields)
 
-tVar :: Pos -> Name -> Type
-tVar pos n = TyVar pos n
+tVar :: TypeProvenance -> Name -> Type
+tVar prov n = TyVar prov n
 
 
 tMono :: Type -> Schema
 tMono t = Forall [] t
 
-tForall :: [(Pos, Name)] -> Schema -> Schema
+tForall :: [(TypeProvenance, Name)] -> Schema -> Schema
 tForall xs (Forall ys t) = Forall (xs ++ ys) t
 
 
 txTuple :: Pos -> [Type] -> Type
-txTuple pos ts = tTuple pos ts
+txTuple pos ts = tTuple (TypeExplicit pos) ts
 
 txArray :: Pos -> Type -> Type
-txArray pos t = tArray pos t
+txArray pos t = tArray (TypeExplicit pos) t
 
 txFun :: Pos -> NamedParamInfo -> [Type] -> Map Name Type -> Type -> Type
-txFun pos n p np r = tFun pos n p np r
+txFun pos n p np r = tFun (TypeExplicit pos) n p np r
 
 txString :: Pos -> Type
-txString pos = tString pos
+txString pos = tString (TypeExplicit pos)
 
 txTerm :: Pos -> Type
-txTerm pos = tTerm pos
+txTerm pos = tTerm (TypeExplicit pos)
 
 txType :: Pos -> Type
-txType pos = tType pos
+txType pos = tType (TypeExplicit pos)
 
 txBool :: Pos -> Type
-txBool pos = tBool pos
+txBool pos = tBool (TypeExplicit pos)
 
 txInt :: Pos -> Type
-txInt pos = tInt pos
+txInt pos = tInt (TypeExplicit pos)
 
 txApply :: Pos -> Type -> Type -> Type
-txApply pos c t = tApply pos c t
+txApply pos c t = tApply (TypeExplicit pos) c t
 
 txAIG :: Pos -> Type
-txAIG pos = tAIG pos
+txAIG pos = tAIG (TypeExplicit pos)
 
 txCFG :: Pos -> Type
-txCFG pos = tCFG pos
+txCFG pos = tCFG (TypeExplicit pos)
 
 txJVMSpec :: Pos -> Type
-txJVMSpec pos = tJVMSpec pos
+txJVMSpec pos = tJVMSpec (TypeExplicit pos)
 
 txLLVMSpec :: Pos -> Type
-txLLVMSpec pos = tLLVMSpec pos
+txLLVMSpec pos = tLLVMSpec (TypeExplicit pos)
 
 txMIRSpec :: Pos -> Type
-txMIRSpec pos = tMIRSpec pos
+txMIRSpec pos = tMIRSpec (TypeExplicit pos)
 
 txContext :: Pos -> Context -> Type
-txContext pos c = tContext pos c
+txContext pos c = tContext (TypeExplicit pos) c
 
 txRecord :: Pos -> [(Name, Type)] -> Type
-txRecord pos fields = tRecord pos fields
+txRecord pos fields = tRecord (TypeExplicit pos) fields
 
 txVar :: Pos -> Name -> Type
-txVar pos a = tVar pos a
+txVar pos a = tVar (TypeExplicit pos) a
 
 
 ------------------------------------------------------------
@@ -970,5 +976,5 @@ isContext ::
     -> Type             -- ^ The type 'ty' to inspect
     -> Bool
 isContext c ty = case ty of
-  TyCon _pos (ContextCon c') [] | c' == c -> True
+  TyCon _prov (ContextCon c') [] | c' == c -> True
   _ -> False

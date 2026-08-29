@@ -28,7 +28,7 @@ import SAWCentral.AST
 -- | namedTyVars is a type-class-polymorphic function for extracting named
 -- type variables from a type or type schema. It returns a set of Name
 -- (Name is just Text) manifested as a map from those Names to their
--- positions.
+-- provenance.
 --
 -- We take the first position we see. The calls to `Map.union` are
 -- organized accordingly (it favors its left argument).
@@ -43,7 +43,7 @@ import SAWCentral.AST
 -- typechecker, maybe this should get moved back to Typechecker.hs.
 --
 class NamedTyVars t where
-  namedTyVars :: t -> Map Name Pos
+  namedTyVars :: t -> Map Name TypeProvenance
 
 instance (Ord k, NamedTyVars a) => NamedTyVars (Map k a) where
   namedTyVars = namedTyVars . Map.elems
@@ -64,7 +64,7 @@ instance NamedTyVars Type where
         in
         Map.unions [paramVars, namedParamVars, retVars]
     TyRecord _ tm     -> namedTyVars tm
-    TyVar pos n       -> Map.singleton n pos
+    TyVar prov n      -> Map.singleton n prov
     TyUnifyVar _ _    -> Map.empty
 
 instance NamedTyVars Schema where
