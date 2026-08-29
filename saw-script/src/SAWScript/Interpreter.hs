@@ -198,7 +198,7 @@ getType pat = case pat of
     SS.PWild _pos ~(Just t) -> t
     SS.PVar _allpos _xpos _x ~(Just t) -> t
     SS.PTuple tuplepos pats ->
-        SS.TyCon tuplepos (SS.TupleCon (genericLength pats)) (map getType pats)
+        SS.TyCon (SS.TypeExplicit tuplepos) (SS.TupleCon (genericLength pats)) (map getType pats)
 
 -- Convert some text to an InputText for cryptol-saw-core.
 toInputText :: SS.Pos -> Text -> CEnv.InputText
@@ -215,7 +215,6 @@ toInputText pos0 txt =
       SS.Range f sl sc _ _ -> (f,sl, sc)
       SS.FileOnlyPos f -> (f, 1, 1)
       SS.FileAndFunctionPos f _ -> (f, 1, 1)
-      SS.PosInferred _ pos' -> extract pos'
       SS.PosInternal s -> (s,1,1)
       SS.PosInsideBuiltin -> ("(builtin)", 1, 1)
       SS.PosREPL       -> ("<interactive>", 1, 1)
@@ -1463,14 +1462,15 @@ interpretMain = do
   Environ varenv tyenv _cryenv <- gets rwEnviron
   rbenv <- gets rwRebindables
   let pos = SS.PosInternal "entry"
+      prov = SS.TypeInferred SS.InfTerm pos
       -- We need the type to be "TopLevel a", not just "TopLevel ()".
       -- There are several (old) tests in the test suite whose main
       -- returns something, e.g. several are TopLevel Theorem because
       -- they call prove_print or prove_sat or whatever and don't
       -- explicitly throw away the result.
-      tyRet = SS.TyVar pos "a"
-      tyMonadic = SS.tApply pos (SS.tContext pos SS.TopLevel) tyRet
-      tyExpected = SS.Forall [(pos, "a")] tyMonadic
+      tyRet = SS.TyVar prov "a"
+      tyMonadic = SS.tApply prov (SS.tContext prov SS.TopLevel) tyRet
+      tyExpected = SS.Forall [(SS.TypeExplicit pos, "a")] tyMonadic
   let main = case ScopedMap.lookup "main" varenv of
           Just (_defpos, lc, tyFound, v, _doc) -> Just (lc, tyFound, v)
           -- Having main be rebindable doesn't make much sense, but
@@ -2548,7 +2548,7 @@ toplevelSubshell () = do
     rw' <- liftIO $ hook ro rw
     put rw'
     popScope
-    let ty = SS.tUnit (rwPosition rw)
+    let ty = SS.tUnit (SS.TypeInferred SS.InfTerm $ rwPosition rw)
     return $ toValue ty "subshell" ()
 
 -- The proof_subshell command.
@@ -2570,18 +2570,19 @@ proofScriptSubshell () = do
     scriptTopLevel $ do
         put rw'
         popScope
-    let ty = SS.tUnit (rwPosition rw)
+    let ty = SS.tUnit (SS.TypeInferred SS.InfTerm $ rwPosition rw)
     return $ toValue ty "proof_subshell" ()
 
 -- The "map" builtin.
 mapValue :: Value -> [Value] -> TopLevel Value
 mapValue f xs =
   do let pos = SS.PosInsideBuiltin
+         prov = SS.TypeInferred SS.InfTerm pos
      let info = "(value was in a \"map\")"
      -- toValue will check the array type but not the element type,
      -- since we already have Values here. So use unit as a
      -- placeholder.
-     let ty = SS.tArray pos (SS.tUnit pos)
+     let ty = SS.tArray prov (SS.tUnit prov)
      toValue ty "map" <$> traverse (applyValue pos info f) xs
 
 -- The "for" builtin.
@@ -4705,7 +4706,7 @@ primitives = Map.fromList $
     [ "Merge two simplification sets into one." ]
 
   , prim "basic_ss"            "Simpset"
-    (bicVal $ \bic _ -> toValue (SS.TyVar SS.PosInsideBuiltin "Simpset") "basic_ss" $ biBasicSS bic)
+    (bicVal $ \bic _ -> toValue (SS.TyVar (SS.TypeInferred SS.InfTerm SS.PosInsideBuiltin) "Simpset") "basic_ss" $ biBasicSS bic)
     Current
     [ "A basic rewriting simplification set containing some boolean"
     , "identities and conversions relating to bitvectors, natural"
