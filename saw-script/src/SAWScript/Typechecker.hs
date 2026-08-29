@@ -46,7 +46,7 @@ import SAWSupport.ScopedMap (ScopedMap)
 -- get around to tidying up the position types and therefore having
 -- less junk in the Position module.
 import qualified SAWCentral.Position as Pos
-import SAWCentral.Position (TypeProvenance(..), Inference(..), Pos(..))
+import SAWCentral.Position (Pos(..))
 import SAWCentral.AST
 import qualified SAWCentral.ASTUtil as Util
 
@@ -95,7 +95,7 @@ instance (Ord k, UnifyVars a) => UnifyVars (Map k a) where
     unifyVars = unifyVars . Map.elems
 
 instance (UnifyVars a) => UnifyVars [a] where
-    unifyVars = Map.unionsWith Pos.chooseProv . map unifyVars
+    unifyVars = Map.unionsWith chooseProv . map unifyVars
 
 instance (UnifyVars a) => UnifyVars (PrimitiveLifecycle, a) where
     unifyVars (_lc, t) = unifyVars t
@@ -111,8 +111,8 @@ instance UnifyVars Type where
                 namedVars = unifyVars namedParams
                 retVars = unifyVars ret
             in
-            let vars1 = Map.unionWith Pos.chooseProv paramsVars namedVars in
-            Map.unionWith Pos.chooseProv vars1 retVars
+            let vars1 = Map.unionWith chooseProv paramsVars namedVars in
+            Map.unionWith chooseProv vars1 retVars
         TyRecord _ tm     -> unifyVars tm
         TyVar _ _         -> Map.empty
         TyUnifyVar prov i  -> Map.singleton i prov
@@ -549,7 +549,7 @@ unifyVarsInEnvs = do
     tenv <- gets tiTyEnv
     vtys <- mapM applyCurrentSubst $ ScopedMap.allElems venv
     ttys <- mapM applyCurrentSubst $ ScopedMap.allElems tenv
-    return $ Map.unionWith Pos.chooseProv (unifyVars vtys) (unifyVars ttys)
+    return $ Map.unionWith chooseProv (unifyVars vtys) (unifyVars ttys)
 
 -- | Get the named type vars that occur as keys in the current type name
 --   environment.

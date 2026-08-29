@@ -13,10 +13,6 @@ Stability   : provisional
 {-# LANGUAGE OverloadedStrings #-}
 
 module SAWCentral.Position (
-    Inference(..),
-    TypeProvenance(..),
-    chooseProv,
-
     Pos(..),
     differentLines,
     leadingPos,
@@ -48,69 +44,6 @@ import qualified What4.ProgramLoc as W4
 import qualified What4.FunctionName as W4
 
 import SAWSupport.Position as Support
-
--- Type provenance ------------------------------------------------------------
-
--- Type inference info, to be used to interpret the positions of
--- inferred types.
---
--- InfFresh means that the term (or pattern) at the given position
---    caused us to generate a fresh type variable, e.g. the element
---    type of "[]".
--- InfTerm means that the term (or pattern) at the given position
---    prompted us to choose the accompanying type; e.g. "[]" has type
---    List.
--- InfContext means that the usage of the term at the given position
---    prompted us to choose the accompanying type; e.g. in "f x" f has
---    function type.
---
--- If you add an Ord instance here (there is currently no need for
--- one) be sure to take steps to avoid confusion with the comparison
--- in compareInfQuality, which is a different kind of comparison.
-data Inference
-  = InfFresh
-  | InfTerm
-  | InfContext
-  deriving (Eq, Show)
-
--- Extended provenance/position information for types.
-data TypeProvenance
-  = TypeExplicit Pos
-  | TypeInferred Inference Pos
-  deriving (Eq, Show)
-
--- | This instance should only be used for cases where we know
---   the position is meaningful on its own.
-instance Positioned TypeProvenance where
-  getPos prov = case prov of
-      TypeExplicit pos -> pos
-      TypeInferred _ pos -> pos
-
---- Compare two type inference notes for quality of information, as per
---- comparePosQuality below. InfFresh is less, others are equal.
-compareInfQuality :: Inference -> Inference -> Ordering
-compareInfQuality inf1 inf2 = case (inf1, inf2) of
-  (InfFresh, InfFresh) -> EQ
-  (InfFresh, _) -> LT
-  (_, InfFresh) -> GT
-  _ -> EQ
-
---- Compare two type provenance entries for quality of information, as per
---- comparePosQuality below. TypeExplicit is greater.
-compareProvQuality :: TypeProvenance -> TypeProvenance -> Ordering
-compareProvQuality prov1 prov2 = case (prov1, prov2) of
-  (TypeExplicit _, TypeExplicit _) -> EQ
-  (TypeExplicit _, _) -> GT
-  (_, TypeExplicit _) -> LT
-  (TypeInferred inf1 _, TypeInferred inf2 _) -> compareInfQuality inf1 inf2
-
--- Pick the better provenance to use going forward. If all else fails
--- pick the left one.
-chooseProv :: TypeProvenance -> TypeProvenance -> TypeProvenance
-chooseProv p1 p2 = case compareProvQuality p1 p2 of
-   LT -> p2
-   GT -> p1
-   EQ -> p1
 
 -- Pos ------------------------------------------------------------------------
 

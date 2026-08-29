@@ -176,7 +176,7 @@ import SAWCoreWhat4.ReturnTrip
 import CryptolSAWCore.TypedTerm
 
 -- saw-script
-import SAWCentral.AST (tMono, tTerm, Rebindable(ReadOnlyVar))
+import SAWCentral.AST (tMono, tTerm, Rebindable(ReadOnlyVar), TypeProvenance(..), Inference(..))
 import SAWCentral.Builtins (ghost_value)
 import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
