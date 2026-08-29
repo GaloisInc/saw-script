@@ -30,7 +30,6 @@ module SAWCentral.AST
      , Schema(..)
      , SchemaPattern(..)
      , NamedType(..)
-     , chooseProv
 
      , Expr(..)
 
@@ -176,32 +175,7 @@ data TypeProvenance
   | TypeInferred Inference Pos
   deriving (Eq, Show)
 
--- Compare two type inference notes for quality of information, as per
--- comparePosQuality in Position.hs InfFresh is less, others are equal.
-compareInfQuality :: Inference -> Inference -> Ordering
-compareInfQuality inf1 inf2 = case (inf1, inf2) of
-  (InfFresh, InfFresh) -> EQ
-  (InfFresh, _) -> LT
-  (_, InfFresh) -> GT
-  _ -> EQ
-
--- Compare two type provenance entries for quality of information, as per
--- comparePosQuality in Position.hs. TypeExplicit is greater.
-compareProvQuality :: TypeProvenance -> TypeProvenance -> Ordering
-compareProvQuality prov1 prov2 = case (prov1, prov2) of
-  (TypeExplicit _, TypeExplicit _) -> EQ
-  (TypeExplicit _, _) -> GT
-  (_, TypeExplicit _) -> LT
-  (TypeInferred inf1 _, TypeInferred inf2 _) -> compareInfQuality inf1 inf2
-
--- Pick the better provenance to use going forward. If all else fails
--- pick the left one.
-chooseProv :: TypeProvenance -> TypeProvenance -> TypeProvenance
-chooseProv p1 p2 = case compareProvQuality p1 p2 of
-   LT -> p2
-   GT -> p1
-   EQ -> p1
-
+-- | Type for unification variable serial numbers.
 type TypeIndex = Integer
 
 -- | Type for the hardwired monad types. Note that these days the

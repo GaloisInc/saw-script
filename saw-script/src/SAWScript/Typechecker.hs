@@ -81,13 +81,16 @@ dropKeys keys xs =
 ------------------------------------------------------------
 -- UnifyVars
 
+-- | unifyVars is a type-class-polymorphic function for extracting
+--   unification vars from a type or type schema. It returns a set of
+--   TypeIndex (TypeIndex is just Integer) manifested as a map from
+--   those TypeIndexes to their positions/provenance.
 --
--- unifyVars is a type-class-polymorphic function for extracting
--- unification vars from a type or type schema. It returns a set of
--- TypeIndex (TypeIndex is just Integer) manifested as a map from
--- those TypeIndexes to their positions/provenance.
+--   Note that because every unification var is created exactly once,
+--   we can take the provenance information from whichever copy we see
+--   first, and not worry about trying to merge it when we take
+--   unions.
 --
-
 class UnifyVars t where
     unifyVars :: t -> Map TypeIndex TypeProvenance
 
@@ -95,7 +98,7 @@ instance (Ord k, UnifyVars a) => UnifyVars (Map k a) where
     unifyVars = unifyVars . Map.elems
 
 instance (UnifyVars a) => UnifyVars [a] where
-    unifyVars = Map.unionsWith chooseProv . map unifyVars
+    unifyVars = Map.unions . map unifyVars
 
 instance (UnifyVars a) => UnifyVars (PrimitiveLifecycle, a) where
     unifyVars (_lc, t) = unifyVars t
@@ -111,8 +114,7 @@ instance UnifyVars Type where
                 namedVars = unifyVars namedParams
                 retVars = unifyVars ret
             in
-            let vars1 = Map.unionWith chooseProv paramsVars namedVars in
-            Map.unionWith chooseProv vars1 retVars
+            Map.unions [paramsVars, namedVars, retVars]
         TyRecord _ tm     -> unifyVars tm
         TyVar _ _         -> Map.empty
         TyUnifyVar prov i  -> Map.singleton i prov
@@ -542,14 +544,18 @@ getProv ty = case ty of
 -- the caller must also apply the current substitution before reasoning
 -- about what unification vars do and don't appear.
 --
--- Returns a map of the index number to the occurrence position.
+-- Returns a map of the index number to the occurrence position. Note
+-- that (first) each unification var is created exactly once so we can
+-- take whichever provenance we find first; and also, we don't
+-- actually care about the provenance, because the result is used to
+-- drop elements from another table.
 unifyVarsInEnvs :: TI (Map TypeIndex TypeProvenance)
 unifyVarsInEnvs = do
     venv <- gets tiVarEnv
     tenv <- gets tiTyEnv
     vtys <- mapM applyCurrentSubst $ ScopedMap.allElems venv
     ttys <- mapM applyCurrentSubst $ ScopedMap.allElems tenv
-    return $ Map.unionWith chooseProv (unifyVars vtys) (unifyVars ttys)
+    return $ Map.union (unifyVars vtys) (unifyVars ttys)
 
 -- | Get the named type vars that occur as keys in the current type name
 --   environment.
