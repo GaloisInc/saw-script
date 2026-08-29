@@ -163,23 +163,22 @@ prettySetupValueAsLLVMVal opts cc spec setupval = do
 -- | Try to translate the spec\'s 'SetupValue' into an 'LLVMVal', pretty-print
 --   the 'LLVMVal'.
 mkStructuralMismatch ::
-  (Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?w4EvalTactic :: W4EvalTactic, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options              {- ^ output/verbosity options -} ->
   LLVMCrucibleContext arch ->
-  SharedContext {- ^ context for constructing SAW terms -} ->
   MS.CrucibleMethodSpecIR (LLVM arch) {- ^ for name and typing environments -} ->
   Crucible.LLVMVal Sym {- ^ the value from the simulator -} ->
   SetupValue (LLVM arch)           {- ^ the value from the spec -} ->
   Crucible.MemType     {- ^ the expected type -} ->
   OverrideMatcher (LLVM arch) w (OverrideFailureReason (LLVM arch))
-mkStructuralMismatch _opts cc sc spec llvmval setupval memTy = do
+mkStructuralMismatch opts cc spec llvmval setupval memTy = do
   let tyEnv = MS.csAllocations spec
       nameEnv = MS.csTypeNames spec
       maybeMsgTy = either (const Nothing) Just $ runExcept (typeOfSetupValue cc tyEnv nameEnv setupval)
-  setupval' <- liftIO $ MS.prettySetupValue sc setupval
+  setupval' <- resolveSetupValueLLVM opts cc spec setupval
   pure $ StructuralMismatch
               (PP.pretty llvmval)
-              setupval'
+              (PP.pretty setupval')
               maybeMsgTy
               memTy
 
@@ -1168,7 +1167,7 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
     (_, _, SetupTerm expectedTT)
       | TypedTermSchema (Cryptol.Forall [] [] tyexpr) <- ttType expectedTT
       , Right tval <- Cryptol.evalType mempty tyexpr
-        -> do failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
+        -> do failMsg  <- mkStructuralMismatch opts cc cs actual expected expectedTy
               realTerm <- valueToSC sym md failMsg tval actual
               instantiateExtMatchTerm sc md prepost realTerm (ttTerm expectedTT)
 
@@ -1242,13 +1241,13 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
 
         _ -> do
             ppopts <- liftIO $ scGetPPOpts sc
-            err <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
+            err <- mkStructuralMismatch opts cc cs actual expected expectedTy
             failure ppopts loc err
-              
+
 
     _ -> do
         ppopts <- liftIO $ scGetPPOpts sc
-        err <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
+        err <- mkStructuralMismatch opts cc cs actual expected expectedTy
         failure ppopts loc err
 
   where
@@ -1260,7 +1259,7 @@ matchArg opts sc cc cs prepost md actual expectedTy expected =
       if diffMemTypes expectedTy ty /= []
       then do
           ppopts <- liftIO $ scGetPPOpts sc
-          err <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
+          err <- mkStructuralMismatch opts cc cs actual expected expectedTy
           failure ppopts loc err
       else liftIO (Crucible.testEqual sym val actual) >>=
         \case
