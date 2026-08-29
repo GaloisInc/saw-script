@@ -38,6 +38,7 @@ import           Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import           Data.IORef
 import qualified Data.List.NonEmpty as NE
+import           Data.List (permutations)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Maybe (mapMaybe,catMaybes, isJust, fromMaybe)
@@ -103,6 +104,9 @@ extraPrims pm = map go
     , ("Cryptol.PLiteral"         , "Literal")
     , ("Cryptol.PLiteralLessThan" , "LiteralLessThan")
     , ("Cryptol.PFLiteral"        , "FLiteral")
+    , ("Cryptol.PGeq"             , ">=")
+    , ("Cryptol.PNeq"             , "!=")
+    , ("Cryptol.PFin"             , "fin")
     -- from CryptolSAWCore.Cryptol.importTFun
     , ("Cryptol.tcWidth"          , "width")
     , ("Cryptol.tcAdd"            , "+")          
@@ -175,32 +179,30 @@ checkConvertible t1 t2 = do
 prettySawName :: SAW.Name -> String
 prettySawName nm = Text.unpack (SAW.toAbsoluteName $ SAW.nameInfo nm)
 
-revTopProofs :: C.Expr -> C.Expr
-revTopProofs = go []
-  where
-    unwind prfs e = case prfs of
-      x:xs -> C.EProofAbs x (unwind xs e)
-      [] -> e
-    go prfs = \case
-      C.ETAbs tp e -> C.ETAbs tp (go prfs e)
-      C.ELocated loc e -> C.ELocated loc (go prfs e)
-      C.EProofAbs prf e -> go (prf:prfs) e
-      e -> unwind prfs e
+stripTopProofs :: C.Expr -> C.Expr
+stripTopProofs = \case
+  C.ETAbs _ e -> stripTopProofs e
+  C.ELocated loc e -> C.ELocated loc (stripTopProofs e)
+  C.EProofAbs _ e -> stripTopProofs e
+  e -> e
 
--- | SAW sometimes reverses the constraints importing expressions, in which case we need to reverse the
---   result after type inference in order to recover the original type/term
-revConstraints :: (Expr, C.Expr, C.Schema) -> (Expr, C.Expr, C.Schema)
-revConstraints (pe, e,s) = (pe, revTopProofs e, s { C.sProps = reverse (C.sProps s)})
+permuteConstraints :: (Expr, C.Expr, C.Schema) -> [(Expr, C.Expr, C.Schema)]
+permuteConstraints (pe, e,s) = do
+  props <- permutations (C.sProps s)
+  pure (pe, foldr C.ETAbs (foldr C.EProofAbs e' props) (C.sVars s), s { C.sProps = props })
+  where
+    e' = stripTopProofs e
 
 validateImport :: Term -> (Expr, C.Expr, C.Schema) -> TT (Expr, C.Expr, C.Schema)
 validateImport t (pe, e, s) = do
   sc <- asks ttSc
   s' <- liftIO $ CrySAW.translateSchema sc s
-  e' <- liftIO $ CrySAW.translateExpr' sc s e
   tT <- liftIO $ scTypeOf sc t
   checkConvertible tT s'
-  checkConvertible e' t
-  return (pe,e,s)
+  commit $ do
+    e' <- liftIO $ CrySAW.translateExpr' sc s e
+    checkConvertible e' t
+    return (pe,e,s)
 
 mkTParam :: (Name,P.Kind) -> MM.ModuleM (C.Name, C.TParam)
 mkTParam (pnm,k) = do
@@ -277,10 +279,9 @@ inferSchemaExpr t = do
     Left e -> errMsg (Text.unpack $ pp e)
     Right (expr,schema) -> do
       let r = (pe,expr,schema)
-      -- the order of the constraints is somewhat inconsistent, so we try
-      -- either the original or reverse orderings and return the one that validates
-      -- in most cases the reversed order seems to be preferred
-      validateImport t (revConstraints r) <|> validateImport t r
+      -- the order of the constraints is not stable as a result of type
+      -- inference, so we try all permutations when validating
+      msum (map (validateImport t) (permuteConstraints r))
 
 -- | Attempt to convert a SAWCore term into an equivalent Cryptol expression and corresponding
 --   schema. Validates that the resulting type-checked expression and schema will
