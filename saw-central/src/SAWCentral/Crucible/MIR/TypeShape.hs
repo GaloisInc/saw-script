@@ -486,7 +486,7 @@ shapeToTerm' sc = go
     mkVec n ty =
       do
         n' <- SAW.scNat sc (fromIntegral n)
-        SAW.scVecType sc n' ty
+        SAW.scVecType sc ty n'
 
     goAgElem :: CryTermAdaptor Integer -> AgElemShape -> m SAW.Term
     goAgElem ada (AgElemShape _ _ shp) = go ada shp

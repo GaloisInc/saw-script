@@ -399,7 +399,7 @@ scPreterms sc preterms = snd <$> go preterms
            -- Use `join` to concatenate same-length preterms
            do i' <- SC.scNat sc i
               boolty <- SC.scBoolType sc
-              ety <- SC.scVecType sc i' boolty
+              ety <- SC.scVecType sc boolty i'
               ps1' <- traverse (scPreterm sc) ps1
               v <- SC.scVector sc ety (p' : ps1')
               let len = List.genericLength ps1 + 1 :: Natural

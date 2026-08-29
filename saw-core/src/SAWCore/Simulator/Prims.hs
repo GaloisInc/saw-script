@@ -850,11 +850,11 @@ equalStringOp bp =
 
 --------------------------------------------------------------------------------
 
--- Vec :: (n :: Nat) -> (a :: sort 0) -> sort 0;
+-- Vec :: (a :: sort 0) -> (n :: Nat) -> sort 0;
 vecTypeOp :: VMonad l => Prim l
 vecTypeOp =
-  natFun $ \n ->
   tvalFun $ \a ->
+  natFun $ \n ->
     PrimValue (TValue (VVecType n a))
 
 -- gen :: (n :: Nat) -> (a :: sort 0) -> (Nat -> a) -> Vec n a;

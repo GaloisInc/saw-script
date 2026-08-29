@@ -640,7 +640,8 @@ evaluateExpr sym st sc cache = f Map.empty
           case B.bvarType bvar of
             BaseBVRepr wrepr -> do
               w <- SC.scNat sc $ natValue wrepr
-              ty <- SC.scVecType sc w =<< SC.scBoolType sc
+              boolty <- SC.scBoolType sc
+              ty <- SC.scVecType sc boolty w
               x <- SC.scFreshVariable sc nm ty
               SAWExpr <$>
                 (SC.scBvForall sc w

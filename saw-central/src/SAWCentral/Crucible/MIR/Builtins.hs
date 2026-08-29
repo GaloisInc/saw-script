@@ -2098,7 +2098,7 @@ setupArg sc cc ecRef mty0 tp0 =
               (eltCty, eltScTp) <- typeShapeToSAWTypes eltShp
               arraySzTerm <- scNat sc $ fromIntegral @Int @Natural arraySz
               let cty = Cryptol.tSeq (Cryptol.tNum (toInteger @Int arraySz)) eltCty
-              scTp <- scVecType sc arraySzTerm eltScTp
+              scTp <- scVecType sc eltScTp arraySzTerm
               pure (cty, scTp)
 
             StructShape mty _ ->
@@ -2158,7 +2158,7 @@ setupArg sc cc ecRef mty0 tp0 =
             PrimShape {} ->
               termToRegValue sym (shapeType shp) t
             ArrayShape _ _ eltSz eltShp len -> do
-              (arraySz :*: eltScTp) <-
+              (eltScTp :*: arraySz) <-
                 case asVecType scTp of
                   Just nt -> pure nt
                   Nothing -> do
