@@ -260,7 +260,9 @@ importPC sc pc =
     C.PCmp             -> scGlobalDef sc "Cryptol.PCmp"
     C.PSignedCmp       -> scGlobalDef sc "Cryptol.PSignedCmp"
     C.PLiteral         -> scGlobalDef sc "Cryptol.PLiteral"
-    C.PLiteralLessThan -> scGlobalDef sc "Cryptol.PLiteralLessThan"
+    -- Translate LiteralLessThan also as PLiteral to reuse the same
+    -- instance rules because they are defined identically.
+    C.PLiteralLessThan -> scGlobalDef sc "Cryptol.PLiteral"
     C.PFLiteral        -> scGlobalDef sc "Cryptol.PFLiteral"
     C.PAnd             -> panic "importPC" ["found PAnd"]
     C.PTrue            -> panic "importPC" ["found PTrue"]
@@ -352,9 +354,11 @@ importType sc ty = do
             C.PLiteral ->
               do a <- go (tyargs !! 1)
                  scGlobalApply sc "Cryptol.PLiteral" [a]
+            -- Translate LiteralLessThan as PLiteral to reuse the same
+            -- instance rules because they are defined identically.
             C.PLiteralLessThan ->
               do a <- go (tyargs !! 1)
-                 scGlobalApply sc "Cryptol.PLiteralLessThan" [a]
+                 scGlobalApply sc "Cryptol.PLiteral" [a]
             C.PFLiteral -> -- we omit the first three arguments to class FLiteral
               do a <- go (tyargs !! 3)
                  scGlobalApply sc "Cryptol.PFLiteral" [a]
