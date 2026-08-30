@@ -2360,7 +2360,10 @@ genCodeForEnum sc nt ctors =
            , dtsArgName = argName
            }
 
-     (_sumTy_tm, ctor_tms) <- scDefineDataType sc dtSpec
+     (_dtName, ctorNames) <- scDefineDataType sc dtSpec
+     ctor_tms <- traverse (scConst sc) ctorNames
+
+     -- Return list of constructor names and terms.
      pure (zip (map C.ecName ctors) ctor_tms)
 
 
