@@ -116,7 +116,7 @@ import SAWCore.Recognizer
 import SAWCore.SharedTerm
 import SAWCore.Simulator.MonadLazy (force)
 import SAWCore.Module (CtorArg(..))
-import SAWCore.Name (toQualName, wildcardVarName)
+import SAWCore.Name (Name, VarName, nameInfo, toQualName, wildcardVarName)
 import SAWCore.Term.Functor (mkSort, FieldName, LocalName)
 import qualified SAWCore.QualName as QN
 
@@ -200,6 +200,13 @@ bindProp sc env prop nm =
      v <- scFreshVariable sc nm ty
      let env' = env { leProps = insertSupers prop [] v (leProps env) }
      pure (env', v)
+
+bindProps :: SharedContext -> LocalEnv -> [C.Prop] -> Text -> IO (LocalEnv, [Term])
+bindProps _sc env [] _nm = pure (env, [])
+bindProps sc env (p : ps) nm =
+  do (env1, v) <- bindProp sc env p nm
+     (env2, vs) <- bindProps sc env1 ps nm
+     pure (env2, v : vs)
 
 -- | When we insert a non-erasable prop into the environment, make
 --   sure to also insert all its superclasses.  We arrange it so
@@ -622,15 +629,19 @@ classIntroIdents =
   , "Prelude.TrueI"
   ]
 
-initializeInstances :: SharedContext -> IO ()
-initializeInstances sc =
+-- | Retrieve the current set of instance introduction rules,
+-- initializing them first if they are not initialized.
+getInstanceRules :: SharedContext -> IO IntroRuleSet
+getInstanceRules sc =
   do result <- eInstances sc
      case result of
-       Just _ -> pure ()
-       Nothing -> mapM_ initializeRule classIntroIdents
+       Just rules -> pure rules
+       Nothing ->
+         do mapM_ loadRule classIntroIdents
+            maybe emptyIntroRuleSet id <$> eInstances sc
   where
-    initializeRule :: Ident -> IO ()
-    initializeRule i =
+    loadRule :: Ident -> IO ()
+    loadRule i =
       do t <- scGlobalDef sc i
          r <- mkIntroRule sc t
          addInstance sc r
@@ -638,19 +649,22 @@ initializeInstances sc =
 -- | Find the SAWCore dictionary for a Cryptol typeclass.
 proveProp :: HasCallStack => SharedContext -> LocalEnv -> C.Prop -> IO Term
 proveProp sc env prop =
+  do p <- importType sc env prop
+     proveInstance sc env p
+
+proveInstance :: HasCallStack => SharedContext -> LocalEnv -> Term -> IO Term
+proveInstance sc env p =
   do let tyProps = leProps env
-     initializeInstances sc
-     net0 <- maybe emptyIntroRuleSet id <$> eInstances sc
+     net0 <- getInstanceRules sc
      prfs <-
        forM (Map.elems tyProps) $ \(prf, fs) ->
          foldM (scRecordSelect sc) prf (reverse fs)
      rules <- traverse (mkIntroRule sc) prfs
      let net = foldr insertIntroRuleSet net0 rules
-     p <- importType sc env prop
      result <- proveWithIntros sc net p
      case result of
        Left e ->
-         do let prop0' = "   " <> CryPP.pp prop
+         do prop0' <- ppTerm sc p
             prop' <- ppTerm sc e
             let env' = map (\p' -> "   " <> CryPP.pp p') $ Map.keys $ tyProps
                 message = [
@@ -658,7 +672,7 @@ proveProp sc env prop =
                     "Property needed:",
                     prop',
                     "Original property:",
-                    Text.unpack prop0',
+                    prop0',
                     "Available propositions in the environment:"
                  ] ++ map Text.unpack env'
             fail (unlines message)
@@ -2297,6 +2311,64 @@ genCodeForNominalTypes sc nominalMap =
             e <- importExpr sc mempty fnWithTAbs
             return [(conNm, e)]
 
+-- | Generate a @PEq@ dictionary combinator for the given
+-- (non-recursive) datatype and register it as an class instance rule.
+deriveEqInstance ::
+  SharedContext ->
+  LocalEnv ->
+  Name {- ^ datatype name -} ->
+  [(VarName, Term)] {- ^ datatype parameters -} ->
+  [C.Prop] {- ^ instance rule hypotheses -} ->
+  [[Term]] {- ^ constructor argument types -} ->
+  IO ()
+deriveEqInstance sc env dtName dtParams props ctorArgTypes =
+  do dt <- scConst sc dtName
+     dtParamsVars <- scVariables sc dtParams
+     ty <- scApplyAll sc dt dtParamsVars
+     recursor <- scRecursor sc dtName (mkSort 0)
+     recursor' <- scApplyAll sc recursor dtParamsVars
+     bool <- scBoolType sc
+     tyPred <- scFun sc ty bool
+     motive1 <- scLambda sc wildcardVarName ty tyPred
+     recursor1 <- scApply sc recursor' motive1
+     motive2 <- scLambda sc wildcardVarName ty bool
+     recursor2 <- scApply sc recursor' motive2
+     false <- scBool sc False
+     (env', propVars) <- bindProps sc env props "_P"
+
+     let mkEq :: Term -> Term -> IO Term
+         mkEq x y =
+           do a <- scTypeOf sc x
+              eqa <- scGlobalApply sc "Cryptol.PEq" [a]
+              pa <- proveInstance sc env' eqa
+              scGlobalApply sc "Cryptol.ecEq" [a, pa, x, y]
+     let eqSubbranch i xs j argTs =
+           do ys <- traverse (scFreshVariable sc "y") argTs
+              body <-
+                case (i :: Int) == j of
+                  False -> pure false
+                  True ->
+                    do conjuncts <- sequence $ zipWith mkEq xs ys
+                       scAndList sc conjuncts
+              scAbstractTerms sc ys body
+     let eqBranch i argTs =
+           do xs <- traverse (scFreshVariable sc "x") argTs
+              subbranches <- sequence $ zipWith (eqSubbranch i xs) [0..] ctorArgTypes
+              body <- scApplyAll sc recursor2 subbranches
+              scAbstractTerms sc xs body
+     branches <- sequence $ zipWith eqBranch [0..] ctorArgTypes
+     eqf <- scApplyAll sc recursor1 branches
+     r <- scRecordValue sc [("eq", eqf)]
+     r1 <- scAscribe sc r =<< scGlobalApply sc "Cryptol.PEq" [ty]
+     r2 <- scAbstractTerms sc (dtParamsVars ++ propVars) r1
+     let dtNameInfo = nameInfo dtName
+     let dtQualName = toQualName dtNameInfo
+     let instQualName = dtQualName { QN.baseName = "PEq__" <> QN.baseName dtQualName }
+     let instNameInfo = mkImportedName instQualName
+     c <- scDefineConstant sc instNameInfo r2
+     rule <- mkIntroRule sc c
+     addInstance sc rule
+
 
 -- | genCodeForEnum ... - called when we see an "enum" definition in the Cryptol module.
 --    - This action does two things
@@ -2360,8 +2432,14 @@ genCodeForEnum sc nt ctors =
            , dtsArgName = argName
            }
 
-     (_dtName, ctorNames) <- scDefineDataType sc dtSpec
+     (dtName, ctorNames) <- scDefineDataType sc dtSpec
      ctor_tms <- traverse (scConst sc) ctorNames
+
+     -- Derive PEq class instance.
+     let ctorArgTypes = [ [ t | (_, ConstArg t) <- cspecArgs c ] | c <- ctorSpecs ]
+     case Map.lookup C.PEq (ntDeriving nt) of
+       Nothing -> pure ()
+       Just assms -> deriveEqInstance sc env dtName (dtsParams dtSpec) assms ctorArgTypes
 
      -- Return list of constructor names and terms.
      pure (zip (map C.ecName ctors) ctor_tms)
