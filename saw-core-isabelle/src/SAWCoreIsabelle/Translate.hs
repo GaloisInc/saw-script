@@ -342,7 +342,9 @@ translateDecl d = withDeclBinding' d $ \b mbody -> case mbody of
 -- | Returns Undefined if translation fails
 translateDecl' :: Cry.Decl -> IsaM (Binding.Binding, Expr)
 translateDecl' d = withDeclBinding d $ \b body -> (tryError $ translateExpr body) >>= \case
-  Left err -> return $ (b, Expr.Undefined (Binding.bindType b) (Error.showErr err))
+  Left err -> do
+    warn err
+    return $ (b, Expr.Undefined (Binding.bindType b) (Error.showErr err))
   Right body' -> return $ (b, body')
 
 nameToVar :: Name.Name -> IsaM Expr
