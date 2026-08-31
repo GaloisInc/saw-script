@@ -56,7 +56,11 @@ Definition TestSeq_Reverse:
       :=
       CryptolPrimitivesForSAWCore.PLiteralSeqBool var__1
    in
-   CryptolPrimitivesForSAWCore.ecReverse var__0 var__2 [
+   CryptolPrimitivesForSAWCore.ecReverse var__0 var__2 
+      (CryptolPrimitivesForSAWCore.PFin_TCNum 
+         (Stdlib.PArith.BinPos.Pos.to_nat 
+            (Stdlib.PArith.BinPos.xO 
+               (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) [
          CryptolPrimitivesForSAWCore.ecNumber 
             (CryptolPrimitivesForSAWCore.TCNum 
                (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) var__2

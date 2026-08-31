@@ -53,6 +53,11 @@ Definition head
 
 Definition sext
         (m n: CryptolPrimitivesForSAWCore.Num)
+        (_P: CryptolPrimitivesForSAWCore.PFin m)
+        (_P1: CryptolPrimitivesForSAWCore.PGeq m n)
+        (_P2: CryptolPrimitivesForSAWCore.PGeq n 
+              (CryptolPrimitivesForSAWCore.TCNum 
+                 (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)))
         (x: CryptolPrimitivesForSAWCore.seq n Init.Datatypes.bool)
       : CryptolPrimitivesForSAWCore.seq m Init.Datatypes.bool :=
    let var__0
@@ -90,7 +95,8 @@ Definition sext
       (CryptolPrimitivesForSAWCore.seq m Init.Datatypes.bool) 
       (CryptolPrimitivesForSAWCore.seq_cong1 var__6 m Init.Datatypes.bool
          ltac:(solveUnsafeAssert)) 
-      (CryptolPrimitivesForSAWCore.ecCat var__1 n Init.Datatypes.bool (if 
+      (CryptolPrimitivesForSAWCore.ecCat var__1 n Init.Datatypes.bool 
+         (CryptolPrimitivesForSAWCore.PFin_tcSub m n _P) (if 
          head var__3 Init.Datatypes.bool 
               (SAWCoreScaffolding.coerce 
                  (CryptolPrimitivesForSAWCore.seq n Init.Datatypes.bool) 
@@ -121,13 +127,23 @@ Definition TestArith_SignExtend:
                (Stdlib.PArith.BinPos.xO 
                   (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
    in
-   sext (CryptolPrimitivesForSAWCore.TCNum 
+   let var__1
+      :=
+      CryptolPrimitivesForSAWCore.TCNum 
+         (Stdlib.PArith.BinPos.Pos.to_nat 
+            (Stdlib.PArith.BinPos.xO 
+               (Stdlib.PArith.BinPos.xO 
+                  (Stdlib.PArith.BinPos.xO 
+                     (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+   in
+   sext var__1 var__0 
+        (CryptolPrimitivesForSAWCore.PFin_TCNum 
            (Stdlib.PArith.BinPos.Pos.to_nat 
               (Stdlib.PArith.BinPos.xO 
                  (Stdlib.PArith.BinPos.xO 
                     (Stdlib.PArith.BinPos.xO 
                        (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))))
-        var__0 
+        ltac:(solveUnsafeAssumePGeq) ltac:(solveUnsafeAssumePGeq) 
         (CryptolPrimitivesForSAWCore.ecNumber 
            (CryptolPrimitivesForSAWCore.TCNum 
               (Stdlib.PArith.BinPos.Pos.to_nat 

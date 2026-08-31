@@ -142,6 +142,7 @@ Section Simple.
 
    Definition encrypt
            (a: CryptolPrimitivesForSAWCore.Num)
+           (_P: CryptolPrimitivesForSAWCore.PFin a)
            (key: CryptolPrimitivesForSAWCore.seq 
                  (CryptolPrimitivesForSAWCore.TCNum 
                     (Stdlib.PArith.BinPos.Pos.to_nat 
@@ -192,6 +193,7 @@ Section Simple.
 
    Definition decrypt
            (a: CryptolPrimitivesForSAWCore.Num)
+           (_P: CryptolPrimitivesForSAWCore.PFin a)
            (key: CryptolPrimitivesForSAWCore.seq 
                  (CryptolPrimitivesForSAWCore.TCNum 
                     (Stdlib.PArith.BinPos.Pos.to_nat 
@@ -242,6 +244,7 @@ Section Simple.
 
    Definition roundtrip
            (u944: CryptolPrimitivesForSAWCore.Num)
+           (_P: CryptolPrimitivesForSAWCore.PFin u944)
            (k: CryptolPrimitivesForSAWCore.seq 
                  (CryptolPrimitivesForSAWCore.TCNum 
                     (Stdlib.PArith.BinPos.Pos.to_nat 
@@ -274,6 +277,6 @@ Section Simple.
          (CryptolPrimitivesForSAWCore.seq u944 var__1) 
          (CryptolPrimitivesForSAWCore.PEqSeq u944 var__1 
             (CryptolPrimitivesForSAWCore.PEqSeqBool var__0)) 
-         (decrypt u944 k (encrypt u944 k ip)) ip.
+         (decrypt u944 _P k (encrypt u944 _P k ip)) ip.
 
 End Simple.

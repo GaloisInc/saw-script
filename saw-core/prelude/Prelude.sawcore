@@ -1165,6 +1165,12 @@ widthNat =
    (\ (_ : Pos) -> Succ)
   );
 
+ltNat_0_right : (n : Nat) -> Eq Bool (ltNat n 0) False;
+ltNat_0_right =
+  Nat#ind (\ (n : Nat) -> Eq Bool (ltNat n 0) False)
+  (Refl Bool False)
+  (\ (_ : Pos) -> Refl Bool False);
+
 --------------------------------------------------------------------------------
 -- Subtraction on Nat
 

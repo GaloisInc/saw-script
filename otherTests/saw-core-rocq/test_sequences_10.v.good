@@ -55,8 +55,8 @@ Definition TestSeq_DropZero:
             (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
    in
    CryptolPrimitivesForSAWCore.ecDrop 
-      (CryptolPrimitivesForSAWCore.TCNum SAWCoreScaffolding.Zero) var__3 var__1
-      [
+      (CryptolPrimitivesForSAWCore.TCNum SAWCoreScaffolding.Zero) var__3 var__1 
+      (CryptolPrimitivesForSAWCore.PFin_TCNum SAWCoreScaffolding.Zero) [
          CryptolPrimitivesForSAWCore.ecNumber 
             (CryptolPrimitivesForSAWCore.TCNum 
                (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH)) var__1

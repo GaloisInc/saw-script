@@ -37,10 +37,6 @@ module CryptolSAWCore.GlobalCryptolEnv
   , addExtraTySyns
   , eAllVars
   , addToAllVars
-  , eTyVars
-  , addTyVars
-  , eTyProps
-  , addTyProps
   , eAllTerms
   , addToAllTerms
   , eRefPrims
@@ -69,7 +65,6 @@ import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.Utils.Ident as C
 
 import SAWCore.SharedTerm
-import SAWCore.Term.Functor (FieldName)
 
 import CryptolSAWCore.FileReader
 import CryptolSAWCore.Panic
@@ -138,8 +133,6 @@ data GlobalCryptolEnv = GlobalCryptolEnv
   , geExtraVars   :: Map C.Name C.Schema
   , geExtraTySyns :: Map C.Name C.TySyn
   , geAllVars     :: Map C.Name C.Schema
-  , geTyVars      :: Map Int Term
-  , geTyProps     :: Map C.Prop (Term, [FieldName])
   , geAllTerms    :: Map C.Name Term
   , geRefPrims    :: Map C.PrimIdent C.Expr
   , gePrims       :: Map C.PrimIdent Term
@@ -152,8 +145,7 @@ data GlobalCryptolEnv = GlobalCryptolEnv
 initGlobalEnv :: ME.ModuleEnv -> GlobalCryptolEnv
 initGlobalEnv modEnv = refreshCryptolEnv $
     GlobalCryptolEnv modEnv
-      mempty mempty mempty mempty mempty mempty mempty mempty mempty
-      mempty
+      mempty mempty mempty mempty mempty mempty mempty mempty
 
 instance IsMetadata GlobalCryptolEnv where
   initMetadata = initGlobalEnv <$> ME.initialModuleEnv
@@ -464,42 +456,6 @@ addToAllVars sc m = mapGlobal sc $ \genv ->
 --
 -- Pieces that track imported SAWCore bits:
 --
-
--- | Map from Cryptol type variable IDs to SAWCore types. This is
--- only nonempty during import, when working inside a forall-binding.
-eTyVars :: SharedContext -> IO (Map Int Term)
-eTyVars = getGlobal geTyVars
-
--- | Add entries to 'eTyVars'
-addTyVars :: SharedContext -> Map Int Term -> IO ()
-addTyVars sc m = mapGlobal sc $ \genv ->
-  genv { geTyVars = Map.union m (geTyVars genv) }
-
--- | Map from Cryptol `C.Prop`, which are type constraints, to
--- corresponding SAWCore information. There is both a term and a list
--- of `FieldName`. The actual class dictionary we need is obtained by
--- applying the given field selectors (in reverse order!) to the term.
--- (This arises when a dictionary comes from a superclass; the field
--- projections traverse the subclass dictionaries.)
--- The constraints are referenced implicitly by their types.
---
--- Like `eTyVars`, this table is only nonempty during import, when
--- working inside a forall-binding, and carries the info from that
--- binding.
-eTyProps :: SharedContext -> IO (Map C.Prop (Term, [FieldName]))
-eTyProps = getGlobal geTyProps
-
--- | Add entries to 'eTyProps'.
---   The one current use of this function in 'CryptolSAWCore.Cryptol'
---   collects all of the superclasses of the given 'C.Prop' as well.
---   It may make sense to move that logic here, as the current
---   approach involves redundantly re-computing the entries for
---   all superclasses for each individual entry.
---   This is not expensive, but would become problematic
---   if we wanted to enforce a write-once policy.
-addTyProps :: SharedContext -> Map C.Prop (Term, [FieldName]) -> IO ()
-addTyProps sc m = mapGlobal sc $ \genv ->
-  genv { geTyProps = Map.union m (geTyProps genv)  }
 
 -- | The translations for all Cryptol names in scope. It maps names to
 -- SAWCore terms, both types and values. Does not include the contents

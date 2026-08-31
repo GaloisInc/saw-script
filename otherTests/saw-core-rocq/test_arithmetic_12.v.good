@@ -20,6 +20,8 @@ From CryptolToRocq Require Import CryptolPrimitivesForSAWCoreExtra.
 
 Definition zext
         (m n: CryptolPrimitivesForSAWCore.Num)
+        (_P: CryptolPrimitivesForSAWCore.PFin m)
+        (_P1: CryptolPrimitivesForSAWCore.PGeq m n)
         (x: CryptolPrimitivesForSAWCore.seq n Init.Datatypes.bool)
       : CryptolPrimitivesForSAWCore.seq m Init.Datatypes.bool :=
    let var__0
@@ -36,6 +38,7 @@ Definition zext
       (CryptolPrimitivesForSAWCore.seq_cong1 var__1 m Init.Datatypes.bool
          ltac:(solveUnsafeAssert)) 
       (CryptolPrimitivesForSAWCore.ecCat var__0 n Init.Datatypes.bool 
+         (CryptolPrimitivesForSAWCore.PFin_tcSub m n _P) 
          (CryptolPrimitivesForSAWCore.ecZero 
             (CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool) 
             (CryptolPrimitivesForSAWCore.PZeroSeqBool var__0)) x).
@@ -59,13 +62,23 @@ Definition TestArith_ZeroExtend:
                (Stdlib.PArith.BinPos.xO 
                   (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
    in
-   zext (CryptolPrimitivesForSAWCore.TCNum 
+   let var__1
+      :=
+      CryptolPrimitivesForSAWCore.TCNum 
+         (Stdlib.PArith.BinPos.Pos.to_nat 
+            (Stdlib.PArith.BinPos.xO 
+               (Stdlib.PArith.BinPos.xO 
+                  (Stdlib.PArith.BinPos.xO 
+                     (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
+   in
+   zext var__1 var__0 
+        (CryptolPrimitivesForSAWCore.PFin_TCNum 
            (Stdlib.PArith.BinPos.Pos.to_nat 
               (Stdlib.PArith.BinPos.xO 
                  (Stdlib.PArith.BinPos.xO 
                     (Stdlib.PArith.BinPos.xO 
                        (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))))
-        var__0 
+        ltac:(solveUnsafeAssumePGeq) 
         (CryptolPrimitivesForSAWCore.ecNumber 
            (CryptolPrimitivesForSAWCore.TCNum 
               (Stdlib.PArith.BinPos.Pos.to_nat 

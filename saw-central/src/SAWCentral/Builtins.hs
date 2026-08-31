@@ -2007,7 +2007,7 @@ defaultTypedTerm opts sc _cryenv cfg tt@(TypedTerm (TypedTermSchema schema) trm)
       let dischargeProp :: Term -> C.Prop -> IO Term
           dischargeProp t p
             | CSC.isErasedProp p = return t
-            | otherwise = scApply sc t =<< CSC.proveProp sc p
+            | otherwise = scApply sc t =<< CSC.proveProp sc mempty p
       trm' <- foldM applyType trm tys
       let su = C.listSubst (zip (map C.tpVar vars) tys)
       let props = map (plainSubst su) (C.sProps schema)
@@ -2021,7 +2021,7 @@ defaultTypedTerm opts sc _cryenv cfg tt@(TypedTerm (TypedTermSchema schema) trm)
           msg = "Assuming" <+> x' <+> "=" <+> t'
       in
       printOutLn opts Info $ PPS.render ppopts msg
-          
+
     -- Apply a substitution to a type *without* simplifying
     -- constraints like @Arith [n]a@ to @Arith a@. (This is in contrast to
     -- 'apSubst', which performs simplifications wherever possible.)

@@ -1,0 +1,9 @@
+// Test Cryptol translation of all enumerated-sequence primitives.
+print {{ [3 .. 10] : [_]Integer }};
+print {{ [3 ..< 10] : [_]Integer }};
+print {{ [3, 5 .. 19] : [_]Integer }};
+print {{ [99, 89 .. 9] : [_]Integer }};
+print {{ [3 .. 13 by 2] : [_]Integer }};
+print {{ [3 ..< 20 by 2] : [_]Integer }};
+print {{ [21 .. 9 down by 3] : [_]Integer }};
+print {{ [21 ..> 10 down by 3] : [_]Integer }};
