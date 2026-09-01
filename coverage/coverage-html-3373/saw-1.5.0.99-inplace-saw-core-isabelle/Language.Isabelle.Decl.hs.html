@@ -1,0 +1,330 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    2 </span>{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+<span class="lineno">    3 </span>module Language.Isabelle.Decl 
+<span class="lineno">    4 </span>  (Decl(..)
+<span class="lineno">    5 </span>  , Decls
+<span class="lineno">    6 </span>  , toList
+<span class="lineno">    7 </span>  , traverseImports
+<span class="lineno">    8 </span>  , traverseDecls
+<span class="lineno">    9 </span>  , singleton
+<span class="lineno">   10 </span>  , filter
+<span class="lineno">   11 </span>  , mapMaybe
+<span class="lineno">   12 </span>  , dependencies
+<span class="lineno">   13 </span>  , strip
+<span class="lineno">   14 </span>  , recordName
+<span class="lineno">   15 </span>  , asRecImpl
+<span class="lineno">   16 </span>  , asRecSpec
+<span class="lineno">   17 </span>  , localeName
+<span class="lineno">   18 </span>  ) where
+<span class="lineno">   19 </span>
+<span class="lineno">   20 </span>import           Prelude hiding (filter)
+<span class="lineno">   21 </span>
+<span class="lineno">   22 </span>import qualified Data.List as List
+<span class="lineno">   23 </span>
+<span class="lineno">   24 </span>import qualified Cryptol.TypeCheck.PP as Cry
+<span class="lineno">   25 </span>
+<span class="lineno">   26 </span>import qualified Language.Isabelle.Binding as Binding
+<span class="lineno">   27 </span>import           Language.Isabelle.Builtins
+<span class="lineno">   28 </span>import qualified Language.Isabelle.Expr as Expr
+<span class="lineno">   29 </span>import qualified Language.Isabelle.Name as Name
+<span class="lineno">   30 </span>import qualified Language.Isabelle.Output as Output
+<span class="lineno">   31 </span>import qualified Language.Isabelle.Syntax as Syntax
+<span class="lineno">   32 </span>import qualified Language.Isabelle.Template as Template
+<span class="lineno">   33 </span>import Numeric (showHex)
+<span class="lineno">   34 </span>import qualified Data.Maybe as Maybe
+<span class="lineno">   35 </span>
+<span class="lineno">   36 </span>data Decl = 
+<span class="lineno">   37 </span>    Definition 
+<span class="lineno">   38 </span>      Bool {- ^ qualified -}
+<span class="lineno">   39 </span>      Binding.Binding {- ^ const name and type -}
+<span class="lineno">   40 </span>      [Binding.Binding] {- ^ argument name/types -}
+<span class="lineno">   41 </span>      Expr.Expr {- ^ body -}
+<span class="lineno">   42 </span>      [Name.Name] {- ^ extra dependencies -}
+<span class="lineno">   43 </span>  | ConstDecl Bool Binding.Binding
+<span class="lineno">   44 </span>  | TypeSyn [Expr.Type] Name.Name Expr.Type
+<span class="lineno">   45 </span>  | TypeDecl [Expr.Type] Name.Name
+<span class="lineno">   46 </span>  | Import Name.TheoryName
+<span class="lineno">   47 </span>  | RecordDecl [String]
+<span class="lineno">   48 </span>  | DatatypeDecl [Expr.Type] Name.Name [(Name.Name,[Expr.Type])]
+<span class="lineno">   49 </span>  | Commented String Decl
+<span class="lineno">   50 </span>  | FixpointLocale [Name.Name]
+<span class="lineno">   51 </span>  | HashDecl 
+<span class="lineno">   52 </span>      Name.Name {- ^ const name -}
+<span class="lineno">   53 </span>      Int {- ^ deep cryptol hash -}
+<span class="lineno">   54 </span>  | NoDecl
+<span class="lineno">   55 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   56 </span>
+<span class="lineno">   57 </span>newtype Decls = Decls { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">toList</span></span></span> :: [Decl] }
+<span class="lineno">   58 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Semigroup</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Monoid</span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">   59 </span>
+<span class="lineno">   60 </span>traverseDecls:: Monad m =&gt;  Decls -&gt; (Decl -&gt; m Decl) -&gt; m Decls
+<span class="lineno">   61 </span><span class="decl"><span class="nottickedoff">traverseDecls (Decls ds) f = do</span>
+<span class="lineno">   62 </span><span class="spaces">  </span><span class="nottickedoff">ds' &lt;- mapM f (List.nub ds)</span>
+<span class="lineno">   63 </span><span class="spaces">  </span><span class="nottickedoff">return $ Decls (List.nub ds')</span></span>
+<span class="lineno">   64 </span>
+<span class="lineno">   65 </span>traverseImports :: Monad m =&gt;  Decls -&gt; (Name.TheoryName -&gt; m Name.TheoryName) -&gt; m Decls
+<span class="lineno">   66 </span><span class="decl"><span class="nottickedoff">traverseImports ds f = do</span>
+<span class="lineno">   67 </span><span class="spaces">  </span><span class="nottickedoff">let (imports, Decls ds') = strip (\case Import{} -&gt; True; _ -&gt; False) ds</span>
+<span class="lineno">   68 </span><span class="spaces">  </span><span class="nottickedoff">imports' &lt;- mapM (\case Import nm -&gt; Import &lt;$&gt; f nm; _ -&gt; undefined) (List.nub imports)</span>
+<span class="lineno">   69 </span><span class="spaces">  </span><span class="nottickedoff">return $ Decls (imports' ++ ds')</span></span>
+<span class="lineno">   70 </span>
+<span class="lineno">   71 </span>liftDeclPred :: (Decl -&gt; Bool) -&gt; Decl -&gt; Bool
+<span class="lineno">   72 </span><span class="decl"><span class="nottickedoff">liftDeclPred f = \case</span>
+<span class="lineno">   73 </span><span class="spaces">  </span><span class="nottickedoff">Commented _ d -&gt; liftDeclPred f d</span>
+<span class="lineno">   74 </span><span class="spaces">  </span><span class="nottickedoff">d -&gt; f d</span></span>
+<span class="lineno">   75 </span>
+<span class="lineno">   76 </span>strip :: (Decl -&gt; Bool) -&gt; Decls -&gt; ([Decl], Decls)
+<span class="lineno">   77 </span><span class="decl"><span class="nottickedoff">strip f (Decls ds) = let (ds_match, ds') = List.partition (liftDeclPred f) ds in (ds_match, Decls ds')</span></span>
+<span class="lineno">   78 </span>
+<span class="lineno">   79 </span>filter :: (Decl -&gt; Bool) -&gt; Decls -&gt; [Decl]
+<span class="lineno">   80 </span><span class="decl"><span class="nottickedoff">filter f (Decls ds ) = List.filter (liftDeclPred f) ds</span></span>
+<span class="lineno">   81 </span>
+<span class="lineno">   82 </span>mapMaybe :: (Decl -&gt; Maybe a) -&gt; Decls -&gt; [a]
+<span class="lineno">   83 </span><span class="decl"><span class="nottickedoff">mapMaybe f (Decls ds) = Maybe.mapMaybe f ds</span></span>
+<span class="lineno">   84 </span>
+<span class="lineno">   85 </span>singleton :: Decl -&gt; Decls
+<span class="lineno">   86 </span><span class="decl"><span class="nottickedoff">singleton d = Decls [d]</span></span>
+<span class="lineno">   87 </span>
+<span class="lineno">   88 </span>maybeQualifyCmd :: Bool -&gt; String -&gt; String
+<span class="lineno">   89 </span><span class="decl"><span class="nottickedoff">maybeQualifyCmd True s = &quot;qualified &quot; ++ s</span>
+<span class="lineno">   90 </span><span class="spaces"></span><span class="nottickedoff">maybeQualifyCmd False s = s</span></span>
+<span class="lineno">   91 </span>
+<span class="lineno">   92 </span>definitionCmd :: Output.HasOutput =&gt; Bool -&gt; Binding.Binding -&gt; Maybe ([Binding.Binding], Expr.Expr) -&gt; String
+<span class="lineno">   93 </span><span class="decl"><span class="nottickedoff">definitionCmd qualify b (Just (args,e)) = maybeQualifyCmd qualify $</span>
+<span class="lineno">   94 </span><span class="spaces">  </span><span class="nottickedoff">&quot;cryptol_definition &quot; ++ </span>
+<span class="lineno">   95 </span><span class="spaces">        </span><span class="nottickedoff">Binding.prettyBindOuter b &lt;&gt; &quot; where\n&quot; ++</span>
+<span class="lineno">   96 </span><span class="spaces">        </span><span class="nottickedoff">(Output.quotes $ (Output.out (Binding.bindName b)) &lt;&gt; &quot; &quot;</span>
+<span class="lineno">   97 </span><span class="spaces">          </span><span class="nottickedoff">&lt;&gt; (Output.spaces (map (Output.out . Binding.bindName) args)) &lt;&gt; &quot; \\&lt;equiv&gt; &quot; &lt;&gt; </span>
+<span class="lineno">   98 </span><span class="spaces">                </span><span class="nottickedoff">(Output.indent 1 $ (Output.out e)))</span>
+<span class="lineno">   99 </span><span class="spaces"></span><span class="nottickedoff">definitionCmd qualify b Nothing = maybeQualifyCmd qualify $</span>
+<span class="lineno">  100 </span><span class="spaces">  </span><span class="nottickedoff">&quot;cryptol_definition &quot; &lt;&gt; Binding.prettyBindOuter b</span></span>
+<span class="lineno">  101 </span>
+<span class="lineno">  102 </span>freshTs :: Int -&gt; ([String], [String])
+<span class="lineno">  103 </span><span class="decl"><span class="nottickedoff">freshTs i = splitAt i (take (i*2) (map (\s -&gt; &quot;'&quot; ++ s) (Cry.nameList [])))</span></span>
+<span class="lineno">  104 </span>
+<span class="lineno">  105 </span>recordName :: [String] -&gt; Name.Name
+<span class="lineno">  106 </span><span class="decl"><span class="nottickedoff">recordName args =</span>
+<span class="lineno">  107 </span><span class="spaces">  </span><span class="nottickedoff">let </span>
+<span class="lineno">  108 </span><span class="spaces">    </span><span class="nottickedoff">rawnm = List.intercalate &quot;_&quot; args ++ &quot;_recordT&quot;</span>
+<span class="lineno">  109 </span><span class="spaces">    </span><span class="nottickedoff">thynm = Name.TheoryName (Name.cleanName $ Name.SimpleName rawnm) True</span>
+<span class="lineno">  110 </span><span class="spaces">  </span><span class="nottickedoff">in Name.Name thynm rawnm Syntax.NoSyn Name.Typ</span></span>
+<span class="lineno">  111 </span>
+<span class="lineno">  112 </span>
+<span class="lineno">  113 </span>recordCmd :: Output.HasOutput =&gt; [String] -&gt; Template.Template -&gt; String
+<span class="lineno">  114 </span><span class="decl"><span class="nottickedoff">recordCmd args template =</span>
+<span class="lineno">  115 </span><span class="spaces">  </span><span class="nottickedoff">let</span>
+<span class="lineno">  116 </span><span class="spaces">    </span><span class="nottickedoff">nm = Name.cleanName $ recordName (map Output.out args)</span>
+<span class="lineno">  117 </span><span class="spaces">    </span><span class="nottickedoff">commas = List.intercalate &quot;,&quot;</span>
+<span class="lineno">  118 </span><span class="spaces">    </span><span class="nottickedoff">sorts s = commas $ List.replicate (length args + 1) s</span>
+<span class="lineno">  119 </span><span class="spaces">    </span><span class="nottickedoff">(ts, ts') = freshTs (length args + 1)</span>
+<span class="lineno">  120 </span><span class="spaces">    </span><span class="nottickedoff">coercion = mapRecord nm args (\(_,x) -&gt; coerceExpr x)</span>
+<span class="lineno">  121 </span><span class="spaces">    </span><span class="nottickedoff">fields = map (\(anm,t) -&gt; Output.out anm ++ &quot; :: &quot; ++ t) (zip args ts)</span>
+<span class="lineno">  122 </span><span class="spaces">    </span><span class="nottickedoff">catom s = &quot;(&quot; ++ s ++ &quot;::coercible_atom&quot; ++ &quot;)&quot;</span>
+<span class="lineno">  123 </span><span class="spaces">  </span><span class="nottickedoff">in Output.out $ Template.apply template $ </span>
+<span class="lineno">  124 </span><span class="spaces">    </span><span class="nottickedoff">[ nm</span>
+<span class="lineno">  125 </span><span class="spaces">    </span><span class="nottickedoff">, commas (map catom ts)</span>
+<span class="lineno">  126 </span><span class="spaces">    </span><span class="nottickedoff">, commas (map catom ts')</span>
+<span class="lineno">  127 </span><span class="spaces">    </span><span class="nottickedoff">, commas (take (length args) ts)</span>
+<span class="lineno">  128 </span><span class="spaces">    </span><span class="nottickedoff">, sorts &quot;coercible_atom&quot;</span>
+<span class="lineno">  129 </span><span class="spaces">    </span><span class="nottickedoff">, sorts &quot;strip_type&quot;</span>
+<span class="lineno">  130 </span><span class="spaces">    </span><span class="nottickedoff">, Output.indent 1 $ Output.lines $ fields</span>
+<span class="lineno">  131 </span><span class="spaces">    </span><span class="nottickedoff">, Output.out coercion</span>
+<span class="lineno">  132 </span><span class="spaces">    </span><span class="nottickedoff">, Output.out $ Output.spaces $ Output.addSep &quot;,&quot; fields</span>
+<span class="lineno">  133 </span><span class="spaces">    </span><span class="nottickedoff">, sorts &quot;zero&quot;</span>
+<span class="lineno">  134 </span><span class="spaces">    </span><span class="nottickedoff">, Output.out $ recordCtr $ (map (\s -&gt; (Name.SimpleName s, Expr.IntLit 0)) args) ++ [(dots, Expr.IntLit 0)]</span>
+<span class="lineno">  135 </span><span class="spaces">    </span><span class="nottickedoff">, sorts &quot;_&quot;</span>
+<span class="lineno">  136 </span><span class="spaces">    </span><span class="nottickedoff">, commas ts</span>
+<span class="lineno">  137 </span><span class="spaces">    </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  138 </span>
+<span class="lineno">  139 </span>collectDeps :: Expr.Expr -&gt; [Name.Name]
+<span class="lineno">  140 </span><span class="decl"><span class="nottickedoff">collectDeps e = Expr.foldSubExprs (\case Expr.Ctr _ nm -&gt; addNm nm; Expr.Var nm -&gt; addNm nm; _ -&gt; id) e []</span>
+<span class="lineno">  141 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  142 </span><span class="spaces">    </span><span class="nottickedoff">addNm :: Name.Name -&gt; [Name.Name] -&gt; [Name.Name]</span>
+<span class="lineno">  143 </span><span class="spaces">    </span><span class="nottickedoff">addNm nm nms = (nm:nms)</span></span>
+<span class="lineno">  144 </span>
+<span class="lineno">  145 </span>dependencies :: Decl -&gt; [Name.Name]
+<span class="lineno">  146 </span><span class="decl"><span class="nottickedoff">dependencies = \case</span>
+<span class="lineno">  147 </span><span class="spaces">  </span><span class="nottickedoff">Definition _ _ _ e extra -&gt; extra ++ collectDeps e</span>
+<span class="lineno">  148 </span><span class="spaces">  </span><span class="nottickedoff">ConstDecl{} -&gt; []</span>
+<span class="lineno">  149 </span><span class="spaces">  </span><span class="nottickedoff">Commented _ d -&gt; dependencies d</span>
+<span class="lineno">  150 </span><span class="spaces">  </span><span class="nottickedoff">TypeDecl{} -&gt; []</span>
+<span class="lineno">  151 </span><span class="spaces">  </span><span class="nottickedoff">TypeSyn _ _ rhs -&gt; collectDeps rhs</span>
+<span class="lineno">  152 </span><span class="spaces">  </span><span class="nottickedoff">RecordDecl{} -&gt; []</span>
+<span class="lineno">  153 </span><span class="spaces">  </span><span class="nottickedoff">DatatypeDecl targs _ flds -&gt; concat $ map collectDeps $ ((concat $ map (\(_,ts) -&gt; ts) flds) List.\\ targs)</span>
+<span class="lineno">  154 </span><span class="spaces">  </span><span class="nottickedoff">Import{} -&gt; []</span>
+<span class="lineno">  155 </span><span class="spaces">  </span><span class="nottickedoff">FixpointLocale nms -&gt; (map asRecImpl nms ++ map asRecSpec nms)</span>
+<span class="lineno">  156 </span><span class="spaces">  </span><span class="nottickedoff">HashDecl nm _ -&gt; [nm]</span>
+<span class="lineno">  157 </span><span class="spaces">  </span><span class="nottickedoff">NoDecl -&gt; []</span></span>
+<span class="lineno">  158 </span>
+<span class="lineno">  159 </span>tyHeader :: Output.HasOutput =&gt; [Expr.Expr] -&gt; Name.Name -&gt; String
+<span class="lineno">  160 </span><span class="decl"><span class="nottickedoff">tyHeader [] nm = Output.out nm</span>
+<span class="lineno">  161 </span><span class="spaces"></span><span class="nottickedoff">tyHeader es nm = Output.brackets (List.intercalate &quot;,&quot; (map Output.out es)) ++ &quot; &quot; ++ Output.out nm</span></span>
+<span class="lineno">  162 </span>
+<span class="lineno">  163 </span>lcp2 :: Eq a =&gt; [a] -&gt; [a] -&gt; [a]
+<span class="lineno">  164 </span><span class="decl"><span class="nottickedoff">lcp2 xs ys = map fst (takeWhile (\(x,y) -&gt; x == y) (zip xs ys))</span></span>
+<span class="lineno">  165 </span>
+<span class="lineno">  166 </span>lcp :: Eq a =&gt; [[a]]-&gt; [a]
+<span class="lineno">  167 </span><span class="decl"><span class="nottickedoff">lcp [] = []</span>
+<span class="lineno">  168 </span><span class="spaces"></span><span class="nottickedoff">lcp (x:xs) = foldl lcp2 x xs</span></span>
+<span class="lineno">  169 </span>
+<span class="lineno">  170 </span>asRecImpl :: Name.HasIdent t =&gt; t -&gt; t
+<span class="lineno">  171 </span><span class="decl"><span class="nottickedoff">asRecImpl = Name.mapIdent (\ident -&gt; ident &lt;&gt; &quot;_impl&quot;)</span></span>
+<span class="lineno">  172 </span>
+<span class="lineno">  173 </span>asRecSpec :: Name.HasIdent t =&gt; t -&gt; t
+<span class="lineno">  174 </span><span class="decl"><span class="nottickedoff">asRecSpec = Name.mapIdent (\ident -&gt; ident &lt;&gt; &quot;_spec&quot;)</span></span>
+<span class="lineno">  175 </span>
+<span class="lineno">  176 </span>fixPointLocale :: 
+<span class="lineno">  177 </span> Output.HasOutput =&gt; 
+<span class="lineno">  178 </span> [Name.Name] -&gt; 
+<span class="lineno">  179 </span> Template.Template -&gt;
+<span class="lineno">  180 </span> String
+<span class="lineno">  181 </span><span class="decl"><span class="nottickedoff">fixPointLocale baseNames template = </span>
+<span class="lineno">  182 </span><span class="spaces">  </span><span class="nottickedoff">let </span>
+<span class="lineno">  183 </span><span class="spaces">    </span><span class="nottickedoff">impls = map asRecImpl baseNames</span>
+<span class="lineno">  184 </span><span class="spaces">    </span><span class="nottickedoff">specs = map asRecSpec baseNames</span>
+<span class="lineno">  185 </span><span class="spaces">    </span><span class="nottickedoff">asms = map (\(lhs,rhs) -&gt; eqExpr (Expr.Var lhs) (Expr.Var rhs)) (zip specs impls)</span>
+<span class="lineno">  186 </span><span class="spaces">    </span><span class="nottickedoff">defs = map (\(lhs,rhs) -&gt; eqExpr (Expr.Var lhs) (Expr.Var rhs)) (zip baseNames impls)</span>
+<span class="lineno">  187 </span><span class="spaces">    </span><span class="nottickedoff">def_template = (Output.getTemplate &quot;Fixpoint_Locale_Def&quot;)</span>
+<span class="lineno">  188 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  189 </span><span class="spaces">    </span><span class="nottickedoff">def_cmds = map (\(nm,e) -&gt; </span>
+<span class="lineno">  190 </span><span class="spaces">         </span><span class="nottickedoff">Output.out $ Template.apply def_template [Output.out nm, Output.out e])</span>
+<span class="lineno">  191 </span><span class="spaces">         </span><span class="nottickedoff">(zip impls defs)</span>
+<span class="lineno">  192 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  193 </span><span class="spaces">    </span><span class="nottickedoff">locale_name = localeName baseNames</span>
+<span class="lineno">  194 </span><span class="spaces">    </span><span class="nottickedoff">aliases = </span>
+<span class="lineno">  195 </span><span class="spaces">      </span><span class="nottickedoff">map (\nm -&gt; &quot;alias &quot; ++ Output.out nm ++ &quot; = &quot; </span>
+<span class="lineno">  196 </span><span class="spaces">                 </span><span class="nottickedoff">++ locale_name ++ &quot;.&quot; ++ Output.out nm) baseNames</span>
+<span class="lineno">  197 </span><span class="spaces">    </span><span class="nottickedoff">hides = </span>
+<span class="lineno">  198 </span><span class="spaces">      </span><span class="nottickedoff">map (\nm -&gt; &quot;hide_fact &quot; ++ locale_name ++ &quot;.&quot; ++ Output.out nm ++ &quot;_def&quot;) baseNames</span>
+<span class="lineno">  199 </span><span class="spaces">  </span><span class="nottickedoff">in Output.out $ Template.apply template $ </span>
+<span class="lineno">  200 </span><span class="spaces">     </span><span class="nottickedoff">[ locale_name</span>
+<span class="lineno">  201 </span><span class="spaces">     </span><span class="nottickedoff">, Output.spaces (Output.addSep &quot;and&quot; (map (\e -&gt; Output.quotes (Output.out e)) asms))</span>
+<span class="lineno">  202 </span><span class="spaces">     </span><span class="nottickedoff">, Output.lines def_cmds</span>
+<span class="lineno">  203 </span><span class="spaces">     </span><span class="nottickedoff">, Output.lines aliases</span>
+<span class="lineno">  204 </span><span class="spaces">     </span><span class="nottickedoff">, Output.lines hides</span>
+<span class="lineno">  205 </span><span class="spaces">     </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  206 </span>
+<span class="lineno">  207 </span>localeName :: [Name.Name] -&gt; String
+<span class="lineno">  208 </span><span class="decl"><span class="nottickedoff">localeName bs = lcp (map Name.identOf bs) ++ &quot;_rec_spec&quot;</span></span>
+<span class="lineno">  209 </span>
+<span class="lineno">  210 </span>isTNum :: Expr.Type -&gt; Bool
+<span class="lineno">  211 </span><span class="decl"><span class="nottickedoff">isTNum t = case t of</span>
+<span class="lineno">  212 </span><span class="spaces">  </span><span class="nottickedoff">Expr.Var tnm | Name.TNum &lt;- Name.nmKind tnm -&gt; True</span>
+<span class="lineno">  213 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; False</span></span>
+<span class="lineno">  214 </span>
+<span class="lineno">  215 </span>nameIdx :: Name.Name -&gt; Int -&gt; Name.Name
+<span class="lineno">  216 </span><span class="decl"><span class="nottickedoff">nameIdx nm 0 = nm</span>
+<span class="lineno">  217 </span><span class="spaces"></span><span class="nottickedoff">nameIdx nm i = Name.mapIdent (\x -&gt; x ++ show i) nm</span></span>
+<span class="lineno">  218 </span>
+<span class="lineno">  219 </span>freshVars :: [Expr.Type] -&gt; [Expr.Type]
+<span class="lineno">  220 </span><span class="decl"><span class="nottickedoff">freshVars = go [] 0</span>
+<span class="lineno">  221 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  222 </span><span class="spaces">    </span><span class="nottickedoff">go acc i = \case</span>
+<span class="lineno">  223 </span><span class="spaces">      </span><span class="nottickedoff">ts@(Expr.Var nm:ts') -&gt; </span>
+<span class="lineno">  224 </span><span class="spaces">        </span><span class="nottickedoff">let t' = Expr.Var (nameIdx nm i)</span>
+<span class="lineno">  225 </span><span class="spaces">        </span><span class="nottickedoff">in case elem t' (ts ++ acc) of</span>
+<span class="lineno">  226 </span><span class="spaces">          </span><span class="nottickedoff">True -&gt; go acc (i+1) (t':ts')</span>
+<span class="lineno">  227 </span><span class="spaces">          </span><span class="nottickedoff">False -&gt; go (t':acc) 0 ts'</span>
+<span class="lineno">  228 </span><span class="spaces">      </span><span class="nottickedoff">(t':ts) -&gt; go (t':acc) 0 ts</span>
+<span class="lineno">  229 </span><span class="spaces">      </span><span class="nottickedoff">[] -&gt; reverse acc</span></span>
+<span class="lineno">  230 </span>
+<span class="lineno">  231 </span>mkSameType :: Output.HasOutput =&gt; (Expr.Type, Expr.Type) -&gt; String
+<span class="lineno">  232 </span><span class="decl"><span class="nottickedoff">mkSameType (t1, t2) = Output.brackets $ case isTNum t1 of</span>
+<span class="lineno">  233 </span><span class="spaces">  </span><span class="nottickedoff">True -&gt; &quot;LEN&quot; ++ Output.brackets (Output.out t1) ++ &quot; = &quot; ++ &quot;LEN&quot; ++ Output.brackets (Output.out t2)</span>
+<span class="lineno">  234 </span><span class="spaces">  </span><span class="nottickedoff">False -&gt; &quot;same_type TYPE&quot; ++ Output.brackets (Output.out t1) ++ &quot; TYPE&quot; ++ Output.brackets (Output.out t2)</span></span>
+<span class="lineno">  235 </span>
+<span class="lineno">  236 </span>datatypeDecl :: 
+<span class="lineno">  237 </span> Output.HasOutput =&gt; 
+<span class="lineno">  238 </span> [Expr.Type] -&gt; 
+<span class="lineno">  239 </span> Name.Name -&gt;
+<span class="lineno">  240 </span> [(Name.Name,[Expr.Type])] -&gt;
+<span class="lineno">  241 </span> Template.Template -&gt;
+<span class="lineno">  242 </span> String
+<span class="lineno">  243 </span><span class="decl"><span class="nottickedoff">datatypeDecl targs nm flds template =</span>
+<span class="lineno">  244 </span><span class="spaces">  </span><span class="nottickedoff">let targs' = freshVars targs</span>
+<span class="lineno">  245 </span><span class="spaces">      </span><span class="nottickedoff">defs = map (\(fnm,fts) -&gt; Name.cleanName fnm ++ &quot; &quot; ++ List.intercalate &quot; &quot; (map (Output.quotes . Output.out) fts)) flds</span>
+<span class="lineno">  246 </span><span class="spaces">      </span><span class="nottickedoff">sorts s = List.intercalate &quot;,&quot; $ map (\t -&gt; if isTNum t then &quot;_&quot; else s) targs</span>
+<span class="lineno">  247 </span><span class="spaces">      </span><span class="nottickedoff">commas xs = List.intercalate &quot;,&quot; (map Output.out xs)</span>
+<span class="lineno">  248 </span><span class="spaces">      </span><span class="nottickedoff">shownat n = Output.brackets $ show n ++ &quot;::nat&quot;</span>
+<span class="lineno">  249 </span><span class="spaces">      </span><span class="nottickedoff">natcase n = case n of</span>
+<span class="lineno">  250 </span><span class="spaces">        </span><span class="nottickedoff">0 -&gt; &quot;0&quot;</span>
+<span class="lineno">  251 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; &quot;Suc (&quot; ++ natcase (n-1) ++ &quot;)&quot;</span>
+<span class="lineno">  252 </span><span class="spaces">      </span><span class="nottickedoff">catom s = case isTNum s of</span>
+<span class="lineno">  253 </span><span class="spaces">        </span><span class="nottickedoff">True -&gt; Output.out s</span>
+<span class="lineno">  254 </span><span class="spaces">        </span><span class="nottickedoff">False -&gt; &quot;(&quot; ++ Output.out s ++ &quot;::coercible_atom&quot; ++ &quot;)&quot;</span>
+<span class="lineno">  255 </span><span class="spaces">      </span><span class="nottickedoff">mk_comp f n = Output.brackets $ List.intercalate &quot; o &quot; (replicate n f)</span>
+<span class="lineno">  256 </span><span class="spaces">      </span><span class="nottickedoff">mk_strip (n,(_,fts)) = Output.brackets $ case length fts of</span>
+<span class="lineno">  257 </span><span class="spaces">        </span><span class="nottickedoff">0 -&gt; &quot;strip (&quot; ++ shownat n ++ &quot;,())&quot;</span>
+<span class="lineno">  258 </span><span class="spaces">        </span><span class="nottickedoff">1 -&gt; &quot;curry strip &quot; ++ shownat n</span>
+<span class="lineno">  259 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; mk_comp &quot;curry&quot; (length fts - 1) ++ (Output.brackets $ &quot;curry strip &quot; ++ shownat n)</span>
+<span class="lineno">  260 </span><span class="spaces">      </span><span class="nottickedoff">mk_unstrip_rhs (fnm,fts) = case length fts of</span>
+<span class="lineno">  261 </span><span class="spaces">        </span><span class="nottickedoff">0 -&gt; &quot;\\&lt;lambda&gt; _. &quot; ++ Output.out fnm</span>
+<span class="lineno">  262 </span><span class="spaces">        </span><span class="nottickedoff">1 -&gt; Output.out fnm ++ &quot; o unstrip&quot;</span>
+<span class="lineno">  263 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; mk_comp &quot;uncurry&quot; (length fts - 1) ++ &quot; &quot;</span>
+<span class="lineno">  264 </span><span class="spaces">                </span><span class="nottickedoff">++ Output.out fnm ++ &quot; o unstrip&quot;</span>
+<span class="lineno">  265 </span><span class="spaces">      </span><span class="nottickedoff">mk_unstrip (n,r) = natcase n ++ &quot; \\&lt;Rightarrow&gt; &quot; ++ mk_unstrip_rhs r</span>
+<span class="lineno">  266 </span><span class="spaces">      </span><span class="nottickedoff">mk_strip_type tp = case tp of</span>
+<span class="lineno">  267 </span><span class="spaces">        </span><span class="nottickedoff">Expr.Var tnm | Name.TNum &lt;- Name.nmKind tnm -&gt; </span>
+<span class="lineno">  268 </span><span class="spaces">          </span><span class="nottickedoff">&quot;Tn LEN(&quot; ++ Output.out tnm ++ &quot;)&quot;</span>
+<span class="lineno">  269 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; &quot;strip_type TYPE(&quot; ++ Output.out tp ++ &quot;)&quot;</span>
+<span class="lineno">  270 </span><span class="spaces">      </span><span class="nottickedoff">mk_coerce (fnm,fts) = Output.brackets $ case length fts of</span>
+<span class="lineno">  271 </span><span class="spaces">        </span><span class="nottickedoff">0 -&gt; Output.out fnm</span>
+<span class="lineno">  272 </span><span class="spaces">        </span><span class="nottickedoff">1 -&gt; Output.out fnm ++ &quot; o coerce&quot;</span>
+<span class="lineno">  273 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; let s = mk_comp &quot;uncurry&quot; (length fts - 1) ++ &quot; &quot; ++ Output.out fnm ++ &quot; o coerce&quot;</span>
+<span class="lineno">  274 </span><span class="spaces">          </span><span class="nottickedoff">in  mk_comp &quot;curry&quot; (length fts - 1) ++ &quot; &quot; ++ Output.brackets s</span>
+<span class="lineno">  275 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  276 </span><span class="spaces">  </span><span class="nottickedoff">in Output.out $ Template.apply template $ </span>
+<span class="lineno">  277 </span><span class="spaces">    </span><span class="nottickedoff">[ Name.cleanName nm</span>
+<span class="lineno">  278 </span><span class="spaces">    </span><span class="nottickedoff">, commas targs</span>
+<span class="lineno">  279 </span><span class="spaces">    </span><span class="nottickedoff">, List.intercalate &quot; | &quot; defs</span>
+<span class="lineno">  280 </span><span class="spaces">    </span><span class="nottickedoff">, commas $ map mk_strip_type targs</span>
+<span class="lineno">  281 </span><span class="spaces">    </span><span class="nottickedoff">, commas targs'</span>
+<span class="lineno">  282 </span><span class="spaces">    </span><span class="nottickedoff">, sorts &quot;coercible_atom&quot;</span>
+<span class="lineno">  283 </span><span class="spaces">    </span><span class="nottickedoff">, List.intercalate &quot; &quot; (map mk_strip (zip [0::Integer ..] flds))</span>
+<span class="lineno">  284 </span><span class="spaces">    </span><span class="nottickedoff">, List.intercalate &quot; | &quot; (map mk_unstrip (zip [0::Integer ..] flds))</span>
+<span class="lineno">  285 </span><span class="spaces">    </span><span class="nottickedoff">, sorts &quot;_&quot;</span>
+<span class="lineno">  286 </span><span class="spaces">    </span><span class="nottickedoff">, sorts &quot;strip_type&quot;</span>
+<span class="lineno">  287 </span><span class="spaces">    </span><span class="nottickedoff">, commas $ map catom targs</span>
+<span class="lineno">  288 </span><span class="spaces">    </span><span class="nottickedoff">, commas $ map catom targs'</span>
+<span class="lineno">  289 </span><span class="spaces">    </span><span class="nottickedoff">, List.intercalate &quot; \\&lt;and&gt; &quot; $ map mkSameType (zip targs targs')</span>
+<span class="lineno">  290 </span><span class="spaces">    </span><span class="nottickedoff">, &quot;&quot;</span>
+<span class="lineno">  291 </span><span class="spaces">    </span><span class="nottickedoff">, List.intercalate &quot; &quot; $ map mk_coerce flds</span>
+<span class="lineno">  292 </span><span class="spaces">    </span><span class="nottickedoff">]</span></span>
+<span class="lineno">  293 </span>
+<span class="lineno">  294 </span>instance Output.Output Decl where
+<span class="lineno">  295 </span>  <span class="decl"><span class="nottickedoff">out = \case</span>
+<span class="lineno">  296 </span><span class="spaces">    </span><span class="nottickedoff">Definition q b args e _ -&gt; definitionCmd q b (Just (args,e))</span>
+<span class="lineno">  297 </span><span class="spaces">    </span><span class="nottickedoff">ConstDecl q b -&gt; definitionCmd q b Nothing</span>
+<span class="lineno">  298 </span><span class="spaces">    </span><span class="nottickedoff">Import i -&gt; Output.out (Name.thyNm i)</span>
+<span class="lineno">  299 </span><span class="spaces">    </span><span class="nottickedoff">TypeSyn targs nm rhs -&gt; </span>
+<span class="lineno">  300 </span><span class="spaces">        </span><span class="nottickedoff">&quot;type_synonym &quot; ++ tyHeader targs nm ++ &quot; = &quot; ++ Output.quotes (Output.out rhs)</span>
+<span class="lineno">  301 </span><span class="spaces">    </span><span class="nottickedoff">TypeDecl targs nm -&gt; &quot;typedecl &quot; ++ tyHeader targs nm</span>
+<span class="lineno">  302 </span><span class="spaces">    </span><span class="nottickedoff">RecordDecl args -&gt; recordCmd args (Output.getTemplate &quot;Coercible_Record&quot;)</span>
+<span class="lineno">  303 </span><span class="spaces">    </span><span class="nottickedoff">DatatypeDecl targs nm flds -&gt; datatypeDecl targs nm flds (Output.getTemplate &quot;Coercible_Datatype&quot;)</span>
+<span class="lineno">  304 </span><span class="spaces">    </span><span class="nottickedoff">FixpointLocale args -&gt; fixPointLocale args (Output.getTemplate &quot;Fixpoint_Locale&quot;)</span>
+<span class="lineno">  305 </span><span class="spaces">    </span><span class="nottickedoff">Commented msg d -&gt; &quot;(* &quot; ++ msg ++ &quot;*)\n&quot; ++ Output.out d</span>
+<span class="lineno">  306 </span><span class="spaces">    </span><span class="nottickedoff">HashDecl nm h -&gt; &quot;declare [[set_const_hash &quot; ++ Output.out nm ++ &quot; 0x&quot; ++ showHex (fromIntegral h :: Word) &quot;&quot; ++ &quot;]]&quot;</span>
+<span class="lineno">  307 </span><span class="spaces">    </span><span class="nottickedoff">NoDecl -&gt; &quot;&quot;</span></span>
+
+</pre>
+</body>
+</html>
