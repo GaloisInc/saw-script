@@ -27,6 +27,7 @@ module SAWCentral.AST
      , TyCon(..)
      , NamedParamInfo(..), noNames
      , Type(..)
+     , SchemaNameProvenance(..)
      , Schema(..)
      , SchemaPattern(..)
      , NamedType(..)
@@ -296,14 +297,21 @@ data Type
   | TyUnifyVar TypeProvenance TypeIndex
   deriving Show
 
-data Schema = Forall [(TypeProvenance, Name)] Type
+-- | The positions in type schemes can be either explicit (the user
+--   gave a name at this position) or implicit (a fresh unification
+--   var was generated at this position and ended up getting forall-
+--   bound). XXX: this could use a shorter name.
+data SchemaNameProvenance = SchemaNameExplicit Pos | SchemaNameImplicit Pos
+  deriving Show
+
+data Schema = Forall [(SchemaNameProvenance, Name)] Type
   deriving Show
 
 -- | A schema pattern is like a schema but has potentially multiple
 -- type entries that are meant to match fragments of a complete
 -- schema. (We don't, for now at least, need a separate type for type
 -- patterns and can just use Type.)
-data SchemaPattern = SchemaPattern [(TypeProvenance, Name)] [Type]
+data SchemaPattern = SchemaPattern [(SchemaNameProvenance, Name)] [Type]
 
 -- | The things a (named) TyVar can refer to by its name.
 --
@@ -991,7 +999,7 @@ tVar prov n = TyVar prov n
 tMono :: Type -> Schema
 tMono t = Forall [] t
 
-tForall :: [(TypeProvenance, Name)] -> Schema -> Schema
+tForall :: [(SchemaNameProvenance, Name)] -> Schema -> Schema
 tForall xs (Forall ys t) = Forall (xs ++ ys) t
 
 
