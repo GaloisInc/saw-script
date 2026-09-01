@@ -2313,6 +2313,35 @@ genCodeForNominalTypes sc nominalMap =
 
 -- | Generate a @PEq@ dictionary combinator for the given
 -- (non-recursive) datatype and register it as an class instance rule.
+--
+-- For the type
+--
+--    enum Foo a = A | B a | C Bool Integer
+--
+-- this will generate the following definition:
+--
+-- PEq__Foo : (a : isort 0) -> PEq a -> PEq (Foo a)
+-- PEq__Foo =
+--   \(a : isort 0) (_P : PEq a) ->
+--     { eq =
+--       Foo#rec a (\(_ : Foo a) -> Foo a -> Bool)
+--         (Foo#rec a (\(_ : Foo a) -> Bool) True (\(y : a) -> False)
+--            (\(y : Bool) (y1 : Integer) -> False))
+--         (\(x : a) ->
+--            Foo#rec a (\(_ : Foo a) -> Bool) False (\(y : a) -> ecEq a _P x y)
+--              (\(y : Bool) (y1 : Integer) -> False))
+--         (\(x : Bool) (x1 : Integer) ->
+--            Foo#rec a (\(_ : Foo a) -> Bool) False (\(y : a) -> False)
+--              (\(y : Bool) (y1 : Integer) ->
+--                and (ecEq Bool PEqBit x y)
+--                  (ecEq Integer PEqInteger x1 y1))) }
+--
+-- To summarize: An outer recursor cases on the first argument.
+-- Within each branch, an inner recursor cases on the second argument.
+-- On inner branches where the constructors differ, return False.
+-- Where the constructors match, recursively call ecEq on
+-- corresponding constructor arguments, and combine with @and@.
+
 deriveEqInstance ::
   SharedContext ->
   LocalEnv ->
@@ -2449,6 +2478,61 @@ deriveCmpInstanceGeneric
 
 -- | Generate a @PCmp@ dictionary combinator for the given
 -- (non-recursive) datatype and register it as an class instance rule.
+--
+-- For the type
+--
+--    enum Foo a = A | B a | C Bool Integer
+--
+-- this will generate the following definition:
+--
+-- PCmp__Foo : (a : isort 0) -> PCmp a -> PCmp (Foo a)
+-- PCmp__Foo =
+--   \(a : isort 0) (_P : PCmp a) ->
+--     { cmpEq = PEq__Foo a _P.cmpEq
+--     , cmp =
+--       Foo#rec a (\(_ : Foo a) -> Foo a -> Bool -> Bool)
+--         (Foo#rec a (\(_ : Foo a) -> Bool -> Bool)
+--            (\(k : Bool) -> k)
+--            (\(y : a) -> \(k : Bool) -> True)
+--            (\(y : Bool) -> \(y1 : Integer) -> \(k : Bool) -> True))
+--         (\(x : a) ->
+--            Foo#rec a (\(_ : Foo a) -> Bool -> Bool)
+--              (\(k : Bool) -> False)
+--              (\(y : a) (k : Bool) -> _P.cmp x y k)
+--              (\(y : Bool) (y1 : Integer) (k : Bool) -> True))
+--         (\(x : Bool) ->
+--            \(x1 : Integer) ->
+--              Foo#rec a (\(_ : Foo a) -> Bool -> Bool)
+--                (\(k : Bool) -> False)
+--                (\(y : a) (k : Bool) -> False)
+--                (\(y : Bool) (y1 : Integer) (k : Bool) ->
+--                   PCmpBit.cmp x y (PCmpInteger.cmp x1 y1 k)))
+--     , le = ...
+--     , lt = ... }
+--
+-- The function in the @cmp@ field returns one of three boolean
+-- functions depending on the ordering:
+--
+--   * LT: @\(k:Bool) -> True@
+--   * GT: @\(k:Bool) -> False@
+--   * EQ: @\(k:Bool) -> k@
+--
+-- With this representation, function composition implements
+-- lexicographic ordering.
+-- Applying @True@ yields a less-than-or-equal function, and applying
+-- @False@ yields less-than.
+--
+-- In the cmp function, an outer recursor cases on the first argument.
+-- Within each branch, an inner recursor cases on the second argument.
+-- On inner branches where the constructors differ, return constant
+-- True or False, depending on the constructor order.
+-- Where the constructors match, recursively compare the corresponding
+-- constructor arguments, and combine with function composition.
+--
+-- The @cmpEq@ field stores the @PEq@ superclass dictionary.
+-- The @le@ and @lt@ fields are the @cmp@ function pre-applied to
+-- @True@ and @False@, respectively.
+
 deriveCmpInstance ::
   SharedContext ->
   LocalEnv ->
@@ -2463,6 +2547,8 @@ deriveCmpInstance =
 
 -- | Generate a @PSignedCmp@ dictionary combinator for the given
 -- (non-recursive) datatype and register it as an class instance rule.
+-- The definition is identical to the @PCmp@ instance, but with
+-- different field and function names.
 deriveSignedCmpInstance ::
   SharedContext ->
   LocalEnv ->
@@ -2475,31 +2561,12 @@ deriveSignedCmpInstance =
   deriveCmpInstanceGeneric
   ("Cryptol.PSignedCmp", "signedCmpEq", "scmp", "sle", "slt", "PSignedCmp__")
 
--- | genCodeForEnum ... - called when we see an "enum" definition in the Cryptol module.
---    - This action does two things
---       1. Returns the names & definitions of the constructors of the enum.
---          This fits with the code for other nominals, needed because
---          the "rest" of Cryptol code to be translated needs to see the
---          constructors in the Cryptol environments.
---       2. It adds many other definitions to the SAWCore environment
---          (in the sc :: SharedContext).  These definitions are only
---          used by other generated SAWCore code, so we don't need to
---          return this information back to the Cryptol environment(s).
---
---    - N.B. PLEASE refer to doc/developer/translating-enums.md for a
---      description of this translation at a more abstract level.  The
---      example there is what is used below to explain the below code
---      by SAWCore examples.  The running example we use is
---
---      > enum ETT ts = C1
---      >             | C2 Nat
---      >             | C3 Bool ts
---
---   FIXME: the uses of 'preludeName' should all be removed and new
---     definitions should be added to the module name being processed.
---     (At one point this was problematic, TODO: figure out and
---     resolve.)
---
+-- | Define a Cryptol @enum@ type as a SAWCore datatype.
+-- If the Cryptol type definition has a @deriving@ clause, then
+-- generate dictionary combinators for each class and register them
+-- for use with the instance solver.
+-- Return a list of Cryptol constructor names paired with the
+-- corresponding SAWCore constructor functions.
 genCodeForEnum ::
   HasCallStack =>
   SharedContext -> NominalType -> [C.EnumCon] -> IO [(C.Name,Term)]
