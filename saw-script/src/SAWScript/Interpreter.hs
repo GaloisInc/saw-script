@@ -1461,8 +1461,8 @@ interpretMain = do
   avail <- gets rwPrimsAvail
   Environ varenv tyenv _cryenv <- gets rwEnviron
   rbenv <- gets rwRebindables
-  let pos = SS.PosInternal "entry"
-      prov = SS.TypeInferred SS.InfTerm pos
+  let pos = SS.PosInternal "call-to-main"
+      prov = SS.TypeFromElement pos SS.TyctxExpr
       -- We need the type to be "TopLevel a", not just "TopLevel ()".
       -- There are several (old) tests in the test suite whose main
       -- returns something, e.g. several are TopLevel Theorem because
@@ -2548,7 +2548,7 @@ toplevelSubshell () = do
     rw' <- liftIO $ hook ro rw
     put rw'
     popScope
-    let ty = SS.tUnit (SS.TypeInferred SS.InfTerm $ rwPosition rw)
+    let ty = SS.tUnit $ SS.TypeFromElement (rwPosition rw) SS.TyctxExpr
     return $ toValue ty "subshell" ()
 
 -- The proof_subshell command.
@@ -2570,14 +2570,14 @@ proofScriptSubshell () = do
     scriptTopLevel $ do
         put rw'
         popScope
-    let ty = SS.tUnit (SS.TypeInferred SS.InfTerm $ rwPosition rw)
+    let ty = SS.tUnit $ SS.TypeFromElement (rwPosition rw) SS.TyctxExpr
     return $ toValue ty "proof_subshell" ()
 
 -- The "map" builtin.
 mapValue :: Value -> [Value] -> TopLevel Value
 mapValue f xs =
   do let pos = SS.PosInsideBuiltin
-         prov = SS.TypeInferred SS.InfTerm pos
+         prov = SS.TypeFromElement pos SS.TyctxExpr
      let info = "(value was in a \"map\")"
      -- toValue will check the array type but not the element type,
      -- since we already have Values here. So use unit as a
@@ -4706,7 +4706,7 @@ primitives = Map.fromList $
     [ "Merge two simplification sets into one." ]
 
   , prim "basic_ss"            "Simpset"
-    (bicVal $ \bic _ -> toValue (SS.TyVar (SS.TypeInferred SS.InfTerm SS.PosInsideBuiltin) "Simpset") "basic_ss" $ biBasicSS bic)
+    (bicVal $ \bic _ -> toValue (SS.TyVar (SS.TypeFromElement SS.PosInsideBuiltin SS.TyctxExpr) "Simpset") "basic_ss" $ biBasicSS bic)
     Current
     [ "A basic rewriting simplification set containing some boolean"
     , "identities and conversions relating to bitvectors, natural"

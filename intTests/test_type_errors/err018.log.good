@@ -17,8 +17,8 @@ Type errors:
           turquoise : Int
        }
 
-  err018.saw:16:14-16:20: Note: The type String arises from this type annotation
-  err018.saw:23:25-23:26: Note: The type Int arises from the type of this term
+  err018.saw:16:14-16:20: Note: The type String arises from this explicit type name
+  err018.saw:23:25-23:26: Note: The type Int arises from the form of this constant
 
   err018.saw:26:11-26:12: Error: Type mismatch.
     Expected: String
@@ -37,8 +37,8 @@ Type errors:
           turquoise : Int
        }
 
-  err018.saw:17:15-17:21: Note: The type String arises from this type annotation
-  err018.saw:23:38-23:39: Note: The type Int arises from the type of this term
+  err018.saw:17:15-17:21: Note: The type String arises from this explicit type name
+  err018.saw:23:38-23:39: Note: The type Int arises from the form of this constant
 
   err018.saw:26:11-26:12: Error: Type mismatch.
     Expected: String
@@ -57,8 +57,8 @@ Type errors:
           turquoise : Int
        }
 
-  err018.saw:18:14-18:20: Note: The type String arises from this type annotation
-  err018.saw:23:50-23:51: Note: The type Int arises from the type of this term
+  err018.saw:18:14-18:20: Note: The type String arises from this explicit type name
+  err018.saw:23:50-23:51: Note: The type Int arises from the form of this constant
 
   err018.saw:26:11-26:12: Error: Type mismatch.
     Expected: String
@@ -77,8 +77,8 @@ Type errors:
           turquoise : Int
        }
 
-  err018.saw:19:15-19:21: Note: The type String arises from this type annotation
-  err018.saw:23:63-23:64: Note: The type Int arises from the type of this term
+  err018.saw:19:15-19:21: Note: The type String arises from this explicit type name
+  err018.saw:23:63-23:64: Note: The type Int arises from the form of this constant
 
 
 FAILED

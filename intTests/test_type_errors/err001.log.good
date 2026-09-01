@@ -4,8 +4,8 @@ Type errors:
     Expected: String
     Found:    Int
 
-  err001.saw:1:14-1:20: Note: The type String arises from this type annotation
-  err001.saw:1:23-1:24: Note: The type Int arises from the type of this term
+  err001.saw:1:14-1:20: Note: The type String arises from this explicit type name
+  err001.saw:1:23-1:24: Note: The type Int arises from the form of this constant
 
 
 FAILED

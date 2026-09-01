@@ -4,8 +4,8 @@ Type errors:
     Expected: { a : Int, b : Int }
     Found:    Int
 
-  err017.saw:4:13-7:2: Note: The type { a : Int, b : Int } arises from this type annotation
-  err017.saw:11:11-11:12: Note: The type Int arises from the type of this term
+  err017.saw:4:13-7:2: Note: The type { a : Int, b : Int } arises from this explicit type name
+  err017.saw:11:11-11:12: Note: The type Int arises from the form of this constant
 
 
 FAILED

@@ -4,8 +4,8 @@ Type errors:
     Expected: (Int, Int, Int, Int)
     Found:    (Int, Int, Int)
 
-  err019.saw:4:12-4:32: Note: The type (Int, Int, Int, Int) arises from this type annotation
-  err019.saw:3:9-3:18: Note: The type (Int, Int, Int) arises from the type of this term
+  err019.saw:4:12-4:32: Note: The type (Int, Int, Int, Int) arises from this explicit type name
+  err019.saw:3:9-3:18: Note: The type (Int, Int, Int) arises from the form of this expression
 
 
 FAILED

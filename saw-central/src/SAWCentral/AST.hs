@@ -20,7 +20,7 @@ module SAWCentral.AST
      , Kind(..)
      , kindStar, kindStarToStar
 
-     , Inference(..)
+     , Tyctx(..)
      , TypeProvenance(..)
      , TypeIndex
      , Context(..)
@@ -43,6 +43,7 @@ module SAWCentral.AST
      , DeclGroup(..)
 
      , ppKind, prettyKind
+     , ppTyctx, prettyTyctx
      , ppTyCon, prettyTyCon
      , ppType, prettyType
      , ppSchema, prettySchema
@@ -147,32 +148,46 @@ kindStarToStar = Kind 1
 ------------------------------------------------------------
 -- Types
 
--- Type inference info, to be used to interpret the positions of
--- inferred types.
---
--- InfFresh means that the term (or pattern) at the given position
---    caused us to generate a fresh type variable, e.g. the element
---    type of "[]".
--- InfTerm means that the term (or pattern) at the given position
---    prompted us to choose the accompanying type; e.g. "[]" has type
---    List.
--- InfContext means that the usage of the term at the given position
---    prompted us to choose the accompanying type; e.g. in "f x" f has
---    function type.
---
--- If you add an Ord instance here (there is currently no need for
--- one) be sure to take steps to avoid confusion with the comparison
--- in compareInfQuality, which is a different kind of comparison.
-data Inference
-  = InfFresh
-  | InfTerm
-  | InfContext
+-- | Context for type provenance; basically, what kind of program
+--   element we were looking at when we inferred a type.
+data Tyctx
+  = TyctxConstant  -- ^ Constants (special cases of expressions)
+  | TyctxExpr      -- ^ Expressions
+  | TyctxPat       -- ^ Patterns
+  | TyctxStmt      -- ^ Statements
+  | TyctxFuncBody  -- ^ Expressions that are function bodies
+  | TyctxArgList   -- ^ Expression groups that are function argument lists
   deriving (Eq, Show)
 
--- Extended provenance/position information for types.
+-- | Extended provenance/position information for types.
+--
+-- TypeExplicit means that the type was written in the input text
+--    at the given position.
+-- TypeFresh means that the type was generated at the given position
+--    to represent a type that that construct implies must exist.
+-- TypeFailed means that the type arose from a prior type error and
+--    is thus not itself very interesting.
+-- TypeFromForallNamed means that the type was forall-bound from the
+--    named variable at the given position, with the given name, in
+--    the function of the given name.
+-- TypeFromForallFresh means that the type was forall-bound from a
+--    fresh type variable implicitly generated at the given position,
+--    using the given typechecker-generated name, in the function of
+--    the given name.
+-- TypeFromElement means that the construct at the given position
+--    prompted us to choose the accompanying type; e.g. "[]" has type
+--    List t.
+-- TypeFromContext means that the usage of the construct at the given
+--    position prompted us to choose the accompanying type; e.g. in "f
+--    x", f has function type.
 data TypeProvenance
   = TypeExplicit Pos
-  | TypeInferred Inference Pos
+  | TypeFresh Pos
+  | TypeFailed Pos
+  | TypeFromForallNamed Pos Text Text
+  | TypeFromForallFresh Pos Text Text
+  | TypeFromElement Pos Tyctx
+  | TypeFromContext Pos Tyctx
   deriving (Eq, Show)
 
 -- | Type for unification variable serial numbers.
@@ -239,32 +254,46 @@ instance Semigroup NamedParamInfo where
     NamedParamInfo n1 nps1 <> NamedParamInfo n2 nps2 =
         NamedParamInfo (n1 + n2) (nps1 ++ nps2)
 
--- The position information in a type should be thought of as its
--- provenance; for a type annotation in the input it'll be a concrete
--- file position. For types we infer, we want the position to record
--- not just where but also how the inference happened, so that when we
--- report this to the user they can see what's going on. (For example,
--- if we infer that a type must be a function because it's applied to
--- an argument, we record that it's inferred from context and the
--- position of the context is the position of the term that was
--- applied.) When the type flows around during type inference it
--- carries the position info with it.
+-- | Types.
+--
+-- We carry around provenance for types, which wrap the source
+-- positions.
+--
+-- For types we infer, we want to record not just where but also how
+-- the inference happened, so that when we report this to the user
+-- they can see what's going on. (For example, if we infer that a type
+-- must be a function because it's applied to an argument, we record
+-- that it's inferred from context and the position of the context is
+-- the position of the term that was applied.) When the type flows
+-- around during type inference it carries the position info with it.
 --
 -- Note that for a non-primitive type the various layers of the type
 -- may have totally different provenance. (E.g. we might have List Int
 -- where List was inferred from a term "[x]" somewhere but Int came
 -- from an explicit annotation somewhere completely different.) So
--- printing this information usefully requires some thought. As of
--- this writing most of that thought hasn't been put in yet and we
--- just stuff the inference info into the Show instance output. See
--- notes in Position.hs.
+-- printing this information usefully requires some thought.
+--
+-- We have the following constraints that it would be nice to encode
+-- into the types, except it doesn't seem feasible:
+--
+--    - Prior to the @generalize@ step in typechecking,
+--      `TyVar` should always have `TypeExplicit` provenance, and
+--      only `TyUnifyVar` should ever have `TypeFailed` provenance.
+--
+--    - After @generalize@, `TyVar` can have any provenance, because
+--      @generalize@ converts remaining `TyUnifyVar` occurrences to
+--      `TyVar` occurrences. This includes `TypeFailed`.
+--
+--   - Like `TyUnifyVar`, `TypeFailed` should not escape the
+--     typechecker.
 --
 data Type
   = TyCon TypeProvenance TyCon [Type]
   | TyFunc TypeProvenance NamedParamInfo [Type] (Map Name Type) Type
   | TyRecord TypeProvenance (Map Name Type)
   | TyVar TypeProvenance Name
-  | TyUnifyVar TypeProvenance TypeIndex       -- ^ For internal typechecker use only
+    -- | For internal typechecker use only.
+  | TyUnifyVar TypeProvenance TypeIndex
   deriving Show
 
 data Schema = Forall [(TypeProvenance, Name)] Type
@@ -429,7 +458,12 @@ data DeclGroup
 instance Positioned TypeProvenance where
   getPos prov = case prov of
       TypeExplicit pos -> pos
-      TypeInferred _ pos -> pos
+      TypeFresh pos -> pos
+      TypeFailed pos -> pos
+      TypeFromForallNamed pos _ _ -> pos
+      TypeFromForallFresh pos _ _ -> pos
+      TypeFromElement pos _ -> pos
+      TypeFromContext pos _ -> pos
 
 -- | This is used by the parser where all the provenance is
 --   `TypeExplicit`, and should not really be used downstream from
@@ -443,7 +477,7 @@ instance Positioned Type where
       TyRecord prov _ -> getPos prov
       TyVar prov _ -> getPos prov
       TyUnifyVar prov _ -> getPos prov
- 
+
 instance Positioned Expr where
   getPos (Bool pos _) = pos
   getPos (String pos _) = pos
@@ -499,6 +533,18 @@ ppKind (Kind n) =
 
 prettyKind :: Kind -> PPS.Doc
 prettyKind k = PP.pretty $ ppKind k
+
+ppTyctx :: Tyctx -> Text
+ppTyctx ctx = case ctx of
+    TyctxConstant -> "constant"
+    TyctxExpr     -> "expression"
+    TyctxPat      -> "pattern"
+    TyctxStmt     -> "statement"
+    TyctxFuncBody -> "function body"
+    TyctxArgList  -> "argument list"
+
+prettyTyctx :: Tyctx -> PP.Doc ann
+prettyTyctx ctx = PP.pretty $ ppTyctx ctx
 
 ppContext :: Context -> Text
 ppContext c = case c of

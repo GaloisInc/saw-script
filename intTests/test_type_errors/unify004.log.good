@@ -4,8 +4,8 @@ Type errors:
     Expected: Int
     Found:    ()
 
-  unify004.saw:8:11-8:14: Note: The type Int arises from this type annotation
-  unify004.saw:9:11-9:13: Note: The type () arises from the type of this term
+  unify004.saw:8:11-8:14: Note: The type Int arises from this explicit type name
+  unify004.saw:9:11-9:13: Note: The type () arises from the form of this constant
 
 
 FAILED

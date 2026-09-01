@@ -176,7 +176,7 @@ import SAWCoreWhat4.ReturnTrip
 import CryptolSAWCore.TypedTerm
 
 -- saw-script
-import SAWCentral.AST (tMono, tTerm, Rebindable(ReadOnlyVar), TypeProvenance(..), Inference(..))
+import SAWCentral.AST (tMono, tTerm, Rebindable(ReadOnlyVar), Tyctx(TyctxExpr), TypeProvenance(TypeFromElement))
 import SAWCentral.Builtins (ghost_value)
 import SAWCentral.Proof
 import SAWCentral.Prover.SolverStats
@@ -476,7 +476,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
               pos
               func_name
               ReadOnlyVar
-              (tMono $ tTerm $ TypeInferred InfTerm pos)
+              (tMono $ tTerm $ TypeFromElement pos TyctxExpr)
               Nothing             -- FUTURE: slot for doc string, could put something here
               (VTerm typed_extracted_func_const)
 

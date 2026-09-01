@@ -5,8 +5,8 @@ Type errors:
     Expected: t.0 Int
     Found:    Term
 
-  err029.saw:5:9-5:17: Note: The type t.0 Int arises from this type annotation
-  err029.saw:5:20-5:27: Note: The type Term arises from the type of this term
+  err029.saw:5:9-5:17: Note: The type t.0 Int arises from this explicit type name
+  err029.saw:5:20-5:27: Note: The type Term arises from the form of this expression
 
 
 FAILED

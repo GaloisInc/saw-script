@@ -5,8 +5,8 @@ Type errors:
     Expected: t.0 Int
     Found:    String
 
-  err028.saw:5:9-5:19: Note: The type t.0 Int arises from this type annotation
-  err028.saw:5:22-5:27: Note: The type String arises from the type of this term
+  err028.saw:5:9-5:19: Note: The type t.0 Int arises from this explicit type name
+  err028.saw:5:22-5:27: Note: The type String arises from the form of this constant
 
 
 FAILED

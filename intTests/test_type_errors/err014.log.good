@@ -4,8 +4,8 @@ Type errors:
     Expected: { a : Int }
     Found:    { b : Int }
 
-  err014.saw:8:13-8:24: Note: The type { a : Int } arises from this type annotation
-  err014.saw:10:25-10:34: Note: The type { b : Int } arises from the type of this term
+  err014.saw:8:13-8:24: Note: The type { a : Int } arises from this explicit type name
+  err014.saw:10:25-10:34: Note: The type { b : Int } arises from the form of this expression
 
 
 FAILED
