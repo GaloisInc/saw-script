@@ -267,6 +267,8 @@ scMatch sc ctxt pat term =
       Term -> Term -> MatchState -> MaybeT IO MatchState
     match (VarCtx _ xm) (VarCtx _ ym) _ (unlabel -> x) (unlabel -> y) s
       | termIndex x == termIndex y &&
+        -- x must not contain any unification variables
+        IntMap.null (IntMap.restrictKeys (IntMap.difference (varTypes x) xm) ixs) &&
         -- bound variables must also refer to the same de Bruijn indices
         IntMap.intersection xm (varTypes x) ==
         IntMap.intersection ym (varTypes y) = pure s
