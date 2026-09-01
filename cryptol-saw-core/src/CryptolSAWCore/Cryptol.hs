@@ -2369,9 +2369,11 @@ deriveEqInstance sc env dtName dtParams props ctorArgTypes =
      rule <- mkIntroRule sc c
      addInstance sc rule
 
--- | Generate a @PCmp@ dictionary combinator for the given
--- (non-recursive) datatype and register it as an class instance rule.
-deriveCmpInstance ::
+-- | Generate a @PCmp@ or @PSignedCmp@ dictionary combinator for the
+-- given (non-recursive) datatype and register it as an class instance
+-- rule.
+deriveCmpInstanceGeneric ::
+  (Ident, FieldName, FieldName, FieldName, FieldName, Text) ->
   SharedContext ->
   LocalEnv ->
   Name {- ^ datatype name -} ->
@@ -2379,7 +2381,9 @@ deriveCmpInstance ::
   [C.Prop] {- ^ instance rule hypotheses -} ->
   [[Term]] {- ^ constructor argument types -} ->
   IO ()
-deriveCmpInstance sc env dtName dtParams props ctorArgTypes =
+deriveCmpInstanceGeneric
+  (classIdent, eqField, cmpField, leField, ltField, prefix)
+  sc env dtName dtParams props ctorArgTypes =
   do dt <- scConst sc dtName
      dtParamsVars <- scVariables sc dtParams
      ty <- scApplyAll sc dt dtParamsVars
@@ -2399,9 +2403,9 @@ deriveCmpInstance sc env dtName dtParams props ctorArgTypes =
      let mkCmp :: Term -> Term -> IO Term
          mkCmp x y =
            do a <- scTypeOf sc x
-              cmpa <- scGlobalApply sc "Cryptol.PCmp" [a]
+              cmpa <- scGlobalApply sc classIdent [a]
               pa <- proveInstance sc env' cmpa
-              cmp <- scRecordSelect sc pa "cmp"
+              cmp <- scRecordSelect sc pa cmpField
               scApplyAll sc cmp [x, y]
      let cmpSubbranch i xs j argTs =
            do ys <- traverse (scFreshVariable sc "y") argTs
@@ -2432,16 +2436,30 @@ deriveCmpInstance sc env dtName dtParams props ctorArgTypes =
      eqty <- scGlobalApply sc "Cryptol.PEq" [ty]
      cmpEq <- proveInstance sc env' eqty
 
-     r <- scRecordValue sc [("cmpEq", cmpEq), ("cmp", cmp), ("le", le), ("lt", lt)]
-     r1 <- scAscribe sc r =<< scGlobalApply sc "Cryptol.PCmp" [ty]
+     r <- scRecordValue sc [(eqField, cmpEq), (cmpField, cmp), (leField, le), (ltField, lt)]
+     r1 <- scAscribe sc r =<< scGlobalApply sc classIdent [ty]
      r2 <- scAbstractTerms sc (dtParamsVars ++ propVars) r1
      let dtNameInfo = nameInfo dtName
      let dtQualName = toQualName dtNameInfo
-     let instQualName = dtQualName { QN.baseName = "PCmp__" <> QN.baseName dtQualName }
+     let instQualName = dtQualName { QN.baseName = prefix <> QN.baseName dtQualName }
      let instNameInfo = mkImportedName instQualName
      c <- scDefineConstant sc instNameInfo r2
      rule <- mkIntroRule sc c
      addInstance sc rule
+
+-- | Generate a @PCmp@ dictionary combinator for the given
+-- (non-recursive) datatype and register it as an class instance rule.
+deriveCmpInstance ::
+  SharedContext ->
+  LocalEnv ->
+  Name {- ^ datatype name -} ->
+  [(VarName, Term)] {- ^ datatype parameters -} ->
+  [C.Prop] {- ^ instance rule hypotheses -} ->
+  [[Term]] {- ^ constructor argument types -} ->
+  IO ()
+deriveCmpInstance =
+  deriveCmpInstanceGeneric
+  ("Cryptol.PCmp", "cmpEq", "cmp", "le", "lt", "PCmp__")
 
 -- | Generate a @PSignedCmp@ dictionary combinator for the given
 -- (non-recursive) datatype and register it as an class instance rule.
@@ -2453,69 +2471,9 @@ deriveSignedCmpInstance ::
   [C.Prop] {- ^ instance rule hypotheses -} ->
   [[Term]] {- ^ constructor argument types -} ->
   IO ()
-deriveSignedCmpInstance sc env dtName dtParams props ctorArgTypes =
-  do dt <- scConst sc dtName
-     dtParamsVars <- scVariables sc dtParams
-     ty <- scApplyAll sc dt dtParamsVars
-     recursor <- scRecursor sc dtName (mkSort 0)
-     recursor' <- scApplyAll sc recursor dtParamsVars
-     bool <- scBoolType sc
-     bool_bool <- scFun sc bool bool
-     ty_bool_bool <- scFun sc ty bool_bool
-     motive1 <- scLambda sc wildcardVarName ty ty_bool_bool
-     recursor1 <- scApply sc recursor' motive1
-     motive2 <- scLambda sc wildcardVarName ty bool_bool
-     recursor2 <- scApply sc recursor' motive2
-     false <- scBool sc False
-     true <- scBool sc True
-     (env', propVars) <- bindProps sc env props "_P"
-
-     let mkCmp :: Term -> Term -> IO Term
-         mkCmp x y =
-           do a <- scTypeOf sc x
-              cmpa <- scGlobalApply sc "Cryptol.PSignedCmp" [a]
-              pa <- proveInstance sc env' cmpa
-              cmp <- scRecordSelect sc pa "scmp"
-              scApplyAll sc cmp [x, y]
-     let cmpSubbranch i xs j argTs =
-           do ys <- traverse (scFreshVariable sc "y") argTs
-              k <- scFreshVariable sc "k" bool
-              body <-
-                case compare (i :: Int) j of
-                  LT -> pure true
-                  GT -> pure false
-                  EQ ->
-                    do fs <- sequence $ zipWith mkCmp xs ys
-                       Fold.foldrM (scApply sc) k fs
-              scAbstractTerms sc (ys ++ [k]) body
-     let cmpBranch i argTs =
-           do xs <- traverse (scFreshVariable sc "x") argTs
-              subbranches <- sequence $ zipWith (cmpSubbranch i xs) [0..] ctorArgTypes
-              body <- scApplyAll sc recursor2 subbranches
-              scAbstractTerms sc xs body
-     branches <- sequence $ zipWith cmpBranch [0..] ctorArgTypes
-     cmp <- scApplyAll sc recursor1 branches
-     (le, lt) <-
-       do x <- scFreshVariable sc "x" ty
-          y <- scFreshVariable sc "y" ty
-          cmp_x_y <- scApplyAll sc cmp [x, y]
-          le <- scAbstractTerms sc [x, y] =<< scApply sc cmp_x_y true
-          lt <- scAbstractTerms sc [x, y] =<< scApply sc cmp_x_y false
-          pure (le, lt)
-
-     eqty <- scGlobalApply sc "Cryptol.PEq" [ty]
-     cmpEq <- proveInstance sc env' eqty
-
-     r <- scRecordValue sc [("signedCmpEq", cmpEq), ("scmp", cmp), ("sle", le), ("slt", lt)]
-     r1 <- scAscribe sc r =<< scGlobalApply sc "Cryptol.PSignedCmp" [ty]
-     r2 <- scAbstractTerms sc (dtParamsVars ++ propVars) r1
-     let dtNameInfo = nameInfo dtName
-     let dtQualName = toQualName dtNameInfo
-     let instQualName = dtQualName { QN.baseName = "PSignedCmp__" <> QN.baseName dtQualName }
-     let instNameInfo = mkImportedName instQualName
-     c <- scDefineConstant sc instNameInfo r2
-     rule <- mkIntroRule sc c
-     addInstance sc rule
+deriveSignedCmpInstance =
+  deriveCmpInstanceGeneric
+  ("Cryptol.PSignedCmp", "signedCmpEq", "scmp", "sle", "slt", "PSignedCmp__")
 
 -- | genCodeForEnum ... - called when we see an "enum" definition in the Cryptol module.
 --    - This action does two things
