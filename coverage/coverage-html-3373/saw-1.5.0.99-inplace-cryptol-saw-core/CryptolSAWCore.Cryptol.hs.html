@@ -2332,438 +2332,505 @@ span.spaces    { background: white }
 <span class="lineno"> 2313 </span>
 <span class="lineno"> 2314 </span>-- | Generate a @PEq@ dictionary combinator for the given
 <span class="lineno"> 2315 </span>-- (non-recursive) datatype and register it as an class instance rule.
-<span class="lineno"> 2316 </span>deriveEqInstance ::
-<span class="lineno"> 2317 </span>  SharedContext -&gt;
-<span class="lineno"> 2318 </span>  LocalEnv -&gt;
-<span class="lineno"> 2319 </span>  Name {- ^ datatype name -} -&gt;
-<span class="lineno"> 2320 </span>  [(VarName, Term)] {- ^ datatype parameters -} -&gt;
-<span class="lineno"> 2321 </span>  [C.Prop] {- ^ instance rule hypotheses -} -&gt;
-<span class="lineno"> 2322 </span>  [[Term]] {- ^ constructor argument types -} -&gt;
-<span class="lineno"> 2323 </span>  IO ()
-<span class="lineno"> 2324 </span><span class="decl"><span class="istickedoff">deriveEqInstance sc env dtName dtParams props ctorArgTypes =</span>
-<span class="lineno"> 2325 </span><span class="spaces">  </span><span class="istickedoff">do dt &lt;- scConst sc dtName</span>
-<span class="lineno"> 2326 </span><span class="spaces">     </span><span class="istickedoff">dtParamsVars &lt;- scVariables sc dtParams</span>
-<span class="lineno"> 2327 </span><span class="spaces">     </span><span class="istickedoff">ty &lt;- scApplyAll sc dt dtParamsVars</span>
-<span class="lineno"> 2328 </span><span class="spaces">     </span><span class="istickedoff">recursor &lt;- scRecursor sc dtName (mkSort 0)</span>
-<span class="lineno"> 2329 </span><span class="spaces">     </span><span class="istickedoff">recursor' &lt;- scApplyAll sc recursor dtParamsVars</span>
-<span class="lineno"> 2330 </span><span class="spaces">     </span><span class="istickedoff">bool &lt;- scBoolType sc</span>
-<span class="lineno"> 2331 </span><span class="spaces">     </span><span class="istickedoff">tyPred &lt;- scFun sc ty bool</span>
-<span class="lineno"> 2332 </span><span class="spaces">     </span><span class="istickedoff">motive1 &lt;- scLambda sc wildcardVarName ty tyPred</span>
-<span class="lineno"> 2333 </span><span class="spaces">     </span><span class="istickedoff">recursor1 &lt;- scApply sc recursor' motive1</span>
-<span class="lineno"> 2334 </span><span class="spaces">     </span><span class="istickedoff">motive2 &lt;- scLambda sc wildcardVarName ty bool</span>
-<span class="lineno"> 2335 </span><span class="spaces">     </span><span class="istickedoff">recursor2 &lt;- scApply sc recursor' motive2</span>
-<span class="lineno"> 2336 </span><span class="spaces">     </span><span class="istickedoff">false &lt;- scBool sc False</span>
-<span class="lineno"> 2337 </span><span class="spaces">     </span><span class="istickedoff">(env', propVars) &lt;- bindProps sc env props &quot;_P&quot;</span>
-<span class="lineno"> 2338 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2339 </span><span class="spaces">     </span><span class="istickedoff">let mkEq :: Term -&gt; Term -&gt; IO Term</span>
-<span class="lineno"> 2340 </span><span class="spaces">         </span><span class="istickedoff">mkEq x y =</span>
-<span class="lineno"> 2341 </span><span class="spaces">           </span><span class="istickedoff">do a &lt;- scTypeOf <span class="nottickedoff">sc</span> x</span>
-<span class="lineno"> 2342 </span><span class="spaces">              </span><span class="istickedoff">eqa &lt;- scGlobalApply sc &quot;Cryptol.PEq&quot; [a]</span>
-<span class="lineno"> 2343 </span><span class="spaces">              </span><span class="istickedoff">pa &lt;- proveInstance sc env' eqa</span>
-<span class="lineno"> 2344 </span><span class="spaces">              </span><span class="istickedoff">scGlobalApply sc &quot;Cryptol.ecEq&quot; [a, pa, x, y]</span>
-<span class="lineno"> 2345 </span><span class="spaces">     </span><span class="istickedoff">let eqSubbranch i xs j argTs =</span>
-<span class="lineno"> 2346 </span><span class="spaces">           </span><span class="istickedoff">do ys &lt;- traverse (scFreshVariable sc &quot;y&quot;) argTs</span>
-<span class="lineno"> 2347 </span><span class="spaces">              </span><span class="istickedoff">body &lt;-</span>
-<span class="lineno"> 2348 </span><span class="spaces">                </span><span class="istickedoff">case (i :: Int) == j of</span>
-<span class="lineno"> 2349 </span><span class="spaces">                  </span><span class="istickedoff">False -&gt; pure false</span>
-<span class="lineno"> 2350 </span><span class="spaces">                  </span><span class="istickedoff">True -&gt;</span>
-<span class="lineno"> 2351 </span><span class="spaces">                    </span><span class="istickedoff">do conjuncts &lt;- sequence $ zipWith mkEq xs ys</span>
-<span class="lineno"> 2352 </span><span class="spaces">                       </span><span class="istickedoff">scAndList sc conjuncts</span>
-<span class="lineno"> 2353 </span><span class="spaces">              </span><span class="istickedoff">scAbstractTerms sc ys body</span>
-<span class="lineno"> 2354 </span><span class="spaces">     </span><span class="istickedoff">let eqBranch i argTs =</span>
-<span class="lineno"> 2355 </span><span class="spaces">           </span><span class="istickedoff">do xs &lt;- traverse (scFreshVariable sc &quot;x&quot;) argTs</span>
-<span class="lineno"> 2356 </span><span class="spaces">              </span><span class="istickedoff">subbranches &lt;- sequence $ zipWith (eqSubbranch i xs) [0..] ctorArgTypes</span>
-<span class="lineno"> 2357 </span><span class="spaces">              </span><span class="istickedoff">body &lt;- scApplyAll sc recursor2 subbranches</span>
-<span class="lineno"> 2358 </span><span class="spaces">              </span><span class="istickedoff">scAbstractTerms sc xs body</span>
-<span class="lineno"> 2359 </span><span class="spaces">     </span><span class="istickedoff">branches &lt;- sequence $ zipWith eqBranch [0..] ctorArgTypes</span>
-<span class="lineno"> 2360 </span><span class="spaces">     </span><span class="istickedoff">eqf &lt;- scApplyAll sc recursor1 branches</span>
-<span class="lineno"> 2361 </span><span class="spaces">     </span><span class="istickedoff">r &lt;- scRecordValue sc [(&quot;eq&quot;, eqf)]</span>
-<span class="lineno"> 2362 </span><span class="spaces">     </span><span class="istickedoff">r1 &lt;- scAscribe sc r =&lt;&lt; scGlobalApply sc &quot;Cryptol.PEq&quot; [ty]</span>
-<span class="lineno"> 2363 </span><span class="spaces">     </span><span class="istickedoff">r2 &lt;- scAbstractTerms sc (dtParamsVars ++ propVars) r1</span>
-<span class="lineno"> 2364 </span><span class="spaces">     </span><span class="istickedoff">let dtNameInfo = nameInfo dtName</span>
-<span class="lineno"> 2365 </span><span class="spaces">     </span><span class="istickedoff">let dtQualName = toQualName dtNameInfo</span>
-<span class="lineno"> 2366 </span><span class="spaces">     </span><span class="istickedoff">let instQualName = dtQualName { QN.baseName = &quot;PEq__&quot; &lt;&gt; QN.baseName dtQualName }</span>
-<span class="lineno"> 2367 </span><span class="spaces">     </span><span class="istickedoff">let instNameInfo = mkImportedName instQualName</span>
-<span class="lineno"> 2368 </span><span class="spaces">     </span><span class="istickedoff">c &lt;- scDefineConstant sc instNameInfo r2</span>
-<span class="lineno"> 2369 </span><span class="spaces">     </span><span class="istickedoff">rule &lt;- mkIntroRule <span class="nottickedoff">sc</span> c</span>
-<span class="lineno"> 2370 </span><span class="spaces">     </span><span class="istickedoff">addInstance sc rule</span></span>
-<span class="lineno"> 2371 </span>
-<span class="lineno"> 2372 </span>-- | Generate a @PCmp@ or @PSignedCmp@ dictionary combinator for the
-<span class="lineno"> 2373 </span>-- given (non-recursive) datatype and register it as an class instance
-<span class="lineno"> 2374 </span>-- rule.
-<span class="lineno"> 2375 </span>deriveCmpInstanceGeneric ::
-<span class="lineno"> 2376 </span>  (Ident, FieldName, FieldName, FieldName, FieldName, Text) -&gt;
-<span class="lineno"> 2377 </span>  SharedContext -&gt;
-<span class="lineno"> 2378 </span>  LocalEnv -&gt;
-<span class="lineno"> 2379 </span>  Name {- ^ datatype name -} -&gt;
-<span class="lineno"> 2380 </span>  [(VarName, Term)] {- ^ datatype parameters -} -&gt;
-<span class="lineno"> 2381 </span>  [C.Prop] {- ^ instance rule hypotheses -} -&gt;
-<span class="lineno"> 2382 </span>  [[Term]] {- ^ constructor argument types -} -&gt;
-<span class="lineno"> 2383 </span>  IO ()
-<span class="lineno"> 2384 </span><span class="decl"><span class="istickedoff">deriveCmpInstanceGeneric</span>
-<span class="lineno"> 2385 </span><span class="spaces">  </span><span class="istickedoff">(classIdent, eqField, cmpField, leField, ltField, prefix)</span>
-<span class="lineno"> 2386 </span><span class="spaces">  </span><span class="istickedoff">sc env dtName dtParams props ctorArgTypes =</span>
-<span class="lineno"> 2387 </span><span class="spaces">  </span><span class="istickedoff">do dt &lt;- scConst sc dtName</span>
-<span class="lineno"> 2388 </span><span class="spaces">     </span><span class="istickedoff">dtParamsVars &lt;- scVariables sc dtParams</span>
-<span class="lineno"> 2389 </span><span class="spaces">     </span><span class="istickedoff">ty &lt;- scApplyAll sc dt dtParamsVars</span>
-<span class="lineno"> 2390 </span><span class="spaces">     </span><span class="istickedoff">recursor &lt;- scRecursor sc dtName (mkSort 0)</span>
-<span class="lineno"> 2391 </span><span class="spaces">     </span><span class="istickedoff">recursor' &lt;- scApplyAll sc recursor dtParamsVars</span>
-<span class="lineno"> 2392 </span><span class="spaces">     </span><span class="istickedoff">bool &lt;- scBoolType sc</span>
-<span class="lineno"> 2393 </span><span class="spaces">     </span><span class="istickedoff">bool_bool &lt;- scFun sc bool bool</span>
-<span class="lineno"> 2394 </span><span class="spaces">     </span><span class="istickedoff">ty_bool_bool &lt;- scFun sc ty bool_bool</span>
-<span class="lineno"> 2395 </span><span class="spaces">     </span><span class="istickedoff">motive1 &lt;- scLambda sc wildcardVarName ty ty_bool_bool</span>
-<span class="lineno"> 2396 </span><span class="spaces">     </span><span class="istickedoff">recursor1 &lt;- scApply sc recursor' motive1</span>
-<span class="lineno"> 2397 </span><span class="spaces">     </span><span class="istickedoff">motive2 &lt;- scLambda sc wildcardVarName ty bool_bool</span>
-<span class="lineno"> 2398 </span><span class="spaces">     </span><span class="istickedoff">recursor2 &lt;- scApply sc recursor' motive2</span>
-<span class="lineno"> 2399 </span><span class="spaces">     </span><span class="istickedoff">false &lt;- scBool sc False</span>
-<span class="lineno"> 2400 </span><span class="spaces">     </span><span class="istickedoff">true &lt;- scBool sc True</span>
-<span class="lineno"> 2401 </span><span class="spaces">     </span><span class="istickedoff">(env', propVars) &lt;- bindProps sc env props &quot;_P&quot;</span>
-<span class="lineno"> 2402 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2403 </span><span class="spaces">     </span><span class="istickedoff">let mkCmp :: Term -&gt; Term -&gt; IO Term</span>
-<span class="lineno"> 2404 </span><span class="spaces">         </span><span class="istickedoff">mkCmp x y =</span>
-<span class="lineno"> 2405 </span><span class="spaces">           </span><span class="istickedoff">do a &lt;- scTypeOf <span class="nottickedoff">sc</span> x</span>
-<span class="lineno"> 2406 </span><span class="spaces">              </span><span class="istickedoff">cmpa &lt;- scGlobalApply sc classIdent [a]</span>
-<span class="lineno"> 2407 </span><span class="spaces">              </span><span class="istickedoff">pa &lt;- proveInstance sc env' cmpa</span>
-<span class="lineno"> 2408 </span><span class="spaces">              </span><span class="istickedoff">cmp &lt;- scRecordSelect sc pa cmpField</span>
-<span class="lineno"> 2409 </span><span class="spaces">              </span><span class="istickedoff">scApplyAll sc cmp [x, y]</span>
-<span class="lineno"> 2410 </span><span class="spaces">     </span><span class="istickedoff">let cmpSubbranch i xs j argTs =</span>
-<span class="lineno"> 2411 </span><span class="spaces">           </span><span class="istickedoff">do ys &lt;- traverse (scFreshVariable sc &quot;y&quot;) argTs</span>
-<span class="lineno"> 2412 </span><span class="spaces">              </span><span class="istickedoff">k &lt;- scFreshVariable sc &quot;k&quot; bool</span>
-<span class="lineno"> 2413 </span><span class="spaces">              </span><span class="istickedoff">body &lt;-</span>
-<span class="lineno"> 2414 </span><span class="spaces">                </span><span class="istickedoff">case compare (i :: Int) j of</span>
-<span class="lineno"> 2415 </span><span class="spaces">                  </span><span class="istickedoff">LT -&gt; pure true</span>
-<span class="lineno"> 2416 </span><span class="spaces">                  </span><span class="istickedoff">GT -&gt; pure false</span>
-<span class="lineno"> 2417 </span><span class="spaces">                  </span><span class="istickedoff">EQ -&gt;</span>
-<span class="lineno"> 2418 </span><span class="spaces">                    </span><span class="istickedoff">do fs &lt;- sequence $ zipWith mkCmp xs ys</span>
-<span class="lineno"> 2419 </span><span class="spaces">                       </span><span class="istickedoff">Fold.foldrM (scApply sc) k fs</span>
-<span class="lineno"> 2420 </span><span class="spaces">              </span><span class="istickedoff">scAbstractTerms sc (ys ++ [k]) body</span>
-<span class="lineno"> 2421 </span><span class="spaces">     </span><span class="istickedoff">let cmpBranch i argTs =</span>
-<span class="lineno"> 2422 </span><span class="spaces">           </span><span class="istickedoff">do xs &lt;- traverse (scFreshVariable sc &quot;x&quot;) argTs</span>
-<span class="lineno"> 2423 </span><span class="spaces">              </span><span class="istickedoff">subbranches &lt;- sequence $ zipWith (cmpSubbranch i xs) [0..] ctorArgTypes</span>
-<span class="lineno"> 2424 </span><span class="spaces">              </span><span class="istickedoff">body &lt;- scApplyAll sc recursor2 subbranches</span>
-<span class="lineno"> 2425 </span><span class="spaces">              </span><span class="istickedoff">scAbstractTerms sc xs body</span>
-<span class="lineno"> 2426 </span><span class="spaces">     </span><span class="istickedoff">branches &lt;- sequence $ zipWith cmpBranch [0..] ctorArgTypes</span>
-<span class="lineno"> 2427 </span><span class="spaces">     </span><span class="istickedoff">cmp &lt;- scApplyAll sc recursor1 branches</span>
-<span class="lineno"> 2428 </span><span class="spaces">     </span><span class="istickedoff">(le, lt) &lt;-</span>
-<span class="lineno"> 2429 </span><span class="spaces">       </span><span class="istickedoff">do x &lt;- scFreshVariable sc &quot;x&quot; ty</span>
-<span class="lineno"> 2430 </span><span class="spaces">          </span><span class="istickedoff">y &lt;- scFreshVariable sc &quot;y&quot; ty</span>
-<span class="lineno"> 2431 </span><span class="spaces">          </span><span class="istickedoff">cmp_x_y &lt;- scApplyAll sc cmp [x, y]</span>
-<span class="lineno"> 2432 </span><span class="spaces">          </span><span class="istickedoff">le &lt;- scAbstractTerms sc [x, y] =&lt;&lt; scApply sc cmp_x_y true</span>
-<span class="lineno"> 2433 </span><span class="spaces">          </span><span class="istickedoff">lt &lt;- scAbstractTerms sc [x, y] =&lt;&lt; scApply sc cmp_x_y false</span>
-<span class="lineno"> 2434 </span><span class="spaces">          </span><span class="istickedoff">pure (le, lt)</span>
-<span class="lineno"> 2435 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2436 </span><span class="spaces">     </span><span class="istickedoff">eqty &lt;- scGlobalApply sc &quot;Cryptol.PEq&quot; [ty]</span>
-<span class="lineno"> 2437 </span><span class="spaces">     </span><span class="istickedoff">cmpEq &lt;- proveInstance sc env' eqty</span>
-<span class="lineno"> 2438 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2439 </span><span class="spaces">     </span><span class="istickedoff">r &lt;- scRecordValue sc [(eqField, cmpEq), (cmpField, cmp), (leField, le), (ltField, lt)]</span>
-<span class="lineno"> 2440 </span><span class="spaces">     </span><span class="istickedoff">r1 &lt;- scAscribe sc r =&lt;&lt; scGlobalApply sc classIdent [ty]</span>
-<span class="lineno"> 2441 </span><span class="spaces">     </span><span class="istickedoff">r2 &lt;- scAbstractTerms sc (dtParamsVars ++ propVars) r1</span>
-<span class="lineno"> 2442 </span><span class="spaces">     </span><span class="istickedoff">let dtNameInfo = nameInfo dtName</span>
-<span class="lineno"> 2443 </span><span class="spaces">     </span><span class="istickedoff">let dtQualName = toQualName dtNameInfo</span>
-<span class="lineno"> 2444 </span><span class="spaces">     </span><span class="istickedoff">let instQualName = dtQualName { QN.baseName = prefix &lt;&gt; QN.baseName dtQualName }</span>
-<span class="lineno"> 2445 </span><span class="spaces">     </span><span class="istickedoff">let instNameInfo = mkImportedName instQualName</span>
-<span class="lineno"> 2446 </span><span class="spaces">     </span><span class="istickedoff">c &lt;- scDefineConstant sc instNameInfo r2</span>
-<span class="lineno"> 2447 </span><span class="spaces">     </span><span class="istickedoff">rule &lt;- mkIntroRule <span class="nottickedoff">sc</span> c</span>
-<span class="lineno"> 2448 </span><span class="spaces">     </span><span class="istickedoff">addInstance sc rule</span></span>
-<span class="lineno"> 2449 </span>
-<span class="lineno"> 2450 </span>-- | Generate a @PCmp@ dictionary combinator for the given
-<span class="lineno"> 2451 </span>-- (non-recursive) datatype and register it as an class instance rule.
-<span class="lineno"> 2452 </span>deriveCmpInstance ::
-<span class="lineno"> 2453 </span>  SharedContext -&gt;
-<span class="lineno"> 2454 </span>  LocalEnv -&gt;
-<span class="lineno"> 2455 </span>  Name {- ^ datatype name -} -&gt;
-<span class="lineno"> 2456 </span>  [(VarName, Term)] {- ^ datatype parameters -} -&gt;
-<span class="lineno"> 2457 </span>  [C.Prop] {- ^ instance rule hypotheses -} -&gt;
-<span class="lineno"> 2458 </span>  [[Term]] {- ^ constructor argument types -} -&gt;
-<span class="lineno"> 2459 </span>  IO ()
-<span class="lineno"> 2460 </span><span class="decl"><span class="istickedoff">deriveCmpInstance =</span>
-<span class="lineno"> 2461 </span><span class="spaces">  </span><span class="istickedoff">deriveCmpInstanceGeneric</span>
-<span class="lineno"> 2462 </span><span class="spaces">  </span><span class="istickedoff">(&quot;Cryptol.PCmp&quot;, &quot;cmpEq&quot;, &quot;cmp&quot;, &quot;le&quot;, &quot;lt&quot;, &quot;PCmp__&quot;)</span></span>
-<span class="lineno"> 2463 </span>
-<span class="lineno"> 2464 </span>-- | Generate a @PSignedCmp@ dictionary combinator for the given
-<span class="lineno"> 2465 </span>-- (non-recursive) datatype and register it as an class instance rule.
-<span class="lineno"> 2466 </span>deriveSignedCmpInstance ::
-<span class="lineno"> 2467 </span>  SharedContext -&gt;
-<span class="lineno"> 2468 </span>  LocalEnv -&gt;
-<span class="lineno"> 2469 </span>  Name {- ^ datatype name -} -&gt;
-<span class="lineno"> 2470 </span>  [(VarName, Term)] {- ^ datatype parameters -} -&gt;
-<span class="lineno"> 2471 </span>  [C.Prop] {- ^ instance rule hypotheses -} -&gt;
-<span class="lineno"> 2472 </span>  [[Term]] {- ^ constructor argument types -} -&gt;
-<span class="lineno"> 2473 </span>  IO ()
-<span class="lineno"> 2474 </span><span class="decl"><span class="istickedoff">deriveSignedCmpInstance =</span>
-<span class="lineno"> 2475 </span><span class="spaces">  </span><span class="istickedoff">deriveCmpInstanceGeneric</span>
-<span class="lineno"> 2476 </span><span class="spaces">  </span><span class="istickedoff">(&quot;Cryptol.PSignedCmp&quot;, &quot;signedCmpEq&quot;, &quot;scmp&quot;, &quot;sle&quot;, &quot;slt&quot;, &quot;PSignedCmp__&quot;)</span></span>
-<span class="lineno"> 2477 </span>
-<span class="lineno"> 2478 </span>-- | genCodeForEnum ... - called when we see an &quot;enum&quot; definition in the Cryptol module.
-<span class="lineno"> 2479 </span>--    - This action does two things
-<span class="lineno"> 2480 </span>--       1. Returns the names &amp; definitions of the constructors of the enum.
-<span class="lineno"> 2481 </span>--          This fits with the code for other nominals, needed because
-<span class="lineno"> 2482 </span>--          the &quot;rest&quot; of Cryptol code to be translated needs to see the
-<span class="lineno"> 2483 </span>--          constructors in the Cryptol environments.
-<span class="lineno"> 2484 </span>--       2. It adds many other definitions to the SAWCore environment
-<span class="lineno"> 2485 </span>--          (in the sc :: SharedContext).  These definitions are only
-<span class="lineno"> 2486 </span>--          used by other generated SAWCore code, so we don't need to
-<span class="lineno"> 2487 </span>--          return this information back to the Cryptol environment(s).
-<span class="lineno"> 2488 </span>--
-<span class="lineno"> 2489 </span>--    - N.B. PLEASE refer to doc/developer/translating-enums.md for a
-<span class="lineno"> 2490 </span>--      description of this translation at a more abstract level.  The
-<span class="lineno"> 2491 </span>--      example there is what is used below to explain the below code
-<span class="lineno"> 2492 </span>--      by SAWCore examples.  The running example we use is
-<span class="lineno"> 2493 </span>--
-<span class="lineno"> 2494 </span>--      &gt; enum ETT ts = C1
-<span class="lineno"> 2495 </span>--      &gt;             | C2 Nat
-<span class="lineno"> 2496 </span>--      &gt;             | C3 Bool ts
-<span class="lineno"> 2497 </span>--
-<span class="lineno"> 2498 </span>--   FIXME: the uses of 'preludeName' should all be removed and new
-<span class="lineno"> 2499 </span>--     definitions should be added to the module name being processed.
-<span class="lineno"> 2500 </span>--     (At one point this was problematic, TODO: figure out and
-<span class="lineno"> 2501 </span>--     resolve.)
-<span class="lineno"> 2502 </span>--
-<span class="lineno"> 2503 </span>genCodeForEnum ::
-<span class="lineno"> 2504 </span>  HasCallStack =&gt;
-<span class="lineno"> 2505 </span>  SharedContext -&gt; NominalType -&gt; [C.EnumCon] -&gt; IO [(C.Name,Term)]
-<span class="lineno"> 2506 </span><span class="decl"><span class="istickedoff">genCodeForEnum sc nt ctors =</span>
-<span class="lineno"> 2507 </span><span class="spaces">  </span><span class="istickedoff">do (env, params) &lt;- fmap (map fst) &lt;$&gt; bindTParams' sc mempty (C.ntParams nt)</span>
-<span class="lineno"> 2508 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2509 </span><span class="spaces">     </span><span class="istickedoff">let importCtorSpec :: C.EnumCon -&gt; IO CtorSpec</span>
-<span class="lineno"> 2510 </span><span class="spaces">         </span><span class="istickedoff">importCtorSpec c =</span>
-<span class="lineno"> 2511 </span><span class="spaces">           </span><span class="istickedoff">do nmi &lt;- importName (C.ecName c)</span>
-<span class="lineno"> 2512 </span><span class="spaces">              </span><span class="istickedoff">args &lt;-</span>
-<span class="lineno"> 2513 </span><span class="spaces">                </span><span class="istickedoff">forM (C.ecFields c) $ \ct -&gt;</span>
-<span class="lineno"> 2514 </span><span class="spaces">                </span><span class="istickedoff">do ty &lt;- importType sc env ct</span>
-<span class="lineno"> 2515 </span><span class="spaces">                   </span><span class="istickedoff">vn &lt;- scFreshVarName sc &quot;_&quot;</span>
-<span class="lineno"> 2516 </span><span class="spaces">                   </span><span class="istickedoff">pure (vn, ConstArg ty)</span>
-<span class="lineno"> 2517 </span><span class="spaces">              </span><span class="istickedoff">pure $</span>
-<span class="lineno"> 2518 </span><span class="spaces">                </span><span class="istickedoff">CtorSpec</span>
-<span class="lineno"> 2519 </span><span class="spaces">                </span><span class="istickedoff">{ cspecNameInfo = nmi</span>
-<span class="lineno"> 2520 </span><span class="spaces">                </span><span class="istickedoff">, cspecArgs = args</span>
-<span class="lineno"> 2521 </span><span class="spaces">                </span><span class="istickedoff">, cspecIndices = []</span>
-<span class="lineno"> 2522 </span><span class="spaces">                </span><span class="istickedoff">}</span>
-<span class="lineno"> 2523 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2524 </span><span class="spaces">     </span><span class="istickedoff">ctorSpecs &lt;- traverse importCtorSpec ctors</span>
-<span class="lineno"> 2525 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2526 </span><span class="spaces">     </span><span class="istickedoff">nmi &lt;- importName (ntName nt)</span>
-<span class="lineno"> 2527 </span><span class="spaces">     </span><span class="istickedoff">motiveName &lt;- scFreshVarName sc &quot;p&quot;</span>
-<span class="lineno"> 2528 </span><span class="spaces">     </span><span class="istickedoff">argName &lt;- scFreshVarName sc &quot;arg&quot;</span>
-<span class="lineno"> 2529 </span><span class="spaces">     </span><span class="istickedoff">let dtSpec =</span>
-<span class="lineno"> 2530 </span><span class="spaces">           </span><span class="istickedoff">DataTypeSpec</span>
-<span class="lineno"> 2531 </span><span class="spaces">           </span><span class="istickedoff">{ dtsNameInfo = nmi</span>
-<span class="lineno"> 2532 </span><span class="spaces">           </span><span class="istickedoff">, dtsParams = mapMaybe asVariable params</span>
-<span class="lineno"> 2533 </span><span class="spaces">           </span><span class="istickedoff">, dtsIndices = []</span>
-<span class="lineno"> 2534 </span><span class="spaces">           </span><span class="istickedoff">, dtsSort = mkSort 0</span>
-<span class="lineno"> 2535 </span><span class="spaces">           </span><span class="istickedoff">, dtsCtors = ctorSpecs</span>
-<span class="lineno"> 2536 </span><span class="spaces">           </span><span class="istickedoff">, dtsMotiveName = motiveName</span>
-<span class="lineno"> 2537 </span><span class="spaces">           </span><span class="istickedoff">, dtsArgName = argName</span>
-<span class="lineno"> 2538 </span><span class="spaces">           </span><span class="istickedoff">}</span>
-<span class="lineno"> 2539 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2540 </span><span class="spaces">     </span><span class="istickedoff">(dtName, ctorNames) &lt;- scDefineDataType sc dtSpec</span>
-<span class="lineno"> 2541 </span><span class="spaces">     </span><span class="istickedoff">ctor_tms &lt;- traverse (scConst sc) ctorNames</span>
-<span class="lineno"> 2542 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2543 </span><span class="spaces">     </span><span class="istickedoff">-- Derive PEq class instance.</span>
-<span class="lineno"> 2544 </span><span class="spaces">     </span><span class="istickedoff">let ctorArgTypes = [ [ t | (_, ConstArg t) &lt;- cspecArgs c ] | c &lt;- ctorSpecs ]</span>
-<span class="lineno"> 2545 </span><span class="spaces">     </span><span class="istickedoff">case Map.lookup C.PEq (ntDeriving nt) of</span>
-<span class="lineno"> 2546 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure <span class="nottickedoff">()</span></span>
-<span class="lineno"> 2547 </span><span class="spaces">       </span><span class="istickedoff">Just assms -&gt; deriveEqInstance sc env dtName (dtsParams dtSpec) assms ctorArgTypes</span>
-<span class="lineno"> 2548 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2549 </span><span class="spaces">     </span><span class="istickedoff">-- Derive PCmp class instance.</span>
-<span class="lineno"> 2550 </span><span class="spaces">     </span><span class="istickedoff">case Map.lookup C.PCmp (ntDeriving nt) of</span>
-<span class="lineno"> 2551 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure <span class="nottickedoff">()</span></span>
-<span class="lineno"> 2552 </span><span class="spaces">       </span><span class="istickedoff">Just assms -&gt; deriveCmpInstance sc env dtName (dtsParams dtSpec) assms ctorArgTypes</span>
-<span class="lineno"> 2553 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2554 </span><span class="spaces">     </span><span class="istickedoff">-- Derive PSignedCmp class instance.</span>
-<span class="lineno"> 2555 </span><span class="spaces">     </span><span class="istickedoff">case Map.lookup C.PSignedCmp (ntDeriving nt) of</span>
-<span class="lineno"> 2556 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure <span class="nottickedoff">()</span></span>
-<span class="lineno"> 2557 </span><span class="spaces">       </span><span class="istickedoff">Just assms -&gt; deriveSignedCmpInstance sc env dtName (dtsParams dtSpec) assms ctorArgTypes</span>
-<span class="lineno"> 2558 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2559 </span><span class="spaces">     </span><span class="istickedoff">-- Return list of constructor names and terms.</span>
-<span class="lineno"> 2560 </span><span class="spaces">     </span><span class="istickedoff">pure (zip (map C.ecName ctors) ctor_tms)</span></span>
-<span class="lineno"> 2561 </span>
-<span class="lineno"> 2562 </span>
-<span class="lineno"> 2563 </span>-- | importCase - translates a Cryptol case expr to SAWCore: an application
-<span class="lineno"> 2564 </span>--   of the SAWCore &lt;NAME&gt;#rec recursor function to appropriate arguments.
-<span class="lineno"> 2565 </span>--
-<span class="lineno"> 2566 </span>--   - Note missing functionality: (FIXME)
-<span class="lineno"> 2567 </span>--     - not implemented yet: default case alternatives that bind the whole scrutinee,
-<span class="lineno"> 2568 </span>--       i.e.,
-<span class="lineno"> 2569 </span>--
-<span class="lineno"> 2570 </span>--       &gt;  case S of
-<span class="lineno"> 2571 </span>--       &gt;    C1 ... -&gt; E
-<span class="lineno"> 2572 </span>--       &gt;    y      -&gt; E[y]  -- y == S   &lt;- NOT IMPLEMENTED YET
-<span class="lineno"> 2573 </span>--
-<span class="lineno"> 2574 </span>importCase ::
-<span class="lineno"> 2575 </span>  HasCallStack =&gt;
-<span class="lineno"> 2576 </span>  SharedContext -&gt;
-<span class="lineno"> 2577 </span>  LocalEnv -&gt;
-<span class="lineno"> 2578 </span>  C.Type -&gt; C.Expr -&gt; Map C.Ident C.CaseAlt -&gt; Maybe C.CaseAlt -&gt; IO Term
-<span class="lineno"> 2579 </span><span class="decl"><span class="istickedoff">importCase sc env tyResult scrutinee altsMap mDfltAlt =</span>
-<span class="lineno"> 2580 </span><span class="spaces">  </span><span class="istickedoff">do</span>
-<span class="lineno"> 2581 </span><span class="spaces">  </span><span class="istickedoff">allvars &lt;- eAllVars sc</span>
-<span class="lineno"> 2582 </span><span class="spaces">  </span><span class="istickedoff">-- FUTURE: consider using scTypeOf once we have an information-</span>
-<span class="lineno"> 2583 </span><span class="spaces">  </span><span class="istickedoff">-- preserving translation of enum types into SAWCore.</span>
-<span class="lineno"> 2584 </span><span class="spaces">  </span><span class="istickedoff">let scrutineeTy = fastTypeOf allvars scrutinee</span>
-<span class="lineno"> 2585 </span><span class="spaces">  </span><span class="istickedoff">(nm,ctors,tyParams,tyArgs) &lt;- case scrutineeTy of</span>
-<span class="lineno"> 2586 </span><span class="spaces">      </span><span class="istickedoff">(C.tIsNominal -&gt; Just (C.NominalType{C.ntDef=C.Enum ctors, ntName=nm, ntParams=tyParams},tyArgs))</span>
-<span class="lineno"> 2587 </span><span class="spaces">        </span><span class="istickedoff">-&gt;</span>
-<span class="lineno"> 2588 </span><span class="spaces">          </span><span class="istickedoff">return (nm,ctors,tyParams,tyArgs)</span>
-<span class="lineno"> 2589 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt;</span>
-<span class="lineno"> 2590 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importCase&quot; [</span></span>
-<span class="lineno"> 2591 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;`case` expression scrutinee is not an Enum type&quot;,</span></span>
-<span class="lineno"> 2592 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">CryPP.pp scrutineeTy</span></span>
-<span class="lineno"> 2593 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2594 </span><span class="spaces">  </span><span class="istickedoff">let sub = C.listParamSubst (zip tyParams tyArgs)</span>
-<span class="lineno"> 2595 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2596 </span><span class="spaces">  </span><span class="istickedoff">-- Create a sequential set of `C.CaseAlt`s that exactly match the</span>
-<span class="lineno"> 2597 </span><span class="spaces">  </span><span class="istickedoff">-- constructors:</span>
-<span class="lineno"> 2598 </span><span class="spaces">  </span><span class="istickedoff">--   - preconditions:</span>
-<span class="lineno"> 2599 </span><span class="spaces">  </span><span class="istickedoff">--      Assume `altsMap` is valid, thus not checking for extraneous</span>
-<span class="lineno"> 2600 </span><span class="spaces">  </span><span class="istickedoff">--      entries. (Call panic if a missing alternative is not covered</span>
-<span class="lineno"> 2601 </span><span class="spaces">  </span><span class="istickedoff">--      by presence of default in `mDfltAlt`.)</span>
-<span class="lineno"> 2602 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2603 </span><span class="spaces">  </span><span class="istickedoff">-- First, define what to do if alternative for constructor is missing:</span>
-<span class="lineno"> 2604 </span><span class="spaces">  </span><span class="istickedoff">let</span>
-<span class="lineno"> 2605 </span><span class="spaces">      </span><span class="istickedoff">-- | useDefaultAlt - when constructor (ctor) has no 'CaseAlt',</span>
-<span class="lineno"> 2606 </span><span class="spaces">      </span><span class="istickedoff">-- create a ctor specific alt-function from the mDfltAlt</span>
-<span class="lineno"> 2607 </span><span class="spaces">      </span><span class="istickedoff">-- &quot;default expr&quot;.</span>
-<span class="lineno"> 2608 </span><span class="spaces">      </span><span class="istickedoff">--   - For each constructor we may need to generate a default alternative,</span>
-<span class="lineno"> 2609 </span><span class="spaces">      </span><span class="istickedoff">--     (the code cannot be shared as the arity and types for each constructor</span>
-<span class="lineno"> 2610 </span><span class="spaces">      </span><span class="istickedoff">--     will be different).</span>
-<span class="lineno"> 2611 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2612 </span><span class="spaces">      </span><span class="istickedoff">useDefaultAlt :: HasCallStack =&gt; C.EnumCon -&gt; IO ([C.Type], C.CaseAlt)</span>
-<span class="lineno"> 2613 </span><span class="spaces">      </span><span class="istickedoff">useDefaultAlt ctor = case mDfltAlt of</span>
-<span class="lineno"> 2614 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 2615 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importCase&quot; [</span></span>
-<span class="lineno"> 2616 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">&quot;missing CaseAlt and no default CaseAlt: &quot; &lt;&gt; CryPP.pp nm</span></span>
-<span class="lineno"> 2617 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2618 </span><span class="spaces">        </span><span class="istickedoff">Just (C.CaseAlt [(nm',_)] dfltE)</span>
-<span class="lineno"> 2619 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlytrue">nameIsUnusedPat nm'</span> -&gt;</span>
-<span class="lineno"> 2620 </span><span class="spaces">                </span><span class="istickedoff">do</span>
-<span class="lineno"> 2621 </span><span class="spaces">                </span><span class="istickedoff">-- NOTE nm' is unused Name</span>
-<span class="lineno"> 2622 </span><span class="spaces">                </span><span class="istickedoff">let vts  = map</span>
-<span class="lineno"> 2623 </span><span class="spaces">                             </span><span class="istickedoff">(\ty-&gt; (nm',plainSubst sub ty))</span>
-<span class="lineno"> 2624 </span><span class="spaces">                             </span><span class="istickedoff">(C.ecFields ctor)</span>
-<span class="lineno"> 2625 </span><span class="spaces">                  </span><span class="istickedoff">-- N.B.: to avoid extra name construction, we are</span>
-<span class="lineno"> 2626 </span><span class="spaces">                  </span><span class="istickedoff">--  using the same name (un-referenced!) nm' for</span>
-<span class="lineno"> 2627 </span><span class="spaces">                  </span><span class="istickedoff">--  each of the arguments of the CaseAlt function.</span>
-<span class="lineno"> 2628 </span><span class="spaces">                  </span><span class="istickedoff">--  This appears to work.  However, if the '_' name</span>
-<span class="lineno"> 2629 </span><span class="spaces">                  </span><span class="istickedoff">--  *was* actually referenced, it would not be what</span>
-<span class="lineno"> 2630 </span><span class="spaces">                  </span><span class="istickedoff">--  we would want However, typechecking would</span>
-<span class="lineno"> 2631 </span><span class="spaces">                  </span><span class="istickedoff">--  ascertain this.</span>
-<span class="lineno"> 2632 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2633 </span><span class="spaces">                </span><span class="istickedoff">return (map snd vts, C.CaseAlt vts dfltE)</span>
-<span class="lineno"> 2634 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2635 </span><span class="spaces">            </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt;</span>
-<span class="lineno"> 2636 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importCase&quot; [</span></span>
-<span class="lineno"> 2637 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">&quot;Unsupported style of case expression: &quot; &lt;&gt;</span></span>
-<span class="lineno"> 2638 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot;default case alternative that binds scrutinee&quot;,</span></span>
-<span class="lineno"> 2639 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">&quot;pattern: &quot; &lt;&gt; CryPP.pp nm</span></span>
-<span class="lineno"> 2640 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
-<span class="lineno"> 2641 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2642 </span><span class="spaces">          </span><span class="istickedoff">where</span>
-<span class="lineno"> 2643 </span><span class="spaces">          </span><span class="istickedoff">nameIsUnusedPat nm'' =</span>
-<span class="lineno"> 2644 </span><span class="spaces">            </span><span class="istickedoff">Text.take 3 (nameToLocalName nm'') == &quot;__p&quot;</span>
-<span class="lineno"> 2645 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2646 </span><span class="spaces">            </span><span class="istickedoff">-- Except for the prefix, the indication that this is an unused pattern</span>
-<span class="lineno"> 2647 </span><span class="spaces">            </span><span class="istickedoff">-- is long gone. This name is created using `getIdent` in</span>
-<span class="lineno"> 2648 </span><span class="spaces">            </span><span class="istickedoff">--   deps/cryptol/src/Cryptol/Parser/Name.hs</span>
-<span class="lineno"> 2649 </span><span class="spaces">            </span><span class="istickedoff">-- FIXME:</span>
-<span class="lineno"> 2650 </span><span class="spaces">            </span><span class="istickedoff">--  - Clearly this is undesirable coupling.</span>
-<span class="lineno"> 2651 </span><span class="spaces">            </span><span class="istickedoff">--  - Best (but non-local, pervasive) solution is to have a more</span>
-<span class="lineno"> 2652 </span><span class="spaces">            </span><span class="istickedoff">--    precise type for default CaseAlt, the type is currently</span>
-<span class="lineno"> 2653 </span><span class="spaces">            </span><span class="istickedoff">--    too general.</span>
-<span class="lineno"> 2654 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2655 </span><span class="spaces">        </span><span class="istickedoff">Just (C.CaseAlt nts _) -&gt;</span>
-<span class="lineno"> 2656 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">let nts' = map (\(n, _t) -&gt; &quot;   &quot; &lt;&gt; CryPP.pp n) nts in</span></span>
-<span class="lineno"> 2657 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importCase&quot; $ [</span></span>
-<span class="lineno"> 2658 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">&quot;Default CaseAlt breaks invariant: &quot; &lt;&gt;</span></span>
-<span class="lineno"> 2659 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">&quot;(assumed) invariant is that exactly one variable pattern is allowed in the default CaseAlt&quot;</span></span>
-<span class="lineno"> 2660 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">] ++ nts'</span></span>
-<span class="lineno"> 2661 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2662 </span><span class="spaces">  </span><span class="istickedoff">-- For each constructor involved in the case expression, return two things:</span>
-<span class="lineno"> 2663 </span><span class="spaces">  </span><span class="istickedoff">--</span>
-<span class="lineno"> 2664 </span><span class="spaces">  </span><span class="istickedoff">-- 1. The types of the constructor's fields as determined by the type of the</span>
-<span class="lineno"> 2665 </span><span class="spaces">  </span><span class="istickedoff">--    scrutinee expression.</span>
-<span class="lineno"> 2666 </span><span class="spaces">  </span><span class="istickedoff">-- 2. A case alternative corresponding to each constructor.</span>
-<span class="lineno"> 2667 </span><span class="spaces">  </span><span class="istickedoff">--</span>
-<span class="lineno"> 2668 </span><span class="spaces">  </span><span class="istickedoff">-- Note that the types in (1) may not precisely correspond to the types of</span>
-<span class="lineno"> 2669 </span><span class="spaces">  </span><span class="istickedoff">-- the case alternative's field binders in (2). This is because Cryptol</span>
-<span class="lineno"> 2670 </span><span class="spaces">  </span><span class="istickedoff">-- sometimes simplifies numeric types in case alternatives (e.g., simplifying</span>
-<span class="lineno"> 2671 </span><span class="spaces">  </span><span class="istickedoff">-- `(n + 1) - 1` to `n`). It is not a big deal if such mismatches arise, as</span>
-<span class="lineno"> 2672 </span><span class="spaces">  </span><span class="istickedoff">-- we will make sure to insert coercions as needed when importing the case</span>
-<span class="lineno"> 2673 </span><span class="spaces">  </span><span class="istickedoff">-- alternatives later. (See `test3301` for an example of a program that</span>
-<span class="lineno"> 2674 </span><span class="spaces">  </span><span class="istickedoff">-- crucially relies on these coercions.)</span>
-<span class="lineno"> 2675 </span><span class="spaces">  </span><span class="istickedoff">fieldTysAndAlts :: [([C.Type], C.CaseAlt)] &lt;-</span>
-<span class="lineno"> 2676 </span><span class="spaces">    </span><span class="istickedoff">forM ctors $ \ctor -&gt;</span>
-<span class="lineno"> 2677 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup (C.nameIdent (C.ecName ctor)) altsMap of</span>
-<span class="lineno"> 2678 </span><span class="spaces">        </span><span class="istickedoff">Just a  -&gt; return (plainSubst sub &lt;$&gt; C.ecFields ctor, a)</span>
-<span class="lineno"> 2679 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; useDefaultAlt ctor</span>
-<span class="lineno"> 2680 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2681 </span><span class="spaces">  </span><span class="istickedoff">{- |</span>
-<span class="lineno"> 2682 </span><span class="spaces">  </span><span class="istickedoff">What we just did is, in terms of the running ETT example above, this:</span>
-<span class="lineno"> 2683 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2684 </span><span class="spaces">  </span><span class="istickedoff">Given this Cryptol</span>
-<span class="lineno"> 2685 </span><span class="spaces">    </span><span class="istickedoff">&gt; case scrutinee  of</span>
-<span class="lineno"> 2686 </span><span class="spaces">    </span><span class="istickedoff">&gt;   C1     -&gt; RHS1</span>
-<span class="lineno"> 2687 </span><span class="spaces">    </span><span class="istickedoff">&gt;   _      -&gt; DFLT</span>
-<span class="lineno"> 2688 </span><span class="spaces">  </span><span class="istickedoff">we transform it into this Cryptol</span>
-<span class="lineno"> 2689 </span><span class="spaces">    </span><span class="istickedoff">&gt; case scrutinee  of</span>
-<span class="lineno"> 2690 </span><span class="spaces">    </span><span class="istickedoff">&gt;   C1     -&gt; RHS1</span>
-<span class="lineno"> 2691 </span><span class="spaces">    </span><span class="istickedoff">&gt;   C2 _   -&gt; DFLT</span>
-<span class="lineno"> 2692 </span><span class="spaces">    </span><span class="istickedoff">&gt;   C3 _ _ -&gt; DFLT</span>
-<span class="lineno"> 2693 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2694 </span><span class="spaces">  </span><span class="istickedoff">And what we will do next is transform this last into this SAWCore:</span>
-<span class="lineno"> 2695 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2696 </span><span class="spaces">    </span><span class="istickedoff">&gt; ETT#rec</span>
-<span class="lineno"> 2697 </span><span class="spaces">    </span><span class="istickedoff">&gt;   T1                          -- type application, the instantiation of 'a1'</span>
-<span class="lineno"> 2698 </span><span class="spaces">    </span><span class="istickedoff">&gt;   (\_ -&gt; B)                   -- type application, the result of the whole case</span>
-<span class="lineno"> 2699 </span><span class="spaces">    </span><span class="istickedoff">&gt;   RHS1                        -- deconstructor for C1</span>
-<span class="lineno"> 2700 </span><span class="spaces">    </span><span class="istickedoff">&gt;   (\(_: Nat)         -&gt; DFLT) -- deconstructor for C2</span>
-<span class="lineno"> 2701 </span><span class="spaces">    </span><span class="istickedoff">&gt;   (\(_: Bool) (_:T1) -&gt; DFLT) -- deconstructor for C3</span>
-<span class="lineno"> 2702 </span><span class="spaces">    </span><span class="istickedoff">&gt;                               --  - note the 'a1' has been instantiated to T1</span>
-<span class="lineno"> 2703 </span><span class="spaces">    </span><span class="istickedoff">&gt;   scrutinee</span>
-<span class="lineno"> 2704 </span><span class="spaces">  </span><span class="istickedoff">-}</span>
-<span class="lineno"> 2705 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2706 </span><span class="spaces">  </span><span class="istickedoff">let funcTysAndFuncs :: [(C.Type, C.Expr)]</span>
-<span class="lineno"> 2707 </span><span class="spaces">      </span><span class="istickedoff">funcTysAndFuncs =</span>
-<span class="lineno"> 2708 </span><span class="spaces">        </span><span class="istickedoff">map</span>
-<span class="lineno"> 2709 </span><span class="spaces">          </span><span class="istickedoff">(\(fieldTys, C.CaseAlt xs body) -&gt;</span>
-<span class="lineno"> 2710 </span><span class="spaces">            </span><span class="istickedoff">let funcTy = foldr C.tFun tyResult fieldTys in</span>
-<span class="lineno"> 2711 </span><span class="spaces">            </span><span class="istickedoff">let func = foldr (\(n,t) e -&gt; C.EAbs n <span class="nottickedoff">t</span> e) body xs in</span>
-<span class="lineno"> 2712 </span><span class="spaces">            </span><span class="istickedoff">(funcTy, func))</span>
-<span class="lineno"> 2713 </span><span class="spaces">          </span><span class="istickedoff">fieldTysAndAlts</span>
-<span class="lineno"> 2714 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2715 </span><span class="spaces">      </span><span class="istickedoff">(funcTys, funcs) = unzip funcTysAndFuncs</span>
-<span class="lineno"> 2716 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2717 </span><span class="spaces">  </span><span class="istickedoff">-- the Cryptol to SAWCore translations:</span>
-<span class="lineno"> 2718 </span><span class="spaces">  </span><span class="istickedoff">tyArgs'    &lt;- mapM (importType sc env) tyArgs</span>
-<span class="lineno"> 2719 </span><span class="spaces">  </span><span class="istickedoff">tyResult'  &lt;- importType sc env tyResult      -- type of whole case expr</span>
-<span class="lineno"> 2720 </span><span class="spaces">  </span><span class="istickedoff">scrutinee' &lt;- importExpr sc env scrutinee</span>
+<span class="lineno"> 2316 </span>--
+<span class="lineno"> 2317 </span>-- For the type
+<span class="lineno"> 2318 </span>--
+<span class="lineno"> 2319 </span>--    enum Foo a = A | B a | C Bool Integer
+<span class="lineno"> 2320 </span>--
+<span class="lineno"> 2321 </span>-- this will generate the following definition:
+<span class="lineno"> 2322 </span>--
+<span class="lineno"> 2323 </span>-- PEq__Foo : (a : isort 0) -&gt; PEq a -&gt; PEq (Foo a)
+<span class="lineno"> 2324 </span>-- PEq__Foo =
+<span class="lineno"> 2325 </span>--   \(a : isort 0) (_P : PEq a) -&gt;
+<span class="lineno"> 2326 </span>--     { eq =
+<span class="lineno"> 2327 </span>--       Foo#rec a (\(_ : Foo a) -&gt; Foo a -&gt; Bool)
+<span class="lineno"> 2328 </span>--         (Foo#rec a (\(_ : Foo a) -&gt; Bool) True (\(y : a) -&gt; False)
+<span class="lineno"> 2329 </span>--            (\(y : Bool) (y1 : Integer) -&gt; False))
+<span class="lineno"> 2330 </span>--         (\(x : a) -&gt;
+<span class="lineno"> 2331 </span>--            Foo#rec a (\(_ : Foo a) -&gt; Bool) False (\(y : a) -&gt; ecEq a _P x y)
+<span class="lineno"> 2332 </span>--              (\(y : Bool) (y1 : Integer) -&gt; False))
+<span class="lineno"> 2333 </span>--         (\(x : Bool) (x1 : Integer) -&gt;
+<span class="lineno"> 2334 </span>--            Foo#rec a (\(_ : Foo a) -&gt; Bool) False (\(y : a) -&gt; False)
+<span class="lineno"> 2335 </span>--              (\(y : Bool) (y1 : Integer) -&gt;
+<span class="lineno"> 2336 </span>--                and (ecEq Bool PEqBit x y)
+<span class="lineno"> 2337 </span>--                  (ecEq Integer PEqInteger x1 y1))) }
+<span class="lineno"> 2338 </span>--
+<span class="lineno"> 2339 </span>-- To summarize: An outer recursor cases on the first argument.
+<span class="lineno"> 2340 </span>-- Within each branch, an inner recursor cases on the second argument.
+<span class="lineno"> 2341 </span>-- On inner branches where the constructors differ, return False.
+<span class="lineno"> 2342 </span>-- Where the constructors match, recursively call ecEq on
+<span class="lineno"> 2343 </span>-- corresponding constructor arguments, and combine with @and@.
+<span class="lineno"> 2344 </span>
+<span class="lineno"> 2345 </span>deriveEqInstance ::
+<span class="lineno"> 2346 </span>  SharedContext -&gt;
+<span class="lineno"> 2347 </span>  LocalEnv -&gt;
+<span class="lineno"> 2348 </span>  Name {- ^ datatype name -} -&gt;
+<span class="lineno"> 2349 </span>  [(VarName, Term)] {- ^ datatype parameters -} -&gt;
+<span class="lineno"> 2350 </span>  [C.Prop] {- ^ instance rule hypotheses -} -&gt;
+<span class="lineno"> 2351 </span>  [[Term]] {- ^ constructor argument types -} -&gt;
+<span class="lineno"> 2352 </span>  IO ()
+<span class="lineno"> 2353 </span><span class="decl"><span class="istickedoff">deriveEqInstance sc env dtName dtParams props ctorArgTypes =</span>
+<span class="lineno"> 2354 </span><span class="spaces">  </span><span class="istickedoff">do dt &lt;- scConst sc dtName</span>
+<span class="lineno"> 2355 </span><span class="spaces">     </span><span class="istickedoff">dtParamsVars &lt;- scVariables sc dtParams</span>
+<span class="lineno"> 2356 </span><span class="spaces">     </span><span class="istickedoff">ty &lt;- scApplyAll sc dt dtParamsVars</span>
+<span class="lineno"> 2357 </span><span class="spaces">     </span><span class="istickedoff">recursor &lt;- scRecursor sc dtName (mkSort 0)</span>
+<span class="lineno"> 2358 </span><span class="spaces">     </span><span class="istickedoff">recursor' &lt;- scApplyAll sc recursor dtParamsVars</span>
+<span class="lineno"> 2359 </span><span class="spaces">     </span><span class="istickedoff">bool &lt;- scBoolType sc</span>
+<span class="lineno"> 2360 </span><span class="spaces">     </span><span class="istickedoff">tyPred &lt;- scFun sc ty bool</span>
+<span class="lineno"> 2361 </span><span class="spaces">     </span><span class="istickedoff">motive1 &lt;- scLambda sc wildcardVarName ty tyPred</span>
+<span class="lineno"> 2362 </span><span class="spaces">     </span><span class="istickedoff">recursor1 &lt;- scApply sc recursor' motive1</span>
+<span class="lineno"> 2363 </span><span class="spaces">     </span><span class="istickedoff">motive2 &lt;- scLambda sc wildcardVarName ty bool</span>
+<span class="lineno"> 2364 </span><span class="spaces">     </span><span class="istickedoff">recursor2 &lt;- scApply sc recursor' motive2</span>
+<span class="lineno"> 2365 </span><span class="spaces">     </span><span class="istickedoff">false &lt;- scBool sc False</span>
+<span class="lineno"> 2366 </span><span class="spaces">     </span><span class="istickedoff">(env', propVars) &lt;- bindProps sc env props &quot;_P&quot;</span>
+<span class="lineno"> 2367 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2368 </span><span class="spaces">     </span><span class="istickedoff">let mkEq :: Term -&gt; Term -&gt; IO Term</span>
+<span class="lineno"> 2369 </span><span class="spaces">         </span><span class="istickedoff">mkEq x y =</span>
+<span class="lineno"> 2370 </span><span class="spaces">           </span><span class="istickedoff">do a &lt;- scTypeOf <span class="nottickedoff">sc</span> x</span>
+<span class="lineno"> 2371 </span><span class="spaces">              </span><span class="istickedoff">eqa &lt;- scGlobalApply sc &quot;Cryptol.PEq&quot; [a]</span>
+<span class="lineno"> 2372 </span><span class="spaces">              </span><span class="istickedoff">pa &lt;- proveInstance sc env' eqa</span>
+<span class="lineno"> 2373 </span><span class="spaces">              </span><span class="istickedoff">scGlobalApply sc &quot;Cryptol.ecEq&quot; [a, pa, x, y]</span>
+<span class="lineno"> 2374 </span><span class="spaces">     </span><span class="istickedoff">let eqSubbranch i xs j argTs =</span>
+<span class="lineno"> 2375 </span><span class="spaces">           </span><span class="istickedoff">do ys &lt;- traverse (scFreshVariable sc &quot;y&quot;) argTs</span>
+<span class="lineno"> 2376 </span><span class="spaces">              </span><span class="istickedoff">body &lt;-</span>
+<span class="lineno"> 2377 </span><span class="spaces">                </span><span class="istickedoff">case (i :: Int) == j of</span>
+<span class="lineno"> 2378 </span><span class="spaces">                  </span><span class="istickedoff">False -&gt; pure false</span>
+<span class="lineno"> 2379 </span><span class="spaces">                  </span><span class="istickedoff">True -&gt;</span>
+<span class="lineno"> 2380 </span><span class="spaces">                    </span><span class="istickedoff">do conjuncts &lt;- sequence $ zipWith mkEq xs ys</span>
+<span class="lineno"> 2381 </span><span class="spaces">                       </span><span class="istickedoff">scAndList sc conjuncts</span>
+<span class="lineno"> 2382 </span><span class="spaces">              </span><span class="istickedoff">scAbstractTerms sc ys body</span>
+<span class="lineno"> 2383 </span><span class="spaces">     </span><span class="istickedoff">let eqBranch i argTs =</span>
+<span class="lineno"> 2384 </span><span class="spaces">           </span><span class="istickedoff">do xs &lt;- traverse (scFreshVariable sc &quot;x&quot;) argTs</span>
+<span class="lineno"> 2385 </span><span class="spaces">              </span><span class="istickedoff">subbranches &lt;- sequence $ zipWith (eqSubbranch i xs) [0..] ctorArgTypes</span>
+<span class="lineno"> 2386 </span><span class="spaces">              </span><span class="istickedoff">body &lt;- scApplyAll sc recursor2 subbranches</span>
+<span class="lineno"> 2387 </span><span class="spaces">              </span><span class="istickedoff">scAbstractTerms sc xs body</span>
+<span class="lineno"> 2388 </span><span class="spaces">     </span><span class="istickedoff">branches &lt;- sequence $ zipWith eqBranch [0..] ctorArgTypes</span>
+<span class="lineno"> 2389 </span><span class="spaces">     </span><span class="istickedoff">eqf &lt;- scApplyAll sc recursor1 branches</span>
+<span class="lineno"> 2390 </span><span class="spaces">     </span><span class="istickedoff">r &lt;- scRecordValue sc [(&quot;eq&quot;, eqf)]</span>
+<span class="lineno"> 2391 </span><span class="spaces">     </span><span class="istickedoff">r1 &lt;- scAscribe sc r =&lt;&lt; scGlobalApply sc &quot;Cryptol.PEq&quot; [ty]</span>
+<span class="lineno"> 2392 </span><span class="spaces">     </span><span class="istickedoff">r2 &lt;- scAbstractTerms sc (dtParamsVars ++ propVars) r1</span>
+<span class="lineno"> 2393 </span><span class="spaces">     </span><span class="istickedoff">let dtNameInfo = nameInfo dtName</span>
+<span class="lineno"> 2394 </span><span class="spaces">     </span><span class="istickedoff">let dtQualName = toQualName dtNameInfo</span>
+<span class="lineno"> 2395 </span><span class="spaces">     </span><span class="istickedoff">let instQualName = dtQualName { QN.baseName = &quot;PEq__&quot; &lt;&gt; QN.baseName dtQualName }</span>
+<span class="lineno"> 2396 </span><span class="spaces">     </span><span class="istickedoff">let instNameInfo = mkImportedName instQualName</span>
+<span class="lineno"> 2397 </span><span class="spaces">     </span><span class="istickedoff">c &lt;- scDefineConstant sc instNameInfo r2</span>
+<span class="lineno"> 2398 </span><span class="spaces">     </span><span class="istickedoff">rule &lt;- mkIntroRule <span class="nottickedoff">sc</span> c</span>
+<span class="lineno"> 2399 </span><span class="spaces">     </span><span class="istickedoff">addInstance sc rule</span></span>
+<span class="lineno"> 2400 </span>
+<span class="lineno"> 2401 </span>-- | Generate a @PCmp@ or @PSignedCmp@ dictionary combinator for the
+<span class="lineno"> 2402 </span>-- given (non-recursive) datatype and register it as an class instance
+<span class="lineno"> 2403 </span>-- rule.
+<span class="lineno"> 2404 </span>deriveCmpInstanceGeneric ::
+<span class="lineno"> 2405 </span>  (Ident, FieldName, FieldName, FieldName, FieldName, Text) -&gt;
+<span class="lineno"> 2406 </span>  SharedContext -&gt;
+<span class="lineno"> 2407 </span>  LocalEnv -&gt;
+<span class="lineno"> 2408 </span>  Name {- ^ datatype name -} -&gt;
+<span class="lineno"> 2409 </span>  [(VarName, Term)] {- ^ datatype parameters -} -&gt;
+<span class="lineno"> 2410 </span>  [C.Prop] {- ^ instance rule hypotheses -} -&gt;
+<span class="lineno"> 2411 </span>  [[Term]] {- ^ constructor argument types -} -&gt;
+<span class="lineno"> 2412 </span>  IO ()
+<span class="lineno"> 2413 </span><span class="decl"><span class="istickedoff">deriveCmpInstanceGeneric</span>
+<span class="lineno"> 2414 </span><span class="spaces">  </span><span class="istickedoff">(classIdent, eqField, cmpField, leField, ltField, prefix)</span>
+<span class="lineno"> 2415 </span><span class="spaces">  </span><span class="istickedoff">sc env dtName dtParams props ctorArgTypes =</span>
+<span class="lineno"> 2416 </span><span class="spaces">  </span><span class="istickedoff">do dt &lt;- scConst sc dtName</span>
+<span class="lineno"> 2417 </span><span class="spaces">     </span><span class="istickedoff">dtParamsVars &lt;- scVariables sc dtParams</span>
+<span class="lineno"> 2418 </span><span class="spaces">     </span><span class="istickedoff">ty &lt;- scApplyAll sc dt dtParamsVars</span>
+<span class="lineno"> 2419 </span><span class="spaces">     </span><span class="istickedoff">recursor &lt;- scRecursor sc dtName (mkSort 0)</span>
+<span class="lineno"> 2420 </span><span class="spaces">     </span><span class="istickedoff">recursor' &lt;- scApplyAll sc recursor dtParamsVars</span>
+<span class="lineno"> 2421 </span><span class="spaces">     </span><span class="istickedoff">bool &lt;- scBoolType sc</span>
+<span class="lineno"> 2422 </span><span class="spaces">     </span><span class="istickedoff">bool_bool &lt;- scFun sc bool bool</span>
+<span class="lineno"> 2423 </span><span class="spaces">     </span><span class="istickedoff">ty_bool_bool &lt;- scFun sc ty bool_bool</span>
+<span class="lineno"> 2424 </span><span class="spaces">     </span><span class="istickedoff">motive1 &lt;- scLambda sc wildcardVarName ty ty_bool_bool</span>
+<span class="lineno"> 2425 </span><span class="spaces">     </span><span class="istickedoff">recursor1 &lt;- scApply sc recursor' motive1</span>
+<span class="lineno"> 2426 </span><span class="spaces">     </span><span class="istickedoff">motive2 &lt;- scLambda sc wildcardVarName ty bool_bool</span>
+<span class="lineno"> 2427 </span><span class="spaces">     </span><span class="istickedoff">recursor2 &lt;- scApply sc recursor' motive2</span>
+<span class="lineno"> 2428 </span><span class="spaces">     </span><span class="istickedoff">false &lt;- scBool sc False</span>
+<span class="lineno"> 2429 </span><span class="spaces">     </span><span class="istickedoff">true &lt;- scBool sc True</span>
+<span class="lineno"> 2430 </span><span class="spaces">     </span><span class="istickedoff">(env', propVars) &lt;- bindProps sc env props &quot;_P&quot;</span>
+<span class="lineno"> 2431 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2432 </span><span class="spaces">     </span><span class="istickedoff">let mkCmp :: Term -&gt; Term -&gt; IO Term</span>
+<span class="lineno"> 2433 </span><span class="spaces">         </span><span class="istickedoff">mkCmp x y =</span>
+<span class="lineno"> 2434 </span><span class="spaces">           </span><span class="istickedoff">do a &lt;- scTypeOf <span class="nottickedoff">sc</span> x</span>
+<span class="lineno"> 2435 </span><span class="spaces">              </span><span class="istickedoff">cmpa &lt;- scGlobalApply sc classIdent [a]</span>
+<span class="lineno"> 2436 </span><span class="spaces">              </span><span class="istickedoff">pa &lt;- proveInstance sc env' cmpa</span>
+<span class="lineno"> 2437 </span><span class="spaces">              </span><span class="istickedoff">cmp &lt;- scRecordSelect sc pa cmpField</span>
+<span class="lineno"> 2438 </span><span class="spaces">              </span><span class="istickedoff">scApplyAll sc cmp [x, y]</span>
+<span class="lineno"> 2439 </span><span class="spaces">     </span><span class="istickedoff">let cmpSubbranch i xs j argTs =</span>
+<span class="lineno"> 2440 </span><span class="spaces">           </span><span class="istickedoff">do ys &lt;- traverse (scFreshVariable sc &quot;y&quot;) argTs</span>
+<span class="lineno"> 2441 </span><span class="spaces">              </span><span class="istickedoff">k &lt;- scFreshVariable sc &quot;k&quot; bool</span>
+<span class="lineno"> 2442 </span><span class="spaces">              </span><span class="istickedoff">body &lt;-</span>
+<span class="lineno"> 2443 </span><span class="spaces">                </span><span class="istickedoff">case compare (i :: Int) j of</span>
+<span class="lineno"> 2444 </span><span class="spaces">                  </span><span class="istickedoff">LT -&gt; pure true</span>
+<span class="lineno"> 2445 </span><span class="spaces">                  </span><span class="istickedoff">GT -&gt; pure false</span>
+<span class="lineno"> 2446 </span><span class="spaces">                  </span><span class="istickedoff">EQ -&gt;</span>
+<span class="lineno"> 2447 </span><span class="spaces">                    </span><span class="istickedoff">do fs &lt;- sequence $ zipWith mkCmp xs ys</span>
+<span class="lineno"> 2448 </span><span class="spaces">                       </span><span class="istickedoff">Fold.foldrM (scApply sc) k fs</span>
+<span class="lineno"> 2449 </span><span class="spaces">              </span><span class="istickedoff">scAbstractTerms sc (ys ++ [k]) body</span>
+<span class="lineno"> 2450 </span><span class="spaces">     </span><span class="istickedoff">let cmpBranch i argTs =</span>
+<span class="lineno"> 2451 </span><span class="spaces">           </span><span class="istickedoff">do xs &lt;- traverse (scFreshVariable sc &quot;x&quot;) argTs</span>
+<span class="lineno"> 2452 </span><span class="spaces">              </span><span class="istickedoff">subbranches &lt;- sequence $ zipWith (cmpSubbranch i xs) [0..] ctorArgTypes</span>
+<span class="lineno"> 2453 </span><span class="spaces">              </span><span class="istickedoff">body &lt;- scApplyAll sc recursor2 subbranches</span>
+<span class="lineno"> 2454 </span><span class="spaces">              </span><span class="istickedoff">scAbstractTerms sc xs body</span>
+<span class="lineno"> 2455 </span><span class="spaces">     </span><span class="istickedoff">branches &lt;- sequence $ zipWith cmpBranch [0..] ctorArgTypes</span>
+<span class="lineno"> 2456 </span><span class="spaces">     </span><span class="istickedoff">cmp &lt;- scApplyAll sc recursor1 branches</span>
+<span class="lineno"> 2457 </span><span class="spaces">     </span><span class="istickedoff">(le, lt) &lt;-</span>
+<span class="lineno"> 2458 </span><span class="spaces">       </span><span class="istickedoff">do x &lt;- scFreshVariable sc &quot;x&quot; ty</span>
+<span class="lineno"> 2459 </span><span class="spaces">          </span><span class="istickedoff">y &lt;- scFreshVariable sc &quot;y&quot; ty</span>
+<span class="lineno"> 2460 </span><span class="spaces">          </span><span class="istickedoff">cmp_x_y &lt;- scApplyAll sc cmp [x, y]</span>
+<span class="lineno"> 2461 </span><span class="spaces">          </span><span class="istickedoff">le &lt;- scAbstractTerms sc [x, y] =&lt;&lt; scApply sc cmp_x_y true</span>
+<span class="lineno"> 2462 </span><span class="spaces">          </span><span class="istickedoff">lt &lt;- scAbstractTerms sc [x, y] =&lt;&lt; scApply sc cmp_x_y false</span>
+<span class="lineno"> 2463 </span><span class="spaces">          </span><span class="istickedoff">pure (le, lt)</span>
+<span class="lineno"> 2464 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2465 </span><span class="spaces">     </span><span class="istickedoff">eqty &lt;- scGlobalApply sc &quot;Cryptol.PEq&quot; [ty]</span>
+<span class="lineno"> 2466 </span><span class="spaces">     </span><span class="istickedoff">cmpEq &lt;- proveInstance sc env' eqty</span>
+<span class="lineno"> 2467 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2468 </span><span class="spaces">     </span><span class="istickedoff">r &lt;- scRecordValue sc [(eqField, cmpEq), (cmpField, cmp), (leField, le), (ltField, lt)]</span>
+<span class="lineno"> 2469 </span><span class="spaces">     </span><span class="istickedoff">r1 &lt;- scAscribe sc r =&lt;&lt; scGlobalApply sc classIdent [ty]</span>
+<span class="lineno"> 2470 </span><span class="spaces">     </span><span class="istickedoff">r2 &lt;- scAbstractTerms sc (dtParamsVars ++ propVars) r1</span>
+<span class="lineno"> 2471 </span><span class="spaces">     </span><span class="istickedoff">let dtNameInfo = nameInfo dtName</span>
+<span class="lineno"> 2472 </span><span class="spaces">     </span><span class="istickedoff">let dtQualName = toQualName dtNameInfo</span>
+<span class="lineno"> 2473 </span><span class="spaces">     </span><span class="istickedoff">let instQualName = dtQualName { QN.baseName = prefix &lt;&gt; QN.baseName dtQualName }</span>
+<span class="lineno"> 2474 </span><span class="spaces">     </span><span class="istickedoff">let instNameInfo = mkImportedName instQualName</span>
+<span class="lineno"> 2475 </span><span class="spaces">     </span><span class="istickedoff">c &lt;- scDefineConstant sc instNameInfo r2</span>
+<span class="lineno"> 2476 </span><span class="spaces">     </span><span class="istickedoff">rule &lt;- mkIntroRule <span class="nottickedoff">sc</span> c</span>
+<span class="lineno"> 2477 </span><span class="spaces">     </span><span class="istickedoff">addInstance sc rule</span></span>
+<span class="lineno"> 2478 </span>
+<span class="lineno"> 2479 </span>-- | Generate a @PCmp@ dictionary combinator for the given
+<span class="lineno"> 2480 </span>-- (non-recursive) datatype and register it as an class instance rule.
+<span class="lineno"> 2481 </span>--
+<span class="lineno"> 2482 </span>-- For the type
+<span class="lineno"> 2483 </span>--
+<span class="lineno"> 2484 </span>--    enum Foo a = A | B a | C Bool Integer
+<span class="lineno"> 2485 </span>--
+<span class="lineno"> 2486 </span>-- this will generate the following definition:
+<span class="lineno"> 2487 </span>--
+<span class="lineno"> 2488 </span>-- PCmp__Foo : (a : isort 0) -&gt; PCmp a -&gt; PCmp (Foo a)
+<span class="lineno"> 2489 </span>-- PCmp__Foo =
+<span class="lineno"> 2490 </span>--   \(a : isort 0) (_P : PCmp a) -&gt;
+<span class="lineno"> 2491 </span>--     { cmpEq = PEq__Foo a _P.cmpEq
+<span class="lineno"> 2492 </span>--     , cmp =
+<span class="lineno"> 2493 </span>--       Foo#rec a (\(_ : Foo a) -&gt; Foo a -&gt; Bool -&gt; Bool)
+<span class="lineno"> 2494 </span>--         (Foo#rec a (\(_ : Foo a) -&gt; Bool -&gt; Bool)
+<span class="lineno"> 2495 </span>--            (\(k : Bool) -&gt; k)
+<span class="lineno"> 2496 </span>--            (\(y : a) -&gt; \(k : Bool) -&gt; True)
+<span class="lineno"> 2497 </span>--            (\(y : Bool) -&gt; \(y1 : Integer) -&gt; \(k : Bool) -&gt; True))
+<span class="lineno"> 2498 </span>--         (\(x : a) -&gt;
+<span class="lineno"> 2499 </span>--            Foo#rec a (\(_ : Foo a) -&gt; Bool -&gt; Bool)
+<span class="lineno"> 2500 </span>--              (\(k : Bool) -&gt; False)
+<span class="lineno"> 2501 </span>--              (\(y : a) (k : Bool) -&gt; _P.cmp x y k)
+<span class="lineno"> 2502 </span>--              (\(y : Bool) (y1 : Integer) (k : Bool) -&gt; True))
+<span class="lineno"> 2503 </span>--         (\(x : Bool) -&gt;
+<span class="lineno"> 2504 </span>--            \(x1 : Integer) -&gt;
+<span class="lineno"> 2505 </span>--              Foo#rec a (\(_ : Foo a) -&gt; Bool -&gt; Bool)
+<span class="lineno"> 2506 </span>--                (\(k : Bool) -&gt; False)
+<span class="lineno"> 2507 </span>--                (\(y : a) (k : Bool) -&gt; False)
+<span class="lineno"> 2508 </span>--                (\(y : Bool) (y1 : Integer) (k : Bool) -&gt;
+<span class="lineno"> 2509 </span>--                   PCmpBit.cmp x y (PCmpInteger.cmp x1 y1 k)))
+<span class="lineno"> 2510 </span>--     , le = ...
+<span class="lineno"> 2511 </span>--     , lt = ... }
+<span class="lineno"> 2512 </span>--
+<span class="lineno"> 2513 </span>-- The function in the @cmp@ field returns one of three boolean
+<span class="lineno"> 2514 </span>-- functions depending on the ordering:
+<span class="lineno"> 2515 </span>--
+<span class="lineno"> 2516 </span>--   * LT: @\(k:Bool) -&gt; True@
+<span class="lineno"> 2517 </span>--   * GT: @\(k:Bool) -&gt; False@
+<span class="lineno"> 2518 </span>--   * EQ: @\(k:Bool) -&gt; k@
+<span class="lineno"> 2519 </span>--
+<span class="lineno"> 2520 </span>-- With this representation, function composition implements
+<span class="lineno"> 2521 </span>-- lexicographic ordering.
+<span class="lineno"> 2522 </span>-- Applying @True@ yields a less-than-or-equal function, and applying
+<span class="lineno"> 2523 </span>-- @False@ yields less-than.
+<span class="lineno"> 2524 </span>--
+<span class="lineno"> 2525 </span>-- In the cmp function, an outer recursor cases on the first argument.
+<span class="lineno"> 2526 </span>-- Within each branch, an inner recursor cases on the second argument.
+<span class="lineno"> 2527 </span>-- On inner branches where the constructors differ, return constant
+<span class="lineno"> 2528 </span>-- True or False, depending on the constructor order.
+<span class="lineno"> 2529 </span>-- Where the constructors match, recursively compare the corresponding
+<span class="lineno"> 2530 </span>-- constructor arguments, and combine with function composition.
+<span class="lineno"> 2531 </span>--
+<span class="lineno"> 2532 </span>-- The @cmpEq@ field stores the @PEq@ superclass dictionary.
+<span class="lineno"> 2533 </span>-- The @le@ and @lt@ fields are the @cmp@ function pre-applied to
+<span class="lineno"> 2534 </span>-- @True@ and @False@, respectively.
+<span class="lineno"> 2535 </span>
+<span class="lineno"> 2536 </span>deriveCmpInstance ::
+<span class="lineno"> 2537 </span>  SharedContext -&gt;
+<span class="lineno"> 2538 </span>  LocalEnv -&gt;
+<span class="lineno"> 2539 </span>  Name {- ^ datatype name -} -&gt;
+<span class="lineno"> 2540 </span>  [(VarName, Term)] {- ^ datatype parameters -} -&gt;
+<span class="lineno"> 2541 </span>  [C.Prop] {- ^ instance rule hypotheses -} -&gt;
+<span class="lineno"> 2542 </span>  [[Term]] {- ^ constructor argument types -} -&gt;
+<span class="lineno"> 2543 </span>  IO ()
+<span class="lineno"> 2544 </span><span class="decl"><span class="istickedoff">deriveCmpInstance =</span>
+<span class="lineno"> 2545 </span><span class="spaces">  </span><span class="istickedoff">deriveCmpInstanceGeneric</span>
+<span class="lineno"> 2546 </span><span class="spaces">  </span><span class="istickedoff">(&quot;Cryptol.PCmp&quot;, &quot;cmpEq&quot;, &quot;cmp&quot;, &quot;le&quot;, &quot;lt&quot;, &quot;PCmp__&quot;)</span></span>
+<span class="lineno"> 2547 </span>
+<span class="lineno"> 2548 </span>-- | Generate a @PSignedCmp@ dictionary combinator for the given
+<span class="lineno"> 2549 </span>-- (non-recursive) datatype and register it as an class instance rule.
+<span class="lineno"> 2550 </span>-- The definition is identical to the @PCmp@ instance, but with
+<span class="lineno"> 2551 </span>-- different field and function names.
+<span class="lineno"> 2552 </span>deriveSignedCmpInstance ::
+<span class="lineno"> 2553 </span>  SharedContext -&gt;
+<span class="lineno"> 2554 </span>  LocalEnv -&gt;
+<span class="lineno"> 2555 </span>  Name {- ^ datatype name -} -&gt;
+<span class="lineno"> 2556 </span>  [(VarName, Term)] {- ^ datatype parameters -} -&gt;
+<span class="lineno"> 2557 </span>  [C.Prop] {- ^ instance rule hypotheses -} -&gt;
+<span class="lineno"> 2558 </span>  [[Term]] {- ^ constructor argument types -} -&gt;
+<span class="lineno"> 2559 </span>  IO ()
+<span class="lineno"> 2560 </span><span class="decl"><span class="istickedoff">deriveSignedCmpInstance =</span>
+<span class="lineno"> 2561 </span><span class="spaces">  </span><span class="istickedoff">deriveCmpInstanceGeneric</span>
+<span class="lineno"> 2562 </span><span class="spaces">  </span><span class="istickedoff">(&quot;Cryptol.PSignedCmp&quot;, &quot;signedCmpEq&quot;, &quot;scmp&quot;, &quot;sle&quot;, &quot;slt&quot;, &quot;PSignedCmp__&quot;)</span></span>
+<span class="lineno"> 2563 </span>
+<span class="lineno"> 2564 </span>-- | Define a Cryptol @enum@ type as a SAWCore datatype.
+<span class="lineno"> 2565 </span>-- If the Cryptol type definition has a @deriving@ clause, then
+<span class="lineno"> 2566 </span>-- generate dictionary combinators for each class and register them
+<span class="lineno"> 2567 </span>-- for use with the instance solver.
+<span class="lineno"> 2568 </span>-- Return a list of Cryptol constructor names paired with the
+<span class="lineno"> 2569 </span>-- corresponding SAWCore constructor functions.
+<span class="lineno"> 2570 </span>genCodeForEnum ::
+<span class="lineno"> 2571 </span>  HasCallStack =&gt;
+<span class="lineno"> 2572 </span>  SharedContext -&gt; NominalType -&gt; [C.EnumCon] -&gt; IO [(C.Name,Term)]
+<span class="lineno"> 2573 </span><span class="decl"><span class="istickedoff">genCodeForEnum sc nt ctors =</span>
+<span class="lineno"> 2574 </span><span class="spaces">  </span><span class="istickedoff">do (env, params) &lt;- fmap (map fst) &lt;$&gt; bindTParams' sc mempty (C.ntParams nt)</span>
+<span class="lineno"> 2575 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2576 </span><span class="spaces">     </span><span class="istickedoff">let importCtorSpec :: C.EnumCon -&gt; IO CtorSpec</span>
+<span class="lineno"> 2577 </span><span class="spaces">         </span><span class="istickedoff">importCtorSpec c =</span>
+<span class="lineno"> 2578 </span><span class="spaces">           </span><span class="istickedoff">do nmi &lt;- importName (C.ecName c)</span>
+<span class="lineno"> 2579 </span><span class="spaces">              </span><span class="istickedoff">args &lt;-</span>
+<span class="lineno"> 2580 </span><span class="spaces">                </span><span class="istickedoff">forM (C.ecFields c) $ \ct -&gt;</span>
+<span class="lineno"> 2581 </span><span class="spaces">                </span><span class="istickedoff">do ty &lt;- importType sc env ct</span>
+<span class="lineno"> 2582 </span><span class="spaces">                   </span><span class="istickedoff">vn &lt;- scFreshVarName sc &quot;_&quot;</span>
+<span class="lineno"> 2583 </span><span class="spaces">                   </span><span class="istickedoff">pure (vn, ConstArg ty)</span>
+<span class="lineno"> 2584 </span><span class="spaces">              </span><span class="istickedoff">pure $</span>
+<span class="lineno"> 2585 </span><span class="spaces">                </span><span class="istickedoff">CtorSpec</span>
+<span class="lineno"> 2586 </span><span class="spaces">                </span><span class="istickedoff">{ cspecNameInfo = nmi</span>
+<span class="lineno"> 2587 </span><span class="spaces">                </span><span class="istickedoff">, cspecArgs = args</span>
+<span class="lineno"> 2588 </span><span class="spaces">                </span><span class="istickedoff">, cspecIndices = []</span>
+<span class="lineno"> 2589 </span><span class="spaces">                </span><span class="istickedoff">}</span>
+<span class="lineno"> 2590 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2591 </span><span class="spaces">     </span><span class="istickedoff">ctorSpecs &lt;- traverse importCtorSpec ctors</span>
+<span class="lineno"> 2592 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2593 </span><span class="spaces">     </span><span class="istickedoff">nmi &lt;- importName (ntName nt)</span>
+<span class="lineno"> 2594 </span><span class="spaces">     </span><span class="istickedoff">motiveName &lt;- scFreshVarName sc &quot;p&quot;</span>
+<span class="lineno"> 2595 </span><span class="spaces">     </span><span class="istickedoff">argName &lt;- scFreshVarName sc &quot;arg&quot;</span>
+<span class="lineno"> 2596 </span><span class="spaces">     </span><span class="istickedoff">let dtSpec =</span>
+<span class="lineno"> 2597 </span><span class="spaces">           </span><span class="istickedoff">DataTypeSpec</span>
+<span class="lineno"> 2598 </span><span class="spaces">           </span><span class="istickedoff">{ dtsNameInfo = nmi</span>
+<span class="lineno"> 2599 </span><span class="spaces">           </span><span class="istickedoff">, dtsParams = mapMaybe asVariable params</span>
+<span class="lineno"> 2600 </span><span class="spaces">           </span><span class="istickedoff">, dtsIndices = []</span>
+<span class="lineno"> 2601 </span><span class="spaces">           </span><span class="istickedoff">, dtsSort = mkSort 0</span>
+<span class="lineno"> 2602 </span><span class="spaces">           </span><span class="istickedoff">, dtsCtors = ctorSpecs</span>
+<span class="lineno"> 2603 </span><span class="spaces">           </span><span class="istickedoff">, dtsMotiveName = motiveName</span>
+<span class="lineno"> 2604 </span><span class="spaces">           </span><span class="istickedoff">, dtsArgName = argName</span>
+<span class="lineno"> 2605 </span><span class="spaces">           </span><span class="istickedoff">}</span>
+<span class="lineno"> 2606 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2607 </span><span class="spaces">     </span><span class="istickedoff">(dtName, ctorNames) &lt;- scDefineDataType sc dtSpec</span>
+<span class="lineno"> 2608 </span><span class="spaces">     </span><span class="istickedoff">ctor_tms &lt;- traverse (scConst sc) ctorNames</span>
+<span class="lineno"> 2609 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2610 </span><span class="spaces">     </span><span class="istickedoff">-- Derive PEq class instance.</span>
+<span class="lineno"> 2611 </span><span class="spaces">     </span><span class="istickedoff">let ctorArgTypes = [ [ t | (_, ConstArg t) &lt;- cspecArgs c ] | c &lt;- ctorSpecs ]</span>
+<span class="lineno"> 2612 </span><span class="spaces">     </span><span class="istickedoff">case Map.lookup C.PEq (ntDeriving nt) of</span>
+<span class="lineno"> 2613 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure <span class="nottickedoff">()</span></span>
+<span class="lineno"> 2614 </span><span class="spaces">       </span><span class="istickedoff">Just assms -&gt; deriveEqInstance sc env dtName (dtsParams dtSpec) assms ctorArgTypes</span>
+<span class="lineno"> 2615 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2616 </span><span class="spaces">     </span><span class="istickedoff">-- Derive PCmp class instance.</span>
+<span class="lineno"> 2617 </span><span class="spaces">     </span><span class="istickedoff">case Map.lookup C.PCmp (ntDeriving nt) of</span>
+<span class="lineno"> 2618 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure <span class="nottickedoff">()</span></span>
+<span class="lineno"> 2619 </span><span class="spaces">       </span><span class="istickedoff">Just assms -&gt; deriveCmpInstance sc env dtName (dtsParams dtSpec) assms ctorArgTypes</span>
+<span class="lineno"> 2620 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2621 </span><span class="spaces">     </span><span class="istickedoff">-- Derive PSignedCmp class instance.</span>
+<span class="lineno"> 2622 </span><span class="spaces">     </span><span class="istickedoff">case Map.lookup C.PSignedCmp (ntDeriving nt) of</span>
+<span class="lineno"> 2623 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; pure <span class="nottickedoff">()</span></span>
+<span class="lineno"> 2624 </span><span class="spaces">       </span><span class="istickedoff">Just assms -&gt; deriveSignedCmpInstance sc env dtName (dtsParams dtSpec) assms ctorArgTypes</span>
+<span class="lineno"> 2625 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2626 </span><span class="spaces">     </span><span class="istickedoff">-- Return list of constructor names and terms.</span>
+<span class="lineno"> 2627 </span><span class="spaces">     </span><span class="istickedoff">pure (zip (map C.ecName ctors) ctor_tms)</span></span>
+<span class="lineno"> 2628 </span>
+<span class="lineno"> 2629 </span>
+<span class="lineno"> 2630 </span>-- | importCase - translates a Cryptol case expr to SAWCore: an application
+<span class="lineno"> 2631 </span>--   of the SAWCore &lt;NAME&gt;#rec recursor function to appropriate arguments.
+<span class="lineno"> 2632 </span>--
+<span class="lineno"> 2633 </span>--   - Note missing functionality: (FIXME)
+<span class="lineno"> 2634 </span>--     - not implemented yet: default case alternatives that bind the whole scrutinee,
+<span class="lineno"> 2635 </span>--       i.e.,
+<span class="lineno"> 2636 </span>--
+<span class="lineno"> 2637 </span>--       &gt;  case S of
+<span class="lineno"> 2638 </span>--       &gt;    C1 ... -&gt; E
+<span class="lineno"> 2639 </span>--       &gt;    y      -&gt; E[y]  -- y == S   &lt;- NOT IMPLEMENTED YET
+<span class="lineno"> 2640 </span>--
+<span class="lineno"> 2641 </span>importCase ::
+<span class="lineno"> 2642 </span>  HasCallStack =&gt;
+<span class="lineno"> 2643 </span>  SharedContext -&gt;
+<span class="lineno"> 2644 </span>  LocalEnv -&gt;
+<span class="lineno"> 2645 </span>  C.Type -&gt; C.Expr -&gt; Map C.Ident C.CaseAlt -&gt; Maybe C.CaseAlt -&gt; IO Term
+<span class="lineno"> 2646 </span><span class="decl"><span class="istickedoff">importCase sc env tyResult scrutinee altsMap mDfltAlt =</span>
+<span class="lineno"> 2647 </span><span class="spaces">  </span><span class="istickedoff">do</span>
+<span class="lineno"> 2648 </span><span class="spaces">  </span><span class="istickedoff">allvars &lt;- eAllVars sc</span>
+<span class="lineno"> 2649 </span><span class="spaces">  </span><span class="istickedoff">-- FUTURE: consider using scTypeOf once we have an information-</span>
+<span class="lineno"> 2650 </span><span class="spaces">  </span><span class="istickedoff">-- preserving translation of enum types into SAWCore.</span>
+<span class="lineno"> 2651 </span><span class="spaces">  </span><span class="istickedoff">let scrutineeTy = fastTypeOf allvars scrutinee</span>
+<span class="lineno"> 2652 </span><span class="spaces">  </span><span class="istickedoff">(nm,ctors,tyParams,tyArgs) &lt;- case scrutineeTy of</span>
+<span class="lineno"> 2653 </span><span class="spaces">      </span><span class="istickedoff">(C.tIsNominal -&gt; Just (C.NominalType{C.ntDef=C.Enum ctors, ntName=nm, ntParams=tyParams},tyArgs))</span>
+<span class="lineno"> 2654 </span><span class="spaces">        </span><span class="istickedoff">-&gt;</span>
+<span class="lineno"> 2655 </span><span class="spaces">          </span><span class="istickedoff">return (nm,ctors,tyParams,tyArgs)</span>
+<span class="lineno"> 2656 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno"> 2657 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importCase&quot; [</span></span>
+<span class="lineno"> 2658 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;`case` expression scrutinee is not an Enum type&quot;,</span></span>
+<span class="lineno"> 2659 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">CryPP.pp scrutineeTy</span></span>
+<span class="lineno"> 2660 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2661 </span><span class="spaces">  </span><span class="istickedoff">let sub = C.listParamSubst (zip tyParams tyArgs)</span>
+<span class="lineno"> 2662 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2663 </span><span class="spaces">  </span><span class="istickedoff">-- Create a sequential set of `C.CaseAlt`s that exactly match the</span>
+<span class="lineno"> 2664 </span><span class="spaces">  </span><span class="istickedoff">-- constructors:</span>
+<span class="lineno"> 2665 </span><span class="spaces">  </span><span class="istickedoff">--   - preconditions:</span>
+<span class="lineno"> 2666 </span><span class="spaces">  </span><span class="istickedoff">--      Assume `altsMap` is valid, thus not checking for extraneous</span>
+<span class="lineno"> 2667 </span><span class="spaces">  </span><span class="istickedoff">--      entries. (Call panic if a missing alternative is not covered</span>
+<span class="lineno"> 2668 </span><span class="spaces">  </span><span class="istickedoff">--      by presence of default in `mDfltAlt`.)</span>
+<span class="lineno"> 2669 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2670 </span><span class="spaces">  </span><span class="istickedoff">-- First, define what to do if alternative for constructor is missing:</span>
+<span class="lineno"> 2671 </span><span class="spaces">  </span><span class="istickedoff">let</span>
+<span class="lineno"> 2672 </span><span class="spaces">      </span><span class="istickedoff">-- | useDefaultAlt - when constructor (ctor) has no 'CaseAlt',</span>
+<span class="lineno"> 2673 </span><span class="spaces">      </span><span class="istickedoff">-- create a ctor specific alt-function from the mDfltAlt</span>
+<span class="lineno"> 2674 </span><span class="spaces">      </span><span class="istickedoff">-- &quot;default expr&quot;.</span>
+<span class="lineno"> 2675 </span><span class="spaces">      </span><span class="istickedoff">--   - For each constructor we may need to generate a default alternative,</span>
+<span class="lineno"> 2676 </span><span class="spaces">      </span><span class="istickedoff">--     (the code cannot be shared as the arity and types for each constructor</span>
+<span class="lineno"> 2677 </span><span class="spaces">      </span><span class="istickedoff">--     will be different).</span>
+<span class="lineno"> 2678 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2679 </span><span class="spaces">      </span><span class="istickedoff">useDefaultAlt :: HasCallStack =&gt; C.EnumCon -&gt; IO ([C.Type], C.CaseAlt)</span>
+<span class="lineno"> 2680 </span><span class="spaces">      </span><span class="istickedoff">useDefaultAlt ctor = case mDfltAlt of</span>
+<span class="lineno"> 2681 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno"> 2682 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importCase&quot; [</span></span>
+<span class="lineno"> 2683 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">&quot;missing CaseAlt and no default CaseAlt: &quot; &lt;&gt; CryPP.pp nm</span></span>
+<span class="lineno"> 2684 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2685 </span><span class="spaces">        </span><span class="istickedoff">Just (C.CaseAlt [(nm',_)] dfltE)</span>
+<span class="lineno"> 2686 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlytrue">nameIsUnusedPat nm'</span> -&gt;</span>
+<span class="lineno"> 2687 </span><span class="spaces">                </span><span class="istickedoff">do</span>
+<span class="lineno"> 2688 </span><span class="spaces">                </span><span class="istickedoff">-- NOTE nm' is unused Name</span>
+<span class="lineno"> 2689 </span><span class="spaces">                </span><span class="istickedoff">let vts  = map</span>
+<span class="lineno"> 2690 </span><span class="spaces">                             </span><span class="istickedoff">(\ty-&gt; (nm',plainSubst sub ty))</span>
+<span class="lineno"> 2691 </span><span class="spaces">                             </span><span class="istickedoff">(C.ecFields ctor)</span>
+<span class="lineno"> 2692 </span><span class="spaces">                  </span><span class="istickedoff">-- N.B.: to avoid extra name construction, we are</span>
+<span class="lineno"> 2693 </span><span class="spaces">                  </span><span class="istickedoff">--  using the same name (un-referenced!) nm' for</span>
+<span class="lineno"> 2694 </span><span class="spaces">                  </span><span class="istickedoff">--  each of the arguments of the CaseAlt function.</span>
+<span class="lineno"> 2695 </span><span class="spaces">                  </span><span class="istickedoff">--  This appears to work.  However, if the '_' name</span>
+<span class="lineno"> 2696 </span><span class="spaces">                  </span><span class="istickedoff">--  *was* actually referenced, it would not be what</span>
+<span class="lineno"> 2697 </span><span class="spaces">                  </span><span class="istickedoff">--  we would want However, typechecking would</span>
+<span class="lineno"> 2698 </span><span class="spaces">                  </span><span class="istickedoff">--  ascertain this.</span>
+<span class="lineno"> 2699 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2700 </span><span class="spaces">                </span><span class="istickedoff">return (map snd vts, C.CaseAlt vts dfltE)</span>
+<span class="lineno"> 2701 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2702 </span><span class="spaces">            </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt;</span>
+<span class="lineno"> 2703 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importCase&quot; [</span></span>
+<span class="lineno"> 2704 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">&quot;Unsupported style of case expression: &quot; &lt;&gt;</span></span>
+<span class="lineno"> 2705 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot;default case alternative that binds scrutinee&quot;,</span></span>
+<span class="lineno"> 2706 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">&quot;pattern: &quot; &lt;&gt; CryPP.pp nm</span></span>
+<span class="lineno"> 2707 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 2708 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2709 </span><span class="spaces">          </span><span class="istickedoff">where</span>
+<span class="lineno"> 2710 </span><span class="spaces">          </span><span class="istickedoff">nameIsUnusedPat nm'' =</span>
+<span class="lineno"> 2711 </span><span class="spaces">            </span><span class="istickedoff">Text.take 3 (nameToLocalName nm'') == &quot;__p&quot;</span>
+<span class="lineno"> 2712 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2713 </span><span class="spaces">            </span><span class="istickedoff">-- Except for the prefix, the indication that this is an unused pattern</span>
+<span class="lineno"> 2714 </span><span class="spaces">            </span><span class="istickedoff">-- is long gone. This name is created using `getIdent` in</span>
+<span class="lineno"> 2715 </span><span class="spaces">            </span><span class="istickedoff">--   deps/cryptol/src/Cryptol/Parser/Name.hs</span>
+<span class="lineno"> 2716 </span><span class="spaces">            </span><span class="istickedoff">-- FIXME:</span>
+<span class="lineno"> 2717 </span><span class="spaces">            </span><span class="istickedoff">--  - Clearly this is undesirable coupling.</span>
+<span class="lineno"> 2718 </span><span class="spaces">            </span><span class="istickedoff">--  - Best (but non-local, pervasive) solution is to have a more</span>
+<span class="lineno"> 2719 </span><span class="spaces">            </span><span class="istickedoff">--    precise type for default CaseAlt, the type is currently</span>
+<span class="lineno"> 2720 </span><span class="spaces">            </span><span class="istickedoff">--    too general.</span>
 <span class="lineno"> 2721 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2722 </span><span class="spaces">  </span><span class="istickedoff">-- The recursor</span>
-<span class="lineno"> 2723 </span><span class="spaces">  </span><span class="istickedoff">nmi        &lt;- importName nm</span>
-<span class="lineno"> 2724 </span><span class="spaces">  </span><span class="istickedoff">mName      &lt;- scResolveQualName sc (toQualName nmi)</span>
-<span class="lineno"> 2725 </span><span class="spaces">  </span><span class="istickedoff">recursor   &lt;- case mName of</span>
-<span class="lineno"> 2726 </span><span class="spaces">                  </span><span class="istickedoff">Just dtName -&gt; scRecursor sc dtName (mkSort 0)</span>
-<span class="lineno"> 2727 </span><span class="spaces">                  </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;importCase&quot; [&quot;Type name not found:&quot;, CryPP.pp nm]</span></span>
+<span class="lineno"> 2722 </span><span class="spaces">        </span><span class="istickedoff">Just (C.CaseAlt nts _) -&gt;</span>
+<span class="lineno"> 2723 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">let nts' = map (\(n, _t) -&gt; &quot;   &quot; &lt;&gt; CryPP.pp n) nts in</span></span>
+<span class="lineno"> 2724 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">panic &quot;importCase&quot; $ [</span></span>
+<span class="lineno"> 2725 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">&quot;Default CaseAlt breaks invariant: &quot; &lt;&gt;</span></span>
+<span class="lineno"> 2726 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">&quot;(assumed) invariant is that exactly one variable pattern is allowed in the default CaseAlt&quot;</span></span>
+<span class="lineno"> 2727 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">] ++ nts'</span></span>
 <span class="lineno"> 2728 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2729 </span><span class="spaces">  </span><span class="istickedoff">-- The deconstructors. Note that we import them with known types (using</span>
-<span class="lineno"> 2730 </span><span class="spaces">  </span><span class="istickedoff">-- importExpr') to resolve any type mismatches that arise between the</span>
-<span class="lineno"> 2731 </span><span class="spaces">  </span><span class="istickedoff">-- scrutinee type and the case alternatives' field binders. (See the comments</span>
-<span class="lineno"> 2732 </span><span class="spaces">  </span><span class="istickedoff">-- on `fieldTysAndAlts` above.)</span>
-<span class="lineno"> 2733 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2734 </span><span class="spaces">  </span><span class="istickedoff">tyInput    &lt;- scTypeOf <span class="nottickedoff">sc</span> scrutinee'</span>
-<span class="lineno"> 2735 </span><span class="spaces">  </span><span class="istickedoff">motive     &lt;- scLambda sc wildcardVarName tyInput tyResult'</span>
-<span class="lineno"> 2736 </span><span class="spaces">  </span><span class="istickedoff">funcs'     &lt;- zipWithM</span>
-<span class="lineno"> 2737 </span><span class="spaces">                  </span><span class="istickedoff">(\funcTy func -&gt; importExpr' sc env (C.tMono funcTy) func)</span>
-<span class="lineno"> 2738 </span><span class="spaces">                  </span><span class="istickedoff">funcTys</span>
-<span class="lineno"> 2739 </span><span class="spaces">                  </span><span class="istickedoff">funcs</span>
-<span class="lineno"> 2740 </span><span class="spaces">  </span><span class="istickedoff">caseExpr   &lt;- scApplyAll sc recursor $</span>
-<span class="lineno"> 2741 </span><span class="spaces">                  </span><span class="istickedoff">tyArgs'             -- recursor is expecting the type arguments</span>
-<span class="lineno"> 2742 </span><span class="spaces">                                      </span><span class="istickedoff">--   that the enumtype is instantiated to</span>
-<span class="lineno"> 2743 </span><span class="spaces">                  </span><span class="istickedoff">++ [motive]         -- the result type of the case expression</span>
-<span class="lineno"> 2744 </span><span class="spaces">                  </span><span class="istickedoff">++ funcs'           -- the eliminator funcs, one for each constructor</span>
-<span class="lineno"> 2745 </span><span class="spaces">                  </span><span class="istickedoff">++ [scrutinee']     -- scrutinee of case, of enum type</span>
-<span class="lineno"> 2746 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 2747 </span><span class="spaces">  </span><span class="istickedoff">return caseExpr</span></span>
+<span class="lineno"> 2729 </span><span class="spaces">  </span><span class="istickedoff">-- For each constructor involved in the case expression, return two things:</span>
+<span class="lineno"> 2730 </span><span class="spaces">  </span><span class="istickedoff">--</span>
+<span class="lineno"> 2731 </span><span class="spaces">  </span><span class="istickedoff">-- 1. The types of the constructor's fields as determined by the type of the</span>
+<span class="lineno"> 2732 </span><span class="spaces">  </span><span class="istickedoff">--    scrutinee expression.</span>
+<span class="lineno"> 2733 </span><span class="spaces">  </span><span class="istickedoff">-- 2. A case alternative corresponding to each constructor.</span>
+<span class="lineno"> 2734 </span><span class="spaces">  </span><span class="istickedoff">--</span>
+<span class="lineno"> 2735 </span><span class="spaces">  </span><span class="istickedoff">-- Note that the types in (1) may not precisely correspond to the types of</span>
+<span class="lineno"> 2736 </span><span class="spaces">  </span><span class="istickedoff">-- the case alternative's field binders in (2). This is because Cryptol</span>
+<span class="lineno"> 2737 </span><span class="spaces">  </span><span class="istickedoff">-- sometimes simplifies numeric types in case alternatives (e.g., simplifying</span>
+<span class="lineno"> 2738 </span><span class="spaces">  </span><span class="istickedoff">-- `(n + 1) - 1` to `n`). It is not a big deal if such mismatches arise, as</span>
+<span class="lineno"> 2739 </span><span class="spaces">  </span><span class="istickedoff">-- we will make sure to insert coercions as needed when importing the case</span>
+<span class="lineno"> 2740 </span><span class="spaces">  </span><span class="istickedoff">-- alternatives later. (See `test3301` for an example of a program that</span>
+<span class="lineno"> 2741 </span><span class="spaces">  </span><span class="istickedoff">-- crucially relies on these coercions.)</span>
+<span class="lineno"> 2742 </span><span class="spaces">  </span><span class="istickedoff">fieldTysAndAlts :: [([C.Type], C.CaseAlt)] &lt;-</span>
+<span class="lineno"> 2743 </span><span class="spaces">    </span><span class="istickedoff">forM ctors $ \ctor -&gt;</span>
+<span class="lineno"> 2744 </span><span class="spaces">      </span><span class="istickedoff">case Map.lookup (C.nameIdent (C.ecName ctor)) altsMap of</span>
+<span class="lineno"> 2745 </span><span class="spaces">        </span><span class="istickedoff">Just a  -&gt; return (plainSubst sub &lt;$&gt; C.ecFields ctor, a)</span>
+<span class="lineno"> 2746 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; useDefaultAlt ctor</span>
+<span class="lineno"> 2747 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2748 </span><span class="spaces">  </span><span class="istickedoff">{- |</span>
+<span class="lineno"> 2749 </span><span class="spaces">  </span><span class="istickedoff">What we just did is, in terms of the running ETT example above, this:</span>
+<span class="lineno"> 2750 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2751 </span><span class="spaces">  </span><span class="istickedoff">Given this Cryptol</span>
+<span class="lineno"> 2752 </span><span class="spaces">    </span><span class="istickedoff">&gt; case scrutinee  of</span>
+<span class="lineno"> 2753 </span><span class="spaces">    </span><span class="istickedoff">&gt;   C1     -&gt; RHS1</span>
+<span class="lineno"> 2754 </span><span class="spaces">    </span><span class="istickedoff">&gt;   _      -&gt; DFLT</span>
+<span class="lineno"> 2755 </span><span class="spaces">  </span><span class="istickedoff">we transform it into this Cryptol</span>
+<span class="lineno"> 2756 </span><span class="spaces">    </span><span class="istickedoff">&gt; case scrutinee  of</span>
+<span class="lineno"> 2757 </span><span class="spaces">    </span><span class="istickedoff">&gt;   C1     -&gt; RHS1</span>
+<span class="lineno"> 2758 </span><span class="spaces">    </span><span class="istickedoff">&gt;   C2 _   -&gt; DFLT</span>
+<span class="lineno"> 2759 </span><span class="spaces">    </span><span class="istickedoff">&gt;   C3 _ _ -&gt; DFLT</span>
+<span class="lineno"> 2760 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2761 </span><span class="spaces">  </span><span class="istickedoff">And what we will do next is transform this last into this SAWCore:</span>
+<span class="lineno"> 2762 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2763 </span><span class="spaces">    </span><span class="istickedoff">&gt; ETT#rec</span>
+<span class="lineno"> 2764 </span><span class="spaces">    </span><span class="istickedoff">&gt;   T1                          -- type application, the instantiation of 'a1'</span>
+<span class="lineno"> 2765 </span><span class="spaces">    </span><span class="istickedoff">&gt;   (\_ -&gt; B)                   -- type application, the result of the whole case</span>
+<span class="lineno"> 2766 </span><span class="spaces">    </span><span class="istickedoff">&gt;   RHS1                        -- deconstructor for C1</span>
+<span class="lineno"> 2767 </span><span class="spaces">    </span><span class="istickedoff">&gt;   (\(_: Nat)         -&gt; DFLT) -- deconstructor for C2</span>
+<span class="lineno"> 2768 </span><span class="spaces">    </span><span class="istickedoff">&gt;   (\(_: Bool) (_:T1) -&gt; DFLT) -- deconstructor for C3</span>
+<span class="lineno"> 2769 </span><span class="spaces">    </span><span class="istickedoff">&gt;                               --  - note the 'a1' has been instantiated to T1</span>
+<span class="lineno"> 2770 </span><span class="spaces">    </span><span class="istickedoff">&gt;   scrutinee</span>
+<span class="lineno"> 2771 </span><span class="spaces">  </span><span class="istickedoff">-}</span>
+<span class="lineno"> 2772 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2773 </span><span class="spaces">  </span><span class="istickedoff">let funcTysAndFuncs :: [(C.Type, C.Expr)]</span>
+<span class="lineno"> 2774 </span><span class="spaces">      </span><span class="istickedoff">funcTysAndFuncs =</span>
+<span class="lineno"> 2775 </span><span class="spaces">        </span><span class="istickedoff">map</span>
+<span class="lineno"> 2776 </span><span class="spaces">          </span><span class="istickedoff">(\(fieldTys, C.CaseAlt xs body) -&gt;</span>
+<span class="lineno"> 2777 </span><span class="spaces">            </span><span class="istickedoff">let funcTy = foldr C.tFun tyResult fieldTys in</span>
+<span class="lineno"> 2778 </span><span class="spaces">            </span><span class="istickedoff">let func = foldr (\(n,t) e -&gt; C.EAbs n <span class="nottickedoff">t</span> e) body xs in</span>
+<span class="lineno"> 2779 </span><span class="spaces">            </span><span class="istickedoff">(funcTy, func))</span>
+<span class="lineno"> 2780 </span><span class="spaces">          </span><span class="istickedoff">fieldTysAndAlts</span>
+<span class="lineno"> 2781 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2782 </span><span class="spaces">      </span><span class="istickedoff">(funcTys, funcs) = unzip funcTysAndFuncs</span>
+<span class="lineno"> 2783 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2784 </span><span class="spaces">  </span><span class="istickedoff">-- the Cryptol to SAWCore translations:</span>
+<span class="lineno"> 2785 </span><span class="spaces">  </span><span class="istickedoff">tyArgs'    &lt;- mapM (importType sc env) tyArgs</span>
+<span class="lineno"> 2786 </span><span class="spaces">  </span><span class="istickedoff">tyResult'  &lt;- importType sc env tyResult      -- type of whole case expr</span>
+<span class="lineno"> 2787 </span><span class="spaces">  </span><span class="istickedoff">scrutinee' &lt;- importExpr sc env scrutinee</span>
+<span class="lineno"> 2788 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2789 </span><span class="spaces">  </span><span class="istickedoff">-- The recursor</span>
+<span class="lineno"> 2790 </span><span class="spaces">  </span><span class="istickedoff">nmi        &lt;- importName nm</span>
+<span class="lineno"> 2791 </span><span class="spaces">  </span><span class="istickedoff">mName      &lt;- scResolveQualName sc (toQualName nmi)</span>
+<span class="lineno"> 2792 </span><span class="spaces">  </span><span class="istickedoff">recursor   &lt;- case mName of</span>
+<span class="lineno"> 2793 </span><span class="spaces">                  </span><span class="istickedoff">Just dtName -&gt; scRecursor sc dtName (mkSort 0)</span>
+<span class="lineno"> 2794 </span><span class="spaces">                  </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;importCase&quot; [&quot;Type name not found:&quot;, CryPP.pp nm]</span></span>
+<span class="lineno"> 2795 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2796 </span><span class="spaces">  </span><span class="istickedoff">-- The deconstructors. Note that we import them with known types (using</span>
+<span class="lineno"> 2797 </span><span class="spaces">  </span><span class="istickedoff">-- importExpr') to resolve any type mismatches that arise between the</span>
+<span class="lineno"> 2798 </span><span class="spaces">  </span><span class="istickedoff">-- scrutinee type and the case alternatives' field binders. (See the comments</span>
+<span class="lineno"> 2799 </span><span class="spaces">  </span><span class="istickedoff">-- on `fieldTysAndAlts` above.)</span>
+<span class="lineno"> 2800 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2801 </span><span class="spaces">  </span><span class="istickedoff">tyInput    &lt;- scTypeOf <span class="nottickedoff">sc</span> scrutinee'</span>
+<span class="lineno"> 2802 </span><span class="spaces">  </span><span class="istickedoff">motive     &lt;- scLambda sc wildcardVarName tyInput tyResult'</span>
+<span class="lineno"> 2803 </span><span class="spaces">  </span><span class="istickedoff">funcs'     &lt;- zipWithM</span>
+<span class="lineno"> 2804 </span><span class="spaces">                  </span><span class="istickedoff">(\funcTy func -&gt; importExpr' sc env (C.tMono funcTy) func)</span>
+<span class="lineno"> 2805 </span><span class="spaces">                  </span><span class="istickedoff">funcTys</span>
+<span class="lineno"> 2806 </span><span class="spaces">                  </span><span class="istickedoff">funcs</span>
+<span class="lineno"> 2807 </span><span class="spaces">  </span><span class="istickedoff">caseExpr   &lt;- scApplyAll sc recursor $</span>
+<span class="lineno"> 2808 </span><span class="spaces">                  </span><span class="istickedoff">tyArgs'             -- recursor is expecting the type arguments</span>
+<span class="lineno"> 2809 </span><span class="spaces">                                      </span><span class="istickedoff">--   that the enumtype is instantiated to</span>
+<span class="lineno"> 2810 </span><span class="spaces">                  </span><span class="istickedoff">++ [motive]         -- the result type of the case expression</span>
+<span class="lineno"> 2811 </span><span class="spaces">                  </span><span class="istickedoff">++ funcs'           -- the eliminator funcs, one for each constructor</span>
+<span class="lineno"> 2812 </span><span class="spaces">                  </span><span class="istickedoff">++ [scrutinee']     -- scrutinee of case, of enum type</span>
+<span class="lineno"> 2813 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 2814 </span><span class="spaces">  </span><span class="istickedoff">return caseExpr</span></span>
 
 </pre>
 </body>

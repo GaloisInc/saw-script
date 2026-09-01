@@ -117,7 +117,7 @@ span.spaces    { background: white }
 <span class="lineno">   98 </span>  -- the generic recursor implementation should be used, while 'Just'
 <span class="lineno">   99 </span>  -- indicates that the recursor should be overridden.
 <span class="lineno">  100 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">simModMap</span></span></span> :: ModuleMap
-<span class="lineno">  101 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">simLazyMux</span></span></span> :: VBool l -&gt; MValue l -&gt; MValue l -&gt; MValue l
+<span class="lineno">  101 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">simLazyMux</span></span></span> :: VBool l -&gt; MValue l -&gt; MValue l -&gt; MValue l
 <span class="lineno">  102 </span>  }
 <span class="lineno">  103 </span>
 <span class="lineno">  104 </span>------------------------------------------------------------
@@ -378,7 +378,7 @@ span.spaces    { background: white }
 <span class="lineno">  359 </span><span class="spaces">    </span><span class="istickedoff">LPi i t1 t2 -&gt;</span>
 <span class="lineno">  360 </span><span class="spaces">      </span><span class="istickedoff">do v1 &lt;- toTValue &lt;$&gt; recEval t1</span>
 <span class="lineno">  361 </span><span class="spaces">         </span><span class="istickedoff">pure $ TValue $ VPiType v1 $</span>
-<span class="lineno">  362 </span><span class="spaces">           </span><span class="istickedoff">VDependentPi (\x -&gt; toTValue &lt;$&gt; loop (IntMap.insert i x vars) lets t2)</span>
+<span class="lineno">  362 </span><span class="spaces">           </span><span class="istickedoff">VDependentPi (\x -&gt; <span class="nottickedoff">toTValue &lt;$&gt; loop (IntMap.insert i x vars) lets t2</span>)</span>
 <span class="lineno">  363 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  364 </span><span class="spaces">    </span><span class="istickedoff">LConst nm -&gt;</span>
 <span class="lineno">  365 </span><span class="spaces">      </span><span class="istickedoff">case IntMap.lookup (nameIndex nm) consts of</span>
@@ -417,13 +417,13 @@ span.spaces    { background: white }
 <span class="lineno">  398 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">n &lt; length elims</span> -&gt;</span>
 <span class="lineno">  399 </span><span class="spaces">              </span><span class="istickedoff">do elimv &lt;- force (elims !! n)</span>
 <span class="lineno">  400 </span><span class="spaces">                 </span><span class="istickedoff">let ctor = dtCtors dt !! n</span>
-<span class="lineno">  401 </span><span class="spaces">                 </span><span class="istickedoff">reduceRecursor (evalRecursor vrec) elimv args (ctorArgStruct ctor)</span>
+<span class="lineno">  401 </span><span class="spaces">                 </span><span class="istickedoff">reduceRecursor <span class="nottickedoff">(evalRecursor vrec)</span> elimv args (ctorArgStruct ctor)</span>
 <span class="lineno">  402 </span><span class="spaces">          </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt;</span>
 <span class="lineno">  403 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">panic &quot;evalTermF / evalRecursor&quot;</span></span>
 <span class="lineno">  404 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">[&quot;No eliminator for constructor: &quot; &lt;&gt; Text.pack (show n)]</span></span>
 <span class="lineno">  405 </span><span class="spaces">        </span><span class="istickedoff">VCtorMux branches -&gt;</span>
-<span class="lineno">  406 </span><span class="spaces">          </span><span class="istickedoff">do alts &lt;- traverse (evalCtorMuxBranch vrec) (IntMap.assocs branches)</span>
-<span class="lineno">  407 </span><span class="spaces">             </span><span class="istickedoff">combineAlts alts</span>
+<span class="lineno">  406 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do alts &lt;- traverse (evalCtorMuxBranch vrec) (IntMap.assocs branches)</span></span>
+<span class="lineno">  407 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">combineAlts alts</span></span>
 <span class="lineno">  408 </span><span class="spaces">        </span><span class="istickedoff">VBVToNat{} -&gt;</span>
 <span class="lineno">  409 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">panic &quot;evalTermF / evalRecursor&quot;</span></span>
 <span class="lineno">  410 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">[&quot;Unsupported symbolic recursor argument of type Nat&quot;]</span></span>
@@ -435,15 +435,15 @@ span.spaces    { background: white }
 <span class="lineno">  416 </span><span class="spaces">      </span><span class="istickedoff">VRecursor l -&gt;</span>
 <span class="lineno">  417 </span><span class="spaces">      </span><span class="istickedoff">(Int, (VBool l, Muxability, [Thunk l])) -&gt;</span>
 <span class="lineno">  418 </span><span class="spaces">      </span><span class="istickedoff">EvalM l (VBool l, EvalM l (Value l))</span>
-<span class="lineno">  419 </span><span class="spaces">    </span><span class="istickedoff">evalCtorMuxBranch r@(VRecursor dt elims) (i, (p, _m, args)) =</span>
-<span class="lineno">  420 </span><span class="spaces">      </span><span class="istickedoff">do elimv &lt;- force (elims !! i)</span>
-<span class="lineno">  421 </span><span class="spaces">         </span><span class="istickedoff">let ctor = dtCtors dt !! i</span>
-<span class="lineno">  422 </span><span class="spaces">         </span><span class="istickedoff">pure (p, reduceRecursor <span class="nottickedoff">(evalRecursor r)</span> elimv args (ctorArgStruct ctor))</span>
+<span class="lineno">  419 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">evalCtorMuxBranch r@(VRecursor dt elims) (i, (p, _m, args)) =</span></span>
+<span class="lineno">  420 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do elimv &lt;- force (elims !! i)</span></span>
+<span class="lineno">  421 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">let ctor = dtCtors dt !! i</span></span>
+<span class="lineno">  422 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">pure (p, reduceRecursor (evalRecursor r) elimv args (ctorArgStruct ctor))</span></span>
 <span class="lineno">  423 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  424 </span><span class="spaces">    </span><span class="istickedoff">combineAlts :: [(VBool l, EvalM l (Value l))] -&gt; EvalM l (Value l)</span>
-<span class="lineno">  425 </span><span class="spaces">    </span><span class="istickedoff">combineAlts [] = <span class="nottickedoff">panic &quot;evalTermF / combineAlts&quot; [&quot;no alternatives&quot;]</span></span>
-<span class="lineno">  426 </span><span class="spaces">    </span><span class="istickedoff">combineAlts [(_, x)] = x</span>
-<span class="lineno">  427 </span><span class="spaces">    </span><span class="istickedoff">combineAlts ((p, x) : alts) = simLazyMux cfg p x (combineAlts alts)</span></span>
+<span class="lineno">  425 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">combineAlts [] = panic &quot;evalTermF / combineAlts&quot; [&quot;no alternatives&quot;]</span></span>
+<span class="lineno">  426 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">combineAlts [(_, x)] = x</span></span>
+<span class="lineno">  427 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">combineAlts ((p, x) : alts) = simLazyMux cfg p x (combineAlts alts)</span></span></span>
 <span class="lineno">  428 </span>
 <span class="lineno">  429 </span>-- | Compute whether the 'Ctor' has a type that allows argument-wise
 <span class="lineno">  430 </span>-- muxing.
@@ -454,7 +454,7 @@ span.spaces    { background: white }
 <span class="lineno">  435 </span><span class="spaces">    </span><span class="istickedoff">cas :: CtorArgStruct</span>
 <span class="lineno">  436 </span><span class="spaces">    </span><span class="istickedoff">cas = ctorArgStruct ctor</span>
 <span class="lineno">  437 </span><span class="spaces">    </span><span class="istickedoff">nondep :: IntSet -&gt; [(VarName, CtorArg)] -&gt; Bool</span>
-<span class="lineno">  438 </span><span class="spaces">    </span><span class="istickedoff">nondep vs [] = all (IntSet.disjoint vs . <span class="nottickedoff">freeVars</span>) (ctorIndices cas)</span>
+<span class="lineno">  438 </span><span class="spaces">    </span><span class="istickedoff">nondep vs [] = all <span class="nottickedoff">(IntSet.disjoint vs . freeVars)</span> (ctorIndices cas)</span>
 <span class="lineno">  439 </span><span class="spaces">    </span><span class="istickedoff">nondep vs ((vn, arg) : args) =</span>
 <span class="lineno">  440 </span><span class="spaces">      </span><span class="istickedoff">IntSet.disjoint vs (freesCtorArg arg) &amp;&amp;</span>
 <span class="lineno">  441 </span><span class="spaces">      </span><span class="istickedoff">nondep (IntSet.insert (vnIndex vn) vs) args</span></span>
@@ -462,11 +462,11 @@ span.spaces    { background: white }
 <span class="lineno">  443 </span>-- | Compute the set of 'VarIndex'es of free variables in a 'CtorArg'.
 <span class="lineno">  444 </span>freesCtorArg :: CtorArg -&gt; IntSet
 <span class="lineno">  445 </span><span class="decl"><span class="istickedoff">freesCtorArg (ConstArg t) = freeVars t</span>
-<span class="lineno">  446 </span><span class="spaces"></span><span class="istickedoff">freesCtorArg (RecursiveArg zs is) = go zs</span>
+<span class="lineno">  446 </span><span class="spaces"></span><span class="istickedoff">freesCtorArg (RecursiveArg zs is) = <span class="nottickedoff">go zs</span></span>
 <span class="lineno">  447 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  448 </span><span class="spaces">    </span><span class="istickedoff">go :: [(VarName, Term)] -&gt; IntSet</span>
-<span class="lineno">  449 </span><span class="spaces">    </span><span class="istickedoff">go [] = IntSet.unions (map <span class="nottickedoff">freeVars</span> is)</span>
-<span class="lineno">  450 </span><span class="spaces">    </span><span class="istickedoff">go ((v, t) : ts) = <span class="nottickedoff">freeVars t &lt;&gt; IntSet.delete (vnIndex v) (go ts)</span></span></span>
+<span class="lineno">  449 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">go [] = IntSet.unions (map freeVars is)</span></span>
+<span class="lineno">  450 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">go ((v, t) : ts) = freeVars t &lt;&gt; IntSet.delete (vnIndex v) (go ts)</span></span></span>
 <span class="lineno">  451 </span>
 <span class="lineno">  452 </span>-- | Evaluate a recursor applied to a specific data constructor.
 <span class="lineno">  453 </span>reduceRecursor ::
@@ -486,19 +486,19 @@ span.spaces    { background: white }
 <span class="lineno">  467 </span><span class="spaces">          </span><span class="istickedoff">do e' &lt;- apply e x</span>
 <span class="lineno">  468 </span><span class="spaces">             </span><span class="istickedoff">go e' xs args</span>
 <span class="lineno">  469 </span><span class="spaces">        </span><span class="istickedoff">RecursiveArg zs _ixs -&gt;</span>
-<span class="lineno">  470 </span><span class="spaces">          </span><span class="istickedoff">do e1 &lt;- apply e x</span>
-<span class="lineno">  471 </span><span class="spaces">             </span><span class="istickedoff">recx &lt;- delay (mk_rec_arg (length zs) x)</span>
-<span class="lineno">  472 </span><span class="spaces">             </span><span class="istickedoff">e2 &lt;- apply e1 recx</span>
-<span class="lineno">  473 </span><span class="spaces">             </span><span class="istickedoff">go e2 xs args</span>
+<span class="lineno">  470 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do e1 &lt;- apply e x</span></span>
+<span class="lineno">  471 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">recx &lt;- delay (mk_rec_arg (length zs) x)</span></span>
+<span class="lineno">  472 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">e2 &lt;- apply e1 recx</span></span>
+<span class="lineno">  473 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">go e2 xs args</span></span>
 <span class="lineno">  474 </span><span class="spaces">    </span><span class="istickedoff">go _ _ _ = <span class="nottickedoff">panic &quot;reduceRecursor&quot; [&quot;Wrong number of constructor arguments&quot;]</span></span>
 <span class="lineno">  475 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  476 </span><span class="spaces">    </span><span class="istickedoff">-- For a recursive argument, we need a value of the form</span>
 <span class="lineno">  477 </span><span class="spaces">    </span><span class="istickedoff">-- &gt; \z1 .. zk -&gt; r (x z1 .. zk)</span>
 <span class="lineno">  478 </span><span class="spaces">    </span><span class="istickedoff">mk_rec_arg :: Int -&gt; Thunk l -&gt; MValue l</span>
-<span class="lineno">  479 </span><span class="spaces">    </span><span class="istickedoff">mk_rec_arg k x =</span>
-<span class="lineno">  480 </span><span class="spaces">      </span><span class="istickedoff">vFunList k $ \zs -&gt;</span>
-<span class="lineno">  481 </span><span class="spaces">      </span><span class="istickedoff">do x_zs &lt;- delay (force x &gt;&gt;= \v -&gt; applyAll v zs)</span>
-<span class="lineno">  482 </span><span class="spaces">         </span><span class="istickedoff">apply r x_zs</span></span>
+<span class="lineno">  479 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">mk_rec_arg k x =</span></span>
+<span class="lineno">  480 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">vFunList k $ \zs -&gt;</span></span>
+<span class="lineno">  481 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do x_zs &lt;- delay (force x &gt;&gt;= \v -&gt; applyAll v zs)</span></span>
+<span class="lineno">  482 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">apply r x_zs</span></span></span>
 <span class="lineno">  483 </span>
 <span class="lineno">  484 </span>
 <span class="lineno">  485 </span>{-# SPECIALIZE evalGlobal ::
@@ -538,7 +538,7 @@ span.spaces    { background: white }
 <span class="lineno">  519 </span>  (VBool l -&gt; MValue l -&gt; MValue l -&gt; MValue l) -&gt;
 <span class="lineno">  520 </span>  EvalM l (SimulatorConfig l)
 <span class="lineno">  521 </span><span class="decl"><span class="istickedoff">evalGlobal modmap prims variable constant recursor primHandler lazymux =</span>
-<span class="lineno">  522 </span><span class="spaces">  </span><span class="istickedoff">evalGlobal' modmap prims (const variable) constant recursor <span class="nottickedoff">primHandler</span> lazymux</span></span>
+<span class="lineno">  522 </span><span class="spaces">  </span><span class="istickedoff">evalGlobal' modmap prims (const variable) constant recursor <span class="nottickedoff">primHandler</span> <span class="nottickedoff">lazymux</span></span></span>
 <span class="lineno">  523 </span>
 <span class="lineno">  524 </span>{-# SPECIALIZE evalGlobal' ::
 <span class="lineno">  525 </span>  Show (Extra l) =&gt;
@@ -580,7 +580,7 @@ span.spaces    { background: white }
 <span class="lineno">  561 </span>  EvalM l (SimulatorConfig l)
 <span class="lineno">  562 </span><span class="decl"><span class="istickedoff">evalGlobal' modmap prims variable constant recursor primHandler lazymux =</span>
 <span class="lineno">  563 </span><span class="spaces">  </span><span class="istickedoff">do checkPrimitives <span class="nottickedoff">modmap</span> <span class="nottickedoff">prims</span></span>
-<span class="lineno">  564 </span><span class="spaces">     </span><span class="istickedoff">return (SimulatorConfig <span class="nottickedoff">primitive</span> variable constant' recursor' modmap lazymux)</span>
+<span class="lineno">  564 </span><span class="spaces">     </span><span class="istickedoff">return (SimulatorConfig <span class="nottickedoff">primitive</span> variable constant' recursor' modmap <span class="nottickedoff">lazymux</span>)</span>
 <span class="lineno">  565 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  566 </span><span class="spaces">    </span><span class="istickedoff">constant' :: Name -&gt; TValue l -&gt; Maybe (MValue l)</span>
 <span class="lineno">  567 </span><span class="spaces">    </span><span class="istickedoff">constant' nm tv =</span>
@@ -678,7 +678,7 @@ span.spaces    { background: white }
 <span class="lineno">  659 </span><span class="spaces">    </span><span class="istickedoff">evalConst :: IntMap (Thunk l) -&gt; Name -&gt; MValue l</span>
 <span class="lineno">  660 </span><span class="spaces">    </span><span class="istickedoff">evalConst consts nm =</span>
 <span class="lineno">  661 </span><span class="spaces">      </span><span class="istickedoff">do let r = requireNameInMap nm (simModMap cfg)</span>
-<span class="lineno">  662 </span><span class="spaces">         </span><span class="istickedoff">ty' &lt;- toTValue &lt;$&gt; evalLTerm <span class="nottickedoff">cfg</span> consts mempty mempty (toLTerm (resolvedNameType r))</span>
+<span class="lineno">  662 </span><span class="spaces">         </span><span class="istickedoff">ty' &lt;- toTValue &lt;$&gt; evalLTerm <span class="nottickedoff">cfg</span> consts <span class="nottickedoff">mempty</span> mempty (toLTerm (resolvedNameType r))</span>
 <span class="lineno">  663 </span><span class="spaces">         </span><span class="istickedoff">case simConstant cfg nm ty' of</span>
 <span class="lineno">  664 </span><span class="spaces">           </span><span class="istickedoff">Just override -&gt; override</span>
 <span class="lineno">  665 </span><span class="spaces">           </span><span class="istickedoff">Nothing -&gt;</span>
