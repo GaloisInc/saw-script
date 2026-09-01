@@ -8,7 +8,7 @@ Type errors:
     Found:    LLVMSetup (Int, Int)
 
   err011.saw:11:1-11:14: Note: The type TopLevel arises from this explicit type name
-  <type of llvm_assert>:1:9-1:18: Note: The type LLVMSetup arises from this explicit type name
+  <definition of llvm_assert>:1:9-1:18: Note: The type LLVMSetup arises from this explicit type name
 
 
 FAILED

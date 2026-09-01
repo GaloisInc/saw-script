@@ -4,7 +4,7 @@ Type errors:
     Expected: String
     Found:    [LLVMType]
 
-  <type of llvm_alias>:1:1-1:7: Note: The type String arises from this explicit type name
+  <definition of llvm_alias>:1:1-1:7: Note: The type String arises from this explicit type name
   err002.saw:5:44-5:57: Note: The type [LLVMType] arises from the form of this expression
 
 

@@ -290,10 +290,7 @@ readSchemaPure ::
 readSchemaPure name lc tyenv str =
     -- This is for use during initialization, so we can use the default ppopts
     let ppopts = PPS.defaultOpts in
-    -- XXX: this should be changed to "definition of" since it's used
-    -- for type builtins as well. But not just yet, as that has a huge
-    -- test footprint.
-    let fakeFileName = Text.unpack $ "<type of " <> name <> ">"
+    let fakeFileName = Text.unpack $ "<definition of " <> name <> ">"
         whoAmI = "readSchemaPure on " <> name
     in
     let schema = readAnyPure ppopts fakeFileName str "end-of-input" parseSchema whoAmI in
