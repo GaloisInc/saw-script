@@ -5,7 +5,7 @@ Type errors:
     Expected: [t.0]
     Found:    [Int] -> [Int]
 
-  <type of concat>:1:5-1:8: Note: The type [t.0] arises from this explicit type name
+  <definition of concat>:1:5-1:8: Note: The type [t.0] arises from this explicit type name
   err038.saw:7:15-7:35: Note: The type [Int] -> [Int] arises from the context of this function body
 
 
