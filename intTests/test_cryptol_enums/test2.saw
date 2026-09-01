@@ -3,6 +3,8 @@ import "Test2.cry";
 print "cc3:";
 check_term {{ cc3 }};
 
+print {{ [C1, C2 0x3, C3 True 0x55] }};
+
 print "results1:";
 print  {{results1}};
 prove_print abc {{ results1 == ~zero}};
