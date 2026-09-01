@@ -100,7 +100,7 @@ qualifiedIdent t = case nameOf t of
   nm@SimpleName{} -> cleanName nm
 
 keywords :: [String]
-keywords = ["mod", "div", "xor", "undefined"]
+keywords = ["mod", "div", "xor", "undefined", "in"]
 
 stripSuffix :: Eq a => [a] -> [a] -> Maybe [a]
 stripSuffix suf l = case stripPrefix suf (reverse l) of
