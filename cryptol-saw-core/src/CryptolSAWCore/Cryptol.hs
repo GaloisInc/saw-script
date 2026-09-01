@@ -2369,6 +2369,79 @@ deriveEqInstance sc env dtName dtParams props ctorArgTypes =
      rule <- mkIntroRule sc c
      addInstance sc rule
 
+-- | Generate a @PCmp@ dictionary combinator for the given
+-- (non-recursive) datatype and register it as an class instance rule.
+deriveCmpInstance ::
+  SharedContext ->
+  LocalEnv ->
+  Name {- ^ datatype name -} ->
+  [(VarName, Term)] {- ^ datatype parameters -} ->
+  [C.Prop] {- ^ instance rule hypotheses -} ->
+  [[Term]] {- ^ constructor argument types -} ->
+  IO ()
+deriveCmpInstance sc env dtName dtParams props ctorArgTypes =
+  do dt <- scConst sc dtName
+     dtParamsVars <- scVariables sc dtParams
+     ty <- scApplyAll sc dt dtParamsVars
+     recursor <- scRecursor sc dtName (mkSort 0)
+     recursor' <- scApplyAll sc recursor dtParamsVars
+     bool <- scBoolType sc
+     bool_bool <- scFun sc bool bool
+     ty_bool_bool <- scFun sc ty bool_bool
+     motive1 <- scLambda sc wildcardVarName ty ty_bool_bool
+     recursor1 <- scApply sc recursor' motive1
+     motive2 <- scLambda sc wildcardVarName ty bool_bool
+     recursor2 <- scApply sc recursor' motive2
+     false <- scBool sc False
+     true <- scBool sc True
+     (env', propVars) <- bindProps sc env props "_P"
+
+     let mkCmp :: Term -> Term -> IO Term
+         mkCmp x y =
+           do a <- scTypeOf sc x
+              cmpa <- scGlobalApply sc "Cryptol.PCmp" [a]
+              pa <- proveInstance sc env' cmpa
+              cmp <- scRecordSelect sc pa "cmp"
+              scApplyAll sc cmp [x, y]
+     let cmpSubbranch i xs j argTs =
+           do ys <- traverse (scFreshVariable sc "y") argTs
+              k <- scFreshVariable sc "k" bool
+              body <-
+                case compare (i :: Int) j of
+                  LT -> pure true
+                  GT -> pure false
+                  EQ ->
+                    do fs <- sequence $ zipWith mkCmp xs ys
+                       Fold.foldrM (scApply sc) k fs
+              scAbstractTerms sc (ys ++ [k]) body
+     let cmpBranch i argTs =
+           do xs <- traverse (scFreshVariable sc "x") argTs
+              subbranches <- sequence $ zipWith (cmpSubbranch i xs) [0..] ctorArgTypes
+              body <- scApplyAll sc recursor2 subbranches
+              scAbstractTerms sc xs body
+     branches <- sequence $ zipWith cmpBranch [0..] ctorArgTypes
+     cmp <- scApplyAll sc recursor1 branches
+     (le, lt) <-
+       do x <- scFreshVariable sc "x" ty
+          y <- scFreshVariable sc "y" ty
+          cmp_x_y <- scApplyAll sc cmp [x, y]
+          le <- scAbstractTerms sc [x, y] =<< scApply sc cmp_x_y true
+          lt <- scAbstractTerms sc [x, y] =<< scApply sc cmp_x_y false
+          pure (le, lt)
+
+     eqty <- scGlobalApply sc "Cryptol.PEq" [ty]
+     cmpEq <- proveInstance sc env' eqty
+
+     r <- scRecordValue sc [("cmpEq", cmpEq), ("cmp", cmp), ("le", le), ("lt", lt)]
+     r1 <- scAscribe sc r =<< scGlobalApply sc "Cryptol.PCmp" [ty]
+     r2 <- scAbstractTerms sc (dtParamsVars ++ propVars) r1
+     let dtNameInfo = nameInfo dtName
+     let dtQualName = toQualName dtNameInfo
+     let instQualName = dtQualName { QN.baseName = "PCmp__" <> QN.baseName dtQualName }
+     let instNameInfo = mkImportedName instQualName
+     c <- scDefineConstant sc instNameInfo r2
+     rule <- mkIntroRule sc c
+     addInstance sc rule
 
 -- | genCodeForEnum ... - called when we see an "enum" definition in the Cryptol module.
 --    - This action does two things
@@ -2440,6 +2513,11 @@ genCodeForEnum sc nt ctors =
      case Map.lookup C.PEq (ntDeriving nt) of
        Nothing -> pure ()
        Just assms -> deriveEqInstance sc env dtName (dtsParams dtSpec) assms ctorArgTypes
+
+     -- Derive PCmp class instance.
+     case Map.lookup C.PCmp (ntDeriving nt) of
+       Nothing -> pure ()
+       Just assms -> deriveCmpInstance sc env dtName (dtsParams dtSpec) assms ctorArgTypes
 
      -- Return list of constructor names and terms.
      pure (zip (map C.ecName ctors) ctor_tms)
