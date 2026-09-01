@@ -533,6 +533,11 @@ importSchema :: SharedContext -> LocalEnv -> C.Schema -> IO Term
 importSchema sc env (C.Forall tparams props ty) =
   importPolyType sc env tparams props ty
 
+-- | The list of names of SAWCore introduction rules used for building
+-- class dictionaries and discharging numeric constraints.
+-- Each constant named in this list should have a type of the form
+-- @forall vars, hyps -> concl@, where @concl@ is a SAWCore
+-- proposition representing a Cryptol class constraint.
 classIntroIdents :: [Ident]
 classIntroIdents =
   [ "Cryptol.PZeroBit"
@@ -584,8 +589,6 @@ classIntroIdents =
   , "Cryptol.PEqPair"
   , "Cryptol.PEqEmpty"
   , "Cryptol.PEqRecord"
-  , "Cryptol.PEqVoid"
-  , "Cryptol.PEqEither"
   , "Cryptol.PCmpBit"
   , "Cryptol.PCmpInteger"
   , "Cryptol.PCmpRational"
@@ -596,16 +599,12 @@ classIntroIdents =
   , "Cryptol.PCmpPair"
   , "Cryptol.PCmpEmpty"
   , "Cryptol.PCmpRecord"
-  , "Cryptol.PCmpVoid"
-  , "Cryptol.PCmpEither"
   , "Cryptol.PSignedCmpSeqBool"
   , "Cryptol.PSignedCmpSeq"
   , "Cryptol.PSignedCmpUnit"
   , "Cryptol.PSignedCmpPair"
   , "Cryptol.PSignedCmpEmpty"
   , "Cryptol.PSignedCmpRecord"
-  , "Cryptol.PSignedCmpVoid"
-  , "Cryptol.PSignedCmpEither"
   , "Cryptol.PLiteralBit"
   , "Cryptol.PLiteralInteger"
   , "Cryptol.PLiteralIntModNum"
