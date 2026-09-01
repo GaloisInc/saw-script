@@ -4,8 +4,8 @@ Type errors:
     Expected: String
     Found:    Int
 
-  unify001.saw:8:14-8:20: Note: The type String arises from this type annotation
-  unify001.saw:8:10-8:11: Note: The type Int arises from the type of this term
+  unify001.saw:8:14-8:20: Note: The type String arises from this explicit type name
+  unify001.saw:8:10-8:11: Note: The type Int arises from the form of this constant
 
 
 FAILED

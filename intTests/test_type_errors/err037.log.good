@@ -5,8 +5,8 @@ Type errors:
     Expected: [Int]
     Found:    [Int] -> [Int]
 
-  err037.saw:9:10-9:15: Note: The type [Int] arises from this type annotation
-  err037.saw:7:15-7:35: Note: The type [Int] -> [Int] arises from the context of the term
+  err037.saw:9:10-9:15: Note: The type [Int] arises from this explicit type name
+  err037.saw:7:15-7:35: Note: The type [Int] -> [Int] arises from the context of this function body
 
 
 FAILED

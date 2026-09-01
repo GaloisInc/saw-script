@@ -7,8 +7,8 @@ Type errors:
     Expected: t.0 Int
     Found:    t.0 String
 
-  unify010.saw:9:9-9:12: Note: The type Int arises from this type annotation
-  unify010.saw:9:24-9:29: Note: The type String arises from the type of this term
+  unify010.saw:9:9-9:12: Note: The type Int arises from this explicit type name
+  unify010.saw:9:24-9:29: Note: The type String arises from the form of this constant
 
 
 FAILED

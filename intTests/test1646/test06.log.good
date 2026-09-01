@@ -5,8 +5,8 @@ Type errors:
     Expected: Int
     Found:    String
 
-  test06.saw:8:20-8:21: Note: The type Int arises from the type of this term
-  test06.saw:3:20-3:23: Note: The type String arises from the type of this term
+  test06.saw:8:20-8:21: Note: The type Int arises from the form of this constant
+  test06.saw:3:20-3:23: Note: The type String arises from the form of this constant
 
 
 FAILED

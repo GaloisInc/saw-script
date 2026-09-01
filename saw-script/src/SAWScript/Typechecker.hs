@@ -393,32 +393,34 @@ getFreshTypeIndex = do
     modify $ (\rw -> rw { tiNextTypeIndex = next + 1 })
     return next
 
+-- | Construct a new (unification) type variable with explicit provenance.
+--   Convert the schema name provenance to type provenance.
+getProvenancedTyVar :: TypeProvenance -> TI Type
+getProvenancedTyVar prov = TyUnifyVar prov <$> getFreshTypeIndex
+
 -- | Construct a fresh type variable.
 --
 --   Collect the position that prompted us to make it; for example, if
 --   we're the element type of an empty list we get the position of the
---   []. We haven't inferred anything, so use the InfFresh position.
+--   []. We haven't inferred anything, so use TypeFresh as provenance.
 --   This will cause the position of anything more substantive that gets
 --   unified with it to be preferred. If no such thing happens though
 --   this will be the position that gets attached to the quantifier
 --   binding in generalize.
 getFreshTyVar :: Pos -> TI Type
-getFreshTyVar pos = TyUnifyVar (TypeInferred InfFresh pos) <$> getFreshTypeIndex
-
--- | Variant that takes an existing provenance entry for the position.
-getFreshTyVar' :: TypeProvenance -> TI Type
-getFreshTyVar' prov = TyUnifyVar prov <$> getFreshTypeIndex
+getFreshTyVar pos = getProvenancedTyVar $ TypeFresh pos
 
 -- | Construct a new type variable to use as a placeholder after an
 --   error occurs. For now this is the same as other fresh type
 --   variables, but I've split it out in case we want to distinguish
 --   it in the future.
 getErrorTyVar :: Pos -> TI Type
-getErrorTyVar pos = getFreshTyVar pos
+getErrorTyVar pos = getProvenancedTyVar $ TypeFailed pos
 
 -- | Variant that takes an existing provenance entry for the position.
+--   XXX: does not set `TypeFailed` and should go away.
 getErrorTyVar' :: TypeProvenance -> TI Type
-getErrorTyVar' prov = getFreshTyVar' prov
+getErrorTyVar' prov = getProvenancedTyVar prov
 
 -- | Add an error message.
 recordError :: Pos -> PPS.Doc -> TI ()
@@ -661,23 +663,49 @@ prettyEnclosing ppopts tys =
     in
     PP.vsep $ map once tys
 
+-- | Print the provenance info we carry in types.
+--
+--   This returns the position along with the text associated with
+--   the provenance, so it isn't a normal print routine. The idea
+--   is to be able to feed lists of positions and messages into the
+--   error-reporting infrastructure.
+--
+--   It remains not entirely clear if the position should be inside
+--   the provenance type or not.
+--
+prettyTypeProvenance :: TypeProvenance -> (Pos, PP.Doc ann)
+prettyTypeProvenance prov = case prov of
+    TypeExplicit pos ->
+        (pos, "arises from this explicit type name")
+    TypeFresh pos ->
+        (pos, "is a fresh type variable for a type implied here")
+    TypeFailed pos ->
+        (pos, "is a placeholder from a type error reported here")
+    TypeFromForallNamed pos a x ->
+        let a' = PP.dquotes $ PP.pretty a
+            x' = PP.dquotes $ PP.pretty x
+        in
+        (pos, "arises from instantiating a type variable" <+> a' <+>
+              "forall-bound in" <+> x' <+> "and introduced here")
+    TypeFromForallFresh pos a x ->
+        let a' = PP.dquotes $ PP.pretty a
+            x' = PP.dquotes $ PP.pretty x
+        in
+        (pos, "arises from instantiating a type variable" <+> a' <+>
+              "forall-bound in" <+> x' <+> "and implied here")
+    TypeFromElement pos tyctx ->
+        let tyctx' = prettyTyctx tyctx in
+        (pos, "arises from the form of this" <+> tyctx')
+    TypeFromContext pos tyctx ->
+        let tyctx' = prettyTyctx tyctx in
+        (pos, "arises from the context of this" <+> tyctx')
+
 -- | Print details of a type. This prints the provenance info
 --   we carry in types.
 prettyTypeDetails :: PPS.Opts -> Type -> (Pos, PPS.Doc)
 prettyTypeDetails ppopts ty =
-    let (pos, what) =
-           case getProv ty of
-               TypeInferred InfFresh p ->
-                   (p, "a fresh type variable introduced here")
-               TypeInferred InfTerm p ->
-                   (p, "the type of this term")
-               TypeInferred InfContext p ->
-                   (p, "the context of the term")
-               TypeExplicit p ->
-                   (p, "this type annotation")
-    in
-    let ty' = prettyType ppopts ty
-        what' = "arises from" <+> what
+    let (pos, what) = prettyTypeProvenance $ getProv ty
+        ty' = prettyType ppopts ty
 
         -- Deliberately render and re-docify the type, and generate a
         -- multi-line message only if the type comes out as multiple
@@ -685,7 +713,7 @@ prettyTypeDetails ppopts ty =
         -- the prettyprinter library does not give much in the way of
         -- formatting control, and if we just do things its way we
         -- pretty much always get a multiline message, even for very
-        -- short types like (), because what' coupled
+        -- short types like (), because @what@ coupled
         -- with the position text at the beginning of the line is long
         -- enough to make the prettyprinter library think the message
         -- ought to be multiline. Perhaps the right way to deal with
@@ -699,8 +727,8 @@ prettyTypeDetails ppopts ty =
         -- analogous code for "Too many arguments to function" below.
         --
         msg = case map PP.pretty $ Text.lines $ PPS.renderText ppopts ty' of
-            [ty''] -> "The type" <+> ty'' <+> what'
-            ty'' -> "The type" <+> PP.nest 3 (PP.vsep ty'' <> PP.line <> what')
+            [ty''] -> "The type" <+> ty'' <+> what
+            ty'' -> "The type" <+> PP.nest 3 (PP.vsep ty'' <> PP.line <> what)
     in
     (pos, msg)
 
@@ -1272,25 +1300,25 @@ addAbstractTyVars vars = do
 --
 inferExpr :: Expr -> TI (OutExpr, Type)
 inferExpr expr = case expr of
-    Bool pos b    -> return (Bool pos b, tBool (TypeInferred InfTerm pos))
-    String pos s  -> return (String pos s, tString (TypeInferred InfTerm pos))
-    Int pos i     -> return (Int pos i, tInt (TypeInferred InfTerm pos))
-    Code pos s    -> return (Code pos s, tTerm (TypeInferred InfTerm pos))
-    CType pos s   -> return (CType pos s, tType (TypeInferred InfTerm pos))
+    Bool pos b    -> return (Bool pos b, tBool (TypeFromElement pos TyctxConstant))
+    String pos s  -> return (String pos s, tString (TypeFromElement pos TyctxConstant))
+    Int pos i     -> return (Int pos i, tInt (TypeFromElement pos TyctxConstant))
+    Code pos s    -> return (Code pos s, tTerm (TypeFromElement pos TyctxExpr))
+    CType pos s   -> return (CType pos s, tType (TypeFromElement pos TyctxExpr))
 
     Array pos [] -> do
         a <- getFreshTyVar pos
-        return (Array pos [], tArray (TypeInferred InfTerm pos) a)
+        return (Array pos [], tArray (TypeFromElement pos TyctxConstant) a)
 
     Array pos (e:es) -> do
         (e',t) <- inferExpr e
         es' <- mapM (\e1 -> checkExpr e1 t) es
-        return (Array pos (e':es'), tArray (TypeInferred InfTerm pos) t)
+        return (Array pos (e':es'), tArray (TypeFromElement pos TyctxExpr) t)
 
     Block pos body -> do
         ctx <- getFreshTyVar pos
         tyResult <- getFreshTyVar pos
-        let ty = tApply (TypeInferred InfTerm pos) ctx tyResult
+        let ty = tApply (TypeFromElement pos TyctxExpr) ctx tyResult
         pushScope
         body' <- inferBlock pos ctx ty body
         popScope
@@ -1298,21 +1326,25 @@ inferExpr expr = case expr of
 
     Tuple pos es -> do
         (es',ts) <- unzip <$> mapM inferExpr es
-        return (Tuple pos es', tTuple (TypeInferred InfTerm pos) ts)
+        -- Consider unit a constant for type provenance purposes.
+        let tyctx = case es' of
+              [] -> TyctxConstant
+              _ -> TyctxExpr
+        return (Tuple pos es', tTuple (TypeFromElement pos tyctx) ts)
 
     Record pos fs -> do
         (nes',nts) <- unzip `fmap` mapM inferField (Map.toList fs)
-        let ty = TyRecord (TypeInferred InfTerm pos) $ Map.fromList nts
+        let ty = TyRecord (TypeFromElement pos TyctxExpr) $ Map.fromList nts
         return (Record pos (Map.fromList nes'), ty)
 
     -- XXX this is currently unreachable because there's no concrete
     -- syntax for it; the parser will never produce it.
     Index pos ar ix -> do
         (ar',at) <- inferExpr ar
-        ix'      <- checkExpr ix (tInt (TypeInferred InfContext (Pos.getPos ix)))
+        ix'      <- checkExpr ix (tInt (TypeFromContext (Pos.getPos ix) TyctxExpr))
         t        <- getFreshTyVar (Pos.getPos ix')
         let pos'ar = Pos.getPos ar'
-            prov = TypeInferred InfContext pos'ar
+            prov = TypeFromContext pos'ar TyctxExpr
         unify (tArray prov t) pos'ar at
         return (Index pos ar' ix', t)
 
@@ -1445,7 +1477,7 @@ inferExpr expr = case expr of
         -- Note: we generate [] for the namelist field of the function
         -- type because we're downstream of the only thing that uses it.
         let e' = Lambda pos mname params' (Map.fromList namedParams') body'
-            prov = TypeInferred InfContext (Pos.getPos body')
+            prov = TypeFromContext (Pos.getPos body') TyctxFuncBody
             namedParamtys' = Map.fromList namedParamtys
             ty = tFun prov noNames paramtys namedParamtys' tybody
         return (e', ty)
@@ -1583,11 +1615,10 @@ inferExpr expr = case expr of
                         in
                         Pos.maxSpan (ps1 ++ ps2)
 
-                  let callprov = TypeInferred InfContext callpos
-                      (_args, argtys) = unzip arginfo
+                  let (_args, argtys) = unzip arginfo
                       namedArgtys = Map.map (\(_namepos, _arg, argty) -> argty) namedArginfo
-                  ret <- getFreshTyVar' callprov
-                  let ty' = TyFunc callprov noNames argtys namedArgtys ret
+                  ret <- getFreshTyVar callpos
+                  let ty' = TyFunc (TypeFromElement callpos TyctxArgList) noNames argtys namedArgtys ret
                   -- Unify the tyvar we got with the function type
                   unify ty callpos ty'
                   -- Hand back the return type
@@ -1699,7 +1730,7 @@ inferExpr expr = case expr of
         return (e',t'')
 
     IfThenElse pos e1 e2 e3 -> do
-        e1' <- checkExpr e1 (tBool (TypeInferred InfContext $ Pos.getPos e1))
+        e1' <- checkExpr e1 (tBool (TypeFromContext (Pos.getPos e1) TyctxExpr))
         (e2', t) <- inferExpr e2
         e3' <- checkExpr e3 t
         return (IfThenElse pos e1' e2' e3', t)
@@ -1787,7 +1818,7 @@ inferPattern rebindable pat = do
             return (t, PVar allpos xpos x (Just t))
         PTuple pos ps -> do
             (ts, ps') <- unzip <$> mapM (inferPattern rebindable) ps
-            return (tTuple (TypeInferred InfTerm pos) ts, PTuple pos ps')
+            return (tTuple (TypeFromElement pos TyctxPat) ts, PTuple pos ps')
 
 -- | Check the type of a pattern, by inferring and then unifying the
 --   result.
@@ -1992,8 +2023,8 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
             -- Restrict include to TopLevel. This matches the prior
             -- behavior when it was a builtin function rather than
             -- syntax. FUTURE: consider relaxing the requirement.
-            let blockprov = TypeInferred InfTerm blockpos
-                sprov = TypeInferred InfTerm spos
+            let blockprov = TypeFromElement blockpos TyctxExpr
+                sprov = TypeFromElement spos TyctxStmt
             let tm = TyCon sprov (ContextCon TopLevel) []
             tx <- getFreshTyVar spos
             unify (tApply blockprov ctx tx) spos (tApply sprov tm tx)
@@ -2160,9 +2191,10 @@ generalize foralls pats0 es0 ts0 = do
     let is2 = Map.toList is1
     let bs2 = Map.toList bs1
 
-    -- if the position is "fresh" turn it into "inferred from term"
+    -- if the position is "fresh" turn it into "inferred from expr"
+    -- XXX this is kind of bogus
     let adjustProv prov = case prov of
-          TypeInferred InfFresh pos -> TypeInferred InfTerm pos
+          TypeFresh pos -> TypeFromElement pos TyctxExpr
           _ -> prov
 
     -- generate names for the unification vars
