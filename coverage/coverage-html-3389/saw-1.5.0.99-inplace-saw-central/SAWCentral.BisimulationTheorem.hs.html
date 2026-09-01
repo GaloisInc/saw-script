@@ -1,0 +1,55 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCentral.BisimulationTheorem
+<span class="lineno">    3 </span>License     : BSD3
+<span class="lineno">    4 </span>Maintainer  : bboston7
+<span class="lineno">    5 </span>Stability   : experimental
+<span class="lineno">    6 </span>-}
+<span class="lineno">    7 </span>
+<span class="lineno">    8 </span>module SAWCentral.BisimulationTheorem
+<span class="lineno">    9 </span>  ( BisimTheorem(..) )
+<span class="lineno">   10 </span>  where
+<span class="lineno">   11 </span>
+<span class="lineno">   12 </span>import qualified Cryptol.TypeCheck.Type as C
+<span class="lineno">   13 </span>import CryptolSAWCore.TypedTerm ( TypedTerm )
+<span class="lineno">   14 </span>
+<span class="lineno">   15 </span>-- | A proved bisimulation theorem.  See the comment at the top of
+<span class="lineno">   16 </span>-- &quot;SAWCentral.Bisimulation&quot; for an explanation of some of the terms used here.
+<span class="lineno">   17 </span>data BisimTheorem = BisimTheorem {
+<span class="lineno">   18 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">bisimTheoremStateRelation</span></span></span> :: TypedTerm
+<span class="lineno">   19 </span> -- ^ State relation
+<span class="lineno">   20 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bisimTheoremOutputRelation</span></span></span> :: TypedTerm
+<span class="lineno">   21 </span> -- ^ Output relation
+<span class="lineno">   22 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bisimTheoremLhs</span></span></span> :: TypedTerm
+<span class="lineno">   23 </span> -- ^ Left hand side of the bisimulation
+<span class="lineno">   24 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bisimTheoremRhs</span></span></span> :: TypedTerm
+<span class="lineno">   25 </span> -- ^ Right hand side of the bisimulation
+<span class="lineno">   26 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bisimTheoremOutputType</span></span></span> :: C.Type
+<span class="lineno">   27 </span> -- ^ Output type for the bisimilar terms
+<span class="lineno">   28 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bisimTheoremLhsStateType</span></span></span> :: C.Type
+<span class="lineno">   29 </span> -- ^ State type for the left term
+<span class="lineno">   30 </span>  , <span class="istickedoff"><span class="decl"><span class="istickedoff">bisimTheoremRhsStateType</span></span></span> :: C.Type
+<span class="lineno">   31 </span> -- ^ State type for the right term
+<span class="lineno">   32 </span>  }
+
+</pre>
+</body>
+</html>
