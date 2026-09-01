@@ -1,0 +1,236 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE DefaultSignatures #-}
+<span class="lineno">    2 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    3 </span>{-# LANGUAGE PatternSynonyms #-}
+<span class="lineno">    4 </span>
+<span class="lineno">    5 </span>module Language.Isabelle.Name
+<span class="lineno">    6 </span>  ( IsaKind(..)
+<span class="lineno">    7 </span>  , isTypeK
+<span class="lineno">    8 </span>  , Name(..)
+<span class="lineno">    9 </span>  , TheoryName
+<span class="lineno">   10 </span>  , pattern TheoryName
+<span class="lineno">   11 </span>  , thyNm
+<span class="lineno">   12 </span>  , thyQualified
+<span class="lineno">   13 </span>  , HasName(..)
+<span class="lineno">   14 </span>  , HasIdent(..)
+<span class="lineno">   15 </span>  , variants
+<span class="lineno">   16 </span>  , cleanName
+<span class="lineno">   17 </span>  , guardUnderscores
+<span class="lineno">   18 </span>  , freshIdent
+<span class="lineno">   19 </span>  , qualifiedIdent
+<span class="lineno">   20 </span>  ) where
+<span class="lineno">   21 </span>
+<span class="lineno">   22 </span>import           Data.List (stripPrefix)
+<span class="lineno">   23 </span>
+<span class="lineno">   24 </span>import qualified Cryptol.TypeCheck.PP as Cry
+<span class="lineno">   25 </span>
+<span class="lineno">   26 </span>import           Language.Isabelle.Syntax (Syntax, pattern InfixSyn)
+<span class="lineno">   27 </span>import           Language.Isabelle.Output (Output,HasOutput,out)
+<span class="lineno">   28 </span>
+<span class="lineno">   29 </span>
+<span class="lineno">   30 </span>type Ident = String
+<span class="lineno">   31 </span>
+<span class="lineno">   32 </span>replace :: String -&gt; String -&gt; String -&gt; String
+<span class="lineno">   33 </span><span class="decl"><span class="nottickedoff">replace _ _ [] = []</span>
+<span class="lineno">   34 </span><span class="spaces"></span><span class="nottickedoff">replace inp outp src@(hd:tl) =</span>
+<span class="lineno">   35 </span><span class="spaces">  </span><span class="nottickedoff">let (hdr,rest) = splitAt (length inp) src</span>
+<span class="lineno">   36 </span><span class="spaces">  </span><span class="nottickedoff">in case hdr == inp of</span>
+<span class="lineno">   37 </span><span class="spaces">    </span><span class="nottickedoff">True -&gt; outp ++ replace inp outp rest</span>
+<span class="lineno">   38 </span><span class="spaces">    </span><span class="nottickedoff">False -&gt; hd : replace inp outp tl</span></span>
+<span class="lineno">   39 </span>
+<span class="lineno">   40 </span>cleanTheoryName :: Ident -&gt; Ident
+<span class="lineno">   41 </span><span class="decl"><span class="nottickedoff">cleanTheoryName i = replace &quot;::&quot; &quot;_&quot; i</span></span>
+<span class="lineno">   42 </span>
+<span class="lineno">   43 </span>data TheoryName = TheoryNameCtr { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">thyNm</span></span></span> :: Ident, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">thyQualified</span></span></span> :: Bool }
+<span class="lineno">   44 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">   45 </span>
+<span class="lineno">   46 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show TheoryName</span></span></span></span> where
+<span class="lineno">   47 </span>  <span class="decl"><span class="nottickedoff">show nm = thyNm nm</span></span>
+<span class="lineno">   48 </span>
+<span class="lineno">   49 </span>pattern TheoryName :: Ident -&gt; Bool -&gt; TheoryName
+<span class="lineno">   50 </span>pattern TheoryName nm b &lt;- <span class="nottickedoff">TheoryNameCtr nm b</span> where
+<span class="lineno">   51 </span>  TheoryName nm b = <span class="nottickedoff">TheoryNameCtr (cleanTheoryName nm) b</span>
+<span class="lineno">   52 </span>
+<span class="lineno">   53 </span>
+<span class="lineno">   54 </span>class HasIdent t where
+<span class="lineno">   55 </span>  identOf :: t -&gt; Ident
+<span class="lineno">   56 </span>  default identOf :: (HasName t) =&gt; t -&gt; Ident
+<span class="lineno">   57 </span>  <span class="decl"><span class="nottickedoff">identOf t = cleanName (nameOf t)</span></span>
+<span class="lineno">   58 </span>
+<span class="lineno">   59 </span>  mapIdent :: (Ident -&gt; Ident) -&gt; t -&gt; t
+<span class="lineno">   60 </span>  default mapIdent :: (HasName t) =&gt; (Ident -&gt; Ident) -&gt; t -&gt; t
+<span class="lineno">   61 </span>  <span class="decl"><span class="nottickedoff">mapIdent f = mapName (\nm -&gt; nm { nmStr = f (nmStr nm) })</span></span>
+<span class="lineno">   62 </span>
+<span class="lineno">   63 </span>
+<span class="lineno">   64 </span>instance HasIdent TheoryName where
+<span class="lineno">   65 </span>  <span class="decl"><span class="nottickedoff">identOf = thyNm</span></span>
+<span class="lineno">   66 </span>  <span class="decl"><span class="nottickedoff">mapIdent f t = t { thyNm = f (thyNm t) }</span></span>
+<span class="lineno">   67 </span>
+<span class="lineno">   68 </span>data IsaKind = Term | Typ | TNum
+<span class="lineno">   69 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   70 </span>
+<span class="lineno">   71 </span>isTypeK :: IsaKind -&gt; Bool
+<span class="lineno">   72 </span><span class="decl"><span class="nottickedoff">isTypeK = \case</span>
+<span class="lineno">   73 </span><span class="spaces">  </span><span class="nottickedoff">Term -&gt; False</span>
+<span class="lineno">   74 </span><span class="spaces">  </span><span class="nottickedoff">Typ -&gt; True</span>
+<span class="lineno">   75 </span><span class="spaces">  </span><span class="nottickedoff">TNum -&gt; True</span></span>
+<span class="lineno">   76 </span>
+<span class="lineno">   77 </span>data Name =
+<span class="lineno">   78 </span>    Name { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">nmThy</span></span></span> :: TheoryName, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">nmStr</span></span></span> :: Ident, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">nmSyn</span></span></span> :: Syntax, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">nmKind</span></span></span> :: IsaKind  }
+<span class="lineno">   79 </span>  | SimpleName { nmStr :: Ident }
+<span class="lineno">   80 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   81 </span>
+<span class="lineno">   82 </span>instance HasName Name where
+<span class="lineno">   83 </span>  <span class="decl"><span class="nottickedoff">nameOf nm = nm</span></span>
+<span class="lineno">   84 </span>  <span class="decl"><span class="nottickedoff">mapName f = f</span></span>
+<span class="lineno">   85 </span>
+<span class="lineno">   86 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">HasIdent Name</span></span></span></span>
+<span class="lineno">   87 </span>
+<span class="lineno">   88 </span>thyQual :: (HasOutput, Output t) =&gt; TheoryName -&gt; t -&gt; String
+<span class="lineno">   89 </span><span class="decl"><span class="nottickedoff">thyQual thy t = case thyQualified thy of</span>
+<span class="lineno">   90 </span><span class="spaces">  </span><span class="nottickedoff">True -&gt; thyNm thy ++ &quot;.&quot; ++ out t</span>
+<span class="lineno">   91 </span><span class="spaces">  </span><span class="nottickedoff">False -&gt; out t</span></span>
+<span class="lineno">   92 </span>
+<span class="lineno">   93 </span>class HasName t where
+<span class="lineno">   94 </span>  nameOf :: t -&gt; Name
+<span class="lineno">   95 </span>  mapName :: (Name -&gt; Name) -&gt; t -&gt; t
+<span class="lineno">   96 </span>
+<span class="lineno">   97 </span>qualifiedIdent :: HasName t =&gt; t -&gt; String
+<span class="lineno">   98 </span><span class="decl"><span class="nottickedoff">qualifiedIdent t = case nameOf t of</span>
+<span class="lineno">   99 </span><span class="spaces">  </span><span class="nottickedoff">nm@Name{} -&gt; thyNm (nmThy nm) ++ &quot;.&quot; ++ cleanName nm</span>
+<span class="lineno">  100 </span><span class="spaces">  </span><span class="nottickedoff">nm@SimpleName{} -&gt; cleanName nm</span></span>
+<span class="lineno">  101 </span>
+<span class="lineno">  102 </span>keywords :: [String]
+<span class="lineno">  103 </span><span class="decl"><span class="nottickedoff">keywords = [&quot;mod&quot;, &quot;div&quot;, &quot;xor&quot;, &quot;undefined&quot;]</span></span>
+<span class="lineno">  104 </span>
+<span class="lineno">  105 </span>stripSuffix :: Eq a =&gt; [a] -&gt; [a] -&gt; Maybe [a]
+<span class="lineno">  106 </span><span class="decl"><span class="nottickedoff">stripSuffix suf l = case stripPrefix suf (reverse l) of</span>
+<span class="lineno">  107 </span><span class="spaces">  </span><span class="nottickedoff">Just l' -&gt; Just (reverse l')</span>
+<span class="lineno">  108 </span><span class="spaces">  </span><span class="nottickedoff">Nothing -&gt; Nothing</span></span>
+<span class="lineno">  109 </span>
+<span class="lineno">  110 </span>guardKeywords :: String -&gt; String
+<span class="lineno">  111 </span><span class="decl"><span class="nottickedoff">guardKeywords s = if elem s keywords then</span>
+<span class="lineno">  112 </span><span class="spaces">  </span><span class="nottickedoff">s ++ &quot;'&quot;</span>
+<span class="lineno">  113 </span><span class="spaces">  </span><span class="nottickedoff">else case stripSuffix &quot;'&quot; s of</span>
+<span class="lineno">  114 </span><span class="spaces">    </span><span class="nottickedoff">Just s' -&gt; guardKeywords s' ++ &quot;'&quot;</span>
+<span class="lineno">  115 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; s</span></span>
+<span class="lineno">  116 </span>
+<span class="lineno">  117 </span>symbolOverrides :: String -&gt; String
+<span class="lineno">  118 </span><span class="decl"><span class="nottickedoff">symbolOverrides s = case s of</span>
+<span class="lineno">  119 </span><span class="spaces">  </span><span class="nottickedoff">&quot;==&gt;&quot; -&gt; &quot;\\&lt;longrightarrow&gt;&quot;</span>
+<span class="lineno">  120 </span><span class="spaces">  </span><span class="nottickedoff">&quot;/\\\\&quot; -&gt; &quot;\\&lt;and&gt;&quot;</span>
+<span class="lineno">  121 </span><span class="spaces">  </span><span class="nottickedoff">&quot;\\\\/&quot; -&gt; &quot;\\&lt;or&gt;&quot;</span>
+<span class="lineno">  122 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; s</span></span>
+<span class="lineno">  123 </span>
+<span class="lineno">  124 </span>cleanPrefix :: String -&gt; String -&gt; Ident -&gt; Ident
+<span class="lineno">  125 </span><span class="decl"><span class="nottickedoff">cleanPrefix pref repl s = case stripPrefix pref s of</span>
+<span class="lineno">  126 </span><span class="spaces">  </span><span class="nottickedoff">Just s' -&gt; repl ++ s'</span>
+<span class="lineno">  127 </span><span class="spaces">  </span><span class="nottickedoff">-- avoid name clashes with things already prefixed with the replacement</span>
+<span class="lineno">  128 </span><span class="spaces">  </span><span class="nottickedoff">Nothing -&gt; case stripPrefix repl s of</span>
+<span class="lineno">  129 </span><span class="spaces">    </span><span class="nottickedoff">Just{} -&gt; repl ++ s</span>
+<span class="lineno">  130 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; s</span></span>
+<span class="lineno">  131 </span>
+<span class="lineno">  132 </span>cleanSuffix :: String -&gt; String -&gt; Ident -&gt; Ident
+<span class="lineno">  133 </span><span class="decl"><span class="nottickedoff">cleanSuffix pref repl s = case stripSuffix pref s of</span>
+<span class="lineno">  134 </span><span class="spaces">  </span><span class="nottickedoff">Just s' -&gt; s' ++ repl</span>
+<span class="lineno">  135 </span><span class="spaces">  </span><span class="nottickedoff">-- avoid name clashes with things already suffixed with the replacement</span>
+<span class="lineno">  136 </span><span class="spaces">  </span><span class="nottickedoff">Nothing -&gt; case stripSuffix repl s of</span>
+<span class="lineno">  137 </span><span class="spaces">    </span><span class="nottickedoff">Just{} -&gt; s ++ repl</span>
+<span class="lineno">  138 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; s</span></span>
+<span class="lineno">  139 </span>
+<span class="lineno">  140 </span>cleanSymbol :: Char -&gt; String
+<span class="lineno">  141 </span><span class="decl"><span class="nottickedoff">cleanSymbol c = case c of</span>
+<span class="lineno">  142 </span><span class="spaces">  </span><span class="nottickedoff">'(' -&gt; &quot;lb&quot;</span>
+<span class="lineno">  143 </span><span class="spaces">  </span><span class="nottickedoff">')' -&gt; &quot;rb&quot;</span>
+<span class="lineno">  144 </span><span class="spaces">  </span><span class="nottickedoff">' ' -&gt; &quot;_&quot;</span>
+<span class="lineno">  145 </span><span class="spaces">  </span><span class="nottickedoff">'&lt;' -&gt; &quot;lt&quot;</span>
+<span class="lineno">  146 </span><span class="spaces">  </span><span class="nottickedoff">'&gt;' -&gt; &quot;gt&quot;</span>
+<span class="lineno">  147 </span><span class="spaces">  </span><span class="nottickedoff">'=' -&gt; &quot;eq&quot;</span>
+<span class="lineno">  148 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; [c]</span></span>
+<span class="lineno">  149 </span>
+<span class="lineno">  150 </span>cleanNameSymbols :: Ident -&gt; Ident
+<span class="lineno">  151 </span><span class="decl"><span class="nottickedoff">cleanNameSymbols s = concat $ map cleanSymbol s</span></span>
+<span class="lineno">  152 </span>
+<span class="lineno">  153 </span>
+<span class="lineno">  154 </span>cleanName :: Name -&gt; Ident
+<span class="lineno">  155 </span><span class="decl"><span class="nottickedoff">cleanName nm =</span>
+<span class="lineno">  156 </span><span class="spaces">     </span><span class="nottickedoff">symbolOverrides</span>
+<span class="lineno">  157 </span><span class="spaces">   </span><span class="nottickedoff">$ guardBackslash</span>
+<span class="lineno">  158 </span><span class="spaces">   </span><span class="nottickedoff">$ cleanPrefix &quot;_&quot; &quot;i_&quot;</span>
+<span class="lineno">  159 </span><span class="spaces">   </span><span class="nottickedoff">$ cleanPrefix &quot;$&quot; &quot;s_&quot;</span>
+<span class="lineno">  160 </span><span class="spaces">   </span><span class="nottickedoff">$ cleanSuffix &quot;_&quot; &quot;_U&quot;</span>
+<span class="lineno">  161 </span><span class="spaces">   </span><span class="nottickedoff">$ cleanNameSymbols</span>
+<span class="lineno">  162 </span><span class="spaces">   </span><span class="nottickedoff">$ guardKeywords (nmStr nm)</span></span>
+<span class="lineno">  163 </span>
+<span class="lineno">  164 </span>guardUnderscores :: Ident -&gt; Ident
+<span class="lineno">  165 </span><span class="decl"><span class="nottickedoff">guardUnderscores i = concat $ map go i</span>
+<span class="lineno">  166 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  167 </span><span class="spaces">    </span><span class="nottickedoff">go :: Char -&gt; String</span>
+<span class="lineno">  168 </span><span class="spaces">    </span><span class="nottickedoff">go c = case [c] of</span>
+<span class="lineno">  169 </span><span class="spaces">      </span><span class="nottickedoff">&quot;_&quot; -&gt; &quot;'_&quot;</span>
+<span class="lineno">  170 </span><span class="spaces">      </span><span class="nottickedoff">s -&gt; s</span></span>
+<span class="lineno">  171 </span>
+<span class="lineno">  172 </span>guardBackslash :: Ident -&gt; Ident
+<span class="lineno">  173 </span><span class="decl"><span class="nottickedoff">guardBackslash i = concat $ map go i</span>
+<span class="lineno">  174 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  175 </span><span class="spaces">    </span><span class="nottickedoff">go :: Char -&gt; String</span>
+<span class="lineno">  176 </span><span class="spaces">    </span><span class="nottickedoff">go c = case [c] of</span>
+<span class="lineno">  177 </span><span class="spaces">      </span><span class="nottickedoff">&quot;\\&quot; -&gt; &quot;\\\\&quot;</span>
+<span class="lineno">  178 </span><span class="spaces">      </span><span class="nottickedoff">s -&gt; s</span></span>
+<span class="lineno">  179 </span>
+<span class="lineno">  180 </span>-- | Infinite list of name variants.
+<span class="lineno">  181 </span>variants :: Name -&gt; [Name]
+<span class="lineno">  182 </span><span class="decl"><span class="nottickedoff">variants nm = map (\nm_ -&gt; nm { nmStr = pref ++ nm_ }) (Cry.nameList baseNms)</span>
+<span class="lineno">  183 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  184 </span><span class="spaces">    </span><span class="nottickedoff">baseNms = case nmStr nm of</span>
+<span class="lineno">  185 </span><span class="spaces">      </span><span class="nottickedoff">&quot;&quot; -&gt; []</span>
+<span class="lineno">  186 </span><span class="spaces">      </span><span class="nottickedoff">&quot;'&quot; -&gt; []</span>
+<span class="lineno">  187 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt; [nmStr nm]</span>
+<span class="lineno">  188 </span><span class="spaces">    </span><span class="nottickedoff">pref = case nmStr nm of</span>
+<span class="lineno">  189 </span><span class="spaces">      </span><span class="nottickedoff">&quot;'&quot; -&gt; &quot;'&quot;</span>
+<span class="lineno">  190 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt; &quot;&quot;</span></span>
+<span class="lineno">  191 </span>
+<span class="lineno">  192 </span>-- | Infinite list of identifier variants
+<span class="lineno">  193 </span>variantIdents :: Ident -&gt; [Ident]
+<span class="lineno">  194 </span><span class="decl"><span class="nottickedoff">variantIdents nm = (map (\suf -&gt; nm ++ suf) (Cry.nameList []))</span></span>
+<span class="lineno">  195 </span>
+<span class="lineno">  196 </span>-- | Returns a variant of a name that does not clash with the given list
+<span class="lineno">  197 </span>freshIdent ::
+<span class="lineno">  198 </span>  [Ident] {- ^ existing identifiers -} -&gt;
+<span class="lineno">  199 </span>  Ident {- ^ prospective name -} -&gt;
+<span class="lineno">  200 </span>  Ident
+<span class="lineno">  201 </span><span class="decl"><span class="nottickedoff">freshIdent exNms tryNm = go (tryNm:variantIdents tryNm)</span>
+<span class="lineno">  202 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  203 </span><span class="spaces">    </span><span class="nottickedoff">go :: [String] -&gt; String</span>
+<span class="lineno">  204 </span><span class="spaces">    </span><span class="nottickedoff">go (nm:nms) | nm `elem` exNms = go nms</span>
+<span class="lineno">  205 </span><span class="spaces">    </span><span class="nottickedoff">go (nm:_) = nm</span>
+<span class="lineno">  206 </span><span class="spaces">    </span><span class="nottickedoff">go [] = error &quot;freshIdent: impossible empty list&quot;</span></span>
+<span class="lineno">  207 </span>
+<span class="lineno">  208 </span>instance Output Name where
+<span class="lineno">  209 </span>  <span class="decl"><span class="nottickedoff">out t = case t of</span>
+<span class="lineno">  210 </span><span class="spaces">    </span><span class="nottickedoff">Name{} -&gt; case nmSyn t of</span>
+<span class="lineno">  211 </span><span class="spaces">      </span><span class="nottickedoff">InfixSyn s -&gt; symbolOverrides $ guardBackslash $ s</span>
+<span class="lineno">  212 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt; thyQual (nmThy t) (cleanName t)</span>
+<span class="lineno">  213 </span><span class="spaces">    </span><span class="nottickedoff">SimpleName{} -&gt; cleanName t</span></span>
+
+</pre>
+</body>
+</html>
