@@ -2230,15 +2230,15 @@ span.spaces    { background: white }
 <span class="lineno"> 2211 </span><span class="spaces">      </span><span class="istickedoff">TV.TVStruct fs   -&gt; exportValue (TV.TVRec fs) v</span>
 <span class="lineno"> 2212 </span><span class="spaces">      </span><span class="istickedoff">TV.TVAbstract {} -&gt; <span class="nottickedoff">error &quot;exportValue: TODO abstract types&quot;</span></span>
 <span class="lineno"> 2213 </span><span class="spaces">      </span><span class="istickedoff">TV.TVEnum infos -&gt;</span>
-<span class="lineno"> 2214 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">case v of</span></span>
-<span class="lineno"> 2215 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">SC.VCtorApp i _ args -&gt;</span></span>
-<span class="lineno"> 2216 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">case infos Vector.! i of</span></span>
-<span class="lineno"> 2217 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">TV.ConInfo ident argTs -&gt;</span></span>
-<span class="lineno"> 2218 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">do let args' = Vector.fromList (map (SC.runIdentity . force) args)</span></span>
-<span class="lineno"> 2219 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">let vs = Vector.zipWith exportValue argTs args'</span></span>
-<span class="lineno"> 2220 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">let tag = V.mkBv (TV.enumTagWidth infos) (toInteger i)</span></span>
-<span class="lineno"> 2221 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">pure (V.VEnum tag (IntMap.singleton i (TV.ConInfo ident vs)))</span></span>
-<span class="lineno"> 2222 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; error $ &quot;exportValue (on enum type &quot; ++ Text.unpack (CryPP.pp ty) ++ &quot;)&quot;</span></span></span>
+<span class="lineno"> 2214 </span><span class="spaces">        </span><span class="istickedoff">case v of</span>
+<span class="lineno"> 2215 </span><span class="spaces">          </span><span class="istickedoff">SC.VCtorApp i _ args -&gt;</span>
+<span class="lineno"> 2216 </span><span class="spaces">            </span><span class="istickedoff">case infos Vector.! i of</span>
+<span class="lineno"> 2217 </span><span class="spaces">              </span><span class="istickedoff">TV.ConInfo ident argTs -&gt;</span>
+<span class="lineno"> 2218 </span><span class="spaces">                </span><span class="istickedoff">do let args' = Vector.fromList (map (SC.runIdentity . force) args)</span>
+<span class="lineno"> 2219 </span><span class="spaces">                   </span><span class="istickedoff">let vs = Vector.zipWith exportValue argTs args'</span>
+<span class="lineno"> 2220 </span><span class="spaces">                   </span><span class="istickedoff">let tag = V.mkBv (TV.enumTagWidth infos) (toInteger i)</span>
+<span class="lineno"> 2221 </span><span class="spaces">                   </span><span class="istickedoff">pure (V.VEnum tag (IntMap.singleton i (TV.ConInfo ident vs)))</span>
+<span class="lineno"> 2222 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">error $ &quot;exportValue (on enum type &quot; ++ Text.unpack (CryPP.pp ty) ++ &quot;)&quot;</span></span></span>
 <span class="lineno"> 2223 </span>
 <span class="lineno"> 2224 </span>
 <span class="lineno"> 2225 </span>exportTupleValue :: [TV.TValue] -&gt; SC.CValue -&gt; [V.Eval V.Value]
