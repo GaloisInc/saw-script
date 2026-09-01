@@ -1421,8 +1421,11 @@ inferExpr expr = case expr of
 
                   -- get a fresh tyvar for each quantifier binding, convert
                   -- to a name -> ty map, and substitute the fresh tyvars
-                  let once (apos, a) = do
-                        at <- getFreshTyVar (Pos.getPos apos)
+                  let once (aprov, a) = do
+                        let aprov' = case aprov of
+                              SchemaNameExplicit apos -> TypeFromForallNamed apos a x
+                              SchemaNameImplicit apos -> TypeFromForallFresh apos a x
+                        at <- getProvenancedTyVar aprov'
                         return (a, (Current, ConcreteType at))
                   substs <- mapM once as
                   let t' = Util.substituteTyVars' avail (Map.fromList substs) t
@@ -2140,8 +2143,6 @@ generalize foralls pats0 es0 ts0 = do
     let is0 = unifyVars ts
     let bs0 = Util.namedTyVars ts
 
-    let foralls' = Map.map (\pos -> TypeExplicit pos) foralls
-
     -- Drop any unification vars and named type vars that we
     -- shouldn't forall-bind.
     --
@@ -2185,27 +2186,21 @@ generalize foralls pats0 es0 ts0 = do
     envUnifyVars <- unifyVarsInEnvs
     knownNamedVars <- namedVarDefinitions
     let is1 = is0 Map.\\ envUnifyVars
-    let bs1 = Map.union foralls' $ Map.withoutKeys bs0 knownNamedVars
+    let bs1 = Map.union foralls $ Map.withoutKeys bs0 knownNamedVars
 
     -- convert to lists
     let is2 = Map.toList is1
     let bs2 = Map.toList bs1
 
-    -- if the position is "fresh" turn it into "inferred from expr"
-    -- XXX this is kind of bogus
-    let adjustProv prov = case prov of
-          TypeFresh pos -> TypeFromElement pos TyctxExpr
-          _ -> prov
-
     -- generate names for the unification vars
-    let is3 = [ (i, adjustProv prov, "a." <> Text.pack (show i)) | (i, prov) <- is2 ]
+    let is3 = [ (i, prov, "a." <> Text.pack (show i)) | (i, prov) <- is2 ]
 
     -- build a substitution
     let s = Map.fromList [ (i, TyVar prov n) | (i, prov, n) <- is3 ]
 
     -- get the names for the Forall
-    let inames = [ (prov, n) | (_i, prov, n) <- is3 ]
-    let bnames = [ (prov, x) | (x, prov) <- bs2 ]
+    let inames = [ (SchemaNameImplicit (Pos.getPos prov), n) | (_i, prov, n) <- is3 ]
+    let bnames = [ (SchemaNameExplicit pos, x) | (x, pos) <- bs2 ]
 
     let mk pat e t =
           let pat' = appSubst s pat
@@ -2639,8 +2634,9 @@ checkDecl ::
 checkDecl ppopts avail env tenv decl =
     runTI ppopts avail env tenv (inferDecl ReadOnlyVar decl)
 
--- | Check a found type (first argument) against an expected type
---   (second argument) and return True if they can be unified.
+-- | Check a found type (first `Schema` argument) against an expected
+--   type (second `Schema` argument) and return True if they can be
+--   unified.
 --
 --   Both types are schemes because that's what we need upstream.
 --
@@ -2649,14 +2645,18 @@ typesMatch ::
       PPS.Opts ->
       Set PrimitiveLifecycle ->
       TyEnv ->
+      Text ->
       Schema ->
       Schema ->
       Bool
-typesMatch ppopts avail tenv schema'found schema'expected =
+typesMatch ppopts avail tenv name schema'found schema'expected =
   let unpack (Forall as ty) = do
         -- Generate unification vars for all the forall-bindings
         let generate (prov'a, a) = do
-              ty'a <- getFreshTyVar (Pos.getPos prov'a)
+              let prov'a' = case prov'a of
+                    SchemaNameExplicit pos -> TypeFromForallNamed pos a name
+                    SchemaNameImplicit pos -> TypeFromForallFresh pos a name
+              ty'a <- getProvenancedTyVar prov'a'
               return (a, (Current, ConcreteType ty'a))
         substs <- mapM generate as
         -- Substitute them into the type
@@ -2702,17 +2702,27 @@ typesMatch ppopts avail tenv schema'found schema'expected =
 --   everything can see current types.
 --
 checkSchema ::
+      -- | Printing options
       PPS.Opts ->
+      -- | Lifecycle we're declaring in
       PrimitiveLifecycle ->
+      -- | Environment for named types
       TyEnv ->
+      -- | Type scheme to check
       Schema ->
+      -- | Name of the object whose type it is
+      Text ->
+      -- | (Theoretically) updated checked result
       Result Schema
-checkSchema ppopts contextLC tyenv schema = do
+checkSchema ppopts contextLC tyenv schema fnName = do
     let check = do
           let Forall tyvars ty = schema
           -- Generate unification vars for all the forall-bindings
           let generate (prov'a, a) = do
-                ty'a <- getFreshTyVar (Pos.getPos prov'a)
+                let prov'a' = case prov'a of
+                      SchemaNameExplicit pos -> TypeFromForallNamed pos a fnName
+                      SchemaNameImplicit pos -> TypeFromForallFresh pos a fnName
+                ty'a <- getProvenancedTyVar prov'a'
                 return (a, (Current, ConcreteType ty'a))
           substs <- mapM generate tyvars
           -- Substitute them into the type

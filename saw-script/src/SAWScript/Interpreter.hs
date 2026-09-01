@@ -1470,7 +1470,7 @@ interpretMain = do
       -- explicitly throw away the result.
       tyRet = SS.TyVar prov "a"
       tyMonadic = SS.tApply prov (SS.tContext prov SS.TopLevel) tyRet
-      tyExpected = SS.Forall [(SS.TypeExplicit pos, "a")] tyMonadic
+      tyExpected = SS.Forall [(SS.SchemaNameExplicit pos, "a")] tyMonadic
   let main = case ScopedMap.lookup "main" varenv of
           Just (_defpos, lc, tyFound, v, _doc) -> Just (lc, tyFound, v)
           -- Having main be rebindable doesn't make much sense, but
@@ -1487,7 +1487,7 @@ interpretMain = do
         SS.Forall _ (SS.TyCon _ SS.BlockCon [_, _]) -> do
             -- It looks like a monadic value, so check more carefully.
             ppopts <- getPPOpts
-            case typesMatch ppopts avail tyenv tyFound tyExpected of
+            case typesMatch ppopts avail tyenv "main" tyFound tyExpected of
               False ->
                   -- While we accept any TopLevel a, don't encourage people
                   -- to do that.
@@ -3354,7 +3354,6 @@ primTypes = foldl doadd Map.empty
           { primTypeType = SS.ConcreteType ty
           , primTypeLife = lc
           }
-        fakeFileName = Text.unpack $ "<definition of builtin type " <> name <> ">"
 
         -- We need a Map Name (PrimitiveLifecycle, NamedType) to feed
         -- to readSchemaPure. Construct one from the Map Name PrimType
@@ -3364,7 +3363,7 @@ primTypes = foldl doadd Map.empty
         tyenv' = Map.map (\pt -> (primTypeLife pt, primTypeType pt)) tyenv
         tyenv'' = ScopedMap.seed tyenv'
 
-        ty = case Loader.readSchemaPure fakeFileName lc tyenv'' tystr of
+        ty = case Loader.readSchemaPure name lc tyenv'' tystr of
             SS.Forall [] ty' ->
                 ty'
             _ ->
@@ -8366,8 +8365,7 @@ primitives = Map.fromList $
         -- reasons we have a :env call in the test suite, even though
         -- it requires maintenance for every change to the builtin
         -- table. Otherwise these panics can go unnoticed.
-        fakeFileName = Text.unpack $ "<type of " <> name <> ">"
-        ty' = Loader.readSchemaPure fakeFileName lc primNamedTypeEnv ty
+        ty' = Loader.readSchemaPure name lc primNamedTypeEnv ty
         ty'' = case ty' of
             SS.Forall _ t -> t
 
