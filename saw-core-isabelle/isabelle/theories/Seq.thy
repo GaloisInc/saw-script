@@ -1061,6 +1061,11 @@ lemma replicate_seq_eq: "((replicate_seq x :: ('n,'a) seq) = s) = (\<forall>i. i
 abbreviation (input) map2_seq :: "('a \<Rightarrow> 'b \<Rightarrow> 'c) \<Rightarrow> ('n,'a) seq \<Rightarrow> ('n,'b) seq \<Rightarrow> ('n,'c) seq" where
   "map2_seq f a b \<equiv> map_seq (\<lambda>(a',b'). f a' b') (zip_seq a b)"
 
+lemma map2_seq_transfer[transfer_rule]:
+  "(pcr_seq (=) ===> pcr_seq (=) ===> pcr_seq (=))
+     (map2 f) (map2_seq f :: ('a,'b) seq \<Rightarrow> ('a,'c) seq \<Rightarrow> ('a,'d) seq)"
+  by transfer_prover
+
 lemma map2_eqI: 
   "length a = length b \<Longrightarrow> 
    length b = length c \<Longrightarrow>
