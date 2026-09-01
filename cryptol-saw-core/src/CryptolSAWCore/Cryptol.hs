@@ -626,7 +626,7 @@ classIntroIdents =
   , "Cryptol.PGeq_0"
   , "Cryptol.unsafeAssumePGeq"
   , "Cryptol.unsafeAssumePNeq"
-  , "Prelude.TrueI"
+  , "Cryptol.TruePropI"
   ]
 
 -- | Retrieve the current set of instance introduction rules,

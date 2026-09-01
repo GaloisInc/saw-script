@@ -336,6 +336,9 @@ unsafeAssumePNeq m n =
   (Refl Bool False)
   (tcEqual m n);
 
+TruePropI : TrueProp;
+TruePropI = Refl Bool True;
+
 --------------------------------------------------------------------------------
 -- Possibly infinite sequences
 
