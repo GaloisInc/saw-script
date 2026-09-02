@@ -164,7 +164,7 @@ import qualified What4.Expr.Builder as B
 import           What4.Interface(SymExpr,SymFnWrapper(..),IsSymExprBuilder)
 import qualified What4.Interface as W
 import           What4.BaseTypes
-import           What4.SWord (SWord(..))
+import           What4.SWord (SWord(..), bvPackBE)
 
 -- parameterized-utils
 import qualified Data.Parameterized.Context as Ctx
@@ -583,7 +583,23 @@ applyUnintApp ::
   IO (UnintApp (SymExpr sym))
 applyUnintApp sym app0 v =
   case v of
-    VVector xv                -> foldM (applyUnintApp sym) app0 =<< traverse force xv
+    VVector xv                -> do
+      vs <- traverse force xv
+      -- A vector all of whose elements are bits represents a single word.
+      -- Depending on how it was produced (e.g. a symbolic word vs. a literal
+      -- constant built as a `Vec n Bool`), the simulator may hand us either a
+      -- `VWord` or a `VVector` of `VBool`.  To keep the argument signature of
+      -- the uninterpreted function stable across call sites, pack such a
+      -- vector into a single bitvector argument here, matching the `VWord`
+      -- case below.  (`mkArgTerm` has a corresponding case so that the number
+      -- of arguments appended stays in sync with the reconstruction.)
+      case traverse asVBool vs of
+        Just bits | not (V.null bits) ->
+          do w <- bvPackBE sym bits
+             case w of
+               DBV sw -> return (extendUnintApp app0 sw (W.exprType sw))
+               ZBV    -> panic "applyUnintApp" ["Unexpected zero-width bitvector"]
+        _ -> foldM (applyUnintApp sym) app0 vs
     VBool sb                  -> return (extendUnintApp app0 sb BaseBoolRepr)
     VInt si                   -> return (extendUnintApp app0 si BaseIntegerRepr)
     VIntMod 0 si              -> return (extendUnintApp app0 si BaseIntegerRepr)
@@ -616,6 +632,10 @@ applyUnintApp sym app0 v =
       "Cannot create uninterpreted function " ++
       show (stringOfUnintApp app0) ++
       " with argument " ++ show v
+  where
+    asVBool :: SValue sym -> Maybe (W.Pred sym)
+    asVBool (VBool b) = Just b
+    asVBool _         = Nothing
 
 
 
@@ -762,6 +782,11 @@ mkArgTerm sc ty val =
       do numer' <- mkArgTerm @sym sc VIntType (VInt numer)
          denom' <- mkArgTerm @sym sc VIntType (VInt denom)
          pure (ArgTermRational numer' denom')
+
+    -- A non-empty vector of bits is packed by 'applyUnintApp' into a single
+    -- bitvector argument (see the 'VVector' case there), so it consumes a
+    -- single reconstruction term---just like the 'VWord' case above.
+    (VVecType n VBoolType, VVector _) | n > 0 -> return ArgTermVar
 
     (VVecType _ ety, VVector vv) ->
       do vs <- traverse force (V.toList vv)

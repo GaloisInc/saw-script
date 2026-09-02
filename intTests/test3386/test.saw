@@ -1,0 +1,10 @@
+// A regression test for #3386.
+
+let {{
+    f : [4] -> [4]
+    f = undefined
+
+    p x a b c d = x == [a,b,c,d] ==> f x == f [a,b,c,d]
+}};
+
+prove_print (w4_unint_z3 ["f"]) {{ p }};
