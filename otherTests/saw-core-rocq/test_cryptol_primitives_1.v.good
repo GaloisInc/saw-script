@@ -512,6 +512,9 @@ Definition PFin_downward_closed: forall (m n: Num) (_1: PGeq m n) (_2: PFin m),
 
 (* "Cryptol::unsafeAssumePNeq@core" was skipped *)
 
+Definition TruePropI: SAWCorePrelude.TrueProp :=
+   @Init.Logic.eq_refl Init.Datatypes.bool Init.Datatypes.true.
+
 Definition seq: forall (_1: Num) (_2: Type), Type :=
    fun (num: Num) (a: Type)
       =>
@@ -3629,6 +3632,27 @@ Definition PZeroFun: forall (a b: Type) (_1: PZero b),
    fun (a b: Type) (pb: PZero b) (_1: a)
       =>
       pb
+   .
+
+Definition PZeroUnit: PZero SAWCoreScaffolding.UnitType :=
+   SAWCoreScaffolding.Unit.
+
+Definition PZeroPair: forall (a b: Type) (_1: PZero a) (_2: PZero b),
+        PZero (SAWCoreScaffolding.PairType a b) :=
+   fun (a b: Type) (pa: PZero a) (pb: PZero b)
+      =>
+      SAWCoreScaffolding.PairValue a b pa pb
+   .
+
+Definition PZeroEmpty: PZero SAWCoreScaffolding.RecordTypeNil :=
+   SAWCoreScaffolding.RecordNil.
+
+Definition PZeroRecord: forall (s: Stdlib.Strings.String.string) (a b: Type)
+        (_1: PZero a) (_2: PZero b),
+        PZero (SAWCoreScaffolding.RecordTypeCons s a b) :=
+   fun (s: Stdlib.Strings.String.string) (a b: Type) (pa: PZero a) (pb: PZero b)
+      =>
+      @SAWCoreScaffolding.RecordCons s a b pa pb
    .
 
 Definition PLogic: forall (_1: Type), Type :=

@@ -1,0 +1,19 @@
+module Test where
+
+import Test::A as Test::A
+import Test::B as Test::B
+
+submodule A where
+  foo : [8] -> [8]
+  foo x = x + 2
+
+  enum Bar = C1 | C2 | C3 [2]
+    deriving (Eq, Cmp, SignedCmp)
+
+
+submodule B where
+  foo : [8] -> [8]
+  foo x = x - 2
+
+  enum Bar = C1 | C2 | C3 [5]
+    deriving (Eq, Cmp, SignedCmp)

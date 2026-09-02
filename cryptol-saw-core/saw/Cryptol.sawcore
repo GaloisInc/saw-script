@@ -336,6 +336,9 @@ unsafeAssumePNeq m n =
   (Refl Bool False)
   (tcEqual m n);
 
+TruePropI : TrueProp;
+TruePropI = Refl Bool True;
+
 --------------------------------------------------------------------------------
 -- Possibly infinite sequences
 
@@ -1062,6 +1065,20 @@ PZeroSeqBool n =
 
 PZeroFun : (a b : sort 0) -> PZero b -> PZero (a -> b);
 PZeroFun a b pb = (\(_ : a) -> pb);
+
+PZeroUnit : PZero #();
+PZeroUnit = ();
+
+PZeroPair : (a b : sort 0) -> PZero a -> PZero b -> PZero (PairType a b);
+PZeroPair a b pa pb = PairValue a b pa pb;
+
+PZeroEmpty : PZero #{};
+PZeroEmpty = {};
+
+PZeroRecord :
+  (s : String) -> (a b : sort 0) ->
+  PZero a -> PZero b -> PZero (RecordType s a b);
+PZeroRecord s a b pa pb = RecordValue s a b pa pb;
 
 -- Logic class
 

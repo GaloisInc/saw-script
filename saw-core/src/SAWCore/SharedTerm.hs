@@ -901,8 +901,8 @@ scOpaqueConstant ::
 scOpaqueConstant sc nmi ty = execSCM sc (scmOpaqueConstant nmi ty)
 
 -- | Define a new data type with constructors in the global context.
--- Return the type constructor and data constructors as 'Term's.
-scDefineDataType :: SharedContext -> DataTypeSpec -> IO (Term, [Term])
+-- Return the type constructor and data constructors as 'Name's.
+scDefineDataType :: SharedContext -> DataTypeSpec -> IO (Name, [Name])
 scDefineDataType sc spec = execSCM sc (scmDefineDataType spec)
 
 -- | Create a function application term from a global identifier and a list of

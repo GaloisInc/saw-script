@@ -47,6 +47,8 @@ module CryptolSAWCore.GlobalCryptolEnv
   , addPrimTypes
   , eFFITypes
   , addFFITypes
+  , eInstances
+  , addInstance
   , withFreshScope
   , getAllIfaceDecls
   ) where
@@ -66,8 +68,6 @@ import qualified Cryptol.Utils.Ident as C
 
 import SAWCore.SharedTerm
 
-import CryptolSAWCore.FileReader
-import CryptolSAWCore.Panic
 import qualified Cryptol.ModuleSystem as MI
 import Control.Monad (unless)
 import qualified Cryptol.ModuleSystem.Monad as MM
@@ -75,6 +75,10 @@ import qualified Cryptol.Eval as E
 import Cryptol.Utils.Logger (quietLogger)
 import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 import qualified Cryptol.TypeCheck as TM
+
+import CryptolSAWCore.FileReader
+import CryptolSAWCore.IntroRule
+import CryptolSAWCore.Panic
 
 --------------------------------------------------------------------------------
 
@@ -138,6 +142,7 @@ data GlobalCryptolEnv = GlobalCryptolEnv
   , gePrims       :: Map C.PrimIdent Term
   , gePrimTypes   :: Map C.PrimIdent Term
   , geFFITypes    :: Map NameInfo C.FFI
+  , geInstances   :: Maybe IntroRuleSet
   }
 
 -- | Initialize the global environment with the given 'ME.ModuleEnv',
@@ -145,7 +150,7 @@ data GlobalCryptolEnv = GlobalCryptolEnv
 initGlobalEnv :: ME.ModuleEnv -> GlobalCryptolEnv
 initGlobalEnv modEnv = refreshCryptolEnv $
     GlobalCryptolEnv modEnv
-      mempty mempty mempty mempty mempty mempty mempty mempty
+      mempty mempty mempty mempty mempty mempty mempty mempty Nothing
 
 instance IsMetadata GlobalCryptolEnv where
   initMetadata = initGlobalEnv <$> ME.initialModuleEnv
@@ -481,6 +486,17 @@ eFFITypes = getGlobal geFFITypes
 addFFITypes :: SharedContext -> Map NameInfo C.FFI -> IO ()
 addFFITypes sc m = mapGlobal sc $ \genv ->
   genv { geFFITypes = Map.union m (geFFITypes genv) }
+
+-- | Retrieve the set of class instance introduction rules.
+eInstances :: SharedContext -> IO (Maybe IntroRuleSet)
+eInstances = getGlobal geInstances
+
+-- | Add an instance introduction rule to 'eInstances'.
+addInstance :: SharedContext -> IntroRule -> IO ()
+addInstance sc r =
+  mapGlobal sc $ \genv ->
+  let rs = maybe emptyIntroRuleSet id (geInstances genv)
+  in genv { geInstances = Just (insertIntroRuleSet r rs) }
 
 --
 -- Scoped entries from 'CryptolEnv':

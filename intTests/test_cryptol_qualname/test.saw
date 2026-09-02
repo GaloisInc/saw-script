@@ -1,0 +1,25 @@
+import "Test.cry";
+
+fails do {print_term (parse_core "foo");};
+fails do {print_term (parse_core "Bar");};
+
+let foo1 = parse_core "Test::A::foo";
+let foo2 = parse_core "Test::B::foo";
+let foo3 = parse_core "Test:|:A::foo";
+let foo4 = parse_core "Test:|:B::foo";
+let foo5 = parse_core "|:A::foo";
+let foo6 = parse_core "|:B::foo";
+
+prove z3 {{ \x -> foo1 x == x + 1 }};
+prove z3 {{ \x -> foo2 x == x - 1 }};
+prove z3 {{ \x -> foo3 x == x + 2 }};
+prove z3 {{ \x -> foo4 x == x - 2 }};
+prove z3 {{ \x -> foo5 x == x + 2 }};
+prove z3 {{ \x -> foo6 x == x - 2 }};
+
+print_type (parse_core "Test::A::C3 0b01010101");
+print_type (parse_core "Test::B::C3 0b0101");
+print_type (parse_core "Test:|:A::C3 0b01");
+print_type (parse_core "Test:|:B::C3 0b01010");
+print_type (parse_core "|:A::C3 0b01");
+print_type (parse_core "|:B::C3 0b01010");

@@ -117,7 +117,7 @@ module SAWCore.Term.Certified
 
 import Control.Applicative
 import Control.Lens
-import Control.Monad (foldM, forM, unless, when)
+import Control.Monad (foldM, forM, forM_, unless, when)
 import Control.Monad.Except (ExceptT(..), runExceptT, throwError)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Reader (ReaderT(..), runReaderT, ask, asks, local, lift, MonadReader)
@@ -1056,11 +1056,11 @@ data CtorSpec =
   }
 
 -- | Define a new data type with constructors in the global context.
--- Return the type constructor and data constructors as 'Term's.
+-- Return the type constructor and data constructors as 'Name's.
 -- Throw an error if the data type declaration is not well-formed:
 -- Parameters, indices and constructor arguments must refer only to
 -- bound variables and inhabit the appropriate sorts.
-scmDefineDataType :: DataTypeSpec -> SCM (Term, [Term])
+scmDefineDataType :: DataTypeSpec -> SCM (Name, [Name])
 scmDefineDataType dts =
   do dName <- scmRegisterName (dtsNameInfo dts)
      -- Enforce that sorts of dtsParams do not exceed dtsSort
@@ -1148,15 +1148,14 @@ scmDefineDataType dts =
        ImportedName{} -> pure ()
        ModuleIdentifier i -> scmRegisterGlobal i d
      -- Register constructors in scGlobalEnv if they have Ident names.
-     cs <-
-       forM ctors $ \ctor ->
-       do c <- scmConst (ctorName ctor)
-          case nameInfo (ctorName ctor) of
-            ImportedName{} -> pure ()
-            ModuleIdentifier i -> scmRegisterGlobal i c
-          pure c
-     -- Return Terms for data type and constructors.
-     pure (d, cs)
+     forM_ ctors $ \ctor ->
+       case nameInfo (ctorName ctor) of
+         ImportedName{} -> pure ()
+         ModuleIdentifier i ->
+           do c <- scmConst (ctorName ctor)
+              scmRegisterGlobal i c
+     -- Return Names of data type and constructors.
+     pure (dName, map ctorName ctors)
 
 --------------------------------------------------------------------------------
 -- Recursors

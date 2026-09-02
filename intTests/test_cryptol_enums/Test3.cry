@@ -1,0 +1,44 @@
+module Test3 where
+
+enum Test a b = C1 | C2 a | C3 [8] b
+  deriving (Eq, Cmp, SignedCmp)
+
+property eq11         = ((C1 : Test [2] [3]) == C1) == True
+property eq12     x   = ((C1 : Test [2] [3]) == C2 x) == False
+property eq13     x y = ((C1 : Test [2] [3]) == C3 x y) == False
+property eq21 a       = ((C2 a : Test [2] [3]) == C1) == False
+property eq22 a   x   = ((C2 a : Test [2] [3]) == C2 x) == (a == x)
+property eq23 a   x y = ((C2 a : Test [2] [3]) == C3 x y) == False
+property eq31 a b     = ((C3 a b : Test [2] [3]) == C1) == False
+property eq32 a b x   = ((C3 a b : Test [2] [3]) == C2 x) == False
+property eq33 a b x y = ((C3 a b : Test [2] [3]) == C3 x y) == ((a, b) == (x, y))
+
+property lt11         = ((C1 : Test [2] [3]) < C1) == False
+property lt12     x   = ((C1 : Test [2] [3]) < C2 x) == True
+property lt13     x y = ((C1 : Test [2] [3]) < C3 x y) == True
+property lt21 a       = ((C2 a : Test [2] [3]) < C1) == False
+property lt22 a   x   = ((C2 a : Test [2] [3]) < C2 x) == (a < x)
+property lt23 a   x y = ((C2 a : Test [2] [3]) < C3 x y) == True
+property lt31 a b     = ((C3 a b : Test [2] [3]) < C1) == False
+property lt32 a b x   = ((C3 a b : Test [2] [3]) < C2 x) == False
+property lt33 a b x y = ((C3 a b : Test [2] [3]) < C3 x y) == ((a, b) < (x, y))
+
+property le11         = ((C1 : Test [2] [3]) <= C1) == True
+property le12     x   = ((C1 : Test [2] [3]) <= C2 x) == True
+property le13     x y = ((C1 : Test [2] [3]) <= C3 x y) == True
+property le21 a       = ((C2 a : Test [2] [3]) <= C1) == False
+property le22 a   x   = ((C2 a : Test [2] [3]) <= C2 x) == (a <= x)
+property le23 a   x y = ((C2 a : Test [2] [3]) <= C3 x y) == True
+property le31 a b     = ((C3 a b : Test [2] [3]) <= C1) == False
+property le32 a b x   = ((C3 a b : Test [2] [3]) <= C2 x) == False
+property le33 a b x y = ((C3 a b : Test [2] [3]) <= C3 x y) == ((a, b) <= (x, y))
+
+property slt11         = ((C1 : Test [2] [3]) <$ C1) == False
+property slt12     x   = ((C1 : Test [2] [3]) <$ C2 x) == True
+property slt13     x y = ((C1 : Test [2] [3]) <$ C3 x y) == True
+property slt21 a       = ((C2 a : Test [2] [3]) <$ C1) == False
+property slt22 a   x   = ((C2 a : Test [2] [3]) <$ C2 x) == (a <$ x)
+property slt23 a   x y = ((C2 a : Test [2] [3]) <$ C3 x y) == True
+property slt31 a b     = ((C3 a b : Test [2] [3]) <$ C1) == False
+property slt32 a b x   = ((C3 a b : Test [2] [3]) <$ C2 x) == False
+property slt33 a b x y = ((C3 a b : Test [2] [3]) <$ C3 x y) == ((a, b) <$ (x, y))

@@ -38,11 +38,10 @@ import SAWCore.Panic (panic)
 
 import SAWCore.Module
   ( emptyModule
-  , findDataTypeInMap
   , resolvedNameName
   , CtorArg(..)
   , DefQualifier(..)
-  , DataType(dtName), ResolvedName, lookupVarIndexInMap, resolvedNameInfo
+  , DataType(dtName), ResolvedName(..), lookupVarIndexInMap, resolvedNameInfo
   )
 import qualified SAWCore.Parser.AST as Un
 import SAWCore.Name
@@ -93,10 +92,7 @@ prettyTCError opts ne e = helper Nothing e where
       EmptyVectorLit ->
         ppWithPos mp [ "Empty vector literal"]
       NoSuchDataType d ->
-        -- Note: for now d is always an `Ident`; when it needs to be
-        -- more general (`Name`), switch to the commented-out version.
-        --let d' = prettyNameWithEnv opts ne d in
-        let d' = pretty $ identText d in
+        let d' = pretty d in
         ppWithPos mp [ "No such data type:" <+> d' ]
       DeclError nm reason ->
         ppWithPos mp [ "Malformed declaration for" <+> pretty (show nm), pretty reason ]
@@ -131,7 +127,7 @@ data TCEnv =
 data TCError
   = AmbiguousName Text [Text]
   | EmptyVectorLit
-  | NoSuchDataType Ident
+  | NoSuchDataType Text
   | DeclError Text String
   | ErrorPos Pos TCError
   | ErrorUTerm Un.UTerm TCError
@@ -304,14 +300,17 @@ typeInferCompleteTerm uterm =
       liftSCM $ SC.scmSortWithFlags srt h
 
     Un.Recursor (PosPair _ str) s ->
-      do mnm <- getModuleName
-         sc <- askSharedContext
-         mm <- liftIO $ scGetModuleMap sc
-         let dt_ident = mkIdent mnm str
-         dt <- case findDataTypeInMap dt_ident mm of
-           Just d -> return d
-           Nothing -> throwTCError $ NoSuchDataType dt_ident
-         liftSCM $ SC.scmRecursor (dtName dt) s
+      do results <- resolveGlobalName str
+         let ppResolvedName = toAbsoluteName . resolvedNameInfo
+         case results of
+           [r] ->
+             case r of
+               Right rname ->
+                 case rname of
+                   ResolvedDataType dt -> liftSCM $ SC.scmRecursor (dtName dt) s
+                   _ -> throwTCError $ NoSuchDataType (ppResolvedName rname)
+               Left (vn, _ty) -> throwTCError $ NoSuchDataType (vnName vn)
+           rs -> throwTCError $ AmbiguousName str (map (either (vnName . fst) ppResolvedName) rs)
 
     Un.App f arg ->
       -- Only call typeInferCompleteUTerm on the function arguments, to

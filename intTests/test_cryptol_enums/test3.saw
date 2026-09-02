@@ -1,0 +1,43 @@
+import "Test3.cry";
+
+prove_print z3 {{ eq11 }};
+prove_print z3 {{ eq12 }};
+prove_print z3 {{ eq13 }};
+prove_print z3 {{ eq21 }};
+prove_print z3 {{ eq22 }};
+prove_print z3 {{ eq23 }};
+prove_print z3 {{ eq31 }};
+prove_print z3 {{ eq32 }};
+prove_print z3 {{ eq33 }};
+
+prove_print z3 {{ lt11 }};
+prove_print z3 {{ lt12 }};
+prove_print z3 {{ lt13 }};
+prove_print z3 {{ lt21 }};
+prove_print z3 {{ lt22 }};
+prove_print z3 {{ lt23 }};
+prove_print z3 {{ lt31 }};
+prove_print z3 {{ lt32 }};
+prove_print z3 {{ lt33 }};
+
+prove_print z3 {{ le11 }};
+prove_print z3 {{ le12 }};
+prove_print z3 {{ le13 }};
+prove_print z3 {{ le21 }};
+prove_print z3 {{ le22 }};
+prove_print z3 {{ le23 }};
+prove_print z3 {{ le31 }};
+prove_print z3 {{ le32 }};
+prove_print z3 {{ le33 }};
+
+prove_print z3 {{ slt11 }};
+prove_print z3 {{ slt12 }};
+prove_print z3 {{ slt13 }};
+prove_print z3 {{ slt21 }};
+prove_print z3 {{ slt22 }};
+prove_print z3 {{ slt23 }};
+prove_print z3 {{ slt31 }};
+prove_print z3 {{ slt32 }};
+prove_print z3 {{ slt33 }};
+
+print "Done.";
