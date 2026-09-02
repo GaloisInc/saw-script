@@ -145,7 +145,7 @@ span.spaces    { background: white }
 <span class="lineno">  126 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvLit   = pure2 literalSWord</span>
 <span class="lineno">  127 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSize  = <span class="nottickedoff">intSizeOf</span></span>
 <span class="lineno">  128 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvJoin  = <span class="nottickedoff">pure2 svJoin</span></span>
-<span class="lineno">  129 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSlice = <span class="nottickedoff">pure3 svSlice</span></span>
+<span class="lineno">  129 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSlice = pure3 svSlice</span>
 <span class="lineno">  130 </span><span class="spaces">    </span><span class="istickedoff">-- Conditionals</span>
 <span class="lineno">  131 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxBool  = pure3 svIte</span>
 <span class="lineno">  132 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpMuxWord  = <span class="nottickedoff">pure3 svIte</span></span>
@@ -157,18 +157,18 @@ span.spaces    { background: white }
 <span class="lineno">  138 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpFalse  = svFalse</span>
 <span class="lineno">  139 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpNot    = pure1 svNot</span>
 <span class="lineno">  140 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpAnd    = pure2 svAnd</span>
-<span class="lineno">  141 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = <span class="nottickedoff">pure2 svOr</span></span>
+<span class="lineno">  141 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpOr     = pure2 svOr</span>
 <span class="lineno">  142 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpXor    = <span class="nottickedoff">pure2 svXOr</span></span>
 <span class="lineno">  143 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBoolEq = pure2 svEqual</span>
 <span class="lineno">  144 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector logical</span>
 <span class="lineno">  145 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvNot  = <span class="nottickedoff">pure1 svNot</span></span>
 <span class="lineno">  146 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAnd  = <span class="nottickedoff">pure2 svAnd</span></span>
 <span class="lineno">  147 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvOr   = <span class="nottickedoff">pure2 svOr</span></span>
-<span class="lineno">  148 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvXor  = <span class="nottickedoff">pure2 svXOr</span></span>
+<span class="lineno">  148 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvXor  = pure2 svXOr</span>
 <span class="lineno">  149 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector arithmetic</span>
 <span class="lineno">  150 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvNeg  = <span class="nottickedoff">pure1 svUNeg</span></span>
 <span class="lineno">  151 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvAdd  = pure2 svPlus</span>
-<span class="lineno">  152 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSub  = <span class="nottickedoff">pure2 svMinus</span></span>
+<span class="lineno">  152 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvSub  = pure2 svMinus</span>
 <span class="lineno">  153 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvMul  = pure2 svTimes</span>
 <span class="lineno">  154 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvUDiv = <span class="nottickedoff">pure2 svQuot</span></span>
 <span class="lineno">  155 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvURem = <span class="nottickedoff">pure2 svRem</span></span>
@@ -178,8 +178,8 @@ span.spaces    { background: white }
 <span class="lineno">  159 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector comparisons</span>
 <span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvEq   = pure2 svEqual</span>
 <span class="lineno">  161 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvsle  = <span class="nottickedoff">\x y -&gt; pure (svLessEq (svSign x) (svSign y))</span></span>
-<span class="lineno">  162 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvslt  = <span class="nottickedoff">\x y -&gt; pure (svLessThan (svSign x) (svSign y))</span></span>
-<span class="lineno">  163 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvule  = <span class="nottickedoff">pure2 svLessEq</span></span>
+<span class="lineno">  162 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvslt  = \x y -&gt; pure (svLessThan (svSign x) (svSign y))</span>
+<span class="lineno">  163 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvule  = pure2 svLessEq</span>
 <span class="lineno">  164 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvult  = pure2 svLessThan</span>
 <span class="lineno">  165 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvsge  = <span class="nottickedoff">\x y -&gt; pure (svGreaterEq (svSign x) (svSign y))</span></span>
 <span class="lineno">  166 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvsgt  = <span class="nottickedoff">\x y -&gt; pure (svGreaterThan (svSign x) (svSign y))</span></span>
@@ -190,8 +190,8 @@ span.spaces    { background: white }
 <span class="lineno">  171 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRorInt = <span class="nottickedoff">pure2 svRor'</span></span>
 <span class="lineno">  172 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShlInt = <span class="nottickedoff">pure3 svShl'</span></span>
 <span class="lineno">  173 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShrInt = <span class="nottickedoff">pure3 svShr'</span></span>
-<span class="lineno">  174 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRol    = <span class="nottickedoff">pure2 svRotateLeft</span></span>
-<span class="lineno">  175 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRor    = <span class="nottickedoff">pure2 svRotateRight</span></span>
+<span class="lineno">  174 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRol    = pure2 svRotateLeft</span>
+<span class="lineno">  175 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvRor    = pure2 svRotateRight</span>
 <span class="lineno">  176 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShl    = <span class="nottickedoff">pure3 svShiftL</span></span>
 <span class="lineno">  177 </span><span class="spaces">  </span><span class="istickedoff">, Prims.bpBvShr    = <span class="nottickedoff">pure3 svShiftR</span></span>
 <span class="lineno">  178 </span><span class="spaces">    </span><span class="istickedoff">-- Bitvector misc</span>
@@ -388,8 +388,8 @@ span.spaces    { background: white }
 <span class="lineno">  369 </span><span class="spaces">  </span><span class="nottickedoff">go _ _ = Nothing</span></span>
 <span class="lineno">  370 </span>
 <span class="lineno">  371 </span>svSlice :: Int -&gt; Int -&gt; SWord -&gt; SWord
-<span class="lineno">  372 </span><span class="decl"><span class="nottickedoff">svSlice i j x = svExtract (w - i - 1) (w - i - j) x</span>
-<span class="lineno">  373 </span><span class="spaces">  </span><span class="nottickedoff">where w = intSizeOf x</span></span>
+<span class="lineno">  372 </span><span class="decl"><span class="istickedoff">svSlice i j x = svExtract (w - i - 1) (w - i - j) x</span>
+<span class="lineno">  373 </span><span class="spaces">  </span><span class="istickedoff">where w = intSizeOf x</span></span>
 <span class="lineno">  374 </span>
 <span class="lineno">  375 </span>----------------------------------------
 <span class="lineno">  376 </span>-- Shift operations
@@ -777,9 +777,9 @@ span.spaces    { background: white }
 <span class="lineno">  758 </span><span class="spaces">                  </span><span class="istickedoff">in Just (mkUninterp vn ty)</span>
 <span class="lineno">  759 </span><span class="spaces">                </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span>                          = Nothing</span>
 <span class="lineno">  760 </span><span class="spaces">          </span><span class="istickedoff">let <span class="nottickedoff">primHandler = Sim.defaultPrimHandler</span></span>
-<span class="lineno">  761 </span><span class="spaces">          </span><span class="istickedoff">let <span class="nottickedoff">mux = Prims.lazyMuxValue prims</span></span>
+<span class="lineno">  761 </span><span class="spaces">          </span><span class="istickedoff">let mux = Prims.lazyMuxValue prims</span>
 <span class="lineno">  762 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  763 </span><span class="spaces">          </span><span class="istickedoff">cfg  &lt;- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) variable uninterpreted recursor <span class="nottickedoff">primHandler</span> <span class="nottickedoff">mux</span>)</span>
+<span class="lineno">  763 </span><span class="spaces">          </span><span class="istickedoff">cfg  &lt;- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) variable uninterpreted recursor <span class="nottickedoff">primHandler</span> mux)</span>
 <span class="lineno">  764 </span><span class="spaces">          </span><span class="istickedoff">bval &lt;- liftIO (Sim.evalSharedTerm cfg t)</span>
 <span class="lineno">  765 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  766 </span><span class="spaces">          </span><span class="istickedoff">case bval of</span>
