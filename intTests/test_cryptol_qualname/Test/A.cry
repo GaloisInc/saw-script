@@ -1,0 +1,7 @@
+module Test::A where
+
+foo : [8] -> [8]
+foo x = x + 1
+
+enum Bar = C1 | C2 | C3 [8]
+  deriving (Eq, Cmp, SignedCmp)
