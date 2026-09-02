@@ -5,8 +5,8 @@ Type errors:
     Expected: Int
     Found:    String
 
-  unify011.saw:12:6-12:9: Note: The type Int arises from this explicit type name
-  unify011.saw:12:14-12:19: Note: The type String arises from the form of this constant
+  unify011.saw:12:6-12:9: Note: The expected type Int arises from this explicit type name
+  unify011.saw:12:14-12:19: Note: The found type String arises from the form of this constant
 
 
 FAILED

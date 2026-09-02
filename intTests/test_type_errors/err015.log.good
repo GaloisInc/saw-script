@@ -11,8 +11,8 @@ Type errors:
           turquoise : Int
        }
 
-  err015.saw:18:15-22:2: Note: The type { amethyst : Int, moonstone : Int, obsidian : Int } arises from this explicit type name
-  err015.saw:55:14-55:74: Note: The type {
+  err015.saw:18:15-22:2: Note: The expected type { amethyst : Int, moonstone : Int, obsidian : Int } arises from this explicit type name
+  err015.saw:55:14-55:74: Note: The found type {
       amethyst : Int,
       moonstone : Int,
       obsidian : Int,
@@ -35,7 +35,7 @@ Type errors:
           turquoise : Int
        }
 
-  err015.saw:25:15-31:2: Note: The type {
+  err015.saw:25:15-31:2: Note: The expected type {
       amethyst : Int,
       moonstone : Int,
       obsidian : Int,
@@ -43,7 +43,7 @@ Type errors:
       turquoise : Int
    }
    arises from this explicit type name
-  err015.saw:55:14-55:74: Note: The type {
+  err015.saw:55:14-55:74: Note: The found type {
       amethyst : Int,
       moonstone : Int,
       obsidian : Int,
@@ -65,14 +65,14 @@ Type errors:
           turquoise : Int
        }
 
-  err015.saw:34:15-39:2: Note: The type {
+  err015.saw:34:15-39:2: Note: The expected type {
       amethyst : Int,
       moonstone : Int,
       obsidian : Int,
       tourmaline : Int
    }
    arises from this explicit type name
-  err015.saw:55:14-55:74: Note: The type {
+  err015.saw:55:14-55:74: Note: The found type {
       amethyst : Int,
       moonstone : Int,
       obsidian : Int,
@@ -89,8 +89,8 @@ Type errors:
           turquoise : Int
        }
 
-  err015.saw:42:15-45:2: Note: The type { amethyst : Int, obsidian : Int } arises from this explicit type name
-  err015.saw:55:14-55:74: Note: The type {
+  err015.saw:42:15-45:2: Note: The expected type { amethyst : Int, obsidian : Int } arises from this explicit type name
+  err015.saw:55:14-55:74: Note: The found type {
       amethyst : Int,
       moonstone : Int,
       obsidian : Int,
@@ -109,8 +109,8 @@ Type errors:
           turquoise : Int
        }
 
-  err015.saw:48:14-53:2: Note: The type { anise : Int, cinnamon : Int, sage : Int, tarragon : Int } arises from this explicit type name
-  err015.saw:55:14-55:74: Note: The type {
+  err015.saw:48:14-53:2: Note: The expected type { anise : Int, cinnamon : Int, sage : Int, tarragon : Int } arises from this explicit type name
+  err015.saw:55:14-55:74: Note: The found type {
       amethyst : Int,
       moonstone : Int,
       obsidian : Int,

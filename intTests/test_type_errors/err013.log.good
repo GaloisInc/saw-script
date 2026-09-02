@@ -8,8 +8,8 @@ Type errors:
     Expected: [t.1]
     Found:    [[t.1]]
 
-  <definition of concat>:1:2-1:3: Note: The type t.1 arises from instantiating a type variable "a" forall-bound in "concat" and introduced here
-  <definition of concat>:1:5-1:8: Note: The type [t.1] arises from this explicit type name
+  <definition of concat>:1:2-1:3: Note: The expected type t.1 arises from instantiating a type variable "a" forall-bound in "concat" and introduced here
+  <definition of concat>:1:5-1:8: Note: The found type [t.1] arises from this explicit type name
 
 
 FAILED

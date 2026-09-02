@@ -8,8 +8,8 @@ Type errors:
     Expected: String -> String
     Found:    String -> t?String -> String
 
-  args006.saw:4:14-4:30: Note: The type String -> String arises from this explicit type name
-  args006.saw:6:25-6:39: Note: The type String -> t?String -> String arises from the context of this function body
+  args006.saw:4:14-4:30: Note: The expected type String -> String arises from this explicit type name
+  args006.saw:6:25-6:39: Note: The found type String -> t?String -> String arises from the context of this function body
 
 
 FAILED

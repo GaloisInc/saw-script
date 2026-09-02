@@ -4,8 +4,8 @@ Type errors:
     Expected: String
     Found:    Int
 
-  err045.saw:2:17-2:23: Note: The type String arises from this explicit type name
-  err045.saw:2:26-2:27: Note: The type Int arises from the form of this constant
+  err045.saw:2:17-2:23: Note: The expected type String arises from this explicit type name
+  err045.saw:2:26-2:27: Note: The found type Int arises from the form of this constant
 
 
 FAILED

@@ -721,9 +721,10 @@ prettyTypeProvenance prov = case prov of
 
 -- | Print details of a type. This prints the provenance info
 --   we carry in types.
-prettyTypeDetails :: PPS.Opts -> Type -> (Pos, PPS.Doc)
-prettyTypeDetails ppopts ty =
-    let (pos, what) = prettyTypeProvenance $ getProv ty
+prettyTypeDetails :: PPS.Opts -> Text -> Type -> (Pos, PPS.Doc)
+prettyTypeDetails ppopts who ty =
+    let who' = PP.pretty who
+        (pos, what) = prettyTypeProvenance $ getProv ty
         ty' = prettyType ppopts ty
 
         -- Deliberately render and re-docify the type, and generate a
@@ -746,8 +747,8 @@ prettyTypeDetails ppopts ty =
         -- analogous code for "Too many arguments to function" below.
         --
         msg = case map PP.pretty $ Text.lines $ PPS.renderText ppopts ty' of
-            [ty''] -> "The type" <+> ty'' <+> what
-            ty'' -> "The type" <+> PP.nest 3 (PP.vsep ty'' <> PP.line <> what)
+            [ty''] -> "The" <+> who' <+> "type" <+> ty'' <+> what
+            ty'' -> "The" <+> who' <+> "type" <+> PP.nest 3 (PP.vsep ty'' <> PP.line <> what)
     in
     (pos, msg)
 
@@ -873,8 +874,8 @@ unify exp0 pos found0 = visit [] exp0 found0
                    ]
               recordError pos $ "Error:" <+> msg <> PP.line <> PP.indent 4 body
 
-              let (pos'expect, expect') = prettyTypeDetails ppopts expect
-                  (pos'found, found') = prettyTypeDetails ppopts found
+              let (pos'expect, expect') = prettyTypeDetails ppopts "expected" expect
+                  (pos'found, found') = prettyTypeDetails ppopts "found" found
               recordError pos'expect $ "Note:" <+> expect'
               -- Attach a blank line to this message so there's a separator
               -- between it and the next type error. XXX: we should have a
@@ -1665,7 +1666,7 @@ inferExpr expr = case expr of
                                                    ty' <> ")"
                       recordError pos $ "but is applied here to" <+>
                                         nargs' <> "."
-                      recordError' $ prettyTypeDetails ppopts ty
+                      recordError' $ prettyTypeDetails ppopts "expression" ty
                   else do
                       -- We already absorbed some arguments so we have
                       -- too many arguments rather than a non-function.
@@ -1682,7 +1683,7 @@ inferExpr expr = case expr of
                                 ts -> PP.nest 3 $ PP.vsep $ map PP.pretty ts
                       recordError argpos $ "Too many arguments to function" <+>
                                            "of type" <+> origTy''
-                      recordError' $ prettyTypeDetails ppopts origTy
+                      recordError' $ prettyTypeDetails ppopts "function" origTy
                   let trailing = Pos.trailingPos argpos
                       leading = Pos.leadingPos pos
                   when (Pos.differentLines trailing leading) $

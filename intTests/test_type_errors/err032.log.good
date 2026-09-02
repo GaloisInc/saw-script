@@ -5,8 +5,8 @@ Type errors:
     Expected: t.0 Bool
     Found:    Bool
 
-  err032.saw:5:9-5:17: Note: The type t.0 Bool arises from this explicit type name
-  <definition of false>:1:1-1:5: Note: The type Bool arises from this explicit type name
+  err032.saw:5:9-5:17: Note: The expected type t.0 Bool arises from this explicit type name
+  <definition of false>:1:1-1:5: Note: The found type Bool arises from this explicit type name
 
 
 FAILED

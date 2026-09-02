@@ -7,8 +7,8 @@ Type errors:
     Expected: Int -> String
     Found:    Int -> Int
 
-  unify009.saw:21:33-21:38: Note: The type String arises from the form of this constant
-  unify009.saw:21:16-21:19: Note: The type Int arises from this explicit type name
+  unify009.saw:21:33-21:38: Note: The expected type String arises from the form of this constant
+  unify009.saw:21:16-21:19: Note: The found type Int arises from this explicit type name
 
 
 FAILED
