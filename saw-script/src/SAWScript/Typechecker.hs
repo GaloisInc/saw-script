@@ -438,6 +438,25 @@ recordWarning pos msg = do
 
 
 ------------------------------------------------------------
+-- Instantiation of foralls
+
+-- | Get a fresh tyvar for each quantifier binding, and convert to a
+--   name -> ty map.
+instantiateForalls ::
+      Text -> -- ^ name of object these belong to
+      [(SchemaNameProvenance, Text)] ->
+      TI (Map Text (PrimitiveLifecycle, NamedType))
+instantiateForalls fnName vars = do
+     let once (prov, x) = do
+           let prov' = case prov of
+                 SchemaNameExplicit pos -> TypeFromForallNamed pos x fnName
+                 SchemaNameImplicit pos -> TypeFromForallFresh pos x fnName
+           t <- getProvenancedTyVar prov'
+           return (x, (Current, ConcreteType t))
+     Map.fromList <$> mapM once vars
+
+
+------------------------------------------------------------
 -- Resolution 
 
 -- | Apply the current substitution with appSubst.
@@ -1419,16 +1438,10 @@ inferExpr expr = case expr of
                       _ ->
                           recordWarning pos $ "Value is deprecated:" <+> x'
 
-                  -- get a fresh tyvar for each quantifier binding, convert
-                  -- to a name -> ty map, and substitute the fresh tyvars
-                  let once (aprov, a) = do
-                        let aprov' = case aprov of
-                              SchemaNameExplicit apos -> TypeFromForallNamed apos a x
-                              SchemaNameImplicit apos -> TypeFromForallFresh apos a x
-                        at <- getProvenancedTyVar aprov'
-                        return (a, (Current, ConcreteType at))
-                  substs <- mapM once as
-                  let t' = Util.substituteTyVars' avail (Map.fromList substs) t
+                  -- instantiate the quantifier bindings and
+                  -- substitute the fresh tyvars
+                  substs <- instantiateForalls x as
+                  let t' = Util.substituteTyVars' avail substs t
                   return (Var pos x, t')
               | otherwise -> do
                   recordError pos $ "Inaccessible variable:" <+> x'
@@ -2652,15 +2665,9 @@ typesMatch ::
 typesMatch ppopts avail tenv name schema'found schema'expected =
   let unpack (Forall as ty) = do
         -- Generate unification vars for all the forall-bindings
-        let generate (prov'a, a) = do
-              let prov'a' = case prov'a of
-                    SchemaNameExplicit pos -> TypeFromForallNamed pos a name
-                    SchemaNameImplicit pos -> TypeFromForallFresh pos a name
-              ty'a <- getProvenancedTyVar prov'a'
-              return (a, (Current, ConcreteType ty'a))
-        substs <- mapM generate as
+        substs <- instantiateForalls name as
         -- Substitute them into the type
-        let ty' = Util.substituteTyVars' avail (Map.fromList substs) ty
+        let ty' = Util.substituteTyVars' avail substs ty
         return ty'
       match = do
         -- Unpack the schemas and check if they match
@@ -2718,15 +2725,9 @@ checkSchema ppopts contextLC tyenv schema fnName = do
     let check = do
           let Forall tyvars ty = schema
           -- Generate unification vars for all the forall-bindings
-          let generate (prov'a, a) = do
-                let prov'a' = case prov'a of
-                      SchemaNameExplicit pos -> TypeFromForallNamed pos a fnName
-                      SchemaNameImplicit pos -> TypeFromForallFresh pos a fnName
-                ty'a <- getProvenancedTyVar prov'a'
-                return (a, (Current, ConcreteType ty'a))
-          substs <- mapM generate tyvars
+          substs <- instantiateForalls fnName tyvars
           -- Substitute them into the type
-          let ty' = Util.substituteTyVars' everythingAvailable (Map.fromList substs) ty
+          let ty' = Util.substituteTyVars' everythingAvailable substs ty
           -- The only way checking can return an updated type is if
           -- there's also an error, so discard the type
           _ <- checkType kindStar ty'
