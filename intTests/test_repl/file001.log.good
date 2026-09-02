@@ -4,8 +4,8 @@ Type errors:
     Expected: TopLevel t.0
     Found:    Int
 
-  file001.saw:2:1-2:2: Note: The type TopLevel t.0 arises from this explicit type name
-  file001.saw:2:1-2:2: Note: The type Int arises from the form of this constant
+  file001.saw:2:1-2:2: Note: The expected type TopLevel t.0 arises from this explicit type name
+  file001.saw:2:1-2:2: Note: The found type Int arises from the form of this constant
 
 
 FAILED

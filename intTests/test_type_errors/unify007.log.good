@@ -4,8 +4,8 @@ Type errors:
     Expected: Int
     Found:    String
 
-  unify007.saw:7:30-7:31: Note: The type Int arises from the form of this constant
-  unify007.saw:7:37-7:41: Note: The type String arises from the form of this constant
+  unify007.saw:7:30-7:31: Note: The expected type Int arises from the form of this constant
+  unify007.saw:7:37-7:41: Note: The found type String arises from the form of this constant
 
 
 FAILED
