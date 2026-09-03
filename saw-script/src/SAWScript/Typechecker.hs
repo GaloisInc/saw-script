@@ -128,7 +128,8 @@ instance UnifyVars Type where
             Map.unions [paramsVars, namedVars, retVars]
         TyRecord _ tm     -> unifyVars tm
         TyVar _ _         -> Map.empty
-        TyUnifyVar prov i  -> Map.singleton i prov
+        TyUnifyVar (TypeFailed _) _i -> Map.empty  -- ignore error vars
+        TyUnifyVar prov i -> Map.singleton i prov
 
 instance UnifyVars Schema where
     unifyVars (Forall _ t) = unifyVars t
@@ -423,15 +424,9 @@ getFreshTyVar pos = getProvenancedTyVar $ TypeFresh pos
 
 -- | Construct a new type variable to use as a placeholder after an
 --   error occurs. For now this is the same as other fresh type
---   variables, but I've split it out in case we want to distinguish
---   it in the future.
+--   variables, but we remember that it arose from an error.
 getErrorTyVar :: Pos -> TI Type
 getErrorTyVar pos = getProvenancedTyVar $ TypeFailed pos
-
--- | Variant that takes an existing provenance entry for the position.
---   XXX: does not set `TypeFailed` and should go away.
-getErrorTyVar' :: TypeProvenance -> TI Type
-getErrorTyVar' prov = getProvenancedTyVar prov
 
 -- | Add an error message.
 recordError :: Pos -> PPS.Doc -> TI ()
@@ -519,7 +514,7 @@ condenseFunctions errPos ty = case ty of
                         let dups' = PP.hsep $ map PP.pretty $ Map.keys dups
                         recordError errPos $ "Function has duplicate" <+>
                                              "parameter names:" <+> dups'
-                        getErrorTyVar' prov1
+                        getErrorTyVar errPos
             _ ->
                 pure ty
     _ ->
@@ -1214,7 +1209,7 @@ unify exp0 pos found0 = visit [] exp0 found0
                           "with" <+> found' <+> "because" <+> i' <+>
                           "appears within" <+> ty' <> "."
                        ]
-                      getErrorTyVar' prov'i
+                      getErrorTyVar pos
 
         -- recurse into one nested type
         let recOnce exp' found' =
@@ -1661,14 +1656,14 @@ inferExpr expr = case expr of
         (e1,t) <- inferExpr e
         t1 <- expandFully (Pos.getPos e1) t
         elTy <- case t1 of
-            TyRecord prov fs
+            TyRecord _prov fs
               | Just ty <- Map.lookup n fs -> do
                   return ty
               | otherwise -> do
                   let n' = PP.pretty n
                   recordError pos $
                       "Record type has no field named" <+> n'
-                  getErrorTyVar' prov
+                  getErrorTyVar pos
             TyUnifyVar _ _ -> do
                 let n' = PP.pretty n
                 recordError pos $
@@ -1687,7 +1682,7 @@ inferExpr expr = case expr of
         (e1,t) <- inferExpr e
         t1 <- expandFully (Pos.getPos e1) t
         elTy <- case t1 of
-            TyCon prov (TupleCon n) tys
+            TyCon _prov (TupleCon n) tys
               | i < n ->
                   return (tys !! fromIntegral i)
               | otherwise -> do
@@ -1695,7 +1690,7 @@ inferExpr expr = case expr of
                       n' = PP.viaShow n
                   recordError pos $
                       "Tuple index" <+> i' <+> "out of bounds; limit is" <+> n'
-                  getErrorTyVar' prov
+                  getErrorTyVar pos
             TyUnifyVar _ _ -> do
                 let i' = PP.viaShow i
                 recordError pos $
@@ -1717,7 +1712,7 @@ inferExpr expr = case expr of
         case ScopedMap.lookup x env of
             Nothing -> do
                 recordError pos $ "Unbound variable:" <+> x'
-                t <- getFreshTyVar pos
+                t <- getErrorTyVar pos
                 return (Var pos x, t)
             Just (_prevpos, lc, _rebindable, Forall as t)
               | Set.member lc avail -> do
@@ -1741,7 +1736,7 @@ inferExpr expr = case expr of
                   recordError pos $ "This command is available only" <+>
                                     "after running" <+> cmd
 
-                  t' <- getFreshTyVar pos
+                  t' <- getErrorTyVar pos
                   return (Var pos x, t')
 
     Lambda pos mname params namedParams body -> do
@@ -1978,7 +1973,7 @@ inferExpr expr = case expr of
                   when (Pos.differentLines trailing leading) $
                       recordError argpos "Did you forget a semicolon?"
                   -- Return a fresh tyvar as an error placeholder.
-                  getFreshTyVar pos
+                  getErrorTyVar pos
 
         (f', ty'f) <- inferExpr f
         ty'f' <- expandFully (Pos.getPos f) ty'f
@@ -2688,8 +2683,15 @@ lookupTyCon tycon = case tycon of
     MIRSpecCon -> []
     ContextCon _ctx -> [kindStar]
 
--- | Check a type for validity and also for having the
---   correct kinding.
+-- | Check a type for validity and also for having the correct
+--   kinding.
+--
+--   Note: the types handled here come from upstream; we never call
+--   this on a type we've inferred. The provenance should always be
+--   `TypeExplicit` and the associated position should always be the
+--   source position of whatever the user typed. The error reporting
+--   relies on this.
+--
 checkType :: Kind -> Type -> TI Type
 checkType kind ty = case ty of
     TyCon prov tycon args -> do
@@ -2861,8 +2863,7 @@ checkType kind ty = case ty of
                       cmd = "`enable_" <> how <> "`"
                   recordError pos $ "This type is available only after" <+>
                                     "running" <+> cmd <> "."
-                  t' <- getFreshTyVar pos
-                  return t'
+                  getErrorTyVar pos
 
     TyUnifyVar _prov _ix ->
         -- for now at least we don't track the kinds of unification vars
