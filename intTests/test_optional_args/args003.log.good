@@ -8,7 +8,7 @@ Type errors:
     Expected: Int -> a?Int -> Int
     Found:    Int -> b?Int -> Int
 
-  args003.saw:7:56-7:57: Note: The expected type Int -> a?Int -> Int arises from the context of this function body
+  args003.saw:7:56-7:57: Note: The expected type _ -> a?_ -> _ arises from the context of this function body
   args003.saw:7:10-7:29: Note: The found type Int -> b?Int -> Int arises from this explicit type name
 
 

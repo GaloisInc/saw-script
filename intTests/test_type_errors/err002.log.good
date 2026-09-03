@@ -5,7 +5,8 @@ Type errors:
     Found:    [LLVMType]
 
   <definition of llvm_alias>:1:1-1:7: Note: The expected type String arises from this explicit type name
-  err002.saw:5:44-5:57: Note: The found type [LLVMType] arises from the form of this expression
+  err002.saw:5:44-5:57: Note: The found type [_] arises from the form of this expression
+  <definition of llvm_int>:1:8-1:16: Note: The found type's element type LLVMType arises from this explicit type name
 
 
 FAILED

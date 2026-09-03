@@ -5,7 +5,8 @@ Type errors:
     Expected: t.0 Int
     Found:    { a : Int }
 
-  err035.saw:5:9-5:23: Note: The expected type t.0 Int arises from this explicit type name
+  err035.saw:5:9-5:23: Note: The expected type _ Int arises from this explicit type name
+  err035.saw:5:9-5:19: Note: The expected type's monad t.0 is a placeholder from a type error reported here
   err035.saw:5:26-5:35: Note: The found type { a : Int } arises from the form of this expression
 
 

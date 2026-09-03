@@ -5,7 +5,8 @@ Type errors:
     Expected: t.0 Bool
     Found:    Bool
 
-  err032.saw:5:9-5:17: Note: The expected type t.0 Bool arises from this explicit type name
+  err032.saw:5:9-5:17: Note: The expected type _ Bool arises from this explicit type name
+  err032.saw:5:9-5:12: Note: The expected type's monad t.0 is a placeholder from a type error reported here
   <definition of false>:1:1-1:5: Note: The found type Bool arises from this explicit type name
 
 

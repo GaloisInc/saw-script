@@ -4,7 +4,8 @@ Type errors:
     Expected: TopLevel t.0
     Found:    [Int]
 
-  err007.saw:2:1-2:4: Note: The expected type TopLevel t.0 arises from this explicit type name
+  err007.saw:2:1-2:4: Note: The expected type TopLevel _ arises from this explicit type name
+  err007.saw:2:1-2:1: Note: The expected type's 1st argument t.0 is a fresh type variable for a type implied here
   err007.saw:2:1-2:4: Note: The found type [Int] arises from the form of this expression
 
 

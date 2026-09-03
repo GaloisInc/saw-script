@@ -5,8 +5,13 @@ Type errors:
     Expected: [t.0]
     Found:    [Int] -> [Int]
 
-  <definition of concat>:1:5-1:8: Note: The expected type [t.0] arises from this explicit type name
-  err038.saw:7:15-7:35: Note: The found type [Int] -> [Int] arises from the context of this function body
+  <definition of concat>:1:5-1:8: Note: The expected type [_] arises from this explicit type name
+  <definition of concat>:1:2-1:3: Note: The expected type's element type t.0 arises from instantiating a type variable "a" forall-bound in "concat" and introduced here
+  err038.saw:7:15-7:35: Note: The found type _ -> _ arises from the context of this function body
+  <definition of concat>:1:12-1:15: Note: The found type's 1st positional parameter [_] arises from this explicit type name
+  err038.saw:9:12-9:13: Note: The 1st positional parameter's element type Int arises from the form of this constant
+  <definition of concat>:1:19-1:22: Note: The found type's return type [_] arises from this explicit type name
+  err038.saw:9:12-9:13: Note: The return type's element type Int arises from the form of this constant
 
 
 FAILED
