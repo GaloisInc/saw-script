@@ -13,7 +13,9 @@
 -- but is also unused in SAWCoreWhat4.What4
 ------------------------------------------------------------------------
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 
@@ -33,7 +35,7 @@ import Data.Parameterized.Context hiding (replicate)
 
 import SAWCoreWhat4.PosNat
 
-import SAWCore.FiniteValue (FirstOrderType(..),FirstOrderValue(..))
+import SAWCore.FiniteValue (FirstOrderType(..),FirstOrderValue(..),FirstOrderFloat(..))
 
 import What4.BaseTypes
 import What4.IndexLit
@@ -52,6 +54,13 @@ fotToBaseType (FOTIntMod _n)
 fotToBaseType (FOTVec nat FOTBit)
   | Just (Some (PosNat nr)) <- somePosNat nat
   = Just (Some (BaseBVRepr nr))
+  | otherwise = Nothing
+fotToBaseType (FOTFloat e p)
+  | Just (Some e') <- someNat e
+  , Just (Some p') <- someNat p
+  , Just LeqProof <- testLeq (knownNat @2) e'
+  , Just LeqProof <- testLeq (knownNat @2) p'
+  = Just (Some (BaseFloatRepr (FloatingPointPrecisionRepr e' p')))
   | otherwise = Nothing
 
 fotToBaseType (FOTVec nat fot)
@@ -82,6 +91,8 @@ typeReprToFOT :: BaseTypeRepr ty -> Either String FirstOrderType
 typeReprToFOT BaseBoolRepr            = pure FOTBit
 typeReprToFOT BaseIntegerRepr         = pure FOTInt
 typeReprToFOT (BaseBVRepr w)          = pure $ FOTVec (natValue w) FOTBit
+typeReprToFOT (BaseFloatRepr (FloatingPointPrecisionRepr e p))
+                                      = pure $ FOTFloat (natValue e) (natValue p)
 typeReprToFOT BaseRealRepr            = Left "No FO Real"
 typeReprToFOT BaseComplexRepr         = Left "No FO Complex"
 typeReprToFOT (BaseStringRepr _)      = Left "No FO String"
@@ -90,7 +101,6 @@ typeReprToFOT (BaseArrayRepr (Empty :> ty) b)
   , Right fot2 <- typeReprToFOT b
   = pure $ FOTArray fot1 fot2
 typeReprToFOT ty@(BaseArrayRepr _ctx _b) = Left $ "Unsupported FO Array: " ++ show ty
-typeReprToFOT (BaseFloatRepr _)       = Left "No FO Floating point"
 typeReprToFOT (BaseStructRepr ctx)    = FOTTuple <$> assnToList ctx
 
 assnToList :: Assignment BaseTypeRepr ctx -> Either String [FirstOrderType]
@@ -106,10 +116,15 @@ groundToFOV :: BaseTypeRepr ty -> GroundValue ty -> Either String FirstOrderValu
 groundToFOV BaseBoolRepr    b         = pure $ FOVBit b
 groundToFOV BaseIntegerRepr i         = pure $ FOVInt i
 groundToFOV (BaseBVRepr w) bv         = pure $ FOVWord (natValue w) (BV.asUnsigned bv)
+groundToFOV (BaseFloatRepr (FloatingPointPrecisionRepr e p)) f
+                                      = pure $ FOVFloat $ FirstOrderFloat
+                                          { fofExp = natValue e
+                                          , fofPrec = natValue p
+                                          , fofValue = f
+                                          }
 groundToFOV BaseRealRepr    _         = Left "Real is not FOV"
 groundToFOV BaseComplexRepr         _ = Left "Complex is not FOV"
 groundToFOV (BaseStringRepr _)      _ = Left "String is not FOV"
-groundToFOV (BaseFloatRepr _)       _ = Left "Floating point is not FOV"
 groundToFOV (BaseArrayRepr (Empty :> ty_idx) ty_val) (ArrayMapping _) = do
     -- ArrayMapping is an array represented as a function call we can
     -- use to extract values. We can't do anything useful with this
