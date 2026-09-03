@@ -15,6 +15,7 @@ Stability   : provisional
 module SAWCentral.Position (
     Pos(..),
     differentLines,
+    subspan,
     leadingPos,
     trailingPos,
     spanPos,
@@ -107,6 +108,22 @@ differentLines p1 p2 =
             f1 == f2 && (l2a > l1b || l1a > l2b)
         (_, _) ->
             False
+
+-- | Check if position p1 is a subspan of position p2. This is used to
+--   guide certain reporting in the SAWScript typechecker.  It is not
+--   intended to do anything useful on more exotic kinds of position.
+subspan :: Pos -> Pos -> Bool
+subspan p1 p2 =
+    case (p1, p2) of
+        -- This might give wrong answers for ill-formed positions
+        -- where the end is before the start. Don't do that
+        (Range f1 l1a c1a l1b c1b, Range f2 l2a c2a l2b c2b) ->
+            f1 == f2 && (
+                l1a > l2a || (l1a == l2a && c1a >= c2a)
+            ) && (
+                l1b < l2b || (l1b == l2b && c1b <= c2b)
+            )
+        (_, _) -> False
 
 -- Get the empty position at the beginning of the position of
 -- something else. This can be used to provide positions for implicit

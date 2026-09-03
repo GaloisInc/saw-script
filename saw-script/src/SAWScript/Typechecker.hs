@@ -77,6 +77,17 @@ dropKeys :: Ord k => [k] -> Map k v -> Map k v
 dropKeys keys xs =
     foldr Map.delete xs keys
 
+-- | Return the string 0th, 1th, 2nd, etc. from n.
+ordin :: Int -> Text
+ordin n =
+    let suffix = case n `mod` 10 of
+          1 | n `mod` 100 /= 11 -> "st"
+          2 | n `mod` 100 /= 12 -> "nd"
+          3 | n `mod` 100 /= 13 -> "rd"
+          _ -> "th"
+    in
+    Text.pack (show n) <> suffix
+
 
 ------------------------------------------------------------
 -- UnifyVars
@@ -721,36 +732,304 @@ prettyTypeProvenance prov = case prov of
 
 -- | Print details of a type. This prints the provenance info
 --   we carry in types.
-prettyTypeDetails :: PPS.Opts -> Text -> Type -> (Pos, PPS.Doc)
-prettyTypeDetails ppopts who ty =
-    let who' = PP.pretty who
-        (pos, what) = prettyTypeProvenance $ getProv ty
-        ty' = prettyType ppopts ty
+--
+--   Note that we are always printing fully resolved types, so any
+--   unification vars we see are unresolved. The provenance entry for
+--   those (if it's `TypeFromElement` or `TypeFromContext`) is meant
+--   for use in `generalize`. Override those cases to report the type
+--   as a fresh type variable.
+--
+--   Also note that while `TyUnifyVar` can't have `TypeExplicit`
+--   provenance, it can have `TypeFailed` provenance; that happens on
+--   error. We do want to print that the usual way.
+--
+--   We potentially print subelements of types (not "subtypes", that
+--   means something else) separately because they can have wildly
+--   different provenance. Therefore, doesn't use the regular type
+--   printer but rolls its own.
+--
+--   We assume that earlier parts of the same type error have already
+--   printed the type using the regular type printer, which means (a)
+--   it will panic on malformed types so we don't have to, and also
+--   (b) we don't have to print the whole thing again, just the
+--   components, and the user can interpret them by looking at the
+--   already-printed version.
+--
+--   Set @inhibitSubs@ to `True` to print only the top layer and
+--   drop the rest.
+--
+prettyTypeDetails :: Bool -> Text -> Type -> [(Pos, PPS.Doc)]
+prettyTypeDetails inhibitSubs desc0 ty0 =
 
-        -- Deliberately render and re-docify the type, and generate a
-        -- multi-line message only if the type comes out as multiple
-        -- lines when rendered on its own. This is kind of gross, but
-        -- the prettyprinter library does not give much in the way of
-        -- formatting control, and if we just do things its way we
-        -- pretty much always get a multiline message, even for very
-        -- short types like (), because @what@ coupled
-        -- with the position text at the beginning of the line is long
-        -- enough to make the prettyprinter library think the message
-        -- ought to be multiline. Perhaps the right way to deal with
-        -- this problem is to force it to use a different notion of
-        -- what constitutes a "long" line when dealing with error
-        -- messages rather than program text; but for the time being
-        -- at least we have no useful infrastructure to support that.
-        -- So instead generate our own faux "reactive" layout. XXX.
-        --
-        -- If you find a way to fix this better, please also fix the
-        -- analogous code for "Too many arguments to function" below.
-        --
-        msg = case map PP.pretty $ Text.lines $ PPS.renderText ppopts ty' of
-            [ty''] -> "The" <+> who' <+> "type" <+> ty'' <+> what
-            ty'' -> "The" <+> who' <+> "type" <+> PP.nest 3 (PP.vsep ty'' <> PP.line <> what)
+    -- | Check whether the type associated with @subprov@ is logically
+    --   part of the type associated with @prov@. If so, we won't
+    --   print the subelement explicitly.
+    --
+    --   This logic is primarily intended to avoid printing
+    --   subcomponents of compound explicit types (consider for
+    --   example @{ a : Int, b : Int }@) but may be useful for other
+    --   situations as well.
+    --
+    --   Treat all errors as included in other errors.
+    --
+    let isIncluded _subty subprov ty prov =
+          case (subprov, prov) of
+              (TypeExplicit subpos, TypeExplicit pos) -> Pos.subspan subpos pos
+              (TypeFailed _, TypeFailed _) -> True
+              (TypeFromElement subpos TyctxConstant, TypeFromElement pos _) ->
+                  -- Restrict this case to when the enclosing type is
+                  -- a tuple, list/array, or record, and the element
+                  -- is a constant. This will capture obvious cases
+                  -- like (0, 3).
+                  --
+                  -- Allowing any case of TypeFromElement with
+                  -- enclosing position includes the result types of
+                  -- do-blocks, and that is in general undesirable. It
+                  -- also captures certain cases with function calls,
+                  -- and those are probably not good either.
+                  --
+                  -- If this causes further fallout, maybe better to
+                  -- shut it off entirely.
+                  --
+                  -- FUTURE: try making do-blocks their own `Tyctx`
+                  -- case.
+                  let enclosed = Pos.subspan subpos pos in
+                  case ty of
+                      TyCon _ (TupleCon _) _ -> enclosed
+                      TyCon _ ArrayCon _ -> enclosed
+                      TyRecord _ _ -> enclosed
+                      _ -> False
+
+              (_, _) -> False
     in
-    (pos, msg)
+
+    -- | Alternate printer for type constructors. This takes argument
+    --   strings to insert into the output. We assume the application
+    --   has the right number of args; otherwise the regular type
+    --   printer would have croaked on it.
+    --
+    --   FUTURE: maybe the main `TyCon` printer should work this way;
+    --   that would avoid the objectionable corner cases. However,
+    --   note that the code here only works for fully applied
+    --   constructors of kind *, and will need further work to take
+    --   the place of the main printer. Also, it (deliberately) only
+    --   handles `Text` and the main printer does need to cope with
+    --   prettyprinter docs.
+    --
+    let ppTyCon' tc args = case tc of
+          TupleCon _n ->
+              "(" <> Text.intercalate ", " args <> ")"
+          ArrayCon -> "[" <> Text.intercalate " " args <> "]"
+          StringCon -> "String"
+          TermCon -> "Term"
+          TypeCon -> "Type"
+          BoolCon -> "Bool"
+          IntCon -> "Int"
+          AIGCon -> "AIG"
+          CFGCon -> "CFG"
+          JVMSpecCon -> "JVMSpec"
+          LLVMSpecCon -> "LLVMSpec"
+          MIRSpecCon -> "MIRSpec"
+          BlockCon -> Text.intercalate " " args
+          ContextCon ProofScript -> "ProofScript"
+          ContextCon TopLevel -> "TopLevel"
+    in
+
+    -- | Get a subelement descriptor for a type constructor.
+    let describeTyConElt :: TyCon -> Int -> Text
+        describeTyConElt tc i = case tc of
+          TupleCon _n -> ordin (i + 1) <> " element"
+          ArrayCon -> "element type"
+          BlockCon -> case i of
+              0 -> "monad"
+              _ -> ordin i <> " argument"
+          _ -> "???"  -- catchall for things that don't have subelements
+    in
+
+
+    -- Print a type, substituting "_" for subelements we want to print
+    -- separately, and return the resulting string, the provenance
+    -- entry from the type, and a list of the same results for each
+    -- subelement that's been separated out.
+    --
+    -- This obviously can't use the regular type printer.
+    --
+    -- Also, we take advantage of not using the regular type printer
+    -- to emit the whole type on one line as `Text`, not as a
+    -- prettyprinter doc. This has the disadvantage that the line
+    -- might be quite long (e.g. for large record types) but the
+    -- advantage that the prettyprinter doesn't try to insert newlines.
+    -- Earlier versions of this code that used the regular type printer
+    -- had to resort to forcibly rendering the type doc to `Text` and
+    -- then re-converting it to a doc so only types that genuinely
+    -- needed to be multiple lines would be. Otherwise it was
+    -- generating stuff like
+    --    foo.saw:12:8-12:25: The expected type (
+    --    ) arises from the form of this constant
+    -- or
+    --    foo.saw:12:8-12:25: The expected type (a,
+    --    b) arises from the form of this constant
+    -- which was really not on.
+    --
+    -- FUTURE: the root cause of that involves the prettyprinter's
+    -- notions about ribbon width, and ultimately we should have
+    -- different width settings for natural language text (like
+    -- errors) and program text. Doing that properly requires some way
+    -- to set program text tiles within natural language text, so if
+    -- we have e.g. a large struct type in an error message it can go
+    -- in an inset. That gets into real typesetting, though, not the
+    -- plastic imitation that prettyprinter libraries seem to offer,
+    -- and the prettyprinter library we're using doesn't have support
+    -- for any such thing. It might be possible to hack it though for
+    -- this special case...
+    --
+    let extract :: Text -> Type -> (Text, TypeProvenance, [(Text, Text, TypeProvenance)])
+        extract desc ty =
+            let consider what prov subelt =
+                  let (subtext, subprov, subsubelts) = extract what subelt in
+                  if isIncluded subelt subprov ty prov then
+                      (subtext, subsubelts)
+                  else
+                      ("_", (desc <> "'s " <> what, subtext, subprov) : subsubelts)
+            in
+            let considerList getWhat prov subelts =
+                  let (_n, subtexts, subsubeltses) =
+                          let once (i, sts, sses) subelt =
+                                let (st, sse) = consider (getWhat i) prov subelt in
+                                (i + 1, st : sts, sse : sses)
+                          in
+                          foldl once (0, [], []) subelts
+                      subtexts' = reverse subtexts
+                      subsubelts' = concat (reverse subsubeltses)
+                  in
+                  (subtexts', subsubelts')
+            in
+            let considerNamed prov subelts =
+                  let once (n, t) =
+                        let what = "named argument " <> n
+                            (st, es) = consider what prov t
+                        in
+                        (n <> "?" <> st, es)
+                  in
+                  let results = map once $ Map.toList subelts
+                      (subtexts, subsubeltses) = unzip results
+                      subsubelts = concat subsubeltses
+                  in
+                  (subtexts, subsubelts)
+            in
+            let considerFields prov subelts =
+                  let once (n, t) =
+                        let what = "field \"" <> n <> "\" type"
+                            (st, es) = consider what prov t
+                        in
+                        (n <> " : " <> st, es)
+                  in
+                  let results = map once $ Map.toList subelts
+                      (subtexts, subsubeltses) = unzip results
+                      subsubelts = concat subsubeltses
+                  in
+                  (subtexts, subsubelts)
+            in
+
+            case ty of
+                TyCon prov tc elts ->
+                    let getWhat = describeTyConElt tc
+                        (elts', subelts) = considerList getWhat prov elts
+                    in
+                    (ppTyCon' tc elts', prov, subelts)
+                TyFunc prov _npi params namedParams ret ->
+                    let mkWhat i = ordin (i + 1) <> " positional parameter"
+                        (params', elts1) = considerList mkWhat prov params
+                        (namedParams', elts2) = considerNamed prov namedParams
+                        (ret', elts3) = consider "return type" prov ret
+                        str = Text.intercalate " -> " (params' ++ namedParams' ++ [ret'])
+                        elts = elts1 ++ elts2 ++ elts3
+                    in
+                    (str, prov, elts)
+                TyRecord prov fields ->
+                    let (fields', elts) = considerFields prov fields
+                        str = "{ " <> Text.intercalate ", " fields' <> " }"
+                    in
+                    (str, prov, elts)
+                TyVar prov x ->
+                    (x, prov, [])
+                TyUnifyVar prov i ->
+                    -- XXX it's important that this match the output of
+                    -- the regular type printer so it would be better to
+                    -- share the code, even though it's one line
+                    let str = "t." <> Text.pack (show i) in
+                    (str, prov, [])
+    in
+    let (str0, prov0, subelts) = extract (desc0 <> " type") ty0 in
+
+    -- Deduplicate the subelements conservatively. Unification
+    -- variables can only have one origin: they are explicitly created
+    -- in some specific place, so if you ever see two copies of of the
+    -- same one they must have both started there. Unfortunately, that
+    -- is not true of named type variables; it is true of those that
+    -- are forall-bound, or that were free in a function header and
+    -- are about to become forall-bound, but we can't distinguish
+    -- those from builtin types here, and builtin types can arise from
+    -- multiple places. (Any builtin function that uses one can
+    -- introduce it.)  (Note though that typedefs have been
+    -- substituted away and are not relevant here.)
+    --
+    -- XXX: it is not optimal to do this by examining the printed form
+    -- of the type. However, it'll work (only a unification var's
+    -- printed form can begin with "t.") and to do it better it would
+    -- need to be merged into the logic of `extract`. I don't want to
+    -- do that right now, because `extract` is already complicated and
+    -- moderately delicate, and adding state like a "seen" table would
+    -- require a complete rework. Maybe in the FUTURE.
+    --
+    -- In principle we could also merge two prints like "the 2nd
+    -- positional parameter t.0" and "the 3rd positional parameter
+    -- t.0" into something like "the 2nd (and 3rd) positional
+    -- parameter t.0", but that would require figuring out a further
+    -- strengthening of `extract` so that you can go back and update
+    -- its already-generated output strings on the fly. Definitely
+    -- doesn't seem worthwhile right now. FUTURE, maybe. For now we
+    -- just drop the duplicates.
+    --
+    let subelts' =
+          let once (seen, elts') elt@(_d, str, _p) =
+                if "t." `Text.isPrefixOf` str then
+                    if Set.member str seen then (seen, elts')
+                    else (Set.insert str seen, elt : elts')
+                else
+                    (seen, elt : elts')
+          in
+          let (_, elts') = foldl once (Set.empty, []) subelts in
+          reverse elts'
+    in
+
+    -- | Convert a printed type and its provenance to an output
+    --   position and message.
+    --
+    --   Note that we can't usefully indent to show grouping; the positions
+    --   get printed at the front, and they're not the same length, so the
+    --   messages all start at different columns and trying to indent them
+    --   just makes a mess.
+    --
+    --   The positions need to be first (in general prints with
+    --   positions should have the form "pos: msg" because various
+    --   tools that read compiler output expect that); we can't
+    --   readily align all the positions and messages in separate
+    --   columns because the prettyprinter library we're using doesn't
+    --   support anything like columns or tables.
+    --
+    --   So we need to do something else to organize the output.
+    let printone (desc, str, prov) =
+          let (pos, prov') = prettyTypeProvenance prov
+              msg = "Note: The " <> PP.pretty desc <+> PP.pretty str <+> prov'
+          in
+          (pos, msg)
+    in
+
+    let msg0 = printone (desc0 <> " type", str0, prov0)
+        msgs = if inhibitSubs then [] else map printone subelts'
+    in
+    msg0 : msgs
 
 -- | Insert an entry in the substitution we're carrying around. Raw
 --   version; everyone except `resolveVar` should call `resolveVar`
@@ -861,7 +1140,7 @@ unify exp0 pos found0 = visit [] exp0 found0
         found <- expandFully pos foundBase
 
         -- | Fail with expected/found types
-        let reject msg more = do
+        let rejectCommon inhibitSubs msg more = do
               ppopts <- asks tiPPOpts
               encs' <- do
                   let once (t1, t2) = do
@@ -874,13 +1153,23 @@ unify exp0 pos found0 = visit [] exp0 found0
                    ]
               recordError pos $ "Error:" <+> msg <> PP.line <> PP.indent 4 body
 
-              let (pos'expect, expect') = prettyTypeDetails ppopts "expected" expect
-                  (pos'found, found') = prettyTypeDetails ppopts "found" found
-              recordError pos'expect $ "Note:" <+> expect'
-              -- Attach a blank line to this message so there's a separator
-              -- between it and the next type error. XXX: we should have a
-              -- less ad hoc way to do this.
-              recordError pos'found $ "Note:" <+> found' <> PP.hardline <> ""
+              let expects' = prettyTypeDetails inhibitSubs "expected" expect
+                  founds' = prettyTypeDetails inhibitSubs "found" found
+                  msgs = expects' ++ founds'
+              -- Attach a blank line to the last message so there's a
+              -- separator between it and the next type error. XXX: we
+              -- should have a less hacky way to do this.
+              let msgs' = case reverse msgs of
+                    [] -> []  -- not actually reachable
+                    (p, last_) : rest ->
+                        let last' = last_ <> PP.hardline <> "" in
+                        reverse ((p, last') : rest)
+              mapM_ recordError' msgs'
+
+        -- | Normal case of reject: print all the type provenance
+        let reject = rejectCommon False
+        -- | Special case of reject: print only the top layer of type provenance
+        let reject' = rejectCommon True
 
         -- | We would like to resolve unification var @i@ to type @ty@.
         --   Make sure this is well formed.
@@ -987,7 +1276,7 @@ unify exp0 pos found0 = visit [] exp0 found0
                         expMissing' = prettyMissingList expect' $ Map.toList expMissing
                         foundMissing' = prettyMissingList found' $ Map.toList foundMissing
                         missing' = expMissing' ++ foundMissing'
-                    reject "Mismatched named parameters." missing'
+                    reject' "Mismatched named parameters." missing'
 
                 else do
                     -- In principle when you have checked that the keys
@@ -1036,7 +1325,7 @@ unify exp0 pos found0 = visit [] exp0 found0
             (TyRecord _ expFields, TyRecord _ foundFields)
               | Map.keys expFields /= Map.keys foundFields ->
                 -- records with different keys
-                reject "Record field names do not match." []
+                reject' "Record field names do not match." []
 
               | otherwise ->
                 -- records with the same field names, try unifying the field types
@@ -1666,7 +1955,7 @@ inferExpr expr = case expr of
                                                    ty' <> ")"
                       recordError pos $ "but is applied here to" <+>
                                         nargs' <> "."
-                      recordError' $ prettyTypeDetails ppopts "expression" ty
+                      mapM_ recordError' $ prettyTypeDetails False "expression" ty
                   else do
                       -- We already absorbed some arguments so we have
                       -- too many arguments rather than a non-function.
@@ -1683,7 +1972,7 @@ inferExpr expr = case expr of
                                 ts -> PP.nest 3 $ PP.vsep $ map PP.pretty ts
                       recordError argpos $ "Too many arguments to function" <+>
                                            "of type" <+> origTy''
-                      recordError' $ prettyTypeDetails ppopts "function" origTy
+                      mapM_ recordError' $ prettyTypeDetails True "function" origTy
                   let trailing = Pos.trailingPos argpos
                       leading = Pos.leadingPos pos
                   when (Pos.differentLines trailing leading) $
