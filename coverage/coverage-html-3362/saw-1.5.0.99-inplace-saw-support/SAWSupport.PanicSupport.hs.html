@@ -152,25 +152,25 @@ span.spaces    { background: white }
 <span class="lineno">  133 </span>--   and third should be the &quot;location&quot; and &quot;description&quot; to pass
 <span class="lineno">  134 </span>--   through to the upstream panic function.
 <span class="lineno">  135 </span>doPanic :: Panic.HasCallStack =&gt; Text -&gt; Text -&gt; [Text] -&gt; a
-<span class="lineno">  136 </span><span class="decl"><span class="istickedoff">doPanic component loc descs =</span>
-<span class="lineno">  137 </span><span class="spaces">  </span><span class="istickedoff">Panic.panic (SAWPanic component) loc' descs'</span>
-<span class="lineno">  138 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  139 </span><span class="spaces">     </span><span class="istickedoff">loc' = Text.unpack loc</span>
-<span class="lineno">  140 </span><span class="spaces">     </span><span class="istickedoff">descs' = map Text.unpack descs</span></span>
+<span class="lineno">  136 </span><span class="decl"><span class="nottickedoff">doPanic component loc descs =</span>
+<span class="lineno">  137 </span><span class="spaces">  </span><span class="nottickedoff">Panic.panic (SAWPanic component) loc' descs'</span>
+<span class="lineno">  138 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  139 </span><span class="spaces">     </span><span class="nottickedoff">loc' = Text.unpack loc</span>
+<span class="lineno">  140 </span><span class="spaces">     </span><span class="nottickedoff">descs' = map Text.unpack descs</span></span>
 <span class="lineno">  141 </span>
 <span class="lineno">  142 </span>instance Panic.PanicComponent SAWPanic where
-<span class="lineno">  143 </span>  <span class="decl"><span class="istickedoff">panicComponentName (SAWPanic component) = Text.unpack component</span></span>
-<span class="lineno">  144 </span>  <span class="decl"><span class="istickedoff">panicComponentIssues _ = &quot;https://github.com/GaloisInc/saw-script/issues&quot;</span></span>
+<span class="lineno">  143 </span>  <span class="decl"><span class="nottickedoff">panicComponentName (SAWPanic component) = Text.unpack component</span></span>
+<span class="lineno">  144 </span>  <span class="decl"><span class="nottickedoff">panicComponentIssues _ = &quot;https://github.com/GaloisInc/saw-script/issues&quot;</span></span>
 <span class="lineno">  145 </span>
 <span class="lineno">  146 </span>  {-# Noinline panicComponentRevision #-}
-<span class="lineno">  147 </span>  <span class="decl"><span class="istickedoff">panicComponentRevision _ =</span>
-<span class="lineno">  148 </span><span class="spaces">    </span><span class="istickedoff">if <span class="tickonlytrue">GitRev.foundGit</span> then</span>
-<span class="lineno">  149 </span><span class="spaces">        </span><span class="istickedoff">let hash = fromMaybe <span class="nottickedoff">&quot;(unknown revision)&quot;</span> GitRev.hash </span>
-<span class="lineno">  150 </span><span class="spaces">            </span><span class="istickedoff">branch = fromMaybe <span class="nottickedoff">&quot;(unknown branch)&quot;</span> GitRev.branch</span>
-<span class="lineno">  151 </span><span class="spaces">        </span><span class="istickedoff">in</span>
-<span class="lineno">  152 </span><span class="spaces">        </span><span class="istickedoff">(hash, branch)</span>
-<span class="lineno">  153 </span><span class="spaces">    </span><span class="istickedoff">else</span>
-<span class="lineno">  154 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">(&quot;(VCS-less build)&quot;, &quot;(VCS-less build)&quot;)</span></span></span>
+<span class="lineno">  147 </span>  <span class="decl"><span class="nottickedoff">panicComponentRevision _ =</span>
+<span class="lineno">  148 </span><span class="spaces">    </span><span class="nottickedoff">if GitRev.foundGit then</span>
+<span class="lineno">  149 </span><span class="spaces">        </span><span class="nottickedoff">let hash = fromMaybe &quot;(unknown revision)&quot; GitRev.hash </span>
+<span class="lineno">  150 </span><span class="spaces">            </span><span class="nottickedoff">branch = fromMaybe &quot;(unknown branch)&quot; GitRev.branch</span>
+<span class="lineno">  151 </span><span class="spaces">        </span><span class="nottickedoff">in</span>
+<span class="lineno">  152 </span><span class="spaces">        </span><span class="nottickedoff">(hash, branch)</span>
+<span class="lineno">  153 </span><span class="spaces">    </span><span class="nottickedoff">else</span>
+<span class="lineno">  154 </span><span class="spaces">        </span><span class="nottickedoff">(&quot;(VCS-less build)&quot;, &quot;(VCS-less build)&quot;)</span></span>
 
 </pre>
 </body>

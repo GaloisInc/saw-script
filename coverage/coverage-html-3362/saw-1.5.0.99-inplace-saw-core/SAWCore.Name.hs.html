@@ -188,7 +188,7 @@ span.spaces    { background: white }
 <span class="lineno">  169 </span>-- | Descriptions of the origins of names that may be in scope
 <span class="lineno">  170 </span>data NameInfo =
 <span class="lineno">  171 </span>  NameInfo { <span class="istickedoff"><span class="decl"><span class="istickedoff">nameInfoQualName</span></span></span> :: QN.QualName, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">nameInfoImported</span></span></span> :: Bool}
-<span class="lineno">  172 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>,<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>,<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">  172 </span>  deriving (<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>,<span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>,<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
 <span class="lineno">  173 </span>
 <span class="lineno">  174 </span>-- | This name arises from an exported declaration from a module
 <span class="lineno">  175 </span>pattern ModuleIdentifier :: Ident -&gt; NameInfo
@@ -224,7 +224,7 @@ span.spaces    { background: white }
 <span class="lineno">  205 </span><span class="decl"><span class="istickedoff">toShortName ni = QN.baseName $ nameInfoQualName ni</span></span>
 <span class="lineno">  206 </span>
 <span class="lineno">  207 </span>toAbsoluteName :: NameInfo -&gt; Text
-<span class="lineno">  208 </span><span class="decl"><span class="nottickedoff">toAbsoluteName ni = QN.ppQualName $ nameInfoQualName ni</span></span>
+<span class="lineno">  208 </span><span class="decl"><span class="istickedoff">toAbsoluteName ni = QN.ppQualName $ nameInfoQualName ni</span></span>
 <span class="lineno">  209 </span>
 <span class="lineno">  210 </span>moduleIdentToQualName :: Ident -&gt; QN.QualName
 <span class="lineno">  211 </span><span class="decl"><span class="istickedoff">moduleIdentToQualName (Ident qn) = qn</span></span>
@@ -249,11 +249,11 @@ span.spaces    { background: white }
 <span class="lineno">  230 </span>
 <span class="lineno">  231 </span>-- | Because of the global uniqueness invariant, comparing the
 <span class="lineno">  232 </span>-- 'VarIndex' is sufficient to ensure equality of names.
-<span class="lineno">  233 </span>instance <span class="decl"><span class="nottickedoff">Eq Name</span></span> where
+<span class="lineno">  233 </span>instance <span class="decl"><span class="istickedoff">Eq Name</span></span> where
 <span class="lineno">  234 </span>  <span class="decl"><span class="istickedoff">x == y = nameIndex x == nameIndex y</span></span>
 <span class="lineno">  235 </span>
-<span class="lineno">  236 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord Name</span></span></span></span></span></span></span></span></span></span></span></span> where
-<span class="lineno">  237 </span>  <span class="decl"><span class="nottickedoff">compare x y = compare (nameIndex x) (nameIndex y)</span></span>
+<span class="lineno">  236 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord Name</span></span></span></span></span></span></span></span></span></span></span></span> where
+<span class="lineno">  237 </span>  <span class="decl"><span class="istickedoff">compare x y = compare (nameIndex x) (nameIndex y)</span></span>
 <span class="lineno">  238 </span>
 <span class="lineno">  239 </span>-- | For hashing, we consider only the 'NameInfo' and not the
 <span class="lineno">  240 </span>-- 'VarIndex'; this gives a stable hash value for a particular name,

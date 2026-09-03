@@ -297,7 +297,7 @@ span.spaces    { background: white }
 <span class="lineno">  278 </span><span class="decl"><span class="nottickedoff">asResolvedCtor = \case { ResolvedCtor ctor -&gt; Just ctor; _ -&gt; Nothing }</span></span>
 <span class="lineno">  279 </span>
 <span class="lineno">  280 </span>asResolvedDataType :: ResolvedName -&gt; Maybe DataType
-<span class="lineno">  281 </span><span class="decl"><span class="istickedoff">asResolvedDataType = \case { ResolvedDataType d -&gt; Just d; _ -&gt; Nothing }</span></span>
+<span class="lineno">  281 </span><span class="decl"><span class="nottickedoff">asResolvedDataType = \case { ResolvedDataType d -&gt; Just d; _ -&gt; Nothing }</span></span>
 <span class="lineno">  282 </span>
 <span class="lineno">  283 </span>asResolvedDef :: ResolvedName -&gt; Maybe Def
 <span class="lineno">  284 </span><span class="decl"><span class="istickedoff">asResolvedDef = \case { ResolvedDef d -&gt; Just d; _ -&gt; <span class="nottickedoff">Nothing</span> }</span></span>
@@ -349,7 +349,7 @@ span.spaces    { background: white }
 <span class="lineno">  330 </span><span class="spaces">               </span><span class="istickedoff">case nameInfo (dtName dt) of</span>
 <span class="lineno">  331 </span><span class="spaces">                 </span><span class="istickedoff">ModuleIdentifier i -&gt;</span>
 <span class="lineno">  332 </span><span class="spaces">                   </span><span class="istickedoff">insDeclInMap (identModule i) <span class="nottickedoff">(TypeDecl dt)</span> mm0</span>
-<span class="lineno">  333 </span><span class="spaces">                 </span><span class="istickedoff">ImportedName{} -&gt; <span class="nottickedoff">mm0</span></span>
+<span class="lineno">  333 </span><span class="spaces">                 </span><span class="istickedoff">ImportedName{} -&gt; mm0</span>
 <span class="lineno">  334 </span><span class="spaces">         </span><span class="istickedoff">let rnames = ResolvedDataType dt : map ResolvedCtor (dtCtors dt)</span>
 <span class="lineno">  335 </span><span class="spaces">         </span><span class="istickedoff">foldM (flip insResolvedNameInMap) mm1 rnames</span></span>
 <span class="lineno">  336 </span>
@@ -441,7 +441,7 @@ span.spaces    { background: white }
 <span class="lineno">  422 </span>
 <span class="lineno">  423 </span>-- | Resolve an 'Ident' to a 'DataType' in a 'ModuleMap'
 <span class="lineno">  424 </span>findDataTypeInMap :: Ident -&gt; ModuleMap -&gt; Maybe DataType
-<span class="lineno">  425 </span><span class="decl"><span class="istickedoff">findDataTypeInMap i mm = resolveNameInMap mm i &gt;&gt;= asResolvedDataType</span></span>
+<span class="lineno">  425 </span><span class="decl"><span class="nottickedoff">findDataTypeInMap i mm = resolveNameInMap mm i &gt;&gt;= asResolvedDataType</span></span>
 <span class="lineno">  426 </span>
 <span class="lineno">  427 </span>-- | Resolve an 'Ident' to a 'Def' in a 'ModuleMap'.
 <span class="lineno">  428 </span>findDefInMap :: Ident -&gt; ModuleMap -&gt; Maybe Def
