@@ -37,6 +37,7 @@ import Data.Map (Map)
 import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
+import SAWSupport.Position
 import qualified SAWSupport.Pretty as PPS
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
@@ -1439,9 +1440,12 @@ inspectTypeFTVs kind ty = case ty of
                       TypeExplicit pos -> pure pos
                       _ -> do
                           ppopts <- asks tiPPOpts
+                          let (pos, prov') = prettyTypeProvenance prov
                           panic "inspectTypeFTVs" [
                               "Invalid provenance for free named type variable",
-                              "Type: " <> ppType ppopts ty
+                              "Type: " <> ppType ppopts ty,
+                              "Position in provenance: " <> ppPosition pos,
+                              "Provenance: " <> PPS.renderText ppopts prov'
                            ]
                 return $ Map.singleton x (pos, kind)
             Just _ ->
