@@ -109,7 +109,7 @@ instance (Ord k, UnifyVars a) => UnifyVars (Map k a) where
     unifyVars = unifyVars . Map.elems
 
 instance (UnifyVars a) => UnifyVars [a] where
-    unifyVars = Map.unions . map unifyVars
+    unifyVars ts = Map.unions $ map unifyVars ts
 
 instance (UnifyVars a) => UnifyVars (PrimitiveLifecycle, a) where
     unifyVars (_lc, t) = unifyVars t
@@ -423,8 +423,8 @@ getFreshTyVar :: Pos -> TI Type
 getFreshTyVar pos = getProvenancedTyVar $ TypeFresh pos
 
 -- | Construct a new type variable to use as a placeholder after an
---   error occurs. For now this is the same as other fresh type
---   variables, but we remember that it arose from an error.
+--   error occurs. Ultimately this is the same as a fresh type
+--   variable, but we remember that it arose from an error.
 getErrorTyVar :: Pos -> TI Type
 getErrorTyVar pos = getProvenancedTyVar $ TypeFailed pos
 
@@ -567,6 +567,7 @@ expandFully pos t = do
 -- take whichever provenance we find first; and also, we don't
 -- actually care about the provenance, because the result is used to
 -- drop elements from another table.
+--
 unifyVarsInEnvs :: TI (Map TypeIndex TypeProvenance)
 unifyVarsInEnvs = do
     venv <- gets tiVarEnv
@@ -1403,6 +1404,11 @@ matches pos t1 t2 =
 -- otherwise annoying things like
 --    let f (x: a) = \(y: b) -> (a, b)
 --
+-- On the minus side, it accepts free type variables in a user-
+-- written type annotation on the RHS:
+--    let f x = x : a
+-- which is not critical but annoying. See #3341.
+--
 -- We extract the type variables with the position of their
 -- initial mention, and the kind that appears to apply.
 --
@@ -1561,6 +1567,11 @@ addPatterns pats = do
 --
 -- Variant version that uses the passed-in schema to produce the types
 -- and ignoring the types already loaded into the pattern.
+--
+-- XXX: this is wrong, if you have @(x, y)@ and @forall t, (t, t)@
+-- it'll produce separate @forall t, t@ bindings for @x@ and @y@ and
+-- not restrict them to the same type.
+--
 addPatternSchema :: Pattern -> Rebindable -> Schema -> TI ()
 addPatternSchema pat rb ty = addVars rb bindings
     where bindings = patternBindingsWithSchema pat ty
@@ -1948,10 +1959,38 @@ inferExpr expr = case expr of
                       -- Use the position of the first excess argument
                       -- to complain.
                       let origTy' = prettyType ppopts origTy
-                          -- Abuse the prettyprinter to keep it from
-                          -- inserting extra unwanted line
-                          -- breaks. Compare the code in
-                          -- `prettyTypeDetails`.  XXX.
+                          -- Deliberately render and re-docify the
+                          -- type, and generate a multi-line message
+                          -- only if the type comes out as multiple
+                          -- lines when rendered on its own. This is
+                          -- kind of gross, but the prettyprinter
+                          -- library does not give much in the way of
+                          -- formatting control, and if we just do
+                          -- things its way we pretty much always get
+                          -- a multiline message, even for very short
+                          -- types like (), which looks terrible. This
+                          -- is because the beginning of the message
+                          -- coupled with the position text at the
+                          -- beginning of the line is long enough to
+                          -- make the prettyprinter library think the
+                          -- message ought to be multiline. Perhaps
+                          -- the right way to deal with this problem
+                          -- is to force it to use a different notion
+                          -- of what constitutes a "long" line when
+                          -- dealing with error messages rather than
+                          -- program text; but for the time being at
+                          -- least we have no useful infrastructure to
+                          -- support that.  So instead generate our
+                          -- own faux "reactive" layout. XXX.
+                          --
+                          -- If you find an easy way to fix this
+                          -- better, please also improve the code in
+                          -- prettyTypeDetails above, which used to
+                          -- use similar logic. (But then it needed
+                          -- its own printer for other reasons and now
+                          -- it always stuffs the entire type on one
+                          -- line, which isn't great either.)
+                          --
                           origTy'' =
                             case Text.lines $ PPS.renderText ppopts origTy' of
                                 [t] -> PP.pretty t
@@ -2698,7 +2737,6 @@ checkForFailure tys = foldr visit (Right ()) tys
 checkType :: Kind -> Type -> TI Type
 checkType kind ty = case ty of
     TyCon prov tycon args -> do
-        ppopts <- asks tiPPOpts
 
         -- First, look up the constructor.
         let params = lookupTyCon tycon
@@ -2707,16 +2745,17 @@ checkType kind ty = case ty of
             argsleft = kindNumArgs kind
 
         if nargs > nparams then do
-            -- XXX special case for BlockCon (remove along with BlockCon)
-            let (nargs', nparams', tycon') =
+            -- XXX special casing for BlockCon (remove along with BlockCon)
+            (nargs', nparams', tycon') <-
                   case (tycon, args) of
-                      (BlockCon, arg : _) ->
-                          let ty' = prettyType ppopts arg in
-                          (PP.viaShow $ nargs - 1, PP.viaShow $ nparams - 1, ty')
-                      (_, _) ->
-                          let ty' = prettyTyCon tycon in
-                          (PP.viaShow nargs, PP.viaShow nparams, ty')
-                          
+                      (BlockCon, arg : _) -> do
+                          ppopts <- asks tiPPOpts
+                          let ty' = prettyType ppopts arg
+                          pure (PP.viaShow $ nargs - 1, PP.viaShow $ nparams - 1, ty')
+                      (_, _) -> do
+                          let ty' = prettyTyCon tycon
+                          pure (PP.viaShow nargs, PP.viaShow nparams, ty')
+
             let pos = Pos.getPos prov
             recordError pos $ "Too many type arguments for type constructor" <+>
                               tycon' <> "; found" <+> nargs' <+>
