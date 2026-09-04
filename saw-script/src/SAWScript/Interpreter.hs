@@ -198,7 +198,8 @@ getType pat = case pat of
     SS.PWild _pos ~(Just t) -> t
     SS.PVar _allpos _xpos _x ~(Just t) -> t
     SS.PTuple tuplepos pats ->
-        SS.TyCon (SS.TypeExplicit tuplepos) (SS.TupleCon (genericLength pats)) (map getType pats)
+        let prov = SS.TypeFromElement tuplepos SS.TyctxPat in
+        SS.TyCon prov (SS.TupleCon (genericLength pats)) (map getType pats)
 
 -- Convert some text to an InputText for cryptol-saw-core.
 toInputText :: SS.Pos -> Text -> CEnv.InputText
