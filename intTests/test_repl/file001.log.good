@@ -4,8 +4,10 @@ Type errors:
     Expected: TopLevel t.0
     Found:    Int
 
-  file001.saw:2:1-2:2: Note: The type TopLevel t.0 arises from this type annotation
-  file001.saw:2:1-2:2: Note: The type Int arises from the type of this term
+  file001.saw:2:1-2:2: Note: The expected type _ _ arises from the form of this expression
+  file001.saw:2:1-2:2: Note: The expected type's monad TopLevel arises from the context of this statement
+  file001.saw:2:1-2:1: Note: The expected type's 1st argument t.0 is a fresh type variable for a type implied here
+  file001.saw:2:1-2:2: Note: The found type Int arises from the form of this constant
 
 
 FAILED

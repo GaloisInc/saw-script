@@ -260,33 +260,41 @@ resolveIncludes depth seen incpath opts ppopts process tree =
 -- appropriate since we use it only to handle the builtins; any
 -- glitches there are properly panics.
 --
--- The first argument (fileName) is a string to pass as the
+-- The first argument (@name@) is the name of the builtin we're
+-- processing. This is used to concoct a fake
 -- filename for the lexer, which (complete with line and column
 -- numbering of dubious value) will go into the positions of the
 -- elements of the resulting type.
---
--- The fake file name names the builtin object involved, so we'll also
--- use it as the panic location string if we need to panic.
 --
 -- FUTURE: we should figure out how to generate more meaningful
 -- positions (like "third argument of concat") but this at least
 -- allows telling the user which builtin the type came from.
 --
+-- The name is also used as part of the panic location if reading the
+-- schema fails, so we know which builtin caused the problem.
+--
 -- Note: there is no way to reach @include@ statements from type
 -- schemas, so no need to process includes in what we read.
 --
 readSchemaPure ::
-    FilePath ->
-    PrimitiveLifecycle ->
-    ScopedMap Name (PrimitiveLifecycle, NamedType) ->
+    -- | Name of the builtin whose type signature we're reading
     Text ->
+    -- | Lifecycle state of the builtin
+    PrimitiveLifecycle ->
+    -- | Environment for named types
+    ScopedMap Name (PrimitiveLifecycle, NamedType) ->
+    -- | Text to read from
+    Text ->
+    -- | Result (a type scheme)
     Schema
-readSchemaPure fakeFileName lc tyenv str =
+readSchemaPure name lc tyenv str =
     -- This is for use during initialization, so we can use the default ppopts
     let ppopts = PPS.defaultOpts in
-
-    let schema = readAnyPure ppopts fakeFileName str "end-of-input" parseSchema (Text.pack fakeFileName) in
-    panicOnMsgs' (Text.pack fakeFileName) $ checkSchema ppopts lc tyenv schema
+    let fakeFileName = Text.unpack $ "<definition of " <> name <> ">"
+        whoAmI = "readSchemaPure on " <> name
+    in
+    let schema = readAnyPure ppopts fakeFileName str "end-of-input" parseSchema whoAmI in
+    panicOnMsgs' (Text.pack fakeFileName) $ checkSchema ppopts lc tyenv schema name
 
 -- | Read a schema pattern from a string. This is used by the
 --   :search REPL command.

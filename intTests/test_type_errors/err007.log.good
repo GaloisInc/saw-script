@@ -4,8 +4,10 @@ Type errors:
     Expected: TopLevel t.0
     Found:    [Int]
 
-  err007.saw:2:1-2:4: Note: The type TopLevel t.0 arises from this type annotation
-  err007.saw:2:1-2:4: Note: The type [Int] arises from the type of this term
+  err007.saw:2:1-2:4: Note: The expected type _ _ arises from the form of this expression
+  err007.saw:2:1-2:4: Note: The expected type's monad TopLevel arises from the context of this statement
+  err007.saw:2:1-2:1: Note: The expected type's 1st argument t.0 is a fresh type variable for a type implied here
+  err007.saw:2:1-2:4: Note: The found type [Int] arises from the form of this expression
 
 
 FAILED

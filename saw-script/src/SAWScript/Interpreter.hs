@@ -198,7 +198,8 @@ getType pat = case pat of
     SS.PWild _pos ~(Just t) -> t
     SS.PVar _allpos _xpos _x ~(Just t) -> t
     SS.PTuple tuplepos pats ->
-        SS.TyCon tuplepos (SS.TupleCon (genericLength pats)) (map getType pats)
+        let prov = SS.TypeFromElement tuplepos SS.TyctxPat in
+        SS.TyCon prov (SS.TupleCon (genericLength pats)) (map getType pats)
 
 -- Convert some text to an InputText for cryptol-saw-core.
 toInputText :: SS.Pos -> Text -> CEnv.InputText
@@ -215,7 +216,6 @@ toInputText pos0 txt =
       SS.Range f sl sc _ _ -> (f,sl, sc)
       SS.FileOnlyPos f -> (f, 1, 1)
       SS.FileAndFunctionPos f _ -> (f, 1, 1)
-      SS.PosInferred _ pos' -> extract pos'
       SS.PosInternal s -> (s,1,1)
       SS.PosInsideBuiltin -> ("(builtin)", 1, 1)
       SS.PosREPL       -> ("<interactive>", 1, 1)
@@ -871,7 +871,7 @@ interpretExpr expr =
                       panic "interpretExpr" [
                            "Read of inaccessible variable " <> x
                       ]
-      SS.Lambda _pos mname params namedParams e -> do
+      SS.Lambda _pos mname _paramPos params namedParams e -> do
           env <- gets rwEnviron
           let namedParams' = Map.map (\(_, (_, d, p)) -> (d, p)) namedParams
           return $ VLambda env mname params namedParams' e
@@ -934,7 +934,7 @@ interpretDeclGroup rebindable dg = case dg of
             -- circular knot that can only be constructed in very
             -- specific ways.
             extractFunction x e0 = case e0 of
-                SS.Lambda _ mname params namedParams e1 ->
+                SS.Lambda _ mname _ params namedParams e1 ->
                     let namedParams' = Map.map (\(_, (_, d, p)) -> (d, p)) namedParams in
                     \env -> VLambda env mname params namedParams' e1
                 SS.TSig _ e1 _ ->
@@ -1462,15 +1462,16 @@ interpretMain = do
   avail <- gets rwPrimsAvail
   Environ varenv tyenv _cryenv <- gets rwEnviron
   rbenv <- gets rwRebindables
-  let pos = SS.PosInternal "entry"
+  let pos = SS.PosInternal "call-to-main"
+      prov = SS.TypeFromElement pos SS.TyctxExpr
       -- We need the type to be "TopLevel a", not just "TopLevel ()".
       -- There are several (old) tests in the test suite whose main
       -- returns something, e.g. several are TopLevel Theorem because
       -- they call prove_print or prove_sat or whatever and don't
       -- explicitly throw away the result.
-      tyRet = SS.TyVar pos "a"
-      tyMonadic = SS.tBlock pos (SS.tContext pos SS.TopLevel) tyRet
-      tyExpected = SS.Forall [(pos, "a")] tyMonadic
+      tyRet = SS.TyVar prov "a"
+      tyMonadic = SS.tApply prov (SS.tContext prov SS.TopLevel) tyRet
+      tyExpected = SS.Forall [(SS.SchemaNameExplicit pos, "a")] tyMonadic
   let main = case ScopedMap.lookup "main" varenv of
           Just (_defpos, lc, tyFound, v, _doc) -> Just (lc, tyFound, v)
           -- Having main be rebindable doesn't make much sense, but
@@ -1487,7 +1488,7 @@ interpretMain = do
         SS.Forall _ (SS.TyCon _ SS.BlockCon [_, _]) -> do
             -- It looks like a monadic value, so check more carefully.
             ppopts <- getPPOpts
-            case typesMatch ppopts avail tyenv tyFound tyExpected of
+            case typesMatch ppopts avail tyenv "main" tyFound tyExpected of
               False ->
                   -- While we accept any TopLevel a, don't encourage people
                   -- to do that.
@@ -2548,7 +2549,7 @@ toplevelSubshell () = do
     rw' <- liftIO $ hook ro rw
     put rw'
     popScope
-    let ty = SS.tUnit (rwPosition rw)
+    let ty = SS.tUnit $ SS.TypeFromElement (rwPosition rw) SS.TyctxExpr
     return $ toValue ty "subshell" ()
 
 -- The proof_subshell command.
@@ -2570,18 +2571,19 @@ proofScriptSubshell () = do
     scriptTopLevel $ do
         put rw'
         popScope
-    let ty = SS.tUnit (rwPosition rw)
+    let ty = SS.tUnit $ SS.TypeFromElement (rwPosition rw) SS.TyctxExpr
     return $ toValue ty "proof_subshell" ()
 
 -- The "map" builtin.
 mapValue :: Value -> [Value] -> TopLevel Value
 mapValue f xs =
   do let pos = SS.PosInsideBuiltin
+         prov = SS.TypeFromElement pos SS.TyctxExpr
      let info = "(value was in a \"map\")"
      -- toValue will check the array type but not the element type,
      -- since we already have Values here. So use unit as a
      -- placeholder.
-     let ty = SS.tArray pos (SS.tUnit pos)
+     let ty = SS.tArray prov (SS.tUnit prov)
      toValue ty "map" <$> traverse (applyValue pos info f) xs
 
 -- The "for" builtin.
@@ -3353,7 +3355,6 @@ primTypes = foldl doadd Map.empty
           { primTypeType = SS.ConcreteType ty
           , primTypeLife = lc
           }
-        fakeFileName = Text.unpack $ "<definition of builtin type " <> name <> ">"
 
         -- We need a Map Name (PrimitiveLifecycle, NamedType) to feed
         -- to readSchemaPure. Construct one from the Map Name PrimType
@@ -3363,7 +3364,7 @@ primTypes = foldl doadd Map.empty
         tyenv' = Map.map (\pt -> (primTypeLife pt, primTypeType pt)) tyenv
         tyenv'' = ScopedMap.seed tyenv'
 
-        ty = case Loader.readSchemaPure fakeFileName lc tyenv'' tystr of
+        ty = case Loader.readSchemaPure name lc tyenv'' tystr of
             SS.Forall [] ty' ->
                 ty'
             _ ->
@@ -4705,7 +4706,7 @@ primitives = Map.fromList $
     [ "Merge two simplification sets into one." ]
 
   , prim "basic_ss"            "Simpset"
-    (bicVal $ \bic _ -> toValue (SS.TyVar SS.PosInsideBuiltin "Simpset") "basic_ss" $ biBasicSS bic)
+    (bicVal $ \bic _ -> toValue (SS.TyVar (SS.TypeFromElement SS.PosInsideBuiltin SS.TyctxExpr) "Simpset") "basic_ss" $ biBasicSS bic)
     Current
     [ "A basic rewriting simplification set containing some boolean"
     , "identities and conversions relating to bitvectors, natural"
@@ -8365,8 +8366,7 @@ primitives = Map.fromList $
         -- reasons we have a :env call in the test suite, even though
         -- it requires maintenance for every change to the builtin
         -- table. Otherwise these panics can go unnoticed.
-        fakeFileName = Text.unpack $ "<type of " <> name <> ">"
-        ty' = Loader.readSchemaPure fakeFileName lc primNamedTypeEnv ty
+        ty' = Loader.readSchemaPure name lc primNamedTypeEnv ty
         ty'' = case ty' of
             SS.Forall _ t -> t
 

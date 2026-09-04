@@ -229,9 +229,9 @@ AExpr :: { Expr }
 Field :: { (Name, Expr) }
  : name '=' Expression                  { (tokStr $1, $3) }
 
-Names :: { [(Pos, Name)] }
- : name                                 { [(getPos $1, tokStr $1)] }
- | name ',' Names                       { (getPos $1, tokStr $1) : $3 }
+Names :: { [(SchemaNameProvenance, Name)] }
+ : name                                 { [(SchemaNameExplicit $ getPos $1, tokStr $1)] }
+ | name ',' Names                       { (SchemaNameExplicit $ getPos $1, tokStr $1) : $3 }
 
 PolyType :: { Schema }
  : Type                                 { tMono $1     }
@@ -256,8 +256,8 @@ FunctionType :: { [(Maybe (Token Pos), Type)] }
  | name '?' AppliedType '->' FunctionType { (Just $1, $3) : $5 }
 
 AppliedType :: { Type }
- : BaseType                             { $1                            }
- | AppliedType BaseType                 { tBlock (maxSpan' $1 $2) $1 $2 }
+ : BaseType                             { $1                             }
+ | AppliedType BaseType                 { txApply (maxSpan' $1 $2) $1 $2 }
 
 -- special case of function type that can be followed by more base types
 -- without requiring parens
@@ -266,26 +266,26 @@ BaseFunType :: { Type }
  | name '?' BaseType '->' FunctionType  {% mkFuncType ((Just $1, $3) : $5) }
 
 BaseType :: { Type }
- : name                                 { tVar (getPos $1) (tokStr $1)     }
- | '(' ')'                              { tTuple (maxSpan [$1, $2]) []     }
- | 'Bool'                               { tBool (getPos $1)                }
- | 'Int'                                { tInt (getPos $1)                 }
- | 'String'                             { tString (getPos $1)              }
- | 'Term'                               { tTerm (getPos $1)                }
- | 'Type'                               { tType (getPos $1)                }
- | 'AIG'                                { tAIG (getPos $1)                 }
- | 'CFG'                                { tCFG (getPos $1)                 }
- | 'LLVMSpec'                           { tLLVMSpec (getPos $1)            }
- | 'JVMMethodSpec'                      { tJVMSpec (getPos $1)             }
- | 'JVMSpec'                            { tJVMSpec (getPos $1)             }
- | 'MIRSpec'                            { tMIRSpec (getPos $1)             }
- | 'ProofScript'                        { tContext (getPos $1) ProofScript }
- | 'TopLevel'                           { tContext (getPos $1) TopLevel    }
- | 'CrucibleSetup'                      { tVar (getPos $1) "CrucibleSetup" }
- | '(' Type ')'                         { $2                               }
- | '(' commas2(Type) ')'                { tTuple (maxSpan [$1, $3]) $2     }
- | '[' Type ']'                         { tArray (maxSpan [$1, $3]) $2     }
- | '{' commas(FieldType) '}'            { tRecord (maxSpan [$1, $3]) $2    }
+ : name                                 { txVar (getPos $1) (tokStr $1)     }
+ | '(' ')'                              { txTuple (maxSpan [$1, $2]) []     }
+ | 'Bool'                               { txBool (getPos $1)                }
+ | 'Int'                                { txInt (getPos $1)                 }
+ | 'String'                             { txString (getPos $1)              }
+ | 'Term'                               { txTerm (getPos $1)                }
+ | 'Type'                               { txType (getPos $1)                }
+ | 'AIG'                                { txAIG (getPos $1)                 }
+ | 'CFG'                                { txCFG (getPos $1)                 }
+ | 'LLVMSpec'                           { txLLVMSpec (getPos $1)            }
+ | 'JVMMethodSpec'                      { txJVMSpec (getPos $1)             }
+ | 'JVMSpec'                            { txJVMSpec (getPos $1)             }
+ | 'MIRSpec'                            { txMIRSpec (getPos $1)             }
+ | 'ProofScript'                        { txContext (getPos $1) ProofScript }
+ | 'TopLevel'                           { txContext (getPos $1) TopLevel    }
+ | 'CrucibleSetup'                      { txVar (getPos $1) "CrucibleSetup" }
+ | '(' Type ')'                         { $2                                }
+ | '(' commas2(Type) ')'                { txTuple (maxSpan [$1, $3]) $2     }
+ | '[' Type ']'                         { txArray (maxSpan [$1, $3]) $2     }
+ | '{' commas(FieldType) '}'            { txRecord (maxSpan [$1, $3]) $2    }
 
 FieldType :: { (Name, Type) }
   : name ':' Type                       { (tokStr $1, $3)         }
@@ -536,9 +536,10 @@ buildFunction mname params e = case params of
       namedParams' <- foldM doadd Map.empty namedParams
 
       -- Figure out the overall pos
-      let pos = spanPos (maxSpan params) (getPos e)
+      let parampos = (maxSpan params) 
+      let allpos = spanPos parampos (getPos e)
 
-      Right $ Lambda pos mname params' namedParams' e
+      Right $ Lambda allpos mname parampos params' namedParams' e
 
 buildApplication :: Expr -> [(Maybe (Pos, Text), Expr)] -> Expr
 buildApplication fun args = case args of
@@ -697,6 +698,6 @@ mkFuncType tys = do
               -- This is not allowed by the grammar
               panic "mkFuncType" ["Return value was named"]
 
-  Right $ tFun pos nameinfo posParams namedParams ret'
+  Right $ txFun pos nameinfo posParams namedParams ret'
 
 }

@@ -37,6 +37,7 @@ import Data.Map (Map)
 import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
+import SAWSupport.Position
 import qualified SAWSupport.Pretty as PPS
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
@@ -46,7 +47,7 @@ import SAWSupport.ScopedMap (ScopedMap)
 -- get around to tidying up the position types and therefore having
 -- less junk in the Position module.
 import qualified SAWCentral.Position as Pos
-import SAWCentral.Position (Inference(..), Pos(..))
+import SAWCentral.Position (Pos(..))
 import SAWCentral.AST
 import qualified SAWCentral.ASTUtil as Util
 
@@ -77,25 +78,39 @@ dropKeys :: Ord k => [k] -> Map k v -> Map k v
 dropKeys keys xs =
     foldr Map.delete xs keys
 
+-- | Return the string 0th, 1th, 2nd, etc. from n.
+ordin :: Int -> Text
+ordin n =
+    let suffix = case n `mod` 10 of
+          1 | n `mod` 100 /= 11 -> "st"
+          2 | n `mod` 100 /= 12 -> "nd"
+          3 | n `mod` 100 /= 13 -> "rd"
+          _ -> "th"
+    in
+    Text.pack (show n) <> suffix
+
 
 ------------------------------------------------------------
 -- UnifyVars
 
+-- | unifyVars is a type-class-polymorphic function for extracting
+--   unification vars from a type or type schema. It returns a set of
+--   TypeIndex (TypeIndex is just Integer) manifested as a map from
+--   those TypeIndexes to their positions/provenance.
 --
--- unifyVars is a type-class-polymorphic function for extracting
--- unification vars from a type or type schema. It returns a set of
--- TypeIndex (TypeIndex is just Integer) manifested as a map from
--- those TypeIndexes to their positions/provenance.
+--   Note that because every unification var is created exactly once,
+--   we can take the provenance information from whichever copy we see
+--   first, and not worry about trying to merge it when we take
+--   unions.
 --
-
 class UnifyVars t where
-    unifyVars :: t -> Map TypeIndex Pos
+    unifyVars :: t -> Map TypeIndex TypeProvenance
 
 instance (Ord k, UnifyVars a) => UnifyVars (Map k a) where
     unifyVars = unifyVars . Map.elems
 
 instance (UnifyVars a) => UnifyVars [a] where
-    unifyVars = Map.unionsWith Pos.choosePos . map unifyVars
+    unifyVars ts = Map.unions $ map unifyVars ts
 
 instance (UnifyVars a) => UnifyVars (PrimitiveLifecycle, a) where
     unifyVars (_lc, t) = unifyVars t
@@ -111,11 +126,11 @@ instance UnifyVars Type where
                 namedVars = unifyVars namedParams
                 retVars = unifyVars ret
             in
-            let vars1 = Map.unionWith Pos.choosePos paramsVars namedVars in
-            Map.unionWith Pos.choosePos vars1 retVars
+            Map.unions [paramsVars, namedVars, retVars]
         TyRecord _ tm     -> unifyVars tm
         TyVar _ _         -> Map.empty
-        TyUnifyVar pos i  -> Map.singleton i pos
+        TyUnifyVar (TypeFailed _) _i -> Map.empty  -- ignore error vars
+        TyUnifyVar prov i -> Map.singleton i prov
 
 instance UnifyVars Schema where
     unifyVars (Forall _ t) = unifyVars t
@@ -190,12 +205,12 @@ instance AppSubst Expr where
         Lookup pos rec fld     -> Lookup pos (appSubst s rec) fld
         TLookup pos tpl idx    -> TLookup pos (appSubst s tpl) idx
         Var _pos _x            -> expr
-        Lambda pos mname pats ppats body ->
+        Lambda pos mname paramPos pats ppats body ->
             let pats' = map (appSubst s) pats
                 ppats' = Map.map (appSubst s) ppats
                 body' = appSubst s body
             in
-            Lambda pos mname pats' ppats' body'
+            Lambda pos mname paramPos pats' ppats' body'
         Application pos f v    ->
             Application pos (appSubst s f) (appSubst s v)
         Let pos dg e           ->
@@ -232,14 +247,14 @@ instance AppSubst Decl where
 
 instance AppSubst Type where
     appSubst s t = case t of
-        TyCon pos tc ts -> TyCon pos tc (appSubst s ts)
-        TyFunc pos ninfo params namedParams ret ->
+        TyCon prov tc ts -> TyCon prov tc (appSubst s ts)
+        TyFunc prov ninfo params namedParams ret ->
             let params' = appSubst s params
                 namedParams' = appSubst s namedParams
                 ret' = appSubst s ret
             in
-            TyFunc pos ninfo params' namedParams' ret'
-        TyRecord pos fs -> TyRecord pos (appSubst s fs)
+            TyFunc prov ninfo params' namedParams' ret'
+        TyRecord prov fs -> TyRecord prov (appSubst s fs)
         TyVar _ _  -> t
         TyUnifyVar _ i -> case Map.lookup i s of
             Nothing -> t
@@ -391,24 +406,28 @@ getFreshTypeIndex = do
     modify $ (\rw -> rw { tiNextTypeIndex = next + 1 })
     return next
 
+-- | Construct a new (unification) type variable with explicit provenance.
+--   Convert the schema name provenance to type provenance.
+getProvenancedTyVar :: TypeProvenance -> TI Type
+getProvenancedTyVar prov = TyUnifyVar prov <$> getFreshTypeIndex
+
 -- | Construct a fresh type variable.
 --
 --   Collect the position that prompted us to make it; for example, if
 --   we're the element type of an empty list we get the position of the
---   []. We haven't inferred anything, so use the InfFresh position.
+--   []. We haven't inferred anything, so use TypeFresh as provenance.
 --   This will cause the position of anything more substantive that gets
 --   unified with it to be preferred. If no such thing happens though
 --   this will be the position that gets attached to the quantifier
 --   binding in generalize.
 getFreshTyVar :: Pos -> TI Type
-getFreshTyVar pos = TyUnifyVar (PosInferred InfFresh pos) <$> getFreshTypeIndex
+getFreshTyVar pos = getProvenancedTyVar $ TypeFresh pos
 
 -- | Construct a new type variable to use as a placeholder after an
---   error occurs. For now this is the same as other fresh type
---   variables, but I've split it out in case we want to distinguish
---   it in the future.
+--   error occurs. Ultimately this is the same as a fresh type
+--   variable, but we remember that it arose from an error.
 getErrorTyVar :: Pos -> TI Type
-getErrorTyVar pos = getFreshTyVar pos
+getErrorTyVar pos = getProvenancedTyVar $ TypeFailed pos
 
 -- | Add an error message.
 recordError :: Pos -> PPS.Doc -> TI ()
@@ -423,6 +442,25 @@ recordError' (pos, err) = recordError pos err
 recordWarning :: Pos -> PPS.Doc -> TI ()
 recordWarning pos msg = do
     modify $ \rw -> rw { tiWarnings = (pos, msg) : tiWarnings rw }
+
+
+------------------------------------------------------------
+-- Instantiation of foralls
+
+-- | Get a fresh tyvar for each quantifier binding, and convert to a
+--   name -> ty map.
+instantiateForalls ::
+      Text -> -- ^ name of object these belong to
+      [(SchemaNameProvenance, Text)] ->
+      TI (Map Text (PrimitiveLifecycle, NamedType))
+instantiateForalls fnName vars = do
+     let once (prov, x) = do
+           let prov' = case prov of
+                 SchemaNameExplicit pos -> TypeFromForallNamed pos x fnName
+                 SchemaNameImplicit pos -> TypeFromForallFresh pos x fnName
+           t <- getProvenancedTyVar prov'
+           return (x, (Current, ConcreteType t))
+     Map.fromList <$> mapM once vars
 
 
 ------------------------------------------------------------
@@ -452,32 +490,32 @@ resolveCurrentTypedefs t = do
 --   as further annotations to errors.)
 condenseFunctions :: Pos -> Type -> TI Type
 condenseFunctions errPos ty = case ty of
-    TyFunc pos1 names1 params1 namedParams1 ret1 ->
+    TyFunc prov1 names1 params1 namedParams1 ret1 ->
         case ret1 of
-            TyFunc _pos2 names2 params2 namedParams2 ret2 ->
+            TyFunc _prov2 names2 params2 namedParams2 ret2 ->
                 let dups = Map.intersection namedParams1 namedParams2 in
                 case null dups of
                     True -> do
-                        -- FUTURE: we could/should splice pos1 and
-                        -- pos2... but we don't have a way to
+                        -- FUTURE: we could/should splice prov1 and
+                        -- prov2... but we don't have a way to
                         -- represent disjoint position spans, so it's
                         -- only a good idea if they're "near" each
                         -- other. But they won't necessarily be, and
                         -- we have no way to figure that for the time
                         -- being.
-                        let pos = pos1
+                        let prov = prov1
                             names = names1 <> names2
                             params = params1 ++ params2
                             namedParams = Map.union namedParams1 namedParams2
                             ret = ret2
-                            ty' = TyFunc pos names params namedParams ret
+                            ty' = TyFunc prov names params namedParams ret
                         -- Try again in case there's more functions hiding
                         condenseFunctions errPos ty'
                     False -> do
                         let dups' = PP.hsep $ map PP.pretty $ Map.keys dups
                         recordError errPos $ "Function has duplicate" <+>
                                              "parameter names:" <+> dups'
-                        getErrorTyVar pos1
+                        getErrorTyVar errPos
             _ ->
                 pure ty
     _ ->
@@ -525,14 +563,19 @@ expandFully pos t = do
 -- the caller must also apply the current substitution before reasoning
 -- about what unification vars do and don't appear.
 --
--- Returns a map of the index number to the occurrence position.
-unifyVarsInEnvs :: TI (Map TypeIndex Pos)
+-- Returns a map of the index number to the occurrence position. Note
+-- that (first) each unification var is created exactly once so we can
+-- take whichever provenance we find first; and also, we don't
+-- actually care about the provenance, because the result is used to
+-- drop elements from another table.
+--
+unifyVarsInEnvs :: TI (Map TypeIndex TypeProvenance)
 unifyVarsInEnvs = do
     venv <- gets tiVarEnv
     tenv <- gets tiTyEnv
     vtys <- mapM applyCurrentSubst $ ScopedMap.allElems venv
     ttys <- mapM applyCurrentSubst $ ScopedMap.allElems tenv
-    return $ Map.unionWith Pos.choosePos (unifyVars vtys) (unifyVars ttys)
+    return $ Map.union (unifyVars vtys) (unifyVars ttys)
 
 -- | Get the named type vars that occur as keys in the current type name
 --   environment.
@@ -638,47 +681,355 @@ prettyEnclosing ppopts tys =
     in
     PP.vsep $ map once tys
 
--- | Print details of a type. This prints the provenance info
---   we carry in type positions.
-prettyTypeDetails :: PPS.Opts -> Type -> (Pos, PPS.Doc)
-prettyTypeDetails ppopts ty =
-    let (pos, what) = case Pos.getPos ty of
-           PosInferred InfFresh p ->
-               (p, "a fresh type variable introduced here")
-           PosInferred InfTerm p ->
-               (p, "the type of this term")
-           PosInferred InfContext p ->
-               (p, "the context of the term")
-           p ->
-               (p, "this type annotation")
-    in
-    let ty' = prettyType ppopts ty
-        what' = "arises from" <+> what
+-- | Print the provenance info we carry in types.
+--
+--   This returns the position along with the text associated with
+--   the provenance, so it isn't a normal print routine. The idea
+--   is to be able to feed lists of positions and messages into the
+--   error-reporting infrastructure.
+--
+--   It remains not entirely clear if the position should be inside
+--   the provenance type or not.
+--
+prettyTypeProvenance :: TypeProvenance -> (Pos, PP.Doc ann, Maybe (Pos, PP.Doc ann))
+prettyTypeProvenance prov = case prov of
+    TypeExplicit pos ->
+        (pos, "arises from this explicit type name", Nothing)
+    TypeFresh pos ->
+        (pos, "is a fresh type variable for a type implied here", Nothing)
+    TypeFailed pos ->
+        (pos, "is a placeholder from a type error reported here", Nothing)
+    TypeFromForallNamed pos a x ->
+        let a' = PP.dquotes $ PP.pretty a
+            x' = PP.dquotes $ PP.pretty x
+        in
+        (pos, "arises from instantiating a type variable" <+> a' <+>
+              "forall-bound in" <+> x' <+> "and introduced here",
+         Nothing)
+    TypeFromForallFresh pos a x ->
+        let a' = PP.dquotes $ PP.pretty a
+            x' = PP.dquotes $ PP.pretty x
+        in
+        (pos, "arises from instantiating a type variable" <+> a' <+>
+              "forall-bound in" <+> x' <+> "and implied here",
+         Nothing)
+    TypeFromElement pos tyctx ->
+        let tyctx' = prettyTyctx tyctx in
+        (pos, "arises from the form of this" <+> tyctx', Nothing)
+    TypeFromContext pos tyctx ->
+        let tyctx' = prettyTyctx tyctx in
+        (pos, "arises from the context of this" <+> tyctx', Nothing)
+    TypeFromFuncWithSig pos ->
+        (pos, "arises from this parameter list", Nothing)
+    TypeFromFuncWithBody pos bodypos ->
+        (pos, "arises from this parameter list...",
+         Just (bodypos, "...and this function body")
+        )
 
-        -- Deliberately render and re-docify the type, and generate a
-        -- multi-line message only if the type comes out as multiple
-        -- lines when rendered on its own. This is kind of gross, but
-        -- the prettyprinter library does not give much in the way of
-        -- formatting control, and if we just do things its way we
-        -- pretty much always get a multiline message, even for very
-        -- short types like (), because what' coupled
-        -- with the position text at the beginning of the line is long
-        -- enough to make the prettyprinter library think the message
-        -- ought to be multiline. Perhaps the right way to deal with
-        -- this problem is to force it to use a different notion of
-        -- what constitutes a "long" line when dealing with error
-        -- messages rather than program text; but for the time being
-        -- at least we have no useful infrastructure to support that.
-        -- So instead generate our own faux "reactive" layout. XXX.
-        --
-        -- If you find a way to fix this better, please also fix the
-        -- analogous code for "Too many arguments to function" below.
-        --
-        msg = case map PP.pretty $ Text.lines $ PPS.renderText ppopts ty' of
-            [ty''] -> "The type" <+> ty'' <+> what'
-            ty'' -> "The type" <+> PP.nest 3 (PP.vsep ty'' <> PP.line <> what')
+-- | Print details of a type. This prints the provenance info
+--   we carry in types.
+--
+--   Note that we are always printing fully resolved types, so any
+--   unification vars we see are unresolved. The provenance entry for
+--   those (if it's `TypeFromElement` or `TypeFromContext`) is meant
+--   for use in `generalize`. Override those cases to report the type
+--   as a fresh type variable.
+--
+--   Also note that while `TyUnifyVar` can't have `TypeExplicit`
+--   provenance, it can have `TypeFailed` provenance; that happens on
+--   error. We do want to print that the usual way.
+--
+--   We potentially print subelements of types (not "subtypes", that
+--   means something else) separately because they can have wildly
+--   different provenance. Therefore, doesn't use the regular type
+--   printer but rolls its own.
+--
+--   We assume that earlier parts of the same type error have already
+--   printed the type using the regular type printer, which means (a)
+--   it will panic on malformed types so we don't have to, and also
+--   (b) we don't have to print the whole thing again, just the
+--   components, and the user can interpret them by looking at the
+--   already-printed version.
+--
+--   Set @inhibitSubs@ to `True` to print only the top layer and
+--   drop the rest.
+--
+prettyTypeDetails :: Bool -> Text -> Type -> [(Pos, PPS.Doc)]
+prettyTypeDetails inhibitSubs desc0 ty0 =
+
+    -- | Check whether the type associated with @subprov@ is logically
+    --   part of the type associated with @prov@. If so, we won't
+    --   print the subelement explicitly.
+    --
+    --   This logic is primarily intended to avoid printing
+    --   subcomponents of compound explicit types (consider for
+    --   example @{ a : Int, b : Int }@) but may be useful for other
+    --   situations as well.
+    --
+    --   Treat all errors as included in other errors.
+    --
+    let isIncluded _subty subprov ty prov =
+          case (subprov, prov) of
+              (TypeExplicit subpos, TypeExplicit pos) -> Pos.subspan subpos pos
+              (TypeFailed _, TypeFailed _) -> True
+              (TypeFromElement subpos TyctxConstant, TypeFromElement pos _) ->
+                  -- Restrict this case to when the enclosing type is
+                  -- a tuple, list/array, or record, and the element
+                  -- is a constant. This will capture obvious cases
+                  -- like (0, 3).
+                  --
+                  -- Allowing any case of TypeFromElement with
+                  -- enclosing position includes the result types of
+                  -- do-blocks, and that is in general undesirable. It
+                  -- also captures certain cases with function calls,
+                  -- and those are probably not good either.
+                  --
+                  -- If this causes further fallout, maybe better to
+                  -- shut it off entirely.
+                  --
+                  -- FUTURE: try making do-blocks their own `Tyctx`
+                  -- case.
+                  let enclosed = Pos.subspan subpos pos in
+                  case ty of
+                      TyCon _ (TupleCon _) _ -> enclosed
+                      TyCon _ ArrayCon _ -> enclosed
+                      TyRecord _ _ -> enclosed
+                      _ -> False
+
+              (_, _) -> False
     in
-    (pos, msg)
+
+    -- | Alternate printer for type constructors. This takes argument
+    --   strings to insert into the output. We assume the application
+    --   has the right number of args; otherwise the regular type
+    --   printer would have croaked on it.
+    --
+    --   FUTURE: maybe the main `TyCon` printer should work this way;
+    --   that would avoid the objectionable corner cases. However,
+    --   note that the code here only works for fully applied
+    --   constructors of kind *, and will need further work to take
+    --   the place of the main printer. Also, it (deliberately) only
+    --   handles `Text` and the main printer does need to cope with
+    --   prettyprinter docs.
+    --
+    let ppTyCon' tc args = case tc of
+          TupleCon _n ->
+              "(" <> Text.intercalate ", " args <> ")"
+          ArrayCon -> "[" <> Text.intercalate " " args <> "]"
+          StringCon -> "String"
+          TermCon -> "Term"
+          TypeCon -> "Type"
+          BoolCon -> "Bool"
+          IntCon -> "Int"
+          AIGCon -> "AIG"
+          CFGCon -> "CFG"
+          JVMSpecCon -> "JVMSpec"
+          LLVMSpecCon -> "LLVMSpec"
+          MIRSpecCon -> "MIRSpec"
+          BlockCon -> Text.intercalate " " args
+          ContextCon ProofScript -> "ProofScript"
+          ContextCon TopLevel -> "TopLevel"
+    in
+
+    -- | Get a subelement descriptor for a type constructor.
+    let describeTyConElt :: TyCon -> Int -> Text
+        describeTyConElt tc i = case tc of
+          TupleCon _n -> ordin (i + 1) <> " element"
+          ArrayCon -> "element type"
+          BlockCon -> case i of
+              0 -> "monad"
+              _ -> ordin i <> " argument"
+          _ -> "???"  -- catchall for things that don't have subelements
+    in
+
+
+    -- Print a type, substituting "_" for subelements we want to print
+    -- separately, and return the resulting string, the provenance
+    -- entry from the type, and a list of the same results for each
+    -- subelement that's been separated out.
+    --
+    -- This obviously can't use the regular type printer.
+    --
+    -- Also, we take advantage of not using the regular type printer
+    -- to emit the whole type on one line as `Text`, not as a
+    -- prettyprinter doc. This has the disadvantage that the line
+    -- might be quite long (e.g. for large record types) but the
+    -- advantage that the prettyprinter doesn't try to insert newlines.
+    -- Earlier versions of this code that used the regular type printer
+    -- had to resort to forcibly rendering the type doc to `Text` and
+    -- then re-converting it to a doc so only types that genuinely
+    -- needed to be multiple lines would be. Otherwise it was
+    -- generating stuff like
+    --    foo.saw:12:8-12:25: The expected type (
+    --    ) arises from the form of this constant
+    -- or
+    --    foo.saw:12:8-12:25: The expected type (a,
+    --    b) arises from the form of this constant
+    -- which was really not on.
+    --
+    -- FUTURE: the root cause of that involves the prettyprinter's
+    -- notions about ribbon width, and ultimately we should have
+    -- different width settings for natural language text (like
+    -- errors) and program text. Doing that properly requires some way
+    -- to set program text tiles within natural language text, so if
+    -- we have e.g. a large struct type in an error message it can go
+    -- in an inset. That gets into real typesetting, though, not the
+    -- plastic imitation that prettyprinter libraries seem to offer,
+    -- and the prettyprinter library we're using doesn't have support
+    -- for any such thing. It might be possible to hack it though for
+    -- this special case...
+    --
+    let extract :: Text -> Type -> (Text, TypeProvenance, [(Text, Text, TypeProvenance)])
+        extract desc ty =
+            let consider what prov subelt =
+                  let (subtext, subprov, subsubelts) = extract what subelt in
+                  if isIncluded subelt subprov ty prov then
+                      (subtext, subsubelts)
+                  else
+                      ("_", (desc <> "'s " <> what, subtext, subprov) : subsubelts)
+            in
+            let considerList getWhat prov subelts =
+                  let (_n, subtexts, subsubeltses) =
+                          let once (i, sts, sses) subelt =
+                                let (st, sse) = consider (getWhat i) prov subelt in
+                                (i + 1, st : sts, sse : sses)
+                          in
+                          foldl once (0, [], []) subelts
+                      subtexts' = reverse subtexts
+                      subsubelts' = concat (reverse subsubeltses)
+                  in
+                  (subtexts', subsubelts')
+            in
+            let considerNamed prov subelts =
+                  let once (n, t) =
+                        let what = "named argument " <> n
+                            (st, es) = consider what prov t
+                        in
+                        (n <> "?" <> st, es)
+                  in
+                  let results = map once $ Map.toList subelts
+                      (subtexts, subsubeltses) = unzip results
+                      subsubelts = concat subsubeltses
+                  in
+                  (subtexts, subsubelts)
+            in
+            let considerFields prov subelts =
+                  let once (n, t) =
+                        let what = "field \"" <> n <> "\" type"
+                            (st, es) = consider what prov t
+                        in
+                        (n <> " : " <> st, es)
+                  in
+                  let results = map once $ Map.toList subelts
+                      (subtexts, subsubeltses) = unzip results
+                      subsubelts = concat subsubeltses
+                  in
+                  (subtexts, subsubelts)
+            in
+
+            case ty of
+                TyCon prov tc elts ->
+                    let getWhat = describeTyConElt tc
+                        (elts', subelts) = considerList getWhat prov elts
+                    in
+                    (ppTyCon' tc elts', prov, subelts)
+                TyFunc prov _npi params namedParams ret ->
+                    let mkWhat i = ordin (i + 1) <> " positional parameter"
+                        (params', elts1) = considerList mkWhat prov params
+                        (namedParams', elts2) = considerNamed prov namedParams
+                        (ret', elts3) = consider "return type" prov ret
+                        str = Text.intercalate " -> " (params' ++ namedParams' ++ [ret'])
+                        elts = elts1 ++ elts2 ++ elts3
+                    in
+                    (str, prov, elts)
+                TyRecord prov fields ->
+                    let (fields', elts) = considerFields prov fields
+                        str = "{ " <> Text.intercalate ", " fields' <> " }"
+                    in
+                    (str, prov, elts)
+                TyVar prov x ->
+                    (x, prov, [])
+                TyUnifyVar prov i ->
+                    -- XXX it's important that this match the output of
+                    -- the regular type printer so it would be better to
+                    -- share the code, even though it's one line
+                    let str = "t." <> Text.pack (show i) in
+                    (str, prov, [])
+    in
+    let (str0, prov0, subelts) = extract (desc0 <> " type") ty0 in
+
+    -- Deduplicate the subelements conservatively. Unification
+    -- variables can only have one origin: they are explicitly created
+    -- in some specific place, so if you ever see two copies of of the
+    -- same one they must have both started there. Unfortunately, that
+    -- is not true of named type variables; it is true of those that
+    -- are forall-bound, or that were free in a function header and
+    -- are about to become forall-bound, but we can't distinguish
+    -- those from builtin types here, and builtin types can arise from
+    -- multiple places. (Any builtin function that uses one can
+    -- introduce it.)  (Note though that typedefs have been
+    -- substituted away and are not relevant here.)
+    --
+    -- XXX: it is not optimal to do this by examining the printed form
+    -- of the type. However, it'll work (only a unification var's
+    -- printed form can begin with "t.") and to do it better it would
+    -- need to be merged into the logic of `extract`. I don't want to
+    -- do that right now, because `extract` is already complicated and
+    -- moderately delicate, and adding state like a "seen" table would
+    -- require a complete rework. Maybe in the FUTURE.
+    --
+    -- In principle we could also merge two prints like "the 2nd
+    -- positional parameter t.0" and "the 3rd positional parameter
+    -- t.0" into something like "the 2nd (and 3rd) positional
+    -- parameter t.0", but that would require figuring out a further
+    -- strengthening of `extract` so that you can go back and update
+    -- its already-generated output strings on the fly. Definitely
+    -- doesn't seem worthwhile right now. FUTURE, maybe. For now we
+    -- just drop the duplicates.
+    --
+    let subelts' =
+          let once (seen, elts') elt@(_d, str, _p) =
+                if "t." `Text.isPrefixOf` str then
+                    if Set.member str seen then (seen, elts')
+                    else (Set.insert str seen, elt : elts')
+                else
+                    (seen, elt : elts')
+          in
+          let (_, elts') = foldl once (Set.empty, []) subelts in
+          reverse elts'
+    in
+
+    -- | Convert a printed type and its provenance to an output
+    --   position and message.
+    --
+    --   Note that we can't usefully indent to show grouping; the positions
+    --   get printed at the front, and they're not the same length, so the
+    --   messages all start at different columns and trying to indent them
+    --   just makes a mess.
+    --
+    --   The positions need to be first (in general prints with
+    --   positions should have the form "pos: msg" because various
+    --   tools that read compiler output expect that); we can't
+    --   readily align all the positions and messages in separate
+    --   columns because the prettyprinter library we're using doesn't
+    --   support anything like columns or tables.
+    --
+    --   So we need to do something else to organize the output.
+    let printone (desc, str, prov) =
+          let (pos, prov', extra) = prettyTypeProvenance prov
+              msg = "Note: The " <> PP.pretty desc <+> PP.pretty str <+> prov'
+              extra' = case extra of
+                  Nothing -> []
+                  Just (pos2, prov2') ->
+                      [(pos2, "Note:" <+> prov2')]
+          in
+          [(pos, msg)] ++ extra'
+    in
+
+    let msg0 = printone (desc0 <> " type", str0, prov0)
+        msgs = if inhibitSubs then [] else concatMap printone subelts'
+    in
+    msg0 ++ msgs
 
 -- | Insert an entry in the substitution we're carrying around. Raw
 --   version; everyone except `resolveVar` should call `resolveVar`
@@ -691,16 +1042,16 @@ addResolution i ty = do
 
 -- | Resolve a unification var: update the table we're carrying around
 --   to hold the new definition for @i@.
-resolveVar :: Pos -> TypeIndex -> Type -> TI ()
-resolveVar pos'i i ty = do
+resolveVar :: TypeProvenance -> TypeIndex -> Type -> TI ()
+resolveVar prov'i i ty = do
     -- Check if we should prefer using t1 to t2 as an expansion.
     -- Return the unification variable ID inside t2.
     let prefer t1 t2 = case (t1, t2) of
-          (TyUnifyVar _ j, TyUnifyVar pos'k k)
-              | j < k -> Just (pos'k, k) -- prefer t1/j
+          (TyUnifyVar _ j, TyUnifyVar prov'k k)
+              | j < k -> Just (prov'k, k) -- prefer t1/j
               | otherwise -> Nothing
           (TyUnifyVar{}, _) -> Nothing
-          (_, TyUnifyVar pos'j j) -> Just (pos'j, j) -- prefer t1
+          (_, TyUnifyVar prov'j j) -> Just (prov'j, j) -- prefer t1
           (_, _) ->
               -- We should only ever get here for convertible types;
               -- we could check that; but we don't have an easy way
@@ -710,10 +1061,10 @@ resolveVar pos'i i ty = do
     -- Insert the new result. Shuffle around what's already there
     -- as needed to preserve the ordering invariant.
     case ty of
-        TyUnifyVar pos'j j | j > i ->
+        TyUnifyVar prov'j j | j > i ->
             -- Maintain the ordering invariant for unification vars
             -- pointing at each other.
-            resolveVar pos'j j (TyUnifyVar pos'i i)
+            resolveVar prov'j j (TyUnifyVar prov'i i)
         _ -> do
             -- Check what's in slot i.
             subst <- gets tiSubst
@@ -735,17 +1086,17 @@ resolveVar pos'i i ty = do
                             -- have an easy way to do that. There is
                             -- no need to do anything else.
                             case ty of
-                                TyUnifyVar pos'j j ->
-                                    resolveVar pos'j j ty'already
+                                TyUnifyVar prov'j j ->
+                                    resolveVar prov'j j ty'already
                                 _ ->
                                     pure ()
-                        Just (pos'j, j) -> do
+                        Just (prov'j, j) -> do
                             -- There's a type already there, and we
                             -- should replace it because it's a
                             -- unification var. Do that, then resolve
                             -- its unification var too.
                             addResolution i ty
-                            resolveVar pos'j j ty
+                            resolveVar prov'j j ty
 
 --
 -- | Unify two types.
@@ -789,7 +1140,7 @@ unify exp0 pos found0 = visit [] exp0 found0
         found <- expandFully pos foundBase
 
         -- | Fail with expected/found types
-        let reject msg more = do
+        let rejectCommon inhibitSubs msg more = do
               ppopts <- asks tiPPOpts
               encs' <- do
                   let once (t1, t2) = do
@@ -802,13 +1153,23 @@ unify exp0 pos found0 = visit [] exp0 found0
                    ]
               recordError pos $ "Error:" <+> msg <> PP.line <> PP.indent 4 body
 
-              let (pos'expect, expect') = prettyTypeDetails ppopts expect
-                  (pos'found, found') = prettyTypeDetails ppopts found
-              recordError pos'expect $ "Note:" <+> expect'
-              -- Attach a blank line to this message so there's a separator
-              -- between it and the next type error. XXX: we should have a
-              -- less ad hoc way to do this.
-              recordError pos'found $ "Note:" <+> found' <> PP.hardline <> ""
+              let expects' = prettyTypeDetails inhibitSubs "expected" expect
+                  founds' = prettyTypeDetails inhibitSubs "found" found
+                  msgs = expects' ++ founds'
+              -- Attach a blank line to the last message so there's a
+              -- separator between it and the next type error. XXX: we
+              -- should have a less hacky way to do this.
+              let msgs' = case reverse msgs of
+                    [] -> []  -- not actually reachable
+                    (p, last_) : rest ->
+                        let last' = last_ <> PP.hardline <> "" in
+                        reverse ((p, last') : rest)
+              mapM_ recordError' msgs'
+
+        -- | Normal case of reject: print all the type provenance
+        let reject = rejectCommon False
+        -- | Special case of reject: print only the top layer of type provenance
+        let reject' = rejectCommon True
 
         -- | We would like to resolve unification var @i@ to type @ty@.
         --   Make sure this is well formed.
@@ -816,7 +1177,7 @@ unify exp0 pos found0 = visit [] exp0 found0
         --   Does not handle the case where t _is_ TyUnifyVar i; there's
         --   a separate case for that.
         --
-        let checkOccurs pos'i i ty =
+        let checkOccurs prov'i i ty =
               -- Collect the unification vars in ty, and check for an
               -- appearance of i. This is sufficient because ty has
               -- been fully expanded (it is either expect or found,
@@ -841,19 +1202,19 @@ unify exp0 pos found0 = visit [] exp0 found0
               --
               case Map.lookup i $ unifyVars ty of
                   Nothing -> pure ty
-                  Just _otherpos -> do
+                  Just _otherprov -> do
                       ppopts <- asks tiPPOpts
                       let expect' = prettyType ppopts expect
                           found' = prettyType ppopts found
-                          i' = prettyType ppopts $ TyUnifyVar pos'i i
+                          i' = prettyType ppopts $ TyUnifyVar prov'i i
                           ty' = prettyType ppopts ty
 
-                      _ <- reject "Occurs check failure." [
+                      reject "Occurs check failure." [
                           "Cannot unify" <+> expect' <+>
                           "with" <+> found' <+> "because" <+> i' <+>
                           "appears within" <+> ty' <> "."
                        ]
-                      getErrorTyVar pos'i
+                      getErrorTyVar pos
 
         -- recurse into one nested type
         let recOnce exp' found' =
@@ -869,18 +1230,18 @@ unify exp0 pos found0 = visit [] exp0 found0
                 -- same unification var, nothing to do
                 pure ()
 
-            (TyUnifyVar pos'i i, _) -> do
+            (TyUnifyVar prov'i i, _) -> do
                 -- one side is a unification var, resolve it
-                found' <- checkOccurs (Pos.getPos found) i found
-                resolveVar pos'i i found'
+                found' <- checkOccurs prov'i i found
+                resolveVar prov'i i found'
 
-            (_, TyUnifyVar pos'i i) -> do
+            (_, TyUnifyVar prov'i i) -> do
                 -- the other side is a unification var, resolve it
-                expect' <- checkOccurs (Pos.getPos expect) i expect
-                resolveVar pos'i i expect'
+                expect' <- checkOccurs prov'i i expect
+                resolveVar prov'i i expect'
 
-            (TyFunc pos'expect _ expParams expNamedParams expRet,
-             TyFunc pos'found _ foundParams foundNamedParams foundRet) -> do
+            (TyFunc prov'expect _ expParams expNamedParams expRet,
+             TyFunc prov'found _ foundParams foundNamedParams foundRet) -> do
                 -- First, unify the named parameters.
                 --
                 -- (We handle the named parameters first because because
@@ -915,7 +1276,7 @@ unify exp0 pos found0 = visit [] exp0 found0
                         expMissing' = prettyMissingList expect' $ Map.toList expMissing
                         foundMissing' = prettyMissingList found' $ Map.toList foundMissing
                         missing' = expMissing' ++ foundMissing'
-                    reject "Mismatched named parameters." missing'
+                    reject' "Mismatched named parameters." missing'
 
                 else do
                     -- In principle when you have checked that the keys
@@ -942,7 +1303,7 @@ unify exp0 pos found0 = visit [] exp0 found0
                             foundParamsR = drop nExp foundParams
                         recList expParams foundParamsL
                         -- we've used up expParams.
-                        let ty' = TyFunc pos'found noNames foundParamsR Map.empty foundRet
+                        let ty' = TyFunc prov'found noNames foundParamsR Map.empty foundRet
                         pure (expRet, ty')
                     else if nFound > nExp then do
                         -- unfortunately we need two copies of this because
@@ -951,7 +1312,7 @@ unify exp0 pos found0 = visit [] exp0 found0
                             expParamsR = drop nFound expParams
                         recList expParamsL foundParams
                         -- we've used up foundParams.
-                        let ty' = TyFunc pos'expect noNames expParamsR Map.empty expRet
+                        let ty' = TyFunc prov'expect noNames expParamsR Map.empty expRet
                         pure (ty', foundRet)
                     else do
                         recList expParams foundParams
@@ -964,7 +1325,7 @@ unify exp0 pos found0 = visit [] exp0 found0
             (TyRecord _ expFields, TyRecord _ foundFields)
               | Map.keys expFields /= Map.keys foundFields ->
                 -- records with different keys
-                reject "Record field names do not match." []
+                reject' "Record field names do not match." []
 
               | otherwise ->
                 -- records with the same field names, try unifying the field types
@@ -1056,6 +1417,11 @@ matches pos t1 t2 =
 -- otherwise annoying things like
 --    let f (x: a) = \(y: b) -> (a, b)
 --
+-- On the minus side, it accepts free type variables in a user-
+-- written type annotation on the RHS:
+--    let f x = x : a
+-- which is not critical but annoying. See #3341.
+--
 -- We extract the type variables with the position of their
 -- initial mention, and the kind that appears to apply.
 --
@@ -1066,21 +1432,42 @@ matches pos t1 t2 =
 -- Get the free type variables found in a Type.
 inspectTypeFTVs :: Kind -> Type -> TI (Map Name (Pos, Kind))
 inspectTypeFTVs kind ty = case ty of
-    TyCon _pos ctor args -> do
+    TyCon _prov ctor args -> do
         let kinds = lookupTyCon ctor
         Map.unions <$> zipWithM inspectTypeFTVs kinds args
-    TyFunc _pos _ params namedParams ret ->
+    TyFunc _prov _ params namedParams ret ->
         let np = Map.elems namedParams in
         Map.unions <$> mapM (inspectTypeFTVs kindStar) (ret : params ++ np)
-    TyRecord _pos fields ->
+    TyRecord _prov fields ->
         Map.unions <$> traverse (inspectTypeFTVs kindStar) fields
-    TyUnifyVar _pos _x ->
+    TyUnifyVar _prov _x ->
         return Map.empty
-    TyVar pos x -> do
+    TyVar prov x -> do
         tyenv <- gets tiTyEnv
         case ScopedMap.lookup x tyenv of
-            Nothing -> return $ Map.singleton x (pos, kind)
-            Just _ -> return $ Map.empty
+            Nothing -> do
+                -- The provenance of a free (named) type variable
+                -- can only be explicit; someone typed it in.
+                pos <- case prov of
+                      TypeExplicit pos -> pure pos
+                      _ -> do
+                          ppopts <- asks tiPPOpts
+                          let (pos, prov', extra) = prettyTypeProvenance prov
+                              extra' = case extra of
+                                  Nothing -> []
+                                  Just (pos2, prov2') -> [
+                                      "Extra position: " <> ppPosition pos2,
+                                      "Extra provenance: " <> PPS.renderText ppopts prov2'
+                                   ]
+                          panic "inspectTypeFTVs" $ [
+                              "Invalid provenance for free named type variable",
+                              "Type: " <> ppType ppopts ty,
+                              "Position in provenance: " <> ppPosition pos,
+                              "Provenance: " <> PPS.renderText ppopts prov'
+                           ] ++ extra'
+                return $ Map.singleton x (pos, kind)
+            Just _ ->
+                return $ Map.empty
 
 -- Get the free type variables found in a Maybe Type.
 inspectMaybeTypeFTVs :: Kind -> Maybe Type -> TI (Map Name (Pos, Kind))
@@ -1127,7 +1514,7 @@ inspectNamedParamsFTVs params =
 -- for possible further analysis.
 inspectLambdaFTVs :: Expr -> TI (Expr, Map Name (Pos, Kind))
 inspectLambdaFTVs e0 = case e0 of
-    Lambda _fpos _mname params namedParams e1 -> do
+    Lambda _fpos _mname _ppos params namedParams e1 -> do
         paramFTVs <- inspectParamsFTVs params
         namedFTVs <- inspectNamedParamsFTVs namedParams
         (e1', bodyFTVs) <- inspectLambdaFTVs e1
@@ -1202,6 +1589,11 @@ addPatterns pats = do
 --
 -- Variant version that uses the passed-in schema to produce the types
 -- and ignoring the types already loaded into the pattern.
+--
+-- XXX: this is wrong, if you have @(x, y)@ and @forall t, (t, t)@
+-- it'll produce separate @forall t, t@ bindings for @x@ and @y@ and
+-- not restrict them to the same type.
+--
 addPatternSchema :: Pattern -> Rebindable -> Schema -> TI ()
 addPatternSchema pat rb ty = addVars rb bindings
     where bindings = patternBindingsWithSchema pat ty
@@ -1236,25 +1628,25 @@ addAbstractTyVars vars = do
 --
 inferExpr :: Expr -> TI (OutExpr, Type)
 inferExpr expr = case expr of
-    Bool pos b    -> return (Bool pos b, tBool (PosInferred InfTerm pos))
-    String pos s  -> return (String pos s, tString (PosInferred InfTerm pos))
-    Int pos i     -> return (Int pos i, tInt (PosInferred InfTerm pos))
-    Code pos s    -> return (Code pos s, tTerm (PosInferred InfTerm pos))
-    CType pos s   -> return (CType pos s, tType (PosInferred InfTerm pos))
+    Bool pos b    -> return (Bool pos b, tBool (TypeFromElement pos TyctxConstant))
+    String pos s  -> return (String pos s, tString (TypeFromElement pos TyctxConstant))
+    Int pos i     -> return (Int pos i, tInt (TypeFromElement pos TyctxConstant))
+    Code pos s    -> return (Code pos s, tTerm (TypeFromElement pos TyctxExpr))
+    CType pos s   -> return (CType pos s, tType (TypeFromElement pos TyctxExpr))
 
     Array pos [] -> do
         a <- getFreshTyVar pos
-        return (Array pos [], tArray (PosInferred InfTerm pos) a)
+        return (Array pos [], tArray (TypeFromElement pos TyctxConstant) a)
 
     Array pos (e:es) -> do
         (e',t) <- inferExpr e
         es' <- mapM (\e1 -> checkExpr e1 t) es
-        return (Array pos (e':es'), tArray (PosInferred InfTerm pos) t)
+        return (Array pos (e':es'), tArray (TypeFromElement pos TyctxExpr) t)
 
     Block pos body -> do
         ctx <- getFreshTyVar pos
         tyResult <- getFreshTyVar pos
-        let ty = tBlock (PosInferred InfTerm pos) ctx tyResult
+        let ty = tApply (TypeFromElement pos TyctxExpr) ctx tyResult
         pushScope
         body' <- inferBlock pos ctx ty body
         popScope
@@ -1262,36 +1654,40 @@ inferExpr expr = case expr of
 
     Tuple pos es -> do
         (es',ts) <- unzip <$> mapM inferExpr es
-        return (Tuple pos es', tTuple (PosInferred InfTerm pos) ts)
+        -- Consider unit a constant for type provenance purposes.
+        let tyctx = case es' of
+              [] -> TyctxConstant
+              _ -> TyctxExpr
+        return (Tuple pos es', tTuple (TypeFromElement pos tyctx) ts)
 
     Record pos fs -> do
         (nes',nts) <- unzip `fmap` mapM inferField (Map.toList fs)
-        let ty = TyRecord (PosInferred InfTerm pos) $ Map.fromList nts
+        let ty = TyRecord (TypeFromElement pos TyctxExpr) $ Map.fromList nts
         return (Record pos (Map.fromList nes'), ty)
 
     -- XXX this is currently unreachable because there's no concrete
     -- syntax for it; the parser will never produce it.
     Index pos ar ix -> do
         (ar',at) <- inferExpr ar
-        ix'      <- checkExpr ix (tInt (PosInferred InfContext (Pos.getPos ix)))
-        t        <- getFreshTyVar (Pos.getPos ix')
+        ix'      <- checkExpr ix (tInt (TypeFromContext (Pos.getPos ix) TyctxExpr))
+        t        <- getFreshTyVar pos
         let pos'ar = Pos.getPos ar'
-            pos'ty = PosInferred InfContext pos'ar
-        unify (tArray pos'ty t) pos'ar at
+            prov = TypeFromContext pos'ar TyctxExpr
+        unify (tArray prov t) pos'ar at
         return (Index pos ar' ix', t)
 
     Lookup pos e n -> do
         (e1,t) <- inferExpr e
         t1 <- expandFully (Pos.getPos e1) t
         elTy <- case t1 of
-            TyRecord typos fs
+            TyRecord _prov fs
               | Just ty <- Map.lookup n fs -> do
                   return ty
               | otherwise -> do
                   let n' = PP.pretty n
                   recordError pos $
                       "Record type has no field named" <+> n'
-                  getErrorTyVar typos
+                  getErrorTyVar pos
             TyUnifyVar _ _ -> do
                 let n' = PP.pretty n
                 recordError pos $
@@ -1310,7 +1706,7 @@ inferExpr expr = case expr of
         (e1,t) <- inferExpr e
         t1 <- expandFully (Pos.getPos e1) t
         elTy <- case t1 of
-            TyCon typos (TupleCon n) tys
+            TyCon _prov (TupleCon n) tys
               | i < n ->
                   return (tys !! fromIntegral i)
               | otherwise -> do
@@ -1318,7 +1714,7 @@ inferExpr expr = case expr of
                       n' = PP.viaShow n
                   recordError pos $
                       "Tuple index" <+> i' <+> "out of bounds; limit is" <+> n'
-                  getErrorTyVar typos
+                  getErrorTyVar pos
             TyUnifyVar _ _ -> do
                 let i' = PP.viaShow i
                 recordError pos $
@@ -1340,24 +1736,21 @@ inferExpr expr = case expr of
         case ScopedMap.lookup x env of
             Nothing -> do
                 recordError pos $ "Unbound variable:" <+> x'
-                t <- getFreshTyVar pos
+                t <- getErrorTyVar pos
                 return (Var pos x, t)
             Just (_prevpos, lc, _rebindable, Forall as t)
               | Set.member lc avail -> do
                   when (Util.isDeprecated lc) $
                       case t of
-                      TyFunc _typos _ _params _namedparams _ret ->
+                      TyFunc _prov _ _params _namedparams _ret ->
                           recordWarning pos $ "Function is deprecated:" <+> x'
                       _ ->
                           recordWarning pos $ "Value is deprecated:" <+> x'
 
-                  -- get a fresh tyvar for each quantifier binding, convert
-                  -- to a name -> ty map, and substitute the fresh tyvars
-                  let once (apos, a) = do
-                        at <- getFreshTyVar apos
-                        return (a, (Current, ConcreteType at))
-                  substs <- mapM once as
-                  let t' = Util.substituteTyVars' avail (Map.fromList substs) t
+                  -- instantiate the quantifier bindings and
+                  -- substitute the fresh tyvars
+                  substs <- instantiateForalls x as
+                  let t' = Util.substituteTyVars' avail substs t
                   return (Var pos x, t')
               | otherwise -> do
                   recordError pos $ "Inaccessible variable:" <+> x'
@@ -1367,10 +1760,10 @@ inferExpr expr = case expr of
                   recordError pos $ "This command is available only" <+>
                                     "after running" <+> cmd
 
-                  t' <- getFreshTyVar pos
+                  t' <- getErrorTyVar pos
                   return (Var pos x, t')
 
-    Lambda pos mname params namedParams body -> do
+    Lambda pos mname paramPos params namedParams body -> do
         pushScope
         let onePositional param = do
               (paramty, param') <- inferPattern ReadOnlyVar param
@@ -1394,24 +1787,38 @@ inferExpr expr = case expr of
             recordError pos $ "Functions may not have only named" <+>
                               "parameters; add ()"
 
-        -- XXX neither InfContext nor InfTerm is quite right here, but
-        -- InfContext is what we were using before. Properly the
-        -- position of the type of the lambda should include the
-        -- parameters, maybe an InfLambda constructor that records
-        -- positions for the parameters and return type that you can pop
-        -- as the parameters get applied.  The current behavior is
-        -- optimized for the common case where you write "let f x y =
-        -- plop x y 1 2 3" and leave off the last argument of plop by
-        -- accident, so the return type of f unexpectedly becomes a
-        -- function, and we'll cite the type of "plop x y 1 2 3" which
-        -- is missing an arg.
+        -- The provenance of a function type is the parameter list and
+        -- either the explicit return type, if there was one, or the
+        -- function body, if not. If there was an explicit return
+        -- type, at this level we get it as a TSig underneath the
+        -- lambda (thus at the top of the body). Distinguish that TSig
+        -- from one that's on the body itself by whether it begins
+        -- before the rest of the body. The concrete syntax for TSig
+        -- has the type after the expression, so if the TSig was
+        -- originally on the body, it'll begin at the same position as
+        -- the expression inside it. The type in the TSig is necessarily
+        -- user-provided, so its provenance will always be
+        -- `TypeExplicit` and we can safely use `Pos.getPos` to fetch
+        -- a position. We can also merge that position with the position
+        -- from the lambda; the only way to get this TSig is from a
+        -- function header.
         --
-        -- Note: we generate [] for the namelist field of the function
+        -- Note: this is fragile, but none of it's terribly likely to
+        -- change without it affecting the `Lambda` constructor and
+        -- thus prompting us to update this code.
+        --
+        let prov = case body' of
+              TSig sigpos subbody tyret | Pos.startsBefore sigpos (Pos.getPos subbody) ->
+                  TypeFromFuncWithSig (Pos.spanPos paramPos $ Pos.getPos tyret)
+              _ ->
+                  TypeFromFuncWithBody paramPos (Pos.getPos body')
+
+        -- Note: we generate noNames for the namelist field of the function
         -- type because we're downstream of the only thing that uses it.
-        let e' = Lambda pos mname params' (Map.fromList namedParams') body'
-            pos'ty = PosInferred InfContext (Pos.getPos body')
-            namedParamtys' = Map.fromList namedParamtys
-            ty = tFun pos'ty noNames paramtys namedParamtys' tybody
+        let namedParamtys' = Map.fromList namedParamtys
+            ty = tFun prov noNames paramtys namedParamtys' tybody
+
+        let e' = Lambda pos mname paramPos params' (Map.fromList namedParams') body'
         return (e', ty)
 
     Application pos f args0 -> do
@@ -1466,7 +1873,7 @@ inferExpr expr = case expr of
         -- case doesn't regress.
 
         let checkCall isFirst origTy ty arginfo namedArginfo = case ty of
-              TyFunc typos _ params namedParams ret -> do
+              TyFunc prov _ params namedParams ret -> do
                   -- We have a function type, check it in detail.
                   let nparams = length params
                       nargs = length arginfo
@@ -1503,7 +1910,7 @@ inferExpr expr = case expr of
                       -- of the only thing that uses it.
                       objectToLeftoverArgs
                       let params' = drop nargs params
-                      pure $ TyFunc typos noNames params' namedParams' ret
+                      pure $ TyFunc prov noNames params' namedParams' ret
 
                   else if nargs == nparams then do
                       -- Complete application, result is the return type.
@@ -1547,11 +1954,10 @@ inferExpr expr = case expr of
                         in
                         Pos.maxSpan (ps1 ++ ps2)
 
-                  let callpos' = PosInferred InfContext callpos
-                      (_args, argtys) = unzip arginfo
+                  let (_args, argtys) = unzip arginfo
                       namedArgtys = Map.map (\(_namepos, _arg, argty) -> argty) namedArginfo
-                  ret <- getFreshTyVar callpos'
-                  let ty' = TyFunc callpos' noNames argtys namedArgtys ret
+                  ret <- getFreshTyVar callpos
+                  let ty' = TyFunc (TypeFromElement callpos TyctxArgList) noNames argtys namedArgtys ret
                   -- Unify the tyvar we got with the function type
                   unify ty callpos ty'
                   -- Hand back the return type
@@ -1582,30 +1988,58 @@ inferExpr expr = case expr of
                                                    ty' <> ")"
                       recordError pos $ "but is applied here to" <+>
                                         nargs' <> "."
-                      recordError' $ prettyTypeDetails ppopts ty
+                      mapM_ recordError' $ prettyTypeDetails False "expression" ty
                   else do
                       -- We already absorbed some arguments so we have
                       -- too many arguments rather than a non-function.
                       -- Use the position of the first excess argument
                       -- to complain.
                       let origTy' = prettyType ppopts origTy
-                          -- Abuse the prettyprinter to keep it from
-                          -- inserting extra unwanted line
-                          -- breaks. Compare the code in
-                          -- `prettyTypeDetails`.  XXX.
+                          -- Deliberately render and re-docify the
+                          -- type, and generate a multi-line message
+                          -- only if the type comes out as multiple
+                          -- lines when rendered on its own. This is
+                          -- kind of gross, but the prettyprinter
+                          -- library does not give much in the way of
+                          -- formatting control, and if we just do
+                          -- things its way we pretty much always get
+                          -- a multiline message, even for very short
+                          -- types like (), which looks terrible. This
+                          -- is because the beginning of the message
+                          -- coupled with the position text at the
+                          -- beginning of the line is long enough to
+                          -- make the prettyprinter library think the
+                          -- message ought to be multiline. Perhaps
+                          -- the right way to deal with this problem
+                          -- is to force it to use a different notion
+                          -- of what constitutes a "long" line when
+                          -- dealing with error messages rather than
+                          -- program text; but for the time being at
+                          -- least we have no useful infrastructure to
+                          -- support that.  So instead generate our
+                          -- own faux "reactive" layout. XXX.
+                          --
+                          -- If you find an easy way to fix this
+                          -- better, please also improve the code in
+                          -- prettyTypeDetails above, which used to
+                          -- use similar logic. (But then it needed
+                          -- its own printer for other reasons and now
+                          -- it always stuffs the entire type on one
+                          -- line, which isn't great either.)
+                          --
                           origTy'' =
                             case Text.lines $ PPS.renderText ppopts origTy' of
                                 [t] -> PP.pretty t
                                 ts -> PP.nest 3 $ PP.vsep $ map PP.pretty ts
                       recordError argpos $ "Too many arguments to function" <+>
                                            "of type" <+> origTy''
-                      recordError' $ prettyTypeDetails ppopts origTy
+                      mapM_ recordError' $ prettyTypeDetails True "function" origTy
                   let trailing = Pos.trailingPos argpos
                       leading = Pos.leadingPos pos
                   when (Pos.differentLines trailing leading) $
                       recordError argpos "Did you forget a semicolon?"
                   -- Return a fresh tyvar as an error placeholder.
-                  getFreshTyVar pos
+                  getErrorTyVar pos
 
         (f', ty'f) <- inferExpr f
         ty'f' <- expandFully (Pos.getPos f) ty'f
@@ -1663,7 +2097,7 @@ inferExpr expr = case expr of
         return (e',t'')
 
     IfThenElse pos e1 e2 e3 -> do
-        e1' <- checkExpr e1 (tBool (PosInferred InfContext $ Pos.getPos e1))
+        e1' <- checkExpr e1 (tBool (TypeFromContext (Pos.getPos e1) TyctxExpr))
         (e2', t) <- inferExpr e2
         e3' <- checkExpr e3 t
         return (IfThenElse pos e1' e2' e3', t)
@@ -1751,7 +2185,7 @@ inferPattern rebindable pat = do
             return (t, PVar allpos xpos x (Just t))
         PTuple pos ps -> do
             (ts, ps') <- unzip <$> mapM (inferPattern rebindable) ps
-            return (tTuple (PosInferred InfTerm pos) ts, PTuple pos ps')
+            return (tTuple (TypeFromElement pos TyctxPat) ts, PTuple pos ps')
 
 -- | Check the type of a pattern, by inferring and then unifying the
 --   result.
@@ -1789,11 +2223,11 @@ monadType ty = case ty of
   TyCon _ BlockCon [ctx@(TyVar _ name), valty] | isMonad name ->
       Just (ctx, valty)
   -- We don't currently ever generate these types, but be future-proof
-  TyCon pos (ContextCon ctx) [valty] ->
-      Just (TyCon pos (ContextCon ctx) [], valty)
+  TyCon prov (ContextCon ctx) [valty] ->
+      Just (TyCon prov (ContextCon ctx) [], valty)
   -- and this one can't even be represented yet
---TyVar pos name [valty] | isMonad name ->
---    Just (TyVar pos name, valty)
+--TyVar prov name [valty] | isMonad name ->
+--    Just (TyVar prov name, valty)
   _ ->
       Nothing
   where
@@ -1833,7 +2267,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
             -- straightforward way to proceed here is to unify both
             -- the monad type (ctx) and the result type expected by
             -- the pattern (pty), like this:
-            --    e' <- checkExpr e (tBlock blockpos ctx pty)
+            --    e' <- checkExpr e (tApply blockpos ctx pty)
             --
             -- However, historically when at the syntactic top level
             -- (only), the monad type was left off, meaning that
@@ -1868,7 +2302,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
             let restrictToCorrect = do
                   -- unify the type of e with the expected monad and
                   -- pattern types
-                  unify (tBlock blockpos ctx pty) (Pos.getPos e') ty
+                  unify (tApply (TypeFromElement blockpos TyctxExpr) ctx pty) (Pos.getPos e') ty
                   return e'
 
             -- The special case for non-monadic values
@@ -1894,8 +2328,8 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
                   -- The historic behavior is that the pattern gets bound
                   -- to a value of type m t instead of type t. This means:
                   --    - we should unify pty, which is the type of the
-                  --      pattern, with m t, which is tBlock ctx' valty'
-                  --      (rather than tBlock ctx valty', which is the
+                  --      pattern, with m t, which is tApply ctx' valty'
+                  --      (rather than tApply ctx valty', which is the
                   --      type we should be getting)
                   --    - this will fail if the pattern includes a type
                   --      signature with a non-monad type, but that's ok
@@ -1905,7 +2339,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
                   --    - we _do_ need to wrap the expression in "return"
                   --      so that the ultimate results are well-typed and
                   --      happen in the TopLevel monad
-                  unify pty (Pos.getPos e') (tBlock spos ctx' valty')
+                  unify pty (Pos.getPos e') (tApply (TypeFromContext spos TyctxStmt) ctx' valty')
 
                   -- Wrap the expression in "return" to produce an
                   -- expression of type TopLevel (m t).
@@ -1916,7 +2350,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
                 if not atSyntacticTopLevel then
                     restrictToCorrect
                 else do
-                    ok <- matches blockpos (tBlock blockpos ctx pty) ty
+                    ok <- matches blockpos (tApply (TypeFromElement blockpos TyctxExpr) ctx pty) ty
                     if ok then
                         restrictToCorrect
                     else
@@ -1956,10 +2390,11 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
             -- Restrict include to TopLevel. This matches the prior
             -- behavior when it was a builtin function rather than
             -- syntax. FUTURE: consider relaxing the requirement.
-            let spos' = PosInferred InfTerm spos
-            let tm = TyCon spos' (ContextCon TopLevel) []
+            let blockprov = TypeFromElement blockpos TyctxExpr
+                sprov = TypeFromElement spos TyctxStmt
+            let tm = TyCon sprov (ContextCon TopLevel) []
             tx <- getFreshTyVar spos
-            unify (tBlock blockpos ctx tx) spos (tBlock spos tm tx)
+            unify (tApply blockprov ctx tx) spos (tApply sprov tm tx)
             return s
         StmtTypedef allpos apos a ty -> do
             ty' <- checkType kindStar ty
@@ -2121,20 +2556,15 @@ generalize foralls pats0 es0 ts0 = do
     let is2 = Map.toList is1
     let bs2 = Map.toList bs1
 
-    -- if the position is "fresh" turn it into "inferred from term"
-    let adjustPos pos = case pos of
-          PosInferred InfFresh pos' -> PosInferred InfTerm pos'
-          _ -> pos
-
     -- generate names for the unification vars
-    let is3 = [ (i, adjustPos pos, "a." <> Text.pack (show i)) | (i, pos) <- is2 ]
+    let is3 = [ (i, prov, "a." <> Text.pack (show i)) | (i, prov) <- is2 ]
 
     -- build a substitution
-    let s = Map.fromList [ (i, TyVar pos n) | (i, pos, n) <- is3 ]
+    let s = Map.fromList [ (i, TyVar prov n) | (i, prov, n) <- is3 ]
 
     -- get the names for the Forall
-    let inames = [ (pos, n) | (_i, pos, n) <- is3 ]
-    let bnames = [ (pos, x) | (x, pos) <- bs2 ]
+    let inames = [ (SchemaNameImplicit (Pos.getPos prov), n) | (_i, prov, n) <- is3 ]
+    let bnames = [ (SchemaNameExplicit pos, x) | (x, pos) <- bs2 ]
 
     let mk pat e t =
           let pat' = appSubst s pat
@@ -2197,7 +2627,7 @@ inferDecl :: Rebindable -> Decl -> TI Decl
 inferDecl rebindable d@(Decl pos pat _ e) = do
     -- collect the free type variables
     foralls <- inspectDeclFTVs d
-    let foralls' = Map.map (\(typos, _kind) -> typos) foralls
+    let foralls' = Map.map (\(prov, _kind) -> prov) foralls
 
     -- Add abstract type variables for the foralls while we check the body.
     -- Note: this is a variable declaration. It doesn't add types; the types
@@ -2234,7 +2664,7 @@ inferRecDecls ds = do
 
     -- Collect the free type variables.
     foralls <- Map.unions <$> mapM inspectDeclFTVs ds
-    let foralls' = Map.map (\(typos, _kind) -> typos) foralls
+    let foralls' = Map.map (\(prov, _kind) -> prov) foralls
 
     -- Add abstract type variables for the foralls while we check the
     -- bodies.
@@ -2319,12 +2749,30 @@ lookupTyCon tycon = case tycon of
     MIRSpecCon -> []
     ContextCon _ctx -> [kindStar]
 
--- | Check a type for validity and also for having the
---   correct kinding.
+-- | Check if a list of types contains a failure type. If so, return
+--   it. Uses `Either` with unit rather than `Maybe` so as to get the
+--   right combining behavior using `>>`.
+checkForFailure :: Foldable t => t Type -> Either Type ()
+checkForFailure tys = foldr visit (Right ()) tys
+  where
+    visit arg' failure = case failure of
+        Left ty' -> Left ty'
+        Right () -> case arg' of
+            TyUnifyVar (TypeFailed _) _ -> Left arg'
+            _ -> Right ()
+
+-- | Check a type for validity and also for having the correct
+--   kinding.
+--
+--   Note: the types handled here come from upstream; we never call
+--   this on a type we've inferred. The provenance should always be
+--   `TypeExplicit` and the associated position should always be the
+--   source position of whatever the user typed. The error reporting
+--   relies on this.
+--
 checkType :: Kind -> Type -> TI Type
 checkType kind ty = case ty of
-    TyCon pos tycon args -> do
-        ppopts <- asks tiPPOpts
+    TyCon prov tycon args -> do
 
         -- First, look up the constructor.
         let params = lookupTyCon tycon
@@ -2333,21 +2781,24 @@ checkType kind ty = case ty of
             argsleft = kindNumArgs kind
 
         if nargs > nparams then do
-            -- XXX special case for BlockCon (remove along with BlockCon)
-            let (nargs', nparams', tycon') =
+            -- XXX special casing for BlockCon (remove along with BlockCon)
+            (nargs', nparams', tycon') <-
                   case (tycon, args) of
-                      (BlockCon, arg : _) ->
-                          let ty' = prettyType ppopts arg in
-                          (PP.viaShow $ nargs - 1, PP.viaShow $ nparams - 1, ty')
-                      (_, _) ->
-                          let ty' = prettyTyCon tycon in
-                          (PP.viaShow nargs, PP.viaShow nparams, ty')
+                      (BlockCon, arg : _) -> do
+                          ppopts <- asks tiPPOpts
+                          let ty' = prettyType ppopts arg
+                          pure (PP.viaShow $ nargs - 1, PP.viaShow $ nparams - 1, ty')
+                      (_, _) -> do
+                          let ty' = prettyTyCon tycon
+                          pure (PP.viaShow nargs, PP.viaShow nparams, ty')
 
+            let pos = Pos.getPos prov
             recordError pos $ "Too many type arguments for type constructor" <+>
                               tycon' <> "; found" <+> nargs' <+>
                               "but expected only" <+> nparams'
             getErrorTyVar pos
         else if nargs + argsleft /= nparams then do
+            let pos = Pos.getPos prov
             let kind' = prettyKind kind
                 kindExp' = prettyKind $ Kind (nparams - nargs)
             recordError pos $ "Kind mismatch: expected" <+> kind' <+>
@@ -2355,12 +2806,27 @@ checkType kind ty = case ty of
             getErrorTyVar pos
         else do
             -- note that this will ignore the extra params, and return
-            -- a list of the same length as the args given
+            -- a list of the same length as the args given, which is
+            -- exactly what we need here.
             args' <- zipWithM checkType params args
-            return $ TyCon pos tycon args'
 
-    TyFunc pos nameinfo params namedParams ret -> do
+            -- If any of the arguments is an error var, something was
+            -- invalid. Return the error var directly. (Properly we
+            -- should make a new one, but it's fresh and we can
+            -- safely repurpose it.) This is a hack to avoid returning
+            -- types _containing_ error vars out, which then lead to
+            -- ugly and confusing further errors downstream. When
+            -- we manage to kill off Block it should be revisited,
+            -- because that will change the way type applications are
+            -- done and that will likely change the way miskinded
+            -- type applications are seen.
+            pure $ case checkForFailure args' of
+                Left ty' -> ty'
+                Right () -> TyCon prov tycon args'
+
+    TyFunc prov nameinfo params namedParams ret -> do
         if kind /= kindStar then do
+            let pos = Pos.getPos prov
             let kind' = prettyKind kind
                 kindStar' = prettyKind kindStar
             recordError pos $ "Kind mismatch: expected" <+> kind' <+>
@@ -2370,13 +2836,17 @@ checkType kind ty = case ty of
             params' <- mapM (checkType kindStar) params
             namedParams' <- mapM (checkType kindStar) namedParams
             when (null params' && not (null namedParams')) $ do
+                let pos = Pos.getPos prov
                 recordError pos $ "Functions may not have only named" <+>
                                   "parameters; add ()"
             ret' <- checkType kindStar ret
-            return $ TyFunc pos nameinfo params' namedParams' ret'
+            pure $ case checkForFailure (ret' : params') >> checkForFailure namedParams' of
+                Left ty' -> ty'
+                Right () -> TyFunc prov nameinfo params' namedParams' ret'
 
-    TyRecord pos fields -> do
+    TyRecord prov fields -> do
         if kind /= kindStar then do
+            let pos = Pos.getPos prov
             let kind' = prettyKind kind
                 kindStar' = prettyKind kindStar
             recordError pos $ "Kind mismatch: expected" <+> kind' <+>
@@ -2387,7 +2857,9 @@ checkType kind ty = case ty of
             -- field names because we can't once the fields are loaded
             -- into a map. (XXX: someone hasn't)
             fields' <- traverse (checkType kindStar) fields
-            return $ TyRecord pos fields'
+            pure $ case checkForFailure fields' of
+                Left ty' -> ty'
+                Right () -> TyRecord prov fields'
 
     -- Special-case CrucibleSetup to mark it deprecated. It is an alias
     -- for LLVMSetup, and it would be nice if it could just be a
@@ -2406,7 +2878,8 @@ checkType kind ty = case ty of
     -- changing the binding for @lc@ immediately below. Then after 1.7
     -- is released we can delete this hackery. When doing so, be sure to
     -- remove it from the parser as well.
-    TyVar pos "CrucibleSetup" -> do
+    TyVar prov "CrucibleSetup" -> do
+        let pos = Pos.getPos prov
         let x = "CrucibleSetup"
             lc = WarnDeprecated
             kindFound = kindStarToStar
@@ -2423,7 +2896,7 @@ checkType kind ty = case ty of
             else
                 -- Expand to LLVMSetup. Even though we don't expand
                 -- typedefs here, this isn't an ordinary typedef.
-                pure $ TyVar pos "LLVMSetup"
+                pure $ TyVar prov "LLVMSetup"
         else do
             let x' = PP.dquotes x
             recordError pos $ "Inaccessible type:" <+> x'
@@ -2431,16 +2904,18 @@ checkType kind ty = case ty of
                               "running `enable_deprecated`."
             getErrorTyVar pos
 
-    TyVar pos x -> do
+    TyVar prov x -> do
         avail <- asks tiPrimsAvail
         tyenv <- gets tiTyEnv
         case ScopedMap.lookup x tyenv of
             Nothing -> do
+                let pos = Pos.getPos prov
                 recordError pos $ "Unbound type variable" <+> PP.pretty x
                 getErrorTyVar pos
             Just (lc, ty')
               | Set.member lc avail -> do
-                  when (Util.isDeprecated lc) $
+                  when (Util.isDeprecated lc) $ do
+                      let pos = Pos.getPos prov
                       recordWarning pos $ "Type is deprecated:" <+> PP.pretty x
 
                   -- For typedefs, which appear here as ConcreteType
@@ -2465,16 +2940,18 @@ checkType kind ty = case ty of
                         AbstractType kf -> kf
 
                   if kind /= kindFound then do
+                      let pos = Pos.getPos prov
                       let kind' = prettyKind kind
                           kindFound' = prettyKind kindFound
                       recordError pos $ "Kind mismatch: expected" <+> kind' <+>
-                                       "but found" <+> kindFound'
+                                        "but found" <+> kindFound'
                       getErrorTyVar pos
                   else
                       -- We do _not_ want to expand typedefs when checking,
                       -- so return the original TyVar.
                       return ty
               | otherwise -> do
+                  let pos = Pos.getPos prov
                   let x' = PP.dquotes (PP.pretty x)
                   recordError pos $ "Inaccessible type:" <+> x'
                   let how = if lc == HideDeprecated then "deprecated"
@@ -2482,10 +2959,9 @@ checkType kind ty = case ty of
                       cmd = "`enable_" <> how <> "`"
                   recordError pos $ "This type is available only after" <+>
                                     "running" <+> cmd <> "."
-                  t' <- getFreshTyVar pos
-                  return t'
+                  getErrorTyVar pos
 
-    TyUnifyVar _pos _ix ->
+    TyUnifyVar _prov _ix ->
         -- for now at least we don't track the kinds of unification vars
         -- (types of mismatched kinds can't be the same types, so they
         -- won't ever unify, so the possible mischief is limited) and all
@@ -2540,7 +3016,7 @@ checkStmt ppopts avail env tenv ctx stmt =
     -- But we don't have a good way of knowing here whether we're
     -- actually in the repl.
     let pos = Pos.getPos stmt
-        ctxtype = TyCon pos (ContextCon ctx) []
+        ctxtype = TyCon (TypeFromContext pos TyctxStmt) (ContextCon ctx) []
     in
     runTI ppopts avail env tenv (inferSingleStmt pos ctxtype stmt)
 
@@ -2558,8 +3034,9 @@ checkDecl ::
 checkDecl ppopts avail env tenv decl =
     runTI ppopts avail env tenv (inferDecl ReadOnlyVar decl)
 
--- | Check a found type (first argument) against an expected type
---   (second argument) and return True if they can be unified.
+-- | Check a found type (first `Schema` argument) against an expected
+--   type (second `Schema` argument) and return True if they can be
+--   unified.
 --
 --   Both types are schemes because that's what we need upstream.
 --
@@ -2568,18 +3045,16 @@ typesMatch ::
       PPS.Opts ->
       Set PrimitiveLifecycle ->
       TyEnv ->
+      Text ->
       Schema ->
       Schema ->
       Bool
-typesMatch ppopts avail tenv schema'found schema'expected =
+typesMatch ppopts avail tenv name schema'found schema'expected =
   let unpack (Forall as ty) = do
         -- Generate unification vars for all the forall-bindings
-        let generate (pos'a, a) = do
-              ty'a <- getFreshTyVar pos'a
-              return (a, (Current, ConcreteType ty'a))
-        substs <- mapM generate as
+        substs <- instantiateForalls name as
         -- Substitute them into the type
-        let ty' = Util.substituteTyVars' avail (Map.fromList substs) ty
+        let ty' = Util.substituteTyVars' avail substs ty
         return ty'
       match = do
         -- Unpack the schemas and check if they match
@@ -2621,21 +3096,25 @@ typesMatch ppopts avail tenv schema'found schema'expected =
 --   everything can see current types.
 --
 checkSchema ::
+      -- | Printing options
       PPS.Opts ->
+      -- | Lifecycle we're declaring in
       PrimitiveLifecycle ->
+      -- | Environment for named types
       TyEnv ->
+      -- | Type scheme to check
       Schema ->
+      -- | Name of the object whose type it is
+      Text ->
+      -- | (Theoretically) updated checked result
       Result Schema
-checkSchema ppopts contextLC tyenv schema = do
+checkSchema ppopts contextLC tyenv schema fnName = do
     let check = do
           let Forall tyvars ty = schema
           -- Generate unification vars for all the forall-bindings
-          let generate (pos'a, a) = do
-                ty'a <- getFreshTyVar pos'a
-                return (a, (Current, ConcreteType ty'a))
-          substs <- mapM generate tyvars
+          substs <- instantiateForalls fnName tyvars
           -- Substitute them into the type
-          let ty' = Util.substituteTyVars' everythingAvailable (Map.fromList substs) ty
+          let ty' = Util.substituteTyVars' everythingAvailable substs ty
           -- The only way checking can return an updated type is if
           -- there's also an error, so discard the type
           _ <- checkType kindStar ty'

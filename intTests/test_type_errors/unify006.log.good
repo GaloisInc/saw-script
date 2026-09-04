@@ -4,8 +4,8 @@ Type errors:
     Expected: Bool
     Found:    Int
 
-  unify006.saw:7:22-7:23: Note: The type Bool arises from the context of the term
-  unify006.saw:7:12-7:15: Note: The type Int arises from this type annotation
+  unify006.saw:7:22-7:23: Note: The expected type Bool arises from the context of this expression
+  unify006.saw:7:12-7:15: Note: The found type Int arises from this explicit type name
 
 
 FAILED

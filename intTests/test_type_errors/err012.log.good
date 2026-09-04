@@ -6,8 +6,10 @@ Type errors:
     Expected: Int
     Found:    LLVMSetup Int
 
-  err012.saw:12:6-12:9: Note: The type Int arises from this type annotation
-  err012.saw:12:2-12:17: Note: The type LLVMSetup Int arises from this type annotation
+  err012.saw:12:6-12:9: Note: The expected type Int arises from this explicit type name
+  err012.saw:12:2-12:17: Note: The found type _ _ arises from the context of this statement
+  <definition of llvm_assert>:1:9-1:18: Note: The found type's monad LLVMSetup arises from this explicit type name
+  err012.saw:12:16-12:17: Note: The found type's 1st argument Int arises from the form of this constant
 
 
 FAILED

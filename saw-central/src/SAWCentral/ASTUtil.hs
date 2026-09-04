@@ -21,16 +21,47 @@ import SAWCentral.Panic
 import SAWCentral.Position
 import SAWCentral.AST
 
+
 ------------------------------------------------------------
 -- NamedTyVars
 
---
--- namedTyVars is a type-class-polymorphic function for extracting named
+-- | namedTyVars is a type-class-polymorphic function for extracting named
 -- type variables from a type or type schema. It returns a set of Name
 -- (Name is just Text) manifested as a map from those Names to their
--- positions/provenance.
+-- originating positions.
 --
-
+-- We take the first position we see. The calls to `Map.union` are
+-- organized accordingly (it favors its left argument).
+--
+-- When we find a `TyVar`, we extract the position from the provenance
+-- with `getPos`. This is not sensible in general; however, we are
+-- called only from the typechecker's @generalize@ operation, which
+-- collects names from the bodies of polymorphic functions.
+--
+-- Those names can have two origins: they can be user-written names,
+-- in which case their provenance is `TypeExplicit` and the position
+-- is meaningful; or they can be the the results of running
+-- @generalize@. While we never run @generalize@ directly on the same
+-- function body more than once, we do (must) rescan the bodies of
+-- nested functions for occurrences of type variables properly
+-- belonging to the enclosing function. That can turn up generalized
+-- type variables that belong to the nested function.
+--
+-- We don't attempt to avoid extracting the positions from those type
+-- variables. However, we discard the results in the `Schema`
+-- instance: anything forall-bound within the schema is contained
+-- within it and shouldn't escape. So it doesn't matter if the
+-- positions we extract from those type variables are meaningful.
+-- However, it does mean extracting them shouldn't crash.
+--
+-- If things change such that extracting those variables is a problem
+-- we can, at the cost of a bunch of complexity, carry the
+-- forall-bound variables from the `Schema` into the code for `Type`
+-- and skip them when they appear.
+--
+-- FUTURE: given that we're now specific to being called from the
+-- typechecker, maybe this should get moved back to Typechecker.hs.
+--
 class NamedTyVars t where
   namedTyVars :: t -> Map Name Pos
 
@@ -38,7 +69,7 @@ instance (Ord k, NamedTyVars a) => NamedTyVars (Map k a) where
   namedTyVars = namedTyVars . Map.elems
 
 instance (NamedTyVars a) => NamedTyVars [a] where
-  namedTyVars = Map.unionsWith choosePos . map namedTyVars
+  namedTyVars ts = Map.unions $ map namedTyVars ts
 
 instance (NamedTyVars a) => NamedTyVars (Pos, a) where
   namedTyVars (_pos, x) = namedTyVars x
@@ -51,9 +82,9 @@ instance NamedTyVars Type where
             namedParamVars = namedTyVars namedParams
             retVars = namedTyVars ret
         in
-        Map.unionWith choosePos (Map.unionWith choosePos paramVars namedParamVars) retVars
+        Map.unions [paramVars, namedParamVars, retVars]
     TyRecord _ tm     -> namedTyVars tm
-    TyVar pos n       -> Map.singleton n pos
+    TyVar prov n      -> Map.singleton n (getPos prov)
     TyUnifyVar _ _    -> Map.empty
 
 instance NamedTyVars Schema where

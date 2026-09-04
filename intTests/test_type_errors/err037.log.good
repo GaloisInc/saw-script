@@ -5,8 +5,13 @@ Type errors:
     Expected: [Int]
     Found:    [Int] -> [Int]
 
-  err037.saw:9:10-9:15: Note: The type [Int] arises from this type annotation
-  err037.saw:7:15-7:35: Note: The type [Int] -> [Int] arises from the context of the term
+  err037.saw:9:10-9:15: Note: The expected type [Int] arises from this explicit type name
+  err037.saw:7:7-7:12: Note: The found type _ -> _ arises from this parameter list...
+  err037.saw:7:15-7:35: Note: ...and this function body
+  <definition of concat>:1:12-1:15: Note: The found type's 1st positional parameter [_] arises from this explicit type name
+  err037.saw:9:21-9:22: Note: The 1st positional parameter's element type Int arises from the form of this constant
+  <definition of concat>:1:19-1:22: Note: The found type's return type [_] arises from this explicit type name
+  err037.saw:9:21-9:22: Note: The return type's element type Int arises from the form of this constant
 
 
 FAILED

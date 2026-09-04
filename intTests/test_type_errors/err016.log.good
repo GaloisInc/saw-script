@@ -5,8 +5,10 @@ Type errors:
     Expected: Int
     Found:    Int -> t.1
 
-  err016.saw:12:11-12:12: Note: The type Int arises from the type of this term
-  err016.saw:12:13-12:14: Note: The type Int -> t.1 arises from the context of the term
+  err016.saw:12:11-12:12: Note: The expected type Int arises from the form of this constant
+  err016.saw:12:13-12:14: Note: The found type _ -> _ arises from the form of this argument list
+  err016.saw:12:13-12:14: Note: The found type's 1st positional parameter Int arises from the form of this constant
+  err016.saw:12:13-12:14: Note: The found type's return type t.1 is a fresh type variable for a type implied here
 
 
 FAILED

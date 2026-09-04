@@ -8,8 +8,10 @@ Type errors:
     Expected: () -> a?Int -> b?Int -> c?Int -> Int
     Found:    () -> a?Int -> b?Int -> d?Int -> Int
 
-  args002.saw:1:27-1:28: Note: The type () -> a?Int -> b?Int -> c?Int -> Int arises from the context of the term
-  args002.saw:2:27-2:28: Note: The type () -> a?Int -> b?Int -> d?Int -> Int arises from the context of the term
+  args002.saw:1:7-1:24: Note: The expected type _ -> a?_ -> b?_ -> c?_ -> _ arises from this parameter list...
+  args002.saw:1:27-1:28: Note: ...and this function body
+  args002.saw:2:7-2:24: Note: The found type _ -> a?_ -> b?_ -> d?_ -> _ arises from this parameter list...
+  args002.saw:2:27-2:28: Note: ...and this function body
 
 
 FAILED
