@@ -1380,6 +1380,10 @@ unify exp0 pos found0 = visit [] exp0 found0
 -- which unifications to attempt to avoid failures on things we don't
 -- want to make fatal just yet. It should be removed when no longer
 -- needed.
+--
+-- Note that while the position argument must be valid (since it may
+-- be used to generate error messages that we then discard), it need
+-- not be accurate since those error messages should not escape.
 matches :: Pos -> Type -> Type -> TI Bool
 matches pos t1 t2 =
     speculateTI $ unify t1 pos t2
@@ -2250,15 +2254,27 @@ wrapReturn e =
 
 -- | Type inference for a single statement.
 --
---   The boolean is whether we're at the syntactic top level, which is used
---   for workaround logic for issue #2162.
+
+--   The boolean is whether we're at the syntactic top level, which is
+--   used for workaround logic for issue #2162. It can be removed along
+--   with the workaround logic for 1.7.
 --
---   The passed-in position should be the position associated with the monad type
---   the first type argument (ctx) is the monad type for any binds that occur.
+--   The passed-in provenance should reflect whatever causes us to be
+--   in a monadic statement rather than a pure expression: for a
+--   block, it's the TypeFromElement with position of the block. For a
+--   top-level statement, we should use TypeFromContext with the
+--   position of the statement itself.
+--
+--   The type argument (ctx) is the monad type for any binds that occur.
+--   The provenance in this should reflect what makes it that monad and
+--   not some other; for blocks typically that should end up being the
+--   first non-monad-polymorphic statement, and for the syntactic top
+--   level it should also be TypeFromContext with the position of the
+--   statement itself.
 --
 -- Updates the environment and returns an updated statement.
-inferStmt :: Bool -> Pos -> Type -> Stmt -> TI Stmt
-inferStmt atSyntacticTopLevel blockpos ctx s = do
+inferStmt :: Bool -> TypeProvenance -> Type -> Stmt -> TI Stmt
+inferStmt atSyntacticTopLevel blockprov ctx s = do
     ppopts <- asks tiPPOpts
     case s of
         StmtBind spos pat e -> do
@@ -2267,7 +2283,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
             -- straightforward way to proceed here is to unify both
             -- the monad type (ctx) and the result type expected by
             -- the pattern (pty), like this:
-            --    e' <- checkExpr e (tApply blockpos ctx pty)
+            --    e' <- checkExpr e (tApply blockprov ctx pty)
             --
             -- However, historically when at the syntactic top level
             -- (only), the monad type was left off, meaning that
@@ -2302,7 +2318,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
             let restrictToCorrect = do
                   -- unify the type of e with the expected monad and
                   -- pattern types
-                  unify (tApply (TypeFromElement blockpos TyctxExpr) ctx pty) (Pos.getPos e') ty
+                  unify (tApply blockprov ctx pty) (Pos.getPos e') ty
                   return e'
 
             -- The special case for non-monadic values
@@ -2350,7 +2366,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
                 if not atSyntacticTopLevel then
                     restrictToCorrect
                 else do
-                    ok <- matches blockpos (tApply (TypeFromElement blockpos TyctxExpr) ctx pty) ty
+                    ok <- matches spos (tApply blockprov ctx pty) ty
                     if ok then
                         restrictToCorrect
                     else
@@ -2390,8 +2406,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
             -- Restrict include to TopLevel. This matches the prior
             -- behavior when it was a builtin function rather than
             -- syntax. FUTURE: consider relaxing the requirement.
-            let blockprov = TypeFromElement blockpos TyctxExpr
-                sprov = TypeFromElement spos TyctxStmt
+            let sprov = TypeFromElement spos TyctxStmt
             let tm = TyCon sprov (ContextCon TopLevel) []
             tx <- getFreshTyVar spos
             unify (tApply blockprov ctx tx) spos (tApply sprov tm tx)
@@ -2444,9 +2459,10 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
 inferBlock :: Pos -> Type -> Type -> ([Stmt], Expr) -> TI ([OutStmt], OutExpr)
 inferBlock blockpos ctx ty (stmts, lastexpr) = do
     let atSyntacticTopLevel = False
+    let blockprov = TypeFromElement blockpos TyctxExpr
 
     -- Check the statements in order, left first.
-    stmts' <- mapM (inferStmt atSyntacticTopLevel blockpos ctx) stmts
+    stmts' <- mapM (inferStmt atSyntacticTopLevel blockprov ctx) stmts
 
     -- Check the final expression.
     -- This produces the result type for the block.
@@ -2471,12 +2487,12 @@ inferBlock blockpos ctx ty (stmts, lastexpr) = do
 --   will throw away the updated environment; the interpreter has its
 --   own misbegotten logic for handling that in its own way. (Which
 --   should be removed.)
-inferSingleStmt :: Pos -> Type -> Stmt -> TI Stmt
-inferSingleStmt pos ctx s = do
+inferSingleStmt :: TypeProvenance -> Type -> Stmt -> TI Stmt
+inferSingleStmt prov ctx s = do
     -- currently we are always at the syntactic top level here because
     -- that's how the interpreter works
     let atSyntacticTopLevel = True
-    s' <- inferStmt atSyntacticTopLevel pos ctx s
+    s' <- inferStmt atSyntacticTopLevel prov ctx s
     s'' <- applyCurrentSubst s'
     return s''
 
@@ -2990,35 +3006,33 @@ checkStmt ::
       Result Stmt
 checkStmt ppopts avail env tenv ctx stmt =
     -- XXX: we shouldn't need this position here.
-    -- The position is used for the following things:
     --
-    --    - to be the position associated with the monad context, which
-    --      in a tidy world should just be PosRepl (as in, the only
-    --      time we should be typechecking a single statement is when
-    --      it was just typed interactively, and which monad we're in
-    --      is a direct property of that context) but this is not
-    --      currently true and will require a good bit of interpreter
-    --      cleanup to make it true;
+    -- The position is used as the position associated with the
+    -- current monad context. In a tidy world this should just be
+    -- PosRepl (as in, the only time we should be typechecking a
+    -- single statement is when it was just typed interactively, and
+    -- which monad we're in is a direct property of that context) but
+    -- this is not currently true and will require a good bit of
+    -- interpreter cleanup to make it true.
     --
-    --    - to pass to inferStmt, which also uses it as part of the
-    --      position associated with the monad context. (This part is a
-    --      result of BlockCon existing and can go away when BlockCon is
-    --      removed.)
+    -- Note that there are two uses of the resulting `TypeProvenance`.
+    -- One is the as the provenance of `ctxtype`. This is what says
+    -- that the current monad is `TopLevel` (or `ProofScript`). The
+    -- other is as the context provenance for `inferStmt` (via
+    -- `inferSingleStmt`; this is subtly different. It's the
+    -- provenance of the fact that we're _in_ a monad and thus the
+    -- type has kind * -> * and form "_ _". These are the same here,
+    -- but for nested blocks they can be different.
     --
-    -- XXX: using the position of the statement as the position
-    -- associated with the monad context is not correct (or at least,
-    -- will be confusing) and we should figure something else out if the
-    -- interpreter cleanup doesn't come through soon. Note that
-    -- currently we come through here only for syntactically top-level
-    -- statements in the interpreter; these are TopLevel except when in
-    -- the ProofScript repl. So perhaps we should use PosRepl when in
-    -- ProofScript, and then either PosRepl or PosBuiltin for TopLevel?
-    -- But we don't have a good way of knowing here whether we're
-    -- actually in the repl.
+    -- (For a nested block the fact that we're in a monad arises from
+    -- being in a do-block, but which monad it is comes from something
+    -- you did in the do block that pinned it to a particular monad.)
+    --
     let pos = Pos.getPos stmt
-        ctxtype = TyCon (TypeFromContext pos TyctxStmt) (ContextCon ctx) []
+        prov = TypeFromContext pos TyctxStmt
+        ctxtype = TyCon prov (ContextCon ctx) []
     in
-    runTI ppopts avail env tenv (inferSingleStmt pos ctxtype stmt)
+    runTI ppopts avail env tenv (inferSingleStmt prov ctxtype stmt)
 
 -- | Check a single declaration. (This is an external interface.)
 --
