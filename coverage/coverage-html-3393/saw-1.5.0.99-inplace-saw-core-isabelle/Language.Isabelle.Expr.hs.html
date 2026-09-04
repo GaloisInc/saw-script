@@ -1,0 +1,206 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    2 </span>{-# LANGUAGE RankNTypes #-}
+<span class="lineno">    3 </span>{-# LANGUAGE ScopedTypeVariables #-}
+<span class="lineno">    4 </span>{-# LANGUAGE PatternSynonyms #-}
+<span class="lineno">    5 </span>
+<span class="lineno">    6 </span>module Language.Isabelle.Expr
+<span class="lineno">    7 </span>(
+<span class="lineno">    8 </span>  Expr(..)
+<span class="lineno">    9 </span>, pattern IntLit
+<span class="lineno">   10 </span>, Type
+<span class="lineno">   11 </span>, traverseSubExprs
+<span class="lineno">   12 </span>, mapSubExprs
+<span class="lineno">   13 </span>, foldSubExprs
+<span class="lineno">   14 </span>, traverseNames
+<span class="lineno">   15 </span>, foldNames
+<span class="lineno">   16 </span>, mapNames
+<span class="lineno">   17 </span>) where
+<span class="lineno">   18 </span>
+<span class="lineno">   19 </span>import           Control.Monad.Identity
+<span class="lineno">   20 </span>import           Control.Monad.State
+<span class="lineno">   21 </span>import           Data.List (intercalate)
+<span class="lineno">   22 </span>
+<span class="lineno">   23 </span>
+<span class="lineno">   24 </span>import qualified Language.Isabelle.Name as Name
+<span class="lineno">   25 </span>import           Language.Isabelle.Name (Name)
+<span class="lineno">   26 </span>import qualified Language.Isabelle.Output as Output
+<span class="lineno">   27 </span>import           Language.Isabelle.Output (Output(..), out)
+<span class="lineno">   28 </span>import qualified Language.Isabelle.Panic as Panic
+<span class="lineno">   29 </span>import qualified Language.Isabelle.Syntax as Syntax
+<span class="lineno">   30 </span>import Numeric (showHex)
+<span class="lineno">   31 </span>
+<span class="lineno">   32 </span>
+<span class="lineno">   33 </span>type Type = Expr
+<span class="lineno">   34 </span>
+<span class="lineno">   35 </span>data Expr =
+<span class="lineno">   36 </span>    Ctr [Expr] Name
+<span class="lineno">   37 </span>  | Binder String [Expr] Expr
+<span class="lineno">   38 </span>  | BinOp Expr Expr Expr
+<span class="lineno">   39 </span>  | App Expr [Expr]
+<span class="lineno">   40 </span>  | TApp Expr [Type]
+<span class="lineno">   41 </span>  | Var Name
+<span class="lineno">   42 </span>  | ConstrainT Expr Type
+<span class="lineno">   43 </span>  | IntLitCtr
+<span class="lineno">   44 </span>      Integer
+<span class="lineno">   45 </span>      Bool -- true if this should be printed as hex
+<span class="lineno">   46 </span>  | Undefined Type String
+<span class="lineno">   47 </span>  | Let [Expr] Expr
+<span class="lineno">   48 </span>  | Case Expr [(Expr,Expr)]
+<span class="lineno">   49 </span>  | EmptyExpr
+<span class="lineno">   50 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show</span></span></span></span></span></span>)
+<span class="lineno">   51 </span>
+<span class="lineno">   52 </span>pattern IntLit :: Integer -&gt; Expr
+<span class="lineno">   53 </span>pattern IntLit i &lt;- <span class="nottickedoff">IntLitCtr i _</span> where
+<span class="lineno">   54 </span>  IntLit i = <span class="nottickedoff">IntLitCtr i False</span>
+<span class="lineno">   55 </span>
+<span class="lineno">   56 </span>traverseSubExprs :: forall m. Monad m =&gt; (Expr -&gt; m Expr) -&gt; Expr -&gt; m Expr
+<span class="lineno">   57 </span><span class="decl"><span class="nottickedoff">traverseSubExprs f = go</span>
+<span class="lineno">   58 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">   59 </span><span class="spaces">    </span><span class="nottickedoff">go :: Expr -&gt; m Expr</span>
+<span class="lineno">   60 </span><span class="spaces">    </span><span class="nottickedoff">go e = f =&lt;&lt; case e of</span>
+<span class="lineno">   61 </span><span class="spaces">      </span><span class="nottickedoff">Ctr es nm -&gt; Ctr &lt;$&gt; mapM go es &lt;*&gt; pure nm</span>
+<span class="lineno">   62 </span><span class="spaces">      </span><span class="nottickedoff">Binder str nms e1 -&gt; Binder &lt;$&gt; pure str &lt;*&gt; pure nms &lt;*&gt; go e1</span>
+<span class="lineno">   63 </span><span class="spaces">      </span><span class="nottickedoff">BinOp e1 e2 e3 -&gt; BinOp &lt;$&gt; go e1 &lt;*&gt; go e2 &lt;*&gt; go e3</span>
+<span class="lineno">   64 </span><span class="spaces">      </span><span class="nottickedoff">App e1 es -&gt; App &lt;$&gt; go e1 &lt;*&gt; mapM go es</span>
+<span class="lineno">   65 </span><span class="spaces">      </span><span class="nottickedoff">TApp e1 ts -&gt; TApp &lt;$&gt; go e1 &lt;*&gt; mapM go ts</span>
+<span class="lineno">   66 </span><span class="spaces">      </span><span class="nottickedoff">Var nm -&gt; Var &lt;$&gt; pure nm</span>
+<span class="lineno">   67 </span><span class="spaces">      </span><span class="nottickedoff">ConstrainT e1 t -&gt; ConstrainT &lt;$&gt; go e1 &lt;*&gt; pure t</span>
+<span class="lineno">   68 </span><span class="spaces">      </span><span class="nottickedoff">IntLitCtr i b -&gt; IntLitCtr &lt;$&gt; pure i &lt;*&gt; pure b</span>
+<span class="lineno">   69 </span><span class="spaces">      </span><span class="nottickedoff">Undefined tp msg -&gt; Undefined &lt;$&gt; go tp &lt;*&gt; pure msg</span>
+<span class="lineno">   70 </span><span class="spaces">      </span><span class="nottickedoff">Let bs e1 -&gt; Let &lt;$&gt; mapM go bs &lt;*&gt; go e1</span>
+<span class="lineno">   71 </span><span class="spaces">      </span><span class="nottickedoff">Case e1 es -&gt; Case &lt;$&gt; go e1 &lt;*&gt; mapM (\(e2,e3) -&gt; (,) &lt;$&gt; go e2 &lt;*&gt; go e3) es</span>
+<span class="lineno">   72 </span><span class="spaces">      </span><span class="nottickedoff">EmptyExpr -&gt; pure EmptyExpr</span></span>
+<span class="lineno">   73 </span>
+<span class="lineno">   74 </span>liftIdentity :: (forall m. Monad m =&gt; (x -&gt; m x) -&gt; y -&gt; m y) -&gt; (x -&gt; x) -&gt; y -&gt; y
+<span class="lineno">   75 </span><span class="decl"><span class="nottickedoff">liftIdentity f g e = runIdentity (f (\e' -&gt; Identity (g e')) e)</span></span>
+<span class="lineno">   76 </span>
+<span class="lineno">   77 </span>mapSubExprs :: (Expr -&gt; Expr) -&gt; Expr -&gt; Expr
+<span class="lineno">   78 </span><span class="decl"><span class="nottickedoff">mapSubExprs = liftIdentity traverseSubExprs</span></span>
+<span class="lineno">   79 </span>
+<span class="lineno">   80 </span>foldSubExprs :: (Expr -&gt; a -&gt; a) -&gt; Expr -&gt; a -&gt; a
+<span class="lineno">   81 </span><span class="decl"><span class="nottickedoff">foldSubExprs f e st =</span>
+<span class="lineno">   82 </span><span class="spaces">  </span><span class="nottickedoff">execState (traverseSubExprs (\e' -&gt; modify (\s -&gt; f e' s) &gt;&gt; return e) e) st</span></span>
+<span class="lineno">   83 </span>
+<span class="lineno">   84 </span>traverseNames :: forall m. Monad m =&gt; (Name.Name -&gt; m Name.Name) -&gt; Expr -&gt; m Expr
+<span class="lineno">   85 </span><span class="decl"><span class="nottickedoff">traverseNames f = traverseSubExprs $ \case</span>
+<span class="lineno">   86 </span><span class="spaces">  </span><span class="nottickedoff">Ctr args nm -&gt; Ctr &lt;$&gt; pure args &lt;*&gt; f nm</span>
+<span class="lineno">   87 </span><span class="spaces">  </span><span class="nottickedoff">Var nm -&gt; Var &lt;$&gt; f nm</span>
+<span class="lineno">   88 </span><span class="spaces">  </span><span class="nottickedoff">e -&gt; pure e</span></span>
+<span class="lineno">   89 </span>
+<span class="lineno">   90 </span>mapNames :: (Name.Name -&gt; Name.Name) -&gt; Expr -&gt; Expr
+<span class="lineno">   91 </span><span class="decl"><span class="nottickedoff">mapNames = liftIdentity traverseNames</span></span>
+<span class="lineno">   92 </span>
+<span class="lineno">   93 </span>
+<span class="lineno">   94 </span>foldNames :: (Name.Name -&gt; a -&gt; a) -&gt; Expr -&gt; a -&gt; a
+<span class="lineno">   95 </span><span class="decl"><span class="nottickedoff">foldNames f e st =</span>
+<span class="lineno">   96 </span><span class="spaces">  </span><span class="nottickedoff">execState (traverseNames (\nm -&gt; modify (\s -&gt; f nm s) &gt;&gt; return nm) e) st</span></span>
+<span class="lineno">   97 </span>
+<span class="lineno">   98 </span>mkTAppSyn :: Type -&gt; [Type] -&gt; Expr
+<span class="lineno">   99 </span><span class="decl"><span class="nottickedoff">mkTAppSyn body ts = Ctr (body:ts) $</span>
+<span class="lineno">  100 </span><span class="spaces">  </span><span class="nottickedoff">Name.Name (Name.TheoryName &quot;Cryptol&quot; False)</span>
+<span class="lineno">  101 </span><span class="spaces">    </span><span class="nottickedoff">&quot;TApp&quot; (Syntax.ListSyn Syntax.Prefix &quot;,&quot; &quot;`{&quot; &quot;}&quot; ) Name.Term</span></span>
+<span class="lineno">  102 </span>
+<span class="lineno">  103 </span>exprToString :: Output.HasOutput =&gt; Expr -&gt; String
+<span class="lineno">  104 </span><span class="decl"><span class="nottickedoff">exprToString = go</span>
+<span class="lineno">  105 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  106 </span><span class="spaces">    </span><span class="nottickedoff">braks :: Expr -&gt; String</span>
+<span class="lineno">  107 </span><span class="spaces">    </span><span class="nottickedoff">braks te = case te of</span>
+<span class="lineno">  108 </span><span class="spaces">      </span><span class="nottickedoff">Var{} -&gt; go te</span>
+<span class="lineno">  109 </span><span class="spaces">      </span><span class="nottickedoff">Ctr [] _ -&gt; go te</span>
+<span class="lineno">  110 </span><span class="spaces">      </span><span class="nottickedoff">IntLit{} -&gt; go te</span>
+<span class="lineno">  111 </span><span class="spaces">      </span><span class="nottickedoff">Binder{} -&gt; go te -- adds brackets itself</span>
+<span class="lineno">  112 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt; Output.brackets $ go te</span>
+<span class="lineno">  113 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  114 </span><span class="spaces">    </span><span class="nottickedoff">braks_postfix :: Expr -&gt; String</span>
+<span class="lineno">  115 </span><span class="spaces">    </span><span class="nottickedoff">braks_postfix te = case te of</span>
+<span class="lineno">  116 </span><span class="spaces">      </span><span class="nottickedoff">Ctr _ nm | Syntax.InfixSyn{} &lt;- Name.nmSyn nm -&gt; braks te</span>
+<span class="lineno">  117 </span><span class="spaces">      </span><span class="nottickedoff">Ctr _ nm | Syntax.ListSyn{} &lt;- Name.nmSyn nm -&gt; braks te</span>
+<span class="lineno">  118 </span><span class="spaces">      </span><span class="nottickedoff">BinOp{} -&gt; braks te</span>
+<span class="lineno">  119 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt; go te</span>
+<span class="lineno">  120 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  121 </span><span class="spaces">    </span><span class="nottickedoff">abs_arg :: Expr -&gt; String</span>
+<span class="lineno">  122 </span><span class="spaces">    </span><span class="nottickedoff">abs_arg te = case te of</span>
+<span class="lineno">  123 </span><span class="spaces">      </span><span class="nottickedoff">ConstrainT{} -&gt; braks te</span>
+<span class="lineno">  124 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt; go te</span>
+<span class="lineno">  125 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  126 </span><span class="spaces">    </span><span class="nottickedoff">go :: Expr -&gt; String</span>
+<span class="lineno">  127 </span><span class="spaces">    </span><span class="nottickedoff">go te = case te of</span>
+<span class="lineno">  128 </span><span class="spaces">      </span><span class="nottickedoff">Ctr [] nm |</span>
+<span class="lineno">  129 </span><span class="spaces">        </span><span class="nottickedoff">Syntax.SymbolSyn s &lt;- Name.nmSyn nm -&gt; s</span>
+<span class="lineno">  130 </span><span class="spaces">      </span><span class="nottickedoff">Ctr [] nm |</span>
+<span class="lineno">  131 </span><span class="spaces">        </span><span class="nottickedoff">Syntax.InfixSyn s &lt;- Name.nmSyn nm -&gt; s</span>
+<span class="lineno">  132 </span><span class="spaces">      </span><span class="nottickedoff">Ctr [] nm |</span>
+<span class="lineno">  133 </span><span class="spaces">        </span><span class="nottickedoff">Syntax.NoSyn &lt;- Name.nmSyn nm -&gt; out nm</span>
+<span class="lineno">  134 </span><span class="spaces">      </span><span class="nottickedoff">Ctr es nm -&gt; case (Name.nmSyn nm, es) of</span>
+<span class="lineno">  135 </span><span class="spaces">        </span><span class="nottickedoff">(Syntax.InfixSyn s, [e1,e2]) -&gt;  Output.spaces $</span>
+<span class="lineno">  136 </span><span class="spaces">          </span><span class="nottickedoff">[ braks e1, s, braks e2 ]</span>
+<span class="lineno">  137 </span><span class="spaces">        </span><span class="nottickedoff">(Syntax.Symbol Syntax.Prefix s, _) -&gt; Output.spaces $</span>
+<span class="lineno">  138 </span><span class="spaces">          </span><span class="nottickedoff">(s:(map braks es))</span>
+<span class="lineno">  139 </span><span class="spaces">        </span><span class="nottickedoff">(Syntax.MixFix1 s1 s2, [e]) -&gt; s1 ++ go e ++ s2</span>
+<span class="lineno">  140 </span><span class="spaces">        </span><span class="nottickedoff">(Syntax.MixFix2 s1 s2, [e1, e2]) -&gt; s1 ++ go e1 ++ s2 ++ braks_postfix e2</span>
+<span class="lineno">  141 </span><span class="spaces">        </span><span class="nottickedoff">(Syntax.MixFix3 s1 s2 s3, [e1, e2, e3]) -&gt; Output.spaces $</span>
+<span class="lineno">  142 </span><span class="spaces">          </span><span class="nottickedoff">[ s1, go e1, s2, braks e2, s3, braks e3 ]</span>
+<span class="lineno">  143 </span><span class="spaces">        </span><span class="nottickedoff">(Syntax.ListSyn Syntax.Nofix sep start end, _) -&gt;</span>
+<span class="lineno">  144 </span><span class="spaces">          </span><span class="nottickedoff">start ++ intercalate sep (map go es) ++ end</span>
+<span class="lineno">  145 </span><span class="spaces">        </span><span class="nottickedoff">(Syntax.ListSyn f sep start end, (body:es')) -&gt; case f of</span>
+<span class="lineno">  146 </span><span class="spaces">          </span><span class="nottickedoff">Syntax.Prefix -&gt; braks body ++ start ++ intercalate sep (map go es') ++ end</span>
+<span class="lineno">  147 </span><span class="spaces">          </span><span class="nottickedoff">Syntax.Postfix -&gt; start ++ intercalate sep (map go es') ++ end ++ braks body</span>
+<span class="lineno">  148 </span><span class="spaces">          </span><span class="nottickedoff">_ -&gt; bad</span>
+<span class="lineno">  149 </span><span class="spaces">        </span><span class="nottickedoff">(Syntax.NoSyn, _) -&gt; case Name.isTypeK (Name.nmKind nm) of</span>
+<span class="lineno">  150 </span><span class="spaces">          </span><span class="nottickedoff">True -&gt; (Output.brackets $ intercalate &quot;,&quot; (map go es)) ++ &quot; &quot; ++ out nm</span>
+<span class="lineno">  151 </span><span class="spaces">          </span><span class="nottickedoff">False -&gt; out nm ++ &quot; &quot; ++ intercalate &quot; &quot; (map braks es)</span>
+<span class="lineno">  152 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; bad</span>
+<span class="lineno">  153 </span><span class="spaces">      </span><span class="nottickedoff">Binder bstr nms e -&gt;</span>
+<span class="lineno">  154 </span><span class="spaces">        </span><span class="nottickedoff">Output.brackets $ bstr</span>
+<span class="lineno">  155 </span><span class="spaces">          </span><span class="nottickedoff">++ (Output.spaces $ map abs_arg nms)</span>
+<span class="lineno">  156 </span><span class="spaces">          </span><span class="nottickedoff">++ &quot;. &quot; ++ (Output.indent 1 $ braks e)</span>
+<span class="lineno">  157 </span><span class="spaces">      </span><span class="nottickedoff">BinOp e1 op e2 -&gt; Output.spaces</span>
+<span class="lineno">  158 </span><span class="spaces">        </span><span class="nottickedoff">([braks e1, go op, braks e2])</span>
+<span class="lineno">  159 </span><span class="spaces">      </span><span class="nottickedoff">App e' args-&gt;</span>
+<span class="lineno">  160 </span><span class="spaces">        </span><span class="nottickedoff">go e' ++ &quot; &quot; ++ (Output.spaces (map braks args))</span>
+<span class="lineno">  161 </span><span class="spaces">      </span><span class="nottickedoff">TApp e ts -&gt; go $ mkTAppSyn e ts</span>
+<span class="lineno">  162 </span><span class="spaces">      </span><span class="nottickedoff">Var nm -&gt; out nm</span>
+<span class="lineno">  163 </span><span class="spaces">      </span><span class="nottickedoff">ConstrainT e1 typ -&gt; out e1 ++ &quot; :: &quot; ++ out typ</span>
+<span class="lineno">  164 </span><span class="spaces">      </span><span class="nottickedoff">IntLitCtr s False -&gt; show s</span>
+<span class="lineno">  165 </span><span class="spaces">      </span><span class="nottickedoff">IntLitCtr s True -&gt; &quot;0x&quot; ++ (showHex s &quot;&quot;)</span>
+<span class="lineno">  166 </span><span class="spaces">      </span><span class="nottickedoff">Undefined tp msg -&gt; Output.brackets $ &quot;undefined ''&quot; ++ msg ++ &quot;'' :: &quot; ++ out tp</span>
+<span class="lineno">  167 </span><span class="spaces">      </span><span class="nottickedoff">Let bs e1 -&gt;</span>
+<span class="lineno">  168 </span><span class="spaces">        </span><span class="nottickedoff">Output.line ++ &quot;let&quot; ++ (Output.indent 1 $ Output.line ++</span>
+<span class="lineno">  169 </span><span class="spaces">            </span><span class="nottickedoff">Output.lines (Output.addSep &quot;;&quot; (map out bs))) ++ Output.line ++ &quot;in &quot; ++ (Output.indent 1 $ (braks e1))</span>
+<span class="lineno">  170 </span><span class="spaces">      </span><span class="nottickedoff">Case e [(pat,body)] -&gt;</span>
+<span class="lineno">  171 </span><span class="spaces">        </span><span class="nottickedoff">Output.spaces $ [&quot;case&quot;, Output.out e, &quot;of&quot;, Output.out pat, &quot;\\&lt;Rightarrow&gt;&quot;, Output.out body]</span>
+<span class="lineno">  172 </span><span class="spaces">      </span><span class="nottickedoff">Case e es -&gt; Output.lines $</span>
+<span class="lineno">  173 </span><span class="spaces">        </span><span class="nottickedoff">[ Output.spaces [&quot;case&quot;, Output.out e, &quot;of&quot;] ]</span>
+<span class="lineno">  174 </span><span class="spaces">        </span><span class="nottickedoff">++</span>
+<span class="lineno">  175 </span><span class="spaces">        </span><span class="nottickedoff">(Output.indent 1 $ </span>
+<span class="lineno">  176 </span><span class="spaces">          </span><span class="nottickedoff">Output.addSepPrefix &quot;| &quot; $ (map (\(pat,body) -&gt; </span>
+<span class="lineno">  177 </span><span class="spaces">            </span><span class="nottickedoff">Output.spaces [ Output.out pat, &quot;\\&lt;Rightarrow&gt;&quot;, Output.brackets $ Output.out body ]) es))</span>
+<span class="lineno">  178 </span><span class="spaces">      </span><span class="nottickedoff">EmptyExpr -&gt; &quot;&quot;</span>
+<span class="lineno">  179 </span><span class="spaces">      </span><span class="nottickedoff">where</span>
+<span class="lineno">  180 </span><span class="spaces">        </span><span class="nottickedoff">bad = Panic.panic &quot;Output Expr: Unexpected signature&quot; [show te]</span></span>
+<span class="lineno">  181 </span>
+<span class="lineno">  182 </span>instance Output Expr where
+<span class="lineno">  183 </span>  <span class="decl"><span class="nottickedoff">out = exprToString</span></span>
+
+</pre>
+</body>
+</html>
