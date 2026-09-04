@@ -5695,8 +5695,8 @@ primitives = Map.fromList $
   , prim "eval_int"           "Term -> Int"
     (funVal1 eval_int)
     Current
-    [ "Evaluate a Cryptol term of type [n] (a bitvector) and convert to"
-    , "a SAWScript 'Int'."
+    [ "Evaluate a Cryptol term of type Integer or [n] (a bitvector) and"
+    , "convert it to a SAWScript 'Int'."
     ]
 
   , prim "eval_size"          "Type -> Int"
