@@ -70,9 +70,9 @@ incs'expr ctx e0 =
         e1' <- incs'expr ctx e1
         pure $ TLookup pos e1' ix
     Var{} -> pure e0
-    Lambda pos mname params namedParams e1 -> do
+    Lambda pos mname paramPos params namedParams e1 -> do
         e1' <- incs'expr ctx e1
-        pure $ Lambda pos mname params namedParams e1'
+        pure $ Lambda pos mname paramPos params namedParams e1'
     Application pos e1 e2s -> do
         e1' <- incs'expr ctx e1
         let once (mbName, e2) = do

@@ -536,9 +536,10 @@ buildFunction mname params e = case params of
       namedParams' <- foldM doadd Map.empty namedParams
 
       -- Figure out the overall pos
-      let pos = spanPos (maxSpan params) (getPos e)
+      let parampos = (maxSpan params) 
+      let allpos = spanPos parampos (getPos e)
 
-      Right $ Lambda pos mname params' namedParams' e
+      Right $ Lambda allpos mname parampos params' namedParams' e
 
 buildApplication :: Expr -> [(Maybe (Pos, Text), Expr)] -> Expr
 buildApplication fun args = case args of

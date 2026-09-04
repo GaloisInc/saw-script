@@ -156,7 +156,6 @@ data Tyctx
   | TyctxExpr      -- ^ Expressions
   | TyctxPat       -- ^ Patterns
   | TyctxStmt      -- ^ Statements
-  | TyctxFuncBody  -- ^ Expressions that are function bodies
   | TyctxArgList   -- ^ Expression groups that are function argument lists
   deriving (Eq, Show)
 
@@ -189,6 +188,8 @@ data TypeProvenance
   | TypeFromForallFresh Pos Text Text
   | TypeFromElement Pos Tyctx
   | TypeFromContext Pos Tyctx
+  | TypeFromFuncWithSig Pos -- ^ Function header with lambda and explicit return type
+  | TypeFromFuncWithBody Pos Pos -- ^ Function header with lambda and body expression
   deriving (Eq, Show)
 
 -- | Type for unification variable serial numbers.
@@ -351,9 +352,11 @@ data Expr
   | Var Pos Name
   -- | All functions are handled as lambdas. We hang onto the name
   --   from the function declaration (if there was one) for use in
-  --   stack traces. The list of patterns holdes the positional
-  --   parameters; the map from text holds the optional named
-  --   parameters. The elements of that map are:
+  --   stack traces. The second position (after the name) is the
+  --   combined position of the whole parameter list. The list of
+  --   patterns holdes the positional parameters; the map from text
+  --   holds the optional named parameters. The elements of that map
+  --   are:
   --      - the position of the name text
   --      - the overall position
   --      - the pattern with the local-facing name (which might be different)
@@ -362,7 +365,7 @@ data Expr
   --   The tuple nesting is supposed to make it possible to remember
   --   which position is which: the one belonging to the map key is
   --   the closest to it.
-  | Lambda Pos (Maybe Name) [Pattern] (Map Text (Pos, (Pos, Expr, Pattern))) Expr
+  | Lambda Pos (Maybe Name) Pos [Pattern] (Map Text (Pos, (Pos, Expr, Pattern))) Expr
   -- | Function arguments come with an optional name; if present,
   --   it includes the position of the name string.
   | Application Pos Expr [(Maybe (Pos, Text), Expr)]
@@ -472,6 +475,8 @@ instance Positioned TypeProvenance where
       TypeFromForallFresh pos _ _ -> pos
       TypeFromElement pos _ -> pos
       TypeFromContext pos _ -> pos
+      TypeFromFuncWithSig pos -> pos
+      TypeFromFuncWithBody pos _morepos -> pos
 
 -- | This is used by the parser where all the provenance is
 --   `TypeExplicit`, and should not really be used downstream from
@@ -500,7 +505,7 @@ instance Positioned Expr where
   getPos (Lookup pos _ _) = pos
   getPos (TLookup pos _ _) = pos
   getPos (Var pos _) = pos
-  getPos (Lambda pos _ _ _ _) = pos
+  getPos (Lambda pos _ _ _ _ _) = pos
   getPos (Application pos _ _) = pos
   getPos (Let pos _ _) = pos
   getPos (TSig pos _ _) = pos
@@ -548,7 +553,6 @@ ppTyctx ctx = case ctx of
     TyctxExpr     -> "expression"
     TyctxPat      -> "pattern"
     TyctxStmt     -> "statement"
-    TyctxFuncBody -> "function body"
     TyctxArgList  -> "argument list"
 
 prettyTyctx :: Tyctx -> PP.Doc ann
@@ -727,7 +731,7 @@ prettyExpr ppopts expr0 = case expr0 of
         expr' <> PP.dot <> n'
     Var _ name ->
         PP.pretty name
-    Lambda _ _mname params namedParams expr ->
+    Lambda _ _mname _parampos params namedParams expr ->
         let onePositional pat =
                 let pat' = prettyPattern ppopts pat in
                 "\\" <+> pat' <+> "->"
@@ -908,7 +912,7 @@ prettyDef :: PPS.Opts -> Decl -> PPS.Doc
 prettyDef ppopts (Decl _ pat0 _ def) =
    let dissectLambda :: Expr -> ([Pattern], Map Text (Pos, (Pos, Expr, Pattern)), Expr)
        dissectLambda e0 = case e0 of
-          Lambda _pos _name pats namedpats e1 ->
+          Lambda _pos _name _parampos pats namedpats e1 ->
               let (morepats, morenamedpats, e1') = dissectLambda e1 in
               (pats ++ morepats, Map.union namedpats morenamedpats, e1')
           _ ->

@@ -871,7 +871,7 @@ interpretExpr expr =
                       panic "interpretExpr" [
                            "Read of inaccessible variable " <> x
                       ]
-      SS.Lambda _pos mname params namedParams e -> do
+      SS.Lambda _pos mname _paramPos params namedParams e -> do
           env <- gets rwEnviron
           let namedParams' = Map.map (\(_, (_, d, p)) -> (d, p)) namedParams
           return $ VLambda env mname params namedParams' e
@@ -934,7 +934,7 @@ interpretDeclGroup rebindable dg = case dg of
             -- circular knot that can only be constructed in very
             -- specific ways.
             extractFunction x e0 = case e0 of
-                SS.Lambda _ mname params namedParams e1 ->
+                SS.Lambda _ mname _ params namedParams e1 ->
                     let namedParams' = Map.map (\(_, (_, d, p)) -> (d, p)) namedParams in
                     \env -> VLambda env mname params namedParams' e1
                 SS.TSig _ e1 _ ->
