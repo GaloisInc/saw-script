@@ -537,15 +537,6 @@ expandFully pos t = do
 ------------------------------------------------------------
 -- Further extraction / support logic
 
--- | Get the provenance entry from a type.
-getProv :: Type -> TypeProvenance
-getProv ty = case ty of
-    TyCon prov _ _ -> prov
-    TyFunc prov _ _ _ _ -> prov
-    TyRecord prov _ -> prov
-    TyVar prov _ -> prov
-    TyUnifyVar prov _ -> prov
-
 -- | Get the unification vars that are used in the current variable typing
 --   and named type environments.
 --
@@ -1227,12 +1218,12 @@ unify exp0 pos found0 = visit [] exp0 found0
 
             (TyUnifyVar prov'i i, _) -> do
                 -- one side is a unification var, resolve it
-                found' <- checkOccurs (getProv found) i found
+                found' <- checkOccurs prov'i i found
                 resolveVar prov'i i found'
 
             (_, TyUnifyVar prov'i i) -> do
                 -- the other side is a unification var, resolve it
-                expect' <- checkOccurs (getProv expect) i expect
+                expect' <- checkOccurs prov'i i expect
                 resolveVar prov'i i expect'
 
             (TyFunc prov'expect _ expParams expNamedParams expRet,
@@ -1646,7 +1637,7 @@ inferExpr expr = case expr of
     Index pos ar ix -> do
         (ar',at) <- inferExpr ar
         ix'      <- checkExpr ix (tInt (TypeFromContext (Pos.getPos ix) TyctxExpr))
-        t        <- getFreshTyVar (Pos.getPos ix')
+        t        <- getFreshTyVar pos
         let pos'ar = Pos.getPos ar'
             prov = TypeFromContext pos'ar TyctxExpr
         unify (tArray prov t) pos'ar at
@@ -2236,7 +2227,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
             let restrictToCorrect = do
                   -- unify the type of e with the expected monad and
                   -- pattern types
-                  unify (tApply (TypeExplicit blockpos) ctx pty) (Pos.getPos e') ty
+                  unify (tApply (TypeFromElement blockpos TyctxExpr) ctx pty) (Pos.getPos e') ty
                   return e'
 
             -- The special case for non-monadic values
@@ -2273,7 +2264,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
                   --    - we _do_ need to wrap the expression in "return"
                   --      so that the ultimate results are well-typed and
                   --      happen in the TopLevel monad
-                  unify pty (Pos.getPos e') (tApply (TypeExplicit spos) ctx' valty')
+                  unify pty (Pos.getPos e') (tApply (TypeFromContext spos TyctxStmt) ctx' valty')
 
                   -- Wrap the expression in "return" to produce an
                   -- expression of type TopLevel (m t).
@@ -2284,7 +2275,7 @@ inferStmt atSyntacticTopLevel blockpos ctx s = do
                 if not atSyntacticTopLevel then
                     restrictToCorrect
                 else do
-                    ok <- matches blockpos (tApply (TypeExplicit blockpos) ctx pty) ty
+                    ok <- matches blockpos (tApply (TypeFromElement blockpos TyctxExpr) ctx pty) ty
                     if ok then
                         restrictToCorrect
                     else
@@ -2950,7 +2941,7 @@ checkStmt ppopts avail env tenv ctx stmt =
     -- But we don't have a good way of knowing here whether we're
     -- actually in the repl.
     let pos = Pos.getPos stmt
-        ctxtype = TyCon (TypeExplicit pos) (ContextCon ctx) []
+        ctxtype = TyCon (TypeFromContext pos TyctxStmt) (ContextCon ctx) []
     in
     runTI ppopts avail env tenv (inferSingleStmt pos ctxtype stmt)
 
