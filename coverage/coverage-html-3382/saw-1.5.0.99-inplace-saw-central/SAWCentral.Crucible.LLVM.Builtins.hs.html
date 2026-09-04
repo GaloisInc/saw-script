@@ -195,7 +195,7 @@ span.spaces    { background: white }
 <span class="lineno">  176 </span>import CryptolSAWCore.TypedTerm
 <span class="lineno">  177 </span>
 <span class="lineno">  178 </span>-- saw-script
-<span class="lineno">  179 </span>import SAWCentral.AST (tMono, tTerm, Rebindable(ReadOnlyVar))
+<span class="lineno">  179 </span>import SAWCentral.AST (tMono, tTerm, Rebindable(ReadOnlyVar), Tyctx(TyctxExpr), TypeProvenance(TypeFromElement))
 <span class="lineno">  180 </span>import SAWCentral.Builtins (ghost_value)
 <span class="lineno">  181 </span>import SAWCentral.Proof
 <span class="lineno">  182 </span>import SAWCentral.Prover.SolverStats
@@ -495,7 +495,7 @@ span.spaces    { background: white }
 <span class="lineno">  476 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">pos</span></span>
 <span class="lineno">  477 </span><span class="spaces">              </span><span class="istickedoff">func_name</span>
 <span class="lineno">  478 </span><span class="spaces">              </span><span class="istickedoff">ReadOnlyVar</span>
-<span class="lineno">  479 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">(tMono $ tTerm pos)</span></span>
+<span class="lineno">  479 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">(tMono $ tTerm $ TypeFromElement pos TyctxExpr)</span></span>
 <span class="lineno">  480 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">Nothing</span>             -- FUTURE: slot for doc string, could put something here</span>
 <span class="lineno">  481 </span><span class="spaces">              </span><span class="istickedoff">(VTerm typed_extracted_func_const)</span>
 <span class="lineno">  482 </span><span class="spaces"></span><span class="istickedoff"></span>

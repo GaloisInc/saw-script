@@ -310,7 +310,7 @@ span.spaces    { background: white }
 <span class="lineno">  291 </span><span class="spaces">        </span><span class="istickedoff">VIntMod 0 si              -&gt; <span class="nottickedoff">return ([si], &quot;&quot;)</span></span>
 <span class="lineno">  292 </span><span class="spaces">        </span><span class="istickedoff">VIntMod n si              -&gt; <span class="nottickedoff">return ([svRem si (svInteger KUnbounded (toInteger n))], &quot;&quot;)</span></span>
 <span class="lineno">  293 </span><span class="spaces">        </span><span class="istickedoff">VWord sw                  -&gt; <span class="nottickedoff">return (if intSizeOf sw &gt; 0 then [sw] else [], &quot;&quot;)</span></span>
-<span class="lineno">  294 </span><span class="spaces">        </span><span class="istickedoff">VCtorApp 0 _ []           -&gt; <span class="nottickedoff">pure ([], &quot;&quot;)</span></span>
+<span class="lineno">  294 </span><span class="spaces">        </span><span class="istickedoff">VCtorApp 0 _ []           -&gt; pure ([], &quot;&quot;)</span>
 <span class="lineno">  295 </span><span class="spaces">        </span><span class="istickedoff">VCtorApp 0 _ [x, y]       -&gt; <span class="nottickedoff">do (xs, sx) &lt;- flattenSValue nm =&lt;&lt; force x</span></span>
 <span class="lineno">  296 </span><span class="spaces">                                        </span><span class="istickedoff"><span class="nottickedoff">(ys, sy) &lt;- flattenSValue nm =&lt;&lt; force y</span></span>
 <span class="lineno">  297 </span><span class="spaces">                                        </span><span class="istickedoff"><span class="nottickedoff">pure (xs ++ ys, sx ++ sy)</span></span>

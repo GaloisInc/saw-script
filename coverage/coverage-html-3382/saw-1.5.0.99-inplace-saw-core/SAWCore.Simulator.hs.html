@@ -417,7 +417,7 @@ span.spaces    { background: white }
 <span class="lineno">  398 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">n &lt; length elims</span> -&gt;</span>
 <span class="lineno">  399 </span><span class="spaces">              </span><span class="istickedoff">do elimv &lt;- force (elims !! n)</span>
 <span class="lineno">  400 </span><span class="spaces">                 </span><span class="istickedoff">let ctor = dtCtors dt !! n</span>
-<span class="lineno">  401 </span><span class="spaces">                 </span><span class="istickedoff">reduceRecursor (evalRecursor vrec) elimv args (ctorArgStruct ctor)</span>
+<span class="lineno">  401 </span><span class="spaces">                 </span><span class="istickedoff">reduceRecursor <span class="nottickedoff">(evalRecursor vrec)</span> elimv args (ctorArgStruct ctor)</span>
 <span class="lineno">  402 </span><span class="spaces">          </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> -&gt;</span>
 <span class="lineno">  403 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">panic &quot;evalTermF / evalRecursor&quot;</span></span>
 <span class="lineno">  404 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">[&quot;No eliminator for constructor: &quot; &lt;&gt; Text.pack (show n)]</span></span>
@@ -449,12 +449,12 @@ span.spaces    { background: white }
 <span class="lineno">  430 </span>-- muxing.
 <span class="lineno">  431 </span>ctorMuxability :: Ctor -&gt; Muxability
 <span class="lineno">  432 </span><span class="decl"><span class="istickedoff">ctorMuxability ctor =</span>
-<span class="lineno">  433 </span><span class="spaces">  </span><span class="istickedoff">if nondep IntSet.empty (ctorArgs cas) then Muxable else NonMuxable</span>
+<span class="lineno">  433 </span><span class="spaces">  </span><span class="istickedoff">if <span class="tickonlytrue">nondep IntSet.empty (ctorArgs cas)</span> then Muxable else <span class="nottickedoff">NonMuxable</span></span>
 <span class="lineno">  434 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  435 </span><span class="spaces">    </span><span class="istickedoff">cas :: CtorArgStruct</span>
 <span class="lineno">  436 </span><span class="spaces">    </span><span class="istickedoff">cas = ctorArgStruct ctor</span>
 <span class="lineno">  437 </span><span class="spaces">    </span><span class="istickedoff">nondep :: IntSet -&gt; [(VarName, CtorArg)] -&gt; Bool</span>
-<span class="lineno">  438 </span><span class="spaces">    </span><span class="istickedoff">nondep vs [] = all <span class="nottickedoff">(IntSet.disjoint vs . freeVars)</span> (ctorIndices cas)</span>
+<span class="lineno">  438 </span><span class="spaces">    </span><span class="istickedoff">nondep vs [] = all (IntSet.disjoint vs . <span class="nottickedoff">freeVars</span>) (ctorIndices cas)</span>
 <span class="lineno">  439 </span><span class="spaces">    </span><span class="istickedoff">nondep vs ((vn, arg) : args) =</span>
 <span class="lineno">  440 </span><span class="spaces">      </span><span class="istickedoff">IntSet.disjoint vs (freesCtorArg arg) &amp;&amp;</span>
 <span class="lineno">  441 </span><span class="spaces">      </span><span class="istickedoff">nondep (IntSet.insert (vnIndex vn) vs) args</span></span>
@@ -462,11 +462,11 @@ span.spaces    { background: white }
 <span class="lineno">  443 </span>-- | Compute the set of 'VarIndex'es of free variables in a 'CtorArg'.
 <span class="lineno">  444 </span>freesCtorArg :: CtorArg -&gt; IntSet
 <span class="lineno">  445 </span><span class="decl"><span class="istickedoff">freesCtorArg (ConstArg t) = freeVars t</span>
-<span class="lineno">  446 </span><span class="spaces"></span><span class="istickedoff">freesCtorArg (RecursiveArg zs is) = go zs</span>
+<span class="lineno">  446 </span><span class="spaces"></span><span class="istickedoff">freesCtorArg (RecursiveArg zs is) = <span class="nottickedoff">go zs</span></span>
 <span class="lineno">  447 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  448 </span><span class="spaces">    </span><span class="istickedoff">go :: [(VarName, Term)] -&gt; IntSet</span>
-<span class="lineno">  449 </span><span class="spaces">    </span><span class="istickedoff">go [] = IntSet.unions (map <span class="nottickedoff">freeVars</span> is)</span>
-<span class="lineno">  450 </span><span class="spaces">    </span><span class="istickedoff">go ((v, t) : ts) = <span class="nottickedoff">freeVars t &lt;&gt; IntSet.delete (vnIndex v) (go ts)</span></span></span>
+<span class="lineno">  449 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">go [] = IntSet.unions (map freeVars is)</span></span>
+<span class="lineno">  450 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">go ((v, t) : ts) = freeVars t &lt;&gt; IntSet.delete (vnIndex v) (go ts)</span></span></span>
 <span class="lineno">  451 </span>
 <span class="lineno">  452 </span>-- | Evaluate a recursor applied to a specific data constructor.
 <span class="lineno">  453 </span>reduceRecursor ::
@@ -486,19 +486,19 @@ span.spaces    { background: white }
 <span class="lineno">  467 </span><span class="spaces">          </span><span class="istickedoff">do e' &lt;- apply e x</span>
 <span class="lineno">  468 </span><span class="spaces">             </span><span class="istickedoff">go e' xs args</span>
 <span class="lineno">  469 </span><span class="spaces">        </span><span class="istickedoff">RecursiveArg zs _ixs -&gt;</span>
-<span class="lineno">  470 </span><span class="spaces">          </span><span class="istickedoff">do e1 &lt;- apply e x</span>
-<span class="lineno">  471 </span><span class="spaces">             </span><span class="istickedoff">recx &lt;- delay (mk_rec_arg (length zs) x)</span>
-<span class="lineno">  472 </span><span class="spaces">             </span><span class="istickedoff">e2 &lt;- apply e1 recx</span>
-<span class="lineno">  473 </span><span class="spaces">             </span><span class="istickedoff">go e2 xs args</span>
+<span class="lineno">  470 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do e1 &lt;- apply e x</span></span>
+<span class="lineno">  471 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">recx &lt;- delay (mk_rec_arg (length zs) x)</span></span>
+<span class="lineno">  472 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">e2 &lt;- apply e1 recx</span></span>
+<span class="lineno">  473 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">go e2 xs args</span></span>
 <span class="lineno">  474 </span><span class="spaces">    </span><span class="istickedoff">go _ _ _ = <span class="nottickedoff">panic &quot;reduceRecursor&quot; [&quot;Wrong number of constructor arguments&quot;]</span></span>
 <span class="lineno">  475 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  476 </span><span class="spaces">    </span><span class="istickedoff">-- For a recursive argument, we need a value of the form</span>
 <span class="lineno">  477 </span><span class="spaces">    </span><span class="istickedoff">-- &gt; \z1 .. zk -&gt; r (x z1 .. zk)</span>
 <span class="lineno">  478 </span><span class="spaces">    </span><span class="istickedoff">mk_rec_arg :: Int -&gt; Thunk l -&gt; MValue l</span>
-<span class="lineno">  479 </span><span class="spaces">    </span><span class="istickedoff">mk_rec_arg k x =</span>
-<span class="lineno">  480 </span><span class="spaces">      </span><span class="istickedoff">vFunList k $ \zs -&gt;</span>
-<span class="lineno">  481 </span><span class="spaces">      </span><span class="istickedoff">do x_zs &lt;- delay (force x &gt;&gt;= \v -&gt; applyAll v zs)</span>
-<span class="lineno">  482 </span><span class="spaces">         </span><span class="istickedoff">apply r x_zs</span></span>
+<span class="lineno">  479 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">mk_rec_arg k x =</span></span>
+<span class="lineno">  480 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">vFunList k $ \zs -&gt;</span></span>
+<span class="lineno">  481 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do x_zs &lt;- delay (force x &gt;&gt;= \v -&gt; applyAll v zs)</span></span>
+<span class="lineno">  482 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">apply r x_zs</span></span></span>
 <span class="lineno">  483 </span>
 <span class="lineno">  484 </span>
 <span class="lineno">  485 </span>{-# SPECIALIZE evalGlobal ::

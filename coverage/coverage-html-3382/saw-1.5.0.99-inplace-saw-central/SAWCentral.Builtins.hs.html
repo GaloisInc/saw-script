@@ -2025,8 +2025,8 @@ span.spaces    { background: white }
 <span class="lineno"> 2006 </span><span class="spaces">            </span><span class="istickedoff">scApply sc t ty'</span>
 <span class="lineno"> 2007 </span><span class="spaces">      </span><span class="istickedoff">let dischargeProp :: Term -&gt; C.Prop -&gt; IO Term</span>
 <span class="lineno"> 2008 </span><span class="spaces">          </span><span class="istickedoff">dischargeProp t p</span>
-<span class="lineno"> 2009 </span><span class="spaces">            </span><span class="istickedoff">| CSC.isErasedProp p = return <span class="nottickedoff">t</span></span>
-<span class="lineno"> 2010 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = scApply sc t =&lt;&lt; CSC.proveProp sc p</span>
+<span class="lineno"> 2009 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlyfalse">CSC.isErasedProp p</span> = <span class="nottickedoff">return t</span></span>
+<span class="lineno"> 2010 </span><span class="spaces">            </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> = scApply sc t =&lt;&lt; CSC.proveProp sc mempty p</span>
 <span class="lineno"> 2011 </span><span class="spaces">      </span><span class="istickedoff">trm' &lt;- foldM applyType trm tys</span>
 <span class="lineno"> 2012 </span><span class="spaces">      </span><span class="istickedoff">let su = C.listSubst (zip (map C.tpVar vars) tys)</span>
 <span class="lineno"> 2013 </span><span class="spaces">      </span><span class="istickedoff">let props = map (plainSubst su) (C.sProps schema)</span>
@@ -2040,7 +2040,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2021 </span><span class="spaces">          </span><span class="istickedoff">msg = &quot;Assuming&quot; &lt;+&gt; x' &lt;+&gt; &quot;=&quot; &lt;+&gt; t'</span>
 <span class="lineno"> 2022 </span><span class="spaces">      </span><span class="istickedoff">in</span>
 <span class="lineno"> 2023 </span><span class="spaces">      </span><span class="istickedoff">printOutLn opts Info $ PPS.render ppopts msg</span>
-<span class="lineno"> 2024 </span><span class="spaces">          </span><span class="istickedoff"></span>
+<span class="lineno"> 2024 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2025 </span><span class="spaces">    </span><span class="istickedoff">-- Apply a substitution to a type *without* simplifying</span>
 <span class="lineno"> 2026 </span><span class="spaces">    </span><span class="istickedoff">-- constraints like @Arith [n]a@ to @Arith a@. (This is in contrast to</span>
 <span class="lineno"> 2027 </span><span class="spaces">    </span><span class="istickedoff">-- 'apSubst', which performs simplifications wherever possible.)</span>
@@ -2132,7 +2132,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2113 </span><span class="spaces">     </span><span class="istickedoff">let mnm =</span>
 <span class="lineno"> 2114 </span><span class="spaces">           </span><span class="istickedoff">mkModuleName $ Text.splitOn &quot;.&quot; mnm_str</span>
 <span class="lineno"> 2115 </span><span class="spaces">     </span><span class="istickedoff">_ &lt;- io $ scFindModule sc mnm -- Check that mnm exists</span>
-<span class="lineno"> 2116 </span><span class="spaces">     </span><span class="istickedoff">err_or_t &lt;- io $ inferCompleteTerm sc (Just mnm) uterm</span>
+<span class="lineno"> 2116 </span><span class="spaces">     </span><span class="istickedoff">err_or_t &lt;- io $ inferCompleteTerm sc <span class="nottickedoff">(Just mnm)</span> uterm</span>
 <span class="lineno"> 2117 </span><span class="spaces">     </span><span class="istickedoff">case err_or_t of</span>
 <span class="lineno"> 2118 </span><span class="spaces">       </span><span class="istickedoff">Left err -&gt; fail (show err)</span>
 <span class="lineno"> 2119 </span><span class="spaces">       </span><span class="istickedoff">Right x -&gt; pure x</span></span>

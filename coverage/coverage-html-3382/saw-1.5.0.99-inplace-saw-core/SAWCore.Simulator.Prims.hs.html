@@ -353,7 +353,7 @@ span.spaces    { background: white }
 <span class="lineno">  334 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.expNat&quot;, <span class="nottickedoff">expNatOp</span>)</span>
 <span class="lineno">  335 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.widthNat&quot;, widthNatOp)</span>
 <span class="lineno">  336 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.natCase&quot;, natCaseOp)</span>
-<span class="lineno">  337 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.Nat__rec&quot;, nat__RecOp)</span>
+<span class="lineno">  337 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.Nat__rec&quot;, <span class="nottickedoff">nat__RecOp</span>)</span>
 <span class="lineno">  338 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.equalNat&quot;, equalNatOp bp)</span>
 <span class="lineno">  339 </span><span class="spaces">  </span><span class="istickedoff">, (&quot;Prelude.ltNat&quot;, ltNatOp bp)</span>
 <span class="lineno">  340 </span><span class="spaces">  </span><span class="istickedoff">-- Integers</span>
@@ -783,17 +783,17 @@ span.spaces    { background: white }
 <span class="lineno">  764 </span>--   ((n : Nat) -&gt; p n -&gt; p (Succ n)) -&gt;
 <span class="lineno">  765 </span>--   (n : Nat) -&gt; p n;
 <span class="lineno">  766 </span>nat__RecOp :: (VMonadLazy l, Show (Extra l)) =&gt; Prim l
-<span class="lineno">  767 </span><span class="decl"><span class="istickedoff">nat__RecOp =</span>
-<span class="lineno">  768 </span><span class="spaces">  </span><span class="istickedoff">constFun $</span>
-<span class="lineno">  769 </span><span class="spaces">  </span><span class="istickedoff">primFun $ \z -&gt;</span>
-<span class="lineno">  770 </span><span class="spaces">  </span><span class="istickedoff">primFun $ \s -&gt;</span>
-<span class="lineno">  771 </span><span class="spaces">  </span><span class="istickedoff">let loop n =</span>
-<span class="lineno">  772 </span><span class="spaces">        </span><span class="istickedoff">if n == 0</span>
-<span class="lineno">  773 </span><span class="spaces">        </span><span class="istickedoff">then force z</span>
-<span class="lineno">  774 </span><span class="spaces">        </span><span class="istickedoff">else do s' &lt;- force s</span>
-<span class="lineno">  775 </span><span class="spaces">                </span><span class="istickedoff">r &lt;- delay (loop (n - 1))</span>
-<span class="lineno">  776 </span><span class="spaces">                </span><span class="istickedoff">applyAll s' [<span class="nottickedoff">ready (VNat (n - 1))</span>, r]</span>
-<span class="lineno">  777 </span><span class="spaces">  </span><span class="istickedoff">in natFun $ \n -&gt; Prim (loop n)</span></span>
+<span class="lineno">  767 </span><span class="decl"><span class="nottickedoff">nat__RecOp =</span>
+<span class="lineno">  768 </span><span class="spaces">  </span><span class="nottickedoff">constFun $</span>
+<span class="lineno">  769 </span><span class="spaces">  </span><span class="nottickedoff">primFun $ \z -&gt;</span>
+<span class="lineno">  770 </span><span class="spaces">  </span><span class="nottickedoff">primFun $ \s -&gt;</span>
+<span class="lineno">  771 </span><span class="spaces">  </span><span class="nottickedoff">let loop n =</span>
+<span class="lineno">  772 </span><span class="spaces">        </span><span class="nottickedoff">if n == 0</span>
+<span class="lineno">  773 </span><span class="spaces">        </span><span class="nottickedoff">then force z</span>
+<span class="lineno">  774 </span><span class="spaces">        </span><span class="nottickedoff">else do s' &lt;- force s</span>
+<span class="lineno">  775 </span><span class="spaces">                </span><span class="nottickedoff">r &lt;- delay (loop (n - 1))</span>
+<span class="lineno">  776 </span><span class="spaces">                </span><span class="nottickedoff">applyAll s' [ready (VNat (n - 1)), r]</span>
+<span class="lineno">  777 </span><span class="spaces">  </span><span class="nottickedoff">in natFun $ \n -&gt; Prim (loop n)</span></span>
 <span class="lineno">  778 </span>
 <span class="lineno">  779 </span>-- Nat#rec :
 <span class="lineno">  780 </span>--   (p : (Nat -&gt; sort 0)) -&gt;
