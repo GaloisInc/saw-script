@@ -381,11 +381,28 @@ data Expr
 
 -- | Patterns.
 --
+--   `PImplicit` represents the `_` in the implicit `_ <- e` that
+--   arises when we see a plain expression in statement context. The
+--   position is the position of the expression `e`. No type can be
+--   provided by the concrete syntax, but we still carry a type slot
+--   for the typechecker to fill in.
+--
+--   `PWild` represents an explicit `_`, and the position is the
+--   position of the `_` along with any type annotation. (So far there
+--   doesn't seem to be any reason to want the position of just the
+--   undersccore.)
+--
+--   Distinguishing `PImplicit` from `PWild` allows the typechecker
+--   to report certain errors correctly instead of hallucinating a
+--   position for the nonexistent underscore.
+--
 --   In `PVar` the first `Pos` is the position of the whole pattern
 --   (including any type) and the second is the position of just the
 --   name itself.
+--
 data Pattern
-  = PWild Pos (Maybe Type)
+  = PImplicit Pos (Maybe Type)
+  | PWild Pos (Maybe Type)
   | PVar Pos Pos Name (Maybe Type)
   | PTuple Pos [Pattern]
   deriving Show
@@ -512,6 +529,7 @@ instance Positioned Expr where
   getPos (IfThenElse pos _ _ _) = pos
 
 instance Positioned Pattern where
+  getPos (PImplicit pos _) = pos
   getPos (PWild pos _) = pos
   getPos (PVar fullpos _namepos _ _) = fullpos
   getPos (PTuple pos _) = pos
@@ -829,6 +847,8 @@ prettyPattern ppopts pat =
           Just ty -> PP.parens $ name' <+> PP.colon <+> prettyType ppopts ty
     in   
     case pat of
+        PImplicit _ mty ->
+          prettyArg "_" mty
         PWild _ mty ->
           prettyArg "_" mty
         PVar _ _ name mty ->
@@ -842,9 +862,10 @@ ppPattern ppopts pat =
 
 prettyStmt :: PPS.Opts -> Stmt -> PPS.Doc
 prettyStmt ppopts s0 = case s0 of
-    StmtBind _ (PWild _ _ty) expr ->
-       -- Drop the _, even if it has an explicit type
+    StmtBind _ (PImplicit _ _ty) expr ->
        prettyExpr ppopts expr <> ";"
+    StmtBind _ (PWild _ _ty) expr ->
+       "_ <-" <+> prettyExpr ppopts expr <> ";"
     StmtBind _ pat expr ->
        let pat' = prettyPattern ppopts pat
            expr' = prettyExpr ppopts expr

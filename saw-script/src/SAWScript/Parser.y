@@ -24,6 +24,7 @@ import Data.Text (Text, pack, unpack)
 import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
+import SAWSupport.Position
 import qualified SAWSupport.Pretty as PPS
 import SAWScript.Panic (panic)
 import SAWScript.Token
@@ -151,7 +152,7 @@ mbImportSpec :: { (Maybe P.ImportSpec, Pos) }
  | {- empty -}                          { (Nothing, Unknown) }
 
 Stmt :: { Stmt }
- : Expression                           { StmtBind (getPos $1) (PWild (leadingPos $ getPos $1) Nothing) $1 }
+ : Expression                           { StmtBind (getPos $1) (PImplicit (getPos $1) Nothing) $1 }
  | AExpr '<-' Expression                {% fmap (\x -> StmtBind (maxSpan' x $3) x $3) (toPattern $1) }
  | 'rec' sepBy1(Declaration, 'and')     { buildRec (maxSpan [tokPos $1, maxSpan $2]) $2 }
  | 'let' Declaration                    { buildLet (maxSpan [tokPos $1, getPos $2]) $2 }
@@ -488,6 +489,7 @@ instance Positioned ParamLabel where
 --
 fixFunctionName :: Pattern -> Maybe Text
 fixFunctionName = \case
+  PImplicit {} -> Nothing
   PWild {} -> Nothing
   PVar _allpos _namepos name _ty -> Just name
   PTuple {} -> Nothing
@@ -583,6 +585,11 @@ addTypeToPattern :: Pattern -> Maybe Type -> Either ParseError Pattern
 addTypeToPattern pat mbType = case mbType of
   Nothing -> pure pat
   Just ty -> case pat of
+      PImplicit pos _ ->
+          -- Unreachable; implicit patterns don't physically exist and
+          -- can't be annotated.
+          let pos' = ppPosition pos in
+          panic "addTypeToPattern" ["Implicit pattern", "Position: " <> pos']
       PWild pos Nothing ->
           pure $ PWild pos (Just ty)
       PVar allpos namepos name Nothing ->
@@ -641,7 +648,7 @@ mkTupleParam lp pats rp = case pats of
 --   be a plain expression, and unpack it to an expression.
 buildBlock :: Pos -> [Stmt] -> Either ParseError Expr
 buildBlock pos stmts = case reverse stmts of
-  StmtBind _spos (PWild _patpos _noty) e : revstmts' ->
+  StmtBind _spos (PImplicit _patpos _noty) e : revstmts' ->
     Right $ Block pos (reverse revstmts', e)
   [] ->
     Left $ EmptyBlock pos

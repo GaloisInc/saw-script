@@ -76,6 +76,10 @@ This release supports [version
 
 ## Bug Fixes
 
+* The SAWScript typechecker no longer allows `_ <- e` as the last
+  statement in a block.
+  Use the plain expression instead.
+
 * The Rocq exporter now generates more or less normal width output
   instead of cramming everything onto one very long line.
 
@@ -153,6 +157,9 @@ This release supports [version
   Use the `:env` REPL command instead.
 
 ## Other changes
+
+* The REPL no longer prints result values you explicitly throw away with
+  `_ <- `.
 
 * The way the `:search` REPL command matches function types has been adjusted.
   It should be more predictable and more useful now.

@@ -195,6 +195,7 @@ isPolymorphic ty0 = case ty0 of
 -- XXX: also it should be moved to ASTUtil once we have such a place.
 getType :: SS.Pattern -> SS.Type
 getType pat = case pat of
+    SS.PImplicit _pos ~(Just t) -> t
     SS.PWild _pos ~(Just t) -> t
     SS.PVar _allpos _xpos _x ~(Just t) -> t
     SS.PTuple tuplepos pats ->
@@ -379,6 +380,8 @@ popdir = do
 bindPattern :: SS.Rebindable -> SS.Pattern -> Maybe SS.Schema -> Value -> TopLevel ()
 bindPattern rb pat ms v =
   case pat of
+    SS.PImplicit _pos _ ->
+      pure ()
     SS.PWild _pos _ ->
       pure ()
     SS.PVar allpos _xpos _x Nothing ->
@@ -959,6 +962,7 @@ interpretDeclGroup rebindable dg = case dg of
             -- Recursive declaration sets are only allowed to contain
             -- functions, so the pattern cannot be a tuple.
             extractName pat = case pat of
+                SS.PImplicit _ _ -> Nothing
                 SS.PWild _ _ -> Nothing
                 SS.PVar _ xpos x _mty -> Just (xpos, x)
                 SS.PTuple{} ->
@@ -1211,8 +1215,8 @@ processStmtBind printBinds pos pat expr = do
   -- Eval the expression
   baseVal <- liftTopLevel $ interpretExpr expr
 
-  -- Fetch the type from updated pattern, since the typechecker will
-  -- have filled it in there.
+  -- Fetch the type from the pattern. The typechecker will have filled
+  -- it in there for us.
   --
   -- Note that this type won't include the current monad type, because
   -- it's the type of the value that the pattern on the left of <- is
@@ -1242,13 +1246,17 @@ processStmtBind printBinds pos pat expr = do
     -- Extract the variable, if any, from the pattern. If there isn't
     -- any single variable use "it".
     let name = case pat of
+          SS.PImplicit _patpos _t -> "it"
           SS.PWild _patpos _t -> "it"
           SS.PVar _patpos _xpos x _t -> x
           SS.PTuple _patpos _pats -> "it"
 
     -- Print non-unit result if it was not bound to a variable
+    -- (PImplicit is when not bound, PWild is when someone wrote _ <-
+    -- e, and in the latter case we can assume they meant to throw
+    -- away the value.)
     case pat of
-      SS.PWild _ _ | not (isVUnit result) ->
+      SS.PImplicit _ _ | not (isVUnit result) ->
         liftTopLevel $
         do sc <- getSharedContext
            result' <- liftIO $ ppValue sc result
@@ -1297,14 +1305,14 @@ interpretTopStmt printBinds replTypingHacks stmt = do
                    (Left errs, warns) ->
                        -- If it doesn't typecheck as a statement, and
                        -- it was a plain expression, which will come
-                       -- through as _ <- e, wrap it in "return" and
-                       -- try again.
+                       -- through as _ <- e (`PImplicit` rather than
+                       -- `PWild`), wrap it in "return" and try again.
                        case stmt of
-                           SS.StmtBind spos (SS.PWild wpos wty) e ->
+                           SS.StmtBind spos (SS.PImplicit wpos wty) e ->
                                let epos = SS.getPos e
                                    ret = SS.Var epos "return"
                                    e' = SS.Application epos ret [(Nothing, e)]
-                                   rstmt = SS.StmtBind spos (SS.PWild wpos wty) e'
+                                   rstmt = SS.StmtBind spos (SS.PImplicit wpos wty) e'
                                in
                                case checkStmt ppopts avail varenv3 tyenv ctx rstmt of
                                    (Left _, _) ->

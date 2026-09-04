@@ -220,6 +220,7 @@ instance AppSubst Expr where
 
 instance AppSubst Pattern where
     appSubst s pat = case pat of
+        PImplicit pos mt  -> PImplicit pos (appSubst s mt)
         PWild pos mt  -> PWild pos (appSubst s mt)
         PVar allpos xpos x mt -> PVar allpos xpos x (appSubst s mt)
         PTuple pos ps -> PTuple pos (appSubst s ps)
@@ -587,6 +588,7 @@ namedVarDefinitions = do
 -- | Get all the bindings in a pattern.
 patternBindings :: Pattern -> [(Name, Pos, Maybe Type)]
 patternBindings pat = case pat of
+    PImplicit _ _mt -> []
     PWild _ _mt -> []
     PVar _ xpos x mt -> [(x, xpos, mt)]
     PTuple _ ps -> concatMap patternBindings ps
@@ -609,6 +611,7 @@ patternBindings pat = case pat of
 --
 patternBindingsWithSchema :: Pattern -> Schema -> [(Name, Pos, Schema)]
 patternBindingsWithSchema pat sch = case pat of
+    PImplicit _ _ -> []
     PWild _ _ -> []
     PVar _ xpos x _ -> [(x, xpos, sch)]
     PTuple _ ps ->
@@ -1482,6 +1485,7 @@ inspectMaybeTypeFTVs kind mty = case mty of
 -- Get the free type variables found in a Pattern.
 inspectPatternFTVs :: Pattern -> TI (Map Name (Pos, Kind))
 inspectPatternFTVs pat = case pat of
+    PImplicit _pos mty -> inspectMaybeTypeFTVs kindStar mty
     PWild _pos mty -> inspectMaybeTypeFTVs kindStar mty
     PVar _allpos _xpos _x mty -> inspectMaybeTypeFTVs kindStar mty
     PTuple _pos subpats ->
@@ -2135,6 +2139,9 @@ inferPattern rebindable pat = do
           Just t -> checkType kindStar t
 
     case pat of
+        PImplicit pos mt -> do
+            t <- resolveType pos mt
+            return (t, PImplicit pos (Just t))
         PWild pos mt -> do
             t <- resolveType pos mt
             return (t, PWild pos (Just t))
@@ -2384,6 +2391,7 @@ inferStmt atSyntacticTopLevel blockprov ctx s = do
                                -- (just proclaiming a value by itself is not a
                                -- case we need to worry about)
                                case pat of
+                                   PImplicit _ _ -> restrictToCorrect
                                    PWild _ _ -> restrictToCorrect
                                    _ -> allowNonMonadic
 
