@@ -2683,6 +2683,18 @@ lookupTyCon tycon = case tycon of
     MIRSpecCon -> []
     ContextCon _ctx -> [kindStar]
 
+-- | Check if a list of types contains a failure type. If so, return
+--   it. Uses `Either` with unit rather than `Maybe` so as to get the
+--   right combining behavior using `>>`.
+checkForFailure :: Foldable t => t Type -> Either Type ()
+checkForFailure tys = foldr visit (Right ()) tys
+  where
+    visit arg' failure = case failure of
+        Left ty' -> Left ty'
+        Right () -> case arg' of
+            TyUnifyVar (TypeFailed _) _ -> Left arg'
+            _ -> Right ()
+
 -- | Check a type for validity and also for having the correct
 --   kinding.
 --
@@ -2728,9 +2740,23 @@ checkType kind ty = case ty of
             getErrorTyVar pos
         else do
             -- note that this will ignore the extra params, and return
-            -- a list of the same length as the args given
+            -- a list of the same length as the args given, which is
+            -- exactly what we need here.
             args' <- zipWithM checkType params args
-            return $ TyCon prov tycon args'
+
+            -- If any of the arguments is an error var, something was
+            -- invalid. Return the error var directly. (Properly we
+            -- should make a new one, but it's fresh and we can
+            -- safely repurpose it.) This is a hack to avoid returning
+            -- types _containing_ error vars out, which then lead to
+            -- ugly and confusing further errors downstream. When
+            -- we manage to kill off Block it should be revisited,
+            -- because that will change the way type applications are
+            -- done and that will likely change the way miskinded
+            -- type applications are seen.
+            pure $ case checkForFailure args' of
+                Left ty' -> ty'
+                Right () -> TyCon prov tycon args'
 
     TyFunc prov nameinfo params namedParams ret -> do
         if kind /= kindStar then do
@@ -2748,7 +2774,9 @@ checkType kind ty = case ty of
                 recordError pos $ "Functions may not have only named" <+>
                                   "parameters; add ()"
             ret' <- checkType kindStar ret
-            return $ TyFunc prov nameinfo params' namedParams' ret'
+            pure $ case checkForFailure (ret' : params') >> checkForFailure namedParams' of
+                Left ty' -> ty'
+                Right () -> TyFunc prov nameinfo params' namedParams' ret'
 
     TyRecord prov fields -> do
         if kind /= kindStar then do
@@ -2763,7 +2791,9 @@ checkType kind ty = case ty of
             -- field names because we can't once the fields are loaded
             -- into a map. (XXX: someone hasn't)
             fields' <- traverse (checkType kindStar) fields
-            return $ TyRecord prov fields'
+            pure $ case checkForFailure fields' of
+                Left ty' -> ty'
+                Right () -> TyRecord prov fields'
 
     -- Special-case CrucibleSetup to mark it deprecated. It is an alias
     -- for LLVMSetup, and it would be nice if it could just be a
