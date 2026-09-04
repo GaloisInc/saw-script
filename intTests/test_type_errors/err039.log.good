@@ -1,6 +1,7 @@
 Loading file "err039.saw"
 Type errors:
   err039.saw:7:26-7:32: Too many arguments to function of type [t.0] -> [t.0] -> [t.0]
-  err039.saw:5:13-5:23: Note: The function type _ -> _ -> _ arises from the context of this function body
+  err039.saw:5:7-5:10: Note: The function type _ -> _ -> _ arises from this parameter list...
+  err039.saw:5:13-5:23: Note: ...and this function body
 
 FAILED

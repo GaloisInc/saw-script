@@ -16,6 +16,7 @@ module SAWCentral.Position (
     Pos(..),
     differentLines,
     subspan,
+    startsBefore,
     leadingPos,
     trailingPos,
     spanPos,
@@ -122,6 +123,16 @@ subspan p1 p2 =
             ) && (
                 l1b < l2b || (l1b == l2b && c1b <= c2b)
             )
+        (_, _) -> False
+
+-- | Check if position p1 starts before position p2. This is also used
+--   to guide certain reporting in the SAWSCript typechecker, and not
+--   intended to do anything useful on more exotic kinds of position.
+startsBefore :: Pos -> Pos -> Bool
+startsBefore p1 p2 =
+    case (p1, p2) of
+        (Range f1 l1 c1 _ _, Range f2 l2 c2 _ _) ->
+            f1 == f2 && (l1 < l2 || (l1 == l2 && c1 < c2))
         (_, _) -> False
 
 -- Get the empty position at the beginning of the position of

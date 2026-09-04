@@ -1,6 +1,7 @@
 Loading file "err065.saw"
 Type errors:
   err065.saw:7:13-7:14: Too many arguments to function of type t.0 -> (t.0, Int)
-  err065.saw:6:11-6:17: Note: The function type _ -> _ arises from the context of this function body
+  err065.saw:6:7-6:8: Note: The function type _ -> _ arises from this parameter list...
+  err065.saw:6:11-6:17: Note: ...and this function body
 
 FAILED

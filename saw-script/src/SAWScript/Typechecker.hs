@@ -205,12 +205,12 @@ instance AppSubst Expr where
         Lookup pos rec fld     -> Lookup pos (appSubst s rec) fld
         TLookup pos tpl idx    -> TLookup pos (appSubst s tpl) idx
         Var _pos _x            -> expr
-        Lambda pos mname pats ppats body ->
+        Lambda pos mname paramPos pats ppats body ->
             let pats' = map (appSubst s) pats
                 ppats' = Map.map (appSubst s) ppats
                 body' = appSubst s body
             in
-            Lambda pos mname pats' ppats' body'
+            Lambda pos mname paramPos pats' ppats' body'
         Application pos f v    ->
             Application pos (appSubst s f) (appSubst s v)
         Let pos dg e           ->
@@ -691,32 +691,40 @@ prettyEnclosing ppopts tys =
 --   It remains not entirely clear if the position should be inside
 --   the provenance type or not.
 --
-prettyTypeProvenance :: TypeProvenance -> (Pos, PP.Doc ann)
+prettyTypeProvenance :: TypeProvenance -> (Pos, PP.Doc ann, Maybe (Pos, PP.Doc ann))
 prettyTypeProvenance prov = case prov of
     TypeExplicit pos ->
-        (pos, "arises from this explicit type name")
+        (pos, "arises from this explicit type name", Nothing)
     TypeFresh pos ->
-        (pos, "is a fresh type variable for a type implied here")
+        (pos, "is a fresh type variable for a type implied here", Nothing)
     TypeFailed pos ->
-        (pos, "is a placeholder from a type error reported here")
+        (pos, "is a placeholder from a type error reported here", Nothing)
     TypeFromForallNamed pos a x ->
         let a' = PP.dquotes $ PP.pretty a
             x' = PP.dquotes $ PP.pretty x
         in
         (pos, "arises from instantiating a type variable" <+> a' <+>
-              "forall-bound in" <+> x' <+> "and introduced here")
+              "forall-bound in" <+> x' <+> "and introduced here",
+         Nothing)
     TypeFromForallFresh pos a x ->
         let a' = PP.dquotes $ PP.pretty a
             x' = PP.dquotes $ PP.pretty x
         in
         (pos, "arises from instantiating a type variable" <+> a' <+>
-              "forall-bound in" <+> x' <+> "and implied here")
+              "forall-bound in" <+> x' <+> "and implied here",
+         Nothing)
     TypeFromElement pos tyctx ->
         let tyctx' = prettyTyctx tyctx in
-        (pos, "arises from the form of this" <+> tyctx')
+        (pos, "arises from the form of this" <+> tyctx', Nothing)
     TypeFromContext pos tyctx ->
         let tyctx' = prettyTyctx tyctx in
-        (pos, "arises from the context of this" <+> tyctx')
+        (pos, "arises from the context of this" <+> tyctx', Nothing)
+    TypeFromFuncWithSig pos ->
+        (pos, "arises from this parameter list", Nothing)
+    TypeFromFuncWithBody pos bodypos ->
+        (pos, "arises from this parameter list...",
+         Just (bodypos, "...and this function body")
+        )
 
 -- | Print details of a type. This prints the provenance info
 --   we carry in types.
@@ -1008,16 +1016,20 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
     --
     --   So we need to do something else to organize the output.
     let printone (desc, str, prov) =
-          let (pos, prov') = prettyTypeProvenance prov
+          let (pos, prov', extra) = prettyTypeProvenance prov
               msg = "Note: The " <> PP.pretty desc <+> PP.pretty str <+> prov'
+              extra' = case extra of
+                  Nothing -> []
+                  Just (pos2, prov2') ->
+                      [(pos2, "Note:" <+> prov2')]
           in
-          (pos, msg)
+          [(pos, msg)] ++ extra'
     in
 
     let msg0 = printone (desc0 <> " type", str0, prov0)
-        msgs = if inhibitSubs then [] else map printone subelts'
+        msgs = if inhibitSubs then [] else concatMap printone subelts'
     in
-    msg0 : msgs
+    msg0 ++ msgs
 
 -- | Insert an entry in the substitution we're carrying around. Raw
 --   version; everyone except `resolveVar` should call `resolveVar`
@@ -1440,13 +1452,19 @@ inspectTypeFTVs kind ty = case ty of
                       TypeExplicit pos -> pure pos
                       _ -> do
                           ppopts <- asks tiPPOpts
-                          let (pos, prov') = prettyTypeProvenance prov
-                          panic "inspectTypeFTVs" [
+                          let (pos, prov', extra) = prettyTypeProvenance prov
+                              extra' = case extra of
+                                  Nothing -> []
+                                  Just (pos2, prov2') -> [
+                                      "Extra position: " <> ppPosition pos2,
+                                      "Extra provenance: " <> PPS.renderText ppopts prov2'
+                                   ]
+                          panic "inspectTypeFTVs" $ [
                               "Invalid provenance for free named type variable",
                               "Type: " <> ppType ppopts ty,
                               "Position in provenance: " <> ppPosition pos,
                               "Provenance: " <> PPS.renderText ppopts prov'
-                           ]
+                           ] ++ extra'
                 return $ Map.singleton x (pos, kind)
             Just _ ->
                 return $ Map.empty
@@ -1496,7 +1514,7 @@ inspectNamedParamsFTVs params =
 -- for possible further analysis.
 inspectLambdaFTVs :: Expr -> TI (Expr, Map Name (Pos, Kind))
 inspectLambdaFTVs e0 = case e0 of
-    Lambda _fpos _mname params namedParams e1 -> do
+    Lambda _fpos _mname _ppos params namedParams e1 -> do
         paramFTVs <- inspectParamsFTVs params
         namedFTVs <- inspectNamedParamsFTVs namedParams
         (e1', bodyFTVs) <- inspectLambdaFTVs e1
@@ -1745,7 +1763,7 @@ inferExpr expr = case expr of
                   t' <- getErrorTyVar pos
                   return (Var pos x, t')
 
-    Lambda pos mname params namedParams body -> do
+    Lambda pos mname paramPos params namedParams body -> do
         pushScope
         let onePositional param = do
               (paramty, param') <- inferPattern ReadOnlyVar param
@@ -1769,24 +1787,38 @@ inferExpr expr = case expr of
             recordError pos $ "Functions may not have only named" <+>
                               "parameters; add ()"
 
-        -- XXX neither InfContext nor InfTerm is quite right here, but
-        -- InfContext is what we were using before. Properly the
-        -- position of the type of the lambda should include the
-        -- parameters, maybe an InfLambda constructor that records
-        -- positions for the parameters and return type that you can pop
-        -- as the parameters get applied.  The current behavior is
-        -- optimized for the common case where you write "let f x y =
-        -- plop x y 1 2 3" and leave off the last argument of plop by
-        -- accident, so the return type of f unexpectedly becomes a
-        -- function, and we'll cite the type of "plop x y 1 2 3" which
-        -- is missing an arg.
+        -- The provenance of a function type is the parameter list and
+        -- either the explicit return type, if there was one, or the
+        -- function body, if not. If there was an explicit return
+        -- type, at this level we get it as a TSig underneath the
+        -- lambda (thus at the top of the body). Distinguish that TSig
+        -- from one that's on the body itself by whether it begins
+        -- before the rest of the body. The concrete syntax for TSig
+        -- has the type after the expression, so if the TSig was
+        -- originally on the body, it'll begin at the same position as
+        -- the expression inside it. The type in the TSig is necessarily
+        -- user-provided, so its provenance will always be
+        -- `TypeExplicit` and we can safely use `Pos.getPos` to fetch
+        -- a position. We can also merge that position with the position
+        -- from the lambda; the only way to get this TSig is from a
+        -- function header.
         --
-        -- Note: we generate [] for the namelist field of the function
+        -- Note: this is fragile, but none of it's terribly likely to
+        -- change without it affecting the `Lambda` constructor and
+        -- thus prompting us to update this code.
+        --
+        let prov = case body' of
+              TSig sigpos subbody tyret | Pos.startsBefore sigpos (Pos.getPos subbody) ->
+                  TypeFromFuncWithSig (Pos.spanPos paramPos $ Pos.getPos tyret)
+              _ ->
+                  TypeFromFuncWithBody paramPos (Pos.getPos body')
+
+        -- Note: we generate noNames for the namelist field of the function
         -- type because we're downstream of the only thing that uses it.
-        let e' = Lambda pos mname params' (Map.fromList namedParams') body'
-            prov = TypeFromContext (Pos.getPos body') TyctxFuncBody
-            namedParamtys' = Map.fromList namedParamtys
+        let namedParamtys' = Map.fromList namedParamtys
             ty = tFun prov noNames paramtys namedParamtys' tybody
+
+        let e' = Lambda pos mname paramPos params' (Map.fromList namedParams') body'
         return (e', ty)
 
     Application pos f args0 -> do
