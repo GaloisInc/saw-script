@@ -886,7 +886,7 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
         extract desc ty =
             let consider what prov subelt =
                   let (subtext, subprov, subsubelts) = extract what subelt in
-                  if isIncluded subelt subprov ty prov then
+                  if inhibitSubs || isIncluded subelt subprov ty prov then
                       (subtext, subsubelts)
                   else
                       ("_", (desc <> "'s " <> what, subtext, subprov) : subsubelts)
