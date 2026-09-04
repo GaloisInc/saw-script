@@ -1,13 +1,3 @@
 Loading file "err029.saw"
-Type errors:
-  err029.saw:5:9-5:13: Kind mismatch: expected * -> * but found *
-  err029.saw:5:20-5:27: Error: Type mismatch.
-    Expected: t.0 Int
-    Found:    Term
-
-  err029.saw:5:9-5:17: Note: The expected type _ Int arises from this explicit type name
-  err029.saw:5:9-5:13: Note: The expected type's monad t.0 is a placeholder from a type error reported here
-  err029.saw:5:20-5:27: Note: The found type Term arises from the form of this expression
-
-
+err029.saw:5:9-5:13: Kind mismatch: expected * -> * but found *
 FAILED
