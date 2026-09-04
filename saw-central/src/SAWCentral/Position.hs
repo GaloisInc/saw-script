@@ -19,7 +19,6 @@ module SAWCentral.Position (
     leadingPos,
     trailingPos,
     spanPos,
-    choosePos,
     posRelativeToCurrentDirectory,
     posRelativeTo,
     routePathThroughPos,
@@ -203,56 +202,6 @@ spanPos (Range f sl sc el ec) (Range _ sl' sc' el' ec') =  Range f l c l' c'
     maxPos l1 c1 l2 c2 | l1 < l2   = (l2, c2)
                        | l1 == l2  = (l1, max c1 c2)
                        | otherwise = (l1, c1)
-
--- Compare two positions for the same thing (e.g. two types we just
--- unified), choosing the one with higher quality information. Use the
--- following heuristics:
---    - obviously prefer any concrete position to a placeholder
---    - PosREPL is a better placeholder than Unknown
---    - prefer the position with the smaller span, as it's likely
---      to be more precise
---    - when all else fails call them equal
---
--- This could be an Ord instance but it seems dangerous to use it
--- implicitly since an EQ result doesn't imply actual equality.
---
--- This is split out from choosePos so it'll be compositional if we
--- end up with more stratification of position types.
-comparePosQuality :: Pos -> Pos -> Ordering
-comparePosQuality p1 p2 = case (p1, p2) of
-   (Unknown, Unknown) -> EQ
-   (Unknown, _) -> LT
-   (_, Unknown) -> GT
-   (PosREPL, PosREPL) -> EQ
-   (PosREPL, _) -> LT
-   (_, PosREPL) -> GT
-   (PosInternal _, PosInternal _) -> EQ
-   (PosInternal _, _) -> LT
-   (_, PosInternal _) -> GT
-   (PosInsideBuiltin, PosInsideBuiltin) -> EQ
-   (PosInsideBuiltin, _) -> LT
-   (_, PosInsideBuiltin) -> GT
-   (FileOnlyPos _, FileOnlyPos _) -> EQ
-   (FileOnlyPos _, FileAndFunctionPos _ _) -> LT
-   (FileAndFunctionPos _ _, FileOnlyPos _) -> GT
-   (FileAndFunctionPos _ _, FileAndFunctionPos _ _) -> EQ
-   (FileOnlyPos _, _) -> LT
-   (_, FileOnlyPos _) -> GT
-   (FileAndFunctionPos _ _, _) -> LT
-   (_, FileAndFunctionPos _ _) -> GT
-   (Range _ sl1 _ el1 _, Range _ sl2 _ el2 _) | el2 - sl2 < el1 - sl1 -> LT
-   (Range _ sl1 _ el1 _, Range _ sl2 _ el2 _) | el1 - sl1 < el2 - sl2 -> GT
-   (Range _ _ sc1 _ ec1, Range _ _ sc2 _ ec2) | ec2 - sc2 < ec1 - sc1 -> LT
-   (Range _ _ sc1 _ ec1, Range _ _ sc2 _ ec2) | ec1 - sc1 < ec2 - sc2 -> GT
-   (Range _ _ _ _ _, Range _ _ _ _ _) -> EQ
-
--- Pick the better position to use going forward. If all else fails
--- pick the left one.
-choosePos :: Pos -> Pos -> Pos
-choosePos p1 p2 = case comparePosQuality p1 p2 of
-   LT -> p2
-   GT -> p1
-   EQ -> p1
 
 posRelativeToCurrentDirectory :: Pos -> IO Pos
 posRelativeToCurrentDirectory (Range f sl sc el ec) = makeRelativeToCurrentDirectory f >>= \f' -> return (Range f' sl sc el ec)
