@@ -232,14 +232,14 @@ instance AppSubst Decl where
 
 instance AppSubst Type where
     appSubst s t = case t of
-        TyCon pos tc ts -> TyCon pos tc (appSubst s ts)
-        TyFunc pos ninfo params namedParams ret ->
+        TyCon prov tc ts -> TyCon prov tc (appSubst s ts)
+        TyFunc prov ninfo params namedParams ret ->
             let params' = appSubst s params
                 namedParams' = appSubst s namedParams
                 ret' = appSubst s ret
             in
-            TyFunc pos ninfo params' namedParams' ret'
-        TyRecord pos fs -> TyRecord pos (appSubst s fs)
+            TyFunc prov ninfo params' namedParams' ret'
+        TyRecord prov fs -> TyRecord prov (appSubst s fs)
         TyVar _ _  -> t
         TyUnifyVar _ i -> case Map.lookup i s of
             Nothing -> t
@@ -710,15 +710,15 @@ addResolution i ty = do
 -- | Resolve a unification var: update the table we're carrying around
 --   to hold the new definition for @i@.
 resolveVar :: TypeProvenance -> TypeIndex -> Type -> TI ()
-resolveVar pos'i i ty = do
+resolveVar prov'i i ty = do
     -- Check if we should prefer using t1 to t2 as an expansion.
     -- Return the unification variable ID inside t2.
     let prefer t1 t2 = case (t1, t2) of
-          (TyUnifyVar _ j, TyUnifyVar pos'k k)
-              | j < k -> Just (pos'k, k) -- prefer t1/j
+          (TyUnifyVar _ j, TyUnifyVar prov'k k)
+              | j < k -> Just (prov'k, k) -- prefer t1/j
               | otherwise -> Nothing
           (TyUnifyVar{}, _) -> Nothing
-          (_, TyUnifyVar pos'j j) -> Just (pos'j, j) -- prefer t1
+          (_, TyUnifyVar prov'j j) -> Just (prov'j, j) -- prefer t1
           (_, _) ->
               -- We should only ever get here for convertible types;
               -- we could check that; but we don't have an easy way
@@ -728,10 +728,10 @@ resolveVar pos'i i ty = do
     -- Insert the new result. Shuffle around what's already there
     -- as needed to preserve the ordering invariant.
     case ty of
-        TyUnifyVar pos'j j | j > i ->
+        TyUnifyVar prov'j j | j > i ->
             -- Maintain the ordering invariant for unification vars
             -- pointing at each other.
-            resolveVar pos'j j (TyUnifyVar pos'i i)
+            resolveVar prov'j j (TyUnifyVar prov'i i)
         _ -> do
             -- Check what's in slot i.
             subst <- gets tiSubst
@@ -753,17 +753,17 @@ resolveVar pos'i i ty = do
                             -- have an easy way to do that. There is
                             -- no need to do anything else.
                             case ty of
-                                TyUnifyVar pos'j j ->
-                                    resolveVar pos'j j ty'already
+                                TyUnifyVar prov'j j ->
+                                    resolveVar prov'j j ty'already
                                 _ ->
                                     pure ()
-                        Just (pos'j, j) -> do
+                        Just (prov'j, j) -> do
                             -- There's a type already there, and we
                             -- should replace it because it's a
                             -- unification var. Do that, then resolve
                             -- its unification var too.
                             addResolution i ty
-                            resolveVar pos'j j ty
+                            resolveVar prov'j j ty
 
 --
 -- | Unify two types.
@@ -834,7 +834,7 @@ unify exp0 pos found0 = visit [] exp0 found0
         --   Does not handle the case where t _is_ TyUnifyVar i; there's
         --   a separate case for that.
         --
-        let checkOccurs pos'i i ty =
+        let checkOccurs prov'i i ty =
               -- Collect the unification vars in ty, and check for an
               -- appearance of i. This is sufficient because ty has
               -- been fully expanded (it is either expect or found,
@@ -863,7 +863,7 @@ unify exp0 pos found0 = visit [] exp0 found0
                       ppopts <- asks tiPPOpts
                       let expect' = prettyType ppopts expect
                           found' = prettyType ppopts found
-                          i' = prettyType ppopts $ TyUnifyVar pos'i i
+                          i' = prettyType ppopts $ TyUnifyVar prov'i i
                           ty' = prettyType ppopts ty
 
                       reject "Occurs check failure." [
@@ -871,7 +871,7 @@ unify exp0 pos found0 = visit [] exp0 found0
                           "with" <+> found' <+> "because" <+> i' <+>
                           "appears within" <+> ty' <> "."
                        ]
-                      getErrorTyVar' pos'i
+                      getErrorTyVar' prov'i
 
         -- recurse into one nested type
         let recOnce exp' found' =
@@ -887,18 +887,18 @@ unify exp0 pos found0 = visit [] exp0 found0
                 -- same unification var, nothing to do
                 pure ()
 
-            (TyUnifyVar pos'i i, _) -> do
+            (TyUnifyVar prov'i i, _) -> do
                 -- one side is a unification var, resolve it
                 found' <- checkOccurs (getProv found) i found
-                resolveVar pos'i i found'
+                resolveVar prov'i i found'
 
-            (_, TyUnifyVar pos'i i) -> do
+            (_, TyUnifyVar prov'i i) -> do
                 -- the other side is a unification var, resolve it
                 expect' <- checkOccurs (getProv expect) i expect
-                resolveVar pos'i i expect'
+                resolveVar prov'i i expect'
 
-            (TyFunc pos'expect _ expParams expNamedParams expRet,
-             TyFunc pos'found _ foundParams foundNamedParams foundRet) -> do
+            (TyFunc prov'expect _ expParams expNamedParams expRet,
+             TyFunc prov'found _ foundParams foundNamedParams foundRet) -> do
                 -- First, unify the named parameters.
                 --
                 -- (We handle the named parameters first because because
@@ -960,7 +960,7 @@ unify exp0 pos found0 = visit [] exp0 found0
                             foundParamsR = drop nExp foundParams
                         recList expParams foundParamsL
                         -- we've used up expParams.
-                        let ty' = TyFunc pos'found noNames foundParamsR Map.empty foundRet
+                        let ty' = TyFunc prov'found noNames foundParamsR Map.empty foundRet
                         pure (expRet, ty')
                     else if nFound > nExp then do
                         -- unfortunately we need two copies of this because
@@ -969,7 +969,7 @@ unify exp0 pos found0 = visit [] exp0 found0
                             expParamsR = drop nFound expParams
                         recList expParamsL foundParams
                         -- we've used up foundParams.
-                        let ty' = TyFunc pos'expect noNames expParamsR Map.empty expRet
+                        let ty' = TyFunc prov'expect noNames expParamsR Map.empty expRet
                         pure (ty', foundRet)
                     else do
                         recList expParams foundParams
@@ -1819,11 +1819,11 @@ monadType ty = case ty of
   TyCon _ BlockCon [ctx@(TyVar _ name), valty] | isMonad name ->
       Just (ctx, valty)
   -- We don't currently ever generate these types, but be future-proof
-  TyCon pos (ContextCon ctx) [valty] ->
-      Just (TyCon pos (ContextCon ctx) [], valty)
+  TyCon prov (ContextCon ctx) [valty] ->
+      Just (TyCon prov (ContextCon ctx) [], valty)
   -- and this one can't even be represented yet
---TyVar pos name [valty] | isMonad name ->
---    Just (TyVar pos name, valty)
+--TyVar prov name [valty] | isMonad name ->
+--    Just (TyVar prov name, valty)
   _ ->
       Nothing
   where
