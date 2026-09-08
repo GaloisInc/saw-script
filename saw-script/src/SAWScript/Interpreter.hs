@@ -2559,6 +2559,9 @@ toplevelSubshell () = do
     rw' <- liftIO $ hook ro rw
     put rw'
     popScope
+    -- Note that (for now at least) toValue just asserts that the type
+    -- matches the value; on failure the message prints the type but
+    -- not the type provenance. So it doesn't have to be perfect.
     let ty = SS.tUnit $ SS.TypeFromElement (rwPosition rw) SS.TyctxExpr
     return $ toValue ty "subshell" ()
 
@@ -2581,6 +2584,9 @@ proofScriptSubshell () = do
     scriptTopLevel $ do
         put rw'
         popScope
+    -- Note that (for now at least) toValue just asserts that the type
+    -- matches the value; on failure the message prints the type but
+    -- not the type provenance. So it doesn't have to be perfect.
     let ty = SS.tUnit $ SS.TypeFromElement (rwPosition rw) SS.TyctxExpr
     return $ toValue ty "proof_subshell" ()
 
@@ -2588,12 +2594,16 @@ proofScriptSubshell () = do
 mapValue :: Value -> [Value] -> TopLevel Value
 mapValue f xs =
   do let pos = SS.PosInsideBuiltin
-         prov = SS.TypeFromElement pos SS.TyctxExpr
      let info = "(value was in a \"map\")"
-     -- toValue will check the array type but not the element type,
-     -- since we already have Values here. So use unit as a
+     -- Note that (for now at least) toValue just asserts that the type
+     -- matches the value; on failure the message prints the type but
+     -- not the type provenance. So it doesn't have to be perfect.
+     --
+     -- Also, since this is an array of Value, toValue will check the
+     -- array type but not the element type.  Use unit as a
      -- placeholder.
-     let ty = SS.tArray prov (SS.tUnit prov)
+     let prov = SS.TypeFromElement pos SS.TyctxExpr
+         ty = SS.tArray prov (SS.tUnit prov)
      toValue ty "map" <$> traverse (applyValue pos info f) xs
 
 -- The "for" builtin.
