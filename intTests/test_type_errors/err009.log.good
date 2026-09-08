@@ -1,6 +1,16 @@
 Loading file "err009.saw"
 Type errors:
   err009.saw:4:1-4:44: Monadic bind with the wrong monad; found LLVMSetup but expected TopLevel
-  err009.saw:4:1-4:44: This creates the action but does not execute it; if you meant to do that, prefix the expression with return
+  err009.saw:4:1-4:44: Historically this created the action without executing it; if you meant to do that, prefix the expression with return
+  err009.saw:4:6-4:44: Error: Type mismatch.
+    Expected: TopLevel
+    Found:    LLVMSetup
+
+    Expected: TopLevel t.0
+    Found:    LLVMSetup Term
+
+  err009.saw:4:1-4:44: Note: The expected type TopLevel arises from the context of this statement
+  <definition of llvm_fresh_cryptol_var>:1:19-1:28: Note: The found type LLVMSetup arises from this explicit type name
+
 
 FAILED

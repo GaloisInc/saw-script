@@ -2337,36 +2337,31 @@ inferStmt atSyntacticTopLevel blockprov ctx s = do
                   return $ wrapReturn e'
 
             -- The special case for the wrong monad
-            let allowWrongMonad ctx' valty' = do
+            let allowWrongMonad ctx' = do
                   let pctx =  prettyType ppopts ctx
                       pctx' = prettyType ppopts ctx'
                   recordError spos $ "Monadic bind with the wrong monad;" <+>
                                      "found" <+> pctx' <+>
                                      "but expected" <+> pctx
-                  recordError spos $ "This creates the action but does" <+>
-                                     "not execute it; if you meant to do" <+>
-                                     "that, prefix the" <+>
+                  recordError spos $ "Historically this created the action" <+>
+                                     "without executing it; if you meant to" <+>
+                                     "do that, prefix the" <+>
                                      "expression with return"
 
-                  -- The historic behavior is that the pattern gets bound
-                  -- to a value of type m t instead of type t. This means:
-                  --    - we should unify pty, which is the type of the
-                  --      pattern, with m t, which is tApply ctx' valty'
-                  --      (rather than tApply ctx valty', which is the
-                  --      type we should be getting)
-                  --    - this will fail if the pattern includes a type
-                  --      signature with a non-monad type, but that's ok
-                  --      because that case also fails in old SAW
-                  --    - we do _not_ need to update pty before returning
-                  --      it out of inferStmt
-                  --    - we _do_ need to wrap the expression in "return"
-                  --      so that the ultimate results are well-typed and
-                  --      happen in the TopLevel monad
-                  unify pty (Pos.getPos e') (tApply (TypeFromContext spos TyctxStmt) ctx' valty')
-
-                  -- Wrap the expression in "return" to produce an
-                  -- expression of type TopLevel (m t).
-                  return $ wrapReturn e'
+                  -- The historic behavior is that the pattern gets
+                  -- bound to a value of type m t instead of type t.
+                  -- While this case was a warning, we needed to
+                  -- preserve that behavior. Now that it's an error,
+                  -- it doesn't matter what value we produce. So just
+                  -- proceed with the correct unification instead of
+                  -- doing anything special. This produces an ordinary
+                  -- type error in addition to the above message,
+                  -- which we mostly didn't get before, but avoids
+                  -- producing an odd secondary error in the case
+                  -- where the value being bound has a type signature,
+                  -- and doesn't violate least surprise.
+                  unify (tApply blockprov ctx pty) (Pos.getPos e') ty
+                  return e'
 
             -- Figure out which case applies.
             e'' <-
@@ -2378,14 +2373,14 @@ inferStmt atSyntacticTopLevel blockprov ctx s = do
                         restrictToCorrect
                     else
                         case monadType ty' of
-                            Just (ctx', valty') ->
+                            Just (ctx', _valty') ->
                                -- Allow it only for _ and a single var.
                                -- Binding elements of a tuple this way
                                -- failed typecheck in the old saw and
-                               -- doesn't need to be allowed now.
+                               -- doesn't need to be special-cased.
                                case pat of
                                    PTuple _ _ -> restrictToCorrect
-                                   _ -> allowWrongMonad ctx' valty'
+                                   _ -> allowWrongMonad ctx'
                             Nothing ->
                                -- allow it only if actually binding something
                                -- (just proclaiming a value by itself is not a

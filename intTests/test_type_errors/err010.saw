@@ -1,5 +1,5 @@
-// This was allowed prior to Dec 2024 and is currently a warning;
-// should eventually become an error.
+// This was allowed prior to Dec 2024 and now fails with a
+// special-case error message, which should eventually be removed.
 //
 // This case checks what happens if you take a tuple in the wrong
 // monad and bind it to a single value.
