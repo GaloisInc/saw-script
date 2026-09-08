@@ -318,7 +318,7 @@ qualified abbreviation seq_concat_map :: "{'n,'a,'m,'b} ('a \<Rightarrow> ['n]'b
 qualified abbreviation  complement :: "{'a::logic} (('a) \<Rightarrow> 'a)" where
   "complement _ x \<equiv> logic_class.not x"
 
-qualified abbreviation negate :: "{'a :: ring} 'a \<Rightarrow> 'a" where
+qualified abbreviation negate :: "{'a :: uminus} 'a \<Rightarrow> 'a" where
   "negate _ x \<equiv> uminus x"
 
 qualified abbreviation fromZ :: "{'n} 'n Z \<Rightarrow> int" where
