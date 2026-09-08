@@ -384,18 +384,20 @@ bindPattern rb pat ms v =
       pure ()
     SS.PWild _pos _ ->
       pure ()
-    SS.PVar allpos _xpos _x Nothing ->
+    SS.PVar allpos _xpos _x Nothing -> do
+      ppopts <- getPPOpts
       panic "bindPattern" [
           "Found pattern with no type in it",
-          "Source position: " <> Text.pack (show allpos),
-          "Pattern: " <> Text.pack (show pat)
-      ]
+          "Source position: " <> ppPosition allpos,
+          "Pattern: " <> SS.ppPattern ppopts pat
+       ]
     SS.PVar _allpos xpos x (Just ty) ->
       let s = fromMaybe (SS.tMono ty) ms in
       extendEnv xpos x rb s Nothing v
     SS.PTuple _pos ps ->
       case v of
         VTuple vs -> do
+            ppopts <- getPPOpts
             let mss = case ms of
                     Nothing ->
                         repeat Nothing
@@ -403,7 +405,7 @@ bindPattern rb pat ms v =
                         [ Just (SS.Forall ks t) | t <- ts ]
                     Just t ->
                         panic "bindPattern" [
-                            "Expected tuple type, got " <> Text.pack (show t)
+                            "Expected tuple type, got " <> SS.ppSchema ppopts t
                         ]
             sequence_ $ zipWith3 (bindPattern rb) ps mss vs
         _ -> do
