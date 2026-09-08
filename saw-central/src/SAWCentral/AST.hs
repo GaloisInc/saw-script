@@ -180,6 +180,14 @@ data Tyctx
 -- TypeFromContext means that the usage of the construct at the given
 --    position prompted us to choose the accompanying type; e.g. in "f
 --    x", f has function type.
+--
+-- Be aware that `TypeFailed` is operationally significant, which
+-- slightly violates least surprise; we tend to expect positions to be
+-- supplementary information. However, adding either a separate field
+-- to `TyUnifyVar` or a separate `Type` constructor for unification
+-- variables that are errors seems like it would be a mess.
+-- FUTURE: sort this out better.
+-- 
 data TypeProvenance
   = TypeExplicit Pos
   | TypeFresh Pos
