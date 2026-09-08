@@ -178,7 +178,7 @@ TypedParam :: { (Maybe ParamLabel, Pattern) }
 
 PlainParam :: { (Maybe ParamLabel, Pattern) }
  : ParamName                            {% mkNamedParam $1 Nothing }
- | '(' TypedParam ')'                   { $2 }
+ | '(' TypedParam ')'                   { fixParamPos (maxSpan [tokPos $1, tokPos $3]) $2 }
  | PlainPattern                         { (Nothing, $1) }
 
 TypedPattern :: { Pattern }
@@ -643,6 +643,24 @@ mkTupleParam :: Token Pos -> [Pattern] -> Token Pos -> Pattern
 mkTupleParam lp pats rp = case pats of
   [pat] -> pat
   _ -> PTuple (spanPos (tokPos lp) (tokPos rp)) pats
+
+-- | Update the "allpos" in a pattern with a new position.
+--
+--   This is used to widen the positions of named-parameter params
+--   that are written in parentheses to include said parentheses.
+--   Otherwise we can end up leaving off the opening paren at the
+--   beginning of a parameter list (or the closing paren at the end)
+--   when reporting the position of the whole list, which is
+--   unsightly.
+fixParamPos :: Pos -> (Maybe ParamLabel, Pattern) -> (Maybe ParamLabel, Pattern)
+fixParamPos newpos (mLabel, pat) =
+  let pat' = case pat of
+        PImplicit _pos mt -> PImplicit newpos mt
+        PWild _pos mt -> PWild newpos mt
+        PVar _allpos xpos x mt -> PVar newpos xpos x mt
+        PTuple _pos pats -> PTuple newpos pats
+  in
+  (mLabel, pat')
 
 -- | Pop off the last statement in a do-block, which is required to
 --   be a plain expression, and unpack it to an expression.
