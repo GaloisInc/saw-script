@@ -1880,6 +1880,16 @@ inferExpr expr = case expr of
         -- test_type_errors to make sure the message for this particular
         -- case doesn't regress.
 
+        -- In the common case, f is just a variable name that refers
+        -- to a function. In that case, fetch the name out so we can
+        -- use it in error messages. Also, because it does come up
+        -- occasionally, handle the case where f is a record accessor
+        -- applied to a variable name.
+        let mbFName = case f of
+              Var _ name -> Just name
+              Lookup _ (Var _ name1) name2 -> Just (name1 <> "." <> name2)
+              _ -> Nothing
+
         let checkCall isFirst origTy ty arginfo namedArginfo = case ty of
               TyFunc prov _ params namedParams ret -> do
                   -- We have a function type, check it in detail.
@@ -2039,8 +2049,11 @@ inferExpr expr = case expr of
                             case Text.lines $ PPS.renderText ppopts origTy' of
                                 [t] -> PP.pretty t
                                 ts -> PP.nest 3 $ PP.vsep $ map PP.pretty ts
+                      let fName' = case mbFName of
+                             Nothing -> ""
+                             Just n -> "\"" <> PP.pretty n <> "\" "
                       recordError argpos $ "Too many arguments to function" <+>
-                                           "of type" <+> origTy''
+                                           fName' <> "of type" <+> origTy''
                       mapM_ recordError' $ prettyTypeDetails True "function" origTy
                   let trailing = Pos.trailingPos argpos
                       leading = Pos.leadingPos pos
