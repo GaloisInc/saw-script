@@ -1,0 +1,16 @@
+module ArithMap where
+
+map2 : {n,a,b} (fin n) => (a -> a -> b) -> [n]a -> [n]a -> [n]b
+map2 f x y = map (\(a,b) -> f a b) (zip x y)
+
+map2_plus : {n} (fin n) => [n][n] -> [n][n] -> Bit
+map2_plus x y = map2 (+) x y == (x + y)
+
+map2_times : {n} (fin n) => [n][n] -> [n][n] -> Bit
+map2_times x y = map2 (*) x y == (x * y)
+
+map2_minus : {n} (fin n) => [n][n] -> [n][n] -> Bit
+map2_minus x y = map2 (-) x y == (x - y)
+
+map_uminus : {n} (fin n) => [n][n] -> Bit
+map_uminus x = map (\a -> -a) x == -x
