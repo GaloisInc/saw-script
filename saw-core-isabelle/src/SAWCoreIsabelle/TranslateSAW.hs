@@ -18,6 +18,7 @@ import qualified Data.IntMap as IntMap
 import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as Text
+import           System.Directory (getCurrentDirectory)
 import           System.FilePath (takeBaseName, takeDirectory)
 
 import qualified SAWCore.Name as SAW
@@ -40,6 +41,7 @@ import           SAWCoreIsabelle.Runner
 import Cryptol.Parser.AST (Located(..), ModName)
 import Cryptol.ModuleSystem.Env (LoadedModules(..), ModuleEnv (..))
 import qualified Cryptol.ModuleSystem.Base as MB
+import qualified Cryptol.ModuleSystem.Monad as MM
 import Cryptol.TypeCheck.AST (tcTopEntitytName)
 
 
@@ -109,9 +111,14 @@ withCryptolModule mm f = case mm of
   Left _ -> fail $ "Cannot translate SAW internal cryptol module"
   Right fp -> do
     sc <- asks ttSc
-    nm <- liftIO $ SAW.liftModuleM sc $
-      tcTopEntitytName <$> MB.loadModuleByPath True fp
-    f nm
+    cwd <- liftIO getCurrentDirectory
+    m <- liftIO $ SAW.liftModuleM sc $
+            -- Prepend the current directory to make sure it's on the
+            -- search path. See the comment on the corresponding code
+            -- in CryptolSAWCore.CryptolEnv for further info.
+            MM.withPrependedSearchPath [cwd] $
+            MB.loadModuleByPath True fp
+    f $ tcTopEntitytName m
 
 writeCryptolModules ::
   [SAW.ExtCryptolModule] ->

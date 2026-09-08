@@ -1,8 +1,8 @@
 Loading file "Names.saw"
 Loading file "saw/isa_test.saw"
-[warning] at ../cryptol/Names.cry:3:7--3:11
+[warning] at saw/../cryptol/Names.cry:3:7--3:11
  Type parameter is not constrained to fin: front`1287
-[warning] at ../cryptol/Names.cry:3:7--3:11
+[warning] at saw/../cryptol/Names.cry:3:7--3:11
  Type parameter is not constrained to fin: back`1288
 Successfully translated theory Names
 Translation successful. Generating theory files...

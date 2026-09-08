@@ -1,6 +1,6 @@
 Loading file "Sequences.saw"
 Loading file "saw/isa_test.saw"
-[warning] at ../cryptol/Sequences.cry:3:22--3:26
+[warning] at saw/../cryptol/Sequences.cry:3:22--3:26
  Type parameter is not constrained to fin: back`1283
 Successfully translated theory Sequences
 Translation successful. Generating theory files...
