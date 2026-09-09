@@ -1,0 +1,7 @@
+Loading file "err073.saw"
+Type errors:
+  err073.saw:8:23-8:28: Too many arguments to function "f" of type String -> String -> String
+  err073.saw:7:8-7:17: Note: The function type String -> String -> String arises from this parameter list...
+  err073.saw:7:40-7:52: Note: ...and this function body
+
+FAILED

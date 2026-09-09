@@ -1953,16 +1953,22 @@ inferExpr expr = case expr of
                   -- maybe we ought to generate N fresh tyvars and unify
                   -- them with the args, but that serves no purpose.)
                   --
-                  -- The position we want to use for this is not the
-                  -- position of the whole call (that's confusing if
-                  -- we're a second or subsequent iteration of
-                  -- checkCall) but the span of the positions of the
-                  -- remaining args.
+                  -- The provenance we want to use for the function
+                  -- type is not the position of the whole argument
+                  -- list (that's confusing if we're a second or
+                  -- subsequent iteration of checkCall) but the span
+                  -- of the positions of the remaining args.
                   --
-                  -- Note: we put [] in the namelist field because we're
-                  -- downstream of the only thing that uses it.
+                  -- Note: we put noNames in the namelist field of the
+                  -- function type because we're downstream of the
+                  -- only thing that uses it.
                   --
-                  let callpos =
+                  -- The position for the return type of the function,
+                  -- however, should be the position of the whole call,
+                  -- since it's implied by the whole thing and not just
+                  -- the remaining arguments.
+                  --
+                  let argspos =
                         let ps1 = map (\(arg, _ty) -> Pos.getPos arg) arginfo
                             ps2 =
                               let once (_name, (namepos, arg, _ty)) =
@@ -1974,10 +1980,37 @@ inferExpr expr = case expr of
 
                   let (_args, argtys) = unzip arginfo
                       namedArgtys = Map.map (\(_namepos, _arg, argty) -> argty) namedArginfo
-                  ret <- getFreshTyVar callpos
-                  let ty' = TyFunc (TypeFromElement callpos TyctxArgList) noNames argtys namedArgtys ret
-                  -- Unify the tyvar we got with the function type
-                  unify ty callpos ty'
+                  ret <- getFreshTyVar pos
+                  let prov = TypeFromElement argspos TyctxArgList
+                      ty' = TyFunc prov noNames argtys namedArgtys ret
+
+                  -- Now unify the tyvar we got with the function
+                  -- type.  Put the new function type on the expected
+                  -- side (LHS) of the unify call, since that's what
+                  -- we're expecting to see and whatever we were
+                  -- passed is what we've found.
+                  --
+                  -- For the position of the unify call we want
+                  -- whatever position we can get for the function
+                  -- we're trying to call, because that's the
+                  -- unification we're doing (of the function type).
+                  -- The argspos value we constructed above is wrong
+                  -- (it is the position of the arguments, not the
+                  -- function) and the position of the whole call is
+                  -- even worse. The best we can do (for now anyway)
+                  -- is to take the position for the unification var
+                  -- we were passed... since that's at least some
+                  -- position that told us there's a function here.
+                  -- It doesn't come out that well in practice though,
+                  -- so we should try to find something else.
+                  --
+                  -- Note: while one needs to be careful with getPos
+                  -- on types, here it is ok: the provenance of a
+                  -- unification var is either where it was created,
+                  -- or if it's an error var the position where the
+                  -- error occurred, and either is reasonably correct
+                  -- to use on its own.
+                  unify ty' (Pos.getPos ty) ty
                   -- Hand back the return type
                   pure ret
               _ -> do

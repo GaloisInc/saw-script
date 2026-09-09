@@ -1,0 +1,9 @@
+// Trigger what happens when you call a function that polymorphically
+// returns its last argument with too many arguments... when we don't
+// know the function signature yet at the call site.
+//
+// Also see err016, err065, err066, err073. If anyone ever renumbers
+// the test dir, it might make sense to group these all together.
+
+let g x = x;
+let q f = let y = f 3 4 in (y, [f, g]);
