@@ -40,6 +40,7 @@ module SAWCore.Name
     -- * Name
   , VarIndex
   , Name(..)
+  , nameQualName
     -- * VarName
   , VarName(..)
   , wildcardVarName
@@ -241,6 +242,9 @@ instance Ord Name where
 -- even if the unique IDs are assigned differently from run to run.
 instance Hashable Name where
   hashWithSalt x nm = hashWithSalt x (nameInfo nm)
+
+nameQualName :: Name -> QN.QualName
+nameQualName nm = nameInfoQualName (nameInfo nm)
 
 
 -- Variable Names --------------------------------------------------------------

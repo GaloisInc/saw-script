@@ -65,10 +65,10 @@ evalSharedTerm m addlPrims varVals t =
         Just v  -> return v
         Nothing -> return $ Prim.userError $ "Unimplemented: free variable " ++ show (vnName vn)
     recursor nm _sort =
-      case nameInfo nm of
-        ModuleIdentifier "Prelude.Stream" -> Just streamRecOp
-        ModuleIdentifier "Prelude.Bool" -> Just (Prims.boolRecOp prims)
-        ModuleIdentifier "Prelude.Nat" -> Just (Prims.natRecOp prims)
+      case nameQualName nm of
+        "Prelude.Stream" -> Just streamRecOp
+        "Prelude.Bool" -> Just (Prims.boolRecOp prims)
+        "Prelude.Nat" -> Just (Prims.natRecOp prims)
         _ -> Nothing
     primHandler nm msg env =
       return $ Prim.userError $ unlines

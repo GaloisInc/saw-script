@@ -74,7 +74,7 @@ import Control.Monad.IO.Class
 import Control.Monad.State as ST (MonadState(..), StateT(..), evalStateT, modify)
 import Numeric.Natural (Natural)
 
-import SAWCore.Name (Name(..), VarName(..), toShortName)
+import SAWCore.Name (Name(..), VarName(..), toShortName, nameQualName)
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Recognizer as R
 import qualified SAWCore.Simulator as Sim
@@ -278,10 +278,10 @@ constMap =
 -- | Recursor overrides for the SAWCore simulator.
 recursor :: Name -> sort -> Maybe SPrim
 recursor nm _sort =
-  case nameInfo nm of
-    ModuleIdentifier "Prelude.Stream" -> Just streamRecOp
-    ModuleIdentifier "Prelude.Bool" -> Just (Prims.boolRecOp prims)
-    ModuleIdentifier "Prelude.Nat" -> Just (Prims.natRecOp prims)
+  case nameQualName nm of
+    "Prelude.Stream" -> Just streamRecOp
+    "Prelude.Bool" -> Just (Prims.boolRecOp prims)
+    "Prelude.Nat" -> Just (Prims.natRecOp prims)
     _ -> Nothing
 
 ------------------------------------------------------------

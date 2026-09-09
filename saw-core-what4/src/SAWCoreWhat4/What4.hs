@@ -76,7 +76,7 @@ import SAWCore.Simulator.Value
 import SAWCore.Simulator.Uninterpreted (generalizeHigherOrderFunctions)
 import SAWCore.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 import SAWCore.Module (ModuleMap)
-import SAWCore.Name (Name(..), VarName(..), toShortName)
+import SAWCore.Name (Name(..), VarName(..), toShortName, nameQualName)
 import SAWCore.Term.Functor (FieldName)
 
 -- what4
@@ -304,10 +304,10 @@ constMap sym =
 -- | Recursor overrides for the SAWCore simulator.
 recursor :: Sym sym => sym -> Name -> sort -> Maybe (SPrim sym)
 recursor sym nm _sort =
-  case nameInfo nm of
-    ModuleIdentifier "Prelude.Stream" -> Just (streamRecOp sym)
-    ModuleIdentifier "Prelude.Bool" -> Just (Prims.boolRecOp (prims sym))
-    ModuleIdentifier "Prelude.Nat" -> Just (Prims.natRecOp (prims sym))
+  case nameQualName nm of
+    "Prelude.Stream" -> Just (streamRecOp sym)
+    "Prelude.Bool" -> Just (Prims.boolRecOp (prims sym))
+    "Prelude.Nat" -> Just (Prims.natRecOp (prims sym))
     _ -> Nothing
 
 -----------------------------------------------------------------------
