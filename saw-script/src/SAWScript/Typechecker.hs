@@ -1308,7 +1308,7 @@ unify exp0 pos found0 = visit [] exp0 found0
                         -- we've used up expParams.
                         let ty' = TyFunc prov'found noNames foundParamsR Map.empty foundRet
                         pure (expRet, ty')
-                    else if nFound > nExp then do
+                    else if nExp > nFound then do
                         -- unfortunately we need two copies of this because
                         -- left vs. right side is semantically significant :-(
                         let expParamsL = take nFound expParams

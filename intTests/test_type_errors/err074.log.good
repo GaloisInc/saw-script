@@ -1,1 +1,16 @@
 Loading file "err074.saw"
+Type errors:
+  err074.saw:9:36-9:37: Error: Type mismatch.
+    Expected: Int -> t.1
+    Found:    Int
+
+    Expected: Int -> Int -> t.1
+    Found:    Int -> Int
+
+  err074.saw:9:21-9:24: Note: The expected type _ -> _ arises from the form of this argument list
+  err074.saw:9:23-9:24: Note: The expected type's 1st positional parameter Int arises from the form of this constant
+  err074.saw:9:19-9:24: Note: The expected type's return type t.1 is a fresh type variable for a type implied here
+  err074.saw:9:21-9:22: Note: The found type Int arises from the form of this constant
+
+
+FAILED
