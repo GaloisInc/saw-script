@@ -2006,27 +2006,35 @@ inferExpr expr = case expr of
                   -- we're expecting to see and whatever we were
                   -- passed is what we've found.
                   --
-                  -- For the position of the unify call we want
-                  -- whatever position we can get for the function
-                  -- we're trying to call, because that's the
-                  -- unification we're doing (of the function type).
-                  -- The argspos value we constructed above is wrong
-                  -- (it is the position of the arguments, not the
-                  -- function) and the position of the whole call is
-                  -- even worse. The best we can do (for now anyway)
-                  -- is to take the position for the unification var
-                  -- we were passed... since that's at least some
-                  -- position that told us there's a function here.
-                  -- It doesn't come out that well in practice though,
-                  -- so we should try to find something else.
+                  -- Note: because we know we have a unification var
+                  -- on one side, this unify call should not be able
+                  -- to fail. (We had a case where it did, which was
+                  -- ultimately a bug arising from inspecting a type
+                  -- that needed to be resubstituted after other unify
+                  -- calls altered it.)
                   --
-                  -- Note: while one needs to be careful with getPos
-                  -- on types, here it is ok: the provenance of a
-                  -- unification var is either where it was created,
-                  -- or if it's an error var the position where the
-                  -- error occurred, and either is reasonably correct
-                  -- to use on its own.
-                  unify ty' (Pos.getPos ty) ty
+                  -- Consequently I'm going to make the position
+                  -- argument, which is only used for error reporting,
+                  -- a panic. The downside of this is that if we ever
+                  -- get the panic we don't get the intended error
+                  -- message so we won't be able to tell exactly what
+                  -- went wrong; but, well, it shouldn't happen...
+                  --
+                  -- Should the above analysis prove wrong for some
+                  -- reason, the "right" position to use here is some
+                  -- position associated with the fact that we have a
+                  -- function type. The best we have is to extract the
+                  -- position from the unification variable's
+                  -- provenance; the other positions we have on hand
+                  -- are definitely wrong.
+                  --
+                  ppopts <- asks tiPPOpts
+                  let fakepos = panic "inferExpr / Application / TyUnifyVar" [
+                          "Irrefutable unify call failed",
+                          "Expected type: " <> ppType ppopts ty',
+                          "Found type: " <> ppType ppopts ty
+                       ]
+                  unify ty' fakepos ty
                   -- Hand back the return type
                   pure ret
               _ -> do
