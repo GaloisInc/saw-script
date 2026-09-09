@@ -2734,8 +2734,82 @@ lemma list_to_seq_pad_Nil:
 
 ML \<open>val seq_syntax = Attrib.setup_config_bool \<^binding>\<open>seq_syntax\<close> (K false);\<close>
 
+nonterminal seq_patterns
+
+hide_const (open) case_seq
+(* this is analgous to case_list, except we only need to examine the length parameter
+   to determine which case to follow.*)
+definition case_seq :: "'b \<Rightarrow> ('a \<Rightarrow> ('n-1,'a) seq \<Rightarrow> 'b) \<Rightarrow> ('n,'a) seq \<Rightarrow> 'b" where
+  "case_seq b f xs \<equiv> if LEN('n) > 0 then f (nth_seq xs 0) (drop_seq xs) else b"
+
+lemma seq_split: "P (case_seq f1 f2 seq) =
+  ((size seq = 0 \<longrightarrow> P f1) \<and>
+   ((size seq > 0) \<longrightarrow> P (f2 (nth_seq seq 0) (drop_seq seq))))"
+  by (simp add: case_seq_def)
+
+lemma seq_split_asm: "P (case_seq f1 f2 seq) =
+  (\<not> (size seq = 0 \<and> \<not> P f1 \<or>
+       (size seq > 0 \<and> \<not> P (f2 (nth_seq seq 0) (drop_seq seq)))))"
+  by (metis seq_split)
+
+definition case_seq_cons :: "('a \<Rightarrow> ('n-1,'a) seq \<Rightarrow> 'b) \<Rightarrow> ('n,'a) seq \<Rightarrow> 'b" where
+  "case_seq_cons f \<equiv> case_seq undefined f"
+
+definition case_seq_nil :: "'b \<Rightarrow> ('n,'a) seq \<Rightarrow> 'b" where
+  "case_seq_nil b \<equiv> case_seq b (\<lambda>_ _. undefined)"
+
+lemma case_seq_tail[simp]:
+  "LEN('n) > 0 \<Longrightarrow> case_seq b (f :: 'a \<Rightarrow> ('n-1,'a) seq \<Rightarrow> 'b) = case_seq_cons f"
+  by (simp add: case_seq_def[abs_def] case_seq_cons_def)
+
+lemma case_seq_head[simp]:
+  "LEN('n) = 0 \<Longrightarrow> case_seq b (f :: 'a \<Rightarrow> ('n-1,'a) seq \<Rightarrow> 'b) = case_seq_nil b"
+  by (simp add: case_seq_def[abs_def] case_seq_nil_def)
+
+lemmas seq_splits_1 = seq_split seq_split_asm
+
+lemmas seq_splits = seq_splits_1
+  seq_splits_1[of _ undefined, simplified case_seq_cons_def[symmetric]]
+  seq_splits_1[of _ _ "\<lambda>_ _. undefined", simplified case_seq_nil_def[symmetric]]
+
+lemma case_seq_cons_simp[simp]: "Suc (length xs) = LEN('n) \<Longrightarrow>
+ case_seq_cons f (list_to_seq (x#xs) :: ('n,'a) seq) = f x (list_to_seq xs)"
+  unfolding case_seq_cons_def case_seq_def
+  apply simp
+  apply transfer
+  by simp
+
+lemma case_seq_nil_simp[simp]: "LEN('n) = 0 \<Longrightarrow>
+ case_seq_nil b (list_to_seq [] :: ('n,'a) seq) = b"
+  unfolding case_seq_nil_def case_seq_def
+  by simp
+
+(* we need an alternate case constant to install the case syntax, so that we can
+   declare list_to_seq as its only constructor *)
+definition case_seq_list :: "('a list \<Rightarrow> 'b) \<Rightarrow> ('n,'a) seq \<Rightarrow> 'b" where
+  "case_seq_list f xs \<equiv> f (seq_to_list xs)"
+
+lemma case_seq_list_case_list[simp]:
+  "case_seq_list (case_list b (\<lambda>x xs. f x xs)) = (case_seq b (\<lambda>x xs. case_seq_list (f x) xs))"
+  unfolding case_seq_list_def case_seq_def
+  apply (rule ext)
+  apply transfer
+  by auto (metis drop0 drop_Suc_nth list.simps(5))
+
 bundle seq_syntax begin
 declare [[seq_syntax]]
+declare [[case_translation case_seq_list list_to_seq]]
+
+syntax
+  "_seq_pattern"  :: "seq_patterns \<Rightarrow> pttrn"         (\<open>(\<open>open_block notation=\<open>pattern list\<close>\<close>'\<lbrakk>_'\<rbrakk>)\<close>)
+  ""              :: "pttrn \<Rightarrow> seq_patterns"                  (\<open>_\<close>)
+  "_seq_patterns" :: "pttrn \<Rightarrow> seq_patterns \<Rightarrow> seq_patterns"      (\<open>_,/ _\<close>)
+syntax_consts
+  "_seq_pattern" "_seq_patterns" \<rightleftharpoons> case_seq
+translations
+  "\<lambda>\<lbrakk>x, y, zs\<rbrakk>. b" \<rightleftharpoons> "CONST case_seq_cons (\<lambda>x \<lbrakk>y, zs\<rbrakk>. b)"
+  "\<lambda>\<lbrakk>x, y\<rbrakk>. b" \<rightleftharpoons> "CONST case_seq_cons (\<lambda>x \<lbrakk>y\<rbrakk>. b)"
+  "\<lambda>\<lbrakk>x\<rbrakk>. b" \<rightleftharpoons> "CONST case_seq_cons (\<lambda>x. CONST case_seq_nil b)"
 
 no_syntax "_bracket" :: "types \<Rightarrow> type \<Rightarrow> type" ("(\<open>notation=\<open>infix \<Rightarrow>\<close>\<close>[_]/ \<Rightarrow> _)" [0,0] 0)
 
@@ -2856,8 +2930,53 @@ in
 end
 \<close>
 
+lemma nth_drop:
+  "LEN('n) > (Suc n) \<Longrightarrow> nth_seq (drop_seq z :: ('n-1,'a) seq) n = nth_seq (z :: ('n,'a) seq) (Suc n)"
+  apply transfer
+  by simp
+
+lemma Suc_inc:
+  "Suc (numeral n) = numeral (Num.inc n)"
+  "Suc 1 = 2"
+  by (simp add: add_One)+
+
+(* prefer to generate numeral indexes *)
+
+lemmas nth_drop_simps[simp] =
+  nth_drop[where n="Suc (Suc n)" for n]
+  nth_drop[where n="numeral n" for n, simplified Suc_inc]
+  nth_drop[where n="0", simplified One_nat_def[symmetric]]
+  nth_drop[where n="1", simplified Suc_inc, simplified One_nat_def]
+
 experiment begin
 context includes seq_syntax begin
+
+lemma "size z = 4 \<Longrightarrow> (let \<lbrakk>x,y,a,b\<rbrakk> = z in (y,x,b,a)) = (nth_seq z 1,nth_seq z 0,nth_seq z 3, nth_seq z 2)"
+  by (auto split: seq_splits)
+
+lemma "size z \<noteq> 4 \<Longrightarrow> (let \<lbrakk>x,y,a,b\<rbrakk> = z in (y,x,b,a)) = undefined"
+  by (auto split: seq_splits)
+
+(* don't require splits when the argument sequence is explicit *)
+lemma "(let \<lbrakk>x,y,z,w\<rbrakk> = \<lbrakk>a,b,c,d\<rbrakk> in \<lbrakk>w,z,w,y,x\<rbrakk>) = \<lbrakk>d,c,d,b,a\<rbrakk>"
+  by simp
+
+lemma "((\<lambda>\<lbrakk>x, y, z, w\<rbrakk>. (x, y, z, w)) \<lbrakk>a, b, c, d\<rbrakk>) = (a,b,c,d)"
+  by simp
+
+lemma ZZ:
+  assumes A: "mz = Some \<lbrakk>x, y, z, w\<rbrakk>"
+  shows "(case mz of Some \<lbrakk>a,b,c,d\<rbrakk> \<Rightarrow> (a = x \<and> b = y \<and> c = z \<and> d = w) | _ \<Rightarrow> False)"
+proof -
+  have B: "case mz of None \<Rightarrow> False | Some aa \<Rightarrow>
+    (\<lambda>\<lbrakk>a, b, c, d\<rbrakk>. a = x \<and> b = y \<and> c = z \<and> d = w) aa"
+    by (simp add: A)
+  show ?thesis
+    (* the case syntax expands to all possible argument lists, but these can be simplified
+       away as unreachable if the sequence length is known *)
+    apply (simp cong: option.case_cong)
+    by (rule B)
+qed
 
 lemma "\<lbrakk>x,y,z\<rbrakk> = rev_seq \<lbrakk>z,y,x\<rbrakk>"
   apply transfer
@@ -2877,6 +2996,8 @@ typ "['a]['b] \<Rightarrow> 'c"
 end
 
 thm X
+(* no case syntax outside the bundle *)
+thm ZZ
 end
 
 end
