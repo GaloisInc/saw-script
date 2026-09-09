@@ -188,6 +188,7 @@ library saw-core
     SAWCore.Simulator.MonadLazy
     SAWCore.Simulator.Prims
     SAWCore.Simulator.RME
+    SAWCore.Simulator.Uninterpreted
     SAWCore.Simulator.Value
     SAWCore.SharedTerm
     SAWCore.Term.Certified
