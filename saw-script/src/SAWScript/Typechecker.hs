@@ -2067,51 +2067,61 @@ inferExpr expr = case expr of
                   else do
                       -- We already absorbed some arguments so we have
                       -- too many arguments rather than a non-function.
-                      -- Use the position of the first excess argument
-                      -- to complain.
-                      let origTy' = prettyType ppopts origTy
-                          -- Deliberately render and re-docify the
-                          -- type, and generate a multi-line message
-                          -- only if the type comes out as multiple
-                          -- lines when rendered on its own. This is
-                          -- kind of gross, but the prettyprinter
-                          -- library does not give much in the way of
-                          -- formatting control, and if we just do
-                          -- things its way we pretty much always get
-                          -- a multiline message, even for very short
-                          -- types like (), which looks terrible. This
-                          -- is because the beginning of the message
-                          -- coupled with the position text at the
-                          -- beginning of the line is long enough to
-                          -- make the prettyprinter library think the
-                          -- message ought to be multiline. Perhaps
-                          -- the right way to deal with this problem
-                          -- is to force it to use a different notion
-                          -- of what constitutes a "long" line when
-                          -- dealing with error messages rather than
-                          -- program text; but for the time being at
-                          -- least we have no useful infrastructure to
-                          -- support that.  So instead generate our
-                          -- own faux "reactive" layout. XXX.
-                          --
-                          -- If you find an easy way to fix this
-                          -- better, please also improve the code in
-                          -- prettyTypeDetails above, which used to
-                          -- use similar logic. (But then it needed
-                          -- its own printer for other reasons and now
-                          -- it always stuffs the entire type on one
-                          -- line, which isn't great either.)
-                          --
-                          origTy'' =
-                            case Text.lines $ PPS.renderText ppopts origTy' of
-                                [t] -> PP.pretty t
-                                ts -> PP.nest 3 $ PP.vsep $ map PP.pretty ts
+                      -- Use the original function type to gripe about
+                      -- it. We need to re-expand it, though, in case
+                      -- we're on the second or subsequent iteration of
+                      -- checkCall; unifications might have been done
+                      -- since the original expansion, and they might
+                      -- have resolved unification variables in it.
+                      origTy1 <- expandFully (Pos.getPos f) origTy
+
+                      -- Now print it.
+                      --
+                      -- Deliberately render and re-docify the
+                      -- type, and generate a multi-line message
+                      -- only if the type comes out as multiple
+                      -- lines when rendered on its own. This is
+                      -- kind of gross, but the prettyprinter
+                      -- library does not give much in the way of
+                      -- formatting control, and if we just do
+                      -- things its way we pretty much always get
+                      -- a multiline message, even for very short
+                      -- types like (), which looks terrible. This
+                      -- is because the beginning of the message
+                      -- coupled with the position text at the
+                      -- beginning of the line is long enough to
+                      -- make the prettyprinter library think the
+                      -- message ought to be multiline. Perhaps
+                      -- the right way to deal with this problem
+                      -- is to force it to use a different notion
+                      -- of what constitutes a "long" line when
+                      -- dealing with error messages rather than
+                      -- program text; but for the time being at
+                      -- least we have no useful infrastructure to
+                      -- support that.  So instead generate our
+                      -- own faux "reactive" layout. XXX.
+                      --
+                      -- If you find an easy way to fix this
+                      -- better, please also improve the code in
+                      -- prettyTypeDetails above, which used to
+                      -- use similar logic. (But then it needed
+                      -- its own printer for other reasons and now
+                      -- it always stuffs the entire type on one
+                      -- line, which isn't great either.)
+                      --
+                      let origTy' =
+                              let origTy2 = prettyType ppopts origTy1 in
+                              case Text.lines $ PPS.renderText ppopts origTy2 of
+                                  [t] -> PP.pretty t
+                                  ts -> PP.nest 3 $ PP.vsep $ map PP.pretty ts
                       let fName' = case mbFName of
                              Nothing -> ""
                              Just n -> "\"" <> PP.pretty n <> "\" "
+                      -- Use the position of the first excess argument
+                      -- to complain.
                       recordError argpos $ "Too many arguments to function" <+>
-                                           fName' <> "of type" <+> origTy''
-                      mapM_ recordError' $ prettyTypeDetails True "function" origTy
+                                           fName' <> "of type" <+> origTy'
+                      mapM_ recordError' $ prettyTypeDetails True "function" origTy1
                   let trailing = Pos.trailingPos argpos
                       leading = Pos.leadingPos pos
                   when (Pos.differentLines trailing leading) $
