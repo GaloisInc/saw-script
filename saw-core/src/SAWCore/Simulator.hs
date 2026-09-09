@@ -68,6 +68,7 @@ import SAWCore.Module
   , ResolvedName(..)
   )
 import SAWCore.Name
+import SAWCore.QualName (QualName)
 import SAWCore.SharedTerm
 
 import SAWCore.Simulator.Value
@@ -670,7 +671,7 @@ evalSharedTerm cfg t =
                ResolvedCtor ctor ->
                  ctorValue (ctorNumber ctor) (ctorMuxability ctor) (ctorNumParams ctor) (ctorNumArgs ctor)
                ResolvedDataType dt ->
-                 dtValue (nameInfo nm) (dtNumParams dt) (dtNumIndices dt)
+                 dtValue (toQualName (nameInfo nm)) (dtNumParams dt) (dtNumIndices dt)
                ResolvedDef d ->
                  case defBody d of
                    Just body -> evalLTerm cfg consts mempty mempty (toLTerm body)
@@ -691,7 +692,7 @@ evalSharedTerm cfg t =
       vFunList j $ \args ->
       pure $ VCtorApp k m args
 
-    dtValue :: NameInfo -> Int -> Int -> MValue l
+    dtValue :: QualName -> Int -> Int -> MValue l
     dtValue nm i j =
       vStrictFunList i $ \params ->
       vStrictFunList j $ \idxs ->

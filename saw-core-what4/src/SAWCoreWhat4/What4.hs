@@ -1435,7 +1435,7 @@ rebuildTerm sym st sc tv sv =
       scUnitValue sc
     VCtorApp 0 _ [x, y] ->
       case tv of
-        VDataType (ModuleIdentifier "Prelude.PairType") [TValue tx, TValue ty] [] ->
+        VDataType "Prelude.PairType" [TValue tx, TValue ty] [] ->
           do vx <- force x
              vy <- force y
              x' <- rebuildTerm sym st sc tx vx

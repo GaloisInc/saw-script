@@ -747,16 +747,16 @@ parseUninterpreted cws nm ty =
                   | i <- [0 .. n-1] ]
             return (VVector (V.fromList (map ready xs)))
 
-    VDataType (ModuleIdentifier "Prelude.UnitType") [] []
+    VDataType "Prelude.UnitType" [] []
       -> pure vUnit
-    VDataType (ModuleIdentifier "Prelude.PairType") [TValue ty1, TValue ty2] []
+    VDataType "Prelude.PairType" [TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted cws (nm ++ ".L") ty1
             x2 <- parseUninterpreted cws (nm ++ ".R") ty2
             pure (vPair (ready x1) (ready x2))
 
-    VDataType (ModuleIdentifier "Prelude.EmptyType") [] []
+    VDataType "Prelude.EmptyType" [] []
       -> pure vEmptyRecord
-    VDataType (ModuleIdentifier "Prelude.RecordType")
+    VDataType "Prelude.RecordType"
       [VString fname, TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted cws (nm ++ "." ++ Text.unpack fname) ty1
             x2 <- parseUninterpreted cws nm ty2

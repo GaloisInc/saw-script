@@ -43,7 +43,7 @@ import SAWCore.Module
   , dtCtors
   , lookupVarIndexInMap
   )
-import SAWCore.Name (nameIndex, toQualName)
+import SAWCore.Name (nameIndex)
 import qualified SAWCore.Simulator.Prims as Prims
 import SAWCore.Simulator.Value
 
@@ -129,22 +129,22 @@ termOfTValue sc val =
       do n' <- scNat sc n
          a' <- termOfTValue sc a
          scVecType sc n' a'
-    VDataType (ModuleIdentifier "Prelude.UnitType") [] []
+    VDataType "Prelude.UnitType" [] []
       -> scUnitType sc
-    VDataType (ModuleIdentifier "Prelude.PairType") [TValue a, TValue b] []
+    VDataType "Prelude.PairType" [TValue a, TValue b] []
       -> do a' <- termOfTValue sc a
             b' <- termOfTValue sc b
             scPairType sc a' b'
-    VDataType (ModuleIdentifier "Prelude.EmptyType") [] []
+    VDataType "Prelude.EmptyType" [] []
       -> scRecordType sc []
-    VDataType (ModuleIdentifier "Prelude.RecordType")
+    VDataType "Prelude.RecordType"
       [VString fname, TValue a, TValue b] []
       -> do fname' <- scString sc fname
             a' <- termOfTValue sc a
             b' <- termOfTValue sc b
             scGlobalApply sc "Prelude.RecordType" [fname', a', b']
-    VDataType nmi ps vs ->
-      do dt <- scGlobalConst sc (toQualName nmi)
+    VDataType qn ps vs ->
+      do dt <- scGlobalConst sc qn
          scApplyAll sc dt =<< traverse (termOfSValue sc) (ps ++ vs)
     _ -> fail $ "termOfTValue: " ++ show val
 
@@ -169,8 +169,8 @@ termOfValue ::
   IO Term
 termOfValue sc ty val =
   case (ty, val) of
-    (VDataType nmi ps _, VCtorApp n _ vv) ->
-      do mnm <- scResolveQualName sc (toQualName nmi)
+    (VDataType qn ps _, VCtorApp n _ vv) ->
+      do mnm <- scResolveQualName sc qn
          case mnm of
            Just nm ->
              do mm <- scGetModuleMap sc
@@ -181,7 +181,7 @@ termOfValue sc ty val =
                        vv' <- traverse (\v -> termOfSValue sc =<< force v) vv
                        scConstApply sc (ctorName ctor) (ps' ++ vv')
                   _ ->
-                    fail $ "termOfValue: data type not found: " ++ show nmi
+                    fail $ "termOfValue: data type not found: " ++ show qn
            Nothing ->
-             fail $ "termOfValue: data type not found: " ++ show nmi
+             fail $ "termOfValue: data type not found: " ++ show qn
     _ -> termOfSValue sc val

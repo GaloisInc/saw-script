@@ -2167,24 +2167,24 @@ scCryptolType sc t =
         | s == mkSort 0 -> return (Left C.KType)
         | otherwise     -> Nothing
 
-      SC.VDataType (ModuleIdentifier "Prelude.Stream") [SC.TValue v1] [] ->
+      SC.VDataType "Prelude.Stream" [SC.TValue v1] [] ->
           do Right t1 <- asCryptolTypeValue v1
              return (Right (C.tSeq C.tInf t1))
 
-      SC.VDataType (ModuleIdentifier "Cryptol.Num") [] [] ->
+      SC.VDataType "Cryptol.Num" [] [] ->
         return (Left C.KNum)
 
-      SC.VDataType (ModuleIdentifier "Prelude.UnitType") [] [] ->
+      SC.VDataType "Prelude.UnitType" [] [] ->
         Just (Right (C.tTuple []))
-      SC.VDataType (ModuleIdentifier "Prelude.PairType") [SC.TValue v1, SC.TValue v2] [] ->
+      SC.VDataType "Prelude.PairType" [SC.TValue v1, SC.TValue v2] [] ->
         do Right t1 <- asCryptolTypeValue v1
            Right t2 <- asCryptolTypeValue v2
            ts <- C.tIsTuple t2
            Just (Right (C.tTuple (t1 : ts)))
 
-      SC.VDataType (ModuleIdentifier "Prelude.EmptyType") [] [] ->
+      SC.VDataType "Prelude.EmptyType" [] [] ->
         Just (Right (C.tRec (C.recordFromFields [])))
-      SC.VDataType (ModuleIdentifier "Prelude.RecordType")
+      SC.VDataType "Prelude.RecordType"
         [SC.VString s, SC.TValue v1, SC.TValue v2] [] ->
         do Right t1 <- asCryptolTypeValue v1
            Right t2 <- asCryptolTypeValue v2
