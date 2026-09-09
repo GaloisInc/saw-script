@@ -1943,8 +1943,24 @@ inferExpr expr = case expr of
                       -- the return type. Pass on any leftover named args.
                       -- Any unused named parameters are left unapplied;
                       -- that is not an error.
+                      --
+                      -- Even though we expanded the return type when
+                      -- we expanded the function type before the
+                      -- first call to checkCall (below), we have done
+                      -- more unifications since and therefore we might
+                      -- (and do) need to expand it again.
+                      --
+                      -- We need a position for this in case
+                      -- condenseFunctions now fails. (Which it can,
+                      -- if we resolved the return type and it's now a
+                      -- function type with a duplicate named
+                      -- argument.) Given the nature of the message,
+                      -- the best available position is the same
+                      -- position we used for the original expansion,
+                      -- which is the position of f.
+                      ret' <- expandFully (Pos.getPos f) ret
                       let arginfo' = (drop nparams arginfo)
-                      checkCall False origTy ret arginfo' namedArginfo'
+                      checkCall False origTy ret' arginfo' namedArginfo'
 
               TyUnifyVar{} -> do
                   -- We don't have a function type yet. Generate a

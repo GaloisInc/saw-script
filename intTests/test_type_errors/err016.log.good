@@ -1,13 +1,7 @@
 Loading file "err016.saw"
 Type errors:
-  err016.saw:11:7-11:8: Error: Type mismatch.
-    Expected: Int -> t.1
-    Found:    Int
-
-  err016.saw:12:13-12:14: Note: The expected type _ -> _ arises from the form of this argument list
-  err016.saw:12:13-12:14: Note: The expected type's 1st positional parameter Int arises from the form of this constant
-  err016.saw:12:9-12:14: Note: The expected type's return type t.1 is a fresh type variable for a type implied here
-  err016.saw:12:11-12:12: Note: The found type Int arises from the form of this constant
-
+  err016.saw:12:13-12:14: Too many arguments to function "f" of type t.0 -> t.0
+  err016.saw:11:7-11:8: Note: The function type t.0 -> t.0 arises from this parameter list...
+  err016.saw:11:11-11:12: Note: ...and this function body
 
 FAILED
