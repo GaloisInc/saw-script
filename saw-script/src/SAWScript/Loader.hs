@@ -50,6 +50,7 @@ import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser
 import SAWScript.Include as Inc
 import SAWScript.Typechecker (checkDecl, checkSchema, checkSchemaPattern)
+import qualified SAWScript.Typechecker as Ty (Message(..))
 
 
 ------------------------------------------------------------
@@ -111,9 +112,17 @@ type ParseResult a = Either ParseError a
 type Parser a = [Token Pos] -> ParseResult a
 
 -- | Type shorthand for a typechecker result. The typechecker returns
---   a pair, with a list of warnings on the right and either a list
---   of errors or a result value on the left.
-type TyResult a = (Either [(Pos, PPS.Doc)] a, [(Pos, PPS.Doc)])
+--   a list of messages (using, for now at least, its own type to
+--   encode errors vs. warnings vs. notices) and a value.
+--
+--   On error the message list includes at least one error, and the
+--   result value exists but is not meaningful and can/should be
+--   discarded.
+--
+--   On success the message list contains only warnings or notices
+--   (or is empty) and the result is valid.
+--
+type TyResult a = ([Ty.Message], a)
 
 -- | Type shorthand for the result of `readAny`, which differs from
 --   the typechecker result by not separating errors from warnings
@@ -214,16 +223,19 @@ panicOnGenericMsgs ppopts whoAmI result =
 --   typechecker should issue its own messages; if not, at least the
 --   format shouldn't be arbitrarily different.
 panicOnTyMsgs :: Text -> TyResult a -> a
-panicOnTyMsgs whoAmI (errs_or_results, warns) =
-    let pp (pos, msg) =
-          let msg' = PosSupport.prettyPosition pos <> ":" <+> msg in
-          PPS.renderText PPS.defaultOpts msg'  -- startup time, use default
+panicOnTyMsgs whoAmI (msgs, result) =
+    let pp msg =
+          let (pos, desc, msg') = case msg of
+                Ty.Error p doc -> (p, "Error:", doc)
+                Ty.Warning p doc -> (p, "Warning:", doc)
+                Ty.Notice p doc -> (p, "Note:", doc)
+          in
+          let msg'' = PosSupport.prettyPosition pos <> ":" <+> desc <+> msg' in
+          PPS.renderText PPS.defaultOpts msg''  -- startup time, use default opts
     in
-    case warns of
-        [] -> case errs_or_results of
-            Left errs -> panic whoAmI ("Unexpected errors: " : map pp errs)
-            Right result -> result
-        _ -> panic whoAmI ("Unexpected warnings: " : map pp warns)
+    case msgs of
+        [] -> result
+        _ -> panic whoAmI ("Unexpected typechecker messages:" : map pp msgs)
 
 -- | Handle the readAny result in IO.
 --
@@ -244,20 +256,16 @@ dispatchGenericMsgs result =
             pure tree
 
 -- | Handle a typechecker result in IO.
---
---   Add HasCallStack because if the panic happens we'll want to know
---   where we came from. XXX: figure out how to get rid of the panic
---   and remove HasCallStack again.
-dispatchTyMsgs :: HasCallStack => TyResult a -> IO a
-dispatchTyMsgs (errs_or_result, warns) = do
-    mapM_ (\(pos, msg) -> Cons.warnP' pos msg) warns
-    case errs_or_result of
-        Left errs -> do
-            mapM_ (\(pos, msg) -> Cons.errDP' pos msg) errs
-            Cons.checkFail
-            panic "dispatchTyMsgs" ["checkFail didn't fail"]
-        Right tree ->
-            pure tree
+dispatchTyMsgs :: TyResult a -> IO a
+dispatchTyMsgs (msgs, result) = do
+    let dispatch msg = case msg of
+          Ty.Error pos msg' -> Cons.errDP' pos msg'
+          Ty.Warning pos msg' -> Cons.warnP' pos msg'
+          Ty.Notice pos msg' -> Cons.noteP' pos msg'
+    mapM_ dispatch msgs
+    -- This crashes out if the above issued any errors
+    Cons.checkFail
+    pure result
 
 -- | Call `readAny` and panic if it generates any diagnostics.
 readAnyPure :: PPS.Opts -> FilePath -> Text -> Text -> Parser a -> Text -> a

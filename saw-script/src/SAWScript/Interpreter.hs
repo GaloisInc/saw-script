@@ -65,6 +65,7 @@ import qualified Mir.Generator as MIR (RustModule)
 import qualified Mir.Mir as MIR
 
 import SAWSupport.Position
+import SAWSupport.ConsoleSupport (Fatal(..))
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
 import qualified SAWSupport.Pretty as PPS
@@ -81,12 +82,12 @@ import qualified SAWCentral.Position as SS
 import SAWCentral.AST (Import(..), PrimitiveLifecycle(..), defaultAvailable)
 import SAWCentral.Bisimulation
 import SAWCentral.Builtins
-import SAWCentral.Exceptions (failTypecheck)
 import qualified SAWScript.Loader as Loader
 import SAWCentral.JavaExpr
 import SAWCentral.LLVMBuiltins
 import SAWCentral.Options
 import SAWScript.Typechecker (checkStmt, typesMatch)
+import qualified SAWScript.Typechecker as Ty (Message(..))
 import SAWScript.Panic (HasCallStack, panic)
 import SAWCentral.TopLevel
 import SAWCentral.Utils
@@ -491,21 +492,53 @@ instance InterpreterMonad MIRSetupM where
 -- Process a typechecker result.
 -- Wraps the typechecker in the stuff needed to print its warnings and errors.
 --
--- XXX: this code should probably live inside the typechecker.
+-- XXX: this code should probably live inside the typechecker, but if
+-- not we should at least be using the copy in the loader instead of
+-- having our own version.
 --
 -- Usage is processTypeCheck $ checkStmt ...
-type MsgList = [(SS.Pos, PPS.Doc)]
-processTypeCheck :: InterpreterMonad m => (Either MsgList a, MsgList) -> m a
-processTypeCheck (errs_or_output, warns) =
+--
+processTypeCheck :: InterpreterMonad m => ([Ty.Message], a) -> m a
+processTypeCheck (msgs, output) =
   liftTopLevel $ do
     ppopts <- getPPOpts
-    let issueWarning (pos, msg) = do
-          -- XXX the print functions should be what knows how to show positions...
-          let pos' = prettyPosition pos
-              msg' = pos' <> ": Warning:" <+> msg
-          printOutLnTop Warn $ PPS.render ppopts msg'
-    mapM_ issueWarning warns
-    either (failTypecheck ppopts) return errs_or_output
+    let inspect msg (msgs', errCount) = case msg of
+          Ty.Error p m -> ((Error, p, m) : msgs', errCount + 1)
+          Ty.Warning p m -> ((Warn, p, m) : msgs', errCount)
+          Ty.Notice p m -> ((Info, p, m) : msgs', errCount)
+    let (msgs', errCount) = foldr inspect ([], 0 :: Int) msgs
+
+    -- XXX this is horrible but I want the output to be unchanged for now.
+
+    let issue :: PPS.Doc -> (Verbosity, SS.Pos, PPS.Doc) -> TopLevel ()
+        issue indent (pri, pos, msg) = do
+            -- XXX the print functions should be what knows how to show positions...
+            let pos' = prettyPosition pos
+                msg' = case pri of
+                   Warn -> indent <> pos' <> ": Warning:" <+> msg
+                   _ -> indent <> pos' <> ":" <+> msg
+            printOutLnTop pri $ PPS.render ppopts msg'
+
+    -- Print all the warnings (and notices) first.
+    let issueWarning (pri, pos, msg) = case pri of
+          Error -> pure ()
+          _ -> issue "" (pri, pos, msg)
+    mapM_ issueWarning msgs'
+
+    -- Now print all the errors. If there's one, just print it. If there's
+    -- more than one, print first and indent everything with two spaces.
+    let issueError indent (pri, pos, msg) = case pri of
+          Error -> issue indent (pri, pos, msg)
+          _ -> pure ()
+    when (errCount > 0) $ do
+        if errCount > 1 then do
+            printOutLnTop Error "Type errors:"
+            mapM_ (issueError "  ") msgs'
+            printOutLnTop Error ""
+        else
+            mapM_ (issueError "") msgs'
+        liftIO $ X.throwIO $ Fatal False
+    pure output
 
 
 ------------------------------------------------------------
@@ -1301,31 +1334,37 @@ interpretTopStmt printBinds replTypingHacks stmt = do
 
       let typingResults =
             if replTypingHacks then
-                case checkStmt ppopts avail varenv3 tyenv ctx stmt of
-                   (Right output, warns) ->
-                       (Right output, warns)
-                   (Left errs, warns) ->
-                       -- If it doesn't typecheck as a statement, and
-                       -- it was a plain expression, which will come
-                       -- through as _ <- e (`PImplicit` rather than
-                       -- `PWild`), wrap it in "return" and try again.
-                       case stmt of
-                           SS.StmtBind spos (SS.PImplicit wpos wty) e ->
-                               let epos = SS.getPos e
-                                   ret = SS.Var epos "return"
-                                   e' = SS.Application epos ret [(Nothing, e)]
-                                   rstmt = SS.StmtBind spos (SS.PImplicit wpos wty) e'
-                               in
-                               case checkStmt ppopts avail varenv3 tyenv ctx rstmt of
-                                   (Left _, _) ->
-                                       -- did not work, use original errors
-                                       (Left errs, warns)
-                                   (Right output', warns') ->
-                                       -- worked, use this version
-                                       (Right output', warns')
-                           _ ->
-                               -- doesn't match, use the original errors
-                               (Left errs, warns)
+                let (msgs, output) = checkStmt ppopts avail varenv3 tyenv ctx stmt in
+                let isError msg = case msg of
+                        Ty.Error{} -> True
+                        _ -> False
+                in
+                if any isError msgs then
+                    -- If it doesn't typecheck as a statement, and
+                    -- it was a plain expression, which will come
+                    -- through as _ <- e (`PImplicit` rather than
+                    -- `PWild`), wrap it in "return" and try again.
+                    case stmt of
+                        SS.StmtBind spos (SS.PImplicit wpos wty) e ->
+                            let epos = SS.getPos e
+                                ret = SS.Var epos "return"
+                                e' = SS.Application epos ret [(Nothing, e)]
+                                rstmt = SS.StmtBind spos (SS.PImplicit wpos wty) e'
+                            in
+                            let (msgs', output') =
+                                  checkStmt ppopts avail varenv3 tyenv ctx rstmt
+                            in
+                            if any isError msgs' then
+                                -- did not work, use original messages
+                                (msgs, output)
+                            else
+                                -- worked, use this version
+                                (msgs', output')
+                        _ ->
+                            -- doesn't match, use the original errors
+                            (msgs, output)
+                else
+                    (msgs, output)
             else
                 checkStmt ppopts avail varenv3 tyenv ctx stmt
       processTypeCheck typingResults

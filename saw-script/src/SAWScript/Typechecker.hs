@@ -15,7 +15,8 @@ This module contains the typechecker for SAWScript.
 -}
 
 module SAWScript.Typechecker
-    ( checkDecl
+    ( Message(..)
+    , checkDecl
     , checkStmt
     , typesMatch
     , checkSchema
@@ -281,6 +282,52 @@ instance AppSubst NamedType where
 
 
 ------------------------------------------------------------
+-- Messages
+
+--
+-- FUTURE: we should use the generic console stuff instead of doing
+-- our own thing. However, for the time being that is running into
+-- multiple problems:
+--    - The types in `SAWConsole` require the ability to crash, and in
+--      here (a) we can't throw safely without adding a bunch of
+--      mechanism we don't need or want, and (b) we don't need or want
+--      those interfaces.
+--    - A full `SAWConsole` interface requires providing progress
+--      reporting, which we don't need and doesn't make sense to do in
+--      a message list anyway.
+--    - Limitations of Haskell typeclasses make it impossible to have
+--      any kind of generic `SAWConsole` interface that handles lists
+--      of messages; the instance has to be here. It might still be
+--      possible to make the list logic generic at the cost of having
+--      a screenful of boilerplate in here, which is not horrible, but
+--      that will require fiddling around at some length.
+--    - There are also issues trying to make generic message list
+--      logic polymorphic over position type. You're supposed to be
+--      able to embed typeclass dictionaries in data constructors, but
+--      I can't get it to work, and parameterizing the whole thing by
+--      the position type is creating (probably fixable) other
+--      problems.
+--
+-- Changing around `SAWConsole` should almost certainly wait until
+-- we're ready to try to actually implement the SAWScript and remote
+-- API instances for it, which I've suspected for some time is going
+-- to turn up further complications.
+--
+-- So, not yet...
+--
+
+-- | We can generate errors, warnings, or notices. This type allows
+--   encoding them in a single list of messages, so as to preserve the
+--   order.
+data Message = Error Pos PPS.Doc | Warning Pos PPS.Doc | Notice Pos PPS.Doc
+
+-- Notice isn't used yet. You can't mark it intentionally unused by
+-- calling it _Notice as that's not syntactically valid...
+_unused :: Message
+_unused = Notice Pos.Unknown "foo"
+
+
+------------------------------------------------------------
 -- Pass context / monad
 
 -- | The monad for this pass is "TI", which is composed of a read-only
@@ -323,17 +370,19 @@ data RW = RW {
     -- | Any type errors and warnings we've generated so far
     --   These accumulate in reverse order; later messages are consed
     --   on the head of the list.
-    tiErrors :: [(Pos, PPS.Doc)],
-    tiWarnings :: [(Pos, PPS.Doc)]
+    tiMessages :: [Message]
 }
 
--- | The result of a `TI` typechecker computation is either a list of
---   errors or a result value, along with (always) a list of warnings.
---   FUTURE: it would be better to preserve the ordering of warnings
---   and errors in a single list...
+-- | The result of a `TI` typechecker computation is a value and a
+--   list of messages. We have succeeded if the list contains only
+--   warnings and notices. (There is no need to be explicit about
+--   this, as the caller will iterate through the messages to print
+--   them and detect failure then.)
 --
-type MsgList = [(Pos, PPS.Doc)]
-type Result a = (Either MsgList a, MsgList)
+--   The result value is (in general) not meaningful if the message
+--   list contains an error.
+--
+type Result a = ([Message], a)
 
 -- | Run the TI monad.
 --
@@ -349,21 +398,16 @@ runTI ppopts avail varenv tyenv m =
             tiTyEnv = tyenv,
             tiNextTypeIndex = 0,
             tiSubst = Map.empty,
-            tiErrors = [],
-            tiWarnings = []
+            tiMessages = []
         }
         ro = RO {
             tiPrimsAvail = avail,
             tiPPOpts = ppopts
         }
         (result, rw') = runState (runReaderT (unTI m) ro) rw
-        errs = reverse $ tiErrors rw'
-        warns = reverse $ tiWarnings rw'
+        msgs = reverse $ tiMessages rw'
     in
-    -- We succeed if and only if the error list is empty.
-    case errs of
-        [] -> (Right result, warns)
-        _ -> (Left errs, warns)
+    (msgs, result)
 
 -- | Run a speculative sub-action in the `TI` monad. Throw away
 --   whatever it does, and return `True` if it succeeds (does
@@ -372,11 +416,17 @@ speculateTI :: TI a -> TI Bool
 speculateTI m = do
     rw <- get
     ro <- ask
-    -- Micro-optimization: speculate with an empty error list, so we
-    -- don't need to iterate over any existing errors afterwards to
+    -- Micro-optimization: speculate with an empty message list, so we
+    -- don't need to iterate over any preexisting messages afterwards to
     -- check for success.
-    let (_result, rw') = runState (runReaderT (unTI m) ro) (rw {tiErrors = []})
-    pure $ null (tiErrors rw')
+    let (_result, rw') = runState (runReaderT (unTI m) ro) (rw {tiMessages = []})
+    let ok =
+          let once msg f = case msg of
+                Error{} -> False
+                _ -> f
+          in
+          foldr once True $ tiMessages rw'
+    pure ok
 
 
 ------------------------------------------------------------
@@ -433,7 +483,7 @@ getErrorTyVar pos = getProvenancedTyVar $ TypeFailed pos
 -- | Add an error message.
 recordError :: Pos -> PPS.Doc -> TI ()
 recordError pos err = do
-    modify $ \rw -> rw { tiErrors = (pos, err) : tiErrors rw }
+    modify $ \rw -> rw { tiMessages = Error pos err : tiMessages rw }
 
 -- | Add an error message. Variant meant for use with prettyTypeDetails.
 recordError' :: (Pos, PPS.Doc) -> TI ()
@@ -442,7 +492,12 @@ recordError' (pos, err) = recordError pos err
 -- | Add a warning message.
 recordWarning :: Pos -> PPS.Doc -> TI ()
 recordWarning pos msg = do
-    modify $ \rw -> rw { tiWarnings = (pos, msg) : tiWarnings rw }
+    modify $ \rw -> rw { tiMessages = Warning pos msg : tiMessages rw }
+
+-- | Add a notice.
+_recordNotice :: Pos -> PPS.Doc -> TI ()
+_recordNotice pos msg = do
+    modify $ \rw -> rw { tiMessages = Notice pos msg : tiMessages rw }
 
 
 ------------------------------------------------------------
@@ -3159,9 +3214,9 @@ typesMatch ppopts avail tenv name schema'found schema'expected =
         ty'expected <- unpack schema'expected
         matches (Pos.getPos ty'found) ty'found ty'expected
   in
-  case runTI ppopts avail ScopedMap.empty tenv match of
-      (Left _errors, _warnings) -> False        -- not actually reachable
-      (Right b, _warnings) -> b                 -- return match success/failure
+  let (_msgs, b) = runTI ppopts avail ScopedMap.empty tenv match in
+  -- return match success/failure
+  b
 
 -- | Check a schema (type) as used when constructing the builtins
 --   table. (This is an external interface.)
@@ -3243,14 +3298,16 @@ checkSchemaPattern _avail _env _tenv pat =
     -- to reject unbound/free type variables (see Search.hs for a
     -- discussion of why) or underapplied type constructors, so the
     -- only check in checkType that makes sense to apply is the one
-    -- for _overapplied_ type constructors, and that is (a) not
-    -- critical (an overapplied type constructor will never match
-    -- anything valid) and (b) as noted in checkType not currently
-    -- actually reasonable because of limitations in the concrete
-    -- syntax. Point (b) will probably change eventually, so we want
-    -- to keep this hook and keep knowledge of its internals private
-    -- here even though for now it's a nop.
-    (Right pat, [])
+    -- for _overapplied_ type constructors, and that is not critical:
+    -- an overapplied type constructor will never match anything
+    -- valid.
+    --
+    -- However, we'd like to reject patterns like "Int Int"
+    -- eventually (FUTURE), so we want to keep this hook and keep
+    -- knowledge of its internals private here even though for now
+    -- it's a nop.
+    --
+    ([], pat)
 
 
 {-
