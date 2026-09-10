@@ -760,10 +760,10 @@ prettyTypeProvenance prov = case prov of
               "forall-bound in" <+> x' <+> "and implied here",
          Nothing)
     TypeFromElement pos tyctx ->
-        let tyctx' = prettyTyctx tyctx in
+        let tyctx' = prettyTyCtx tyctx in
         (pos, "arises from the form of this" <+> tyctx', Nothing)
     TypeFromContext pos tyctx ->
-        let tyctx' = prettyTyctx tyctx in
+        let tyctx' = prettyTyCtx tyctx in
         (pos, "arises from the context of this" <+> tyctx', Nothing)
     TypeFromFuncWithSig pos ->
         (pos, "arises from this parameter list", Nothing)
@@ -818,7 +818,7 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
           case (subprov, prov) of
               (TypeExplicit subpos, TypeExplicit pos) -> Pos.subspan subpos pos
               (TypeFailed _, TypeFailed _) -> True
-              (TypeFromElement subpos TyctxConstant, TypeFromElement pos _) ->
+              (TypeFromElement subpos TyCtxConstant, TypeFromElement pos _) ->
                   -- Restrict this case to when the enclosing type is
                   -- a tuple, list/array, or record, and the element
                   -- is a constant. This will capture obvious cases
@@ -833,7 +833,7 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
                   -- If this causes further fallout, maybe better to
                   -- shut it off entirely.
                   --
-                  -- FUTURE: try making do-blocks their own `Tyctx`
+                  -- FUTURE: try making do-blocks their own `TyCtx`
                   -- case.
                   let enclosed = Pos.subspan subpos pos in
                   case ty of
@@ -1684,25 +1684,25 @@ addAbstractTyVars vars = do
 --
 inferExpr :: Expr -> TI (OutExpr, Type)
 inferExpr expr = case expr of
-    Bool pos b    -> return (Bool pos b, tBool (TypeFromElement pos TyctxConstant))
-    String pos s  -> return (String pos s, tString (TypeFromElement pos TyctxConstant))
-    Int pos i     -> return (Int pos i, tInt (TypeFromElement pos TyctxConstant))
-    Code pos s    -> return (Code pos s, tTerm (TypeFromElement pos TyctxExpr))
-    CType pos s   -> return (CType pos s, tType (TypeFromElement pos TyctxExpr))
+    Bool pos b    -> return (Bool pos b, tBool (TypeFromElement pos TyCtxConstant))
+    String pos s  -> return (String pos s, tString (TypeFromElement pos TyCtxConstant))
+    Int pos i     -> return (Int pos i, tInt (TypeFromElement pos TyCtxConstant))
+    Code pos s    -> return (Code pos s, tTerm (TypeFromElement pos TyCtxExpr))
+    CType pos s   -> return (CType pos s, tType (TypeFromElement pos TyCtxExpr))
 
     Array pos [] -> do
         a <- getFreshTyVar pos
-        return (Array pos [], tArray (TypeFromElement pos TyctxConstant) a)
+        return (Array pos [], tArray (TypeFromElement pos TyCtxConstant) a)
 
     Array pos (e:es) -> do
         (e',t) <- inferExpr e
         es' <- mapM (\e1 -> checkExpr e1 t) es
-        return (Array pos (e':es'), tArray (TypeFromElement pos TyctxExpr) t)
+        return (Array pos (e':es'), tArray (TypeFromElement pos TyCtxExpr) t)
 
     Block pos body -> do
         ctx <- getFreshTyVar pos
         tyResult <- getFreshTyVar pos
-        let ty = tApply (TypeFromElement pos TyctxExpr) ctx tyResult
+        let ty = tApply (TypeFromElement pos TyCtxExpr) ctx tyResult
         pushScope
         body' <- inferBlock pos ctx ty body
         popScope
@@ -1712,23 +1712,23 @@ inferExpr expr = case expr of
         (es',ts) <- unzip <$> mapM inferExpr es
         -- Consider unit a constant for type provenance purposes.
         let tyctx = case es' of
-              [] -> TyctxConstant
-              _ -> TyctxExpr
+              [] -> TyCtxConstant
+              _ -> TyCtxExpr
         return (Tuple pos es', tTuple (TypeFromElement pos tyctx) ts)
 
     Record pos fs -> do
         (nes',nts) <- unzip `fmap` mapM inferField (Map.toList fs)
-        let ty = TyRecord (TypeFromElement pos TyctxExpr) $ Map.fromList nts
+        let ty = TyRecord (TypeFromElement pos TyCtxExpr) $ Map.fromList nts
         return (Record pos (Map.fromList nes'), ty)
 
     -- XXX this is currently unreachable because there's no concrete
     -- syntax for it; the parser will never produce it.
     Index pos ar ix -> do
         (ar',at) <- inferExpr ar
-        ix'      <- checkExpr ix (tInt (TypeFromContext (Pos.getPos ix) TyctxExpr))
+        ix'      <- checkExpr ix (tInt (TypeFromContext (Pos.getPos ix) TyCtxExpr))
         t        <- getFreshTyVar pos
         let pos'ar = Pos.getPos ar'
-            prov = TypeFromContext pos'ar TyctxExpr
+            prov = TypeFromContext pos'ar TyCtxExpr
         unify (tArray prov t) pos'ar at
         return (Index pos ar' ix', t)
 
@@ -2045,7 +2045,7 @@ inferExpr expr = case expr of
                   let (_args, argtys) = unzip arginfo
                       namedArgtys = Map.map (\(_namepos, _arg, argty) -> argty) namedArginfo
                   ret <- getFreshTyVar pos
-                  let prov = TypeFromElement argspos TyctxArgList
+                  let prov = TypeFromElement argspos TyCtxArgList
                       ty' = TyFunc prov noNames argtys namedArgtys ret
 
                   -- Now unify the tyvar we got with the function
@@ -2233,7 +2233,7 @@ inferExpr expr = case expr of
         return (e',t'')
 
     IfThenElse pos e1 e2 e3 -> do
-        e1' <- checkExpr e1 (tBool (TypeFromContext (Pos.getPos e1) TyctxExpr))
+        e1' <- checkExpr e1 (tBool (TypeFromContext (Pos.getPos e1) TyCtxExpr))
         (e2', t) <- inferExpr e2
         e3' <- checkExpr e3 t
         return (IfThenElse pos e1' e2' e3', t)
@@ -2324,7 +2324,7 @@ inferPattern rebindable pat = do
             return (t, PVar allpos xpos x (Just t))
         PTuple pos ps -> do
             (ts, ps') <- unzip <$> mapM (inferPattern rebindable) ps
-            return (tTuple (TypeFromElement pos TyctxPat) ts, PTuple pos ps')
+            return (tTuple (TypeFromElement pos TyCtxPat) ts, PTuple pos ps')
 
 -- | Check the type of a pattern, by inferring and then unifying the
 --   result.
@@ -2537,7 +2537,7 @@ inferStmt atSyntacticTopLevel blockprov ctx s = do
             -- Restrict include to TopLevel. This matches the prior
             -- behavior when it was a builtin function rather than
             -- syntax. FUTURE: consider relaxing the requirement.
-            let sprov = TypeFromElement spos TyctxStmt
+            let sprov = TypeFromElement spos TyCtxStmt
             let tm = TyCon sprov (ContextCon TopLevel) []
             tx <- getFreshTyVar spos
             unify (tApply blockprov ctx tx) spos (tApply sprov tm tx)
@@ -2590,7 +2590,7 @@ inferStmt atSyntacticTopLevel blockprov ctx s = do
 inferBlock :: Pos -> Type -> Type -> ([Stmt], Expr) -> TI ([OutStmt], OutExpr)
 inferBlock blockpos ctx ty (stmts, lastexpr) = do
     let atSyntacticTopLevel = False
-    let blockprov = TypeFromElement blockpos TyctxExpr
+    let blockprov = TypeFromElement blockpos TyCtxExpr
 
     -- Check the statements in order, left first.
     stmts' <- mapM (inferStmt atSyntacticTopLevel blockprov ctx) stmts
@@ -3160,7 +3160,7 @@ checkStmt ppopts avail env tenv ctx stmt =
     -- you did in the do block that pinned it to a particular monad.)
     --
     let pos = Pos.getPos stmt
-        prov = TypeFromContext pos TyctxStmt
+        prov = TypeFromContext pos TyCtxStmt
         ctxtype = TyCon prov (ContextCon ctx) []
     in
     runTI ppopts avail env tenv (inferSingleStmt prov ctxtype stmt)

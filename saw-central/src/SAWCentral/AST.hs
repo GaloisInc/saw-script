@@ -20,7 +20,7 @@ module SAWCentral.AST
      , Kind(..)
      , kindStar, kindStarToStar
 
-     , Tyctx(..)
+     , TyCtx(..)
      , TypeProvenance(..)
      , TypeIndex
      , Context(..)
@@ -44,7 +44,7 @@ module SAWCentral.AST
      , DeclGroup(..)
 
      , ppKind, prettyKind
-     , ppTyctx, prettyTyctx
+     , ppTyCtx, prettyTyCtx
      , ppTyCon, prettyTyCon
      , ppType, prettyType
      , ppSchema, prettySchema
@@ -151,12 +151,12 @@ kindStarToStar = Kind 1
 
 -- | Context for type provenance; basically, what kind of program
 --   element we were looking at when we inferred a type.
-data Tyctx
-  = TyctxConstant  -- ^ Constants (special cases of expressions)
-  | TyctxExpr      -- ^ Expressions
-  | TyctxPat       -- ^ Patterns
-  | TyctxStmt      -- ^ Statements
-  | TyctxArgList   -- ^ Expression groups that are function argument lists
+data TyCtx
+  = TyCtxConstant  -- ^ Constants (special cases of expressions)
+  | TyCtxExpr      -- ^ Expressions
+  | TyCtxPat       -- ^ Patterns
+  | TyCtxStmt      -- ^ Statements
+  | TyCtxArgList   -- ^ Expression groups that are function argument lists
   deriving (Eq, Show)
 
 -- | Extended provenance/position information for types.
@@ -210,8 +210,8 @@ data TypeProvenance
   | TypeFailed Pos
   | TypeFromForallNamed Pos Text Text
   | TypeFromForallFresh Pos Text Text
-  | TypeFromElement Pos Tyctx
-  | TypeFromContext Pos Tyctx
+  | TypeFromElement Pos TyCtx
+  | TypeFromContext Pos TyCtx
   | TypeFromFuncWithSig Pos
   | TypeFromFuncWithBody Pos Pos
   deriving (Eq, Show)
@@ -589,16 +589,16 @@ ppKind (Kind n) =
 prettyKind :: Kind -> PPS.Doc
 prettyKind k = PP.pretty $ ppKind k
 
-ppTyctx :: Tyctx -> Text
-ppTyctx ctx = case ctx of
-    TyctxConstant -> "constant"
-    TyctxExpr     -> "expression"
-    TyctxPat      -> "pattern"
-    TyctxStmt     -> "statement"
-    TyctxArgList  -> "argument list"
+ppTyCtx :: TyCtx -> Text
+ppTyCtx ctx = case ctx of
+    TyCtxConstant -> "constant"
+    TyCtxExpr     -> "expression"
+    TyCtxPat      -> "pattern"
+    TyCtxStmt     -> "statement"
+    TyCtxArgList  -> "argument list"
 
-prettyTyctx :: Tyctx -> PP.Doc ann
-prettyTyctx ctx = PP.pretty $ ppTyctx ctx
+prettyTyCtx :: TyCtx -> PP.Doc ann
+prettyTyCtx ctx = PP.pretty $ ppTyCtx ctx
 
 ppContext :: Context -> Text
 ppContext c = case c of

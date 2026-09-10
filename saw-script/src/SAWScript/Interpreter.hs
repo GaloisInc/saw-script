@@ -200,7 +200,7 @@ getType pat = case pat of
     SS.PWild _pos ~(Just t) -> t
     SS.PVar _allpos _xpos _x ~(Just t) -> t
     SS.PTuple tuplepos pats ->
-        let prov = SS.TypeFromElement tuplepos SS.TyctxPat in
+        let prov = SS.TypeFromElement tuplepos SS.TyCtxPat in
         SS.TyCon prov (SS.TupleCon (genericLength pats)) (map getType pats)
 
 -- Convert some text to an InputText for cryptol-saw-core.
@@ -1492,7 +1492,7 @@ interpretMain = do
   Environ varenv tyenv _cryenv <- gets rwEnviron
   rbenv <- gets rwRebindables
   let pos = SS.PosInternal "call-to-main"
-      prov = SS.TypeFromElement pos SS.TyctxExpr
+      prov = SS.TypeFromElement pos SS.TyCtxExpr
       -- We need the type to be "TopLevel a", not just "TopLevel ()".
       -- There are several (old) tests in the test suite whose main
       -- returns something, e.g. several are TopLevel Theorem because
@@ -2581,7 +2581,7 @@ toplevelSubshell () = do
     -- Note that (for now at least) toValue just asserts that the type
     -- matches the value; on failure the message prints the type but
     -- not the type provenance. So it doesn't have to be perfect.
-    let ty = SS.tUnit $ SS.TypeFromElement (rwPosition rw) SS.TyctxExpr
+    let ty = SS.tUnit $ SS.TypeFromElement (rwPosition rw) SS.TyCtxExpr
     return $ toValue ty "subshell" ()
 
 -- The proof_subshell command.
@@ -2606,7 +2606,7 @@ proofScriptSubshell () = do
     -- Note that (for now at least) toValue just asserts that the type
     -- matches the value; on failure the message prints the type but
     -- not the type provenance. So it doesn't have to be perfect.
-    let ty = SS.tUnit $ SS.TypeFromElement (rwPosition rw) SS.TyctxExpr
+    let ty = SS.tUnit $ SS.TypeFromElement (rwPosition rw) SS.TyCtxExpr
     return $ toValue ty "proof_subshell" ()
 
 -- The "map" builtin.
@@ -2621,7 +2621,7 @@ mapValue f xs =
      -- Also, since this is an array of Value, toValue will check the
      -- array type but not the element type.  Use unit as a
      -- placeholder.
-     let prov = SS.TypeFromElement pos SS.TyctxExpr
+     let prov = SS.TypeFromElement pos SS.TyCtxExpr
          ty = SS.tArray prov (SS.tUnit prov)
      toValue ty "map" <$> traverse (applyValue pos info f) xs
 
@@ -4745,7 +4745,7 @@ primitives = Map.fromList $
     [ "Merge two simplification sets into one." ]
 
   , prim "basic_ss"            "Simpset"
-    (bicVal $ \bic _ -> toValue (SS.TyVar (SS.TypeFromElement SS.PosInsideBuiltin SS.TyctxExpr) "Simpset") "basic_ss" $ biBasicSS bic)
+    (bicVal $ \bic _ -> toValue (SS.TyVar (SS.TypeFromElement SS.PosInsideBuiltin SS.TyCtxExpr) "Simpset") "basic_ss" $ biBasicSS bic)
     Current
     [ "A basic rewriting simplification set containing some boolean"
     , "identities and conversions relating to bitvectors, natural"
