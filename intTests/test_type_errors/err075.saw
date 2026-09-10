@@ -1,0 +1,8 @@
+// It is not legal for the last element of a do-block to have the form
+// "_ <- e", even though in some sense it's logically equivalent to
+// just writing "e". It does _not_ throw the value away.
+//
+// Exercise the resulting error message.
+// Also see err026.
+
+let foo = do { llvm_assert {{ True }}; _ <- return (); };
