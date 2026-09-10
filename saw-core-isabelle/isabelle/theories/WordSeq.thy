@@ -652,24 +652,39 @@ lemma signed_shift_conv2[word_seq_convs]:
   apply (subst signed_shift_conv1[symmetric])
   by simp
 
-
 (* Using native mod_ring division is only defined if the cardinality is prime, which
    is more restrictive than word division, so we need to perform the division
    as integers. *)
-instantiation seq :: (_,bool) divide begin
 context includes seq_zint.seq.lifting begin
-lift_definition divide_seq :: "('a, 'b::bool) seq \<Rightarrow> ('a, 'b) seq \<Rightarrow> ('a, 'b) seq" is 
+lift_definition divide_seq_zint :: "('a, 'b::bool) seq \<Rightarrow> ('a, 'b) seq \<Rightarrow> ('a, 'b) seq" is
   "\<lambda>x y. of_int_mod_ring (to_int_mod_ring x div to_int_mod_ring y)" .
 end
+
+unconstraining divide_seq_zint and divide begin
+definition divide_seq' :: "('a,'b) seq \<Rightarrow> ('a,'b) seq \<Rightarrow> ('a,'b) seq" where
+  "divide_seq' \<equiv> \<lambda>xs ys.
+    if is_bool TYPE('b) then divide_seq_zint xs ys
+    else map2_seq (div) xs ys"
+end
+
+instantiation seq :: (_, _) divide begin
+definition [simplified divide_seq'_def]: "divide_seq \<equiv> divide_seq'"
 instance ..
 end
 
 lemma div_seq_transfer[transfer_rule]:
  "(eq_word_seq ===> eq_word_seq ===> eq_word_seq) (div) (div)"
+  unfolding divide_seq_def
   apply (rule rel_funI)+
   apply (simp add: eq_word_seq_def2)
   apply transfer
   by (simp add: take_bit_of_to_mod_ring)
+
+lemma div_seq_not_bool_transfer[transfer_rule]:
+  "(pcr_seq (=) ===> pcr_seq (=) ===> pcr_seq (=)) (map2 (div))
+     ((div) :: ('a,'b::{divide,not_bool}) seq \<Rightarrow> ('a,'b) seq \<Rightarrow> ('a,'b) seq)"
+  unfolding divide_seq_def
+  by (simp add: map2_seq_transfer)
 
 lemma seq_to_word_div[word_seq_convs]: 
   "seq_to_word (x div y) = (seq_to_word x) div (seq_to_word y)"
@@ -1138,12 +1153,16 @@ lemma or_seq_conv[word_seq_convs]:
 
 lemma xor_seq_conv[word_seq_convs]:
  "(\<lambda>x y. map2_seq ((\<noteq>) :: bool \<Rightarrow> bool \<Rightarrow> bool) x y) = (\<lambda>x y. word_to_seq (seq_to_word x XOR seq_to_word y))"
-  supply [simp del] = not_iff
-  apply (rule ext)+
-  apply (simp add: zip_seq_as_bl_zip)
-  apply transfer
-  by (simp add: word_rotate.blwl_syms)
-
+ "(\<lambda>x y. map2_seq (\<lambda>a' b'. a' = (\<not> b')) x y) = (\<lambda>x y. word_to_seq (seq_to_word x XOR seq_to_word y))"
+  apply (constrain 'a="'aa::len")
+  subgoal H
+    supply [simp del] = not_iff
+    apply (rule ext)+
+    apply (simp add: zip_seq_as_bl_zip)
+    apply transfer
+    by (simp add: word_rotate.blwl_syms)
+  apply (rule H)
+  by (rule H[simplified])
 
 end
 

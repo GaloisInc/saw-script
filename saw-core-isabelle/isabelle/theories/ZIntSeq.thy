@@ -287,36 +287,127 @@ lemma bs_to_zint_inj: "seq_to_zint y = seq_to_zint x \<Longrightarrow> x = y"
 lemma bs_to_zint_inj'[simp]: "inj seq_to_zint"
   by (simp add: bs_to_zint_inj injI)
 
+term is_bool
+
 lemma zero_transfer_seq[transfer_rule]: 
   "eq_zint_seq 0 (0 :: ('a,'b::bool) seq)"
   apply (simp add: eq_zint_seq_def)
   apply transfer
   using bin_to_bl_zero by force
 
-
-instantiation seq :: (_, bool) comm_ring begin
-interpretation seq_zint .
-
-lift_definition plus_seq :: 
+context includes seq_zint.seq.lifting begin
+lift_definition plus_seq_zint ::
   "('a,'b::bool) seq \<Rightarrow> ('a,'b) seq \<Rightarrow> ('a,'b) seq" is "(+)" .
-
-lift_definition minus_seq :: 
+lift_definition minus_seq_zint ::
   "('a,'b::bool) seq \<Rightarrow> ('a,'b) seq \<Rightarrow> ('a,'b) seq" is "(-)" .
-
-lift_definition times_seq :: 
+lift_definition times_seq_zint ::
   "('a,'b::bool) seq \<Rightarrow> ('a,'b) seq \<Rightarrow> ('a,'b) seq" is "(*)" .
+lift_definition uminus_seq_zint ::
+  "('a,'b::bool) seq \<Rightarrow> ('a,'b) seq" is "uminus" .
+end
 
-lift_definition uminus_seq :: "('a,'b::bool) seq \<Rightarrow> ('a,'b) seq" is "\<lambda>x. -x" .
+unconstraining plus_seq_zint and plus begin
+definition plus_seq' :: "('a,'b) seq \<Rightarrow> ('a,'b) seq \<Rightarrow> ('a,'b) seq" where
+  "plus_seq' \<equiv> \<lambda>xs ys.
+    if is_bool TYPE('b) then plus_seq_zint xs ys
+    else map2_seq (+) xs ys"
+end
 
-instance
+instantiation seq :: (_, _) plus begin
+definition [simplified plus_seq'_def]: "plus_seq \<equiv> plus_seq'"
+instance ..
+end
+
+unconstraining times_seq_zint and times begin
+definition times_seq' :: "('a,'b) seq \<Rightarrow> ('a,'b) seq \<Rightarrow> ('a,'b) seq" where
+  "times_seq' \<equiv> \<lambda>xs ys.
+    if is_bool TYPE('b) then times_seq_zint xs ys
+    else map2_seq (*) xs ys"
+end
+
+instantiation seq :: (_, _) times begin
+definition [simplified times_seq'_def]: "times_seq \<equiv> times_seq'"
+instance ..
+end
+
+unconstraining minus_seq_zint and minus begin
+definition minus_seq' :: "('a,'b) seq \<Rightarrow> ('a,'b) seq \<Rightarrow> ('a,'b) seq" where
+  "minus_seq' \<equiv> \<lambda>xs ys.
+    if is_bool TYPE('b) then minus_seq_zint xs ys
+    else map2_seq (-) xs ys"
+end
+
+instantiation seq :: (_, _) minus begin
+definition [simplified minus_seq'_def]: "minus_seq \<equiv> minus_seq'"
+instance ..
+end
+
+unconstraining uminus_seq_zint and uminus begin
+definition uminus_seq' :: "('a,'b) seq \<Rightarrow> ('a,'b) seq" where
+  "uminus_seq' \<equiv> \<lambda>xs.
+    if is_bool TYPE('b) then uminus_seq_zint xs
+    else map_seq uminus xs"
+end
+
+instantiation seq :: (_, _) uminus begin
+definition [simplified uminus_seq'_def]: "uminus_seq \<equiv> uminus_seq'"
+instance ..
+end
+
+lemma plus_seq_bool_transfer[transfer_rule]:
+  "(eq_zint_seq ===> eq_zint_seq ===> eq_zint_seq) (+) (+)"
+  unfolding plus_seq_def
+  apply simp
+  by (rule plus_seq_zint.transfer)
+
+lemma times_seq_bool_transfer[transfer_rule]:
+  "(eq_zint_seq ===> eq_zint_seq ===> eq_zint_seq) (*) (*)"
+  unfolding times_seq_def
+  apply simp
+  by (rule times_seq_zint.transfer)
+
+lemma minus_seq_bool_transfer[transfer_rule]:
+  "(eq_zint_seq ===> eq_zint_seq ===> eq_zint_seq) (-) (-)"
+  unfolding minus_seq_def
+  apply simp
+  by (rule minus_seq_zint.transfer)
+
+lemma uminus_seq_bool_transfer[transfer_rule]:
+  "(eq_zint_seq ===> eq_zint_seq) uminus uminus"
+  unfolding uminus_seq_def
+  apply simp
+  by (rule uminus_seq_zint.transfer)
+
+lemma plus_seq_not_bool_transfer[transfer_rule]:
+  "(pcr_seq (=) ===> pcr_seq (=) ===> pcr_seq (=)) (map2 (+))
+     ((+) :: ('a,'b::{plus,not_bool}) seq \<Rightarrow> ('a,'b) seq \<Rightarrow> ('a,'b) seq)"
+  unfolding plus_seq_def
+  by (simp add: map2_seq_transfer)
+
+lemma times_seq_not_bool_transfer[transfer_rule]:
+  "(pcr_seq (=) ===> pcr_seq (=) ===> pcr_seq (=)) (map2 (*))
+     ((*) :: ('a,'b::{times,not_bool}) seq \<Rightarrow> ('a,'b) seq \<Rightarrow> ('a,'b) seq)"
+  unfolding times_seq_def
+  by (simp add: map2_seq_transfer)
+
+lemma minus_seq_not_bool_transfer[transfer_rule]:
+  "(pcr_seq (=) ===> pcr_seq (=) ===> pcr_seq (=)) (map2 (-))
+     ((-) :: ('a,'b::{minus,not_bool}) seq \<Rightarrow> ('a,'b) seq \<Rightarrow> ('a,'b) seq)"
+  unfolding minus_seq_def
+  by (simp add: map2_seq_transfer)
+
+lemma uminus_seq_not_bool_transfer[transfer_rule]:
+  "(pcr_seq (=) ===> pcr_seq (=)) (map uminus)
+     (uminus :: ('a,'b::{uminus,not_bool}) seq \<Rightarrow> ('a,'b) seq)"
+  unfolding uminus_seq_def
+  apply simp
+  by transfer_prover
+
+instance seq :: (_, bool) comm_ring
   apply (standard;transfer;simp?)
     apply (simp add: mult.assoc)
    apply (simp add: mult.commute)
   by (simp add: distrib_left mult.commute)
-end
-
-
-
 
 instantiation seq :: (_, bool) one begin
 context includes  seq_zint.seq.lifting begin
@@ -341,7 +432,7 @@ instance
 end
 
 lemma zint_to_bs_distrib[simp]: "zint_to_seq (x + y) = (zint_to_seq x) + (zint_to_seq y)"
-  by (simp add: plus_seq.abs_eq)
+  by (simp add: plus_seq_def plus_seq_zint.abs_eq)
 
 lemma zint_to_bs_1[simp]: "zint_to_seq 1 = 1"
   by (simp add: one_seq.abs_eq)

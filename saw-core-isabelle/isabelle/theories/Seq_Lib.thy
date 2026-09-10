@@ -321,9 +321,10 @@ lemma or[seq_to_word]:
   "seq_to_word (map2_seq (\<or>) x z) =  (seq_to_word x) OR (seq_to_word z)"
   by (simp add: word_seq_convs)
 
-lemma xor[simplified, seq_to_word]:
-  "seq_to_word (map2_seq (\<noteq>) x z) =  (seq_to_word x) xor (seq_to_word z)"
-  by (simp add: word_seq_convs)
+lemma xor[seq_to_word]:
+  "seq_to_word (map2_seq (\<noteq>) x z) = (seq_to_word x) xor (seq_to_word z)"
+  "seq_to_word (map2_seq (\<lambda>a' b'. a' = (\<not> b')) x z) = (seq_to_word x) xor (seq_to_word z)"
+  by (auto simp add: word_seq_convs)
 
 lemma signed_mod[seq_to_word]: 
   "seq_to_word (x smod z) = seq_to_word x smod seq_to_word z"

@@ -1223,10 +1223,14 @@ lemma sext_seq_code[code abstract]: "seq_to_seqE (sext_seq xs) = sext_seqE (seq_
   apply transfer
   by (auto simp: to_seqI_def)
 
-lemma zip_seq_code[code abstract]: "seq_to_seqE (zip_seq x y) = 
+lemma zip_seq_code1: "seq_to_seqE (zip_seq x y) =
   list_to_seqE (zip (seq_to_list x) (seq_to_list y))"
   apply transfer
   by (auto simp: to_seqI_def)
+
+lemma zip_seq_code[code abstract]:
+  "seq_to_seqE (zip_seq x y) = list_to_seqE (zip (seqE_to_list (seq_to_seqE x)) (seqE_to_list (seq_to_seqE y)))"
+  by (metis zip_seq_code1 seqE_to_list_seq)
 
 lemma word_reverse_zero: "word_reverse 0 = 0"
   unfolding word_reverse_def
@@ -1248,8 +1252,42 @@ lemma set_seq_code[code]: "set_seq y = set (seqE_to_list (seq_to_seqE y))"
   apply transfer
   by simp
 
-experiment  begin
+declare plus_seq0[code_unfold]
+declare times_seq0[code_unfold]
+declare minus_seq0[code_unfold]
+declare divide_seq0[code_unfold]
+declare uminus_seq0[code_unfold]
+
+lemma plus_seq_code_map[code_unfold]:
+  "((x :: ('a, 'b::{not_bool,plus}) seq) + y) = map2_seq (+) x y"
+  unfolding plus_seq_def
+  by simp
+
+lemma times_seq_code_map[code_unfold]:
+  "((x :: ('a, 'b::{not_bool,times}) seq) * y) = map2_seq (*) x y"
+  unfolding times_seq_def
+  by simp
+
+lemma minus_seq_code_map[code_unfold]:
+  "((x :: ('a, 'b::{not_bool,minus}) seq) - y) = map2_seq (-) x y"
+  unfolding minus_seq_def
+  by simp
+
+lemma divide_seq_code_map[code_unfold]:
+  "((x :: ('a, 'b::{not_bool,divide}) seq) div y) = map2_seq (div) x y"
+  unfolding divide_seq_def
+  by simp
+
+lemma uminus_seq_code_map[code_unfold]:
+  "(-(x :: ('a, 'b::{not_bool,uminus}) seq)) = map_seq uminus x"
+  unfolding uminus_seq_def
+  by simp
+
+experiment begin
 context includes rotate_shift_syntax and seq_syntax begin
+value "((list_to_seq [1,2]) :: (2,int) seq) + ((list_to_seq [3,4]) :: (2,int) seq)"
+value "let f = \<lambda>(x::integer) y. x + y in (f 1 2, f 3 4)"
+value "((1 :: (32,bool) seq) + 2)"
 
 value " ((list_to_seq [True,False,True,True]) :: (4,bool) seq)"
 value "(0 ^ 10000000) :: (32, bool) seq"
@@ -1292,6 +1330,12 @@ lemma
   "set_seq (0 :: (32,bool) seq) = {0}"
   "set_seq (-1 :: (32,bool) seq) = {1}"
   "set_seq (1 :: (32,bool) seq) = {0,1}"
+  "(1 :: (32,bool) seq) + 2 = 3"
+  "\<lbrakk>1::int,2,3\<rbrakk> + \<lbrakk>4,5,6\<rbrakk> = \<lbrakk>5,7,9\<rbrakk>"
+  "\<lbrakk>1::int,2,3\<rbrakk> * \<lbrakk>4,5,6\<rbrakk> = \<lbrakk>4,10,18\<rbrakk>"
+  "\<lbrakk>1::int,2,3\<rbrakk> - \<lbrakk>4,5,6\<rbrakk> = \<lbrakk>-3,-3,-3\<rbrakk>"
+  "\<lbrakk>4::int,8,16\<rbrakk> div \<lbrakk>2,4,8\<rbrakk> = \<lbrakk>2,2,2\<rbrakk>"
+  "-\<lbrakk>1::int,2,3\<rbrakk> = \<lbrakk>-1,-2,-3\<rbrakk>"
   by eval+
 
 value "(from_nat (log2_nat (to_nat (32 :: (32,bool) seq))) :: (32,bool) seq)"

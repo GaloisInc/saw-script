@@ -10,7 +10,7 @@ instance ..
 end
 
 context includes cryptol_translation_syntax begin
-lemma $1_same_type[simp]: 
+lemma $1_same_type[simp]:
   "same_type TYPE(($11) $1) TYPE(($12) $1) = ($13)"
   by (simp add: same_type_def strip_type_$1_def strip_type_seq_def)
 end
@@ -21,7 +21,7 @@ definition strip_$1 :: "($2) $1 => stripped" where
   "strip_$1 \<equiv> case_$1 $7"
 
 definition unstrip_$1 :: "stripped => ($2) $1" where
-  "unstrip_$1 \<equiv> (\<lambda> r. let (a :: nat, b :: stripped) = unstrip r in 
+  "unstrip_$1 \<equiv> (\<lambda> r. let (a :: nat, b :: stripped) = unstrip r in
      (case a of $8) b)"
 
 instance
