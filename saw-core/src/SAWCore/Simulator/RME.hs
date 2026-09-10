@@ -42,6 +42,7 @@ import SAWCore.Module (ModuleMap)
 import SAWCore.Name
 import SAWCore.Panic (panic)
 import qualified SAWCore.Prim as Prim
+import SAWCore.QualName (QualName)
 import qualified SAWCore.Simulator as Sim
 import SAWCore.Simulator.Value
 import qualified SAWCore.Simulator.Prims as Prims
@@ -52,7 +53,7 @@ import SAWCore.SATQuery
 ------------------------------------------------------------
 
 -- | Evaluator for shared terms.
-evalSharedTerm :: ModuleMap -> Map Ident RPrim -> Term -> RValue
+evalSharedTerm :: ModuleMap -> Map QualName RPrim -> Term -> RValue
 evalSharedTerm m addlPrims t =
   runIdentity $ do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
@@ -273,7 +274,7 @@ prims =
 unsupportedRMEPrimitive :: String -> a
 unsupportedRMEPrimitive = Prim.unsupportedPrimitive "RME"
 
-constMap :: Map Ident RPrim
+constMap :: Map QualName RPrim
 constMap =
   Map.union (Prims.constMap prims) $
   Map.fromList
@@ -453,11 +454,12 @@ newVars' shape = ready <$> newVars shape
 ------------------------------------------------------------
 -- Bit-blasting primitives.
 
-bitBlastBasic :: ModuleMap
-              -> Map Ident RPrim
-              -> Map VarIndex RValue
-              -> Term
-              -> RValue
+bitBlastBasic ::
+  ModuleMap ->
+  Map QualName RPrim ->
+  Map VarIndex RValue ->
+  Term ->
+  RValue
 bitBlastBasic m addlPrims varMap t = runIdentity $ do
   let primHandler nm msg env =
          return $ Prim.userError $ unlines
@@ -486,7 +488,7 @@ processVar (vn, fot) =
 
 withBitBlastedSATQuery ::
   SharedContext ->
-  Map Ident RPrim ->
+  Map QualName RPrim ->
   SATQuery ->
   (RME -> [(VarName, FiniteType)] -> IO a) ->
   IO a

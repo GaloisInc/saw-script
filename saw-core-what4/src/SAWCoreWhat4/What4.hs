@@ -67,6 +67,7 @@ import Control.Monad.Trans.Class (MonadTrans(..))
 import Numeric.Natural (Natural)
 
 -- saw-core
+import SAWCore.QualName (QualName)
 import qualified SAWCore.Recognizer as R
 import qualified SAWCore.Simulator as Sim
 import qualified SAWCore.Simulator.Prims as Prims
@@ -272,7 +273,7 @@ prims sym =
   }
 
 
-constMap :: forall sym. Sym sym => sym -> Map Ident (SPrim sym)
+constMap :: forall sym. Sym sym => sym -> Map QualName (SPrim sym)
 constMap sym =
   Map.union (Prims.constMap (prims sym)) $
   Map.fromList
@@ -1053,7 +1054,7 @@ w4SolveBasic ::
   forall sym. IsSymExprBuilder sym =>
   sym ->
   SharedContext ->
-  Map Ident (SPrim sym) {- ^ additional primitives -} ->
+  Map QualName (SPrim sym) {- ^ additional primitives -} ->
   Map VarIndex (SValue sym) {- ^ bindings for free variables -} ->
   IORef (SymFnCache sym) {- ^ cache for uninterpreted function symbols -} ->
   Set VarIndex {- ^ 'unints' Constants in this list are kept uninterpreted -} ->
@@ -1395,7 +1396,7 @@ w4EvalTerm ::
   B.ExprBuilder n st fs ->
   SAWCoreState n ->
   SharedContext ->
-  Map Ident (SPrim (B.ExprBuilder n st fs)) ->
+  Map QualName (SPrim (B.ExprBuilder n st fs)) ->
   Set VarIndex ->
   Term ->
   IO Term
@@ -1497,7 +1498,7 @@ w4EvalAny ::
   B.ExprBuilder n st fs ->
   SAWCoreState n ->
   SharedContext ->
-  Map Ident (SPrim (B.ExprBuilder n st fs)) ->
+  Map QualName (SPrim (B.ExprBuilder n st fs)) ->
   Set VarIndex ->
   Term ->
   IO ([String],
@@ -1538,7 +1539,7 @@ w4Eval ::
   B.ExprBuilder n st fs ->
   SAWCoreState n ->
   SharedContext ->
-  Map Ident (SPrim (B.ExprBuilder n st fs)) ->
+  Map QualName (SPrim (B.ExprBuilder n st fs)) ->
   Set VarIndex ->
   Term ->
   IO ([String], ([Maybe (Labeler (B.ExprBuilder n st fs))], SBool (B.ExprBuilder n st fs)))
@@ -1556,7 +1557,7 @@ w4EvalBasic ::
   SAWCoreState n ->
   SharedContext ->
   ModuleMap ->
-  Map Ident (SPrim (B.ExprBuilder n st fs)) {- ^ additional primitives -} ->
+  Map QualName (SPrim (B.ExprBuilder n st fs)) {- ^ additional primitives -} ->
   IntMap (SValue (B.ExprBuilder n st fs)) {- ^ bindings for free variables -} ->
   IORef (SymFnCache (B.ExprBuilder n st fs)) {- ^ cache for uninterpreted function symbols -} ->
   Set VarIndex {- ^ 'unints' Constants in this list are kept uninterpreted -} ->

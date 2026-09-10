@@ -273,7 +273,7 @@ import qualified SAWCore.Parser.AST as Un
 import SAWCore.Parser.Grammar (parseSAW, parseSAWTerm)
 import SAWCore.ExternalFormat
 import SAWCore.Module (lookupVarIndexInMap, ResolvedName(..))
-import SAWCore.Name (ModuleName, Name(..), VarName(..), mkModuleName, moduleIdentToQualName)
+import SAWCore.Name (ModuleName, Name(..), VarName(..), mkModuleName)
 import SAWCore.SATQuery
 import SAWCore.Simulator.Concrete (constMap)
 import SAWCore.Simulator.Uninterpreted (generalizeHigherOrderFunctions)
@@ -840,7 +840,7 @@ normalize_term_opaque opaque tt =
   do sc <- getSharedContext
      idxs <- mconcat <$> mapM (resolveName sc) opaque
      -- Also exclude defined SAWCore constants that are implemented as primitives
-     let primQualNames = map moduleIdentToQualName (Map.keys constMap)
+     let primQualNames = Map.keys constMap
      primIdxs <- io $ traverse (scResolveQualName sc) primQualNames
      let opaqueSet = Set.fromList (map nameIndex (catMaybes primIdxs) ++ idxs)
      let unfold nm = Set.notMember (nameIndex nm) opaqueSet
@@ -853,7 +853,7 @@ goal_normalize opaque =
     do sc <- getSharedContext
        idxs <- mconcat <$> mapM (resolveName sc) opaque
        -- Also exclude defined SAWCore constants that are implemented as primitives
-       let primQualNames = map moduleIdentToQualName (Map.keys constMap)
+       let primQualNames = Map.keys constMap
        primIdxs <- io $ traverse (scResolveQualName sc) primQualNames
        let opaqueSet = Set.fromList (map nameIndex (catMaybes primIdxs) ++ idxs)
        sqt' <- io $ traverseSequentWithFocus (normalizeProp sc opaqueSet) (goalSequent goal)

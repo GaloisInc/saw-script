@@ -43,6 +43,7 @@ import SAWCore.Name
 import SAWCore.Panic (panic)
 import SAWCore.Prim (BitVector(..), signed, bv, bvNeg)
 import qualified SAWCore.Prim as Prim
+import SAWCore.QualName (QualName)
 import qualified SAWCore.Simulator as Sim
 import SAWCore.Simulator.Value
 import qualified SAWCore.Simulator.Prims as Prims
@@ -51,7 +52,7 @@ import SAWCore.SharedTerm
 ------------------------------------------------------------
 
 -- | Evaluator for shared terms.
-evalSharedTerm :: ModuleMap -> Map Ident CPrim -> Map VarIndex CValue -> Term -> CValue
+evalSharedTerm :: ModuleMap -> Map QualName CPrim -> Map VarIndex CValue -> Term -> CValue
 evalSharedTerm m addlPrims varVals t =
   runIdentity $ do
     cfg <-
@@ -359,7 +360,7 @@ prims =
 unsupportedConcretePrimitive :: String -> a
 unsupportedConcretePrimitive = Prim.unsupportedPrimitive "concrete"
 
-constMap :: Map Ident CPrim
+constMap :: Map QualName CPrim
 constMap =
   flip Map.union (Prims.constMap prims) $
   Map.fromList

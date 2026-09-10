@@ -36,7 +36,6 @@ import Control.Monad.Identity (Identity)
 import qualified Control.Monad.State as State
 import Data.Foldable (Foldable(..))
 import qualified Data.Set as Set
-import Data.Maybe (mapMaybe)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.IntMap (IntMap)
@@ -489,7 +488,7 @@ reduceRecursor r elim c_args argstruct = go elim c_args (map snd (ctorArgs argst
 {-# SPECIALIZE evalGlobal ::
   Show (Extra l) =>
   ModuleMap ->
-  Map Ident (PrimIn Id l) ->
+  Map QualName (PrimIn Id l) ->
   (VarName -> TValueIn Id l -> MValueIn Id l) ->
   (Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
   (Name -> Sort -> Maybe (PrimIn Id l)) ->
@@ -499,7 +498,7 @@ reduceRecursor r elim c_args argstruct = go elim c_args (map snd (ctorArgs argst
 {-# SPECIALIZE evalGlobal ::
   Show (Extra l) =>
   ModuleMap ->
-  Map Ident (PrimIn IO l) ->
+  Map QualName (PrimIn IO l) ->
   (VarName -> TValueIn IO l -> MValueIn IO l) ->
   (Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
   (Name -> Sort -> Maybe (PrimIn IO l)) ->
@@ -510,7 +509,7 @@ evalGlobal ::
   forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
   ModuleMap ->
   -- | Implementations of 'Primitive' terms, plus overrides for 'Constant' and 'CtorApp' terms
-  Map Ident (Prims.Prim l) ->
+  Map QualName (Prims.Prim l) ->
   -- | Implementations of free 'Variable' terms
   (VarName -> TValue l -> MValue l) ->
   -- | Overrides for Constant terms (e.g. uninterpreted functions)
@@ -528,7 +527,7 @@ evalGlobal modmap prims variable constant recursor primHandler lazymux =
 {-# SPECIALIZE evalGlobal' ::
   Show (Extra l) =>
   ModuleMap ->
-  Map Ident (PrimIn Id l) ->
+  Map QualName (PrimIn Id l) ->
   (Term -> VarName -> TValueIn Id l -> MValueIn Id l) ->
   (Name -> TValueIn Id l -> Maybe (MValueIn Id l)) ->
   (Name -> Sort -> Maybe (PrimIn Id l)) ->
@@ -538,7 +537,7 @@ evalGlobal modmap prims variable constant recursor primHandler lazymux =
 {-# SPECIALIZE evalGlobal' ::
   Show (Extra l) =>
   ModuleMap ->
-  Map Ident (PrimIn IO l) ->
+  Map QualName (PrimIn IO l) ->
   (Term -> VarName -> TValueIn IO l -> MValueIn IO l) ->
   (Name -> TValueIn IO l -> Maybe (MValueIn IO l)) ->
   (Name -> Sort -> Maybe (PrimIn IO l)) ->
@@ -551,7 +550,7 @@ evalGlobal' ::
   forall l. (VMonadLazy l, Show (Extra l)) =>
   ModuleMap ->
   -- | Implementations of 'Primitive' terms, plus overrides for 'Constant' and 'CtorApp' terms
-  Map Ident (Prims.Prim l) ->
+  Map QualName (Prims.Prim l) ->
   -- | Implementations of free 'Variable' terms
   (Term -> VarName -> TValue l -> MValue l) ->
   -- | Overrides for Constant terms (e.g. uninterpreted functions)
@@ -572,20 +571,13 @@ evalGlobal' modmap prims variable constant recursor primHandler lazymux =
       case constant nm tv of
         Just v -> Just v
         Nothing ->
-          case nameInfo nm of
-            ModuleIdentifier ident ->
-              evalPrim (primHandler nm) <$> Map.lookup ident prims
-            ImportedName{} -> Nothing
+          evalPrim (primHandler nm) <$> Map.lookup (nameQualName nm) prims
 
     primitive :: Name -> MValue l
     primitive nm =
-      case nameInfo nm of
-        ImportedName {} ->
-          panic "evalGlobal'" ["Unimplemented global: " <> toAbsoluteName (nameInfo nm)]
-        ModuleIdentifier ident ->
-          case Map.lookup ident prims of
-            Just v  -> evalPrim (primHandler nm) v
-            Nothing -> panic "evalGlobal'" ["Unimplemented global: " <> identText ident]
+      case Map.lookup (nameQualName nm) prims of
+        Just v  -> evalPrim (primHandler nm) v
+        Nothing -> panic "evalGlobal'" ["Unimplemented global: " <> toAbsoluteName (nameInfo nm)]
 
     recursor' :: Name -> Sort -> Maybe (MValue l)
     recursor' nm s = evalPrim (primHandler nm) <$> recursor nm s
@@ -593,10 +585,11 @@ evalGlobal' modmap prims variable constant recursor primHandler lazymux =
 -- | Check that all the primitives declared in the given module
 --   are implemented, and that terms with implementations are not
 --   overridden.
-checkPrimitives :: forall l. (VMonadLazy l, Show (Extra l))
-                => ModuleMap
-                -> Map Ident (Prims.Prim l)
-                -> EvalM l ()
+checkPrimitives ::
+  forall l. (VMonadLazy l, Show (Extra l)) =>
+  ModuleMap ->
+  Map QualName (Prims.Prim l) ->
+  EvalM l ()
 checkPrimitives modmap prims = do
    -- FIXME this is downgraded to a warning temporarily while we work out a
    -- solution to issue GaloisInc/saw-script#48
@@ -610,18 +603,15 @@ checkPrimitives modmap prims = do
         _overrideMsg = unwords $
             ("WARNING overridden definitions:" : (map show overridePrims))
 
-        primSet = Set.fromList $ mapMaybe defIdent $ allModulePrimitives modmap
-        defSet  = Set.fromList $ mapMaybe defIdent $ allModuleActualDefs modmap
+        primSet = Set.fromList $ map defQualName $ allModulePrimitives modmap
+        defSet  = Set.fromList $ map defQualName $ allModuleActualDefs modmap
         implementedPrims = Map.keysSet prims
 
         unimplementedPrims = Set.toList $ Set.difference primSet implementedPrims
         overridePrims = Set.toList $ Set.intersection defSet implementedPrims
 
-defIdent :: Def -> Maybe Ident
-defIdent d =
-  case nameInfo (defName d) of
-    ModuleIdentifier ident -> Just ident
-    ImportedName{} -> Nothing
+defQualName :: Def -> QualName
+defQualName d = toQualName (nameInfo (defName d))
 
 ----------------------------------------------------------------------
 -- The evaluation strategy for shared terms involves a preprocessing

@@ -74,8 +74,8 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
-import SAWCore.Name (Ident)
 import SAWCore.Panic (panic)
+import SAWCore.QualName (QualName)
 import SAWCore.Simulator.Value
 import SAWCore.Prim
 import qualified SAWCore.Prim as Prim
@@ -314,7 +314,7 @@ constMap ::
   forall l.
   (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
   BasePrims l ->
-  Map Ident (Prim l)
+  Map QualName (Prim l)
 constMap bp = Map.fromList
   -- Boolean
   [ ("Prelude.Bool"  , PrimValue (TValue VBoolType))

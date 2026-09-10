@@ -76,6 +76,7 @@ import Numeric.Natural (Natural)
 
 import SAWCore.Name (Name(..), VarName(..), toShortName, nameQualName)
 import qualified SAWCore.Prim as Prim
+import SAWCore.QualName (QualName)
 import qualified SAWCore.Recognizer as R
 import qualified SAWCore.Simulator as Sim
 import qualified SAWCore.Simulator.Prims as Prims
@@ -246,7 +247,7 @@ prims =
 unsupportedSBVPrimitive :: String -> a
 unsupportedSBVPrimitive = Prim.unsupportedPrimitive "SBV"
 
-constMap :: Map Ident SPrim
+constMap :: Map QualName SPrim
 constMap =
   Map.union (Prims.constMap prims) $
   Map.fromList
@@ -693,7 +694,7 @@ muxSbvExtra c x y =
 
 -- | Abstract constants with names in the list 'unints' are kept as
 -- uninterpreted constants; all others are unfolded.
-sbvSolveBasic :: SharedContext -> Map Ident SPrim -> Set VarIndex -> Term -> IO SValue
+sbvSolveBasic :: SharedContext -> Map QualName SPrim -> Set VarIndex -> Term -> IO SValue
 sbvSolveBasic sc addlPrims unintSet t = do
   m <- scGetModuleMap sc
 
@@ -777,7 +778,11 @@ mkUninterpreted k args nm =
                   args
   where nm' = "|" ++ nm ++ "|" -- enclose name to allow primes and other non-alphanum chars
 
-sbvSATQuery :: SharedContext -> Map Ident SPrim -> SATQuery -> IO ([Labeler], [VarName], Symbolic SBool)
+sbvSATQuery ::
+  SharedContext ->
+  Map QualName SPrim ->
+  SATQuery ->
+  IO ([Labeler], [VarName], Symbolic SBool)
 sbvSATQuery sc addlPrims query =
   do t <- liftIO (satQueryAsTerm sc query)
      let qvars = Map.toList (satVariables query)
@@ -991,13 +996,13 @@ argTypes sc t = do
        return (t1:ts, res)
     _ -> return ([], t')
 
-sbvCodeGen_definition
-  :: SharedContext
-  -> Map Ident SPrim
-  -> Set VarIndex
-  -> Term
-  -> (Natural -> Bool) -- ^ Allowed word sizes
-  -> IO (SBVCodeGen (), [FirstOrderType], FirstOrderType)
+sbvCodeGen_definition ::
+  SharedContext ->
+  Map QualName SPrim ->
+  Set VarIndex ->
+  Term ->
+  (Natural -> Bool) {- ^ Allowed word sizes -} ->
+  IO (SBVCodeGen (), [FirstOrderType], FirstOrderType)
 sbvCodeGen_definition sc addlPrims unintSet t checkSz = do
   ty <- scTypeOf sc t
   (argTs,resTy) <- argTypes sc ty
@@ -1077,13 +1082,12 @@ sbvSetOutput _checkSz _ft _v _i = do
    fail "sbvCode gen: type mismatch when setting output values"
 
 
-sbvCodeGen :: SharedContext
-           -> Map Ident SPrim
-           -> Set VarIndex
-           -> Maybe FilePath
-           -> String
-           -> Term
-           -> IO ()
+sbvCodeGen ::
+  SharedContext ->
+  Map QualName SPrim ->
+  Set VarIndex ->
+  Maybe FilePath ->
+  String -> Term -> IO ()
 sbvCodeGen sc addlPrims unintSet path fname t = do
   -- The SBV C code generator expects only these word sizes
   let checkSz n = n `elem` [8,16,32,64]

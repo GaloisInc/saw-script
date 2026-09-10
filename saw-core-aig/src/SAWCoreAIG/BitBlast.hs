@@ -29,6 +29,7 @@ import Numeric.Natural (Natural)
 import SAWCore.FiniteValue (FiniteType(..),FirstOrderType(..),toFiniteType)
 import SAWCore.Name (Name(..), VarName(..), nameQualName)
 import SAWCore.Module (ModuleMap)
+import SAWCore.QualName (QualName)
 import qualified SAWCore.Simulator as Sim
 import SAWCore.Simulator.Value
 import qualified SAWCore.Simulator.Prims as Prims
@@ -288,7 +289,7 @@ prims be =
 unsupportedAIGPrimitive :: String -> a
 unsupportedAIGPrimitive = Prim.unsupportedPrimitive "AIG"
 
-beConstMap :: AIG.IsAIG l g => g s -> Map Ident (BPrim (l s))
+beConstMap :: AIG.IsAIG l g => g s -> Map QualName (BPrim (l s))
 beConstMap be =
   Map.union (Prims.constMap (prims be)) $
   Map.fromList
@@ -483,7 +484,7 @@ newVars' be shape = ready <$> newVars be shape
 -- own bit engine internally, instead of receiving it from the caller,
 -- and pass it to the caller-provided continuation.
 
-type PrimMap l g = forall s. g s -> Map Ident (BPrim (l s))
+type PrimMap l g = forall s. g s -> Map QualName (BPrim (l s))
 
 bitBlastBasic :: AIG.IsAIG l g
               => g s
