@@ -816,7 +816,7 @@ span.spaces    { background: white }
 <span class="lineno">  797 </span><span class="spaces">                      </span><span class="istickedoff">TyCon _ (TupleCon _) _ -&gt; enclosed</span>
 <span class="lineno">  798 </span><span class="spaces">                      </span><span class="istickedoff">TyCon _ ArrayCon _ -&gt; enclosed</span>
 <span class="lineno">  799 </span><span class="spaces">                      </span><span class="istickedoff">TyRecord _ _ -&gt; <span class="nottickedoff">enclosed</span></span>
-<span class="lineno">  800 </span><span class="spaces">                      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">False</span></span>
+<span class="lineno">  800 </span><span class="spaces">                      </span><span class="istickedoff">_ -&gt; False</span>
 <span class="lineno">  801 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  802 </span><span class="spaces">              </span><span class="istickedoff">(_, _) -&gt; False</span>
 <span class="lineno">  803 </span><span class="spaces">    </span><span class="istickedoff">in</span>
@@ -1327,15 +1327,15 @@ span.spaces    { background: white }
 <span class="lineno"> 1308 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">-- we've used up expParams.</span></span>
 <span class="lineno"> 1309 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">let ty' = TyFunc prov'found noNames foundParamsR Map.empty foundRet</span></span>
 <span class="lineno"> 1310 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">pure (expRet, ty')</span></span>
-<span class="lineno"> 1311 </span><span class="spaces">                    </span><span class="istickedoff">else if <span class="tickonlyfalse">nFound &gt; nExp</span> then <span class="nottickedoff">do</span></span>
-<span class="lineno"> 1312 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">-- unfortunately we need two copies of this because</span></span>
-<span class="lineno"> 1313 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">-- left vs. right side is semantically significant :-(</span></span>
-<span class="lineno"> 1314 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">let expParamsL = take nFound expParams</span></span>
-<span class="lineno"> 1315 </span><span class="spaces">                            </span><span class="istickedoff"><span class="nottickedoff">expParamsR = drop nFound expParams</span></span>
-<span class="lineno"> 1316 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">recList expParamsL foundParams</span></span>
-<span class="lineno"> 1317 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">-- we've used up foundParams.</span></span>
-<span class="lineno"> 1318 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">let ty' = TyFunc prov'expect noNames expParamsR Map.empty expRet</span></span>
-<span class="lineno"> 1319 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">pure (ty', foundRet)</span></span>
+<span class="lineno"> 1311 </span><span class="spaces">                    </span><span class="istickedoff">else if nExp &gt; nFound then do</span>
+<span class="lineno"> 1312 </span><span class="spaces">                        </span><span class="istickedoff">-- unfortunately we need two copies of this because</span>
+<span class="lineno"> 1313 </span><span class="spaces">                        </span><span class="istickedoff">-- left vs. right side is semantically significant :-(</span>
+<span class="lineno"> 1314 </span><span class="spaces">                        </span><span class="istickedoff">let expParamsL = take nFound expParams</span>
+<span class="lineno"> 1315 </span><span class="spaces">                            </span><span class="istickedoff">expParamsR = drop nFound expParams</span>
+<span class="lineno"> 1316 </span><span class="spaces">                        </span><span class="istickedoff">recList expParamsL foundParams</span>
+<span class="lineno"> 1317 </span><span class="spaces">                        </span><span class="istickedoff">-- we've used up foundParams.</span>
+<span class="lineno"> 1318 </span><span class="spaces">                        </span><span class="istickedoff">let ty' = TyFunc prov'expect <span class="nottickedoff">noNames</span> expParamsR Map.empty expRet</span>
+<span class="lineno"> 1319 </span><span class="spaces">                        </span><span class="istickedoff">pure (ty', foundRet)</span>
 <span class="lineno"> 1320 </span><span class="spaces">                    </span><span class="istickedoff">else do</span>
 <span class="lineno"> 1321 </span><span class="spaces">                        </span><span class="istickedoff">recList expParams foundParams</span>
 <span class="lineno"> 1322 </span><span class="spaces">                        </span><span class="istickedoff">-- we've used up both expParams and foundParams.</span>
@@ -2003,21 +2003,21 @@ span.spaces    { background: white }
 <span class="lineno"> 1984 </span><span class="spaces">                  </span><span class="istickedoff">-- since it's implied by the whole thing and not just</span>
 <span class="lineno"> 1985 </span><span class="spaces">                  </span><span class="istickedoff">-- the remaining arguments.</span>
 <span class="lineno"> 1986 </span><span class="spaces">                  </span><span class="istickedoff">--</span>
-<span class="lineno"> 1987 </span><span class="spaces">                  </span><span class="istickedoff">let <span class="nottickedoff">argspos =</span></span>
-<span class="lineno"> 1988 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">let ps1 = map (\(arg, _ty) -&gt; Pos.getPos arg) arginfo</span></span>
-<span class="lineno"> 1989 </span><span class="spaces">                            </span><span class="istickedoff"><span class="nottickedoff">ps2 =</span></span>
-<span class="lineno"> 1990 </span><span class="spaces">                              </span><span class="istickedoff"><span class="nottickedoff">let once (_name, (namepos, arg, _ty)) =</span></span>
+<span class="lineno"> 1987 </span><span class="spaces">                  </span><span class="istickedoff">let argspos =</span>
+<span class="lineno"> 1988 </span><span class="spaces">                        </span><span class="istickedoff">let ps1 = map (\(arg, _ty) -&gt; Pos.getPos arg) arginfo</span>
+<span class="lineno"> 1989 </span><span class="spaces">                            </span><span class="istickedoff">ps2 =</span>
+<span class="lineno"> 1990 </span><span class="spaces">                              </span><span class="istickedoff">let <span class="nottickedoff">once (_name, (namepos, arg, _ty)) =</span></span>
 <span class="lineno"> 1991 </span><span class="spaces">                                    </span><span class="istickedoff"><span class="nottickedoff">Pos.spanPos namepos (Pos.getPos arg)</span></span>
-<span class="lineno"> 1992 </span><span class="spaces">                              </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
-<span class="lineno"> 1993 </span><span class="spaces">                              </span><span class="istickedoff"><span class="nottickedoff">map once (Map.toList namedArginfo)</span></span>
-<span class="lineno"> 1994 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
-<span class="lineno"> 1995 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">Pos.maxSpan (ps1 ++ ps2)</span></span>
+<span class="lineno"> 1992 </span><span class="spaces">                              </span><span class="istickedoff">in</span>
+<span class="lineno"> 1993 </span><span class="spaces">                              </span><span class="istickedoff">map <span class="nottickedoff">once</span> (Map.toList namedArginfo)</span>
+<span class="lineno"> 1994 </span><span class="spaces">                        </span><span class="istickedoff">in</span>
+<span class="lineno"> 1995 </span><span class="spaces">                        </span><span class="istickedoff">Pos.maxSpan (ps1 ++ ps2)</span>
 <span class="lineno"> 1996 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1997 </span><span class="spaces">                  </span><span class="istickedoff">let (_args, argtys) = unzip arginfo</span>
 <span class="lineno"> 1998 </span><span class="spaces">                      </span><span class="istickedoff">namedArgtys = Map.map (\(_namepos, _arg, argty) -&gt; argty) namedArginfo</span>
-<span class="lineno"> 1999 </span><span class="spaces">                  </span><span class="istickedoff">ret &lt;- getFreshTyVar <span class="nottickedoff">pos</span></span>
-<span class="lineno"> 2000 </span><span class="spaces">                  </span><span class="istickedoff">let <span class="nottickedoff">prov = TypeFromElement argspos TyctxArgList</span></span>
-<span class="lineno"> 2001 </span><span class="spaces">                      </span><span class="istickedoff">ty' = TyFunc <span class="nottickedoff">prov</span> <span class="nottickedoff">noNames</span> argtys namedArgtys ret</span>
+<span class="lineno"> 1999 </span><span class="spaces">                  </span><span class="istickedoff">ret &lt;- getFreshTyVar pos</span>
+<span class="lineno"> 2000 </span><span class="spaces">                  </span><span class="istickedoff">let prov = TypeFromElement argspos TyctxArgList</span>
+<span class="lineno"> 2001 </span><span class="spaces">                      </span><span class="istickedoff">ty' = TyFunc prov <span class="nottickedoff">noNames</span> argtys namedArgtys ret</span>
 <span class="lineno"> 2002 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2003 </span><span class="spaces">                  </span><span class="istickedoff">-- Now unify the tyvar we got with the function</span>
 <span class="lineno"> 2004 </span><span class="spaces">                  </span><span class="istickedoff">-- type.  Put the new function type on the expected</span>
