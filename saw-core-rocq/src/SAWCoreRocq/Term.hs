@@ -631,7 +631,7 @@ translateTermUnshared t =
       let (f, args) = asApplyAll t
       in
       case f of
-      (asGlobalDef -> Just i) ->
+      (asConstant -> Just (nameInfo -> ModuleIdentifier i)) ->
         case i of
         "Prelude.natToInt" ->
           case args of

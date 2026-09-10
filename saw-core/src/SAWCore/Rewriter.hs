@@ -88,7 +88,6 @@ import qualified SAWCore.Recognizer as R
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import qualified SAWCore.TermNet as Net
-import SAWCore.Prelude.Constants
 
 data RewriteRule a
   = RewriteRule
@@ -177,8 +176,8 @@ firstOrderMatch ctxt pat term = match pat term IntMap.empty
 asConstantNat :: Term -> Maybe Natural
 asConstantNat t =
   case t of
-    (R.asGlobalApply preludeZeroIdent -> Just []) -> Just 0
-    (R.asGlobalApply preludeSuccIdent -> Just [x]) -> (+ 1) <$> asConstantNat x
+    (R.asGlobalApply "Prelude.Zero" -> Just []) -> Just 0
+    (R.asGlobalApply "Prelude.Succ" -> Just [x]) -> (+ 1) <$> asConstantNat x
     _ ->
       do let (f, xs) = R.asApplyAll t
          i <- R.asGlobalDef f
@@ -328,42 +327,12 @@ scMatch sc ctxt pat term =
 ----------------------------------------------------------------------
 -- Building rewrite rules
 
-eqIdent :: Ident
-eqIdent = mkIdent (mkModuleName ["Prelude"]) "Eq"
-
-ecEqIdent :: Ident
-ecEqIdent = mkIdent (mkModuleName ["Cryptol"]) "ecEq"
-
-bvEqIdent :: Ident
-bvEqIdent = mkIdent (mkModuleName ["Prelude"]) "bvEq"
-
-boolEqIdent :: Ident
-boolEqIdent = mkIdent (mkModuleName ["Prelude"]) "boolEq"
-
-vecEqIdent :: Ident
-vecEqIdent = mkIdent (mkModuleName ["Prelude"]) "vecEq"
-
-pairEqIdent :: Ident
-pairEqIdent = mkIdent (mkModuleName ["Prelude"]) "pairEq"
-
-arrayEqIdent :: Ident
-arrayEqIdent = mkIdent (mkModuleName ["Prelude"]) "arrayEq"
-
-equalNatIdent :: Ident
-equalNatIdent = mkIdent (mkModuleName ["Prelude"]) "equalNat"
-
-intEqIdent :: Ident
-intEqIdent = mkIdent (mkModuleName ["Prelude"]) "intEq"
-
-intModEqIdent :: Ident
-intModEqIdent = mkIdent (mkModuleName ["Prelude"]) "intModEq"
-
 -- | Converts a universally quantified equality proposition from a
 -- Term representation to a RewriteRule.
 ruleOfTerm :: Term -> Maybe a -> RewriteRule a
 ruleOfTerm t ann =
   do let (vars, body) = R.asPiList t
-     case R.asGlobalApply eqIdent body of
+     case R.asGlobalApply "Prelude.Eq" body of
        Just [_, x, y] -> mkRewriteRule vars x y False False ann
        _ -> panic "ruleOfTerm" ["Illegal argument"]
 
@@ -410,15 +379,15 @@ ruleOfProp sc term ann =
          pure $ (\r -> r { ctxt = (nm, tp) : ctxt r}) <$> rule
     Nothing ->
       case term of
-        (R.asGlobalApply ecEqIdent -> Just [_, _, x, y]) -> eqRule x y
-        (R.asGlobalApply bvEqIdent -> Just [_, x, y]) -> eqRule x y
-        (R.asGlobalApply equalNatIdent -> Just [x, y]) -> eqRule x y
-        (R.asGlobalApply boolEqIdent -> Just [x, y]) -> eqRule x y
-        (R.asGlobalApply vecEqIdent -> Just [_, _, _, x, y]) -> eqRule x y
-        (R.asGlobalApply pairEqIdent -> Just [_, _, _, _, x, y]) -> eqRule x y
-        (R.asGlobalApply arrayEqIdent -> Just [_, _, x, y]) -> eqRule x y
-        (R.asGlobalApply intEqIdent -> Just [x, y]) -> eqRule x y
-        (R.asGlobalApply intModEqIdent -> Just [_, x, y]) -> eqRule x y
+        (R.asGlobalApply "Cryptol.ecEq" -> Just [_, _, x, y]) -> eqRule x y
+        (R.asGlobalApply "Prelude.bvEq" -> Just [_, x, y]) -> eqRule x y
+        (R.asGlobalApply "Prelude.equalNat" -> Just [x, y]) -> eqRule x y
+        (R.asGlobalApply "Prelude.boolEq" -> Just [x, y]) -> eqRule x y
+        (R.asGlobalApply "Prelude.vecEq" -> Just [_, _, _, x, y]) -> eqRule x y
+        (R.asGlobalApply "Prelude.pairEq" -> Just [_, _, _, _, x, y]) -> eqRule x y
+        (R.asGlobalApply "Prelude.arrayEq" -> Just [_, _, x, y]) -> eqRule x y
+        (R.asGlobalApply "Prelude.intEq" -> Just [x, y]) -> eqRule x y
+        (R.asGlobalApply "Prelude.intModEq" -> Just [_, x, y]) -> eqRule x y
         (R.asConstant -> Just nm) ->
           do mres <- lookupVarIndexInMap (nameIndex nm) <$> scGetModuleMap sc
              case mres of

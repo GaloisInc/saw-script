@@ -89,7 +89,7 @@ import Data.Text (Text)
 import Numeric.Natural (Natural)
 
 import SAWCore.Name
-import SAWCore.Prelude.Constants
+import SAWCore.QualName (QualName)
 import SAWCore.Term.Functor
 import SAWCore.Term.Raw
 
@@ -138,19 +138,13 @@ asLabel t = case unwrapTermF t of
   Label tg t1 -> return (tg, t1)
   _ -> Nothing
 
-asModuleIdentifier :: Recognizer Name Ident
-asModuleIdentifier nm =
-  case nameInfo nm of
-    ModuleIdentifier ident -> Just ident
-    _ -> Nothing
-
-asGlobalDef :: Recognizer Term Ident
+asGlobalDef :: Recognizer Term QualName
 asGlobalDef (unlabel -> t) =
   case unwrapTermF t of
-    Constant nm -> asModuleIdentifier nm
+    Constant nm -> Just (nameQualName nm)
     _ -> Nothing
 
-isGlobalDef :: Ident -> Recognizer Term ()
+isGlobalDef :: QualName -> Recognizer Term ()
 isGlobalDef i t = do
   o <- asGlobalDef t
   if i == o then Just () else Nothing
@@ -183,7 +177,7 @@ asApplyAll = go []
             Nothing -> (t, xs)
             Just (t', x) -> go (x : xs) t'
 
-asGlobalApply :: Ident -> Recognizer Term [Term]
+asGlobalApply :: QualName -> Recognizer Term [Term]
 asGlobalApply i t =
   do let (f, xs) = asApplyAll t
      isGlobalDef i f
@@ -321,7 +315,7 @@ asPos (asGlobalApply "Prelude.Bit1" -> Just [asPos -> Just n]) = pure (2*n+1)
 asPos _ = Nothing
 
 asNat :: Recognizer Term Natural
-asNat (asGlobalApply preludeZeroIdent -> Just []) = pure 0
+asNat (asGlobalApply "Prelude.Zero" -> Just []) = pure 0
 asNat (asGlobalApply "Prelude.NatPos" -> Just [asPos -> Just n]) = pure n
 asNat _ = Nothing
 
@@ -450,9 +444,7 @@ asBoolType :: Recognizer Term ()
 asBoolType = isGlobalDef "Prelude.Bool"
 
 asNatType :: Recognizer Term ()
-asNatType (asConstant -> Just o)
-  | nameInfo o == ModuleIdentifier preludeNatIdent = pure ()
-asNatType _ = Nothing
+asNatType = isGlobalDef "Prelude.Nat"
 
 asIntegerType :: Recognizer Term ()
 asIntegerType = isGlobalDef "Prelude.Integer"

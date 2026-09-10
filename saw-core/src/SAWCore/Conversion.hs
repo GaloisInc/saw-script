@@ -91,6 +91,8 @@ import SAWCore.Name
 import SAWCore.OpenTerm (OpenTerm)
 import qualified SAWCore.OpenTerm as OT
 import qualified SAWCore.Prim as Prim
+import SAWCore.QualName (QualName)
+import qualified SAWCore.QualName as QN
 import SAWCore.Recognizer ((:*:)(..))
 import SAWCore.Prim
 import qualified SAWCore.Recognizer as R
@@ -212,8 +214,8 @@ resolveArgs (Matcher p m) (defaultArgsMatcher -> args@(ArgsMatcher pl _)) =
 -- Term matchers
 
 -- | Match a global definition.
-asGlobalDef :: Ident -> Matcher ()
-asGlobalDef ident = Matcher (Net.Atom (identBaseName ident)) f
+asGlobalDef :: QualName -> Matcher ()
+asGlobalDef ident = Matcher (Net.Atom (QN.baseName ident)) f
   where f (R.asGlobalDef -> Just o) | ident == o = return ()
         f _ = Nothing
 
@@ -269,8 +271,8 @@ asRecordSelector m = asVar $ \t -> _1 (runMatcher m) =<< R.asRecordSelector t
 --TODO: RecordSelector
 
 -- | Match a constructor
-asCtor :: ArgsMatchable v a => Ident -> v a -> Matcher a
-asCtor o = resolveArgs $ Matcher (Net.Atom (identBaseName o)) match
+asCtor :: ArgsMatchable v a => QualName -> v a -> Matcher a
+asCtor o = resolveArgs $ Matcher (Net.Atom (QN.baseName o)) match
   where match t = R.asGlobalApply o t
 
 -- | Match any sort.
@@ -450,8 +452,8 @@ instance Conversionable (Prim.Vec Term Term) where
 instance (Buildable a, Buildable b) => Conversionable (a, b) where
     convOfMatcher = defaultConvOfMatcher
 
-globalConv :: (Conversionable a) => Ident -> a -> Conversion
-globalConv ident f = convOfMatcher (thenMatcher (asGlobalDef ident) (const (Just f)))
+globalConv :: (Conversionable a) => QualName -> a -> Conversion
+globalConv qn f = convOfMatcher (thenMatcher (asGlobalDef qn) (const (Just f)))
 
 ----------------------------------------------------------------------
 -- Conversions for Prelude operations
