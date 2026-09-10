@@ -52,20 +52,23 @@ import SAWScript.Include as Inc
 import SAWScript.Typechecker (checkDecl, checkSchema, checkSchemaPattern)
 
 
+------------------------------------------------------------
+-- Messages and results
+
 -- | Type shorthand for an operation that can return warnings and/or
 --   errors. On error it returns Left and a list of messages, at least
 --   one of which is an error and therefore fatal. On success, it
 --   returns a (possibly empty) list of messages, which are all
 --   warnings and not fatal, and a result of type a.
 --
---   The position is a Maybe because errors from the parser come back
---   with a position already stuffed into the message text, and we would
---   like to not print another vacuous one along with it.
---
 --   The text is a Doc because we've improved the parser so it sometimes
---   prints tabular messages.
+--   prints tabular messages. The typechecker often does as well.
 --
 type WithMsgs a = Either [(Pos, PPS.Doc)] ([(Pos, PPS.Doc)], a)
+
+
+------------------------------------------------------------
+-- Support logic
 
 -- | Type shorthand for an include path.
 --
@@ -108,6 +111,10 @@ wrapDir dir m = do
     stmts <- m
     let pos = PosInternal "pushd/popd derived from include"
     pure $ [StmtPushdir pos dir] ++ stmts ++ [StmtPopdir pos]
+
+
+------------------------------------------------------------
+-- Common load logic
 
 -- | Read some SAWScript text, using the selected parser entry point.
 --
@@ -252,6 +259,10 @@ resolveIncludes ::
     Int -> SeenSet -> IncludePath -> Options -> PPS.Opts -> Inc.Processor a -> a -> IO a
 resolveIncludes depth seen incpath opts ppopts process tree =
     process (includeFile depth seen incpath opts ppopts) tree
+
+
+------------------------------------------------------------
+-- Entry points for loading
 
 -- | Read a type schema from a string. This is used to digest the type
 --   signatures for builtins, and the expansions for builtin typedefs.
