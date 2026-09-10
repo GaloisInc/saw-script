@@ -503,17 +503,16 @@ processTypeCheck (msgs, output) =
   liftTopLevel $ do
     ppopts <- getPPOpts
     let inspect msg (msgs', failed) = case msg of
-          Ty.Error p m -> ((Error, p, m) : msgs', True)
-          Ty.Warning p m -> ((Warn, p, m) : msgs', failed)
-          Ty.Notice p m -> ((Info, p, m) : msgs', failed)
+          Ty.Error p m -> ((Error, p, "Error: ", m) : msgs', True)
+          Ty.Warning p m -> ((Warn, p, "Warning: ", m) : msgs', failed)
+          Ty.Notice p m -> ((Info, p, "Note: ", m) : msgs', failed)
+          Ty.Comment p m -> ((Info, p, "", m) : msgs', failed)
     let (msgs', failed) = foldr inspect ([], False) msgs
 
-    let issue (pri, pos, msg) = do
+    let issue (pri, pos, desc, msg) = do
             -- XXX the print functions should be what knows how to show positions...
             let pos' = prettyPosition pos
-                msg' = case pri of
-                   Warn -> pos' <> ": Warning:" <+> msg
-                   _ -> pos' <> ":" <+> msg
+                msg' = pos' <> ":" <+> desc <> msg
             printOutLnTop pri $ PPS.render ppopts msg'
     mapM_ issue msgs'
 

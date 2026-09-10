@@ -226,11 +226,12 @@ panicOnTyMsgs :: Text -> TyResult a -> a
 panicOnTyMsgs whoAmI (msgs, result) =
     let pp msg =
           let (pos, desc, msg') = case msg of
-                Ty.Error p doc -> (p, "Error:", doc)
-                Ty.Warning p doc -> (p, "Warning:", doc)
-                Ty.Notice p doc -> (p, "Note:", doc)
+                Ty.Error p doc -> (p, "Error: ", doc)
+                Ty.Warning p doc -> (p, "Warning: ", doc)
+                Ty.Notice p doc -> (p, "Note: ", doc)
+                Ty.Comment p doc -> (p, "", doc)
           in
-          let msg'' = PosSupport.prettyPosition pos <> ":" <+> desc <+> msg' in
+          let msg'' = PosSupport.prettyPosition pos <> ":" <+> desc <> msg' in
           PPS.renderText PPS.defaultOpts msg''  -- startup time, use default opts
     in
     case msgs of
@@ -262,6 +263,7 @@ dispatchTyMsgs (msgs, result) = do
           Ty.Error pos msg' -> Cons.errDP' pos msg'
           Ty.Warning pos msg' -> Cons.warnP' pos msg'
           Ty.Notice pos msg' -> Cons.noteP' pos msg'
+          Ty.Comment pos msg' -> Cons.commentP' pos msg'
     mapM_ dispatch msgs
     -- This crashes out if the above issued any errors
     Cons.checkFail

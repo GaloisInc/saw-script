@@ -319,12 +319,7 @@ instance AppSubst NamedType where
 -- | We can generate errors, warnings, or notices. This type allows
 --   encoding them in a single list of messages, so as to preserve the
 --   order.
-data Message = Error Pos PPS.Doc | Warning Pos PPS.Doc | Notice Pos PPS.Doc
-
--- Notice isn't used yet. You can't mark it intentionally unused by
--- calling it _Notice as that's not syntactically valid...
-_unused :: Message
-_unused = Notice Pos.Unknown "foo"
+data Message = Error Pos PPS.Doc | Warning Pos PPS.Doc | Notice Pos PPS.Doc | Comment Pos PPS.Doc
 
 
 ------------------------------------------------------------
@@ -480,24 +475,17 @@ getFreshTyVar pos = getProvenancedTyVar $ TypeFresh pos
 getErrorTyVar :: Pos -> TI Type
 getErrorTyVar pos = getProvenancedTyVar $ TypeFailed pos
 
--- | Add an error message.
-recordError :: Pos -> PPS.Doc -> TI ()
-recordError pos err = do
-    modify $ \rw -> rw { tiMessages = Error pos err : tiMessages rw }
+-- | Add (any) message.
+recordMessage :: Message -> TI ()
+recordMessage msg =
+    modify $ \rw -> rw { tiMessages = msg : tiMessages rw }
 
--- | Add an error message. Variant meant for use with prettyTypeDetails.
-recordError' :: (Pos, PPS.Doc) -> TI ()
-recordError' (pos, err) = recordError pos err
-
--- | Add a warning message.
-recordWarning :: Pos -> PPS.Doc -> TI ()
-recordWarning pos msg = do
-    modify $ \rw -> rw { tiMessages = Warning pos msg : tiMessages rw }
-
--- | Add a notice.
-_recordNotice :: Pos -> PPS.Doc -> TI ()
-_recordNotice pos msg = do
-    modify $ \rw -> rw { tiMessages = Notice pos msg : tiMessages rw }
+-- | Add an error message, warning, or comment.
+--   (we could also have a @recordNotice@ but there's no use of it)
+recordError, recordWarning, recordComment :: Pos -> PPS.Doc -> TI ()
+recordError pos msg = recordMessage $ Error pos msg
+recordWarning pos msg = recordMessage $ Warning pos msg
+recordComment pos msg = recordMessage $ Comment pos msg
 
 
 ------------------------------------------------------------
@@ -812,7 +800,7 @@ prettyTypeProvenance prov = case prov of
 --   Set @inhibitSubs@ to `True` to print only the top layer and
 --   drop the rest.
 --
-prettyTypeDetails :: Bool -> Text -> Type -> [(Pos, PPS.Doc)]
+prettyTypeDetails :: Bool -> Text -> Type -> [Message]
 prettyTypeDetails inhibitSubs desc0 ty0 =
 
     -- | Check whether the type associated with @subprov@ is logically
@@ -1075,13 +1063,13 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
     --   So we need to do something else to organize the output.
     let printone (desc, str, prov) =
           let (pos, prov', extra) = prettyTypeProvenance prov
-              msg = "Note: The " <> PP.pretty desc <+> PP.pretty str <+> prov'
+              msg = "The " <> PP.pretty desc <+> PP.pretty str <+> prov'
               extra' = case extra of
                   Nothing -> []
                   Just (pos2, prov2') ->
-                      [(pos2, "Note:" <+> prov2')]
+                      [(Notice pos2 prov2')]
           in
-          [(pos, msg)] ++ extra'
+          [(Notice pos msg)] ++ extra'
     in
 
     let msg0 = printone (desc0 <> " type", str0, prov0)
@@ -1209,7 +1197,7 @@ unify exp0 pos found0 = visit [] exp0 found0
               let body = PP.vsep $ more ++ [
                       prettyEnclosing ppopts ((expect, found) : encs')
                    ]
-              recordError pos $ "Error:" <+> msg <> PP.line <> PP.indent 4 body
+              recordError pos $ msg <> PP.line <> PP.indent 4 body
 
               let expects' = prettyTypeDetails inhibitSubs "expected" expect
                   founds' = prettyTypeDetails inhibitSubs "found" found
@@ -1219,10 +1207,15 @@ unify exp0 pos found0 = visit [] exp0 found0
               -- should have a less hacky way to do this.
               let msgs' = case reverse msgs of
                     [] -> []  -- not actually reachable
-                    (p, last_) : rest ->
-                        let last' = last_ <> PP.hardline <> "" in
-                        reverse ((p, last') : rest)
-              mapM_ recordError' msgs'
+                    lastmsg : rest ->
+                        let lastmsg' = case lastmsg of
+                              Error p d -> Error p (d <> PP.hardline <> "")
+                              Warning p d -> Warning p (d <> PP.hardline <> "")
+                              Notice p d -> Notice p (d <> PP.hardline <> "")
+                              Comment p d -> Comment p (d <> PP.hardline <> "")
+                        in
+                        reverse (lastmsg' : rest)
+              mapM_ recordMessage msgs'
 
         -- | Normal case of reject: print all the type provenance
         let reject = rejectCommon False
@@ -1820,8 +1813,8 @@ inferExpr expr = case expr of
                   let how = if lc == HideDeprecated then "deprecated"
                             else "experimental"
                       cmd = "`enable_" <> how <> "`."
-                  recordError pos $ "This command is available only" <+>
-                                    "after running" <+> cmd
+                  recordComment pos $ "This command is available only" <+>
+                                      "after running" <+> cmd
 
                   t' <- getErrorTyVar pos
                   return (Var pos x, t')
@@ -2116,9 +2109,9 @@ inferExpr expr = case expr of
                       recordError (Pos.getPos f) $ "This expression is not" <+>
                                                    "a function (type is" <+>
                                                    ty' <> ")"
-                      recordError pos $ "but is applied here to" <+>
-                                        nargs' <> "."
-                      mapM_ recordError' $ prettyTypeDetails False "expression" ty
+                      recordComment pos $ "but is applied here to" <+>
+                                          nargs' <> "."
+                      mapM_ recordMessage $ prettyTypeDetails False "expression" ty
                   else do
                       -- We already absorbed some arguments so we have
                       -- too many arguments rather than a non-function.
@@ -2176,11 +2169,11 @@ inferExpr expr = case expr of
                       -- to complain.
                       recordError argpos $ "Too many arguments to function" <+>
                                            fName' <> "of type" <+> origTy'
-                      mapM_ recordError' $ prettyTypeDetails True "function" origTy1
+                      mapM_ recordMessage $ prettyTypeDetails True "function" origTy1
                   let trailing = Pos.trailingPos argpos
                       leading = Pos.leadingPos pos
                   when (Pos.differentLines trailing leading) $
-                      recordError argpos "Did you forget a semicolon?"
+                      recordComment argpos "Did you forget a semicolon?"
                   -- Return a fresh tyvar as an error placeholder.
                   getErrorTyVar pos
 
@@ -2327,7 +2320,7 @@ inferPattern rebindable pat = do
                         -- different warning for locals that shadow
                         -- variables from outer scopes.
                         recordWarning xpos $ "Redeclaration of" <+> PP.pretty x
-                        recordWarning prevpos $ "Previous declaration was here"
+                        recordComment prevpos $ "Previous declaration was here"
             return (t, PVar allpos xpos x (Just t))
         PTuple pos ps -> do
             (ts, ps') <- unzip <$> mapM (inferPattern rebindable) ps
@@ -2478,10 +2471,10 @@ inferStmt atSyntacticTopLevel blockprov ctx s = do
                   recordError spos $ "Monadic bind with the wrong monad;" <+>
                                      "found" <+> pctx' <+>
                                      "but expected" <+> pctx
-                  recordError spos $ "Historically this created the action" <+>
-                                     "without executing it; if you meant to" <+>
-                                     "do that, prefix the" <+>
-                                     "expression with return"
+                  recordComment spos $ "Historically this created the action" <+>
+                                       "without executing it; if you meant to" <+>
+                                       "do that, prefix the" <+>
+                                       "expression with return"
 
                   -- The historic behavior is that the pattern gets
                   -- bound to a value of type m t instead of type t.
@@ -2531,7 +2524,7 @@ inferStmt atSyntacticTopLevel blockprov ctx s = do
         StmtLet spos rebindable dg -> do
             when (rebindable == RebindableVar && not atSyntacticTopLevel) $ do
                 recordError spos "Invalid use of 'rebindable'"
-                recordError spos "It is only allowed at the syntactic top level"
+                recordComment spos "It is only allowed at the syntactic top level"
             dg' <- inferDeclGroup rebindable dg
             let s' = StmtLet spos rebindable dg'
             addDeclGroup rebindable dg'
@@ -3054,8 +3047,8 @@ checkType kind ty = case ty of
         else do
             let x' = PP.dquotes x
             recordError pos $ "Inaccessible type:" <+> x'
-            recordError pos $ "This type is available only after" <+>
-                              "running `enable_deprecated`."
+            recordComment pos $ "This type is available only after" <+>
+                                "running `enable_deprecated`."
             getErrorTyVar pos
 
     TyVar prov x -> do
@@ -3111,8 +3104,8 @@ checkType kind ty = case ty of
                   let how = if lc == HideDeprecated then "deprecated"
                             else "experimental"
                       cmd = "`enable_" <> how <> "`"
-                  recordError pos $ "This type is available only after" <+>
-                                    "running" <+> cmd <> "."
+                  recordComment pos $ "This type is available only after" <+>
+                                      "running" <+> cmd <> "."
                   getErrorTyVar pos
 
     TyUnifyVar _prov _ix ->

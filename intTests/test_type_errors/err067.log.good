@@ -1,5 +1,5 @@
 Loading file "err067.saw"
-err067.saw:7:1-7:2: Too many arguments to function "f" of type Int -> Int -> TopLevel ()
+err067.saw:7:1-7:2: Error: Too many arguments to function "f" of type Int -> Int -> TopLevel ()
 err067.saw:3:7-3:10: Note: The function type Int -> Int -> TopLevel () arises from this parameter list...
 err067.saw:3:13-3:25: Note: ...and this function body
 err067.saw:7:1-7:2: Did you forget a semicolon?
