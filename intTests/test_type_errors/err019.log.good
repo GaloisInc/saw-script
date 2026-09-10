@@ -1,11 +1,9 @@
 Loading file "err019.saw"
-Type errors:
-  err019.saw:5:11-5:12: Error: Type mismatch.
+err019.saw:5:11-5:12: Error: Type mismatch.
     Expected: (Int, Int, Int, Int)
     Found:    (Int, Int, Int)
 
-  err019.saw:4:12-4:32: Note: The expected type (Int, Int, Int, Int) arises from this explicit type name
-  err019.saw:3:9-3:18: Note: The found type (Int, Int, Int) arises from the form of this expression
-
+err019.saw:4:12-4:32: Note: The expected type (Int, Int, Int, Int) arises from this explicit type name
+err019.saw:3:9-3:18: Note: The found type (Int, Int, Int) arises from the form of this expression
 
 FAILED

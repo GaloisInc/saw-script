@@ -502,41 +502,22 @@ processTypeCheck :: InterpreterMonad m => ([Ty.Message], a) -> m a
 processTypeCheck (msgs, output) =
   liftTopLevel $ do
     ppopts <- getPPOpts
-    let inspect msg (msgs', errCount) = case msg of
-          Ty.Error p m -> ((Error, p, m) : msgs', errCount + 1)
-          Ty.Warning p m -> ((Warn, p, m) : msgs', errCount)
-          Ty.Notice p m -> ((Info, p, m) : msgs', errCount)
-    let (msgs', errCount) = foldr inspect ([], 0 :: Int) msgs
+    let inspect msg (msgs', failed) = case msg of
+          Ty.Error p m -> ((Error, p, m) : msgs', True)
+          Ty.Warning p m -> ((Warn, p, m) : msgs', failed)
+          Ty.Notice p m -> ((Info, p, m) : msgs', failed)
+    let (msgs', failed) = foldr inspect ([], False) msgs
 
-    -- XXX this is horrible but I want the output to be unchanged for now.
-
-    let issue :: PPS.Doc -> (Verbosity, SS.Pos, PPS.Doc) -> TopLevel ()
-        issue indent (pri, pos, msg) = do
+    let issue (pri, pos, msg) = do
             -- XXX the print functions should be what knows how to show positions...
             let pos' = prettyPosition pos
                 msg' = case pri of
-                   Warn -> indent <> pos' <> ": Warning:" <+> msg
-                   _ -> indent <> pos' <> ":" <+> msg
+                   Warn -> pos' <> ": Warning:" <+> msg
+                   _ -> pos' <> ":" <+> msg
             printOutLnTop pri $ PPS.render ppopts msg'
+    mapM_ issue msgs'
 
-    -- Print all the warnings (and notices) first.
-    let issueWarning (pri, pos, msg) = case pri of
-          Error -> pure ()
-          _ -> issue "" (pri, pos, msg)
-    mapM_ issueWarning msgs'
-
-    -- Now print all the errors. If there's one, just print it. If there's
-    -- more than one, print first and indent everything with two spaces.
-    let issueError indent (pri, pos, msg) = case pri of
-          Error -> issue indent (pri, pos, msg)
-          _ -> pure ()
-    when (errCount > 0) $ do
-        if errCount > 1 then do
-            printOutLnTop Error "Type errors:"
-            mapM_ (issueError "  ") msgs'
-            printOutLnTop Error ""
-        else
-            mapM_ (issueError "") msgs'
+    when failed $
         liftIO $ X.throwIO $ Fatal False
     pure output
 

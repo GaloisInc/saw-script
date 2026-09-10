@@ -1,11 +1,9 @@
 Loading file "err017.saw"
-Type errors:
-  err017.saw:11:11-11:12: Error: Type mismatch.
+err017.saw:11:11-11:12: Error: Type mismatch.
     Expected: { a : Int, b : Int }
     Found:    Int
 
-  err017.saw:4:13-7:2: Note: The expected type { a : Int, b : Int } arises from this explicit type name
-  err017.saw:11:11-11:12: Note: The found type Int arises from the form of this constant
-
+err017.saw:4:13-7:2: Note: The expected type { a : Int, b : Int } arises from this explicit type name
+err017.saw:11:11-11:12: Note: The found type Int arises from the form of this constant
 
 FAILED

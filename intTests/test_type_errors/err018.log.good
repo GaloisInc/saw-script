@@ -1,6 +1,5 @@
 Loading file "err018.saw"
-Type errors:
-  err018.saw:26:11-26:12: Error: Type mismatch.
+err018.saw:26:11-26:12: Error: Type mismatch.
     Expected: String
     Found:    Int
 
@@ -17,10 +16,10 @@ Type errors:
           turquoise : Int
        }
 
-  err018.saw:16:14-16:20: Note: The expected type String arises from this explicit type name
-  err018.saw:23:25-23:26: Note: The found type Int arises from the form of this constant
+err018.saw:16:14-16:20: Note: The expected type String arises from this explicit type name
+err018.saw:23:25-23:26: Note: The found type Int arises from the form of this constant
 
-  err018.saw:26:11-26:12: Error: Type mismatch.
+err018.saw:26:11-26:12: Error: Type mismatch.
     Expected: String
     Found:    Int
 
@@ -37,10 +36,10 @@ Type errors:
           turquoise : Int
        }
 
-  err018.saw:17:15-17:21: Note: The expected type String arises from this explicit type name
-  err018.saw:23:38-23:39: Note: The found type Int arises from the form of this constant
+err018.saw:17:15-17:21: Note: The expected type String arises from this explicit type name
+err018.saw:23:38-23:39: Note: The found type Int arises from the form of this constant
 
-  err018.saw:26:11-26:12: Error: Type mismatch.
+err018.saw:26:11-26:12: Error: Type mismatch.
     Expected: String
     Found:    Int
 
@@ -57,10 +56,10 @@ Type errors:
           turquoise : Int
        }
 
-  err018.saw:18:14-18:20: Note: The expected type String arises from this explicit type name
-  err018.saw:23:50-23:51: Note: The found type Int arises from the form of this constant
+err018.saw:18:14-18:20: Note: The expected type String arises from this explicit type name
+err018.saw:23:50-23:51: Note: The found type Int arises from the form of this constant
 
-  err018.saw:26:11-26:12: Error: Type mismatch.
+err018.saw:26:11-26:12: Error: Type mismatch.
     Expected: String
     Found:    Int
 
@@ -77,8 +76,7 @@ Type errors:
           turquoise : Int
        }
 
-  err018.saw:19:15-19:21: Note: The expected type String arises from this explicit type name
-  err018.saw:23:63-23:64: Note: The found type Int arises from the form of this constant
-
+err018.saw:19:15-19:21: Note: The expected type String arises from this explicit type name
+err018.saw:23:63-23:64: Note: The found type Int arises from the form of this constant
 
 FAILED

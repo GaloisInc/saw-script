@@ -1,12 +1,10 @@
 Loading file "unify002.saw"
-Type errors:
-  unify002.saw:7:13-7:18: Error: Type mismatch.
+unify002.saw:7:13-7:18: Error: Type mismatch.
     Expected: Int
     Found:    String
 
-  unify002.saw:7:10-7:11: Note: The expected type Int arises from the form of this constant
-  unify002.saw:7:13-7:18: Note: The found type String arises from the form of this constant
+unify002.saw:7:10-7:11: Note: The expected type Int arises from the form of this constant
+unify002.saw:7:13-7:18: Note: The found type String arises from the form of this constant
 
-  unify002.saw:7:23-7:27: Unbound variable: "True"
-
+unify002.saw:7:23-7:27: Unbound variable: "True"
 FAILED
