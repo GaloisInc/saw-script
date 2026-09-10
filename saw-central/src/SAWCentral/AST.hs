@@ -180,6 +180,22 @@ data Tyctx
 -- TypeFromContext means that the usage of the construct at the given
 --    position prompted us to choose the accompanying type; e.g. in "f
 --    x", f has function type.
+-- TypeFromFuncWithSig means that the type came from the function
+--    header (with adjacent return type annotation) at the given
+--    position. For example: @let foo (x: Int) : Int = ...@. The
+--    span of the position includes the parameter list and return
+--    type but not the function name or the equal sign.
+-- TypeFromFuncWithBody means that the type came from the function
+--    header at the first position, and the function body at the
+--    second position. This is for cases without an explicit type
+--    signature where we inferred the body type.
+--
+-- The positions stored in these will ordinarily be concrete source
+-- positions (`Range`) because they come from parsed source text, but
+-- other things may appear, especially in corner cases. The
+-- typechecker does now attempt to interpret the positions in two
+-- places; however, in both cases if it doesn't get concrete souce
+-- positions it will fall back to the default behavior.
 --
 -- Be aware that `TypeFailed` is operationally significant, which
 -- slightly violates least surprise; we tend to expect positions to be
@@ -196,8 +212,8 @@ data TypeProvenance
   | TypeFromForallFresh Pos Text Text
   | TypeFromElement Pos Tyctx
   | TypeFromContext Pos Tyctx
-  | TypeFromFuncWithSig Pos -- ^ Function header with lambda and explicit return type
-  | TypeFromFuncWithBody Pos Pos -- ^ Function header with lambda and body expression
+  | TypeFromFuncWithSig Pos
+  | TypeFromFuncWithBody Pos Pos
   deriving (Eq, Show)
 
 -- | Type for unification variable serial numbers.
