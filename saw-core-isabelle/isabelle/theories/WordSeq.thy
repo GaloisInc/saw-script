@@ -1153,12 +1153,16 @@ lemma or_seq_conv[word_seq_convs]:
 
 lemma xor_seq_conv[word_seq_convs]:
  "(\<lambda>x y. map2_seq ((\<noteq>) :: bool \<Rightarrow> bool \<Rightarrow> bool) x y) = (\<lambda>x y. word_to_seq (seq_to_word x XOR seq_to_word y))"
-  supply [simp del] = not_iff
-  apply (rule ext)+
-  apply (simp add: zip_seq_as_bl_zip)
-  apply transfer
-  by (simp add: word_rotate.blwl_syms)
-
+ "(\<lambda>x y. map2_seq (\<lambda>a' b'. a' = (\<not> b')) x y) = (\<lambda>x y. word_to_seq (seq_to_word x XOR seq_to_word y))"
+  apply (constrain 'a="'aa::len")
+  subgoal H
+    supply [simp del] = not_iff
+    apply (rule ext)+
+    apply (simp add: zip_seq_as_bl_zip)
+    apply transfer
+    by (simp add: word_rotate.blwl_syms)
+  apply (rule H)
+  by (rule H[simplified])
 
 end
 
