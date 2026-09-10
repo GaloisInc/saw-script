@@ -24,7 +24,10 @@ module SAWCore.Simulator
   , defaultPrimHandler
   ) where
 
-import Prelude hiding (mapM)
+-- FUTURE: hiding Foldable and then importing it explicitly can be
+-- dropped once we no longer support building with GHC 9.8 or earlier
+-- (base 4.19 and earlier).
+import Prelude hiding (mapM, Foldable(..))
 
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
