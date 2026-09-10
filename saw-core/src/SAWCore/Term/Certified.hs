@@ -330,11 +330,12 @@ emptyAppCache = emptyTFM
 -- extended at run-time with new names and declarations.
 
 -- Invariant: scGlobalEnv is a cache with one entry for every global
--- declaration in 'scModuleMap' whose name is a 'ModuleIdentifier'.
--- Each map entry points to a 'Constant' term with the same 'Ident'.
+-- declaration in 'scModuleMap'.
+-- Each map entry points to a 'Constant' term with the same 'QualName'.
 -- It exists only to save one map lookup when building terms: Without
--- it we would first have to look up the Ident by QualName in scQualNameEnv, and
--- then do another lookup for hash-consing the Constant term.
+-- it we would first have to look up the 'QualName' in
+-- 'scQualNameEnv', and then do another lookup for hash-consing the
+-- Constant term.
 -- Invariant: All entries in 'scAppCache' must have 'TermIndex'es that
 -- are less than 'scNextTermIndex' and marked valid in 'scValidTerms'.
 --
@@ -347,7 +348,7 @@ data SharedContext = SharedContext
   , scAppCache       :: AppCacheRef
   , scDisplayNameEnv :: IORef DisplayNameEnv
   , scQualNameEnv    :: IORef (Map QN.QualName Name)
-  , scGlobalEnv      :: IORef (HashMap Ident Term)
+  , scGlobalEnv      :: IORef (HashMap QN.QualName Term)
   , scNextVarIndex   :: IORef VarIndex
   , scNextTermIndex  :: IORef TermIndex
   , scValidTerms     :: IORef IntRangeSet
@@ -412,7 +413,7 @@ data SharedContextCheckpoint =
   { sccModuleMap :: ModuleMap
   , sccNamingEnv :: DisplayNameEnv
   , sccQualNameEnv :: Map QN.QualName Name
-  , sccGlobalEnv :: HashMap Ident Term
+  , sccGlobalEnv :: HashMap QN.QualName Term
   , sccTermIndex :: TermIndex
   , sccMetadata :: TypedStore (Metadata Identity)
   }
@@ -882,7 +883,7 @@ scmGlobalDef :: Ident -> SCM Term
 scmGlobalDef ident =
   do sc <- scmSharedContext
      m <- liftIO $ readIORef (scGlobalEnv sc)
-     case HMap.lookup ident m of
+     case HMap.lookup (moduleIdentToQualName ident) m of
        Nothing -> scmError (IdentNotFound ident)
        Just t -> pure t
 
@@ -891,31 +892,31 @@ scmGlobalDef ident =
 scmGlobalConst :: QN.QualName -> SCM Term
 scmGlobalConst qn =
   do sc <- scmSharedContext
-     m <- liftIO $ readIORef (scQualNameEnv sc)
-     case Map.lookup qn m of
+     m <- liftIO $ readIORef (scGlobalEnv sc)
+     case HMap.lookup qn m of
        Nothing -> scmError (QualNameNotFound qn)
-       Just nm -> scmConst nm
+       Just t -> pure t
 
--- | Internal function to register an 'Ident' with a 'Term' (which
--- must be a 'Constant' term with the same 'Ident') in the
+-- | Internal function to register a 'QualName' with a 'Term' (which
+-- must be a 'Constant' term with the same 'QualName') in the
 -- 'scGlobalEnv' map of the 'SharedContext'. Not exported.
-scmRegisterGlobal :: Ident -> Term -> SCM ()
-scmRegisterGlobal ident t =
+scmRegisterGlobal :: QN.QualName -> Term -> SCM ()
+scmRegisterGlobal qn t =
   do sc <- scmSharedContext
      dup <- liftIO $ atomicModifyIORef' (scGlobalEnv sc) f
-     when dup $ scmError (DuplicateQualName (moduleIdentToQualName ident))
+     when dup $ scmError (DuplicateQualName qn)
   where
     f m =
-      case HMap.lookup ident m of
+      case HMap.lookup qn m of
         Just _ -> (m, True)
-        Nothing -> (HMap.insert ident t m, False)
+        Nothing -> (HMap.insert qn t m, False)
 
 -- | Find a variant of an identifier that is not already being used as a global,
 -- by possibly adding a numeric suffix
 scFreshenGlobalIdent :: SharedContext -> Ident -> IO Ident
 scFreshenGlobalIdent sc ident =
   readIORef (scGlobalEnv sc) >>= \gmap ->
-  return $ fromJust $ find (\i -> not $ HMap.member i gmap) $
+  return $ fromJust $ find (\i -> not $ HMap.member (moduleIdentToQualName i) gmap) $
   ident : map (mkIdent (identModule ident) .
                Text.append (identBaseName ident) .
                Text.pack . show) [(0::Integer) ..]
@@ -988,10 +989,8 @@ scmDeclareDef nm q ty body =
        , defBody = body
        }
      t <- scmConst nm
-     -- Register constant in scGlobalEnv if it has an Ident name
-     case nameInfo nm of
-       ModuleIdentifier ident -> scmRegisterGlobal ident t
-       ImportedName{} -> pure ()
+     -- Register constant in scGlobalEnv
+     scmRegisterGlobal (nameQualName nm) t
      pure t
 
 -- | Declare a SAW core primitive of the specified type.
@@ -1143,17 +1142,13 @@ scmDefineDataType dts =
          -- This should never happen; duplicate names are detected by scRegisterName.
          Left nm -> panic "scmDefineDataType" ["Duplicate name: " <> toAbsoluteName (nameInfo nm)]
          Right mm' -> mm'
-     -- Register data type constant in scGlobalEnv if it has an Ident name.
-     case dtsNameInfo dts of
-       ImportedName{} -> pure ()
-       ModuleIdentifier i -> scmRegisterGlobal i d
-     -- Register constructors in scGlobalEnv if they have Ident names.
+     -- Register data type constant in scGlobalEnv.
+     scmRegisterGlobal (toQualName (dtsNameInfo dts)) d
+     -- Register constructors in scGlobalEnv.
      forM_ ctors $ \ctor ->
-       case nameInfo (ctorName ctor) of
-         ImportedName{} -> pure ()
-         ModuleIdentifier i ->
-           do c <- scmConst (ctorName ctor)
-              scmRegisterGlobal i c
+       do let nm = ctorName ctor
+          c <- scmConst nm
+          scmRegisterGlobal (nameQualName nm) c
      -- Return Names of data type and constructors.
      pure (dName, map ctorName ctors)
 
