@@ -20,11 +20,14 @@ module SAWCentral.AST
      , Kind(..)
      , kindStar, kindStarToStar
 
+     , TyCtx(..)
+     , TypeProvenance(..)
      , TypeIndex
      , Context(..)
      , TyCon(..)
      , NamedParamInfo(..), noNames
      , Type(..)
+     , SchemaNameProvenance(..)
      , Schema(..)
      , SchemaPattern(..)
      , NamedType(..)
@@ -41,6 +44,7 @@ module SAWCentral.AST
      , DeclGroup(..)
 
      , ppKind, prettyKind
+     , ppTyCtx, prettyTyCtx
      , ppTyCon, prettyTyCon
      , ppType, prettyType
      , ppSchema, prettySchema
@@ -50,11 +54,16 @@ module SAWCentral.AST
      , prettyWholeModule
 
      , tUnit, tTuple, tArray, tFun
-     , tString, tTerm, tType, tBool, tInt, tBlock
+     , tString, tTerm, tType, tBool, tInt, tApply
      , tAIG, tCFG, tJVMSpec, tLLVMSpec, tMIRSpec
      , tContext
      , tRecord, tVar
      , tMono, tForall
+     , txTuple, txArray, txFun
+     , txString, txTerm, txType, txBool, txInt, txApply
+     , txAIG, txCFG, txJVMSpec, txLLVMSpec, txMIRSpec
+     , txContext
+     , txRecord, txVar
 
      , isContext
      ) where
@@ -140,6 +149,74 @@ kindStarToStar = Kind 1
 ------------------------------------------------------------
 -- Types
 
+-- | Context for type provenance; basically, what kind of program
+--   element we were looking at when we inferred a type.
+data TyCtx
+  = TyCtxConstant  -- ^ Constants (special cases of expressions)
+  | TyCtxExpr      -- ^ Expressions
+  | TyCtxPat       -- ^ Patterns
+  | TyCtxStmt      -- ^ Statements
+  | TyCtxArgList   -- ^ Expression groups that are function argument lists
+  deriving (Eq, Show)
+
+-- | Extended provenance/position information for types.
+--
+-- TypeExplicit means that the type was written in the input text
+--    at the given position.
+-- TypeFresh means that the type was generated at the given position
+--    to represent a type that that construct implies must exist.
+-- TypeFailed means that the type arose from a prior type error and
+--    is thus not itself very interesting.
+-- TypeFromForallNamed means that the type was forall-bound from the
+--    named variable at the given position, with the given name, in
+--    the function of the given name.
+-- TypeFromForallFresh means that the type was forall-bound from a
+--    fresh type variable implicitly generated at the given position,
+--    using the given typechecker-generated name, in the function of
+--    the given name.
+-- TypeFromElement means that the construct at the given position
+--    prompted us to choose the accompanying type; e.g. "[]" has type
+--    List t.
+-- TypeFromContext means that the usage of the construct at the given
+--    position prompted us to choose the accompanying type; e.g. in "f
+--    x", f has function type.
+-- TypeFromFuncWithSig means that the type came from the function
+--    header (with adjacent return type annotation) at the given
+--    position. For example: @let foo (x: Int) : Int = ...@. The
+--    span of the position includes the parameter list and return
+--    type but not the function name or the equal sign.
+-- TypeFromFuncWithBody means that the type came from the function
+--    header at the first position, and the function body at the
+--    second position. This is for cases without an explicit type
+--    signature where we inferred the body type.
+--
+-- The positions stored in these will ordinarily be concrete source
+-- positions (`Range`) because they come from parsed source text, but
+-- other things may appear, especially in corner cases. The
+-- typechecker does now attempt to interpret the positions in two
+-- places; however, in both cases if it doesn't get concrete souce
+-- positions it will fall back to the default behavior.
+--
+-- Be aware that `TypeFailed` is operationally significant, which
+-- slightly violates least surprise; we tend to expect positions to be
+-- supplementary information. However, adding either a separate field
+-- to `TyUnifyVar` or a separate `Type` constructor for unification
+-- variables that are errors seems like it would be a mess.
+-- FUTURE: sort this out better.
+-- 
+data TypeProvenance
+  = TypeExplicit Pos
+  | TypeFresh Pos
+  | TypeFailed Pos
+  | TypeFromForallNamed Pos Text Text
+  | TypeFromForallFresh Pos Text Text
+  | TypeFromElement Pos TyCtx
+  | TypeFromContext Pos TyCtx
+  | TypeFromFuncWithSig Pos
+  | TypeFromFuncWithBody Pos Pos
+  deriving (Eq, Show)
+
+-- | Type for unification variable serial numbers.
 type TypeIndex = Integer
 
 -- | Type for the hardwired monad types. Note that these days the
@@ -203,42 +280,63 @@ instance Semigroup NamedParamInfo where
     NamedParamInfo n1 nps1 <> NamedParamInfo n2 nps2 =
         NamedParamInfo (n1 + n2) (nps1 ++ nps2)
 
--- The position information in a type should be thought of as its
--- provenance; for a type annotation in the input it'll be a concrete
--- file position. For types we infer, we want the position to record
--- not just where but also how the inference happened, so that when we
--- report this to the user they can see what's going on. (For example,
--- if we infer that a type must be a function because it's applied to
--- an argument, we record that it's inferred from context and the
--- position of the context is the position of the term that was
--- applied.) When the type flows around during type inference it
--- carries the position info with it.
+-- | Types.
+--
+-- We carry around provenance for types, which wrap the source
+-- positions.
+--
+-- For types we infer, we want to record not just where but also how
+-- the inference happened, so that when we report this to the user
+-- they can see what's going on. (For example, if we infer that a type
+-- must be a function because it's applied to an argument, we record
+-- that it's inferred from context and the position of the context is
+-- the position of the term that was applied.) When the type flows
+-- around during type inference it carries the position info with it.
 --
 -- Note that for a non-primitive type the various layers of the type
 -- may have totally different provenance. (E.g. we might have List Int
 -- where List was inferred from a term "[x]" somewhere but Int came
 -- from an explicit annotation somewhere completely different.) So
--- printing this information usefully requires some thought. As of
--- this writing most of that thought hasn't been put in yet and we
--- just stuff the inference info into the Show instance output. See
--- notes in Position.hs.
+-- printing this information usefully requires some thought.
+--
+-- We have the following constraints that it would be nice to encode
+-- into the types, except it doesn't seem feasible:
+--
+--    - Prior to the @generalize@ step in typechecking,
+--      `TyVar` should always have `TypeExplicit` provenance, and
+--      only `TyUnifyVar` should ever have `TypeFailed` provenance.
+--
+--    - After @generalize@, `TyVar` can have any provenance, because
+--      @generalize@ converts remaining `TyUnifyVar` occurrences to
+--      `TyVar` occurrences. This includes `TypeFailed`.
+--
+--   - Like `TyUnifyVar`, `TypeFailed` should not escape the
+--     typechecker.
 --
 data Type
-  = TyCon Pos TyCon [Type]
-  | TyFunc Pos NamedParamInfo [Type] (Map Name Type) Type
-  | TyRecord Pos (Map Name Type)
-  | TyVar Pos Name
-  | TyUnifyVar Pos TypeIndex       -- ^ For internal typechecker use only
+  = TyCon TypeProvenance TyCon [Type]
+  | TyFunc TypeProvenance NamedParamInfo [Type] (Map Name Type) Type
+  | TyRecord TypeProvenance (Map Name Type)
+  | TyVar TypeProvenance Name
+    -- | For internal typechecker use only.
+  | TyUnifyVar TypeProvenance TypeIndex
   deriving Show
 
-data Schema = Forall [(Pos, Name)] Type
+-- | The positions in type schemes can be either explicit (the user
+--   gave a name at this position) or implicit (a fresh unification
+--   var was generated at this position and ended up getting forall-
+--   bound). XXX: this could use a shorter name.
+data SchemaNameProvenance = SchemaNameExplicit Pos | SchemaNameImplicit Pos
+  deriving Show
+
+data Schema = Forall [(SchemaNameProvenance, Name)] Type
   deriving Show
 
 -- | A schema pattern is like a schema but has potentially multiple
 -- type entries that are meant to match fragments of a complete
 -- schema. (We don't, for now at least, need a separate type for type
 -- patterns and can just use Type.)
-data SchemaPattern = SchemaPattern [(Pos, Name)] [Type]
+data SchemaPattern = SchemaPattern [(SchemaNameProvenance, Name)] [Type]
 
 -- | The things a (named) TyVar can refer to by its name.
 --
@@ -278,9 +376,11 @@ data Expr
   | Var Pos Name
   -- | All functions are handled as lambdas. We hang onto the name
   --   from the function declaration (if there was one) for use in
-  --   stack traces. The list of patterns holdes the positional
-  --   parameters; the map from text holds the optional named
-  --   parameters. The elements of that map are:
+  --   stack traces. The second position (after the name) is the
+  --   combined position of the whole parameter list. The list of
+  --   patterns holdes the positional parameters; the map from text
+  --   holds the optional named parameters. The elements of that map
+  --   are:
   --      - the position of the name text
   --      - the overall position
   --      - the pattern with the local-facing name (which might be different)
@@ -289,7 +389,7 @@ data Expr
   --   The tuple nesting is supposed to make it possible to remember
   --   which position is which: the one belonging to the map key is
   --   the closest to it.
-  | Lambda Pos (Maybe Name) [Pattern] (Map Text (Pos, (Pos, Expr, Pattern))) Expr
+  | Lambda Pos (Maybe Name) Pos [Pattern] (Map Text (Pos, (Pos, Expr, Pattern))) Expr
   -- | Function arguments come with an optional name; if present,
   --   it includes the position of the name string.
   | Application Pos Expr [(Maybe (Pos, Text), Expr)]
@@ -305,11 +405,28 @@ data Expr
 
 -- | Patterns.
 --
+--   `PImplicit` represents the `_` in the implicit `_ <- e` that
+--   arises when we see a plain expression in statement context. The
+--   position is the position of the expression `e`. No type can be
+--   provided by the concrete syntax, but we still carry a type slot
+--   for the typechecker to fill in.
+--
+--   `PWild` represents an explicit `_`, and the position is the
+--   position of the `_` along with any type annotation. (So far there
+--   doesn't seem to be any reason to want the position of just the
+--   undersccore.)
+--
+--   Distinguishing `PImplicit` from `PWild` allows the typechecker
+--   to report certain errors correctly instead of hallucinating a
+--   position for the nonexistent underscore.
+--
 --   In `PVar` the first `Pos` is the position of the whole pattern
 --   (including any type) and the second is the position of just the
 --   name itself.
+--
 data Pattern
-  = PWild Pos (Maybe Type)
+  = PImplicit Pos (Maybe Type)
+  | PWild Pos (Maybe Type)
   | PVar Pos Pos Name (Maybe Type)
   | PTuple Pos [Pattern]
   deriving Show
@@ -388,12 +505,32 @@ data DeclGroup
 ------------------------------------------------------------
 -- Position extraction
 
+-- | This instance should only be used for cases where we know
+--   the position is meaningful on its own.
+instance Positioned TypeProvenance where
+  getPos prov = case prov of
+      TypeExplicit pos -> pos
+      TypeFresh pos -> pos
+      TypeFailed pos -> pos
+      TypeFromForallNamed pos _ _ -> pos
+      TypeFromForallFresh pos _ _ -> pos
+      TypeFromElement pos _ -> pos
+      TypeFromContext pos _ -> pos
+      TypeFromFuncWithSig pos -> pos
+      TypeFromFuncWithBody pos _morepos -> pos
+
+-- | This is used by the parser where all the provenance is
+--   `TypeExplicit`, and should not really be used downstream from
+--   there. The locations without the accompanying provenance
+--   annotations aren't too meaningful and may be confusing.
+--
 instance Positioned Type where
-  getPos (TyCon pos _ _) = pos
-  getPos (TyFunc pos _ _ _ _) = pos
-  getPos (TyRecord pos _) = pos
-  getPos (TyVar pos _) = pos
-  getPos (TyUnifyVar pos _) = pos
+  getPos ty = case ty of
+      TyCon prov _ _ -> getPos prov
+      TyFunc prov _ _ _ _ -> getPos prov
+      TyRecord prov _ -> getPos prov
+      TyVar prov _ -> getPos prov
+      TyUnifyVar prov _ -> getPos prov
 
 instance Positioned Expr where
   getPos (Bool pos _) = pos
@@ -409,13 +546,14 @@ instance Positioned Expr where
   getPos (Lookup pos _ _) = pos
   getPos (TLookup pos _ _) = pos
   getPos (Var pos _) = pos
-  getPos (Lambda pos _ _ _ _) = pos
+  getPos (Lambda pos _ _ _ _ _) = pos
   getPos (Application pos _ _) = pos
   getPos (Let pos _ _) = pos
   getPos (TSig pos _ _) = pos
   getPos (IfThenElse pos _ _ _) = pos
 
 instance Positioned Pattern where
+  getPos (PImplicit pos _) = pos
   getPos (PWild pos _) = pos
   getPos (PVar fullpos _namepos _ _) = fullpos
   getPos (PTuple pos _) = pos
@@ -450,6 +588,17 @@ ppKind (Kind n) =
 
 prettyKind :: Kind -> PPS.Doc
 prettyKind k = PP.pretty $ ppKind k
+
+ppTyCtx :: TyCtx -> Text
+ppTyCtx ctx = case ctx of
+    TyCtxConstant -> "constant"
+    TyCtxExpr     -> "expression"
+    TyCtxPat      -> "pattern"
+    TyCtxStmt     -> "statement"
+    TyCtxArgList  -> "argument list"
+
+prettyTyCtx :: TyCtx -> PP.Doc ann
+prettyTyCtx ctx = PP.pretty $ ppTyCtx ctx
 
 ppContext :: Context -> Text
 ppContext c = case c of
@@ -624,7 +773,7 @@ prettyExpr ppopts expr0 = case expr0 of
         expr' <> PP.dot <> n'
     Var _ name ->
         PP.pretty name
-    Lambda _ _mname params namedParams expr ->
+    Lambda _ _mname _parampos params namedParams expr ->
         let onePositional pat =
                 let pat' = prettyPattern ppopts pat in
                 "\\" <+> pat' <+> "->"
@@ -722,6 +871,8 @@ prettyPattern ppopts pat =
           Just ty -> PP.parens $ name' <+> PP.colon <+> prettyType ppopts ty
     in   
     case pat of
+        PImplicit _ mty ->
+          prettyArg "_" mty
         PWild _ mty ->
           prettyArg "_" mty
         PVar _ _ name mty ->
@@ -735,9 +886,10 @@ ppPattern ppopts pat =
 
 prettyStmt :: PPS.Opts -> Stmt -> PPS.Doc
 prettyStmt ppopts s0 = case s0 of
-    StmtBind _ (PWild _ _ty) expr ->
-       -- Drop the _, even if it has an explicit type
+    StmtBind _ (PImplicit _ _ty) expr ->
        prettyExpr ppopts expr <> ";"
+    StmtBind _ (PWild _ _ty) expr ->
+       "_ <-" <+> prettyExpr ppopts expr <> ";"
     StmtBind _ pat expr ->
        let pat' = prettyPattern ppopts pat
            expr' = prettyExpr ppopts expr
@@ -805,7 +957,7 @@ prettyDef :: PPS.Opts -> Decl -> PPS.Doc
 prettyDef ppopts (Decl _ pat0 _ def) =
    let dissectLambda :: Expr -> ([Pattern], Map Text (Pos, (Pos, Expr, Pattern)), Expr)
        dissectLambda e0 = case e0 of
-          Lambda _pos _name pats namedpats e1 ->
+          Lambda _pos _name _parampos pats namedpats e1 ->
               let (morepats, morenamedpats, e1') = dissectLambda e1 in
               (pats ++ morepats, Map.union namedpats morenamedpats, e1')
           _ ->
@@ -833,67 +985,123 @@ prettyWholeModule ppopts stmts =
 
 ------------------------------------------------------------
 -- Type formers
+--
+-- The @tx@ forms wrap in `TypeExplicit` and are mostly used by the
+-- parser.
 
-tUnit :: Pos -> Type
-tUnit pos = tTuple pos []
+tUnit :: TypeProvenance -> Type
+tUnit prov = tTuple prov []
 
-tTuple :: Pos -> [Type] -> Type
-tTuple pos ts = TyCon pos (TupleCon $ fromIntegral $ length ts) ts
+tTuple :: TypeProvenance -> [Type] -> Type
+tTuple prov ts = TyCon prov (TupleCon $ fromIntegral $ length ts) ts
 
-tArray :: Pos -> Type -> Type
-tArray pos t = TyCon pos ArrayCon [t]
+tArray :: TypeProvenance -> Type -> Type
+tArray prov t = TyCon prov ArrayCon [t]
 
 -- | Create a function type a1 -> a2 -> ... -> b.
-tFun :: Pos -> NamedParamInfo -> [Type] -> Map Name Type -> Type -> Type
-tFun pos names params namedParams ret = TyFunc pos names params namedParams ret
+tFun :: TypeProvenance -> NamedParamInfo -> [Type] -> Map Name Type -> Type -> Type
+tFun prov names params namedParams ret = TyFunc prov names params namedParams ret
 
-tString :: Pos -> Type
-tString pos = TyCon pos StringCon []
+tString :: TypeProvenance -> Type
+tString prov = TyCon prov StringCon []
 
-tTerm :: Pos -> Type
-tTerm pos = TyCon pos TermCon []
+tTerm :: TypeProvenance -> Type
+tTerm prov = TyCon prov TermCon []
 
-tType :: Pos -> Type
-tType pos = TyCon pos TypeCon []
+tType :: TypeProvenance -> Type
+tType prov = TyCon prov TypeCon []
 
-tBool :: Pos -> Type
-tBool pos = TyCon pos BoolCon []
+tBool :: TypeProvenance -> Type
+tBool prov = TyCon prov BoolCon []
 
-tInt :: Pos -> Type
-tInt pos = TyCon pos IntCon []
+tInt :: TypeProvenance -> Type
+tInt prov = TyCon prov IntCon []
 
-tBlock :: Pos -> Type -> Type -> Type
-tBlock pos c t = TyCon pos BlockCon [c,t]
+tApply :: TypeProvenance -> Type -> Type -> Type
+tApply prov c t = TyCon prov BlockCon [c, t]
 
-tAIG :: Pos -> Type
-tAIG pos = TyCon pos AIGCon []
+tAIG :: TypeProvenance -> Type
+tAIG prov = TyCon prov AIGCon []
 
-tCFG :: Pos -> Type
-tCFG pos = TyCon pos CFGCon []
+tCFG :: TypeProvenance -> Type
+tCFG prov = TyCon prov CFGCon []
 
-tJVMSpec :: Pos -> Type
-tJVMSpec pos = TyCon pos JVMSpecCon []
+tJVMSpec :: TypeProvenance -> Type
+tJVMSpec prov = TyCon prov JVMSpecCon []
 
-tLLVMSpec :: Pos -> Type
-tLLVMSpec pos = TyCon pos LLVMSpecCon []
+tLLVMSpec :: TypeProvenance -> Type
+tLLVMSpec prov = TyCon prov LLVMSpecCon []
 
-tMIRSpec :: Pos -> Type
-tMIRSpec pos = TyCon pos MIRSpecCon []
+tMIRSpec :: TypeProvenance -> Type
+tMIRSpec prov = TyCon prov MIRSpecCon []
 
-tContext :: Pos -> Context -> Type
-tContext pos c = TyCon pos (ContextCon c) []
+tContext :: TypeProvenance -> Context -> Type
+tContext prov c = TyCon prov (ContextCon c) []
 
-tRecord :: Pos -> [(Name, Type)] -> Type
-tRecord pos fields = TyRecord pos (Map.fromList fields)
+tRecord :: TypeProvenance -> [(Name, Type)] -> Type
+tRecord prov fields = TyRecord prov (Map.fromList fields)
 
-tVar :: Pos -> Name -> Type
-tVar pos n = TyVar pos n
+tVar :: TypeProvenance -> Name -> Type
+tVar prov n = TyVar prov n
+
 
 tMono :: Type -> Schema
-tMono = Forall []
+tMono t = Forall [] t
 
-tForall :: [(Pos, Name)] -> Schema -> Schema
+tForall :: [(SchemaNameProvenance, Name)] -> Schema -> Schema
 tForall xs (Forall ys t) = Forall (xs ++ ys) t
+
+
+txTuple :: Pos -> [Type] -> Type
+txTuple pos ts = tTuple (TypeExplicit pos) ts
+
+txArray :: Pos -> Type -> Type
+txArray pos t = tArray (TypeExplicit pos) t
+
+txFun :: Pos -> NamedParamInfo -> [Type] -> Map Name Type -> Type -> Type
+txFun pos n p np r = tFun (TypeExplicit pos) n p np r
+
+txString :: Pos -> Type
+txString pos = tString (TypeExplicit pos)
+
+txTerm :: Pos -> Type
+txTerm pos = tTerm (TypeExplicit pos)
+
+txType :: Pos -> Type
+txType pos = tType (TypeExplicit pos)
+
+txBool :: Pos -> Type
+txBool pos = tBool (TypeExplicit pos)
+
+txInt :: Pos -> Type
+txInt pos = tInt (TypeExplicit pos)
+
+txApply :: Pos -> Type -> Type -> Type
+txApply pos c t = tApply (TypeExplicit pos) c t
+
+txAIG :: Pos -> Type
+txAIG pos = tAIG (TypeExplicit pos)
+
+txCFG :: Pos -> Type
+txCFG pos = tCFG (TypeExplicit pos)
+
+txJVMSpec :: Pos -> Type
+txJVMSpec pos = tJVMSpec (TypeExplicit pos)
+
+txLLVMSpec :: Pos -> Type
+txLLVMSpec pos = tLLVMSpec (TypeExplicit pos)
+
+txMIRSpec :: Pos -> Type
+txMIRSpec pos = tMIRSpec (TypeExplicit pos)
+
+txContext :: Pos -> Context -> Type
+txContext pos c = tContext (TypeExplicit pos) c
+
+txRecord :: Pos -> [(Name, Type)] -> Type
+txRecord pos fields = tRecord (TypeExplicit pos) fields
+
+txVar :: Pos -> Name -> Type
+txVar pos a = tVar (TypeExplicit pos) a
 
 
 ------------------------------------------------------------
@@ -909,5 +1117,5 @@ isContext ::
     -> Type             -- ^ The type 'ty' to inspect
     -> Bool
 isContext c ty = case ty of
-  TyCon _pos (ContextCon c') [] | c' == c -> True
+  TyCon _prov (ContextCon c') [] | c' == c -> True
   _ -> False

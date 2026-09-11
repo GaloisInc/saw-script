@@ -5,8 +5,8 @@
 // extra one, and that can lead down a rabbit hole of strange errors
 // if you aren't careful.
 //
-// Also see err065, err066. If anyone ever renumbers the test dir, it
-// might make sense to group these all together.
+// Also see err065, err066, err073, err074. If anyone ever renumbers
+// the test dir, it might make sense to group these all together.
 
 let f x = x;
 let y = f 3 4;

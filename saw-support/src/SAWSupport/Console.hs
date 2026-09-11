@@ -55,10 +55,12 @@ import SAWSupport.ConsoleSupport (Fatal(..))
 
 -- | Monad class for SAW message printing.
 --
---   There are three basic kinds of diagnostic messages:
+--   There are four basic kinds of diagnostic messages:
 --      - @err@ prints an error;
 --      - @warn@ prints a warning;
 --      - @note@ prints a notice.
+--      - @comment@ prints a comment that is a second or subsequent
+--        part of a prior message.
 --
 --   These are then further qualified as follows:
 --      - @N@ prints without any position;
@@ -124,6 +126,10 @@ class (Monad m) => SAWConsole m where
     noteP :: IsPosition pos => pos -> Text -> m ()
     noteX :: Text -> m ()
 
+    commentN :: Text -> m ()
+    commentP :: IsPosition pos => pos -> Text -> m ()
+    commentX :: Text -> m ()
+
     errN' :: PPS.Doc -> m a
     errP' :: IsPosition pos => pos -> PPS.Doc -> m a
     errX' :: PPS.Doc -> m a
@@ -139,6 +145,10 @@ class (Monad m) => SAWConsole m where
     noteN' :: PPS.Doc -> m ()
     noteP' :: IsPosition pos => pos -> PPS.Doc -> m ()
     noteX' :: PPS.Doc -> m ()
+
+    commentN' :: PPS.Doc -> m ()
+    commentP' :: IsPosition pos => pos -> PPS.Doc -> m ()
+    commentX' :: PPS.Doc -> m ()
 
     checkFail :: m ()
 
@@ -202,6 +212,10 @@ instance SAWConsole IO where
     noteP pos msg = Supp.noteP say pos msg
     noteX msg = Supp.noteP say dummyPos msg
 
+    commentN msg = Supp.commentN say msg
+    commentP pos msg = Supp.commentP say pos msg
+    commentX msg = Supp.commentP say dummyPos msg
+
     errN' msg = Supp.errN' say PPS.defaultOpts msg >> throwIO (Fatal False)
     errP' pos msg = Supp.errP' say PPS.defaultOpts pos msg >> throwIO (Fatal False)
     -- XXX: same as above
@@ -220,6 +234,10 @@ instance SAWConsole IO where
     noteN' msg = Supp.noteN' say PPS.defaultOpts msg
     noteP' pos msg = Supp.noteP' say PPS.defaultOpts pos msg
     noteX' msg = Supp.noteP' say PPS.defaultOpts dummyPos msg
+
+    commentN' msg = Supp.commentN' say PPS.defaultOpts msg
+    commentP' pos msg = Supp.commentP' say PPS.defaultOpts pos msg
+    commentX' msg = Supp.commentP' say PPS.defaultOpts dummyPos msg
 
     checkFail = pure ()
 

@@ -1,12 +1,5 @@
 Loading file "err016.saw"
-Type errors:
-  err016.saw:12:13-12:14: Error: Type mismatch.
-    Perhaps a function was not given enough arguments?
-    Expected: Int
-    Found:    Int -> t.1
-
-  err016.saw:12:11-12:12: Note: The type Int arises from the type of this term
-  err016.saw:12:13-12:14: Note: The type Int -> t.1 arises from the context of the term
-
-
+err016.saw:12:13-12:14: Error: Too many arguments to function "f" of type Int -> Int
+err016.saw:11:7-11:8: Note: The function type Int -> Int arises from this parameter list...
+err016.saw:11:11-11:12: Note: ...and this function body
 FAILED

@@ -16,9 +16,11 @@ module SAWSupport.ConsoleSupport (
     errN, errP,
     warnN, warnP,
     noteN, noteP,
+    commentN, commentP,
     errN', errP',
     warnN', warnP',
-    noteN', noteP'
+    noteN', noteP',
+    commentN', commentP'
   )
   where
 
@@ -139,6 +141,21 @@ noteP say pos msg = do
     let pos' = ppPosition pos
     say $ pos' <> ": Notice: " <> msg
 
+-- | Backend for `commentN` in `SAWConsole` in terms of a function
+--   `say` for issuing a single message. This doesn't really do
+--   anything, but it's this module's responsibility to know that and
+--   not the caller.
+commentN :: SayFunc m -> Text -> m ()
+commentN say msg =
+    say msg
+
+-- | Backend for `commentP` and `commentX` in `SAWConsole` in terms of a
+--   function `say` for issuing a single message.
+commentP :: IsPosition pos => SayFunc m -> pos -> Text -> m ()
+commentP say pos msg = do
+    let pos' = ppPosition pos
+    say $ pos' <> ": " <> msg
+
 -- | Backend for `errN'` and `errDN'` in `SAWConsole` in terms of a
 --   function `say` for issuing a single message. Note: the
 --   `SAWConsole` implementation is still responsible for bailing out
@@ -199,3 +216,19 @@ noteN' say opts msg = noteN say $ PPS.renderText opts msg
 --
 noteP' :: IsPosition pos => SayFunc m -> PPS.Opts -> pos -> PPS.Doc -> m ()
 noteP' say opts pos msg = noteP say pos $ PPS.renderText opts msg
+
+-- | Backend for `commentN` in `SAWConsole` in terms of a function `say`
+--   for issuing a single message.
+--
+--   XXX: as in errN'
+--
+commentN' :: SayFunc m -> PPS.Opts -> PPS.Doc -> m ()
+commentN' say opts msg = commentN say $ PPS.renderText opts msg
+
+-- | Backend for `commentP` and `commentX` in `SAWConsole` in terms of a
+--   function `say` for issuing a single message.
+--
+--   XXX: as in errN'
+--
+commentP' :: IsPosition pos => SayFunc m -> PPS.Opts -> pos -> PPS.Doc -> m ()
+commentP' say opts pos msg = commentP say pos $ PPS.renderText opts msg

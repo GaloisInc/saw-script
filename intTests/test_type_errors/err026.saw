@@ -1,4 +1,5 @@
 // Trigger the "do block must end with expression" message
+// Also see err075.
 
 let x = do {
    y <- llvm_assert {{ True }};

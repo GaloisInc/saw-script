@@ -50,22 +50,11 @@ import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser
 import SAWScript.Include as Inc
 import SAWScript.Typechecker (checkDecl, checkSchema, checkSchemaPattern)
+import qualified SAWScript.Typechecker as Ty (Message(..))
 
 
--- | Type shorthand for an operation that can return warnings and/or
---   errors. On error it returns Left and a list of messages, at least
---   one of which is an error and therefore fatal. On success, it
---   returns a (possibly empty) list of messages, which are all
---   warnings and not fatal, and a result of type a.
---
---   The position is a Maybe because errors from the parser come back
---   with a position already stuffed into the message text, and we would
---   like to not print another vacuous one along with it.
---
---   The text is a Doc because we've improved the parser so it sometimes
---   prints tabular messages.
---
-type WithMsgs a = Either [(Pos, PPS.Doc)] ([(Pos, PPS.Doc)], a)
+------------------------------------------------------------
+-- Support logic
 
 -- | Type shorthand for an include path.
 --
@@ -109,6 +98,51 @@ wrapDir dir m = do
     let pos = PosInternal "pushd/popd derived from include"
     pure $ [StmtPushdir pos dir] ++ stmts ++ [StmtPopdir pos]
 
+
+------------------------------------------------------------
+-- Messages and results
+
+-- | Type shorthand for the results produced by the parser: either a
+--   parse error, or a value. The parser never produces warnings, and
+--   (for now at least) it can only produce one error before giving
+--   up.
+type ParseResult a = Either ParseError a
+
+-- | Type shorthand for a parser function: list of tokens to a result.
+type Parser a = [Token Pos] -> ParseResult a
+
+-- | Type shorthand for a typechecker result. The typechecker returns
+--   a list of messages (using, for now at least, its own type to
+--   encode errors vs. warnings vs. notices) and a value.
+--
+--   On error the message list includes at least one error, and the
+--   result value exists but is not meaningful and can/should be
+--   discarded.
+--
+--   On success the message list contains only warnings or notices
+--   (or is empty) and the result is valid.
+--
+type TyResult a = ([Ty.Message], a)
+
+-- | Type shorthand for the result of `readAny`, which differs from
+--   the typechecker result by not separating errors from warnings
+--   and therefore preserving message order.
+--
+--   On error it returns Left and a list of messages, at least
+--   one of which is an error and therefore fatal.
+--
+--   On success, it returns a (possibly empty) list of messages, which
+--   are all warnings and not fatal, and a result of type a.
+--
+--   The text is a Doc because we've improved the parser so it sometimes
+--   prints structured messages. The typechecker often does as well.
+--
+type GenericResult a = Either [(Pos, PPS.Doc)] ([(Pos, PPS.Doc)], a)
+
+
+------------------------------------------------------------
+-- Common load logic
+
 -- | Read some SAWScript text, using the selected parser entry point.
 --
 --   Returns only in Either; caller is responsible for handling the
@@ -124,7 +158,7 @@ wrapDir dir m = do
 --   the EOF token name passed to `prettyParseError`, which should
 --   generally be either "end of line" or "end of file".
 --
-readAny :: PPS.Opts -> FilePath -> Text -> Text -> ([Token Pos] -> Either ParseError a) -> WithMsgs a
+readAny :: PPS.Opts -> FilePath -> Text -> Text -> Parser a -> GenericResult a
 readAny ppopts fileName str eofName parser =
     case lexSAW fileName eofName str of
         Left (_verbosity, pos, msg) ->
@@ -163,8 +197,10 @@ readAny ppopts fileName str eofName parser =
                     Right (msgs, tree)
 
 -- | Use the readAny result to panic if any messages were generated.
-panicOnMsgs :: PPS.Opts -> Text -> WithMsgs a -> a
-panicOnMsgs ppopts whoAmI result =
+--   (Including warnings. This is used when processing the builtins
+--   table during startup, and it should not produce warnings.)
+panicOnGenericMsgs :: PPS.Opts -> Text -> GenericResult a -> a
+panicOnGenericMsgs ppopts whoAmI result =
   -- Properly, printing the positions with the errors should be done
   -- by the error infrastructure. However, the error infrastructure
   -- necessarily needs to run in `IO`, and we need to _not_ run in
@@ -183,64 +219,65 @@ panicOnMsgs ppopts whoAmI result =
    Right (warns, _) ->
        panic whoAmI ("Unexpected warnings:" : map pp warns)
 
--- | Like `panicOnMsgs` but for typechecker results. XXX: the
---   typechecker should issue its own messages; if not, it at least
---   shouldn't be arbitrarily different.
-panicOnMsgs' :: Text -> (Either [(Pos, PPS.Doc)] a, [(Pos, PPS.Doc)]) -> a
-panicOnMsgs' whoAmI (errs_or_results, warns) =
-    let pp (pos, msg) =
-          let msg' = PosSupport.prettyPosition pos <> ":" <+> msg in
-          PPS.renderText PPS.defaultOpts msg'  -- startup time, use default
+-- | Like `panicOnGeneric Msgs` but for typechecker results. XXX: the
+--   typechecker should issue its own messages; if not, at least the
+--   format shouldn't be arbitrarily different.
+panicOnTyMsgs :: Text -> TyResult a -> a
+panicOnTyMsgs whoAmI (msgs, result) =
+    let pp msg =
+          let (pos, desc, msg') = case msg of
+                Ty.Error p doc -> (p, "Error: ", doc)
+                Ty.Warning p doc -> (p, "Warning: ", doc)
+                Ty.Notice p doc -> (p, "Note: ", doc)
+                Ty.Comment p doc -> (p, "", doc)
+          in
+          let msg'' = PosSupport.prettyPosition pos <> ":" <+> desc <> msg' in
+          PPS.renderText PPS.defaultOpts msg''  -- startup time, use default opts
     in
-    case warns of
-        [] -> case errs_or_results of
-            Left errs -> panic whoAmI ("Unexpected errors: " : map pp errs)
-            Right result -> result
-        _ -> panic whoAmI ("Unexpected warnings: " : map pp warns)
+    case msgs of
+        [] -> result
+        _ -> panic whoAmI ("Unexpected typechecker messages:" : map pp msgs)
 
 -- | Handle the readAny result in IO.
 --
 --   Add HasCallStack because if the panic happens we'll want to know
 --   where we came from. XXX: figure out how to get rid of the panic
 --   and remove HasCallStack again.
-dispatchMsgs :: HasCallStack => WithMsgs a -> IO a
-dispatchMsgs result =
+dispatchGenericMsgs :: HasCallStack => GenericResult a -> IO a
+dispatchGenericMsgs result =
     case result of
         Left errs -> do
             let pp (pos, msg) = Cons.errDP' pos msg
             mapM_ pp errs
             Cons.checkFail
-            panic "dispatchMsgs" ["checkFail didn't fail"]
+            panic "dispatchGenericMsgs" ["checkFail didn't fail"]
         Right (msgs, tree) -> do
             let pp (pos, msg) = Cons.warnP' pos msg
             mapM_ pp msgs
             pure tree
 
 -- | Handle a typechecker result in IO.
---
---   Add HasCallStack because if the panic happens we'll want to know
---   where we came from. XXX: figure out how to get rid of the panic
---   and remove HasCallStack again.
-dispatchMsgs' :: HasCallStack => (Either [(Pos, PPS.Doc)] a, [(Pos, PPS.Doc)]) -> IO a
-dispatchMsgs' (errs_or_result, warns) = do
-    mapM_ (\(pos, msg) -> Cons.warnP' pos msg) warns
-    case errs_or_result of
-        Left errs -> do
-            mapM_ (\(pos, msg) -> Cons.errDP' pos msg) errs
-            Cons.checkFail
-            panic "dispatchMsgs'" ["checkFail didn't fail"]
-        Right tree ->
-            pure tree
+dispatchTyMsgs :: TyResult a -> IO a
+dispatchTyMsgs (msgs, result) = do
+    let dispatch msg = case msg of
+          Ty.Error pos msg' -> Cons.errDP' pos msg'
+          Ty.Warning pos msg' -> Cons.warnP' pos msg'
+          Ty.Notice pos msg' -> Cons.noteP' pos msg'
+          Ty.Comment pos msg' -> Cons.commentP' pos msg'
+    mapM_ dispatch msgs
+    -- This crashes out if the above issued any errors
+    Cons.checkFail
+    pure result
 
--- | Call `readAny` then `panicOnMsgs`.
-readAnyPure :: PPS.Opts -> FilePath -> Text -> Text -> ([Token Pos] -> Either ParseError a) -> Text -> a
+-- | Call `readAny` and panic if it generates any diagnostics.
+readAnyPure :: PPS.Opts -> FilePath -> Text -> Text -> Parser a -> Text -> a
 readAnyPure ppopts fileName str eofName parser whoAmI =
-    panicOnMsgs ppopts whoAmI $ readAny ppopts fileName str eofName parser
+    panicOnGenericMsgs ppopts whoAmI $ readAny ppopts fileName str eofName parser
 
--- | Call `readAny` then `dispatchMsgs`.
-readAnyIO :: PPS.Opts -> FilePath -> Text -> Text -> ([Token Pos] -> Either ParseError a) -> IO a
+-- | Call `readAny` then `dispatchGenericMsgs`.
+readAnyIO :: PPS.Opts -> FilePath -> Text -> Text -> Parser a -> IO a
 readAnyIO ppopts fileName str eofName parser =
-    dispatchMsgs $ readAny ppopts fileName str eofName parser
+    dispatchGenericMsgs $ readAny ppopts fileName str eofName parser
 
 -- | Run the readAny result through the `Include` module to resolve
 --   @include@ statements.
@@ -253,6 +290,10 @@ resolveIncludes ::
 resolveIncludes depth seen incpath opts ppopts process tree =
     process (includeFile depth seen incpath opts ppopts) tree
 
+
+------------------------------------------------------------
+-- Entry points for loading
+
 -- | Read a type schema from a string. This is used to digest the type
 --   signatures for builtins, and the expansions for builtin typedefs.
 --
@@ -260,33 +301,41 @@ resolveIncludes depth seen incpath opts ppopts process tree =
 -- appropriate since we use it only to handle the builtins; any
 -- glitches there are properly panics.
 --
--- The first argument (fileName) is a string to pass as the
+-- The first argument (@name@) is the name of the builtin we're
+-- processing. This is used to concoct a fake
 -- filename for the lexer, which (complete with line and column
 -- numbering of dubious value) will go into the positions of the
 -- elements of the resulting type.
---
--- The fake file name names the builtin object involved, so we'll also
--- use it as the panic location string if we need to panic.
 --
 -- FUTURE: we should figure out how to generate more meaningful
 -- positions (like "third argument of concat") but this at least
 -- allows telling the user which builtin the type came from.
 --
+-- The name is also used as part of the panic location if reading the
+-- schema fails, so we know which builtin caused the problem.
+--
 -- Note: there is no way to reach @include@ statements from type
 -- schemas, so no need to process includes in what we read.
 --
 readSchemaPure ::
-    FilePath ->
-    PrimitiveLifecycle ->
-    ScopedMap Name (PrimitiveLifecycle, NamedType) ->
+    -- | Name of the builtin whose type signature we're reading
     Text ->
+    -- | Lifecycle state of the builtin
+    PrimitiveLifecycle ->
+    -- | Environment for named types
+    ScopedMap Name (PrimitiveLifecycle, NamedType) ->
+    -- | Text to read from
+    Text ->
+    -- | Result (a type scheme)
     Schema
-readSchemaPure fakeFileName lc tyenv str =
+readSchemaPure name lc tyenv str =
     -- This is for use during initialization, so we can use the default ppopts
     let ppopts = PPS.defaultOpts in
-
-    let schema = readAnyPure ppopts fakeFileName str "end-of-input" parseSchema (Text.pack fakeFileName) in
-    panicOnMsgs' (Text.pack fakeFileName) $ checkSchema ppopts lc tyenv schema
+    let fakeFileName = Text.unpack $ "<definition of " <> name <> ">"
+        whoAmI = "readSchemaPure on " <> name
+    in
+    let schema = readAnyPure ppopts fakeFileName str "end-of-input" parseSchema whoAmI in
+    panicOnTyMsgs (Text.pack fakeFileName) $ checkSchema ppopts lc tyenv schema name
 
 -- | Read a schema pattern from a string. This is used by the
 --   :search REPL command.
@@ -316,7 +365,7 @@ readSchemaPattern _opts ppopts fileName environ rbenv avail str = do
       varenv'' = Map.union varenv' rbenv'
       varenv''' = ScopedMap.seed varenv''
 
-  dispatchMsgs' $ checkSchemaPattern avail varenv''' tyenv pat
+  dispatchTyMsgs $ checkSchemaPattern avail varenv''' tyenv pat
 
 -- | Read an expression from a string. This is used by the
 --   :type REPL command.
@@ -349,7 +398,7 @@ readExpression opts ppopts fileName environ rbenv avail str = do
   let pos = Pos.getPos expr
       decl = Decl pos (PWild pos Nothing) Nothing expr
 
-  decl' <- dispatchMsgs' $ checkDecl ppopts avail varenv''' tyenv decl
+  decl' <- dispatchTyMsgs $ checkDecl ppopts avail varenv''' tyenv decl
 
   let expr' = dDef decl'
       schema = case dType decl' of

@@ -24,6 +24,7 @@ import Data.Text (Text, pack, unpack)
 import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
+import SAWSupport.Position
 import qualified SAWSupport.Pretty as PPS
 import SAWScript.Panic (panic)
 import SAWScript.Token
@@ -151,7 +152,7 @@ mbImportSpec :: { (Maybe P.ImportSpec, Pos) }
  | {- empty -}                          { (Nothing, Unknown) }
 
 Stmt :: { Stmt }
- : Expression                           { StmtBind (getPos $1) (PWild (leadingPos $ getPos $1) Nothing) $1 }
+ : Expression                           { StmtBind (getPos $1) (PImplicit (getPos $1) Nothing) $1 }
  | AExpr '<-' Expression                {% fmap (\x -> StmtBind (maxSpan' x $3) x $3) (toPattern $1) }
  | 'rec' sepBy1(Declaration, 'and')     { buildRec (maxSpan [tokPos $1, maxSpan $2]) $2 }
  | 'let' Declaration                    { buildLet (maxSpan [tokPos $1, getPos $2]) $2 }
@@ -177,7 +178,7 @@ TypedParam :: { (Maybe ParamLabel, Pattern) }
 
 PlainParam :: { (Maybe ParamLabel, Pattern) }
  : ParamName                            {% mkNamedParam $1 Nothing }
- | '(' TypedParam ')'                   { $2 }
+ | '(' TypedParam ')'                   { fixParamPos (maxSpan [tokPos $1, tokPos $3]) $2 }
  | PlainPattern                         { (Nothing, $1) }
 
 TypedPattern :: { Pattern }
@@ -229,9 +230,9 @@ AExpr :: { Expr }
 Field :: { (Name, Expr) }
  : name '=' Expression                  { (tokStr $1, $3) }
 
-Names :: { [(Pos, Name)] }
- : name                                 { [(getPos $1, tokStr $1)] }
- | name ',' Names                       { (getPos $1, tokStr $1) : $3 }
+Names :: { [(SchemaNameProvenance, Name)] }
+ : name                                 { [(SchemaNameExplicit $ getPos $1, tokStr $1)] }
+ | name ',' Names                       { (SchemaNameExplicit $ getPos $1, tokStr $1) : $3 }
 
 PolyType :: { Schema }
  : Type                                 { tMono $1     }
@@ -256,8 +257,8 @@ FunctionType :: { [(Maybe (Token Pos), Type)] }
  | name '?' AppliedType '->' FunctionType { (Just $1, $3) : $5 }
 
 AppliedType :: { Type }
- : BaseType                             { $1                            }
- | AppliedType BaseType                 { tBlock (maxSpan' $1 $2) $1 $2 }
+ : BaseType                             { $1                             }
+ | AppliedType BaseType                 { txApply (maxSpan' $1 $2) $1 $2 }
 
 -- special case of function type that can be followed by more base types
 -- without requiring parens
@@ -266,26 +267,26 @@ BaseFunType :: { Type }
  | name '?' BaseType '->' FunctionType  {% mkFuncType ((Just $1, $3) : $5) }
 
 BaseType :: { Type }
- : name                                 { tVar (getPos $1) (tokStr $1)     }
- | '(' ')'                              { tTuple (maxSpan [$1, $2]) []     }
- | 'Bool'                               { tBool (getPos $1)                }
- | 'Int'                                { tInt (getPos $1)                 }
- | 'String'                             { tString (getPos $1)              }
- | 'Term'                               { tTerm (getPos $1)                }
- | 'Type'                               { tType (getPos $1)                }
- | 'AIG'                                { tAIG (getPos $1)                 }
- | 'CFG'                                { tCFG (getPos $1)                 }
- | 'LLVMSpec'                           { tLLVMSpec (getPos $1)            }
- | 'JVMMethodSpec'                      { tJVMSpec (getPos $1)             }
- | 'JVMSpec'                            { tJVMSpec (getPos $1)             }
- | 'MIRSpec'                            { tMIRSpec (getPos $1)             }
- | 'ProofScript'                        { tContext (getPos $1) ProofScript }
- | 'TopLevel'                           { tContext (getPos $1) TopLevel    }
- | 'CrucibleSetup'                      { tVar (getPos $1) "CrucibleSetup" }
- | '(' Type ')'                         { $2                               }
- | '(' commas2(Type) ')'                { tTuple (maxSpan [$1, $3]) $2     }
- | '[' Type ']'                         { tArray (maxSpan [$1, $3]) $2     }
- | '{' commas(FieldType) '}'            { tRecord (maxSpan [$1, $3]) $2    }
+ : name                                 { txVar (getPos $1) (tokStr $1)     }
+ | '(' ')'                              { txTuple (maxSpan [$1, $2]) []     }
+ | 'Bool'                               { txBool (getPos $1)                }
+ | 'Int'                                { txInt (getPos $1)                 }
+ | 'String'                             { txString (getPos $1)              }
+ | 'Term'                               { txTerm (getPos $1)                }
+ | 'Type'                               { txType (getPos $1)                }
+ | 'AIG'                                { txAIG (getPos $1)                 }
+ | 'CFG'                                { txCFG (getPos $1)                 }
+ | 'LLVMSpec'                           { txLLVMSpec (getPos $1)            }
+ | 'JVMMethodSpec'                      { txJVMSpec (getPos $1)             }
+ | 'JVMSpec'                            { txJVMSpec (getPos $1)             }
+ | 'MIRSpec'                            { txMIRSpec (getPos $1)             }
+ | 'ProofScript'                        { txContext (getPos $1) ProofScript }
+ | 'TopLevel'                           { txContext (getPos $1) TopLevel    }
+ | 'CrucibleSetup'                      { txVar (getPos $1) "CrucibleSetup" }
+ | '(' Type ')'                         { $2                                }
+ | '(' commas2(Type) ')'                { txTuple (maxSpan [$1, $3]) $2     }
+ | '[' Type ']'                         { txArray (maxSpan [$1, $3]) $2     }
+ | '{' commas(FieldType) '}'            { txRecord (maxSpan [$1, $3]) $2    }
 
 FieldType :: { (Name, Type) }
   : name ':' Type                       { (tokStr $1, $3)         }
@@ -488,6 +489,7 @@ instance Positioned ParamLabel where
 --
 fixFunctionName :: Pattern -> Maybe Text
 fixFunctionName = \case
+  PImplicit {} -> Nothing
   PWild {} -> Nothing
   PVar _allpos _namepos name _ty -> Just name
   PTuple {} -> Nothing
@@ -536,9 +538,10 @@ buildFunction mname params e = case params of
       namedParams' <- foldM doadd Map.empty namedParams
 
       -- Figure out the overall pos
-      let pos = spanPos (maxSpan params) (getPos e)
+      let parampos = (maxSpan params) 
+      let allpos = spanPos parampos (getPos e)
 
-      Right $ Lambda pos mname params' namedParams' e
+      Right $ Lambda allpos mname parampos params' namedParams' e
 
 buildApplication :: Expr -> [(Maybe (Pos, Text), Expr)] -> Expr
 buildApplication fun args = case args of
@@ -582,6 +585,11 @@ addTypeToPattern :: Pattern -> Maybe Type -> Either ParseError Pattern
 addTypeToPattern pat mbType = case mbType of
   Nothing -> pure pat
   Just ty -> case pat of
+      PImplicit pos _ ->
+          -- Unreachable; implicit patterns don't physically exist and
+          -- can't be annotated.
+          let pos' = ppPosition pos in
+          panic "addTypeToPattern" ["Implicit pattern", "Position: " <> pos']
       PWild pos Nothing ->
           pure $ PWild pos (Just ty)
       PVar allpos namepos name Nothing ->
@@ -636,11 +644,29 @@ mkTupleParam lp pats rp = case pats of
   [pat] -> pat
   _ -> PTuple (spanPos (tokPos lp) (tokPos rp)) pats
 
+-- | Update the "allpos" in a pattern with a new position.
+--
+--   This is used to widen the positions of named-parameter params
+--   that are written in parentheses to include said parentheses.
+--   Otherwise we can end up leaving off the opening paren at the
+--   beginning of a parameter list (or the closing paren at the end)
+--   when reporting the position of the whole list, which is
+--   unsightly.
+fixParamPos :: Pos -> (Maybe ParamLabel, Pattern) -> (Maybe ParamLabel, Pattern)
+fixParamPos newpos (mLabel, pat) =
+  let pat' = case pat of
+        PImplicit _pos mt -> PImplicit newpos mt
+        PWild _pos mt -> PWild newpos mt
+        PVar _allpos xpos x mt -> PVar newpos xpos x mt
+        PTuple _pos pats -> PTuple newpos pats
+  in
+  (mLabel, pat')
+
 -- | Pop off the last statement in a do-block, which is required to
 --   be a plain expression, and unpack it to an expression.
 buildBlock :: Pos -> [Stmt] -> Either ParseError Expr
 buildBlock pos stmts = case reverse stmts of
-  StmtBind _spos (PWild _patpos _noty) e : revstmts' ->
+  StmtBind _spos (PImplicit _patpos _noty) e : revstmts' ->
     Right $ Block pos (reverse revstmts', e)
   [] ->
     Left $ EmptyBlock pos
@@ -697,6 +723,6 @@ mkFuncType tys = do
               -- This is not allowed by the grammar
               panic "mkFuncType" ["Return value was named"]
 
-  Right $ tFun pos nameinfo posParams namedParams ret'
+  Right $ txFun pos nameinfo posParams namedParams ret'
 
 }

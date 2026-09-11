@@ -65,6 +65,7 @@ import qualified Mir.Generator as MIR (RustModule)
 import qualified Mir.Mir as MIR
 
 import SAWSupport.Position
+import SAWSupport.ConsoleSupport (Fatal(..))
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
 import qualified SAWSupport.Pretty as PPS
@@ -81,12 +82,12 @@ import qualified SAWCentral.Position as SS
 import SAWCentral.AST (Import(..), PrimitiveLifecycle(..), defaultAvailable)
 import SAWCentral.Bisimulation
 import SAWCentral.Builtins
-import SAWCentral.Exceptions (failTypecheck)
 import qualified SAWScript.Loader as Loader
 import SAWCentral.JavaExpr
 import SAWCentral.LLVMBuiltins
 import SAWCentral.Options
 import SAWScript.Typechecker (checkStmt, typesMatch)
+import qualified SAWScript.Typechecker as Ty (Message(..))
 import SAWScript.Panic (HasCallStack, panic)
 import SAWCentral.TopLevel
 import SAWCentral.Utils
@@ -195,10 +196,12 @@ isPolymorphic ty0 = case ty0 of
 -- XXX: also it should be moved to ASTUtil once we have such a place.
 getType :: SS.Pattern -> SS.Type
 getType pat = case pat of
+    SS.PImplicit _pos ~(Just t) -> t
     SS.PWild _pos ~(Just t) -> t
     SS.PVar _allpos _xpos _x ~(Just t) -> t
     SS.PTuple tuplepos pats ->
-        SS.TyCon tuplepos (SS.TupleCon (genericLength pats)) (map getType pats)
+        let prov = SS.TypeFromElement tuplepos SS.TyCtxPat in
+        SS.TyCon prov (SS.TupleCon (genericLength pats)) (map getType pats)
 
 -- Convert some text to an InputText for cryptol-saw-core.
 toInputText :: SS.Pos -> Text -> CEnv.InputText
@@ -215,7 +218,6 @@ toInputText pos0 txt =
       SS.Range f sl sc _ _ -> (f,sl, sc)
       SS.FileOnlyPos f -> (f, 1, 1)
       SS.FileAndFunctionPos f _ -> (f, 1, 1)
-      SS.PosInferred _ pos' -> extract pos'
       SS.PosInternal s -> (s,1,1)
       SS.PosInsideBuiltin -> ("(builtin)", 1, 1)
       SS.PosREPL       -> ("<interactive>", 1, 1)
@@ -379,20 +381,24 @@ popdir = do
 bindPattern :: SS.Rebindable -> SS.Pattern -> Maybe SS.Schema -> Value -> TopLevel ()
 bindPattern rb pat ms v =
   case pat of
+    SS.PImplicit _pos _ ->
+      pure ()
     SS.PWild _pos _ ->
       pure ()
-    SS.PVar allpos _xpos _x Nothing ->
+    SS.PVar allpos _xpos _x Nothing -> do
+      ppopts <- getPPOpts
       panic "bindPattern" [
           "Found pattern with no type in it",
-          "Source position: " <> Text.pack (show allpos),
-          "Pattern: " <> Text.pack (show pat)
-      ]
+          "Source position: " <> ppPosition allpos,
+          "Pattern: " <> SS.ppPattern ppopts pat
+       ]
     SS.PVar _allpos xpos x (Just ty) ->
       let s = fromMaybe (SS.tMono ty) ms in
       extendEnv xpos x rb s Nothing v
     SS.PTuple _pos ps ->
       case v of
         VTuple vs -> do
+            ppopts <- getPPOpts
             let mss = case ms of
                     Nothing ->
                         repeat Nothing
@@ -400,7 +406,7 @@ bindPattern rb pat ms v =
                         [ Just (SS.Forall ks t) | t <- ts ]
                     Just t ->
                         panic "bindPattern" [
-                            "Expected tuple type, got " <> Text.pack (show t)
+                            "Expected tuple type, got " <> SS.ppSchema ppopts t
                         ]
             sequence_ $ zipWith3 (bindPattern rb) ps mss vs
         _ -> do
@@ -486,21 +492,33 @@ instance InterpreterMonad MIRSetupM where
 -- Process a typechecker result.
 -- Wraps the typechecker in the stuff needed to print its warnings and errors.
 --
--- XXX: this code should probably live inside the typechecker.
+-- XXX: this code should probably live inside the typechecker, but if
+-- not we should at least be using the copy in the loader instead of
+-- having our own version.
 --
 -- Usage is processTypeCheck $ checkStmt ...
-type MsgList = [(SS.Pos, PPS.Doc)]
-processTypeCheck :: InterpreterMonad m => (Either MsgList a, MsgList) -> m a
-processTypeCheck (errs_or_output, warns) =
+--
+processTypeCheck :: InterpreterMonad m => ([Ty.Message], a) -> m a
+processTypeCheck (msgs, output) =
   liftTopLevel $ do
     ppopts <- getPPOpts
-    let issueWarning (pos, msg) = do
-          -- XXX the print functions should be what knows how to show positions...
-          let pos' = prettyPosition pos
-              msg' = pos' <> ": Warning:" <+> msg
-          printOutLnTop Warn $ PPS.render ppopts msg'
-    mapM_ issueWarning warns
-    either (failTypecheck ppopts) return errs_or_output
+    let inspect msg (msgs', failed) = case msg of
+          Ty.Error p m -> ((Error, p, "Error: ", m) : msgs', True)
+          Ty.Warning p m -> ((Warn, p, "Warning: ", m) : msgs', failed)
+          Ty.Notice p m -> ((Info, p, "Note: ", m) : msgs', failed)
+          Ty.Comment p m -> ((Info, p, "", m) : msgs', failed)
+    let (msgs', failed) = foldr inspect ([], False) msgs
+
+    let issue (pri, pos, desc, msg) = do
+            -- XXX the print functions should be what knows how to show positions...
+            let pos' = prettyPosition pos
+                msg' = pos' <> ":" <+> desc <> msg
+            printOutLnTop pri $ PPS.render ppopts msg'
+    mapM_ issue msgs'
+
+    when failed $
+        liftIO $ X.throwIO $ Fatal False
+    pure output
 
 
 ------------------------------------------------------------
@@ -871,7 +889,7 @@ interpretExpr expr =
                       panic "interpretExpr" [
                            "Read of inaccessible variable " <> x
                       ]
-      SS.Lambda _pos mname params namedParams e -> do
+      SS.Lambda _pos mname _paramPos params namedParams e -> do
           env <- gets rwEnviron
           let namedParams' = Map.map (\(_, (_, d, p)) -> (d, p)) namedParams
           return $ VLambda env mname params namedParams' e
@@ -934,7 +952,7 @@ interpretDeclGroup rebindable dg = case dg of
             -- circular knot that can only be constructed in very
             -- specific ways.
             extractFunction x e0 = case e0 of
-                SS.Lambda _ mname params namedParams e1 ->
+                SS.Lambda _ mname _ params namedParams e1 ->
                     let namedParams' = Map.map (\(_, (_, d, p)) -> (d, p)) namedParams in
                     \env -> VLambda env mname params namedParams' e1
                 SS.TSig _ e1 _ ->
@@ -959,6 +977,7 @@ interpretDeclGroup rebindable dg = case dg of
             -- Recursive declaration sets are only allowed to contain
             -- functions, so the pattern cannot be a tuple.
             extractName pat = case pat of
+                SS.PImplicit _ _ -> Nothing
                 SS.PWild _ _ -> Nothing
                 SS.PVar _ xpos x _mty -> Just (xpos, x)
                 SS.PTuple{} ->
@@ -1211,8 +1230,8 @@ processStmtBind printBinds pos pat expr = do
   -- Eval the expression
   baseVal <- liftTopLevel $ interpretExpr expr
 
-  -- Fetch the type from updated pattern, since the typechecker will
-  -- have filled it in there.
+  -- Fetch the type from the pattern. The typechecker will have filled
+  -- it in there for us.
   --
   -- Note that this type won't include the current monad type, because
   -- it's the type of the value that the pattern on the left of <- is
@@ -1242,13 +1261,17 @@ processStmtBind printBinds pos pat expr = do
     -- Extract the variable, if any, from the pattern. If there isn't
     -- any single variable use "it".
     let name = case pat of
+          SS.PImplicit _patpos _t -> "it"
           SS.PWild _patpos _t -> "it"
           SS.PVar _patpos _xpos x _t -> x
           SS.PTuple _patpos _pats -> "it"
 
     -- Print non-unit result if it was not bound to a variable
+    -- (PImplicit is when not bound, PWild is when someone wrote _ <-
+    -- e, and in the latter case we can assume they meant to throw
+    -- away the value.)
     case pat of
-      SS.PWild _ _ | not (isVUnit result) ->
+      SS.PImplicit _ _ | not (isVUnit result) ->
         liftTopLevel $
         do sc <- getSharedContext
            result' <- liftIO $ ppValue sc result
@@ -1291,31 +1314,37 @@ interpretTopStmt printBinds replTypingHacks stmt = do
 
       let typingResults =
             if replTypingHacks then
-                case checkStmt ppopts avail varenv3 tyenv ctx stmt of
-                   (Right output, warns) ->
-                       (Right output, warns)
-                   (Left errs, warns) ->
-                       -- If it doesn't typecheck as a statement, and
-                       -- it was a plain expression, which will come
-                       -- through as _ <- e, wrap it in "return" and
-                       -- try again.
-                       case stmt of
-                           SS.StmtBind spos (SS.PWild wpos wty) e ->
-                               let epos = SS.getPos e
-                                   ret = SS.Var epos "return"
-                                   e' = SS.Application epos ret [(Nothing, e)]
-                                   rstmt = SS.StmtBind spos (SS.PWild wpos wty) e'
-                               in
-                               case checkStmt ppopts avail varenv3 tyenv ctx rstmt of
-                                   (Left _, _) ->
-                                       -- did not work, use original errors
-                                       (Left errs, warns)
-                                   (Right output', warns') ->
-                                       -- worked, use this version
-                                       (Right output', warns')
-                           _ ->
-                               -- doesn't match, use the original errors
-                               (Left errs, warns)
+                let (msgs, output) = checkStmt ppopts avail varenv3 tyenv ctx stmt in
+                let isError msg = case msg of
+                        Ty.Error{} -> True
+                        _ -> False
+                in
+                if any isError msgs then
+                    -- If it doesn't typecheck as a statement, and
+                    -- it was a plain expression, which will come
+                    -- through as _ <- e (`PImplicit` rather than
+                    -- `PWild`), wrap it in "return" and try again.
+                    case stmt of
+                        SS.StmtBind spos (SS.PImplicit wpos wty) e ->
+                            let epos = SS.getPos e
+                                ret = SS.Var epos "return"
+                                e' = SS.Application epos ret [(Nothing, e)]
+                                rstmt = SS.StmtBind spos (SS.PImplicit wpos wty) e'
+                            in
+                            let (msgs', output') =
+                                  checkStmt ppopts avail varenv3 tyenv ctx rstmt
+                            in
+                            if any isError msgs' then
+                                -- did not work, use original messages
+                                (msgs, output)
+                            else
+                                -- worked, use this version
+                                (msgs', output')
+                        _ ->
+                            -- doesn't match, use the original errors
+                            (msgs, output)
+                else
+                    (msgs, output)
             else
                 checkStmt ppopts avail varenv3 tyenv ctx stmt
       processTypeCheck typingResults
@@ -1462,15 +1491,16 @@ interpretMain = do
   avail <- gets rwPrimsAvail
   Environ varenv tyenv _cryenv <- gets rwEnviron
   rbenv <- gets rwRebindables
-  let pos = SS.PosInternal "entry"
+  let pos = SS.PosInternal "call-to-main"
+      prov = SS.TypeFromElement pos SS.TyCtxExpr
       -- We need the type to be "TopLevel a", not just "TopLevel ()".
       -- There are several (old) tests in the test suite whose main
       -- returns something, e.g. several are TopLevel Theorem because
       -- they call prove_print or prove_sat or whatever and don't
       -- explicitly throw away the result.
-      tyRet = SS.TyVar pos "a"
-      tyMonadic = SS.tBlock pos (SS.tContext pos SS.TopLevel) tyRet
-      tyExpected = SS.Forall [(pos, "a")] tyMonadic
+      tyRet = SS.TyVar prov "a"
+      tyMonadic = SS.tApply prov (SS.tContext prov SS.TopLevel) tyRet
+      tyExpected = SS.Forall [(SS.SchemaNameExplicit pos, "a")] tyMonadic
   let main = case ScopedMap.lookup "main" varenv of
           Just (_defpos, lc, tyFound, v, _doc) -> Just (lc, tyFound, v)
           -- Having main be rebindable doesn't make much sense, but
@@ -1487,7 +1517,7 @@ interpretMain = do
         SS.Forall _ (SS.TyCon _ SS.BlockCon [_, _]) -> do
             -- It looks like a monadic value, so check more carefully.
             ppopts <- getPPOpts
-            case typesMatch ppopts avail tyenv tyFound tyExpected of
+            case typesMatch ppopts avail tyenv "main" tyFound tyExpected of
               False ->
                   -- While we accept any TopLevel a, don't encourage people
                   -- to do that.
@@ -2548,7 +2578,10 @@ toplevelSubshell () = do
     rw' <- liftIO $ hook ro rw
     put rw'
     popScope
-    let ty = SS.tUnit (rwPosition rw)
+    -- Note that (for now at least) toValue just asserts that the type
+    -- matches the value; on failure the message prints the type but
+    -- not the type provenance. So it doesn't have to be perfect.
+    let ty = SS.tUnit $ SS.TypeFromElement (rwPosition rw) SS.TyCtxExpr
     return $ toValue ty "subshell" ()
 
 -- The proof_subshell command.
@@ -2570,7 +2603,10 @@ proofScriptSubshell () = do
     scriptTopLevel $ do
         put rw'
         popScope
-    let ty = SS.tUnit (rwPosition rw)
+    -- Note that (for now at least) toValue just asserts that the type
+    -- matches the value; on failure the message prints the type but
+    -- not the type provenance. So it doesn't have to be perfect.
+    let ty = SS.tUnit $ SS.TypeFromElement (rwPosition rw) SS.TyCtxExpr
     return $ toValue ty "proof_subshell" ()
 
 -- The "map" builtin.
@@ -2578,10 +2614,15 @@ mapValue :: Value -> [Value] -> TopLevel Value
 mapValue f xs =
   do let pos = SS.PosInsideBuiltin
      let info = "(value was in a \"map\")"
-     -- toValue will check the array type but not the element type,
-     -- since we already have Values here. So use unit as a
+     -- Note that (for now at least) toValue just asserts that the type
+     -- matches the value; on failure the message prints the type but
+     -- not the type provenance. So it doesn't have to be perfect.
+     --
+     -- Also, since this is an array of Value, toValue will check the
+     -- array type but not the element type.  Use unit as a
      -- placeholder.
-     let ty = SS.tArray pos (SS.tUnit pos)
+     let prov = SS.TypeFromElement pos SS.TyCtxExpr
+         ty = SS.tArray prov (SS.tUnit prov)
      toValue ty "map" <$> traverse (applyValue pos info f) xs
 
 -- The "for" builtin.
@@ -3353,7 +3394,6 @@ primTypes = foldl doadd Map.empty
           { primTypeType = SS.ConcreteType ty
           , primTypeLife = lc
           }
-        fakeFileName = Text.unpack $ "<definition of builtin type " <> name <> ">"
 
         -- We need a Map Name (PrimitiveLifecycle, NamedType) to feed
         -- to readSchemaPure. Construct one from the Map Name PrimType
@@ -3363,7 +3403,7 @@ primTypes = foldl doadd Map.empty
         tyenv' = Map.map (\pt -> (primTypeLife pt, primTypeType pt)) tyenv
         tyenv'' = ScopedMap.seed tyenv'
 
-        ty = case Loader.readSchemaPure fakeFileName lc tyenv'' tystr of
+        ty = case Loader.readSchemaPure name lc tyenv'' tystr of
             SS.Forall [] ty' ->
                 ty'
             _ ->
@@ -4705,7 +4745,7 @@ primitives = Map.fromList $
     [ "Merge two simplification sets into one." ]
 
   , prim "basic_ss"            "Simpset"
-    (bicVal $ \bic _ -> toValue (SS.TyVar SS.PosInsideBuiltin "Simpset") "basic_ss" $ biBasicSS bic)
+    (bicVal $ \bic _ -> toValue (SS.TyVar (SS.TypeFromElement SS.PosInsideBuiltin SS.TyCtxExpr) "Simpset") "basic_ss" $ biBasicSS bic)
     Current
     [ "A basic rewriting simplification set containing some boolean"
     , "identities and conversions relating to bitvectors, natural"
@@ -8365,8 +8405,7 @@ primitives = Map.fromList $
         -- reasons we have a :env call in the test suite, even though
         -- it requires maintenance for every change to the builtin
         -- table. Otherwise these panics can go unnoticed.
-        fakeFileName = Text.unpack $ "<type of " <> name <> ">"
-        ty' = Loader.readSchemaPure fakeFileName lc primNamedTypeEnv ty
+        ty' = Loader.readSchemaPure name lc primNamedTypeEnv ty
         ty'' = case ty' of
             SS.Forall _ t -> t
 
