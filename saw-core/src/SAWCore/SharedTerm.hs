@@ -31,12 +31,9 @@ module SAWCore.SharedTerm
   ( -- * Terms
     Term -- exported as abstract
   , TermF(..)
-  , Ident, mkIdent
+  , mkQualName
   , VarIndex
-  , NameInfo
-  , pattern ModuleIdentifier
-  , pattern ImportedName
-  , mkImportedName
+  , QualName
   , TermIndex
   , unwrapTermF
   , termIndex
@@ -374,7 +371,6 @@ import SAWCore.Recognizer
 import SAWCore.Term.Certified
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
-import SAWCore.QualName (QualName)
 import qualified SAWCore.QualName as QN
 
 --------------------------------------------------------------------------------
@@ -742,12 +738,11 @@ scVariables :: Traversable t => SharedContext -> t (VarName, Term) -> IO (t Term
 scVariables sc = traverse (\(v, t) -> scVariable sc v t)
 
 -- | Generate a 'Name' with a fresh 'VarIndex' for the given
--- 'NameInfo' and register everything together in the naming
+-- 'QualName' and register everything together in the naming
 -- environment of the 'SharedContext'.
--- Throws an exception if the QualName in the 'NameInfo' is already
--- registered.
-scRegisterName :: SharedContext -> NameInfo -> IO Name
-scRegisterName sc nmi = execSCM sc (scmRegisterName nmi)
+-- Throws an exception if the 'QualName' is already registered.
+scRegisterName :: SharedContext -> QualName -> IO Name
+scRegisterName sc qn = execSCM sc (scmRegisterName qn)
 
 -- | Create a unique global name with the given base name.
 scFreshName :: SharedContext -> Text -> IO Name
@@ -895,34 +890,34 @@ scFreshConstant ::
   IO Term
 scFreshConstant sc name rhs = execSCM sc (scmFreshConstant name rhs)
 
--- | Define a global constant with the specified name (as 'NameInfo')
+-- | Define a global constant with the specified name (as 'QualName')
 -- and body.
--- The QualName in the given 'NameInfo' must be globally unique.
+-- The 'QualName' must be globally unique.
 -- The term for the body must not have any free variables.
 -- The type of the body determines the type of the constant; to
 -- specify a different formulation of the type, use 'scAscribe'.
 scDefineConstant ::
   SharedContext ->
-  NameInfo {- ^ The name -} ->
+  QualName {- ^ The name -} ->
   Term {- ^ The body -} ->
   IO Term
-scDefineConstant sc nmi rhs = execSCM sc (scmDefineConstant nmi rhs)
+scDefineConstant sc qn rhs = execSCM sc (scmDefineConstant qn rhs)
 
 -- | Declare a SAW core primitive of the specified type.
-scDeclarePrim :: SharedContext -> NameInfo -> DefQualifier -> Term -> IO ()
-scDeclarePrim sc nmi q ty = execSCM sc (scmDeclarePrim nmi q ty)
+scDeclarePrim :: SharedContext -> QualName -> DefQualifier -> Term -> IO ()
+scDeclarePrim sc qn q ty = execSCM sc (scmDeclarePrim qn q ty)
 
 -- | Declare a global opaque constant with the specified name (as
--- 'NameInfo') and type.
+-- 'QualName') and type.
 -- Such a constant has no definition, but unlike a variable it may be
 -- used in other constant definitions and is not subject to
 -- lambda-binding or substitution.
 scOpaqueConstant ::
   SharedContext ->
-  NameInfo ->
+  QualName ->
   Term {- ^ type of the constant -} ->
   IO Term
-scOpaqueConstant sc nmi ty = execSCM sc (scmOpaqueConstant nmi ty)
+scOpaqueConstant sc qn ty = execSCM sc (scmOpaqueConstant qn ty)
 
 -- | Define a new data type with constructors in the global context.
 -- Return the type constructor and data constructors as 'Name's.
@@ -2336,7 +2331,7 @@ getAllVarsMap t0 = State.evalState (go t0) IntMap.empty
              pure (vars1 <> Map.delete x vars2)
         _ -> Fold.fold <$> traverse go tf
 
-getConstantSet :: Term -> Map VarIndex NameInfo
+getConstantSet :: Term -> Map VarIndex QualName
 getConstantSet t0 = snd $ go (IntSet.empty, Map.empty) t0
   where
     go acc@(idxs, names) t

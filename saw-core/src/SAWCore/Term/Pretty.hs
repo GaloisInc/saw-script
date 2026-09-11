@@ -522,10 +522,10 @@ prettyBestName nm =
   do ne <- asks ppNamingEnv
      case bestDisplayName ne (nameIndex nm) of
        Just alias -> pure $ pretty alias
-       Nothing -> pure $ prettyName (nameInfo nm)
+       Nothing -> pure $ prettyQualName (nameQualName nm)
 
-prettyName :: NameInfo -> PPS.Doc
-prettyName nmi = pretty (QN.ppQualName (toQualName nmi))
+prettyQualName :: QualName -> PPS.Doc
+prettyQualName qn = pretty (QN.ppQualName qn)
 
 -- | Pretty-print a non-shared term
 prettyTermF :: Prec -> TermF Term -> PPM PPS.Doc

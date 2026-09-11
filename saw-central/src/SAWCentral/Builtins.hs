@@ -273,8 +273,7 @@ import qualified SAWCore.Parser.AST as Un
 import SAWCore.Parser.Grammar (parseSAW, parseSAWTerm)
 import SAWCore.ExternalFormat
 import SAWCore.Module (lookupVarIndexInMap, ResolvedName(..))
-import SAWCore.Name (ModuleName, Name(..), VarName(..), mkModuleName, moduleIdentToQualName)
-import SAWCore.QualName (QualName)
+import SAWCore.Name (ModuleName, Name(..), VarName(..), mkModuleName)
 import SAWCore.SATQuery
 import SAWCore.Simulator.Concrete (constMap)
 import SAWCore.Simulator.Uninterpreted (generalizeHigherOrderFunctions)
@@ -810,13 +809,10 @@ resolveNameIO sc cenv nm =
      case res of
        Just cnm ->
          do importedName <- CSC.importName cnm
-            case importedName of
-              ImportedName qn ->
-                do resolvedName <- scResolveQualName sc qn
-                   case resolvedName of
-                     Just n -> pure (nameIndex n : scnms)
-                     Nothing -> pure scnms
-              _ -> pure scnms
+            resolvedName <- scResolveQualName sc importedName
+            case resolvedName of
+              Just n -> pure (nameIndex n : scnms)
+              Nothing -> pure scnms
        Nothing -> pure scnms
 
 -- | Given a user-provided name, resolve it to (potentially several)
@@ -1586,14 +1582,14 @@ addPreludeEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
-    where qualify = moduleIdentToQualName . mkIdent (mkModuleName ["Prelude"])
+    where qualify = mkQualName (mkModuleName ["Prelude"])
 
 addCryptolEqs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addCryptolEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
-    where qualify = moduleIdentToQualName . mkIdent (mkModuleName ["Cryptol"])
+    where qualify = mkQualName (mkModuleName ["Cryptol"])
 
 add_defs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 add_defs names ss =

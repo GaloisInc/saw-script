@@ -67,7 +67,6 @@ import Control.Monad.Trans.Class (MonadTrans(..))
 import Numeric.Natural (Natural)
 
 -- saw-core
-import SAWCore.QualName (QualName)
 import qualified SAWCore.Recognizer as R
 import qualified SAWCore.Simulator as Sim
 import qualified SAWCore.Simulator.Prims as Prims
@@ -1067,7 +1066,7 @@ w4SolveBasic sym sc addlPrims varMap ref unintSet t0 =
             | otherwise = parseUninterpreted sym ref (mkUnintApp (Text.unpack x ++ "_" ++ show ix)) ty
      let uninterpreted nm ty
            | Set.member (nameIndex nm) unintSet =
-             let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
+             let vn = VarName (nameIndex nm) (toShortName (nameQualName nm))
              in Just (variable vn ty)
            | otherwise                          = Nothing
      let primHandler = Sim.defaultPrimHandler
@@ -1577,7 +1576,7 @@ w4EvalBasic sym st sc m addlPrims varCons ref unintSet t =
      let variable' tp vn ty = variable (Variable vn tp) vn ty
      let uninterpreted nm ty
            | Set.member (nameIndex nm) unintSet =
-             let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
+             let vn = VarName (nameIndex nm) (toShortName (nameQualName nm))
              in Just (variable (Constant nm) vn ty)
            | otherwise                          = Nothing
      let primHandler = Sim.defaultPrimHandler

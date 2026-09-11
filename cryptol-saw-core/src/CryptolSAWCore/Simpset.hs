@@ -15,7 +15,6 @@ module CryptolSAWCore.Simpset
 
 import SAWCore.Module (moduleDefs, Def(..))
 import SAWCore.Name
-import SAWCore.QualName (QualName)
 import SAWCore.Rewriter
 import SAWCore.SharedTerm
 
@@ -34,8 +33,7 @@ mkCryptolSimpset sc =
      scSimpset sc (cryptolDefs m) idents []
   where
     cryptolDefs m = filter (not . excluded) $ moduleDefs m
-    excluded d =
-      toQualName (nameInfo (defName d)) `elem` excludedNames
+    excluded d = nameQualName (defName d) `elem` excludedNames
     idents =
       [ "Prelude.coerce_same"
       , "Prelude.unsafeCoerce_same"

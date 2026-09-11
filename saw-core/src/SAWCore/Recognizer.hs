@@ -89,7 +89,6 @@ import Data.Text (Text)
 import Numeric.Natural (Natural)
 
 import SAWCore.Name
-import SAWCore.QualName (QualName)
 import SAWCore.Term.Functor
 import SAWCore.Term.Raw
 

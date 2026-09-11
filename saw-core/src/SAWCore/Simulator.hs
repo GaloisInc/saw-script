@@ -67,7 +67,6 @@ import SAWCore.Module
   , ResolvedName(..)
   )
 import SAWCore.Name
-import SAWCore.QualName (QualName)
 import SAWCore.SharedTerm
 
 import SAWCore.Simulator.Value
@@ -328,7 +327,7 @@ evalLTerm cfg consts vars lets t0 =
                 _ ->
                   panic "evalTermF"
                   [ "Data type not found for recursor: " <>
-                    toAbsoluteName (nameInfo (recursorDataType r)) ]
+                    toAbsoluteName (nameQualName (recursorDataType r)) ]
         Sort s _h ->
           pure $ TValue (VSort s)
         ArrayValue _ tv ->
@@ -413,7 +412,7 @@ evalLTerm cfg consts vars lets t0 =
           ["Unsupported symbolic recursor argument of type Nat"]
         _ ->
           panic "evalTermF / evalRecursor"
-          ["Expected constructor for datatype: " <> toAbsoluteName (nameInfo (dtName dt))]
+          ["Expected constructor for datatype: " <> toAbsoluteName (nameQualName (dtName dt))]
 
     evalCtorMuxBranch ::
       VRecursor l ->
@@ -577,7 +576,7 @@ evalGlobal' modmap prims variable constant recursor primHandler lazymux =
     primitive nm =
       case Map.lookup (nameQualName nm) prims of
         Just v  -> evalPrim (primHandler nm) v
-        Nothing -> panic "evalGlobal'" ["Unimplemented global: " <> toAbsoluteName (nameInfo nm)]
+        Nothing -> panic "evalGlobal'" ["Unimplemented global: " <> toAbsoluteName (nameQualName nm)]
 
     recursor' :: Name -> Sort -> Maybe (MValue l)
     recursor' nm s = evalPrim (primHandler nm) <$> recursor nm s
@@ -611,7 +610,7 @@ checkPrimitives modmap prims = do
         overridePrims = Set.toList $ Set.intersection defSet implementedPrims
 
 defQualName :: Def -> QualName
-defQualName d = toQualName (nameInfo (defName d))
+defQualName d = nameQualName (defName d)
 
 ----------------------------------------------------------------------
 -- The evaluation strategy for shared terms involves a preprocessing
@@ -661,7 +660,7 @@ evalSharedTerm cfg t =
                ResolvedCtor ctor ->
                  ctorValue (ctorNumber ctor) (ctorMuxability ctor) (ctorNumParams ctor) (ctorNumArgs ctor)
                ResolvedDataType dt ->
-                 dtValue (toQualName (nameInfo nm)) (dtNumParams dt) (dtNumIndices dt)
+                 dtValue (nameQualName nm) (dtNumParams dt) (dtNumIndices dt)
                ResolvedDef d ->
                  case defBody d of
                    Just body -> evalLTerm cfg consts mempty mempty (toLTerm body)
@@ -769,7 +768,7 @@ defaultPrimHandler ::
   Name -> Text -> [Thunk l] -> MValue l
 defaultPrimHandler nm msg env =
   fail $ unlines
-  [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))
+  [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameQualName nm))
   , "On argument " ++ show (length env)
   , Text.unpack msg
   ]

@@ -119,9 +119,8 @@ import SAWCore.Recognizer
 import SAWCore.SharedTerm
 import SAWCore.Simulator.MonadLazy (force)
 import SAWCore.Module (CtorArg(..))
-import SAWCore.Name (Name, VarName, nameInfo, toQualName, wildcardVarName)
+import SAWCore.Name (Name, VarName, nameQualName, wildcardVarName)
 import SAWCore.Term.Functor (mkSort, FieldName, LocalName)
-import SAWCore.QualName (QualName)
 import qualified SAWCore.QualName as QN
 
 -- local modules:
@@ -348,8 +347,8 @@ importType sc env ty = do
            C.Enum {} ->
              -- The (parameterized) type should be in the sc env,
              -- just apply types to it:
-             do ni <- importName n
-                mnm <- scResolveQualName sc (toQualName ni)
+             do qn <- importName n
+                mnm <- scResolveQualName sc qn
                 case mnm of
                   Just nm ->
                     do t <- scConstApply sc nm =<< traverse go ts
@@ -1481,8 +1480,8 @@ cryptolQualName ::
 cryptolQualName ps sps nm midx =
   QN.QualName ps sps nm midx (Just QN.NamespaceCryptol)
 
--- | Import a Cryptol `C.Name` and produce a SAWCore `NameInfo`.
-importName :: C.Name -> IO NameInfo
+-- | Import a Cryptol `C.Name` and produce a SAWCore `QualName`.
+importName :: C.Name -> IO QualName
 importName cnm =
   case C.nameInfo cnm of
     C.LocalName {} -> fail ("Cannot import non-top-level name: " ++ Text.unpack (CryPP.pp cnm))
@@ -1490,7 +1489,7 @@ importName cnm =
       | C.ogModule og == C.TopModule C.interactiveName ->
           let shortNm = C.identText (C.nameIdent cnm)
               qn = cryptolQualName [] [] shortNm (Just (C.nameUnique cnm))
-           in pure (mkImportedName qn)
+           in pure qn
 
       | otherwise -> do
           let (topMod, nested) = C.modPathSplit (C.ogModule og)
@@ -1525,7 +1524,7 @@ importName cnm =
                   fail $ Text.unpack $ "Unexpected/unsupported module " <>
                                        "parameter name " <> C.identText i <>
                                        " in Cryptol name " <> QN.ppQualName qn
-          pure (mkImportedName qn)
+          pure qn
 
 -- | Recognize 'Term's of the form @PairType1 a b@.
 asPairType1 :: Term -> Maybe (Term, Term)
@@ -2450,11 +2449,9 @@ deriveEqInstance sc env dtName dtParams props ctorArgTypes =
      r <- scRecordValue sc [("eq", eqf)]
      r1 <- scAscribe sc r =<< scGlobalApply sc "Cryptol.PEq" [ty]
      r2 <- scAbstractTerms sc (dtParamsVars ++ propVars) r1
-     let dtNameInfo = nameInfo dtName
-     let dtQualName = toQualName dtNameInfo
+     let dtQualName = nameQualName dtName
      let instQualName = dtQualName { QN.baseName = "PEq__" <> QN.baseName dtQualName }
-     let instNameInfo = mkImportedName instQualName
-     c <- scDefineConstant sc instNameInfo r2
+     c <- scDefineConstant sc instQualName r2
      rule <- mkIntroRule sc c
      addInstance sc rule
 
@@ -2528,11 +2525,9 @@ deriveCmpInstanceGeneric
      r <- scRecordValue sc [(eqField, cmpEq), (cmpField, cmp), (leField, le), (ltField, lt)]
      r1 <- scAscribe sc r =<< scGlobalApply sc className [ty]
      r2 <- scAbstractTerms sc (dtParamsVars ++ propVars) r1
-     let dtNameInfo = nameInfo dtName
-     let dtQualName = toQualName dtNameInfo
+     let dtQualName = nameQualName dtName
      let instQualName = dtQualName { QN.baseName = prefix <> QN.baseName dtQualName }
-     let instNameInfo = mkImportedName instQualName
-     c <- scDefineConstant sc instNameInfo r2
+     c <- scDefineConstant sc instQualName r2
      rule <- mkIntroRule sc c
      addInstance sc rule
 
@@ -2644,7 +2639,7 @@ genCodeForEnum sc nt ctors =
                    pure (vn, ConstArg ty)
               pure $
                 CtorSpec
-                { cspecNameInfo = nmi
+                { cspecQualName = nmi
                 , cspecArgs = args
                 , cspecIndices = []
                 }
@@ -2656,7 +2651,7 @@ genCodeForEnum sc nt ctors =
      argName <- scFreshVarName sc "arg"
      let dtSpec =
            DataTypeSpec
-           { dtsNameInfo = nmi
+           { dtsQualName = nmi
            , dtsParams = mapMaybe asVariable (params ++ constraints)
            , dtsIndices = []
            , dtsSort = mkSort 0
@@ -2851,8 +2846,8 @@ importCase sc env tyResult scrutinee altsMap mDfltAlt =
      tyArgs' <- (snd . asApplyAll) <$> scTypeOf sc scrutinee'
 
      -- The recursor
-     nmi        <- importName nm
-     mName      <- scResolveQualName sc (toQualName nmi)
+     qn         <- importName nm
+     mName      <- scResolveQualName sc qn
      recursor   <- case mName of
                      Just dtName -> scRecursor sc dtName (mkSort 0)
                      Nothing -> panic "importCase" ["Type name not found:", CryPP.pp nm]

@@ -42,8 +42,8 @@ import GHC.Num.Natural (Natural)
 
 import SAWCore.FiniteValue (FirstOrderType(..))
 import SAWCore.Module (ModuleMap, ResolvedName(..), Def(..), DataType(..), Ctor(..), lookupVarIndexInMap)
-import SAWCore.Name (Name(..), VarCtx, NameInfo, VarName(..), VarIndex,
-                     emptyVarCtx, consVarCtx, lookupVarCtx, toQualName)
+import SAWCore.Name (Name(..), VarCtx, VarName(..), VarIndex, QualName,
+                     emptyVarCtx, consVarCtx, lookupVarCtx)
 import qualified SAWCore.QualName as QN
 import SAWCore.SATQuery (SATQuery, SATAssert(..), satVariables, satUninterp, satAsserts)
 import SAWCore.Term.Functor (FlatTermF(..), TermF(..), Sort(..), CompiledRecursor(..))
@@ -138,8 +138,8 @@ instance Bytes Text where
     where
       bs = encodeUtf8 txt
 
-instance Bytes NameInfo where
-  bytes nmi = bytes (QN.ppQualName (toQualName nmi))
+instance Bytes QualName where
+  bytes qn = bytes (QN.ppQualName qn)
 
 instance Bytes Sort where
   bytes = \case
@@ -250,7 +250,7 @@ fpDef nm = do
       pure $ tag <> body
   where
     ni :: BS.Builder
-    ni = bytes $ nameInfo nm
+    ni = bytes $ nameQualName nm
 
 fpAssert :: VarCtx -> SATAssert -> FP BS.Builder
 fpAssert ctx = \case

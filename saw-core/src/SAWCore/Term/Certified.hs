@@ -791,25 +791,24 @@ scmFreshVarIndex =
 -- 'VarIndex'.
 -- Valid aliases are generated based on the provided 'QN.POpts'.
 -- Not exported.
-scmRegisterNameInfoWithIndex :: VarIndex -> QN.POpts -> NameInfo -> SCM Name
-scmRegisterNameInfoWithIndex i opts nmi =
+scmRegisterQualNameWithIndex :: VarIndex -> QN.POpts -> QualName -> SCM Name
+scmRegisterQualNameWithIndex i opts qn =
   do sc <- scmSharedContext
-     let qn = toQualName nmi
      qns <- liftIO $ readIORef (scQualNameEnv sc)
      when (Map.member qn qns) $ scmError (DuplicateQualName qn)
-     let nm = Name i nmi
+     let nm = Name i qn
      liftIO $ writeIORef (scQualNameEnv sc) (Map.insert qn nm qns)
      let aliases = QN.aliasesOpts opts qn
      liftIO $ modifyIORef' (scDisplayNameEnv sc) $ extendDisplayNameEnv i aliases
      pure nm
 
 -- | Generate a 'Name' with a fresh 'VarIndex' for the given
--- 'NameInfo' and register everything together in the naming
+-- 'QualName' and register everything together in the naming
 -- environment of the 'SharedContext'.
-scmRegisterName :: NameInfo -> SCM Name
-scmRegisterName nmi =
+scmRegisterName :: QualName -> SCM Name
+scmRegisterName qn =
   do i <- scmFreshVarIndex
-     scmRegisterNameInfoWithIndex i QN.allAliasesPOpts nmi
+     scmRegisterQualNameWithIndex i QN.allAliasesPOpts qn
 
 scResolveQualName :: SharedContext -> QN.QualName -> IO (Maybe Name)
 scResolveQualName sc qn =
@@ -821,8 +820,7 @@ scmFreshName :: Text -> SCM Name
 scmFreshName x =
   do i <- scmFreshVarIndex
      let qn = scFreshQualName x i
-     let nmi = mkImportedName qn
-     scmRegisterNameInfoWithIndex i QN.allAliasesPOpts nmi
+     scmRegisterQualNameWithIndex i QN.allAliasesPOpts qn
 
 -- | Create a 'VarName' with the given identifier (which may be "_").
 scmFreshVarName :: Text -> SCM VarName
@@ -847,12 +845,11 @@ scmFreshInventedVar name ty = do
           { QN.pPath = QN.AlwaysPrint
           , QN.pSubPath = QN.AlwaysPrint
           }
-    qn = case parseQualName "" "" (LText.fromStrict name)  of
+    qn = case parseQualName "" "" (LText.fromStrict name) of
         Right qn_@(QN.QualName _ _ _ Nothing Nothing) -> qn_
         _ -> QN.simpleName name
     qn' = qn { QN.index = Just (vnIndex vn), QN.namespace = Just QN.NamespaceFresh }
-    nmi = mkImportedName qn'
-  _nm <- scmRegisterNameInfoWithIndex (vnIndex vn) popts nmi
+  _nm <- scmRegisterQualNameWithIndex (vnIndex vn) popts qn'
   scmUpdateData $ \(InventedVars m) ->
     InventedVars (IntMap.insert (vnIndex vn) ty m)
   return vn
@@ -966,11 +963,11 @@ scmDeclareDef nm q ty body =
      pure t
 
 -- | Declare a SAW core primitive of the specified type.
-scmDeclarePrim :: NameInfo -> DefQualifier -> Term -> SCM ()
-scmDeclarePrim nmi q def_tp =
+scmDeclarePrim :: QualName -> DefQualifier -> Term -> SCM ()
+scmDeclarePrim qn q def_tp =
   do scmEnsureValidTerm def_tp
      _ <- scmEnsureSortType def_tp
-     nm <- scmRegisterName nmi
+     nm <- scmRegisterName qn
      _ <- scmDeclareDef nm q def_tp Nothing
      pure ()
 
@@ -992,7 +989,7 @@ scInjectCode sc mnm ns txt =
 
 data DataTypeSpec =
   DataTypeSpec
-  { dtsNameInfo :: NameInfo
+  { dtsQualName :: QualName
     -- ^ The name of this data type
   , dtsParams :: [(VarName, Term)]
     -- ^ The context of parameters of this data type.
@@ -1013,7 +1010,7 @@ data DataTypeSpec =
 
 data CtorSpec =
   CtorSpec
-  { cspecNameInfo :: NameInfo
+  { cspecQualName :: QualName
     -- ^ The name of this constructor
   , cspecArgs :: [(VarName, CtorArg)]
     -- ^ The argument types of this constructor.
@@ -1032,7 +1029,7 @@ data CtorSpec =
 -- bound variables and inhabit the appropriate sorts.
 scmDefineDataType :: DataTypeSpec -> SCM (Name, [Name])
 scmDefineDataType dts =
-  do dName <- scmRegisterName (dtsNameInfo dts)
+  do dName <- scmRegisterName (dtsQualName dts)
      -- Enforce that sorts of dtsParams do not exceed dtsSort
      let checkParam (x, ty) =
            do paramSort <- scmEnsureSortType ty
@@ -1076,7 +1073,7 @@ scmDefineDataType dts =
               scmPiList (dtsParams dts) body
      let makeCtor :: (Int, CtorSpec) -> SCM Ctor
          makeCtor (n, cs) =
-           do cName <- scmRegisterName (cspecNameInfo cs)
+           do cName <- scmRegisterName (cspecQualName cs)
               cType <- ctorSpecType cName cs
               -- Enforce that cType is closed.
               unless (closedTerm cType) $
@@ -1111,10 +1108,10 @@ scmDefineDataType dts =
      liftIO $ modifyIORef' (scModuleMap sc) $ \mm ->
        case insTypeDeclInMap dt mm of
          -- This should never happen; duplicate names are detected by scRegisterName.
-         Left nm -> panic "scmDefineDataType" ["Duplicate name: " <> toAbsoluteName (nameInfo nm)]
+         Left nm -> panic "scmDefineDataType" ["Duplicate name: " <> toAbsoluteName (nameQualName nm)]
          Right mm' -> mm'
      -- Register data type constant in scGlobalEnv.
-     scmRegisterGlobal (toQualName (dtsNameInfo dts)) d
+     scmRegisterGlobal (dtsQualName dts) d
      -- Register constructors in scGlobalEnv.
      forM_ ctors $ \ctor ->
        do let nm = ctorName ctor
@@ -1397,7 +1394,7 @@ scmReduceRecursor r crec params motive elims c args =
        Just (ResolvedCtor ctor) ->
          ctorIotaReduction ctor r_applied cs_fs args
        _ ->
-         panic "scReduceRecursor" ["Could not find constructor: " <> toAbsoluteName (nameInfo c)]
+         panic "scReduceRecursor" ["Could not find constructor: " <> toAbsoluteName (nameQualName c)]
 
 -- | Function for computing the result of one step of iota reduction
 -- of the term
@@ -1421,7 +1418,7 @@ ctorIotaReduction ctor r cs_fs args =
         Just e -> e
         Nothing ->
           panic "ctorIotaReduction"
-          ["no eliminator for constructor " <> toAbsoluteName (nameInfo (ctorName ctor))]
+          ["no eliminator for constructor " <> toAbsoluteName (nameQualName (ctorName ctor))]
 
 --------------------------------------------------------------------------------
 -- Reduction to head-normal form
@@ -1993,37 +1990,37 @@ scmFreshConstant name rhs =
      ty <- scmTypeOf rhs
      scmDeclareDef nm NoQualifier ty (Just rhs)
 
--- | Define a global constant with the specified name (as 'NameInfo')
+-- | Define a global constant with the specified name (as 'QualName')
 -- and body.
--- The QualName in the given 'NameInfo' must be globally unique.
+-- The 'QualName' must be globally unique.
 -- The term for the body must not have any free variables.
 -- The type of the body determines the type of the constant; to
 -- specify a different formulation of the type, use 'scAscribe'.
 scmDefineConstant ::
-  NameInfo {- ^ The name -} ->
+  QualName {- ^ The name -} ->
   Term {- ^ The body -} ->
   SCM Term
-scmDefineConstant nmi rhs =
+scmDefineConstant qn rhs =
   do scmEnsureValidTerm rhs
      ty <- scmTypeOf rhs
-     nm <- scmRegisterName nmi
+     nm <- scmRegisterName qn
      unless (closedTerm rhs) $
        scmError (ConstantNotClosed nm rhs)
      scmDeclareDef nm NoQualifier ty (Just rhs)
 
 -- | Declare a global opaque constant with the specified name (as
--- 'NameInfo') and type.
+-- 'QualName') and type.
 -- Such a constant has no definition, but unlike a variable it may be
 -- used in other constant definitions and is not subject to
 -- lambda-binding or substitution.
 scmOpaqueConstant ::
-  NameInfo ->
+  QualName ->
   Term {- ^ type of the constant -} ->
   SCM Term
-scmOpaqueConstant nmi ty =
+scmOpaqueConstant qn ty =
   do scmEnsureValidTerm ty
      _ <- scmEnsureSortType ty
-     nm <- scmRegisterName nmi
+     nm <- scmRegisterName qn
      scmDeclareDef nm NoQualifier ty Nothing
 
 -- | Create a function application term from a global identifier and a list of

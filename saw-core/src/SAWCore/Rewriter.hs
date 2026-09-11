@@ -84,7 +84,6 @@ import SAWCore.Module
 import SAWCore.Name
 import qualified SAWCore.OpenTerm as OT
 import SAWCore.Panic (panic)
-import SAWCore.QualName (QualName)
 import qualified SAWCore.Recognizer as R
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
@@ -487,7 +486,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow convFlag ann) =
          dt <-
            case lookupVarIndexInMap (nameIndex d) mm of
              Just (ResolvedDataType dt) -> pure dt
-             _ -> panic "scExpandRewriteRule" ["Datatype not found: " <> toAbsoluteName (nameInfo d)]
+             _ -> panic "scExpandRewriteRule" ["Datatype not found: " <> toAbsoluteName (nameQualName d)]
          rules <- traverse ctorRule (dtCtors dt)
          return (Just rules)
     _ -> return Nothing

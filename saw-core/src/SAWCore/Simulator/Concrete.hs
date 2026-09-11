@@ -43,7 +43,6 @@ import SAWCore.Name
 import SAWCore.Panic (panic)
 import SAWCore.Prim (BitVector(..), signed, bv, bvNeg)
 import qualified SAWCore.Prim as Prim
-import SAWCore.QualName (QualName)
 import qualified SAWCore.Simulator as Sim
 import SAWCore.Simulator.Value
 import qualified SAWCore.Simulator.Prims as Prims
@@ -73,7 +72,7 @@ evalSharedTerm m addlPrims varVals t =
         _ -> Nothing
     primHandler nm msg env =
       return $ Prim.userError $ unlines
-        [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))
+        [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameQualName nm))
         , "On argument " ++ show (length env)
         , Text.unpack msg
         ]

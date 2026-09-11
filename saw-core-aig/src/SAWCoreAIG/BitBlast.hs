@@ -29,7 +29,6 @@ import Numeric.Natural (Natural)
 import SAWCore.FiniteValue (FiniteType(..),FirstOrderType(..),toFiniteType)
 import SAWCore.Name (Name(..), VarName(..), nameQualName)
 import SAWCore.Module (ModuleMap)
-import SAWCore.QualName (QualName)
 import qualified SAWCore.Simulator as Sim
 import SAWCore.Simulator.Value
 import qualified SAWCore.Simulator.Prims as Prims

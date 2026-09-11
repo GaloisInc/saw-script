@@ -98,9 +98,8 @@ convertYosysIR sc ir =
                    QN.NamespaceYosys
                    nm
                    (fromIntegral $ Nonce.indexValue n)
-             let ni = SC.mkImportedName qn
              let body = cm ^. convertedModuleTerm
-             tc <- SC.scDefineConstant sc ni body
+             tc <- SC.scDefineConstant sc qn body
              let cm' = cm { _convertedModuleTerm = tc }
              pure $ Map.insert nm cm' env
        )

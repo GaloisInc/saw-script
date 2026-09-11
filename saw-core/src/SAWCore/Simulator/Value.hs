@@ -81,7 +81,7 @@ import qualified SAWSupport.Pretty as PPS
 import SAWCore.Module (DataType)
 import SAWCore.Panic (panic)
 import SAWCore.FiniteValue (FiniteType(..), FirstOrderType(..))
-import SAWCore.QualName (QualName, ppQualName)
+import SAWCore.QualName (ppQualName)
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty

@@ -22,26 +22,17 @@ module SAWCore.Name
   , moduleNameText
   , moduleNamePieces
   , qualNameModule
-   -- * Identifiers
-  , Ident, identModule, identBaseName, identName, mkIdent, mkSafeIdent
-  , parseIdent
+   -- * Qualified Names
+  , QualName
+  , mkQualName
   , identText
-  , identPieces
-    -- * NameInfo
-  , NameInfo
-  , pattern ModuleIdentifier
-  , pattern ImportedName
-  , mkImportedName
   , toShortName
   , toAbsoluteName
-  , moduleIdentToQualName
-  , toQualName
   , nameAliases
   , scFreshQualName
     -- * Name
   , VarIndex
   , Name(..)
-  , nameQualName
     -- * VarName
   , VarName(..)
   , wildcardVarName
@@ -61,8 +52,6 @@ module SAWCore.Name
   , deleteDisplayNameEnv
   ) where
 
-import           Numeric (showHex)
-import           Data.Char
 import           Data.Hashable
 import           Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
@@ -72,13 +61,13 @@ import qualified Data.List as List
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.String (IsString(..))
 import           Data.Text (Text)
 import qualified Data.Text as Text
 -- import           GHC.Generics (Generic)
 import qualified Language.Haskell.TH.Syntax as TH
 
 import SAWCore.Panic (panic)
+import SAWCore.QualName (QualName)
 import qualified SAWCore.QualName as QN
 
 -- Module Names ----------------------------------------------------------------
@@ -111,109 +100,24 @@ qualNameModule qn =
     Nothing -> Nothing
 
 
--- Identifiers -----------------------------------------------------------------
+-- Qualified Names -------------------------------------------------------------
 
-newtype Ident = Ident QN.QualName
-  deriving (Eq, Ord, Hashable)
+identText :: QualName -> Text
+identText qn = QN.ppQualName (qn{ QN.namespace = Nothing })
 
-identModule :: Ident -> ModuleName
-identModule (Ident qn) = case QN.split qn of
-  Just (q, _, _) -> ModuleName q
-  Nothing -> panic "identModule" ["invalid Ident"]
+mkQualName :: ModuleName -> Text -> QualName
+mkQualName (ModuleName m) s = QN.qualify m s
 
-identBaseName :: Ident -> Text
-identBaseName (Ident qn) = QN.baseName qn
+nameAliases :: QualName -> [Text]
+nameAliases = QN.aliases
 
-instance Show Ident where
-  show i = Text.unpack (identText i)
+toShortName :: QualName -> Text
+toShortName = QN.baseName
 
-identText :: Ident -> Text
-identText (Ident qn) = QN.ppQualName (qn{ QN.namespace = Nothing })
+toAbsoluteName :: QualName -> Text
+toAbsoluteName = QN.ppQualName
 
-identPieces :: Ident -> NonEmpty Text
-identPieces (Ident qn) = QN.fullPathNE qn
-
-identName :: Ident -> String
-identName = Text.unpack . identBaseName
-
-mkIdent :: ModuleName -> Text -> Ident
-mkIdent (ModuleName m) s = Ident $ QN.qualify m s
-
--- | Make a \"rocq-safe\" identifier from a string that might contain
--- non-identifier characters, where we use the SAW core notion of identifier
--- characters as letters, digits, underscore and primes. Any disallowed
--- character is mapped to the string @__xNN@, where @NN@ is the hexadecimal code
--- for that character. Additionally, a SAW core identifier is not allowed to
--- start with a prime, so a leading underscore is added in such a case.
-mkSafeIdent :: ModuleName -> String -> Ident
-mkSafeIdent _ [] = fromString "_"
-mkSafeIdent mnm nm =
-  let is_safe_char c = isAlphaNum c || c == '_' || c == '\'' in
-  mkIdent mnm $ Text.pack $
-  (if nm!!0 == '\'' then ('_' :) else id) $
-  concatMap
-  (\c -> if is_safe_char c then [c] else
-           "__x" ++ showHex (ord c) "")
-  nm
-
--- | Parse a fully-qualified identifier. Supports either '.' or '::' as path separator.
-parseIdent :: String -> Ident
-parseIdent s0 = Ident $ case (Text.splitOn sep t0) of
-  (t1:t2) -> QN.fromPath QN.NamespaceCore (t1:|t2)
-  _ -> panic "parseIdent" ["invalid identifier: " <> t0]
-  where
-    sep = case Text.any (\c -> c=='.') t0 of
-      True -> "."
-      False -> "::"
-    t0 = Text.pack s0
-
-instance IsString Ident where
-  fromString = parseIdent
-
---------------------------------------------------------------------------------
--- NameInfo
-
-
--- | Descriptions of the origins of names that may be in scope
-data NameInfo =
-  NameInfo { nameInfoQualName :: QN.QualName, nameInfoImported :: Bool}
-  deriving (Eq,Ord,Show)
-
--- | This name arises from an exported declaration from a module
-pattern ModuleIdentifier :: Ident -> NameInfo
-pattern ModuleIdentifier i <- NameInfo (Ident -> i) False  where
-  ModuleIdentifier i = NameInfo (moduleIdentToQualName i) False
-
--- | This name was imported from some other programming language/scope
-pattern ImportedName ::
-  QN.QualName -> -- ^ An absolutely-qualified name, which is required to be unique
-  NameInfo
-pattern ImportedName qn <- NameInfo qn True
-
-mkImportedName :: QN.QualName -> NameInfo
-mkImportedName qn = NameInfo qn True
-
-{-# COMPLETE ModuleIdentifier,ImportedName #-}
-
-instance Hashable NameInfo where
-  hashWithSalt x (NameInfo a b) = x `hashWithSalt` a `hashWithSalt` b
-
-toQualName :: NameInfo -> QN.QualName
-toQualName ni = nameInfoQualName ni
-
-nameAliases :: NameInfo -> [Text]
-nameAliases ni = QN.aliases $ nameInfoQualName ni
-
-toShortName :: NameInfo -> Text
-toShortName ni = QN.baseName $ nameInfoQualName ni
-
-toAbsoluteName :: NameInfo -> Text
-toAbsoluteName ni = QN.ppQualName $ nameInfoQualName ni
-
-moduleIdentToQualName :: Ident -> QN.QualName
-moduleIdentToQualName (Ident qn) = qn
-
-scFreshQualName :: Text -> VarIndex -> QN.QualName
+scFreshQualName :: Text -> VarIndex -> QualName
 scFreshQualName nm i = QN.fromNameIndex QN.NamespaceFresh (if Text.null nm then "_" else nm) i
 
 -- Global Names ----------------------------------------------------------------
@@ -227,7 +131,7 @@ type VarIndex = Int
 data Name =
   Name
   { nameIndex :: !VarIndex
-  , nameInfo :: !NameInfo
+  , nameQualName :: !QualName
   }
   deriving (Show)
 
@@ -243,10 +147,7 @@ instance Ord Name where
 -- 'VarIndex'; this gives a stable hash value for a particular name,
 -- even if the unique IDs are assigned differently from run to run.
 instance Hashable Name where
-  hashWithSalt x nm = hashWithSalt x (nameInfo nm)
-
-nameQualName :: Name -> QN.QualName
-nameQualName nm = nameInfoQualName (nameInfo nm)
+  hashWithSalt x nm = hashWithSalt x (nameQualName nm)
 
 
 -- Variable Names --------------------------------------------------------------

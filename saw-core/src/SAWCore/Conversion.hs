@@ -91,7 +91,6 @@ import SAWCore.Name
 import SAWCore.OpenTerm (OpenTerm)
 import qualified SAWCore.OpenTerm as OT
 import qualified SAWCore.Prim as Prim
-import SAWCore.QualName (QualName)
 import qualified SAWCore.QualName as QN
 import SAWCore.Recognizer ((:*:)(..))
 import SAWCore.Prim
@@ -132,7 +131,7 @@ termPat t = termFPat (unwrapTermF t)
 termFPat :: TermF Term -> Net.Pat
 termFPat tf =
   case tf of
-    Constant nm    -> Net.Atom (toShortName (nameInfo nm))
+    Constant nm    -> Net.Atom (toShortName (nameQualName nm))
     App t1 t2      -> Net.App (termPat t1) (termPat t2)
     Lambda _ t1 t2 -> Net.App (Net.App (Net.Atom "\\") (termPat t1)) (termPat t2)
     Pi _ t1 t2     -> Net.App (Net.App (Net.Atom "->") (termPat t1)) (termPat t2)
@@ -140,7 +139,7 @@ termFPat tf =
     Label _ t1      -> termPat t1
     FTermF ftf ->
       case ftf of
-        Recursor crec   -> Net.Atom (toShortName (nameInfo (recursorDataType crec)) <> "#rec")
+        Recursor crec   -> Net.Atom (toShortName (nameQualName (recursorDataType crec)) <> "#rec")
         Sort s _         -> Net.Atom (Text.pack ('*' : show s))
         ArrayValue t1 ts -> foldl Net.App (Net.Atom "[]") (termPat t1 : map termPat (V.toList ts))
         StringLit str    -> Net.Atom (Text.pack (show str))

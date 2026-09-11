@@ -17,12 +17,12 @@ import SAWCore.Prelude
 import SAWCore.SharedTerm
 
 
-namedMsg :: NameInfo -> String -> String
+namedMsg :: QualName -> String -> String
 namedMsg sym msg = "In " ++ show (toAbsoluteName sym) ++ ": " ++ msg
 
 checkDef :: Def -> Assertion
 checkDef d = do
-  let sym = nameInfo (defName d)
+  let sym = nameQualName (defName d)
   let tp = defType d
   assertBool (namedMsg sym "Type is not ground.") (closedTerm tp)
   case defBody d of

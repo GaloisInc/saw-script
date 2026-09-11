@@ -781,7 +781,7 @@ replaceConstantTerm constant constantRetType term =
 -- Extract the name from a 'Constant'. Fails if provided another kind of 'TermF'
 constantName :: TermF Term -> TopLevel Text.Text
 constantName (Constant e) =
-  return $ toShortName $ nameInfo e
+  return $ toShortName $ nameQualName e
 constantName tf = do
   sc <- getSharedContext
   term <- io $ scTermF sc tf

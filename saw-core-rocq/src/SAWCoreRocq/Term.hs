@@ -23,7 +23,7 @@ module SAWCoreRocq.Term (
     topLevelDeclarations,
     TermTranslationMonad,
     runTermTranslationMonad,
-    translateIdentToIdent,
+    translateQualNameToIdent,
     translateSort,
     mkDefinition,
     translateParams,
@@ -31,6 +31,7 @@ module SAWCoreRocq.Term (
     translateDefDoc
   ) where
 
+import           Control.Applicative          (Alternative(..))
 import           Control.Lens                 (makeLenses, over, set, to, view)
 import qualified Control.Monad.Except         as Except
 import           Control.Monad.Reader         (MonadReader(ask, local), asks)
@@ -59,6 +60,7 @@ import qualified Language.Rocq.Pretty         as Rocq
 
 import           SAWCore.Module               (Def(..), ModuleMap, ResolvedName(..), requireNameInMap, resolvedNameType)
 import           SAWCore.Name
+import qualified SAWCore.QualName as QN
 import           SAWCore.Recognizer
 import           SAWCore.SharedTerm
 import           SAWCore.Term.Pretty
@@ -294,27 +296,30 @@ qualify :: ModuleName -> Rocq.Ident -> Rocq.Ident
 qualify m (Rocq.Ident i) =
     Rocq.Ident $ Text.intercalate "." (moduleNamePieces m) <> "." <> i
 
--- | Translate an 'Ident' with a given list of arguments to a Rocq term, using
+-- | Translate a 'QualName' with a given list of arguments to a Rocq term, using
 -- any special treatment for that identifier and qualifying it if necessary
-translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Rocq.Term
-translateIdentWithArgs i args = do
-  currentModuleName <- asks (view currentModule . otherConfiguration)
-  let identToRocq ident =
-        if Just (identModule ident) == currentModuleName
-          then base else qualify (translateModuleName (identModule ident)) base
-        where
-          base = escapeIdent (Rocq.Ident (Text.pack $ identName ident))
-  specialTreatment <- findSpecialTreatment i
-  applySpecialTreatment identToRocq (atUseSite specialTreatment)
+translateQualNameWithArgs :: TermTranslationMonad m => QualName -> [Term] -> m Rocq.Term
+translateQualNameWithArgs qn args =
+  do currentModuleName <- asks (view currentModule . otherConfiguration)
+     let identToRocq qname =
+           case qualNameModule qname of
+             Nothing -> base
+             Just mname ->
+               if Just mname == currentModuleName
+               then base else qualify (translateModuleName mname) base
+           where
+             base = escapeIdent (Rocq.Ident (toShortName qname))
+     specialTreatment <- findSpecialTreatment qn
+     applySpecialTreatment identToRocq (atUseSite specialTreatment)
 
   where
 
     applySpecialTreatment identToRocq UsePreserve =
-      Rocq.App (Rocq.Var $ identToRocq i) <$> mapM translateTerm args
+      Rocq.App (Rocq.Var $ identToRocq qn) <$> mapM translateTerm args
     applySpecialTreatment _identToRocq (UseRename targetModule targetName expl) =
       Rocq.App
         ((if expl then Rocq.ExplVar else Rocq.Var) $
-          qualify (fromMaybe (translateModuleName $ identModule i) targetModule)
+          maybe id qualify (targetModule <|> (translateModuleName <$> qualNameModule qn))
           targetName)
           <$> mapM translateTerm args
     applySpecialTreatment _identToRocq (UseMacro n macroFun)
@@ -323,7 +328,7 @@ translateIdentWithArgs i args = do
         do f <- macroFun <$> mapM translateTerm m_args
            Rocq.App f <$> mapM translateTerm args'
     applySpecialTreatment _identToRocq (UseMacro n _) =
-        let i' = Text.pack $ show i
+        let i' = Text.pack $ show qn
             n' = Text.pack $ show n
         in
         -- XXX shouldn't this fail and report an error rather than stuff an
@@ -331,24 +336,26 @@ translateIdentWithArgs i args = do
         errorTermM ("Identifier " <> i' <>
                     "not applied to required number of args, which is " <> n')
 
--- | Helper for 'translateIdentWithArgs' with no arguments
-translateIdent :: TermTranslationMonad m => Ident -> m Rocq.Term
-translateIdent i = translateIdentWithArgs i []
+-- | Helper for 'translateQualNameWithArgs' with no arguments
+translateQualName :: TermTranslationMonad m => QualName -> m Rocq.Term
+translateQualName i = translateQualNameWithArgs i []
 
--- | Translate a constant to a Rocq term. If the constant is named with
--- an 'Ident', then it already has a top-level translation from
--- translating the SAW core module containing that 'Ident'. If the
--- constant is an 'ImportedName', however, then it might not have a
--- Rocq definition already, so add a definition of it to the top-level
--- translation state.
+-- | Translate a constant to a Rocq term.
+-- If the constant has a name in 'QN.NamespaceCore', then it should
+-- already have a top-level translation from translating the SAW core
+-- module containing that name.
+-- If the constant has a name in another namespace, however, then it
+-- might not have a Rocq definition already, so add a definition of it
+-- to the top-level translation state.
 translateConstant :: TermTranslationMonad m => Name -> m Rocq.Term
 translateConstant nm
-  | ModuleIdentifier ident <- nameInfo nm = translateIdent ident
+  | QN.namespace (nameQualName nm) == Just QN.NamespaceCore =
+      translateQualName (nameQualName nm)
 translateConstant nm =
   do -- First, apply the constant renaming to get the name for this constant
      configuration <- asks translationConfiguration
      -- TODO short name seems wrong
-     let nm_str = toShortName $ nameInfo nm
+     let nm_str = toShortName $ nameQualName nm
      let renamed =
            escapeIdent $ Rocq.Ident $ fromMaybe nm_str $
            lookup nm_str $ constantRenaming configuration
@@ -381,17 +388,20 @@ translateConstant nm =
      -- Finally, return the constant as a Rocq variable
      pure (Rocq.Var renamed)
 
--- | Translate an 'Ident' and see if the result maps to a special 'Rocq.Ident',
--- returning the latter 'Rocq.Ident' if so
-translateIdentToIdent :: TermTranslationMonad m => Ident -> m (Maybe Rocq.Ident)
-translateIdentToIdent i =
-  (atUseSite <$> findSpecialTreatment i) >>= \case
-    UsePreserve -> return $ Just (qualify translatedModuleName (Rocq.Ident (identBaseName i)))
-    UseRename   targetModule targetName _ ->
-      return $ Just $ qualify (fromMaybe translatedModuleName targetModule) targetName
-    UseMacro _ _ -> return Nothing
-  where
-    translatedModuleName = translateModuleName (identModule i)
+-- | Translate a 'QualName' and see if the result maps to a special 'Rocq.Ident',
+-- returning the latter 'Rocq.Ident' if so.
+translateQualNameToIdent :: TermTranslationMonad m => QualName -> m (Maybe Rocq.Ident)
+translateQualNameToIdent qn =
+  case qualNameModule qn of
+    Nothing -> pure Nothing
+    Just mname ->
+      do treatment <- atUseSite <$> findSpecialTreatment qn
+         let translatedModuleName = translateModuleName mname
+         case treatment of
+           UsePreserve -> pure $ Just (qualify translatedModuleName (Rocq.Ident (toShortName qn)))
+           UseRename targetModule targetName _ ->
+             pure $ Just $ qualify (fromMaybe translatedModuleName targetModule) targetName
+           UseMacro _ _ -> pure Nothing
 
 translateSort :: Sort -> Rocq.Sort
 translateSort s = if s == propSort then Rocq.Prop else Rocq.Type
@@ -404,16 +414,13 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
   case tf of
     Recursor crec ->
       do let d = recursorDataType crec
-         maybe_d_trans <-
-           case nameInfo d of
-             ModuleIdentifier ident -> translateIdentToIdent ident
-             ImportedName{} -> pure Nothing
+         maybe_d_trans <- translateQualNameToIdent (nameQualName d)
          case maybe_d_trans of
            Just (Rocq.Ident i) -> return $ Rocq.ExplVar (Rocq.Ident (i <> "_rect"))
            Nothing -> do
              -- XXX: this should really use ppName but that's a can of worms
              -- XXX: shouldn't this fail rather than issue an error into the output?
-             let d' = toAbsoluteName (nameInfo d)
+             let d' = toAbsoluteName (nameQualName d)
              errorTermM ("Recursor for " <> d' <>
                          " cannot be translated because the datatype " <>
                          "is mapped to an arbitrary Rocq term")
@@ -631,19 +638,19 @@ translateTermUnshared t =
       let (f, args) = asApplyAll t
       in
       case f of
-      (asConstant -> Just (nameInfo -> ModuleIdentifier i)) ->
-        case i of
+      (asConstant -> Just (nameQualName -> qn)) | QN.namespace qn == Just QN.NamespaceCore ->
+        case qn of
         "Prelude.natToInt" ->
           case args of
           [n] -> translateTerm n >>= \case
             Rocq.NatLit n' -> pure $ Rocq.ZLit n'
-            _ -> translateIdentWithArgs "Prelude.natToInt" [n]
+            _ -> translateQualNameWithArgs "Prelude.natToInt" [n]
           _ -> badTerm
         "Prelude.intNeg" ->
           case args of
           [z] -> translateTerm z >>= \case
             Rocq.ZLit z' -> pure $ Rocq.ZLit (-z')
-            _ -> translateIdentWithArgs "Prelude.intNeg" [z]
+            _ -> translateQualNameWithArgs "Prelude.intNeg" [z]
           _ -> badTerm
         "Prelude.ite" ->
           case args of
@@ -655,14 +662,14 @@ translateTermUnshared t =
               [] -> return ite
               _  -> Rocq.App ite <$> mapM translateTerm rest
           -- When `ite` is partially applied (fewer than 4 args), fall
-          -- through to `translateIdentWithArgs` to translate it as a
+          -- through to `translateQualNameWithArgs` to translate it as a
           -- normal function application instead of if-then-else syntax.
-          _ -> translateIdentWithArgs i args
+          _ -> translateQualNameWithArgs qn args
 
         -- Refuse to translate any recursive value defined using Prelude.fix
         "Prelude.fix" -> badTerm
 
-        _ -> translateIdentWithArgs i args
+        _ -> translateQualNameWithArgs qn args
       _ -> Rocq.App <$> translateTerm f <*> traverse translateTerm args
 
     -- Constants

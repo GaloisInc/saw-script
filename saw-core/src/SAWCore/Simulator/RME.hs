@@ -42,7 +42,6 @@ import SAWCore.Module (ModuleMap)
 import SAWCore.Name
 import SAWCore.Panic (panic)
 import qualified SAWCore.Prim as Prim
-import SAWCore.QualName (QualName)
 import qualified SAWCore.Simulator as Sim
 import SAWCore.Simulator.Value
 import qualified SAWCore.Simulator.Prims as Prims
@@ -64,7 +63,7 @@ evalSharedTerm m addlPrims t =
     variable vn _tp = return $ Prim.userError $ "Unimplemented: free variable " ++ show (vnName vn)
     primHandler nm msg env =
       return $ Prim.userError $ unlines
-        [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))
+        [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameQualName nm))
         , "On argument " ++ show (length env)
         , Text.unpack msg
         ]
@@ -463,7 +462,7 @@ bitBlastBasic ::
 bitBlastBasic m addlPrims varMap t = runIdentity $ do
   let primHandler nm msg env =
          return $ Prim.userError $ unlines
-           [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))
+           [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameQualName nm))
            , "On argument " ++ show (length env)
            , Text.unpack msg
            ]

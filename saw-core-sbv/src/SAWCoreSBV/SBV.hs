@@ -76,7 +76,6 @@ import Numeric.Natural (Natural)
 
 import SAWCore.Name (Name(..), VarName(..), toShortName, nameQualName)
 import qualified SAWCore.Prim as Prim
-import SAWCore.QualName (QualName)
 import qualified SAWCore.Recognizer as R
 import qualified SAWCore.Simulator as Sim
 import qualified SAWCore.Simulator.Prims as Prims
@@ -701,7 +700,7 @@ sbvSolveBasic sc addlPrims unintSet t = do
   let variable (VarName ix nm) ty = parseUninterpreted [] (Text.unpack nm ++ "#" ++ show ix) ty
   let uninterpreted nm ty
         | Set.member (nameIndex nm) unintSet =
-          let vn = VarName (nameIndex nm) (toShortName (nameInfo nm)) in Just (variable vn ty)
+          let vn = VarName (nameIndex nm) (toShortName (nameQualName nm)) in Just (variable vn ty)
         | otherwise                          = Nothing
   let primHandler = Sim.defaultPrimHandler
   let mux = Prims.lazyMuxValue prims
@@ -806,7 +805,7 @@ sbvSATQuery sc addlPrims query =
                 | otherwise = mkUninterp vn tp
           let uninterpreted nm ty
                 | Set.member (nameIndex nm) unintSet =
-                  let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
+                  let vn = VarName (nameIndex nm) (toShortName (nameQualName nm))
                   in Just (mkUninterp vn ty)
                 | otherwise                          = Nothing
           let primHandler = Sim.defaultPrimHandler

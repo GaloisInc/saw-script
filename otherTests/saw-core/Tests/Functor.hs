@@ -69,7 +69,7 @@ vnBar = VarName 3 "bar"
 nmFoo :: Name
 nmFoo = Name {
     nameIndex = 0,
-    nameInfo = ModuleIdentifier "Foo.Module"
+    nameQualName = "Foo.Module"
  }
 
 -- | Test in the Either monad so we can use do-notation. (It might be

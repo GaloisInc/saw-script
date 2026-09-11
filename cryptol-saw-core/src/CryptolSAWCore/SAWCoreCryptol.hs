@@ -70,7 +70,6 @@ import qualified Cryptol.Utils.RecordMap as C
 import qualified SAWSupport.Pretty as PPS
 
 import qualified SAWCore.Name as SAW
-import qualified SAWCore.QualName as SAW (QualName)
 import           SAWCore.Recognizer
 import           SAWCore.SharedTerm
 import           SAWCore.Term.Functor
@@ -178,7 +177,7 @@ checkConvertible t1 t2 = do
         errMsg "Terms are not convertible"
 
 prettySawName :: SAW.Name -> String
-prettySawName nm = Text.unpack (SAW.toAbsoluteName $ SAW.nameInfo nm)
+prettySawName nm = Text.unpack (SAW.toAbsoluteName $ SAW.nameQualName nm)
 
 stripTopProofs :: C.Expr -> C.Expr
 stripTopProofs = \case
@@ -452,10 +451,10 @@ constToName nm = do
   mT <- asks ttExtras
   msum
     [ mreturn $ Map.lookup nm m
-    , do let qn = SAW.toQualName $ SAW.nameInfo nm
+    , do let qn = SAW.nameQualName nm
          mreturn $ Map.lookup qn mT
     , errMsg $ "No corresponding Cryptol name for SAW constant: " ++
-        Text.unpack (SAW.toAbsoluteName $ SAW.nameInfo nm)
+        Text.unpack (SAW.toAbsoluteName $ SAW.nameQualName nm)
     ]
 
 mkFreshName :: Text -> TT Name

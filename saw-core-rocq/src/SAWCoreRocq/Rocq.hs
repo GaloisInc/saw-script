@@ -104,6 +104,6 @@ translateCryptolModule sc nm configuration globalDecls m = do
 
 -- | Extract out the 'Text' name of a declaration in a SAW core module
 moduleDeclName :: ModuleDecl -> Maybe Text
-moduleDeclName (TypeDecl (DataType { dtName })) = Just (toShortName (nameInfo dtName))
-moduleDeclName (DefDecl  (Def      { defName })) = Just (toShortName (nameInfo defName))
+moduleDeclName (TypeDecl (DataType { dtName })) = Just (toShortName (nameQualName dtName))
+moduleDeclName (DefDecl  (Def      { defName })) = Just (toShortName (nameQualName defName))
 moduleDeclName InjectCodeDecl{} = Nothing

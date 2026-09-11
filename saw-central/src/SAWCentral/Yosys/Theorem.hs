@@ -109,13 +109,9 @@ buildTheorem sc _env ymod newmod precond body = do
       _ -> yosysError YosysErrorInvalidOverrideTarget
   inpTy <- CSC.translateType sc cinpTy
   outTy <- CSC.translateType sc coutTy
-  nmi <-
-    case reduceSelectors (SC.ttTerm ymod) of
-      (R.asConstant -> Just (SC.Name _ nmi)) -> pure nmi
-      _ -> yosysError YosysErrorInvalidOverrideTarget
   qn <-
-    case nmi of
-      SC.ImportedName qn -> pure qn
+    case reduceSelectors (SC.ttTerm ymod) of
+      (R.asConstant -> Just (SC.Name _ qn)) -> pure qn
       _ -> yosysError YosysErrorInvalidOverrideTarget
   pure YosysTheorem
     { _theoremQualName = qn

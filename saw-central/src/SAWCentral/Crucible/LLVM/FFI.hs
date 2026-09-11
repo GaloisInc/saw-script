@@ -158,7 +158,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
   let ?ctx = FFISetupCtx {..}
   ffiTypes <- lio $ eFFITypes sc
   case asConstant funTerm of
-    Just nm -> case Map.lookup (nameInfo nm) ffiTypes of
+    Just nm -> case Map.lookup (nameQualName nm) ffiTypes of
       Nothing -> do
         opts <- lll $ getPPOpts
         nm' <- lio $ ppName sc opts nm

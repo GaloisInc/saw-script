@@ -351,9 +351,6 @@ llvm_array_size_profile assume (Some lm) nm lemmas setup = do
 llvmQualName :: Text -> QN.QualName
 llvmQualName symbol_name = QN.fromPath QN.NamespaceLLVM (symbol_name :| [])
 
-llvmNameInfo :: Text -> NameInfo
-llvmNameInfo symbol_name = mkImportedName (llvmQualName symbol_name)
-
 llvm_compositional_extract ::
   Some LLVMModule ->
   Text ->
@@ -430,7 +427,7 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
           when (not (closedTerm extracted_func)) $
             fail "Non-functional simulation summary."
 
-          let nmi = llvmNameInfo func_name
+          let nmi = llvmQualName func_name
 
           extracted_func_const <-
             io $ scDefineConstant shared_context nmi extracted_func

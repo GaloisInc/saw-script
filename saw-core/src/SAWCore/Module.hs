@@ -29,7 +29,7 @@ module SAWCore.Module
   , ModuleDecl(..)
   , ResolvedName(..)
   , resolvedNameName
-  , resolvedNameInfo
+  , resolvedQualName
   , resolvedNameType
   , moduleName
   , emptyModule
@@ -227,9 +227,9 @@ resolvedNameName r =
     ResolvedDataType dt -> dtName dt
     ResolvedDef def -> defName def
 
--- | Get the 'NameInfo' for a 'ResolvedName'
-resolvedNameInfo :: ResolvedName -> NameInfo
-resolvedNameInfo r = nameInfo (resolvedNameName r)
+-- | Get the 'QualName' for a 'ResolvedName'.
+resolvedQualName :: ResolvedName -> QualName
+resolvedQualName r = nameQualName (resolvedNameName r)
 
 -- | Get the type of a 'ResolvedName' as a 'Term'.
 resolvedNameType :: ResolvedName -> Term
@@ -282,7 +282,7 @@ asResolvedDef = \case { ResolvedDef d -> Just d; _ -> Nothing }
 -- clash, i.e., an existing binding for the same 'Text' name.
 insResolvedName :: Module -> ResolvedName -> Module
 insResolvedName m nm =
-  let str = toShortName $ resolvedNameInfo nm in
+  let str = toShortName $ resolvedQualName nm in
   if Map.member str (moduleResolveMap m) then
     panic "insResolvedName" [
         "inserting duplicate name " <> str <> " into module " <>
@@ -323,7 +323,7 @@ localResolvedNames m =
   where
     isLocal :: ResolvedName -> Bool
     isLocal r =
-      case qualNameModule (toQualName (resolvedNameInfo r)) of
+      case qualNameModule (resolvedQualName r) of
         Just mname -> mname == moduleName m
         Nothing -> False
 
@@ -387,7 +387,7 @@ requireNameInMap :: Name -> ModuleMap -> ResolvedName
 requireNameInMap nm mm =
   case lookupVarIndexInMap (nameIndex nm) mm of
     Just r -> r
-    Nothing -> panic "requireNameInMap" ["Constant not found: " <> toAbsoluteName (nameInfo nm)]
+    Nothing -> panic "requireNameInMap" ["Constant not found: " <> toAbsoluteName (nameQualName nm)]
 
 -- | Get all definitions defined in any module in an entire module map. Note
 -- that the returned list might have redundancies if a definition is visible /
@@ -450,12 +450,12 @@ insResolvedNameInMap r mm =
   case lookupVarIndexInMap (resolvedNameVarIndex r) mm of
     Just _ -> Left (resolvedNameName r)
     Nothing ->
-      case qualNameModule (toQualName (resolvedNameInfo r)) of
+      case qualNameModule (resolvedQualName r) of
         Just mname ->
           Right $ mm' { mmNameEnv = Map.insert mname env' (mmNameEnv mm) }
           where
             vi = resolvedNameVarIndex r
-            base = toShortName (resolvedNameInfo r)
+            base = toShortName (resolvedQualName r)
             env = fromMaybe emptyDisplayNameEnv $ Map.lookup mname (mmNameEnv mm)
             env' = extendDisplayNameEnv vi [base] env
         Nothing ->

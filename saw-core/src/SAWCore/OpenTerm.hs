@@ -77,7 +77,6 @@ import Numeric.Natural
 
 import SAWCore.Name
 import SAWCore.Panic
-import SAWCore.QualName (QualName)
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 
