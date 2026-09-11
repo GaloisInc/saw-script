@@ -109,6 +109,7 @@ termOfTValue sc val =
   case val of
     VBoolType -> scBoolType sc
     VIntType -> scIntegerType sc
+    VIntModType n -> scIntModType sc =<< scNat sc n
     VRationalType -> scRationalType sc
     VVecType n a ->
       do n' <- scNat sc n
