@@ -219,7 +219,7 @@ span.spaces    { background: white }
 <span class="lineno">  200 </span><span class="spaces">    </span><span class="istickedoff">SS.PWild _pos ~(Just t) -&gt; t</span>
 <span class="lineno">  201 </span><span class="spaces">    </span><span class="istickedoff">SS.PVar _allpos _xpos _x ~(Just t) -&gt; t</span>
 <span class="lineno">  202 </span><span class="spaces">    </span><span class="istickedoff">SS.PTuple tuplepos pats -&gt;</span>
-<span class="lineno">  203 </span><span class="spaces">        </span><span class="istickedoff">let <span class="nottickedoff">prov = SS.TypeFromElement tuplepos SS.TyctxPat</span> in</span>
+<span class="lineno">  203 </span><span class="spaces">        </span><span class="istickedoff">let <span class="nottickedoff">prov = SS.TypeFromElement tuplepos SS.TyCtxPat</span> in</span>
 <span class="lineno">  204 </span><span class="spaces">        </span><span class="istickedoff">SS.TyCon <span class="nottickedoff">prov</span> (SS.TupleCon <span class="nottickedoff">(genericLength pats)</span>) (map getType pats)</span></span>
 <span class="lineno">  205 </span>
 <span class="lineno">  206 </span>-- Convert some text to an InputText for cryptol-saw-core.
@@ -1511,7 +1511,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1492 </span><span class="spaces">  </span><span class="istickedoff">Environ varenv tyenv _cryenv &lt;- gets rwEnviron</span>
 <span class="lineno"> 1493 </span><span class="spaces">  </span><span class="istickedoff">rbenv &lt;- gets rwRebindables</span>
 <span class="lineno"> 1494 </span><span class="spaces">  </span><span class="istickedoff">let pos = SS.PosInternal &quot;call-to-main&quot;</span>
-<span class="lineno"> 1495 </span><span class="spaces">      </span><span class="istickedoff">prov = SS.TypeFromElement <span class="nottickedoff">pos</span> <span class="nottickedoff">SS.TyctxExpr</span></span>
+<span class="lineno"> 1495 </span><span class="spaces">      </span><span class="istickedoff">prov = SS.TypeFromElement <span class="nottickedoff">pos</span> <span class="nottickedoff">SS.TyCtxExpr</span></span>
 <span class="lineno"> 1496 </span><span class="spaces">      </span><span class="istickedoff">-- We need the type to be &quot;TopLevel a&quot;, not just &quot;TopLevel ()&quot;.</span>
 <span class="lineno"> 1497 </span><span class="spaces">      </span><span class="istickedoff">-- There are several (old) tests in the test suite whose main</span>
 <span class="lineno"> 1498 </span><span class="spaces">      </span><span class="istickedoff">-- returns something, e.g. several are TopLevel Theorem because</span>
@@ -2600,7 +2600,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2581 </span><span class="spaces">    </span><span class="istickedoff">-- Note that (for now at least) toValue just asserts that the type</span>
 <span class="lineno"> 2582 </span><span class="spaces">    </span><span class="istickedoff">-- matches the value; on failure the message prints the type but</span>
 <span class="lineno"> 2583 </span><span class="spaces">    </span><span class="istickedoff">-- not the type provenance. So it doesn't have to be perfect.</span>
-<span class="lineno"> 2584 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">ty = SS.tUnit $ SS.TypeFromElement (rwPosition rw) SS.TyctxExpr</span></span>
+<span class="lineno"> 2584 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">ty = SS.tUnit $ SS.TypeFromElement (rwPosition rw) SS.TyCtxExpr</span></span>
 <span class="lineno"> 2585 </span><span class="spaces">    </span><span class="istickedoff">return $ <span class="nottickedoff">toValue ty &quot;subshell&quot; ()</span></span></span>
 <span class="lineno"> 2586 </span>
 <span class="lineno"> 2587 </span>-- The proof_subshell command.
@@ -2625,7 +2625,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2606 </span><span class="spaces">    </span><span class="istickedoff">-- Note that (for now at least) toValue just asserts that the type</span>
 <span class="lineno"> 2607 </span><span class="spaces">    </span><span class="istickedoff">-- matches the value; on failure the message prints the type but</span>
 <span class="lineno"> 2608 </span><span class="spaces">    </span><span class="istickedoff">-- not the type provenance. So it doesn't have to be perfect.</span>
-<span class="lineno"> 2609 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">ty = SS.tUnit $ SS.TypeFromElement (rwPosition rw) SS.TyctxExpr</span></span>
+<span class="lineno"> 2609 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">ty = SS.tUnit $ SS.TypeFromElement (rwPosition rw) SS.TyCtxExpr</span></span>
 <span class="lineno"> 2610 </span><span class="spaces">    </span><span class="istickedoff">return $ <span class="nottickedoff">toValue ty &quot;proof_subshell&quot; ()</span></span></span>
 <span class="lineno"> 2611 </span>
 <span class="lineno"> 2612 </span>-- The &quot;map&quot; builtin.
@@ -2640,7 +2640,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2621 </span><span class="spaces">     </span><span class="istickedoff">-- Also, since this is an array of Value, toValue will check the</span>
 <span class="lineno"> 2622 </span><span class="spaces">     </span><span class="istickedoff">-- array type but not the element type.  Use unit as a</span>
 <span class="lineno"> 2623 </span><span class="spaces">     </span><span class="istickedoff">-- placeholder.</span>
-<span class="lineno"> 2624 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">prov = SS.TypeFromElement pos SS.TyctxExpr</span></span>
+<span class="lineno"> 2624 </span><span class="spaces">     </span><span class="istickedoff">let <span class="nottickedoff">prov = SS.TypeFromElement pos SS.TyCtxExpr</span></span>
 <span class="lineno"> 2625 </span><span class="spaces">         </span><span class="istickedoff">ty = SS.tArray <span class="nottickedoff">prov</span> <span class="nottickedoff">(SS.tUnit prov)</span></span>
 <span class="lineno"> 2626 </span><span class="spaces">     </span><span class="istickedoff">toValue ty <span class="nottickedoff">&quot;map&quot;</span> &lt;$&gt; traverse (applyValue <span class="nottickedoff">pos</span> <span class="nottickedoff">info</span> f) xs</span></span>
 <span class="lineno"> 2627 </span>
@@ -4764,7 +4764,7 @@ span.spaces    { background: white }
 <span class="lineno"> 4745 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Merge two simplification sets into one.&quot; ]</span></span>
 <span class="lineno"> 4746 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 4747 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;basic_ss&quot;            &quot;Simpset&quot;</span>
-<span class="lineno"> 4748 </span><span class="spaces">    </span><span class="istickedoff">(bicVal $ \bic _ -&gt; toValue (SS.TyVar <span class="nottickedoff">(SS.TypeFromElement SS.PosInsideBuiltin SS.TyctxExpr)</span> &quot;Simpset&quot;) <span class="nottickedoff">&quot;basic_ss&quot;</span> $ biBasicSS bic)</span>
+<span class="lineno"> 4748 </span><span class="spaces">    </span><span class="istickedoff">(bicVal $ \bic _ -&gt; toValue (SS.TyVar <span class="nottickedoff">(SS.TypeFromElement SS.PosInsideBuiltin SS.TyCtxExpr)</span> &quot;Simpset&quot;) <span class="nottickedoff">&quot;basic_ss&quot;</span> $ biBasicSS bic)</span>
 <span class="lineno"> 4749 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 4750 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;A basic rewriting simplification set containing some boolean&quot;</span></span>
 <span class="lineno"> 4751 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;identities and conversions relating to bitvectors, natural&quot;</span></span>

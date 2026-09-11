@@ -779,10 +779,10 @@ span.spaces    { background: white }
 <span class="lineno">  760 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">&quot;forall-bound in&quot; &lt;+&gt; x' &lt;+&gt; &quot;and implied here&quot;,</span></span>
 <span class="lineno">  761 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">Nothing)</span></span>
 <span class="lineno">  762 </span><span class="spaces">    </span><span class="istickedoff">TypeFromElement pos tyctx -&gt;</span>
-<span class="lineno">  763 </span><span class="spaces">        </span><span class="istickedoff">let tyctx' = prettyTyctx tyctx in</span>
+<span class="lineno">  763 </span><span class="spaces">        </span><span class="istickedoff">let tyctx' = prettyTyCtx tyctx in</span>
 <span class="lineno">  764 </span><span class="spaces">        </span><span class="istickedoff">(pos, &quot;arises from the form of this&quot; &lt;+&gt; tyctx', Nothing)</span>
 <span class="lineno">  765 </span><span class="spaces">    </span><span class="istickedoff">TypeFromContext pos tyctx -&gt;</span>
-<span class="lineno">  766 </span><span class="spaces">        </span><span class="istickedoff">let tyctx' = prettyTyctx tyctx in</span>
+<span class="lineno">  766 </span><span class="spaces">        </span><span class="istickedoff">let tyctx' = prettyTyCtx tyctx in</span>
 <span class="lineno">  767 </span><span class="spaces">        </span><span class="istickedoff">(pos, &quot;arises from the context of this&quot; &lt;+&gt; tyctx', Nothing)</span>
 <span class="lineno">  768 </span><span class="spaces">    </span><span class="istickedoff">TypeFromFuncWithSig pos -&gt;</span>
 <span class="lineno">  769 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">(pos, &quot;arises from this parameter list&quot;, Nothing)</span></span>
@@ -837,7 +837,7 @@ span.spaces    { background: white }
 <span class="lineno">  818 </span><span class="spaces">          </span><span class="istickedoff">case (subprov, prov) of</span>
 <span class="lineno">  819 </span><span class="spaces">              </span><span class="istickedoff">(TypeExplicit subpos, TypeExplicit pos) -&gt; Pos.subspan subpos pos</span>
 <span class="lineno">  820 </span><span class="spaces">              </span><span class="istickedoff">(TypeFailed _, TypeFailed _) -&gt; <span class="nottickedoff">True</span></span>
-<span class="lineno">  821 </span><span class="spaces">              </span><span class="istickedoff">(TypeFromElement subpos TyctxConstant, TypeFromElement pos _) -&gt;</span>
+<span class="lineno">  821 </span><span class="spaces">              </span><span class="istickedoff">(TypeFromElement subpos TyCtxConstant, TypeFromElement pos _) -&gt;</span>
 <span class="lineno">  822 </span><span class="spaces">                  </span><span class="istickedoff">-- Restrict this case to when the enclosing type is</span>
 <span class="lineno">  823 </span><span class="spaces">                  </span><span class="istickedoff">-- a tuple, list/array, or record, and the element</span>
 <span class="lineno">  824 </span><span class="spaces">                  </span><span class="istickedoff">-- is a constant. This will capture obvious cases</span>
@@ -852,7 +852,7 @@ span.spaces    { background: white }
 <span class="lineno">  833 </span><span class="spaces">                  </span><span class="istickedoff">-- If this causes further fallout, maybe better to</span>
 <span class="lineno">  834 </span><span class="spaces">                  </span><span class="istickedoff">-- shut it off entirely.</span>
 <span class="lineno">  835 </span><span class="spaces">                  </span><span class="istickedoff">--</span>
-<span class="lineno">  836 </span><span class="spaces">                  </span><span class="istickedoff">-- FUTURE: try making do-blocks their own `Tyctx`</span>
+<span class="lineno">  836 </span><span class="spaces">                  </span><span class="istickedoff">-- FUTURE: try making do-blocks their own `TyCtx`</span>
 <span class="lineno">  837 </span><span class="spaces">                  </span><span class="istickedoff">-- case.</span>
 <span class="lineno">  838 </span><span class="spaces">                  </span><span class="istickedoff">let enclosed = Pos.subspan subpos pos in</span>
 <span class="lineno">  839 </span><span class="spaces">                  </span><span class="istickedoff">case ty of</span>
@@ -1703,25 +1703,25 @@ span.spaces    { background: white }
 <span class="lineno"> 1684 </span>--
 <span class="lineno"> 1685 </span>inferExpr :: Expr -&gt; TI (OutExpr, Type)
 <span class="lineno"> 1686 </span><span class="decl"><span class="istickedoff">inferExpr expr = case expr of</span>
-<span class="lineno"> 1687 </span><span class="spaces">    </span><span class="istickedoff">Bool pos b    -&gt; <span class="nottickedoff">return (Bool pos b, tBool (TypeFromElement pos TyctxConstant))</span></span>
-<span class="lineno"> 1688 </span><span class="spaces">    </span><span class="istickedoff">String pos s  -&gt; return (String pos s, tString (TypeFromElement pos TyctxConstant))</span>
-<span class="lineno"> 1689 </span><span class="spaces">    </span><span class="istickedoff">Int pos i     -&gt; return (Int pos i, tInt (TypeFromElement pos TyctxConstant))</span>
-<span class="lineno"> 1690 </span><span class="spaces">    </span><span class="istickedoff">Code pos s    -&gt; return (Code pos s, tTerm <span class="nottickedoff">(TypeFromElement pos TyctxExpr)</span>)</span>
-<span class="lineno"> 1691 </span><span class="spaces">    </span><span class="istickedoff">CType pos s   -&gt; return (CType pos s, tType <span class="nottickedoff">(TypeFromElement pos TyctxExpr)</span>)</span>
+<span class="lineno"> 1687 </span><span class="spaces">    </span><span class="istickedoff">Bool pos b    -&gt; <span class="nottickedoff">return (Bool pos b, tBool (TypeFromElement pos TyCtxConstant))</span></span>
+<span class="lineno"> 1688 </span><span class="spaces">    </span><span class="istickedoff">String pos s  -&gt; return (String pos s, tString (TypeFromElement pos TyCtxConstant))</span>
+<span class="lineno"> 1689 </span><span class="spaces">    </span><span class="istickedoff">Int pos i     -&gt; return (Int pos i, tInt (TypeFromElement pos TyCtxConstant))</span>
+<span class="lineno"> 1690 </span><span class="spaces">    </span><span class="istickedoff">Code pos s    -&gt; return (Code pos s, tTerm <span class="nottickedoff">(TypeFromElement pos TyCtxExpr)</span>)</span>
+<span class="lineno"> 1691 </span><span class="spaces">    </span><span class="istickedoff">CType pos s   -&gt; return (CType pos s, tType <span class="nottickedoff">(TypeFromElement pos TyCtxExpr)</span>)</span>
 <span class="lineno"> 1692 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1693 </span><span class="spaces">    </span><span class="istickedoff">Array pos [] -&gt; do</span>
 <span class="lineno"> 1694 </span><span class="spaces">        </span><span class="istickedoff">a &lt;- getFreshTyVar pos</span>
-<span class="lineno"> 1695 </span><span class="spaces">        </span><span class="istickedoff">return (Array <span class="nottickedoff">pos</span> [], tArray (TypeFromElement pos TyctxConstant) a)</span>
+<span class="lineno"> 1695 </span><span class="spaces">        </span><span class="istickedoff">return (Array <span class="nottickedoff">pos</span> [], tArray (TypeFromElement pos TyCtxConstant) a)</span>
 <span class="lineno"> 1696 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1697 </span><span class="spaces">    </span><span class="istickedoff">Array pos (e:es) -&gt; do</span>
 <span class="lineno"> 1698 </span><span class="spaces">        </span><span class="istickedoff">(e',t) &lt;- inferExpr e</span>
 <span class="lineno"> 1699 </span><span class="spaces">        </span><span class="istickedoff">es' &lt;- mapM (\e1 -&gt; checkExpr e1 t) es</span>
-<span class="lineno"> 1700 </span><span class="spaces">        </span><span class="istickedoff">return (Array pos (e':es'), tArray (TypeFromElement pos TyctxExpr) t)</span>
+<span class="lineno"> 1700 </span><span class="spaces">        </span><span class="istickedoff">return (Array pos (e':es'), tArray (TypeFromElement pos TyCtxExpr) t)</span>
 <span class="lineno"> 1701 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1702 </span><span class="spaces">    </span><span class="istickedoff">Block pos body -&gt; do</span>
 <span class="lineno"> 1703 </span><span class="spaces">        </span><span class="istickedoff">ctx &lt;- getFreshTyVar <span class="nottickedoff">pos</span></span>
 <span class="lineno"> 1704 </span><span class="spaces">        </span><span class="istickedoff">tyResult &lt;- getFreshTyVar <span class="nottickedoff">pos</span></span>
-<span class="lineno"> 1705 </span><span class="spaces">        </span><span class="istickedoff">let ty = tApply <span class="nottickedoff">(TypeFromElement pos TyctxExpr)</span> ctx tyResult</span>
+<span class="lineno"> 1705 </span><span class="spaces">        </span><span class="istickedoff">let ty = tApply <span class="nottickedoff">(TypeFromElement pos TyCtxExpr)</span> ctx tyResult</span>
 <span class="lineno"> 1706 </span><span class="spaces">        </span><span class="istickedoff">pushScope</span>
 <span class="lineno"> 1707 </span><span class="spaces">        </span><span class="istickedoff">body' &lt;- inferBlock <span class="nottickedoff">pos</span> ctx ty body</span>
 <span class="lineno"> 1708 </span><span class="spaces">        </span><span class="istickedoff">popScope</span>
@@ -1731,23 +1731,23 @@ span.spaces    { background: white }
 <span class="lineno"> 1712 </span><span class="spaces">        </span><span class="istickedoff">(es',ts) &lt;- unzip &lt;$&gt; mapM inferExpr es</span>
 <span class="lineno"> 1713 </span><span class="spaces">        </span><span class="istickedoff">-- Consider unit a constant for type provenance purposes.</span>
 <span class="lineno"> 1714 </span><span class="spaces">        </span><span class="istickedoff">let tyctx = case es' of</span>
-<span class="lineno"> 1715 </span><span class="spaces">              </span><span class="istickedoff">[] -&gt; TyctxConstant</span>
-<span class="lineno"> 1716 </span><span class="spaces">              </span><span class="istickedoff">_ -&gt; TyctxExpr</span>
+<span class="lineno"> 1715 </span><span class="spaces">              </span><span class="istickedoff">[] -&gt; TyCtxConstant</span>
+<span class="lineno"> 1716 </span><span class="spaces">              </span><span class="istickedoff">_ -&gt; TyCtxExpr</span>
 <span class="lineno"> 1717 </span><span class="spaces">        </span><span class="istickedoff">return (Tuple pos es', tTuple (TypeFromElement pos tyctx) ts)</span>
 <span class="lineno"> 1718 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1719 </span><span class="spaces">    </span><span class="istickedoff">Record pos fs -&gt; do</span>
 <span class="lineno"> 1720 </span><span class="spaces">        </span><span class="istickedoff">(nes',nts) &lt;- unzip `fmap` mapM inferField (Map.toList fs)</span>
-<span class="lineno"> 1721 </span><span class="spaces">        </span><span class="istickedoff">let ty = TyRecord (TypeFromElement pos TyctxExpr) $ Map.fromList nts</span>
+<span class="lineno"> 1721 </span><span class="spaces">        </span><span class="istickedoff">let ty = TyRecord (TypeFromElement pos TyCtxExpr) $ Map.fromList nts</span>
 <span class="lineno"> 1722 </span><span class="spaces">        </span><span class="istickedoff">return (Record <span class="nottickedoff">pos</span> (Map.fromList nes'), ty)</span>
 <span class="lineno"> 1723 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1724 </span><span class="spaces">    </span><span class="istickedoff">-- XXX this is currently unreachable because there's no concrete</span>
 <span class="lineno"> 1725 </span><span class="spaces">    </span><span class="istickedoff">-- syntax for it; the parser will never produce it.</span>
 <span class="lineno"> 1726 </span><span class="spaces">    </span><span class="istickedoff">Index pos ar ix -&gt; <span class="nottickedoff">do</span></span>
 <span class="lineno"> 1727 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">(ar',at) &lt;- inferExpr ar</span></span>
-<span class="lineno"> 1728 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ix'      &lt;- checkExpr ix (tInt (TypeFromContext (Pos.getPos ix) TyctxExpr))</span></span>
+<span class="lineno"> 1728 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ix'      &lt;- checkExpr ix (tInt (TypeFromContext (Pos.getPos ix) TyCtxExpr))</span></span>
 <span class="lineno"> 1729 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">t        &lt;- getFreshTyVar pos</span></span>
 <span class="lineno"> 1730 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">let pos'ar = Pos.getPos ar'</span></span>
-<span class="lineno"> 1731 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">prov = TypeFromContext pos'ar TyctxExpr</span></span>
+<span class="lineno"> 1731 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">prov = TypeFromContext pos'ar TyCtxExpr</span></span>
 <span class="lineno"> 1732 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">unify (tArray prov t) pos'ar at</span></span>
 <span class="lineno"> 1733 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">return (Index pos ar' ix', t)</span></span>
 <span class="lineno"> 1734 </span><span class="spaces"></span><span class="istickedoff"></span>
@@ -2064,7 +2064,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2045 </span><span class="spaces">                  </span><span class="istickedoff">let (_args, argtys) = unzip arginfo</span>
 <span class="lineno"> 2046 </span><span class="spaces">                      </span><span class="istickedoff">namedArgtys = Map.map (\(_namepos, _arg, argty) -&gt; argty) namedArginfo</span>
 <span class="lineno"> 2047 </span><span class="spaces">                  </span><span class="istickedoff">ret &lt;- getFreshTyVar pos</span>
-<span class="lineno"> 2048 </span><span class="spaces">                  </span><span class="istickedoff">let prov = TypeFromElement argspos TyctxArgList</span>
+<span class="lineno"> 2048 </span><span class="spaces">                  </span><span class="istickedoff">let prov = TypeFromElement argspos TyCtxArgList</span>
 <span class="lineno"> 2049 </span><span class="spaces">                      </span><span class="istickedoff">ty' = TyFunc prov <span class="nottickedoff">noNames</span> argtys namedArgtys ret</span>
 <span class="lineno"> 2050 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2051 </span><span class="spaces">                  </span><span class="istickedoff">-- Now unify the tyvar we got with the function</span>
@@ -2252,7 +2252,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2233 </span><span class="spaces">        </span><span class="istickedoff">return (e',t'')</span>
 <span class="lineno"> 2234 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2235 </span><span class="spaces">    </span><span class="istickedoff">IfThenElse pos e1 e2 e3 -&gt; do</span>
-<span class="lineno"> 2236 </span><span class="spaces">        </span><span class="istickedoff">e1' &lt;- checkExpr e1 (tBool (TypeFromContext (Pos.getPos e1) TyctxExpr))</span>
+<span class="lineno"> 2236 </span><span class="spaces">        </span><span class="istickedoff">e1' &lt;- checkExpr e1 (tBool (TypeFromContext (Pos.getPos e1) TyCtxExpr))</span>
 <span class="lineno"> 2237 </span><span class="spaces">        </span><span class="istickedoff">(e2', t) &lt;- inferExpr e2</span>
 <span class="lineno"> 2238 </span><span class="spaces">        </span><span class="istickedoff">e3' &lt;- checkExpr e3 t</span>
 <span class="lineno"> 2239 </span><span class="spaces">        </span><span class="istickedoff">return (IfThenElse <span class="nottickedoff">pos</span> e1' e2' e3', t)</span></span>
@@ -2343,7 +2343,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2324 </span><span class="spaces">            </span><span class="istickedoff">return (t, PVar allpos xpos x (Just t))</span>
 <span class="lineno"> 2325 </span><span class="spaces">        </span><span class="istickedoff">PTuple pos ps -&gt; do</span>
 <span class="lineno"> 2326 </span><span class="spaces">            </span><span class="istickedoff">(ts, ps') &lt;- unzip &lt;$&gt; mapM (inferPattern rebindable) ps</span>
-<span class="lineno"> 2327 </span><span class="spaces">            </span><span class="istickedoff">return (tTuple <span class="nottickedoff">(TypeFromElement pos TyctxPat)</span> ts, PTuple <span class="nottickedoff">pos</span> ps')</span></span>
+<span class="lineno"> 2327 </span><span class="spaces">            </span><span class="istickedoff">return (tTuple <span class="nottickedoff">(TypeFromElement pos TyCtxPat)</span> ts, PTuple <span class="nottickedoff">pos</span> ps')</span></span>
 <span class="lineno"> 2328 </span>
 <span class="lineno"> 2329 </span>-- | Check the type of a pattern, by inferring and then unifying the
 <span class="lineno"> 2330 </span>--   result.
@@ -2556,7 +2556,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2537 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">-- Restrict include to TopLevel. This matches the prior</span></span>
 <span class="lineno"> 2538 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">-- behavior when it was a builtin function rather than</span></span>
 <span class="lineno"> 2539 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">-- syntax. FUTURE: consider relaxing the requirement.</span></span>
-<span class="lineno"> 2540 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">let sprov = TypeFromElement spos TyctxStmt</span></span>
+<span class="lineno"> 2540 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">let sprov = TypeFromElement spos TyCtxStmt</span></span>
 <span class="lineno"> 2541 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">let tm = TyCon sprov (ContextCon TopLevel) []</span></span>
 <span class="lineno"> 2542 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">tx &lt;- getFreshTyVar spos</span></span>
 <span class="lineno"> 2543 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">unify (tApply blockprov ctx tx) spos (tApply sprov tm tx)</span></span>
@@ -2609,7 +2609,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2590 </span>inferBlock :: Pos -&gt; Type -&gt; Type -&gt; ([Stmt], Expr) -&gt; TI ([OutStmt], OutExpr)
 <span class="lineno"> 2591 </span><span class="decl"><span class="istickedoff">inferBlock blockpos ctx ty (stmts, lastexpr) = do</span>
 <span class="lineno"> 2592 </span><span class="spaces">    </span><span class="istickedoff">let atSyntacticTopLevel = False</span>
-<span class="lineno"> 2593 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">blockprov = TypeFromElement blockpos TyctxExpr</span></span>
+<span class="lineno"> 2593 </span><span class="spaces">    </span><span class="istickedoff">let <span class="nottickedoff">blockprov = TypeFromElement blockpos TyCtxExpr</span></span>
 <span class="lineno"> 2594 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 2595 </span><span class="spaces">    </span><span class="istickedoff">-- Check the statements in order, left first.</span>
 <span class="lineno"> 2596 </span><span class="spaces">    </span><span class="istickedoff">stmts' &lt;- mapM (inferStmt atSyntacticTopLevel <span class="nottickedoff">blockprov</span> ctx) stmts</span>
@@ -3179,7 +3179,7 @@ span.spaces    { background: white }
 <span class="lineno"> 3160 </span><span class="spaces">    </span><span class="istickedoff">-- you did in the do block that pinned it to a particular monad.)</span>
 <span class="lineno"> 3161 </span><span class="spaces">    </span><span class="istickedoff">--</span>
 <span class="lineno"> 3162 </span><span class="spaces">    </span><span class="istickedoff">let pos = Pos.getPos stmt</span>
-<span class="lineno"> 3163 </span><span class="spaces">        </span><span class="istickedoff">prov = TypeFromContext pos TyctxStmt</span>
+<span class="lineno"> 3163 </span><span class="spaces">        </span><span class="istickedoff">prov = TypeFromContext pos TyCtxStmt</span>
 <span class="lineno"> 3164 </span><span class="spaces">        </span><span class="istickedoff">ctxtype = TyCon prov (ContextCon ctx) []</span>
 <span class="lineno"> 3165 </span><span class="spaces">    </span><span class="istickedoff">in</span>
 <span class="lineno"> 3166 </span><span class="spaces">    </span><span class="istickedoff">runTI ppopts avail env tenv (inferSingleStmt prov ctxtype stmt)</span></span>
