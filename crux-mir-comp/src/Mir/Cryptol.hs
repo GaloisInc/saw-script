@@ -342,7 +342,7 @@ cryptolRun col name (CryFunArgs (CryFunArgs' tpArgs ctrs normArgs)) retShp funcT
               Just i ->
                 do t <- SAW.scGlobalDef sc "Cryptol.Num"
                    i' <- SAW.scNat sc (fromIntegral i)
-                   x <- SAW.scGlobalApply sc "Prelude.TCNum" [i']
+                   x <- SAW.scGlobalApply sc "Cryptol.TCNum" [i']
                    SAW.scGlobalApply sc "Prelude.Refl" [t, x]
               Nothing -> fail "Invalid size parameter"
           (Cry.pIsNeq -> Just _) ->
