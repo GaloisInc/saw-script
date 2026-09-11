@@ -89,9 +89,9 @@ span.spaces    { background: white }
 <span class="lineno">   70 </span><span class="spaces">        </span><span class="istickedoff">e1' &lt;- incs'expr <span class="nottickedoff">ctx</span> e1</span>
 <span class="lineno">   71 </span><span class="spaces">        </span><span class="istickedoff">pure $ TLookup pos e1' ix</span>
 <span class="lineno">   72 </span><span class="spaces">    </span><span class="istickedoff">Var{} -&gt; pure e0</span>
-<span class="lineno">   73 </span><span class="spaces">    </span><span class="istickedoff">Lambda pos mname params namedParams e1 -&gt; do</span>
+<span class="lineno">   73 </span><span class="spaces">    </span><span class="istickedoff">Lambda pos mname paramPos params namedParams e1 -&gt; do</span>
 <span class="lineno">   74 </span><span class="spaces">        </span><span class="istickedoff">e1' &lt;- incs'expr <span class="nottickedoff">ctx</span> e1</span>
-<span class="lineno">   75 </span><span class="spaces">        </span><span class="istickedoff">pure $ Lambda pos mname params namedParams e1'</span>
+<span class="lineno">   75 </span><span class="spaces">        </span><span class="istickedoff">pure $ Lambda pos mname paramPos params namedParams e1'</span>
 <span class="lineno">   76 </span><span class="spaces">    </span><span class="istickedoff">Application pos e1 e2s -&gt; do</span>
 <span class="lineno">   77 </span><span class="spaces">        </span><span class="istickedoff">e1' &lt;- incs'expr <span class="nottickedoff">ctx</span> e1</span>
 <span class="lineno">   78 </span><span class="spaces">        </span><span class="istickedoff">let once (mbName, e2) = do</span>
