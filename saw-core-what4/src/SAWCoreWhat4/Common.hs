@@ -130,11 +130,14 @@ termOfTValue sc val =
             scGlobalApply sc "Prelude.RecordType" [fname', a', b']
     _ -> fail $ "termOfTValue: " ++ show val
 
-termOfSValue :: SharedContext -> SValue sym -> IO Term
+termOfSValue :: IsSymExprBuilder sym => SharedContext -> SValue sym -> IO Term
 termOfSValue sc val =
   case val of
     VCtorApp 0 _ []
       -> scUnitValue sc
+    VBool b
+      | Just x <- W.asConstantPred b
+      -> scBool sc x
     VNat n
       -> scNat sc n
     TValue tv -> termOfTValue sc tv
