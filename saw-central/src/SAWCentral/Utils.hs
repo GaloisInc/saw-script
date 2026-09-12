@@ -26,6 +26,7 @@ import Control.Exception as CE
 import Control.Monad.State
 import Control.Monad.Trans.Except
 import Data.Function (on)
+import qualified Data.Text as Text
 import Data.List (sortBy)
 import qualified Data.List.NonEmpty as NE
 import Data.Map (Map)
@@ -42,7 +43,9 @@ import qualified Lang.JVM.Codebase as JSS
 import qualified SAWSupport.ConsoleSupport as Cons
 
 import SAWCentral.Options
+import SAWCentral.Exceptions (TraceException(..))
 import SAWCentral.Position
+import SAWCentral.Trace (ppTrace)
 
 bullets :: Char -> [PP.Doc ann] -> PP.Doc ann
 bullets c = PP.vcat . map (PP.hang 2 . (PP.pretty c PP.<+>))
@@ -159,8 +162,32 @@ handleException opts e
     | Just (_ :: Cons.Fatal) <- CE.fromException e =
          -- Cons.Fatal means we've already printed a message, don't print again
          exitProofUnknown
+    | Just (TraceException trace curpos e') <- CE.fromException e = do
+         -- Print this directly instead of allowing it to go through
+         -- CE.displayException. Starting in GHC 9.10, something seems
+         -- to attach a Haskell-level stack trace to it, which then
+         -- gets printed by CE.displayException, and (1) we don't want
+         -- the output depending on GHC version and (2) we also
+         -- definitely don't want a Haskell-level stack trace for
+         -- this; it's a SAWScript-level stack trace, and the Haskell
+         -- trace is just noise.
+         let trace' = lines $ Text.unpack $ ppTrace trace curpos
+         printOutLn opts Error "Stack trace:"
+         mapM_ (printOutLn opts Error) trace'
+         handleException opts e'
     | Just ioe <- CE.fromException e =
          printOutLn opts Error (displayIOE ioe) >> exitProofUnknown
+    | Just (ErrorCall msg) <- CE.fromException e = do
+         -- This is the exception used by `error`. Capture and print
+         -- it directly instead of allowing it to go through
+         -- CE.displayException. Starting in GHC 9.10, it apparently
+         -- comes with a Haskell-level stack trace, which would not
+         -- necessarily be a bad thing, except that the "undefined"
+         -- builtin currently relies on `error` and we can't have the
+         -- output depending on the GHC version.
+         printOutLn opts Error msg
+         printOutLn opts Error ("   (This failure used error at the Haskell level)")
+         exitProofUnknown
     | otherwise =
          printOutLn opts Error (CE.displayException e) >> exitProofUnknown
 
