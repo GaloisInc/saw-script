@@ -1,5 +1,11 @@
 Loading file "err066.saw"
 err066.saw:8:9-8:10: Error: This expression is not a function (type is Int)
+let y = f ();
+        ^
 err066.saw:8:9-8:13: but is applied here to one argument.
+let y = f ();
+        ^^^^
 err066.saw:7:9-7:10: Note: The expression type Int arises from the form of this constant
+let f = 3;
+        ^
 FAILED

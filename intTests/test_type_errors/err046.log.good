@@ -1,3 +1,5 @@
 Loading file "err046.saw"
 err046.saw:3:13-3:24: Error: Cannot infer a record type for field someField; please use a type annotation
+let foo x = x.someField;
+            ^^^^^^^^^^^
 FAILED

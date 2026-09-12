@@ -2,3 +2,5 @@
 Some legal inputs at this point: 'let' 'rec' 'do' 'if' '[' '('
    ')' '{' '\\' string code ctype num name
 <stdin>:1:1-1:4: Error: Unbound variable: "bar"
+bar;
+^^^

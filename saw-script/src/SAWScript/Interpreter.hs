@@ -45,8 +45,6 @@ import System.FilePath ( (</>) )
 import System.Environment (lookupEnv)
 import System.Process (readProcess)
 
-import Prettyprinter ((<+>))
-
 import Data.Parameterized.Some
 
 import qualified Data.AIG.CompactGraph as AIG
@@ -215,7 +213,7 @@ toInputText pos0 txt =
   where
   (file, ln, col) = extract pos0
   extract pos = case pos of
-      SS.Range f sl sc _ _ -> (f,sl, sc)
+      SS.Range f sl sc _ _ _ -> (f, sl, sc)
       SS.FileOnlyPos f -> (f, 1, 1)
       SS.FileAndFunctionPos f _ -> (f, 1, 1)
       SS.PosInternal s -> (s,1,1)
@@ -503,16 +501,19 @@ processTypeCheck (msgs, output) =
   liftTopLevel $ do
     ppopts <- getPPOpts
     let inspect msg (msgs', failed) = case msg of
-          Ty.Error p m -> ((Error, p, "Error: ", m) : msgs', True)
-          Ty.Warning p m -> ((Warn, p, "Warning: ", m) : msgs', failed)
-          Ty.Notice p m -> ((Info, p, "Note: ", m) : msgs', failed)
-          Ty.Comment p m -> ((Info, p, "", m) : msgs', failed)
+          Ty.Error p m -> ((Error, Just p, "Error: ", m) : msgs', True)
+          Ty.Warning p m -> ((Warn, Just p, "Warning: ", m) : msgs', failed)
+          Ty.Notice p m -> ((Info, Just p, "Note: ", m) : msgs', failed)
+          Ty.Comment p m -> ((Info, Just p, "", m) : msgs', failed)
+          Ty.Annotation m -> ((Info, Nothing, "", m) : msgs', failed)
     let (msgs', failed) = foldr inspect ([], False) msgs
 
-    let issue (pri, pos, desc, msg) = do
+    let issue (pri, mbPos, desc, msg) = do
             -- XXX the print functions should be what knows how to show positions...
-            let pos' = prettyPosition pos
-                msg' = pos' <> ":" <+> desc <> msg
+            let pos' = case mbPos of
+                  Nothing -> ""
+                  Just pos -> prettyPosition pos <> ": "
+            let msg' = pos' <> desc <> msg
             printOutLnTop pri $ PPS.render ppopts msg'
     mapM_ issue msgs'
 

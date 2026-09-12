@@ -16,8 +16,14 @@ err018.saw:26:11-26:12: Error: Type mismatch.
           turquoise : Int
        }
 
+let y = f x;
+          ^
 err018.saw:16:14-16:20: Note: The expected type String arises from this explicit type name
+   amethyst: String,
+             ^^^^^^
 err018.saw:23:25-23:26: Note: The found type Int arises from the form of this constant
+let x : t1 = { amethyst=3, moonstone=4, obsidian=5, turquoise=6 };
+                        ^
 
 err018.saw:26:11-26:12: Error: Type mismatch.
     Expected: String
@@ -36,8 +42,14 @@ err018.saw:26:11-26:12: Error: Type mismatch.
           turquoise : Int
        }
 
+let y = f x;
+          ^
 err018.saw:17:15-17:21: Note: The expected type String arises from this explicit type name
+   moonstone: String,
+              ^^^^^^
 err018.saw:23:38-23:39: Note: The found type Int arises from the form of this constant
+let x : t1 = { amethyst=3, moonstone=4, obsidian=5, turquoise=6 };
+                                     ^
 
 err018.saw:26:11-26:12: Error: Type mismatch.
     Expected: String
@@ -56,8 +68,14 @@ err018.saw:26:11-26:12: Error: Type mismatch.
           turquoise : Int
        }
 
+let y = f x;
+          ^
 err018.saw:18:14-18:20: Note: The expected type String arises from this explicit type name
+   obsidian: String,
+             ^^^^^^
 err018.saw:23:50-23:51: Note: The found type Int arises from the form of this constant
+let x : t1 = { amethyst=3, moonstone=4, obsidian=5, turquoise=6 };
+                                                 ^
 
 err018.saw:26:11-26:12: Error: Type mismatch.
     Expected: String
@@ -76,7 +94,13 @@ err018.saw:26:11-26:12: Error: Type mismatch.
           turquoise : Int
        }
 
+let y = f x;
+          ^
 err018.saw:19:15-19:21: Note: The expected type String arises from this explicit type name
+   turquoise: String
+              ^^^^^^
 err018.saw:23:63-23:64: Note: The found type Int arises from the form of this constant
+let x : t1 = { amethyst=3, moonstone=4, obsidian=5, turquoise=6 };
+                                                              ^
 
 FAILED

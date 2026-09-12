@@ -2,5 +2,9 @@ Loading file "test14.saw"
 x=a
 x=b
 test14.saw:11:5-11:6: Warning: Redeclaration of x
+let x = "c";
+    ^
 test14.saw:8:16-8:17: Previous declaration was here
+let rebindable x = "b";
+               ^
 x=b

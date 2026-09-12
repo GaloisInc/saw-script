@@ -1,5 +1,11 @@
 Loading file "args015.saw"
 args015.saw:3:23-3:24: Warning: Redeclaration of x
+let f x?=3 () = let g x?=4 () = x in g;
+                      ^
 args015.saw:3:7-3:8: Previous declaration was here
+let f x?=3 () = let g x?=4 () = x in g;
+      ^
 args015.saw:3:5-3:6: Error: Function has duplicate parameter names: x
+let f x?=3 () = let g x?=4 () = x in g;
+    ^
 FAILED

@@ -3,7 +3,13 @@ err014.saw:12:15-12:18: Error: Record field names do not match.
     Expected: { a : Int }
     Found:    { b : Int }
 
+let baz = foo bar;
+              ^^^
 err014.saw:8:13-8:24: Note: The expected type { a : Int } arises from this explicit type name
+let foo (x: { a : Int }) : { a : Int } = { a = x.a };
+            ^^^^^^^^^^^
 err014.saw:10:25-10:34: Note: The found type { b : Int } arises from the form of this expression
+let bar : { b : Int } = { b = 3 };
+                        ^^^^^^^^^
 
 FAILED

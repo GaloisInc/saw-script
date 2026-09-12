@@ -3,7 +3,13 @@ err001.saw:1:23-1:24: Error: Type mismatch.
     Expected: String
     Found:    Int
 
+let foo () : String = 3;
+                      ^
 err001.saw:1:14-1:20: Note: The expected type String arises from this explicit type name
+let foo () : String = 3;
+             ^^^^^^
 err001.saw:1:23-1:24: Note: The found type Int arises from the form of this constant
+let foo () : String = 3;
+                      ^
 
 FAILED

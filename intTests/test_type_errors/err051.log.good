@@ -1,4 +1,8 @@
 Loading file "err051.saw"
 err051.saw:8:9-8:28: Error: Inaccessible variable: "external_cnf_solver"
+let _ = external_cnf_solver;
+        ^^^^^^^^^^^^^^^^^^^
 err051.saw:8:9-8:28: This command is available only after running `enable_deprecated`.
+let _ = external_cnf_solver;
+        ^^^^^^^^^^^^^^^^^^^
 FAILED

@@ -1,3 +1,5 @@
 Loading file "err056.saw"
 err056.saw:3:15-3:26: Error: Kind mismatch: expected * but found * -> *
+typedef Foo = ProofScript;
+              ^^^^^^^^^^^
 FAILED
