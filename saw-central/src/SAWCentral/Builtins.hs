@@ -1829,7 +1829,9 @@ failsPrim :: TopLevel SV.Value -> TopLevel ()
 failsPrim m = do
   topRO <- getTopLevelRO
   topRW <- getTopLevelRW
+  scc <- liftIO $ checkpointSharedContext (rwSharedContext topRW)
   x <- liftIO $ Ex.try (runTopLevel m topRO topRW)
+  liftIO $ restoreSharedContext scc (rwSharedContext topRW)
   case x of
     Left (ex :: Ex.SomeException)
       | Just (e :: PanicSupport.PanicException) <- Ex.fromException ex ->
