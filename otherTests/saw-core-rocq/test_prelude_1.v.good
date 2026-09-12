@@ -3533,14 +3533,6 @@ Definition updBvFun: forall (n: Init.Datatypes.nat) (a: Type) (_1: forall (_1:
          f x
    .
 
-(* "Prelude::Float@core" was skipped *)
-
-(* "Prelude::mkFloat@core" was skipped *)
-
-(* "Prelude::Double@core" was skipped *)
-
-(* "Prelude::mkDouble@core" was skipped *)
-
 (* "Prelude::List" was skipped *)
 
 (* "Prelude::List__rec@core" was skipped *)
@@ -3977,6 +3969,160 @@ Definition rationalRoundToEven: forall (_1: SAWCoreScaffolding.Rational),
                var__0
             else
                var__1
+   .
+
+(* "Prelude::Float@core" was skipped *)
+
+(* "Prelude::RoundingMode@core" was skipped *)
+
+Definition roundNearestEven: SAWCoreVectorsAsRocqVectors.RoundingMode :=
+   SAWCoreVectorsAsRocqVectors.bvNat 
+      (Stdlib.PArith.BinPos.Pos.to_nat 
+         (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
+      SAWCoreScaffolding.Zero.
+
+Definition roundNearestAway: SAWCoreVectorsAsRocqVectors.RoundingMode :=
+   SAWCoreVectorsAsRocqVectors.bvNat 
+      (Stdlib.PArith.BinPos.Pos.to_nat 
+         (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)) 
+      (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH).
+
+Definition roundPositive: SAWCoreVectorsAsRocqVectors.RoundingMode :=
+   SAWCoreVectorsAsRocqVectors.bvNat 
+      (Stdlib.PArith.BinPos.Pos.to_nat 
+         (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)) 
+      (Stdlib.PArith.BinPos.Pos.to_nat 
+         (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)).
+
+Definition roundNegative: SAWCoreVectorsAsRocqVectors.RoundingMode :=
+   SAWCoreVectorsAsRocqVectors.bvNat 
+      (Stdlib.PArith.BinPos.Pos.to_nat 
+         (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)) 
+      (Stdlib.PArith.BinPos.Pos.to_nat 
+         (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)).
+
+Definition roundZero: SAWCoreVectorsAsRocqVectors.RoundingMode :=
+   SAWCoreVectorsAsRocqVectors.bvNat 
+      (Stdlib.PArith.BinPos.Pos.to_nat 
+         (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)) 
+      (Stdlib.PArith.BinPos.Pos.to_nat 
+         (Stdlib.PArith.BinPos.xO 
+            (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))).
+
+Definition rne: SAWCoreVectorsAsRocqVectors.RoundingMode :=
+   roundNearestEven.
+
+Definition rna: SAWCoreVectorsAsRocqVectors.RoundingMode :=
+   roundNearestAway.
+
+Definition rtp: SAWCoreVectorsAsRocqVectors.RoundingMode :=
+   roundPositive.
+
+Definition rtn: SAWCoreVectorsAsRocqVectors.RoundingMode :=
+   roundNegative.
+
+Definition rtz: SAWCoreVectorsAsRocqVectors.RoundingMode :=
+   roundZero.
+
+(* "Prelude::fpNaN@core" was skipped *)
+
+(* "Prelude::fpPosInf@core" was skipped *)
+
+(* "Prelude::fpFromBits@core" was skipped *)
+
+(* "Prelude::fpToBits@core" was skipped *)
+
+(* "Prelude::fpLogicalEq@core" was skipped *)
+
+(* "Prelude::fpIsNaN@core" was skipped *)
+
+(* "Prelude::fpIsInf@core" was skipped *)
+
+(* "Prelude::fpIsZero@core" was skipped *)
+
+(* "Prelude::fpIsNeg@core" was skipped *)
+
+(* "Prelude::fpIsNormal@core" was skipped *)
+
+(* "Prelude::fpIsSubnormal@core" was skipped *)
+
+(* "Prelude::fpAdd@core" was skipped *)
+
+(* "Prelude::fpSub@core" was skipped *)
+
+(* "Prelude::fpMul@core" was skipped *)
+
+(* "Prelude::fpDiv@core" was skipped *)
+
+(* "Prelude::fpFMA@core" was skipped *)
+
+(* "Prelude::fpAbs@core" was skipped *)
+
+(* "Prelude::fpSqrt@core" was skipped *)
+
+(* "Prelude::fpToRational@core" was skipped *)
+
+(* "Prelude::fpFromRational@core" was skipped *)
+
+(* "Prelude::fpPosZero@core" was skipped *)
+
+(* "Prelude::fpIeeeEq@core" was skipped *)
+
+(* "Prelude::fpLt@core" was skipped *)
+
+Definition fpLe: forall (e p: Init.Datatypes.nat) (_1 _2: 
+           SAWCoreScaffolding.Float e p),
+        Init.Datatypes.bool :=
+   fun (e p: Init.Datatypes.nat) (x y: SAWCoreScaffolding.Float e p)
+      =>
+      Init.Datatypes.orb (SAWCoreScaffolding.fpIeeeEq e p x y) 
+         (SAWCoreScaffolding.fpLt e p x y)
+   .
+
+Definition fpCmp: forall (e p: Init.Datatypes.nat) (_1 _2: 
+           SAWCoreScaffolding.Float e p) (_3: Init.Datatypes.bool),
+        Init.Datatypes.bool :=
+   fun (e p: Init.Datatypes.nat) (x y: SAWCoreScaffolding.Float e p)
+        (k: Init.Datatypes.bool)
+      =>
+      Init.Datatypes.orb (SAWCoreScaffolding.fpLt e p x y) 
+         (Init.Datatypes.andb (SAWCoreScaffolding.fpIeeeEq e p x y) k)
+   .
+
+(* "Prelude::fpNeg@core" was skipped *)
+
+(* "Prelude::fpFromInteger@core" was skipped *)
+
+(* "Prelude::fpToInteger@core" was skipped *)
+
+(* "Prelude::fpIsPos@core" was skipped *)
+
+(* "Prelude::fpRem@core" was skipped *)
+
+(* "Prelude::fpCast@core" was skipped *)
+
+(* "Prelude::fpRound@core" was skipped *)
+
+(* "Prelude::fpFromBV@core" was skipped *)
+
+(* "Prelude::fpFromSBV@core" was skipped *)
+
+(* "Prelude::fpToBV@core" was skipped *)
+
+(* "Prelude::fpToSBV@core" was skipped *)
+
+Definition fpNegInf: forall (e p: Init.Datatypes.nat),
+        SAWCoreScaffolding.Float e p :=
+   fun (e p: Init.Datatypes.nat)
+      =>
+      SAWCoreScaffolding.fpNeg e p (SAWCoreScaffolding.fpPosInf e p)
+   .
+
+Definition fpNegZero: forall (e p: Init.Datatypes.nat),
+        SAWCoreScaffolding.Float e p :=
+   fun (e p: Init.Datatypes.nat)
+      =>
+      SAWCoreScaffolding.fpNeg e p (SAWCoreScaffolding.fpPosZero e p)
    .
 
 (* "Prelude::bveq_sameL@core" was skipped *)

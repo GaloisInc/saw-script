@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
 
 {- |
@@ -80,6 +81,7 @@ import Prettyprinter ((<+>))
 -- cryptol
 import qualified Cryptol.Eval.Type as TV
 import qualified Cryptol.Backend as V
+import qualified Cryptol.Backend.FloatHelpers as V
 import qualified Cryptol.Backend.Monad as V
 import qualified Cryptol.Backend.SeqMap as V
 import qualified Cryptol.Backend.WordValue as V
@@ -109,6 +111,7 @@ import qualified Cryptol.ModuleSystem.Renamer as MR
 import qualified SAWSupport.Pretty as PPS
 
 -- saw-core
+import SAWCore.FiniteValue (FirstOrderFloat(..))
 import qualified SAWCore.Simulator.Concrete as SC
 import qualified SAWCore.Simulator.Value as SC
 import SAWCore.Prim (BitVector(..))
@@ -307,7 +310,7 @@ importPC sc pc =
     C.PFLiteral        -> scGlobalDef sc "Cryptol.PFLiteral"
     C.PAnd             -> panic "importPC" ["found PAnd"]
     C.PTrue            -> scGlobalDef sc "Prelude.TrueProp"
-    C.PValidFloat      -> panic "importPC" ["found PValidFloat"]
+    C.PValidFloat      -> scGlobalDef sc "Cryptol.PValidFloat"
 
 -- | Import a Cryptol `C.Type` as a SAWCore term.
 --
@@ -378,7 +381,7 @@ importType sc env ty = do
             C.TCBit      -> scBoolType sc
             C.TCInteger  -> scIntegerType sc
             C.TCIntMod   -> scGlobalApply sc "Cryptol.IntModNum" =<< traverse go tyargs
-            C.TCFloat    -> scGlobalApply sc "Cryptol.TCFloat"   =<< traverse go tyargs
+            C.TCFloat    -> scGlobalApply sc "Cryptol.FloatNum"  =<< traverse go tyargs
             C.TCArray    -> do a <- go (tyargs !! 0)
                                b <- go (tyargs !! 1)
                                scArrayType sc a b
@@ -441,7 +444,7 @@ isErasedPC pc =
     C.PLiteral         -> False
     C.PLiteralLessThan -> False
     C.PFLiteral        -> False
-    C.PValidFloat      -> True
+    C.PValidFloat      -> False
     C.PAnd             -> True
     C.PTrue            -> False
 
@@ -544,6 +547,7 @@ classIntroIdents =
   , "Cryptol.PZeroInteger"
   , "Cryptol.PZeroIntModNum"
   , "Cryptol.PZeroRational"
+  , "Cryptol.PZeroFloatNum"
   , "Cryptol.PZeroSeqBool"
   , "Cryptol.PZeroFloat"
   , "Cryptol.PZeroSeq"
@@ -563,6 +567,7 @@ classIntroIdents =
   , "Cryptol.PRingInteger"
   , "Cryptol.PRingIntModNum"
   , "Cryptol.PRingRational"
+  , "Cryptol.PRingFloatNum"
   , "Cryptol.PRingSeqBool"
   , "Cryptol.PRingFloat"
   , "Cryptol.PRingSeq"
@@ -574,14 +579,17 @@ classIntroIdents =
   , "Cryptol.PIntegralInteger"
   , "Cryptol.PIntegralSeqBool"
   , "Cryptol.PFieldRational"
+  , "Cryptol.PFieldFloatNum"
   , "Cryptol.PFieldIntModNum"
   , "Cryptol.PFieldFloat"
   , "Cryptol.PRoundRational"
+  , "Cryptol.PRoundFloatNum"
   , "Cryptol.PRoundFloat"
   , "Cryptol.PEqBit"
   , "Cryptol.PEqInteger"
   , "Cryptol.PEqIntModNum"
   , "Cryptol.PEqRational"
+  , "Cryptol.PEqFloatNum"
   , "Cryptol.PEqFloat"
   , "Cryptol.PEqSeqBool"
   , "Cryptol.PEqSeq"
@@ -592,6 +600,7 @@ classIntroIdents =
   , "Cryptol.PCmpBit"
   , "Cryptol.PCmpInteger"
   , "Cryptol.PCmpRational"
+  , "Cryptol.PCmpFloatNum"
   , "Cryptol.PCmpFloat"
   , "Cryptol.PCmpSeqBool"
   , "Cryptol.PCmpSeq"
@@ -609,9 +618,11 @@ classIntroIdents =
   , "Cryptol.PLiteralInteger"
   , "Cryptol.PLiteralIntModNum"
   , "Cryptol.PLiteralRational"
+  , "Cryptol.PLiteralFloatNum"
   , "Cryptol.PLiteralSeqBool"
   , "Cryptol.PLiteralFloat"
   , "Cryptol.PFLiteralRational"
+  , "Cryptol.PFLiteralFloatNum"
   , "Cryptol.PFLiteralFloat"
   , "Cryptol.PFin_TCNum"
   , "Cryptol.PFin_tcAdd"
@@ -625,6 +636,12 @@ classIntroIdents =
   , "Cryptol.PGeq_0"
   , "Cryptol.unsafeAssumePGeq"
   , "Cryptol.unsafeAssumePNeq"
+  , "Cryptol.PValidFloat_16"
+  , "Cryptol.PValidFloat_32"
+  , "Cryptol.PValidFloat_64"
+  , "Cryptol.PValidFloat_128"
+  , "Cryptol.PValidFloat_256"
+  , "Cryptol.unsafeAssumePValidFloat"
   , "Cryptol.TruePropI"
   ]
 
@@ -956,22 +973,22 @@ floatPrims =
   , ("fpPosInf",       flip scGlobalDef "Cryptol.ecFpPosInf")
   , ("fpFromBits",     flip scGlobalDef "Cryptol.ecFpFromBits")
   , ("fpToBits",       flip scGlobalDef "Cryptol.ecFpToBits")
-  , ("=.=",            flip scGlobalDef "Cryptol.ecFpEq")
+  , ("=.=",            flip scGlobalDef "Cryptol.ecFpLogicalEq")
   , ("fpAdd",          flip scGlobalDef "Cryptol.ecFpAdd")
   , ("fpSub",          flip scGlobalDef "Cryptol.ecFpSub")
   , ("fpMul",          flip scGlobalDef "Cryptol.ecFpMul")
   , ("fpDiv",          flip scGlobalDef "Cryptol.ecFpDiv")
   , ("fpToRational",   flip scGlobalDef "Cryptol.ecFpToRational")
   , ("fpFromRational", flip scGlobalDef "Cryptol.ecFpFromRational")
-  , ("fpIsNaN",        flip scGlobalDef "Cryptol.fpIsNaN")
-  , ("fpIsInf",        flip scGlobalDef "Cryptol.fpIsInf")
-  , ("fpIsZero",       flip scGlobalDef "Cryptol.fpIsZero")
-  , ("fpIsNeg",        flip scGlobalDef "Cryptol.fpIsNeg")
-  , ("fpIsNormal",     flip scGlobalDef "Cryptol.fpIsNormal")
-  , ("fpIsSubnormal",  flip scGlobalDef "Cryptol.fpIsSubnormal")
-  , ("fpFMA",          flip scGlobalDef "Cryptol.fpFMA")
-  , ("fpAbs",          flip scGlobalDef "Cryptol.fpAbs")
-  , ("fpSqrt",         flip scGlobalDef "Cryptol.fpSqrt")
+  , ("fpIsNaN",        flip scGlobalDef "Cryptol.ecFpIsNaN")
+  , ("fpIsInf",        flip scGlobalDef "Cryptol.ecFpIsInf")
+  , ("fpIsZero",       flip scGlobalDef "Cryptol.ecFpIsZero")
+  , ("fpIsNeg",        flip scGlobalDef "Cryptol.ecFpIsNeg")
+  , ("fpIsNormal",     flip scGlobalDef "Cryptol.ecFpIsNormal")
+  , ("fpIsSubnormal",  flip scGlobalDef "Cryptol.ecFpIsSubnormal")
+  , ("fpFMA",          flip scGlobalDef "Cryptol.ecFpFMA")
+  , ("fpAbs",          flip scGlobalDef "Cryptol.ecFpAbs")
+  , ("fpSqrt",         flip scGlobalDef "Cryptol.ecFpSqrt")
   ]
 
 suiteBPrims :: Map C.PrimIdent (SharedContext -> IO Term)
@@ -1719,25 +1736,19 @@ proveEq sc env t1 t2
   | otherwise =
     case (C.tNoUser t1, C.tNoUser t2) of
       (C.tIsSeq -> Just (n1, a1), C.tIsSeq -> Just (n2, a2)) ->
-        do n1' <- importType sc env n1
-           n2' <- importType sc env n2
+        do (n1', n2', nEq) <- proveNumEq sc env n1 n2
            a1' <- importType sc env a1
            a2' <- importType sc env a2
-           num <- scGlobalApply sc "Cryptol.Num" []
-           nEq <- if n1 == n2
-                  then scGlobalApply sc "Prelude.Refl" [num, n1']
-                  else scGlobalApply sc "Prelude.unsafeAssert" [num, n1', n2']
            aEq <- proveEq sc env a1 a2
            if a1 == a2
              then scGlobalApply sc "Cryptol.seq_cong1" [n1', n2', a1', nEq]
              else scGlobalApply sc "Cryptol.seq_cong" [n1', n2', a1', a2', nEq, aEq]
+      (C.tIsFloat -> Just (e1, p1), C.tIsFloat -> Just (e2, p2)) ->
+        do (e1', e2', eEq) <- proveNumEq sc env e1 e2
+           (p1', p2', pEq) <- proveNumEq sc env p1 p2
+           scGlobalApply sc "Cryptol.FloatNum_cong" [e1', e2', p1', p2', eEq, pEq]
       (C.tIsIntMod -> Just n1, C.tIsIntMod -> Just n2) ->
-        do n1' <- importType sc env n1
-           n2' <- importType sc env n2
-           num <- scGlobalApply sc "Cryptol.Num" []
-           nEq <- if n1 == n2
-                  then scGlobalApply sc "Prelude.Refl" [num, n1']
-                  else scGlobalApply sc "Prelude.unsafeAssert" [num, n1', n2']
+        do (n1', n2', nEq) <- proveNumEq sc env n1 n2
            scGlobalApply sc "Cryptol.IntModNum_cong" [n1', n2', nEq]
       (C.tIsFun -> Just (a1, b1), C.tIsFun -> Just (a2, b2)) ->
         do a1' <- importType sc env a1
@@ -1796,6 +1807,21 @@ proveEq sc env t1 t2
             "t2: " <> CryPP.pp t2
         ]
 
+
+-- | Convert two @Num@ types to SAWCore 'Term's and create an equality term
+-- between them. If the two @Num@s are syntactically equal, this simply uses
+-- @Refl@ to equate them. Otherwise, this uses @unsafeAssert@, assuming that
+-- Cryptol's typechecker has proven that the two @Num@s are in fact equal.
+proveNumEq ::
+  SharedContext -> LocalEnv -> C.Type -> C.Type -> IO (Term, Term, Term)
+proveNumEq sc env n1 n2 =
+  do n1' <- importType sc env n1
+     n2' <- importType sc env n2
+     num <- scGlobalApply sc "Cryptol.Num" []
+     nEq <- if n1 == n2
+            then scGlobalApply sc "Prelude.Refl" [num, n1']
+            else scGlobalApply sc "Prelude.unsafeAssert" [num, n1', n2']
+     pure (n1', n2', nEq)
 
 -- | Create an equality term between two @RecordType@ values with the same
 -- field name. This works for equalities between record values and newtype
@@ -2098,6 +2124,7 @@ scCryptolType sc t =
       SC.VIntType -> return (Right C.tInteger)
       SC.VIntModType n -> return (Right (C.tIntMod (C.tNum n)))
       SC.VRationalType -> return (Right C.tRational)
+      SC.VFloatType e p -> pure (Right (C.tFloat (C.tNum e) (C.tNum p)))
       SC.VArrayType v1 v2 -> do
         Right t1 <- asCryptolTypeValue v1
         Right t2 <- asCryptolTypeValue v2
@@ -2175,7 +2202,15 @@ exportValue ty v = case ty of
       SC.VRational numer denom -> pure $ V.VRational $ V.SRational numer denom
       _ -> error $ "exportValue (on rational type " ++ show ty ++ ")"
 
-  TV.TVFloat _ _ -> panic "exportValue" ["Not yet implemented: Float"]
+  TV.TVFloat e p ->
+    case v of
+      SC.VFloat fof ->
+        pure $ V.VFloat $ V.BF
+          { V.bfExpWidth = e
+          , V.bfPrecWidth = p
+          , V.bfValue = fofValue fof
+          }
+      _ -> error $ "exportValue (on float type " ++ show ty ++ ")"
 
   TV.TVSeq _ e ->
     case v of

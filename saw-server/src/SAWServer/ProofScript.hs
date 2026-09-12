@@ -241,6 +241,7 @@ exportFirstOrderExpression fv =
     FOVInt i    -> return $ Integer i
     FOVIntMod m i -> return $ IntegerModulo i (toInteger m)
     FOVRational _r -> Left "exportFirstOrderExpression: unsupported type: Rational"
+    FOVFloat{} -> Left "exportFirstOrderExpression: unsupported type: Float"
     FOVWord w x -> return $ Num Hex (pack (showHex x "")) (toInteger w)
     FOVVec _t vs -> Sequence <$> mapM exportFirstOrderExpression vs
     FOVArray{} -> Left "exportFirstOrderExpression: unsupported type: Array (concrete case)"

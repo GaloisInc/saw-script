@@ -424,10 +424,17 @@ rocqTranslationConfiguration renamings skips = Rocq.TranslationConfiguration
   , Rocq.vectorModule = "SAWCoreVectorsAsRocqVectors"
   }
 
+withImportIEEE754BinarySingleNaN :: Rocq.TranslationConfiguration  -> Rocq.TranslationConfiguration
+withImportIEEE754BinarySingleNaN config@(Rocq.TranslationConfiguration { Rocq.postPreamble }) =
+  config {
+      Rocq.postPreamble = postPreamble <>
+          "From Flocq Require IEEE754.BinarySingleNaN.\n"
+  }
+
 withImportSAWCorePrelude :: Rocq.TranslationConfiguration  -> Rocq.TranslationConfiguration
 withImportSAWCorePrelude config@(Rocq.TranslationConfiguration { Rocq.postPreamble }) =
   config {
-      Rocq.postPreamble = postPreamble <> 
+      Rocq.postPreamble = postPreamble <>
           "From CryptolToRocq Require Import SAWCorePrelude.\n"
   }
 
@@ -580,6 +587,7 @@ writeRocqCryptolPrimitivesForSAWCore cryFile notations skips = do
   let configuration =
         withImportSAWCorePreludeExtra $
         withImportSAWCorePrelude $
+        withImportIEEE754BinarySingleNaN $
         rocqTranslationConfiguration notations skips
   m' <- Rocq.translateSAWModule sc configuration mm m
   let doc = PP.vcat [ Rocq.preamble configuration, m']

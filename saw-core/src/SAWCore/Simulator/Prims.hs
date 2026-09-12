@@ -130,6 +130,12 @@ intModFun = PrimFilterFun "expected IntMod" r
   where r (VIntMod _ i) = pure i
         r _ = mzero
 
+-- | A primitive that requires a @Float@ argument
+floatFun :: VMonad l => (VFloat l -> Prim l) -> Prim l
+floatFun = PrimFilterFun "expected Float" r
+  where r (VFloat f) = pure f
+        r _ = mzero
+
 -- | A primitive that requires a rational argument
 ratFun :: VMonad l => ((VInt l, VInt l) -> Prim l) -> Prim l
 ratFun = PrimFilterFun "expected Rational" r
@@ -189,6 +195,7 @@ data BasePrims l =
   , bpMuxBool  :: VBool l -> VBool l -> VBool l -> MBool l
   , bpMuxWord  :: VBool l -> VWord l -> VWord l -> MWord l
   , bpMuxInt   :: VBool l -> VInt l -> VInt l -> MInt l
+  , bpMuxFloat :: VBool l -> VFloat l -> VFloat l -> MFloat l
   , bpMuxArray :: VBool l -> VArray l -> VArray l -> MArray l
   , bpMuxExtra :: VBool l -> Extra l -> Extra l -> EvalM l (Extra l)
     -- Booleans
@@ -252,6 +259,41 @@ data BasePrims l =
   , bpIntMin :: VInt l -> VInt l -> MInt l
   , bpIntMax :: VInt l -> VInt l -> MInt l
   , bpNatToInt :: Natural -> MInt l
+    -- Float operations
+  , bpFpAbs :: VFloat l -> MFloat l
+  , bpFpAdd :: VWord l -> VFloat l -> VFloat l -> MFloat l
+  , bpFpCast :: Natural -> Natural -> VWord l -> VFloat l -> MFloat l
+  , bpFpDiv :: VWord l -> VFloat l -> VFloat l -> MFloat l
+  , bpFpFMA :: VWord l -> VFloat l -> VFloat l -> VFloat l -> MFloat l
+  , bpFpFromBits :: Natural -> Natural -> VWord l -> MFloat l
+  , bpFpFromBV :: Natural -> Natural -> VWord l -> VWord l -> MFloat l
+  , bpFpFromInteger :: Natural -> Natural -> VWord l -> VInt l -> MFloat l
+  , bpFpFromRational :: Natural -> Natural -> VWord l -> VInt l -> VInt l -> MFloat l
+  , bpFpFromSBV :: Natural -> Natural -> VWord l -> VWord l -> MFloat l
+  , bpFpIeeeEq :: VFloat l -> VFloat l -> MBool l
+  , bpFpIsInf :: VFloat l -> MBool l
+  , bpFpIsNaN :: VFloat l -> MBool l
+  , bpFpIsNeg :: VFloat l -> MBool l
+  , bpFpIsNormal :: VFloat l -> MBool l
+  , bpFpIsPos :: VFloat l -> MBool l
+  , bpFpIsSubnormal :: VFloat l -> MBool l
+  , bpFpIsZero :: VFloat l -> MBool l
+  , bpFpLt :: VFloat l -> VFloat l -> MBool l
+  , bpFpLogicalEq :: VFloat l -> VFloat l -> MBool l
+  , bpFpMul :: VWord l -> VFloat l -> VFloat l -> MFloat l
+  , bpFpNaN :: Natural -> Natural -> MFloat l
+  , bpFpNeg :: VFloat l -> MFloat l
+  , bpFpPosInf :: Natural -> Natural -> MFloat l
+  , bpFpPosZero :: Natural -> Natural -> MFloat l
+  , bpFpRem :: VFloat l -> VFloat l -> MFloat l
+  , bpFpRound :: VWord l -> VFloat l -> MFloat l
+  , bpFpSqrt :: VWord l -> VFloat l -> MFloat l
+  , bpFpSub :: VWord l -> VFloat l -> VFloat l -> MFloat l
+  , bpFpToBits :: VFloat l -> MWord l
+  , bpFpToBV :: Natural -> VWord l -> VFloat l -> MWord l
+  , bpFpToInteger :: VWord l -> VFloat l -> MInt l
+  , bpFpToRational :: VFloat l -> EvalM l (VInt l, VInt l)
+  , bpFpToSBV :: Natural -> VWord l -> VFloat l -> MWord l
     -- Array operations
   , bpArrayConstant :: TValue l -> TValue l -> Value l -> MArray l
   , bpArrayLookup :: VArray l -> Value l -> MValue l
@@ -364,6 +406,42 @@ constMap bp = Map.fromList
   , ("Prelude.rationalNeg", rationalNegOp bp)
   , ("Prelude.rationalRecip", rationalRecipOp)
   , ("Prelude.rationalFloor", rationalFloorOp bp)
+  -- Floats
+  , ("Prelude.Float", floatTypeOp)
+  , ("Prelude.fpAbs", fpAbsOp bp)
+  , ("Prelude.fpAdd", fpAddOp bp)
+  , ("Prelude.fpCast", fpCastOp bp)
+  , ("Prelude.fpDiv", fpDivOp bp)
+  , ("Prelude.fpFMA", fpFMAOp bp)
+  , ("Prelude.fpFromBits", fpFromBitsOp bp)
+  , ("Prelude.fpFromBV", fpFromBVOp bp)
+  , ("Prelude.fpFromInteger", fpFromIntegerOp bp)
+  , ("Prelude.fpFromRational", fpFromRationalOp bp)
+  , ("Prelude.fpFromSBV", fpFromSBVOp bp)
+  , ("Prelude.fpIeeeEq", fpIeeeEqOp bp)
+  , ("Prelude.fpIsInf", fpIsInfOp bp)
+  , ("Prelude.fpIsNaN", fpIsNaNOp bp)
+  , ("Prelude.fpIsNeg", fpIsNegOp bp)
+  , ("Prelude.fpIsNormal", fpIsNormalOp bp)
+  , ("Prelude.fpIsPos", fpIsPosOp bp)
+  , ("Prelude.fpIsSubnormal", fpIsSubnormalOp bp)
+  , ("Prelude.fpIsZero", fpIsZeroOp bp)
+  , ("Prelude.fpLt", fpLtOp bp)
+  , ("Prelude.fpLogicalEq", fpLogicalEqOp bp)
+  , ("Prelude.fpMul", fpMulOp bp)
+  , ("Prelude.fpNaN", fpNaNOp bp)
+  , ("Prelude.fpNeg", fpNegOp bp)
+  , ("Prelude.fpPosInf", fpPosInfOp bp)
+  , ("Prelude.fpPosZero", fpPosZeroOp bp)
+  , ("Prelude.fpRem", fpRemOp bp)
+  , ("Prelude.fpRound", fpRoundOp bp)
+  , ("Prelude.fpSqrt", fpSqrtOp bp)
+  , ("Prelude.fpSub", fpSubOp bp)
+  , ("Prelude.fpToBits", fpToBitsOp bp)
+  , ("Prelude.fpToBV", fpToBVOp bp)
+  , ("Prelude.fpToInteger", fpToIntegerOp bp)
+  , ("Prelude.fpToRational", fpToRationalOp bp)
+  , ("Prelude.fpToSBV", fpToSBVOp bp)
   -- Modular Integers
   , ("Prelude.IntMod", natFun $ \n -> PrimValue (TValue (VIntModType n)))
   -- Vectors
@@ -1340,6 +1418,346 @@ intToNatOp =
   intFun $ \x -> PrimValue $!
     if x >= 0 then VNat (fromInteger x) else VNat 0
 
+-- primitive Float : Nat -> Nat -> sort 0;
+floatTypeOp :: VMonad l => Prim l
+floatTypeOp =
+  natFun $ \e ->
+  natFun $ \p ->
+    PrimValue (TValue (VFloatType e p))
+
+-- primitive fpAbs : (e : Nat) -> (p : Nat) -> Float e p -> Float e p;
+fpAbsOp :: VMonad l => BasePrims l -> Prim l
+fpAbsOp bp =
+  constFun $
+  constFun $
+  floatFun $ \x ->
+  Prim $
+    VFloat <$> bpFpAbs bp x
+
+-- primitive fpAdd : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+fpAddOp :: VMonad l => BasePrims l -> Prim l
+fpAddOp bp =
+  constFun $
+  constFun $
+  wordFun (bpPack bp) $ \rm ->
+  floatFun $ \x ->
+  floatFun $ \y ->
+  Prim $
+    VFloat <$> bpFpAdd bp rm x y
+
+-- primitive fpCast : (e1 : Nat) (p1 : Nat) (e2 : Nat) (p2 : Nat) -> RoundingMode -> Float e1 p1 -> Float e2 p2;
+fpCastOp :: VMonad l => BasePrims l -> Prim l
+fpCastOp bp =
+  constFun $
+  constFun $
+  natFun $ \e2 ->
+  natFun $ \p2 ->
+  wordFun (bpPack bp) $ \rm ->
+  floatFun $ \x ->
+  Prim $
+    VFloat <$> bpFpCast bp e2 p2 rm x
+
+-- primitive fpDiv : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+fpDivOp :: VMonad l => BasePrims l -> Prim l
+fpDivOp bp =
+  constFun $
+  constFun $
+  wordFun (bpPack bp) $ \rm ->
+  floatFun $ \x ->
+  floatFun $ \y ->
+  Prim $
+    VFloat <$> bpFpDiv bp rm x y
+
+-- primitive fpFMA : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p -> Float e p;
+fpFMAOp :: VMonad l => BasePrims l -> Prim l
+fpFMAOp bp =
+  constFun $
+  constFun $
+  wordFun (bpPack bp) $ \rm ->
+  floatFun $ \x ->
+  floatFun $ \y ->
+  floatFun $ \z ->
+  Prim $
+    VFloat <$> bpFpFMA bp rm x y z
+
+-- primitive fpFromBits : (e : Nat) -> (p : Nat) -> Vec (addNat e p) Bool -> Float e p;
+fpFromBitsOp :: VMonad l => BasePrims l -> Prim l
+fpFromBitsOp bp =
+  natFun $ \e ->
+  natFun $ \p ->
+  wordFun (bpPack bp) $ \x ->
+  Prim $
+    VFloat <$> bpFpFromBits bp e p x
+
+-- primitive fpFromBV : (n : Nat) (e : Nat) -> (p : Nat) -> RoundingMode -> Vec (Succ n) Bool -> Float e p;
+fpFromBVOp :: VMonad l => BasePrims l -> Prim l
+fpFromBVOp bp =
+  constFun $
+  natFun $ \e ->
+  natFun $ \p ->
+  wordFun (bpPack bp) $ \rm ->
+  wordFun (bpPack bp) $ \x ->
+  Prim $
+    VFloat <$> bpFpFromBV bp e p rm x
+
+-- primitive fpFromInteger : (e : Nat) -> (p : Nat) -> RoundingMode -> Integer -> Float e p;
+fpFromIntegerOp :: VMonad l => BasePrims l -> Prim l
+fpFromIntegerOp bp =
+  natFun $ \e ->
+  natFun $ \p ->
+  wordFun (bpPack bp) $ \rm ->
+  intFun $ \x ->
+  Prim $
+    VFloat <$> bpFpFromInteger bp e p rm x
+
+-- primitive fpFromRational : (e : Nat) -> (p : Nat) -> RoundingMode -> Rational -> Float e p;
+fpFromRationalOp :: VMonad l => BasePrims l -> Prim l
+fpFromRationalOp bp =
+  natFun $ \e ->
+  natFun $ \p ->
+  wordFun (bpPack bp) $ \rm ->
+  ratFun $ \(numer, denom) ->
+  Prim $
+    VFloat <$> bpFpFromRational bp e p rm numer denom
+
+-- primitive fpFromSBV : (n : Nat) (e : Nat) -> (p : Nat) -> RoundingMode -> Vec (Succ n) Bool -> Float e p;
+fpFromSBVOp :: VMonad l => BasePrims l -> Prim l
+fpFromSBVOp bp =
+  constFun $
+  natFun $ \e ->
+  natFun $ \p ->
+  wordFun (bpPack bp) $ \rm ->
+  wordFun (bpPack bp) $ \x ->
+  Prim $
+    VFloat <$> bpFpFromSBV bp e p rm x
+
+-- primitive fpIeeeEq : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
+fpIeeeEqOp :: VMonad l => BasePrims l -> Prim l
+fpIeeeEqOp bp =
+  constFun $
+  constFun $
+  floatFun $ \x ->
+  floatFun $ \y ->
+  Prim $
+    VBool <$> bpFpIeeeEq bp x y
+
+-- primitive fpIsInf : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+fpIsInfOp :: VMonad l => BasePrims l -> Prim l
+fpIsInfOp bp =
+  constFun $
+  constFun $
+  floatFun $ \x ->
+  Prim $
+    VBool <$> bpFpIsInf bp x
+
+-- primitive fpIsNaN : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+fpIsNaNOp :: VMonad l => BasePrims l -> Prim l
+fpIsNaNOp bp =
+  constFun $
+  constFun $
+  floatFun $ \x ->
+  Prim $
+    VBool <$> bpFpIsNaN bp x
+
+-- primitive fpIsNeg : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+fpIsNegOp :: VMonad l => BasePrims l -> Prim l
+fpIsNegOp bp =
+  constFun $
+  constFun $
+  floatFun $ \x ->
+  Prim $
+    VBool <$> bpFpIsNeg bp x
+
+-- primitive fpIsNormal : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+fpIsNormalOp :: VMonad l => BasePrims l -> Prim l
+fpIsNormalOp bp =
+  constFun $
+  constFun $
+  floatFun $ \x ->
+  Prim $
+    VBool <$> bpFpIsNormal bp x
+
+-- primitive fpIsPos : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+fpIsPosOp :: VMonad l => BasePrims l -> Prim l
+fpIsPosOp bp =
+  constFun $
+  constFun $
+  floatFun $ \x ->
+  Prim $
+    VBool <$> bpFpIsPos bp x
+
+-- primitive fpIsSubnormal : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+fpIsSubnormalOp :: VMonad l => BasePrims l -> Prim l
+fpIsSubnormalOp bp =
+  constFun $
+  constFun $
+  floatFun $ \x ->
+  Prim $
+    VBool <$> bpFpIsSubnormal bp x
+
+-- primitive fpIsZero : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
+fpIsZeroOp :: VMonad l => BasePrims l -> Prim l
+fpIsZeroOp bp =
+  constFun $
+  constFun $
+  floatFun $ \x ->
+  Prim $
+    VBool <$> bpFpIsZero bp x
+
+-- primitive fpLt : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
+fpLtOp :: VMonad l => BasePrims l -> Prim l
+fpLtOp bp =
+  constFun $
+  constFun $
+  floatFun $ \x ->
+  floatFun $ \y ->
+  Prim $
+    VBool <$> bpFpLt bp x y
+
+-- primitive fpLogicalEq : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
+fpLogicalEqOp :: VMonad l => BasePrims l -> Prim l
+fpLogicalEqOp bp =
+  constFun $
+  constFun $
+  floatFun $ \x ->
+  floatFun $ \y ->
+  Prim $
+    VBool <$> bpFpLogicalEq bp x y
+
+-- primitive fpMul : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+fpMulOp :: VMonad l => BasePrims l -> Prim l
+fpMulOp bp =
+  constFun $
+  constFun $
+  wordFun (bpPack bp) $ \rm ->
+  floatFun $ \x ->
+  floatFun $ \y ->
+  Prim $
+    VFloat <$> bpFpMul bp rm x y
+
+-- primitive fpNaN : (e : Nat) -> (p : Nat) -> Float e p;
+fpNaNOp :: VMonad l => BasePrims l -> Prim l
+fpNaNOp bp =
+  natFun $ \e ->
+  natFun $ \p ->
+  Prim $
+    VFloat <$> bpFpNaN bp e p
+
+-- primitive fpNeg : (e : Nat) -> (p : Nat) -> Float e p -> Float e p;
+fpNegOp :: VMonad l => BasePrims l -> Prim l
+fpNegOp bp =
+  constFun $
+  constFun $
+  floatFun $ \x ->
+  Prim $
+    VFloat <$> bpFpNeg bp x
+
+-- primitive fpPosInf : (e : Nat) -> (p : Nat) -> Float e p;
+fpPosInfOp :: VMonad l => BasePrims l -> Prim l
+fpPosInfOp bp =
+  natFun $ \e ->
+  natFun $ \p ->
+  Prim $
+    VFloat <$> bpFpPosInf bp e p
+
+-- primitive fpPosZero : (e : Nat) -> (p : Nat) -> Float e p;
+fpPosZeroOp :: VMonad l => BasePrims l -> Prim l
+fpPosZeroOp bp =
+  natFun $ \e ->
+  natFun $ \p ->
+  Prim $
+    VFloat <$> bpFpPosZero bp e p
+
+-- primitive fpRem : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Float e p;
+fpRemOp :: VMonad l => BasePrims l -> Prim l
+fpRemOp bp =
+  constFun $
+  constFun $
+  floatFun $ \x ->
+  floatFun $ \y ->
+  Prim $
+    VFloat <$> bpFpRem bp x y
+
+-- primitive fpRound : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p;
+fpRoundOp :: VMonad l => BasePrims l -> Prim l
+fpRoundOp bp =
+  wordFun (bpPack bp) $ \rm ->
+  floatFun $ \x ->
+  Prim $
+    VFloat <$> bpFpRound bp rm x
+
+-- primitive fpSqrt : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p;
+fpSqrtOp :: VMonad l => BasePrims l -> Prim l
+fpSqrtOp bp =
+  constFun $
+  constFun $
+  wordFun (bpPack bp) $ \rm ->
+  floatFun $ \x ->
+  Prim $
+    VFloat <$> bpFpSqrt bp rm x
+
+-- primitive fpSub : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
+fpSubOp :: VMonad l => BasePrims l -> Prim l
+fpSubOp bp =
+  constFun $
+  constFun $
+  wordFun (bpPack bp) $ \rm ->
+  floatFun $ \x ->
+  floatFun $ \y ->
+  Prim $
+    VFloat <$> bpFpSub bp rm x y
+
+-- primitive fpToBits : (e : Nat) -> (p : Nat) -> Float e p -> Vec (addNat e p) Bool;
+fpToBitsOp :: VMonad l => BasePrims l -> Prim l
+fpToBitsOp bp =
+  constFun $
+  constFun $
+  floatFun $ \x ->
+  Prim $
+    VWord <$> bpFpToBits bp x
+
+-- primitive fpToBV : (n : Nat) (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Vec (Succ n) Bool;
+fpToBVOp :: VMonad l => BasePrims l -> Prim l
+fpToBVOp bp =
+  natFun $ \n ->
+  constFun $
+  constFun $
+  wordFun (bpPack bp) $ \rm ->
+  floatFun $ \x ->
+  Prim $
+    VWord <$> bpFpToBV bp n rm x
+
+-- primitive fpToInteger : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Integer;
+fpToIntegerOp :: VMonad l => BasePrims l -> Prim l
+fpToIntegerOp bp =
+  constFun $
+  constFun $
+  wordFun (bpPack bp) $ \rm ->
+  floatFun $ \x ->
+  Prim $
+    VInt <$> bpFpToInteger bp rm x
+
+-- primitive fpToRational : (e : Nat) -> (p : Nat) -> Float e p -> Rational;
+fpToRationalOp :: VMonad l => BasePrims l -> Prim l
+fpToRationalOp bp =
+  constFun $
+  constFun $
+  floatFun $ \x ->
+  Prim $ do
+    (numer, denom) <- bpFpToRational bp x
+    pure $ VRational numer denom
+
+-- primitive fpToSBV : (n : Nat) (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Vec (Succ n) Bool;
+fpToSBVOp :: VMonad l => BasePrims l -> Prim l
+fpToSBVOp bp =
+  natFun $ \n ->
+  constFun $
+  constFun $
+  wordFun (bpPack bp) $ \rm ->
+  floatFun $ \x ->
+  Prim $
+    VWord <$> bpFpToSBV bp n rm x
+
 -- primitive ratio : Integer -> Integer -> Rational;
 ratioOp :: VMonad l => Prim l
 ratioOp =
@@ -1567,6 +1985,8 @@ muxValue bp b x0 y0 = value x0 y0
 
     value (VRational xNumer xDenom) (VRational yNumer yDenom) =
       VRational <$> bpMuxInt bp b xNumer yNumer <*> bpMuxInt bp b xDenom yDenom
+
+    value (VFloat x) (VFloat y)               = VFloat <$> bpMuxFloat bp b x y
 
     value x@(VWord _)       y                 = do xv <- toVector' x
                                                    value (VVector xv) y

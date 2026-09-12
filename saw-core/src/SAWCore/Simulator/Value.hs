@@ -26,8 +26,10 @@ module SAWCore.Simulator.Value
   , VBool
   , VWord
   , VInt
+  , VFloat
   , VArray
   , Extra
+  , VRoundingMode
   , WithM
   -- * Type synonyms
   , Thunk
@@ -35,6 +37,7 @@ module SAWCore.Simulator.Value
   , MBool
   , MWord
   , MInt
+  , MFloat
   , MArray
   , VMonad
   , VMonadLazy
@@ -126,6 +129,7 @@ data Value l
     -- ^ A rational number, where the first 'VInt' is the numerator and the
     -- second 'VInt' is the denominator.
     -- Invariant: the denominator is non-zero.
+  | VFloat (VFloat l)
   | VArray (VArray l)
   | VString !Text
   | VExtra (Extra l)
@@ -148,6 +152,9 @@ data TValue l
   | VIntType
   | VIntModType !Natural
   | VRationalType
+  | VFloatType !Natural !Natural
+    -- ^ The first 'Natural' is the exponent size, and the second 'Natural' is
+    -- the precision size (both in bits).
   | VArrayType !(TValue l) !(TValue l)
   | VPiType !(TValue l) !(PiBody l)
   | VStringType
@@ -169,10 +176,15 @@ type family VBool l :: Type
 type family VWord l :: Type
 -- | Integers for value instantiation 'l'
 type family VInt  l :: Type
+-- | Floats for value instantiation 'l'
+type family VFloat l :: Type
 -- | SMT arrays for value instantiation 'l'
 type family VArray l :: Type
 -- | Additional constructors for instantiation 'l'
 type family Extra l :: Type
+
+-- | SAWCore encodes rounding modes as 3-bit words.
+type VRoundingMode l = VWord l
 
 -- | Short-hand for a monadic value.
 type MValue l     = EvalM l (Value l)
@@ -185,6 +197,9 @@ type MWord l      = EvalM l (VWord l)
 
 -- | Short-hand for a monadic integer.
 type MInt l       = EvalM l (VInt  l)
+
+-- | Short-hand for a monadic float.
+type MFloat l     = EvalM l (VFloat l)
 
 -- | Short-hand for a monadic array.
 type MArray l     = EvalM l (VArray l)
@@ -204,6 +219,7 @@ type instance EvalM (WithM m l) = m
 type instance VBool (WithM m l) = VBool l
 type instance VWord (WithM m l) = VWord l
 type instance VInt  (WithM m l) = VInt l
+type instance VFloat (WithM m l) = VFloat l
 type instance VArray (WithM m l) = VArray l
 type instance Extra (WithM m l) = Extra l
 
@@ -224,6 +240,7 @@ instance Show (Extra l) => Show (Value l) where
       VInt _         -> showString "<<integer>>"
       VIntMod n _    -> showString ("<<Z " ++ show n ++ ">>")
       VRational{}    -> showString "<<rational>>"
+      VFloat{}       -> showString "<<float>>"
       VArray{}       -> showString "<<array>>"
       VString s      -> shows s
       VExtra x       -> showsPrec p x
@@ -239,6 +256,8 @@ instance Show (Extra l) => Show (TValue l) where
       VIntType       -> showString "Integer"
       VIntModType n  -> showParen True (showString "IntMod " . shows n)
       VRationalType  -> showString "Rational"
+      VFloatType e' p' ->
+        showParen True (showString "Float " . shows e' . showChar ' ' . shows p')
       VArrayType{}   -> showString "Array"
       VPiType t _    -> showParen True
                         (shows t . showString " -> ...")
@@ -377,6 +396,7 @@ asFiniteTypeTValue v =
     VIntType      -> Nothing
     VIntModType{} -> Nothing
     VRationalType{} -> Nothing
+    VFloatType{}  -> Nothing
     VArrayType{}  -> Nothing
 
 asFirstOrderTypeValue :: Value l -> Maybe FirstOrderType
@@ -393,6 +413,7 @@ asFirstOrderTypeTValue v =
     VIntType      -> return FOTInt
     VIntModType m -> return (FOTIntMod m)
     VRationalType -> return FOTRational
+    VFloatType e p -> pure (FOTFloat e p)
     VArrayType a b ->
       FOTArray <$> asFirstOrderTypeTValue a <*> asFirstOrderTypeTValue b
     VDataType (ModuleIdentifier "Prelude.UnitType") [] [] ->
@@ -444,6 +465,7 @@ suffixTValue tv =
     VIntType -> Just "_Int"
     VIntModType n -> Just ("_IntMod_" ++ show n)
     VRationalType -> Just "_Rational"
+    VFloatType e p -> Just ("_Float_" ++ show e ++ "_" ++ show p)
     VArrayType a b ->
       do a' <- suffixTValue a
          b' <- suffixTValue b

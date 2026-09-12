@@ -734,6 +734,9 @@ PEqInteger = { eq = intEq };
 PEqRational : PEq Rational;
 PEqRational = { eq = rationalEq };
 
+PEqFloat : (e p : Nat) -> PEq (Float e p);
+PEqFloat e p = { eq = fpIeeeEq e p };
+
 PEqIntMod : (n : Nat) -> PEq (IntMod n);
 PEqIntMod n = { eq = intModEq n };
 
@@ -814,6 +817,14 @@ PCmpInteger = { cmpEq = PEqInteger, cmp = integerCmp, le = intLe, lt = intLt };
 
 PCmpRational : PCmp Rational;
 PCmpRational = { cmpEq = PEqRational, cmp = rationalCmp, le = rationalLe, lt = rationalLt };
+
+PCmpFloat : (e p : Nat) -> PCmp (Float e p);
+PCmpFloat e p =
+  { cmpEq = PEqFloat e p
+  , cmp = fpCmp e p
+  , le = fpLe e p
+  , lt = fpLt e p
+  };
 
 PCmpVec : (n : Nat) -> (a : isort 0) -> PCmp a -> PCmp (Vec n a);
 PCmpVec n a pa =
@@ -1050,6 +1061,9 @@ PZeroIntMod n = toIntMod n (natToInt 0);
 PZeroRational : PZero Rational;
 PZeroRational = rationalZero;
 
+PZeroFloat : (e p : Nat) -> PZero (Float e p);
+PZeroFloat e p = fpPosZero e p;
+
 PZeroIntModNum : (num : Num) -> PZero (IntModNum num);
 PZeroIntModNum num = Num#rec1 (\ (n : Num) -> PZero (IntModNum n)) PZeroIntMod PZeroInteger num;
 
@@ -1232,6 +1246,16 @@ PRingRational =
   , int = integerToRational
   };
 
+PRingFloat : (e p : Nat) -> PRing (Float e p);
+PRingFloat e p =
+  { ringZero = PZeroFloat e p
+  , add = fpAdd e p rne
+  , sub = fpSub e p rne
+  , mul = fpMul e p rne
+  , neg = fpNeg e p
+  , int = fpFromInteger e p rne
+  };
+
 PRingVec : (n : Nat) -> (a : isort 0) -> PRing a -> PRing (Vec n a);
 PRingVec n a pa =
   { ringZero = replicate n a pa.ringZero
@@ -1391,6 +1415,12 @@ PFieldRational =
   , fieldDiv  = rationalDiv
   };
 
+PFieldFloat : (e p : Nat) -> PField (Float e p);
+PFieldFloat e p =
+  { fieldRing = PRingFloat e p
+  , recip     = fpDiv e p rne (fpFromInteger e p rne (natToInt 1))
+  , fieldDiv  = fpDiv e p rne
+  };
 
 PFieldIntMod : (n : Nat) -> PField (IntMod n);
 PFieldIntMod n =
@@ -1430,6 +1460,16 @@ PRoundRational =
   , roundToEven = rationalRoundToEven
   };
 
+PRoundFloat : (e p : Nat) -> PRound (Float e p);
+PRoundFloat e p =
+  { roundField  = PFieldFloat e p
+  , roundCmp    = PCmpFloat e p
+  , floor       = fpToInteger e p rtn
+  , ceiling     = fpToInteger e p rtp
+  , trunc       = fpToInteger e p rtz
+  , roundAway   = fpToInteger e p rna
+  , roundToEven = fpToInteger e p rne
+  };
 
 -- Literal and LiteralLessThan classes
 
@@ -1467,6 +1507,9 @@ PLiteralIntModNum num =
 PLiteralRational : PLiteral Rational;
 PLiteralRational = \ (x : Nat) -> integerToRational (natToInt x);
 
+PLiteralFloat : (e p : Nat) -> PLiteral (Float e p);
+PLiteralFloat e p = \ (x : Nat) -> fpFromInteger e p rne (natToInt x);
+
 -- FLiteral class
 
 -- Compared to the Cryptol class 'FLiteral m n r a', we omit the 'm', 'n', and
@@ -1480,6 +1523,10 @@ PFLiteral a = Nat -> Nat -> Nat -> a;
 PFLiteralRational : PFLiteral Rational;
 PFLiteralRational =
   \ (m : Nat) (n : Nat) (r : Nat) -> ratio (natToInt m) (natToInt n);
+
+PFLiteralFloat : (e p : Nat) -> PFLiteral (Float e p);
+PFLiteralFloat e p = \ (m : Nat) (n : Nat) (r : Nat) ->
+  fpFromRational e p rne (ratio (natToInt m) (natToInt n));
 
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
@@ -2120,121 +2167,321 @@ ecScanl n a b f z =
     n;
 
 --------------------------------------------------------------------------------
--- Floating point primitives (TODO)
+-- Floating point
 
-TCFloat : Num -> Num -> sort 0;
-TCFloat _ _ = #();
+-- Return True if the numbers of bits used to represent a Float's exponent and
+-- precision (significand) are supported. See Note [Minimum number of Float
+-- bits] in saw-core/prelude/Prelude.sawcore.
+tcValidFloat : Num -> Num -> Bool;
+tcValidFloat =
+  binaryNumPred
+    -- Return True if there are at least three exponent bits and at least 2
+    -- precision bits.
+    (\ (e p : Nat) -> and (leNat 3 e) (leNat 2 p))
+    -- Return False if the number of exponent or precision bits is infinite.
+    (\ (_ : Nat) -> False)
+    (\ (_ : Nat) -> False)
+    False;
 
-PEqFloat : (e p : Num) -> PEq (TCFloat e p);
-PEqFloat e p = { eq = \(x y : TCFloat e p) -> error Bool "Unimplemented: (==) Float" };
+-- A proposition that checks if the numbers of bits used to represent a Float's
+-- exponent and precision (significand) are supported. See Note [Minimum number
+-- of Float bits] in saw-core/prelude/Prelude.sawcore.
+PValidFloat : Num -> Num -> Prop;
+PValidFloat e p = Eq Bool (tcValidFloat e p) True;
 
-PCmpFloat : (e p : Num) -> PCmp (TCFloat e p);
-PCmpFloat e p =
-  { cmpEq = PEqFloat e p
-  , cmp = \(x y : TCFloat e p) (k : Bool) -> error Bool "Unimplemented: Cmp Float"
-  , le = \(x y : TCFloat e p) -> error Bool "Unimplemented: Cmp Float"
-  , lt = \(x y : TCFloat e p) -> error Bool "Unimplemented: Cmp Float"
-  };
+-- PValidFloat proofs for commonly used Float sizes.
 
-PZeroFloat : (e p : Num) -> PZero (TCFloat e p);
-PZeroFloat e p = error (TCFloat e p) "Unimplemented: Zero Float";
+PValidFloat_16 : PValidFloat (TCNum 5) (TCNum 11);
+PValidFloat_16 = Refl Bool True;
 
-PRingFloat : (e p : Num) -> PRing (TCFloat e p);
-PRingFloat e p =
-  { ringZero = PZeroFloat e p
-  , add = \(x y : TCFloat e p) -> error (TCFloat e p) "Unimplemented: (+) Float"
-  , sub = \(x y : TCFloat e p) -> error (TCFloat e p) "Unimplemented: (-) Float"
-  , mul = \(x y : TCFloat e p) -> error (TCFloat e p) "Unimplemented: (*) Float"
-  , neg = \(x : TCFloat e p) -> error (TCFloat e p) "Unimplemented: neg Float"
-  , int = \ (i : Integer) -> error (TCFloat e p) "Unimplemented: toInteger Float"
-  };
+PValidFloat_32 : PValidFloat (TCNum 8) (TCNum 24);
+PValidFloat_32 = Refl Bool True;
 
-PFieldFloat : (e p : Num) -> PField (TCFloat e p);
-PFieldFloat e p =
-  { fieldRing = PRingFloat e p
-  , recip     = \(x : TCFloat e p) -> error (TCFloat e p) "Unimplemented: recip Float"
-  , fieldDiv  = \(x y : TCFloat e p) -> error (TCFloat e p) "Unimplemented: (/.) Float"
-  };
+PValidFloat_64 : PValidFloat (TCNum 11) (TCNum 53);
+PValidFloat_64 = Refl Bool True;
 
-PRoundFloat : (e p : Num) -> PRound (TCFloat e p);
-PRoundFloat e p =
-  { roundField  = PFieldFloat e p
-  , roundCmp    = PCmpFloat e p
-  , floor       = \(x : TCFloat e p) -> error Integer "Unimplemented: floor Float"
-  , ceiling     = \(x : TCFloat e p) -> error Integer "Unimplemented: ceiling Float"
-  , trunc       = \(x : TCFloat e p) -> error Integer "Unimplemented: trunc Float"
-  , roundAway   = \(x : TCFloat e p) -> error Integer "Unimplemented: roundAway Float"
-  , roundToEven = \(x : TCFloat e p) -> error Integer "Unimplemented: roundToEven Float"
-  };
+PValidFloat_128 : PValidFloat (TCNum 15) (TCNum 113);
+PValidFloat_128 = Refl Bool True;
 
-PLiteralFloat : (e p : Num) -> PLiteral (TCFloat e p);
-PLiteralFloat e p = \ (x : Nat) -> error (TCFloat e p) "Unimplemented: Literal Float";
+PValidFloat_256 : PValidFloat (TCNum 19) (TCNum 237);
+PValidFloat_256 = Refl Bool True;
 
-PFLiteralFloat : (e p : Num) -> PFLiteral (TCFloat e p);
-PFLiteralFloat _ _ = \ (m : Nat) (n : Nat) (r : Nat) -> ();
+-- Assuming `ValidFloat` constraints proved by the Cryptol type checker.
+unsafeAssumePValidFloat : (e p : Num) -> PValidFloat e p;
+unsafeAssumePValidFloat e p =
+  Bool#ind
+    (\ (x : Bool) -> Eq Bool x True)
+    (Refl Bool True)
+    (unsafeAssert Bool False True)
+    (tcValidFloat e p);
 
-ecFpNaN : (e : Num) -> (p : Num) -> TCFloat e p;
-ecFpNaN e p = error (TCFloat e p) "Unimplemented: fpNaN";
+-- Like the Float type, except that this takes Nums instead of Nats to
+-- represent the exponent and precision (significand) bits.
+--
+-- Note that in the case where one of the Nums is TCInf, we return a silly type
+-- (e.g., Float 0 0). This is done such that we can define an Inhabited
+-- instance for Float in saw-core-rocq (Flocq works such that even silly types
+-- like Float 0 0 are inhabited). Note that most FloatNum operations will be
+-- dispatched through floatNumFunction, which ensures that the number of
+-- exponent and precision bits are finite, erroring out otherwise.
+FloatNum : Num -> Num -> sort 0;
+FloatNum e p =
+  Num#rec1
+    (\ (_ : Num) -> sort 0)
+    (\ (e : Nat) ->
+      Num#rec1
+        (\ (_ : Num) -> sort 0)
+        (Float e)
+        (Float e 0)
+        p)
+    (Float 0 0)
+    e;
 
-ecFpPosInf : (e : Num) -> (p : Num) -> TCFloat e p;
-ecFpPosInf e p = error (TCFloat e p) "Unimplemented: fpPosInf";
+-- Create an inhabitant of the FloatNum type given a function that returns a
+-- Float for all possible exponent and precision (significand) sizes. This is
+-- only used for saw-core-rocq purposes (see Inhabited_FloatNum below).
+FloatNumInhabited : (e p : Num) -> FloatNum e p;
+FloatNumInhabited e p =
+  Num#rec1
+    (\ (e : Num) -> FloatNum e p)
+    (\ (e : Nat) ->
+      Num#rec1
+        (FloatNum (TCNum e))
+        (fpPosZero e)
+        (fpPosZero e 0)
+        p)
+    (fpPosZero 0 0)
+    e;
 
-ecFpFromBits : (e : Num) -> (p : Num) -> seq (tcAdd e p) Bool -> TCFloat e p;
-ecFpFromBits e p _ = error (TCFloat e p) "Unimplemented: fpFromBits";
+-- Define an Inhabited instance for FloatNum. This instance is crucial in order
+-- to ensure that applications of floatNumFunction which use FloatNum in the
+-- motive type will typecheck in Rocq.
+injectCode "Rocq"
+  "#[global] Instance Inhabited_FloatNum (e p : Num) : Inhabited (FloatNum e p) := MkInhabited (FloatNum e p) (FloatNumInhabited e p).";
 
-ecFpToBits : (e : Num) -> (p : Num) -> TCFloat e p -> seq (tcAdd e p) Bool;
-ecFpToBits e p _ = error (seq (tcAdd e p) Bool) "Unimplemented: fpToBits";
+FloatNum_cong :
+  (e : Num) -> (e' : Num) -> (p : Num) -> (p' : Num) ->
+  Eq Num e e' -> Eq Num p p' -> Eq (sort 0) (FloatNum e p) (FloatNum e' p');
+FloatNum_cong e e' p p' eq_e eq_p =
+  trans
+    (sort 0) (FloatNum e p) (FloatNum e' p) (FloatNum e' p')
+    (eq_cong Num e e' eq_e (sort 0) (\ (x : Num) -> FloatNum x p))
+    (eq_cong Num p p' eq_p (sort 0) (\ (x : Num) -> FloatNum e' x));
 
-ecFpEq : (e : Num) -> (p : Num) -> TCFloat e p -> TCFloat e p -> Bool;
-ecFpEq e p _ _ = error Bool "Unimplemented: =.=";
+-- An induction scheme on FloatNums that calls a function when the number of
+-- exponent and precision bits are finite. If either of them are infinite,
+-- this will error out.
+floatNumFunction :
+  (motive : Num -> Num -> isort 0) ->
+  ((e p : Nat) -> motive (TCNum e) (TCNum p)) ->
+  (e p : Num) -> motive e p;
+floatNumFunction motive f e p =
+  Num#rec1
+    (\ (e : Num) -> motive e p)
+    (\ (e : Nat) ->
+      Num#rec1
+        (\ (p : Num) -> motive (TCNum e) p)
+        (f e)
+        (error (motive (TCNum e) TCInf) "p should not be infinite")
+        p)
+    (error (motive TCInf p) "e should not be infinite")
+    e;
 
-ecFpAdd : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p;
-ecFpAdd e p _ _ _ = error (TCFloat e p) "Unimplemented: fpAdd";
+-- A stronger version of floatNumFunction that also imposes a ValidFloat
+-- constraint.
+validFloatNumFunction :
+  (motive : Num -> Num -> isort 0) ->
+  ((e p : Nat) -> motive (TCNum e) (TCNum p)) ->
+  (e p : Num) -> PValidFloat e p -> motive e p;
+validFloatNumFunction motive f e p _ = floatNumFunction motive f e p;
 
-ecFpSub : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p;
-ecFpSub e p _ _ _ = error (TCFloat e p) "Unimplemented: fpSub";
+-- primitive fpNaN : {e,p} ValidFloat e p => Float e p
+ecFpNaN : (e : Num) -> (p : Num) -> PValidFloat e p -> FloatNum e p;
+ecFpNaN =
+  validFloatNumFunction
+    FloatNum
+    fpNaN;
 
-ecFpMul : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p;
-ecFpMul e p _ _ _ = error (TCFloat e p) "Unimplemented: fpMul";
+-- primitive fpPosInf : {e,p} ValidFloat e p => Float e p
+ecFpPosInf : (e : Num) -> (p : Num) -> PValidFloat e p -> FloatNum e p;
+ecFpPosInf =
+  validFloatNumFunction
+    FloatNum
+    fpPosInf;
 
-ecFpDiv : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p;
-ecFpDiv e p _ _ _ = error (TCFloat e p) "Unimplemented: fpDiv";
+-- primitive fpFromBits : {e,p} ValidFloat e p => [e + p] -> Float e p
+ecFpFromBits : (e : Num) -> (p : Num) -> PValidFloat e p -> seq (tcAdd e p) Bool -> FloatNum e p;
+ecFpFromBits =
+  validFloatNumFunction
+    (\ (e p : Num) -> seq (tcAdd e p) Bool -> FloatNum e p)
+    fpFromBits;
 
-ecFpToRational : (e : Num) -> (p : Num) -> TCFloat e p -> Rational;
-ecFpToRational e p _ = error Rational "Unimplemented: fpToRational";
+-- primitive fpToBits : {e,p} ValidFloat e p => Float e p -> [e + p]
+ecFpToBits : (e : Num) -> (p : Num) -> PValidFloat e p -> FloatNum e p -> seq (tcAdd e p) Bool;
+ecFpToBits =
+  validFloatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> seq (tcAdd e p) Bool)
+    fpToBits;
 
-ecFpFromRational : (e : Num) -> (p : Num) -> Vec 3 Bool -> Rational -> TCFloat e p;
-ecFpFromRational e p _ _ = error (TCFloat e p) "Unimplemented: fpFromRational";
+-- primitive (=.=) : {e,p} ValidFloat e p => Float e p -> Float e p -> Bool
+ecFpLogicalEq : (e : Num) -> (p : Num) -> PValidFloat e p -> FloatNum e p -> FloatNum e p -> Bool;
+ecFpLogicalEq =
+  validFloatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> FloatNum e p -> Bool)
+    fpLogicalEq;
 
-fpIsNaN : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
-fpIsNaN e p x = error Bool "Unimplemented: fpIsNaN";
+-- primitive fpAdd : {e,p} ValidFloat e p => RoundingMode -> Float e p -> Float e p -> Float e p
+ecFpAdd : (e : Num) -> (p : Num) -> PValidFloat e p -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p;
+ecFpAdd =
+  validFloatNumFunction
+    (\ (e p : Num) -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p)
+    fpAdd;
 
-fpIsInf : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
-fpIsInf e p x = error Bool "Unimplemented: fpIsInf";
+-- primitive fpSub : {e,p} ValidFloat e p => RoundingMode -> Float e p -> Float e p -> Float e p
+ecFpSub : (e : Num) -> (p : Num) -> PValidFloat e p -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p;
+ecFpSub =
+  validFloatNumFunction
+    (\ (e p : Num) -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p)
+    fpSub;
 
-fpIsZero : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
-fpIsZero e p x = error Bool "Unimplemented: fpIsZero";
+-- primitive fpMul : {e,p} ValidFloat e p => RoundingMode -> Float e p -> Float e p -> Float e p
+ecFpMul : (e : Num) -> (p : Num) -> PValidFloat e p -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p;
+ecFpMul =
+  validFloatNumFunction
+    (\ (e p : Num) -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p)
+    fpMul;
 
-fpIsNeg : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
-fpIsNeg e p x = error Bool "Unimplemented: fpIsNeg";
+-- primitive fpDiv : {e,p} ValidFloat e p => RoundingMode -> Float e p -> Float e p -> Float e p
+ecFpDiv : (e : Num) -> (p : Num) -> PValidFloat e p -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p;
+ecFpDiv =
+  validFloatNumFunction
+    (\ (e p : Num) -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p)
+    fpDiv;
 
-fpIsNormal : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
-fpIsNormal e p x = error Bool "Unimplemented: fpIsNormal";
+-- primitive fpToRational : {e,p} ValidFloat e p => Float e p -> Rational
+ecFpToRational : (e : Num) -> (p : Num) -> PValidFloat e p -> FloatNum e p -> Rational;
+ecFpToRational =
+  validFloatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> Rational)
+    fpToRational;
 
-fpIsSubnormal : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
-fpIsSubnormal e p x = error Bool "Unimplemented: fpIsSubnormal";
+-- primitive primitive fpFromRational : {e,p} ValidFloat e p => RoundingMode -> Rational -> Float e p
+ecFpFromRational : (e : Num) -> (p : Num) -> PValidFloat e p -> RoundingMode -> Rational -> FloatNum e p;
+ecFpFromRational =
+  validFloatNumFunction
+    (\ (e p : Num) -> RoundingMode -> Rational -> FloatNum e p)
+    fpFromRational;
 
-fpFMA :
-  (e : Num) -> (p : Num) -> Vec 3 Bool ->
-  TCFloat e p -> TCFloat e p -> TCFloat e p -> TCFloat e p;
-fpFMA e p r x y z = error (TCFloat e p) "Unimplemented: fpFMA";
+-- primitive fpIsNaN : {e,p} ValidFloat e p => Float e p -> Bool
+ecFpIsNaN : (e : Num) -> (p : Num) -> PValidFloat e p -> FloatNum e p -> Bool;
+ecFpIsNaN =
+  validFloatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> Bool)
+    fpIsNaN;
 
-fpAbs : (e : Num) -> (p : Num) -> TCFloat e p -> TCFloat e p;
-fpAbs e p x = error (TCFloat e p) "Unimplemented: fpAbs";
+-- primitive fpIsInf : {e,p} ValidFloat e p => Float e p -> Bool
+ecFpIsInf : (e : Num) -> (p : Num) -> PValidFloat e p -> FloatNum e p -> Bool;
+ecFpIsInf =
+  validFloatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> Bool)
+    fpIsInf;
 
-fpSqrt : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p;
-fpSqrt e p r x = error (TCFloat e p) "Unimplemented: fpSqrt";
+-- primitive fpIsZero : {e,p} ValidFloat e p => Float e p -> Bool
+ecFpIsZero : (e : Num) -> (p : Num) -> PValidFloat e p -> FloatNum e p -> Bool;
+ecFpIsZero =
+  validFloatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> Bool)
+    fpIsZero;
 
+-- primitive fpIsNeg : {e,p} ValidFloat e p => Float e p -> Bool
+ecFpIsNeg : (e : Num) -> (p : Num) -> PValidFloat e p -> FloatNum e p -> Bool;
+ecFpIsNeg =
+  validFloatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> Bool)
+    fpIsNeg;
+
+-- primitive fpIsNormal : {e,p} ValidFloat e p => Float e p -> Bool
+ecFpIsNormal : (e : Num) -> (p : Num) -> PValidFloat e p -> FloatNum e p -> Bool;
+ecFpIsNormal =
+  validFloatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> Bool)
+    fpIsNormal;
+
+-- primitive fpIsSubnormal : {e,p} ValidFloat e p => Float e p -> Bool
+ecFpIsSubnormal : (e : Num) -> (p : Num) -> PValidFloat e p -> FloatNum e p -> Bool;
+ecFpIsSubnormal =
+  validFloatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> Bool)
+    fpIsSubnormal;
+
+-- primitive fpFMA : {e,p} ValidFloat e p => RoundingMode -> Float e p -> Float e p -> Float e p -> Float e p
+ecFpFMA : (e : Num) -> (p : Num) -> PValidFloat e p -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p -> FloatNum e p;
+ecFpFMA =
+  validFloatNumFunction
+    (\ (e p : Num) -> RoundingMode -> FloatNum e p -> FloatNum e p -> FloatNum e p -> FloatNum e p)
+    fpFMA;
+
+-- primitive fpAbs : {e,p} ValidFloat e p => Float e p -> Float e p
+ecFpAbs : (e : Num) -> (p : Num) -> PValidFloat e p -> FloatNum e p -> FloatNum e p;
+ecFpAbs =
+  validFloatNumFunction
+    (\ (e p : Num) -> FloatNum e p -> FloatNum e p)
+    fpAbs;
+
+-- primitive fpSqrt : {e,p} ValidFloat e p => RoundingMode -> Float e p -> Float e p
+ecFpSqrt : (e : Num) -> (p : Num) -> PValidFloat e p -> RoundingMode -> FloatNum e p -> FloatNum e p;
+ecFpSqrt =
+  validFloatNumFunction
+    (\ (e p : Num) -> RoundingMode -> FloatNum e p -> FloatNum e p)
+    fpSqrt;
+
+PEqFloatNum : (e p : Num) -> PEq (FloatNum e p);
+PEqFloatNum =
+  floatNumFunction
+    (\ (e p : Num) -> PEq (FloatNum e p))
+    PEqFloat;
+
+PCmpFloatNum : (e p : Num) -> PCmp (FloatNum e p);
+PCmpFloatNum =
+  floatNumFunction
+    (\ (e p : Num) -> PCmp (FloatNum e p))
+    PCmpFloat;
+
+PZeroFloatNum : (e p : Num) -> PZero (FloatNum e p);
+PZeroFloatNum =
+  floatNumFunction
+    (\ (e p : Num) -> PZero (FloatNum e p))
+    PZeroFloat;
+
+PRingFloatNum : (e p : Num) -> PRing (FloatNum e p);
+PRingFloatNum =
+  floatNumFunction
+    (\ (e p : Num) -> PRing (FloatNum e p))
+    PRingFloat;
+
+PFieldFloatNum : (e p : Num) -> PField (FloatNum e p);
+PFieldFloatNum =
+  floatNumFunction
+    (\ (e p : Num) -> PField (FloatNum e p))
+    PFieldFloat;
+
+PRoundFloatNum : (e p : Num) -> PRound (FloatNum e p);
+PRoundFloatNum =
+  floatNumFunction
+    (\ (e p : Num) -> PRound (FloatNum e p))
+    PRoundFloat;
+
+PLiteralFloatNum : (e p : Num) -> PLiteral (FloatNum e p);
+PLiteralFloatNum =
+  floatNumFunction
+    (\ (e p : Num) -> PLiteral (FloatNum e p))
+    PLiteralFloat;
+
+PFLiteralFloatNum : (e p : Num) -> PFLiteral (FloatNum e p);
+PFLiteralFloatNum =
+  floatNumFunction
+    (\ (e p : Num) -> PFLiteral (FloatNum e p))
+    PFLiteralFloat;
 
 --------------------------------------------------------------------------------
 -- Extra primitives

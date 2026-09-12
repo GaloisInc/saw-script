@@ -10,6 +10,7 @@ From CryptolToRocq Require Import SAWCoreVectorsAsRocqVectors.
 Import VectorNotations.
 
 (** Post-preamble section specified by you *)
+From Flocq Require IEEE754.BinarySingleNaN.
 From CryptolToRocq Require Import SAWCorePrelude.
 From CryptolToRocq Require Import SAWCorePreludeExtra.
 
@@ -1455,6 +1456,16 @@ Definition PEqRational: PEq SAWCoreScaffolding.Rational :=
            Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil
       SAWCoreScaffolding.rationalEqb SAWCoreScaffolding.RecordNil.
 
+Definition PEqFloat: forall (e p: Init.Datatypes.nat),
+        PEq (SAWCoreScaffolding.Float e p) :=
+   fun (e p: Init.Datatypes.nat)
+      =>
+      @SAWCoreScaffolding.RecordCons "eq"%string (forall (_1 _2: 
+                 SAWCoreScaffolding.Float e p),
+              Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil 
+         (SAWCoreScaffolding.fpIeeeEq e p) SAWCoreScaffolding.RecordNil
+   .
+
 Definition PEqIntMod: forall (n: Init.Datatypes.nat),
         PEq (SAWCoreScaffolding.IntMod n) :=
    fun (n: Init.Datatypes.nat)
@@ -1734,6 +1745,45 @@ Definition PCmpRational: PCmp SAWCoreScaffolding.Rational :=
                     (_1 _2: SAWCoreScaffolding.Rational),
                     Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil
                SAWCoreScaffolding.rationalLt SAWCoreScaffolding.RecordNil))).
+
+Definition PCmpFloat: forall (e p: Init.Datatypes.nat),
+        PCmp (SAWCoreScaffolding.Float e p) :=
+   fun (e p: Init.Datatypes.nat)
+      =>
+      @SAWCoreScaffolding.RecordCons "cmpEq"%string 
+         (PEq (SAWCoreScaffolding.Float e p)) 
+         (SAWCoreScaffolding.RecordTypeCons "cmp"%string (forall (_1 _2: 
+                    SAWCoreScaffolding.Float e p) (_3: Init.Datatypes.bool),
+                 Init.Datatypes.bool) 
+            (SAWCoreScaffolding.RecordTypeCons "le"%string (forall (_1 _2: 
+                       SAWCoreScaffolding.Float e p),
+                    Init.Datatypes.bool) 
+               (SAWCoreScaffolding.RecordTypeCons "lt"%string (forall (_1 _2: 
+                          SAWCoreScaffolding.Float e p),
+                       Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil))) 
+         (PEqFloat e p) 
+         (@SAWCoreScaffolding.RecordCons "cmp"%string (forall (_1 _2: 
+                    SAWCoreScaffolding.Float e p) (_3: Init.Datatypes.bool),
+                 Init.Datatypes.bool) 
+            (SAWCoreScaffolding.RecordTypeCons "le"%string (forall (_1 _2: 
+                       SAWCoreScaffolding.Float e p),
+                    Init.Datatypes.bool) 
+               (SAWCoreScaffolding.RecordTypeCons "lt"%string (forall (_1 _2: 
+                          SAWCoreScaffolding.Float e p),
+                       Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil)) 
+            (SAWCorePrelude.fpCmp e p) 
+            (@SAWCoreScaffolding.RecordCons "le"%string (forall (_1 _2: 
+                       SAWCoreScaffolding.Float e p),
+                    Init.Datatypes.bool) 
+               (SAWCoreScaffolding.RecordTypeCons "lt"%string (forall (_1 _2: 
+                          SAWCoreScaffolding.Float e p),
+                       Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil) 
+               (SAWCorePrelude.fpLe e p) 
+               (@SAWCoreScaffolding.RecordCons "lt"%string (forall (_1 _2: 
+                          SAWCoreScaffolding.Float e p),
+                       Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil 
+                  (SAWCoreScaffolding.fpLt e p) SAWCoreScaffolding.RecordNil)))
+   .
 
 Definition PCmpVec: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a: 
            SAWCoreScaffolding.Inhabited a} (_1: PCmp a),
@@ -3598,6 +3648,13 @@ Definition PZeroIntMod: forall (n: Init.Datatypes.nat),
 
 Definition PZeroRational: PZero SAWCoreScaffolding.Rational :=
    SAWCorePrelude.rationalZero.
+
+Definition PZeroFloat: forall (e p: Init.Datatypes.nat),
+        PZero (SAWCoreScaffolding.Float e p) :=
+   fun (e p: Init.Datatypes.nat)
+      =>
+      SAWCoreScaffolding.fpPosZero e p
+   .
 
 Definition PZeroIntModNum: forall (num: Num), PZero (IntModNum num) :=
    fun (num: Num)
@@ -5470,6 +5527,86 @@ Definition PRingRational: PRing SAWCoreScaffolding.Rational :=
                      SAWCoreScaffolding.RecordTypeNil
                      SAWCorePrelude.integerToRational
                      SAWCoreScaffolding.RecordNil))))).
+
+Definition PRingFloat: forall (e p: Init.Datatypes.nat),
+        PRing (SAWCoreScaffolding.Float e p) :=
+   fun (e p: Init.Datatypes.nat)
+      =>
+      @SAWCoreScaffolding.RecordCons "ringZero"%string 
+         (PZero (SAWCoreScaffolding.Float e p)) 
+         (SAWCoreScaffolding.RecordTypeCons "add"%string (forall (_1 _2: 
+                    SAWCoreScaffolding.Float e p),
+                 SAWCoreScaffolding.Float e p) 
+            (SAWCoreScaffolding.RecordTypeCons "sub"%string (forall (_1 _2: 
+                       SAWCoreScaffolding.Float e p),
+                    SAWCoreScaffolding.Float e p) 
+               (SAWCoreScaffolding.RecordTypeCons "mul"%string (forall (_1 _2: 
+                          SAWCoreScaffolding.Float e p),
+                       SAWCoreScaffolding.Float e p) 
+                  (SAWCoreScaffolding.RecordTypeCons "neg"%string (forall (_1: 
+                             SAWCoreScaffolding.Float e p),
+                          SAWCoreScaffolding.Float e p) 
+                     (SAWCoreScaffolding.RecordTypeCons "int"%string (forall
+                             (_1: SAWCoreScaffolding.Integer),
+                             SAWCoreScaffolding.Float e p)
+                        SAWCoreScaffolding.RecordTypeNil))))) (PZeroFloat e p) 
+         (@SAWCoreScaffolding.RecordCons "add"%string (forall (_1 _2: 
+                    SAWCoreScaffolding.Float e p),
+                 SAWCoreScaffolding.Float e p) 
+            (SAWCoreScaffolding.RecordTypeCons "sub"%string (forall (_1 _2: 
+                       SAWCoreScaffolding.Float e p),
+                    SAWCoreScaffolding.Float e p) 
+               (SAWCoreScaffolding.RecordTypeCons "mul"%string (forall (_1 _2: 
+                          SAWCoreScaffolding.Float e p),
+                       SAWCoreScaffolding.Float e p) 
+                  (SAWCoreScaffolding.RecordTypeCons "neg"%string (forall (_1: 
+                             SAWCoreScaffolding.Float e p),
+                          SAWCoreScaffolding.Float e p) 
+                     (SAWCoreScaffolding.RecordTypeCons "int"%string (forall
+                             (_1: SAWCoreScaffolding.Integer),
+                             SAWCoreScaffolding.Float e p)
+                        SAWCoreScaffolding.RecordTypeNil)))) 
+            (SAWCoreVectorsAsRocqVectors.fpAdd e p SAWCorePrelude.rne) 
+            (@SAWCoreScaffolding.RecordCons "sub"%string (forall (_1 _2: 
+                       SAWCoreScaffolding.Float e p),
+                    SAWCoreScaffolding.Float e p) 
+               (SAWCoreScaffolding.RecordTypeCons "mul"%string (forall (_1 _2: 
+                          SAWCoreScaffolding.Float e p),
+                       SAWCoreScaffolding.Float e p) 
+                  (SAWCoreScaffolding.RecordTypeCons "neg"%string (forall (_1: 
+                             SAWCoreScaffolding.Float e p),
+                          SAWCoreScaffolding.Float e p) 
+                     (SAWCoreScaffolding.RecordTypeCons "int"%string (forall
+                             (_1: SAWCoreScaffolding.Integer),
+                             SAWCoreScaffolding.Float e p)
+                        SAWCoreScaffolding.RecordTypeNil))) 
+               (SAWCoreVectorsAsRocqVectors.fpSub e p SAWCorePrelude.rne) 
+               (@SAWCoreScaffolding.RecordCons "mul"%string (forall (_1 _2: 
+                          SAWCoreScaffolding.Float e p),
+                       SAWCoreScaffolding.Float e p) 
+                  (SAWCoreScaffolding.RecordTypeCons "neg"%string (forall (_1: 
+                             SAWCoreScaffolding.Float e p),
+                          SAWCoreScaffolding.Float e p) 
+                     (SAWCoreScaffolding.RecordTypeCons "int"%string (forall
+                             (_1: SAWCoreScaffolding.Integer),
+                             SAWCoreScaffolding.Float e p)
+                        SAWCoreScaffolding.RecordTypeNil)) 
+                  (SAWCoreVectorsAsRocqVectors.fpMul e p SAWCorePrelude.rne) 
+                  (@SAWCoreScaffolding.RecordCons "neg"%string (forall (_1: 
+                             SAWCoreScaffolding.Float e p),
+                          SAWCoreScaffolding.Float e p) 
+                     (SAWCoreScaffolding.RecordTypeCons "int"%string (forall
+                             (_1: SAWCoreScaffolding.Integer),
+                             SAWCoreScaffolding.Float e p)
+                        SAWCoreScaffolding.RecordTypeNil) 
+                     (SAWCoreScaffolding.fpNeg e p) 
+                     (@SAWCoreScaffolding.RecordCons "int"%string (forall
+                             (_1: SAWCoreScaffolding.Integer),
+                             SAWCoreScaffolding.Float e p)
+                        SAWCoreScaffolding.RecordTypeNil 
+                        (SAWCoreVectorsAsRocqVectors.fpFromInteger e p
+                           SAWCorePrelude.rne) SAWCoreScaffolding.RecordNil)))))
+   .
 
 Definition PRingVec: forall (n: Init.Datatypes.nat) (a: Type) {Inh_a: 
            SAWCoreScaffolding.Inhabited a} (_1: PRing a),
@@ -8143,6 +8280,38 @@ Definition PFieldRational: PField SAWCoreScaffolding.Rational :=
                  SAWCoreScaffolding.Rational) SAWCoreScaffolding.RecordTypeNil
             SAWCorePrelude.rationalDiv SAWCoreScaffolding.RecordNil)).
 
+Definition PFieldFloat: forall (e p: Init.Datatypes.nat),
+        PField (SAWCoreScaffolding.Float e p) :=
+   fun (e p: Init.Datatypes.nat)
+      =>
+      @SAWCoreScaffolding.RecordCons "fieldRing"%string 
+         (PRing (SAWCoreScaffolding.Float e p)) 
+         (SAWCoreScaffolding.RecordTypeCons "recip"%string (forall (_1: 
+                    SAWCoreScaffolding.Float e p),
+                 SAWCoreScaffolding.Float e p) 
+            (SAWCoreScaffolding.RecordTypeCons "fieldDiv"%string (forall
+                    (_1 _2: SAWCoreScaffolding.Float e p),
+                    SAWCoreScaffolding.Float e p)
+               SAWCoreScaffolding.RecordTypeNil)) (PRingFloat e p) 
+         (@SAWCoreScaffolding.RecordCons "recip"%string (forall (_1: 
+                    SAWCoreScaffolding.Float e p),
+                 SAWCoreScaffolding.Float e p) 
+            (SAWCoreScaffolding.RecordTypeCons "fieldDiv"%string (forall
+                    (_1 _2: SAWCoreScaffolding.Float e p),
+                    SAWCoreScaffolding.Float e p)
+               SAWCoreScaffolding.RecordTypeNil) 
+            (SAWCoreVectorsAsRocqVectors.fpDiv e p SAWCorePrelude.rne 
+               (SAWCoreVectorsAsRocqVectors.fpFromInteger e p SAWCorePrelude.rne
+                  (SAWCoreScaffolding.natToInt 
+                     (Stdlib.PArith.BinPos.Pos.to_nat Stdlib.PArith.BinPos.xH))))
+            (@SAWCoreScaffolding.RecordCons "fieldDiv"%string (forall (_1 _2: 
+                       SAWCoreScaffolding.Float e p),
+                    SAWCoreScaffolding.Float e p)
+               SAWCoreScaffolding.RecordTypeNil 
+               (SAWCoreVectorsAsRocqVectors.fpDiv e p SAWCorePrelude.rne)
+               SAWCoreScaffolding.RecordNil))
+   .
+
 Definition PFieldIntMod: forall (n: Init.Datatypes.nat),
         PField (SAWCoreScaffolding.IntMod n) :=
    fun (n: Init.Datatypes.nat)
@@ -8301,6 +8470,111 @@ Definition PRoundRational: PRound SAWCoreScaffolding.Rational :=
                         SAWCorePrelude.rationalRoundToEven
                         SAWCoreScaffolding.RecordNil)))))).
 
+Definition PRoundFloat: forall (e p: Init.Datatypes.nat),
+        PRound (SAWCoreScaffolding.Float e p) :=
+   fun (e p: Init.Datatypes.nat)
+      =>
+      @SAWCoreScaffolding.RecordCons "roundField"%string 
+         (PField (SAWCoreScaffolding.Float e p)) 
+         (SAWCoreScaffolding.RecordTypeCons "roundCmp"%string 
+            (PCmp (SAWCoreScaffolding.Float e p)) 
+            (SAWCoreScaffolding.RecordTypeCons "floor"%string (forall (_1: 
+                       SAWCoreScaffolding.Float e p),
+                    SAWCoreScaffolding.Integer) 
+               (SAWCoreScaffolding.RecordTypeCons "ceiling"%string (forall (_1: 
+                          SAWCoreScaffolding.Float e p),
+                       SAWCoreScaffolding.Integer) 
+                  (SAWCoreScaffolding.RecordTypeCons "trunc"%string (forall
+                          (_1: SAWCoreScaffolding.Float e p),
+                          SAWCoreScaffolding.Integer) 
+                     (SAWCoreScaffolding.RecordTypeCons "roundAway"%string
+                        (forall (_1: SAWCoreScaffolding.Float e p),
+                             SAWCoreScaffolding.Integer) 
+                        (SAWCoreScaffolding.RecordTypeCons "roundToEven"%string
+                           (forall (_1: SAWCoreScaffolding.Float e p),
+                                SAWCoreScaffolding.Integer)
+                           SAWCoreScaffolding.RecordTypeNil)))))) 
+         (PFieldFloat e p) 
+         (@SAWCoreScaffolding.RecordCons "roundCmp"%string 
+            (PCmp (SAWCoreScaffolding.Float e p)) 
+            (SAWCoreScaffolding.RecordTypeCons "floor"%string (forall (_1: 
+                       SAWCoreScaffolding.Float e p),
+                    SAWCoreScaffolding.Integer) 
+               (SAWCoreScaffolding.RecordTypeCons "ceiling"%string (forall (_1: 
+                          SAWCoreScaffolding.Float e p),
+                       SAWCoreScaffolding.Integer) 
+                  (SAWCoreScaffolding.RecordTypeCons "trunc"%string (forall
+                          (_1: SAWCoreScaffolding.Float e p),
+                          SAWCoreScaffolding.Integer) 
+                     (SAWCoreScaffolding.RecordTypeCons "roundAway"%string
+                        (forall (_1: SAWCoreScaffolding.Float e p),
+                             SAWCoreScaffolding.Integer) 
+                        (SAWCoreScaffolding.RecordTypeCons "roundToEven"%string
+                           (forall (_1: SAWCoreScaffolding.Float e p),
+                                SAWCoreScaffolding.Integer)
+                           SAWCoreScaffolding.RecordTypeNil))))) (PCmpFloat e p)
+            (@SAWCoreScaffolding.RecordCons "floor"%string (forall (_1: 
+                       SAWCoreScaffolding.Float e p),
+                    SAWCoreScaffolding.Integer) 
+               (SAWCoreScaffolding.RecordTypeCons "ceiling"%string (forall (_1: 
+                          SAWCoreScaffolding.Float e p),
+                       SAWCoreScaffolding.Integer) 
+                  (SAWCoreScaffolding.RecordTypeCons "trunc"%string (forall
+                          (_1: SAWCoreScaffolding.Float e p),
+                          SAWCoreScaffolding.Integer) 
+                     (SAWCoreScaffolding.RecordTypeCons "roundAway"%string
+                        (forall (_1: SAWCoreScaffolding.Float e p),
+                             SAWCoreScaffolding.Integer) 
+                        (SAWCoreScaffolding.RecordTypeCons "roundToEven"%string
+                           (forall (_1: SAWCoreScaffolding.Float e p),
+                                SAWCoreScaffolding.Integer)
+                           SAWCoreScaffolding.RecordTypeNil)))) 
+               (SAWCoreVectorsAsRocqVectors.fpToInteger e p SAWCorePrelude.rtn) 
+               (@SAWCoreScaffolding.RecordCons "ceiling"%string (forall (_1: 
+                          SAWCoreScaffolding.Float e p),
+                       SAWCoreScaffolding.Integer) 
+                  (SAWCoreScaffolding.RecordTypeCons "trunc"%string (forall
+                          (_1: SAWCoreScaffolding.Float e p),
+                          SAWCoreScaffolding.Integer) 
+                     (SAWCoreScaffolding.RecordTypeCons "roundAway"%string
+                        (forall (_1: SAWCoreScaffolding.Float e p),
+                             SAWCoreScaffolding.Integer) 
+                        (SAWCoreScaffolding.RecordTypeCons "roundToEven"%string
+                           (forall (_1: SAWCoreScaffolding.Float e p),
+                                SAWCoreScaffolding.Integer)
+                           SAWCoreScaffolding.RecordTypeNil))) 
+                  (SAWCoreVectorsAsRocqVectors.fpToInteger e p
+                     SAWCorePrelude.rtp) 
+                  (@SAWCoreScaffolding.RecordCons "trunc"%string (forall (_1: 
+                             SAWCoreScaffolding.Float e p),
+                          SAWCoreScaffolding.Integer) 
+                     (SAWCoreScaffolding.RecordTypeCons "roundAway"%string
+                        (forall (_1: SAWCoreScaffolding.Float e p),
+                             SAWCoreScaffolding.Integer) 
+                        (SAWCoreScaffolding.RecordTypeCons "roundToEven"%string
+                           (forall (_1: SAWCoreScaffolding.Float e p),
+                                SAWCoreScaffolding.Integer)
+                           SAWCoreScaffolding.RecordTypeNil)) 
+                     (SAWCoreVectorsAsRocqVectors.fpToInteger e p
+                        SAWCorePrelude.rtz) 
+                     (@SAWCoreScaffolding.RecordCons "roundAway"%string (forall
+                             (_1: SAWCoreScaffolding.Float e p),
+                             SAWCoreScaffolding.Integer) 
+                        (SAWCoreScaffolding.RecordTypeCons "roundToEven"%string
+                           (forall (_1: SAWCoreScaffolding.Float e p),
+                                SAWCoreScaffolding.Integer)
+                           SAWCoreScaffolding.RecordTypeNil) 
+                        (SAWCoreVectorsAsRocqVectors.fpToInteger e p
+                           SAWCorePrelude.rna) 
+                        (@SAWCoreScaffolding.RecordCons "roundToEven"%string
+                           (forall (_1: SAWCoreScaffolding.Float e p),
+                                SAWCoreScaffolding.Integer)
+                           SAWCoreScaffolding.RecordTypeNil 
+                           (SAWCoreVectorsAsRocqVectors.fpToInteger e p
+                              SAWCorePrelude.rne)
+                           SAWCoreScaffolding.RecordNil))))))
+   .
+
 Definition PLiteral: forall (a: Type), Type :=
    fun (a: Type)
       =>
@@ -8356,6 +8630,14 @@ Definition PLiteralRational: PLiteral SAWCoreScaffolding.Rational :=
       SAWCorePrelude.integerToRational (SAWCoreScaffolding.natToInt x)
    .
 
+Definition PLiteralFloat: forall (e p: Init.Datatypes.nat),
+        PLiteral (SAWCoreScaffolding.Float e p) :=
+   fun (e p x: Init.Datatypes.nat)
+      =>
+      SAWCoreVectorsAsRocqVectors.fpFromInteger e p SAWCorePrelude.rne 
+         (SAWCoreScaffolding.natToInt x)
+   .
+
 Definition PFLiteral: forall (a: Type), Type :=
    fun (a: Type)
       =>
@@ -8368,6 +8650,15 @@ Definition PFLiteralRational: PFLiteral SAWCoreScaffolding.Rational :=
       =>
       SAWCoreScaffolding.ratio (SAWCoreScaffolding.natToInt m) 
          (SAWCoreScaffolding.natToInt n)
+   .
+
+Definition PFLiteralFloat: forall (e p: Init.Datatypes.nat),
+        PFLiteral (SAWCoreScaffolding.Float e p) :=
+   fun (e p m n r: Init.Datatypes.nat)
+      =>
+      SAWCoreVectorsAsRocqVectors.fpFromRational e p SAWCorePrelude.rne 
+         (SAWCoreScaffolding.ratio (SAWCoreScaffolding.natToInt m) 
+            (SAWCoreScaffolding.natToInt n))
    .
 
 Definition ecNumber: forall (val: Num) (a: Type) (_1: PLiteral a), a :=
@@ -10826,513 +11117,380 @@ Definition ecScanl: forall (n: Num) (a b: Type) (_1: forall (_1: a) (_2: b), a)
          ) n
    .
 
-Definition TCFloat: forall (_1 _2: Num), Type :=
-   fun (_1 _2: Num)
-      =>
-      SAWCoreScaffolding.UnitType
-   .
+Definition tcValidFloat: forall (_1 _2: Num), Init.Datatypes.bool :=
+   binaryNumPred (fun (e p: Init.Datatypes.nat)
+         =>
+         Init.Datatypes.andb 
+            (SAWCoreScaffolding.leNat 
+               (Stdlib.PArith.BinPos.Pos.to_nat 
+                  (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)) e) 
+            (SAWCoreScaffolding.leNat 
+               (Stdlib.PArith.BinPos.Pos.to_nat 
+                  (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)) p)
+      ) (fun (_1: Init.Datatypes.nat) => Init.Datatypes.false) (fun
+           (_1: Init.Datatypes.nat)
+         =>
+         Init.Datatypes.false
+      ) Init.Datatypes.false.
 
-Definition PEqFloat: forall (e p: Num), PEq (TCFloat e p) :=
+Definition PValidFloat: forall (_1 _2: Num), Prop :=
    fun (e p: Num)
       =>
-      @SAWCoreScaffolding.RecordCons "eq"%string (forall (x y: TCFloat e p),
-              Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil (fun (x y: 
-                 TCFloat e p)
+      @Init.Logic.eq Init.Datatypes.bool (tcValidFloat e p) Init.Datatypes.true
+   .
+
+Definition PValidFloat_16: 
+   PValidFloat 
+      (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+               (Stdlib.PArith.BinPos.xI 
+                  (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))) 
+      (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+               (Stdlib.PArith.BinPos.xI 
+                  (Stdlib.PArith.BinPos.xI 
+                     (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) :=
+   @Init.Logic.eq_refl Init.Datatypes.bool Init.Datatypes.true.
+
+Definition PValidFloat_32: 
+   PValidFloat 
+      (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+               (Stdlib.PArith.BinPos.xO 
+                  (Stdlib.PArith.BinPos.xO 
+                     (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) 
+      (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+               (Stdlib.PArith.BinPos.xO 
+                  (Stdlib.PArith.BinPos.xO 
+                     (Stdlib.PArith.BinPos.xO 
+                        (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)))))) :=
+   @Init.Logic.eq_refl Init.Datatypes.bool Init.Datatypes.true.
+
+Definition PValidFloat_64: 
+   PValidFloat 
+      (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+               (Stdlib.PArith.BinPos.xI 
+                  (Stdlib.PArith.BinPos.xI 
+                     (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))) 
+      (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+               (Stdlib.PArith.BinPos.xI 
+                  (Stdlib.PArith.BinPos.xO 
+                     (Stdlib.PArith.BinPos.xI 
+                        (Stdlib.PArith.BinPos.xO 
+                           (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))))))) :=
+   @Init.Logic.eq_refl Init.Datatypes.bool Init.Datatypes.true.
+
+Definition PValidFloat_128: 
+   PValidFloat 
+      (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+               (Stdlib.PArith.BinPos.xI 
+                  (Stdlib.PArith.BinPos.xI 
+                     (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))))) 
+      (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+               (Stdlib.PArith.BinPos.xI 
+                  (Stdlib.PArith.BinPos.xO 
+                     (Stdlib.PArith.BinPos.xO 
+                        (Stdlib.PArith.BinPos.xO 
+                           (Stdlib.PArith.BinPos.xI 
+                              (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH)))))))) :=
+   @Init.Logic.eq_refl Init.Datatypes.bool Init.Datatypes.true.
+
+Definition PValidFloat_256: 
+   PValidFloat 
+      (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+               (Stdlib.PArith.BinPos.xI 
+                  (Stdlib.PArith.BinPos.xI 
+                     (Stdlib.PArith.BinPos.xO 
+                        (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))) 
+      (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
+               (Stdlib.PArith.BinPos.xI 
+                  (Stdlib.PArith.BinPos.xO 
+                     (Stdlib.PArith.BinPos.xI 
+                        (Stdlib.PArith.BinPos.xI 
+                           (Stdlib.PArith.BinPos.xO 
+                              (Stdlib.PArith.BinPos.xI 
+                                 (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))))))))) :=
+   @Init.Logic.eq_refl Init.Datatypes.bool Init.Datatypes.true.
+
+(* "Cryptol::unsafeAssumePValidFloat@core" was skipped *)
+
+Definition FloatNum: forall (_1 _2: Num), Type :=
+   fun (e p: Num)
+      =>
+      @CryptolPrimitivesForSAWCore.Num_rect (fun (_1: Num) => Type) (fun
+              (e1: Init.Datatypes.nat)
             =>
-            SAWCoreScaffolding.error Init.Datatypes.bool
-               "Unimplemented: (==) Float"%string
-         ) SAWCoreScaffolding.RecordNil
+            @CryptolPrimitivesForSAWCore.Num_rect (fun (_1: Num) => Type) 
+               (SAWCoreScaffolding.Float e1) 
+               (SAWCoreScaffolding.Float e1 SAWCoreScaffolding.Zero) p
+         ) (SAWCoreScaffolding.Float SAWCoreScaffolding.Zero
+            SAWCoreScaffolding.Zero) e
    .
 
-Definition PCmpFloat: forall (e p: Num), PCmp (TCFloat e p) :=
+Definition FloatNumInhabited: forall (e p: Num), FloatNum e p :=
    fun (e p: Num)
       =>
-      let var__0
-         :=
-         TCFloat e p
-      in
-      @SAWCoreScaffolding.RecordCons "cmpEq"%string (PEq var__0) 
-         (SAWCoreScaffolding.RecordTypeCons "cmp"%string (forall (x y: var__0)
-                 (k: Init.Datatypes.bool),
-                 Init.Datatypes.bool) 
-            (SAWCoreScaffolding.RecordTypeCons "le"%string (forall
-                    (x y: var__0),
-                    Init.Datatypes.bool) 
-               (SAWCoreScaffolding.RecordTypeCons "lt"%string (forall
-                       (x y: var__0),
-                       Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil))) 
-         (PEqFloat e p) 
-         (@SAWCoreScaffolding.RecordCons "cmp"%string (forall (x y: var__0)
-                 (k: Init.Datatypes.bool),
-                 Init.Datatypes.bool) 
-            (SAWCoreScaffolding.RecordTypeCons "le"%string (forall
-                    (x y: var__0),
-                    Init.Datatypes.bool) 
-               (SAWCoreScaffolding.RecordTypeCons "lt"%string (forall
-                       (x y: var__0),
-                       Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil))
-            (fun (x y: var__0) (k: Init.Datatypes.bool)
+      @CryptolPrimitivesForSAWCore.Num_rect (fun (e1: Num) => FloatNum e1 p)
+         (fun (e1: Init.Datatypes.nat)
+            =>
+            @CryptolPrimitivesForSAWCore.Num_rect (FloatNum (TCNum e1)) 
+               (SAWCoreScaffolding.fpPosZero e1) 
+               (SAWCoreScaffolding.fpPosZero e1 SAWCoreScaffolding.Zero) p
+         ) (SAWCoreScaffolding.fpPosZero SAWCoreScaffolding.Zero
+            SAWCoreScaffolding.Zero) e
+   .
+
+#[global] Instance Inhabited_FloatNum (e p : Num) : Inhabited (FloatNum e p) := MkInhabited (FloatNum e p) (FloatNumInhabited e p).
+Definition FloatNum_cong: forall (e e' p p': Num) (_1: @Init.Logic.eq Num e e')
+        (_2: @Init.Logic.eq Num p p'),
+        @Init.Logic.eq Type (FloatNum e p) (FloatNum e' p') :=
+   fun (e e' p p': Num) (eq_e: @Init.Logic.eq Num e e') (eq_p: 
+           @Init.Logic.eq Num p p')
+      =>
+      SAWCorePrelude.trans Type (FloatNum e p) (FloatNum e' p) (FloatNum e' p') 
+         (SAWCorePrelude.eq_cong Num e e' eq_e Type (fun (x: Num)
                =>
-               SAWCoreScaffolding.error Init.Datatypes.bool
-                  "Unimplemented: Cmp Float"%string
-            ) (@SAWCoreScaffolding.RecordCons "le"%string (forall (x y: var__0),
-                    Init.Datatypes.bool) 
-               (SAWCoreScaffolding.RecordTypeCons "lt"%string (forall
-                       (x y: var__0),
-                       Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil)
-               (fun (x y: var__0)
-                  =>
-                  SAWCoreScaffolding.error Init.Datatypes.bool
-                     "Unimplemented: Cmp Float"%string
-               ) (@SAWCoreScaffolding.RecordCons "lt"%string (forall
-                       (x y: var__0),
-                       Init.Datatypes.bool) SAWCoreScaffolding.RecordTypeNil
-                  (fun (x y: var__0)
-                     =>
-                     SAWCoreScaffolding.error Init.Datatypes.bool
-                        "Unimplemented: Cmp Float"%string
-                  ) SAWCoreScaffolding.RecordNil)))
-   .
-
-Definition PZeroFloat: forall (e p: Num), PZero (TCFloat e p) :=
-   fun (e p: Num)
-      =>
-      SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: Zero Float"%string
-   .
-
-Definition PRingFloat: forall (e p: Num), PRing (TCFloat e p) :=
-   fun (e p: Num)
-      =>
-      let var__0
-         :=
-         TCFloat e p
-      in
-      @SAWCoreScaffolding.RecordCons "ringZero"%string (PZero var__0) 
-         (SAWCoreScaffolding.RecordTypeCons "add"%string (forall (x y: var__0),
-                 var__0) 
-            (SAWCoreScaffolding.RecordTypeCons "sub"%string (forall
-                    (x y: var__0),
-                    var__0) 
-               (SAWCoreScaffolding.RecordTypeCons "mul"%string (forall
-                       (x y: var__0),
-                       var__0) 
-                  (SAWCoreScaffolding.RecordTypeCons "neg"%string (forall
-                          (x: var__0),
-                          var__0) 
-                     (SAWCoreScaffolding.RecordTypeCons "int"%string (forall
-                             (i: SAWCoreScaffolding.Integer),
-                             var__0) SAWCoreScaffolding.RecordTypeNil))))) 
-         (PZeroFloat e p) 
-         (@SAWCoreScaffolding.RecordCons "add"%string (forall (x y: var__0),
-                 var__0) 
-            (SAWCoreScaffolding.RecordTypeCons "sub"%string (forall
-                    (x y: var__0),
-                    var__0) 
-               (SAWCoreScaffolding.RecordTypeCons "mul"%string (forall
-                       (x y: var__0),
-                       var__0) 
-                  (SAWCoreScaffolding.RecordTypeCons "neg"%string (forall
-                          (x: var__0),
-                          var__0) 
-                     (SAWCoreScaffolding.RecordTypeCons "int"%string (forall
-                             (i: SAWCoreScaffolding.Integer),
-                             var__0) SAWCoreScaffolding.RecordTypeNil)))) (fun
-                 (x y: var__0)
+               FloatNum x p
+            )) 
+         (SAWCorePrelude.eq_cong Num p p' eq_p Type (fun (x: Num)
                =>
-               SAWCoreScaffolding.error var__0 "Unimplemented: (+) Float"%string
-            ) (@SAWCoreScaffolding.RecordCons "sub"%string (forall
-                    (x y: var__0),
-                    var__0) 
-               (SAWCoreScaffolding.RecordTypeCons "mul"%string (forall
-                       (x y: var__0),
-                       var__0) 
-                  (SAWCoreScaffolding.RecordTypeCons "neg"%string (forall
-                          (x: var__0),
-                          var__0) 
-                     (SAWCoreScaffolding.RecordTypeCons "int"%string (forall
-                             (i: SAWCoreScaffolding.Integer),
-                             var__0) SAWCoreScaffolding.RecordTypeNil))) (fun
-                    (x y: var__0)
+               FloatNum e' x
+            ))
+   .
+
+Definition floatNumFunction: forall (motive: forall (_1 _2: Num), Type)
+        {Inh_motive: forall (_1 _2: Num),
+                SAWCoreScaffolding.Inhabited (motive _1 _2)} (_1: forall
+                (e p: Init.Datatypes.nat),
+                motive (TCNum e) (TCNum p)) (e p: Num),
+        motive e p :=
+   fun (motive: forall (_1 _2: Num), Type) (Inh_motive: forall (_1 _2: Num),
+                SAWCoreScaffolding.Inhabited (motive _1 _2)) (f: forall
+                (e p: Init.Datatypes.nat),
+                motive (TCNum e) (TCNum p)) (e p: Num)
+      =>
+      @CryptolPrimitivesForSAWCore.Num_rect (fun (e1: Num) => motive e1 p) (fun
+              (e1: Init.Datatypes.nat)
+            =>
+            @CryptolPrimitivesForSAWCore.Num_rect (fun (p1: Num)
                   =>
-                  SAWCoreScaffolding.error var__0
-                     "Unimplemented: (-) Float"%string
-               ) (@SAWCoreScaffolding.RecordCons "mul"%string (forall
-                       (x y: var__0),
-                       var__0) 
-                  (SAWCoreScaffolding.RecordTypeCons "neg"%string (forall
-                          (x: var__0),
-                          var__0) 
-                     (SAWCoreScaffolding.RecordTypeCons "int"%string (forall
-                             (i: SAWCoreScaffolding.Integer),
-                             var__0) SAWCoreScaffolding.RecordTypeNil)) (fun
-                       (x y: var__0)
-                     =>
-                     SAWCoreScaffolding.error var__0
-                        "Unimplemented: (*) Float"%string
-                  ) (@SAWCoreScaffolding.RecordCons "neg"%string (forall
-                          (x: var__0),
-                          var__0) 
-                     (SAWCoreScaffolding.RecordTypeCons "int"%string (forall
-                             (i: SAWCoreScaffolding.Integer),
-                             var__0) SAWCoreScaffolding.RecordTypeNil) (fun
-                          (x: var__0)
-                        =>
-                        SAWCoreScaffolding.error var__0
-                           "Unimplemented: neg Float"%string
-                     ) (@SAWCoreScaffolding.RecordCons "int"%string (forall
-                             (i: SAWCoreScaffolding.Integer),
-                             var__0) SAWCoreScaffolding.RecordTypeNil (fun
-                             (i: SAWCoreScaffolding.Integer)
-                           =>
-                           SAWCoreScaffolding.error var__0
-                              "Unimplemented: toInteger Float"%string
-                        ) SAWCoreScaffolding.RecordNil)))))
+                  motive (TCNum e1) p1
+               ) (f e1) 
+               (SAWCoreScaffolding.error (motive (TCNum e1) TCInf)
+                  "p should not be infinite"%string) p
+         ) (SAWCoreScaffolding.error (motive TCInf p)
+            "e should not be infinite"%string) e
    .
 
-Definition PFieldFloat: forall (e p: Num), PField (TCFloat e p) :=
-   fun (e p: Num)
+Definition validFloatNumFunction: forall (motive: forall (_1 _2: Num), Type)
+        {Inh_motive: forall (_1 _2: Num),
+                SAWCoreScaffolding.Inhabited (motive _1 _2)} (_1: forall
+                (e p: Init.Datatypes.nat),
+                motive (TCNum e) (TCNum p)) (e p: Num) (_2: PValidFloat e p),
+        motive e p :=
+   fun (motive: forall (_1 _2: Num), Type) (Inh_motive: forall (_1 _2: Num),
+                SAWCoreScaffolding.Inhabited (motive _1 _2)) (f: forall
+                (e p: Init.Datatypes.nat),
+                motive (TCNum e) (TCNum p)) (e p: Num) (_1: PValidFloat e p)
       =>
-      let var__0
-         :=
-         TCFloat e p
-      in
-      @SAWCoreScaffolding.RecordCons "fieldRing"%string (PRing var__0) 
-         (SAWCoreScaffolding.RecordTypeCons "recip"%string (forall (x: var__0),
-                 var__0) 
-            (SAWCoreScaffolding.RecordTypeCons "fieldDiv"%string (forall
-                    (x y: var__0),
-                    var__0) SAWCoreScaffolding.RecordTypeNil)) (PRingFloat e p) 
-         (@SAWCoreScaffolding.RecordCons "recip"%string (forall (x: var__0),
-                 var__0) 
-            (SAWCoreScaffolding.RecordTypeCons "fieldDiv"%string (forall
-                    (x y: var__0),
-                    var__0) SAWCoreScaffolding.RecordTypeNil) (fun (x: var__0)
-               =>
-               SAWCoreScaffolding.error var__0
-                  "Unimplemented: recip Float"%string
-            ) (@SAWCoreScaffolding.RecordCons "fieldDiv"%string (forall
-                    (x y: var__0),
-                    var__0) SAWCoreScaffolding.RecordTypeNil (fun (x y: var__0)
-                  =>
-                  SAWCoreScaffolding.error var__0
-                     "Unimplemented: (/.) Float"%string
-               ) SAWCoreScaffolding.RecordNil))
+      floatNumFunction motive f e p
    .
 
-Definition PRoundFloat: forall (e p: Num),
-        PRound (TCFloat e p) :=
-   fun (e p: Num)
-      =>
-      let var__0
-         :=
-         TCFloat e p
-      in
-      @SAWCoreScaffolding.RecordCons "roundField"%string (PField var__0) 
-         (SAWCoreScaffolding.RecordTypeCons "roundCmp"%string (PCmp var__0) 
-            (SAWCoreScaffolding.RecordTypeCons "floor"%string (forall
-                    (x: var__0),
-                    SAWCoreScaffolding.Integer) 
-               (SAWCoreScaffolding.RecordTypeCons "ceiling"%string (forall
-                       (x: var__0),
-                       SAWCoreScaffolding.Integer) 
-                  (SAWCoreScaffolding.RecordTypeCons "trunc"%string (forall
-                          (x: var__0),
-                          SAWCoreScaffolding.Integer) 
-                     (SAWCoreScaffolding.RecordTypeCons "roundAway"%string
-                        (forall (x: var__0), SAWCoreScaffolding.Integer) 
-                        (SAWCoreScaffolding.RecordTypeCons "roundToEven"%string
-                           (forall (x: var__0), SAWCoreScaffolding.Integer)
-                           SAWCoreScaffolding.RecordTypeNil)))))) 
-         (PFieldFloat e p) 
-         (@SAWCoreScaffolding.RecordCons "roundCmp"%string (PCmp var__0) 
-            (SAWCoreScaffolding.RecordTypeCons "floor"%string (forall
-                    (x: var__0),
-                    SAWCoreScaffolding.Integer) 
-               (SAWCoreScaffolding.RecordTypeCons "ceiling"%string (forall
-                       (x: var__0),
-                       SAWCoreScaffolding.Integer) 
-                  (SAWCoreScaffolding.RecordTypeCons "trunc"%string (forall
-                          (x: var__0),
-                          SAWCoreScaffolding.Integer) 
-                     (SAWCoreScaffolding.RecordTypeCons "roundAway"%string
-                        (forall (x: var__0), SAWCoreScaffolding.Integer) 
-                        (SAWCoreScaffolding.RecordTypeCons "roundToEven"%string
-                           (forall (x: var__0), SAWCoreScaffolding.Integer)
-                           SAWCoreScaffolding.RecordTypeNil))))) (PCmpFloat e p)
-            (@SAWCoreScaffolding.RecordCons "floor"%string (forall (x: var__0),
-                    SAWCoreScaffolding.Integer) 
-               (SAWCoreScaffolding.RecordTypeCons "ceiling"%string (forall
-                       (x: var__0),
-                       SAWCoreScaffolding.Integer) 
-                  (SAWCoreScaffolding.RecordTypeCons "trunc"%string (forall
-                          (x: var__0),
-                          SAWCoreScaffolding.Integer) 
-                     (SAWCoreScaffolding.RecordTypeCons "roundAway"%string
-                        (forall (x: var__0), SAWCoreScaffolding.Integer) 
-                        (SAWCoreScaffolding.RecordTypeCons "roundToEven"%string
-                           (forall (x: var__0), SAWCoreScaffolding.Integer)
-                           SAWCoreScaffolding.RecordTypeNil)))) (fun (x: var__0)
-                  =>
-                  SAWCoreScaffolding.error SAWCoreScaffolding.Integer
-                     "Unimplemented: floor Float"%string
-               )
-               (@SAWCoreScaffolding.RecordCons "ceiling"%string (forall
-                       (x: var__0),
-                       SAWCoreScaffolding.Integer) 
-                  (SAWCoreScaffolding.RecordTypeCons "trunc"%string (forall
-                          (x: var__0),
-                          SAWCoreScaffolding.Integer) 
-                     (SAWCoreScaffolding.RecordTypeCons "roundAway"%string
-                        (forall (x: var__0), SAWCoreScaffolding.Integer) 
-                        (SAWCoreScaffolding.RecordTypeCons "roundToEven"%string
-                           (forall (x: var__0), SAWCoreScaffolding.Integer)
-                           SAWCoreScaffolding.RecordTypeNil))) (fun (x: var__0)
-                     =>
-                     SAWCoreScaffolding.error SAWCoreScaffolding.Integer
-                        "Unimplemented: ceiling Float"%string
-                  )
-                  (@SAWCoreScaffolding.RecordCons "trunc"%string (forall
-                          (x: var__0),
-                          SAWCoreScaffolding.Integer) 
-                     (SAWCoreScaffolding.RecordTypeCons "roundAway"%string
-                        (forall (x: var__0), SAWCoreScaffolding.Integer) 
-                        (SAWCoreScaffolding.RecordTypeCons "roundToEven"%string
-                           (forall (x: var__0), SAWCoreScaffolding.Integer)
-                           SAWCoreScaffolding.RecordTypeNil)) (fun (x: var__0)
-                        =>
-                        SAWCoreScaffolding.error SAWCoreScaffolding.Integer
-                           "Unimplemented: trunc Float"%string
-                     )
-                     (@SAWCoreScaffolding.RecordCons "roundAway"%string (forall
-                             (x: var__0),
-                             SAWCoreScaffolding.Integer) 
-                        (SAWCoreScaffolding.RecordTypeCons "roundToEven"%string
-                           (forall (x: var__0), SAWCoreScaffolding.Integer)
-                           SAWCoreScaffolding.RecordTypeNil) (fun (x: var__0)
-                           =>
-                           SAWCoreScaffolding.error SAWCoreScaffolding.Integer
-                              "Unimplemented: roundAway Float"%string
-                        )
-                        (@SAWCoreScaffolding.RecordCons "roundToEven"%string
-                           (forall (x: var__0), SAWCoreScaffolding.Integer)
-                           SAWCoreScaffolding.RecordTypeNil (fun (x: var__0)
-                              =>
-                              SAWCoreScaffolding.error SAWCoreScaffolding.Integer
-                                 "Unimplemented: roundToEven Float"%string
-                           ) SAWCoreScaffolding.RecordNil))))))
-   .
+Definition ecFpNaN: forall (e p: Num) (_1: PValidFloat e p), FloatNum e p :=
+   validFloatNumFunction FloatNum SAWCoreScaffolding.fpNaN.
 
-Definition PLiteralFloat: forall (e p: Num), PLiteral (TCFloat e p) :=
-   fun (e p: Num) (x: Init.Datatypes.nat)
-      =>
-      SAWCoreScaffolding.error (TCFloat e p)
-         "Unimplemented: Literal Float"%string
-   .
+Definition ecFpPosInf: forall (e p: Num) (_1: PValidFloat e p), FloatNum e p :=
+   validFloatNumFunction FloatNum SAWCoreScaffolding.fpPosInf.
 
-Definition PFLiteralFloat: forall (e p: Num), PFLiteral (TCFloat e p) :=
-   fun (e p: Num) (m n r: Init.Datatypes.nat)
-      =>
-      SAWCoreScaffolding.Unit
-   .
-
-Definition ecFpNaN: forall (e p: Num), TCFloat e p :=
-   fun (e p: Num)
-      =>
-      SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpNaN"%string
-   .
-
-Definition ecFpPosInf: forall (e p: Num), TCFloat e p :=
-   fun (e p: Num)
-      =>
-      SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpPosInf"%string
-   .
-
-Definition ecFpFromBits: forall (e p: Num) (_1: 
+Definition ecFpFromBits: forall (e p: Num) (_1: PValidFloat e p) (_2: 
            seq (tcAdd e p) Init.Datatypes.bool),
-        TCFloat e p :=
-   fun (e p: Num) (_1: seq (tcAdd e p) Init.Datatypes.bool)
-      =>
-      SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpFromBits"%string
-   .
+        FloatNum e p :=
+   validFloatNumFunction (fun (e p: Num)
+         =>
+         forall (_1: seq (tcAdd e p) Init.Datatypes.bool),
+              FloatNum e p
+      ) SAWCoreVectorsAsRocqVectors.fpFromBits.
 
-Definition ecFpToBits: forall (e p: Num) (_1: TCFloat e p),
+Definition ecFpToBits: forall (e p: Num) (_1: PValidFloat e p) (_2: 
+           FloatNum e p),
         seq (tcAdd e p) Init.Datatypes.bool :=
-   fun (e p: Num) (_1: TCFloat e p)
-      =>
-      SAWCoreScaffolding.error (seq (tcAdd e p) Init.Datatypes.bool)
-         "Unimplemented: fpToBits"%string
-   .
+   validFloatNumFunction (fun (e p: Num)
+         =>
+         forall (_1: FloatNum e p),
+              seq (tcAdd e p) Init.Datatypes.bool
+      ) SAWCoreVectorsAsRocqVectors.fpToBits.
 
-Definition ecFpEq: forall (e p: Num) (_1 _2: TCFloat e p),
+Definition ecFpLogicalEq: forall (e p: Num) (_1: PValidFloat e p) (_2 _3: 
+           FloatNum e p),
         Init.Datatypes.bool :=
-   fun (e p: Num) (_1 _2: TCFloat e p)
-      =>
-      SAWCoreScaffolding.error Init.Datatypes.bool "Unimplemented: =.="%string
-   .
+   validFloatNumFunction (fun (e p: Num)
+         =>
+         forall (_1 _2: FloatNum e p),
+              Init.Datatypes.bool
+      ) SAWCoreScaffolding.fpLogicalEq.
 
-Definition ecFpAdd: forall (e p: Num) (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec 
-              (Stdlib.PArith.BinPos.Pos.to_nat 
-                 (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
-              Init.Datatypes.bool) (_2 _3: TCFloat e p),
-        TCFloat e p :=
-   fun (e p: Num) (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec 
-              (Stdlib.PArith.BinPos.Pos.to_nat 
-                 (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
-              Init.Datatypes.bool) (_2 _3: TCFloat e p)
-      =>
-      SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpAdd"%string
-   .
+Definition ecFpAdd: forall (e p: Num) (_1: PValidFloat e p)
+        (_2: SAWCoreVectorsAsRocqVectors.RoundingMode) (_3 _4: FloatNum e p),
+        FloatNum e p :=
+   validFloatNumFunction (fun (e p: Num)
+         =>
+         forall (_1: SAWCoreVectorsAsRocqVectors.RoundingMode) (_2 _3: 
+                 FloatNum e p),
+              FloatNum e p
+      ) SAWCoreVectorsAsRocqVectors.fpAdd.
 
-Definition ecFpSub: forall (e p: Num) (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec 
-              (Stdlib.PArith.BinPos.Pos.to_nat 
-                 (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
-              Init.Datatypes.bool) (_2 _3: TCFloat e p),
-        TCFloat e p :=
-   fun (e p: Num) (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec 
-              (Stdlib.PArith.BinPos.Pos.to_nat 
-                 (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
-              Init.Datatypes.bool) (_2 _3: TCFloat e p)
-      =>
-      SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpSub"%string
-   .
+Definition ecFpSub: forall (e p: Num) (_1: PValidFloat e p)
+        (_2: SAWCoreVectorsAsRocqVectors.RoundingMode) (_3 _4: FloatNum e p),
+        FloatNum e p :=
+   validFloatNumFunction (fun (e p: Num)
+         =>
+         forall (_1: SAWCoreVectorsAsRocqVectors.RoundingMode) (_2 _3: 
+                 FloatNum e p),
+              FloatNum e p
+      ) SAWCoreVectorsAsRocqVectors.fpSub.
 
-Definition ecFpMul: forall (e p: Num) (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec 
-              (Stdlib.PArith.BinPos.Pos.to_nat 
-                 (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
-              Init.Datatypes.bool) (_2 _3: TCFloat e p),
-        TCFloat e p :=
-   fun (e p: Num) (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec 
-              (Stdlib.PArith.BinPos.Pos.to_nat 
-                 (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
-              Init.Datatypes.bool) (_2 _3: TCFloat e p)
-      =>
-      SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpMul"%string
-   .
+Definition ecFpMul: forall (e p: Num) (_1: PValidFloat e p)
+        (_2: SAWCoreVectorsAsRocqVectors.RoundingMode) (_3 _4: FloatNum e p),
+        FloatNum e p :=
+   validFloatNumFunction (fun (e p: Num)
+         =>
+         forall (_1: SAWCoreVectorsAsRocqVectors.RoundingMode) (_2 _3: 
+                 FloatNum e p),
+              FloatNum e p
+      ) SAWCoreVectorsAsRocqVectors.fpMul.
 
-Definition ecFpDiv: forall (e p: Num) (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec 
-              (Stdlib.PArith.BinPos.Pos.to_nat 
-                 (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
-              Init.Datatypes.bool) (_2 _3: TCFloat e p),
-        TCFloat e p :=
-   fun (e p: Num) (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec 
-              (Stdlib.PArith.BinPos.Pos.to_nat 
-                 (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
-              Init.Datatypes.bool) (_2 _3: TCFloat e p)
-      =>
-      SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpDiv"%string
-   .
+Definition ecFpDiv: forall (e p: Num) (_1: PValidFloat e p)
+        (_2: SAWCoreVectorsAsRocqVectors.RoundingMode) (_3 _4: FloatNum e p),
+        FloatNum e p :=
+   validFloatNumFunction (fun (e p: Num)
+         =>
+         forall (_1: SAWCoreVectorsAsRocqVectors.RoundingMode) (_2 _3: 
+                 FloatNum e p),
+              FloatNum e p
+      ) SAWCoreVectorsAsRocqVectors.fpDiv.
 
-Definition ecFpToRational: forall (e p: Num) (_1: TCFloat e p),
+Definition ecFpToRational: forall (e p: Num) (_1: PValidFloat e p) (_2: 
+           FloatNum e p),
         SAWCoreScaffolding.Rational :=
-   fun (e p: Num) (_1: TCFloat e p)
-      =>
-      SAWCoreScaffolding.error SAWCoreScaffolding.Rational
-         "Unimplemented: fpToRational"%string
-   .
+   validFloatNumFunction (fun (e p: Num)
+         =>
+         forall (_1: FloatNum e p),
+              SAWCoreScaffolding.Rational
+      ) SAWCoreScaffolding.fpToRational.
 
-Definition ecFpFromRational: forall (e p: Num) (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec 
-              (Stdlib.PArith.BinPos.Pos.to_nat 
-                 (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
-              Init.Datatypes.bool) (_2: SAWCoreScaffolding.Rational),
-        TCFloat e p :=
-   fun (e p: Num) (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec 
-              (Stdlib.PArith.BinPos.Pos.to_nat 
-                 (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
-              Init.Datatypes.bool) (_2: SAWCoreScaffolding.Rational)
-      =>
-      SAWCoreScaffolding.error (TCFloat e p)
-         "Unimplemented: fpFromRational"%string
-   .
+Definition ecFpFromRational: forall (e p: Num) (_1: PValidFloat e p)
+        (_2: SAWCoreVectorsAsRocqVectors.RoundingMode)
+        (_3: SAWCoreScaffolding.Rational),
+        FloatNum e p :=
+   validFloatNumFunction (fun (e p: Num)
+         =>
+         forall (_1: SAWCoreVectorsAsRocqVectors.RoundingMode)
+              (_2: SAWCoreScaffolding.Rational),
+              FloatNum e p
+      ) SAWCoreVectorsAsRocqVectors.fpFromRational.
 
-Definition fpIsNaN: forall (e p: Num) (_1: TCFloat e p), Init.Datatypes.bool :=
-   fun (e p: Num) (x: TCFloat e p)
-      =>
-      SAWCoreScaffolding.error Init.Datatypes.bool
-         "Unimplemented: fpIsNaN"%string
-   .
-
-Definition fpIsInf: forall (e p: Num) (_1: TCFloat e p), Init.Datatypes.bool :=
-   fun (e p: Num) (x: TCFloat e p)
-      =>
-      SAWCoreScaffolding.error Init.Datatypes.bool
-         "Unimplemented: fpIsInf"%string
-   .
-
-Definition fpIsZero: forall (e p: Num) (_1: TCFloat e p), Init.Datatypes.bool :=
-   fun (e p: Num) (x: TCFloat e p)
-      =>
-      SAWCoreScaffolding.error Init.Datatypes.bool
-         "Unimplemented: fpIsZero"%string
-   .
-
-Definition fpIsNeg: forall (e p: Num) (_1: TCFloat e p), Init.Datatypes.bool :=
-   fun (e p: Num) (x: TCFloat e p)
-      =>
-      SAWCoreScaffolding.error Init.Datatypes.bool
-         "Unimplemented: fpIsNeg"%string
-   .
-
-Definition fpIsNormal: forall (e p: Num) (_1: TCFloat e p),
+Definition ecFpIsNaN: forall (e p: Num) (_1: PValidFloat e p) (_2: 
+           FloatNum e p),
         Init.Datatypes.bool :=
-   fun (e p: Num) (x: TCFloat e p)
-      =>
-      SAWCoreScaffolding.error Init.Datatypes.bool
-         "Unimplemented: fpIsNormal"%string
-   .
+   validFloatNumFunction (fun (e p: Num)
+         =>
+         forall (_1: FloatNum e p),
+              Init.Datatypes.bool
+      ) SAWCoreScaffolding.fpIsNaN.
 
-Definition fpIsSubnormal: forall (e p: Num) (_1: TCFloat e p),
+Definition ecFpIsInf: forall (e p: Num) (_1: PValidFloat e p) (_2: 
+           FloatNum e p),
         Init.Datatypes.bool :=
-   fun (e p: Num) (x: TCFloat e p)
-      =>
-      SAWCoreScaffolding.error Init.Datatypes.bool
-         "Unimplemented: fpIsSubnormal"%string
-   .
+   validFloatNumFunction (fun (e p: Num)
+         =>
+         forall (_1: FloatNum e p),
+              Init.Datatypes.bool
+      ) SAWCoreScaffolding.fpIsInf.
 
-Definition fpFMA: forall (e p: Num) (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec 
-              (Stdlib.PArith.BinPos.Pos.to_nat 
-                 (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
-              Init.Datatypes.bool) (_2 _3 _4: TCFloat e p),
-        TCFloat e p :=
-   fun (e p: Num) (r: 
-           SAWCoreVectorsAsRocqVectors.Vec 
-              (Stdlib.PArith.BinPos.Pos.to_nat 
-                 (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
-              Init.Datatypes.bool) (x y z: TCFloat e p)
-      =>
-      SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpFMA"%string
-   .
+Definition ecFpIsZero: forall (e p: Num) (_1: PValidFloat e p) (_2: 
+           FloatNum e p),
+        Init.Datatypes.bool :=
+   validFloatNumFunction (fun (e p: Num)
+         =>
+         forall (_1: FloatNum e p),
+              Init.Datatypes.bool
+      ) SAWCoreScaffolding.fpIsZero.
 
-Definition fpAbs: forall (e p: Num) (_1: TCFloat e p), TCFloat e p :=
-   fun (e p: Num) (x: TCFloat e p)
-      =>
-      SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpAbs"%string
-   .
+Definition ecFpIsNeg: forall (e p: Num) (_1: PValidFloat e p) (_2: 
+           FloatNum e p),
+        Init.Datatypes.bool :=
+   validFloatNumFunction (fun (e p: Num)
+         =>
+         forall (_1: FloatNum e p),
+              Init.Datatypes.bool
+      ) SAWCoreScaffolding.fpIsNeg.
 
-Definition fpSqrt: forall (e p: Num) (_1: 
-           SAWCoreVectorsAsRocqVectors.Vec 
-              (Stdlib.PArith.BinPos.Pos.to_nat 
-                 (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
-              Init.Datatypes.bool) (_2: TCFloat e p),
-        TCFloat e p :=
-   fun (e p: Num) (r: 
-           SAWCoreVectorsAsRocqVectors.Vec 
-              (Stdlib.PArith.BinPos.Pos.to_nat 
-                 (Stdlib.PArith.BinPos.xI Stdlib.PArith.BinPos.xH))
-              Init.Datatypes.bool) (x: TCFloat e p)
-      =>
-      SAWCoreScaffolding.error (TCFloat e p) "Unimplemented: fpSqrt"%string
-   .
+Definition ecFpIsNormal: forall (e p: Num) (_1: PValidFloat e p) (_2: 
+           FloatNum e p),
+        Init.Datatypes.bool :=
+   validFloatNumFunction (fun (e p: Num)
+         =>
+         forall (_1: FloatNum e p),
+              Init.Datatypes.bool
+      ) SAWCoreScaffolding.fpIsNormal.
+
+Definition ecFpIsSubnormal: forall (e p: Num) (_1: PValidFloat e p) (_2: 
+           FloatNum e p),
+        Init.Datatypes.bool :=
+   validFloatNumFunction (fun (e p: Num)
+         =>
+         forall (_1: FloatNum e p),
+              Init.Datatypes.bool
+      ) SAWCoreScaffolding.fpIsSubnormal.
+
+Definition ecFpFMA: forall (e p: Num) (_1: PValidFloat e p)
+        (_2: SAWCoreVectorsAsRocqVectors.RoundingMode) (_3 _4 _5: FloatNum e p),
+        FloatNum e p :=
+   validFloatNumFunction (fun (e p: Num)
+         =>
+         forall (_1: SAWCoreVectorsAsRocqVectors.RoundingMode) (_2 _3 _4: 
+                 FloatNum e p),
+              FloatNum e p
+      ) SAWCoreVectorsAsRocqVectors.fpFMA.
+
+Definition ecFpAbs: forall (e p: Num) (_1: PValidFloat e p) (_2: FloatNum e p),
+        FloatNum e p :=
+   validFloatNumFunction (fun (e p: Num)
+         =>
+         forall (_1: FloatNum e p),
+              FloatNum e p
+      ) SAWCoreScaffolding.fpAbs.
+
+Definition ecFpSqrt: forall (e p: Num) (_1: PValidFloat e p)
+        (_2: SAWCoreVectorsAsRocqVectors.RoundingMode) (_3: FloatNum e p),
+        FloatNum e p :=
+   validFloatNumFunction (fun (e p: Num)
+         =>
+         forall (_1: SAWCoreVectorsAsRocqVectors.RoundingMode) (_2: 
+                 FloatNum e p),
+              FloatNum e p
+      ) SAWCoreVectorsAsRocqVectors.fpSqrt.
+
+Definition PEqFloatNum: forall (e p: Num), PEq (FloatNum e p) :=
+   floatNumFunction (fun (e p: Num) => PEq (FloatNum e p)) PEqFloat.
+
+Definition PCmpFloatNum: forall (e p: Num), PCmp (FloatNum e p) :=
+   floatNumFunction (fun (e p: Num) => PCmp (FloatNum e p)) PCmpFloat.
+
+Definition PZeroFloatNum: forall (e p: Num), PZero (FloatNum e p) :=
+   floatNumFunction (fun (e p: Num) => PZero (FloatNum e p)) PZeroFloat.
+
+Definition PRingFloatNum: forall (e p: Num), PRing (FloatNum e p) :=
+   floatNumFunction (fun (e p: Num) => PRing (FloatNum e p)) PRingFloat.
+
+Definition PFieldFloatNum: forall (e p: Num), PField (FloatNum e p) :=
+   floatNumFunction (fun (e p: Num) => PField (FloatNum e p)) PFieldFloat.
+
+Definition PRoundFloatNum: forall (e p: Num), PRound (FloatNum e p) :=
+   floatNumFunction (fun (e p: Num) => PRound (FloatNum e p)) PRoundFloat.
+
+Definition PLiteralFloatNum: forall (e p: Num), PLiteral (FloatNum e p) :=
+   floatNumFunction (fun (e p: Num) => PLiteral (FloatNum e p)) PLiteralFloat.
+
+Definition PFLiteralFloatNum: forall (e p: Num), PFLiteral (FloatNum e p) :=
+   floatNumFunction (fun (e p: Num) => PFLiteral (FloatNum e p)) PFLiteralFloat.
 
 Definition ecUpdate: forall (n: Num) (a: Type) {Inh_a: 
            SAWCoreScaffolding.Inhabited a} (ix: Type) (_1: PIntegral ix) (_2: 

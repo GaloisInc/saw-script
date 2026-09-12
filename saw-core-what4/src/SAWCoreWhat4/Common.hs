@@ -44,6 +44,7 @@ import SAWCore.Simulator.Value
 -- what4
 import           What4.Interface(Pred,SymInteger,IsSymExprBuilder)
 import qualified What4.Interface as W
+import           What4.SFloat (SFloat(..))
 import           What4.SWord (SWord(..))
 
 -- parameterized-utils
@@ -74,6 +75,7 @@ type instance EvalM (What4 sym) = IO
 type instance VBool (What4 sym) = SBool sym
 type instance VWord (What4 sym) = SWord sym
 type instance VInt  (What4 sym) = SInt  sym
+type instance VFloat (What4 sym) = SFloat sym
 type instance VArray (What4 sym) = SArray sym
 type instance Extra (What4 sym) = What4Extra sym
 
@@ -110,6 +112,10 @@ termOfTValue sc val =
     VBoolType -> scBoolType sc
     VIntType -> scIntegerType sc
     VRationalType -> scRationalType sc
+    VFloatType e p ->
+      do e' <- scNat sc e
+         p' <- scNat sc p
+         scFloatType sc e' p'
     VVecType n a ->
       do n' <- scNat sc n
          a' <- termOfTValue sc a
