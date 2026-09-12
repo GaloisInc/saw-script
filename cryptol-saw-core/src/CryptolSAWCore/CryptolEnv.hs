@@ -70,6 +70,7 @@ import           Data.Set (Set)
 import qualified Data.Text as Text
 import           Data.Text (Text)
 import           GHC.Stack
+import           System.Directory (getCurrentDirectory)
 import           System.Environment (lookupEnv)
 import           System.Environment.Executable (splitExecutablePath)
 import           System.FilePath
@@ -832,9 +833,19 @@ loadAndTranslateModule ::
   IO T.Module
 loadAndTranslateModule sc src =
   do modEnv <- eModuleEnv sc
+     cwd <- getCurrentDirectory
      mtop <- liftModuleM sc $
        case src of
-         Left path -> MB.loadModuleByPath True path
+         Left path ->
+           -- Prepend the current directory to make sure it's on the
+           -- search path. When Cryptol initializes, it captures the
+           -- current directory at the time on the default search
+           -- path; but if SAW chdirs (either via the mess documented
+           -- in #1791, or explicitly with :cd) that's no longer the
+           -- current directory and then relative paths don't work. See
+           -- the discussion in pull request #3396, and also #2194, for
+           -- more information.
+           MM.withPrependedSearchPath [cwd] $ MB.loadModuleByPath True path
          Right mn  -> snd <$> MB.loadModuleFrom True (MM.FromModule mn)
      m <- case mtop of
             T.TCTopModule mod'  -> pure mod'
