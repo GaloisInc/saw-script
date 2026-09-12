@@ -1829,14 +1829,22 @@ withTimePrim a = do
   let diff = truncate (diffUTCTime t2 t1 * 1000)
   return $ SV.VTuple [ SV.VInteger diff, r ]
 
+-- Run the toplevel command. Print the elapsed time.
+-- Do so even if the command fails.
 timePrim :: TopLevel SV.Value -> TopLevel SV.Value
 timePrim a = do
+  ro <- getTopLevelRO
+  rw <- getTopLevelRW
   t1 <- liftIO $ getCurrentTime
-  r <- a
+  result <- liftIO $ Ex.try (runTopLevel a ro rw)
   t2 <- liftIO $ getCurrentTime
   let diff = diffUTCTime t2 t1
-  printOutLnTop Info $ printf "Time: %s\n" (show diff)
-  return r
+  printOutLnTop Info $ printf "Time: %s" (show diff)
+  case result of
+      Left (ex :: Ex.SomeException) -> throwM ex
+      Right (output, rw') -> do
+          putTopLevelRW rw'
+          pure output
 
 failPrim :: Text -> TopLevel SV.Value
 failPrim msg = fail $ Text.unpack msg
