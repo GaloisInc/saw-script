@@ -15,5 +15,4 @@ Theorem as SAWCore:
                (ecMul _x`1 _x`3
                   (ecNumber (TCNum 2) _x`1 (PLiteralSeqBool _x`2))
                   i))
-
 FAILED

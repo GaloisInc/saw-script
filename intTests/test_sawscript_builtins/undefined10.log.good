@@ -9,5 +9,4 @@ undefined10.saw:2:13-2:22: Error: evaluated "undefined"
 Stack trace:
    (builtin) (at top level)
 undefined10.saw:6:7-6:16: Error: evaluated "undefined"
-
 FAILED

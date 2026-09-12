@@ -5,5 +5,4 @@ Stack trace:
    (builtin) in prove_print
    test04.saw:6:1-13:3 (at top level)
 Could not resolve name: PEqBit.eq
-
 FAILED

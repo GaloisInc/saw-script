@@ -4,5 +4,4 @@ Stack trace:
    coreparser001.saw:2:1-2:47 (at top level)
 Module parsing failed:
 coreparser001.sawcore:2:7: Unexpected "where"
-
 FAILED

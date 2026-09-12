@@ -2,5 +2,4 @@ Loading file "undefined1.saw"
 Stack trace:
    (builtin) (at top level)
 undefined1.saw:13:1-13:10: Error: evaluated "undefined"
-
 FAILED
