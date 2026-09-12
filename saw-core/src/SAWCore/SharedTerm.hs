@@ -311,7 +311,6 @@ import Data.Ratio (numerator, denominator)
 import Data.Ref ( C )
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Typeable
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Numeric.Natural (Natural)
@@ -1016,7 +1015,6 @@ ppName sc opts nm =
   PPS.renderText opts <$> prettyName sc opts nm
 
 newtype PrettyOpts = PrettyOpts PPS.Opts
-  deriving (Typeable)
 
 instance IsMetadata PrettyOpts where
   initMetadata = return $ PrettyOpts PPS.defaultOpts

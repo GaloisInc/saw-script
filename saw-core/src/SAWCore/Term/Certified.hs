@@ -866,7 +866,6 @@ scmFreshInventedVar name ty = do
 -- appear free at the top-level.
 -- This is a private type that we store as global metadata
 newtype InventedVars = InventedVars (IntMap Term)
-  deriving (Typeable)
 
 instance IsMetadata InventedVars where
   initMetadata = return $ InventedVars IntMap.empty

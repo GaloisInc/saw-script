@@ -9,12 +9,10 @@ module CryptolSAWCore.FileReader
 import Control.Monad.IO.Class
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import Data.Typeable
 
 import SAWCore.SharedTerm (SharedContext, IsMetadata(..), scGetData, scWithData)
 
 newtype FileReader = FileReader (FilePath -> IO ByteString)
-  deriving Typeable
 
 instance IsMetadata FileReader where
   initMetadata = return $ FileReader BS.readFile

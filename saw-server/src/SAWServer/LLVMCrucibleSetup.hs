@@ -118,6 +118,13 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
       do t <- llvm_fresh_var dn (llvmType ty)
          return (n, t)
 
+    -- ghc 9.12.2 requires the following type signature to avoid a
+    -- type error that's almost certainly a GHC bug
+    setupState ::
+        [(ServerName, CMS.AllLLVM MS.SetupValue)] ->
+        (Map ServerName ServerSetupVal, CryptolEnv) ->
+        [ContractVar JSONLLVMType] ->
+        LLVMCrucibleSetupM (Map ServerName ServerSetupVal, CryptolEnv)
     setupState allocs (env, cenv) vars =
       do freshTerms <- mapM setupFresh vars
          let sc = biSharedContext bic
