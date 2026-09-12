@@ -10,5 +10,4 @@ The trivial tactic cannot prove this equality
      ((\(b1 : Bool) -> \(b2 : Bool) -> ite Bool b1 b2 (not b2)) y y)
      True
 
-
 FAILED
