@@ -1,3 +1,5 @@
 Loading file "err024.saw"
 err024.saw:3:9-3:10: Error: Unbound variable: "y"
+let x = y;
+        ^
 FAILED

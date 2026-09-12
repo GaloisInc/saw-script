@@ -319,7 +319,19 @@ instance AppSubst NamedType where
 -- | We can generate errors, warnings, or notices. This type allows
 --   encoding them in a single list of messages, so as to preserve the
 --   order.
-data Message = Error Pos PPS.Doc | Warning Pos PPS.Doc | Notice Pos PPS.Doc | Comment Pos PPS.Doc
+--
+--   A `Comment` is a message that is a second or subsequent line of
+--   one of the other kinds that has its own position. An `Annotation`
+--   is a second or subsequent line that does not have a position.
+--   FUTURE: come up with better names, or maybe these shouldn't be
+--   separate constructors but extra material in the others.
+--
+data Message
+    = Error Pos PPS.Doc
+    | Warning Pos PPS.Doc
+    | Notice Pos PPS.Doc
+    | Comment Pos PPS.Doc
+    | Annotation PPS.Doc
 
 
 ------------------------------------------------------------
@@ -478,7 +490,22 @@ getErrorTyVar pos = getProvenancedTyVar $ TypeFailed pos
 -- | Add (any) message.
 recordMessage :: Message -> TI ()
 recordMessage msg =
-    modify $ \rw -> rw { tiMessages = msg : tiMessages rw }
+    let annotate pos = case Pos.getSourceText pos of
+          Nothing -> [msg]
+          Just (l1, l2) ->
+              let l1' = PP.pretty l1
+                  l2' = PP.pretty l2
+              in
+              [Annotation l2', Annotation l1', msg]
+    in
+    let msgs = case msg of
+          Error pos _ -> annotate pos
+          Warning pos _ -> annotate pos
+          Notice pos _ -> annotate pos
+          Comment pos _ -> annotate pos
+          Annotation _ -> [msg]
+    in
+    modify $ \rw -> rw { tiMessages = msgs ++ tiMessages rw }
 
 -- | Add an error message, warning, or comment.
 --   (we could also have a @recordNotice@ but there's no use of it)
@@ -1202,19 +1229,9 @@ unify exp0 pos found0 = visit [] exp0 found0
               let expects' = prettyTypeDetails inhibitSubs "expected" expect
                   founds' = prettyTypeDetails inhibitSubs "found" found
                   msgs = expects' ++ founds'
-              -- Attach a blank line to the last message so there's a
-              -- separator between it and the next type error. XXX: we
-              -- should have a less hacky way to do this.
-              let msgs' = case reverse msgs of
-                    [] -> []  -- not actually reachable
-                    lastmsg : rest ->
-                        let lastmsg' = case lastmsg of
-                              Error p d -> Error p (d <> PP.hardline <> "")
-                              Warning p d -> Warning p (d <> PP.hardline <> "")
-                              Notice p d -> Notice p (d <> PP.hardline <> "")
-                              Comment p d -> Comment p (d <> PP.hardline <> "")
-                        in
-                        reverse (lastmsg' : rest)
+              -- Append a blank line so there's a separator between it
+              -- and the next type error.
+              let msgs' = msgs ++ [Annotation PP.emptyDoc]
               mapM_ recordMessage msgs'
 
         -- | Normal case of reject: print all the type provenance

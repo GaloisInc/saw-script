@@ -1,3 +1,5 @@
 Loading file "args021.saw"
 args021.saw:4:14-4:15: Error: Duplicate named argument x
+print (f x=2 x=4 ());
+             ^
 FAILED

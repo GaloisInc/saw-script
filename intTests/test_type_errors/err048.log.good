@@ -1,3 +1,5 @@
 Loading file "err048.saw"
 err048.saw:10:5-10:10: Error: Only functions may be recursive.
+rec x = 3;
+    ^^^^^
 FAILED

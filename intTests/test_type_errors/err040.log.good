@@ -6,7 +6,13 @@ err040.saw:8:11-8:26: Error: Type mismatch.
     Expected: (Int, Int, Int)
     Found:    (Int, Int, String)
 
+let x = f (1, 2, "three");
+          ^^^^^^^^^^^^^^^
 err040.saw:7:23-7:26: Note: The expected type Int arises from this explicit type name
+let f (x : (Int, Int, Int)) = (x.1, x.2, x.0);
+                      ^^^
 err040.saw:8:18-8:25: Note: The found type String arises from the form of this constant
+let x = f (1, 2, "three");
+                 ^^^^^^^
 
 FAILED

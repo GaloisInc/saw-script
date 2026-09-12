@@ -1,3 +1,5 @@
 Loading file "args022.saw"
 args022.saw:9:27-9:28: Error: Invalid named argument x: No such named parameter
+print (let g = f x=2 in g x=4 ());
+                          ^
 FAILED

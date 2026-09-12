@@ -1,5 +1,9 @@
 Loading file "test03.saw"
 test03.saw:9:8-9:9: Warning: Redeclaration of x
+   let x = "b";
+       ^
 test03.saw:4:8-4:9: Previous declaration was here
+   let x = "a";
+       ^
 x=a
 x=a

@@ -3,9 +3,19 @@ file001.saw:2:1-2:2: Error: Type mismatch.
     Expected: TopLevel t.0
     Found:    Int
 
+3;
+^
 file001.saw:2:1-2:2: Note: The expected type _ _ arises from the context of this statement
+3;
+^
 file001.saw:2:1-2:2: Note: The expected type's monad TopLevel arises from the context of this statement
+3;
+^
 file001.saw:2:1-2:2: Note: The expected type's 1st argument t.0 is a fresh type variable for a type implied here
+3;
+^
 file001.saw:2:1-2:2: Note: The found type Int arises from the form of this constant
+3;
+^
 
 FAILED

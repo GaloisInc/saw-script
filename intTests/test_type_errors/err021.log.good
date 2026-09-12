@@ -1,3 +1,5 @@
 Loading file "err021.saw"
 err021.saw:8:18-8:31: Error: Record type has no field named nonexistent
+let foo (x: t) = x.nonexistent;
+                 ^^^^^^^^^^^^^
 FAILED

@@ -3,7 +3,13 @@ unify007.saw:7:37-7:41: Error: Type mismatch.
     Expected: Int
     Found:    String
 
+let f (b : Bool) = if b then 1 else "hi";
+                                    ^^^^
 unify007.saw:7:30-7:31: Note: The expected type Int arises from the form of this constant
+let f (b : Bool) = if b then 1 else "hi";
+                             ^
 unify007.saw:7:37-7:41: Note: The found type String arises from the form of this constant
+let f (b : Bool) = if b then 1 else "hi";
+                                    ^^^^
 
 FAILED

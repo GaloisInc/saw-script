@@ -1,3 +1,5 @@
 Loading file "err022.saw"
 err022.saw:3:20-3:23: Error: Tuple lookup on non-tuple value of type Int
+let foo (x: Int) = x.3;
+                   ^^^
 FAILED

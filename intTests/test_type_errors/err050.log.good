@@ -1,4 +1,8 @@
 Loading file "err050.saw"
 err050.saw:8:9-8:21: Error: Inaccessible variable: "implies_term"
+let _ = implies_term;
+        ^^^^^^^^^^^^
 err050.saw:8:9-8:21: This command is available only after running `enable_experimental`.
+let _ = implies_term;
+        ^^^^^^^^^^^^
 FAILED
