@@ -4,5 +4,4 @@ Stack trace:
    coreparser001.saw:2:1-2:47 (at top level)
 Module parsing failed:
 PosPair {_pos = Pos {posBase = ".", posPath = "coreparser001.sawcore", posLine = 2, posCol = 7}, val = UnexpectedToken (TKey "where")}
-
 FAILED
