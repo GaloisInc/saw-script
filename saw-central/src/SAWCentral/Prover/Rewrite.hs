@@ -67,6 +67,7 @@ basic_ss sc =
          , "bveq_sameL"
          , "bveq_sameR"
          , "bveq_same2"
+         , "bvEq_refl"
          , "bvNat_bvToNat"
          ]
        defs = map (mkIdent (mkModuleName ["Cryptol"])) ["seq", "ecEq", "ecNotEq"]
