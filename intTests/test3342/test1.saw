@@ -1,0 +1,10 @@
+// Test "backtick" Cryptol functor instantiation.
+//
+// Note: right now only the syntax is implemented, so there's no
+// actual Fn.cry. Add one when it works. (Also at that point,
+// consider turning off test-and-diff.)
+
+fails (do { import `Fn as F1; return (); });
+fails (do { import Fn { _ } as F2; return (); });
+fails (do { import `"Fn.cry" as F3; return (); });
+fails (do { import "Fn.cry" { _ } as F4; return (); });
