@@ -76,6 +76,9 @@ This release supports [version
 
 ## Bug Fixes
 
+* `include_once` no longer gets confused by different
+  `../dir/file.saw` pathnames starting from different directories.
+
 * The SAWScript typechecker no longer allows `_ <- e` as the last
   statement in a block.
   Use the plain expression instead.
