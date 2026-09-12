@@ -8,5 +8,4 @@ The trivial tactic cannot prove this equality
 (y : Bool)
 -> Eq Bool (ite Bool y y (not y)) True
 
-
 FAILED
