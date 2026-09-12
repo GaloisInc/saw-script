@@ -28,27 +28,25 @@ span.spaces    { background: white }
 <span class="lineno">    9 </span>import Control.Monad.IO.Class
 <span class="lineno">   10 </span>import Data.ByteString (ByteString)
 <span class="lineno">   11 </span>import qualified Data.ByteString as BS
-<span class="lineno">   12 </span>import Data.Typeable
-<span class="lineno">   13 </span>
-<span class="lineno">   14 </span>import SAWCore.SharedTerm (SharedContext, IsMetadata(..), scGetData, scWithData)
-<span class="lineno">   15 </span>
-<span class="lineno">   16 </span>newtype FileReader = FileReader (FilePath -&gt; IO ByteString)
-<span class="lineno">   17 </span>  deriving Typeable
-<span class="lineno">   18 </span>
-<span class="lineno">   19 </span>instance <span class="decl"><span class="istickedoff">IsMetadata FileReader</span></span> where
-<span class="lineno">   20 </span>  <span class="decl"><span class="istickedoff">initMetadata = return $ FileReader BS.readFile</span></span>
-<span class="lineno">   21 </span>
-<span class="lineno">   22 </span>-- Override the result of 'scFileReader' with the given function for
-<span class="lineno">   23 </span>-- the duration of an action.
-<span class="lineno">   24 </span>withFileReader :: (MonadIO m) =&gt; SharedContext -&gt; (FilePath -&gt; IO ByteString) -&gt; m a -&gt; m a
-<span class="lineno">   25 </span><span class="decl"><span class="istickedoff">withFileReader sc fileReader = scWithData sc (\_ -&gt; FileReader fileReader)</span></span>
-<span class="lineno">   26 </span>
-<span class="lineno">   27 </span>-- | Get the file reader from the 'SharedContext'. Returns
-<span class="lineno">   28 </span>-- 'Data.ByteString.readFile' unless overridden by 'withFileReader'.
-<span class="lineno">   29 </span>scFileReader :: (MonadIO m) =&gt; SharedContext -&gt; m (FilePath -&gt; IO ByteString)
-<span class="lineno">   30 </span><span class="decl"><span class="istickedoff">scFileReader sc = do</span>
-<span class="lineno">   31 </span><span class="spaces">  </span><span class="istickedoff">FileReader fileReader &lt;- liftIO $ scGetData sc</span>
-<span class="lineno">   32 </span><span class="spaces">  </span><span class="istickedoff">return fileReader</span></span>
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>import SAWCore.SharedTerm (SharedContext, IsMetadata(..), scGetData, scWithData)
+<span class="lineno">   14 </span>
+<span class="lineno">   15 </span>newtype FileReader = FileReader (FilePath -&gt; IO ByteString)
+<span class="lineno">   16 </span>
+<span class="lineno">   17 </span>instance <span class="decl"><span class="istickedoff">IsMetadata FileReader</span></span> where
+<span class="lineno">   18 </span>  <span class="decl"><span class="istickedoff">initMetadata = return $ FileReader BS.readFile</span></span>
+<span class="lineno">   19 </span>
+<span class="lineno">   20 </span>-- Override the result of 'scFileReader' with the given function for
+<span class="lineno">   21 </span>-- the duration of an action.
+<span class="lineno">   22 </span>withFileReader :: (MonadIO m) =&gt; SharedContext -&gt; (FilePath -&gt; IO ByteString) -&gt; m a -&gt; m a
+<span class="lineno">   23 </span><span class="decl"><span class="istickedoff">withFileReader sc fileReader = scWithData sc (\_ -&gt; FileReader fileReader)</span></span>
+<span class="lineno">   24 </span>
+<span class="lineno">   25 </span>-- | Get the file reader from the 'SharedContext'. Returns
+<span class="lineno">   26 </span>-- 'Data.ByteString.readFile' unless overridden by 'withFileReader'.
+<span class="lineno">   27 </span>scFileReader :: (MonadIO m) =&gt; SharedContext -&gt; m (FilePath -&gt; IO ByteString)
+<span class="lineno">   28 </span><span class="decl"><span class="istickedoff">scFileReader sc = do</span>
+<span class="lineno">   29 </span><span class="spaces">  </span><span class="istickedoff">FileReader fileReader &lt;- liftIO $ scGetData sc</span>
+<span class="lineno">   30 </span><span class="spaces">  </span><span class="istickedoff">return fileReader</span></span>
 
 </pre>
 </body>
