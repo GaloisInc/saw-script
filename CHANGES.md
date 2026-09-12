@@ -531,6 +531,13 @@ This release supports [version
 
 ## Bug Fixes
 
+* SAW no longer automatically applies the rewriter to (effectively) all
+  SAWCore terms as they are constructed.
+  This was unsound and could break typesafety.
+  On the minus side, you may need to rewrite manually with `basic_ss` or
+  `cryptol_ss ()` in more places.
+  See #2676 for more information.
+
 * Under some combinations of circumstances you would sometimes get
   messages of the form "Subshells not supported" or "Proof subshells
   not supported" when trying to start an interactive subshell /
