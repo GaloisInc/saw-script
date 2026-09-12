@@ -258,7 +258,7 @@ import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
 
---import qualified Prettyprinter as PP
+import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
 import qualified CryptolSAWCore.Simpset as Cryptol
@@ -267,6 +267,7 @@ import qualified CryptolSAWCore.SAWCoreCryptol as Cryptol
 -- saw-support
 import qualified SAWSupport.PanicSupport as PanicSupport
 import qualified SAWSupport.Pretty as PPS
+import SAWSupport.Position
 import qualified SAWSupport.ConsoleSupport as Cons
 
 -- saw-core
@@ -1660,21 +1661,36 @@ term_eval unints (TypedTerm schema t0) =
      t1 <- liftIO $ W4Sim.w4EvalTerm sym st sc Map.empty unintSet t0
      pure (TypedTerm schema t1)
 
+theoremToRule :: Theorem -> TopLevel (RewriteRule TheoremAnnotation)
+theoremToRule thm = do
+    sc <- getSharedContext
+    let ann = TheoremAnnotation (Set.singleton (thmNonce thm)) (thmHyps thm) (thmSummary thm)
+    mbRule <- liftIO $ propToRewriteRule sc (thmProp thm) (Just ann)
+    case mbRule of 
+      Nothing -> do
+          ppopts <- SV.getPPOpts
+          nenv <- liftIO $ scGetNamingEnv sc
+          let pos' = prettyPosition $ thmLocation thm
+          let thm' = prettyTheorem ppopts nenv thm
+          let msg = PP.vsep [
+                  "Cannot add theorem to simplification set; it must be an equality.",
+                  pos' <> ": Theorem created here",
+                  "Theorem as SAWCore:",
+                  PP.indent 3 thm'
+               ]
+          fail $ PPS.render ppopts msg
+      Just rule ->
+          pure rule
+
 addsimp :: Theorem -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
-addsimp thm ss =
-  do sc <- getSharedContext
-     let ann = TheoremAnnotation (Set.singleton (thmNonce thm)) (thmHyps thm) (thmSummary thm)
-     io (propToRewriteRule sc (thmProp thm) (Just ann)) >>= \case
-       Nothing -> fail "addsimp: theorem not an equation"
-       Just rule -> pure (addRule rule ss)
+addsimp thm ss = do
+  rule <- theoremToRule thm
+  pure $ addRule rule ss
 
 addsimp_shallow :: Theorem -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
-addsimp_shallow thm ss =
-  do sc <- getSharedContext
-     let ann = TheoremAnnotation (Set.singleton (thmNonce thm)) (thmHyps thm) (thmSummary thm)
-     io (propToRewriteRule sc (thmProp thm) (Just ann)) >>= \case
-       Nothing -> fail "addsimp: theorem not an equation"
-       Just rule -> pure (addRule (shallowRule rule) ss)
+addsimp_shallow thm ss = do
+  rule <- theoremToRule thm
+  pure $ addRule (shallowRule rule) ss
 
 simpset_union :: SV.SAWSimpset -> SV.SAWSimpset -> SV.SAWSimpset
 simpset_union ss1 ss2 = Net.merge ss1 ss2
