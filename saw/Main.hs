@@ -369,8 +369,9 @@ main = do
       hPutStrLn stderr shortVersionText
       exitSuccess
 
-  when (showHelp opts) $
-      err opts usageText
+  when (showHelp opts) $ do
+      hPutStrLn stderr usageText
+      exitSuccess
 
   -- blah, there should be a tidier way to write this (without
   -- incurring an incomplete match warning or indenting the whole rest
