@@ -769,7 +769,13 @@ reconstructArgTerm atrm sc ts =
 -- 'ArgTerm' that builds a term of that type from local variables with
 -- base types. The number of 'ArgTermVar' constructors should match
 -- the number of arguments appended by 'applyUnintApp'.
-mkArgTerm :: forall sym. SharedContext -> TValue (What4 sym) -> SValue sym -> IO ArgTerm
+mkArgTerm ::
+  forall sym.
+  IsSymExprBuilder sym =>
+  SharedContext ->
+  TValue (What4 sym) ->
+  SValue sym ->
+  IO ArgTerm
 mkArgTerm sc ty val =
   case (ty, val) of
     (VBoolType, VBool _) -> return ArgTermVar
@@ -883,4 +889,3 @@ mkSymFn sym ref nm args ret =
             writeIORef ref (insertSymFn s args ret fn cache)
             pure fn
 --------------------------------------------------------------------------------
-
