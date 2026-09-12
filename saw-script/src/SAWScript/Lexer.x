@@ -260,6 +260,7 @@ data AlexPos = AlexPos {
 
 -- input state
 type AlexInput = (
+    Text,       -- ^ The input from the begining of the current line
     AlexPos,    -- ^ Current position
     Text        -- ^ Remaining input
   )
@@ -339,10 +340,14 @@ byteForChar c
 
 -- input handler for alex
 alexGetByte :: AlexInput -> Maybe (Word8, AlexInput)
-alexGetByte (pos, text) = fmap doGet $ Text.uncons text
+alexGetByte (curLine, pos, text) = fmap doGet $ Text.uncons text
     where
-      doGet (c, text') = (byteForChar c, (move c, text'))
-      move c = case c of
+      doGet (c, text') =
+          (byteForChar c, (advanceLine c text', advancePos c, text'))
+      advanceLine c text' = case c of
+          '\n' -> text'
+          _ -> curLine
+      advancePos c = case c of
           '\n' -> AlexPos { apLine = apLine pos + 1, apCol = 1 }
           _ -> pos { apCol = apCol pos + 1 }
 
@@ -353,18 +358,18 @@ alexInputPrevChar _ = panic "Lexer" ["alexInputPrevChar"]
 -- read the text of a file, passing in the filename for use in positions
 -- and also the name to use for the EOF token
 scanTokens :: FilePath -> Text -> Text -> LexResult
-scanTokens filename eofName str0 = go (initialPos, str0) Normal
+scanTokens filename eofName str0 = go (str0, initialPos, str0) Normal
   where
-    fillPos pos height width =
+    fillPos pos height width lineText =
         let startLine = apLine pos
             startCol = apCol pos
             endLine = startLine + height
             endCol = startCol + width
         in
-        Range filename startLine startCol endLine endCol
+        Range filename startLine startCol endLine endCol lineText
 
-    go inp@(strPos, str) s = case alexScan inp (stateToInt s) of
-        AlexEOF -> let strPos' = fillPos strPos 0 0
+    go inp@(curLine, strPos, str) s = case alexScan inp (stateToInt s) of
+        AlexEOF -> let strPos' = fillPos strPos 0 0 curLine
                        tok = [TEOF strPos' eofName]
                    in case s of
             Normal ->
@@ -381,7 +386,7 @@ scanTokens filename eofName str0 = go (initialPos, str0) Normal
                 Left (Error, beginPos, "Unclosed Cryptol type block")
             LexFailed msg failPos _ -> -- should never happen, but this is its semantics anyway
                 Left (Error, failPos, msg)
-        AlexError (failPos, _) ->
+        AlexError (_, failPos, _) ->
             let line' = Text.pack $ show $ apLine failPos
                 col' = Text.pack $ show $ apCol failPos
             in
@@ -394,7 +399,7 @@ scanTokens filename eofName str0 = go (initialPos, str0) Normal
                     [] -> (0, 0)
                     [line] -> (0, Text.length line)
                     last_ : rest -> (length rest, Text.length last_)
-                strPos' = fillPos strPos height width
+                strPos' = fillPos strPos height width curLine
             in
             case act strPos' text s of
               (_t, LexFailed msg failPos _rest) -> Left (Error, failPos, msg)

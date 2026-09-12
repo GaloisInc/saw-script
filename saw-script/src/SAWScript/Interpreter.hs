@@ -215,7 +215,7 @@ toInputText pos0 txt =
   where
   (file, ln, col) = extract pos0
   extract pos = case pos of
-      SS.Range f sl sc _ _ -> (f,sl, sc)
+      SS.Range f sl sc _ _ _ -> (f, sl, sc)
       SS.FileOnlyPos f -> (f, 1, 1)
       SS.FileAndFunctionPos f _ -> (f, 1, 1)
       SS.PosInternal s -> (s,1,1)

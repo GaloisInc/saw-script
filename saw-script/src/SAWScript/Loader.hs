@@ -183,7 +183,8 @@ readAny ppopts fileName str eofName parser =
                                 -- trailing edge of the last token.
                                 case uncons (reverse tokens) of
                                     Nothing ->
-                                        Range fileName 1 1 1 1
+                                        -- empty file
+                                        Range fileName 1 1 1 1 ""
                                     Just (t, _) ->
                                         Pos.trailingPos $ tokPos t
                             Just p ->

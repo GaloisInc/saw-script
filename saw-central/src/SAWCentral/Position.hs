@@ -17,6 +17,7 @@ module SAWCentral.Position (
     differentLines,
     subspan,
     startsBefore,
+    getSourceText,
     leadingPos,
     trailingPos,
     spanPos,
@@ -39,6 +40,7 @@ import GHC.Generics (Generic)
 import System.Directory (makeRelativeToCurrentDirectory)
 import System.FilePath (makeRelative, isAbsolute, (</>), takeDirectory)
 import qualified Data.Text as Text
+import Data.Text (Text)
 import qualified Prettyprinter as PP
 
 import qualified What4.ProgramLoc as W4
@@ -89,6 +91,7 @@ import SAWSupport.Position as Support
 data Pos = Range !FilePath -- file
                  !Int !Int -- start line, col
                  !Int !Int -- end line, col
+                 Text      -- the input starting at the beginning of the start line
          | FileOnlyPos !FilePath
          | FileAndFunctionPos !FilePath !String
          | Unknown
@@ -104,7 +107,7 @@ data Pos = Range !FilePath -- file
 differentLines :: Pos -> Pos -> Bool
 differentLines p1 p2 =
     case (p1, p2) of
-        (Range f1 l1a _ l1b _, Range f2 l2a _ l2b _) ->
+        (Range f1 l1a _ l1b _ _, Range f2 l2a _ l2b _ _) ->
             f1 == f2 && (l2a > l1b || l1a > l2b)
         (_, _) ->
             False
@@ -117,7 +120,7 @@ subspan p1 p2 =
     case (p1, p2) of
         -- This might give wrong answers for ill-formed positions
         -- where the end is before the start. Don't do that
-        (Range f1 l1a c1a l1b c1b, Range f2 l2a c2a l2b c2b) ->
+        (Range f1 l1a c1a l1b c1b _, Range f2 l2a c2a l2b c2b _) ->
             f1 == f2 && (
                 l1a > l2a || (l1a == l2a && c1a >= c2a)
             ) && (
@@ -131,9 +134,54 @@ subspan p1 p2 =
 startsBefore :: Pos -> Pos -> Bool
 startsBefore p1 p2 =
     case (p1, p2) of
-        (Range f1 l1 c1 _ _, Range f2 l2 c2 _ _) ->
+        (Range f1 l1 c1 _ _ _, Range f2 l2 c2 _ _ _) ->
             f1 == f2 && (l1 < l2 || (l1 == l2 && c1 < c2))
         (_, _) -> False
+
+-- | Get the source text associated with a position, if we have it.
+--   Returns `Nothing` if we don't.
+--
+--   The return value is two lines in `Text`, one that contains up to
+--   80 characters of the first line of the original source text the
+--   position refers to. The other contains carets underlining the
+--   portion of that text the position covers. If the position is
+--   beyond column 80, returns None. FUTURE: instead of hardwiring 80,
+--   maybe we can arrange to pass in or know the terminal width.
+--
+--   FUTURE: also, maybe we should add "..." if there's more lines,
+--   and if we truncate to 80 columns maybe we should replace the
+--   last three characters with "..." too.
+--
+--   Note that because columns are 1-based we need to subtract 1 in
+--   key places. Also, similarly, note that the span is not intended
+--   to be inclusive. We do sometimes get 0-length spans, which are
+--   meant to indicate the slot before/after something or between two
+--   things; if we get one of those print one caret. (Maybe we should
+--   print some other symbol. Dunno what though.)
+--
+getSourceText :: Pos -> Maybe (Text, Text)
+getSourceText pos = case pos of
+    Range _f sl sc el ec txt ->
+        if sc >= 80 then Nothing
+        else if Text.null txt then Nothing
+        else
+            -- end of the line (zero-based)
+            let lineEnd = case Text.findIndex (\ch -> ch == '\n') txt of
+                  Nothing -> Text.length txt
+                  Just col -> col
+            in
+            -- zero-based resultant start and end columns
+            let scz = sc - 1
+                ecz = if el > sl then lineEnd else ec - 1
+            in
+            let line1 = Text.take lineEnd txt
+            --let line1 = "@" <> Text.pack (show lineEnd) <> " --" <> txt <> "--"
+                ul = Text.replicate (if ecz == scz then 1 else ecz - scz) "^"
+                line2 = Text.replicate scz " " <> ul
+            in
+            Just (line1, line2)
+    _ ->
+        Nothing
 
 -- Get the empty position at the beginning of the position of
 -- something else. This can be used to provide positions for implicit
@@ -141,15 +189,22 @@ startsBefore p1 p2 =
 -- do-notation binding that doesn't bind anything.
 leadingPos :: Pos -> Pos
 leadingPos pos = case pos of
-   Range f l1 c1 _l2 _c2 -> Range f l1 c1 l1 c1
+   Range f l1 c1 _l2 _c2 txt -> Range f l1 c1 l1 c1 txt
    _ -> pos
 
 -- Get the empty position at the end of the position of something
 -- else.
 trailingPos :: Pos -> Pos
 trailingPos pos = case pos of
-   Range f _l1 _c1 l2 c2 -> Range f l2 c2 l2 c2
+   Range f l1 _c1 l2 c2 txt -> Range f l2 c2 l2 c2 (skipLines (l2 - l1) txt)
    _ -> pos
+  where
+    skipLines n txt =
+        if n == 0 then txt
+        else
+            case Text.findIndex (\c -> c == '\n') txt of
+                Nothing -> ""
+                Just offset -> skipLines (n - 1) (Text.drop (offset + 1) txt)
 
 -- Paste together two positions.
 --
@@ -203,7 +258,7 @@ spanPos (FileOnlyPos _) p = p
 spanPos p (FileOnlyPos _) = p
 spanPos (FileAndFunctionPos _ _) p = p
 spanPos p (FileAndFunctionPos _ _) = p
-spanPos (Range f sl sc el ec) (Range _ sl' sc' el' ec') =  Range f l c l' c'
+spanPos (Range f sl sc el ec txt) (Range _ sl' sc' el' ec' _txt') =  Range f l c l' c' txt
   where
     (l, c) = minPos sl sc sl' sc'
     (l', c') = maxPos el ec el' ec'
@@ -215,7 +270,7 @@ spanPos (Range f sl sc el ec) (Range _ sl' sc' el' ec') =  Range f l c l' c'
                        | otherwise = (l1, c1)
 
 posRelativeToCurrentDirectory :: Pos -> IO Pos
-posRelativeToCurrentDirectory (Range f sl sc el ec) = makeRelativeToCurrentDirectory f >>= \f' -> return (Range f' sl sc el ec)
+posRelativeToCurrentDirectory (Range f sl sc el ec t) = makeRelativeToCurrentDirectory f >>= \f' -> return (Range f' sl sc el ec t)
 posRelativeToCurrentDirectory (FileOnlyPos f)       = makeRelativeToCurrentDirectory f >>= \f' -> return (FileOnlyPos f')
 posRelativeToCurrentDirectory (FileAndFunctionPos f fn) = makeRelativeToCurrentDirectory f >>= \f' -> return (FileAndFunctionPos f' fn)
 posRelativeToCurrentDirectory Unknown               = return Unknown
@@ -224,7 +279,7 @@ posRelativeToCurrentDirectory PosInsideBuiltin      = return PosInsideBuiltin
 posRelativeToCurrentDirectory PosREPL               = return PosREPL
 
 posRelativeTo :: FilePath -> Pos -> Pos
-posRelativeTo d (Range f sl sc el ec) = Range (makeRelative d f) sl sc el ec
+posRelativeTo d (Range f sl sc el ec t) = Range (makeRelative d f) sl sc el ec t
 posRelativeTo d (FileOnlyPos f)       = FileOnlyPos (makeRelative d f)
 posRelativeTo d (FileAndFunctionPos f fn) = FileAndFunctionPos (makeRelative d f) fn
 posRelativeTo _ Unknown               = Unknown
@@ -236,7 +291,7 @@ routePathThroughPos :: Pos -> FilePath -> FilePath
 routePathThroughPos pos fp
   | isAbsolute fp = fp
   | True = case pos of
-        Range f _ _ _ _        -> takeDirectory f </> fp
+        Range f _ _ _ _ _      -> takeDirectory f </> fp
         FileOnlyPos f          -> takeDirectory f </> fp
         FileAndFunctionPos f _ -> takeDirectory f </> fp
         _ -> fp
@@ -258,8 +313,8 @@ routePathThroughPos pos fp
 instance Show Pos where
   -- show (Pos f 0 0)           = f ++ ":end-of-file"
   -- show (Pos f l c)           = f ++ ":" ++ show l ++ ":" ++ show c
-  show (Range f 0 0 0 0) = f ++ ":end-of-file"
-  show (Range f sl sc el ec) = f ++ ":" ++ show sl ++ ":" ++ show sc ++ "-" ++ show el ++ ":" ++ show ec
+  show (Range f 0 0 0 0 _) = f ++ ":end-of-file"
+  show (Range f sl sc el ec _) = f ++ ":" ++ show sl ++ ":" ++ show sc ++ "-" ++ show el ++ ":" ++ show ec
   show (FileOnlyPos f)          = f
   show (FileAndFunctionPos f fn)  = f ++ ":" ++ fn
   show Unknown               = "unknown"
@@ -280,7 +335,7 @@ toW4Loc fnm =
     PosREPL -> mkLoc (fnm <> " <REPL>") W4.InternalPos
     PosInternal nm -> mkLoc (fnm <> " " <> Text.pack nm) W4.InternalPos
     PosInsideBuiltin -> mkLoc (fnm <> " (in builtin)") W4.InternalPos
-    Range file sl sc _el _ec ->
+    Range file sl sc _el _ec _ ->
       mkLoc fnm (W4.SourcePos (Text.pack file) sl sc)
   where mkLoc nm = W4.mkProgramLoc (W4.functionNameFromText nm)
 
