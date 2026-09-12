@@ -464,7 +464,23 @@ includeFile ::
     Int -> SeenSet -> IncludePath -> Options -> PPS.Opts -> FilePath -> Bool -> IO [Stmt]
 includeFile depth seen incpath opts ppopts fname once = do
   fname' <- locateFile incpath fname
-  alreadySeen <- seenSetMember fname' seen 
+
+  -- Absolutize and follow symlinks when checking whether we've
+  -- already seen the file. This is essentially realpath(3) (though
+  -- the Haskell stdlib does its own thing, seemingly not quite the
+  -- same) and it's generally better not to do that, but:
+  --    - we never print the absolutized name;
+  --    - without these simple cases involving ../foo from multiple
+  --      other places don't work right, regardless of symlinks;
+  --    - there's nothing simpler than a full realpath that will
+  --      not have even odder behavior;
+  --    - checking the OS-level file identity would work but may not
+  --      even be possible in Haskell, and if it is, likely isn't
+  --      workable on Windows.
+  --  
+  absoluteName <- canonicalizePath fname'
+
+  alreadySeen <- seenSetMember absoluteName seen 
   if depth > 128 then
       -- XXX pass in the include position as well
       Cons.errX $ "Maximum include depth exceeded"
@@ -474,7 +490,7 @@ includeFile depth seen incpath opts ppopts fname once = do
                    Text.pack fname' <> "\""
       pure []
   else do
-      seenSetInsert fname' seen
+      seenSetInsert absoluteName seen
       let (_current, dirs) = incpath
           current' = takeDirectory fname'
           incpath' = (current', dirs)

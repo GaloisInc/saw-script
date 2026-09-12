@@ -1,0 +1,19 @@
+Loading file "err002.saw"
+Stack trace:
+   (builtin) in addsimps
+   err002.saw:7:11-7:34 (at top level)
+Cannot add theorem to simplification set; it must be an equality.
+err002.saw:6:1-6:76: Theorem created here
+Theorem as SAWCore:
+   let { _x`1 = Vec 8 Bool;
+         _x`2 = TCNum 8;
+         _x`3 = PRingSeqBool _x`2;
+       }
+    in (i : _x`1)
+       -> EqTrue
+            ((PEqSeqBool _x`2).eq (ecPlus _x`1 _x`3 i i)
+               (ecMul _x`1 _x`3
+                  (ecNumber (TCNum 2) _x`1 (PLiteralSeqBool _x`2))
+                  i))
+
+FAILED

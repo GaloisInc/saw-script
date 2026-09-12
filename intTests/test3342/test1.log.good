@@ -1,0 +1,29 @@
+Loading file "test1.saw"
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   test1.saw:7:1-7:43 (at top level)
+block-level import unimplemented
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   test1.saw:8:1-8:48 (at top level)
+block-level import unimplemented
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   test1.saw:9:1-9:49 (at top level)
+block-level import unimplemented
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   test1.saw:10:1-10:54 (at top level)
+block-level import unimplemented
+

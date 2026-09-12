@@ -369,8 +369,9 @@ main = do
       hPutStrLn stderr shortVersionText
       exitSuccess
 
-  when (showHelp opts) $
-      err opts usageText
+  when (showHelp opts) $ do
+      hPutStrLn stderr usageText
+      exitSuccess
 
   -- blah, there should be a tidier way to write this (without
   -- incurring an incomplete match warning or indenting the whole rest
@@ -383,7 +384,7 @@ main = do
           err opts $ "Error: no path to clean.\n" ++
                      "Either give --clean-mismatched-versions-solver-cache" ++
                      " an argument or set SAW_SOLVER_CACHE_PATH"
-      cache <- lazyOpenSolverCache cleanPath
+      cache <- lazyOpenSolverCache opts cleanPath
       vs <- getSolverBackendVersions allBackends
       fst <$> solverCacheOp (cleanMismatchedVersionsSolverCache vs) opts cache
       exitSuccess

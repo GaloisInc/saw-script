@@ -440,9 +440,10 @@ data SolverCacheStat = Lookups | FailedLookups | Inserts | FailedInserts
 -- | Create a 'SolverCache' with the given 'FilePath', but do not yet open an
 -- LMDB database at that path (i.e. `solverCacheEnv` and `solverCacheDB` are
 -- both set to 'Nothing')
-lazyOpenSolverCache :: FilePath -> IO SolverCache
-lazyOpenSolverCache path = do
+lazyOpenSolverCache :: Options -> FilePath -> IO SolverCache
+lazyOpenSolverCache opts path = do
   stats <- newIORef $ Map.fromList ((,0) <$> [minBound..])
+  printOutLn opts Info $ "Solver cache enabled in " ++ path
   return SolverCache { solverCachePath    = path,
                        solverCacheEnv     = Nothing,
                        solverCacheDB      = Nothing,
@@ -452,9 +453,10 @@ lazyOpenSolverCache path = do
 
 -- | Create a 'SolverCache' with the given 'FilePath' and open an LMDB database
 -- at that path (i.e. `solverCacheEnv` and `solverCacheDB` are both 'Just')
-openSolverCache :: FilePath -> IO SolverCache
-openSolverCache path = do
-  (_, _, cache') <- forceSolverCacheOpened =<< lazyOpenSolverCache path
+openSolverCache :: Options -> FilePath -> IO SolverCache
+openSolverCache opts path = do
+  cache <- lazyOpenSolverCache opts path
+  (_, _, cache') <- forceSolverCacheOpened cache
   return cache'
 
 -- | Ensure that the given 'SolverCache' has opened an LMDB database at its set
@@ -505,12 +507,12 @@ tryTransaction cache@SolverCache{..} t =
 data SolverCacheOp a = SCOpOrFail (Options -> SolverCache -> IO (a, SolverCache))
                      | SCOpOrDefault a (Options -> SolverCache -> IO (a, SolverCache))
 
--- | Get the operation associated to a 'SolverCacheOp'
+-- | Get the operation associated with a 'SolverCacheOp'
 solverCacheOp :: SolverCacheOp a -> Options -> SolverCache -> IO (a, SolverCache)
 solverCacheOp (SCOpOrFail f) = f
 solverCacheOp (SCOpOrDefault _ f) = f
 
--- | Get the default value associated to a 'SolverCacheOp', if any
+-- | Get the default value associated with a 'SolverCacheOp', if any
 solverCacheOpDefault :: SolverCacheOp a -> Maybe a
 solverCacheOpDefault (SCOpOrFail _) = Nothing
 solverCacheOpDefault (SCOpOrDefault a _) = Just a

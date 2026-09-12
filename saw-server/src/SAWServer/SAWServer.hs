@@ -311,7 +311,7 @@ initialState readFileFn =
      jvmTrans <- CJ.mkInitialJVMContext halloc
      cwd <- getCurrentDirectory
      mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
-       Just path | not (null path) -> Just <$> lazyOpenSolverCache path
+       Just path | not (null path) -> Just <$> lazyOpenSolverCache opts path
        _ -> return Nothing
      let ro = TopLevelRO
                 { roOptions = opts

@@ -1375,6 +1375,8 @@ interpretTopStmt printBinds replTypingHacks stmt = do
          sc <- getSharedContext
          cenv <- getCryptolEnv
          --showCryptolEnv
+         when (iIsBacktick imp) $ do
+             fail "Backtick imports are not yet supported"
          let mLoc  = iModule imp
              qual  = iAs imp
              spec  = iSpec imp
@@ -1555,7 +1557,7 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
        ss <- basic_ss sc
        currDir <- getCurrentDirectory
        mb_cache <- lookupEnv "SAW_SOLVER_CACHE_PATH" >>= \case
-         Just path | not (null path) -> Just <$> lazyOpenSolverCache path
+         Just path | not (null path) -> Just <$> lazyOpenSolverCache opts path
          _ -> return Nothing
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
@@ -2862,7 +2864,8 @@ set_solver_cache_path pathtxt = do
       onSolverCache (setSolverCachePath path)
     (Nothing, True) -> return ()
     (Nothing, False) -> do
-      cache <- io $ openSolverCache path
+      opts <- getOptions
+      cache <- io $ openSolverCache opts path
       putTopLevelRW rw { rwSolverCache = Just cache }
 
 set_solver_cache_timeout :: Int -> TopLevel ()

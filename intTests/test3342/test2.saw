@@ -1,0 +1,4 @@
+// This is not legal, at least as long as we don't support general
+// functor instantiation.
+
+import Fn { blather };
