@@ -1375,6 +1375,8 @@ interpretTopStmt printBinds replTypingHacks stmt = do
          sc <- getSharedContext
          cenv <- getCryptolEnv
          --showCryptolEnv
+         when (iIsBacktick imp) $ do
+             fail "Backtick imports are not yet supported"
          let mLoc  = iModule imp
              qual  = iAs imp
              spec  = iSpec imp
