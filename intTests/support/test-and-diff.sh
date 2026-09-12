@@ -151,6 +151,12 @@ run-tests() {
         # having the source line number in the reference outputs is
         # super aggravating because it changes all the time, usually
         # when you aren't expecting it.
+        #
+        # Also remove the "Solver cache enabled in..." message
+        # entirely (rather than just pruning the path out of it)
+        # because whether the tests use the solver cache at all
+        # depends on how the test run has been set up.
+        #
         sed < $TEST.rawlog '
             :again
             /^sawscript> /s/^sawscript> //
@@ -158,6 +164,7 @@ run-tests() {
             tagain
 
             /^  error, called at [^ :]*\.hs:[0-9:]* in saw-/s/\.hs:.*/.hs/
+            /^Solver cache enabled in [^ ][^ ]*$/d
         ' | (
             # If there's a custom postprocess script for this test,
             # chain it in.
