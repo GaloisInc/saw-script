@@ -1,0 +1,34 @@
+// Test: module aliases (aka submodule synonyms), i.e.
+//   submodule A = submodule B
+
+import "Synonyms.cry";
+
+/* *******************************
+   the names of the aliased submodule are in scope under the alias:
+ */
+
+print {{ S::s }};
+print {{ Syn::s }};
+
+// ... at any depth, and through nested aliases:
+print {{ S::S_Inner::s_inner }};
+print {{ Syn::S_Inner::s_inner }};
+print {{ Syn::S_InnerSyn::s_inner }};
+
+// ... and through a chain of aliases:
+print {{ SynSyn::s }};
+print {{ SynSyn::S_InnerSyn::s_inner }};
+
+// an alias for a top-level module works too:
+print {{ CrySyn::min 4 5 }};
+
+
+/* *******************************
+   `import submodule` follows aliases:
+ */
+
+import submodule SynSyn;
+
+print {{ s }};
+print {{ S_Inner::s_inner }};
+print {{ S_InnerSyn::s_inner }};

@@ -1,0 +1,3 @@
+import "AliasExample.cry";
+print {{ Sub::demo }};
+print {{ Alias::demo }};
