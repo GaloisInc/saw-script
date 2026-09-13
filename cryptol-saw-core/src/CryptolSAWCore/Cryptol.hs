@@ -282,9 +282,7 @@ importTFun sc tf =
 importPC :: SharedContext -> C.PC -> IO Term
 importPC sc pc =
   case pc of
-    C.PEqual           -> do eq <- scGlobalDef sc "Prelude.Eq"
-                             num <- scGlobalDef sc "Cryptol.Num"
-                             scApply sc eq num
+    C.PEqual           -> scGlobalDef sc "Cryptol.PEqual"
     C.PNeq             -> scGlobalDef sc "Cryptol.PNeq"
     C.PGeq             -> scGlobalDef sc "Cryptol.PGeq"
     C.PFin             -> scGlobalDef sc "Cryptol.PFin"
@@ -620,8 +618,7 @@ classIntroIdents =
   , "Cryptol.PFin_tcDiv"
   , "Cryptol.PFin_tcCeilDiv"
   , "Cryptol.unsafeAssumePFin"
-  , "Prelude.Refl"
-  , "Prelude.unsafeAssert"
+  , "Cryptol.unsafeAssumePEqual"
   , "Cryptol.PGeq_0"
   , "Cryptol.unsafeAssumePGeq"
   , "Cryptol.unsafeAssumePNeq"

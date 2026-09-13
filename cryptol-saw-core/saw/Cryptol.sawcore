@@ -244,6 +244,10 @@ tcEqual =
 tcLt : Num -> Num -> Bool;
 tcLt = binaryNumPred ltNat (\ (x:Nat) -> True) (\ (y:Nat) -> False) True;
 
+-- The Cryptol numeric type constraint m == n.
+PEqual : Num -> Num -> Prop;
+PEqual m n = Eq Bool (tcEqual m n) True;
+
 -- The Cryptol numeric type constraint m != n.
 PNeq : Num -> Num -> Prop;
 PNeq m n = Eq Bool (tcEqual m n) False;
@@ -319,6 +323,14 @@ PFin_downward_closed m n =
 -- Assuming `fin` constraints proved by the Cryptol type checker.
 unsafeAssumePFin : (n : Num) -> PFin n;
 unsafeAssumePFin = Num#ind PFin PFin_TCNum (unsafeAssert Bool False True);
+
+-- Assuming `==` constraints proved by the Cryptol type checker.
+unsafeAssumePEqual : (m n : Num) -> PEqual m n;
+unsafeAssumePEqual m n =
+  Bool#ind (\ (x : Bool) -> Eq Bool x True)
+  (Refl Bool True)
+  (unsafeAssert Bool False True)
+  (tcEqual m n);
 
 -- Assuming `>=` constraints proved by the Cryptol type checker.
 unsafeAssumePGeq : (m n : Num) -> PGeq m n;
