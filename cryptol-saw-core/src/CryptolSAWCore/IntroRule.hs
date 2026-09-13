@@ -66,7 +66,7 @@ mkIntroRule sc t0 =
 -- 'TermNet.Net'.
 
 -- The 'Int' keys record the order in which rules were inserted.
--- Older rules take priority over newer rules.
+-- Newer rules take priority over older rules.
 data IntroRuleSet = IntroRuleSet !Int (TermNet.Net (Int, IntroRule))
 
 emptyIntroRuleSet :: IntroRuleSet
@@ -80,11 +80,12 @@ insertIntroRuleSet r (IntroRuleSet i net) =
 -- of introduction rules.
 -- A failing 'Left' result includes the type of a subgoal with no
 -- matching rule; a successful 'Right' result includes a proof term.
+-- More-recently-inserted rules take priority over older rules.
 proveWithIntros :: SharedContext -> IntroRuleSet -> Term -> IO (Either Term Term)
 proveWithIntros sc (IntroRuleSet _ net) t0 = runExceptT (solve t0)
   where
     solve :: Term -> ExceptT Term IO Term
-    solve t = try rules t
+    solve t = try (reverse rules) t
       where rules = map snd $ sortOn fst (TermNet.match_term net (termPat t))
 
     try :: [IntroRule] -> Term -> ExceptT Term IO Term

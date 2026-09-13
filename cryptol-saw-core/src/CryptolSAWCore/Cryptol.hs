@@ -641,7 +641,9 @@ getInstanceRules sc =
      case result of
        Just rules -> pure rules
        Nothing ->
-         do mapM_ loadRule classIntroIdents
+         do -- More recent rules take priority in the IntroRuleSet, so
+            -- add them in reverse order.
+            mapM_ loadRule (reverse classIntroIdents)
             maybe emptyIntroRuleSet id <$> eInstances sc
   where
     loadRule :: Ident -> IO ()
