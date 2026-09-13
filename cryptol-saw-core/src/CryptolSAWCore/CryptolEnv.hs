@@ -317,9 +317,13 @@ ioParseResult res = case res of
 --   above it.
 --
 --   Note that while each `sImports` is (mostly) maintained with more
---   recent imports at the front of the list, this should be
+--   recent imports at the front of the list, this is mainly
 --   irrelevant to name resolution.
 --
+--     - However with `import submodule ...` it *is* relevant, as the
+--       sequence of `import` and `import submodule` has now become
+--       relevant: we only import a submodule that is in scope in the
+--       previous imports.
 
 getNamingEnv :: SharedContext -> CryptolEnv -> IO MR.NamingEnv
 getNamingEnv sc env = do
