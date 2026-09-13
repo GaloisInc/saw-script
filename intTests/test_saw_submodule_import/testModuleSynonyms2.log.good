@@ -1,0 +1,36 @@
+Loading file "testModuleSynonyms2.saw"
+Assuming a = Integer
+1
+Assuming a = Integer
+1
+Assuming a = Integer
+2
+Assuming a = Integer
+2
+Assuming a = Integer
+2
+Assuming a = Integer
+1
+Assuming a = Integer
+2
+Assuming a = Integer
+4
+Assuming a = Integer
+1
+Assuming a = Integer
+2
+Assuming a = Integer
+2
+
+
+errors follow:
+
+
+Error: Cryptol: [error] at testModuleSynonyms2.saw:48:21--48:35
+    Value not in scope: Syn::s_private
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testModuleSynonyms2.saw:48:1-48:41 (at top level)
+
+(Failure was expected, continuing)
