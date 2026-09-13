@@ -20,6 +20,7 @@ module CryptolSAWCore.IntroRule
 import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.Trans (lift)
 import qualified Data.IntMap as IntMap
+import Data.List (sortOn)
 import Data.Maybe (mapMaybe)
 
 import SAWCore.Conversion (termPat)
@@ -63,24 +64,28 @@ mkIntroRule sc t0 =
 
 -- | A set of 'IntroRule's, indexed by conclusion in a a
 -- 'TermNet.Net'.
-newtype IntroRuleSet = IntroRuleSet (TermNet.Net IntroRule)
+
+-- The 'Int' keys record the order in which rules were inserted.
+-- Older rules take priority over newer rules.
+data IntroRuleSet = IntroRuleSet !Int (TermNet.Net (Int, IntroRule))
 
 emptyIntroRuleSet :: IntroRuleSet
-emptyIntroRuleSet = IntroRuleSet TermNet.empty
+emptyIntroRuleSet = IntroRuleSet 0 TermNet.empty
 
 insertIntroRuleSet :: IntroRule -> IntroRuleSet -> IntroRuleSet
-insertIntroRuleSet r (IntroRuleSet net) =
-  IntroRuleSet (TermNet.insert_term (termPat (concl r), r) net)
+insertIntroRuleSet r (IntroRuleSet i net) =
+  IntroRuleSet (i+1) (TermNet.insert_term (termPat (concl r), (i, r)) net)
 
 -- | Attempt to construct a term inhabiting a given type using a set
 -- of introduction rules.
 -- A failing 'Left' result includes the type of a subgoal with no
 -- matching rule; a successful 'Right' result includes a proof term.
 proveWithIntros :: SharedContext -> IntroRuleSet -> Term -> IO (Either Term Term)
-proveWithIntros sc (IntroRuleSet net) t0 = runExceptT (solve t0)
+proveWithIntros sc (IntroRuleSet _ net) t0 = runExceptT (solve t0)
   where
     solve :: Term -> ExceptT Term IO Term
-    solve t = try (TermNet.match_term net (termPat t)) t
+    solve t = try rules t
+      where rules = map snd $ sortOn fst (TermNet.match_term net (termPat t))
 
     try :: [IntroRule] -> Term -> ExceptT Term IO Term
     try [] t = throwError t

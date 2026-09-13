@@ -538,6 +538,11 @@ importSchema sc env (C.Forall tparams props ty) =
 -- Each constant named in this list should have a type of the form
 -- @forall vars, hyps -> concl@, where @concl@ is a SAWCore
 -- proposition representing a Cryptol class constraint.
+--
+-- NOTE: The instance prover prioritizes rules according to the order
+-- in which they are added to the 'IntroRuleSet'.
+-- When there are multiple class intro rules with overlapping
+-- patterns, the preferred rule should be listed first.
 classIntroIdents :: [Ident]
 classIntroIdents =
   [ "Cryptol.PZeroBit"
