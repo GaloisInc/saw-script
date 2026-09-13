@@ -236,6 +236,7 @@ library cryptol-saw-core
     bytestring,
     containers,
     data-inttrie >= 0.1.4,
+    directory,
     executable-path,
     filepath,
     integer-gmp,
