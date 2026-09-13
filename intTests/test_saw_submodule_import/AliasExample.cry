@@ -1,0 +1,6 @@
+module AliasExample where
+
+submodule Sub where
+  demo = True
+
+submodule Alias = submodule Sub
