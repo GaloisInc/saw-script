@@ -1,0 +1,67 @@
+// This test ensures that the cryptol-saw-core instance prover always
+// selects the appropriate rules to construct dictionaries and
+// discharge numeric constraints.
+
+let {{
+  example : {m} (m == 2) => [m] -> [m]
+  example xs = xs
+
+  fin_add : {m, n} (fin m, fin n) => [m + n]
+  fin_add = reverse zero
+
+  fin_mul : {m, n} (fin m, fin n) => [m * n]
+  fin_mul = reverse zero
+
+  fin_sub : {m, n} (fin m, fin n, m >= n) => [m - n]
+  fin_sub = reverse zero
+
+  fin_div : {m, n} (fin m, fin n, n >= 1) => [m / n]
+  fin_div = reverse zero
+
+  fin_cdiv : {m, n} (fin m, fin n, n >= 1) => [m /^ n]
+  fin_cdiv = reverse zero
+
+  geq_0 : {n} (fin n) => [n]
+  geq_0 = zext []
+}};
+
+print_term {{ example`{2} }};
+
+// PZeroSeqBool v. PZeroSeq
+print_term {{ zero`{[8][8]} }};
+
+// PLogicSeqBool v. PLogicSeq
+print_term {{ complement`{[8][8]} }};
+
+// PRingSeqBool v. PRingSeq
+print_term {{ (*)`{[8][8]} }};
+
+// PEqSeqBool v. PEqSeq
+print_term {{ (==)`{[8][8]} }};
+
+// PCmpSeqBool v. PCmpSeq
+print_term {{ (<=)`{[8][8]} }};
+
+// PSignedCmpSeqBool v. PSignedCmpSeq
+print_term {{ (<=$)`{[8][8]} }};
+
+// PFin_TCNum v. unsafeAssumePFin
+print_term {{ and`{8} }};
+
+// PFin_tcAdd v. unsafeAssumePFin
+print_term (unfold_term ["fin_add"] {{ fin_add }});
+
+// PFin_tcMul v. unsafeAssumePFin
+print_term (unfold_term ["fin_mul"] {{ fin_mul }});
+
+// PFin_tcSub v. unsafeAssumePFin
+print_term (unfold_term ["fin_sub"] {{ fin_sub }});
+
+// PFin_tcDiv v. unsafeAssumePFin
+print_term (unfold_term ["fin_div"] {{ fin_div }});
+
+// PFin_tcCeilDiv v. unsafeAssumePFin
+print_term (unfold_term ["fin_cdiv"] {{ fin_cdiv }});
+
+// PGeq_0 v. unsafeAssumePGeq
+print_term (unfold_term ["geq_0"] {{ geq_0 }});
