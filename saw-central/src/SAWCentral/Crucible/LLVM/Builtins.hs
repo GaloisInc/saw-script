@@ -31,6 +31,8 @@ module SAWCentral.Crucible.LLVM.Builtins
     , llvm_extract
     , llvm_compositional_extract
     , llvm_verify
+    , llvm_verify_fixpoint
+    , llvm_verify_fixpoint_chc
     , llvm_refine_spec
     , llvm_array_size_profile
     , llvm_setup_with_tag
@@ -79,7 +81,7 @@ import Prelude hiding (fail)
 import qualified Control.Exception as X
 import           Control.Lens
 
-import           Control.Monad (foldM, forM, replicateM, unless, when)
+import           Control.Monad (foldM, forM, replicateM, unless, when, zipWithM)
 import           Control.Monad.Fail (MonadFail(..))
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Reader (runReaderT)
@@ -156,6 +158,8 @@ import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.MemType as Crucible
 import qualified Lang.Crucible.LLVM.PrettyPrint as Crucible
 import           Lang.Crucible.LLVM.QQ( llvmOvr )
+import qualified Lang.Crucible.LLVM.SimpleLoopFixpoint as Crucible.LLVM.Fixpoint
+import qualified Lang.Crucible.LLVM.SimpleLoopFixpointCHC as Crucible.LLVM.FixpointCHC
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 
 import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as Crucible
@@ -297,6 +301,63 @@ llvm_verify (Some lm) nm lemmas checkSat setup tactic =
      lemmas' <- checkModuleCompatibility lm lemmas
      withMethodSpec checkSat lm nm setup $ \cc method_spec ->
        do (stats, vcs, _) <- verifyMethodSpec cc method_spec lemmas' checkSat tactic Nothing
+          let lemmaSet = Set.fromList (map (view MS.psSpecIdent) lemmas')
+          end <- io getCurrentTime
+          let diff = diffUTCTime end start
+          ps <- io (MS.mkProvedSpec MS.SpecProved method_spec stats vcs lemmaSet diff)
+          returnLLVMProof $ SomeLLVM ps
+
+-- | Which loop fixpoint strategy to use during symbolic execution.
+data FixpointSelect
+  = NoFixpoint
+  | SimpleFixpoint TypedTerm
+  | SimpleFixpointCHC TypedTerm
+
+-- | Like 'llvm_verify', but with user-supplied loop fixpoint support.
+-- This enables verification of LLVM bitcode containing loops with symbolic
+-- bounds by providing a fixpoint function that describes how loop state
+-- evolves across iterations.
+llvm_verify_fixpoint ::
+  Some LLVMModule        ->
+  Text                   ->
+  [SomeLLVM MS.ProvedSpec] ->
+  Bool                   ->
+  TypedTerm              {- ^ fixpoint function -} ->
+  LLVMCrucibleSetupM ()  ->
+  ProofScript ()         ->
+  TopLevel (SomeLLVM MS.ProvedSpec)
+llvm_verify_fixpoint (Some lm) nm lemmas checkSat fixpointFn setup tactic =
+  do start <- io getCurrentTime
+     lemmas' <- checkModuleCompatibility lm lemmas
+     withMethodSpec checkSat lm nm setup $ \cc method_spec ->
+       do (stats, vcs, _) <-
+            verifyMethodSpecWithFixpoint cc method_spec lemmas' checkSat
+              (SimpleFixpoint fixpointFn) tactic Nothing
+          let lemmaSet = Set.fromList (map (view MS.psSpecIdent) lemmas')
+          end <- io getCurrentTime
+          let diff = diffUTCTime end start
+          ps <- io (MS.mkProvedSpec MS.SpecProved method_spec stats vcs lemmaSet diff)
+          returnLLVMProof $ SomeLLVM ps
+
+-- | Like 'llvm_verify', but with CHC-based automated loop fixpoint inference.
+-- SAW will attempt to automatically infer loop invariants using Constrained
+-- Horn Clause (CHC) solving.
+llvm_verify_fixpoint_chc ::
+  Some LLVMModule        ->
+  Text                   ->
+  [SomeLLVM MS.ProvedSpec] ->
+  Bool                   ->
+  TypedTerm              {- ^ CHC hint function -} ->
+  LLVMCrucibleSetupM ()  ->
+  ProofScript ()         ->
+  TopLevel (SomeLLVM MS.ProvedSpec)
+llvm_verify_fixpoint_chc (Some lm) nm lemmas checkSat chcFn setup tactic =
+  do start <- io getCurrentTime
+     lemmas' <- checkModuleCompatibility lm lemmas
+     withMethodSpec checkSat lm nm setup $ \cc method_spec ->
+       do (stats, vcs, _) <-
+            verifyMethodSpecWithFixpoint cc method_spec lemmas' checkSat
+              (SimpleFixpointCHC chcFn) tactic Nothing
           let lemmaSet = Set.fromList (map (view MS.psSpecIdent) lemmas')
           end <- io getCurrentTime
           let diff = diffUTCTime end start
@@ -673,6 +734,82 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
             )
 
 
+-- | Like 'verifyMethodSpec', but with loop fixpoint support.
+verifyMethodSpecWithFixpoint ::
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts::Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , ?checkAllocSymInit :: Bool
+  , ?singleOverrideSpecialCase :: Bool
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
+  LLVMCrucibleContext arch ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
+  [MS.ProvedSpec (LLVM arch)] ->
+  Bool ->
+  FixpointSelect ->
+  ProofScript () ->
+  Maybe (IORef (Map Text.Text [Crucible.FunctionProfile])) ->
+  TopLevel (SolverStats, [MS.VCStats], OverrideState (LLVM arch))
+verifyMethodSpecWithFixpoint cc methodSpec lemmas checkSat fixpointSel tactic asp =
+  ccWithBackend cc $ \bak ->
+  do printOutLnTop Info $ Text.unpack $
+         "Verifying " <> (methodSpec ^. csName) <> " (with fixpoint)..."
+
+     let sym = cc^.ccSym
+
+     profFile <- rwProfilingFile <$> getTopLevelRW
+     (writeFinalProfile, pfs) <- io $ Common.setupProfiling sym "llvm_verify" profFile
+
+     mdMap <- io $ newIORef mempty
+
+     let globals = cc^.ccLLVMGlobals
+     let mvar = Crucible.llvmMemVar (ccLLVMContext cc)
+     let mem0 = lookupMemGlobal mvar globals
+     let mem = case methodSpec^.csParentName of
+               Just parent -> mem0
+                 { Crucible.memImplHeap = Crucible.pushStackFrameMem
+                   (mconcat [methodSpec ^. csName, "#", parent])
+                   (Crucible.memImplHeap mem0)
+                 }
+               Nothing -> mem0
+
+     let globals1 = Crucible.llvmGlobals mvar mem
+
+     opts <- getOptions
+     (args, assumes, env, globals2) <-
+       io $ verifyPrestate opts cc methodSpec globals1
+
+     when (detectVacuity opts)
+       $ Vacuity.checkAssumptionsForContradictions sym methodSpec tactic assumes
+
+     frameIdent <- io $ Crucible.pushAssumptionFrame bak
+
+     printOutLnTop Info $ Text.unpack $
+         "Simulating " <> (methodSpec ^. csName) <> " (with fixpoint)..."
+     top_loc <- toW4Loc "llvm_verify" <$> getPosition
+     (ret, globals3, invSubst) <-
+       verifySimulateWithFixpoint opts cc pfs fixpointSel methodSpec args assumes
+         top_loc lemmas globals2 checkSat asp mdMap env
+
+     (asserts, post_override_state) <-
+       verifyPoststate cc
+       methodSpec env globals3 ret
+       mdMap
+       invSubst
+
+     _ <- io $ Crucible.popAssumptionFrame bak frameIdent
+
+     printOutLnTop Info $ Text.unpack $
+         "Checking proof obligations " <> (methodSpec ^. csName) <> "..."
+     (stats, vcstats) <- verifyObligations cc methodSpec tactic assumes asserts
+     io $ writeFinalProfile
+
+     return ( stats
+            , vcstats
+            , post_override_state
+            )
 
 
 refineMethodSpec ::
@@ -1449,6 +1586,249 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
                             (Crucible.regValue retval)
                      return (Just (ret_mt, v))
             return (retval', globals1, MapF.empty)
+
+       Crucible.TimeoutResult _ -> fail $ "Symbolic execution timed out"
+
+       Crucible.AbortedResult _ ar ->
+         do let resultDoc = ppAbortedResult cc ar
+            fail $ unlines [ "Symbolic execution failed."
+                           , show resultDoc
+                           ]
+
+
+-- | Like 'verifySimulate', but with loop fixpoint support.
+-- Sets up fixpoint execution features and processes CHC results.
+verifySimulateWithFixpoint ::
+  ( ?lc :: Crucible.TypeContext
+  , ?memOpts::Crucible.MemOptions
+  , ?w4EvalTactic :: W4EvalTactic
+  , ?checkAllocSymInit :: Bool
+  , ?singleOverrideSpecialCase :: Bool
+  , Crucible.HasPtrWidth wptr
+  , wptr ~ Crucible.ArchWidth arch
+  , Crucible.HasLLVMAnn Sym
+  ) =>
+  Options ->
+  LLVMCrucibleContext arch ->
+  [Crucible.GenericExecutionFeature Sym] ->
+  FixpointSelect ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
+  [(Crucible.MemType, LLVMVal)] ->
+  [Crucible.LabeledPred Term AssumptionReason] ->
+  W4.ProgramLoc ->
+  [MS.ProvedSpec (LLVM arch)] ->
+  Crucible.SymGlobalState Sym ->
+  Bool ->
+  Maybe (IORef (Map Text.Text [Crucible.FunctionProfile])) ->
+  IORef MetadataMap ->
+  Map AllocIndex (LLVMPtr wptr) ->
+  TopLevel (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym, MapF (W4.SymFnWrapper Sym) (W4.SymFnWrapper Sym))
+verifySimulateWithFixpoint opts cc pfs fixpointSel mspec args assumes top_loc lemmas globals checkSat asp mdMap allocEnv =
+  io $ withCfgAndBlockId opts cc mspec $ \cfg entryId -> ccWithBackend cc $ \bak -> do
+     let sym = cc^.ccSym
+     let sc = sawCoreSharedContext sym
+     let sawst = sawCoreState sym
+     let mvar = Crucible.llvmMemVar (ccLLVMContext cc)
+     let argTys = Crucible.blockInputs $
+           Crucible.getBlock entryId $ Crucible.cfgBlockMap cfg
+     let retTy = Crucible.handleReturnType $ Crucible.cfgHandle cfg
+
+     args' <- prepareArgs sym argTys (map snd args)
+     let simCtx = cc^.ccLLVMSimContext
+     psatf <-
+       Crucible.pathSatisfiabilityFeature sym
+         (Crucible.considerSatisfiability bak)
+     let patSatGenExecFeature = if checkSat then [psatf] else []
+     when checkSat checkYicesVersion
+
+     -- Set up loop fixpoint features
+     (fixpointFeatures, maybe_fixpoint_ref) <-
+       case fixpointSel of
+         NoFixpoint -> return ([], Nothing)
+         SimpleFixpoint func -> do
+           f <- Crucible.LLVM.Fixpoint.simpleLoopFixpoint sym cfg mvar $
+             \fixpoint_substitution condition ->
+               do let fixpoint_substitution_as_list = reverse $ MapF.toList fixpoint_substitution
+                  let body_exprs = map (mapSome $ Crucible.LLVM.Fixpoint.bodyValue) (MapF.elems fixpoint_substitution)
+                  let uninterpreted_constants = foldMap
+                        (viewSome $ Set.map (mapSome $ W4.varExpr sym) . W4.exprUninterpConstants sym)
+                        (Some condition : body_exprs)
+                  let filtered_uninterpreted_constants = Set.toList $ Set.filter
+                        (\(Some variable) ->
+                          not (elem True $ map (\p -> take (length p) (show $ W4.printSymExpr variable) == p)
+                            ["creg_join_var", "cmem_join_var", "cundefined", "calign_amount"]))
+                        uninterpreted_constants
+                  body_tms <- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants
+                  implicit_parameters <- scVariables sc $ Map.toList $ foldMap getAllVarsMap body_tms
+                  arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
+                    toSC sym sawst $ Crucible.LLVM.Fixpoint.headerValue fixpoint_entry
+                  applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ arguments
+                  applied_func_selectors <-
+                    forM [0 .. length fixpoint_substitution_as_list - 1] $
+                    scTupleSelector sc applied_func
+                  result_substitution <- MapF.fromList <$> zipWithM
+                    (\(MapF.Pair variable _) applied_func_selector ->
+                      MapF.Pair variable <$> bindSAWTerm sym sawst (W4.exprType variable) applied_func_selector)
+                    fixpoint_substitution_as_list
+                    applied_func_selectors
+                  -- Compute the induction step condition
+                  explicit_parameters <- forM fixpoint_substitution_as_list $ \(MapF.Pair variable _) ->
+                    toSC sym sawst variable
+                  inner_func <- do
+                    mm <- scGetModuleMap sc
+                    case asConstant (ttTerm func) of
+                      Just nm' ->
+                        case lookupVarIndexInMap (nameIndex nm') mm of
+                          Just (ResolvedDef (defBody -> Just body)) ->
+                            case asApplyAll body of
+                              (isGlobalDef "Prelude.fix" -> Just (), [_, f]) -> pure f
+                              _ -> fail "fixpoint function is not Prelude.fix"
+                          _ -> fail "fixpoint function not found in module"
+                      Nothing -> fail "fixpoint function is not a constant"
+                  func_body <- betaNormalize sc
+                    =<< scApplyAll sc inner_func ((ttTerm func) : (implicit_parameters ++ explicit_parameters))
+                  step_arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
+                    toSC sym sawst $ Crucible.LLVM.Fixpoint.bodyValue fixpoint_entry
+                  tail_applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ step_arguments
+                  explicit_parameters_tuple <- scTuple sc explicit_parameters
+                  let lhs = Prelude.last step_arguments
+                  w <- scNat sc 64
+                  let implicit_parameter_head =
+                        case implicit_parameters of
+                          ip:_ -> ip
+                          [] -> error "setupSimpleLoopFixpointFeature: No implicit parameters"
+                  rhs <- scBvMul sc w implicit_parameter_head =<< scBvNat sc w =<< scNat sc 128
+                  loop_condition <- scBvULt sc w lhs rhs
+                  output_tuple_type <- scTupleType sc =<< mapM (scTypeOf sc) explicit_parameters
+                  loop_body <- scIte sc output_tuple_type loop_condition tail_applied_func explicit_parameters_tuple
+                  induction_step_condition <- scEq sc loop_body func_body
+                  result_condition <- bindSAWTerm sym sawst W4.BaseBoolRepr induction_step_condition
+                  return (result_substitution, result_condition)
+           return ([f], Nothing)
+         SimpleFixpointCHC func -> do
+           (f, ref) <- Crucible.LLVM.FixpointCHC.simpleLoopFixpoint sym cfg mvar $ Just $
+             \fixpoint_substitution condition ->
+               do let fixpoint_substitution_as_list = reverse $ MapF.toList fixpoint_substitution
+                  let header_exprs = map (mapSome $ Crucible.LLVM.FixpointCHC.headerValue) (MapF.elems fixpoint_substitution)
+                  let body_exprs = map (mapSome $ Crucible.LLVM.FixpointCHC.bodyValue) (MapF.elems fixpoint_substitution)
+                  let uninterpreted_constants = foldMap
+                        (viewSome $ Set.map (mapSome $ W4.varExpr sym) . W4.exprUninterpConstants sym)
+                        (Some condition : body_exprs ++ header_exprs)
+                  let filtered_uninterpreted_constants = Set.toList $ Set.filter
+                        (\(Some variable) ->
+                          not (elem True $ map (\p -> take (length p) (show $ W4.printSymExpr variable) == p)
+                            ["cindex_var", "creg_join_var", "cmem_join_var", "cundefined", "calign_amount"]))
+                        uninterpreted_constants
+                  tms <- mapM (viewSome $ toSC sym sawst) filtered_uninterpreted_constants
+                  implicit_parameters <- scVariables sc $ Map.toList $ foldMap getAllVarsMap tms
+                  arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
+                    toSC sym sawst $ Crucible.LLVM.FixpointCHC.headerValue fixpoint_entry
+                  arguments_tuple <- scTuple sc arguments
+                  applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ [arguments_tuple]
+                  applied_func_selectors <-
+                    forM [0 .. length fixpoint_substitution_as_list - 1] $
+                    scTupleSelector sc applied_func
+                  result_substitution <- MapF.fromList <$> zipWithM
+                    (\(MapF.Pair variable _) applied_func_selector ->
+                      MapF.Pair variable <$> bindSAWTerm sym sawst (W4.exprType variable) applied_func_selector)
+                    fixpoint_substitution_as_list
+                    applied_func_selectors
+                  explicit_parameters <- forM fixpoint_substitution_as_list $ \(MapF.Pair variable _) ->
+                    toSC sym sawst variable
+                  explicit_parameters_tuple <- scTuple sc explicit_parameters
+                  inner_func <- do
+                    mm <- scGetModuleMap sc
+                    case asConstant (ttTerm func) of
+                      Just nm' ->
+                        case lookupVarIndexInMap (nameIndex nm') mm of
+                          Just (ResolvedDef (defBody -> Just body)) ->
+                            case asApplyAll body of
+                              (isGlobalDef "Prelude.fix" -> Just (), [_, f]) -> pure f
+                              _ -> fail "fixpoint function is not Prelude.fix"
+                          _ -> fail "fixpoint function not found in module"
+                      Nothing -> fail "fixpoint function is not a constant"
+                  func_body <- betaNormalize sc
+                    =<< scApplyAll sc inner_func ((ttTerm func) : (implicit_parameters ++ [explicit_parameters_tuple]))
+                  step_arguments <- forM fixpoint_substitution_as_list $ \(MapF.Pair _ fixpoint_entry) ->
+                    toSC sym sawst $ Crucible.LLVM.FixpointCHC.bodyValue fixpoint_entry
+                  step_arguments_tuple <- scTuple sc step_arguments
+                  tail_applied_func <- scApplyAll sc (ttTerm func) $ implicit_parameters ++ [step_arguments_tuple]
+                  loop_condition <- toSC sym sawst condition
+                  output_tuple_type <- scTupleType sc =<< mapM (scTypeOf sc) explicit_parameters
+                  loop_body <- scIte sc output_tuple_type loop_condition tail_applied_func explicit_parameters_tuple
+                  induction_step_condition <- scEq sc loop_body func_body
+                  result_condition <- bindSAWTerm sym sawst W4.BaseBoolRepr induction_step_condition
+                  return (result_substitution, Just result_condition)
+           return ([f], Just ref)
+
+     let (funcLemmas, invLemmas) =
+           partition (isNothing . view csParentName)
+                     (map (view MS.psSpec) lemmas)
+
+     cutpoints <-
+       forM (neGroupOn (view csParentName) invLemmas) $ \specs ->
+       do let parent = fromJust $ (NE.head specs) ^. csParentName
+          let cutpoint_names = nubOrd $
+                map (Crucible.CutpointName . view csName) (NE.toList specs)
+          withCfg opts cc (Text.unpack parent) $ \parent_cfg ->
+            return
+              ( Crucible.SomeHandle (Crucible.cfgHandle parent_cfg)
+              , cutpoint_names
+              )
+
+     invariantExecFeatures <-
+       mapM
+       (registerInvariantOverride opts cc top_loc mdMap (HashMap.fromList cutpoints))
+       (neGroupOn (view csName) invLemmas)
+
+     additionalFeatures <-
+       mapM (Crucible.arraySizeProfile (ccLLVMContext cc)) $ maybeToList asp
+
+     let execFeatures =
+           fixpointFeatures ++
+           invariantExecFeatures ++
+           map Crucible.genericToExecutionFeature (patSatGenExecFeature ++ pfs) ++
+           additionalFeatures
+
+     let initExecState =
+           Crucible.InitialState simCtx globals Crucible.defaultAbortHandler retTy $
+           Crucible.runOverrideSim retTy $
+           do mapM_ (registerOverride opts cc simCtx top_loc mdMap)
+                    (neGroupOn (view csName) funcLemmas)
+              registerVtableOverrides opts cc simCtx top_loc mdMap
+                mspec funcLemmas allocEnv
+              liftIO $
+                for_ assumes $ \(Crucible.LabeledPred p (md, reason)) ->
+                  do expr <- resolveSAWPred cc p
+                     let loc = MS.conditionLoc md
+                     Crucible.addAssumption bak
+                       (Crucible.GenericAssumption loc reason expr)
+              Crucible.regValue <$> (Crucible.callBlock cfg entryId args')
+     res <- Crucible.executeCrucible execFeatures initExecState
+     case res of
+       Crucible.FinishedResult _ partialResult ->
+         do Crucible.GlobalPair retval globals1 <-
+              Common.getGlobalPair opts partialResult
+            let ret_ty = mspec ^. MS.csRet
+            retval' <-
+              case ret_ty of
+                Nothing -> return Nothing
+                Just ret_mt ->
+                  do v <- Crucible.packMemValue sym
+                            (fromMaybe (error ("Expected storable type:" ++ show ret_ty))
+                                 (Crucible.toStorableType ret_mt))
+                            (Crucible.regType  retval)
+                            (Crucible.regValue retval)
+                     return (Just (ret_mt, v))
+            -- Process CHC fixpoint results
+            invSubst <- case maybe_fixpoint_ref of
+              Just fixpoint_state_ref -> do
+                uninterp_inv_fns <-
+                  Crucible.LLVM.FixpointCHC.executionFeatureContextInvPreds
+                    <$> readIORef fixpoint_state_ref
+                Crucible.runCHC bak uninterp_inv_fns
+              Nothing -> return MapF.empty
+            return (retval', globals1, invSubst)
 
        Crucible.TimeoutResult _ -> fail $ "Symbolic execution timed out"
 
