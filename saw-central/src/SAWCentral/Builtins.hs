@@ -311,8 +311,9 @@ import qualified Cryptol.TypeCheck.Solver.SMT as C (withSolver)
 import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst)
 import qualified Cryptol.Backend.Monad as C (runEval)
+import qualified Cryptol.Backend.WordValue as C (asWordVal)
 import qualified Cryptol.Eval.Type as C (evalType)
-import qualified Cryptol.Eval.Value as C (fromVBit, fromVWord)
+import qualified Cryptol.Eval.Value as C (fromVBit, fromVWord, GenValue(..))
 import qualified Cryptol.Eval.Concrete as C (Concrete(..), bvVal)
 import qualified Cryptol.Utils.Ident as C (packModName,
                                            textToModName, PrimIdent(..))
@@ -1901,11 +1902,24 @@ eval_bool_inner funName t = do
     malformed msg = fail $ funName ++ ": " ++ msg
 
 eval_int :: TypedTerm -> TopLevel Integer
-eval_int t = snd <$> eval_int_inner "eval_int" t
+eval_int t =
+  do sc <- getSharedContext
+     unless (closedTerm (ttTerm t)) $
+       fail "eval_int: term contains symbolic variables"
+     t' <- default_typed_term t
+     v <- io $ rethrowEvalError $ SV.evaluateTypedTerm sc t'
+     case v of
+       C.VWord wv ->
+         io $ C.runEval mempty (C.bvVal <$> C.asWordVal C.Concrete wv)
+       C.VInteger i ->
+         pure i
+       _ ->
+         fail "eval_int: argument is not a finite bitvector or integer"
 
--- | The workhorse for @eval_int@ and @mir_const@ (when its @MIRType@ argument
--- is @mir_char@ or a primitive integer type). This is parameterized by a
--- 'String', which is intended to represent the name of the caller function.
+-- | The workhorse for @mir_const@ (when its @MIRType@ argument is
+-- @mir_char@ or a primitive integer type).
+-- This is parameterized by a 'String', which is intended to represent
+-- the name of the caller function.
 -- This 'String' is only used for error message purposes.
 --
 -- This returns two 'Integer' values, where the first 'Integer' represents the
