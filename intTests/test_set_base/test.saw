@@ -1,0 +1,14 @@
+// Test that set_base works for valid bases and rejects invalid ones.
+
+// Valid bases should succeed.
+set_base 2;
+set_base 8;
+set_base 10;
+set_base 16;
+set_base 36;
+
+// Invalid bases should fail.
+fails (set_base 0);
+fails (set_base 1);
+fails (set_base 37);
+fails (set_base 100);
