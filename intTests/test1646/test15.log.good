@@ -367,17 +367,18 @@ show : {a} a -> String
 show_cfg : CFG -> String
 show_term : Term -> String
 simplify : Simpset -> ProofScript ()
-simplify_local : [Int] -> Simpset -> ProofScript ()
 simpset_union : Simpset -> Simpset -> Simpset
 size_to_term : Type -> Term
 str_concat : String -> String -> String
 str_concats : [String] -> sep?String -> String
+subproof : ProofScript () -> ProofScript ()
 tail : {a} [a] -> [a]
 term_apply : Term -> [Term] -> Term
 term_eval : Term -> Term
 term_eval_unint : [String] -> Term -> Term
 term_labels : Term -> ([String], Term)
 term_size : Term -> Int
+term_thm : Term -> Theorem
 term_tree_size : Term -> Int
 test_solver_cache_stats :
    Int -> Int -> Int -> Int -> Int -> TopLevel ()

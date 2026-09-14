@@ -75,11 +75,11 @@ assumptionsContainContradiction sym methodSpec tactic assumptions =
                   , goalName = show (methodSpec^.MS.csMethod)
                   , goalLoc  = show (W4.plSourceLoc ploc) ++ " in " ++ show (W4.plFunction ploc)
                   , goalDesc = "vacuousness check"
-                  , goalSequent = propToSequent goal'
+                  , goalProp = goal'
                   , goalTags = mempty
                   })
      res <- runProofScript tactic goal' pgl Nothing
-              "vacuousness check" False False
+              "vacuousness check" False
      case res of
        ValidProof _ _     -> return True
        InvalidProof _ _ _ -> return False

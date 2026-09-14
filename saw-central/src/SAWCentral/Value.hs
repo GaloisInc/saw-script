@@ -1162,7 +1162,6 @@ data TopLevelRW =
   , rwPathSatSolver :: Common.PathSatSolver
   , rwSkipSafetyProofs :: Bool
   , rwSingleOverrideSpecialCase :: Bool
-  , rwSequentGoals :: Bool
   }
 
 newtype TopLevel a =
@@ -1667,9 +1666,8 @@ runProofScript ::
   Maybe ProgramLoc ->
   Text ->
   Bool {- ^ record the theorem in the database? -} ->
-  Bool {- ^ do we need to normalize the sequent goal? -} ->
   TopLevel ProofResult
-runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
+runProofScript (ProofScript m) concl gl ploc rsn recordThm =
   do pos <- getPosition
      ps <- io (startProof gl pos ploc rsn)
      (r,pstate) <- runStateT (runExceptT m) ps
@@ -1679,7 +1677,7 @@ runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
          do sc <- getSharedContext
             db <- getTheoremDB
             what4PushMuxOps <- gets rwWhat4PushMuxOps
-            (thmResult, db') <- io (finishProof sc db concl pstate recordThm useSequentGoals what4PushMuxOps)
+            (thmResult, db') <- io (finishProof sc db concl pstate recordThm what4PushMuxOps)
             putTheoremDB db'
             pure thmResult
 
