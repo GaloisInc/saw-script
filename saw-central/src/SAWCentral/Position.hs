@@ -166,16 +166,19 @@ getSourceText pos = case pos of
         else if Text.null txt then Nothing
         else
             -- end of the line (zero-based)
-            let lineEnd = case Text.findIndex (\ch -> ch == '\n') txt of
-                  Nothing -> Text.length txt
-                  Just col -> col
+            let line1 =
+                  -- Take up to the first whole line of the file, and
+                  -- drop any carriage return that might lurk at the
+                  -- end.
+                  let (rawLine, _) = Text.break (\ch -> ch == '\n') txt in
+                  if Text.isSuffixOf "\r" rawLine then Text.dropEnd 1 rawLine
+                  else rawLine
             in
             -- zero-based resultant start and end columns
             let scz = sc - 1
-                ecz = if el > sl then lineEnd else ec - 1
+                ecz = if el > sl then Text.length line1 else ec - 1
             in
-            let line1 = Text.take lineEnd txt
-                ul = Text.replicate (if ecz == scz then 1 else ecz - scz) "^"
+            let ul = Text.replicate (if ecz == scz then 1 else ecz - scz) "^"
                 line2 = Text.replicate scz " " <> ul
             in
             Just (line1, line2)
