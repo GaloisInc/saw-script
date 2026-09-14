@@ -65,7 +65,8 @@ mkIntroRule sc t0 =
 -- | A set of 'IntroRule's, indexed by conclusion in a a
 -- 'TermNet.Net'.
 
--- The 'Int' keys record the order in which rules were inserted.
+-- The 'Int' argument counts the number of inserted rules.
+-- The 'Int' keys record the count when each rule was inserted.
 -- Newer rules take priority over older rules.
 data IntroRuleSet = IntroRuleSet !Int (TermNet.Net (Int, IntroRule))
 
@@ -84,6 +85,7 @@ insertIntroRuleSet r (IntroRuleSet i net) =
 proveWithIntros :: SharedContext -> IntroRuleSet -> Term -> IO (Either Term Term)
 proveWithIntros sc (IntroRuleSet _ net) t0 = runExceptT (solve t0)
   where
+    -- Sort rules so that the highest-numbered goes first.
     solve :: Term -> ExceptT Term IO Term
     solve t = try (reverse rules) t
       where rules = map snd $ sortOn fst (TermNet.match_term net (termPat t))

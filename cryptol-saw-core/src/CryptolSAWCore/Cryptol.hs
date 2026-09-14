@@ -549,7 +549,7 @@ classIntroIdents =
   , "Cryptol.PZeroInteger"
   , "Cryptol.PZeroIntModNum"
   , "Cryptol.PZeroRational"
-  , "Cryptol.PZeroSeqBool"
+  , "Cryptol.PZeroSeqBool" -- prefer over PZeroSeq
   , "Cryptol.PZeroFloat"
   , "Cryptol.PZeroSeq"
   , "Cryptol.PZeroFun"
@@ -558,7 +558,7 @@ classIntroIdents =
   , "Cryptol.PZeroEmpty"
   , "Cryptol.PZeroRecord"
   , "Cryptol.PLogicBit"
-  , "Cryptol.PLogicSeqBool"
+  , "Cryptol.PLogicSeqBool" -- prefer over PLogicSeq
   , "Cryptol.PLogicSeq"
   , "Cryptol.PLogicFun"
   , "Cryptol.PLogicUnit"
@@ -568,7 +568,7 @@ classIntroIdents =
   , "Cryptol.PRingInteger"
   , "Cryptol.PRingIntModNum"
   , "Cryptol.PRingRational"
-  , "Cryptol.PRingSeqBool"
+  , "Cryptol.PRingSeqBool" -- prefer over PRingSeq
   , "Cryptol.PRingFloat"
   , "Cryptol.PRingSeq"
   , "Cryptol.PRingFun"
@@ -588,7 +588,7 @@ classIntroIdents =
   , "Cryptol.PEqIntModNum"
   , "Cryptol.PEqRational"
   , "Cryptol.PEqFloat"
-  , "Cryptol.PEqSeqBool"
+  , "Cryptol.PEqSeqBool" -- prefer over PEqSeq
   , "Cryptol.PEqSeq"
   , "Cryptol.PEqUnit"
   , "Cryptol.PEqPair"
@@ -598,13 +598,13 @@ classIntroIdents =
   , "Cryptol.PCmpInteger"
   , "Cryptol.PCmpRational"
   , "Cryptol.PCmpFloat"
-  , "Cryptol.PCmpSeqBool"
+  , "Cryptol.PCmpSeqBool" -- prefer over PCmpSeq
   , "Cryptol.PCmpSeq"
   , "Cryptol.PCmpUnit"
   , "Cryptol.PCmpPair"
   , "Cryptol.PCmpEmpty"
   , "Cryptol.PCmpRecord"
-  , "Cryptol.PSignedCmpSeqBool"
+  , "Cryptol.PSignedCmpSeqBool" -- prefer over PSignedCmpSeq
   , "Cryptol.PSignedCmpSeq"
   , "Cryptol.PSignedCmpUnit"
   , "Cryptol.PSignedCmpPair"
@@ -624,10 +624,10 @@ classIntroIdents =
   , "Cryptol.PFin_tcSub"
   , "Cryptol.PFin_tcDiv"
   , "Cryptol.PFin_tcCeilDiv"
-  , "Cryptol.unsafeAssumePFin"
-  , "Prelude.Refl"
+  , "Cryptol.unsafeAssumePFin" -- lowest priority of all PFin rules
+  , "Prelude.Refl" -- prefer over unsafeAssert
   , "Prelude.unsafeAssert"
-  , "Cryptol.PGeq_0"
+  , "Cryptol.PGeq_0" -- prefer over unsafeAssumePGeq
   , "Cryptol.unsafeAssumePGeq"
   , "Cryptol.unsafeAssumePNeq"
   , "Cryptol.TruePropI"
