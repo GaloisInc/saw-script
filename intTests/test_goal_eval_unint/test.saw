@@ -1,0 +1,11 @@
+let {{
+  example : {m} (m == 2) => [m] -> [m]
+  example xs = xs
+}};
+
+prove_print
+  do {
+    goal_eval_unint ["example"];
+    trivial;
+  }
+  {{ \x -> example`{2} x == example x }};
