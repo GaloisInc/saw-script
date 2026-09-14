@@ -393,6 +393,35 @@ getNamingEnvOfImport modEnv impData =
         OnlyPublic       -> a `Set.member` publicNames
 
 
+-- | The names that module aliases contribute to an import.
+--
+--   A module alias (@submodule A = submodule B@) introduces no new
+--   `MN.Name`s: @A::x@ and @B::x@ are literally the same name.  So,
+--   unlike the members of an ordinary submodule, alias-qualified names
+--   cannot be recovered from a @Set MN.Name@; we instead pick them out
+--   of the naming environment that the renamer built for the module
+--   being imported.
+--
+modAliasNames ::
+  MR.NamingEnv         {- ^ what is in scope in the imported module -} ->
+  (MN.Name -> P.PName) {- ^ how names of the imported module are spelled -} ->
+  [MN.Name]            {- ^ the visible module aliases declared in it -} ->
+  MR.NamingEnv
+modAliasNames scopeEnv nameToPName aliases
+  | null aliases = mempty
+  | otherwise    = MN.filterPNames underAnAlias scopeEnv
+
+  where
+  -- a name is contributed by an alias when its qualifiers start with
+  -- the alias, e.g. `A::x` and `A::Inner::y` for the alias `A`
+  -- (`pNameChunks` of an alias being the qualifiers it introduces):
+  underAnAlias :: P.PName -> Bool
+  underAnAlias pn =
+    any (\a -> pNameChunks (nameToPName a) `isPrefixOf` pNameQualifiers pn)
+        aliases
+
+-- ImportCache and functions returning -------------------------------
+
 -- | What `getNamingEnvOfImport` needs to know about the module (or
 --   submodule) which is imported (in `ImportData`).  This allows
 --   to abstract over the `import` vs. `import submodule`.
@@ -419,6 +448,27 @@ data ImportCache = ImportCache
     --     - For top-level modules, use `MN.nameToPNameWithQualifiers`
     --       to preserve paths.
   }
+
+-- | The `ImportCache` for an `import modName`, where `modName` is a
+--   top-level (and loaded) module.
+cacheIfTop :: ME.ModuleEnv -> ImportVisibility -> C.ModName -> ImportCache
+cacheIfTop modEnv vis modName =
+  ImportCache
+    { icPath          = C.TopModule modName
+    , icScopeEnv      = ME.lmNamingEnv loadedMod
+    , icPublicNames   = MI.ifsPublic $ MI.ifNames $ ME.lmInterface loadedMod
+    , icImportedNames = namesOfLoadedModule loadedMod vis
+    , icNameToPName   = MN.nameToPNameWithQualifiers
+    }
+
+  where
+  -- the top-level loaded module being imported:
+  loadedMod :: ME.LoadedModule
+  loadedMod =
+    case ME.lookupModule modName modEnv of
+      Just lm -> lm
+      Nothing -> panic "cacheIfTop"
+                       ["cannot lookupModule: " <> CryPP.pp modName]
 
 -- | The `ImportCache` for an `import submodule nm`.  Note that when
 --   `nm` is a module alias, we follow it to what it refers to.
@@ -448,74 +498,6 @@ cacheIfNested modEnv vis nm =
       Nothing -> panic "cacheIfNested"
                        ["name: " <> Text.pack (show nm)]
 
--- | The `ImportCache` for an `import modName`, where `modName` is a
---   top-level (and loaded) module.
-cacheIfTop :: ME.ModuleEnv -> ImportVisibility -> C.ModName -> ImportCache
-cacheIfTop modEnv vis modName =
-  ImportCache
-    { icPath          = C.TopModule modName
-    , icScopeEnv      = ME.lmNamingEnv loadedMod
-    , icPublicNames   = MI.ifsPublic $ MI.ifNames $ ME.lmInterface loadedMod
-    , icImportedNames = namesOfLoadedModule loadedMod vis
-    , icNameToPName   = MN.nameToPNameWithQualifiers
-    }
-
-  where
-  -- the top-level loaded module being imported:
-  loadedMod :: ME.LoadedModule
-  loadedMod =
-    case ME.lookupModule modName modEnv of
-      Just lm -> lm
-      Nothing -> panic "cacheIfTop"
-                       ["cannot lookupModule: " <> CryPP.pp modName]
-
-
--- | The names that module aliases contribute to an import.
---
---   A module alias (@submodule A = submodule B@) introduces no new
---   `MN.Name`s: @A::x@ and @B::x@ are literally the same name.  So,
---   unlike the members of an ordinary submodule, alias-qualified names
---   cannot be recovered from a @Set MN.Name@; we instead pick them out
---   of the naming environment that the renamer built for the module
---   being imported.
---
-modAliasNames ::
-  MR.NamingEnv         {- ^ what is in scope in the imported module -} ->
-  (MN.Name -> P.PName) {- ^ how names of the imported module are spelled -} ->
-  [MN.Name]            {- ^ the visible module aliases declared in it -} ->
-  MR.NamingEnv
-modAliasNames scopeEnv nameToPName aliases
-  | null aliases = mempty
-  | otherwise    = MN.filterPNames underAnAlias scopeEnv
-
-  where
-  -- a name is contributed by an alias when its qualifiers start with
-  -- the alias, e.g. `A::x` and `A::Inner::y` for the alias `A`
-  -- (`pNameChunks` of an alias being the qualifiers it introduces):
-  underAnAlias :: P.PName -> Bool
-  underAnAlias pn =
-    any (\a -> pNameChunks (nameToPName a) `isPrefixOf` pNameQualifiers pn)
-        aliases
-
--- | The qualifiers of a `P.PName`: @["X","Y"]@ for @X::Y::z@ and @[]@
---   for @z@.
-pNameQualifiers :: P.PName -> [Text]
-pNameQualifiers pn = maybe [] C.modNameChunksText (P.getModName pn)
-
--- | A `P.PName` as its chunks: @["X","Y","z"]@ for @X::Y::z@.
-pNameChunks :: P.PName -> [Text]
-pNameChunks pn = pNameQualifiers pn ++ [identText (P.getIdent pn)]
-
-
--- | The module aliases declared in a loaded top-level module, at every
---   level of nesting.  (Empty when the module isn't loaded.)
-modAliasesOf :: ME.ModuleEnv -> C.ModName -> Map MN.Name (P.ImpName MN.Name)
-modAliasesOf modEnv modName =
-  case ME.lookupModule modName modEnv of
-    Just lm -> T.mModAliases (ME.lmModule lm)
-    Nothing -> Map.empty
-
-
 -- | The `C.ModPath` that a `P.ImpName` refers to, following a module
 --   alias (@submodule A = submodule B@) to its target.
 --
@@ -533,6 +515,26 @@ resolveModPath modEnv impName =
         fromMaybe impName $
           Map.lookup nm $ modAliasesOf modEnv (MN.nameTopModule nm)
 
+-- | The module aliases declared in a loaded top-level module, at every
+--   level of nesting.  (Empty when the module isn't loaded.)
+modAliasesOf :: ME.ModuleEnv -> C.ModName -> Map MN.Name (P.ImpName MN.Name)
+modAliasesOf modEnv modName =
+  case ME.lookupModule modName modEnv of
+    Just lm -> T.mModAliases (ME.lmModule lm)
+    Nothing -> Map.empty
+
+
+
+-- Utility-like functions ------------------------------------------------
+
+-- | The qualifiers of a `P.PName`: @["X","Y"]@ for @X::Y::z@ and @[]@
+--   for @z@.
+pNameQualifiers :: P.PName -> [Text]
+pNameQualifiers pn = maybe [] C.modNameChunksText (P.getModName pn)
+
+-- | A `P.PName` as its chunks: @["X","Y","z"]@ for @X::Y::z@.
+pNameChunks :: P.PName -> [Text]
+pNameChunks pn = pNameQualifiers pn ++ [identText (P.getIdent pn)]
 
 -- | Strip a module path prefix from a Name, to get a 'less' qualified
 --   name.  E.g., intuitively:
