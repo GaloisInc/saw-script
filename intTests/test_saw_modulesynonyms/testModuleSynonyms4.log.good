@@ -1,0 +1,71 @@
+Loading file "testModuleSynonyms4.saw"
+Error: Cryptol: [error] at testModuleSynonyms4.saw:12:21--12:29
+    Value not in scope: S::s_pri
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testModuleSynonyms4.saw:12:1-12:35 (at top level)
+
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testModuleSynonyms4.saw:15:21--15:31
+    Value not in scope: Syn::s_pri
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testModuleSynonyms4.saw:15:1-15:38 (at top level)
+
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testModuleSynonyms4.saw:16:21--16:34
+    Value not in scope: SynSyn::s_pri
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testModuleSynonyms4.saw:16:1-16:41 (at top level)
+
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testModuleSynonyms4.saw:20:21--20:44
+    Value not in scope: S::S_Inner::s_inner_pri
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testModuleSynonyms4.saw:20:1-20:51 (at top level)
+
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testModuleSynonyms4.saw:21:21--21:46
+    Value not in scope: Syn::S_Inner::s_inner_pri
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testModuleSynonyms4.saw:21:1-21:53 (at top level)
+
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testModuleSynonyms4.saw:25:21--25:49
+    Value not in scope: Syn::S_InnerSyn::s_inner_pri
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testModuleSynonyms4.saw:25:1-25:56 (at top level)
+
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testModuleSynonyms4.saw:26:21--26:52
+    Value not in scope: SynSyn::S_InnerSyn::s_inner_pri
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testModuleSynonyms4.saw:26:1-26:59 (at top level)
+
+(Failure was expected, continuing)
+Assuming a = Integer
+4
+Assuming a = Integer
+4
+Assuming a = Integer
+4
+Assuming a = Integer
+3
+Assuming a = Integer
+3
+Assuming a = Integer
+3
+Assuming a = Integer
+3

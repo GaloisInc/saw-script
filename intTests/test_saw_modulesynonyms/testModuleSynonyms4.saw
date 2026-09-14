@@ -1,0 +1,47 @@
+// Test: module aliases (aka submodule synonyms), i.e.
+//   submodule A = submodule B
+//
+// These tests are comparable to testModuleSynonyms2.saw, but they
+// ensure that aliases respect the 'public and private' import mechanism.
+// So here we replace `s_inner` with `s_inner_pri`
+
+import "Synonyms.cry" as M;
+
+/* ENSURE we can't access anything without M: *****************************/
+// private in submodule:
+fails (do{ print {{ S::s_pri }}; });
+
+// private in submodule, via aliases:
+fails (do{ print {{ Syn::s_pri }};  });
+fails (do{ print {{ SynSyn::s_pri }};  });
+
+
+// ... at any depth, and through nested aliases:
+fails (do{ print {{ S::S_Inner::s_inner_pri }};  });
+fails (do{ print {{ Syn::S_Inner::s_inner_pri }};  });
+
+
+// ... using aliases inside submodules (to refer to private vars):
+fails (do{ print {{ Syn::S_InnerSyn::s_inner_pri }};  });
+fails (do{ print {{ SynSyn::S_InnerSyn::s_inner_pri }};  });
+
+
+/* ENSURE everything can be accessed via M: *******************************/
+
+// private in submodule:
+print {{ M::S::s_pri }};
+
+
+// private in submodule, via aliases:
+print {{ M::Syn::s_pri }};
+print {{ M::SynSyn::s_pri }};
+
+
+// ... at any depth, and through nested aliases:
+print {{ M::S::S_Inner::s_inner_pri }};
+print {{ M::Syn::S_Inner::s_inner_pri }};
+
+
+// ... using aliases inside submodules (to refer to private vars):
+print {{ M::Syn::S_InnerSyn::s_inner_pri }};
+print {{ M::SynSyn::S_InnerSyn::s_inner_pri }};
