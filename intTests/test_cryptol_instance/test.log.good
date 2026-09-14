@@ -1,0 +1,77 @@
+Loading file "test.saw"
+let { _x`1 = TCNum 2; } in example _x`1 (Refl Num _x`1)
+let { _x`1 = TCNum 8;
+      _x`2 = seq _x`1 Bool;
+    }
+ in ecZero (seq _x`1 _x`2)
+      (PZeroSeq _x`1 _x`2 (PZeroSeqBool _x`1))
+let { _x`1 = TCNum 8;
+      _x`2 = seq _x`1 Bool;
+    }
+ in ecCompl (seq _x`1 _x`2)
+      (PLogicSeq _x`1 _x`2 (PLogicSeqBool _x`1))
+let { _x`1 = TCNum 8;
+      _x`2 = seq _x`1 Bool;
+    }
+ in ecMul (seq _x`1 _x`2)
+      (PRingSeq _x`1 _x`2 (PRingSeqBool _x`1))
+let { _x`1 = TCNum 8;
+      _x`2 = seq _x`1 Bool;
+    }
+ in ecEq (seq _x`1 _x`2) (PEqSeq _x`1 _x`2 (PEqSeqBool _x`1))
+let { _x`1 = TCNum 8;
+      _x`2 = seq _x`1 Bool;
+    }
+ in ecLtEq (seq _x`1 _x`2)
+      (PCmpSeq _x`1 _x`2 (PCmpSeqBool _x`1))
+let { _x`1 = TCNum 8;
+      _x`2 = seq _x`1 Bool;
+    }
+ in !?"<=$" (seq _x`1 _x`2)
+      (PSignedCmpSeq _x`1 _x`2 (PSignedCmpSeqBool _x`1))
+Cryptol::and (TCNum 8) (PFin_TCNum 8)
+\(m : Num) ->
+  \(n : Num) ->
+    let { _x`1 = tcAdd m n;
+        }
+     in \(_P : PFin m) ->
+          \(_P1 : PFin n) ->
+            ecReverse _x`1 Bool (PFin_tcAdd m n _P _P1)
+              (ecZero (seq _x`1 Bool) (PZeroSeqBool _x`1))
+\(m : Num) ->
+  \(n : Num) ->
+    let { _x`1 = tcMul m n;
+        }
+     in \(_P : PFin m) ->
+          \(_P1 : PFin n) ->
+            ecReverse _x`1 Bool (PFin_tcMul m n _P _P1)
+              (ecZero (seq _x`1 Bool) (PZeroSeqBool _x`1))
+\(m : Num) ->
+  \(n : Num) ->
+    let { _x`1 = tcSub m n;
+        }
+     in \(_P : PFin m) ->
+          \(_P1 : PFin n) ->
+            \(_P2 : PGeq m n) ->
+              ecReverse _x`1 Bool (PFin_tcSub m n _P)
+                (ecZero (seq _x`1 Bool) (PZeroSeqBool _x`1))
+\(m : Num) ->
+  \(n : Num) ->
+    let { _x`1 = tcDiv m n;
+        }
+     in \(_P : PFin m) ->
+          \(_P1 : PFin n) ->
+            \(_P2 : PGeq n (TCNum 1)) ->
+              ecReverse _x`1 Bool (PFin_tcDiv m n _P)
+                (ecZero (seq _x`1 Bool) (PZeroSeqBool _x`1))
+\(m : Num) ->
+  \(n : Num) ->
+    let { _x`1 = tcCeilDiv m n;
+        }
+     in \(_P : PFin m) ->
+          \(_P1 : PFin n) ->
+            \(_P2 : PGeq n (TCNum 1)) ->
+              ecReverse _x`1 Bool (PFin_tcCeilDiv m n _P)
+                (ecZero (seq _x`1 Bool) (PZeroSeqBool _x`1))
+\(n : Num) ->
+  \(_P : PFin n) -> zext n (TCNum 0) _P (PGeq_0 n) 0x

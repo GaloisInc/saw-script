@@ -538,13 +538,18 @@ importSchema sc env (C.Forall tparams props ty) =
 -- Each constant named in this list should have a type of the form
 -- @forall vars, hyps -> concl@, where @concl@ is a SAWCore
 -- proposition representing a Cryptol class constraint.
+--
+-- NOTE: The instance prover prioritizes rules according to the order
+-- in which they are added to the 'IntroRuleSet'.
+-- When there are multiple class intro rules with overlapping
+-- patterns, the preferred rule should be listed first.
 classIntroIdents :: [Ident]
 classIntroIdents =
   [ "Cryptol.PZeroBit"
   , "Cryptol.PZeroInteger"
   , "Cryptol.PZeroIntModNum"
   , "Cryptol.PZeroRational"
-  , "Cryptol.PZeroSeqBool"
+  , "Cryptol.PZeroSeqBool" -- prefer over PZeroSeq
   , "Cryptol.PZeroFloat"
   , "Cryptol.PZeroSeq"
   , "Cryptol.PZeroFun"
@@ -553,7 +558,7 @@ classIntroIdents =
   , "Cryptol.PZeroEmpty"
   , "Cryptol.PZeroRecord"
   , "Cryptol.PLogicBit"
-  , "Cryptol.PLogicSeqBool"
+  , "Cryptol.PLogicSeqBool" -- prefer over PLogicSeq
   , "Cryptol.PLogicSeq"
   , "Cryptol.PLogicFun"
   , "Cryptol.PLogicUnit"
@@ -563,7 +568,7 @@ classIntroIdents =
   , "Cryptol.PRingInteger"
   , "Cryptol.PRingIntModNum"
   , "Cryptol.PRingRational"
-  , "Cryptol.PRingSeqBool"
+  , "Cryptol.PRingSeqBool" -- prefer over PRingSeq
   , "Cryptol.PRingFloat"
   , "Cryptol.PRingSeq"
   , "Cryptol.PRingFun"
@@ -583,7 +588,7 @@ classIntroIdents =
   , "Cryptol.PEqIntModNum"
   , "Cryptol.PEqRational"
   , "Cryptol.PEqFloat"
-  , "Cryptol.PEqSeqBool"
+  , "Cryptol.PEqSeqBool" -- prefer over PEqSeq
   , "Cryptol.PEqSeq"
   , "Cryptol.PEqUnit"
   , "Cryptol.PEqPair"
@@ -593,13 +598,13 @@ classIntroIdents =
   , "Cryptol.PCmpInteger"
   , "Cryptol.PCmpRational"
   , "Cryptol.PCmpFloat"
-  , "Cryptol.PCmpSeqBool"
+  , "Cryptol.PCmpSeqBool" -- prefer over PCmpSeq
   , "Cryptol.PCmpSeq"
   , "Cryptol.PCmpUnit"
   , "Cryptol.PCmpPair"
   , "Cryptol.PCmpEmpty"
   , "Cryptol.PCmpRecord"
-  , "Cryptol.PSignedCmpSeqBool"
+  , "Cryptol.PSignedCmpSeqBool" -- prefer over PSignedCmpSeq
   , "Cryptol.PSignedCmpSeq"
   , "Cryptol.PSignedCmpUnit"
   , "Cryptol.PSignedCmpPair"
@@ -619,10 +624,10 @@ classIntroIdents =
   , "Cryptol.PFin_tcSub"
   , "Cryptol.PFin_tcDiv"
   , "Cryptol.PFin_tcCeilDiv"
-  , "Cryptol.unsafeAssumePFin"
-  , "Prelude.Refl"
+  , "Cryptol.unsafeAssumePFin" -- lowest priority of all PFin rules
+  , "Prelude.Refl" -- prefer over unsafeAssert
   , "Prelude.unsafeAssert"
-  , "Cryptol.PGeq_0"
+  , "Cryptol.PGeq_0" -- prefer over unsafeAssumePGeq
   , "Cryptol.unsafeAssumePGeq"
   , "Cryptol.unsafeAssumePNeq"
   , "Cryptol.TruePropI"
@@ -636,7 +641,9 @@ getInstanceRules sc =
      case result of
        Just rules -> pure rules
        Nothing ->
-         do mapM_ loadRule classIntroIdents
+         do -- More recent rules take priority in the IntroRuleSet, so
+            -- add them in reverse order.
+            mapM_ loadRule (reverse classIntroIdents)
             maybe emptyIntroRuleSet id <$> eInstances sc
   where
     loadRule :: Ident -> IO ()
