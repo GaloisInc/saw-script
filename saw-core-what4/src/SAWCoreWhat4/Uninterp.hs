@@ -524,7 +524,7 @@ parseUninterpreted' saw ref app ty =
         -- This happens when we are translating a symbolic variable with
         -- no arguments (see `parseUninterpretedTop`, first case)
         Nothing
-          | DoReturnTrip sym True st sc arg <- saw ->
+          | DoReturnTrip sym True st sc arg <- argTerm ->
             lift (bindSAWTerm sym st tyr =<< reconstructArgTerm arg sc [])
             
         Just (Arr fn w (x : xs) atms) ->
