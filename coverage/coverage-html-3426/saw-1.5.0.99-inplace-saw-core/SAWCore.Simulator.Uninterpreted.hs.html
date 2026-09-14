@@ -1,0 +1,262 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    2 </span>
+<span class="lineno">    3 </span>{- |
+<span class="lineno">    4 </span>Module      : SAWCore.Simulator.Uninterpreted
+<span class="lineno">    5 </span>Copyright   : Galois, Inc. 2026
+<span class="lineno">    6 </span>License     : BSD3
+<span class="lineno">    7 </span>Maintainer  : saw@galois.com
+<span class="lineno">    8 </span>Stability   : experimental
+<span class="lineno">    9 </span>Portability : non-portable (language extensions)
+<span class="lineno">   10 </span>
+<span class="lineno">   11 </span>Preprocessor for uninterpreted higher-order functions.
+<span class="lineno">   12 </span>-}
+<span class="lineno">   13 </span>
+<span class="lineno">   14 </span>module SAWCore.Simulator.Uninterpreted
+<span class="lineno">   15 </span>  ( generalizeHigherOrderFunctions
+<span class="lineno">   16 </span>  , isSimpleType
+<span class="lineno">   17 </span>  , isFirstOrderType
+<span class="lineno">   18 </span>  ) where
+<span class="lineno">   19 </span>
+<span class="lineno">   20 </span>import Control.Monad (filterM)
+<span class="lineno">   21 </span>import Data.Foldable (foldlM)
+<span class="lineno">   22 </span>import Data.IntMap (IntMap)
+<span class="lineno">   23 </span>import qualified Data.IntMap as IntMap
+<span class="lineno">   24 </span>import Data.IntSet (IntSet)
+<span class="lineno">   25 </span>import qualified Data.IntSet as IntSet
+<span class="lineno">   26 </span>import Data.Set (Set)
+<span class="lineno">   27 </span>import qualified Data.Set as Set
+<span class="lineno">   28 </span>
+<span class="lineno">   29 </span>import SAWCore.Module
+<span class="lineno">   30 </span>  ( Ctor(..)
+<span class="lineno">   31 </span>  , CtorArg(..)
+<span class="lineno">   32 </span>  , CtorArgStruct(..)
+<span class="lineno">   33 </span>  , DataType(..)
+<span class="lineno">   34 </span>  , ResolvedName(..)
+<span class="lineno">   35 </span>  , lookupVarIndexInMap
+<span class="lineno">   36 </span>  , resolvedNameType
+<span class="lineno">   37 </span>  )
+<span class="lineno">   38 </span>import SAWCore.Name (VarName(..), Name(..))
+<span class="lineno">   39 </span>import SAWCore.Recognizer
+<span class="lineno">   40 </span>import SAWCore.Rewriter
+<span class="lineno">   41 </span>import SAWCore.SharedTerm
+<span class="lineno">   42 </span>
+<span class="lineno">   43 </span>-- | Given a set of 'VarIndex'es representing constants with
+<span class="lineno">   44 </span>-- higher-order function types, search a term and collect every
+<span class="lineno">   45 </span>-- subterm that is a partial application of one such constant.
+<span class="lineno">   46 </span>-- The partial application should include as many arguments as
+<span class="lineno">   47 </span>-- necessary to make the resulting function first-order.
+<span class="lineno">   48 </span>--
+<span class="lineno">   49 </span>-- For each such partial application in the term, replace it with a
+<span class="lineno">   50 </span>-- fresh free variable that has a first-order function type.
+<span class="lineno">   51 </span>-- Also create a substitution suitable for use with 'scInstantiate'
+<span class="lineno">   52 </span>-- that maps each new variable to the original subterm.
+<span class="lineno">   53 </span>--
+<span class="lineno">   54 </span>-- For example, the SAWCore function @foldl@ has the following type:
+<span class="lineno">   55 </span>--
+<span class="lineno">   56 </span>-- @foldl : (a b : sort 0) -&gt; (n : Nat) -&gt; (b -&gt; a -&gt; b) -&gt; b -&gt; Vec n a -&gt; b@
+<span class="lineno">   57 </span>--
+<span class="lineno">   58 </span>-- Say the term has a subterm with @foldl@ applied to six arguments:
+<span class="lineno">   59 </span>-- @foldl Bool Bool 8 xor False 0x55@.
+<span class="lineno">   60 </span>-- The partial application @foldl Bool Bool 8 xor@ has the minimum
+<span class="lineno">   61 </span>-- number of arguments required to give it a first-order function
+<span class="lineno">   62 </span>-- type: @Bool -&gt; Vec 8 -&gt; Bool@.
+<span class="lineno">   63 </span>--
+<span class="lineno">   64 </span>-- Thus all occurrences of the subterm @foldl Bool Bool 8 xor@ are
+<span class="lineno">   65 </span>-- replaced with a new free variable @u@ of type @Bool -&gt; Vec 8 Bool
+<span class="lineno">   66 </span>-- -&gt; Bool@.
+<span class="lineno">   67 </span>--
+<span class="lineno">   68 </span>-- The final result will be a term containing @u False 0x55@, and
+<span class="lineno">   69 </span>-- a substitution mapping @u@ to @foldl Bool Bool 8 xor@.
+<span class="lineno">   70 </span>--
+<span class="lineno">   71 </span>-- The preprocessed term should now be suitable for use with a
+<span class="lineno">   72 </span>-- symbolic evaluation backend that supports uninterpreted first-order
+<span class="lineno">   73 </span>-- functions.
+<span class="lineno">   74 </span>
+<span class="lineno">   75 </span>generalizeHigherOrderFunctions ::
+<span class="lineno">   76 </span>  SharedContext -&gt; Set VarIndex -&gt; Term -&gt; IO (Term, IntMap Term)
+<span class="lineno">   77 </span><span class="decl"><span class="istickedoff">generalizeHigherOrderFunctions sc vs t0 =</span>
+<span class="lineno">   78 </span><span class="spaces">  </span><span class="istickedoff">do vs' &lt;- filterCandidates sc vs</span>
+<span class="lineno">   79 </span><span class="spaces">     </span><span class="istickedoff">pats &lt;- findFirstOrderApps <span class="nottickedoff">sc</span> vs' t0</span>
+<span class="lineno">   80 </span><span class="spaces">     </span><span class="istickedoff">(ss, sub) &lt;- mkSimpsetSub <span class="nottickedoff">sc</span> pats</span>
+<span class="lineno">   81 </span><span class="spaces">     </span><span class="istickedoff">((), t1) &lt;- rewriteSharedTerm sc ss t0</span>
+<span class="lineno">   82 </span><span class="spaces">     </span><span class="istickedoff">pure (t1, sub)</span></span>
+<span class="lineno">   83 </span>
+<span class="lineno">   84 </span>-- | Given a set of SAWCore constants identified by 'VarIndex', filter
+<span class="lineno">   85 </span>-- them and return the set of constants with higher-order function
+<span class="lineno">   86 </span>-- types.
+<span class="lineno">   87 </span>filterCandidates :: SharedContext -&gt; Set VarIndex -&gt; IO (Set VarIndex)
+<span class="lineno">   88 </span><span class="decl"><span class="istickedoff">filterCandidates sc vs =</span>
+<span class="lineno">   89 </span><span class="spaces">  </span><span class="istickedoff">Set.fromList &lt;$&gt; filterM (isHigherOrderVarIndex sc) (Set.toList vs)</span></span>
+<span class="lineno">   90 </span>
+<span class="lineno">   91 </span>-- | Look up the type of a SAWCore constant by the 'VarIndex' of its
+<span class="lineno">   92 </span>-- name, and return 'True' if it has a higher-order function type.
+<span class="lineno">   93 </span>isHigherOrderVarIndex :: SharedContext -&gt; VarIndex -&gt; IO Bool
+<span class="lineno">   94 </span><span class="decl"><span class="istickedoff">isHigherOrderVarIndex sc i =</span>
+<span class="lineno">   95 </span><span class="spaces">  </span><span class="istickedoff">do mm &lt;- scGetModuleMap sc</span>
+<span class="lineno">   96 </span><span class="spaces">     </span><span class="istickedoff">case lookupVarIndexInMap i mm of</span>
+<span class="lineno">   97 </span><span class="spaces">       </span><span class="istickedoff">Just r -&gt; not &lt;$&gt; isFirstOrderType sc (resolvedNameType r)</span>
+<span class="lineno">   98 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">pure False</span></span></span>
+<span class="lineno">   99 </span>
+<span class="lineno">  100 </span>-- | Given a list of 'Term' patterns, invent a variable for each.
+<span class="lineno">  101 </span>-- Build a 'Simpset' to turn the patterns into the corresponding
+<span class="lineno">  102 </span>-- variables and a substitution to convert them back.
+<span class="lineno">  103 </span>mkSimpsetSub :: SharedContext -&gt; [Term] -&gt; IO (Simpset a, IntMap Term)
+<span class="lineno">  104 </span><span class="decl"><span class="istickedoff">mkSimpsetSub _ [] = pure (emptySimpset, IntMap.empty)</span>
+<span class="lineno">  105 </span><span class="spaces"></span><span class="istickedoff">mkSimpsetSub sc (t : ts) =</span>
+<span class="lineno">  106 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">do (ss, sub) &lt;- mkSimpsetSub sc ts</span></span>
+<span class="lineno">  107 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">vn &lt;- scFreshVarName sc &quot;u&quot;</span></span>
+<span class="lineno">  108 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">let vars = getAllVars t</span></span>
+<span class="lineno">  109 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">ty &lt;- scTypeOf sc t</span></span>
+<span class="lineno">  110 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">ty' &lt;- scPiList sc vars ty</span></span>
+<span class="lineno">  111 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">v &lt;- scVariable sc vn ty'</span></span>
+<span class="lineno">  112 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">rhs &lt;- scApplyAll sc v =&lt;&lt; scVariables sc vars</span></span>
+<span class="lineno">  113 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">eq &lt;- scGlobalApply sc &quot;Prelude.Eq&quot; [ty, t, rhs]</span></span>
+<span class="lineno">  114 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">prop &lt;- scPiList sc vars eq</span></span>
+<span class="lineno">  115 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">let rule = ruleOfTerm prop Nothing</span></span>
+<span class="lineno">  116 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">let ss' = addRule rule ss</span></span>
+<span class="lineno">  117 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">f &lt;- scLambdaList sc vars t</span></span>
+<span class="lineno">  118 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">let sub' = IntMap.insert (vnIndex vn) f sub</span></span>
+<span class="lineno">  119 </span><span class="spaces">     </span><span class="istickedoff"><span class="nottickedoff">pure (ss', sub')</span></span></span>
+<span class="lineno">  120 </span>
+<span class="lineno">  121 </span>-- | Given a set of 'VarIndex'es representing constants with
+<span class="lineno">  122 </span>-- higher-order function types, search a term and collect every
+<span class="lineno">  123 </span>-- subterm that is a partial application of one such constant.
+<span class="lineno">  124 </span>-- The partial application should include as many arguments as
+<span class="lineno">  125 </span>-- necessary to make the resulting function first-order.
+<span class="lineno">  126 </span>--
+<span class="lineno">  127 </span>-- For example, the SAWCore function @foldl@ has the following type:
+<span class="lineno">  128 </span>--
+<span class="lineno">  129 </span>-- @foldl : (a b : sort 0) -&gt; (n : Nat) -&gt; (b -&gt; a -&gt; b) -&gt; b -&gt; Vec n a -&gt; b@
+<span class="lineno">  130 </span>--
+<span class="lineno">  131 </span>-- Say the term has a subterm with @foldl@ applied to six arguments:
+<span class="lineno">  132 </span>-- @foldl Bool Bool 8 xor False 0x55@.
+<span class="lineno">  133 </span>-- The final two arguments, @False@ and @0x55@, have simple non-function
+<span class="lineno">  134 </span>-- types, so they can be skipped over.
+<span class="lineno">  135 </span>-- However, the @xor@ argument has a function type, so the partial
+<span class="lineno">  136 </span>-- application must include it.
+<span class="lineno">  137 </span>-- Thus the result list will include @foldl Bool Bool 8 xor@, which
+<span class="lineno">  138 </span>-- has the first-order function type @Bool -&gt; Vec 8 Bool -&gt; Bool@.
+<span class="lineno">  139 </span>findFirstOrderApps :: SharedContext -&gt; Set VarIndex -&gt; Term -&gt; IO [Term]
+<span class="lineno">  140 </span><span class="decl"><span class="istickedoff">findFirstOrderApps sc vs t0 = snd &lt;$&gt; go (IntSet.empty, []) t0</span>
+<span class="lineno">  141 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  142 </span><span class="spaces">    </span><span class="istickedoff">-- foldlM :: (Foldable t, Monad m) =&gt; (b -&gt; a -&gt; m b) -&gt; b -&gt; t a -&gt; m b</span>
+<span class="lineno">  143 </span><span class="spaces">    </span><span class="istickedoff">go :: (IntSet, [Term]) -&gt; Term -&gt; IO (IntSet, [Term])</span>
+<span class="lineno">  144 </span><span class="spaces">    </span><span class="istickedoff">go acc@(seen, ts) t</span>
+<span class="lineno">  145 </span><span class="spaces">      </span><span class="istickedoff">| IntSet.member (termIndex t) seen = pure acc</span>
+<span class="lineno">  146 </span><span class="spaces">      </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> =</span>
+<span class="lineno">  147 </span><span class="spaces">          </span><span class="istickedoff">let seen' = IntSet.insert (termIndex t) seen in</span>
+<span class="lineno">  148 </span><span class="spaces">          </span><span class="istickedoff">-- Is this term a designated higher-order function applied to arguments?</span>
+<span class="lineno">  149 </span><span class="spaces">          </span><span class="istickedoff">case asConstant (fst (asApplyAll t)) of</span>
+<span class="lineno">  150 </span><span class="spaces">            </span><span class="istickedoff">Just nm</span>
+<span class="lineno">  151 </span><span class="spaces">              </span><span class="istickedoff">| <span class="tickonlyfalse">Set.member (nameIndex nm) vs</span> -&gt;</span>
+<span class="lineno">  152 </span><span class="spaces">                  </span><span class="istickedoff">-- If so, check whether the outermost argument has a</span>
+<span class="lineno">  153 </span><span class="spaces">                  </span><span class="istickedoff">-- simple type.</span>
+<span class="lineno">  154 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">case asApp t of</span></span>
+<span class="lineno">  155 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; pure (seen', ts)</span></span>
+<span class="lineno">  156 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">Just (_t1, t2) -&gt;</span></span>
+<span class="lineno">  157 </span><span class="spaces">                      </span><span class="istickedoff"><span class="nottickedoff">do ty2 &lt;- scTypeOf sc t2</span></span>
+<span class="lineno">  158 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">simple &lt;- isSimpleType sc ty2</span></span>
+<span class="lineno">  159 </span><span class="spaces">                         </span><span class="istickedoff"><span class="nottickedoff">case simple of</span></span>
+<span class="lineno">  160 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">-- If it's simple, then we don't need to</span></span>
+<span class="lineno">  161 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">-- record a pattern; recurse.</span></span>
+<span class="lineno">  162 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">True -&gt; foldlM go (seen', ts) (unwrapTermF t)</span></span>
+<span class="lineno">  163 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">-- If it's *not* simple, then record a</span></span>
+<span class="lineno">  164 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">-- pattern.</span></span>
+<span class="lineno">  165 </span><span class="spaces">                           </span><span class="istickedoff"><span class="nottickedoff">False -&gt; pure (seen', t : ts)</span></span>
+<span class="lineno">  166 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; foldlM go (seen', ts) (unwrapTermF t)</span></span>
+<span class="lineno">  167 </span>
+<span class="lineno">  168 </span>
+<span class="lineno">  169 </span>-- | Return true for any function type where all the argument types
+<span class="lineno">  170 </span>-- and the result type are simple types; return false otherwise.
+<span class="lineno">  171 </span>isFirstOrderType :: SharedContext -&gt; Term -&gt; IO Bool
+<span class="lineno">  172 </span><span class="decl"><span class="istickedoff">isFirstOrderType sc t =</span>
+<span class="lineno">  173 </span><span class="spaces">  </span><span class="istickedoff">do t' &lt;- scWhnf sc t</span>
+<span class="lineno">  174 </span><span class="spaces">     </span><span class="istickedoff">case asPi t' of</span>
+<span class="lineno">  175 </span><span class="spaces">       </span><span class="istickedoff">Just (_, a, b) -&gt;</span>
+<span class="lineno">  176 </span><span class="spaces">         </span><span class="istickedoff">do ok &lt;- isSimpleType sc a</span>
+<span class="lineno">  177 </span><span class="spaces">            </span><span class="istickedoff">if <span class="tickonlytrue">ok</span> then isFirstOrderType sc b else <span class="nottickedoff">pure False</span></span>
+<span class="lineno">  178 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt;</span>
+<span class="lineno">  179 </span><span class="spaces">         </span><span class="istickedoff">isSimpleType sc t'</span></span>
+<span class="lineno">  180 </span>
+<span class="lineno">  181 </span>-- | Return false for any type containing a function type.
+<span class="lineno">  182 </span>-- Return true for primitive base types, pairs or vectors of simple
+<span class="lineno">  183 </span>-- types, and non-recursive datatypes with only simple constructor
+<span class="lineno">  184 </span>-- argument types.
+<span class="lineno">  185 </span>-- Precondition: The type of the term argument should be a sort.
+<span class="lineno">  186 </span>isSimpleType :: SharedContext -&gt; Term -&gt; IO Bool
+<span class="lineno">  187 </span><span class="decl"><span class="istickedoff">isSimpleType sc t =</span>
+<span class="lineno">  188 </span><span class="spaces">  </span><span class="istickedoff">do t' &lt;- scWhnf sc t</span>
+<span class="lineno">  189 </span><span class="spaces">     </span><span class="istickedoff">case t' of</span>
+<span class="lineno">  190 </span><span class="spaces">       </span><span class="istickedoff">-- We consider type variables to be simple, optimistically</span>
+<span class="lineno">  191 </span><span class="spaces">       </span><span class="istickedoff">-- assuming that they will be instantiated with simple types.</span>
+<span class="lineno">  192 </span><span class="spaces">       </span><span class="istickedoff">(asVariable -&gt; Just _) -&gt; <span class="nottickedoff">pure True</span></span>
+<span class="lineno">  193 </span><span class="spaces">       </span><span class="istickedoff">-- Pi types are not simple.</span>
+<span class="lineno">  194 </span><span class="spaces">       </span><span class="istickedoff">(asPi -&gt; Just _) -&gt; <span class="nottickedoff">pure False</span></span>
+<span class="lineno">  195 </span><span class="spaces">       </span><span class="istickedoff">-- Sorts are simple.</span>
+<span class="lineno">  196 </span><span class="spaces">       </span><span class="istickedoff">(asSort -&gt; Just _) -&gt; <span class="nottickedoff">pure True</span></span>
+<span class="lineno">  197 </span><span class="spaces">       </span><span class="istickedoff">-- Primitive base types are simple.</span>
+<span class="lineno">  198 </span><span class="spaces">       </span><span class="istickedoff">(asGlobalDef -&gt; Just &quot;Prelude.String&quot;) -&gt; <span class="nottickedoff">pure True</span></span>
+<span class="lineno">  199 </span><span class="spaces">       </span><span class="istickedoff">(asGlobalDef -&gt; Just &quot;Prelude.Float&quot;) -&gt; <span class="nottickedoff">pure True</span></span>
+<span class="lineno">  200 </span><span class="spaces">       </span><span class="istickedoff">(asGlobalDef -&gt; Just &quot;Prelude.Double&quot;) -&gt; <span class="nottickedoff">pure True</span></span>
+<span class="lineno">  201 </span><span class="spaces">       </span><span class="istickedoff">(asRationalType -&gt; Just ()) -&gt; <span class="nottickedoff">pure True</span></span>
+<span class="lineno">  202 </span><span class="spaces">       </span><span class="istickedoff">(asIntegerType -&gt; Just ()) -&gt; <span class="nottickedoff">pure True</span></span>
+<span class="lineno">  203 </span><span class="spaces">       </span><span class="istickedoff">(asIntModType -&gt; Just _) -&gt; <span class="nottickedoff">pure True</span></span>
+<span class="lineno">  204 </span><span class="spaces">       </span><span class="istickedoff">-- Booleans and naturals are simple.</span>
+<span class="lineno">  205 </span><span class="spaces">       </span><span class="istickedoff">(asBoolType -&gt; Just ()) -&gt; pure True</span>
+<span class="lineno">  206 </span><span class="spaces">       </span><span class="istickedoff">(asNatType -&gt; Just ()) -&gt; <span class="nottickedoff">pure True</span></span>
+<span class="lineno">  207 </span><span class="spaces">       </span><span class="istickedoff">-- Vectors and pairs are simple if their arguments are.</span>
+<span class="lineno">  208 </span><span class="spaces">       </span><span class="istickedoff">(asVectorType -&gt; Just (_n, a)) -&gt; isSimpleType sc a</span>
+<span class="lineno">  209 </span><span class="spaces">       </span><span class="istickedoff">(asPairType -&gt; Just (a, b)) -&gt;</span>
+<span class="lineno">  210 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">allM (isSimpleType sc) [a, b]</span></span>
+<span class="lineno">  211 </span><span class="spaces">       </span><span class="istickedoff">-- Nonrecursive datatypes are simple if all their constructor</span>
+<span class="lineno">  212 </span><span class="spaces">       </span><span class="istickedoff">-- argument types are.</span>
+<span class="lineno">  213 </span><span class="spaces">       </span><span class="istickedoff">(asApplyAll -&gt; (asConstant -&gt; Just nm, args)) -&gt;</span>
+<span class="lineno">  214 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">do mm &lt;- scGetModuleMap sc</span></span>
+<span class="lineno">  215 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">-- look up name; if it's a datatype, then check all its arguments</span></span>
+<span class="lineno">  216 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">case lookupVarIndexInMap (nameIndex nm) mm of</span></span>
+<span class="lineno">  217 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">Just (ResolvedDataType dt) -&gt;</span></span>
+<span class="lineno">  218 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">do let sub = IntMap.fromList (zip (map (vnIndex . fst) (dtParams dt)) args)</span></span>
+<span class="lineno">  219 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">allM (checkCtorArgStruct sub . ctorArgStruct) (dtCtors dt)</span></span>
+<span class="lineno">  220 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; pure False</span></span>
+<span class="lineno">  221 </span><span class="spaces">       </span><span class="istickedoff">-- No other cases are considered simple.</span>
+<span class="lineno">  222 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">pure False</span></span>
+<span class="lineno">  223 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  224 </span><span class="spaces">    </span><span class="istickedoff">checkCtorArgStruct :: IntMap Term -&gt; CtorArgStruct -&gt; IO Bool</span>
+<span class="lineno">  225 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">checkCtorArgStruct sub cas =</span></span>
+<span class="lineno">  226 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">allM (checkCtorArg sub . snd) (ctorArgs cas)</span></span>
+<span class="lineno">  227 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  228 </span><span class="spaces">    </span><span class="istickedoff">checkCtorArg :: IntMap Term -&gt; CtorArg -&gt; IO Bool</span>
+<span class="lineno">  229 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">checkCtorArg sub carg =</span></span>
+<span class="lineno">  230 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case carg of</span></span>
+<span class="lineno">  231 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ConstArg ty -&gt; isSimpleType sc =&lt;&lt; scInstantiate sc sub ty</span></span>
+<span class="lineno">  232 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">RecursiveArg{} -&gt; pure False</span></span></span>
+<span class="lineno">  233 </span>
+<span class="lineno">  234 </span>
+<span class="lineno">  235 </span>allM :: (Monad m) =&gt; (a -&gt; m Bool) -&gt; [a] -&gt; m Bool
+<span class="lineno">  236 </span><span class="decl"><span class="nottickedoff">allM _ [] = pure True</span>
+<span class="lineno">  237 </span><span class="spaces"></span><span class="nottickedoff">allM f (x : xs) =</span>
+<span class="lineno">  238 </span><span class="spaces">  </span><span class="nottickedoff">do b &lt;- f x</span>
+<span class="lineno">  239 </span><span class="spaces">     </span><span class="nottickedoff">if b then allM f xs else pure False</span></span>
+
+</pre>
+</body>
+</html>
