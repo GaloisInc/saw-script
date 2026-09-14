@@ -376,7 +376,7 @@ getNamingEnvOfImport modEnv impData =
   -- the names that the module aliases (i.e., `submodule A = ...`
   -- declarations) inside the imported module contribute:
   aliasedNames :: MR.NamingEnv
-  aliasedNames = modAliasNames scopeEnv publicNames vis nameToPName aliases
+  aliasedNames = modAliasNames scopeEnv nameToPName visibleAliases
     where
     (scopeEnv, publicNames) =
       case info of
@@ -387,12 +387,20 @@ getNamingEnvOfImport modEnv impData =
           , MI.ifsPublic $ MI.ifNames $ ME.lmInterface loadedMod
           )
 
-    -- the aliases declared anywhere inside the imported module:
-    aliases =
+    -- the aliases declared anywhere inside the imported module, keeping
+    -- only those the visibility parameter allows us to bring in:
+    visibleAliases =
       [ a
       | a <- Map.keys $ modAliasesOf modEnv $ C.topModuleFor importedPath
       , C.modPathIsOrContains importedPath (MN.nameModPath a)
+      , visible a
       ]
+
+    visible :: MN.Name -> Bool
+    visible a =
+      case vis of
+        PublicAndPrivate -> True
+        OnlyPublic       -> a `Set.member` publicNames
 
   -- the path of the module (or submodule) being imported.  Note that
   -- for `import submodule A`, where `A` is a module alias, this is the
@@ -451,18 +459,19 @@ getNamingEnvOfImport modEnv impData =
 --
 --   NOTE: a module's scope exposes only the @public@ members of the
 --   modules nested inside it, so these names are public-only even when
---   the visibility is `PublicAndPrivate`.
+--   the caller's visibility is `PublicAndPrivate`.
+--
+--   The caller is responsible for filtering the aliases it passes in
+--   down to the ones that should be visible.
 --
 modAliasNames ::
   MR.NamingEnv         {- ^ what is in scope in the imported module -} ->
-  Set MN.Name          {- ^ the public names of the imported module -} ->
-  ImportVisibility     {- ^ what visibility to give the names -} ->
   (MN.Name -> P.PName) {- ^ how names of the imported module are spelled -} ->
-  [MN.Name]            {- ^ the module aliases declared in it -} ->
+  [MN.Name]            {- ^ the visible module aliases declared in it -} ->
   MR.NamingEnv
-modAliasNames scopeEnv publicNames vis nameToPName aliases
-  | null aliasQuals = mempty
-  | otherwise       = MN.filterPNames underAnAlias scopeEnv
+modAliasNames scopeEnv nameToPName aliases
+  | null aliases = mempty
+  | otherwise    = MN.filterPNames underAnAlias scopeEnv
 
   where
   -- a name is contributed by an alias when its qualifiers start with
@@ -470,19 +479,12 @@ modAliasNames scopeEnv publicNames vis nameToPName aliases
   underAnAlias :: P.PName -> Bool
   underAnAlias pn = any (`isPrefixOf` pNameQualifiers pn) aliasQuals
 
-  -- each visible alias, as the list of qualifiers it introduces:
+  -- each alias, as the list of qualifiers it introduces:
   aliasQuals :: [[Text]]
   aliasQuals = [ pNameQualifiers pn ++ [identText (P.getIdent pn)]
                | a <- aliases
-               , visible a
                , let pn = nameToPName a
                ]
-
-  visible :: MN.Name -> Bool
-  visible a =
-    case vis of
-      PublicAndPrivate -> True
-      OnlyPublic       -> a `Set.member` publicNames
 
 
 -- | The qualifiers of a `P.PName`: @["X","Y"]@ for @X::Y::z@ and @[]@
