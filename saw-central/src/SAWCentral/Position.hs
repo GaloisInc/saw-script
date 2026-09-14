@@ -175,7 +175,6 @@ getSourceText pos = case pos of
                 ecz = if el > sl then lineEnd else ec - 1
             in
             let line1 = Text.take lineEnd txt
-            --let line1 = "@" <> Text.pack (show lineEnd) <> " --" <> txt <> "--"
                 ul = Text.replicate (if ecz == scz then 1 else ecz - scz) "^"
                 line2 = Text.replicate scz " " <> ul
             in
