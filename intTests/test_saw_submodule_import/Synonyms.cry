@@ -1,0 +1,25 @@
+module Synonyms where
+
+// `S` and everything nested in it is what the module aliases (aka
+// submodule synonyms) below refer to.
+submodule S where
+  s = 1
+
+  submodule S_Inner where
+    s_inner = 2
+    private s_inner_pri = 3
+
+  // a module alias nested inside a submodule:
+  submodule S_InnerSyn = submodule S_Inner
+
+  private
+    s_pri = 4
+
+// a module alias for a submodule:
+submodule Syn = submodule S
+
+// a module alias for another module alias:
+submodule SynSyn = submodule Syn
+
+// a module alias for a top-level module:
+submodule CrySyn = Cryptol
