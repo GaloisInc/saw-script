@@ -3,7 +3,13 @@ unify004.saw:9:11-9:13: Error: Type mismatch.
     Expected: Int
     Found:    ()
 
+let x = q () ();
+          ^^
 unify004.saw:8:11-8:14: Note: The expected type Int arises from this explicit type name
+let q (a: Int) () = a;
+          ^^^
 unify004.saw:9:11-9:13: Note: The found type () arises from the form of this constant
+let x = q () ();
+          ^^
 
 FAILED

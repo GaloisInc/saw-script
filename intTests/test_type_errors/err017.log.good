@@ -3,7 +3,13 @@ err017.saw:11:11-11:12: Error: Type mismatch.
     Expected: { a : Int, b : Int }
     Found:    Int
 
+let y = f 3;
+          ^
 err017.saw:4:13-7:2: Note: The expected type { a : Int, b : Int } arises from this explicit type name
+typedef t = {
+            ^
 err017.saw:11:11-11:12: Note: The found type Int arises from the form of this constant
+let y = f 3;
+          ^
 
 FAILED

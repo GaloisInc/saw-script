@@ -1,5 +1,11 @@
 Loading file "err065.saw"
 err065.saw:7:13-7:14: Error: Too many arguments to function "f" of type Int -> (Int, Int)
+let y = f 4 5;
+            ^
 err065.saw:6:7-6:8: Note: The function type Int -> (Int, Int) arises from this parameter list...
+let f x = (x, 3);
+      ^
 err065.saw:6:11-6:17: Note: ...and this function body
+let f x = (x, 3);
+          ^^^^^^
 FAILED

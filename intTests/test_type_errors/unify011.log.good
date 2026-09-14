@@ -1,10 +1,18 @@
 Loading file "unify011.saw"
 unify011.saw:12:2-12:19: Error: Monadic bind of non-monadic value; rewrite as let-binding or use return
+(x : Int) <- "abc";
+ ^^^^^^^^^^^^^^^^^
 unify011.saw:12:14-12:19: Error: Type mismatch.
     Expected: Int
     Found:    String
 
+(x : Int) <- "abc";
+             ^^^^^
 unify011.saw:12:6-12:9: Note: The expected type Int arises from this explicit type name
+(x : Int) <- "abc";
+     ^^^
 unify011.saw:12:14-12:19: Note: The found type String arises from the form of this constant
+(x : Int) <- "abc";
+             ^^^^^
 
 FAILED

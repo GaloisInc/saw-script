@@ -3,7 +3,13 @@ unify006.saw:7:22-7:23: Error: Type mismatch.
     Expected: Bool
     Found:    Int
 
+let f (x : Int) = if x then 1 else 2;
+                     ^
 unify006.saw:7:22-7:23: Note: The expected type Bool arises from the context of this expression
+let f (x : Int) = if x then 1 else 2;
+                     ^
 unify006.saw:7:12-7:15: Note: The found type Int arises from this explicit type name
+let f (x : Int) = if x then 1 else 2;
+           ^^^
 
 FAILED

@@ -1,3 +1,5 @@
 Loading file "args017.saw"
 args017.saw:6:5-6:6: Error: Function has duplicate parameter names: x
+let g x?=3 () : q = f;
+    ^
 FAILED

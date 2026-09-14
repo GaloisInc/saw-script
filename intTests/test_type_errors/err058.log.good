@@ -1,4 +1,6 @@
 Loading file "err058.saw"
 0
 err058.saw:4:7-4:8: Error: Unbound variable: "_"
+print _;
+      ^
 FAILED

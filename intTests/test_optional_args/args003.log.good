@@ -7,8 +7,16 @@ args003.saw:7:6-7:29: Error: Mismatched named parameters.
     Expected: Int -> a?Int -> Int
     Found:    Int -> b?Int -> Int
 
+let (g : b?Int -> Int -> Int) (a?=0 : Int) (x : Int) = x;
+     ^^^^^^^^^^^^^^^^^^^^^^^
 args003.saw:7:31-7:52: Note: The expected type Int -> a?Int -> Int arises from this parameter list...
+let (g : b?Int -> Int -> Int) (a?=0 : Int) (x : Int) = x;
+                              ^^^^^^^^^^^^^^^^^^^^^
 args003.saw:7:56-7:57: Note: ...and this function body
+let (g : b?Int -> Int -> Int) (a?=0 : Int) (x : Int) = x;
+                                                       ^
 args003.saw:7:10-7:29: Note: The found type Int -> b?Int -> Int arises from this explicit type name
+let (g : b?Int -> Int -> Int) (a?=0 : Int) (x : Int) = x;
+         ^^^^^^^^^^^^^^^^^^^
 
 FAILED

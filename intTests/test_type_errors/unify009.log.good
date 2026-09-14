@@ -6,7 +6,13 @@ unify009.saw:21:6-21:19: Error: Type mismatch.
     Expected: Int -> String
     Found:    Int -> Int
 
+and (y: Int -> Int) (k : Int) = "abc";
+     ^^^^^^^^^^^^^
 unify009.saw:21:33-21:38: Note: The expected type String arises from the form of this constant
+and (y: Int -> Int) (k : Int) = "abc";
+                                ^^^^^
 unify009.saw:21:16-21:19: Note: The found type Int arises from this explicit type name
+and (y: Int -> Int) (k : Int) = "abc";
+               ^^^
 
 FAILED

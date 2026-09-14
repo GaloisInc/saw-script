@@ -1,6 +1,14 @@
 Loading file "err067.saw"
 err067.saw:7:1-7:2: Error: Too many arguments to function "f" of type Int -> Int -> TopLevel ()
+g 4 5;
+^
 err067.saw:3:7-3:10: Note: The function type Int -> Int -> TopLevel () arises from this parameter list...
+let f x y = print (x, y);
+      ^^^
 err067.saw:3:13-3:25: Note: ...and this function body
+let f x y = print (x, y);
+            ^^^^^^^^^^^^
 err067.saw:7:1-7:2: Did you forget a semicolon?
+g 4 5;
+^
 FAILED

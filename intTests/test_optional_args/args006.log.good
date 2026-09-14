@@ -7,8 +7,16 @@ args006.saw:13:13-13:17: Error: Mismatched named parameters.
     Expected: String -> String
     Found:    String -> t?String -> String
 
+print (plop honk);
+            ^^^^
 args006.saw:4:14-4:30: Note: The expected type String -> String arises from this explicit type name
+let plop (f: String -> String) = f "plop";
+             ^^^^^^^^^^^^^^^^
 args006.saw:6:10-6:13: Note: The found type String -> t?String -> String arises from this parameter list...
+let honk s t?=" honk" = str_concat s t;
+         ^^^
 args006.saw:6:25-6:39: Note: ...and this function body
+let honk s t?=" honk" = str_concat s t;
+                        ^^^^^^^^^^^^^^
 
 FAILED

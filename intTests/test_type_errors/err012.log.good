@@ -1,6 +1,10 @@
 Loading file "err012.saw"
 err012.saw:12:2-12:17: Error: Monadic bind with the wrong monad; found LLVMSetup but expected TopLevel
+(a : Int) <- f 3;
+ ^^^^^^^^^^^^^^^
 err012.saw:12:2-12:17: Historically this created the action without executing it; if you meant to do that, prefix the expression with return
+(a : Int) <- f 3;
+ ^^^^^^^^^^^^^^^
 err012.saw:12:14-12:17: Error: Type mismatch.
     Expected: TopLevel
     Found:    LLVMSetup
@@ -8,7 +12,13 @@ err012.saw:12:14-12:17: Error: Type mismatch.
     Expected: TopLevel Int
     Found:    LLVMSetup Int
 
+(a : Int) <- f 3;
+             ^^^
 err012.saw:12:2-12:17: Note: The expected type TopLevel arises from the context of this statement
+(a : Int) <- f 3;
+ ^^^^^^^^^^^^^^^
 <definition of llvm_assert>:1:9-1:18: Note: The found type LLVMSetup arises from this explicit type name
+Term -> LLVMSetup ()
+        ^^^^^^^^^
 
 FAILED

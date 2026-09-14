@@ -3,7 +3,13 @@ err019.saw:5:11-5:12: Error: Type mismatch.
     Expected: (Int, Int, Int, Int)
     Found:    (Int, Int, Int)
 
+let y = f x;
+          ^
 err019.saw:4:12-4:32: Note: The expected type (Int, Int, Int, Int) arises from this explicit type name
+let f (xx: (Int, Int, Int, Int)) = xx.0;
+           ^^^^^^^^^^^^^^^^^^^^
 err019.saw:3:9-3:18: Note: The found type (Int, Int, Int) arises from the form of this expression
+let x = (1, 2, 3);
+        ^^^^^^^^^
 
 FAILED

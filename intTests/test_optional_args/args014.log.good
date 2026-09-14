@@ -1,5 +1,11 @@
 Loading file "args014.saw"
 args014.saw:3:18-3:19: Warning: Redeclaration of x
+let f x?=3 () = \x?=4 () -> ();
+                 ^
 args014.saw:3:7-3:8: Previous declaration was here
+let f x?=3 () = \x?=4 () -> ();
+      ^
 args014.saw:3:5-3:6: Error: Function has duplicate parameter names: x
+let f x?=3 () = \x?=4 () -> ();
+    ^
 FAILED

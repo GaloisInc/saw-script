@@ -1,6 +1,14 @@
 Loading file "test08.saw"
 test08.saw:4:4-4:26: Error: Invalid use of 'rebindable'
+   let rebindable x = "a";
+   ^^^^^^^^^^^^^^^^^^^^^^
 test08.saw:4:4-4:26: It is only allowed at the syntactic top level
+   let rebindable x = "a";
+   ^^^^^^^^^^^^^^^^^^^^^^
 test08.saw:9:4-9:26: Error: Invalid use of 'rebindable'
+   let rebindable x = "b";
+   ^^^^^^^^^^^^^^^^^^^^^^
 test08.saw:9:4-9:26: It is only allowed at the syntactic top level
+   let rebindable x = "b";
+   ^^^^^^^^^^^^^^^^^^^^^^
 FAILED

@@ -1,3 +1,5 @@
 Loading file "err047.saw"
 err047.saw:3:13-3:16: Error: Cannot infer tuple arity for lookup of element 3; please use a type annotation
+let foo x = x.3;
+            ^^^
 FAILED

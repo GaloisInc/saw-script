@@ -1,3 +1,5 @@
 Loading file "err003.saw"
 err003.saw:3:16-3:27: Error: Unbound type variable Nonexistent
+   typedef t = Nonexistent;
+               ^^^^^^^^^^^
 FAILED

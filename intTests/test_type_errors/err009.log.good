@@ -1,6 +1,10 @@
 Loading file "err009.saw"
 err009.saw:4:1-4:44: Error: Monadic bind with the wrong monad; found LLVMSetup but expected TopLevel
+x <- llvm_fresh_cryptol_var "foo" {| [8] |};
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 err009.saw:4:1-4:44: Historically this created the action without executing it; if you meant to do that, prefix the expression with return
+x <- llvm_fresh_cryptol_var "foo" {| [8] |};
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 err009.saw:4:6-4:44: Error: Type mismatch.
     Expected: TopLevel
     Found:    LLVMSetup
@@ -8,7 +12,13 @@ err009.saw:4:6-4:44: Error: Type mismatch.
     Expected: TopLevel t.0
     Found:    LLVMSetup Term
 
+x <- llvm_fresh_cryptol_var "foo" {| [8] |};
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 err009.saw:4:1-4:44: Note: The expected type TopLevel arises from the context of this statement
+x <- llvm_fresh_cryptol_var "foo" {| [8] |};
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 <definition of llvm_fresh_cryptol_var>:1:19-1:28: Note: The found type LLVMSetup arises from this explicit type name
+String -> Type -> LLVMSetup Term
+                  ^^^^^^^^^
 
 FAILED

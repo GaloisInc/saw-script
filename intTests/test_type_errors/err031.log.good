@@ -1,3 +1,5 @@
 Loading file "err031.saw"
 err031.saw:5:9-5:13: Error: Kind mismatch: expected * -> * but found *
+let x : Bool Int = false;
+        ^^^^
 FAILED

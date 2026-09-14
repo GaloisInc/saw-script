@@ -1,81 +1,239 @@
 Loading file "warn001.saw"
 warn001.saw:15:5-15:6: Warning: Redeclaration of x
+let x = 3;
+    ^
 warn001.saw:11:5-11:6: Previous declaration was here
+let x = 3;
+    ^
 warn001.saw:16:5-16:6: Warning: Redeclaration of x
+let x = 4;
+    ^
 warn001.saw:15:5-15:6: Previous declaration was here
+let x = 3;
+    ^
 warn001.saw:17:10-17:11: Warning: Redeclaration of x
+do { let x = 5; return (); };
+         ^
 warn001.saw:16:5-16:6: Previous declaration was here
+let x = 4;
+    ^
 warn001.saw:18:14-18:15: Warning: Redeclaration of x
+let f0 = let x = 6 in ();
+             ^
 warn001.saw:16:5-16:6: Previous declaration was here
+let x = 4;
+    ^
 warn001.saw:19:17-19:18: Warning: Redeclaration of x
+let f1 () = let x = 6 in ();
+                ^
 warn001.saw:16:5-16:6: Previous declaration was here
+let x = 4;
+    ^
 warn001.saw:20:30-20:31: Warning: Redeclaration of x
+let f2 () = do { let a = let x = 6 in (); return (); };
+                             ^
 warn001.saw:16:5-16:6: Previous declaration was here
+let x = 4;
+    ^
 warn001.saw:21:22-21:23: Warning: Redeclaration of x
+let f3 () = do { let x = 6; return (); };
+                     ^
 warn001.saw:16:5-16:6: Previous declaration was here
+let x = 4;
+    ^
 warn001.saw:22:9-22:10: Warning: Redeclaration of x
+let f4 (x: Int) = ();
+        ^
 warn001.saw:16:5-16:6: Previous declaration was here
+let x = 4;
+    ^
 warn001.saw:23:21-23:22: Warning: Redeclaration of x
+let f5 () = let f6 (x: Int) = () in ();
+                    ^
 warn001.saw:16:5-16:6: Previous declaration was here
+let x = 4;
+    ^
 warn001.saw:24:34-24:35: Warning: Redeclaration of x
+let f7 () = do { return (let f8 (x: Int) = () in ()); };
+                                 ^
 warn001.saw:16:5-16:6: Previous declaration was here
+let x = 4;
+    ^
 warn001.saw:25:35-25:36: Warning: Redeclaration of x
+let f9 () = do { let a = let f10 (x: Int) = () in (); return (); };
+                                  ^
 warn001.saw:16:5-16:6: Previous declaration was here
+let x = 4;
+    ^
 warn001.saw:26:28-26:29: Warning: Redeclaration of x
+let f11 () = do { let f12 (x: Int) = (); return (); };
+                           ^
 warn001.saw:16:5-16:6: Previous declaration was here
+let x = 4;
+    ^
 warn001.saw:29:1-29:2: Warning: Redeclaration of x
+x <- return 3;
+^
 warn001.saw:16:5-16:6: Previous declaration was here
+let x = 4;
+    ^
 warn001.saw:30:1-30:2: Warning: Redeclaration of x
+x <- return 4;
+^
 warn001.saw:29:1-29:2: Previous declaration was here
+x <- return 3;
+^
 warn001.saw:31:6-31:7: Warning: Redeclaration of x
+do { x <- return 5; return (); };
+     ^
 warn001.saw:30:1-30:2: Previous declaration was here
+x <- return 4;
+^
 warn001.saw:32:19-32:20: Warning: Redeclaration of x
+let f13 () = do { x <- return 6; return (); };
+                  ^
 warn001.saw:30:1-30:2: Previous declaration was here
+x <- return 4;
+^
 warn001.saw:35:5-35:6: Warning: Redeclaration of y
+let y = 3;
+    ^
 warn001.saw:12:1-12:2: Previous declaration was here
+y <- return 3;
+^
 warn001.saw:36:5-36:6: Warning: Redeclaration of y
+let y = 4;
+    ^
 warn001.saw:35:5-35:6: Previous declaration was here
+let y = 3;
+    ^
 warn001.saw:37:10-37:11: Warning: Redeclaration of y
+do { let y = 5; return (); };
+         ^
 warn001.saw:36:5-36:6: Previous declaration was here
+let y = 4;
+    ^
 warn001.saw:38:15-38:16: Warning: Redeclaration of y
+let ff0 = let y = 6 in ();
+              ^
 warn001.saw:36:5-36:6: Previous declaration was here
+let y = 4;
+    ^
 warn001.saw:39:18-39:19: Warning: Redeclaration of y
+let ff1 () = let y = 6 in ();
+                 ^
 warn001.saw:36:5-36:6: Previous declaration was here
+let y = 4;
+    ^
 warn001.saw:40:31-40:32: Warning: Redeclaration of y
+let ff2 () = do { let a = let y = 6 in (); return (); };
+                              ^
 warn001.saw:36:5-36:6: Previous declaration was here
+let y = 4;
+    ^
 warn001.saw:41:23-41:24: Warning: Redeclaration of y
+let ff3 () = do { let y = 6; return (); };
+                      ^
 warn001.saw:36:5-36:6: Previous declaration was here
+let y = 4;
+    ^
 warn001.saw:42:10-42:11: Warning: Redeclaration of y
+let ff4 (y: Int) = ();
+         ^
 warn001.saw:36:5-36:6: Previous declaration was here
+let y = 4;
+    ^
 warn001.saw:43:23-43:24: Warning: Redeclaration of y
+let ff5 () = let ff6 (y: Int) = () in ();
+                      ^
 warn001.saw:36:5-36:6: Previous declaration was here
+let y = 4;
+    ^
 warn001.saw:44:36-44:37: Warning: Redeclaration of y
+let ff7 () = do { return (let ff8 (y: Int) = () in ()); };
+                                   ^
 warn001.saw:36:5-36:6: Previous declaration was here
+let y = 4;
+    ^
 warn001.saw:45:37-45:38: Warning: Redeclaration of y
+let ff9 () = do { return (let ff10 (y: Int) = () in ()); return (); };
+                                    ^
 warn001.saw:36:5-36:6: Previous declaration was here
+let y = 4;
+    ^
 warn001.saw:46:30-46:31: Warning: Redeclaration of y
+let ff11 () = do { let ff12 (y: Int) = (); return (); };
+                             ^
 warn001.saw:36:5-36:6: Previous declaration was here
+let y = 4;
+    ^
 warn001.saw:49:1-49:2: Warning: Redeclaration of y
+y <- return 3;
+^
 warn001.saw:36:5-36:6: Previous declaration was here
+let y = 4;
+    ^
 warn001.saw:50:1-50:2: Warning: Redeclaration of y
+y <- return 4;
+^
 warn001.saw:49:1-49:2: Previous declaration was here
+y <- return 3;
+^
 warn001.saw:51:6-51:7: Warning: Redeclaration of y
+do { y <- return 5; return (); };
+     ^
 warn001.saw:50:1-50:2: Previous declaration was here
+y <- return 4;
+^
 warn001.saw:52:20-52:21: Warning: Redeclaration of y
+let ff13 () = do { y <- return 6; return (); };
+                   ^
 warn001.saw:50:1-50:2: Previous declaration was here
+y <- return 4;
+^
 warn001.saw:56:24-56:26: Warning: Redeclaration of z0
+let g0 (z0: Int) = let z0 = 3 in ();
+                       ^^
 warn001.saw:56:9-56:11: Previous declaration was here
+let g0 (z0: Int) = let z0 = 3 in ();
+        ^^
 warn001.saw:57:37-57:39: Warning: Redeclaration of z1
+let g1 (z1: Int) = do { return (let z1 = 3 in ()); };
+                                    ^^
 warn001.saw:57:9-57:11: Previous declaration was here
+let g1 (z1: Int) = do { return (let z1 = 3 in ()); };
+        ^^
 warn001.saw:58:29-58:31: Warning: Redeclaration of z2
+let g2 (z2: Int) = do { let z2 = 3; return (); };
+                            ^^
 warn001.saw:58:9-58:11: Previous declaration was here
+let g2 (z2: Int) = do { let z2 = 3; return (); };
+        ^^
 warn001.saw:59:22-59:24: Warning: Redeclaration of z3
+do { return (let g3 (z3: Int) = let z3 = 3 in () in ()); };
+                     ^^
 [internal:<<builtin>>]: Previous declaration was here
 warn001.saw:59:37-59:39: Warning: Redeclaration of z3
+do { return (let g3 (z3: Int) = let z3 = 3 in () in ()); };
+                                    ^^
 warn001.saw:59:22-59:24: Previous declaration was here
+do { return (let g3 (z3: Int) = let z3 = 3 in () in ()); };
+                     ^^
 warn001.saw:60:29-60:31: Warning: Redeclaration of z4
+do { let g4 (z4: Int) = let z4 = 3 in (); return (); };
+                            ^^
 warn001.saw:60:14-60:16: Previous declaration was here
+do { let g4 (z4: Int) = let z4 = 3 in (); return (); };
+             ^^
 warn001.saw:61:25-61:27: Warning: Redeclaration of z6
+let g6 (z6: Int) = do { z6 <- return 3; return (); };
+                        ^^
 warn001.saw:61:9-61:11: Previous declaration was here
+let g6 (z6: Int) = do { z6 <- return 3; return (); };
+        ^^
 warn001.saw:62:30-62:32: Warning: Redeclaration of z7
+do { let g7 (z7: Int) = do { z7 <- return 3; return (); }; return (); };
+                             ^^
 warn001.saw:62:14-62:16: Previous declaration was here
+do { let g7 (z7: Int) = do { z7 <- return 3; return (); }; return (); };
+             ^^

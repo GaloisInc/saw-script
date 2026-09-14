@@ -1,3 +1,5 @@
 Loading file "err028.saw"
 err028.saw:5:9-5:15: Error: Kind mismatch: expected * -> * but found *
+let x : String Int = "abc";
+        ^^^^^^
 FAILED

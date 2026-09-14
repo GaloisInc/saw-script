@@ -3,7 +3,11 @@ Loading file "testGoodImport11.saw"
 ("MYSTRING", 5)
 12114
 testGoodImport11.saw:23:5-23:7: Warning: Redeclaration of d2
+let d2 = {{d2 + 1}};
+    ^^
 testGoodImport11.saw:13:5-13:7: Previous declaration was here
+let d2 = ("MYSTRING",5);
+    ^^
 12115
 12115
 done

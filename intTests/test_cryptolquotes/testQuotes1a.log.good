@@ -3,6 +3,10 @@ ss: p1a
 [115, 115, 58, 32, 112, 49, 97]
 [115, 115, 58, 32, 112, 49, 97]
 testQuotes1a.saw:9:5-9:7: Warning: Redeclaration of p1
+let p1 = "ss: p1b";
+    ^^
 testQuotes1a.saw:1:5-1:7: Previous declaration was here
+let p1 = "ss: p1a";
+    ^^
 ss: p1b
 [115, 115, 58, 32, 112, 49, 98]

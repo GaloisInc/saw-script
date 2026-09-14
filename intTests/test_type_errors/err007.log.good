@@ -3,9 +3,19 @@ err007.saw:2:1-2:4: Error: Type mismatch.
     Expected: TopLevel t.0
     Found:    [Int]
 
+[0];
+^^^
 err007.saw:2:1-2:4: Note: The expected type _ _ arises from the context of this statement
+[0];
+^^^
 err007.saw:2:1-2:4: Note: The expected type's monad TopLevel arises from the context of this statement
+[0];
+^^^
 err007.saw:2:1-2:4: Note: The expected type's 1st argument t.0 is a fresh type variable for a type implied here
+[0];
+^^^
 err007.saw:2:1-2:4: Note: The found type [Int] arises from the form of this expression
+[0];
+^^^
 
 FAILED

@@ -1,3 +1,5 @@
 Loading file "err029.saw"
 err029.saw:5:9-5:13: Error: Kind mismatch: expected * -> * but found *
+let x : Term Int = {{ 3 }};
+        ^^^^
 FAILED

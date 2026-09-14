@@ -1,5 +1,9 @@
 Loading file "test11.saw"
 test11.saw:6:8-6:9: Warning: Redeclaration of x
+   let x = 3;
+       ^
 test11.saw:3:16-3:17: Previous declaration was here
+let rebindable x = "a";
+               ^
 3
 b

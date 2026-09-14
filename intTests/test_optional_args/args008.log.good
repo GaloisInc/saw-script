@@ -1,3 +1,5 @@
 Loading file "args008.saw"
 args008.saw:6:11-6:12: Error: Unbound variable: "f"
+let f x?=(f x=0 ()) () = x;
+          ^
 FAILED

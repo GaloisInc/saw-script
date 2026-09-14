@@ -1,4 +1,8 @@
 Loading file "test09.saw"
 test09.saw:7:4-7:5: Warning: Redeclaration of x
+   x <- return 3;
+   ^
 test09.saw:4:16-4:17: Previous declaration was here
+let rebindable x = "a";
+               ^
 a

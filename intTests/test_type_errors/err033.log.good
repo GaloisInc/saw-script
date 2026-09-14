@@ -1,3 +1,5 @@
 Loading file "err033.saw"
 err033.saw:5:9-5:17: Error: Kind mismatch: expected * but found * -> *
+let x : TopLevel = false;
+        ^^^^^^^^
 FAILED

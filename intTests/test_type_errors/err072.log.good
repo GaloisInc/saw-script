@@ -7,8 +7,16 @@ err072.saw:18:15-18:16: Error: Occurs check failure.
     Expected: { a : [t.6], b : [t.6] }
     Found:    { a : [t.6], b : t.6 }
 
+   return [q, r];
+              ^
 err072.saw:15:16-15:18: Note: The expected type [_] arises from the form of this constant
+   e <- return [];
+               ^^
 err072.saw:15:16-15:18: Note: The expected type's element type t.6 is a fresh type variable for a type implied here
+   e <- return [];
+               ^^
 err072.saw:15:16-15:18: Note: The found type t.6 is a fresh type variable for a type implied here
+   e <- return [];
+               ^^
 
 FAILED

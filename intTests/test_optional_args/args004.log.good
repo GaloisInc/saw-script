@@ -1,3 +1,5 @@
 Loading file "args004.saw"
 args004.saw:5:7-5:23: Error: Functions may not have only named parameters; add ()
+let f (x?=0 : Int) = x;
+      ^^^^^^^^^^^^^^^^
 FAILED
