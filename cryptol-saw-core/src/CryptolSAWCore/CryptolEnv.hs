@@ -500,22 +500,22 @@ modAliasesOf modEnv modName =
     Nothing -> Map.empty
 
 
--- | The `C.ModPath` that a `P.ImpName` refers to, following module
---   aliases (@submodule A = submodule B@) to their target.
+-- | The `C.ModPath` that a `P.ImpName` refers to, following a module
+--   alias (@submodule A = submodule B@) to its target.
+--
+--   NOTE: one lookup suffices, as the targets in `T.mModAliases` are
+--   already fully resolved: the Cryptol renamer collapses chains of
+--   aliases (see `renameModuleAlias`, which records the result of its
+--   `resolveModAlias`) before the typechecker stores them.
+--
 resolveModPath :: ME.ModuleEnv -> P.ImpName MN.Name -> C.ModPath
-resolveModPath modEnv = go Set.empty
-  where
-  go :: Set MN.Name -> P.ImpName MN.Name -> C.ModPath
-  go _    (P.ImpTop modName) = C.TopModule modName
-  go seen (P.ImpNested nm)   =
-    case Map.lookup nm (modAliasesOf modEnv (MN.nameTopModule nm)) of
-      -- `nm` is an alias, so continue with what it refers to. The
-      -- `seen` check guards against a cycle, which the Cryptol renamer
-      -- should have rejected already.
-      Just target | not (nm `Set.member` seen) ->
-        go (Set.insert nm seen) target
-      _ ->
-        C.Nested (MN.nameModPath nm) (MN.nameIdent nm)
+resolveModPath modEnv impName =
+  P.impNameModPath $
+    case impName of
+      P.ImpTop _     -> impName
+      P.ImpNested nm ->
+        fromMaybe impName $
+          Map.lookup nm $ modAliasesOf modEnv (MN.nameTopModule nm)
 
 
 -- | Strip a module path prefix from a Name, to get a 'less' qualified
