@@ -7,12 +7,13 @@ submodule S where
 
   submodule S_Inner where
     s_inner = 2
+    private s_inner_pri = 3
 
   // a module alias nested inside a submodule:
   submodule S_InnerSyn = submodule S_Inner
 
   private
-    s_private = 3
+    s_pri = 4
 
 // a module alias for a submodule:
 submodule Syn = submodule S

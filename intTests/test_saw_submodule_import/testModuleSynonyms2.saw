@@ -24,6 +24,7 @@ print {{ SynSyn::S_InnerSyn::s_inner }};
 // an alias for a top-level module works too:
 print {{ CrySyn::min 4 5 }};
 
+
 /* *******************************
    `import submodule` follows aliases:
  */
@@ -34,15 +35,28 @@ print {{ s }};
 print {{ S_Inner::s_inner }};
 print {{ S_InnerSyn::s_inner }};
 
+
 /* *******************************
-  errors:
+   Aliases respect the 'public and private' import mechanism:
+   redoing above tests but replacing `s_inner` with `s_inner_pri`
  */
 
-print "\n";
-print "errors follow:";
-print "\n";
+// private in submodule:
+print {{ S::s_pri }};
 
-// NOTE: a module's scope exposes only the `public` members of the
-// modules nested in it, so `private` names are not reachable via an
-// alias (even though SAW's `import` does make `S::s_private` visible).
-fails (do{ print {{ Syn::s_private }}; }) ;
+// private in submodule, via aliases:
+print {{ Syn::s_pri }};
+print {{ SynSyn::s_pri }};
+
+
+// ... at any depth, and through nested aliases:
+print {{ S::S_Inner::s_inner_pri }};
+print {{ Syn::S_Inner::s_inner_pri }};
+
+// ... using aliases inside submodules:
+
+/*
+// FIXME: these should succeed but they fail:
+print {{ Syn::S_InnerSyn::s_inner_pri }};
+print {{ SynSyn::S_InnerSyn::s_inner_pri }};
+*/
