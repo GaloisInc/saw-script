@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
 {- |
@@ -29,8 +30,14 @@ import Data.IntTrie (IntTrie)
 import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Ratio ((%), numerator, denominator)
 import qualified Data.Text as Text
+import LibBF (BFOpts, BigFloat, Status)
+import qualified LibBF as BF
+import Numeric.Natural (Natural)
 
+import SAWCore.FiniteValue (FirstOrderFloat(..))
+import SAWCore.FloatHelpers
 import SAWCore.Module (ModuleMap)
 import SAWCore.Name
 import SAWCore.Panic (panic)
@@ -79,6 +86,7 @@ type instance EvalM Concrete = Identity
 type instance VBool Concrete = Bool
 type instance VWord Concrete = BitVector
 type instance VInt  Concrete = Integer
+type instance VFloat Concrete = FirstOrderFloat
 type instance VArray Concrete = ()
 type instance Extra Concrete = CExtra
 
@@ -134,6 +142,12 @@ pure2 f x y = pure (f x y)
 pure3 :: Applicative f => (a -> b -> c -> d) -> a -> b -> c -> f d
 pure3 f x y z = pure (f x y z)
 
+pure4 :: Applicative f => (a -> b -> c -> d -> e) -> a -> b -> c -> d -> f e
+pure4 f w x y z = pure (f w x y z)
+
+pure5 :: Applicative m => (a -> b -> c -> d -> e -> f) -> a -> b -> c -> d -> e -> m f
+pure5 f v w x y z = pure (f v w x y z)
+
 divOp :: (a -> b -> Maybe c) -> a -> b -> Identity c
 divOp f x y = maybe Prim.divideByZero pure (f x y)
 
@@ -156,6 +170,7 @@ prims =
   , Prims.bpMuxBool  = pure3 ite
   , Prims.bpMuxWord  = pure3 ite
   , Prims.bpMuxInt   = pure3 ite
+  , Prims.bpMuxFloat = pure3 ite
   , Prims.bpMuxArray = unsupportedConcretePrimitive "bpMuxArray"
   , Prims.bpMuxExtra = pure3 ite
     -- Booleans
@@ -221,6 +236,114 @@ prims =
   , Prims.bpIntMax = pure2 max
   , Prims.bpNatToInt = pure1 toInteger
 
+    -- Float operations
+  , Prims.bpFpAbs = pure1 (\x -> x { fofValue = BF.bfAbs (fofValue x) })
+  , Prims.bpFpAdd = fpBinArith BF.bfAdd
+  , Prims.bpFpCast = pure4 $ \e p r x ->
+      let opts = fpOpts e p (fpRoundMode r) in
+      x { fofValue = fpCheckStatus (BF.bfRoundFloat opts (fofValue x)) }
+  , Prims.bpFpDiv = fpBinArith BF.bfDiv
+  , Prims.bpFpFMA = pure4 $ \r x y z ->
+      let opts = fpOpts (fofExp x) (fofPrec x) (fpRoundMode r) in
+      x { fofValue = fpCheckStatus (BF.bfFMA opts (fofValue x) (fofValue y) (fofValue z)) }
+  , Prims.bpFpFromBits = pure3 $ \e p x ->
+      FirstOrderFloat
+        { fofExp = e
+        , fofPrec = p
+        , fofValue = floatFromBits e p (unsigned x)
+        }
+  , Prims.bpFpFromInteger = pure4 $ \e p r x ->
+      FirstOrderFloat
+        { fofExp = e
+        , fofPrec = p
+        , fofValue = fpCheckStatus (BF.bfRoundInt (fpRoundMode r) (BF.bfFromInteger x))
+        }
+  , Prims.bpFpFromRational = pure5 $ \e p r numer denom ->
+      FirstOrderFloat
+        { fofExp = e
+        , fofPrec = p
+        , fofValue = floatFromRational e p (fpRoundMode r) (numer % denom)
+        }
+  , Prims.bpFpFromBV = pure4 $ \e p r x ->
+      let opts = fpOpts e p (fpRoundMode r) in
+      FirstOrderFloat
+        { fofExp = e
+        , fofPrec = p
+        , fofValue = floatFromInteger opts (unsigned x)
+        }
+  , Prims.bpFpFromSBV = pure4 $ \e p r x ->
+      let opts = fpOpts e p (fpRoundMode r) in
+      FirstOrderFloat
+        { fofExp = e
+        , fofPrec = p
+        , fofValue = floatFromInteger opts (signed x)
+        }
+  , Prims.bpFpIeeeEq = pure2 (\x y -> fofValue x == fofValue y)
+  , Prims.bpFpIsInf = pure1 (\x -> BF.bfIsInf (fofValue x))
+  , Prims.bpFpIsNaN = pure1 (\x -> BF.bfIsNaN (fofValue x))
+  , Prims.bpFpIsNeg = pure1 (\x -> BF.bfIsNeg (fofValue x))
+  , Prims.bpFpIsNormal = pure1 $ \x ->
+      let opts = fpOpts (fofExp x) (fofPrec x) BF.NearEven in
+      BF.bfIsNormal opts (fofValue x)
+  , Prims.bpFpIsPos = pure1 (\x -> BF.bfIsPos (fofValue x))
+  , Prims.bpFpIsSubnormal = pure1 $ \x ->
+      let opts = fpOpts (fofExp x) (fofPrec x) BF.NearEven in
+      BF.bfIsSubnormal opts (fofValue x)
+  , Prims.bpFpIsZero = pure1 (\x -> BF.bfIsZero (fofValue x))
+  , Prims.bpFpLt = pure2 (\x y -> fofValue x < fofValue y)
+  , Prims.bpFpLogicalEq = pure2 (\x y -> BF.bfCompare (fofValue x) (fofValue y) == EQ)
+  , Prims.bpFpMul = fpBinArith BF.bfMul
+  , Prims.bpFpNaN = pure2 $ \e p ->
+      FirstOrderFloat
+        { fofExp = e
+        , fofPrec = p
+        , fofValue = BF.bfNaN
+        }
+  , Prims.bpFpNeg = pure1 (\x -> x { fofValue = BF.bfNeg (fofValue x) })
+  , Prims.bpFpPosInf = pure2 $ \e p ->
+      FirstOrderFloat
+        { fofExp = e
+        , fofPrec = p
+        , fofValue = BF.bfPosInf
+        }
+  , Prims.bpFpPosZero = pure2 $ \e p ->
+      FirstOrderFloat
+        { fofExp = e
+        , fofPrec = p
+        , fofValue = BF.bfPosZero
+        }
+  , Prims.bpFpRem = pure2 $ \x y ->
+      let opts = fpOpts (fofExp x) (fofPrec x) BF.NearEven in
+      x { fofValue = fpCheckStatus (BF.bfRem opts (fofValue x) (fofValue y)) }
+  , Prims.bpFpRound = pure2 $ \r x ->
+      let r' = fpRoundMode r in
+      let opts = fpOpts (fofExp x) (fofPrec x) r' in
+      let x' = fpCheckStatus (BF.bfRoundInt r' (fofValue x)) in
+      x { fofValue = fpCheckStatus (BF.bfRoundFloat opts x') }
+  , Prims.bpFpSqrt = pure2 $ \r x ->
+      let opts = fpOpts (fofExp x) (fofPrec x) (fpRoundMode r) in
+      x { fofValue = fpCheckStatus (BF.bfSqrt opts (fofValue x)) }
+  , Prims.bpFpSub = fpBinArith BF.bfSub
+  , Prims.bpFpToBits = pure1 $ \x ->
+      let e = fofExp x in
+      let p = fofPrec x in
+      bv (fromIntegral @Natural @Int (e+p)) (floatToBits e p (fofValue x))
+  , Prims.bpFpToBV = pure3 $ \w r x ->
+      case floatToBV w (fpRoundMode r) (fofValue x) of
+        Right i -> bv (fromIntegral @Natural @Int w) i
+        Left err -> error $ ppNotBitvectorError err
+  , Prims.bpFpToInteger = pure2 $ \r x ->
+      case floatToInteger (fpRoundMode r) (fofValue x) of
+        Right i -> i
+        Left err -> error $ ppNotRationalError err
+  , Prims.bpFpToRational = pure1 $ \x ->
+      case floatToRational (fofValue x) of
+        Right r -> (numerator r, denominator r)
+        Left err -> error $ ppNotRationalError err
+  , Prims.bpFpToSBV = pure3 $ \w r x ->
+      case floatToSBV w (fpRoundMode r) (fofValue x) of
+        Right i -> bv (fromIntegral @Natural @Int w) i
+        Left err -> error $ ppNotBitvectorError err
     -- Array operations
   , Prims.bpArrayConstant = unsupportedConcretePrimitive "bpArrayConstant"
   , Prims.bpArrayLookup = unsupportedConcretePrimitive "bpArrayLookup"
@@ -357,3 +480,22 @@ streamRecOp =
   Prims.Prim $
   do let f = vStrictFun $ \ix -> pure (streamGet (toStream xs) ix)
      apply f1 (ready f)
+
+------------------------------------------------------------
+
+fpBinArith ::
+  (BFOpts -> BigFloat -> BigFloat -> (BigFloat, Status)) ->
+  BitVector {- ^ Rouding mode -} ->
+  FirstOrderFloat ->
+  FirstOrderFloat ->
+  Identity FirstOrderFloat
+fpBinArith fun = pure3 $ \r x y ->
+  let opts = fpOpts (fofExp x) (fofPrec x) (fpRoundMode r) in
+  x { fofValue = fpCheckStatus (fun opts (fofValue x) (fofValue y)) }
+
+fpRoundMode :: BitVector -> BF.RoundMode
+fpRoundMode w =
+  let uw = unsigned w in
+  case fpRound uw of
+    Nothing -> error $ "Invalid rounding mode: " ++ show uw
+    Just a  -> a

@@ -26,6 +26,7 @@ From Stdlib Require Import Lists.List.
 From Stdlib Require        Numbers.NatInt.NZLog.
 From Stdlib Require Import Peano_dec.
 From Stdlib Require Import PeanoNat.
+From Stdlib Require Import QArith.QArith_base.
 From Stdlib Require Import Strings.String.
 #[local] Set Warnings "-stdlib-vector".
 From Stdlib Require Import Vectors.Vector.
@@ -39,6 +40,8 @@ From Stdlib Require Import PArith.
 #[local] Undelimit Scope N_scope.
 From CryptolToRocq Require Import SAWCoreScaffolding.
 
+From Flocq Require Import IEEE754.BinarySingleNaN.
+
 From mathcomp Require Import ssreflect.
 #[local] Set Warnings "-notation-overridden".
 From mathcomp Require Import ssrnat.
@@ -46,6 +49,9 @@ From mathcomp Require Import ssrnat.
 From mathcomp Require Import ssrbool.
 From mathcomp Require Import fintype.
 From mathcomp Require Import tuple.
+
+(* This defines notations that clash with nat's notations. *)
+Close Scope Q_scope.
 
 Import VectorNotations.
 
@@ -523,3 +529,94 @@ Definition bvAddOverflow n (a : bitvector n) (b : bitvector n) : bool :=
 Definition bvSubOverflow n (a : bitvector n) (b : bitvector n) : bool :=
   let c := bvSub n a b
    in ((sign a && ~~ sign b && ~~ sign c) || (~~ sign a && sign b && sign c))%bool.
+
+(***
+ *** Float-related definitions that require bitvectors
+ ***)
+
+Definition RoundingMode := bitvector 3.
+
+Definition fromRoundingMode (rm : RoundingMode) : mode :=
+  match rm with
+  | (* 0 *) [false; false; false] => mode_NE
+  | (* 1 *) [false; false; true]  => mode_NA
+  | (* 2 *) [false; true;  false] => mode_UP
+  | (* 3 *) [false; true;  true]  => mode_DN
+  | (* 4 *) [true;  false; false] => mode_ZR
+  | _ => mode_NE (* An arbitrary choice *)
+  end.
+
+Definition toRoundingMode (rm : mode) : RoundingMode :=
+  match rm with
+  | mode_NE => (* 0 *) [false; false; false]
+  | mode_NA => (* 1 *) [false; false; true]
+  | mode_UP => (* 2 *) [false; true;  false]
+  | mode_DN => (* 3 *) [false; true;  true]
+  | mode_ZR => (* 4 *) [true;  false; false]
+  end.
+
+(* A simple theorem which ensures we did the mapping from modes to
+ * RoundingModes correctly.
+ *)
+Theorem fromToRoundingMode :
+  forall (rm : mode), fromRoundingMode (toRoundingMode rm) = rm.
+Proof.
+destruct rm; trivial.
+Qed.
+
+Definition fpAdd (e p : nat) (rm : RoundingMode) : Float e p -> Float e p -> Float e p :=
+  fpAdd_mode e p (fromRoundingMode rm).
+
+Definition fpCast (e1 p1 e2 p2 : nat) (rm : RoundingMode) : Float e1 p1 -> Float e2 p2 :=
+  fpCast_mode e1 p1 e2 p2 (fromRoundingMode rm).
+
+Definition fpDiv (e p : nat) (rm : RoundingMode) : Float e p -> Float e p -> Float e p :=
+  fpDiv_mode e p (fromRoundingMode rm).
+
+Definition fpFMA (e p : nat) (rm : RoundingMode) : Float e p -> Float e p -> Float e p -> Float e p :=
+  fpFMA_mode e p (fromRoundingMode rm).
+
+Definition fpFromBits (e p : nat) (bits : bitvector (addNat e p)) : Float e p :=
+  fpFromBits_Z e p (bvToInt (addNat e p) bits).
+
+Definition fpFromBV (n e p : nat) (rm : RoundingMode) (bv : bitvector (n.+1)) : Float e p :=
+  fpFromInteger_mode e p (fromRoundingMode rm) (bvToInt (n.+1) bv).
+
+Definition fpFromInteger (e p : nat) (rm : RoundingMode) : Z -> Float e p :=
+  fpFromInteger_mode e p (fromRoundingMode rm).
+
+Definition fpFromRational (e p : nat) (rm : RoundingMode) : Q -> Float e p :=
+  fpFromRational_mode e p (fromRoundingMode rm).
+
+Definition fpFromSBV (n e p : nat) (rm : RoundingMode) (bv : bitvector (n.+1)) : Float e p :=
+  fpFromInteger_mode e p (fromRoundingMode rm) (sbvToInt (n.+1) bv).
+
+Definition fpMul (e p : nat) (rm : RoundingMode) : Float e p -> Float e p -> Float e p :=
+  fpMul_mode e p (fromRoundingMode rm).
+
+Definition fpRound (e p : nat) (rm : RoundingMode) : Float e p -> Float e p :=
+  fpRound_mode e p (fromRoundingMode rm).
+
+Definition fpSqrt (e p : nat) (rm : RoundingMode) : Float e p -> Float e p :=
+  fpSqrt_mode e p (fromRoundingMode rm).
+
+Definition fpSub (e p : nat) (rm : RoundingMode) : Float e p -> Float e p -> Float e p :=
+  fpSub_mode e p (fromRoundingMode rm).
+
+Definition fpToBits (e p : nat) (f : Float e p) : bitvector (addNat e p) :=
+  intToBv (addNat e p) (fpToBits_Z e p f).
+
+Definition fpToInteger (e p : nat) (rm : RoundingMode) : Float e p -> Z :=
+  fpToInteger_mode e p (fromRoundingMode rm).
+
+(* Note that fpToBV and fpToSBV have the same definition! In SAWCore, these
+ * definitions will error if you supply a Float whose corresponding bitvector
+ * lies outside the range of valid unsigned or signed bitvectors. In Rocq,
+ * these operations will instead return unspecified results.
+ *)
+
+Definition fpToBV (e p n : nat) (rm : RoundingMode) (f : Float e p) : bitvector (n.+1) :=
+  intToBv (Succ n) (fpToInteger_mode e p (fromRoundingMode rm) f).
+
+Definition fpToSBV (e p n : nat) (rm : RoundingMode) (f : Float e p) : bitvector (n.+1) :=
+  intToBv (Succ n) (fpToInteger_mode e p (fromRoundingMode rm) f).

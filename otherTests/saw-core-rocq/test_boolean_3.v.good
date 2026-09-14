@@ -25,19 +25,26 @@ Definition TestBool_Comparison: Init.Datatypes.bool :=
       :=
       CryptolPrimitivesForSAWCore.TCNum 
          (Stdlib.PArith.BinPos.Pos.to_nat 
+            (Stdlib.PArith.BinPos.xI 
+               (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))
+   in
+   let var__1
+      :=
+      CryptolPrimitivesForSAWCore.TCNum 
+         (Stdlib.PArith.BinPos.Pos.to_nat 
             (Stdlib.PArith.BinPos.xO 
                (Stdlib.PArith.BinPos.xO 
                   (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
    in
-   let var__1
-      :=
-      CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool
-   in
    let var__2
       :=
-      CryptolPrimitivesForSAWCore.PLiteralSeqBool var__0
+      CryptolPrimitivesForSAWCore.seq var__1 Init.Datatypes.bool
    in
    let var__3
+      :=
+      CryptolPrimitivesForSAWCore.PLiteralSeqBool var__1
+   in
+   let var__4
       :=
       CryptolPrimitivesForSAWCore.TCNum 
          (Stdlib.PArith.BinPos.Pos.to_nat 
@@ -45,29 +52,22 @@ Definition TestBool_Comparison: Init.Datatypes.bool :=
                (Stdlib.PArith.BinPos.xI 
                   (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH))))
    in
-   let var__4
-      :=
-      CryptolPrimitivesForSAWCore.TCNum 
-         (Stdlib.PArith.BinPos.Pos.to_nat 
-            (Stdlib.PArith.BinPos.xI 
-               (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))
-   in
    let var__5
-      :=
-      CryptolPrimitivesForSAWCore.ecNumber var__3 SAWCoreScaffolding.Integer
-         CryptolPrimitivesForSAWCore.PLiteralInteger
-   in
-   let var__6
       :=
       CryptolPrimitivesForSAWCore.ecNumber var__4 SAWCoreScaffolding.Integer
          CryptolPrimitivesForSAWCore.PLiteralInteger
    in
+   let var__6
+      :=
+      CryptolPrimitivesForSAWCore.ecNumber var__0 SAWCoreScaffolding.Integer
+         CryptolPrimitivesForSAWCore.PLiteralInteger
+   in
    CryptolPrimitivesForSAWCore.ecAnd Init.Datatypes.bool
       CryptolPrimitivesForSAWCore.PLogicBit 
-      (CryptolPrimitivesForSAWCore.ecLt var__1 
-         (CryptolPrimitivesForSAWCore.PCmpSeqBool var__0) 
-         (CryptolPrimitivesForSAWCore.ecNumber var__3 var__1 var__2) 
-         (CryptolPrimitivesForSAWCore.ecNumber var__4 var__1 var__2)) 
+      (CryptolPrimitivesForSAWCore.ecLt var__2 
+         (CryptolPrimitivesForSAWCore.PCmpSeqBool var__1) 
+         (CryptolPrimitivesForSAWCore.ecNumber var__4 var__2 var__3) 
+         (CryptolPrimitivesForSAWCore.ecNumber var__0 var__2 var__3)) 
       (CryptolPrimitivesForSAWCore.ecAnd Init.Datatypes.bool
          CryptolPrimitivesForSAWCore.PLogicBit 
          (CryptolPrimitivesForSAWCore.ecGt SAWCoreScaffolding.Integer

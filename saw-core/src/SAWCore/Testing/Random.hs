@@ -1,4 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- |
 -- Module      :  SAWCore.Testing.Random
@@ -18,8 +21,11 @@ module SAWCore.Testing.Random (
   ) where
 
 import SAWCore.FiniteValue
-  ( FirstOrderType(..), FirstOrderValue(..), scFirstOrderValue )
+  ( FirstOrderFloat(..), FirstOrderType(..), FirstOrderValue(..)
+  , scFirstOrderValue
+  )
 
+import SAWCore.FloatHelpers (fpOpts)
 import SAWCore.Module (ModuleMap)
 import SAWCore.Name (VarName(..))
 import SAWCore.SATQuery
@@ -32,12 +38,15 @@ import SAWCore.Simulator.Value (Value(..)) -- , TValue(..))
 
 import qualified Control.Monad.Fail as F
 import Control.Monad.Random
+import Data.Bits (Bits(..))
 import Data.Functor.Compose (Compose(..))
 import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Ratio ((%))
 import qualified Data.Set as Set
+import LibBF
+import Numeric.Natural (Natural)
 import System.Random.TF (newTFGen, TFGen)
 
 
@@ -52,6 +61,8 @@ randomFirstOrderValue (FOTIntMod m) =
   Compose (Just (FOVIntMod m <$> getRandomR (0, toInteger m - 1)))
 randomFirstOrderValue FOTRational =
   Compose (Just (FOVRational <$> randomRational))
+randomFirstOrderValue (FOTFloat e p) =
+  Compose (Just ((FOVFloat . FirstOrderFloat e p) <$> randomBigFloat e p))
 randomFirstOrderValue (FOTVec n FOTBit) =
   Compose (Just (FOVWord n <$> getRandomR (0, 2^n - 1)))
 randomFirstOrderValue (FOTVec n t) =
@@ -73,7 +84,63 @@ randomRational = do
   denom <- getRandomR (1, 10^(6 :: Int))
   pure (numer % denom)
 
+randomBigFloat ::
+  forall m.
+  MonadRandom m =>
+  -- | Exponent width
+  Natural ->
+  -- | Precision width
+  Natural ->
+  m BigFloat
+randomBigFloat e p = do
+  let sz :: Integer
+      sz = 5
+  x <- getRandomR (0, 10*(sz+1))
+  if | x < 2    -> pure bfNaN
+     | x < 4    -> pure bfPosInf
+     | x < 6    -> pure bfNegInf
+     | x < 8    -> pure bfPosZero
+     | x < 10   -> pure bfNegZero
+     | x <= sz       -> randomSubnormal  -- about 10% of the time
+     | x <= 4*(sz+1) -> randomBinary     -- about 40%
+     | otherwise     -> randomNormal     -- remaining ~50%
+  where
+    opts = fpOpts e p NearEven
 
+    eInt = fromIntegral @Natural @Int e
+    pInt = fromIntegral @Natural @Int p
+
+    -- Generates floats uniformly chosen from among all bitpatterns.
+    randomBinary :: m BigFloat
+    randomBinary = do
+      -- NB: Use the size (e+p) below: 1 bit for the sign bit, e bits for the
+      -- exponent, and (p - 1) bits for the mantissa for a total of
+      -- (1 + e + (p - 1)) = (e+p) bits.
+      v <- getRandomR (0, bit (eInt+pInt) - 1)
+      pure $ bfFromBits opts v
+
+    -- Generates floats corresponding to subnormal values. These are values
+    -- with 0 biased exponent and nonzero mantissa.
+    randomSubnormal :: m BigFloat
+    randomSubnormal = do
+      sgn <- getRandom
+      -- NB: Use size (p - 1) bits below. `p` includes the implicit leading bit
+      -- of the mantissa, which isn't explicitly included in the overall bit
+      -- pattern.
+      v <- getRandomR (1, bit (pInt - 1) - 1)
+      let bf = bfFromBits opts v
+      pure $ if sgn then bfNeg bf else bf
+
+    -- Generates floats corresponding to normal values. These are values where
+    -- the exponent bits are not all zeros and not all ones.
+    randomNormal :: m BigFloat
+    randomNormal = do
+      sgn <- getRandom
+      ex <- getRandomR (1, bit eInt - 2)
+      si <- getRandomR (0, bit (pInt - 1) - 1)
+      let v = (ex `shiftL` (pInt - 1)) .|. si
+      let bf = bfFromBits opts v
+      pure $ if sgn then bfNeg bf else bf
 
 execTest ::
   (F.MonadFail m, MonadRandom m, MonadIO m) =>

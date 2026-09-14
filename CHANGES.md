@@ -59,7 +59,7 @@ This release supports [version
   corresponding to a source file and source line number, or (3) the unnamed
   Metadata at the requested index.
 
-* Add basic support for Cryptol `Rational` values in SAWCore.
+* Add basic support for Cryptol `Rational` and `Float` values in SAWCore.
 
 * Add support for derived Cryptol instances in SAWCore.
 
