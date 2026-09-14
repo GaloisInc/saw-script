@@ -424,6 +424,7 @@ checkpointSharedContext sc =
      uenv <- readIORef (scQualNameEnv sc)
      genv <- readIORef (scGlobalEnv sc)
      i <- readIORef (scNextTermIndex sc)
+     modifyIORef' (scNextTermIndex sc) (\j -> j + 1)
      td_refs <- readIORef (scMetadata sc)
      td <- TypedStore.traverse 
        (\(Metadata ref) -> (Metadata . Identity) <$> readIORef ref) td_refs
