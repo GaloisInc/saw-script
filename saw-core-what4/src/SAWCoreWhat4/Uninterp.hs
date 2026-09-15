@@ -269,11 +269,10 @@ parseUninterpretedTop ::
 -- This case deals with symbolic variable with no parameters.  The round
 -- trip for these works differently (see `mkUninterpreted`),
 -- and since they have no arguments, we don't need to do the array caching.
-parseUninterpretedTop rt@(DoReturnTrip _ True _ _ _) ref app@(UnintApp _ _ argTys) ty =
-  case testEquality Ctx.empty argTys of
-    Just Refl -> evalStateT (parseUninterpreted' rt ref app ty) MapF.empty
-    Nothing   -> fail "At present, we do not support symbolic variables with parameters"
-    
+parseUninterpretedTop rt@(DoReturnTrip _ True _ _ _) ref app@(UnintApp _ _ argTys) ty
+  | Just Refl <- testEquality Ctx.empty argTys =
+      evalStateT (parseUninterpreted' rt ref app ty) MapF.empty
+
 parseUninterpretedTop saw ref app ty =
   do
     count <-

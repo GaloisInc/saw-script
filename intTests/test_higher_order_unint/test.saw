@@ -1,0 +1,58 @@
+enable_experimental;
+
+let {{
+
+  g : {a} (Ring a) => a -> a -> a
+  g = undefined
+
+  ident : {a} a -> a
+  ident x = x
+
+  twice : {a} (a -> a) -> a -> a
+  twice f x = f (f x)
+
+  thrice : {a} (a -> a) -> a -> a
+  thrice f x = f (f (f x))
+
+}};
+
+// Tests with an uninterpreted overloaded function
+
+prove_print
+  (w4_unint_z3 ["g"])
+  {{ \a b c d -> foldl g (a : [8]) [b, c, d] == g (g (g a b) c) d }};
+
+let ss = add_core_thms ["bvEq_refl"] empty_ss;
+
+prove_print
+  do { simplify ss; trivial; }
+  (term_eval_unint ["g"] {{ foldl g 0 [0x12, 0x23, 0x34] == g (g (g 0 0x12) 0x23) 0x34 }});
+
+prove_print
+  do { goal_eval_unint ["g"]; simplify ss; trivial; }
+  {{ \a b c d -> foldl g (a : [8]) [b, c, d] == g (g (g a b) c) d }};
+
+
+// Tests with an uninterpreted higher-order function
+
+prove_print
+  (w4_unint_z3 ["thrice"])
+  {{ \(x : [8]) ->
+    twice (thrice thrice thrice thrice ident) x ==
+    thrice thrice thrice thrice ident (thrice thrice thrice thrice ident x)
+  }};
+
+prove_print
+  do { simplify ss; trivial; }
+  (term_eval_unint ["thrice"]
+    {{
+      twice (thrice thrice thrice thrice ident) 0x23 ==
+      thrice thrice thrice thrice ident (thrice thrice thrice thrice ident 0x23)
+    }});
+
+prove_print
+  do { goal_eval_unint ["thrice"]; simplify ss; trivial; }
+  {{ \(x : [8]) ->
+    twice (thrice thrice thrice thrice ident) x ==
+    thrice thrice thrice thrice ident (thrice thrice thrice thrice ident x)
+  }};

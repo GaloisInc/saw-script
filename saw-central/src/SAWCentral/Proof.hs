@@ -179,6 +179,7 @@ import SAWCore.Term.Pretty (prettyTermWithEnv, prettyTermContainerWithEnv)
 
 import SAWCore.Simulator.Concrete (evalSharedTerm)
 import SAWCore.Simulator.Value (asFirstOrderTypeValue, Value(..), TValue(..))
+import SAWCore.Simulator.Uninterpreted (generalizeHigherOrderFunctions)
 
 import CryptolSAWCore.TypedTerm
 
@@ -476,15 +477,21 @@ evalProp sc what4PushMuxOps unints p =
          Nothing -> do
            p' <- ppTerm sc (unProp p)
            fail $ "goal_eval: expected EqTrue\n" ++ p'
+     -- Generalize goal by inventing new variables for instances of
+     -- higher-order uninterpreted functions.
+     (body'', sub) <- generalizeHigherOrderFunctions sc unints body'
 
      eb <- W4Sim.newSAWCoreExprBuilder sc what4PushMuxOps
      let st = eb ^. W4.userState
-     (_names, (_mlabels, p')) <- W4Sim.w4Eval eb st sc mempty unints body'
+     (_names, (_mlabels, p')) <- W4Sim.w4Eval eb st sc mempty unints body''
      t1 <- W4Sim.toSC eb st p'
-     t2 <- scEqTrue sc t1
+     -- Apply substitution to remove variables we invented for
+     -- instances of higher-order uninterpreted functions.
+     t2 <- scInstantiate sc sub t1
+     t3 <- scEqTrue sc t2
      -- turn the free variables we generated back into pi-bound variables
-     t3 <- scPiList sc vars t2
-     return (Prop t3)
+     t4 <- scPiList sc vars t3
+     return (Prop t4)
 
 -- | Perform beta normalization on the given proposition.
 betaReduceProp :: SharedContext -> Prop -> IO Prop

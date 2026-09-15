@@ -276,6 +276,7 @@ import SAWCore.ExternalFormat
 import SAWCore.Name (ModuleName, Name(..), VarName(..), mkModuleName, moduleIdentToQualName)
 import SAWCore.SATQuery
 import SAWCore.Simulator.Concrete (constMap)
+import SAWCore.Simulator.Uninterpreted (generalizeHigherOrderFunctions)
 import SAWCore.Recognizer
 import SAWCore.Prelude (scEq)
 import SAWCore.SharedTerm
@@ -1657,8 +1658,12 @@ term_eval unints (TypedTerm schema t0) =
      what4PushMuxOps <- gets rwWhat4PushMuxOps
      sym <- liftIO $ newSAWCoreExprBuilder sc what4PushMuxOps
      let st = sawCoreState sym
-     t1 <- liftIO $ W4Sim.w4EvalTerm sym st sc Map.empty unintSet t0
-     pure (TypedTerm schema t1)
+     -- Replace instances of uninterpreted higher-order functions with new variables.
+     (t1, sub) <- liftIO $ generalizeHigherOrderFunctions sc unintSet t0
+     t2 <- liftIO $ W4Sim.w4EvalTerm sym st sc Map.empty unintSet t1
+     -- Restore instances of uninterpreted higher-order functions.
+     t3 <- liftIO $ scInstantiate sc sub t2
+     pure (TypedTerm schema t3)
 
 addsimp :: Theorem -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addsimp thm ss =

@@ -73,6 +73,7 @@ import qualified SAWCore.Simulator.Prims as Prims
 import SAWCore.SATQuery
 import SAWCore.SharedTerm
 import SAWCore.Simulator.Value
+import SAWCore.Simulator.Uninterpreted (generalizeHigherOrderFunctions)
 import SAWCore.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 import SAWCore.Module (ModuleMap)
 import SAWCore.Name (Name(..), VarName(..), toShortName)
@@ -840,7 +841,7 @@ w4SolveBasic ::
   Set VarIndex {- ^ 'unints' Constants in this list are kept uninterpreted -} ->
   Term {- ^ term to simulate -} ->
   IO (SValue sym)
-w4SolveBasic sym sc addlPrims varMap ref unintSet t =
+w4SolveBasic sym sc addlPrims varMap ref unintSet t0 =
   do m <- scGetModuleMap sc
      let variable (VarName ix x) ty
             | Just v <- Map.lookup ix varMap = return v
@@ -855,6 +856,7 @@ w4SolveBasic sym sc addlPrims varMap ref unintSet t =
      cfg <-
        Sim.evalGlobal m (constMap sym `Map.union` addlPrims)
        variable uninterpreted (recursor sym) primHandler mux
+     (t, _sub) <- generalizeHigherOrderFunctions sc unintSet t0
      Sim.evalSharedTerm cfg t
 
 
@@ -1353,4 +1355,3 @@ w4EvalBasic sym st sc m addlPrims varCons ref unintSet t =
        Sim.evalGlobal' m (constMap sym `Map.union` addlPrims)
                         variable' uninterpreted (recursor sym) primHandler mux
      Sim.evalSharedTerm cfg t
-
