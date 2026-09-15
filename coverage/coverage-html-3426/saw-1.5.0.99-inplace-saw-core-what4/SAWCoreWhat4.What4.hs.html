@@ -1190,20 +1190,20 @@ span.spaces    { background: white }
 <span class="lineno"> 1171 </span>  Set VarIndex -&gt;
 <span class="lineno"> 1172 </span>  Term -&gt;
 <span class="lineno"> 1173 </span>  IO Term
-<span class="lineno"> 1174 </span><span class="decl"><span class="nottickedoff">w4EvalTerm sym st sc ps unintSet t =</span>
-<span class="lineno"> 1175 </span><span class="spaces">  </span><span class="nottickedoff">do modmap &lt;- scGetModuleMap sc</span>
-<span class="lineno"> 1176 </span><span class="spaces">     </span><span class="nottickedoff">ref &lt;- newIORef Map.empty</span>
-<span class="lineno"> 1177 </span><span class="spaces">     </span><span class="nottickedoff">let eval = w4EvalBasic sym st sc modmap ps mempty ref unintSet</span>
-<span class="lineno"> 1178 </span><span class="spaces">     </span><span class="nottickedoff">ty &lt;- eval =&lt;&lt; scTypeOf sc t</span>
-<span class="lineno"> 1179 </span><span class="spaces">     </span><span class="nottickedoff">-- evaluate term to an SValue</span>
-<span class="lineno"> 1180 </span><span class="spaces">     </span><span class="nottickedoff">val &lt;- eval t</span>
-<span class="lineno"> 1181 </span><span class="spaces">     </span><span class="nottickedoff">tytval &lt;- toTValue ty</span>
-<span class="lineno"> 1182 </span><span class="spaces">     </span><span class="nottickedoff">-- convert SValue back into a Term</span>
-<span class="lineno"> 1183 </span><span class="spaces">     </span><span class="nottickedoff">rebuildTerm sym st sc tytval val</span>
-<span class="lineno"> 1184 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno"> 1185 </span><span class="spaces">    </span><span class="nottickedoff">toTValue :: Value l -&gt; IO (TValue l)</span>
-<span class="lineno"> 1186 </span><span class="spaces">    </span><span class="nottickedoff">toTValue (TValue x) = pure x</span>
-<span class="lineno"> 1187 </span><span class="spaces">    </span><span class="nottickedoff">toTValue _ = fail &quot;toTValue&quot;</span></span>
+<span class="lineno"> 1174 </span><span class="decl"><span class="istickedoff">w4EvalTerm sym st sc ps unintSet t =</span>
+<span class="lineno"> 1175 </span><span class="spaces">  </span><span class="istickedoff">do modmap &lt;- scGetModuleMap sc</span>
+<span class="lineno"> 1176 </span><span class="spaces">     </span><span class="istickedoff">ref &lt;- newIORef Map.empty</span>
+<span class="lineno"> 1177 </span><span class="spaces">     </span><span class="istickedoff">let eval = w4EvalBasic sym st sc modmap ps mempty ref unintSet</span>
+<span class="lineno"> 1178 </span><span class="spaces">     </span><span class="istickedoff">ty &lt;- eval =&lt;&lt; scTypeOf <span class="nottickedoff">sc</span> t</span>
+<span class="lineno"> 1179 </span><span class="spaces">     </span><span class="istickedoff">-- evaluate term to an SValue</span>
+<span class="lineno"> 1180 </span><span class="spaces">     </span><span class="istickedoff">val &lt;- eval t</span>
+<span class="lineno"> 1181 </span><span class="spaces">     </span><span class="istickedoff">tytval &lt;- toTValue ty</span>
+<span class="lineno"> 1182 </span><span class="spaces">     </span><span class="istickedoff">-- convert SValue back into a Term</span>
+<span class="lineno"> 1183 </span><span class="spaces">     </span><span class="istickedoff">rebuildTerm <span class="nottickedoff">sym</span> st <span class="nottickedoff">sc</span> <span class="nottickedoff">tytval</span> val</span>
+<span class="lineno"> 1184 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno"> 1185 </span><span class="spaces">    </span><span class="istickedoff">toTValue :: Value l -&gt; IO (TValue l)</span>
+<span class="lineno"> 1186 </span><span class="spaces">    </span><span class="istickedoff">toTValue (TValue x) = pure <span class="nottickedoff">x</span></span>
+<span class="lineno"> 1187 </span><span class="spaces">    </span><span class="istickedoff">toTValue _ = <span class="nottickedoff">fail &quot;toTValue&quot;</span></span></span>
 <span class="lineno"> 1188 </span>
 <span class="lineno"> 1189 </span>rebuildTerm ::
 <span class="lineno"> 1190 </span>  B.ExprBuilder n st fs -&gt;
@@ -1212,71 +1212,71 @@ span.spaces    { background: white }
 <span class="lineno"> 1193 </span>  TValue (What4 (B.ExprBuilder n st fs)) -&gt;
 <span class="lineno"> 1194 </span>  SValue (B.ExprBuilder n st fs) -&gt;
 <span class="lineno"> 1195 </span>  IO Term
-<span class="lineno"> 1196 </span><span class="decl"><span class="nottickedoff">rebuildTerm sym st sc tv sv =</span>
-<span class="lineno"> 1197 </span><span class="spaces">  </span><span class="nottickedoff">let chokeOn what =</span>
-<span class="lineno"> 1198 </span><span class="spaces">        </span><span class="nottickedoff">-- XXX: alas, for the time being it looks like all we have for</span>
-<span class="lineno"> 1199 </span><span class="spaces">        </span><span class="nottickedoff">-- printing SValue/Value is a show instance</span>
-<span class="lineno"> 1200 </span><span class="spaces">        </span><span class="nottickedoff">fail (&quot;saw-core-what4: rebuildTerm: cannot handle &quot; ++ what ++ &quot;: &quot; ++</span>
-<span class="lineno"> 1201 </span><span class="spaces">              </span><span class="nottickedoff">show sv)</span>
-<span class="lineno"> 1202 </span><span class="spaces">  </span><span class="nottickedoff">in</span>
-<span class="lineno"> 1203 </span><span class="spaces">  </span><span class="nottickedoff">case sv of</span>
-<span class="lineno"> 1204 </span><span class="spaces">    </span><span class="nottickedoff">VFun {} -&gt;</span>
-<span class="lineno"> 1205 </span><span class="spaces">      </span><span class="nottickedoff">chokeOn &quot;lambdas (VFun)&quot;</span>
-<span class="lineno"> 1206 </span><span class="spaces">    </span><span class="nottickedoff">VCtorApp 0 _ [] -&gt;</span>
-<span class="lineno"> 1207 </span><span class="spaces">      </span><span class="nottickedoff">scUnitValue sc</span>
-<span class="lineno"> 1208 </span><span class="spaces">    </span><span class="nottickedoff">VCtorApp 0 _ [x, y] -&gt;</span>
-<span class="lineno"> 1209 </span><span class="spaces">      </span><span class="nottickedoff">case tv of</span>
-<span class="lineno"> 1210 </span><span class="spaces">        </span><span class="nottickedoff">VDataType (ModuleIdentifier &quot;Prelude.PairType&quot;) [TValue tx, TValue ty] [] -&gt;</span>
-<span class="lineno"> 1211 </span><span class="spaces">          </span><span class="nottickedoff">do vx &lt;- force x</span>
-<span class="lineno"> 1212 </span><span class="spaces">             </span><span class="nottickedoff">vy &lt;- force y</span>
-<span class="lineno"> 1213 </span><span class="spaces">             </span><span class="nottickedoff">x' &lt;- rebuildTerm sym st sc tx vx</span>
-<span class="lineno"> 1214 </span><span class="spaces">             </span><span class="nottickedoff">y' &lt;- rebuildTerm sym st sc ty vy</span>
-<span class="lineno"> 1215 </span><span class="spaces">             </span><span class="nottickedoff">scPairValue sc x' y'</span>
-<span class="lineno"> 1216 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; panic &quot;rebuildTerm&quot; [</span>
-<span class="lineno"> 1217 </span><span class="spaces">                 </span><span class="nottickedoff">&quot;Pair wasn't a pair: found &quot; &lt;&gt; Text.pack (show tv)</span>
-<span class="lineno"> 1218 </span><span class="spaces">             </span><span class="nottickedoff">]</span>
-<span class="lineno"> 1219 </span><span class="spaces">    </span><span class="nottickedoff">VCtorApp {} -&gt;</span>
-<span class="lineno"> 1220 </span><span class="spaces">      </span><span class="nottickedoff">chokeOn &quot;constructors (VCtorApp)&quot;</span>
-<span class="lineno"> 1221 </span><span class="spaces">    </span><span class="nottickedoff">VCtorMux {} -&gt;</span>
-<span class="lineno"> 1222 </span><span class="spaces">      </span><span class="nottickedoff">chokeOn &quot;constructors (VCtorMux)&quot;</span>
-<span class="lineno"> 1223 </span><span class="spaces">    </span><span class="nottickedoff">VVector xs -&gt;</span>
-<span class="lineno"> 1224 </span><span class="spaces">      </span><span class="nottickedoff">case tv of</span>
-<span class="lineno"> 1225 </span><span class="spaces">        </span><span class="nottickedoff">VVecType _ tx -&gt;</span>
-<span class="lineno"> 1226 </span><span class="spaces">          </span><span class="nottickedoff">do vs &lt;- traverse force (V.toList xs)</span>
-<span class="lineno"> 1227 </span><span class="spaces">             </span><span class="nottickedoff">xs' &lt;- traverse (rebuildTerm sym st sc tx) vs</span>
-<span class="lineno"> 1228 </span><span class="spaces">             </span><span class="nottickedoff">tx' &lt;- termOfTValue sc tx</span>
-<span class="lineno"> 1229 </span><span class="spaces">             </span><span class="nottickedoff">scVectorReduced sc tx' xs'</span>
-<span class="lineno"> 1230 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; panic &quot;rebuildTerm&quot; [</span>
-<span class="lineno"> 1231 </span><span class="spaces">                 </span><span class="nottickedoff">&quot;Vector wasn't a vector: found &quot; &lt;&gt; Text.pack (show tv)</span>
-<span class="lineno"> 1232 </span><span class="spaces">             </span><span class="nottickedoff">]</span>
-<span class="lineno"> 1233 </span><span class="spaces">    </span><span class="nottickedoff">VBool x -&gt;</span>
-<span class="lineno"> 1234 </span><span class="spaces">      </span><span class="nottickedoff">toSC sym st x</span>
-<span class="lineno"> 1235 </span><span class="spaces">    </span><span class="nottickedoff">VWord x -&gt;</span>
-<span class="lineno"> 1236 </span><span class="spaces">      </span><span class="nottickedoff">case x of</span>
-<span class="lineno"> 1237 </span><span class="spaces">        </span><span class="nottickedoff">DBV w -&gt; toSC sym st w</span>
-<span class="lineno"> 1238 </span><span class="spaces">        </span><span class="nottickedoff">ZBV -&gt;</span>
-<span class="lineno"> 1239 </span><span class="spaces">          </span><span class="nottickedoff">do z &lt;- scNat sc 0</span>
-<span class="lineno"> 1240 </span><span class="spaces">             </span><span class="nottickedoff">scBvNat sc z z</span>
-<span class="lineno"> 1241 </span><span class="spaces">    </span><span class="nottickedoff">VBVToNat _ _ -&gt;</span>
-<span class="lineno"> 1242 </span><span class="spaces">      </span><span class="nottickedoff">chokeOn &quot;VBVToNat&quot;</span>
-<span class="lineno"> 1243 </span><span class="spaces">    </span><span class="nottickedoff">VIntToNat _ -&gt;</span>
-<span class="lineno"> 1244 </span><span class="spaces">      </span><span class="nottickedoff">chokeOn &quot;VIntToNat&quot;</span>
-<span class="lineno"> 1245 </span><span class="spaces">    </span><span class="nottickedoff">VRational{} -&gt;</span>
-<span class="lineno"> 1246 </span><span class="spaces">      </span><span class="nottickedoff">chokeOn &quot;VRational&quot;</span>
-<span class="lineno"> 1247 </span><span class="spaces">    </span><span class="nottickedoff">VNat n -&gt;</span>
-<span class="lineno"> 1248 </span><span class="spaces">      </span><span class="nottickedoff">scNat sc n</span>
-<span class="lineno"> 1249 </span><span class="spaces">    </span><span class="nottickedoff">VInt x -&gt;</span>
-<span class="lineno"> 1250 </span><span class="spaces">      </span><span class="nottickedoff">toSC sym st x</span>
-<span class="lineno"> 1251 </span><span class="spaces">    </span><span class="nottickedoff">VIntMod _ _ -&gt;</span>
-<span class="lineno"> 1252 </span><span class="spaces">      </span><span class="nottickedoff">chokeOn &quot;VIntMod&quot;</span>
-<span class="lineno"> 1253 </span><span class="spaces">    </span><span class="nottickedoff">VArray _ -&gt;</span>
-<span class="lineno"> 1254 </span><span class="spaces">      </span><span class="nottickedoff">chokeOn &quot;arrays (VArray)&quot;</span>
-<span class="lineno"> 1255 </span><span class="spaces">    </span><span class="nottickedoff">VString s -&gt;</span>
-<span class="lineno"> 1256 </span><span class="spaces">      </span><span class="nottickedoff">scString sc s</span>
-<span class="lineno"> 1257 </span><span class="spaces">    </span><span class="nottickedoff">VExtra _ -&gt;</span>
-<span class="lineno"> 1258 </span><span class="spaces">      </span><span class="nottickedoff">chokeOn &quot;VExtra&quot;</span>
-<span class="lineno"> 1259 </span><span class="spaces">    </span><span class="nottickedoff">TValue _tval -&gt;</span>
-<span class="lineno"> 1260 </span><span class="spaces">      </span><span class="nottickedoff">chokeOn &quot;types (TValue)&quot;</span></span>
+<span class="lineno"> 1196 </span><span class="decl"><span class="istickedoff">rebuildTerm sym st sc tv sv =</span>
+<span class="lineno"> 1197 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">chokeOn what =</span></span>
+<span class="lineno"> 1198 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- XXX: alas, for the time being it looks like all we have for</span></span>
+<span class="lineno"> 1199 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- printing SValue/Value is a show instance</span></span>
+<span class="lineno"> 1200 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">fail (&quot;saw-core-what4: rebuildTerm: cannot handle &quot; ++ what ++ &quot;: &quot; ++</span></span>
+<span class="lineno"> 1201 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">show sv)</span></span>
+<span class="lineno"> 1202 </span><span class="spaces">  </span><span class="istickedoff">in</span>
+<span class="lineno"> 1203 </span><span class="spaces">  </span><span class="istickedoff">case sv of</span>
+<span class="lineno"> 1204 </span><span class="spaces">    </span><span class="istickedoff">VFun {} -&gt;</span>
+<span class="lineno"> 1205 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">chokeOn &quot;lambdas (VFun)&quot;</span></span>
+<span class="lineno"> 1206 </span><span class="spaces">    </span><span class="istickedoff">VCtorApp 0 _ [] -&gt;</span>
+<span class="lineno"> 1207 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">scUnitValue sc</span></span>
+<span class="lineno"> 1208 </span><span class="spaces">    </span><span class="istickedoff">VCtorApp 0 _ [x, y] -&gt;</span>
+<span class="lineno"> 1209 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case tv of</span></span>
+<span class="lineno"> 1210 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VDataType (ModuleIdentifier &quot;Prelude.PairType&quot;) [TValue tx, TValue ty] [] -&gt;</span></span>
+<span class="lineno"> 1211 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do vx &lt;- force x</span></span>
+<span class="lineno"> 1212 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">vy &lt;- force y</span></span>
+<span class="lineno"> 1213 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x' &lt;- rebuildTerm sym st sc tx vx</span></span>
+<span class="lineno"> 1214 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">y' &lt;- rebuildTerm sym st sc ty vy</span></span>
+<span class="lineno"> 1215 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">scPairValue sc x' y'</span></span>
+<span class="lineno"> 1216 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; panic &quot;rebuildTerm&quot; [</span></span>
+<span class="lineno"> 1217 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">&quot;Pair wasn't a pair: found &quot; &lt;&gt; Text.pack (show tv)</span></span>
+<span class="lineno"> 1218 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 1219 </span><span class="spaces">    </span><span class="istickedoff">VCtorApp {} -&gt;</span>
+<span class="lineno"> 1220 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">chokeOn &quot;constructors (VCtorApp)&quot;</span></span>
+<span class="lineno"> 1221 </span><span class="spaces">    </span><span class="istickedoff">VCtorMux {} -&gt;</span>
+<span class="lineno"> 1222 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">chokeOn &quot;constructors (VCtorMux)&quot;</span></span>
+<span class="lineno"> 1223 </span><span class="spaces">    </span><span class="istickedoff">VVector xs -&gt;</span>
+<span class="lineno"> 1224 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case tv of</span></span>
+<span class="lineno"> 1225 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">VVecType _ tx -&gt;</span></span>
+<span class="lineno"> 1226 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do vs &lt;- traverse force (V.toList xs)</span></span>
+<span class="lineno"> 1227 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">xs' &lt;- traverse (rebuildTerm sym st sc tx) vs</span></span>
+<span class="lineno"> 1228 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">tx' &lt;- termOfTValue sc tx</span></span>
+<span class="lineno"> 1229 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">scVectorReduced sc tx' xs'</span></span>
+<span class="lineno"> 1230 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; panic &quot;rebuildTerm&quot; [</span></span>
+<span class="lineno"> 1231 </span><span class="spaces">                 </span><span class="istickedoff"><span class="nottickedoff">&quot;Vector wasn't a vector: found &quot; &lt;&gt; Text.pack (show tv)</span></span>
+<span class="lineno"> 1232 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno"> 1233 </span><span class="spaces">    </span><span class="istickedoff">VBool x -&gt;</span>
+<span class="lineno"> 1234 </span><span class="spaces">      </span><span class="istickedoff">toSC <span class="nottickedoff">sym</span> st x</span>
+<span class="lineno"> 1235 </span><span class="spaces">    </span><span class="istickedoff">VWord x -&gt;</span>
+<span class="lineno"> 1236 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">case x of</span></span>
+<span class="lineno"> 1237 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">DBV w -&gt; toSC sym st w</span></span>
+<span class="lineno"> 1238 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">ZBV -&gt;</span></span>
+<span class="lineno"> 1239 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do z &lt;- scNat sc 0</span></span>
+<span class="lineno"> 1240 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">scBvNat sc z z</span></span>
+<span class="lineno"> 1241 </span><span class="spaces">    </span><span class="istickedoff">VBVToNat _ _ -&gt;</span>
+<span class="lineno"> 1242 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">chokeOn &quot;VBVToNat&quot;</span></span>
+<span class="lineno"> 1243 </span><span class="spaces">    </span><span class="istickedoff">VIntToNat _ -&gt;</span>
+<span class="lineno"> 1244 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">chokeOn &quot;VIntToNat&quot;</span></span>
+<span class="lineno"> 1245 </span><span class="spaces">    </span><span class="istickedoff">VRational{} -&gt;</span>
+<span class="lineno"> 1246 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">chokeOn &quot;VRational&quot;</span></span>
+<span class="lineno"> 1247 </span><span class="spaces">    </span><span class="istickedoff">VNat n -&gt;</span>
+<span class="lineno"> 1248 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">scNat sc n</span></span>
+<span class="lineno"> 1249 </span><span class="spaces">    </span><span class="istickedoff">VInt x -&gt;</span>
+<span class="lineno"> 1250 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">toSC sym st x</span></span>
+<span class="lineno"> 1251 </span><span class="spaces">    </span><span class="istickedoff">VIntMod _ _ -&gt;</span>
+<span class="lineno"> 1252 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">chokeOn &quot;VIntMod&quot;</span></span>
+<span class="lineno"> 1253 </span><span class="spaces">    </span><span class="istickedoff">VArray _ -&gt;</span>
+<span class="lineno"> 1254 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">chokeOn &quot;arrays (VArray)&quot;</span></span>
+<span class="lineno"> 1255 </span><span class="spaces">    </span><span class="istickedoff">VString s -&gt;</span>
+<span class="lineno"> 1256 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">scString sc s</span></span>
+<span class="lineno"> 1257 </span><span class="spaces">    </span><span class="istickedoff">VExtra _ -&gt;</span>
+<span class="lineno"> 1258 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">chokeOn &quot;VExtra&quot;</span></span>
+<span class="lineno"> 1259 </span><span class="spaces">    </span><span class="istickedoff">TValue _tval -&gt;</span>
+<span class="lineno"> 1260 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">chokeOn &quot;types (TValue)&quot;</span></span></span>
 <span class="lineno"> 1261 </span>
 <span class="lineno"> 1262 </span>
 <span class="lineno"> 1263 </span>-- | Simplify a saw-core term by evaluating it through the saw backend
@@ -1295,8 +1295,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1276 </span>      SValue (B.ExprBuilder n st fs))
 <span class="lineno"> 1277 </span><span class="decl"><span class="istickedoff">w4EvalAny sym st sc ps unintSet t =</span>
 <span class="lineno"> 1278 </span><span class="spaces">  </span><span class="istickedoff">do modmap &lt;- scGetModuleMap sc</span>
-<span class="lineno"> 1279 </span><span class="spaces">     </span><span class="istickedoff">ref &lt;- newIORef <span class="nottickedoff">Map.empty</span></span>
-<span class="lineno"> 1280 </span><span class="spaces">     </span><span class="istickedoff">let eval = w4EvalBasic sym st sc modmap ps mempty <span class="nottickedoff">ref</span> unintSet</span>
+<span class="lineno"> 1279 </span><span class="spaces">     </span><span class="istickedoff">ref &lt;- newIORef Map.empty</span>
+<span class="lineno"> 1280 </span><span class="spaces">     </span><span class="istickedoff">let eval = w4EvalBasic sym st sc modmap ps mempty ref unintSet</span>
 <span class="lineno"> 1281 </span><span class="spaces">     </span><span class="istickedoff">ty &lt;- eval =&lt;&lt; scTypeOf <span class="nottickedoff">sc</span> t</span>
 <span class="lineno"> 1282 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1283 </span><span class="spaces">     </span><span class="istickedoff">-- get the names of the arguments to the function</span>
@@ -1360,8 +1360,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1341 </span><span class="spaces">                            </span><span class="istickedoff">Variable {} -&gt; True</span>
 <span class="lineno"> 1342 </span><span class="spaces">                            </span><span class="istickedoff">Constant {} -&gt; <span class="nottickedoff">False</span></span>
 <span class="lineno"> 1343 </span><span class="spaces">                            </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;w4EvalBasic&quot; [&quot;Unexpected term in `variable`&quot;]</span></span>
-<span class="lineno"> 1344 </span><span class="spaces">              </span><span class="istickedoff">parseUninterpretedSAW sym st sc <span class="nottickedoff">ref</span> isVar trm</span>
-<span class="lineno"> 1345 </span><span class="spaces">                 </span><span class="istickedoff">(mkUnintApp <span class="nottickedoff">(Text.unpack nm ++ &quot;_&quot; ++ show ix)</span>) ty</span>
+<span class="lineno"> 1344 </span><span class="spaces">              </span><span class="istickedoff">parseUninterpretedSAW sym st sc ref isVar trm</span>
+<span class="lineno"> 1345 </span><span class="spaces">                 </span><span class="istickedoff">(mkUnintApp (Text.unpack nm ++ &quot;_&quot; ++ show ix)) ty</span>
 <span class="lineno"> 1346 </span><span class="spaces">     </span><span class="istickedoff">let variable' tp vn ty = variable (Variable vn tp) vn ty</span>
 <span class="lineno"> 1347 </span><span class="spaces">     </span><span class="istickedoff">let uninterpreted nm ty</span>
 <span class="lineno"> 1348 </span><span class="spaces">           </span><span class="istickedoff">| <span class="tickonlyfalse">Set.member (nameIndex nm) unintSet</span> =</span>

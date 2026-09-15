@@ -238,7 +238,7 @@ span.spaces    { background: white }
 <span class="lineno">  219 </span><span class="decl"><span class="istickedoff">withSym xs k =</span>
 <span class="lineno">  220 </span><span class="spaces">  </span><span class="istickedoff">case xs of</span>
 <span class="lineno">  221 </span><span class="spaces">    </span><span class="istickedoff">NoReturnTrip sym -&gt; k sym</span>
-<span class="lineno">  222 </span><span class="spaces">    </span><span class="istickedoff">DoReturnTrip sym _ _ _ _ -&gt; <span class="nottickedoff">k sym</span></span></span>
+<span class="lineno">  222 </span><span class="spaces">    </span><span class="istickedoff">DoReturnTrip sym _ _ _ _ -&gt; k sym</span></span>
 <span class="lineno">  223 </span>
 <span class="lineno">  224 </span>mapArgTerm :: (ArgTerm -&gt; ArgTerm) -&gt; ReturnTrip sym -&gt; ReturnTrip sym
 <span class="lineno">  225 </span><span class="decl"><span class="istickedoff">mapArgTerm f saw =</span>
@@ -274,7 +274,7 @@ span.spaces    { background: white }
 <span class="lineno">  255 </span>  TValue (What4 (B.ExprBuilder n st fs)) {- ^ Type of the function's result. -} -&gt;
 <span class="lineno">  256 </span>  IO (SValue (B.ExprBuilder n st fs))
 <span class="lineno">  257 </span><span class="decl"><span class="istickedoff">parseUninterpretedSAW sym st sc ref isVar term app t =</span>
-<span class="lineno">  258 </span><span class="spaces">  </span><span class="istickedoff">parseUninterpretedTop (DoReturnTrip sym isVar st sc (ArgTermConst term)) <span class="nottickedoff">ref</span> app t</span></span>
+<span class="lineno">  258 </span><span class="spaces">  </span><span class="istickedoff">parseUninterpretedTop (DoReturnTrip sym isVar st sc (ArgTermConst term)) ref app t</span></span>
 <span class="lineno">  259 </span>
 <span class="lineno">  260 </span>parseUninterpretedTop ::
 <span class="lineno">  261 </span>  forall sym.
@@ -290,7 +290,7 @@ span.spaces    { background: white }
 <span class="lineno">  271 </span>-- and since they have no arguments, we don't need to do the array caching.
 <span class="lineno">  272 </span><span class="decl"><span class="istickedoff">parseUninterpretedTop rt@(DoReturnTrip _ True _ _ _) ref app@(UnintApp _ _ argTys) ty</span>
 <span class="lineno">  273 </span><span class="spaces">  </span><span class="istickedoff">| Just Refl &lt;- testEquality Ctx.empty argTys =</span>
-<span class="lineno">  274 </span><span class="spaces">      </span><span class="istickedoff">evalStateT (parseUninterpreted' rt <span class="nottickedoff">ref</span> <span class="nottickedoff">app</span> ty) MapF.empty</span>
+<span class="lineno">  274 </span><span class="spaces">      </span><span class="istickedoff">evalStateT (parseUninterpreted' rt ref app ty) MapF.empty</span>
 <span class="lineno">  275 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  276 </span><span class="spaces"></span><span class="istickedoff">parseUninterpretedTop saw ref app ty =</span>
 <span class="lineno">  277 </span><span class="spaces">  </span><span class="istickedoff">do</span>
@@ -300,18 +300,18 @@ span.spaces    { background: white }
 <span class="lineno">  281 </span><span class="spaces">    </span><span class="istickedoff">(val,st) &lt;- runStateT (parseUninterpreted' saw ref app ty) count</span>
 <span class="lineno">  282 </span><span class="spaces">    </span><span class="istickedoff">case saw of</span>
 <span class="lineno">  283 </span><span class="spaces">      </span><span class="istickedoff">NoReturnTrip _ -&gt; pure <span class="nottickedoff">()</span></span>
-<span class="lineno">  284 </span><span class="spaces">      </span><span class="istickedoff">DoReturnTrip sym _ sawSt sc _ -&gt; <span class="nottickedoff">MapF.traverseWithKey_ register st</span></span>
+<span class="lineno">  284 </span><span class="spaces">      </span><span class="istickedoff">DoReturnTrip sym _ sawSt sc _ -&gt; MapF.traverseWithKey_ register st</span>
 <span class="lineno">  285 </span><span class="spaces">        </span><span class="istickedoff">where</span>
 <span class="lineno">  286 </span><span class="spaces">        </span><span class="istickedoff">register :: BaseTypeRepr t -&gt; Arr sym t -&gt; IO ()</span>
-<span class="lineno">  287 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">register k (Arr fn ixW _ vs) =</span></span>
-<span class="lineno">  288 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do</span></span>
-<span class="lineno">  289 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">elTy &lt;- baseSCType sym sc k</span></span>
-<span class="lineno">  290 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">sawRegisterSymFunInterp sawSt fn $ \sc' ts -&gt;</span></span>
-<span class="lineno">  291 </span><span class="spaces">              </span><span class="istickedoff"><span class="nottickedoff">do</span></span>
-<span class="lineno">  292 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">terms &lt;- mapM (\ate -&gt; reconstructArgTerm ate sc' ts) (reverse vs)</span></span>
-<span class="lineno">  293 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">case terms of</span></span>
-<span class="lineno">  294 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">[t] -&gt; pure (UninterpOne t)</span></span>
-<span class="lineno">  295 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">_   -&gt; pure (UninterpMany ixW elTy (V.fromList terms))</span></span>
+<span class="lineno">  287 </span><span class="spaces">        </span><span class="istickedoff">register k (Arr fn ixW _ vs) =</span>
+<span class="lineno">  288 </span><span class="spaces">          </span><span class="istickedoff">do</span>
+<span class="lineno">  289 </span><span class="spaces">            </span><span class="istickedoff">elTy &lt;- baseSCType <span class="nottickedoff">sym</span> sc k</span>
+<span class="lineno">  290 </span><span class="spaces">            </span><span class="istickedoff">sawRegisterSymFunInterp sawSt fn $ \sc' ts -&gt;</span>
+<span class="lineno">  291 </span><span class="spaces">              </span><span class="istickedoff">do</span>
+<span class="lineno">  292 </span><span class="spaces">                </span><span class="istickedoff">terms &lt;- mapM (\ate -&gt; reconstructArgTerm ate sc' ts) (reverse vs)</span>
+<span class="lineno">  293 </span><span class="spaces">                </span><span class="istickedoff">case terms of</span>
+<span class="lineno">  294 </span><span class="spaces">                  </span><span class="istickedoff">[t] -&gt; pure (UninterpOne t)</span>
+<span class="lineno">  295 </span><span class="spaces">                  </span><span class="istickedoff">_   -&gt; <span class="nottickedoff">pure (UninterpMany ixW elTy (V.fromList terms))</span></span>
 <span class="lineno">  296 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  297 </span><span class="spaces">    </span><span class="istickedoff">pure val</span></span>
 <span class="lineno">  298 </span>    
@@ -390,7 +390,7 @@ span.spaces    { background: white }
 <span class="lineno">  371 </span><span class="spaces">        </span><span class="istickedoff">do</span>
 <span class="lineno">  372 </span><span class="spaces">          </span><span class="istickedoff">fn &lt;- mkSymFn sym ref (nm ++ suff ret) tys ret</span>
 <span class="lineno">  373 </span><span class="spaces">          </span><span class="istickedoff">el &lt;- W.applySymFn sym fn args</span>
-<span class="lineno">  374 </span><span class="spaces">          </span><span class="istickedoff">pure (Arr { arrFn = <span class="nottickedoff">fn</span>, arrIndexWidth = wn, arrSymExprs = [el], arrFromSym = <span class="nottickedoff">[]</span> })</span>
+<span class="lineno">  374 </span><span class="spaces">          </span><span class="istickedoff">pure (Arr { arrFn = fn, arrIndexWidth = wn, arrSymExprs = [el], arrFromSym = [] })</span>
 <span class="lineno">  375 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  376 </span><span class="spaces">      </span><span class="istickedoff">-- We need multiple symbolic values of this type, result is array</span>
 <span class="lineno">  377 </span><span class="spaces">      </span><span class="istickedoff">Right LeqProof -&gt;</span>
@@ -458,17 +458,17 @@ span.spaces    { background: white }
 <span class="lineno">  439 </span><span class="spaces">            </span><span class="istickedoff">case saw of</span>
 <span class="lineno">  440 </span><span class="spaces">              </span><span class="istickedoff">NoReturnTrip sym -&gt; pure (NoReturnTrip sym)</span>
 <span class="lineno">  441 </span><span class="spaces">              </span><span class="istickedoff">DoReturnTrip sym isVar st sc trm -&gt;</span>
-<span class="lineno">  442 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">do newArg &lt;- mkArgTerm sc t1 x'</span></span>
-<span class="lineno">  443 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">let newTerm = ArgTermApply trm newArg</span></span>
-<span class="lineno">  444 </span><span class="spaces">                   </span><span class="istickedoff"><span class="nottickedoff">pure (DoReturnTrip sym isVar st sc newTerm)</span></span>
+<span class="lineno">  442 </span><span class="spaces">                </span><span class="istickedoff">do newArg &lt;- mkArgTerm <span class="nottickedoff">sc</span> t1 x'</span>
+<span class="lineno">  443 </span><span class="spaces">                   </span><span class="istickedoff">let newTerm = ArgTermApply trm newArg</span>
+<span class="lineno">  444 </span><span class="spaces">                   </span><span class="istickedoff">pure (DoReturnTrip sym isVar st sc newTerm)</span>
 <span class="lineno">  445 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  446 </span><span class="spaces">          </span><span class="istickedoff">parseUninterpretedTop saw' ref app' t2</span>
 <span class="lineno">  447 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  448 </span><span class="spaces">    </span><span class="istickedoff">VBoolType</span>
-<span class="lineno">  449 </span><span class="spaces">      </span><span class="istickedoff">-&gt; VBool &lt;$&gt; mkUninterpreted BaseBoolRepr <span class="nottickedoff">saw</span></span>
+<span class="lineno">  449 </span><span class="spaces">      </span><span class="istickedoff">-&gt; VBool &lt;$&gt; mkUninterpreted BaseBoolRepr saw</span>
 <span class="lineno">  450 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  451 </span><span class="spaces">    </span><span class="istickedoff">VIntType</span>
-<span class="lineno">  452 </span><span class="spaces">      </span><span class="istickedoff">-&gt; VInt &lt;$&gt; mkUninterpreted BaseIntegerRepr <span class="nottickedoff">saw</span></span>
+<span class="lineno">  452 </span><span class="spaces">      </span><span class="istickedoff">-&gt; VInt &lt;$&gt; mkUninterpreted BaseIntegerRepr saw</span>
 <span class="lineno">  453 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  454 </span><span class="spaces">    </span><span class="istickedoff">VIntModType n</span>
 <span class="lineno">  455 </span><span class="spaces">      </span><span class="istickedoff">-&gt; <span class="nottickedoff">VIntMod n &lt;$&gt; mkUninterpreted BaseIntegerRepr (mapArgTerm (ArgTermFromIntMod n) saw)</span></span>
@@ -489,7 +489,7 @@ span.spaces    { background: white }
 <span class="lineno">  470 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  471 </span><span class="spaces">    </span><span class="istickedoff">VVecType n VBoolType -&gt;</span>
 <span class="lineno">  472 </span><span class="spaces">      </span><span class="istickedoff">case somePosNat n of</span>
-<span class="lineno">  473 </span><span class="spaces">        </span><span class="istickedoff">Just (Some (PosNat w)) -&gt; VWord . DBV &lt;$&gt; mkUninterpreted (BaseBVRepr w) <span class="nottickedoff">saw</span></span>
+<span class="lineno">  473 </span><span class="spaces">        </span><span class="istickedoff">Just (Some (PosNat w)) -&gt; VWord . DBV &lt;$&gt; mkUninterpreted (BaseBVRepr w) saw</span>
 <span class="lineno">  474 </span><span class="spaces">        </span><span class="istickedoff">_                      -&gt; <span class="nottickedoff">pure (VWord ZBV)</span></span>
 <span class="lineno">  475 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  476 </span><span class="spaces">    </span><span class="istickedoff">VVecType n et -&gt;</span>
@@ -542,16 +542,16 @@ span.spaces    { background: white }
 <span class="lineno">  523 </span><span class="spaces">        </span><span class="istickedoff">-- This happens when we are translating a symbolic variable with</span>
 <span class="lineno">  524 </span><span class="spaces">        </span><span class="istickedoff">-- no arguments (see `parseUninterpretedTop`, first case)</span>
 <span class="lineno">  525 </span><span class="spaces">        </span><span class="istickedoff">Nothing</span>
-<span class="lineno">  526 </span><span class="spaces">          </span><span class="istickedoff">| DoReturnTrip sym True st sc arg &lt;- saw -&gt;</span>
+<span class="lineno">  526 </span><span class="spaces">          </span><span class="istickedoff">| DoReturnTrip sym True st sc arg &lt;- argTerm -&gt;</span>
 <span class="lineno">  527 </span><span class="spaces">            </span><span class="istickedoff">lift (bindSAWTerm sym st tyr =&lt;&lt; reconstructArgTerm arg sc [])</span>
 <span class="lineno">  528 </span><span class="spaces">            </span><span class="istickedoff"></span>
 <span class="lineno">  529 </span><span class="spaces">        </span><span class="istickedoff">Just (Arr fn w (x : xs) atms) -&gt;</span>
 <span class="lineno">  530 </span><span class="spaces">          </span><span class="istickedoff">do</span>
-<span class="lineno">  531 </span><span class="spaces">            </span><span class="istickedoff">let <span class="nottickedoff">newTerm =</span></span>
-<span class="lineno">  532 </span><span class="spaces">                  </span><span class="istickedoff"><span class="nottickedoff">case argTerm of</span></span>
-<span class="lineno">  533 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">NoReturnTrip _     -&gt; []</span></span>
-<span class="lineno">  534 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">DoReturnTrip _ _ _ _ t -&gt; t : atms</span></span>
-<span class="lineno">  535 </span><span class="spaces">            </span><span class="istickedoff">put <span class="nottickedoff">(MapF.insert tyr (Arr fn w xs newTerm) mp)</span></span>
+<span class="lineno">  531 </span><span class="spaces">            </span><span class="istickedoff">let newTerm =</span>
+<span class="lineno">  532 </span><span class="spaces">                  </span><span class="istickedoff">case argTerm of</span>
+<span class="lineno">  533 </span><span class="spaces">                    </span><span class="istickedoff">NoReturnTrip _     -&gt; <span class="nottickedoff">[]</span></span>
+<span class="lineno">  534 </span><span class="spaces">                    </span><span class="istickedoff">DoReturnTrip _ _ _ _ t -&gt; t : atms</span>
+<span class="lineno">  535 </span><span class="spaces">            </span><span class="istickedoff">put (MapF.insert tyr (Arr fn w <span class="nottickedoff">xs</span> newTerm) mp)</span>
 <span class="lineno">  536 </span><span class="spaces">            </span><span class="istickedoff">pure x</span>
 <span class="lineno">  537 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  538 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;mkUninterpreted&quot; [&quot;Not enough uninterpreted results&quot;]</span></span></span>
@@ -700,9 +700,9 @@ span.spaces    { background: white }
 <span class="lineno">  681 </span><span class="spaces">    </span><span class="istickedoff">parse at ts0 =</span>
 <span class="lineno">  682 </span><span class="spaces">      </span><span class="istickedoff">case at of</span>
 <span class="lineno">  683 </span><span class="spaces">        </span><span class="istickedoff">ArgTermVar -&gt;</span>
-<span class="lineno">  684 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">case ts0 of</span></span>
-<span class="lineno">  685 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">x : ts1 -&gt; return (x, ts1)</span></span>
-<span class="lineno">  686 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">[] -&gt; fail &quot;reconstructArgTerm: too few function arguments&quot;</span></span>
+<span class="lineno">  684 </span><span class="spaces">          </span><span class="istickedoff">case ts0 of</span>
+<span class="lineno">  685 </span><span class="spaces">            </span><span class="istickedoff">x : ts1 -&gt; return (x, ts1)</span>
+<span class="lineno">  686 </span><span class="spaces">            </span><span class="istickedoff">[] -&gt; <span class="nottickedoff">fail &quot;reconstructArgTerm: too few function arguments&quot;</span></span>
 <span class="lineno">  687 </span><span class="spaces">        </span><span class="istickedoff">ArgTermBVZero -&gt;</span>
 <span class="lineno">  688 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do z &lt;- scNat sc 0</span></span>
 <span class="lineno">  689 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scBvNat sc z z</span></span>
@@ -752,10 +752,10 @@ span.spaces    { background: white }
 <span class="lineno">  733 </span><span class="spaces">        </span><span class="istickedoff">ArgTermConst x -&gt;</span>
 <span class="lineno">  734 </span><span class="spaces">          </span><span class="istickedoff">do return (x, ts0)</span>
 <span class="lineno">  735 </span><span class="spaces">        </span><span class="istickedoff">ArgTermApply at1 at2 -&gt;</span>
-<span class="lineno">  736 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do (x1, ts1) &lt;- parse at1 ts0</span></span>
-<span class="lineno">  737 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">(x2, ts2) &lt;- parse at2 ts1</span></span>
-<span class="lineno">  738 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">x &lt;- scApply sc x1 x2</span></span>
-<span class="lineno">  739 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">return (x, ts2)</span></span>
+<span class="lineno">  736 </span><span class="spaces">          </span><span class="istickedoff">do (x1, ts1) &lt;- parse at1 ts0</span>
+<span class="lineno">  737 </span><span class="spaces">             </span><span class="istickedoff">(x2, ts2) &lt;- parse at2 ts1</span>
+<span class="lineno">  738 </span><span class="spaces">             </span><span class="istickedoff">x &lt;- scApply sc x1 x2</span>
+<span class="lineno">  739 </span><span class="spaces">             </span><span class="istickedoff">return (x, ts2)</span>
 <span class="lineno">  740 </span><span class="spaces">        </span><span class="istickedoff">ArgTermAt n ty at1 i -&gt;</span>
 <span class="lineno">  741 </span><span class="spaces">          </span><span class="istickedoff">do n' &lt;- scNat sc n</span>
 <span class="lineno">  742 </span><span class="spaces">             </span><span class="istickedoff">(x1, ts1) &lt;- parse at1 ts0</span>
@@ -794,79 +794,79 @@ span.spaces    { background: white }
 <span class="lineno">  775 </span>  TValue (What4 sym) -&gt;
 <span class="lineno">  776 </span>  SValue sym -&gt;
 <span class="lineno">  777 </span>  IO ArgTerm
-<span class="lineno">  778 </span><span class="decl"><span class="nottickedoff">mkArgTerm sc ty val =</span>
-<span class="lineno">  779 </span><span class="spaces">  </span><span class="nottickedoff">case (ty, val) of</span>
-<span class="lineno">  780 </span><span class="spaces">    </span><span class="nottickedoff">(VBoolType, VBool _) -&gt; return ArgTermVar</span>
-<span class="lineno">  781 </span><span class="spaces">    </span><span class="nottickedoff">(VIntType, VInt _)   -&gt; return ArgTermVar</span>
-<span class="lineno">  782 </span><span class="spaces">    </span><span class="nottickedoff">(_, VWord ZBV)       -&gt; return ArgTermBVZero     -- 0-width bitvector is a constant</span>
-<span class="lineno">  783 </span><span class="spaces">    </span><span class="nottickedoff">(_, VWord (DBV _))   -&gt; return ArgTermVar</span>
-<span class="lineno">  784 </span><span class="spaces">    </span><span class="nottickedoff">(_, VArray{})        -&gt; return ArgTermVar</span>
-<span class="lineno">  785 </span><span class="spaces">    </span><span class="nottickedoff">(VIntModType n, VIntMod _ _) -&gt; pure (ArgTermToIntMod n ArgTermVar)</span>
-<span class="lineno">  786 </span><span class="spaces">    </span><span class="nottickedoff">(VRationalType, VRational numer denom) -&gt;</span>
-<span class="lineno">  787 </span><span class="spaces">      </span><span class="nottickedoff">do numer' &lt;- mkArgTerm @sym sc VIntType (VInt numer)</span>
-<span class="lineno">  788 </span><span class="spaces">         </span><span class="nottickedoff">denom' &lt;- mkArgTerm @sym sc VIntType (VInt denom)</span>
-<span class="lineno">  789 </span><span class="spaces">         </span><span class="nottickedoff">pure (ArgTermRational numer' denom')</span>
-<span class="lineno">  790 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  791 </span><span class="spaces">    </span><span class="nottickedoff">-- A non-empty vector of bits is packed by 'applyUnintApp' into a single</span>
-<span class="lineno">  792 </span><span class="spaces">    </span><span class="nottickedoff">-- bitvector argument (see the 'VVector' case there), so it consumes a</span>
-<span class="lineno">  793 </span><span class="spaces">    </span><span class="nottickedoff">-- single reconstruction term---just like the 'VWord' case above.</span>
-<span class="lineno">  794 </span><span class="spaces">    </span><span class="nottickedoff">(VVecType n VBoolType, VVector _) | n &gt; 0 -&gt; return ArgTermVar</span>
-<span class="lineno">  795 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  796 </span><span class="spaces">    </span><span class="nottickedoff">(VVecType _ ety, VVector vv) -&gt;</span>
-<span class="lineno">  797 </span><span class="spaces">      </span><span class="nottickedoff">do vs &lt;- traverse force (V.toList vv)</span>
-<span class="lineno">  798 </span><span class="spaces">         </span><span class="nottickedoff">xs &lt;- traverse (mkArgTerm sc ety) vs</span>
-<span class="lineno">  799 </span><span class="spaces">         </span><span class="nottickedoff">ety' &lt;- termOfTValue sc ety</span>
-<span class="lineno">  800 </span><span class="spaces">         </span><span class="nottickedoff">return (ArgTermVector ety' xs)</span>
-<span class="lineno">  801 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  802 </span><span class="spaces">    </span><span class="nottickedoff">(VDataType (ModuleIdentifier &quot;Prelude.UnitType&quot;) [] [],</span>
-<span class="lineno">  803 </span><span class="spaces">     </span><span class="nottickedoff">VCtorApp 0 _ [])</span>
-<span class="lineno">  804 </span><span class="spaces">                         </span><span class="nottickedoff">-&gt; return ArgTermUnit</span>
-<span class="lineno">  805 </span><span class="spaces">    </span><span class="nottickedoff">(VDataType (ModuleIdentifier &quot;Prelude.PairType&quot;) [TValue ty1, TValue ty2] [],</span>
-<span class="lineno">  806 </span><span class="spaces">     </span><span class="nottickedoff">VCtorApp 0 _ [v1, v2]) -&gt;</span>
-<span class="lineno">  807 </span><span class="spaces">      </span><span class="nottickedoff">do x1 &lt;- mkArgTerm sc ty1 =&lt;&lt; force v1</span>
-<span class="lineno">  808 </span><span class="spaces">         </span><span class="nottickedoff">x2 &lt;- mkArgTerm sc ty2 =&lt;&lt; force v2</span>
-<span class="lineno">  809 </span><span class="spaces">         </span><span class="nottickedoff">return (ArgTermPair x1 x2)</span>
-<span class="lineno">  810 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  811 </span><span class="spaces">    </span><span class="nottickedoff">(VDataType (ModuleIdentifier &quot;Prelude.EmptyType&quot;) [] [],</span>
-<span class="lineno">  812 </span><span class="spaces">     </span><span class="nottickedoff">VCtorApp 0 _ []) -&gt;</span>
-<span class="lineno">  813 </span><span class="spaces">      </span><span class="nottickedoff">pure ArgTermEmpty</span>
-<span class="lineno">  814 </span><span class="spaces">    </span><span class="nottickedoff">(VDataType _nm [VString fname, TValue ty1, TValue ty2] [],</span>
-<span class="lineno">  815 </span><span class="spaces">     </span><span class="nottickedoff">VCtorApp 0 _ [v1, v2]) -&gt;</span>
-<span class="lineno">  816 </span><span class="spaces">      </span><span class="nottickedoff">do x1 &lt;- mkArgTerm sc ty1 =&lt;&lt; force v1</span>
-<span class="lineno">  817 </span><span class="spaces">         </span><span class="nottickedoff">x2 &lt;- mkArgTerm sc ty2 =&lt;&lt; force v2</span>
-<span class="lineno">  818 </span><span class="spaces">         </span><span class="nottickedoff">pure (ArgTermRecord fname x1 x2)</span>
-<span class="lineno">  819 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  820 </span><span class="spaces">    </span><span class="nottickedoff">(VDataType nmi ps _, VCtorApp n _ vv) -&gt;</span>
-<span class="lineno">  821 </span><span class="spaces">      </span><span class="nottickedoff">do mnm &lt;- scResolveQualName sc (toQualName nmi)</span>
-<span class="lineno">  822 </span><span class="spaces">         </span><span class="nottickedoff">nm &lt;-</span>
-<span class="lineno">  823 </span><span class="spaces">           </span><span class="nottickedoff">case mnm of</span>
-<span class="lineno">  824 </span><span class="spaces">             </span><span class="nottickedoff">Just nm -&gt; pure nm</span>
-<span class="lineno">  825 </span><span class="spaces">             </span><span class="nottickedoff">Nothing -&gt; panic &quot;mkArgTerm&quot; [&quot;Data type name not found: &quot; &lt;&gt; toAbsoluteName nmi]</span>
-<span class="lineno">  826 </span><span class="spaces">         </span><span class="nottickedoff">mm &lt;- scGetModuleMap sc</span>
-<span class="lineno">  827 </span><span class="spaces">         </span><span class="nottickedoff">dt &lt;-</span>
-<span class="lineno">  828 </span><span class="spaces">           </span><span class="nottickedoff">case lookupVarIndexInMap (nameIndex nm) mm of</span>
-<span class="lineno">  829 </span><span class="spaces">             </span><span class="nottickedoff">Just (ResolvedDataType dt) -&gt; pure dt</span>
-<span class="lineno">  830 </span><span class="spaces">             </span><span class="nottickedoff">_ -&gt; panic &quot;mkArgTerm&quot; [&quot;Data type not found: &quot; &lt;&gt; toAbsoluteName nmi]</span>
-<span class="lineno">  831 </span><span class="spaces">         </span><span class="nottickedoff">let ctor = dtCtors dt !! n</span>
-<span class="lineno">  832 </span><span class="spaces">         </span><span class="nottickedoff">ps' &lt;- traverse (termOfSValue sc) ps</span>
-<span class="lineno">  833 </span><span class="spaces">         </span><span class="nottickedoff">vv' &lt;- traverse (termOfSValue sc &lt;=&lt; force) vv</span>
-<span class="lineno">  834 </span><span class="spaces">         </span><span class="nottickedoff">x   &lt;- scConstApply sc (ctorName ctor) (ps' ++ vv')</span>
-<span class="lineno">  835 </span><span class="spaces">         </span><span class="nottickedoff">return (ArgTermConst x)</span>
-<span class="lineno">  836 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  837 </span><span class="spaces">    </span><span class="nottickedoff">(_, TValue tval) -&gt;</span>
-<span class="lineno">  838 </span><span class="spaces">      </span><span class="nottickedoff">do x &lt;- termOfTValue sc tval</span>
-<span class="lineno">  839 </span><span class="spaces">         </span><span class="nottickedoff">pure (ArgTermConst x)</span>
-<span class="lineno">  840 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  841 </span><span class="spaces">    </span><span class="nottickedoff">(_, VNat n) -&gt;</span>
-<span class="lineno">  842 </span><span class="spaces">      </span><span class="nottickedoff">do x &lt;- scNat sc n</span>
-<span class="lineno">  843 </span><span class="spaces">         </span><span class="nottickedoff">pure (ArgTermConst x)</span>
-<span class="lineno">  844 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  845 </span><span class="spaces">    </span><span class="nottickedoff">(_, VBVToNat w v) -&gt;</span>
-<span class="lineno">  846 </span><span class="spaces">      </span><span class="nottickedoff">do let w' = fromIntegral w -- FIXME: make w :: Natural to avoid fromIntegral</span>
-<span class="lineno">  847 </span><span class="spaces">         </span><span class="nottickedoff">x &lt;- mkArgTerm sc (VVecType w' VBoolType) v</span>
-<span class="lineno">  848 </span><span class="spaces">         </span><span class="nottickedoff">pure (ArgTermBVToNat w' x)</span>
-<span class="lineno">  849 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  850 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; fail $ &quot;could not create uninterpreted function argument of type &quot; ++ show ty</span></span>
+<span class="lineno">  778 </span><span class="decl"><span class="istickedoff">mkArgTerm sc ty val =</span>
+<span class="lineno">  779 </span><span class="spaces">  </span><span class="istickedoff">case (ty, val) of</span>
+<span class="lineno">  780 </span><span class="spaces">    </span><span class="istickedoff">(VBoolType, VBool _) -&gt; <span class="nottickedoff">return ArgTermVar</span></span>
+<span class="lineno">  781 </span><span class="spaces">    </span><span class="istickedoff">(VIntType, VInt _)   -&gt; <span class="nottickedoff">return ArgTermVar</span></span>
+<span class="lineno">  782 </span><span class="spaces">    </span><span class="istickedoff">(_, VWord ZBV)       -&gt; <span class="nottickedoff">return ArgTermBVZero</span>     -- 0-width bitvector is a constant</span>
+<span class="lineno">  783 </span><span class="spaces">    </span><span class="istickedoff">(_, VWord (DBV _))   -&gt; return ArgTermVar</span>
+<span class="lineno">  784 </span><span class="spaces">    </span><span class="istickedoff">(_, VArray{})        -&gt; <span class="nottickedoff">return ArgTermVar</span></span>
+<span class="lineno">  785 </span><span class="spaces">    </span><span class="istickedoff">(VIntModType n, VIntMod _ _) -&gt; <span class="nottickedoff">pure (ArgTermToIntMod n ArgTermVar)</span></span>
+<span class="lineno">  786 </span><span class="spaces">    </span><span class="istickedoff">(VRationalType, VRational numer denom) -&gt;</span>
+<span class="lineno">  787 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do numer' &lt;- mkArgTerm @sym sc VIntType (VInt numer)</span></span>
+<span class="lineno">  788 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">denom' &lt;- mkArgTerm @sym sc VIntType (VInt denom)</span></span>
+<span class="lineno">  789 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">pure (ArgTermRational numer' denom')</span></span>
+<span class="lineno">  790 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  791 </span><span class="spaces">    </span><span class="istickedoff">-- A non-empty vector of bits is packed by 'applyUnintApp' into a single</span>
+<span class="lineno">  792 </span><span class="spaces">    </span><span class="istickedoff">-- bitvector argument (see the 'VVector' case there), so it consumes a</span>
+<span class="lineno">  793 </span><span class="spaces">    </span><span class="istickedoff">-- single reconstruction term---just like the 'VWord' case above.</span>
+<span class="lineno">  794 </span><span class="spaces">    </span><span class="istickedoff">(VVecType n VBoolType, VVector _) | <span class="nottickedoff">n &gt; 0</span> -&gt; <span class="nottickedoff">return ArgTermVar</span></span>
+<span class="lineno">  795 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  796 </span><span class="spaces">    </span><span class="istickedoff">(VVecType _ ety, VVector vv) -&gt;</span>
+<span class="lineno">  797 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do vs &lt;- traverse force (V.toList vv)</span></span>
+<span class="lineno">  798 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">xs &lt;- traverse (mkArgTerm sc ety) vs</span></span>
+<span class="lineno">  799 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">ety' &lt;- termOfTValue sc ety</span></span>
+<span class="lineno">  800 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">return (ArgTermVector ety' xs)</span></span>
+<span class="lineno">  801 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  802 </span><span class="spaces">    </span><span class="istickedoff">(VDataType (ModuleIdentifier &quot;Prelude.UnitType&quot;) [] [],</span>
+<span class="lineno">  803 </span><span class="spaces">     </span><span class="istickedoff">VCtorApp 0 _ [])</span>
+<span class="lineno">  804 </span><span class="spaces">                         </span><span class="istickedoff">-&gt; <span class="nottickedoff">return ArgTermUnit</span></span>
+<span class="lineno">  805 </span><span class="spaces">    </span><span class="istickedoff">(VDataType (ModuleIdentifier &quot;Prelude.PairType&quot;) [TValue ty1, TValue ty2] [],</span>
+<span class="lineno">  806 </span><span class="spaces">     </span><span class="istickedoff">VCtorApp 0 _ [v1, v2]) -&gt;</span>
+<span class="lineno">  807 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do x1 &lt;- mkArgTerm sc ty1 =&lt;&lt; force v1</span></span>
+<span class="lineno">  808 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">x2 &lt;- mkArgTerm sc ty2 =&lt;&lt; force v2</span></span>
+<span class="lineno">  809 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">return (ArgTermPair x1 x2)</span></span>
+<span class="lineno">  810 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  811 </span><span class="spaces">    </span><span class="istickedoff">(VDataType (ModuleIdentifier &quot;Prelude.EmptyType&quot;) [] [],</span>
+<span class="lineno">  812 </span><span class="spaces">     </span><span class="istickedoff">VCtorApp 0 _ []) -&gt;</span>
+<span class="lineno">  813 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">pure ArgTermEmpty</span></span>
+<span class="lineno">  814 </span><span class="spaces">    </span><span class="istickedoff">(VDataType _nm [VString fname, TValue ty1, TValue ty2] [],</span>
+<span class="lineno">  815 </span><span class="spaces">     </span><span class="istickedoff">VCtorApp 0 _ [v1, v2]) -&gt;</span>
+<span class="lineno">  816 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do x1 &lt;- mkArgTerm sc ty1 =&lt;&lt; force v1</span></span>
+<span class="lineno">  817 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">x2 &lt;- mkArgTerm sc ty2 =&lt;&lt; force v2</span></span>
+<span class="lineno">  818 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">pure (ArgTermRecord fname x1 x2)</span></span>
+<span class="lineno">  819 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  820 </span><span class="spaces">    </span><span class="istickedoff">(VDataType nmi ps _, VCtorApp n _ vv) -&gt;</span>
+<span class="lineno">  821 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do mnm &lt;- scResolveQualName sc (toQualName nmi)</span></span>
+<span class="lineno">  822 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">nm &lt;-</span></span>
+<span class="lineno">  823 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">case mnm of</span></span>
+<span class="lineno">  824 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">Just nm -&gt; pure nm</span></span>
+<span class="lineno">  825 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">Nothing -&gt; panic &quot;mkArgTerm&quot; [&quot;Data type name not found: &quot; &lt;&gt; toAbsoluteName nmi]</span></span>
+<span class="lineno">  826 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">mm &lt;- scGetModuleMap sc</span></span>
+<span class="lineno">  827 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">dt &lt;-</span></span>
+<span class="lineno">  828 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">case lookupVarIndexInMap (nameIndex nm) mm of</span></span>
+<span class="lineno">  829 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">Just (ResolvedDataType dt) -&gt; pure dt</span></span>
+<span class="lineno">  830 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; panic &quot;mkArgTerm&quot; [&quot;Data type not found: &quot; &lt;&gt; toAbsoluteName nmi]</span></span>
+<span class="lineno">  831 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">let ctor = dtCtors dt !! n</span></span>
+<span class="lineno">  832 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">ps' &lt;- traverse (termOfSValue sc) ps</span></span>
+<span class="lineno">  833 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">vv' &lt;- traverse (termOfSValue sc &lt;=&lt; force) vv</span></span>
+<span class="lineno">  834 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">x   &lt;- scConstApply sc (ctorName ctor) (ps' ++ vv')</span></span>
+<span class="lineno">  835 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">return (ArgTermConst x)</span></span>
+<span class="lineno">  836 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  837 </span><span class="spaces">    </span><span class="istickedoff">(_, TValue tval) -&gt;</span>
+<span class="lineno">  838 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do x &lt;- termOfTValue sc tval</span></span>
+<span class="lineno">  839 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">pure (ArgTermConst x)</span></span>
+<span class="lineno">  840 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  841 </span><span class="spaces">    </span><span class="istickedoff">(_, VNat n) -&gt;</span>
+<span class="lineno">  842 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do x &lt;- scNat sc n</span></span>
+<span class="lineno">  843 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">pure (ArgTermConst x)</span></span>
+<span class="lineno">  844 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  845 </span><span class="spaces">    </span><span class="istickedoff">(_, VBVToNat w v) -&gt;</span>
+<span class="lineno">  846 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">do let w' = fromIntegral w -- FIXME: make w :: Natural to avoid fromIntegral</span></span>
+<span class="lineno">  847 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">x &lt;- mkArgTerm sc (VVecType w' VBoolType) v</span></span>
+<span class="lineno">  848 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">pure (ArgTermBVToNat w' x)</span></span>
+<span class="lineno">  849 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  850 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">fail $ &quot;could not create uninterpreted function argument of type &quot; ++ show ty</span></span></span>
 <span class="lineno">  851 </span>
 <span class="lineno">  852 </span>
 <span class="lineno">  853 </span>

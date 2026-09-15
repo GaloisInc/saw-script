@@ -498,7 +498,7 @@ span.spaces    { background: white }
 <span class="lineno">  479 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">fail $ &quot;goal_eval: expected EqTrue\n&quot; ++ p'</span></span>
 <span class="lineno">  480 </span><span class="spaces">     </span><span class="istickedoff">-- Generalize goal by inventing new variables for instances of</span>
 <span class="lineno">  481 </span><span class="spaces">     </span><span class="istickedoff">-- higher-order uninterpreted functions.</span>
-<span class="lineno">  482 </span><span class="spaces">     </span><span class="istickedoff">(body'', sub) &lt;- generalizeHigherOrderFunctions <span class="nottickedoff">sc</span> unints body'</span>
+<span class="lineno">  482 </span><span class="spaces">     </span><span class="istickedoff">(body'', sub) &lt;- generalizeHigherOrderFunctions sc unints body'</span>
 <span class="lineno">  483 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  484 </span><span class="spaces">     </span><span class="istickedoff">eb &lt;- W4Sim.newSAWCoreExprBuilder sc what4PushMuxOps</span>
 <span class="lineno">  485 </span><span class="spaces">     </span><span class="istickedoff">let st = eb ^. W4.userState</span>
@@ -506,7 +506,7 @@ span.spaces    { background: white }
 <span class="lineno">  487 </span><span class="spaces">     </span><span class="istickedoff">t1 &lt;- W4Sim.toSC <span class="nottickedoff">eb</span> st p'</span>
 <span class="lineno">  488 </span><span class="spaces">     </span><span class="istickedoff">-- Apply substitution to remove variables we invented for</span>
 <span class="lineno">  489 </span><span class="spaces">     </span><span class="istickedoff">-- instances of higher-order uninterpreted functions.</span>
-<span class="lineno">  490 </span><span class="spaces">     </span><span class="istickedoff">t2 &lt;- scInstantiate <span class="nottickedoff">sc</span> sub t1</span>
+<span class="lineno">  490 </span><span class="spaces">     </span><span class="istickedoff">t2 &lt;- scInstantiate sc sub t1</span>
 <span class="lineno">  491 </span><span class="spaces">     </span><span class="istickedoff">t3 &lt;- scEqTrue sc t2</span>
 <span class="lineno">  492 </span><span class="spaces">     </span><span class="istickedoff">-- turn the free variables we generated back into pi-bound variables</span>
 <span class="lineno">  493 </span><span class="spaces">     </span><span class="istickedoff">t4 &lt;- scPiList sc vars t3</span>
