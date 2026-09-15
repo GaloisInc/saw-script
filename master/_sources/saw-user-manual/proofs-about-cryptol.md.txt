@@ -27,24 +27,6 @@ modules.
 SAW uses the same code to do this as Cryptol itself, so the behavior
 should be the same, including in complicated cases.
 
-There is a known problem with the interaction of pathnames in quotes
-with `CRYPTOLPATH`, which also happens on the Cryptol command line;
-see [#2194](https://github.com/GaloisInc/saw-script/issues/2194).
-This can be avoided by using qualified module names instead of file
-paths.
-
-For example, instead of
-
-```sawscript
-import "Foo/Bar.cry";
-```
-
-use
-
-```sawscript
-import Foo::Bar;
-```
-
 To import a submodule (Cryptol submodules are ML-style modules nested
 within source files), use the keyword `submodule` before the module
 path.
@@ -93,11 +75,6 @@ Eventually the `import` form will become equivalent, at which point
 
 Note that `cryptol_load` does not support qualified module names or
 partial imports.
-Also, if using it for complicated things, beware of
-[issue #3167](https://github.com/GaloisInc/saw-script/issues/3167);
-currently if you pass a module handle function to a function defined
-before the module load, things get confused and the Cryptol importer
-panics.
 
 ## Writing Cryptol Inline in SAWScript
 

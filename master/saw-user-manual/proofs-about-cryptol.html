@@ -155,19 +155,6 @@ The environment variable <code class="docutils literal notranslate"><span class=
 modules.
 SAW uses the same code to do this as Cryptol itself, so the behavior
 should be the same, including in complicated cases.</p>
-<p>There is a known problem with the interaction of pathnames in quotes
-with <code class="docutils literal notranslate"><span class="pre">CRYPTOLPATH</span></code>, which also happens on the Cryptol command line;
-see <a class="reference external" href="https://github.com/GaloisInc/saw-script/issues/2194">#2194</a>.
-This can be avoided by using qualified module names instead of file
-paths.</p>
-<p>For example, instead of</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="s2">&quot;Foo/Bar.cry&quot;</span><span class="p">;</span>
-</pre></div>
-</div>
-<p>use</p>
-<div class="highlight-sawscript notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="n">Foo</span><span class="p">::</span><span class="n">Bar</span><span class="p">;</span>
-</pre></div>
-</div>
 <p>To import a submodule (Cryptol submodules are ML-style modules nested
 within source files), use the keyword <code class="docutils literal notranslate"><span class="pre">submodule</span></code> before the module
 path.</p>
@@ -203,12 +190,7 @@ qualifier only.
 Eventually the <code class="docutils literal notranslate"><span class="pre">import</span></code> form will become equivalent, at which point
 <code class="docutils literal notranslate"><span class="pre">cryptol_load</span></code> will be deprecated.</p>
 <p>Note that <code class="docutils literal notranslate"><span class="pre">cryptol_load</span></code> does not support qualified module names or
-partial imports.
-Also, if using it for complicated things, beware of
-<a class="reference external" href="https://github.com/GaloisInc/saw-script/issues/3167">issue #3167</a>;
-currently if you pass a module handle function to a function defined
-before the module load, things get confused and the Cryptol importer
-panics.</p>
+partial imports.</p>
 </section>
 <section id="writing-cryptol-inline-in-sawscript">
 <h2>Writing Cryptol Inline in SAWScript<a class="headerlink" href="#writing-cryptol-inline-in-sawscript" title="Link to this heading"></a></h2>
