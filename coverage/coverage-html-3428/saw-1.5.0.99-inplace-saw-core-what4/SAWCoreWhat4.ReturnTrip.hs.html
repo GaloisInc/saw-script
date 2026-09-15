@@ -142,7 +142,7 @@ span.spaces    { background: white }
 <span class="lineno">  123 </span><span class="spaces">  </span><span class="istickedoff">do inpr &lt;- newIORef <span class="nottickedoff">Seq.empty</span></span>
 <span class="lineno">  124 </span><span class="spaces">     </span><span class="istickedoff">ch   &lt;- B.newIdxCache</span>
 <span class="lineno">  125 </span><span class="spaces">     </span><span class="istickedoff">ch_r &lt;- newIORef IntMap.empty</span>
-<span class="lineno">  126 </span><span class="spaces">     </span><span class="istickedoff">mr   &lt;- newIORef <span class="nottickedoff">Map.empty</span></span>
+<span class="lineno">  126 </span><span class="spaces">     </span><span class="istickedoff">mr   &lt;- newIORef Map.empty</span>
 <span class="lineno">  127 </span><span class="spaces">     </span><span class="istickedoff">return SAWCoreState</span>
 <span class="lineno">  128 </span><span class="spaces">            </span><span class="istickedoff">{ saw_sc = sc</span>
 <span class="lineno">  129 </span><span class="spaces">            </span><span class="istickedoff">, saw_inputs = inpr</span>
@@ -276,7 +276,7 @@ span.spaces    { background: white }
 <span class="lineno">  257 </span>  (SC.SharedContext -&gt; [SC.Term] -&gt; IO UninterpResult) -&gt;
 <span class="lineno">  258 </span>  IO ()
 <span class="lineno">  259 </span><span class="decl"><span class="istickedoff">sawRegisterSymFunInterp st f i =</span>
-<span class="lineno">  260 </span><span class="spaces">  </span><span class="istickedoff">modifyIORef (saw_symMap st) <span class="nottickedoff">(Map.insert (indexValue (B.symFnId f)) i)</span></span></span>
+<span class="lineno">  260 </span><span class="spaces">  </span><span class="istickedoff">modifyIORef (saw_symMap st) (Map.insert (indexValue (B.symFnId f)) i)</span></span>
 <span class="lineno">  261 </span>
 <span class="lineno">  262 </span>toSC :: B.ExprBuilder n st fs -&gt; SAWCoreState n -&gt; B.Expr n tp -&gt; IO SC.Term
 <span class="lineno">  263 </span><span class="decl"><span class="istickedoff">toSC sym st elt = evaluateExpr sym st (saw_sc st) (saw_elt_cache st) elt</span></span>
@@ -554,30 +554,30 @@ span.spaces    { background: white }
 <span class="lineno">  535 </span>  B.ExprSymFn n args ret -&gt;
 <span class="lineno">  536 </span>  Ctx.Assignment SAWExpr args -&gt;
 <span class="lineno">  537 </span>  IO (SAWExpr ret)
-<span class="lineno">  538 </span><span class="decl"><span class="nottickedoff">applyExprSymFn sym st sc fn args =</span>
-<span class="lineno">  539 </span><span class="spaces">  </span><span class="nottickedoff">do mp &lt;- readIORef (saw_symMap st)</span>
-<span class="lineno">  540 </span><span class="spaces">     </span><span class="nottickedoff">mk &lt;-</span>
-<span class="lineno">  541 </span><span class="spaces">       </span><span class="nottickedoff">case Map.lookup (indexValue (B.symFnId fn)) mp of</span>
-<span class="lineno">  542 </span><span class="spaces">         </span><span class="nottickedoff">Nothing -&gt; panic &quot;applyExprSymFn&quot; [</span>
-<span class="lineno">  543 </span><span class="spaces">                        </span><span class="nottickedoff">&quot;Unknown symbolic function &quot; &lt;&gt; Text.pack (show fn)</span>
-<span class="lineno">  544 </span><span class="spaces">                    </span><span class="nottickedoff">]</span>
-<span class="lineno">  545 </span><span class="spaces">         </span><span class="nottickedoff">Just mk -&gt; return mk</span>
-<span class="lineno">  546 </span><span class="spaces">     </span><span class="nottickedoff">ts &lt;- evaluateAsgn args</span>
-<span class="lineno">  547 </span><span class="spaces">     </span><span class="nottickedoff">res &lt;- mk sc (reverse ts)</span>
-<span class="lineno">  548 </span><span class="spaces">     </span><span class="nottickedoff">pure $</span>
-<span class="lineno">  549 </span><span class="spaces">       </span><span class="nottickedoff">case res of</span>
-<span class="lineno">  550 </span><span class="spaces">         </span><span class="nottickedoff">UninterpOne a -&gt; SAWExpr a</span>
-<span class="lineno">  551 </span><span class="spaces">         </span><span class="nottickedoff">UninterpMany w t vs -&gt;</span>
-<span class="lineno">  552 </span><span class="spaces">           </span><span class="nottickedoff">case B.symFnReturnType fn of</span>
-<span class="lineno">  553 </span><span class="spaces">             </span><span class="nottickedoff">BaseArrayRepr _ _ -&gt; UninterpArraySAWExpr w t vs</span>
-<span class="lineno">  554 </span><span class="spaces">             </span><span class="nottickedoff">_ -&gt; panic &quot;applyExpSymFn&quot; [&quot;`UninterpMany`, but type is not array&quot;]</span>
-<span class="lineno">  555 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
-<span class="lineno">  556 </span><span class="spaces">    </span><span class="nottickedoff">evaluateAsgn :: Ctx.Assignment SAWExpr args' -&gt; IO [SC.Term]</span>
-<span class="lineno">  557 </span><span class="spaces">    </span><span class="nottickedoff">evaluateAsgn Ctx.Empty = return []</span>
-<span class="lineno">  558 </span><span class="spaces">    </span><span class="nottickedoff">evaluateAsgn (xs Ctx.:&gt; x) =</span>
-<span class="lineno">  559 </span><span class="spaces">      </span><span class="nottickedoff">do vs &lt;- evaluateAsgn xs</span>
-<span class="lineno">  560 </span><span class="spaces">         </span><span class="nottickedoff">v &lt;- termOfSAWExpr sym sc x</span>
-<span class="lineno">  561 </span><span class="spaces">         </span><span class="nottickedoff">return (v : vs)</span></span>
+<span class="lineno">  538 </span><span class="decl"><span class="istickedoff">applyExprSymFn sym st sc fn args =</span>
+<span class="lineno">  539 </span><span class="spaces">  </span><span class="istickedoff">do mp &lt;- readIORef (saw_symMap st)</span>
+<span class="lineno">  540 </span><span class="spaces">     </span><span class="istickedoff">mk &lt;-</span>
+<span class="lineno">  541 </span><span class="spaces">       </span><span class="istickedoff">case Map.lookup (indexValue (B.symFnId fn)) mp of</span>
+<span class="lineno">  542 </span><span class="spaces">         </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">panic &quot;applyExprSymFn&quot; [</span></span>
+<span class="lineno">  543 </span><span class="spaces">                        </span><span class="istickedoff"><span class="nottickedoff">&quot;Unknown symbolic function &quot; &lt;&gt; Text.pack (show fn)</span></span>
+<span class="lineno">  544 </span><span class="spaces">                    </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  545 </span><span class="spaces">         </span><span class="istickedoff">Just mk -&gt; return mk</span>
+<span class="lineno">  546 </span><span class="spaces">     </span><span class="istickedoff">ts &lt;- evaluateAsgn args</span>
+<span class="lineno">  547 </span><span class="spaces">     </span><span class="istickedoff">res &lt;- mk sc (reverse ts)</span>
+<span class="lineno">  548 </span><span class="spaces">     </span><span class="istickedoff">pure $</span>
+<span class="lineno">  549 </span><span class="spaces">       </span><span class="istickedoff">case res of</span>
+<span class="lineno">  550 </span><span class="spaces">         </span><span class="istickedoff">UninterpOne a -&gt; SAWExpr a</span>
+<span class="lineno">  551 </span><span class="spaces">         </span><span class="istickedoff">UninterpMany w t vs -&gt;</span>
+<span class="lineno">  552 </span><span class="spaces">           </span><span class="istickedoff"><span class="nottickedoff">case B.symFnReturnType fn of</span></span>
+<span class="lineno">  553 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">BaseArrayRepr _ _ -&gt; UninterpArraySAWExpr w t vs</span></span>
+<span class="lineno">  554 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; panic &quot;applyExpSymFn&quot; [&quot;`UninterpMany`, but type is not array&quot;]</span></span>
+<span class="lineno">  555 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  556 </span><span class="spaces">    </span><span class="istickedoff">evaluateAsgn :: Ctx.Assignment SAWExpr args' -&gt; IO [SC.Term]</span>
+<span class="lineno">  557 </span><span class="spaces">    </span><span class="istickedoff">evaluateAsgn Ctx.Empty = return []</span>
+<span class="lineno">  558 </span><span class="spaces">    </span><span class="istickedoff">evaluateAsgn (xs Ctx.:&gt; x) =</span>
+<span class="lineno">  559 </span><span class="spaces">      </span><span class="istickedoff">do vs &lt;- evaluateAsgn xs</span>
+<span class="lineno">  560 </span><span class="spaces">         </span><span class="istickedoff">v &lt;- termOfSAWExpr <span class="nottickedoff">sym</span> <span class="nottickedoff">sc</span> x</span>
+<span class="lineno">  561 </span><span class="spaces">         </span><span class="istickedoff">return (v : vs)</span></span>
 <span class="lineno">  562 </span>
 <span class="lineno">  563 </span>{- | Declare that we don't support something or other.
 <span class="lineno">  564 </span>This aborts the current path of execution, and adds a proof
@@ -672,8 +672,8 @@ span.spaces    { background: white }
 <span class="lineno">  653 </span><span class="spaces">        </span><span class="istickedoff">B.MapOverArrays{} -&gt; <span class="nottickedoff">unimplemented &quot;MapOverArrays&quot;</span></span>
 <span class="lineno">  654 </span><span class="spaces">        </span><span class="istickedoff">B.ArrayTrueOnEntries{} -&gt; <span class="nottickedoff">unimplemented &quot;ArrayTrueOnEntries&quot;</span></span>
 <span class="lineno">  655 </span><span class="spaces">        </span><span class="istickedoff">B.FnApp fn asgn -&gt;</span>
-<span class="lineno">  656 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">do args &lt;- traverseFC (eval env) asgn</span></span>
-<span class="lineno">  657 </span><span class="spaces">             </span><span class="istickedoff"><span class="nottickedoff">applyExprSymFn sym st sc fn args</span></span>
+<span class="lineno">  656 </span><span class="spaces">          </span><span class="istickedoff">do args &lt;- traverseFC (eval <span class="nottickedoff">env</span>) asgn</span>
+<span class="lineno">  657 </span><span class="spaces">             </span><span class="istickedoff">applyExprSymFn <span class="nottickedoff">sym</span> st sc fn args</span>
 <span class="lineno">  658 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  659 </span><span class="spaces">    </span><span class="istickedoff">go env a0@(B.AppExpr a) =</span>
 <span class="lineno">  660 </span><span class="spaces">      </span><span class="istickedoff">let <span class="nottickedoff">nyi = unsupported sym $</span></span>
