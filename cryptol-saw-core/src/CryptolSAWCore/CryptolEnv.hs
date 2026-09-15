@@ -355,24 +355,29 @@ getNamingEnvOfImport modEnv impData =
 
   where
 
-  vis   = importVis impData
-  imprt = importCmd impData
+  vis       = importVis impData
+  imprt     = importCmd impData
+  imprtType = importInfo impData :: ImportInfo
+                                    -- E.g., ImportNested/ImportTop
 
-  -- here we encapsulate code that depends on *what kind* of import we have;
-  -- the rest of the function treats both kinds uniformly:
-  ImportCache { icPath          = importedPath
-              , icScopeEnv      = scopeEnv
-              , icPublicNames   = publicNames
-              , icImportedNames = importedNames
-              , icNameToPName   = nameToPName
-              } =
-    case importInfo impData of
-      C.ImportNested nm -> cacheIfNested modEnv vis nm
-      C.ImportTop       -> cacheIfTop modEnv vis
-                                      (P.thing $ T.iModule imprt)
+  -- bind all the results that depend on `imprtType`:
+  ImportResults { irPath          = importedPath
+                , irScopeEnv      = scopeEnv
+                , irPublicNames   = publicNames
+                , irImportedNames = importedNames
+                , irNameToPName   = nameToPName
+                }
+      =
+      -- here's the only place we case on imprtType:
+      case imprtType of
+        -- process when we have `import submodule`:
+        C.ImportNested nm -> importResultsIfNested modEnv vis nm
+        -- process when we have `import`:
+        C.ImportTop       -> importResultsIfTop modEnv vis
+                               (P.thing $ T.iModule imprt)
 
-  -- the names that the module aliases (i.e., `submodule A = ...`
-  -- declarations) inside the imported module contribute:
+  -- the naming environment containing the module aliases
+  -- (i.e., `submodule A = ...`-- declarations) of the imported module:
   aliasedNames :: MR.NamingEnv
   aliasedNames = modAliasNames scopeEnv nameToPName visibleAliases
     where
@@ -420,28 +425,29 @@ modAliasNames scopeEnv nameToPName aliases
     any (\a -> pNameChunks (nameToPName a) `isPrefixOf` pNameQualifiers pn)
         aliases
 
--- ImportCache and functions returning -------------------------------
+-- ImportResults and functions returning it ------------------------------------
 
--- | What `getNamingEnvOfImport` needs to know about the module (or
---   submodule) which is imported (in `ImportData`).  This allows
---   to abstract over the `import` vs. `import submodule`.
-data ImportCache = ImportCache
-  { icPath :: C.ModPath
+-- | Various results we need to compute for the module/submodule
+--   that we import (in `ImportData`).  The purpose of this is to
+--   abstract over the `import` vs. `import submodule` differences
+--   in the code below:
+data ImportResults = ImportResults
+  { irPath :: C.ModPath
     -- ^ the path of the module (or submodule) being imported.  Note
     --   that for `import submodule A`, where `A` is a module alias,
     --   this is the path of what `A` refers to.
 
-  , icScopeEnv :: MR.NamingEnv
+  , irScopeEnv :: MR.NamingEnv
     -- ^ what is in scope in the imported module.
 
-  , icPublicNames :: Set MN.Name
+  , irPublicNames :: Set MN.Name
     -- ^ the public (i.e., exported) names of the imported module.
 
-  , icImportedNames :: Set MN.Name
+  , irImportedNames :: Set MN.Name
     -- ^ the names the import brings in, before any renaming, respecting
     --   the import's visibility (`PublicAndPrivate` vs `OnlyPublic`).
 
-  , icNameToPName :: MN.Name -> P.PName
+  , irNameToPName :: MN.Name -> P.PName
     -- ^ how the names of the imported module are spelled:
     --     - For submodules, strip the submodule nesting to get a
     --       'less' qualified name.
@@ -449,16 +455,17 @@ data ImportCache = ImportCache
     --       to preserve paths.
   }
 
--- | The `ImportCache` for an `import modName`, where `modName` is a
+-- | The `ImportResults` for an `import modName`, where `modName` is a
 --   top-level (and loaded) module.
-cacheIfTop :: ME.ModuleEnv -> ImportVisibility -> C.ModName -> ImportCache
-cacheIfTop modEnv vis modName =
-  ImportCache
-    { icPath          = C.TopModule modName
-    , icScopeEnv      = ME.lmNamingEnv loadedMod
-    , icPublicNames   = MI.ifsPublic $ MI.ifNames $ ME.lmInterface loadedMod
-    , icImportedNames = namesOfLoadedModule loadedMod vis
-    , icNameToPName   = MN.nameToPNameWithQualifiers
+importResultsIfTop ::
+  ME.ModuleEnv -> ImportVisibility -> C.ModName -> ImportResults
+importResultsIfTop modEnv vis modName =
+  ImportResults
+    { irPath          = C.TopModule modName
+    , irScopeEnv      = ME.lmNamingEnv loadedMod
+    , irPublicNames   = MI.ifsPublic $ MI.ifNames $ ME.lmInterface loadedMod
+    , irImportedNames = namesOfLoadedModule loadedMod vis
+    , irNameToPName   = MN.nameToPNameWithQualifiers
     }
 
   where
@@ -467,22 +474,23 @@ cacheIfTop modEnv vis modName =
   loadedMod =
     case ME.lookupModule modName modEnv of
       Just lm -> lm
-      Nothing -> panic "cacheIfTop"
+      Nothing -> panic "importResultsIfTop"
                        ["cannot lookupModule: " <> CryPP.pp modName]
 
--- | The `ImportCache` for an `import submodule nm`.  Note that when
+-- | The `ImportResults` for an `import submodule nm`.  Note that when
 --   `nm` is a module alias, we follow it to what it refers to.
-cacheIfNested :: ME.ModuleEnv -> ImportVisibility -> MN.Name -> ImportCache
-cacheIfNested modEnv vis nm =
-  ImportCache
-    { icPath          = path
-    , icScopeEnv      = ME.mctxNames submodCtx
-    , icPublicNames   = exported
-    , icImportedNames =
+importResultsIfNested ::
+  ME.ModuleEnv -> ImportVisibility -> MN.Name -> ImportResults
+importResultsIfNested modEnv vis nm =
+  ImportResults
+    { irPath          = path
+    , irScopeEnv      = ME.mctxNames submodCtx
+    , irPublicNames   = exported
+    , irImportedNames =
         case vis of
           PublicAndPrivate -> nms
           OnlyPublic       -> Set.intersection nms exported
-    , icNameToPName   = stripModPathPrefix path
+    , irNameToPName   = stripModPathPrefix path
     }
 
   where
@@ -495,8 +503,8 @@ cacheIfNested modEnv vis nm =
   submodCtx =
     case ME.modContextOf (P.ImpNested nm) modEnv of
       Just mc -> mc
-      Nothing -> panic "cacheIfNested"
-                       ["name: " <> Text.pack (show nm)]
+      Nothing -> panic "importResultsIfNested / submodCtx"
+                       ["no context; name: " <> Text.pack (show nm)]
 
 -- | The `C.ModPath` that a `P.ImpName` refers to, following a module
 --   alias (@submodule A = submodule B@) to its target.
