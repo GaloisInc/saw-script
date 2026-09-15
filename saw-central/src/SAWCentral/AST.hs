@@ -444,6 +444,7 @@ data Rebindable
 data Import = Import
   { iIsSubmodule :: Bool
   , iModule    :: Either FilePath P.ModName
+  , iIsBacktick :: Bool
   , iAs        :: Maybe P.ModName
   , iSpec      :: Maybe P.ImportSpec
   , iPos       :: Pos

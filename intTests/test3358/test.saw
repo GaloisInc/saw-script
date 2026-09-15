@@ -1,0 +1,3 @@
+include "left/left.saw";
+include "right/right.saw";
+print (left, middle, right);

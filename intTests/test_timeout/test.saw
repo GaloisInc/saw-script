@@ -27,6 +27,7 @@ let eq i j = eval_bool {{ ((`(i) : [32]) == `(j)) }};
 rec fib n = if eq n 0 then 0 else if eq n 1 then 1 else plus (fib (minus n 1)) (fib (minus n 2));
 
 // function is evaluated first if not wrapped in a do-block
+print "--- script evaluation ---";
 timeout_handle 1000 (return (fib 7)) (fail "Unexpected timeout");
 
 go 1000 (do { return (fib 7); });
@@ -61,6 +62,7 @@ err_unless (eval_bool {{ `(elapsed_max) < `(10000) }})
 let test_timeout = eval_int {{ (`(elapsed_min) / 2 : [32]) }};
 let test_timeout_long = eval_int {{ (`(elapsed_min) * 2 : [32]) }};
 
+print "--- basic solver case ---";
 b0 <- timeout_handle test_timeout (do {
   x <- fresh_symbolic "x" {| Integer |};
   let t = parse_core "x";
@@ -73,6 +75,7 @@ err_unless b0 "Unexpected success";
 fails (do { return (parse_core "x"); });
 
 
+print "--- rebinding x ---";
 b1 <- timeout_handle 1000 (do {
   x <- fresh_symbolic "x" {| Integer |};
   return true;
@@ -83,15 +86,18 @@ err_unless b1 "Unexpected timeout";
 // unambiguous, since the previous declaration was reverted
 let _ = parse_core "x";
 
+print "--- long case ---";
 go test_timeout_long (do { proof z3; proof z3; proof z3; proof z3; });
 
 // inner timeout first
+print "--- inner case ---";
 (elapsed, _) <- with_time (timeout_handle test_timeout_long
   (go test_timeout (proof z3)) (fail "Unexpected timeout"));
 err_unless (eval_bool {{ `(elapsed) <= `(test_timeout) + 200 }})
   "Timeout did not trigger in time";
 
 // outer timeout first
+print "--- outer case ---";
 (elapsed2, b) <- with_time (timeout_handle test_timeout
   (go test_timeout_long (proof z3))
   (do { print "Timed out. (expected)"; return true;}));
@@ -99,15 +105,21 @@ err_unless b "Unexpected success";
 err_unless (eval_bool {{ `(elapsed2) <= `(test_timeout) + 200 }})
   "Timeout did not trigger in time";
 
+print "--- fails inside, z3 ---";
 go test_timeout (fails (proof z3));
+print "--- fails inside, w4_unint_z3 ---";
 go test_timeout (fails (proof (w4_unint_z3 [])));
 
+print "--- without fails, z3 ---";
 go test_timeout (proof z3);
+print "--- without fails, w4_unint_z3 ---";
 go test_timeout (proof (w4_unint_z3 []));
 
+print "--- fails outside, z3 ---";
 fails (timeout test_timeout (proof z3));
 
 
+print "--- invalid timeout ---";
 fails (timeout_handle 18446744073709551616 (return true) (return false));
 
 print "Success!";

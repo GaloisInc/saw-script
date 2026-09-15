@@ -32,6 +32,7 @@ sed < test.rawlog '
     }
     s,'"$CURDIR"'/,,
     s,^Goal size [0-9]*,Goal size N,
+    /^Solver cache enabled in [^ ][^ ]*$/d
 ' | (
     case "$(uname -s)" in
         MSYS_NT-*|[Ww]indows*|*[Cc]ygwin*|*[Ii]nterix*)

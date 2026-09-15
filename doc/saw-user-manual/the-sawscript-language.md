@@ -598,9 +598,9 @@ Note the terminology: `import` is for bringing in Cryptol,
 
 `include_once` is like `include`, except that if the same file has
 already been included it does nothing.
-(The file is the "same" based on the filename.
-The test does not chase symlinks or inspect OS-level markers for
-file identity.)
+(The file is the "same" based on the filename, absolutized via the
+Haskell equivalent of `realpath`, and not on OS-level markers of file
+identity.)
 
 SAWScript does not have a module system and there is no more
 structured way to load SAWScript code.

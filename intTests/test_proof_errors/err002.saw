@@ -1,0 +1,7 @@
+// Tickle the message about only being able to add theorems that are
+// equalities.
+//
+// Note that if you _don't_ rewrite with basic_ss, it doesn't fail...
+
+thm <- prove_print rme (rewrite basic_ss {{ \(i : [8]) -> i + i == 2 * i }});
+let set = addsimps [thm] basic_ss;
