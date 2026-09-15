@@ -26,6 +26,7 @@ module SAWCoreWhat4.Common
   , valueAsBaseType
   , termOfTValue
   , termOfSValue
+  , termOfValue
   ) where
 
 import Data.IORef
@@ -36,6 +37,13 @@ import Numeric.Natural (Natural)
 -- saw-core
 import SAWCore.SharedTerm
 import SAWCore.FiniteValue (FirstOrderType(..))
+import SAWCore.Module
+  ( ResolvedName(..)
+  , ctorName
+  , dtCtors
+  , lookupVarIndexInMap
+  )
+import SAWCore.Name (nameIndex, toQualName)
 import qualified SAWCore.Simulator.Prims as Prims
 import SAWCore.Simulator.Value
 
@@ -104,7 +112,7 @@ vAsFirstOrderType v = asFirstOrderTypeTValue v
 valueAsBaseType :: IsSymExprBuilder sym => TValue (What4 sym) -> Maybe (Some W.BaseTypeRepr)
 valueAsBaseType v = fotToBaseType =<< vAsFirstOrderType v
 
-termOfTValue :: SharedContext -> TValue (What4 sym) -> IO Term
+termOfTValue :: IsSymExprBuilder sym => SharedContext -> TValue (What4 sym) -> IO Term
 termOfTValue sc val =
   case val of
     VBoolType -> scBoolType sc
@@ -129,6 +137,13 @@ termOfTValue sc val =
             a' <- termOfTValue sc a
             b' <- termOfTValue sc b
             scGlobalApply sc "Prelude.RecordType" [fname', a', b']
+    VDataType nmi ps vs ->
+      do mnm <- scResolveQualName sc (toQualName nmi)
+         case mnm of
+           Just nm ->
+             scConstApply sc nm =<< traverse (termOfSValue sc) (ps ++ vs)
+           Nothing ->
+             fail $ "termOfTValue: data type not found: " ++ show nmi
     _ -> fail $ "termOfTValue: " ++ show val
 
 termOfSValue :: IsSymExprBuilder sym => SharedContext -> SValue sym -> IO Term
@@ -143,3 +158,28 @@ termOfSValue sc val =
       -> scNat sc n
     TValue tv -> termOfTValue sc tv
     _ -> fail $ "termOfSValue: " ++ show val
+
+termOfValue ::
+  IsSymExprBuilder sym =>
+  SharedContext ->
+  TValue (What4 sym) ->
+  SValue sym ->
+  IO Term
+termOfValue sc ty val =
+  case (ty, val) of
+    (VDataType nmi ps _, VCtorApp n _ vv) ->
+      do mnm <- scResolveQualName sc (toQualName nmi)
+         case mnm of
+           Just nm ->
+             do mm <- scGetModuleMap sc
+                case lookupVarIndexInMap (nameIndex nm) mm of
+                  Just (ResolvedDataType dt) ->
+                    do let ctor = dtCtors dt !! n
+                       ps' <- traverse (termOfSValue sc) ps
+                       vv' <- traverse (\v -> termOfSValue sc =<< force v) vv
+                       scConstApply sc (ctorName ctor) (ps' ++ vv')
+                  _ ->
+                    fail $ "termOfValue: data type not found: " ++ show nmi
+           Nothing ->
+             fail $ "termOfValue: data type not found: " ++ show nmi
+    _ -> termOfSValue sc val
