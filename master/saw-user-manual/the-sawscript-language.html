@@ -887,9 +887,9 @@ inside a nested context can have odd effects.</p>
 <code class="docutils literal notranslate"><span class="pre">include</span></code> is for bringing in more SAWScript.</p>
 <p><code class="docutils literal notranslate"><span class="pre">include_once</span></code> is like <code class="docutils literal notranslate"><span class="pre">include</span></code>, except that if the same file has
 already been included it does nothing.
-(The file is the “same” based on the filename.
-The test does not chase symlinks or inspect OS-level markers for
-file identity.)</p>
+(The file is the “same” based on the filename, absolutized via the
+Haskell equivalent of <code class="docutils literal notranslate"><span class="pre">realpath</span></code>, and not on OS-level markers of file
+identity.)</p>
 <p>SAWScript does not have a module system and there is no more
 structured way to load SAWScript code.</p>
 </section>
