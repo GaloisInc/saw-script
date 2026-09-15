@@ -1358,7 +1358,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1339 </span><span class="decl"><span class="nottickedoff">w4_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices []</span></span>
 <span class="lineno"> 1340 </span>
 <span class="lineno"> 1341 </span>w4_unint_bitwuzla :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1342 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] Prover.proveWhat4_bitwuzla</span></span>
+<span class="lineno"> 1342 </span><span class="decl"><span class="istickedoff">w4_unint_bitwuzla = wrapW4Prover Bitwuzla [] <span class="nottickedoff">Prover.proveWhat4_bitwuzla</span></span></span>
 <span class="lineno"> 1343 </span>
 <span class="lineno"> 1344 </span>w4_unint_rme :: [Text] -&gt; ProofScript ()
 <span class="lineno"> 1345 </span><span class="decl"><span class="istickedoff">w4_unint_rme = wrapW4Prover RME [] Prover.proveWhat4_rme</span></span>
@@ -1379,10 +1379,10 @@ span.spaces    { background: white }
 <span class="lineno"> 1360 </span><span class="decl"><span class="nottickedoff">w4_unint_cvc4 = wrapW4Prover CVC4 [] Prover.proveWhat4_cvc4</span></span>
 <span class="lineno"> 1361 </span>
 <span class="lineno"> 1362 </span>w4_unint_cvc5 :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1363 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] Prover.proveWhat4_cvc5</span></span>
+<span class="lineno"> 1363 </span><span class="decl"><span class="istickedoff">w4_unint_cvc5 = wrapW4Prover CVC5 [] <span class="nottickedoff">Prover.proveWhat4_cvc5</span></span></span>
 <span class="lineno"> 1364 </span>
 <span class="lineno"> 1365 </span>w4_unint_yices :: [Text] -&gt; ProofScript ()
-<span class="lineno"> 1366 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] Prover.proveWhat4_yices</span></span>
+<span class="lineno"> 1366 </span><span class="decl"><span class="istickedoff">w4_unint_yices = wrapW4Prover Yices [] <span class="nottickedoff">Prover.proveWhat4_yices</span></span></span>
 <span class="lineno"> 1367 </span>
 <span class="lineno"> 1368 </span>offline_w4_unint_bitwuzla :: [Text] -&gt; FilePath -&gt; ProofScript ()
 <span class="lineno"> 1369 </span><span class="decl"><span class="nottickedoff">offline_w4_unint_bitwuzla unints path =</span>
@@ -1475,7 +1475,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1456 </span><span class="decl"><span class="istickedoff">w4_abc_aiger = wrapW4Prover ABC [W4_AIGER] Prover.w4AbcAIGER []</span></span>
 <span class="lineno"> 1457 </span>
 <span class="lineno"> 1458 </span>w4_abc_verilog :: ProofScript ()
-<span class="lineno"> 1459 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] Prover.w4AbcVerilog []</span></span>
+<span class="lineno"> 1459 </span><span class="decl"><span class="istickedoff">w4_abc_verilog = wrapW4Prover ABC [W4_Verilog] <span class="nottickedoff">Prover.w4AbcVerilog</span> []</span></span>
 <span class="lineno"> 1460 </span>
 <span class="lineno"> 1461 </span>set_timeout :: Integer -&gt; ProofScript ()
 <span class="lineno"> 1462 </span><span class="decl"><span class="nottickedoff">set_timeout to = modify (setProofTimeout to)</span></span>
