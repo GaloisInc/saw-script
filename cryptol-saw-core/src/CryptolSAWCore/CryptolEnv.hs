@@ -62,6 +62,7 @@ module CryptolSAWCore.CryptolEnv
 
 -- base & standard modules:
 import           Control.Monad(when)
+import           Data.List (isPrefixOf)
 import qualified Data.Map as Map
 import           Data.Map (Map)
 import           Data.Maybe (fromMaybe)
@@ -317,9 +318,13 @@ ioParseResult res = case res of
 --   above it.
 --
 --   Note that while each `sImports` is (mostly) maintained with more
---   recent imports at the front of the list, this should be
+--   recent imports at the front of the list, this is mainly
 --   irrelevant to name resolution.
 --
+--     - However with `import submodule ...` it *is* relevant, as the
+--       sequence of `import` and `import submodule` has now become
+--       relevant: we only import a submodule that is in scope in the
+--       previous imports.
 
 getNamingEnv :: SharedContext -> CryptolEnv -> IO MR.NamingEnv
 getNamingEnv sc env = do
@@ -331,6 +336,11 @@ getNamingEnv sc env = do
            (eImports env))
 
 -- | Get the `MR.NamingEnv` for a single import (`ImportData`)
+--
+--   There is a bit of complexity here due to both
+--    - imports of submodules, and
+--    - module aliases
+
 getNamingEnvOfImport :: ME.ModuleEnv
                      -> ImportData
                      -> MR.NamingEnv
@@ -341,77 +351,213 @@ getNamingEnvOfImport modEnv impData =
          -- NOTE: the import spec must be applied *before* the above
          -- qualification, as it names the members of the module being
          -- imported, not the qualified names we end up with.
-  $ MN.namingEnvFromNames' nameToPName
-  $ importedNames
+  $ MN.namingEnvFromNames' nameToPName importedNames <> aliasedNames
 
   where
 
-  info  = importInfo impData
-  vis   = importVis  impData
-  imprt = importCmd  impData
+  vis       = importVis impData
+  imprt     = importCmd impData
+  imprtType = importInfo impData :: ImportInfo
+                                    -- E.g., ImportNested/ImportTop
 
-  -- the names the import brings in, before any of the renaming above:
-  importedNames :: Set MN.Name
-  importedNames =
-    case info of
-      C.ImportNested nm ->
-          -- find the submodule in the current module environment and get
-          -- its names, respecting the visibility parameter
-          -- (PublicAndPrivate vs OnlyPublic)
-          case ME.modContextOf (P.ImpNested nm) modEnv of
-              Just mc ->
-                case vis of
-                  PublicAndPrivate ->
-                    nms
-                  OnlyPublic ->
-                    Set.intersection nms (ME.mctxExported mc)
-                where
-                nms = MN.namingEnvNames (ME.mctxNames mc)
-                        -- what's in scope inside the submodule
+  -- bind all the results that depend on `imprtType`:
+  ImportResults { irPath          = importedPath
+                , irScopeEnv      = scopeEnv
+                , irPublicNames   = publicNames
+                , irImportedNames = importedNames
+                , irNameToPName   = nameToPName
+                }
+      =
+      -- here's the only place we case on imprtType:
+      case imprtType of
+        -- process when we have `import submodule`:
+        C.ImportNested nm -> importResultsIfNested modEnv vis nm
+        -- process when we have `import`:
+        C.ImportTop       -> importResultsIfTop modEnv vis
+                               (P.thing $ T.iModule imprt)
 
-              Nothing -> panic "getNamingEnvOfImport"
-                               ["name: " <> Text.pack (show nm)]
+  -- the naming environment containing the module aliases
+  -- (i.e., `submodule A = ...`-- declarations) of the imported module:
+  aliasedNames :: MR.NamingEnv
+  aliasedNames = modAliasNames scopeEnv nameToPName visibleAliases
+    where
 
-      C.ImportTop ->
-          -- find a top-level loaded module and get its names:
-          let
-            modName :: C.ModName
-            modName = P.thing $ T.iModule imprt
+    -- the aliases declared anywhere inside the imported module, keeping
+    -- only those the visibility parameter allows us to bring in:
+    visibleAliases =
+      [ a
+      | a <- Map.keys $ modAliasesOf modEnv $ C.topModuleFor importedPath
+      , C.modPathIsOrContains importedPath (MN.nameModPath a)
+      , visible a
+      ]
 
-            lm = case ME.lookupModule modName modEnv of
-                   Just lm' -> lm'
-                   Nothing  -> panic "getNamingEnvOfImport"
-                                 ["cannot lookupModule: " <> CryPP.pp modName]
-          in
-            namesOfLoadedModule lm vis
-
-  -- nameToPName -
-  --   - For submodules, strip the submodule nesting to get a
-  --     'less' qualified name.
-  --   - For top-level modules, use nameToPNameWithQualifiers to preserve
-  --     paths.
-  nameToPName :: MN.Name -> P.PName
-  nameToPName =
-    case info of
-      C.ImportNested nm -> stripSubmodulePrefix nm
-      C.ImportTop       -> MN.nameToPNameWithQualifiers
+    visible :: MN.Name -> Bool
+    visible a =
+      case vis of
+        PublicAndPrivate -> True
+        OnlyPublic       -> a `Set.member` publicNames
 
 
--- | Strip the submodule path prefix from a Name.
--- E.g., intuitively:
---    stripSubmodulePrefix "X.Y" "X.Y.Z.name" == "Z.name"
+-- | The names that module aliases contribute to an import.
 --
-stripSubmodulePrefix :: MN.Name -> MN.Name -> P.PName
-stripSubmodulePrefix submodName name =
-  case C.modPathCommon submodPath (MN.nameModPath name) of
+--   A module alias (@submodule A = submodule B@) introduces no new
+--   `MN.Name`s: @A::x@ and @B::x@ are literally the same name.  So,
+--   unlike the members of an ordinary submodule, alias-qualified names
+--   cannot be recovered from a @Set MN.Name@; we instead pick them out
+--   of the naming environment that the renamer built for the module
+--   being imported.
+--
+modAliasNames ::
+  MR.NamingEnv         {- ^ what is in scope in the imported module -} ->
+  (MN.Name -> P.PName) {- ^ how names of the imported module are spelled -} ->
+  [MN.Name]            {- ^ the visible module aliases declared in it -} ->
+  MR.NamingEnv
+modAliasNames scopeEnv nameToPName aliases
+  | null aliases = mempty
+  | otherwise    = MN.filterPNames underAnAlias scopeEnv
+
+  where
+  -- a name is contributed by an alias when its qualifiers start with
+  -- the alias, e.g. `A::x` and `A::Inner::y` for the alias `A`
+  -- (`pNameChunks` of an alias being the qualifiers it introduces):
+  underAnAlias :: P.PName -> Bool
+  underAnAlias pn =
+    any (\a -> pNameChunks (nameToPName a) `isPrefixOf` pNameQualifiers pn)
+        aliases
+
+-- ImportResults and functions returning it ------------------------------------
+
+-- | Various results we need to compute for the module/submodule
+--   that we import (in `ImportData`).  The purpose of this is to
+--   abstract over the `import` vs. `import submodule` differences
+--   in the code below:
+data ImportResults = ImportResults
+  { irPath :: C.ModPath
+    -- ^ the path of the module (or submodule) being imported.  Note
+    --   that for `import submodule A`, where `A` is a module alias,
+    --   this is the path of what `A` refers to.
+
+  , irScopeEnv :: MR.NamingEnv
+    -- ^ what is in scope in the imported module.
+
+  , irPublicNames :: Set MN.Name
+    -- ^ the public (i.e., exported) names of the imported module.
+
+  , irImportedNames :: Set MN.Name
+    -- ^ the names the import brings in, before any renaming, respecting
+    --   the import's visibility (`PublicAndPrivate` vs `OnlyPublic`).
+
+  , irNameToPName :: MN.Name -> P.PName
+    -- ^ how the names of the imported module are spelled:
+    --     - For submodules, strip the submodule nesting to get a
+    --       'less' qualified name.
+    --     - For top-level modules, use `MN.nameToPNameWithQualifiers`
+    --       to preserve paths.
+  }
+
+-- | The `ImportResults` for an `import modName`, where `modName` is a
+--   top-level (and loaded) module.
+importResultsIfTop ::
+  ME.ModuleEnv -> ImportVisibility -> C.ModName -> ImportResults
+importResultsIfTop modEnv vis modName =
+  ImportResults
+    { irPath          = C.TopModule modName
+    , irScopeEnv      = ME.lmNamingEnv loadedMod
+    , irPublicNames   = MI.ifsPublic $ MI.ifNames $ ME.lmInterface loadedMod
+    , irImportedNames = namesOfLoadedModule loadedMod vis
+    , irNameToPName   = MN.nameToPNameWithQualifiers
+    }
+
+  where
+  -- the top-level loaded module being imported:
+  loadedMod :: ME.LoadedModule
+  loadedMod =
+    case ME.lookupModule modName modEnv of
+      Just lm -> lm
+      Nothing -> panic "importResultsIfTop"
+                       ["cannot lookupModule: " <> CryPP.pp modName]
+
+-- | The `ImportResults` for an `import submodule nm`.  Note that when
+--   `nm` is a module alias, we follow it to what it refers to.
+importResultsIfNested ::
+  ME.ModuleEnv -> ImportVisibility -> MN.Name -> ImportResults
+importResultsIfNested modEnv vis nm =
+  ImportResults
+    { irPath          = path
+    , irScopeEnv      = ME.mctxNames submodCtx
+    , irPublicNames   = exported
+    , irImportedNames =
+        case vis of
+          PublicAndPrivate -> nms
+          OnlyPublic       -> Set.intersection nms exported
+    , irNameToPName   = stripModPathPrefix path
+    }
+
+  where
+  path     = resolveModPath modEnv (P.ImpNested nm)
+  exported = ME.mctxExported submodCtx
+  nms      = MN.namingEnvNames (ME.mctxNames submodCtx)
+
+  -- the `ME.ModContext` of the submodule being imported:
+  submodCtx :: ME.ModContext
+  submodCtx =
+    case ME.modContextOf (P.ImpNested nm) modEnv of
+      Just mc -> mc
+      Nothing -> panic "importResultsIfNested / submodCtx"
+                       ["no context; name: " <> Text.pack (show nm)]
+
+-- | The `C.ModPath` that a `P.ImpName` refers to, following a module
+--   alias (@submodule A = submodule B@) to its target.
+--
+--   NOTE: one lookup suffices, as the targets in `T.mModAliases` are
+--   already fully resolved: the Cryptol renamer collapses chains of
+--   aliases (see `renameModuleAlias`, which records the result of its
+--   `resolveModAlias`) before the typechecker stores them.
+--
+resolveModPath :: ME.ModuleEnv -> P.ImpName MN.Name -> C.ModPath
+resolveModPath modEnv impName =
+  P.impNameModPath $
+    case impName of
+      P.ImpTop _     -> impName
+      P.ImpNested nm ->
+        fromMaybe impName $
+          Map.lookup nm $ modAliasesOf modEnv (MN.nameTopModule nm)
+
+-- | The module aliases declared in a loaded top-level module, at every
+--   level of nesting.  (Empty when the module isn't loaded.)
+modAliasesOf :: ME.ModuleEnv -> C.ModName -> Map MN.Name (P.ImpName MN.Name)
+modAliasesOf modEnv modName =
+  case ME.lookupModule modName modEnv of
+    Just lm -> T.mModAliases (ME.lmModule lm)
+    Nothing -> Map.empty
+
+
+
+-- Utility-like functions ------------------------------------------------
+
+-- | The qualifiers of a `P.PName`: @["X","Y"]@ for @X::Y::z@ and @[]@
+--   for @z@.
+pNameQualifiers :: P.PName -> [Text]
+pNameQualifiers pn = maybe [] C.modNameChunksText (P.getModName pn)
+
+-- | A `P.PName` as its chunks: @["X","Y","z"]@ for @X::Y::z@.
+pNameChunks :: P.PName -> [Text]
+pNameChunks pn = pNameQualifiers pn ++ [identText (P.getIdent pn)]
+
+-- | Strip a module path prefix from a Name, to get a 'less' qualified
+--   name.  E.g., intuitively:
+--       stripModPathPrefix "X::Y" "X::Y::Z::name" == "Z::name"
+--   The name is left unqualified when it is not inside the path.
+--
+stripModPathPrefix :: C.ModPath -> MN.Name -> P.PName
+stripModPathPrefix modPath name =
+  case C.modPathCommon modPath (MN.nameModPath name) of
     Just (_, [], path) | not (null path) ->
         P.Qual (C.packModName (map C.identText path)) nmIdent
     _ ->
         P.UnQual' nmIdent (MN.nameSrc name)
   where
   nmIdent = MN.nameIdent name
-  submodPath = C.Nested (MN.nameModPath submodName)
-                        (MN.nameIdent submodName)
 
 
 -- | Restrict a `MR.NamingEnv` per an import spec. I.e., the @(a,b)@ or
@@ -440,9 +586,9 @@ restrictToImportSpec importSpec =
   -- first component of a `P.PName`: "D3" for `D3::d3`, "d2" for `d2`
   firstComponent :: P.PName -> Text
   firstComponent pn =
-    case C.modNameChunksText <$> P.getModName pn of
-      Just (chunk : _) -> chunk
-      _                -> identText (P.getIdent pn)
+    case pNameQualifiers pn of
+      chunk : _ -> chunk
+      []        -> identText (P.getIdent pn)
 
 
 -- | The names that a loaded (top-level) module brings in when imported,
