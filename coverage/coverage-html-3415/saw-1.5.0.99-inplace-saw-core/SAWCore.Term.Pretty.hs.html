@@ -504,10 +504,10 @@ span.spaces    { background: white }
 <span class="lineno">  485 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  486 </span><span class="spaces">    </span><span class="istickedoff">Sort s h -&gt; return (viaShow h &lt;&gt; viaShow s)</span>
 <span class="lineno">  487 </span><span class="spaces">    </span><span class="istickedoff">ArrayValue (asBoolType -&gt; Just _) args</span>
-<span class="lineno">  488 </span><span class="spaces">      </span><span class="istickedoff">| Just bits &lt;- <span class="nottickedoff">mapM asBool $ V.toList args</span> -&gt;</span>
-<span class="lineno">  489 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">if length bits `mod` 4 == 0 then</span></span>
-<span class="lineno">  490 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">return $ pretty (&quot;0x&quot; ++ ppBitsToHex bits)</span></span>
-<span class="lineno">  491 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">else</span></span>
+<span class="lineno">  488 </span><span class="spaces">      </span><span class="istickedoff">| Just bits &lt;- mapM <span class="nottickedoff">asBool</span> $ V.toList args -&gt;</span>
+<span class="lineno">  489 </span><span class="spaces">        </span><span class="istickedoff">if <span class="tickonlytrue">length bits `mod` 4 == 0</span> then</span>
+<span class="lineno">  490 </span><span class="spaces">          </span><span class="istickedoff">return $ pretty (&quot;0x&quot; ++ ppBitsToHex bits)</span>
+<span class="lineno">  491 </span><span class="spaces">        </span><span class="istickedoff">else</span>
 <span class="lineno">  492 </span><span class="spaces">          </span><span class="istickedoff"><span class="nottickedoff">return $ pretty (&quot;0b&quot; ++ map (\b -&gt; if b then '1' else '0') bits)</span></span>
 <span class="lineno">  493 </span><span class="spaces">    </span><span class="istickedoff">ArrayValue _ args   -&gt;</span>
 <span class="lineno">  494 </span><span class="spaces">      </span><span class="istickedoff">prettyArrayValue &lt;$&gt; mapM (prettyTerm' PrecTerm) (V.toList args)</span>
@@ -515,17 +515,17 @@ span.spaces    { background: white }
 <span class="lineno">  496 </span>
 <span class="lineno">  497 </span>-- | Pretty-print a big endian list of bit values as a hexadecimal number
 <span class="lineno">  498 </span>ppBitsToHex :: [Bool] -&gt; String
-<span class="lineno">  499 </span><span class="decl"><span class="nottickedoff">ppBitsToHex (b8:b4:b2:b1:bits') =</span>
-<span class="lineno">  500 </span><span class="spaces">  </span><span class="nottickedoff">intToDigit (8 * toInt b8 + 4 * toInt b4 + 2 * toInt b2 + toInt b1) :</span>
-<span class="lineno">  501 </span><span class="spaces">  </span><span class="nottickedoff">ppBitsToHex bits'</span>
-<span class="lineno">  502 </span><span class="spaces">  </span><span class="nottickedoff">where toInt True = 1</span>
-<span class="lineno">  503 </span><span class="spaces">        </span><span class="nottickedoff">toInt False = 0</span>
-<span class="lineno">  504 </span><span class="spaces"></span><span class="nottickedoff">ppBitsToHex [] = &quot;&quot;</span>
-<span class="lineno">  505 </span><span class="spaces"></span><span class="nottickedoff">ppBitsToHex bits =</span>
-<span class="lineno">  506 </span><span class="spaces">  </span><span class="nottickedoff">panic &quot;ppBitsToHex&quot; [</span>
-<span class="lineno">  507 </span><span class="spaces">      </span><span class="nottickedoff">&quot;length of bit list &quot; &lt;&gt; bits' &lt;&gt; &quot; is not a multiple of 4&quot;</span>
-<span class="lineno">  508 </span><span class="spaces">  </span><span class="nottickedoff">]</span>
-<span class="lineno">  509 </span><span class="spaces">  </span><span class="nottickedoff">where bits' = Text.pack (show bits)</span></span>
+<span class="lineno">  499 </span><span class="decl"><span class="istickedoff">ppBitsToHex (b8:b4:b2:b1:bits') =</span>
+<span class="lineno">  500 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">intToDigit (8 * toInt b8 + 4 * toInt b4 + 2 * toInt b2 + toInt b1) :</span></span>
+<span class="lineno">  501 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">ppBitsToHex bits'</span></span>
+<span class="lineno">  502 </span><span class="spaces">  </span><span class="istickedoff">where <span class="nottickedoff">toInt True = 1</span></span>
+<span class="lineno">  503 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">toInt False = 0</span></span>
+<span class="lineno">  504 </span><span class="spaces"></span><span class="istickedoff">ppBitsToHex [] = &quot;&quot;</span>
+<span class="lineno">  505 </span><span class="spaces"></span><span class="istickedoff">ppBitsToHex bits =</span>
+<span class="lineno">  506 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">panic &quot;ppBitsToHex&quot; [</span></span>
+<span class="lineno">  507 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">&quot;length of bit list &quot; &lt;&gt; bits' &lt;&gt; &quot; is not a multiple of 4&quot;</span></span>
+<span class="lineno">  508 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">]</span></span>
+<span class="lineno">  509 </span><span class="spaces">  </span><span class="istickedoff">where <span class="nottickedoff">bits' = Text.pack (show bits)</span></span></span>
 <span class="lineno">  510 </span>
 <span class="lineno">  511 </span>-- | Pretty-print a 'VarName' according to the current naming environment.
 <span class="lineno">  512 </span>prettyVarName :: VarName -&gt; PPM PPS.Doc

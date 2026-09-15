@@ -118,10 +118,10 @@ span.spaces    { background: white }
 <span class="lineno">   99 </span>-- Convert a saw-core type expression to a FirstOrder type expression
 <span class="lineno">  100 </span>--
 <span class="lineno">  101 </span>vAsFirstOrderType :: IsSymExprBuilder sym =&gt; TValue (What4 sym) -&gt; Maybe FirstOrderType
-<span class="lineno">  102 </span><span class="decl"><span class="istickedoff">vAsFirstOrderType v = asFirstOrderTypeTValue v</span></span>
+<span class="lineno">  102 </span><span class="decl"><span class="nottickedoff">vAsFirstOrderType v = asFirstOrderTypeTValue v</span></span>
 <span class="lineno">  103 </span>
 <span class="lineno">  104 </span>valueAsBaseType :: IsSymExprBuilder sym =&gt; TValue (What4 sym) -&gt; Maybe (Some W.BaseTypeRepr)
-<span class="lineno">  105 </span><span class="decl"><span class="istickedoff">valueAsBaseType v = fotToBaseType =&lt;&lt; vAsFirstOrderType v</span></span>
+<span class="lineno">  105 </span><span class="decl"><span class="nottickedoff">valueAsBaseType v = fotToBaseType =&lt;&lt; vAsFirstOrderType v</span></span>
 <span class="lineno">  106 </span>
 <span class="lineno">  107 </span>termOfTValue :: SharedContext -&gt; TValue (What4 sym) -&gt; IO Term
 <span class="lineno">  108 </span><span class="decl"><span class="istickedoff">termOfTValue sc val =</span>
