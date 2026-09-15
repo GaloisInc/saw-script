@@ -130,12 +130,17 @@ mkSimpsetSub sc (t : ts) =
 --
 -- Say the term has a subterm with @foldl@ applied to six arguments:
 -- @foldl Bool Bool 8 xor False 0x55@.
--- The final two arguments, @False@ and @0x55@, have simple non-function
--- types, so they can be skipped over.
--- However, the @xor@ argument has a function type, so the partial
--- application must include it.
+-- The full application has a simple result type, so we search inward
+-- until we find the first partial application whose type is a
+-- first-order function type.
 -- Thus the result list will include @foldl Bool Bool 8 xor@, which
 -- has the first-order function type @Bool -> Vec 8 Bool -> Bool@.
+--
+-- Checking the type of the partial application, rather than just the
+-- type of its outermost argument, is important for dependent function
+-- types. In particular, all typeclass and constraint arguments must be
+-- included in the generalized prefix, even when later value arguments
+-- have simple types.
 findFirstOrderApps :: SharedContext -> Set VarIndex -> Term -> IO [Term]
 findFirstOrderApps sc vs t0 = snd <$> go (IntSet.empty, []) t0
   where
@@ -149,20 +154,19 @@ findFirstOrderApps sc vs t0 = snd <$> go (IntSet.empty, []) t0
           case asConstant (fst (asApplyAll t)) of
             Just nm
               | Set.member (nameIndex nm) vs ->
-                  -- If so, check whether the outermost argument has a
-                  -- simple type.
                   case asApp t of
                     Nothing -> pure (seen', ts)
-                    Just (_t1, t2) ->
-                      do ty2 <- scTypeOf sc t2
-                         simple <- isSimpleType sc ty2
-                         case simple of
-                           -- If it's simple, then we don't need to
-                           -- record a pattern; recurse.
-                           True -> foldlM go (seen', ts) (unwrapTermF t)
-                           -- If it's *not* simple, then record a
-                           -- pattern.
-                           False -> pure (seen', t : ts)
+                    Just{} ->
+                      do ty <- scWhnf sc =<< scTypeOf sc t
+                         case asPi ty of
+                           Just{} ->
+                             do firstOrder <- isFirstOrderType sc ty
+                                -- Record the first partial application whose
+                                -- remaining type is a first-order function.
+                                if firstOrder
+                                  then pure (seen', t : ts)
+                                  else foldlM go (seen', ts) (unwrapTermF t)
+                           _ -> foldlM go (seen', ts) (unwrapTermF t)
             _ -> foldlM go (seen', ts) (unwrapTermF t)
 
 
