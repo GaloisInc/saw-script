@@ -5757,6 +5757,19 @@ primitives = Map.fromList $
     , "'list_term' is the inverse of 'eval_list'."
     ]
 
+  , prim "eval_tuple"          "Term -> [Term]"
+    (funVal1 eval_tuple)
+    Current
+    [ "Evaluate a Cryptol term of tuple type to a list of terms." ]
+
+  , prim "tuple_term"          "[Term] -> Term"
+    (funVal1 tuple_term)
+    Current
+    [ "Make a Cryptol term of type (t1, t2, ... tn) from a list of"
+    , "terms of types t1, t2, ... tn."
+    , "'tuple_term' is the inverse of 'eval_tuple'."
+    ]
+
   , prim "cryptol_load"        "String -> TopLevel CryptolModule"
     (pureVal (do_cryptol_load BS.readFile))
     Current

@@ -182,6 +182,8 @@ module SAWCentral.Builtins (
     eval_int_inner,
     list_term,
     eval_list,
+    tuple_term,
+    eval_tuple,
     term_theories,
     default_typed_term,
     defaultTypedTerm,
@@ -1972,6 +1974,60 @@ eval_list t =
             idxs <- io $ traverse (scNat sc) $ map fromInteger [0 .. n - 1]
             ts <- io $ traverse (scAt sc n' a' (ttTerm t)) idxs
             pure (map (TypedTerm (TypedTermSchema (C.tMono a))) ts)
+
+tuple_term :: [TypedTerm] -> TopLevel TypedTerm
+tuple_term tts =
+  do sc <- getSharedContext
+     let ts = map ttTerm tts
+     tys <- io $ traverse (scTypeOf sc) ts
+     kinds <- io $ traverse (scTypeOf sc) tys
+     unless (all isSort0 kinds) $
+       fail "tuple_term: invalid element type"
+     tuple <- io $ scTuple sc ts
+     case traverse (ttIsMono . ttType) tts of
+       Just ctys ->
+         pure (TypedTerm (TypedTermSchema (C.tMono (C.tTuple ctys))) tuple)
+       Nothing ->
+         io $ mkTypedTerm sc tuple
+  where
+    isSort0 :: Term -> Bool
+    isSort0 t =
+      case asSort t of
+        Nothing -> False
+        Just s -> s <= TypeSort 0
+
+eval_tuple :: TypedTerm -> TopLevel [TypedTerm]
+eval_tuple tt =
+  case ttIsMono (ttType tt) of
+    Just cty ->
+      case C.tIsTuple cty of
+        Nothing -> fail "eval_tuple: not a monomorphic tuple type"
+        Just ctys ->
+          do sc <- getSharedContext
+             ts <- io $ proj sc ctys (ttTerm tt)
+             let mkTT ty t = TypedTerm (TypedTermSchema (C.tMono ty)) t
+             pure $ zipWith mkTT ctys ts
+    Nothing ->
+      do sc <- getSharedContext
+         ty <- io $ scTypeOf sc (ttTerm tt)
+         case asTupleType ty of
+           Nothing -> fail "eval_tuple: not a monomorphic tuple type"
+           Just tys ->
+             do ts <- io $ proj sc tys (ttTerm tt)
+                io $ traverse (mkTypedTerm sc) ts
+  where
+    proj :: SharedContext -> [a] -> Term -> IO [Term]
+    proj _ [] _ = pure []
+    proj sc (_ : xs) t =
+      case asPairValue t of
+        Just (t1, t2) ->
+          do ts <- proj sc xs t2
+             pure (t1 : ts)
+        Nothing ->
+          do t1 <- scPairLeft sc t
+             t2 <- scPairRight sc t
+             ts <- proj sc xs t2
+             pure (t1 : ts)
 
 term_theories :: [Text] -> TypedTerm -> TopLevel [Text]
 term_theories unints t = do
