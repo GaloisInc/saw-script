@@ -138,12 +138,8 @@ termOfTValue sc val =
             b' <- termOfTValue sc b
             scGlobalApply sc "Prelude.RecordType" [fname', a', b']
     VDataType nmi ps vs ->
-      do mnm <- scResolveQualName sc (toQualName nmi)
-         case mnm of
-           Just nm ->
-             scConstApply sc nm =<< traverse (termOfSValue sc) (ps ++ vs)
-           Nothing ->
-             fail $ "termOfTValue: data type not found: " ++ show nmi
+      do dt <- scGlobalConst sc (toQualName nmi)
+         scApplyAll sc dt =<< traverse (termOfSValue sc) (ps ++ vs)
     _ -> fail $ "termOfTValue: " ++ show val
 
 termOfSValue :: IsSymExprBuilder sym => SharedContext -> SValue sym -> IO Term

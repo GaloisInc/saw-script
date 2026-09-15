@@ -1,11 +1,21 @@
 let {{
-  example : {m} (m == 2) => [m] -> [m]
-  example xs = xs
+  example1 : {m} (m == 2) => [m] -> [m]
+  example1 xs = xs
+  example2 : {m, n} (m * n == 64) => [m][n] -> [64]
+  example2 = join
+
 }};
 
 prove_print
   do {
-    goal_eval_unint ["example"];
+    goal_eval_unint ["example1"];
     trivial;
   }
-  {{ \x -> example`{2} x == example x }};
+  {{ \x -> example1`{2} x == example1 x }};
+
+prove_print
+  do {
+    goal_eval_unint ["example2"];
+    rme;
+  }
+  {{ \x -> example2`{8, 8} x == join x }};
