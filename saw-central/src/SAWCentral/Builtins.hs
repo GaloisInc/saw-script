@@ -1671,7 +1671,7 @@ theoremToRule thm = do
     sc <- getSharedContext
     let ann = TheoremAnnotation (Set.singleton (thmNonce thm)) (thmHyps thm) (thmSummary thm)
     mbRule <- liftIO $ propToRewriteRule sc (thmProp thm) (Just ann)
-    case mbRule of 
+    case mbRule of
       Nothing -> do
           ppopts <- SV.getPPOpts
           nenv <- liftIO $ scGetNamingEnv sc
@@ -1732,7 +1732,7 @@ check_term tt = do
   printOutLnTop Info ty'
 
 term_labels :: TypedTerm -> TopLevel ([Text],TypedTerm)
-term_labels tt = 
+term_labels tt =
   let (lbls, t') = go [] (ttTerm tt)
   in return (lbls, tt { ttTerm = t' })
   where
