@@ -1,0 +1,95 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>-- |
+<span class="lineno">    2 </span>-- Module      : SAWSupport.EqRel
+<span class="lineno">    3 </span>-- Description : Equivalence relation that is defined pointwise
+<span class="lineno">    4 </span>-- License     : BSD3
+<span class="lineno">    5 </span>-- Maintainer  : saw@galois.com
+<span class="lineno">    6 </span>-- Stability   : provisional
+<span class="lineno">    7 </span>--
+<span class="lineno">    8 </span>-- An 'EqRel' is a collection of sets representing equivalence classes.
+<span class="lineno">    9 </span>-- Two values are considered equivalent with respect to this relation if
+<span class="lineno">   10 </span>-- they are both in the same equivalence class.
+<span class="lineno">   11 </span>--
+<span class="lineno">   12 </span>-- The relation is defined pointwise: pairs of values are declared
+<span class="lineno">   13 </span>-- equivalent via 'insert', which implicitly extends the data structure
+<span class="lineno">   14 </span>-- such that the result is a still a valid equivalence relation
+<span class="lineno">   15 </span>-- (symmetric, transitive, reflexive).
+<span class="lineno">   16 </span>
+<span class="lineno">   17 </span>module SAWSupport.EqRel
+<span class="lineno">   18 </span>  ( EqRel
+<span class="lineno">   19 </span>  , empty
+<span class="lineno">   20 </span>  , eq
+<span class="lineno">   21 </span>  , insert
+<span class="lineno">   22 </span>  ) where
+<span class="lineno">   23 </span>
+<span class="lineno">   24 </span>import Data.HashMap.Strict (HashMap)
+<span class="lineno">   25 </span>import qualified Data.HashMap.Strict as HashMap
+<span class="lineno">   26 </span>import Data.Hashable (Hashable)
+<span class="lineno">   27 </span>import Data.HashSet (HashSet)
+<span class="lineno">   28 </span>import qualified Data.HashSet as HashSet
+<span class="lineno">   29 </span>
+<span class="lineno">   30 </span>-- | Represents an equivalence relation that is defined pointwise.
+<span class="lineno">   31 </span>--   Values marked as equivalent via 'insert' are considered to
+<span class="lineno">   32 </span>--   belong to the same equivalence class.
+<span class="lineno">   33 </span>--   The relation is implicitly transitive, symmetric and reflexive.
+<span class="lineno">   34 </span>--   Specifically, for any @r@:
+<span class="lineno">   35 </span>--     * if @eq r x y@ is @True@
+<span class="lineno">   36 </span>--       then @eq (insert a b r) x y@ is @True@
+<span class="lineno">   37 </span>--     * if @x == y@ is @True@ then @eq r x y@ is @True@
+<span class="lineno">   38 </span>--     * @eq (insert x y r) x y @ is @True@
+<span class="lineno">   39 </span>--     * if @eq r x y@ is @True@,
+<span class="lineno">   40 </span>--       then @eq r y x@ is @True@
+<span class="lineno">   41 </span>--     * if @eq r x y@ and @eq r y z@ are @True@,
+<span class="lineno">   42 </span>--       then @eq r x z@ is @True@
+<span class="lineno">   43 </span>--     * in all other cases, @eq r x y@ is @False@
+<span class="lineno">   44 </span>--
+<span class="lineno">   45 </span>--   Invariant: for each @s@ in the codomain of the map @m@ and each
+<span class="lineno">   46 </span>--   @x@ in @s@: @HashMap.lookup x m == Just s@
+<span class="lineno">   47 </span>newtype EqRel a = EqRel (HashMap a (HashSet a))
+<span class="lineno">   48 </span>
+<span class="lineno">   49 </span>-- | An empty 'EqRel', where values are equivalent iff they
+<span class="lineno">   50 </span>--   are exactly equal.
+<span class="lineno">   51 </span>empty :: EqRel a
+<span class="lineno">   52 </span><span class="decl"><span class="istickedoff">empty = EqRel HashMap.empty</span></span>
+<span class="lineno">   53 </span>
+<span class="lineno">   54 </span>-- | Test if two values are equivalent up to the given equivalence
+<span class="lineno">   55 </span>--   relation 'EqRel'.
+<span class="lineno">   56 </span>eq :: Hashable a =&gt; EqRel a -&gt; a -&gt; a -&gt; Bool
+<span class="lineno">   57 </span><span class="decl"><span class="istickedoff">eq (EqRel m) x y =</span>
+<span class="lineno">   58 </span><span class="spaces">  </span><span class="istickedoff">case HashMap.lookup y m of</span>
+<span class="lineno">   59 </span><span class="spaces">    </span><span class="istickedoff">Just ys -&gt; HashSet.member x ys</span>
+<span class="lineno">   60 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; x == y</span></span>
+<span class="lineno">   61 </span>
+<span class="lineno">   62 </span>-- | Extend an equivalence relation 'EqRel' to combine the equivalence
+<span class="lineno">   63 </span>--   classes of the two given values (i.e. consider the
+<span class="lineno">   64 </span>--   two values to be equivalent).
+<span class="lineno">   65 </span>insert :: Hashable a =&gt; a -&gt; a -&gt; EqRel a -&gt; EqRel a
+<span class="lineno">   66 </span><span class="decl"><span class="istickedoff">insert x y (EqRel m) = EqRel (HashMap.union (const s &lt;$&gt; HashSet.toMap s) m)</span>
+<span class="lineno">   67 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">   68 </span><span class="spaces">    </span><span class="istickedoff">s = case (HashMap.lookup x m, HashMap.lookup y m) of</span>
+<span class="lineno">   69 </span><span class="spaces">      </span><span class="istickedoff">(Just xs, Just ys) -&gt; <span class="nottickedoff">HashSet.union xs ys</span></span>
+<span class="lineno">   70 </span><span class="spaces">      </span><span class="istickedoff">(Nothing, Just ys) -&gt; HashSet.insert x ys</span>
+<span class="lineno">   71 </span><span class="spaces">      </span><span class="istickedoff">(Just xs, Nothing) -&gt; HashSet.insert y xs</span>
+<span class="lineno">   72 </span><span class="spaces">      </span><span class="istickedoff">(Nothing, Nothing) -&gt; HashSet.insert x $ HashSet.singleton y</span></span>
+
+</pre>
+</body>
+</html>
