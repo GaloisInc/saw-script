@@ -2342,9 +2342,10 @@ summarize_verification =
   do values <- rwProofs <$> getTopLevelRW
      let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
          lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
+         mspecs  = [ s | SV.VMIRMethodSpec s <- values ]
          thms    = [ t | SV.VTheorem t <- values ]
      db <- SV.getTheoremDB
-     let summary = computeVerificationSummary db jspecs lspecs thms
+     let summary = computeVerificationSummary db jspecs lspecs mspecs thms
      opts <- SV.getPPOpts
      nenv <- io . scGetNamingEnv =<< getSharedContext
      io $ putStrLn $ prettyVerificationSummary opts nenv summary
@@ -2354,9 +2355,10 @@ summarize_verification_json fpath =
   do values <- rwProofs <$> getTopLevelRW
      let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
          lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
+         mspecs  = [ s | SV.VMIRMethodSpec s <- values ]
          thms    = [ t | SV.VTheorem t <- values ]
      db <- SV.getTheoremDB
-     let summary = computeVerificationSummary db jspecs lspecs thms
+     let summary = computeVerificationSummary db jspecs lspecs mspecs thms
      io (writeFile fpath (jsonVerificationSummary summary))
 
 writeVerificationSummary :: TopLevel ()
@@ -2366,8 +2368,9 @@ writeVerificationSummary = do
     values <- rwProofs <$> getTopLevelRW
     let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
         lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
+        mspecs  = [ s | SV.VMIRMethodSpec s <- values ]
         thms    = [ t | SV.VTheorem t <- values ]
-        summary = computeVerificationSummary db jspecs lspecs thms
+        summary = computeVerificationSummary db jspecs lspecs mspecs thms
     opts <- asks roOptions
     dir <- asks roInitWorkDir
     nenv <- io . scGetNamingEnv =<< getSharedContext

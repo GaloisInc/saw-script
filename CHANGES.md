@@ -4,6 +4,17 @@ This release supports [version
 13](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#13) of
 `mir-json`'s schema.
 
+## Bug Fixes
+
+* The `summarize_verification` command now reports which MIR functions were
+  analyzed in addition to LLVM functions and JVM methods.
+
+# next
+
+This release supports [version
+13](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#13) of
+`mir-json`'s schema.
+
 ## New Features
 
 * SAWScript now supports optional named arguments.
