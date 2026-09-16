@@ -336,6 +336,8 @@ cryptolRun col name (CryFunArgs (CryFunArgs' tpArgs ctrs normArgs)) retShp funcT
       proveProp :: Cry.Prop -> IO SAW.Term
       proveProp p =
         case p of
+          (Cry.pIsTrue -> True) ->
+            SAW.scGlobalDef sc "Cryptol.TruePropI"
           (Cry.pIsEqual -> Just (m, _)) ->
             -- Constraint `m == n` is translated as `Eq Num m n`
             case Cry.tIsNum (Cry.apSubst su m) of
