@@ -811,6 +811,13 @@ mkArgTerm sc ty val =
     (VDataType (ModuleIdentifier "Prelude.EmptyType") [] [],
      VCtorApp 0 _ []) ->
       pure ArgTermEmpty
+    (VDataType (ModuleIdentifier "Prelude.Eq") [TValue ety, x] [y],
+     VCtorApp 0 _ []) ->
+      do ety' <- termOfTValue sc ety
+         x' <- termOfValue sc ety x
+         y' <- termOfValue sc ety y
+         pf <- scGlobalApply sc "Prelude.unsafeAssert" [ety', x', y']
+         pure (ArgTermConst pf)
     (VDataType _nm [VString fname, TValue ty1, TValue ty2] [],
      VCtorApp 0 _ [v1, v2]) ->
       do x1 <- mkArgTerm sc ty1 =<< force v1

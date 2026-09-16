@@ -389,6 +389,7 @@ constMap bp = Map.fromList
   , ("Prelude.EmptyVec", emptyVec)
   -- Miscellaneous
   , ("Prelude.coerce", coerceOp)
+  , ("Prelude.unsafeAssert", unsafeAssertOp)
   , ("Prelude.bvNat", bvNatOp bp)
   , ("Prelude.bvToNat", bvToNatOp)
   , ("Prelude.fix", fixOp)
@@ -541,6 +542,16 @@ coerceOp =
   constFun $
   constFun $
   primFun (\x -> Prim (force x))
+
+-- unsafeAssert : (a : sort 1) -> (x : a) -> (y : a) -> Eq a x y;
+unsafeAssertOp :: Prim l
+unsafeAssertOp =
+  -- Equality proofs are computationally irrelevant. Treat an unchecked
+  -- equality proof as the sole constructor of Eq when evaluating it.
+  constFun $
+  constFun $
+  constFun $
+  PrimValue (VCtorApp 0 Muxable [])
 
 ------------------------------------------------------------
 -- Nat primitives
