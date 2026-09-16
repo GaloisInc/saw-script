@@ -1,0 +1,21 @@
+module test::symb_eval::cryptol::true_constraint where
+
+type constraint Fits W M = (fin M, width (8 * M) <= W)
+
+submodule F where
+  parameter
+    type W : #
+    type B : #
+    type L : #
+
+    type constraint (Fits W (B + L))
+    type constraint (L <= B)
+
+  f : {k, n} (Fits W k, Fits W (B + n)) =>
+      [k][8] -> [n][8] -> [L][8]
+  f _ _ = zero
+
+submodule Instantiated = submodule F where
+  type W = 64
+  type B = 8
+  type L = 4
