@@ -30,6 +30,8 @@ import Data.Parameterized.Nonce
 
 import qualified Lang.Crucible.JVM as CJ
 
+import Mir.Intrinsics (MIR)
+
 import qualified SAWSupport.Pretty as PPS (Opts)
 
 import SAWCentral.Crucible.Common.MethodSpec
@@ -44,11 +46,13 @@ import What4.FunctionName
 
 type JVMTheorem =  CMS.ProvedSpec CJ.JVM
 type LLVMTheorem = CMSLLVM.SomeLLVM CMS.ProvedSpec
+type MIRTheorem  = CMS.ProvedSpec MIR
 
 data VerificationSummary =
   VerificationSummary
   { vsJVMMethodSpecs :: [JVMTheorem]
   , vsLLVMMethodSpecs :: [LLVMTheorem]
+  , vsMIRMethodSpecs :: [MIRTheorem]
   , vsTheorems :: [Theorem]
   }
 
@@ -56,7 +60,8 @@ vsVerifSolvers :: VerificationSummary -> Set Text
 vsVerifSolvers vs =
   Set.unions $
   map (\ms -> solverStatsSolvers (ms ^. psSolverStats)) (vsJVMMethodSpecs vs) ++
-  map (\(CMSLLVM.SomeLLVM ms) -> solverStatsSolvers (ms ^. psSolverStats)) (vsLLVMMethodSpecs vs)
+  map (\(CMSLLVM.SomeLLVM ms) -> solverStatsSolvers (ms ^. psSolverStats)) (vsLLVMMethodSpecs vs) ++
+  map (\ms -> solverStatsSolvers (ms ^. psSolverStats)) (vsMIRMethodSpecs vs)
 
 vsTheoremSolvers :: VerificationSummary -> Set Text
 vsTheoremSolvers = Set.unions . map getSolvers . vsTheorems
@@ -65,14 +70,15 @@ vsTheoremSolvers = Set.unions . map getSolvers . vsTheorems
 vsAllSolvers :: VerificationSummary -> Set Text
 vsAllSolvers vs = Set.union (vsVerifSolvers vs) (vsTheoremSolvers vs)
 
-computeVerificationSummary :: TheoremDB -> [JVMTheorem] -> [LLVMTheorem] -> [Theorem] -> VerificationSummary
-computeVerificationSummary db js ls thms =
+computeVerificationSummary ::
+  TheoremDB -> [JVMTheorem] -> [LLVMTheorem] -> [MIRTheorem] -> [Theorem] -> VerificationSummary
+computeVerificationSummary db js ls ms thms =
   let roots = mconcat (
                 [ vcDeps vc | j <- js, vc <- j^.psVCStats ] ++
                 [ vcDeps vc | CMSLLVM.SomeLLVM l <- ls, vc <- l^.psVCStats ] ++
                 [ Set.singleton (thmNonce t) | t <- thms ])
       thms' = Map.elems (reachableTheorems db roots)
-  in  VerificationSummary js ls thms'
+  in  VerificationSummary js ls ms thms'
 
 -- TODO: we could make things instances of a ToJSON typeclass instead of using the two methods below.
 msToJSON :: forall ext . Pretty (MethodId ext) => CMS.ProvedSpec ext -> Value
@@ -143,18 +149,20 @@ plocToJSON ploc = object
 
 
 jsonVerificationSummary :: VerificationSummary -> String
-jsonVerificationSummary (VerificationSummary jspecs lspecs thms) =
+jsonVerificationSummary (VerificationSummary jspecs lspecs mspecs thms) =
   BLU.toString $ encode vals where
-    vals = foldr (++) [] [jvals, lvals, thmvals]
+    vals = foldr (++) [] [jvals, lvals, mvals, thmvals]
     jvals = msToJSON <$> jspecs
     lvals = (\(CMSLLVM.SomeLLVM ls) -> msToJSON ls) <$> lspecs -- TODO: why is the type annotation required here?
+    mvals = msToJSON <$> mspecs
     thmvals = thmToJSON <$> thms
 
 prettyVerificationSummary :: PPS.Opts -> DisplayNameEnv -> VerificationSummary -> String
-prettyVerificationSummary ppOpts nenv vs@(VerificationSummary jspecs lspecs thms) =
+prettyVerificationSummary ppOpts nenv vs@(VerificationSummary jspecs lspecs mspecs thms) =
   show $ vsep
   [ prettyJVMSpecs jspecs
   , prettyLLVMSpecs lspecs
+  , prettyMIRSpecs mspecs
   , prettyTheorems thms
   , prettySolvers (Set.toList (vsAllSolvers vs))
   ] where
@@ -187,6 +195,13 @@ prettyVerificationSummary ppOpts nenv vs@(VerificationSummary jspecs lspecs thms
         sectionWithItems "LLVM Functions Analyzed" prettyLLVMSpec ss
       prettyLLVMSpec (CMSLLVM.SomeLLVM s) =
         vsep [ item (fromString $ Text.unpack (s ^. CMS.psSpec.CMSLLVM.csName))
+             -- , subitem (condStatus s)
+             , subitem (verifStatus s)
+             ]
+      prettyMIRSpecs ss =
+        sectionWithItems "MIR Functions Analyzed" prettyMIRSpec ss
+      prettyMIRSpec s =
+        vsep [ item (pretty (s ^. CMS.psSpec.csMethod))
              -- , subitem (condStatus s)
              , subitem (verifStatus s)
              ]
