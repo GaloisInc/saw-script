@@ -488,40 +488,56 @@ span.spaces    { background: white }
 <span class="lineno">  469 </span>    Int -&gt; SeenSet -&gt; IncludePath -&gt; Options -&gt; PPS.Opts -&gt; FilePath -&gt; Bool -&gt; IO [Stmt]
 <span class="lineno">  470 </span><span class="decl"><span class="istickedoff">includeFile depth seen incpath opts ppopts fname once = do</span>
 <span class="lineno">  471 </span><span class="spaces">  </span><span class="istickedoff">fname' &lt;- locateFile incpath fname</span>
-<span class="lineno">  472 </span><span class="spaces">  </span><span class="istickedoff">alreadySeen &lt;- seenSetMember fname' seen </span>
-<span class="lineno">  473 </span><span class="spaces">  </span><span class="istickedoff">if depth &gt; 128 then</span>
-<span class="lineno">  474 </span><span class="spaces">      </span><span class="istickedoff">-- XXX pass in the include position as well</span>
-<span class="lineno">  475 </span><span class="spaces">      </span><span class="istickedoff">Cons.errX $ &quot;Maximum include depth exceeded&quot;</span>
-<span class="lineno">  476 </span><span class="spaces">  </span><span class="istickedoff">else if once &amp;&amp; alreadySeen then do</span>
-<span class="lineno">  477 </span><span class="spaces">      </span><span class="istickedoff">-- include_once and we've already seen this file</span>
-<span class="lineno">  478 </span><span class="spaces">      </span><span class="istickedoff">Cons.noteN $ &quot;Skipping already-included file \&quot;&quot; &lt;&gt;</span>
-<span class="lineno">  479 </span><span class="spaces">                   </span><span class="istickedoff">Text.pack fname' &lt;&gt; &quot;\&quot;&quot;</span>
-<span class="lineno">  480 </span><span class="spaces">      </span><span class="istickedoff">pure []</span>
-<span class="lineno">  481 </span><span class="spaces">  </span><span class="istickedoff">else do</span>
-<span class="lineno">  482 </span><span class="spaces">      </span><span class="istickedoff">seenSetInsert fname' seen</span>
-<span class="lineno">  483 </span><span class="spaces">      </span><span class="istickedoff">let (_current, dirs) = incpath</span>
-<span class="lineno">  484 </span><span class="spaces">          </span><span class="istickedoff">current' = takeDirectory fname'</span>
-<span class="lineno">  485 </span><span class="spaces">          </span><span class="istickedoff">incpath' = (current', dirs)</span>
-<span class="lineno">  486 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  487 </span><span class="spaces">      </span><span class="istickedoff">Cons.noteN $ &quot;Loading file \&quot;&quot; &lt;&gt; Text.pack fname' &lt;&gt; &quot;\&quot;&quot;</span>
-<span class="lineno">  488 </span><span class="spaces">      </span><span class="istickedoff">ftext &lt;- TextIO.readFile fname'</span>
-<span class="lineno">  489 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  490 </span><span class="spaces">      </span><span class="istickedoff">stmts &lt;- wrapDir current' $ readAnyIO <span class="nottickedoff">ppopts</span> fname ftext &quot;end-of-file&quot; parseModule</span>
-<span class="lineno">  491 </span><span class="spaces">      </span><span class="istickedoff">resolveIncludes (depth + 1) seen incpath' <span class="nottickedoff">opts</span> <span class="nottickedoff">ppopts</span> Inc.processStmts stmts</span></span>
-<span class="lineno">  492 </span>
-<span class="lineno">  493 </span>-- | Find a file, potentially looking in a list of multiple search paths (as
-<span class="lineno">  494 </span>-- specified via the @SAW_IMPORT_PATH@ environment variable or
-<span class="lineno">  495 </span>-- @-i@/@--import-path@ command-line options). If the file was successfully
-<span class="lineno">  496 </span>-- found, load it. If not, fail by returning `Left`.
-<span class="lineno">  497 </span>--
-<span class="lineno">  498 </span>-- Doesn't run the typechecker (yet).
-<span class="lineno">  499 </span>findAndLoadFileUnchecked :: Options -&gt; PPS.Opts -&gt; FilePath -&gt; IO [Stmt]
-<span class="lineno">  500 </span><span class="decl"><span class="istickedoff">findAndLoadFileUnchecked opts ppopts fp = do</span>
-<span class="lineno">  501 </span><span class="spaces">  </span><span class="istickedoff">let depth = 0</span>
-<span class="lineno">  502 </span><span class="spaces">  </span><span class="istickedoff">seen &lt;- emptySeenSet</span>
-<span class="lineno">  503 </span><span class="spaces">  </span><span class="istickedoff">let incpath = (&quot;.&quot;, Options.importPath opts)</span>
-<span class="lineno">  504 </span><span class="spaces">      </span><span class="istickedoff">once = False</span>
-<span class="lineno">  505 </span><span class="spaces">  </span><span class="istickedoff">includeFile depth seen incpath <span class="nottickedoff">opts</span> <span class="nottickedoff">ppopts</span> fp once</span></span>
+<span class="lineno">  472 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  473 </span><span class="spaces">  </span><span class="istickedoff">-- Absolutize and follow symlinks when checking whether we've</span>
+<span class="lineno">  474 </span><span class="spaces">  </span><span class="istickedoff">-- already seen the file. This is essentially realpath(3) (though</span>
+<span class="lineno">  475 </span><span class="spaces">  </span><span class="istickedoff">-- the Haskell stdlib does its own thing, seemingly not quite the</span>
+<span class="lineno">  476 </span><span class="spaces">  </span><span class="istickedoff">-- same) and it's generally better not to do that, but:</span>
+<span class="lineno">  477 </span><span class="spaces">  </span><span class="istickedoff">--    - we never print the absolutized name;</span>
+<span class="lineno">  478 </span><span class="spaces">  </span><span class="istickedoff">--    - without these simple cases involving ../foo from multiple</span>
+<span class="lineno">  479 </span><span class="spaces">  </span><span class="istickedoff">--      other places don't work right, regardless of symlinks;</span>
+<span class="lineno">  480 </span><span class="spaces">  </span><span class="istickedoff">--    - there's nothing simpler than a full realpath that will</span>
+<span class="lineno">  481 </span><span class="spaces">  </span><span class="istickedoff">--      not have even odder behavior;</span>
+<span class="lineno">  482 </span><span class="spaces">  </span><span class="istickedoff">--    - checking the OS-level file identity would work but may not</span>
+<span class="lineno">  483 </span><span class="spaces">  </span><span class="istickedoff">--      even be possible in Haskell, and if it is, likely isn't</span>
+<span class="lineno">  484 </span><span class="spaces">  </span><span class="istickedoff">--      workable on Windows.</span>
+<span class="lineno">  485 </span><span class="spaces">  </span><span class="istickedoff">--  </span>
+<span class="lineno">  486 </span><span class="spaces">  </span><span class="istickedoff">absoluteName &lt;- canonicalizePath fname'</span>
+<span class="lineno">  487 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  488 </span><span class="spaces">  </span><span class="istickedoff">alreadySeen &lt;- seenSetMember absoluteName seen </span>
+<span class="lineno">  489 </span><span class="spaces">  </span><span class="istickedoff">if depth &gt; 128 then</span>
+<span class="lineno">  490 </span><span class="spaces">      </span><span class="istickedoff">-- XXX pass in the include position as well</span>
+<span class="lineno">  491 </span><span class="spaces">      </span><span class="istickedoff">Cons.errX $ &quot;Maximum include depth exceeded&quot;</span>
+<span class="lineno">  492 </span><span class="spaces">  </span><span class="istickedoff">else if once &amp;&amp; alreadySeen then do</span>
+<span class="lineno">  493 </span><span class="spaces">      </span><span class="istickedoff">-- include_once and we've already seen this file</span>
+<span class="lineno">  494 </span><span class="spaces">      </span><span class="istickedoff">Cons.noteN $ &quot;Skipping already-included file \&quot;&quot; &lt;&gt;</span>
+<span class="lineno">  495 </span><span class="spaces">                   </span><span class="istickedoff">Text.pack fname' &lt;&gt; &quot;\&quot;&quot;</span>
+<span class="lineno">  496 </span><span class="spaces">      </span><span class="istickedoff">pure []</span>
+<span class="lineno">  497 </span><span class="spaces">  </span><span class="istickedoff">else do</span>
+<span class="lineno">  498 </span><span class="spaces">      </span><span class="istickedoff">seenSetInsert absoluteName seen</span>
+<span class="lineno">  499 </span><span class="spaces">      </span><span class="istickedoff">let (_current, dirs) = incpath</span>
+<span class="lineno">  500 </span><span class="spaces">          </span><span class="istickedoff">current' = takeDirectory fname'</span>
+<span class="lineno">  501 </span><span class="spaces">          </span><span class="istickedoff">incpath' = (current', dirs)</span>
+<span class="lineno">  502 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  503 </span><span class="spaces">      </span><span class="istickedoff">Cons.noteN $ &quot;Loading file \&quot;&quot; &lt;&gt; Text.pack fname' &lt;&gt; &quot;\&quot;&quot;</span>
+<span class="lineno">  504 </span><span class="spaces">      </span><span class="istickedoff">ftext &lt;- TextIO.readFile fname'</span>
+<span class="lineno">  505 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  506 </span><span class="spaces">      </span><span class="istickedoff">stmts &lt;- wrapDir current' $ readAnyIO <span class="nottickedoff">ppopts</span> fname ftext &quot;end-of-file&quot; parseModule</span>
+<span class="lineno">  507 </span><span class="spaces">      </span><span class="istickedoff">resolveIncludes (depth + 1) seen incpath' <span class="nottickedoff">opts</span> <span class="nottickedoff">ppopts</span> Inc.processStmts stmts</span></span>
+<span class="lineno">  508 </span>
+<span class="lineno">  509 </span>-- | Find a file, potentially looking in a list of multiple search paths (as
+<span class="lineno">  510 </span>-- specified via the @SAW_IMPORT_PATH@ environment variable or
+<span class="lineno">  511 </span>-- @-i@/@--import-path@ command-line options). If the file was successfully
+<span class="lineno">  512 </span>-- found, load it. If not, fail by returning `Left`.
+<span class="lineno">  513 </span>--
+<span class="lineno">  514 </span>-- Doesn't run the typechecker (yet).
+<span class="lineno">  515 </span>findAndLoadFileUnchecked :: Options -&gt; PPS.Opts -&gt; FilePath -&gt; IO [Stmt]
+<span class="lineno">  516 </span><span class="decl"><span class="istickedoff">findAndLoadFileUnchecked opts ppopts fp = do</span>
+<span class="lineno">  517 </span><span class="spaces">  </span><span class="istickedoff">let depth = 0</span>
+<span class="lineno">  518 </span><span class="spaces">  </span><span class="istickedoff">seen &lt;- emptySeenSet</span>
+<span class="lineno">  519 </span><span class="spaces">  </span><span class="istickedoff">let incpath = (&quot;.&quot;, Options.importPath opts)</span>
+<span class="lineno">  520 </span><span class="spaces">      </span><span class="istickedoff">once = False</span>
+<span class="lineno">  521 </span><span class="spaces">  </span><span class="istickedoff">includeFile depth seen incpath <span class="nottickedoff">opts</span> <span class="nottickedoff">ppopts</span> fp once</span></span>
 
 </pre>
 </body>
