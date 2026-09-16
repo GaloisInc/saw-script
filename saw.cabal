@@ -97,6 +97,7 @@ library saw-support
   exposed-modules:
     SAWSupport.Console
     SAWSupport.ConsoleSupport
+    SAWSupport.Dump
     SAWSupport.EqRel
     SAWSupport.IntRangeSet
     SAWSupport.PanicSupport
@@ -643,6 +644,7 @@ library saw-central
     SAWCentral.Position
     SAWCentral.Utils
     SAWCentral.AST
+    SAWCentral.ASTDump
     SAWCentral.ASTUtil
     SAWCentral.Trace
     SAWCentral.Exceptions
