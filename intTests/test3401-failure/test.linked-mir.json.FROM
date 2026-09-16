@@ -2,7 +2,7 @@ versions
    rustc 1.96.0-nightly (ac7f9ec7d 2026-03-20)
    mir-json 0.1.0 (JSON schema version 13)
    Rust toolchain nightly-2026-03-21
-   mir-json mtime: Sep 16 14:57:44 2026
+   mir-json mtime: Sep 16 13:52:27 2026
    mir-json version from cargo: mir-json v0.1.0
    probable mir-json commit: 8cbf9af1821075ef47cf784fef78d2650827730d from Mon Aug 31 11:37:28 2026 and/or Mon Aug 31 11:37:28 2026
 versions-notes

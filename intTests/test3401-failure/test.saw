@@ -1,0 +1,23 @@
+m <- mir_load_module "test.linked-mir.json";
+
+let f_spec = do {
+  x0 <- mir_fresh_var "x0" (mir_array 16 mir_u8);
+  x1 <- mir_fresh_var "x1" (mir_array 16 mir_u8);
+  x_ref <- mir_ref_of (mir_array_value (mir_array 16 mir_u8)
+    [ mir_term x0
+    , mir_term x1
+    ]);
+  mir_execute_func
+    [ mir_slice_value (mir_elem_ref x_ref 0)
+    , mir_slice_value (mir_elem_ref x_ref 1)
+    ];
+};
+
+let g_spec = do {
+  x <- mir_fresh_var "x" (mir_array 2 (mir_array 16 mir_u8));
+  x_ref <- mir_ref_of (mir_term x);
+  mir_execute_func [x_ref];
+};
+
+f_ov <- mir_verify m "test::f" [] false f_spec z3;
+mir_verify m "test::g" [f_ov] false g_spec z3;

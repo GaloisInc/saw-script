@@ -26,6 +26,64 @@ let g_spec_wrong = do {
     mir_return (mir_term {{ a_array @ 0 }});
 };
 
+
+let f_spec_0_0 = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 2 (mir_array 5 mir_u8));
+    a_ref <- mir_ref_of (mir_term a_array);
+    let a_0_ref = mir_elem_ref a_ref 0;
+    mir_execute_func [mir_slice_range_value a_0_ref 0 2];
+    mir_return (mir_term {{ (a_array @ 0) @ 0 }});
+};
+
+let f_spec_0_2 = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 2 (mir_array 5 mir_u8));
+    a_ref <- mir_ref_of (mir_term a_array);
+    let a_0_ref = mir_elem_ref a_ref 0;
+    mir_execute_func [mir_slice_range_value a_0_ref 2 4];
+    mir_return (mir_term {{ (a_array @ 0) @ 2 }});
+};
+
+let f_spec_1_0 = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 2 (mir_array 5 mir_u8));
+    a_ref <- mir_ref_of (mir_term a_array);
+    let a_1_ref = mir_elem_ref a_ref 1;
+    mir_execute_func [mir_slice_range_value a_1_ref 0 2];
+    mir_return (mir_term {{ (a_array @ 1) @ 0 }});
+};
+
+let f_spec_1_2 = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 2 (mir_array 5 mir_u8));
+    a_ref <- mir_ref_of (mir_term a_array);
+    let a_1_ref = mir_elem_ref a_ref 1;
+    mir_execute_func [mir_slice_range_value a_1_ref 2 4];
+    mir_return (mir_term {{ (a_array @ 1) @ 2 }});
+};
+
+let h_spec_correct = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 2 (mir_array 5 mir_u8));
+    mir_execute_func [mir_term a_array];
+    mir_return (mir_term {{ (a_array @ 1) @ 2 }});
+};
+
+let h_spec_wrong_0_0 = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 2 (mir_array 5 mir_u8));
+    mir_execute_func [mir_term a_array];
+    mir_return (mir_term {{ (a_array @ 0) @ 0 }});
+};
+
+let h_spec_wrong_1_0 = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 2 (mir_array 5 mir_u8));
+    mir_execute_func [mir_term a_array];
+    mir_return (mir_term {{ (a_array @ 1) @ 0 }});
+};
+
+let h_spec_wrong_0_2 = do {
+    a_array <- mir_fresh_var "a_array" (mir_array 2 (mir_array 5 mir_u8));
+    mir_execute_func [mir_term a_array];
+    mir_return (mir_term {{ (a_array @ 0) @ 2 }});
+};
+
+
 m <- mir_load_module "test.linked-mir.json";
 
 f_ov_0 <- mir_verify m "test::f" [] false f_spec_0 z3;
@@ -36,3 +94,31 @@ mir_verify m "test::g" [f_ov_2] false g_spec_correct z3;
 fails (mir_verify m "test::g" [] false g_spec_wrong z3);
 fails (mir_verify m "test::g" [f_ov_0] false g_spec_wrong z3);
 fails (mir_verify m "test::g" [f_ov_2] false g_spec_wrong z3);
+
+
+f_ov_0_0 <- mir_verify m "test::f" [] false f_spec_0_0 z3;
+f_ov_0_2 <- mir_verify m "test::f" [] false f_spec_0_2 z3;
+f_ov_1_0 <- mir_verify m "test::f" [] false f_spec_1_0 z3;
+f_ov_1_2 <- mir_verify m "test::f" [] false f_spec_1_2 z3;
+
+mir_verify m "test::h" [] false h_spec_correct z3;
+fails (mir_verify m "test::h" [f_ov_0_0] false h_spec_correct z3);
+fails (mir_verify m "test::h" [f_ov_0_2] false h_spec_correct z3);
+fails (mir_verify m "test::h" [f_ov_1_0] false h_spec_correct z3);
+mir_verify m "test::h" [f_ov_1_2] false h_spec_correct z3;
+
+fails (mir_verify m "test::h" [] false h_spec_wrong_0_0 z3);
+fails (mir_verify m "test::h" [] false h_spec_wrong_1_0 z3);
+fails (mir_verify m "test::h" [] false h_spec_wrong_0_2 z3);
+fails (mir_verify m "test::h" [f_ov_0_0] false h_spec_wrong_0_0 z3);
+fails (mir_verify m "test::h" [f_ov_0_2] false h_spec_wrong_0_0 z3);
+fails (mir_verify m "test::h" [f_ov_1_0] false h_spec_wrong_0_0 z3);
+fails (mir_verify m "test::h" [f_ov_1_2] false h_spec_wrong_0_0 z3);
+fails (mir_verify m "test::h" [f_ov_0_0] false h_spec_wrong_1_0 z3);
+fails (mir_verify m "test::h" [f_ov_0_2] false h_spec_wrong_1_0 z3);
+fails (mir_verify m "test::h" [f_ov_1_0] false h_spec_wrong_1_0 z3);
+fails (mir_verify m "test::h" [f_ov_1_2] false h_spec_wrong_1_0 z3);
+fails (mir_verify m "test::h" [f_ov_0_0] false h_spec_wrong_0_2 z3);
+fails (mir_verify m "test::h" [f_ov_0_2] false h_spec_wrong_0_2 z3);
+fails (mir_verify m "test::h" [f_ov_1_0] false h_spec_wrong_0_2 z3);
+fails (mir_verify m "test::h" [f_ov_1_2] false h_spec_wrong_0_2 z3);

@@ -1571,18 +1571,10 @@ matchArg opts sc cc cs prepost md = go False []
                  arrRefTyLen (Mir.TyRef (Mir.TyArray _ len) _) = pure len
                  arrRefTyLen _ = fail_
 
-             -- Take the actual slice value's underlying reference, obtain the
-             -- array reference value that it points into, and the index of that
-             -- array that it is pointing at.
-             -- See Note [Matching slices in overrides] for why we do this.
-             let arrElemSize = tySize col actualElemTy
-             Ctx.Empty Ctx.:> Crucible.RV actualArrRef Ctx.:> Crucible.RV actualStartSym <-
-               tryMirOperation $ Mir.mirRef_peelIndexMA bak iTypes actualSliceRef arrElemSize
-
              let -- Match the expected array reference value against the actual
                  -- array reference value.
-                 matchSlice :: Mir.Ty -> SetupValue -> OverrideMatcher MIR w ()
-                 matchSlice expectedArrRefTy expectedArrRef = do
+                 matchSlice :: Mir.Ty -> SetupValue -> Crucible.RegValue Sym Mir.MirReferenceType -> OverrideMatcher MIR w ()
+                 matchSlice expectedArrRefTy expectedArrRef actualArrRef = do
                    arrLen <- arrRefTyLen expectedArrRefTy
                    let actualArrTy = Mir.TyArray actualElemTy arrLen
                    let actualArrTpr = Mir.MirAggregateRepr
@@ -1606,8 +1598,16 @@ matchArg opts sc cc cs prepost md = go False []
                  expectedArrRefTy <- typeOfSetupValue cc tyenv nameEnv expectedArrRef
                  expectedSliceLen <- arrRefTyLen expectedArrRefTy
                  unless (expectedSliceLen == actualSliceLen) fail_
+                 -- `matchSlice` requires a reference to the array underpinning
+                 -- `actualSliceRef`. Because `crucible-mir`-derived array and
+                 -- slice references are indistinguishable, and because
+                 -- `MirSetupSlice` describes a slice that spans the entirety of
+                 -- an array, we know that `actualSliceRef` already _is_ a
+                 -- reference to the array underpinning the slice, so we can use
+                 -- it as-is.
+                 let actualArrRef = actualSliceRef
                  -- Match the reference values.
-                 matchSlice expectedArrRefTy expectedArrRef
+                 matchSlice expectedArrRefTy expectedArrRef actualArrRef
                MirSetupSliceRange expectedSliceInfo expectedArrRef expectedStart expectedEnd -> do
                  -- Check that both the expected and actual values are the same
                  -- sort of slice.
@@ -1621,15 +1621,27 @@ matchArg opts sc cc cs prepost md = go False []
                  expectedArrRefTy <- typeOfSetupValue cc tyenv nameEnv expectedArrRef
                  let expectedSliceLen = expectedEnd - expectedStart
                  unless (expectedSliceLen == actualSliceLen) fail_
-                 -- Check that the starting indices into the expected and actual
-                 -- arrays are the same.
-                 case W4.asBV actualStartSym of
-                   Just actualStartBV
-                     | expectedStart == fromInteger (BV.asUnsigned actualStartBV) ->
-                       pure ()
-                   _ -> fail_
+                 -- Unlike the `MirSetupSlice` case above, to obtain a reference
+                 -- to the underlying array, we need to shift `actualSliceRef`
+                 -- backwards by some amount - in particular, by the number of
+                 -- bytes between the start of the underlying array and the
+                 -- start of the slice. We multiply `expectedStart` by the array
+                 -- element size to compute this shift.
+                 --
+                 -- Before https://github.com/GaloisInc/crucible/pull/1842, we
+                 -- could check that `expectedStart` matched the actual number
+                 -- of elements between the start of the array and the start of
+                 -- the slice, but we no longer have enough information to do
+                 -- so. Now, instead, we treat `expectedStart` as correct here
+                 -- and rely on checks during recursive calls of `matchArg` to
+                 -- fail if it was wrong.
+                 let arrElemSize = tySize col actualElemTy
+                 let elemOff = fromIntegral expectedStart * arrElemSize
+                 originOff <- liftIO $ wordLit sym (negate elemOff)
+                 actualArrRef <-
+                   tryMirOperation $ Mir.mirRef_agOffsetMA bak iTypes originOff actualSliceRef
                  -- Match the reference values.
-                 matchSlice expectedArrRefTy expectedArrRef
+                 matchSlice expectedArrRefTy expectedArrRef actualArrRef
 
         ([], MIRVal (RefShape (Mir.TyRef _ _) _ _ xTpr) x, MS.SetupGlobal () name) -> do
           ppopts <- omGetPPOpts
