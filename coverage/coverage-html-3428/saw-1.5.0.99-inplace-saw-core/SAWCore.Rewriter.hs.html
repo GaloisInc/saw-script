@@ -452,7 +452,7 @@ span.spaces    { background: white }
 <span class="lineno">  433 </span><span class="spaces">                 </span><span class="istickedoff">do app &lt;- scApplyAllBeta sc body args</span>
 <span class="lineno">  434 </span><span class="spaces">                    </span><span class="istickedoff">ruleOfProp <span class="nottickedoff">sc</span> app <span class="nottickedoff">ann</span></span>
 <span class="lineno">  435 </span><span class="spaces">               </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">pure Nothing</span></span>
-<span class="lineno">  436 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">pure Nothing</span></span>
+<span class="lineno">  436 </span><span class="spaces">        </span><span class="istickedoff">_ -&gt; pure Nothing</span>
 <span class="lineno">  437 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  438 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  439 </span><span class="spaces">    </span><span class="istickedoff">eqRule x y = pure $ Just $ mkRewriteRule [] x y False False ann</span></span>

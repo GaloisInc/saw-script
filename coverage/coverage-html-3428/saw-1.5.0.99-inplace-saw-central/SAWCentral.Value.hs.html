@@ -1690,7 +1690,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1671 </span>  TopLevel ProofResult
 <span class="lineno"> 1672 </span><span class="decl"><span class="istickedoff">runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =</span>
 <span class="lineno"> 1673 </span><span class="spaces">  </span><span class="istickedoff">do pos &lt;- getPosition</span>
-<span class="lineno"> 1674 </span><span class="spaces">     </span><span class="istickedoff">ps &lt;- io (startProof gl <span class="nottickedoff">pos</span> <span class="nottickedoff">ploc</span> <span class="nottickedoff">rsn</span>)</span>
+<span class="lineno"> 1674 </span><span class="spaces">     </span><span class="istickedoff">ps &lt;- io (startProof gl pos <span class="nottickedoff">ploc</span> <span class="nottickedoff">rsn</span>)</span>
 <span class="lineno"> 1675 </span><span class="spaces">     </span><span class="istickedoff">(r,pstate) &lt;- runStateT (runExceptT m) ps</span>
 <span class="lineno"> 1676 </span><span class="spaces">     </span><span class="istickedoff">case r of</span>
 <span class="lineno"> 1677 </span><span class="spaces">       </span><span class="istickedoff">Left (stats,cex) -&gt; return (SAWCentral.Proof.InvalidProof stats cex pstate)</span>

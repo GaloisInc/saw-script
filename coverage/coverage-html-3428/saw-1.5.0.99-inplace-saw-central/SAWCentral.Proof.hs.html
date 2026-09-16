@@ -1195,7 +1195,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1176 </span>
 <span class="lineno"> 1177 </span>-- | The SAW source location that generated this theorem
 <span class="lineno"> 1178 </span>thmLocation :: Theorem -&gt; Pos
-<span class="lineno"> 1179 </span><span class="decl"><span class="nottickedoff">thmLocation Theorem{ _thmLocation = loc } = loc</span></span>
+<span class="lineno"> 1179 </span><span class="decl"><span class="istickedoff">thmLocation Theorem{ _thmLocation = loc } = loc</span></span>
 <span class="lineno"> 1180 </span>
 <span class="lineno"> 1181 </span>-- | The program location (if any) of the program under
 <span class="lineno"> 1182 </span>--   verification giving rise to this theorem
@@ -1922,7 +1922,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1903 </span>startProof :: ProofGoal -&gt; Pos -&gt; Maybe ProgramLoc -&gt; Text -&gt; IO ProofState
 <span class="lineno"> 1904 </span><span class="decl"><span class="istickedoff">startProof g pos ploc rsn =</span>
 <span class="lineno"> 1905 </span><span class="spaces">  </span><span class="istickedoff">do start &lt;- getCurrentTime</span>
-<span class="lineno"> 1906 </span><span class="spaces">     </span><span class="istickedoff">pure (ProofState [g] (<span class="nottickedoff">goalSequent g</span>,<span class="nottickedoff">pos</span>,<span class="nottickedoff">ploc</span>,<span class="nottickedoff">rsn</span>) mempty Nothing passthroughEvidence <span class="nottickedoff">start</span>)</span></span>
+<span class="lineno"> 1906 </span><span class="spaces">     </span><span class="istickedoff">pure (ProofState [g] (<span class="nottickedoff">goalSequent g</span>,pos,<span class="nottickedoff">ploc</span>,<span class="nottickedoff">rsn</span>) mempty Nothing passthroughEvidence <span class="nottickedoff">start</span>)</span></span>
 <span class="lineno"> 1907 </span>
 <span class="lineno"> 1908 </span>-- | Attempt to complete a proof by checking that all subgoals have been discharged,
 <span class="lineno"> 1909 </span>--   and validate the computed evidence to ensure that it supports the original
@@ -1976,7 +1976,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1957 </span><span class="spaces">                   </span><span class="istickedoff">, _thmHyps = hyps</span>
 <span class="lineno"> 1958 </span><span class="spaces">                   </span><span class="istickedoff">, _thmStats = stats</span>
 <span class="lineno"> 1959 </span><span class="spaces">                   </span><span class="istickedoff">, _thmEvidence = <span class="nottickedoff">e'</span></span>
-<span class="lineno"> 1960 </span><span class="spaces">                   </span><span class="istickedoff">, _thmLocation = <span class="nottickedoff">loc</span></span>
+<span class="lineno"> 1960 </span><span class="spaces">                   </span><span class="istickedoff">, _thmLocation = loc</span>
 <span class="lineno"> 1961 </span><span class="spaces">                   </span><span class="istickedoff">, _thmProgramLoc = <span class="nottickedoff">ploc</span></span>
 <span class="lineno"> 1962 </span><span class="spaces">                   </span><span class="istickedoff">, _thmReason = <span class="nottickedoff">rsn</span></span>
 <span class="lineno"> 1963 </span><span class="spaces">                   </span><span class="istickedoff">, _thmNonce = n</span>
@@ -2076,7 +2076,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2057 </span><span class="spaces">                      </span><span class="istickedoff">do let (es1, es2) = splitAt (length gs') es</span>
 <span class="lineno"> 2058 </span><span class="spaces">                         </span><span class="istickedoff">e &lt;- buildTacticEvidence es1</span>
 <span class="lineno"> 2059 </span><span class="spaces">                         </span><span class="istickedoff">evidenceCont (e:es2)</span>
-<span class="lineno"> 2060 </span><span class="spaces">              </span><span class="istickedoff">let ps' = ProofState (gs' &lt;&gt; gs) concl (stats &lt;&gt; stats') timeout evidenceCont' <span class="nottickedoff">start</span></span>
+<span class="lineno"> 2060 </span><span class="spaces">              </span><span class="istickedoff">let ps' = ProofState (gs' &lt;&gt; gs) concl (stats &lt;&gt; stats') <span class="nottickedoff">timeout</span> evidenceCont' <span class="nottickedoff">start</span></span>
 <span class="lineno"> 2061 </span><span class="spaces">              </span><span class="istickedoff">seq ps' (return (Right (x, ps')))</span></span>
 <span class="lineno"> 2062 </span>
 <span class="lineno"> 2063 </span>predicateToSATQuery :: SharedContext -&gt; Set VarIndex -&gt; Term -&gt; IO SATQuery

@@ -173,7 +173,7 @@ span.spaces    { background: white }
 <span class="lineno">  154 </span><span class="spaces">                  </span><span class="istickedoff">case asApp t of</span>
 <span class="lineno">  155 </span><span class="spaces">                    </span><span class="istickedoff">Nothing -&gt; pure (seen', ts)</span>
 <span class="lineno">  156 </span><span class="spaces">                    </span><span class="istickedoff">Just (_t1, t2) -&gt;</span>
-<span class="lineno">  157 </span><span class="spaces">                      </span><span class="istickedoff">do ty2 &lt;- scTypeOf sc t2</span>
+<span class="lineno">  157 </span><span class="spaces">                      </span><span class="istickedoff">do ty2 &lt;- scTypeOf <span class="nottickedoff">sc</span> t2</span>
 <span class="lineno">  158 </span><span class="spaces">                         </span><span class="istickedoff">simple &lt;- isSimpleType sc ty2</span>
 <span class="lineno">  159 </span><span class="spaces">                         </span><span class="istickedoff">case simple of</span>
 <span class="lineno">  160 </span><span class="spaces">                           </span><span class="istickedoff">-- If it's simple, then we don't need to</span>
@@ -218,15 +218,15 @@ span.spaces    { background: white }
 <span class="lineno">  199 </span><span class="spaces">       </span><span class="istickedoff">(asGlobalDef -&gt; Just &quot;Prelude.Float&quot;) -&gt; <span class="nottickedoff">pure True</span></span>
 <span class="lineno">  200 </span><span class="spaces">       </span><span class="istickedoff">(asGlobalDef -&gt; Just &quot;Prelude.Double&quot;) -&gt; <span class="nottickedoff">pure True</span></span>
 <span class="lineno">  201 </span><span class="spaces">       </span><span class="istickedoff">(asRationalType -&gt; Just ()) -&gt; <span class="nottickedoff">pure True</span></span>
-<span class="lineno">  202 </span><span class="spaces">       </span><span class="istickedoff">(asIntegerType -&gt; Just ()) -&gt; pure True</span>
-<span class="lineno">  203 </span><span class="spaces">       </span><span class="istickedoff">(asIntModType -&gt; Just _) -&gt; pure True</span>
+<span class="lineno">  202 </span><span class="spaces">       </span><span class="istickedoff">(asIntegerType -&gt; Just ()) -&gt; <span class="nottickedoff">pure True</span></span>
+<span class="lineno">  203 </span><span class="spaces">       </span><span class="istickedoff">(asIntModType -&gt; Just _) -&gt; <span class="nottickedoff">pure True</span></span>
 <span class="lineno">  204 </span><span class="spaces">       </span><span class="istickedoff">-- Booleans and naturals are simple.</span>
 <span class="lineno">  205 </span><span class="spaces">       </span><span class="istickedoff">(asBoolType -&gt; Just ()) -&gt; pure True</span>
 <span class="lineno">  206 </span><span class="spaces">       </span><span class="istickedoff">(asNatType -&gt; Just ()) -&gt; pure True</span>
 <span class="lineno">  207 </span><span class="spaces">       </span><span class="istickedoff">-- Vectors and pairs are simple if their arguments are.</span>
 <span class="lineno">  208 </span><span class="spaces">       </span><span class="istickedoff">(asVectorType -&gt; Just (_n, a)) -&gt; isSimpleType sc a</span>
 <span class="lineno">  209 </span><span class="spaces">       </span><span class="istickedoff">(asPairType -&gt; Just (a, b)) -&gt;</span>
-<span class="lineno">  210 </span><span class="spaces">         </span><span class="istickedoff">allM (isSimpleType sc) [a, b]</span>
+<span class="lineno">  210 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">allM (isSimpleType sc) [a, b]</span></span>
 <span class="lineno">  211 </span><span class="spaces">       </span><span class="istickedoff">-- Nonrecursive datatypes are simple if all their constructor</span>
 <span class="lineno">  212 </span><span class="spaces">       </span><span class="istickedoff">-- argument types are.</span>
 <span class="lineno">  213 </span><span class="spaces">       </span><span class="istickedoff">(asApplyAll -&gt; (asConstant -&gt; Just nm, args)) -&gt;</span>
@@ -236,7 +236,7 @@ span.spaces    { background: white }
 <span class="lineno">  217 </span><span class="spaces">              </span><span class="istickedoff">Just (ResolvedDataType dt) -&gt;</span>
 <span class="lineno">  218 </span><span class="spaces">                </span><span class="istickedoff">do let sub = IntMap.fromList (zip (map (vnIndex . fst) (dtParams dt)) args)</span>
 <span class="lineno">  219 </span><span class="spaces">                   </span><span class="istickedoff">allM (checkCtorArgStruct sub . ctorArgStruct) (dtCtors dt)</span>
-<span class="lineno">  220 </span><span class="spaces">              </span><span class="istickedoff">_ -&gt; pure False</span>
+<span class="lineno">  220 </span><span class="spaces">              </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">pure False</span></span>
 <span class="lineno">  221 </span><span class="spaces">       </span><span class="istickedoff">-- No other cases are considered simple.</span>
 <span class="lineno">  222 </span><span class="spaces">       </span><span class="istickedoff">_ -&gt; pure False</span>
 <span class="lineno">  223 </span><span class="spaces">  </span><span class="istickedoff">where</span>
