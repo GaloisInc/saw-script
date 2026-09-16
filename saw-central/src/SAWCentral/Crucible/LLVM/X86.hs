@@ -1615,14 +1615,13 @@ checkGoals bak opts nm loc sc tactic mdMap invSubst loopFunEquivConds = do
                     , goalName = Text.unpack nm
                     , goalLoc  = gloc
                     , goalDesc = msg
-                    , goalSequent = propToSequent g
+                    , goalProp = g
                     , goalTags = MS.conditionTags md
                     }
     res <- runProofScript tactic g proofgoal (Just ploc)
              (Text.unwords
               ["X86 verification condition", Text.pack (show n), Text.pack msg])
              False -- do not record this theorem in the database
-             False -- TODO! useSequentGoals
     case res of
       ValidProof stats thm ->
         return (stats, MS.VCStats md stats (thmSummary thm) (thmNonce thm) (thmDepends thm) (thmElapsedTime thm))
