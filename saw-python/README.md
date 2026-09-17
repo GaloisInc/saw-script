@@ -33,7 +33,7 @@ $ docker run --name=saw-remote-api -d \
   ghcr.io/galoisinc/saw-remote-api:nightly
 $ export SAW_SERVER_URL="http://localhost:8080/"
 ```
-6. Install the Python client (requires Python v3.9 or newer -- we recommend using [`poetry`](https://python-poetry.org/docs/#installation) to install the package):
+6. Install the Python client (requires Python v3.10 or newer -- we recommend using [`poetry`](https://python-poetry.org/docs/#installation) to install the package):
 ```
 $ poetry install 
 ```

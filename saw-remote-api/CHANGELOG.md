@@ -2,6 +2,10 @@
 
 ## next
 
+## 1.6 -- 2026-09-17
+
+* No changes specifically to the remote API.
+
 ## 1.5 -- 2026-01-31
 
 * Add a `SAW/MIR/find mangled ADT` command, which allows looking up MIR

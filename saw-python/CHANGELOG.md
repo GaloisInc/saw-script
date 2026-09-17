@@ -2,6 +2,8 @@
 
 ## next
 
+## 1.6 -- 2026-09-17
+
 * Require urrlib 2.7.0 or higher, and requests 2.33.0 or higher,
   for security fixes.
   This in turn requires Python 3.10, so Python 3.9 is no longer supported.
