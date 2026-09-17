@@ -1571,18 +1571,10 @@ matchArg opts sc cc cs prepost md = go False []
                  arrRefTyLen (Mir.TyRef (Mir.TyArray _ len) _) = pure len
                  arrRefTyLen _ = fail_
 
-             -- Take the actual slice value's underlying reference, obtain the
-             -- array reference value that it points into, and the index of that
-             -- array that it is pointing at.
-             -- See Note [Matching slices in overrides] for why we do this.
-             let arrElemSize = tySize col actualElemTy
-             Ctx.Empty Ctx.:> Crucible.RV actualArrRef Ctx.:> Crucible.RV actualStartSym <-
-               tryMirOperation $ Mir.mirRef_peelIndexMA bak iTypes actualSliceRef arrElemSize
-
              let -- Match the expected array reference value against the actual
                  -- array reference value.
-                 matchSlice :: Mir.Ty -> SetupValue -> OverrideMatcher MIR w ()
-                 matchSlice expectedArrRefTy expectedArrRef = do
+                 matchSlice :: Mir.Ty -> SetupValue -> Crucible.RegValue Sym Mir.MirReferenceType -> OverrideMatcher MIR w ()
+                 matchSlice expectedArrRefTy expectedArrRef actualArrRef = do
                    arrLen <- arrRefTyLen expectedArrRefTy
                    let actualArrTy = Mir.TyArray actualElemTy arrLen
                    let actualArrTpr = Mir.MirAggregateRepr
@@ -1606,8 +1598,16 @@ matchArg opts sc cc cs prepost md = go False []
                  expectedArrRefTy <- typeOfSetupValue cc tyenv nameEnv expectedArrRef
                  expectedSliceLen <- arrRefTyLen expectedArrRefTy
                  unless (expectedSliceLen == actualSliceLen) fail_
+                 -- `matchSlice` requires a reference to the array underpinning
+                 -- `actualSliceRef`. Because `crucible-mir`-derived array and
+                 -- slice references are indistinguishable, and because
+                 -- `MirSetupSlice` describes a slice that spans the entirety of
+                 -- an array, we know that `actualSliceRef` already _is_ a
+                 -- reference to the array underpinning the slice, so we can use
+                 -- it as-is.
+                 let actualArrRef = actualSliceRef
                  -- Match the reference values.
-                 matchSlice expectedArrRefTy expectedArrRef
+                 matchSlice expectedArrRefTy expectedArrRef actualArrRef
                MirSetupSliceRange expectedSliceInfo expectedArrRef expectedStart expectedEnd -> do
                  -- Check that both the expected and actual values are the same
                  -- sort of slice.
@@ -1621,15 +1621,28 @@ matchArg opts sc cc cs prepost md = go False []
                  expectedArrRefTy <- typeOfSetupValue cc tyenv nameEnv expectedArrRef
                  let expectedSliceLen = expectedEnd - expectedStart
                  unless (expectedSliceLen == actualSliceLen) fail_
-                 -- Check that the starting indices into the expected and actual
-                 -- arrays are the same.
-                 case W4.asBV actualStartSym of
-                   Just actualStartBV
-                     | expectedStart == fromInteger (BV.asUnsigned actualStartBV) ->
-                       pure ()
-                   _ -> fail_
+                 -- Unlike the `MirSetupSlice` case above, to obtain a reference
+                 -- to the underlying array, we need to shift `actualSliceRef`
+                 -- backwards by some amount - in particular, by the number of
+                 -- bytes between the start of the underlying array and the
+                 -- start of the slice. We multiply `expectedStart` by the array
+                 -- element size to compute this shift.
+                 --
+                 -- Before https://github.com/GaloisInc/crucible/pull/1842,
+                 -- which implemented aggregate-flattening, we could check that
+                 -- `expectedStart` matched the actual number of elements
+                 -- between the start of the array and the start of the slice,
+                 -- but we no longer have enough information to do so. Now,
+                 -- instead, we treat `expectedStart` as correct here and rely
+                 -- on checks during recursive calls of `matchArg` to fail if it
+                 -- was wrong.
+                 let arrElemSize = tySize col actualElemTy
+                 let elemOff = fromIntegral expectedStart * arrElemSize
+                 originOff <- liftIO $ wordLit sym (negate elemOff)
+                 actualArrRef <-
+                   tryMirOperation $ Mir.mirRef_agOffsetMA bak iTypes originOff actualSliceRef
                  -- Match the reference values.
-                 matchSlice expectedArrRefTy expectedArrRef
+                 matchSlice expectedArrRefTy expectedArrRef actualArrRef
 
         ([], MIRVal (RefShape (Mir.TyRef _ _) _ _ xTpr) x, MS.SetupGlobal () name) -> do
           ppopts <- omGetPPOpts
@@ -1766,9 +1779,9 @@ we need to check three things:
 3. For slices constructed from a sub-range of an array, the starting indices of
    the expected and actual slices are the same.
 
-(1) is fairly straightforward, but (2) is easy to mess up. It's tempting to
-just call `matchArg` on the underlying references, but don't do this! These
-reference values are derived from array references, which are of type &[T; N],
+(1) is fairly straightforward, but (2) is easy to mess up. It's tempting to just
+call `matchArg` on the underlying references at `*const T`, but don't do this!
+These references are derived from array references, which are of type &[T; N],
 but calling matchArg on something of type `*const T` will associate the
 reference's AllocIndex to something that points to a value of type T, not a
 value of type [T; N]. This leads to disaster later when checking mir_points_to
@@ -1777,25 +1790,21 @@ will incorrectly require the right-hand side to be of type T, not [T; N]. (See
 #2045 for an example of this actually happening.)
 
 Instead, we want to call `matchArg` on the *array reference value* associated
-with a slice, not the raw reference value itself. To do this, we take the raw
-reference value and use mirRef_peelIndexIO, a crucible-mir memory model
-operation which "peels back" the indexing operation that raw slice references
-use, thereby turning a `*const T` value into a `&[T; N]` value. It's a bit
-indirect, but it avoids needing to plumb around the original array reference
-value alongside the slice's raw reference value.
+with a slice. If the slice reference points to the beginning of the array, as in
+the `MirSetupSlice` case, we can take advantage of the fact that `crucible-mir`
+gives array and slice references the same shape, and use the slice reference
+directly. If not, as in the `MirSetupSliceRange` case, we need to obtain a
+reference to the beginning of the array from which the slice was derived, and
+use that. We obtain such a reference by offsetting backwards by the starting
+element stored in `MirSetupSliceRange.
 
-Conveniently, mirRef_peelIndexIO also gives us the index of the slice's raw
-reference value in the array, so we can check (3) by comparing that against the
-expected slice starting index.
-
-We do something similar for &str slices, as crucible-mir backs them with an
-array reference value of type &[u8; N].
-
-This assumes that all slice reference values passed to an override were derived
-from crucible-mir's indexing operations, as this is crucial for
-mirRef_peelIndexIO to work. This is currently the case on every example we have
-tried, but if we encounter an example that breaks this assumption, then we will
-need to rethink this approach.
+In the former case, (3) holds trivially, as both the actual and expected indices
+are necessarily zero. In the latter case, we don't check (3) directly, because
+we're offsetting according to the _expected_ starting index. We're assuming that
+subsequent recursive calls to `matchArg` will fail if we've offset by the wrong
+amount. In practice, this assumption seems sound - we check a number of cases
+that might expose issues with this approach in `intTests/test3010` and
+`intTests/test3010-multi`.
 -}
 
 -- | For each points-to statement read the memory value through the
