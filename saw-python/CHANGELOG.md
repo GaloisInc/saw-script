@@ -1,5 +1,7 @@
 # Revision history for saw-client
 
+## next
+
 ## 1.6 -- 2026-09-17
 
 * Require urrlib 2.7.0 or higher, and requests 2.33.0 or higher,
