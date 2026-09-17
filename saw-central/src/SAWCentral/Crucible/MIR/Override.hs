@@ -1628,13 +1628,14 @@ matchArg opts sc cc cs prepost md = go False []
                  -- start of the slice. We multiply `expectedStart` by the array
                  -- element size to compute this shift.
                  --
-                 -- Before https://github.com/GaloisInc/crucible/pull/1842, we
-                 -- could check that `expectedStart` matched the actual number
-                 -- of elements between the start of the array and the start of
-                 -- the slice, but we no longer have enough information to do
-                 -- so. Now, instead, we treat `expectedStart` as correct here
-                 -- and rely on checks during recursive calls of `matchArg` to
-                 -- fail if it was wrong.
+                 -- Before https://github.com/GaloisInc/crucible/pull/1842,
+                 -- which implemented aggregate-flattening, we could check that
+                 -- `expectedStart` matched the actual number of elements
+                 -- between the start of the array and the start of the slice,
+                 -- but we no longer have enough information to do so. Now,
+                 -- instead, we treat `expectedStart` as correct here and rely
+                 -- on checks during recursive calls of `matchArg` to fail if it
+                 -- was wrong.
                  let arrElemSize = tySize col actualElemTy
                  let elemOff = fromIntegral expectedStart * arrElemSize
                  originOff <- liftIO $ wordLit sym (negate elemOff)
@@ -1778,9 +1779,9 @@ we need to check three things:
 3. For slices constructed from a sub-range of an array, the starting indices of
    the expected and actual slices are the same.
 
-(1) is fairly straightforward, but (2) is easy to mess up. It's tempting to
-just call `matchArg` on the underlying references, but don't do this! These
-reference values are derived from array references, which are of type &[T; N],
+(1) is fairly straightforward, but (2) is easy to mess up. It's tempting to just
+call `matchArg` on the underlying references at `*const T`, but don't do this!
+These references are derived from array references, which are of type &[T; N],
 but calling matchArg on something of type `*const T` will associate the
 reference's AllocIndex to something that points to a value of type T, not a
 value of type [T; N]. This leads to disaster later when checking mir_points_to
@@ -1789,25 +1790,21 @@ will incorrectly require the right-hand side to be of type T, not [T; N]. (See
 #2045 for an example of this actually happening.)
 
 Instead, we want to call `matchArg` on the *array reference value* associated
-with a slice, not the raw reference value itself. To do this, we take the raw
-reference value and use mirRef_peelIndexIO, a crucible-mir memory model
-operation which "peels back" the indexing operation that raw slice references
-use, thereby turning a `*const T` value into a `&[T; N]` value. It's a bit
-indirect, but it avoids needing to plumb around the original array reference
-value alongside the slice's raw reference value.
+with a slice. If the slice reference points to the beginning of the array, as in
+the `MirSetupSlice` case, we can take advantage of the fact that `crucible-mir`
+gives array and slice references the same shape, and use the slice reference
+directly. If not, as in the `MirSetupSliceRange` case, we need to obtain a
+reference to the beginning of the array from which the slice was derived, and
+use that. We obtain such a reference by offsetting backwards by the starting
+element stored in `MirSetupSliceRange.
 
-Conveniently, mirRef_peelIndexIO also gives us the index of the slice's raw
-reference value in the array, so we can check (3) by comparing that against the
-expected slice starting index.
-
-We do something similar for &str slices, as crucible-mir backs them with an
-array reference value of type &[u8; N].
-
-This assumes that all slice reference values passed to an override were derived
-from crucible-mir's indexing operations, as this is crucial for
-mirRef_peelIndexIO to work. This is currently the case on every example we have
-tried, but if we encounter an example that breaks this assumption, then we will
-need to rethink this approach.
+In the former case, (3) holds trivially, as both the actual and expected indices
+are necessarily zero. In the latter case, we don't check (3) directly, because
+we're offsetting according to the _expected_ starting index. We're assuming that
+subsequent recursive calls to `matchArg` will fail if we've offset by the wrong
+amount. In practice, this assumption seems sound - we check a number of cases
+that might expose issues with this approach in `intTests/test3010` and
+`intTests/test3010-multi`.
 -}
 
 -- | For each points-to statement read the memory value through the
