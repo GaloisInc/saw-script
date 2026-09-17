@@ -379,14 +379,18 @@ getNamingEnvOfImport modEnv impData =
   -- the naming environment containing the module aliases
   -- (i.e., `submodule A = ...`-- declarations) of the imported module:
   aliasedNames :: MR.NamingEnv
-  aliasedNames = modAliasNames scopeEnv nameToPName visibleAliases
+  aliasedNames =
+    modAliasNames scopeEnv nameToPName importedNames visibleAliases
     where
 
-    -- the aliases declared anywhere inside the imported module, keeping
-    -- only those the visibility parameter allows us to bring in:
+    -- the aliases declared anywhere inside the imported module (paired
+    -- with the path each one refers to), keeping only those the
+    -- visibility parameter allows us to bring in:
     visibleAliases =
-      [ a
-      | a <- Map.keys $ modAliasesOf modEnv $ C.topModuleFor importedPath
+      [ (a, P.impNameModPath target)
+      | (a, target) <- Map.toList
+                       $ modAliasesOf modEnv
+                       $ C.topModuleFor importedPath
       , C.modPathIsOrContains importedPath (MN.nameModPath a)
       , visible a
       ]
@@ -403,27 +407,52 @@ getNamingEnvOfImport modEnv impData =
 --   A module alias (@submodule A = submodule B@) introduces no new
 --   `MN.Name`s: @A::x@ and @B::x@ are literally the same name.  So,
 --   unlike the members of an ordinary submodule, alias-qualified names
---   cannot be recovered from a @Set MN.Name@; we instead pick them out
---   of the naming environment that the renamer built for the module
---   being imported.
+--   cannot simply be read off a @Set MN.Name@; we get them from two
+--   places (see `namesUnderAlias`).
 --
 modAliasNames ::
   MR.NamingEnv         {- ^ what is in scope in the imported module -} ->
   (MN.Name -> P.PName) {- ^ how names of the imported module are spelled -} ->
-  [MN.Name]            {- ^ the visible module aliases declared in it -} ->
+  Set MN.Name          {- ^ the names the import brings in -} ->
+  [(MN.Name, C.ModPath)]
+    {- ^ the visible module aliases declared in the imported module,
+         each paired with the path it refers to -} ->
   MR.NamingEnv
-modAliasNames scopeEnv nameToPName aliases
-  | null aliases = mempty
-  | otherwise    = MN.filterPNames underAnAlias scopeEnv
+modAliasNames scopeEnv nameToPName importedNames aliases =
+  mconcat [ namesUnderAlias a target | (a, target) <- aliases ]
 
   where
-  -- a name is contributed by an alias when its qualifiers start with
-  -- the alias, e.g. `A::x` and `A::Inner::y` for the alias `A`
-  -- (`pNameChunks` of an alias being the qualifiers it introduces):
-  underAnAlias :: P.PName -> Bool
-  underAnAlias pn =
-    any (\a -> pNameChunks (nameToPName a) `isPrefixOf` pNameQualifiers pn)
-        aliases
+  namesUnderAlias :: MN.Name -> C.ModPath -> MR.NamingEnv
+  namesUnderAlias alias target =
+      MN.filterPNames underTheAlias scopeEnv
+    <> MN.namingEnvFromNames' spellUnderAlias namesInTarget
+
+    where
+    -- the qualifiers the alias introduces: ["A"] for a top-level alias
+    -- `A`, ["S","A"] for an alias `A` nested inside a submodule `S`:
+    aliasChunks = pNameChunks (nameToPName alias)
+
+    -- (1) the alias-qualified names that the renamer already put in
+    -- scope in the imported module, i.e. those whose qualifiers start
+    -- with the alias (`A::x`, `A::Inner::y`, ...).  These are the
+    -- target's *exported* names, including what aliases nested inside
+    -- the target contribute:
+    underTheAlias :: P.PName -> Bool
+    underTheAlias pn = aliasChunks `isPrefixOf` pNameQualifiers pn
+
+    -- (2) the imported names that live inside the target, respelled
+    -- under the alias.  This is what makes the target's `private`
+    -- names reachable as `A::x`: an alias respects the import's
+    -- visibility, so `A::x` is in scope exactly when the import brings
+    -- in `x` under the target's own name:
+    namesInTarget :: Set MN.Name
+    namesInTarget =
+      Set.filter (C.modPathIsOrContains target . MN.nameModPath)
+                 importedNames
+
+    spellUnderAlias :: MN.Name -> P.PName
+    spellUnderAlias nm =
+      addQualifiers aliasChunks (stripModPathPrefix target nm)
 
 -- ImportResults and functions returning it ------------------------------------
 
@@ -543,6 +572,13 @@ pNameQualifiers pn = maybe [] C.modNameChunksText (P.getModName pn)
 -- | A `P.PName` as its chunks: @["X","Y","z"]@ for @X::Y::z@.
 pNameChunks :: P.PName -> [Text]
 pNameChunks pn = pNameQualifiers pn ++ [identText (P.getIdent pn)]
+
+-- | Add qualifiers in front of those of a `P.PName`: @["A","B"]@ and
+--   @Y::z@ gives @A::B::Y::z@.
+addQualifiers :: [Text] -> P.PName -> P.PName
+addQualifiers []        pn = pn
+addQualifiers qualifiers pn =
+  P.Qual (C.packModName (qualifiers ++ pNameQualifiers pn)) (P.getIdent pn)
 
 -- | Strip a module path prefix from a Name, to get a 'less' qualified
 --   name.  E.g., intuitively:
