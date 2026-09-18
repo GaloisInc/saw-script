@@ -157,7 +157,7 @@ data TyCtx
   | TyCtxPat       -- ^ Patterns
   | TyCtxStmt      -- ^ Statements
   | TyCtxArgList   -- ^ Expression groups that are function argument lists
-  deriving (Eq, Show)
+  deriving Eq
 
 -- | Extended provenance/position information for types.
 --
@@ -214,7 +214,7 @@ data TypeProvenance
   | TypeFromContext Pos TyCtx
   | TypeFromFuncWithSig Pos
   | TypeFromFuncWithBody Pos Pos
-  deriving (Eq, Show)
+  deriving Eq
 
 -- | Type for unification variable serial numbers.
 type TypeIndex = Integer
@@ -225,7 +225,7 @@ type TypeIndex = Integer
 data Context
   = ProofScript
   | TopLevel
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord)
 
 data TyCon
   = TupleCon Integer
@@ -242,7 +242,7 @@ data TyCon
   | LLVMSpecCon
   | MIRSpecCon
   | ContextCon Context
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord)
 
 -- | Information about the named parameters in a function type
 --   signature.
@@ -259,7 +259,6 @@ data TyCon
 --   functions); the list argument gives the names of the named
 --   arguments.
 data NamedParamInfo = NamedParamInfo Int [Text]
-  deriving Show
 
 -- | Dummy `NamedParamInfo` for use where the information is not
 --   needed, such as the typechecker. The only consumer of the
@@ -320,17 +319,14 @@ data Type
   | TyVar TypeProvenance Name
     -- | For internal typechecker use only.
   | TyUnifyVar TypeProvenance TypeIndex
-  deriving Show
 
 -- | The positions in type schemes can be either explicit (the user
 --   gave a name at this position) or implicit (a fresh unification
 --   var was generated at this position and ended up getting forall-
 --   bound). XXX: this could use a shorter name.
 data SchemaNameProvenance = SchemaNameExplicit Pos | SchemaNameImplicit Pos
-  deriving Show
 
 data Schema = Forall [(SchemaNameProvenance, Name)] Type
-  deriving Show
 
 -- | A schema pattern is like a schema but has potentially multiple
 -- type entries that are meant to match fragments of a complete
@@ -397,7 +393,6 @@ data Expr
   | Let Pos DeclGroup Expr
   | TSig Pos Expr Type
   | IfThenElse Pos Expr Expr Expr
-  deriving Show
 
 
 ------------------------------------------------------------
@@ -429,7 +424,6 @@ data Pattern
   | PWild Pos (Maybe Type)
   | PVar Pos Pos Name (Maybe Type)
   | PTuple Pos [Pattern]
-  deriving Show
 
 
 ------------------------------------------------------------
@@ -439,7 +433,7 @@ data Pattern
 data Rebindable
   = RebindableVar -- ^ produced by @let rebindable@
   | ReadOnlyVar   -- ^ produced by ordinary @let@ and by @rec@
-  deriving (Eq, Show)
+  deriving Eq
 
 data Import = Import
   { iIsSubmodule :: Bool
@@ -448,7 +442,7 @@ data Import = Import
   , iAs        :: Maybe P.ModName
   , iSpec      :: Maybe P.ImportSpec
   , iPos       :: Pos
-  } deriving Show
+  }
 
 -- | Statements.
 --
@@ -476,7 +470,6 @@ data Stmt
   | StmtTypedef  Pos Pos Text Type
   | StmtPushdir  Pos FilePath
   | StmtPopdir   Pos
-  deriving Show
 
 
 ------------------------------------------------------------
@@ -492,7 +485,6 @@ data Stmt
 --   arguments are stuffed into the body as lambdas.
 data Decl
   = Decl { dPos :: Pos, dPat :: Pattern, dType :: Maybe Schema, dDef :: Expr }
-  deriving Show
 
 -- | Systems of mutually recursive declarations.
 --
@@ -500,7 +492,6 @@ data Decl
 data DeclGroup
   = Recursive [Decl]   -- ^ produced by @rec ... and ...@
   | NonRecursive Decl  -- ^ produced by @let ...@
-  deriving Show
 
 
 ------------------------------------------------------------

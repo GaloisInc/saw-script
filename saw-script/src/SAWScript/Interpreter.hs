@@ -63,6 +63,7 @@ import qualified Mir.Generator as MIR (RustModule)
 import qualified Mir.Mir as MIR
 
 import SAWSupport.Position
+import qualified SAWSupport.Dump as Dump
 import SAWSupport.ConsoleSupport (Fatal(..))
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
@@ -75,8 +76,9 @@ import CryptolSAWCore.TypedTerm
 --import SAWCentral.Trace (Trace)
 import qualified SAWCentral.Trace as Trace
 
-import qualified SAWCentral.AST as SS
 import qualified SAWCentral.Position as SS
+import qualified SAWCentral.AST as SS
+import qualified SAWCentral.ASTDump as ASTDump
 import SAWCentral.AST (Import(..), PrimitiveLifecycle(..), defaultAvailable)
 import SAWCentral.Bisimulation
 import SAWCentral.Builtins
@@ -3070,7 +3072,8 @@ dump_file_AST _bic opts filetxt = do
     liftIO $ do
         let file = Text.unpack filetxt
         stmts <- Loader.findAndLoadFileUnchecked opts ppopts file
-        mapM_ print stmts
+        let dump = Dump.list $ map ASTDump.dumpStmt stmts
+        mapM_ putStrLn $ Dump.renderString dump
 
 parser_printer_roundtrip :: BuiltinContext -> Options -> Text -> TopLevel ()
 parser_printer_roundtrip _bic opts filetxt = do
