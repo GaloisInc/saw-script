@@ -62,6 +62,7 @@ jobs:
       - name: config
         id: config
         env:
+          EVENT_REF: ${{ github.ref }}
           EVENT_TAG: ${{ startsWith(github.event.ref, 'refs/tags/') }}
           EVENT_SCHEDULE: ${{ github.event_name == 'schedule' }}
           EVENT_DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
@@ -75,7 +76,7 @@ jobs:
           .github/ci.sh output tag $EVENT_TAG
           .github/ci.sh output schedule $EVENT_SCHEDULE
           .github/ci.sh output publish $({ $EVENT_TAG || $EVENT_SCHEDULE; } && echo true || echo false)
-          .github/ci.sh output is-stable-branch $(.github/ci.sh is_stable_branch_event "$EVENT_TAG")
+          .github/ci.sh output is-stable-branch $(.github/ci.sh is_stable_branch_event "$EVENT_REF")
           .github/ci.sh output retention-days $($IS_STABLE && echo 90 || echo 5)
 
   build:
