@@ -858,7 +858,7 @@ evaluateExpr sym st sc cache = f Map.empty
                sc_elm <- f env v
                SAWExpr <$> SC.scArrayConstant sc sc_idx_type sc_elm_type sc_elm
           | otherwise -> unimplemented "multidimensional ConstantArray"
-        
+
         B.SelectArray range arr indexTerms
           | Ctx.Empty Ctx.:> idx <- indexTerms
           , idx_type <- exprType idx ->
