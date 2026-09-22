@@ -30,7 +30,6 @@ module SAWCoreWhat4.ReturnTrip
   , sawCreateVar
   , sawRegisterSymFunInterp
   , UninterpResult(..)
-  , getInputs
   ) where
 
 import           Control.Lens
@@ -47,8 +46,6 @@ import           Data.Parameterized.Nonce
 import           Data.Parameterized.Some
 import           Data.Parameterized.TraversableFC
 import           Data.Ratio
-import           Data.Sequence (Seq)
-import qualified Data.Sequence as Seq
 import           Data.Word(Word64)
 import           Data.Text (Text)
 import qualified Data.Text as Text
@@ -86,10 +83,6 @@ data SAWCoreState n
     { saw_sc :: SC.SharedContext
       -- ^ the main SAWCore datastructure for building shared terms
 
-    , saw_inputs    :: IORef (Seq (SC.VarName, SC.Term))
-      -- ^ a record of all the symbolic input variables created so far,
-      --   in the order they were created
-
     , saw_symMap :: IORef (Map Word64 (SC.SharedContext -> [SC.Term] -> IO UninterpResult))
       -- ^ What to do with uninterpreted functions.
       -- The key is the "indexValue" of the "symFunId" for the function
@@ -120,13 +113,11 @@ newSAWCoreState ::
   SC.SharedContext ->
   IO (SAWCoreState n)
 newSAWCoreState sc =
-  do inpr <- newIORef Seq.empty
-     ch   <- B.newIdxCache
+  do ch   <- B.newIdxCache
      ch_r <- newIORef IntMap.empty
      mr   <- newIORef Map.empty
      return SAWCoreState
             { saw_sc = sc
-            , saw_inputs = inpr
             , saw_symMap = mr
             , saw_elt_cache = ch
             , saw_elt_cache_r = ch_r
@@ -177,9 +168,6 @@ scArrayFromElems sc w elT xs =
     Nothing     -> panic "srArrayFromElems" ["Empty"]
 
 
-getInputs :: SAWCoreState n -> IO (Seq (SC.VarName, SC.Term))
-getInputs st = readIORef (saw_inputs st)
-
 baseSCType ::
   sym ->
   SC.SharedContext ->
@@ -223,9 +211,7 @@ sawCreateVar :: SAWCoreState n
 sawCreateVar st nm tp = do
   let sc = saw_sc st
   x <- SC.scFreshVarName sc nm
-  t <- SC.scVariable sc x tp
-  modifyIORef (saw_inputs st) (\xs -> xs Seq.|> (x, tp))
-  return t
+  SC.scVariable sc x tp
 
 bindSAWTerm ::
   B.ExprBuilder n st fs ->
