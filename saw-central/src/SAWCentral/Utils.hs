@@ -5,6 +5,7 @@ Maintainer  : jhendrix, atomb
 Stability   : provisional
 -}
 
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveDataTypeable  #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -188,8 +189,22 @@ handleException opts e
          printOutLn opts Error msg
          printOutLn opts Error ("   (This failure used error at the Haskell level)")
          exitProofUnknown
-    | otherwise =
-         printOutLn opts Error (CE.displayException e) >> exitProofUnknown
+    | otherwise = do
+         -- Starting with GHC 9.10 (base 4.20) we get extra newlines (and in
+         -- some cases, unwanted backtraces, and I think the newline is an
+         -- empty backtrace) from printing exceptions here. Suppress that by
+         -- stripping off the backtrace.
+         --
+         -- Which base version $NoBacktrace$ first appears in is
+         -- undocumented, but it seems to have appeared by 4.20. It is
+         -- definitely not in 4.17.
+#if MIN_VERSION_base(4,20,0)
+         let msg = CE.displayException $ CE.NoBacktrace e
+#else
+         let msg = CE.displayException e
+#endif
+         printOutLn opts Error msg
+         exitProofUnknown
 
  where
  displayIOE ioe
