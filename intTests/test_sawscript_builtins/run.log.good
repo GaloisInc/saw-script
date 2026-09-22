@@ -4,6 +4,7 @@ hopefully nothing happened
 this should print:
 
 
+
 # Theorems Proved or Assumed
 
 * Theorem:
@@ -16,6 +17,7 @@ this should print:
 * SBV->Z3
 that should have printed
 this should also print:
+
 
 
 # Theorems Proved or Assumed

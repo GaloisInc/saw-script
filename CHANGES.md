@@ -1,5 +1,14 @@
 # next
 
+This release supports [version
+13](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#13) of
+`mir-json`'s schema.
+
+## Bug Fixes
+
+* The `summarize_verification` command now reports which MIR functions were
+  analyzed in addition to LLVM functions and JVM methods.
+
 # 1.6 -- 2026-09-17
 
 This release supports [version
@@ -181,14 +190,14 @@ See `saw-core-isabelle/README.md`.
 
 ## New Features
 
-* SAW now has the following commands for generating Isabelle theories 
+* SAW now has the following commands for generating Isabelle theories
   (requires `enable_experimental`):
   - `write_isabelle_cryptol_modules` for translating Cryptol modules
   - `offline_isabelle` for translating SAW subgoals
   - `write_isabelle_term` for translating SAWCore terms
 
   Supporting theories are in `saw-core-isabelle/isabelle/theories`.
-  
+
   Additionally, the release includes a standalone binary
   `cryptol-to-isabelle` for translating Cryptol modules into Isabelle
   theories.
