@@ -9,6 +9,10 @@ This release supports [version
 * The `summarize_verification` command now reports which MIR functions were
   analyzed in addition to LLVM functions and JVM methods.
 
+## Removals / Deprecations
+
+* Support for CVC4 has been removed. Use CVC5.
+
 # 1.6 -- 2026-09-17
 
 This release supports [version

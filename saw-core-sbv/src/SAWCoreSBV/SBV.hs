@@ -36,7 +36,7 @@ module SAWCoreSBV.SBV
   , SBV.executable
   , SBV.setTimeOut
   , SBV.getModelDictionary
-  , SBV.abc, SBV.z3, SBV.cvc4, SBV.cvc5, SBV.yices, SBV.mathSAT, SBV.boolector, SBV.bitwuzla
+  , SBV.abc, SBV.z3, SBV.cvc5, SBV.yices, SBV.mathSAT, SBV.boolector, SBV.bitwuzla
   ) where
 
 import Data.SBV.Dynamic

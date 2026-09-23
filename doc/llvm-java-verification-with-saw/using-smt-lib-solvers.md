@@ -38,5 +38,4 @@ passes the given term through unchanged, because it might be used for
 either satisfiability or validity checking.
 
 The SMT-Lib export capabilities in SAWScript make use of the Haskell SBV
-package, and support ABC, Bitwuzla, Boolector, CVC4, CVC5, MathSAT, Yices, and
-Z3.
+package, and support ABC, Bitwuzla, Boolector, CVC5, MathSAT, Yices, and Z3.
