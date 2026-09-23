@@ -49,7 +49,7 @@
 #      (this is for tagged releases)
 #    - a push is made to master (this happens when PRs are merged)
 #    - a push is made to a release branch (this happens when PRs are merged there)
-#    - for pushes to pull requests
+#    - for updates to pull requests
 #    - once a night
 #    - or if explicitly triggered via the repository's Actions page
 
@@ -114,14 +114,22 @@ jobs:
   config:
     runs-on: ubuntu-24.04
     outputs:
+
+      # string outputs (names and versions)
       name: ${{ steps.config.outputs.name }}
       saw-version: ${{ steps.config.outputs.saw-version }}
       crux-name: ${{ steps.config.outputs.crux-name }}
       crux-version: ${{ steps.config.outputs.crux-version }}
-      event-tag: ${{ steps.config.outputs.tag }}
-      event-schedule: ${{ steps.config.outputs.schedule }}
+
+      # boolean outputs characterizing the build we're doing
+      event-is-tag: ${{ steps.config.outputs.event-is-tag }}
+      event-is-scheduled: ${{ steps.config.outputs.event-is-scheduled }}
+      event-is-stable-branch: ${{ steps.config.outputs.event-is-stable-branch }}
+
+      # boolean outputs characterizing what we want to do in this build
       publish: ${{ steps.config.outputs.publish }}
-      is-stable-branch: ${{ steps.config.outputs.is-stable-branch }}
+
+      # other config outputs
       retention-days: ${{ steps.config.outputs.retention-days }}
     steps:
       - uses: actions/checkout@v7
@@ -131,22 +139,32 @@ jobs:
       - name: config
         id: config
         env:
+          # get the git ref associated with this build
           EVENT_REF: ${{ github.ref }}
-          EVENT_TAG: ${{ startsWith(github.event.ref, 'refs/tags/') }}
-          EVENT_SCHEDULE: ${{ github.event_name == 'schedule' }}
-          EVENT_DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
-          IS_STABLE: ${{ startsWith(github.event.ref, 'refs/heads/release-') }}
+
+          # The various ways this build might have been triggered.
+          EVENT_IS_TAG: ${{ startsWith(github.event.ref, 'refs/tags/') }}
+          EVENT_IS_SCHEDULED: ${{ github.event_name == 'schedule' }}
+          EVENT_IS_DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
+          EVENT_IS_STABLE: ${{ startsWith(github.event.ref, 'refs/heads/release-') }}
         run: |
           set -x
+
+          # string outputs (names and versions)
           .github/ci.sh output name saw-$(.github/ci.sh saw_ver)
           .github/ci.sh output saw-version $(.github/ci.sh saw_ver)
           .github/ci.sh output crux-name crux-mir-comp-$(.github/ci.sh crux_ver)
           .github/ci.sh output crux-version $(.github/ci.sh crux_ver)
-          .github/ci.sh output tag $EVENT_TAG
-          .github/ci.sh output schedule $EVENT_SCHEDULE
-          .github/ci.sh output publish $({ $EVENT_TAG || $EVENT_SCHEDULE; } && echo true || echo false)
-          .github/ci.sh output is-stable-branch $(.github/ci.sh is_stable_branch_event "$EVENT_REF")
-          .github/ci.sh output retention-days $($IS_STABLE && echo 90 || echo 5)
+
+          # boolean outputs characterizing the build we're doing
+          .github/ci.sh output event-is-tag $EVENT_IS_TAG
+          .github/ci.sh output event-is-scheduled $EVENT_IS_SCHEDULED
+          .github/ci.sh output event-is-stable-branch $(.github/ci.sh is_stable_branch_event "$EVENT_REF")
+          # boolean outputs characterizing what we want to do in this build
+          .github/ci.sh output publish $({ $EVENT_IS_TAG || $EVENT_IS_SCHEDULED; } && echo true || echo false)
+
+          # other config outputs
+          .github/ci.sh output retention-days $($EVENT_IS_STABLE && echo 90 || echo 5)
 
 ############################################################
 #
@@ -196,7 +214,7 @@ jobs:
     # We want to upload docs for `master` and for tagged releases, and
     # not otherwise, so filter this further:
     #    - restricting to `push` actions eliminates pull requests
-    #    - requiring needs.config.outputs.is-stable-branch be false skips
+    #    - requiring needs.config.outputs.event-is-stable-branch be false skips
     #      miscellaneous builds on stable (`release-**`) branches
     # so what's left is `master` and release tags.
     #
@@ -208,13 +226,13 @@ jobs:
     # Note that even though tags will normally be _on_ stable
     # branches, tag events generate a completely different github.ref
     # of the form `refs/tags/...` which won't set
-    # needs.config.outputs.is-stable-branch, so we aren't accidentally
+    # needs.config.outputs.event-is-stable-branch, so we aren't accidentally
     # skipping release tags. According to the docs, pushing to a
     # stable branch will trigger a branch run, and then tagging it
     # will trigger a separate tag run, and it seems to so work.
     #
     if: github.event_name == 'push' &&
-        needs.config.outputs.is-stable-branch == 'false' &&
+        needs.config.outputs.event-is-stable-branch == 'false' &&
         github.repository_owner == 'GaloisInc' &&
         github.actor != 'dependabot[bot]'
     strategy:
@@ -488,7 +506,7 @@ jobs:
       # workflow dispatches, or releases (and not in pull requests).
       - name: Notarize binaries (macOS)
         if: runner.os == 'macOS' &&
-            (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.is-stable-branch == 'true' || needs.config.outputs.tag == 'true') &&
+            (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.event-is-stable-branch == 'true' || needs.config.outputs.tag == 'true') &&
             github.repository_owner == 'GaloisInc' &&
             github.actor != 'dependabot[bot]'
         env:
@@ -627,7 +645,7 @@ jobs:
     # will be available. As noted above, scheduled runs also happen in
     # forks. It would be nice to run all of it but the final push step,
     # but we appear to need docker login to build.
-    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.is-stable-branch == 'true') &&
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.event-is-stable-branch == 'true') &&
         github.repository_owner == 'GaloisInc' &&
         github.actor != 'dependabot[bot]'
     strategy:
@@ -730,13 +748,13 @@ jobs:
         name: Test saw-remote-api
         run: ./saw-remote-api/scripts/test_docker.sh ${{ matrix.image }}:$COMMON_TAG
 
-      - if: needs.config.outputs.event-schedule == 'true'
+      - if: needs.config.outputs.event-is-scheduled == 'true'
         name: ${{ matrix.image }}:nightly
         run: |
           docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:nightly
           docker push ${{ matrix.image }}:nightly
 
-      - if: needs.config.outputs.is-stable-branch == 'true'
+      - if: needs.config.outputs.event-is-stable-branch == 'true'
         name: ${{ matrix.image }}:${{ matrix.image-tag }}
         run: |
           docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:${{ matrix.image-tag }}
@@ -1354,7 +1372,7 @@ jobs:
     # tags only. Skip running it on forks as well, because we won't have
     # the signing key there.
     if: github.event_name == 'push' &&
-        needs.config.outputs.event-tag == 'true' &&
+        needs.config.outputs.event-is-tag == 'true' &&
         github.repository_owner == 'GaloisInc' &&
         github.actor != 'dependabot[bot]'
     strategy:
