@@ -313,6 +313,7 @@ is_stable_branch_event() {
             if [ "$branchver" = "$ver" ]; then
                 echo true
             else
+                echo "$0: wrong version: found $branchver, expected $ver" 1>&2
                 echo false
             fi
         ;;
@@ -320,14 +321,187 @@ is_stable_branch_event() {
             if [ "$branchver" = "$basever" ]; then
                 echo true
             else
+                echo "$0: wrong version: found $branchver, expected $basever" 1>&2
                 echo false
             fi
         ;;
         *)
+            echo "$0: completely unexpected ref $1" 1>&2
             echo false
         ;;
     esac
 }
+
+# Figure out what triggered the build based on the git ref Actions
+# gave us, and output the corresponding build config.
+#
+# Arguments:
+#    $1 github.event_name
+#    $2 github.ref
+#    $3 $EVENT_IS_OURS (either 'true' or 'false')
+#
+# EVENT_IS_OURS is true if we are running in the main SAW repository
+# and have access to secrets and upload permissions and such.
+#
+# Many of the cases fall back to issuing $3, because they should be
+# done for certain event types but only in the main repo.
+configure_for_event() {
+    local name=$1
+    local ref=$2
+    local ours=$3
+
+    local type
+    local is_tag=false is_master=false is_scheduled=false
+    local is_dispatch=false is_pr=false is_stable=false
+
+    # There are six ways the build can be triggered; these cases
+    # correspond to the dispatch entries in the "on" section of
+    # ci.yml.
+    #
+    # Exactly one these of six cases should match.
+    case "$name" in
+        workflow_dispatch)
+            type=dispatch
+            is_dispatch=true
+            ;;
+        schedule)
+            type=scheduled
+            is_scheduled=true
+            ;;
+        pull_request)
+            type=pr
+            is_pr=true
+            ;;
+        push)
+            case "$ref" in
+                refs/tags/*)
+                    type=tag
+                    is_tag=true
+                    ;;
+                master)
+                    type=master
+                    is_master=true
+                    ;;
+                *)
+                    if [ $(is_stable_branch_event "$ref") = true ]; then
+                        type=stable
+                        is_stable=true
+                    else
+                        type=unknown
+                    fi
+                    ;;
+            esac
+            ;;
+        *)
+            type=unknown
+            ;;
+    esac
+
+    # output the type string
+    output event-type $type
+
+    # boolean outputs characterizing the build we're doing
+    output event-is-tag $is_tag
+    output event-is-master $is_master
+    output event-is-stable-branch $is_stable
+    output event-is-scheduled $is_scheduled
+    output event-is-dispatch $is_dispatch
+    output event-is-pr $is_pr
+
+    # boolean outputs characterizing what we want to do in this build
+
+    # Whether we want to publish the docs we build. This should
+    # happen for `master` and for tagged releases, and not
+    # otherwise. Also avoid running in forks. Note: this
+    # specifically does not publish docs for untagged changes
+    # merged to a stable branch. It is not immediately clear if
+    # that's what we want, but it's what we've been doing.
+    case $type in
+        tag|master)
+            output want-deploy-docs $ours
+            ;;
+        *)
+            output want-deploy-docs false
+            ;;
+    esac
+
+    # Whether to sign binaries.
+    output want-signing $ours
+
+    # Whether to notarize MacOS binaries.
+    #
+    # Note that Apple's documentation suggests that you
+    # shouldn't notarize more than 75 times in one day
+    # (https://developer.apple.com/documentation/security/customizing-the-notarization-workflow#Avoid-long-notarization-response-times-and-size-limits),
+    # so as a precaution, we only perform this step for
+    # scheduled events, workflow dispatches, or releases (and
+    # not in pull requests or on merges to master).
+    #
+    # Use of this should also check want-signing.
+    case $type in
+        tag|stable|scheduled|dispatch)
+            output want-apple-notarization true
+            ;;
+        *)
+            output want-apple-notarization false
+            ;;
+    esac
+
+    # Whether to build the Docker images.
+    #
+    # Do this only on scheduled runs, stable branch merges, and
+    # explicit dispatch, and only when we have upload permission.
+    #
+    # Docker images produced by explicit dispatch aren't
+    # uploaded; the explicit dispatch should be used to test the
+    # Docker builds when that's needed, which is not often.
+    case $type in
+        stable|scheduled|dispatch)
+            output want-docker-images $ours
+            ;;
+        *)
+            output want-docker-images false
+            ;;
+    esac
+
+    # Whether to test with coverage reporting. We do this on all
+    # pull requests, but only for the main repo because
+    # uploading the results needs permissions.
+    case $type in
+        pr)
+            output want-coverage $ours
+            ;;
+        *)
+            output want-coverage false
+            ;;
+    esac
+
+    # Whether to build and upload a source archive. This is only
+    # for tagged releases. (It seems reasonable that people who
+    # want a release might want to download the source for the
+    # release. Otherwise they'll presumably clone the repo.)
+    # Restrict to the main repo because the upload requires
+    # permission; also it isn't a useful thing to do in forks.
+    case $type in
+        tag)
+            output want-source-archive $ours
+            ;;
+        *)
+            output want-source-archive false
+            ;;
+    esac
+
+    # other config outputs
+    case $type in
+        stable)
+            output retention-days 90
+            ;;
+        *)
+            output retention-days 5
+            ;;
+    esac
+}
+
 
 COMMAND="$1"
 shift
