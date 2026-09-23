@@ -93,7 +93,7 @@ jobs:
         haddock: [true]
         run-tests: [true]
         hpc: [false]
-        include:
+        #include:
           # We include one job from an older Ubuntu LTS release to increase our
           # coverage of possible Linux configurations. Since we already run the
           # tests with the newest LTS release, we won't bother testing this one.
