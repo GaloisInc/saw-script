@@ -146,7 +146,7 @@ jobs:
           EVENT_IS_TAG: ${{ startsWith(github.event.ref, 'refs/tags/') }}
           EVENT_IS_SCHEDULED: ${{ github.event_name == 'schedule' }}
           EVENT_IS_DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
-          EVENT_IS_STABLE: ${{ startsWith(github.event.ref, 'refs/heads/release-') }}
+          EVENT_IS_STABLE: $(.github/ci.sh is_stable_branch_event "$EVENT_REF")
         run: |
           set -x
 
@@ -159,7 +159,7 @@ jobs:
           # boolean outputs characterizing the build we're doing
           .github/ci.sh output event-is-tag $EVENT_IS_TAG
           .github/ci.sh output event-is-scheduled $EVENT_IS_SCHEDULED
-          .github/ci.sh output event-is-stable-branch $(.github/ci.sh is_stable_branch_event "$EVENT_REF")
+          .github/ci.sh output event-is-stable-branch $EVENT_IS_STABLE
           # boolean outputs characterizing what we want to do in this build
           .github/ci.sh output publish $({ $EVENT_IS_TAG || $EVENT_IS_SCHEDULED; } && echo true || echo false)
 
