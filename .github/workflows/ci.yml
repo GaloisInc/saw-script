@@ -60,10 +60,10 @@ on:
       - "v?[0-9]+.[0-9]+"
       - "v?[0-9]+.[0-9]+.[0-9]+"
     branches: [master, "release-**"]
-  pull_request:
   schedule:
     - cron: "0 10 * * *" # 10am UTC -> 2/3am PST
   workflow_dispatch:
+  pull_request:
 
 ############################################################
 #
@@ -123,8 +123,11 @@ jobs:
 
       # boolean outputs characterizing the build we're doing
       event-is-tag: ${{ steps.config.outputs.event-is-tag }}
-      event-is-scheduled: ${{ steps.config.outputs.event-is-scheduled }}
+      event-is-master: ${{ steps.config.outputs.event-is-master }}
       event-is-stable-branch: ${{ steps.config.outputs.event-is-stable-branch }}
+      event-is-scheduled: ${{ steps.config.outputs.event-is-scheduled }}
+      event-is-dispatch: ${{ steps.config.outputs.event-is-dispatch }}
+      event-is-pr: ${{ steps.config.outputs.event-is-pr }}
 
       # boolean outputs characterizing what we want to do in this build
       publish: ${{ steps.config.outputs.publish }}
@@ -142,11 +145,15 @@ jobs:
           # get the git ref associated with this build
           EVENT_REF: ${{ github.ref }}
 
-          # The various ways this build might have been triggered.
+          # The various ways this build might have been triggered, in
+          # the same order as the dispatch config above. Ordinarily,
+          # only one of these should be true at once.
           EVENT_IS_TAG: ${{ startsWith(github.event.ref, 'refs/tags/') }}
+          EVENT_IS_MASTER: ${{ github.event.ref == 'master' }}
+          EVENT_IS_STABLE: $(.github/ci.sh is_stable_branch_event "$EVENT_REF")
           EVENT_IS_SCHEDULED: ${{ github.event_name == 'schedule' }}
           EVENT_IS_DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
-          EVENT_IS_STABLE: $(.github/ci.sh is_stable_branch_event "$EVENT_REF")
+          EVENT_IS_PR: $( github.event_name == 'pull_request' }}
         run: |
           set -x
 
@@ -158,8 +165,12 @@ jobs:
 
           # boolean outputs characterizing the build we're doing
           .github/ci.sh output event-is-tag $EVENT_IS_TAG
-          .github/ci.sh output event-is-scheduled $EVENT_IS_SCHEDULED
+          .github/ci.sh output event-is-master $EVENT_IS_MASTER
           .github/ci.sh output event-is-stable-branch $EVENT_IS_STABLE
+          .github/ci.sh output event-is-scheduled $EVENT_IS_SCHEDULED
+          .github/ci.sh output event-is-dispatch $EVENT_IS_DISPATCH
+          .github/ci.sh output event-is-pr $EVENT_IS_PR
+
           # boolean outputs characterizing what we want to do in this build
           .github/ci.sh output publish $({ $EVENT_IS_TAG || $EVENT_IS_SCHEDULED; } && echo true || echo false)
 
