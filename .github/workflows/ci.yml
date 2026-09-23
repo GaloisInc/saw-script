@@ -37,7 +37,6 @@
 #
 # other jobs (do not require bins)
 #    - source-archive (extracts a working source archive for releases)
-#    - mergify (doesn't actually do anything)
 
 
 ############################################################
@@ -1354,24 +1353,3 @@ jobs:
         run: |
           chmod +x bin/*
           docker run -v $PWD/bin:/saw-bin exercises
-
-  # Indicates sufficient CI success for the purposes of mergify merging the pull
-  # request, see .github/mergify.yml. This is done instead of enumerating each
-  # instance of each job in the mergify configuration for a number of reasons:
-  # - continue-on-error is respected, won't block merge
-  # - changes to jobs or job instances don't require a mergify config update
-  # - dependencies through `needs:` are validated, CI will fail if it's invalid
-  mergify:
-    runs-on: ubuntu-24.04
-    needs:
-      - build
-      - rocq-builds
-      - isabelle-builds
-      - crux-mir-comp-tests
-      - saw-remote-api-tests
-      - cabal-test
-      - coverage
-      - s2n-tests
-      - exercises
-    steps:
-      - run: "true"
