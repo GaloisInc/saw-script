@@ -150,11 +150,11 @@ jobs:
 
 ############################################################
 #
-# Jobs
+# Documentation jobs
 #
 
 # All of this is indented two spaces because it actually hangs under
-# the "jobs:" line in the section above.
+# the "jobs:" line in the "job config" section above.
 
   build-docs:
     name: "Build SAW documentation"
@@ -292,6 +292,14 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: gh-pages
           keep_files: true
+
+############################################################
+#
+# Build jobs
+#
+
+# All of this is indented two spaces because it actually hangs under
+# the "jobs:" line in the "job config" section above.
 
   build:
     runs-on: ${{ matrix.os }}
@@ -735,6 +743,14 @@ jobs:
           docker push ${{ matrix.image }}:${{ matrix.image-tag }}
           docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:latest
           docker push ${{ matrix.image }}:latest
+
+############################################################
+#
+# Test jobs
+#
+
+# All of this is indented two spaces because it actually hangs under
+# the "jobs:" line in the "job config" section above.
 
   rocq-builds:
     needs: [build]
@@ -1317,6 +1333,14 @@ jobs:
         run: |
           chmod +x bin/*
           docker run -v $PWD/bin:/saw-bin exercises
+
+############################################################
+#
+# Misc jobs
+#
+
+# All of this is indented two spaces because it actually hangs under
+# the "jobs:" line in the "job config" section above.
 
   # The source archives that github autogenerates for releases do not
   # include submodules, and also do not include submodule references, so
