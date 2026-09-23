@@ -227,13 +227,13 @@ jobs:
       # the binaries were compiled using HPC or not. This is done to ensure that
       # the HPC-enabled binaries do not clobber the non-HPC-enabled binaries.
       - uses: actions/upload-artifact@v5
-        if: matrix.ghc == '9.10.3' && matrix.hpc == false
+        if: matrix.ghc == '9.12.2' && matrix.hpc == false
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}
 
       - uses: actions/upload-artifact@v5
-        if: matrix.ghc == '9.10.3' && matrix.hpc == true
+        if: matrix.ghc == '9.12.2' && matrix.hpc == true
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}-hpc
@@ -351,7 +351,7 @@ jobs:
       # In the next 3 steps we check that `matrix.hpc == false` so that if the
       # distribution version matches the HPC version, the HPC build artifacts do
       # not clobber the non-HPC distribution artifacts.
-      - if: matrix.ghc == '9.10.3' && matrix.hpc == false
+      - if: matrix.ghc == '9.12.2' && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -359,7 +359,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '9.10.3' && matrix.hpc == false
+      - if: matrix.ghc == '9.12.2' && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.name }}-with-solvers
@@ -367,7 +367,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '9.10.3' && matrix.hpc == false
+      - if: matrix.ghc == '9.12.2' && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.crux-name }} (GHC ${{ matrix.ghc }})
@@ -375,7 +375,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '9.10.3' && matrix.run-tests && matrix.hpc == false
+      - if: matrix.ghc == '9.12.2' && matrix.run-tests && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           path: dist/bin
@@ -973,7 +973,7 @@ jobs:
       - uses: haskell-actions/setup@v2
         id: setup-haskell
         with:
-          ghc-version: "9.10.3"
+          ghc-version: "9.12.2"
 
       - name: Download what4-solvers
         uses: GaloisInc/what4-solvers@v1
@@ -1201,7 +1201,7 @@ jobs:
           # - awslc
           - blst
         os: [ubuntu-24.04]
-        ghc: ["9.10.3"]
+        ghc: ["9.12.2"]
     steps:
       - uses: actions/checkout@v7
       - run: |
@@ -1255,7 +1255,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-24.04]
-        ghc: ["9.10.3"]
+        ghc: ["9.12.2"]
     steps:
       - uses: actions/checkout@v7
       - run: |
