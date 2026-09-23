@@ -5,6 +5,55 @@
 # - Docker builds happen nightly, on manual invocation, and on release branch commits
 # Please update this comment as those details change.
 
+# Structural notes:
+#
+# There is a first "config" job that everything depends on, which
+# produces a bunch of configuration data.
+#
+# We then have these families of jobs:
+#    - docs
+#    - build
+#    - test
+#    - other
+#
+# docs jobs (do not require bins):
+#    - build-docs (builds the html docs)
+#    - deploy-docs (pushes the html docs to GH Pages)
+#    - update-docs-versions (updates the GH Pages index)
+#
+# build jobs (produce bins)
+#    - build (builds saw bins)
+#    - build-push-image (builds the docker images)
+#
+# test jobs (generally require bins)
+#    - rocq-builds (builds the Rocq support code)
+#    - isabelle-builds (builds the Isabelle support code, does not actually require bins)
+#    - crux-mir-comp-tests (runs crux-mir-comp's tests)
+#    - saw-remote-api-tests (runs the saw-remote-api tests)
+#    - cabal-test (runs all the other cabal-driven test suites)
+#    - coverage (runs cabal test with coverage tracking)
+#    - s2n-tests (runs the s2n tests in docker containers)
+#    - exercises (builds and runs the exercises)
+#
+# other jobs (do not require bins)
+#    - source-archive (extracts a working source archive for releases)
+#    - mergify (doesn't actually do anything)
+
+
+############################################################
+#
+# Job dispatch config
+#
+
+# The whole workflow runs if:
+#    - a tag matching either of the version string patterns is pushed
+#      (this is for tagged releases)
+#    - a push is made to master (this happens when PRs are merged)
+#    - a push is made to a release branch (this happens when PRs are merged there)
+#    - for pushes to pull requests
+#    - once a night
+#    - or if explicitly triggered via the repository's Actions page
+
 name: SAWScript
 on:
   push:
@@ -17,14 +66,30 @@ on:
     - cron: "0 10 * * *" # 10am UTC -> 2/3am PST
   workflow_dispatch:
 
+############################################################
+#
+# Setup
+#
+
+#
+# The CABAL_CACHE_VERSION, CARGO_CACHE_VERSION, and SOLVER_CACHE_VERSION
+# environment variables can be updated to force the use of a new cabal,
+# cargo, or solver cache if the respective current cache contents become
+# corrupted/invalid.  This can sometimes happen when (for example) the OS
+# version is changed but older .so files are cached, which can have various
+# effects (e.g. cabal complains it can't find a valid version of the "happy"
+# tool).
+#
+# DISABLED_TESTS turns off specific tests in the `intTests` test suite.
+# Doesn't actually work right; see #3092.
+#
+# RUST_TOOLCHAIN sets the Rust version we're using. This should be the one
+# supported by the mir-json submodule.
+#
+# SOLVER_PKG_VERSION is the name of the what4-solvers snapshot we use. This
+# should ordinarily be the latest one.
+#
 env:
-  # The CABAL_CACHE_VERSION, CARGO_CACHE_VERSION, and SOLVER_CACHE_VERSION
-  # environment variables can be updated to force the use of a new cabal,
-  # cargo, or solver cache if the respective current cache contents become
-  # corrupted/invalid.  This can sometimes happen when (for example) the OS
-  # version is changed but older .so files are cached, which can have various
-  # effects (e.g. cabal complains it can't find a valid version of the "happy"
-  # tool).
   CABAL_CACHE_VERSION: 12
   CARGO_CACHE_VERSION: 1
   SOLVER_CACHE_VERSION: 1
@@ -40,6 +105,11 @@ env:
   # ./saw/Dockerfile
   # ./saw-remote-api/Dockerfile
   SOLVER_PKG_VERSION: "snapshot-20260622"
+
+############################################################
+#
+# Job config
+#
 
 jobs:
   config:
@@ -78,6 +148,14 @@ jobs:
           .github/ci.sh output publish $({ $EVENT_TAG || $EVENT_SCHEDULE; } && echo true || echo false)
           .github/ci.sh output is-stable-branch $(.github/ci.sh is_stable_branch_event "$EVENT_REF")
           .github/ci.sh output retention-days $($IS_STABLE && echo 90 || echo 5)
+
+############################################################
+#
+# Jobs
+#
+
+# All of this is indented two spaces because it actually hangs under
+# the "jobs:" line in the section above.
 
   build:
     runs-on: ${{ matrix.os }}
