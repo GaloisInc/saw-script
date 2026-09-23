@@ -156,6 +156,143 @@ jobs:
 # All of this is indented two spaces because it actually hangs under
 # the "jobs:" line in the section above.
 
+  build-docs:
+    name: "Build SAW documentation"
+    needs: [config]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-24.04]
+    steps:
+      - name: Check out repository (no submodules)
+        uses: actions/checkout@v7
+
+      - name: Cache Python environment
+        uses: actions/cache@v6
+        with:
+          path: doc/.venv
+          key: ${{ matrix.os }}-venv-${{ hashFiles('doc/scripts/requirements.txt') }}
+
+      - name: Build HTML documentation
+        run: make -C doc html
+        env:
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+
+      - name: Upload HTML artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: html_docs
+          path: doc/_build/html/
+
+  deploy-docs:
+    name: "Deploy SAW documentation to GitHub Pages"
+    needs: [config, build-docs]
+    runs-on: ${{ matrix.os }}
+    #
+    # The whole workflow is only run at all on branches matching
+    # `master`, branches matching `release-**`, and release tags, per
+    # the `on:` stanza at the top of the file.
+    #
+    # We want to upload docs for `master` and for tagged releases, and
+    # not otherwise, so filter this further:
+    #    - restricting to `push` actions eliminates pull requests
+    #    - requiring needs.config.outputs.is-stable-branch be false skips
+    #      miscellaneous builds on stable (`release-**`) branches
+    # so what's left is `master` and release tags.
+    #
+    # Then also check the repository owner to avoid running in forks.
+    # This is to avoid issues with missing permissions on
+    # GITHUB_TOKEN, needed when actually deploying the documentation
+    # to the `gh-pages` branch.
+    #
+    # Note that even though tags will normally be _on_ stable
+    # branches, tag events generate a completely different github.ref
+    # of the form `refs/tags/...` which won't set
+    # needs.config.outputs.is-stable-branch, so we aren't accidentally
+    # skipping release tags. According to the docs, pushing to a
+    # stable branch will trigger a branch run, and then tagging it
+    # will trigger a separate tag run, and it seems to so work.
+    #
+    if: github.event_name == 'push' &&
+        needs.config.outputs.is-stable-branch == 'false' &&
+        github.repository_owner == 'GaloisInc' &&
+        github.actor != 'dependabot[bot]'
+    strategy:
+      matrix:
+        os: [ubuntu-24.04]
+    steps:
+      - name: Check out repository (no submodules)
+        uses: actions/checkout@v7
+
+      - name: Download HTML artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: html_docs
+          path: doc/_build/html
+
+      # Adapted from:
+      # https://github.com/brechtm/rinohtype/commit/8a23be41d39d748955b139f0fabefe3205a4fd93
+      # Based on the Stack Overflow thread:
+      # https://stackoverflow.com/questions/72089650/how-to-host-multiple-version-of-a-sphinx-based-documentation-on-github
+      - name: Determine documentation publishing directory
+        id: doc-publish-dir
+        run: python3 .github/save_doc_publish_dir.py
+
+      # Using peaceiris/actions-gh-pages, as it allows us to specify specific
+      # target directories to publish to, where the built-in actions are
+      # "one and done": Package and upload a single artifact, and deploy that.
+      - name: Publish docs to GitHub pages
+        if: steps.doc-publish-dir.outputs.target != ''
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: doc/_build/html
+          destination_dir: ${{ steps.doc-publish-dir.outputs.target }}
+          keep_files: false
+
+  # Adapted from:
+  # https://github.com/brechtm/rinohtype/commit/6ba7637c248add1ce90efa7bb1c761d690b0de17
+  update-docs-versions:
+    name: "Update documentation versions JSON"
+    needs: [deploy-docs]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-24.04]
+    steps:
+      - name: Check out gh-pages
+        uses: actions/checkout@v7
+        with:
+          ref: gh-pages
+
+      - name: Write versions to JSON file
+        run: |
+          python3 -c "
+          import json
+          from pathlib import Path
+
+          cwd = Path.cwd()
+          versions = sorted(
+              (
+                  item.name
+                  for item in cwd.iterdir()
+                  if item.is_dir() and not item.name.startswith('.') and item.name != 'coverage'
+              ),
+              reverse=True,
+          )
+          target_dir = Path('gh-pages')
+          target_dir.mkdir(parents=True)
+          target_file = target_dir / 'versions.json'
+          with target_file.open('w') as f:
+              json.dump(versions, f)"
+
+      - name: Publish versions JSON to GitHub pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: gh-pages
+          keep_files: true
+
   build:
     runs-on: ${{ matrix.os }}
     needs: [config]
@@ -475,178 +612,129 @@ jobs:
             dist-newstyle
           key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
 
-  # The source archives that github autogenerates for releases do not
-  # include submodules, and also do not include submodule references, so
-  # they are unbuildable and broken. See issue 2532.
-  #
-  # We only need one of these. Run it on Ubuntu so as to be sure to get GNU tar.
-  source-archive:
+  build-push-image:
     runs-on: ubuntu-24.04
     needs: [config]
-    # Run this piece only on tag builds, which in practice means release
-    # tags only. Skip running it on forks as well, because we won't have
-    # the signing key there.
-    if: github.event_name == 'push' &&
-        needs.config.outputs.event-tag == 'true' &&
+    # Restrict this to the main repository where the needed secrets
+    # will be available. As noted above, scheduled runs also happen in
+    # forks. It would be nice to run all of it but the final push step,
+    # but we appear to need docker login to build.
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.is-stable-branch == 'true') &&
         github.repository_owner == 'GaloisInc' &&
         github.actor != 'dependabot[bot]'
     strategy:
       fail-fast: false
+      matrix:
+        include:
+          - file: saw/Dockerfile
+            image: ghcr.io/galoisinc/saw
+            cache: ghcr.io/galoisinc/cache-saw
+            image-repo: GaloisInc/saw-script
+            image-tag: ${{ needs.config.outputs.saw-version }}
+          - file: saw-remote-api/Dockerfile
+            image: ghcr.io/galoisinc/saw-remote-api
+            cache: ghcr.io/galoisinc/cache-saw-remote-api
+            image-repo: GaloisInc/saw-script
+            image-tag: ${{ needs.config.outputs.saw-version }}
+          - file: crux-mir-comp/Dockerfile
+            image: ghcr.io/galoisinc/crux-mir-comp
+            cache: ghcr.io/galoisinc/cache-crux-mir-comp
+            image-repo: GaloisInc/crux
+            image-tag: ${{ needs.config.outputs.crux-version }}
     steps:
       - uses: actions/checkout@v7
-      - run: git submodule update --init
-      - name: make-source-distribution
-        shell: bash
-        run: .github/ci.sh make_source_distribution ${{ needs.config.outputs.name }}
-      - name: sign-source-distribution
-        shell: bash
-        run: .github/ci.sh sign ${{ needs.config.outputs.name }}-sources.tar.gz
-        env:
-          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
-          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-      - uses: actions/upload-artifact@v5
         with:
-          name: ${{ needs.config.outputs.name }}-sources (full source distribution)
-          path: ${{ needs.config.outputs.name }}-sources.tar.gz
-          if-no-files-found: error
-          retention-days: ${{ needs.config.outputs.retention-days }}
+          submodules: true
 
-  build-docs:
-    name: "Build SAW documentation"
-    needs: [config]
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-24.04]
-    steps:
-      - name: Check out repository (no submodules)
-        uses: actions/checkout@v7
+      - name: capture git state in GitRev.hs
+        run: ./build.sh gitrev
 
-      - name: Cache Python environment
-        uses: actions/cache@v6
-        with:
-          path: doc/.venv
-          key: ${{ matrix.os }}-venv-${{ hashFiles('doc/scripts/requirements.txt') }}
-
-      - name: Build HTML documentation
-        run: make -C doc html
-        env:
-          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
-
-      - name: Upload HTML artifact
-        uses: actions/upload-artifact@v5
-        with:
-          name: html_docs
-          path: doc/_build/html/
-
-  deploy-docs:
-    name: "Deploy SAW documentation to GitHub Pages"
-    needs: [config, build-docs]
-    runs-on: ${{ matrix.os }}
-    #
-    # The whole workflow is only run at all on branches matching
-    # `master`, branches matching `release-**`, and release tags, per
-    # the `on:` stanza at the top of the file.
-    #
-    # We want to upload docs for `master` and for tagged releases, and
-    # not otherwise, so filter this further:
-    #    - restricting to `push` actions eliminates pull requests
-    #    - requiring needs.config.outputs.is-stable-branch be false skips
-    #      miscellaneous builds on stable (`release-**`) branches
-    # so what's left is `master` and release tags.
-    #
-    # Then also check the repository owner to avoid running in forks.
-    # This is to avoid issues with missing permissions on
-    # GITHUB_TOKEN, needed when actually deploying the documentation
-    # to the `gh-pages` branch.
-    #
-    # Note that even though tags will normally be _on_ stable
-    # branches, tag events generate a completely different github.ref
-    # of the form `refs/tags/...` which won't set
-    # needs.config.outputs.is-stable-branch, so we aren't accidentally
-    # skipping release tags. According to the docs, pushing to a
-    # stable branch will trigger a branch run, and then tagging it
-    # will trigger a separate tag run, and it seems to so work.
-    #
-    if: github.event_name == 'push' &&
-        needs.config.outputs.is-stable-branch == 'false' &&
-        github.repository_owner == 'GaloisInc' &&
-        github.actor != 'dependabot[bot]'
-    strategy:
-      matrix:
-        os: [ubuntu-24.04]
-    steps:
-      - name: Check out repository (no submodules)
-        uses: actions/checkout@v7
-
-      - name: Download HTML artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: html_docs
-          path: doc/_build/html
-
-      # Adapted from:
-      # https://github.com/brechtm/rinohtype/commit/8a23be41d39d748955b139f0fabefe3205a4fd93
-      # Based on the Stack Overflow thread:
-      # https://stackoverflow.com/questions/72089650/how-to-host-multiple-version-of-a-sphinx-based-documentation-on-github
-      - name: Determine documentation publishing directory
-        id: doc-publish-dir
-        run: python3 .github/save_doc_publish_dir.py
-
-      # Using peaceiris/actions-gh-pages, as it allows us to specify specific
-      # target directories to publish to, where the built-in actions are
-      # "one and done": Package and upload a single artifact, and deploy that.
-      - name: Publish docs to GitHub pages
-        if: steps.doc-publish-dir.outputs.target != ''
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: doc/_build/html
-          destination_dir: ${{ steps.doc-publish-dir.outputs.target }}
-          keep_files: false
-
-  # Adapted from:
-  # https://github.com/brechtm/rinohtype/commit/6ba7637c248add1ce90efa7bb1c761d690b0de17
-  update-docs-versions:
-    name: "Update documentation versions JSON"
-    needs: [deploy-docs]
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-24.04]
-    steps:
-      - name: Check out gh-pages
-        uses: actions/checkout@v7
-        with:
-          ref: gh-pages
-
-      - name: Write versions to JSON file
+      - name: Clear up some disk space
         run: |
-          python3 -c "
-          import json
-          from pathlib import Path
+          # The crux-mir-comp Docker image is rather large (~1GB compressed),
+          # and the mere act of building the image requires just over 14 GB of
+          # disk space, which exceeds the maximum provided by a GitHub Action
+          # CI runner. To clear up some extra space, we delete ~10GB worth of
+          # pre-installed GitHub Actions tools, none of which we make use of.
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY" # Python installations
 
-          cwd = Path.cwd()
-          versions = sorted(
-              (
-                  item.name
-                  for item in cwd.iterdir()
-                  if item.is_dir() and not item.name.startswith('.') and item.name != 'coverage'
-              ),
-              reverse=True,
-          )
-          target_dir = Path('gh-pages')
-          target_dir.mkdir(parents=True)
-          target_file = target_dir / 'versions.json'
-          with target_file.open('w') as f:
-              json.dump(versions, f)"
+      - uses: rlespinasse/github-slug-action@v3.x
 
-      - name: Publish versions JSON to GitHub pages
-        uses: peaceiris/actions-gh-pages@v4
+      - id: common-tag
+        run: |
+          echo "::set-output name=common-tag::$GITHUB_REF_SLUG"
+          echo "COMMON_TAG=$GITHUB_REF_SLUG" >> $GITHUB_ENV
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/metadata-action@v6
+        name: Labels
+        id: labels
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: gh-pages
-          keep_files: true
+          images: ${{ matrix.image }}
+          labels: |
+             org.opencontainers.image.source=https://github.com/${{ matrix.image-repo }}
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          tags: ${{ matrix.image }}:${{ steps.common-tag.outputs.common-tag }}
+          labels: ${{ steps.labels.outputs.labels }}
+          load: true
+          push: false
+          file: ${{ matrix.file }}
+          build-args: ${{ matrix.build-args }}
+          cache-from: |
+            type=registry,ref=${{ matrix.cache }}:${{ steps.prefix.outputs.prefix }}master
+            type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }}
+
+      - name: Cache image build
+        uses: docker/build-push-action@v6
+        continue-on-error: true  # Tolerate cache upload failures - this should be handled better
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          build-args: ${{ matrix.build-args }}
+          cache-to: type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }},mode=max
+
+      - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
+        uses: actions/setup-python@v6
+        with:
+          # Ensure that this matches saw-python/mypy.ini file
+          # and that saw-python/pyproject.toml file is compatible with this version
+          python-version: '3.12'
+
+      - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
+        uses: abatilo/actions-poetry@v4
+        with:
+          poetry-version: 2.4.1
+
+      - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
+        name: Test saw-remote-api
+        run: ./saw-remote-api/scripts/test_docker.sh ${{ matrix.image }}:$COMMON_TAG
+
+      - if: needs.config.outputs.event-schedule == 'true'
+        name: ${{ matrix.image }}:nightly
+        run: |
+          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:nightly
+          docker push ${{ matrix.image }}:nightly
+
+      - if: needs.config.outputs.is-stable-branch == 'true'
+        name: ${{ matrix.image }}:${{ matrix.image-tag }}
+        run: |
+          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:${{ matrix.image-tag }}
+          docker push ${{ matrix.image }}:${{ matrix.image-tag }}
+          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:latest
+          docker push ${{ matrix.image }}:latest
 
   rocq-builds:
     needs: [build]
@@ -1133,130 +1221,6 @@ jobs:
           destination_dir: coverage
           keep_files: false
 
-  build-push-image:
-    runs-on: ubuntu-24.04
-    needs: [config]
-    # Restrict this to the main repository where the needed secrets
-    # will be available. As noted above, scheduled runs also happen in
-    # forks. It would be nice to run all of it but the final push step,
-    # but we appear to need docker login to build.
-    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.is-stable-branch == 'true') &&
-        github.repository_owner == 'GaloisInc' &&
-        github.actor != 'dependabot[bot]'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - file: saw/Dockerfile
-            image: ghcr.io/galoisinc/saw
-            cache: ghcr.io/galoisinc/cache-saw
-            image-repo: GaloisInc/saw-script
-            image-tag: ${{ needs.config.outputs.saw-version }}
-          - file: saw-remote-api/Dockerfile
-            image: ghcr.io/galoisinc/saw-remote-api
-            cache: ghcr.io/galoisinc/cache-saw-remote-api
-            image-repo: GaloisInc/saw-script
-            image-tag: ${{ needs.config.outputs.saw-version }}
-          - file: crux-mir-comp/Dockerfile
-            image: ghcr.io/galoisinc/crux-mir-comp
-            cache: ghcr.io/galoisinc/cache-crux-mir-comp
-            image-repo: GaloisInc/crux
-            image-tag: ${{ needs.config.outputs.crux-version }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: true
-
-      - name: capture git state in GitRev.hs
-        run: ./build.sh gitrev
-
-      - name: Clear up some disk space
-        run: |
-          # The crux-mir-comp Docker image is rather large (~1GB compressed),
-          # and the mere act of building the image requires just over 14 GB of
-          # disk space, which exceeds the maximum provided by a GitHub Action
-          # CI runner. To clear up some extra space, we delete ~10GB worth of
-          # pre-installed GitHub Actions tools, none of which we make use of.
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY" # Python installations
-
-      - uses: rlespinasse/github-slug-action@v3.x
-
-      - id: common-tag
-        run: |
-          echo "::set-output name=common-tag::$GITHUB_REF_SLUG"
-          echo "COMMON_TAG=$GITHUB_REF_SLUG" >> $GITHUB_ENV
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/metadata-action@v6
-        name: Labels
-        id: labels
-        with:
-          images: ${{ matrix.image }}
-          labels: |
-             org.opencontainers.image.source=https://github.com/${{ matrix.image-repo }}
-
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          tags: ${{ matrix.image }}:${{ steps.common-tag.outputs.common-tag }}
-          labels: ${{ steps.labels.outputs.labels }}
-          load: true
-          push: false
-          file: ${{ matrix.file }}
-          build-args: ${{ matrix.build-args }}
-          cache-from: |
-            type=registry,ref=${{ matrix.cache }}:${{ steps.prefix.outputs.prefix }}master
-            type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }}
-
-      - name: Cache image build
-        uses: docker/build-push-action@v6
-        continue-on-error: true  # Tolerate cache upload failures - this should be handled better
-        with:
-          context: .
-          file: ${{ matrix.file }}
-          build-args: ${{ matrix.build-args }}
-          cache-to: type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }},mode=max
-
-      - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
-        uses: actions/setup-python@v6
-        with:
-          # Ensure that this matches saw-python/mypy.ini file
-          # and that saw-python/pyproject.toml file is compatible with this version
-          python-version: '3.12'
-
-      - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
-        uses: abatilo/actions-poetry@v4
-        with:
-          poetry-version: 2.4.1
-
-      - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
-        name: Test saw-remote-api
-        run: ./saw-remote-api/scripts/test_docker.sh ${{ matrix.image }}:$COMMON_TAG
-
-      - if: needs.config.outputs.event-schedule == 'true'
-        name: ${{ matrix.image }}:nightly
-        run: |
-          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:nightly
-          docker push ${{ matrix.image }}:nightly
-
-      - if: needs.config.outputs.is-stable-branch == 'true'
-        name: ${{ matrix.image }}:${{ matrix.image-tag }}
-        run: |
-          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:${{ matrix.image-tag }}
-          docker push ${{ matrix.image }}:${{ matrix.image-tag }}
-          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:latest
-          docker push ${{ matrix.image }}:latest
-
   s2n-tests:
     name: "Test s2n proofs"
     timeout-minutes: 150
@@ -1353,3 +1317,39 @@ jobs:
         run: |
           chmod +x bin/*
           docker run -v $PWD/bin:/saw-bin exercises
+
+  # The source archives that github autogenerates for releases do not
+  # include submodules, and also do not include submodule references, so
+  # they are unbuildable and broken. See issue 2532.
+  #
+  # We only need one of these. Run it on Ubuntu so as to be sure to get GNU tar.
+  source-archive:
+    runs-on: ubuntu-24.04
+    needs: [config]
+    # Run this piece only on tag builds, which in practice means release
+    # tags only. Skip running it on forks as well, because we won't have
+    # the signing key there.
+    if: github.event_name == 'push' &&
+        needs.config.outputs.event-tag == 'true' &&
+        github.repository_owner == 'GaloisInc' &&
+        github.actor != 'dependabot[bot]'
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v7
+      - run: git submodule update --init
+      - name: make-source-distribution
+        shell: bash
+        run: .github/ci.sh make_source_distribution ${{ needs.config.outputs.name }}
+      - name: sign-source-distribution
+        shell: bash
+        run: .github/ci.sh sign ${{ needs.config.outputs.name }}-sources.tar.gz
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+      - uses: actions/upload-artifact@v5
+        with:
+          name: ${{ needs.config.outputs.name }}-sources (full source distribution)
+          path: ${{ needs.config.outputs.name }}-sources.tar.gz
+          if-no-files-found: error
+          retention-days: ${{ needs.config.outputs.retention-days }}
