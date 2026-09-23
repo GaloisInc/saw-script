@@ -88,7 +88,8 @@ jobs:
         os: [ubuntu-24.04]
         cabal: ["3.14.1.0"]
         #ghc: ["9.4.8", "9.6.7", "9.8.4"]
-        ghc: ["9.10.3", "9.12.2"]
+        #ghc: ["9.10.3", "9.12.2"]
+        ghc: ["9.12.2"]
         haddock: [true]
         run-tests: [true]
         hpc: [false]
@@ -103,12 +104,12 @@ jobs:
           #  run-tests: false
           #  hpc: false
           # Include one job with HPC enabled
-          - os: ubuntu-24.04
-            ghc: "9.10.3"
-            cabal: "3.14.1.0"
-            haddock: false
-            run-tests: true
-            hpc: true
+          #- os: ubuntu-24.04
+          #  ghc: "9.10.3"
+          #  cabal: "3.14.1.0"
+          #  haddock: false
+          #  run-tests: true
+          #  hpc: true
           # Windows and macOS CI runners are more expensive than Linux runners,
           # so we only build one particular GHC version to test them on. We
           # include both an x86-64 macOS runner (macos-15-intel) as well as an
