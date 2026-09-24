@@ -84,13 +84,21 @@ on:
 #
 
 #
-# The CABAL_CACHE_VERSION, CARGO_CACHE_VERSION, and SOLVER_CACHE_VERSION
-# environment variables can be updated to force the use of a new cabal,
-# cargo, or solver cache if the respective current cache contents become
-# corrupted/invalid.  This can sometimes happen when (for example) the OS
-# version is changed but older .so files are cached, which can have various
-# effects (e.g. cabal complains it can't find a valid version of the "happy"
-# tool).
+# The various *_CACHE_VERSION environment variables can be updated to
+# force the use of a new cache if the respective current cache
+# contents become corrupted/invalid. This can sometimes happen when
+# (for example) the OS version is changed but older .so files are
+# cached, which can have various effects (e.g. cabal complains it
+# can't find a valid version of the "happy" tool).
+#
+#    CABAL_CACHE_VERSION controls the cache of the Cabal store used by
+#       the main SAW build.
+#    CARGO_CACHE_VERSION controls the cache of the Cargo store used by
+#       the mir-json build.
+#    SPHINX_CACHE_VERSION controls the cache of the Python virtual
+#       environment used by the documentation build.
+#    SOLVER_CACHE_VERSION controls the cached version of the SAW
+#       solver cache used by the test suite.
 #
 # DISABLED_TESTS turns off specific tests in the `intTests` test suite.
 # Doesn't actually work right; see #3092.
@@ -217,7 +225,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: doc/.venv
-          key: ${{ matrix.os }}-venv-${{ hashFiles('doc/scripts/requirements.txt') }}
+          key: ${{ env.SPHINX_CACHE_VERSION }}-sphinx-${{ matrix.os }}-${{ hashFiles('doc/scripts/requirements.txt') }}
 
       - name: Build HTML documentation
         run: make -C doc html
