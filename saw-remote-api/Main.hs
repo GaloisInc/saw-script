@@ -48,6 +48,8 @@ import SAWServer.MIRFindADT
     ( mirFindADTDescr, mirFindADT )
 import SAWServer.MIRFindMangledADT
     ( mirFindMangledADTDescr, mirFindMangledADT )
+import SAWServer.MIRFindName
+    ( mirFindNameDescr, mirFindName )
 import SAWServer.MIRVerify
     ( mirAssumeDescr, mirAssume,
       mirVerifyDescr, mirVerify )
@@ -169,6 +171,10 @@ sawMethods =
      "SAW/MIR/find mangled ADT"
      mirFindMangledADTDescr
      mirFindMangledADT
+  , Argo.command
+     "SAW/MIR/find name"
+     mirFindNameDescr
+     mirFindName
   -- Yosys
   , Argo.command
      "SAW/Yosys/import"

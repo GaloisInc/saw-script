@@ -304,6 +304,20 @@ class SAWConnection:
             MIRFindMangledADT(self, module_server_name, adt_mangled_name, adt_server_name, timeout)
         return self.most_recent_result
 
+    def mir_find_name(self,
+                      module_server_name : str,
+                      orig_name : str,
+                      tys : List[MIRType],
+                      timeout : Optional[float] = None) -> Command:
+        """Consult the given MIR module (``module_server_name``) to find a
+           function with ``orig_name`` as its identifier and ``tys`` as the
+           types used to instantiate the type parameters. If such a function
+           cannot be found in the module, this will raise an error.
+        """
+        self.most_recent_result = \
+            MIRFindName(self, module_server_name, orig_name, tys, timeout)
+        return self.most_recent_result
+
     def yosys_import(self, name: str, path: str, timeout : Optional[float] = None) -> Command:
         self.most_recent_result = YosysImport(self, name, path, timeout)
         return self.most_recent_result

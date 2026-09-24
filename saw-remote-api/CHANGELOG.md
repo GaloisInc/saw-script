@@ -2,6 +2,9 @@
 
 ## next
 
+* Add a `SAW/MIR/find name` command, which allows looking up instantiations of
+  generic MIR functions.
+
 ## 1.6 -- 2026-09-17
 
 * No changes specifically to the remote API.

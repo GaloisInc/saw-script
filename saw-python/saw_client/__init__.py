@@ -791,6 +791,22 @@ def mir_find_mangled_adt(module: MIRModule,
     return mir.MIRAdt(adt_mangled_name, adt_server_name)
 
 
+def mir_find_name(module: MIRModule,
+                  orig_name: str,
+                  *tys: mir.MIRType) -> str:
+    """Consult the given MIR module (``module_server_name``) to find a function
+       with ``orig_name`` as its identifier and ``tys`` as the types used to
+       instantiate the type parameters. If such a function cannot be found in
+       the module, this will raise an error.
+    """
+    conn = __get_designated_connection()
+    res = conn.mir_find_name(module.server_name, orig_name, list(tys)).result()
+    v = res['value']
+    if not isinstance(v, str):
+        raise ValueError(str(v) + " is not a string")
+    return v
+
+
 def prove(goal: cryptoltypes.CryptolJSON,
           proof_script: proofscript.ProofScript) -> ProofResult:
     """Atempts to prove that the expression given as the first argument, `goal`, is
