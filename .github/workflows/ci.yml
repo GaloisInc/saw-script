@@ -189,6 +189,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          submodules: false
           fetch-depth: 0
 
       - name: Issue build settings
@@ -246,6 +247,8 @@ jobs:
     steps:
       - name: Check out repository (no submodules)
         uses: actions/checkout@v7
+        with:
+          submodules: false
 
       - name: Cache Python environment
         uses: actions/cache@v6
@@ -276,6 +279,8 @@ jobs:
     steps:
       - name: Check out repository (no submodules)
         uses: actions/checkout@v7
+        with:
+          submodules: false
 
       - name: Download HTML artifact
         uses: actions/download-artifact@v4
@@ -410,8 +415,8 @@ jobs:
     steps:
 
       - uses: actions/checkout@v7
-      - run: |
-           git submodule update --init
+        with:
+          submodules: true
 
       - id: config
         shell: bash
@@ -1270,6 +1275,8 @@ jobs:
         ghc: ["9.6.7"]
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: false
       - run: |
           mkdir -p s2nTests/bin
 
@@ -1324,6 +1331,8 @@ jobs:
         ghc: ["9.6.7"]
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: false
       - run: |
           mkdir -p exercises/bin
 
@@ -1366,7 +1375,8 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v7
-      - run: git submodule update --init
+        with:
+          submodules: true
       - name: make-source-distribution
         shell: bash
         run: .github/ci.sh make_source_distribution ${{ needs.config.outputs.name }}
