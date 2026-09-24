@@ -133,6 +133,7 @@ env:
 
 jobs:
   config:
+    name: Configure this build
     runs-on: ubuntu-24.04
     outputs:
 
@@ -161,7 +162,8 @@ jobs:
       # other config outputs
       retention-days: ${{ steps.settings.outputs.retention-days }}
     steps:
-      - uses: actions/checkout@v7
+      - name: "Check out repository (depth 0)"
+        uses: actions/checkout@v7
         with:
           submodules: false
           fetch-depth: 0
@@ -337,6 +339,7 @@ jobs:
 # the "jobs:" line in the "job config" section above.
 
   build:
+    name: "Build on ${{ matrix.os }} with GHC ${{ matrix.ghc }}: haddock=${{ matrix.haddock }} tests=${{ matrix.run-tests }} coverage=${{ matrix.hpc }}"
     runs-on: ${{ matrix.os }}
     needs: [config]
     strategy:
@@ -388,11 +391,13 @@ jobs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
 
-      - uses: actions/checkout@v7
+      - name: Check out repository with submodules
+        uses: actions/checkout@v7
         with:
           submodules: true
 
-      - id: config
+      - name: Build job configuration
+        id: config
         shell: bash
         run: |
           NAME="${{ needs.config.outputs.name }}-${{ matrix.os }}-${{ runner.arch }}"
@@ -412,8 +417,9 @@ jobs:
           p12-file-base64: ${{ secrets.APPLE_P12_CERTIFICATE }}
           p12-password: ${{ secrets.APPLE_P12_PASSWORD }}
 
-      - uses: haskell-actions/setup@v2
+      - name: Set up Haskell
         id: setup-haskell
+        uses: haskell-actions/setup@v2
         with:
           ghc-version: ${{ matrix.ghc }}
           cabal-version: ${{ matrix.cabal }}
@@ -432,12 +438,12 @@ jobs:
           dest: bin
           release: ${{ env.SOLVER_PKG_VERSION }}
 
-      - shell: bash
-        name: Add what4-solvers to GITHUB_PATH
+      - name: Add what4-solvers to GITHUB_PATH
+        shell: bash
         run: echo "$PWD/bin" >> $GITHUB_PATH
 
-      - uses: actions/cache/restore@v6
-        name: Restore cabal store cache
+      - name: Restore cabal store cache
+        uses: actions/cache/restore@v6
         with:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
@@ -446,20 +452,24 @@ jobs:
           restore-keys: |
             ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
 
-      - shell: bash
+      - name: Build SAW
+        shell: bash
         run: .github/ci.sh build
         env:
           ENABLE_HPC: ${{ matrix.hpc }}
 
-      - shell: bash
+      - name: Build Cryptol
+        shell: bash
         run: .github/ci.sh build_cryptol
 
-      - if: matrix.haddock == true
+      - name: Run Haddock
+        if: matrix.haddock == true
         shell: bash
         run: .github/ci.sh haddock
 
-      - uses: GaloisInc/.github/actions/cabal-collect-bins@v1.1.1
+      - name: Collect test bins
         id: cabal-test-suites
+        uses: GaloisInc/.github/actions/cabal-collect-bins@v1.1.1
         with:
           # Keep this list in sync. There are four lists of tests:
           #   - here
@@ -478,22 +488,26 @@ jobs:
       # In the next 2 steps, we upload to different names depending on whether
       # the binaries were compiled using HPC or not. This is done to ensure that
       # the HPC-enabled binaries do not clobber the non-HPC-enabled binaries.
-      - uses: actions/upload-artifact@v5
+      - name: Upload non-coverage test bins
+        uses: actions/upload-artifact@v5
         if: matrix.ghc == '9.6.7' && matrix.hpc == false
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}
 
-      - uses: actions/upload-artifact@v5
+      - name: Upload with-coverage test bins
+        uses: actions/upload-artifact@v5
         if: matrix.ghc == '9.6.7' && matrix.hpc == true
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}-hpc
 
-      - shell: bash
+      - name: Collect SAW and Cryptol bins
+        shell: bash
         run: .github/ci.sh setup_dist_bins
 
-      - shell: bash
+      - name: Collect Crux bins
+        shell: bash
         run: .github/ci.sh setup_crux_dist_bins dist-crux
 
       # On macOS, code sign the binaries to verify that Galois is the author.
@@ -526,21 +540,26 @@ jobs:
             --issuer "$ISSUER_ID" \
             --wait
 
-      - shell: bash
+      - name: Create SAW binary distribution tree
+        shell: bash
         run: .github/ci.sh bundle_files
 
-      - shell: bash
+      - name: Zip up the SAW non-solvers binary distribution
+        shell: bash
         run: .github/ci.sh zip_dist $NAME
 
-      - shell: bash
+      - name: Zip up the SAW with-solvers binary distribution
+        shell: bash
         run: .github/ci.sh zip_dist_with_solvers $NAME-with-solvers
 
-      - shell: bash
+      - name: Zip up the Crux binary distribution
+        shell: bash
         run: .github/ci.sh zip_dist $CRUX_NAME dist-crux
 
       # Restrict this step so it only runs when the secrets needed are
       # available.
-      - if: matrix.ghc == '9.6.7' && needs.config.outputs.want-signing
+      - name: Sign the binary distributions
+        if: matrix.ghc == '9.6.7' && needs.config.outputs.want-signing
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
@@ -565,7 +584,8 @@ jobs:
       # In the next 3 steps we check that `matrix.hpc == false` so that if the
       # distribution version matches the HPC version, the HPC build artifacts do
       # not clobber the non-HPC distribution artifacts.
-      - if: matrix.ghc == '9.6.7' && matrix.hpc == false
+      - name: Upload the SAW non-solvers binary distribution
+        if: matrix.ghc == '9.6.7' && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -573,7 +593,8 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '9.6.7' && matrix.hpc == false
+      - name: Upload the SAW with-solvers binary distribution
+        if: matrix.ghc == '9.6.7' && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.name }}-with-solvers
@@ -581,7 +602,8 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '9.6.7' && matrix.hpc == false
+      - name: Upload the Crux binary distribution
+        if: matrix.ghc == '9.6.7' && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.crux-name }} (GHC ${{ matrix.ghc }})
@@ -589,25 +611,28 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '9.6.7' && matrix.run-tests && matrix.hpc == false
+      - name: Upload the non-coverage test bins
+        if: matrix.ghc == '9.6.7' && matrix.run-tests && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           path: dist/bin
           name: ${{ matrix.os }}-bins
 
-      - if: matrix.hpc == true
+      - name: Collect the coverage-testing files
+        if: matrix.hpc == true
         shell: bash
         run: .github/ci.sh collect_hpc_files
 
-      - if: matrix.hpc == true
+      - name: Upload the coverage-testing files
+        if: matrix.hpc == true
         uses: actions/upload-artifact@v5
         with:
           path: hpc.tar.gz
           name: ${{ matrix.os }}-hpc.tar.gz
 
-      - uses: actions/cache/save@v6
-        name: Save cabal store cache
+      - name: Save cabal store cache
         if: always()
+        uses: actions/cache/save@v6
         with:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
@@ -615,6 +640,7 @@ jobs:
           key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
 
   build-push-image:
+    name: "Build the ${{ matrix.which }} docker image"
     runs-on: ubuntu-24.04
     needs: [config]
     # Restrict this to the main repository where the needed secrets
@@ -626,27 +652,31 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - file: saw/Dockerfile
+          - which: saw
+            file: saw/Dockerfile
             image: ghcr.io/galoisinc/saw
             cache: ghcr.io/galoisinc/cache-saw
             image-repo: GaloisInc/saw-script
             image-tag: ${{ needs.config.outputs.saw-version }}
-          - file: saw-remote-api/Dockerfile
+          - which: saw-remote-api
+            file: saw-remote-api/Dockerfile
             image: ghcr.io/galoisinc/saw-remote-api
             cache: ghcr.io/galoisinc/cache-saw-remote-api
             image-repo: GaloisInc/saw-script
             image-tag: ${{ needs.config.outputs.saw-version }}
-          - file: crux-mir-comp/Dockerfile
+          - which: crux-mir-comp
+            file: crux-mir-comp/Dockerfile
             image: ghcr.io/galoisinc/crux-mir-comp
             cache: ghcr.io/galoisinc/cache-crux-mir-comp
             image-repo: GaloisInc/crux
             image-tag: ${{ needs.config.outputs.crux-version }}
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out the repository with submodules
+        uses: actions/checkout@v7
         with:
           submodules: true
 
-      - name: capture git state in GitRev.hs
+      - name: Capture git state in GitRev.hs
         run: ./build.sh gitrev
 
       - name: Clear up some disk space
@@ -663,16 +693,18 @@ jobs:
 
       - uses: rlespinasse/github-slug-action@v3.x
 
-      - id: common-tag
+      - name: Set COMMON_TAG
+        id: common-tag
         run: |
           echo "::set-output name=common-tag::$GITHUB_REF_SLUG"
           echo "COMMON_TAG=$GITHUB_REF_SLUG" >> $GITHUB_ENV
 
-      - uses: docker/setup-buildx-action@v3
+      - name: Docker build setup
+        uses: docker/setup-buildx-action@v3
 
-      - uses: docker/metadata-action@v6
-        name: Labels
+      - name: Docker labels
         id: labels
+        uses: docker/metadata-action@v6
         with:
           images: ${{ matrix.image }}
           labels: |
@@ -684,7 +716,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v6
+      - name: Do the image build
+        uses: docker/build-push-action@v6
         with:
           context: .
           tags: ${{ matrix.image }}:${{ steps.common-tag.outputs.common-tag }}
@@ -697,7 +730,7 @@ jobs:
             type=registry,ref=${{ matrix.cache }}:${{ steps.prefix.outputs.prefix }}master
             type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }}
 
-      - name: Cache image build
+      - name: Cache the image build
         uses: docker/build-push-action@v6
         continue-on-error: true  # Tolerate cache upload failures - this should be handled better
         with:
@@ -706,32 +739,34 @@ jobs:
           build-args: ${{ matrix.build-args }}
           cache-to: type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }},mode=max
 
-      - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
+      - name: Set up Python
+        if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
         uses: actions/setup-python@v6
         with:
           # Ensure that this matches saw-python/mypy.ini file
           # and that saw-python/pyproject.toml file is compatible with this version
           python-version: '3.12'
 
-      - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
+      - name: Set up Poetry
+        if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
         uses: abatilo/actions-poetry@v4
         with:
           poetry-version: 2.4.1
 
-      - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
-        name: Test saw-remote-api
+      - name: Test saw-remote-api
+        if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
         run: ./saw-remote-api/scripts/test_docker.sh ${{ matrix.image }}:$COMMON_TAG
 
         # Scheduled events upload as "nightly"
-      - if: needs.config.outputs.event-is-scheduled == 'true'
-        name: ${{ matrix.image }}:nightly
+      - name: Upload ${{ matrix.image }}:nightly
+        if: needs.config.outputs.event-is-scheduled == 'true'
         run: |
           docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:nightly
           docker push ${{ matrix.image }}:nightly
 
         # Stable branch events upload by the version
-      - if: needs.config.outputs.event-is-stable-branch == 'true'
-        name: ${{ matrix.image }}:${{ matrix.image-tag }}
+      - name: Upload ${{ matrix.image }}:${{ matrix.image-tag }}
+        if: needs.config.outputs.event-is-stable-branch == 'true'
         run: |
           docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:${{ matrix.image-tag }}
           docker push ${{ matrix.image }}:${{ matrix.image-tag }}
@@ -754,7 +789,8 @@ jobs:
         os: [ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out the repository with submodules
+        uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -764,11 +800,12 @@ jobs:
           dest: bin
           release: ${{ env.SOLVER_PKG_VERSION }}
 
-      - shell: bash
-        name: Add what4-solvers to GITHUB_PATH
+      - name: Add what4-solvers to GITHUB_PATH
+        shell: bash
         run: echo "$PWD/bin" >> $GITHUB_PATH
 
-      - uses: actions/download-artifact@v4
+      - name: Download the SAW bins
+        uses: actions/download-artifact@v4
         with:
           name: "${{ matrix.os }}-bins"
           path: dist/bin
@@ -779,18 +816,24 @@ jobs:
           chmod +x dist/bin/*
           echo $GITHUB_WORKSPACE/dist/bin >> $GITHUB_PATH
 
-      - uses: ocaml/setup-ocaml@v3
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: "4.14"
 
-      - run: opam repo add rocq-released https://rocq-prover.org/opam/released
+      - name: Add Rocq upstream to opam
+        run: opam repo add rocq-released https://rocq-prover.org/opam/released
 
-      - run: opam pin add -y rocq-prover 9.0.0
-      - run: opam install -y rocq-core=9.1.0 rocq-stdlib=9.0.0
+      - name: Install rocq-prover
+        run: opam pin add -y rocq-prover 9.0.0
+
+      - name: Install rocq-core and rocq-stdlib
+        run: opam install -y rocq-core=9.1.0 rocq-stdlib=9.0.0
 
       # Install coq-bits from source. FIXME: replace with compatible
       # opam-released version when available.
-      - working-directory: saw-core-rocq/rocq
+      - name: Install coq-bits
+        working-directory: saw-core-rocq/rocq
         run: |
           opam install -y coq=9.1.0 # coq-* packages include compatibility shims (e.g., coq_makefile).
           opam pin -y coq-bits https://github.com/rocq-community/bits.git#f50fc3e5f1eabcb0b0b94c8d25f75e61a255c2ba
@@ -799,18 +842,21 @@ jobs:
       # Rocq translator and builds them; if we do other Rocq tests, these steps
       # should become their own build artifact, to avoid re-compiling the Rocq
       # libraries
-      - working-directory: saw-core-rocq/rocq
+      - name: Build the handwritten Rocq infrastructure
+        working-directory: saw-core-rocq/rocq
         shell: bash
         run: opam exec -- make -j
 
       # Regenerate the test .v files, since we don't have the ones from the
       # test run and rebuilding them isn't super expensive.
-      - working-directory: otherTests/saw-core-rocq
+      - name: Regen the saw-core-rocq-tests outputs
+        working-directory: otherTests/saw-core-rocq
         shell: bash
         run: SAW=saw sh ./test.sh
 
       # Now build, or try to build, all the output files.
-      - working-directory: otherTests/saw-core-rocq
+      - name: Build the saw-core-rocq-tests outputs
+        working-directory: otherTests/saw-core-rocq
         shell: bash
         run: opam exec -- make -j rocq
 
@@ -829,18 +875,19 @@ jobs:
       ISABELLE_COMMIT: '8d9ad3f2984ab945542dad1a0802f0c1b0517337'
       AFP_COMMIT: '9db853f97465cce2ce1ed731b4c8ba94187ea650'
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out the repository without submodules
+        uses: actions/checkout@v7
         with:
           submodules: false
 
-      - name: Checkout Isabelle
+      - name: Check out Isabelle
         uses: actions/checkout@v7
         with:
           repository: 'isabelle-prover/mirror-isabelle'
           ref: ${{ env.ISABELLE_COMMIT }}
           path: isabelle
 
-      - name: Checkout AFP
+      - name: Check out AFP
         uses: actions/checkout@v7
         with:
           repository: 'isabelle-prover/mirror-afp-devel'
@@ -852,7 +899,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y curl perl
 
-      - name: Restore Isabelle user directory
+      - name: Restore cached Isabelle user directory
         id: cache-isabelle-restore
         uses: actions/cache/restore@v6
         with:
@@ -877,12 +924,12 @@ jobs:
           isabelle components -u "$PWD/saw-core-isabelle/isabelle"
           isabelle build -b Cryptol_Base
 
-      - name: "Build Test image"
+      - name: "Build test image"
         run: |
           isabelle components -u "$PWD/otherTests/saw-core-isabelle"
           isabelle build Cryptol_Tests
 
-      - name: Save Isabelle user directory
+      - name: Update cached Isabelle user directory
         if: always()
         uses: actions/cache/save@v6
         with:
@@ -911,7 +958,7 @@ jobs:
           override: true
           components: rustc-dev, rust-src
 
-      - name: cargo cache
+      - name: Engage the Cargo cache
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: "true"
@@ -925,8 +972,8 @@ jobs:
           dest: bin
           release: ${{ env.SOLVER_PKG_VERSION }}
 
-      - shell: bash
-        name: Add what4-solvers to GITHUB_PATH
+      - name: Add what4-solvers to GITHUB_PATH
+        shell: bash
         run: echo "$PWD/bin" >> $GITHUB_PATH
 
       - name: Install mir-json
@@ -955,6 +1002,7 @@ jobs:
         run: crux-mir-comp-tests
 
   saw-remote-api-tests:
+    name: "saw-remote-api-tests (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
     needs: [build]
     strategy:
@@ -976,7 +1024,8 @@ jobs:
             test: saw-remote-api/scripts/check_docs.sh
             os: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out the repository with submodules
+        uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -986,26 +1035,29 @@ jobs:
           dest: bin
           release: ${{ env.SOLVER_PKG_VERSION }}
 
-      - shell: bash
-        name: Add what4-solvers to GITHUB_PATH
+      - name: Add what4-solvers to GITHUB_PATH
+        shell: bash
         run: echo "$PWD/bin" >> $GITHUB_PATH
 
-      - uses: actions/download-artifact@v4
+      - name: Download the SAW bins
+        uses: actions/download-artifact@v4
         with:
           name: "${{ matrix.os }}-bins"
           path: dist/bin
 
-      - uses: actions/setup-python@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
           # Ensure that this matches saw-python/mypy.ini file
           # and that saw-python/pyproject.toml file is compatible with this version
           python-version: '3.12'
 
-      - uses: abatilo/actions-poetry@v4
+      - name: Set up Poetry
+        uses: abatilo/actions-poetry@v4
         with:
           poetry-version: 2.4.1
 
-      - name: ${{ matrix.name }}
+      - name: "Run the tests: ${{ matrix.name }}"
         shell: bash
         run: |
           chmod +x dist/bin/*
@@ -1019,6 +1071,7 @@ jobs:
           ${{ matrix.test }}
 
   cabal-test:
+    name: "cabal-test ${{ matrix.suite }} (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
     needs: [build]
     strategy:
@@ -1044,7 +1097,8 @@ jobs:
           # crux-mir-comp-tests job, which is defined separately.
           - suite: crux-mir-comp-tests
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out the repository with submodules
+        uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -1054,41 +1108,47 @@ jobs:
           dest: bin
           release: ${{ env.SOLVER_PKG_VERSION }}
 
-      - shell: bash
-        name: Add what4-solvers to GITHUB_PATH
+      - name: Add what4-solvers to GITHUB_PATH
+        shell: bash
         run: echo "$PWD/bin" >> $GITHUB_PATH
 
-      - uses: actions/download-artifact@v4
+      - name: Download the SAW bins
+        uses: actions/download-artifact@v4
         with:
           name: "${{ matrix.os }}-bins"
           path: dist/bin
 
-      - shell: bash
+      - name: Chmod the bins
+        shell: bash
         if: runner.os != 'Windows'
         run: chmod +x dist/bin/*
 
-      - shell: bash
+      - name: Chmod more bins
+        shell: bash
         if: runner.os != 'Windows'
         run: chmod +x bin/*
 
-      - uses: actions/download-artifact@v4
+      - name: Download the test bins
+        uses: actions/download-artifact@v4
         with:
           name: dist-tests-${{ matrix.os }}
           path: dist-tests
 
-      - shell: bash
+      - name: Chmod the test bins
+        shell: bash
         if: runner.os != 'Windows'
         run: chmod +x dist-tests/*
 
-      - uses: actions/setup-java@v5
+      - name: Set up Java
+        uses: actions/setup-java@v5
         if: matrix.suite == 'integration-tests'
         with:
           distribution: "zulu"
           java-version: "8"
           java-package: jdk
 
-      - uses: actions/cache/restore@v6
-        name: Restore SMT solver result cache
+      - name: Restore SMT solver result cache
+        uses: actions/cache/restore@v6
         if: matrix.suite == 'integration-tests'
         with:
           path: ${{ matrix.suite }}.cache
@@ -1096,22 +1156,22 @@ jobs:
           restore-keys: |
             ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-
 
-      - shell: bash
-        name: Enable solver caching
+      - name: Enable solver caching
+        shell: bash
         if: matrix.suite == 'integration-tests'
         run: |
           echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
           dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
 
-      - name: ${{ matrix.suite }}
+      - name: Run test suite ${{ matrix.suite }}
         continue-on-error: ${{ matrix.continue-on-error }}
         shell: bash
         run: |
           export PATH="$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
 
-      - uses: actions/cache/save@v6
-        name: Save SMT solver result cache
+      - name: Save SMT solver result cache
+        uses: actions/cache/save@v6
         if: matrix.suite == 'integration-tests'
         with:
           path: ${{ matrix.suite }}.cache
@@ -1122,7 +1182,7 @@ jobs:
   # test coverage results, generates an HTML summary, and publishes the results
   # to github pages.
   coverage:
-    name: "Run integration tests with coverage reporting"
+    name: "Run integration tests with coverage reporting (${{ matrix.os }})"
     needs: [config, build]
     runs-on: ${{ matrix.os }}
     # Do not run this job in forks, as the deployment to GitHub pages will fail
@@ -1136,11 +1196,13 @@ jobs:
         os: [ubuntu-24.04]
     steps:
       # Need a copy of the source to generate coverage HTML
-      - uses: actions/checkout@v7
+      - name: Check out the repository with submodules
+        uses: actions/checkout@v7
         with:
           submodules: true
 
-      - uses: haskell-actions/setup@v2
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
         id: setup-haskell
         with:
           ghc-version: "9.6.7"
@@ -1151,20 +1213,22 @@ jobs:
           dest: bin
           release: ${{ env.SOLVER_PKG_VERSION }}
 
-      - shell: bash
-        name: Add what4-solvers to GITHUB_PATH
+      - name: Add what4-solvers to GITHUB_PATH
+        shell: bash
         run: echo "$PWD/bin" >> $GITHUB_PATH
 
-      - uses: actions/download-artifact@v4
+      - name: Download the with-coverage test bins
+        uses: actions/download-artifact@v4
         with:
           name: dist-tests-${{ matrix.os }}-hpc
           path: dist-tests
 
-      - uses: actions/download-artifact@v4
+      - name: Download the coverage files
+        uses: actions/download-artifact@v4
         with:
           name: "${{ matrix.os }}-hpc.tar.gz"
 
-      - name: Setup test environment
+      - name: Set up test environment
         shell: bash
         run: |
           tar xvf hpc.tar.gz
@@ -1172,7 +1236,8 @@ jobs:
           chmod +x bin/*
           chmod +x dist-tests/*
 
-      - uses: actions/setup-java@v5
+      - name: Set up Java
+        uses: actions/setup-java@v5
         with:
           distribution: "zulu"
           java-version: "8"
@@ -1183,16 +1248,16 @@ jobs:
       # `cabal-test` also runs the integration tests and uploads an updated
       # cache. Because the test suite is the same, the resulting cache files
       # would also be identical.
-      - uses: actions/cache/restore@v6
-        name: Restore SMT solver result cache
+      - name: Restore SMT solver result cache
+        uses: actions/cache/restore@v6
         with:
           path: ${{ matrix.suite }}.cache
           key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
           restore-keys: |
             ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-
 
-      - shell: bash
-        name: Enable solver caching
+      - name: Enable solver caching
+        shell: bash
         run: |
           echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
           dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
@@ -1210,7 +1275,8 @@ jobs:
         run: |
           ./compute-coverage.sh
 
-      - uses: actions/upload-artifact@v5
+      - name: Upload the coverage data
+        uses: actions/upload-artifact@v5
         with:
           path: hpc-html
           name: coverage-html-${{ github.event.number }}
@@ -1229,7 +1295,7 @@ jobs:
           keep_files: false
 
   s2n-tests:
-    name: "Test s2n proofs"
+    name: "Test s2n proofs: ${{ matrix.s2n-target }}"
     timeout-minutes: 150
     needs: build
     runs-on: ${{ matrix.os }}
@@ -1249,10 +1315,12 @@ jobs:
         os: [ubuntu-24.04]
         ghc: ["9.6.7"]
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out the repository without submodules
+        uses: actions/checkout@v7
         with:
           submodules: false
-      - run: |
+      - name: Create bin dir
+        run: |
           mkdir -p s2nTests/bin
 
       - name: Download previously-built SAW
@@ -1261,27 +1329,28 @@ jobs:
           name: "${{ matrix.os }}-bins"
           path: ./s2nTests/bin
 
-      - shell: bash
+      - name: Do docker-compose pull
+        shell: bash
         working-directory: s2nTests
         run: |
           docker compose pull --ignore-buildable
           grep -h '^FROM' docker/*.dockerfile | sort -u | awk '{print $2}' | xargs -n1 -P8 docker pull
 
-      - shell: bash
-        name: "make s2n"
+      - name: Do docker-compose build
+        shell: bash
         working-directory: s2nTests
         run: docker compose build s2n
 
-      - uses: actions/cache/restore@v6
-        name: Restore SMT solver result cache
+      - name: Restore SMT solver result cache
+        uses: actions/cache/restore@v6
         with:
           path: s2nTests/cache
           key: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-${{ github.sha }}
           restore-keys:
             ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-
 
-      - shell: bash
-        name: "s2n tests: ${{ matrix.s2n-target }}"
+      - name: "Run s2n tests: ${{ matrix.s2n-target }}"
+        shell: bash
         working-directory: s2nTests
         run: |
           chmod +x bin/*
@@ -1289,8 +1358,8 @@ jobs:
           chmod -R +rw cache
           make ${{ matrix.s2n-target }}
 
-      - uses: actions/cache/save@v6
-        name: Save SMT solver result cache
+      - name: Save SMT solver result cache
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: s2nTests/cache
@@ -1305,10 +1374,12 @@ jobs:
         os: [ubuntu-24.04]
         ghc: ["9.6.7"]
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out the repository without submodules
+        uses: actions/checkout@v7
         with:
           submodules: false
-      - run: |
+      - name: Create bin dir
+        run: |
           mkdir -p exercises/bin
 
       - name: Download previously-built SAW
@@ -1317,13 +1388,13 @@ jobs:
           name: "${{ matrix.os }}-bins"
           path: ./exercises/bin
 
-      - shell: bash
-        name: "make exercises container"
+      - name: "Make the exercises container"
+        shell: bash
         working-directory: exercises
         run: docker build -t exercises .
 
-      - shell: bash
-        name: "run exercises"
+      - name: "Run the exercises"
+        shell: bash
         working-directory: exercises
         run: |
           chmod +x bin/*
@@ -1349,19 +1420,23 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out the repository with submodules
+        uses: actions/checkout@v7
         with:
           submodules: true
-      - name: make-source-distribution
+      - name: Create the source distribution
+        id: make-source-distribution
         shell: bash
         run: .github/ci.sh make_source_distribution ${{ needs.config.outputs.name }}
-      - name: sign-source-distribution
+      - name: Sign the source distribution
+        id: sign-source-distribution
         shell: bash
         run: .github/ci.sh sign ${{ needs.config.outputs.name }}-sources.tar.gz
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-      - uses: actions/upload-artifact@v5
+      - name: Upload the source distribution
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ needs.config.outputs.name }}-sources (full source distribution)
           path: ${{ needs.config.outputs.name }}-sources.tar.gz
