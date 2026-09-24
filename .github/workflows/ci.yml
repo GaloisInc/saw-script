@@ -253,6 +253,11 @@ jobs:
       matrix:
         os: [ubuntu-24.04]
     steps:
+      - name: Report relevant config
+        run: |
+          echo "OS: ${{ matrix.os }}"
+          echo "want-deploy-docs: ${{ needs.config.outputs.want-deploy-docs }}"
+
       - name: Check out repository (no submodules)
         uses: actions/checkout@v7
         with:
@@ -291,12 +296,17 @@ jobs:
   # says to deploy the docs.
   update-docs-versions:
     name: "Update documentation versions JSON"
-    needs: [deploy-docs]
+    needs: [config, deploy-docs]
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-24.04]
     steps:
+      - name: Report relevant config
+        run: |
+          echo "OS: ${{ matrix.os }}"
+          echo "want-deploy-docs: ${{ needs.config.outputs.want-deploy-docs }}"
+
       - name: Check out gh-pages
         uses: actions/checkout@v7
         with:
@@ -390,6 +400,15 @@ jobs:
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
+      - name: Report relevant config
+        run: |
+          echo "OS: ${{ matrix.os }}"
+          echo "GHC: ${{ matrix.ghc }}"
+          echo "Haddock: ${{ matrix.haddock }}"
+          echo "Run tests: ${{ matrix.run-tests }}"
+          echo "Coverage (HPC): ${{ matrix.hpc }}"
+          echo "Want signing: ${{ needs.config.outputs.want-signing }}"
+          echo "Want notarization: $$ {{ needs.config.outputs.want-apple-notarization }}"
 
       - name: Check out repository with submodules
         uses: actions/checkout@v7
@@ -671,6 +690,15 @@ jobs:
             image-repo: GaloisInc/crux
             image-tag: ${{ needs.config.outputs.crux-version }}
     steps:
+      - name: Report relevant config
+        run: |
+          echo "Want docker images: ${{ needs.config.outputs.want-docker-images }}"
+          echo "File: ${{ matrix.file }}"
+          echo "Image: ${{ matrix.image }}"
+          echo "Cache image: ${{ matrix.cache }}"
+          echo "Repo: ${{ matrix.image-repo }}"
+          echo "Tag: ${{ matrix.image-tag }}"
+
       - name: Check out the repository with submodules
         uses: actions/checkout@v7
         with:
@@ -1097,6 +1125,12 @@ jobs:
           # crux-mir-comp-tests job, which is defined separately.
           - suite: crux-mir-comp-tests
     steps:
+      - name: Report relevant config
+        run: |
+          echo "Runner OS: ${{ runner.os }}"
+          echo "Suite: ${{ matrix.suite }}"
+          echo "Continue on error: ${{ matrix.continue-on-error }}"
+
       - name: Check out the repository with submodules
         uses: actions/checkout@v7
         with:
@@ -1195,6 +1229,10 @@ jobs:
         suite: ['integration-tests']
         os: [ubuntu-24.04]
     steps:
+      - name: Report relevant config
+        run: |
+          echo "Want coverage: ${{ needs.config.outputs.want-coverage }}"
+
       # Need a copy of the source to generate coverage HTML
       - name: Check out the repository with submodules
         uses: actions/checkout@v7
@@ -1420,6 +1458,10 @@ jobs:
     strategy:
       fail-fast: false
     steps:
+      - name: Report relevant config
+        run: |
+          echo "Want source archive: ${{ needs.config.outputs.want-source-archive }}"
+
       - name: Check out the repository with submodules
         uses: actions/checkout@v7
         with:
