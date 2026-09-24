@@ -533,28 +533,14 @@ jobs:
       - shell: bash
         run: .github/ci.sh zip_dist $CRUX_NAME dist-crux
 
-      # Restrict these steps so they're only run when the secrets
-      # needed are available.
+      # Restrict this step so it only runs when the secrets needed are
+      # available.
       - if: matrix.ghc == '9.6.7' && needs.config.outputs.want-signing
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-        run: .github/ci.sh sign $NAME.tar.gz
-
-      - if: matrix.ghc == '9.6.7' && needs.config.outputs.want-signing
-        shell: bash
-        env:
-          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
-          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-        run: .github/ci.sh sign $NAME-with-solvers.tar.gz
-
-      - if: matrix.ghc == '9.6.7' && needs.config.outputs.want-signing
-        shell: bash
-        env:
-          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
-          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-        run: .github/ci.sh sign $CRUX_NAME.tar.gz
+        run: .github/ci.sh sign $NAME.tar.gz $NAME-with-solvers.tar.gz $CRUX_NAME.tar.gz
 
       ##########################################################################
       # We upload an archive containing SAW, and also and archive containing SAW

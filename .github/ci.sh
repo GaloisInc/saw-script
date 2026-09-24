@@ -203,14 +203,16 @@ bundle_files() {
 }
 
 sign() {
-  # This is surrounded with `set +x; ...; set -x` to disable printing out
-  # statements that could leak GPG-related secrets.
-  set +x
-  gpg --batch --import <(echo "$SIGNING_KEY")
-  fingerprint="$(gpg --list-keys | grep Galois -a1 | head -n1 | awk '{$1=$1};1')"
-  echo "$fingerprint:6" | gpg --import-ownertrust
-  gpg --yes --no-tty --batch --pinentry-mode loopback --default-key "$fingerprint" --detach-sign -o "$1".sig --passphrase-file <(echo "$SIGNING_PASSPHRASE") "$1"
-  set -x
+    # This is surrounded with `set +x; ...; set -x` to disable printing out
+    # statements that could leak GPG-related secrets.
+    set +x
+    for f in "$@"; do
+        gpg --batch --import <(echo "$SIGNING_KEY")
+        fingerprint="$(gpg --list-keys | grep Galois -a1 | head -n1 | awk '{$1=$1};1')"
+        echo "$fingerprint:6" | gpg --import-ownertrust
+        gpg --yes --no-tty --batch --pinentry-mode loopback --default-key "$fingerprint" --detach-sign -o "$f".sig --passphrase-file <(echo "$SIGNING_PASSPHRASE") "$f"
+    done
+    set -x
 }
 
 zip_dist() {
