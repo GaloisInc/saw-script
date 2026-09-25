@@ -248,7 +248,7 @@ jobs:
     name: "Deploy SAW documentation to GitHub Pages"
     needs: [config, build-docs]
     runs-on: ${{ matrix.os }}
-    if: needs.config.outputs.want-deploy-docs
+    if: needs.config.outputs.want-deploy-docs == true
     strategy:
       matrix:
         os: [ubuntu-24.04]
@@ -431,7 +431,7 @@ jobs:
       # Do not run this step in forks, as this requires repo-specific secrets.
       - name: Import signing certificate (macOS)
         uses: apple-actions/import-codesign-certs@v7
-        if: runner.os == 'macOS' && needs.config.outputs.want-signing
+        if: runner.os == 'macOS' && needs.config.outputs.want-signing == true
         with:
           p12-file-base64: ${{ secrets.APPLE_P12_CERTIFICATE }}
           p12-password: ${{ secrets.APPLE_P12_PASSWORD }}
@@ -532,7 +532,7 @@ jobs:
       # On macOS, code sign the binaries to verify that Galois is the author.
       # Do not run this step in forks, as this requires repo-specific secrets.
       - name: Sign binaries (macOS)
-        if: runner.os == 'macOS' && needs.config.outputs.want-signing
+        if: runner.os == 'macOS' && needs.config.outputs.want-signing == true
         env:
           IDENTITY_NAME: ${{ secrets.APPLE_P12_IDENTITY_NAME }}
         run: |
@@ -545,7 +545,7 @@ jobs:
       # On macOS, notarize the binaries so that users can run them without
       # needing to whitelist them.
       - name: Notarize binaries (macOS)
-        if: runner.os == 'macOS' && needs.config.outputs.want-signing && needs.config.outputs.want-apple-notarization
+        if: runner.os == 'macOS' && needs.config.outputs.want-signing == true && needs.config.outputs.want-apple-notarization == true
         env:
           KEY_ID: ${{ secrets.APPLE_P8_KEY_ID }}
           ISSUER_ID: ${{ secrets.APPLE_P8_ISSUER_ID }}
@@ -578,7 +578,7 @@ jobs:
       # Restrict this step so it only runs when the secrets needed are
       # available.
       - name: Sign the binary distributions
-        if: matrix.ghc == '9.6.7' && needs.config.outputs.want-signing
+        if: matrix.ghc == '9.6.7' && needs.config.outputs.want-signing == true
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
@@ -666,7 +666,7 @@ jobs:
     # will be available. As noted above, scheduled runs also happen in
     # forks. It would be nice to run all of it but the final push step,
     # but we appear to need docker login to build.
-    if: needs.config.outputs.want-docker-images
+    if: needs.config.outputs.want-docker-images == true
     strategy:
       fail-fast: false
       matrix:
@@ -1223,7 +1223,7 @@ jobs:
     # unless it has GITHUB_TOKEN permissions from a user within the GaloisInc
     # organization (see #2216). Also exclude dependabot, because it apparently
     # works like a fork but isn't one. See crucible #1642 for discussion.
-    if: needs.config.outputs.want-coverage
+    if: needs.config.outputs.want-coverage == true
     strategy:
       matrix:
         suite: ['integration-tests']
@@ -1454,7 +1454,7 @@ jobs:
   source-archive:
     runs-on: ubuntu-24.04
     needs: [config]
-    if: needs.config.outputs.want-source-archive
+    if: needs.config.outputs.want-source-archive == true
     strategy:
       fail-fast: false
     steps:
