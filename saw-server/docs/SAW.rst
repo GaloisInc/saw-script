@@ -599,6 +599,40 @@ No return fields
 
 
 
+SAW/MIR/find name (command)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Consult the a MIR module to find a function with the supplied identifier and type parameter substitutions. If such a function cannot be found in the module, this will raise an error.
+
+Parameter fields
+++++++++++++++++
+
+
+``module``
+  The server name of the MIR module containing the function.
+  
+  
+
+``original name``
+  The original (pre-monomorphized) function name.
+  
+  
+
+``type substitutions``
+  The types to substitute the function's type parameters with.
+  
+  
+
+Return fields
++++++++++++++
+
+
+``value``
+  The monomorphized function name.
+  
+  
+
+
 SAW/Yosys/import (command)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 

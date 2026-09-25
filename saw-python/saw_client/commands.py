@@ -343,6 +343,22 @@ class MIRFindMangledADT(SAWCommand):
     def process_result(self, res : Any) -> Any:
         return res
 
+class MIRFindName(SAWCommand):
+    def __init__(
+            self,
+            connection : argo.HasProtocolState,
+            module_server_name : str,
+            orig_name : str,
+            tys : List[MIRType],
+            timeout : Optional[float]) -> None:
+        params = {'module': module_server_name,
+                  'original name': orig_name,
+                  'type substitutions': [ty.to_json() for ty in tys]}
+        super(MIRFindName, self).__init__('SAW/MIR/find name', params, connection, timeout=timeout)
+
+    def process_result(self, res : Any) -> Any:
+        return res
+
 class Prove(SAWCommand):
     def __init__(
             self,
