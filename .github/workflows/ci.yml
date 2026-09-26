@@ -1223,7 +1223,7 @@ jobs:
     # unless it has GITHUB_TOKEN permissions from a user within the GaloisInc
     # organization (see #2216). Also exclude dependabot, because it apparently
     # works like a fork but isn't one. See crucible #1642 for discussion.
-    if: needs.config.outputs.want-coverage == true
+    if: needs.config.outputs.want-coverage == 'true'
     strategy:
       matrix:
         suite: ['integration-tests']
