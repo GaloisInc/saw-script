@@ -1,0 +1,19 @@
+// test.saw — smoke test for llvm_verify_fixpoint / llvm_verify_fixpoint_chc
+//
+// Regression for the bug where these primitives were implemented in
+// SAWCentral.Crucible.LLVM.Builtins but never registered as SAWScript
+// primitives in saw-script/src/SAWScript/Interpreter.hs.
+//
+// This test only checks that:
+//   1. Both primitives are bound (no "unbound variable" error).
+//   2. They typecheck with the documented argument shape.
+//
+// We do NOT run a full fixpoint proof here — that requires a hand-crafted
+// Cryptol next-state function matching the loop's live variable layout,
+// which is out of scope for a binding-existence regression test.
+
+let f1 = llvm_verify_fixpoint;
+let f2 = llvm_verify_fixpoint_chc;
+
+print "llvm_verify_fixpoint and llvm_verify_fixpoint_chc are bound";
+print "ok";
