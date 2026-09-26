@@ -1030,7 +1030,7 @@ jobs:
         run: crux-mir-comp-tests
 
   saw-remote-api-tests:
-    name: "saw-remote-api-tests (${{ matrix.os }})"
+    name: "saw-remote-api-tests (${{ matrix.name }} on ${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
     needs: [build]
     strategy:
@@ -1041,7 +1041,7 @@ jobs:
             test: saw-remote-api/scripts/run_rpc_tests.sh
             os: ubuntu-24.04
           # TODO: saw-remote-api unit tests are disabled pending a fix for #1699
-          - name: Install on MacOS
+          - name: Install only
             test: |
               cd saw-python/
               poetry install
