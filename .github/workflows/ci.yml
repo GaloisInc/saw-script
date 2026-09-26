@@ -5,26 +5,111 @@
 # - Docker builds happen nightly, on manual invocation, and on release branch commits
 # Please update this comment as those details change.
 
+# Structural notes:
+#
+# There is a first "config" job that everything depends on, which
+# produces a bunch of configuration data.
+#
+# We then have these families of jobs:
+#    - docs
+#    - build
+#    - test
+#    - other
+#
+# docs jobs (do not require bins):
+#    - build-docs (builds the html docs)
+#    - deploy-docs (pushes the html docs to GH Pages)
+#    - update-docs-versions (updates the GH Pages index)
+#
+# build jobs (produce bins)
+#    - build (builds saw bins)
+#    - build-push-image (builds the docker images)
+#
+# test jobs (generally require bins)
+#    - rocq-builds (builds the Rocq support code)
+#    - isabelle-builds (builds the Isabelle support code, does not actually require bins)
+#    - crux-mir-comp-tests (runs crux-mir-comp's tests)
+#    - saw-remote-api-tests (runs the saw-remote-api tests)
+#    - cabal-test (runs all the other cabal-driven test suites)
+#    - coverage (runs cabal test with coverage tracking)
+#    - s2n-tests (runs the s2n tests in docker containers)
+#    - exercises (builds and runs the exercises)
+#
+# other jobs (do not require bins)
+#    - source-archive (extracts a working source archive for releases)
+
+
+############################################################
+#
+# Job dispatch config
+#
+
+# The whole workflow runs:
+#    - if explicitly triggered via the repository's Actions page
+#    - once a night
+#    - on updates to pull requests
+#    - a tag matching either of the version string patterns is pushed
+#      (this is for tagged releases)
+#    - a push is made to master (this happens when PRs are merged)
+#    - a push is made to a release/stable branch
+#      (this happens when PRs are merged there)
+#
+# Note that in general a release will get built twice: once when the
+# final commit is merged to the release branch or the release branch
+# is created (as a stable branch build), and again when the tag for
+# the release is pushed (as a tag build). Some jobs are attached to
+# one or the other of these, and some to both.
+#
+# Also note that it's apparently impossible to directly restrict
+# scheduled runs to the original repository; they will also always run
+# in forks. All logic that triggers on scheduled runs needs to also
+# check whether the repository is ours if appropriate.
+# See https://github.com/orgs/community/discussions/16109.
+
 name: SAWScript
 on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 10 * * *" # 10am UTC -> 2/3am PST
+  pull_request:
   push:
     tags:
       - "v?[0-9]+.[0-9]+"
       - "v?[0-9]+.[0-9]+.[0-9]+"
     branches: [master, "release-**"]
-  pull_request:
-  schedule:
-    - cron: "0 10 * * *" # 10am UTC -> 2/3am PST
-  workflow_dispatch:
 
+############################################################
+#
+# Setup
+#
+
+#
+# The various *_CACHE_VERSION environment variables can be updated to
+# force the use of a new cache if the respective current cache
+# contents become corrupted/invalid. This can sometimes happen when
+# (for example) the OS version is changed but older .so files are
+# cached, which can have various effects (e.g. cabal complains it
+# can't find a valid version of the "happy" tool).
+#
+#    CABAL_CACHE_VERSION controls the cache of the Cabal store used by
+#       the main SAW build.
+#    CARGO_CACHE_VERSION controls the cache of the Cargo store used by
+#       the mir-json build.
+#    SPHINX_CACHE_VERSION controls the cache of the Python virtual
+#       environment used by the documentation build.
+#    SOLVER_CACHE_VERSION controls the cached version of the SAW
+#       solver cache used by the test suite.
+#
+# DISABLED_TESTS turns off specific tests in the `intTests` test suite.
+# Doesn't actually work right; see #3092.
+#
+# RUST_TOOLCHAIN sets the Rust version we're using. This should be the one
+# supported by the mir-json submodule.
+#
+# SOLVER_PKG_VERSION is the name of the what4-solvers snapshot we use. This
+# should ordinarily be the latest one.
+#
 env:
-  # The CABAL_CACHE_VERSION, CARGO_CACHE_VERSION, and SOLVER_CACHE_VERSION
-  # environment variables can be updated to force the use of a new cabal,
-  # cargo, or solver cache if the respective current cache contents become
-  # corrupted/invalid.  This can sometimes happen when (for example) the OS
-  # version is changed but older .so files are cached, which can have various
-  # effects (e.g. cabal complains it can't find a valid version of the "happy"
-  # tool).
   CABAL_CACHE_VERSION: 12
   CARGO_CACHE_VERSION: 1
   SOLVER_CACHE_VERSION: 1
@@ -41,45 +126,230 @@ env:
   # ./saw-remote-api/Dockerfile
   SOLVER_PKG_VERSION: "snapshot-20260622"
 
+############################################################
+#
+# Job config
+#
+
 jobs:
   config:
+    name: Configure this build
     runs-on: ubuntu-24.04
     outputs:
-      name: ${{ steps.config.outputs.name }}
-      saw-version: ${{ steps.config.outputs.saw-version }}
-      crux-name: ${{ steps.config.outputs.crux-name }}
-      crux-version: ${{ steps.config.outputs.crux-version }}
-      event-tag: ${{ steps.config.outputs.tag }}
-      event-schedule: ${{ steps.config.outputs.schedule }}
-      publish: ${{ steps.config.outputs.publish }}
-      is-stable-branch: ${{ steps.config.outputs.is-stable-branch }}
-      retention-days: ${{ steps.config.outputs.retention-days }}
+
+      # string outputs (names and versions)
+      name: ${{ steps.settings.outputs.name }}
+      saw-version: ${{ steps.settings.outputs.saw-version }}
+      crux-name: ${{ steps.settings.outputs.crux-name }}
+      crux-version: ${{ steps.settings.outputs.crux-version }}
+
+      # boolean outputs characterizing the build we're doing
+      event-is-tag: ${{ steps.settings.outputs.event-is-tag }}
+      event-is-master: ${{ steps.settings.outputs.event-is-master }}
+      event-is-stable-branch: ${{ steps.settings.outputs.event-is-stable-branch }}
+      event-is-scheduled: ${{ steps.settings.outputs.event-is-scheduled }}
+      event-is-dispatch: ${{ steps.settings.outputs.event-is-dispatch }}
+      event-is-pr: ${{ steps.settings.outputs.event-is-pr }}
+
+      # boolean outputs characterizing what we want to do in this build
+      want-deploy-docs: ${{ steps.settings.outputs.want-deploy-docs }}
+      want-signing: ${{ steps.settings.outputs.want-signing }}
+      want-apple-notarization: ${{ steps.settings.outputs.want-apple-notarization }}
+      want-docker-images: ${{ steps.settings.outputs.want-docker-images }}
+      want-coverage: ${{ steps.settings.outputs.want-coverage }}
+      want-source-archive: ${{ steps.settings.outputs.want-source-archive }}
+
+      # other config outputs
+      retention-days: ${{ steps.settings.outputs.retention-days }}
     steps:
-      - uses: actions/checkout@v7
+      - name: "Check out repository (depth 0)"
+        uses: actions/checkout@v7
         with:
+          submodules: false
           fetch-depth: 0
 
-      - name: config
-        id: config
+      - name: Issue build settings
+        id: settings
         env:
+          # get the event name for this build
+          EVENT_NAME: ${{ github.event_name }}
+          # get the git ref associated with this build
+          # note that github.event.ref also exists but does not seem to always work
           EVENT_REF: ${{ github.ref }}
-          EVENT_TAG: ${{ startsWith(github.event.ref, 'refs/tags/') }}
-          EVENT_SCHEDULE: ${{ github.event_name == 'schedule' }}
-          EVENT_DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
-          IS_STABLE: ${{ startsWith(github.event.ref, 'refs/heads/release-') }}
+
+          # This is true if the build is running in the real repository and
+          # not a fork. Dependabot runs apparently behave like forks but don't
+          # appear that way and need to be excluded explicitly. This should
+          # be checked for anything that requires secrets or otherwise
+          # won't work in a fork. See #2216 and Crucible #1642 for
+          # further discussion.
+          EVENT_IS_OURS: ${{ github.event.pull_request.head.repo.fork == false && github.repository_owner == 'GaloisInc' && github.actor != 'dependabot[bot]' }}
+
         run: |
           set -x
+          # string outputs (names and versions)
           .github/ci.sh output name saw-$(.github/ci.sh saw_ver)
           .github/ci.sh output saw-version $(.github/ci.sh saw_ver)
           .github/ci.sh output crux-name crux-mir-comp-$(.github/ci.sh crux_ver)
           .github/ci.sh output crux-version $(.github/ci.sh crux_ver)
-          .github/ci.sh output tag $EVENT_TAG
-          .github/ci.sh output schedule $EVENT_SCHEDULE
-          .github/ci.sh output publish $({ $EVENT_TAG || $EVENT_SCHEDULE; } && echo true || echo false)
-          .github/ci.sh output is-stable-branch $(.github/ci.sh is_stable_branch_event "$EVENT_REF")
-          .github/ci.sh output retention-days $($IS_STABLE && echo 90 || echo 5)
+
+          # output the "ours" info
+          .github/ci.sh output event-is-ours $EVENT_IS_OURS
+
+          # Figure out how this build was triggered and generate corresponding
+          # boolean outputs.
+          .github/ci.sh configure_for_event $EVENT_NAME $EVENT_REF $EVENT_IS_OURS
+
+      - name: Fail if the classification did not work
+        if: steps.settings.outputs.event-type == 'unknown'
+        run: false
+
+############################################################
+#
+# Documentation jobs
+#
+
+# All of this is indented two spaces because it actually hangs under
+# the "jobs:" line in the "job config" section above.
+
+  # Always build the docs (in case they don't)
+  build-docs:
+    name: "Build SAW documentation"
+    needs: [config]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-24.04]
+    steps:
+      - name: Check out repository (no submodules)
+        uses: actions/checkout@v7
+        with:
+          submodules: false
+
+      - name: Cache Python environment
+        uses: actions/cache@v6
+        with:
+          path: doc/.venv
+          key: ${{ env.SPHINX_CACHE_VERSION }}-sphinx-${{ matrix.os }}-${{ hashFiles('doc/scripts/requirements.txt') }}
+
+      - name: Build HTML documentation
+        run: make -C doc html
+        env:
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+
+      - name: Upload HTML artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: html_docs
+          path: doc/_build/html/
+
+  # This runs only when the run config says to deploy the docs
+  deploy-docs:
+    name: "Deploy SAW documentation to GitHub Pages"
+    needs: [config, build-docs]
+    runs-on: ${{ matrix.os }}
+    if: needs.config.outputs.want-deploy-docs == true
+    strategy:
+      matrix:
+        os: [ubuntu-24.04]
+    steps:
+      - name: Report relevant config
+        run: |
+          echo "OS: ${{ matrix.os }}"
+          echo "want-deploy-docs: ${{ needs.config.outputs.want-deploy-docs }}"
+
+      - name: Check out repository (no submodules)
+        uses: actions/checkout@v7
+        with:
+          submodules: false
+
+      - name: Download HTML artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: html_docs
+          path: doc/_build/html
+
+      # Adapted from:
+      # https://github.com/brechtm/rinohtype/commit/8a23be41d39d748955b139f0fabefe3205a4fd93
+      # Based on the Stack Overflow thread:
+      # https://stackoverflow.com/questions/72089650/how-to-host-multiple-version-of-a-sphinx-based-documentation-on-github
+      - name: Determine documentation publishing directory
+        id: doc-publish-dir
+        run: python3 .github/save_doc_publish_dir.py
+
+      # Using peaceiris/actions-gh-pages, as it allows us to specify specific
+      # target directories to publish to, where the built-in actions are
+      # "one and done": Package and upload a single artifact, and deploy that.
+      - name: Publish docs to GitHub pages
+        if: steps.doc-publish-dir.outputs.target != ''
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: doc/_build/html
+          destination_dir: ${{ steps.doc-publish-dir.outputs.target }}
+          keep_files: false
+
+  # Adapted from:
+  # https://github.com/brechtm/rinohtype/commit/6ba7637c248add1ce90efa7bb1c761d690b0de17
+  #
+  # By depending on deploy-docs, this runs only when the run config
+  # says to deploy the docs.
+  update-docs-versions:
+    name: "Update documentation versions JSON"
+    needs: [config, deploy-docs]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-24.04]
+    steps:
+      - name: Report relevant config
+        run: |
+          echo "OS: ${{ matrix.os }}"
+          echo "want-deploy-docs: ${{ needs.config.outputs.want-deploy-docs }}"
+
+      - name: Check out gh-pages
+        uses: actions/checkout@v7
+        with:
+          ref: gh-pages
+
+      - name: Write versions to JSON file
+        run: |
+          python3 -c "
+          import json
+          from pathlib import Path
+
+          cwd = Path.cwd()
+          versions = sorted(
+              (
+                  item.name
+                  for item in cwd.iterdir()
+                  if item.is_dir() and not item.name.startswith('.') and item.name != 'coverage'
+              ),
+              reverse=True,
+          )
+          target_dir = Path('gh-pages')
+          target_dir.mkdir(parents=True)
+          target_file = target_dir / 'versions.json'
+          with target_file.open('w') as f:
+              json.dump(versions, f)"
+
+      - name: Publish versions JSON to GitHub pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: gh-pages
+          keep_files: true
+
+############################################################
+#
+# Build jobs
+#
+
+# All of this is indented two spaces because it actually hangs under
+# the "jobs:" line in the "job config" section above.
 
   build:
+    name: "Build on ${{ matrix.os }} with GHC ${{ matrix.ghc }}: haddock=${{ matrix.haddock }} tests=${{ matrix.run-tests }} coverage=${{ matrix.hpc }}"
     runs-on: ${{ matrix.os }}
     needs: [config]
     strategy:
@@ -130,12 +400,23 @@ jobs:
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
+      - name: Report relevant config
+        run: |
+          echo "OS: ${{ matrix.os }}"
+          echo "GHC: ${{ matrix.ghc }}"
+          echo "Haddock: ${{ matrix.haddock }}"
+          echo "Run tests: ${{ matrix.run-tests }}"
+          echo "Coverage (HPC): ${{ matrix.hpc }}"
+          echo "Want signing: ${{ needs.config.outputs.want-signing }}"
+          echo "Want notarization: $$ {{ needs.config.outputs.want-apple-notarization }}"
 
-      - uses: actions/checkout@v7
-      - run: |
-           git submodule update --init
+      - name: Check out repository with submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: true
 
-      - id: config
+      - name: Build job configuration
+        id: config
         shell: bash
         run: |
           NAME="${{ needs.config.outputs.name }}-${{ matrix.os }}-${{ runner.arch }}"
@@ -150,16 +431,14 @@ jobs:
       # Do not run this step in forks, as this requires repo-specific secrets.
       - name: Import signing certificate (macOS)
         uses: apple-actions/import-codesign-certs@v7
-        if: runner.os == 'macOS' &&
-            github.event.pull_request.head.repo.fork == false &&
-            github.repository_owner == 'GaloisInc' &&
-            github.actor != 'dependabot[bot]'
+        if: runner.os == 'macOS' && needs.config.outputs.want-signing == true
         with:
           p12-file-base64: ${{ secrets.APPLE_P12_CERTIFICATE }}
           p12-password: ${{ secrets.APPLE_P12_PASSWORD }}
 
-      - uses: haskell-actions/setup@v2
+      - name: Set up Haskell
         id: setup-haskell
+        uses: haskell-actions/setup@v2
         with:
           ghc-version: ${{ matrix.ghc }}
           cabal-version: ${{ matrix.cabal }}
@@ -178,12 +457,12 @@ jobs:
           dest: bin
           release: ${{ env.SOLVER_PKG_VERSION }}
 
-      - shell: bash
-        name: Add what4-solvers to GITHUB_PATH
+      - name: Add what4-solvers to GITHUB_PATH
+        shell: bash
         run: echo "$PWD/bin" >> $GITHUB_PATH
 
-      - uses: actions/cache/restore@v6
-        name: Restore cabal store cache
+      - name: Restore cabal store cache
+        uses: actions/cache/restore@v6
         with:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
@@ -192,20 +471,24 @@ jobs:
           restore-keys: |
             ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
 
-      - shell: bash
+      - name: Build SAW
+        shell: bash
         run: .github/ci.sh build
         env:
           ENABLE_HPC: ${{ matrix.hpc }}
 
-      - shell: bash
+      - name: Build Cryptol
+        shell: bash
         run: .github/ci.sh build_cryptol
 
-      - if: matrix.haddock == true
+      - name: Run Haddock
+        if: matrix.haddock == true
         shell: bash
         run: .github/ci.sh haddock
 
-      - uses: GaloisInc/.github/actions/cabal-collect-bins@v1.1.1
+      - name: Collect test bins
         id: cabal-test-suites
+        uses: GaloisInc/.github/actions/cabal-collect-bins@v1.1.1
         with:
           # Keep this list in sync. There are four lists of tests:
           #   - here
@@ -224,31 +507,32 @@ jobs:
       # In the next 2 steps, we upload to different names depending on whether
       # the binaries were compiled using HPC or not. This is done to ensure that
       # the HPC-enabled binaries do not clobber the non-HPC-enabled binaries.
-      - uses: actions/upload-artifact@v5
+      - name: Upload non-coverage test bins
+        uses: actions/upload-artifact@v5
         if: matrix.ghc == '9.6.7' && matrix.hpc == false
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}
 
-      - uses: actions/upload-artifact@v5
+      - name: Upload with-coverage test bins
+        uses: actions/upload-artifact@v5
         if: matrix.ghc == '9.6.7' && matrix.hpc == true
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}-hpc
 
-      - shell: bash
+      - name: Collect SAW and Cryptol bins
+        shell: bash
         run: .github/ci.sh setup_dist_bins
 
-      - shell: bash
+      - name: Collect Crux bins
+        shell: bash
         run: .github/ci.sh setup_crux_dist_bins dist-crux
 
       # On macOS, code sign the binaries to verify that Galois is the author.
       # Do not run this step in forks, as this requires repo-specific secrets.
       - name: Sign binaries (macOS)
-        if: runner.os == 'macOS' &&
-            github.event.pull_request.head.repo.fork == false &&
-            github.repository_owner == 'GaloisInc' &&
-            github.actor != 'dependabot[bot]'
+        if: runner.os == 'macOS' && needs.config.outputs.want-signing == true
         env:
           IDENTITY_NAME: ${{ secrets.APPLE_P12_IDENTITY_NAME }}
         run: |
@@ -259,16 +543,9 @@ jobs:
             dist/bin/* dist-crux/bin/*
 
       # On macOS, notarize the binaries so that users can run them without
-      # needing to whitelist them. Note that Apple's documentation suggests
-      # that you shouldn't notarize more than 75 times in one day
-      # (https://developer.apple.com/documentation/security/customizing-the-notarization-workflow#Avoid-long-notarization-response-times-and-size-limits),
-      # so as a precaution, we only perform this step for scheduled events,
-      # workflow dispatches, or releases (and not in pull requests).
+      # needing to whitelist them.
       - name: Notarize binaries (macOS)
-        if: runner.os == 'macOS' &&
-            (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.is-stable-branch == 'true' || needs.config.outputs.tag == 'true') &&
-            github.repository_owner == 'GaloisInc' &&
-            github.actor != 'dependabot[bot]'
+        if: runner.os == 'macOS' && needs.config.outputs.want-signing == true && needs.config.outputs.want-apple-notarization == true
         env:
           KEY_ID: ${{ secrets.APPLE_P8_KEY_ID }}
           ISSUER_ID: ${{ secrets.APPLE_P8_ISSUER_ID }}
@@ -282,54 +559,31 @@ jobs:
             --issuer "$ISSUER_ID" \
             --wait
 
-      - shell: bash
+      - name: Create SAW binary distribution tree
+        shell: bash
         run: .github/ci.sh bundle_files
 
-      - shell: bash
+      - name: Zip up the SAW non-solvers binary distribution
+        shell: bash
         run: .github/ci.sh zip_dist $NAME
 
-      - shell: bash
+      - name: Zip up the SAW with-solvers binary distribution
+        shell: bash
         run: .github/ci.sh zip_dist_with_solvers $NAME-with-solvers
 
-      - shell: bash
+      - name: Zip up the Crux binary distribution
+        shell: bash
         run: .github/ci.sh zip_dist $CRUX_NAME dist-crux
 
-      # Restrict these steps so they're only run when the secrets
-      # needed are available. It's insufficient to just check whether
-      # we're working on a pull request in a fork because we might be
-      # working on master in a fork. We have scheduled runs, and it's
-      # apparently impossible to restrict scheduled runs to the
-      # original repository; they will also always run in forks.
-      # See https://github.com/orgs/community/discussions/16109.
-      - if: matrix.ghc == '9.6.7' &&
-            github.event.pull_request.head.repo.fork == false &&
-            github.repository_owner == 'GaloisInc' &&
-            github.actor != 'dependabot[bot]'
+      # Restrict this step so it only runs when the secrets needed are
+      # available.
+      - name: Sign the binary distributions
+        if: matrix.ghc == '9.6.7' && needs.config.outputs.want-signing == true
         shell: bash
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-        run: .github/ci.sh sign $NAME.tar.gz
-
-      - if: matrix.ghc == '9.6.7' &&
-            github.event.pull_request.head.repo.fork == false &&
-            github.repository_owner == 'GaloisInc' &&
-            github.actor != 'dependabot[bot]'
-        shell: bash
-        env:
-          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
-          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-        run: .github/ci.sh sign $NAME-with-solvers.tar.gz
-
-      - if: matrix.ghc == '9.6.7' &&
-            github.event.pull_request.head.repo.fork == false &&
-            github.repository_owner == 'GaloisInc' &&
-            github.actor != 'dependabot[bot]'
-        shell: bash
-        env:
-          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
-          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-        run: .github/ci.sh sign $CRUX_NAME.tar.gz
+        run: .github/ci.sh sign $NAME.tar.gz $NAME-with-solvers.tar.gz $CRUX_NAME.tar.gz
 
       ##########################################################################
       # We upload an archive containing SAW, and also and archive containing SAW
@@ -349,7 +603,8 @@ jobs:
       # In the next 3 steps we check that `matrix.hpc == false` so that if the
       # distribution version matches the HPC version, the HPC build artifacts do
       # not clobber the non-HPC distribution artifacts.
-      - if: matrix.ghc == '9.6.7' && matrix.hpc == false
+      - name: Upload the SAW non-solvers binary distribution
+        if: matrix.ghc == '9.6.7' && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -357,7 +612,8 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '9.6.7' && matrix.hpc == false
+      - name: Upload the SAW with-solvers binary distribution
+        if: matrix.ghc == '9.6.7' && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.name }}-with-solvers
@@ -365,7 +621,8 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '9.6.7' && matrix.hpc == false
+      - name: Upload the Crux binary distribution
+        if: matrix.ghc == '9.6.7' && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.crux-name }} (GHC ${{ matrix.ghc }})
@@ -373,203 +630,184 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '9.6.7' && matrix.run-tests && matrix.hpc == false
+      - name: Upload the non-coverage test bins
+        if: matrix.ghc == '9.6.7' && matrix.run-tests && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           path: dist/bin
           name: ${{ matrix.os }}-bins
 
-      - if: matrix.hpc == true
+      - name: Collect the coverage-testing files
+        if: matrix.hpc == true
         shell: bash
         run: .github/ci.sh collect_hpc_files
 
-      - if: matrix.hpc == true
+      - name: Upload the coverage-testing files
+        if: matrix.hpc == true
         uses: actions/upload-artifact@v5
         with:
           path: hpc.tar.gz
           name: ${{ matrix.os }}-hpc.tar.gz
 
-      - uses: actions/cache/save@v6
-        name: Save cabal store cache
+      - name: Save cabal store cache
         if: always()
+        uses: actions/cache/save@v6
         with:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
             dist-newstyle
           key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
 
-  # The source archives that github autogenerates for releases do not
-  # include submodules, and also do not include submodule references, so
-  # they are unbuildable and broken. See issue 2532.
-  #
-  # We only need one of these. Run it on Ubuntu so as to be sure to get GNU tar.
-  source-archive:
+  build-push-image:
+    name: "Build the ${{ matrix.which }} docker image"
     runs-on: ubuntu-24.04
     needs: [config]
-    # Run this piece only on tag builds, which in practice means release
-    # tags only. Skip running it on forks as well, because we won't have
-    # the signing key there.
-    if: github.event_name == 'push' &&
-        needs.config.outputs.event-tag == 'true' &&
-        github.repository_owner == 'GaloisInc' &&
-        github.actor != 'dependabot[bot]'
+    # Restrict this to the main repository where the needed secrets
+    # will be available. As noted above, scheduled runs also happen in
+    # forks. It would be nice to run all of it but the final push step,
+    # but we appear to need docker login to build.
+    if: needs.config.outputs.want-docker-images == true
     strategy:
       fail-fast: false
-    steps:
-      - uses: actions/checkout@v7
-      - run: git submodule update --init
-      - name: make-source-distribution
-        shell: bash
-        run: .github/ci.sh make_source_distribution ${{ needs.config.outputs.name }}
-      - name: sign-source-distribution
-        shell: bash
-        run: .github/ci.sh sign ${{ needs.config.outputs.name }}-sources.tar.gz
-        env:
-          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
-          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-      - uses: actions/upload-artifact@v5
-        with:
-          name: ${{ needs.config.outputs.name }}-sources (full source distribution)
-          path: ${{ needs.config.outputs.name }}-sources.tar.gz
-          if-no-files-found: error
-          retention-days: ${{ needs.config.outputs.retention-days }}
-
-  build-docs:
-    name: "Build SAW documentation"
-    needs: [config]
-    runs-on: ${{ matrix.os }}
-    strategy:
       matrix:
-        os: [ubuntu-24.04]
+        include:
+          - which: saw
+            file: saw/Dockerfile
+            image: ghcr.io/galoisinc/saw
+            cache: ghcr.io/galoisinc/cache-saw
+            image-repo: GaloisInc/saw-script
+            image-tag: ${{ needs.config.outputs.saw-version }}
+          - which: saw-remote-api
+            file: saw-remote-api/Dockerfile
+            image: ghcr.io/galoisinc/saw-remote-api
+            cache: ghcr.io/galoisinc/cache-saw-remote-api
+            image-repo: GaloisInc/saw-script
+            image-tag: ${{ needs.config.outputs.saw-version }}
+          - which: crux-mir-comp
+            file: crux-mir-comp/Dockerfile
+            image: ghcr.io/galoisinc/crux-mir-comp
+            cache: ghcr.io/galoisinc/cache-crux-mir-comp
+            image-repo: GaloisInc/crux
+            image-tag: ${{ needs.config.outputs.crux-version }}
     steps:
-      - name: Check out repository (no submodules)
-        uses: actions/checkout@v7
-
-      - name: Cache Python environment
-        uses: actions/cache@v6
-        with:
-          path: doc/.venv
-          key: ${{ matrix.os }}-venv-${{ hashFiles('doc/scripts/requirements.txt') }}
-
-      - name: Build HTML documentation
-        run: make -C doc html
-        env:
-          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
-
-      - name: Upload HTML artifact
-        uses: actions/upload-artifact@v5
-        with:
-          name: html_docs
-          path: doc/_build/html/
-
-  deploy-docs:
-    name: "Deploy SAW documentation to GitHub Pages"
-    needs: [config, build-docs]
-    runs-on: ${{ matrix.os }}
-    #
-    # The whole workflow is only run at all on branches matching
-    # `master`, branches matching `release-**`, and release tags, per
-    # the `on:` stanza at the top of the file.
-    #
-    # We want to upload docs for `master` and for tagged releases, and
-    # not otherwise, so filter this further:
-    #    - restricting to `push` actions eliminates pull requests
-    #    - requiring needs.config.outputs.is-stable-branch be false skips
-    #      miscellaneous builds on stable (`release-**`) branches
-    # so what's left is `master` and release tags.
-    #
-    # Then also check the repository owner to avoid running in forks.
-    # This is to avoid issues with missing permissions on
-    # GITHUB_TOKEN, needed when actually deploying the documentation
-    # to the `gh-pages` branch.
-    #
-    # Note that even though tags will normally be _on_ stable
-    # branches, tag events generate a completely different github.ref
-    # of the form `refs/tags/...` which won't set
-    # needs.config.outputs.is-stable-branch, so we aren't accidentally
-    # skipping release tags. According to the docs, pushing to a
-    # stable branch will trigger a branch run, and then tagging it
-    # will trigger a separate tag run, and it seems to so work.
-    #
-    if: github.event_name == 'push' &&
-        needs.config.outputs.is-stable-branch == 'false' &&
-        github.repository_owner == 'GaloisInc' &&
-        github.actor != 'dependabot[bot]'
-    strategy:
-      matrix:
-        os: [ubuntu-24.04]
-    steps:
-      - name: Check out repository (no submodules)
-        uses: actions/checkout@v7
-
-      - name: Download HTML artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: html_docs
-          path: doc/_build/html
-
-      # Adapted from:
-      # https://github.com/brechtm/rinohtype/commit/8a23be41d39d748955b139f0fabefe3205a4fd93
-      # Based on the Stack Overflow thread:
-      # https://stackoverflow.com/questions/72089650/how-to-host-multiple-version-of-a-sphinx-based-documentation-on-github
-      - name: Determine documentation publishing directory
-        id: doc-publish-dir
-        run: python3 .github/save_doc_publish_dir.py
-
-      # Using peaceiris/actions-gh-pages, as it allows us to specify specific
-      # target directories to publish to, where the built-in actions are
-      # "one and done": Package and upload a single artifact, and deploy that.
-      - name: Publish docs to GitHub pages
-        if: steps.doc-publish-dir.outputs.target != ''
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: doc/_build/html
-          destination_dir: ${{ steps.doc-publish-dir.outputs.target }}
-          keep_files: false
-
-  # Adapted from:
-  # https://github.com/brechtm/rinohtype/commit/6ba7637c248add1ce90efa7bb1c761d690b0de17
-  update-docs-versions:
-    name: "Update documentation versions JSON"
-    needs: [deploy-docs]
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-24.04]
-    steps:
-      - name: Check out gh-pages
-        uses: actions/checkout@v7
-        with:
-          ref: gh-pages
-
-      - name: Write versions to JSON file
+      - name: Report relevant config
         run: |
-          python3 -c "
-          import json
-          from pathlib import Path
+          echo "Want docker images: ${{ needs.config.outputs.want-docker-images }}"
+          echo "File: ${{ matrix.file }}"
+          echo "Image: ${{ matrix.image }}"
+          echo "Cache image: ${{ matrix.cache }}"
+          echo "Repo: ${{ matrix.image-repo }}"
+          echo "Tag: ${{ matrix.image-tag }}"
 
-          cwd = Path.cwd()
-          versions = sorted(
-              (
-                  item.name
-                  for item in cwd.iterdir()
-                  if item.is_dir() and not item.name.startswith('.') and item.name != 'coverage'
-              ),
-              reverse=True,
-          )
-          target_dir = Path('gh-pages')
-          target_dir.mkdir(parents=True)
-          target_file = target_dir / 'versions.json'
-          with target_file.open('w') as f:
-              json.dump(versions, f)"
-
-      - name: Publish versions JSON to GitHub pages
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Check out the repository with submodules
+        uses: actions/checkout@v7
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: gh-pages
-          keep_files: true
+          submodules: true
+
+      - name: Capture git state in GitRev.hs
+        run: ./build.sh gitrev
+
+      - name: Clear up some disk space
+        run: |
+          # The crux-mir-comp Docker image is rather large (~1GB compressed),
+          # and the mere act of building the image requires just over 14 GB of
+          # disk space, which exceeds the maximum provided by a GitHub Action
+          # CI runner. To clear up some extra space, we delete ~10GB worth of
+          # pre-installed GitHub Actions tools, none of which we make use of.
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY" # Python installations
+
+      - uses: rlespinasse/github-slug-action@v3.x
+
+      - name: Set COMMON_TAG
+        id: common-tag
+        run: |
+          echo "::set-output name=common-tag::$GITHUB_REF_SLUG"
+          echo "COMMON_TAG=$GITHUB_REF_SLUG" >> $GITHUB_ENV
+
+      - name: Docker build setup
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker labels
+        id: labels
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ matrix.image }}
+          labels: |
+             org.opencontainers.image.source=https://github.com/${{ matrix.image-repo }}
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Do the image build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          tags: ${{ matrix.image }}:${{ steps.common-tag.outputs.common-tag }}
+          labels: ${{ steps.labels.outputs.labels }}
+          load: true
+          push: false
+          file: ${{ matrix.file }}
+          build-args: ${{ matrix.build-args }}
+          cache-from: |
+            type=registry,ref=${{ matrix.cache }}:${{ steps.prefix.outputs.prefix }}master
+            type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }}
+
+      - name: Cache the image build
+        uses: docker/build-push-action@v6
+        continue-on-error: true  # Tolerate cache upload failures - this should be handled better
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          build-args: ${{ matrix.build-args }}
+          cache-to: type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }},mode=max
+
+      - name: Set up Python
+        if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
+        uses: actions/setup-python@v6
+        with:
+          # Ensure that this matches saw-python/mypy.ini file
+          # and that saw-python/pyproject.toml file is compatible with this version
+          python-version: '3.12'
+
+      - name: Set up Poetry
+        if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
+        uses: abatilo/actions-poetry@v4
+        with:
+          poetry-version: 2.4.1
+
+      - name: Test saw-remote-api
+        if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
+        run: ./saw-remote-api/scripts/test_docker.sh ${{ matrix.image }}:$COMMON_TAG
+
+        # Scheduled events upload as "nightly"
+      - name: Upload ${{ matrix.image }}:nightly
+        if: needs.config.outputs.event-is-scheduled == 'true'
+        run: |
+          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:nightly
+          docker push ${{ matrix.image }}:nightly
+
+        # Stable branch events upload by the version
+      - name: Upload ${{ matrix.image }}:${{ matrix.image-tag }}
+        if: needs.config.outputs.event-is-stable-branch == 'true'
+        run: |
+          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:${{ matrix.image-tag }}
+          docker push ${{ matrix.image }}:${{ matrix.image-tag }}
+          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:latest
+          docker push ${{ matrix.image }}:latest
+
+############################################################
+#
+# Test jobs
+#
+
+# All of this is indented two spaces because it actually hangs under
+# the "jobs:" line in the "job config" section above.
 
   rocq-builds:
     needs: [build]
@@ -579,7 +817,8 @@ jobs:
         os: [ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out the repository with submodules
+        uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -589,11 +828,12 @@ jobs:
           dest: bin
           release: ${{ env.SOLVER_PKG_VERSION }}
 
-      - shell: bash
-        name: Add what4-solvers to GITHUB_PATH
+      - name: Add what4-solvers to GITHUB_PATH
+        shell: bash
         run: echo "$PWD/bin" >> $GITHUB_PATH
 
-      - uses: actions/download-artifact@v4
+      - name: Download the SAW bins
+        uses: actions/download-artifact@v4
         with:
           name: "${{ matrix.os }}-bins"
           path: dist/bin
@@ -604,18 +844,24 @@ jobs:
           chmod +x dist/bin/*
           echo $GITHUB_WORKSPACE/dist/bin >> $GITHUB_PATH
 
-      - uses: ocaml/setup-ocaml@v3
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: "4.14"
 
-      - run: opam repo add rocq-released https://rocq-prover.org/opam/released
+      - name: Add Rocq upstream to opam
+        run: opam repo add rocq-released https://rocq-prover.org/opam/released
 
-      - run: opam pin add -y rocq-prover 9.0.0
-      - run: opam install -y rocq-core=9.1.0 rocq-stdlib=9.0.0
+      - name: Install rocq-prover
+        run: opam pin add -y rocq-prover 9.0.0
+
+      - name: Install rocq-core and rocq-stdlib
+        run: opam install -y rocq-core=9.1.0 rocq-stdlib=9.0.0
 
       # Install coq-bits from source. FIXME: replace with compatible
       # opam-released version when available.
-      - working-directory: saw-core-rocq/rocq
+      - name: Install coq-bits
+        working-directory: saw-core-rocq/rocq
         run: |
           opam install -y coq=9.1.0 # coq-* packages include compatibility shims (e.g., coq_makefile).
           opam pin -y coq-bits https://github.com/rocq-community/bits.git#f50fc3e5f1eabcb0b0b94c8d25f75e61a255c2ba
@@ -624,18 +870,21 @@ jobs:
       # Rocq translator and builds them; if we do other Rocq tests, these steps
       # should become their own build artifact, to avoid re-compiling the Rocq
       # libraries
-      - working-directory: saw-core-rocq/rocq
+      - name: Build the handwritten Rocq infrastructure
+        working-directory: saw-core-rocq/rocq
         shell: bash
         run: opam exec -- make -j
 
       # Regenerate the test .v files, since we don't have the ones from the
       # test run and rebuilding them isn't super expensive.
-      - working-directory: otherTests/saw-core-rocq
+      - name: Regen the saw-core-rocq-tests outputs
+        working-directory: otherTests/saw-core-rocq
         shell: bash
         run: SAW=saw sh ./test.sh
 
       # Now build, or try to build, all the output files.
-      - working-directory: otherTests/saw-core-rocq
+      - name: Build the saw-core-rocq-tests outputs
+        working-directory: otherTests/saw-core-rocq
         shell: bash
         run: opam exec -- make -j rocq
 
@@ -654,18 +903,19 @@ jobs:
       ISABELLE_COMMIT: '8d9ad3f2984ab945542dad1a0802f0c1b0517337'
       AFP_COMMIT: '9db853f97465cce2ce1ed731b4c8ba94187ea650'
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out the repository without submodules
+        uses: actions/checkout@v7
         with:
           submodules: false
 
-      - name: Checkout Isabelle
+      - name: Check out Isabelle
         uses: actions/checkout@v7
         with:
           repository: 'isabelle-prover/mirror-isabelle'
           ref: ${{ env.ISABELLE_COMMIT }}
           path: isabelle
 
-      - name: Checkout AFP
+      - name: Check out AFP
         uses: actions/checkout@v7
         with:
           repository: 'isabelle-prover/mirror-afp-devel'
@@ -677,7 +927,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y curl perl
 
-      - name: Restore Isabelle user directory
+      - name: Restore cached Isabelle user directory
         id: cache-isabelle-restore
         uses: actions/cache/restore@v6
         with:
@@ -702,12 +952,12 @@ jobs:
           isabelle components -u "$PWD/saw-core-isabelle/isabelle"
           isabelle build -b Cryptol_Base
 
-      - name: "Build Test image"
+      - name: "Build test image"
         run: |
           isabelle components -u "$PWD/otherTests/saw-core-isabelle"
           isabelle build Cryptol_Tests
 
-      - name: Save Isabelle user directory
+      - name: Update cached Isabelle user directory
         if: always()
         uses: actions/cache/save@v6
         with:
@@ -736,7 +986,7 @@ jobs:
           override: true
           components: rustc-dev, rust-src
 
-      - name: cargo cache
+      - name: Engage the Cargo cache
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: "true"
@@ -750,8 +1000,8 @@ jobs:
           dest: bin
           release: ${{ env.SOLVER_PKG_VERSION }}
 
-      - shell: bash
-        name: Add what4-solvers to GITHUB_PATH
+      - name: Add what4-solvers to GITHUB_PATH
+        shell: bash
         run: echo "$PWD/bin" >> $GITHUB_PATH
 
       - name: Install mir-json
@@ -780,6 +1030,7 @@ jobs:
         run: crux-mir-comp-tests
 
   saw-remote-api-tests:
+    name: "saw-remote-api-tests (${{ matrix.name }} on ${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
     needs: [build]
     strategy:
@@ -790,7 +1041,7 @@ jobs:
             test: saw-remote-api/scripts/run_rpc_tests.sh
             os: ubuntu-24.04
           # TODO: saw-remote-api unit tests are disabled pending a fix for #1699
-          - name: Install on MacOS
+          - name: Install only
             test: |
               cd saw-python/
               poetry install
@@ -801,7 +1052,8 @@ jobs:
             test: saw-remote-api/scripts/check_docs.sh
             os: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out the repository with submodules
+        uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -811,26 +1063,29 @@ jobs:
           dest: bin
           release: ${{ env.SOLVER_PKG_VERSION }}
 
-      - shell: bash
-        name: Add what4-solvers to GITHUB_PATH
+      - name: Add what4-solvers to GITHUB_PATH
+        shell: bash
         run: echo "$PWD/bin" >> $GITHUB_PATH
 
-      - uses: actions/download-artifact@v4
+      - name: Download the SAW bins
+        uses: actions/download-artifact@v4
         with:
           name: "${{ matrix.os }}-bins"
           path: dist/bin
 
-      - uses: actions/setup-python@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
           # Ensure that this matches saw-python/mypy.ini file
           # and that saw-python/pyproject.toml file is compatible with this version
           python-version: '3.12'
 
-      - uses: abatilo/actions-poetry@v4
+      - name: Set up Poetry
+        uses: abatilo/actions-poetry@v4
         with:
           poetry-version: 2.4.1
 
-      - name: ${{ matrix.name }}
+      - name: "Run the tests: ${{ matrix.name }}"
         shell: bash
         run: |
           chmod +x dist/bin/*
@@ -844,6 +1099,7 @@ jobs:
           ${{ matrix.test }}
 
   cabal-test:
+    name: "cabal-test ${{ matrix.suite }} (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
     needs: [build]
     strategy:
@@ -869,7 +1125,14 @@ jobs:
           # crux-mir-comp-tests job, which is defined separately.
           - suite: crux-mir-comp-tests
     steps:
-      - uses: actions/checkout@v7
+      - name: Report relevant config
+        run: |
+          echo "Runner OS: ${{ runner.os }}"
+          echo "Suite: ${{ matrix.suite }}"
+          echo "Continue on error: ${{ matrix.continue-on-error }}"
+
+      - name: Check out the repository with submodules
+        uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -879,65 +1142,71 @@ jobs:
           dest: bin
           release: ${{ env.SOLVER_PKG_VERSION }}
 
-      - shell: bash
-        name: Add what4-solvers to GITHUB_PATH
+      - name: Add what4-solvers to GITHUB_PATH
+        shell: bash
         run: echo "$PWD/bin" >> $GITHUB_PATH
 
-      - uses: actions/download-artifact@v4
+      - name: Download the SAW bins
+        uses: actions/download-artifact@v4
         with:
           name: "${{ matrix.os }}-bins"
           path: dist/bin
 
-      - shell: bash
-        if: "runner.os != 'Windows'"
+      - name: Chmod the bins
+        shell: bash
+        if: runner.os != 'Windows'
         run: chmod +x dist/bin/*
 
-      - shell: bash
+      - name: Chmod more bins
+        shell: bash
         if: runner.os != 'Windows'
         run: chmod +x bin/*
 
-      - uses: actions/download-artifact@v4
+      - name: Download the test bins
+        uses: actions/download-artifact@v4
         with:
           name: dist-tests-${{ matrix.os }}
           path: dist-tests
 
-      - shell: bash
+      - name: Chmod the test bins
+        shell: bash
         if: runner.os != 'Windows'
         run: chmod +x dist-tests/*
 
-      - uses: actions/setup-java@v5
-        if: "matrix.suite == 'integration-tests'"
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        if: matrix.suite == 'integration-tests'
         with:
           distribution: "zulu"
           java-version: "8"
           java-package: jdk
 
-      - uses: actions/cache/restore@v6
-        name: Restore SMT solver result cache
-        if: "matrix.suite == 'integration-tests'"
+      - name: Restore SMT solver result cache
+        uses: actions/cache/restore@v6
+        if: matrix.suite == 'integration-tests'
         with:
           path: ${{ matrix.suite }}.cache
           key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
           restore-keys: |
             ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-
 
-      - shell: bash
-        name: Enable solver caching
-        if: "matrix.suite == 'integration-tests'"
+      - name: Enable solver caching
+        shell: bash
+        if: matrix.suite == 'integration-tests'
         run: |
           echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
           dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
 
-      - name: ${{ matrix.suite }}
+      - name: Run test suite ${{ matrix.suite }}
         continue-on-error: ${{ matrix.continue-on-error }}
         shell: bash
         run: |
           export PATH="$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
 
-      - uses: actions/cache/save@v6
-        name: Save SMT solver result cache
-        if: "matrix.suite == 'integration-tests'"
+      - name: Save SMT solver result cache
+        uses: actions/cache/save@v6
+        if: matrix.suite == 'integration-tests'
         with:
           path: ${{ matrix.suite }}.cache
           key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
@@ -947,28 +1216,31 @@ jobs:
   # test coverage results, generates an HTML summary, and publishes the results
   # to github pages.
   coverage:
-    name: "Run integration tests with coverage reporting"
-    needs: build
+    name: "Run integration tests with coverage reporting (${{ matrix.os }})"
+    needs: [config, build]
     runs-on: ${{ matrix.os }}
     # Do not run this job in forks, as the deployment to GitHub pages will fail
     # unless it has GITHUB_TOKEN permissions from a user within the GaloisInc
     # organization (see #2216). Also exclude dependabot, because it apparently
     # works like a fork but isn't one. See crucible #1642 for discussion.
-    if: github.event_name == 'pull_request' &&
-        github.event.pull_request.head.repo.fork == false &&
-        github.repository_owner == 'GaloisInc' &&
-        github.actor != 'dependabot[bot]'
+    if: needs.config.outputs.want-coverage == 'true'
     strategy:
       matrix:
         suite: ['integration-tests']
         os: [ubuntu-24.04]
     steps:
+      - name: Report relevant config
+        run: |
+          echo "Want coverage: ${{ needs.config.outputs.want-coverage }}"
+
       # Need a copy of the source to generate coverage HTML
-      - uses: actions/checkout@v7
+      - name: Check out the repository with submodules
+        uses: actions/checkout@v7
         with:
           submodules: true
 
-      - uses: haskell-actions/setup@v2
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
         id: setup-haskell
         with:
           ghc-version: "9.6.7"
@@ -979,20 +1251,22 @@ jobs:
           dest: bin
           release: ${{ env.SOLVER_PKG_VERSION }}
 
-      - shell: bash
-        name: Add what4-solvers to GITHUB_PATH
+      - name: Add what4-solvers to GITHUB_PATH
+        shell: bash
         run: echo "$PWD/bin" >> $GITHUB_PATH
 
-      - uses: actions/download-artifact@v4
+      - name: Download the with-coverage test bins
+        uses: actions/download-artifact@v4
         with:
           name: dist-tests-${{ matrix.os }}-hpc
           path: dist-tests
 
-      - uses: actions/download-artifact@v4
+      - name: Download the coverage files
+        uses: actions/download-artifact@v4
         with:
           name: "${{ matrix.os }}-hpc.tar.gz"
 
-      - name: Setup test environment
+      - name: Set up test environment
         shell: bash
         run: |
           tar xvf hpc.tar.gz
@@ -1000,7 +1274,8 @@ jobs:
           chmod +x bin/*
           chmod +x dist-tests/*
 
-      - uses: actions/setup-java@v5
+      - name: Set up Java
+        uses: actions/setup-java@v5
         with:
           distribution: "zulu"
           java-version: "8"
@@ -1011,16 +1286,16 @@ jobs:
       # `cabal-test` also runs the integration tests and uploads an updated
       # cache. Because the test suite is the same, the resulting cache files
       # would also be identical.
-      - uses: actions/cache/restore@v6
-        name: Restore SMT solver result cache
+      - name: Restore SMT solver result cache
+        uses: actions/cache/restore@v6
         with:
           path: ${{ matrix.suite }}.cache
           key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
           restore-keys: |
             ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-
 
-      - shell: bash
-        name: Enable solver caching
+      - name: Enable solver caching
+        shell: bash
         run: |
           echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
           dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
@@ -1038,7 +1313,8 @@ jobs:
         run: |
           ./compute-coverage.sh
 
-      - uses: actions/upload-artifact@v5
+      - name: Upload the coverage data
+        uses: actions/upload-artifact@v5
         with:
           path: hpc-html
           name: coverage-html-${{ github.event.number }}
@@ -1056,132 +1332,8 @@ jobs:
           destination_dir: coverage
           keep_files: false
 
-  build-push-image:
-    runs-on: ubuntu-24.04
-    needs: [config]
-    # Restrict this to the main repository where the needed secrets
-    # will be available. As noted above, scheduled runs also happen in
-    # forks. It would be nice to run all of it but the final push step,
-    # but we appear to need docker login to build.
-    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.config.outputs.is-stable-branch == 'true') &&
-        github.repository_owner == 'GaloisInc' &&
-        github.actor != 'dependabot[bot]'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - file: saw/Dockerfile
-            image: ghcr.io/galoisinc/saw
-            cache: ghcr.io/galoisinc/cache-saw
-            image-repo: GaloisInc/saw-script
-            image-tag: ${{ needs.config.outputs.saw-version }}
-          - file: saw-remote-api/Dockerfile
-            image: ghcr.io/galoisinc/saw-remote-api
-            cache: ghcr.io/galoisinc/cache-saw-remote-api
-            image-repo: GaloisInc/saw-script
-            image-tag: ${{ needs.config.outputs.saw-version }}
-          - file: crux-mir-comp/Dockerfile
-            image: ghcr.io/galoisinc/crux-mir-comp
-            cache: ghcr.io/galoisinc/cache-crux-mir-comp
-            image-repo: GaloisInc/crux
-            image-tag: ${{ needs.config.outputs.crux-version }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: true
-
-      - name: capture git state in GitRev.hs
-        run: ./build.sh gitrev
-
-      - name: Clear up some disk space
-        run: |
-          # The crux-mir-comp Docker image is rather large (~1GB compressed),
-          # and the mere act of building the image requires just over 14 GB of
-          # disk space, which exceeds the maximum provided by a GitHub Action
-          # CI runner. To clear up some extra space, we delete ~10GB worth of
-          # pre-installed GitHub Actions tools, none of which we make use of.
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY" # Python installations
-
-      - uses: rlespinasse/github-slug-action@v3.x
-
-      - id: common-tag
-        run: |
-          echo "::set-output name=common-tag::$GITHUB_REF_SLUG"
-          echo "COMMON_TAG=$GITHUB_REF_SLUG" >> $GITHUB_ENV
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/metadata-action@v6
-        name: Labels
-        id: labels
-        with:
-          images: ${{ matrix.image }}
-          labels: |
-             org.opencontainers.image.source=https://github.com/${{ matrix.image-repo }}
-
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          tags: ${{ matrix.image }}:${{ steps.common-tag.outputs.common-tag }}
-          labels: ${{ steps.labels.outputs.labels }}
-          load: true
-          push: false
-          file: ${{ matrix.file }}
-          build-args: ${{ matrix.build-args }}
-          cache-from: |
-            type=registry,ref=${{ matrix.cache }}:${{ steps.prefix.outputs.prefix }}master
-            type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }}
-
-      - name: Cache image build
-        uses: docker/build-push-action@v6
-        continue-on-error: true  # Tolerate cache upload failures - this should be handled better
-        with:
-          context: .
-          file: ${{ matrix.file }}
-          build-args: ${{ matrix.build-args }}
-          cache-to: type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }},mode=max
-
-      - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
-        uses: actions/setup-python@v6
-        with:
-          # Ensure that this matches saw-python/mypy.ini file
-          # and that saw-python/pyproject.toml file is compatible with this version
-          python-version: '3.12'
-
-      - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
-        uses: abatilo/actions-poetry@v4
-        with:
-          poetry-version: 2.4.1
-
-      - if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
-        name: Test saw-remote-api
-        run: ./saw-remote-api/scripts/test_docker.sh ${{ matrix.image }}:$COMMON_TAG
-
-      - if: needs.config.outputs.event-schedule == 'true'
-        name: ${{ matrix.image }}:nightly
-        run: |
-          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:nightly
-          docker push ${{ matrix.image }}:nightly
-
-      - if: needs.config.outputs.is-stable-branch == 'true'
-        name: ${{ matrix.image }}:${{ matrix.image-tag }}
-        run: |
-          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:${{ matrix.image-tag }}
-          docker push ${{ matrix.image }}:${{ matrix.image-tag }}
-          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:latest
-          docker push ${{ matrix.image }}:latest
-
   s2n-tests:
-    name: "Test s2n proofs"
+    name: "Test s2n proofs: ${{ matrix.s2n-target }}"
     timeout-minutes: 150
     needs: build
     runs-on: ${{ matrix.os }}
@@ -1201,8 +1353,12 @@ jobs:
         os: [ubuntu-24.04]
         ghc: ["9.6.7"]
     steps:
-      - uses: actions/checkout@v7
-      - run: |
+      - name: Check out the repository without submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: false
+      - name: Create bin dir
+        run: |
           mkdir -p s2nTests/bin
 
       - name: Download previously-built SAW
@@ -1211,27 +1367,28 @@ jobs:
           name: "${{ matrix.os }}-bins"
           path: ./s2nTests/bin
 
-      - shell: bash
+      - name: Do docker-compose pull
+        shell: bash
         working-directory: s2nTests
         run: |
           docker compose pull --ignore-buildable
           grep -h '^FROM' docker/*.dockerfile | sort -u | awk '{print $2}' | xargs -n1 -P8 docker pull
 
-      - shell: bash
-        name: "make s2n"
+      - name: Do docker-compose build
+        shell: bash
         working-directory: s2nTests
         run: docker compose build s2n
 
-      - uses: actions/cache/restore@v6
-        name: Restore SMT solver result cache
+      - name: Restore SMT solver result cache
+        uses: actions/cache/restore@v6
         with:
           path: s2nTests/cache
           key: ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-${{ github.sha }}
           restore-keys:
             ${{ env.SOLVER_CACHE_VERSION }}-solver-s2n-${{ matrix.s2n-target }}-${{ matrix.ghc }}-
 
-      - shell: bash
-        name: "s2n tests: ${{ matrix.s2n-target }}"
+      - name: "Run s2n tests: ${{ matrix.s2n-target }}"
+        shell: bash
         working-directory: s2nTests
         run: |
           chmod +x bin/*
@@ -1239,8 +1396,8 @@ jobs:
           chmod -R +rw cache
           make ${{ matrix.s2n-target }}
 
-      - uses: actions/cache/save@v6
-        name: Save SMT solver result cache
+      - name: Save SMT solver result cache
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: s2nTests/cache
@@ -1255,8 +1412,12 @@ jobs:
         os: [ubuntu-24.04]
         ghc: ["9.6.7"]
     steps:
-      - uses: actions/checkout@v7
-      - run: |
+      - name: Check out the repository without submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: false
+      - name: Create bin dir
+        run: |
           mkdir -p exercises/bin
 
       - name: Download previously-built SAW
@@ -1265,35 +1426,61 @@ jobs:
           name: "${{ matrix.os }}-bins"
           path: ./exercises/bin
 
-      - shell: bash
-        name: "make exercises container"
+      - name: "Make the exercises container"
+        shell: bash
         working-directory: exercises
         run: docker build -t exercises .
 
-      - shell: bash
-        name: "run exercises"
+      - name: "Run the exercises"
+        shell: bash
         working-directory: exercises
         run: |
           chmod +x bin/*
           docker run -v $PWD/bin:/saw-bin exercises
 
-  # Indicates sufficient CI success for the purposes of mergify merging the pull
-  # request, see .github/mergify.yml. This is done instead of enumerating each
-  # instance of each job in the mergify configuration for a number of reasons:
-  # - continue-on-error is respected, won't block merge
-  # - changes to jobs or job instances don't require a mergify config update
-  # - dependencies through `needs:` are validated, CI will fail if it's invalid
-  mergify:
+############################################################
+#
+# Misc jobs
+#
+
+# All of this is indented two spaces because it actually hangs under
+# the "jobs:" line in the "job config" section above.
+
+  # The source archives that github autogenerates for releases do not
+  # include submodules, and also do not include submodule references, so
+  # they are unbuildable and broken. See issue 2532.
+  #
+  # We only need one of these. Run it on Ubuntu so as to be sure to get GNU tar.
+  source-archive:
     runs-on: ubuntu-24.04
-    needs:
-      - build
-      - rocq-builds
-      - isabelle-builds
-      - crux-mir-comp-tests
-      - saw-remote-api-tests
-      - cabal-test
-      - coverage
-      - s2n-tests
-      - exercises
+    needs: [config]
+    if: needs.config.outputs.want-source-archive == true
+    strategy:
+      fail-fast: false
     steps:
-      - run: "true"
+      - name: Report relevant config
+        run: |
+          echo "Want source archive: ${{ needs.config.outputs.want-source-archive }}"
+
+      - name: Check out the repository with submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: true
+      - name: Create the source distribution
+        id: make-source-distribution
+        shell: bash
+        run: .github/ci.sh make_source_distribution ${{ needs.config.outputs.name }}
+      - name: Sign the source distribution
+        id: sign-source-distribution
+        shell: bash
+        run: .github/ci.sh sign ${{ needs.config.outputs.name }}-sources.tar.gz
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+      - name: Upload the source distribution
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ needs.config.outputs.name }}-sources (full source distribution)
+          path: ${{ needs.config.outputs.name }}-sources.tar.gz
+          if-no-files-found: error
+          retention-days: ${{ needs.config.outputs.retention-days }}
