@@ -235,7 +235,7 @@ jobs:
     name: "Deploy SAW documentation to GitHub Pages"
     needs: [config, build-docs]
     runs-on: ${{ matrix.os }}
-    if: needs.config.outputs.want-deploy-docs == true
+    if: needs.config.outputs.want-deploy-docs == 'true'
     strategy:
       matrix:
         os: [ubuntu-24.04]
@@ -394,7 +394,7 @@ jobs:
       # Do not run this step in forks, as this requires repo-specific secrets.
       - name: Import signing certificate (macOS)
         uses: apple-actions/import-codesign-certs@v7
-        if: runner.os == 'macOS' && needs.config.outputs.want-signing == true
+        if: runner.os == 'macOS' && needs.config.outputs.want-signing == 'true'
         with:
           p12-file-base64: ${{ secrets.APPLE_P12_CERTIFICATE }}
           p12-password: ${{ secrets.APPLE_P12_PASSWORD }}
@@ -441,7 +441,7 @@ jobs:
       - shell: bash
         run: .github/ci.sh build_cryptol
 
-      - if: matrix.haddock == true
+      - if: matrix.haddock == 'true'
         shell: bash
         run: .github/ci.sh haddock
 
@@ -465,14 +465,13 @@ jobs:
       # In the next 2 steps, we upload to different names depending on whether
       # the binaries were compiled using HPC or not. This is done to ensure that
       # the HPC-enabled binaries do not clobber the non-HPC-enabled binaries.
-      - uses: actions/upload-artifact@v5
-        if: matrix.ghc == '9.6.7' && matrix.hpc == false
+        if: matrix.ghc == '9.6.7' && matrix.hpc == 'false'
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}
 
       - uses: actions/upload-artifact@v5
-        if: matrix.ghc == '9.6.7' && matrix.hpc == true
+        if: matrix.ghc == '9.6.7' && matrix.hpc == 'true'
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}-hpc
@@ -486,7 +485,7 @@ jobs:
       # On macOS, code sign the binaries to verify that Galois is the author.
       # Do not run this step in forks, as this requires repo-specific secrets.
       - name: Sign binaries (macOS)
-        if: runner.os == 'macOS' && needs.config.outputs.want-signing == true
+        if: runner.os == 'macOS' && needs.config.outputs.want-signing == 'true'
         env:
           IDENTITY_NAME: ${{ secrets.APPLE_P12_IDENTITY_NAME }}
         run: |
@@ -499,7 +498,7 @@ jobs:
       # On macOS, notarize the binaries so that users can run them without
       # needing to whitelist them.
       - name: Notarize binaries (macOS)
-        if: runner.os == 'macOS' && needs.config.outputs.want-signing == true && needs.config.outputs.want-apple-notarization == true
+        if: runner.os == 'macOS' && needs.config.outputs.want-signing == 'true' && needs.config.outputs.want-apple-notarization == 'true'
         env:
           KEY_ID: ${{ secrets.APPLE_P8_KEY_ID }}
           ISSUER_ID: ${{ secrets.APPLE_P8_ISSUER_ID }}
@@ -566,7 +565,7 @@ jobs:
       # In the next 3 steps we check that `matrix.hpc == false` so that if the
       # distribution version matches the HPC version, the HPC build artifacts do
       # not clobber the non-HPC distribution artifacts.
-      - if: matrix.ghc == '9.6.7' && matrix.hpc == false
+      - if: matrix.ghc == '9.6.7' && matrix.hpc == 'false'
         uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -574,7 +573,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '9.6.7' && matrix.hpc == false
+      - if: matrix.ghc == '9.6.7' && matrix.hpc == 'false'
         uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.name }}-with-solvers
@@ -582,7 +581,7 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '9.6.7' && matrix.hpc == false
+      - if: matrix.ghc == '9.6.7' && matrix.hpc == 'false'
         uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.crux-name }} (GHC ${{ matrix.ghc }})
@@ -590,17 +589,17 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - if: matrix.ghc == '9.6.7' && matrix.run-tests && matrix.hpc == false
+      - if: matrix.ghc == '9.6.7' && matrix.run-tests && matrix.hpc == 'false'
         uses: actions/upload-artifact@v5
         with:
           path: dist/bin
           name: ${{ matrix.os }}-bins
 
-      - if: matrix.hpc == true
+      - if: matrix.hpc == 'true'
         shell: bash
         run: .github/ci.sh collect_hpc_files
 
-      - if: matrix.hpc == true
+      - if: matrix.hpc == 'true'
         uses: actions/upload-artifact@v5
         with:
           path: hpc.tar.gz
@@ -622,7 +621,7 @@ jobs:
     # will be available. As noted above, scheduled runs also happen in
     # forks. It would be nice to run all of it but the final push step,
     # but we appear to need docker login to build.
-    if: needs.config.outputs.want-docker-images == true
+    if: needs.config.outputs.want-docker-images == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -1130,7 +1129,7 @@ jobs:
     # unless it has GITHUB_TOKEN permissions from a user within the GaloisInc
     # organization (see #2216). Also exclude dependabot, because it apparently
     # works like a fork but isn't one. See crucible #1642 for discussion.
-    if: needs.config.outputs.want-coverage == true
+    if: needs.config.outputs.want-coverage == 'true'
     strategy:
       matrix:
         suite: ['integration-tests']
@@ -1342,7 +1341,7 @@ jobs:
   source-archive:
     runs-on: ubuntu-24.04
     needs: [config]
-    if: needs.config.outputs.want-source-archive == true
+    if: needs.config.outputs.want-source-archive == 'true'
     strategy:
       fail-fast: false
     steps:
