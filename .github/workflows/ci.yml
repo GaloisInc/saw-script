@@ -38,6 +38,26 @@
 # other jobs (do not require bins)
 #    - source-archive (extracts a working source archive for releases)
 
+# Notes on eval for conditionals:
+#
+# It seems that in an if: line, you must:
+#    - not use ${{ }}, just write an undecorated expression;
+#    - if you take a boolean value from the context (e.g.
+#       needs.config.outputs.*), you must explicitly compare it to the
+#       _string_ values 'true' or 'false'.
+#
+# Apparently storing and retrieving values this way "promotes"
+# booleans to strings, and then either value, not being '', evaluates
+# to true in a boolean context. But of course this doesn't produce a
+# type error (even a runtime type error), it just silently
+# misbehaves. There also doesn't appear to be any debug mode for job
+# or step conditionals, so if you get any of this wrong it just
+# executes wrong and it's hard to figure why.
+#
+# It might be that sticking one of these values in a specifically
+# boolean context (like "foo.x && foo.y") will evaluate it as a
+# boolean rather than a string, but more likely not and I'm not
+# inclined to argue with it.
 
 ############################################################
 #
@@ -65,6 +85,12 @@
 # in forks. All logic that triggers on scheduled runs needs to also
 # check whether the repository is ours if appropriate.
 # See https://github.com/orgs/community/discussions/16109.
+#
+# Meanwhile, be advised that the patterns in the tag and release
+# branch matching are not regexps, they're some kind of overboosted
+# globs. Check the GH documentation before you change the patterns,
+# especially because the only way to test the release tag patterns is
+# to tag a release.
 
 name: SAWScript
 on:
