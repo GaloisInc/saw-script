@@ -2611,7 +2611,23 @@ genCodeForEnum sc nt ctors =
            }
 
      (dtName, ctorNames) <- scDefineDataType sc dtSpec
-     ctor_tms <- traverse (scConst sc) ctorNames
+     rawCtorTms <- traverse (scConst sc) ctorNames
+
+     -- A nominal type's constraints are included in the Cryptol schemas for
+     -- its constructors.  The underlying SAWCore datatype constructors do not
+     -- need these proof arguments, so eta-expand them with ignored binders to
+     -- keep the generated terms in sync with their Cryptol schemas.
+     let wrapCtor c rawCtor = do
+           ctor <- scApplyAll sc rawCtor params
+           (_, propVars) <-
+             bindProps sc env
+               (filter (not . isErasedProp) (C.ntConstraints nt))
+               "_P"
+           argTys <- traverse (importType sc env) (C.ecFields c)
+           argVars <- traverse (scFreshVariable sc "_") argTys
+           body <- scApplyAll sc ctor argVars
+           scAbstractTerms sc (params ++ propVars ++ argVars) body
+     ctorTms <- sequence (zipWith wrapCtor ctors rawCtorTms)
 
      -- Derive PEq class instance.
      let ctorArgTypes = [ [ t | (_, ConstArg t) <- cspecArgs c ] | c <- ctorSpecs ]
@@ -2630,7 +2646,7 @@ genCodeForEnum sc nt ctors =
        Just assms -> deriveSignedCmpInstance sc env dtName (dtsParams dtSpec) assms ctorArgTypes
 
      -- Return list of constructor names and terms.
-     pure (zip (map C.ecName ctors) ctor_tms)
+     pure (zip (map C.ecName ctors) ctorTms)
 
 
 -- | importCase - translates a Cryptol case expr to SAWCore: an application
