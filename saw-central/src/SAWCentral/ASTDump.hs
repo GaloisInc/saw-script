@@ -131,7 +131,6 @@ dumpType ty0 = case ty0 of
               TypeCon -> "Type"
               BoolCon -> "Bool"
               IntCon -> "Int"
-              BlockCon -> "Block"
               AIGCon -> "AIG"
               CFGCon -> "CFG"
               JVMSpecCon -> "JVMSpec"
@@ -139,6 +138,12 @@ dumpType ty0 = case ty0 of
               MIRSpecCon -> "MIRSpec"
               ContextCon ProofScript -> "ProofScript"
               ContextCon TopLevel -> "TopLevel"
+        in
+        Dump.subelements ("TyCon " <> tycon') (prov' : map dumpType args)
+    TyAltCon prov tycon args ->
+        let prov' = dumpTypeProvenance prov in
+        let tycon' = case tycon of
+              BlockCon -> "Block"
         in
         Dump.subelements ("TyCon " <> tycon') (prov' : map dumpType args)
     TyFunc prov npi params namedParams ret ->

@@ -122,6 +122,7 @@ instance (UnifyVars a) => UnifyVars (Pos, PrimitiveLifecycle, Rebindable, a) whe
 instance UnifyVars Type where
     unifyVars t = case t of
         TyCon _ _ ts      -> unifyVars ts
+        TyAltCon _ _ ts   -> unifyVars ts
         TyFunc _ _ params namedParams ret ->
             let paramsVars = unifyVars params
                 namedVars = unifyVars namedParams
@@ -250,6 +251,7 @@ instance AppSubst Decl where
 instance AppSubst Type where
     appSubst s t = case t of
         TyCon prov tc ts -> TyCon prov tc (appSubst s ts)
+        TyAltCon prov tc ts -> TyAltCon prov tc (appSubst s ts)
         TyFunc prov ninfo params namedParams ret ->
             let params' = appSubst s params
                 namedParams' = appSubst s namedParams
@@ -899,9 +901,11 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
           JVMSpecCon -> "JVMSpec"
           LLVMSpecCon -> "LLVMSpec"
           MIRSpecCon -> "MIRSpec"
-          BlockCon -> Text.intercalate " " args
           ContextCon ProofScript -> "ProofScript"
           ContextCon TopLevel -> "TopLevel"
+    in
+    let ppTyAltCon' tc args = case tc of
+          BlockCon -> Text.intercalate " " args
     in
 
     -- | Get a subelement descriptor for a type constructor.
@@ -909,10 +913,13 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
         describeTyConElt tc i = case tc of
           TupleCon _n -> ordin (i + 1) <> " element"
           ArrayCon -> "element type"
+          _ -> "???"  -- catchall for things that don't have subelements
+    in
+    let describeTyAltConElt :: TyAltCon -> Int -> Text
+        describeTyAltConElt tc i = case tc of
           BlockCon -> case i of
               0 -> "monad"
               _ -> ordin i <> " argument"
-          _ -> "???"  -- catchall for things that don't have subelements
     in
 
 
@@ -1006,6 +1013,11 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
                         (elts', subelts) = considerList getWhat prov elts
                     in
                     (ppTyCon' tc elts', prov, subelts)
+                TyAltCon prov tc elts ->
+                    let getWhat = describeTyAltConElt tc
+                        (elts', subelts) = considerList getWhat prov elts
+                    in
+                    (ppTyAltCon' tc elts', prov, subelts)
                 TyFunc prov _npi params namedParams ret ->
                     let mkWhat i = ordin (i + 1) <> " positional parameter"
                         (params', elts1) = considerList mkWhat prov params
@@ -1426,6 +1438,33 @@ unify exp0 pos found0 = visit [] exp0 found0
 
                 recList expTS foundTS
 
+            (TyAltCon _ expTC expTS, TyAltCon _ foundTC foundTS) | expTC == foundTC -> do
+                -- same type constructor, unify the args
+                when (length expTS /= length foundTS) $ do
+                    -- This case is unreachable.
+                    --
+                    -- Every distinct type constructor has a definite
+                    -- arity (tuples of different lengths are not the same
+                    -- type constructor) and every type is supposed to
+                    -- pass `checkType` before we do anything more
+                    -- significant with it; that does a kind check, and on
+                    -- failure produces a fresh unification var that can't
+                    -- cause further trouble.
+                    --
+                    -- Therefore, if we get here, something's broked and we should
+                    -- panic.
+                    --
+                    ppopts <- asks tiPPOpts
+                    let expTS'   = "LHS:" : map (\t -> "   " <> ppType ppopts t) expTS
+                        foundTS' = "RHS:" : map (\t -> "   " <> ppType ppopts t) foundTS
+                    let nexpect'   = Text.pack $ show $ length expTS
+                        nfound' = Text.pack $ show $ length foundTS
+                        heading = "Mismatched type constructor arguments: " <>
+                                  "expected " <> nexpect' <> ", found " <> nfound'
+                    panic "unify" (heading : expTS' ++ foundTS')
+
+                recList expTS foundTS
+
             (TyVar _ a, TyVar _ b) | a == b ->
                 -- Same named variable, nothing to do
                 pure ()
@@ -1506,6 +1545,9 @@ inspectTypeFTVs :: Kind -> Type -> TI (Map Name (Pos, Kind))
 inspectTypeFTVs kind ty = case ty of
     TyCon _prov ctor args -> do
         let kinds = lookupTyCon ctor
+        Map.unions <$> zipWithM inspectTypeFTVs kinds args
+    TyAltCon _prov ctor args -> do
+        let kinds = lookupTyAltCon ctor
         Map.unions <$> zipWithM inspectTypeFTVs kinds args
     TyFunc _prov _ params namedParams ret ->
         let np = Map.elems namedParams in
@@ -2374,9 +2416,9 @@ addTypedef a ty = do
 --
 monadType :: Type -> Maybe (Type, Type)
 monadType ty = case ty of
-  TyCon _ BlockCon [ctx@(TyCon _ (ContextCon _) []), valty] ->
+  TyAltCon _ BlockCon [ctx@(TyCon _ (ContextCon _) []), valty] ->
       Just (ctx, valty)
-  TyCon _ BlockCon [ctx@(TyVar _ name), valty] | isMonad name ->
+  TyAltCon _ BlockCon [ctx@(TyVar _ name), valty] | isMonad name ->
       Just (ctx, valty)
   -- We don't currently ever generate these types, but be future-proof
   TyCon prov (ContextCon ctx) [valty] ->
@@ -2905,13 +2947,16 @@ lookupTyCon tycon = case tycon of
     TypeCon -> []
     BoolCon -> []
     IntCon -> []
-    BlockCon -> [kindStarToStar, kindStar]
     AIGCon -> []
     CFGCon -> []
     JVMSpecCon -> []
     LLVMSpecCon -> []
     MIRSpecCon -> []
     ContextCon _ctx -> [kindStar]
+
+lookupTyAltCon :: TyAltCon -> [Kind]
+lookupTyAltCon tycon = case tycon of
+    BlockCon -> [kindStarToStar, kindStar]
 
 -- | Check if a list of types contains a failure type. If so, return
 --   it. Uses `Either` with unit rather than `Maybe` so as to get the
@@ -2945,16 +2990,9 @@ checkType kind ty = case ty of
             argsleft = kindNumArgs kind
 
         if nargs > nparams then do
-            -- XXX special casing for BlockCon (remove along with BlockCon)
-            (nargs', nparams', tycon') <-
-                  case (tycon, args) of
-                      (BlockCon, arg : _) -> do
-                          ppopts <- asks tiPPOpts
-                          let ty' = prettyType ppopts arg
-                          pure (PP.viaShow $ nargs - 1, PP.viaShow $ nparams - 1, ty')
-                      (_, _) -> do
-                          let ty' = prettyTyCon tycon
-                          pure (PP.viaShow nargs, PP.viaShow nparams, ty')
+            let nargs' = PP.viaShow nargs
+                nparams' = PP.viaShow nparams
+                tycon' = prettyTyCon tycon
 
             let pos = Pos.getPos prov
             recordError pos $ "Too many type arguments for type constructor" <+>
@@ -2979,14 +3017,63 @@ checkType kind ty = case ty of
             -- should make a new one, but it's fresh and we can
             -- safely repurpose it.) This is a hack to avoid returning
             -- types _containing_ error vars out, which then lead to
-            -- ugly and confusing further errors downstream. When
-            -- we manage to kill off Block it should be revisited,
-            -- because that will change the way type applications are
-            -- done and that will likely change the way miskinded
-            -- type applications are seen.
+            -- ugly and confusing further errors downstream.
             pure $ case checkForFailure args' of
                 Left ty' -> ty'
                 Right () -> TyCon prov tycon args'
+
+    TyAltCon prov tycon args -> do
+
+        -- First, look up the constructor.
+        let params = lookupTyAltCon tycon
+        let nparams = genericLength params
+            nargs = genericLength args
+            argsleft = kindNumArgs kind
+
+        if nargs > nparams then case tycon of
+            BlockCon -> do
+                ppopts <- asks tiPPOpts
+                let nargs' = PP.viaShow $ nargs - 1
+                    nparams' = PP.viaShow $ nparams - 1
+                    arg = case args of
+                        a : _ -> a
+                        [] ->
+                            panic "checkType / TyAltCon" [
+                                "impossible empty args with 0 > 2"
+                            ]
+                    tycon' = prettyType ppopts arg
+
+                let pos = Pos.getPos prov
+                recordError pos $ "Too many type arguments for type constructor" <+>
+                                  tycon' <> "; found" <+> nargs' <+>
+                                  "but expected only" <+> nparams'
+                getErrorTyVar pos
+        else if nargs + argsleft /= nparams then do
+            let pos = Pos.getPos prov
+            let kind' = prettyKind kind
+                kindExp' = prettyKind $ Kind (nparams - nargs)
+            recordError pos $ "Kind mismatch: expected" <+> kind' <+>
+                              "but found" <+> kindExp'
+            getErrorTyVar pos
+        else do
+            -- note that this will ignore the extra params, and return
+            -- a list of the same length as the args given, which is
+            -- exactly what we need here.
+            args' <- zipWithM checkType params args
+
+            -- If any of the arguments is an error var, something was
+            -- invalid. Return the error var directly. (Properly we
+            -- should make a new one, but it's fresh and we can safely
+            -- repurpose it.) This is a hack to avoid returning types
+            -- _containing_ error vars out, which then lead to ugly
+            -- and confusing further errors downstream. This may need
+            -- to be revisited as we work to remove Block, because
+            -- that will change the way type applications are done and
+            -- that will likely change the way miskinded type
+            -- applications are seen.
+            pure $ case checkForFailure args' of
+                Left ty' -> ty'
+                Right () -> TyAltCon prov tycon args'
 
     TyFunc prov nameinfo params namedParams ret -> do
         if kind /= kindStar then do
