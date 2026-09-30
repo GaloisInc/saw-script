@@ -240,7 +240,7 @@ injectPositionIntoMonadicValue :: SS.Pos -> Value -> Value
 injectPositionIntoMonadicValue pos v = case v of
     VTopLevel _oldpos chain f -> VTopLevel pos chain f
     VProofScript _oldpos chain f -> VProofScript pos chain f
-    VLLVMCrucibleSetup _oldpos chain f -> VLLVMCrucibleSetup pos chain f
+    VLLVMSetup _oldpos chain f -> VLLVMSetup pos chain f
     VJVMSetup _oldpos chain f -> VJVMSetup pos chain f
     VMIRSetup _oldpos chain f -> VMIRSetup pos chain f
     _ -> v
@@ -254,7 +254,7 @@ insertRefChain pos name v =
     VBindOnce bindpos chain v1 v2 -> VBindOnce bindpos (insert chain) v1 v2
     VTopLevel vpos chain f -> VTopLevel vpos (insert chain) f
     VProofScript vpos chain f -> VProofScript vpos (insert chain) f
-    VLLVMCrucibleSetup vpos chain f -> VLLVMCrucibleSetup vpos (insert chain) f
+    VLLVMSetup vpos chain f -> VLLVMSetup vpos (insert chain) f
     VJVMSetup vpos chain f -> VJVMSetup vpos (insert chain) f
     VMIRSetup vpos chain f -> VMIRSetup vpos (insert chain) f
     _ -> v
@@ -272,7 +272,7 @@ propagateRefChain chain1 v =
     VBindOnce pos chain2 v1 v2 -> VBindOnce pos (insert chain2) v1 v2
     VTopLevel pos chain2 f -> VTopLevel pos (insert chain2) f
     VProofScript pos chain2 f -> VProofScript pos (insert chain2) f
-    VLLVMCrucibleSetup pos chain2 f -> VLLVMCrucibleSetup pos (insert chain2) f
+    VLLVMSetup pos chain2 f -> VLLVMSetup pos (insert chain2) f
     VJVMSetup pos chain2 f -> VJVMSetup pos (insert chain2) f
     VMIRSetup pos chain2 f -> VMIRSetup pos (insert chain2) f
     _ -> v
@@ -461,7 +461,7 @@ instance InterpreterMonad ProofScript where
 instance InterpreterMonad LLVMCrucibleSetupM where
   liftTopLevel m = llvmTopLevel m
   actionFromValue = fromValue
-  mkValue pos chain m = VLLVMCrucibleSetup pos chain m
+  mkValue pos chain m = VLLVMSetup pos chain m
   getMonadContext = panic "getMonadContext" ["Called in LLVMSetup"]
   pushScopeAny = llvmTopLevel pushScope
   popScopeAny = llvmTopLevel popScope
@@ -2100,7 +2100,7 @@ instance FromValue a => FromValue (ProofScript a) where
 instance IsValue a => IsValue (LLVMCrucibleSetupM a) where
     toValue ty name m = case ty of
         SS.TyCon _ SS.BlockCon [SS.TyVar _ "LLVMSetup", ty'a] ->
-            VLLVMCrucibleSetup atRestPos [] (fmap (toValue ty'a name) m)
+            VLLVMSetup atRestPos [] (fmap (toValue ty'a name) m)
         _ ->
             toValuePanic "LLVMSetup" ty
 
@@ -2108,7 +2108,7 @@ instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
     fromValue how v = do
       v' <- interpretMonadAction how v
       case v' of
-        VLLVMCrucibleSetup pos chain action ->
+        VLLVMSetup pos chain action ->
           fromValue how <$> preparePlainMonadicAction how pos chain action
         _ ->
           panic "fromValue (LLVMSetup)" [
@@ -2154,12 +2154,12 @@ instance FromValue a => FromValue (MIRSetupM a) where
 instance IsValue (CIR.AllLLVM CMS.SetupValue) where
     toValue ty _name v = case ty of
         SS.TyVar _ "LLVMValue" ->
-            VLLVMCrucibleSetupValue v
+            VLLVMSetupValue v
         _ ->
             toValuePanic "LLVMValue" ty
 
 instance FromValue (CIR.AllLLVM CMS.SetupValue) where
-  fromValue _ (VLLVMCrucibleSetupValue v) = v
+  fromValue _ (VLLVMSetupValue v) = v
   fromValue _ _ = error "fromValue Crucible.SetupValue"
 
 instance IsValue (CMS.SetupValue CJ.JVM) where
@@ -2198,12 +2198,12 @@ instance FromValue SAW_CFG where
 instance IsValue (CIR.SomeLLVM CMS.ProvedSpec) where
     toValue ty _name mir = case ty of
         SS.TyCon _ SS.LLVMSpecCon [] ->
-            VLLVMCrucibleMethodSpec mir
+            VLLVMMethodSpec mir
         _ ->
             toValuePanic "LLVMSpec" ty
 
 instance FromValue (CIR.SomeLLVM CMS.ProvedSpec) where
-    fromValue _ (VLLVMCrucibleMethodSpec mir) = mir
+    fromValue _ (VLLVMMethodSpec mir) = mir
     fromValue _ _ = error "fromValue ProvedSpec LLVM"
 
 instance IsValue (CMS.ProvedSpec CJ.JVM) where
@@ -3162,7 +3162,7 @@ do_offline_rocq f =
   offline_rocq (Text.unpack f)
 
 do_offline_isabelle :: Text -> ProofScript ()
-do_offline_isabelle t = 
+do_offline_isabelle t =
   offline_isabelle (Text.unpack t)
 
 do_write_isabelle_term :: Text -> Text -> Term -> TopLevel ()

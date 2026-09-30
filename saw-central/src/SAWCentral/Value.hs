@@ -441,7 +441,7 @@ type RefChain = [(SS.Pos, SS.Name)]
 --        monadic actions:
 --           VTopLevel
 --           VProofScript
---           VLLVMCrucibleSetup
+--           VLLVMSetup
 --           VJVMSetup
 --           VMIRSetup
 --
@@ -648,9 +648,9 @@ data Value
   -----
     -- | A plain value containing a Haskell-level action in LLVMSetup.
     --   Like a VTopLevel, except in the other monad.
-  | VLLVMCrucibleSetup SS.Pos RefChain !(LLVMCrucibleSetupM Value)
-  | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.ProvedSpec)
-  | VLLVMCrucibleSetupValue (CMSLLVM.AllLLVM CMS.SetupValue)
+  | VLLVMSetup SS.Pos RefChain !(LLVMCrucibleSetupM Value)
+  | VLLVMMethodSpec (CMSLLVM.SomeLLVM CMS.ProvedSpec)
+  | VLLVMSetupValue (CMSLLVM.AllLLVM CMS.SetupValue)
   -----
     -- | A plain value containing a Haskell-level action in JVMSetup.
     --   Like a VTopLevel, except in the other monad.
@@ -824,9 +824,9 @@ prettyValue sc = visit (0 :: Int)
         ppopts <- scGetPPOpts sc
         pure $ "Theorem" <+> PP.parens (prettyTheorem ppopts nenv thm)
       VBisimTheorem _ -> pure "<<Bisimulation theorem>>"
-      VLLVMCrucibleSetup{} -> pure "<<LLVM Setup>>"
-      VLLVMCrucibleSetupValue x -> CMS.prettySetupValue sc $ CMSLLVM.getAllLLVM x
-      VLLVMCrucibleMethodSpec{} -> pure "<<LLVM MethodSpec>>"
+      VLLVMSetup{} -> pure "<<LLVM Setup>>"
+      VLLVMSetupValue x -> CMS.prettySetupValue sc $ CMSLLVM.getAllLLVM x
+      VLLVMMethodSpec{} -> pure "<<LLVM MethodSpec>>"
       VLLVMModuleSkeleton s -> pure $ PP.viaShow s
       VLLVMFunctionSkeleton s -> pure $ PP.viaShow s
       VLLVMSkeletonState _ -> pure "<<Skeleton state>>"
@@ -891,9 +891,9 @@ uglyValue v0 = case v0 of
     VProofScript{} -> "<<proof script>>"
     VTheorem{} -> "<<Theorem>>"
     VBisimTheorem{} -> "<<Bisimulation theorem>>"
-    VLLVMCrucibleSetup{} -> "<<LLVM Setup>>"
-    VLLVMCrucibleSetupValue{} -> "<<LLVM Value>>"
-    VLLVMCrucibleMethodSpec{} -> "<<LLVM MethodSpec>>"
+    VLLVMSetup{} -> "<<LLVM Setup>>"
+    VLLVMSetupValue{} -> "<<LLVM Value>>"
+    VLLVMMethodSpec{} -> "<<LLVM MethodSpec>>"
     VLLVMModuleSkeleton{} -> "<<Module skeleton>>"
     VLLVMFunctionSkeleton{} -> "<<Function skeleton>>"
     VLLVMSkeletonState{} -> "<<Skeleton state>>"
@@ -1040,7 +1040,7 @@ rwSetCryptolEnv :: CEnv.CryptolEnv -> TopLevelRW -> TopLevelRW
 rwSetCryptolEnv ce rw =
     let Environ varenv tyenv _ = rwEnviron rw
     in rw { rwEnviron = Environ varenv tyenv ce }
- 
+
 -- | Modify the current Cryptol environment in a TopLevelRW.
 --
 --   (Accessor method for use in SAWServer and SAWScript.REPL, which
@@ -1415,7 +1415,7 @@ recordTheoremProof :: Theorem -> TopLevel ()
 recordTheoremProof thm = recordProof (VTheorem thm)
 
 returnLLVMProof :: CMSLLVM.SomeLLVM CMS.ProvedSpec -> TopLevel (CMSLLVM.SomeLLVM CMS.ProvedSpec)
-returnLLVMProof ms = recordProof (VLLVMCrucibleMethodSpec ms) >> return ms
+returnLLVMProof ms = recordProof (VLLVMMethodSpec ms) >> return ms
 
 returnJVMProof :: CMS.ProvedSpec CJ.JVM -> TopLevel (CMS.ProvedSpec CJ.JVM)
 returnJVMProof ms = recordProof (VJVMMethodSpec ms) >> return ms
