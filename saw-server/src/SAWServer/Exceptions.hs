@@ -17,8 +17,6 @@ module SAWServer.Exceptions (
   , notAMIRMethodSpecIR
   , notAMIRAdt
   -- * Wrong monad errors
-  , notSettingUpCryptol
-  , notSettingUpLLVMCrucible
   , notAtTopLevel
   -- * Cryptol errors
   , cryptolError
@@ -137,14 +135,7 @@ notAJVMMethodSpecIR name =
      " is not a JVM method specification")
     (Just $ object ["name" .= name])
 
-notSettingUpCryptol :: JSONRPCException
-notSettingUpCryptol =
-  makeJSONRPCException 10100 "Not currently setting up Cryptol" noData
-
-notSettingUpLLVMCrucible :: JSONRPCException
-notSettingUpLLVMCrucible =
-  makeJSONRPCException
-    10110 "Not currently setting up Crucible/LLVM" noData
+-- Exception codes 10100 and 10110 are currently unused
 
 notAtTopLevel :: ToJSON a => [a] -> JSONRPCException
 notAtTopLevel tasks =
@@ -235,6 +226,3 @@ cryptolError message =
   makeJSONRPCException
     11000 "Cryptol exception"
     (Just (JSON.object ["error" .= message]))
-
-noData :: Maybe ()
-noData = Nothing
