@@ -122,7 +122,7 @@ instance (UnifyVars a) => UnifyVars (Pos, PrimitiveLifecycle, Rebindable, a) whe
 instance UnifyVars Type where
     unifyVars t = case t of
         TyCon _ _ ts      -> unifyVars ts
-        TyAltCon _ _ ts   -> unifyVars ts
+        TyApplyMonad _ ts   -> unifyVars ts
         TyFunc _ _ params namedParams ret ->
             let paramsVars = unifyVars params
                 namedVars = unifyVars namedParams
@@ -251,7 +251,7 @@ instance AppSubst Decl where
 instance AppSubst Type where
     appSubst s t = case t of
         TyCon prov tc ts -> TyCon prov tc (appSubst s ts)
-        TyAltCon prov tc ts -> TyAltCon prov tc (appSubst s ts)
+        TyApplyMonad prov ts -> TyApplyMonad prov (appSubst s ts)
         TyFunc prov ninfo params namedParams ret ->
             let params' = appSubst s params
                 namedParams' = appSubst s namedParams
@@ -904,9 +904,6 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
           ContextCon ProofScript -> "ProofScript"
           ContextCon TopLevel -> "TopLevel"
     in
-    let ppTyAltCon' tc args = case tc of
-          BlockCon -> Text.intercalate " " args
-    in
 
     -- | Get a subelement descriptor for a type constructor.
     let describeTyConElt :: TyCon -> Int -> Text
@@ -915,13 +912,6 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
           ArrayCon -> "element type"
           _ -> "???"  -- catchall for things that don't have subelements
     in
-    let describeTyAltConElt :: TyAltCon -> Int -> Text
-        describeTyAltConElt tc i = case tc of
-          BlockCon -> case i of
-              0 -> "monad"
-              _ -> ordin i <> " argument"
-    in
-
 
     -- Print a type, substituting "_" for subelements we want to print
     -- separately, and return the resulting string, the provenance
@@ -1013,11 +1003,13 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
                         (elts', subelts) = considerList getWhat prov elts
                     in
                     (ppTyCon' tc elts', prov, subelts)
-                TyAltCon prov tc elts ->
-                    let getWhat = describeTyAltConElt tc
+                TyApplyMonad prov elts ->
+                    let getWhat i = case i of
+                          0 -> "monad"
+                          _ -> ordin i <> " argument"
                         (elts', subelts) = considerList getWhat prov elts
                     in
-                    (ppTyAltCon' tc elts', prov, subelts)
+                    (Text.intercalate " " elts', prov, subelts)
                 TyFunc prov _npi params namedParams ret ->
                     let mkWhat i = ordin (i + 1) <> " positional parameter"
                         (params', elts1) = considerList mkWhat prov params
@@ -1438,18 +1430,17 @@ unify exp0 pos found0 = visit [] exp0 found0
 
                 recList expTS foundTS
 
-            (TyAltCon _ expTC expTS, TyAltCon _ foundTC foundTS) | expTC == foundTC -> do
-                -- same type constructor, unify the args
+            (TyApplyMonad _ expTS, TyApplyMonad _ foundTS) -> do
+                -- both monad applications, unify the args
                 when (length expTS /= length foundTS) $ do
                     -- This case is unreachable.
                     --
-                    -- Every distinct type constructor has a definite
-                    -- arity (tuples of different lengths are not the same
-                    -- type constructor) and every type is supposed to
-                    -- pass `checkType` before we do anything more
-                    -- significant with it; that does a kind check, and on
-                    -- failure produces a fresh unification var that can't
-                    -- cause further trouble.
+                    -- Monad application has a definite arity and
+                    -- every type is supposed to pass `checkType`
+                    -- before we do anything more significant with it;
+                    -- that does a kind check, and on failure produces
+                    -- a fresh unification var that can't cause
+                    -- further trouble.
                     --
                     -- Therefore, if we get here, something's broked and we should
                     -- panic.
@@ -1546,8 +1537,8 @@ inspectTypeFTVs kind ty = case ty of
     TyCon _prov ctor args -> do
         let kinds = lookupTyCon ctor
         Map.unions <$> zipWithM inspectTypeFTVs kinds args
-    TyAltCon _prov ctor args -> do
-        let kinds = lookupTyAltCon ctor
+    TyApplyMonad _prov args -> do
+        let kinds = applyMonadKinds
         Map.unions <$> zipWithM inspectTypeFTVs kinds args
     TyFunc _prov _ params namedParams ret ->
         let np = Map.elems namedParams in
@@ -2416,9 +2407,9 @@ addTypedef a ty = do
 --
 monadType :: Type -> Maybe (Type, Type)
 monadType ty = case ty of
-  TyAltCon _ BlockCon [ctx@(TyCon _ (ContextCon _) []), valty] ->
+  TyApplyMonad _ [ctx@(TyCon _ (ContextCon _) []), valty] ->
       Just (ctx, valty)
-  TyAltCon _ BlockCon [ctx@(TyVar _ name), valty] | isMonad name ->
+  TyApplyMonad _ [ctx@(TyVar _ name), valty] | isMonad name ->
       Just (ctx, valty)
   -- We don't currently ever generate these types, but be future-proof
   TyCon prov (ContextCon ctx) [valty] ->
@@ -2954,9 +2945,9 @@ lookupTyCon tycon = case tycon of
     MIRSpecCon -> []
     ContextCon _ctx -> [kindStar]
 
-lookupTyAltCon :: TyAltCon -> [Kind]
-lookupTyAltCon tycon = case tycon of
-    BlockCon -> [kindStarToStar, kindStar]
+-- | Get the kinds of the parameters of a monad application
+applyMonadKinds :: [Kind]
+applyMonadKinds = [kindStarToStar, kindStar]
 
 -- | Check if a list of types contains a failure type. If so, return
 --   it. Uses `Either` with unit rather than `Maybe` so as to get the
@@ -3022,23 +3013,22 @@ checkType kind ty = case ty of
                 Left ty' -> ty'
                 Right () -> TyCon prov tycon args'
 
-    TyAltCon prov tycon args -> do
+    TyApplyMonad prov args -> do
 
         -- First, look up the constructor.
-        let params = lookupTyAltCon tycon
+        let params = applyMonadKinds
         let nparams = genericLength params
             nargs = genericLength args
             argsleft = kindNumArgs kind
 
-        if nargs > nparams then case tycon of
-            BlockCon -> do
+        if nargs > nparams then do
                 ppopts <- asks tiPPOpts
                 let nargs' = PP.viaShow $ nargs - 1
                     nparams' = PP.viaShow $ nparams - 1
                     arg = case args of
                         a : _ -> a
                         [] ->
-                            panic "checkType / TyAltCon" [
+                            panic "checkType / TyApplyMonad" [
                                 "impossible empty args with 0 > 2"
                             ]
                     tycon' = prettyType ppopts arg
@@ -3073,7 +3063,7 @@ checkType kind ty = case ty of
             -- applications are seen.
             pure $ case checkForFailure args' of
                 Left ty' -> ty'
-                Right () -> TyAltCon prov tycon args'
+                Right () -> TyApplyMonad prov args'
 
     TyFunc prov nameinfo params namedParams ret -> do
         if kind /= kindStar then do

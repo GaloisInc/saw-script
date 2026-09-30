@@ -121,8 +121,7 @@ matchExact ty1 ty2 = case (ty1, ty2) of
         ctor1 == ctor2 &&
         length args1 == length args2 &&
         liftEq matchExact args1 args2
-    (TyAltCon _pos1 ctor1 args1, TyAltCon _pos2 ctor2 args2) ->
-        ctor1 == ctor2 &&
+    (TyApplyMonad _pos1 args1, TyApplyMonad _pos2 args2) ->
         length args1 == length args2 &&
         liftEq matchExact args1 args2
     (TyFunc _pos1 _ params1 namedParams1 ret1, TyFunc _pos2 _ params2 namedParams2 ret2) ->
@@ -139,7 +138,7 @@ matchExact ty1 ty2 = case (ty1, ty2) of
         a1 == a2
     (TyCon _ _ _, _) ->
         False
-    (TyAltCon _ _ _, _) ->
+    (TyApplyMonad _ _, _) ->
         False
     (TyFunc _ _ _ _ _, _) ->
         False
@@ -207,21 +206,20 @@ instance Ord Candidate where
                 (TyCon _pos1 ctor1 args1, TyCon _pos2 ctor2 args2) ->
                     compare ctor1 ctor2 <>
                     liftCompare compareType args1 args2
-                (TyCon _ _ _, TyAltCon _ _ _) -> LT
+                (TyCon _ _ _, TyApplyMonad _ _) -> LT
                 (TyCon _ _ _, TyFunc _ _ _ _ _) -> LT
                 (TyCon _ _ _, TyRecord _ _) -> LT
                 (TyCon _ _ _, TyVar _ _) -> LT
                 (TyCon _ _ _, TyUnifyVar _ _) -> LT
-                (TyAltCon _ _ _, TyCon _ _ _) -> GT
-                (TyAltCon _pos1 ctor1 args1, TyAltCon _pos2 ctor2 args2) ->
-                    compare ctor1 ctor2 <>
+                (TyApplyMonad _ _, TyCon _ _ _) -> GT
+                (TyApplyMonad _pos1 args1, TyApplyMonad _pos2 args2) ->
                     liftCompare compareType args1 args2
-                (TyAltCon _ _ _, TyFunc _ _ _ _ _) -> LT
-                (TyAltCon _ _ _, TyRecord _ _) -> LT
-                (TyAltCon _ _ _, TyVar _ _) -> LT
-                (TyAltCon _ _ _, TyUnifyVar _ _) -> LT
+                (TyApplyMonad _ _, TyFunc _ _ _ _ _) -> LT
+                (TyApplyMonad _ _, TyRecord _ _) -> LT
+                (TyApplyMonad _ _, TyVar _ _) -> LT
+                (TyApplyMonad _ _, TyUnifyVar _ _) -> LT
                 (TyFunc _ _ _ _ _, TyCon _ _ _) -> GT
-                (TyFunc _ _ _ _ _, TyAltCon _ _ _) -> GT
+                (TyFunc _ _ _ _ _, TyApplyMonad _ _) -> GT
                 (TyFunc _pos1 _ params1 namedParams1 ret1, TyFunc _pos2 _ params2 namedParams2 ret2) ->
                     liftCompare compareType params1 params2 <>
                     liftCompare compareType namedParams1 namedParams2 <>
@@ -230,21 +228,21 @@ instance Ord Candidate where
                 (TyFunc _ _ _ _ _, TyVar _ _) -> LT
                 (TyFunc _ _ _ _ _, TyUnifyVar _ _) -> LT
                 (TyRecord _ _, TyCon _ _ _) -> GT
-                (TyRecord _ _, TyAltCon _ _ _) -> GT
+                (TyRecord _ _, TyApplyMonad _ _) -> GT
                 (TyRecord _ _, TyFunc _ _ _ _ _) -> GT
                 (TyRecord _pos1 fields1, TyRecord _pos2 fields2) ->
                     liftCompare compareType fields1 fields2
                 (TyRecord _ _, TyVar _ _) -> LT
                 (TyRecord _ _, TyUnifyVar _ _) -> LT
                 (TyVar _ _, TyCon _ _ _) -> GT
-                (TyVar _ _, TyAltCon _ _ _) -> GT
+                (TyVar _ _, TyApplyMonad _ _) -> GT
                 (TyVar _ _, TyFunc _ _ _ _ _) -> GT
                 (TyVar _ _, TyRecord _ _) -> GT
                 (TyVar _pos1 x1, TyVar _pos2 x2) ->
                     compare x1 x2
                 (TyVar _ _, TyUnifyVar _ _) -> LT
                 (TyUnifyVar _ _, TyCon _ _ _) -> GT
-                (TyUnifyVar _ _, TyAltCon _ _ _) -> GT
+                (TyUnifyVar _ _, TyApplyMonad _ _) -> GT
                 (TyUnifyVar _ _, TyFunc _ _ _ _ _) -> GT
                 (TyUnifyVar _ _, TyRecord _ _) -> GT
                 (TyUnifyVar _ _, TyVar _ _) -> GT
@@ -296,7 +294,7 @@ compareBySelectivity ctx ty1 ty2 =
               -- take the max score of the args, deduct one,
               -- clamp to 1
               max 1 ((foldr max 1 $ map score args) - 1)
-          TyAltCon _pos _ctor args ->
+          TyApplyMonad _pos args ->
               -- take the max score of the args, deduct one,
               -- clamp to 1
               max 1 ((foldr max 1 $ map score args) - 1)
@@ -352,10 +350,10 @@ matchFullOnce ctx cand tgtType patType =
                       matchFullAllPairs ctx cand (zip tgtArgs patArgs)
               _ -> Nothing
 
-      TyAltCon _patpos patCtor patArgs ->
-          -- The pattern is an alternate type constructor; only accept the same one.
+      TyApplyMonad _patpos patArgs ->
+          -- The pattern is a monad application; only accept another.
           case tgtType of
-              TyAltCon _tgtpos tgtCtor tgtArgs | tgtCtor == patCtor ->
+              TyApplyMonad _tgtpos tgtArgs ->
                   -- If the pattern has more args, give up; if it has
                   -- the same or fewer, match the ones that are there.
                   if length tgtArgs < length patArgs then Nothing
@@ -531,8 +529,8 @@ matchFragOnceBody ctx cand tgtType patType =
         TyCon _tgtpos _tgtCtor tgtArgs ->
             -- The target is a type constructor; we can match any argument.
             checkList tgtArgs
-        TyAltCon _tgtpos _tgtCtor tgtArgs ->
-            -- The target is an alternate type constructor; we can match any argument.
+        TyApplyMonad _tgtpos tgtArgs ->
+            -- The target is a monad application; we can match any argument.
             checkList tgtArgs
         TyFunc _tgtpos _ tgtParams tgtNamedParams tgtRet ->
             -- The target is a function.

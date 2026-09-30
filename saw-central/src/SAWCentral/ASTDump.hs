@@ -140,12 +140,9 @@ dumpType ty0 = case ty0 of
               ContextCon TopLevel -> "TopLevel"
         in
         Dump.subelements ("TyCon " <> tycon') (prov' : map dumpType args)
-    TyAltCon prov tycon args ->
+    TyApplyMonad prov args ->
         let prov' = dumpTypeProvenance prov in
-        let tycon' = case tycon of
-              BlockCon -> "Block"
-        in
-        Dump.subelements ("TyCon " <> tycon') (prov' : map dumpType args)
+        Dump.subelements "TyApplyMonad" (prov' : map dumpType args)
     TyFunc prov npi params namedParams ret ->
         let prov' = dumpTypeProvenance prov in
         let dumpNamedParam (name, ty) =

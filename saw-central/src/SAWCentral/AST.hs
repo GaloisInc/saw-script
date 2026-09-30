@@ -25,7 +25,6 @@ module SAWCentral.AST
      , TypeIndex
      , Context(..)
      , TyCon(..)
-     , TyAltCon(..)
      , NamedParamInfo(..), noNames
      , Type(..)
      , SchemaNameProvenance(..)
@@ -47,7 +46,6 @@ module SAWCentral.AST
      , ppKind, prettyKind
      , ppTyCtx, prettyTyCtx
      , ppTyCon, prettyTyCon
-     , ppTyAltCon, prettyTyAltCon
      , ppType, prettyType
      , ppSchema, prettySchema
      , prettyNamedType
@@ -245,10 +243,6 @@ data TyCon
   | ContextCon Context
   deriving (Eq, Ord)
 
-data TyAltCon
-  = BlockCon
-  deriving (Eq, Ord)
-
 -- | Information about the named parameters in a function type
 --   signature.
 --
@@ -319,7 +313,7 @@ instance Semigroup NamedParamInfo where
 --
 data Type
   = TyCon TypeProvenance TyCon [Type]
-  | TyAltCon TypeProvenance TyAltCon [Type]
+  | TyApplyMonad TypeProvenance [Type]
   | TyFunc TypeProvenance NamedParamInfo [Type] (Map Name Type) Type
   | TyRecord TypeProvenance (Map Name Type)
   | TyVar TypeProvenance Name
@@ -525,7 +519,7 @@ instance Positioned TypeProvenance where
 instance Positioned Type where
   getPos ty = case ty of
       TyCon prov _ _ -> getPos prov
-      TyAltCon prov _ _ -> getPos prov
+      TyApplyMonad prov _ -> getPos prov
       TyFunc prov _ _ _ _ -> getPos prov
       TyRecord prov _ -> getPos prov
       TyVar prov _ -> getPos prov
@@ -627,13 +621,6 @@ prettyTyCon tc = case tc of
 ppTyCon :: PPS.Opts -> TyCon -> Text
 ppTyCon ppopts tc = PPS.renderText ppopts $ prettyTyCon tc
 
-prettyTyAltCon :: TyAltCon -> PP.Doc ann
-prettyTyAltCon tc = case tc of
-    BlockCon       -> "<Block>"
-
-ppTyAltCon :: PPS.Opts -> TyAltCon -> Text
-ppTyAltCon ppopts tc = PPS.renderText ppopts $ prettyTyAltCon tc
-
 prettyType :: PPS.Opts -> Type -> PPS.Doc
 prettyType ppopts = PP.group . visit 0
   where
@@ -657,14 +644,14 @@ prettyType ppopts = PP.group . visit 0
                       let ctor'' = PPS.renderText ppopts ctor' in
                       croak ctor'' 0 args
 
-      TyAltCon _ ctor args -> case (ctor, args) of
-          (BlockCon, [m, arg]) ->
+      TyApplyMonad _ args -> case args of
+          [m, arg] ->
               let m' = visit 1 m
                   arg' = visit 2 arg
                   body = m' <+> arg'
               in
               if prec > 1 then PP.parens body else body
-          (BlockCon, _) -> croak "block" 2 args
+          _ -> croak "block" 2 args
 
       TyFunc _ _ params namedParams ret ->
               let params' = map (\p -> visit 1 p <+> "->") params
@@ -1025,7 +1012,7 @@ tInt :: TypeProvenance -> Type
 tInt prov = TyCon prov IntCon []
 
 tApply :: TypeProvenance -> Type -> Type -> Type
-tApply prov c t = TyAltCon prov BlockCon [c, t]
+tApply prov c t = TyApplyMonad prov [c, t]
 
 tAIG :: TypeProvenance -> Type
 tAIG prov = TyCon prov AIGCon []
