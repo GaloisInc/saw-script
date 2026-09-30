@@ -4,7 +4,6 @@ module SAWServer.Exceptions (
     serverValNotFound
   , notACryptolEnv
   , notAnLLVMModule
-  , notAnLLVMSetup
   , notACrucibleSetupVal
   , notAJVMMethodSpecIR
   , notAnLLVMMethodSpecIR
@@ -70,16 +69,7 @@ notAnLLVMModule name =
      " is not an LLVM module")
     (Just $ object ["name" .= name])
 
-notAnLLVMSetup ::
-  (ToJSON name, Show name) =>
-  name {- ^ the name that should have been mapped to an LLVM setup script -}->
-  JSONRPCException
-notAnLLVMSetup name =
-  makeJSONRPCException 10030
-    ("The server value with name " <>
-     T.pack (show name) <>
-     " is not an LLVM setup script")
-    (Just $ object ["name" .= name])
+-- Exception code 10030 is currently unused
 
 notACrucibleSetupVal ::
   (ToJSON name, Show name) =>

@@ -24,7 +24,6 @@ import Data.ByteString (ByteString)
 import Data.Kind (Type)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Parameterized.Pair ( Pair(..) )
 import Data.Parameterized.Some ( Some(..) )
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -73,7 +72,7 @@ import SAWCentral.Options (processEnv, defaultOptions)
 import SAWCentral.Position (Pos(..))
 import SAWCentral.Prover.Rewrite (basic_ss)
 import SAWCentral.Proof (emptyTheoremDB)
-import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibleSetupM, Environ(..), TopLevelRO(..), TopLevelRW(..), SAWSimpset, JavaCodebase(..), LLVMGlobalAllocMode(LLVMAllocConstantGlobals), rwSetCryptolEnv, rwGetCryptolEnv, prettySimpset)
+import SAWCentral.Value (AIGProxy(..), BuiltinContext(..), Environ(..), TopLevelRO(..), TopLevelRW(..), SAWSimpset, JavaCodebase(..), LLVMGlobalAllocMode(LLVMAllocConstantGlobals), rwSetCryptolEnv, rwGetCryptolEnv, prettySimpset)
 import SAWCentral.Yosys.State (YosysSequential)
 import SAWCentral.Yosys.Theorem (YosysTheorem)
 import SAWCentral.Yosys (YosysImport)
@@ -90,7 +89,6 @@ import qualified Argo
 import SAWServer.Exceptions
     ( serverValNotFound,
       notAnLLVMModule,
-      notAnLLVMSetup,
       notAnLLVMMethodSpecIR,
       notASimpset,
       notATerm,
@@ -432,8 +430,6 @@ data ServerVal
   | VType Cryptol.Schema
   | VCryptolModule CryptolModule -- from SAW, includes Term mappings
   | VJVMClass JSS.Class
-  | VJVMCrucibleSetup (Pair CrucibleSetupTypeRepr JVMSetupM)
-  | VLLVMCrucibleSetup (Pair CrucibleSetupTypeRepr LLVMCrucibleSetupM)
   | VLLVMModule (Some CMS.LLVMModule)
   | VMIRModule RustModule
   | VMIRAdt Adt
@@ -455,8 +451,6 @@ prettyServerValCommon ppopts v = case v of
   VType t -> "(VType " <> CryPP.pretty t <> ")"
   VCryptolModule _ -> "VCryptolModule"
   VJVMClass _ -> "VJVMClass"
-  VJVMCrucibleSetup _ -> "VJVMCrucibleSetup"
-  VLLVMCrucibleSetup _ -> "VLLVMCrucibleSetup"
   VLLVMModule (Some _) -> "VLLVMModule"
   VMIRModule _ -> "VMIRModule"
   VMIRAdt _ -> "VMIRAdt"
@@ -544,9 +538,6 @@ instance KnownCrucibleSetupType () where
 
 instance KnownCrucibleSetupType TypedTerm where
   knownCrucibleSetupRepr = TypedTermRepr
-
-instance KnownCrucibleSetupType a => IsServerVal (LLVMCrucibleSetupM a) where
-  toServerVal x = VLLVMCrucibleSetup (Pair knownCrucibleSetupRepr x)
 
 instance IsServerVal (Some CMS.LLVMModule) where
   toServerVal = VLLVMModule
@@ -653,13 +644,6 @@ mirAdtEither n v =
   case v of
     VMIRAdt adt -> Right adt
     _other -> Left (notAMIRAdt n)
-
-getLLVMSetup :: ServerName -> Argo.Command SAWState (Pair CrucibleSetupTypeRepr LLVMCrucibleSetupM)
-getLLVMSetup n =
-  do v <- getServerVal n
-     case v of
-       VLLVMCrucibleSetup setup -> return setup
-       _other -> Argo.raise (notAnLLVMSetup n)
 
 getLLVMMethodSpecIR :: ServerName -> Argo.Command SAWState (CMS.SomeLLVM CMS.ProvedSpec)
 getLLVMMethodSpecIR n =
