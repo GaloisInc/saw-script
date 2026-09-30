@@ -9,7 +9,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE TupleSections #-}
-module SAWServer.LLVMCrucibleSetup
+module SAWServer.LLVMSetup
   ( llvmLoadModule
   , llvmLoadModuleDescr
   , Contract(..)

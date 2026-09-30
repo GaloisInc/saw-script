@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 -- | Support for interfacing with MIR-related commands in SAW.
-module SAWServer.MIRCrucibleSetup
+module SAWServer.MIRSetup
   ( mirLoadModule
   , mirLoadModuleDescr
   , compileMIRContract

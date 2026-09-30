@@ -118,7 +118,7 @@ module SAWCentral.Value (
     -- used in various places in SAWCentral, plus SAWScript.Interpreter
     printOutLnTop,
     -- used in SAWCentral.Crucible.*, SAWCentral.Builtins,
-    --    SAWServer.SAWServer, SAWServer.Ghost, SAWServer.LLVMCrucibleSetup
+    --    SAWServer.SAWServer, SAWServer.Ghost, SAWServer.LLVMSetup
     getHandleAlloc,
     -- used in SAWCentral.Builtins SAWScript.REPL.Monad, SAWScript.AutoMatch
     -- also accessible via SAWCentral.TopLevel
@@ -152,7 +152,7 @@ module SAWCentral.Value (
     --    XXX: it wraps TopLevel rather than being part of it; is that necessary?
     CrucibleSetup,
     -- used in SAWCentral.Crucible.LLVM.*,
-    --    SAWServer.SAWServer, SAWServer.LLVMCrucibleSetup
+    --    SAWServer.SAWServer, SAWServer.LLVMSetup
     LLVMSetupM(..),
     -- used in SAWCentral.Crucible.*.Builtins
     throwCrucibleSetup,
@@ -164,14 +164,14 @@ module SAWCentral.Value (
     -- used by SAWServer.SAWServer, SAWServer.JVMVerify, SAWScript.Interpreter
     JVMSetup,
     -- used by SAWCentral.Crucible.JVM.Builtins,
-    --    SAWServer.SAWServer, SAWServer.JVMCrucibleSetup
+    --    SAWServer.SAWServer, SAWServer.JVMSetup
     JVMSetupM(..),
     -- used by SAWCentral.Crucible.MIR.ResolveSetupValue,
     --    SAWServer.SAWServer, SAWServer.MIRVerify, SAWScript.Interpreter
     JavaCodebase(..),
     -- Used to initialize things; probably only need `JavaUninitialized`.
     MIRSetup,
-    -- used by SAWCentral.Crucible.MIR.Builtins, SAWServer.MIRCrucibleSetup
+    -- used by SAWCentral.Crucible.MIR.Builtins, SAWServer.MIRSetup
     MIRSetupM(..),
     -- used in SAWCentral.Crucible.LLVM.X86, SAWCentral.Crucible.*.Builtins,
     --    SAWCentral.Crucible.Common.Vacuity,

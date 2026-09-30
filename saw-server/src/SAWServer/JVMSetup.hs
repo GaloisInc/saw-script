@@ -9,7 +9,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE TupleSections #-}
-module SAWServer.JVMCrucibleSetup
+module SAWServer.JVMSetup
   ( jvmLoadClass
   , jvmLoadClassDescr
   , compileJVMContract

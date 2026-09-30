@@ -33,7 +33,7 @@ import SAWServer.SAWServer
 import SAWServer.CryptolExpression (getCryptolExpr)
 import SAWServer.Data.Contract ( ContractMode(..) )
 import SAWServer.Exceptions ( notAtTopLevel )
-import SAWServer.JVMCrucibleSetup ( compileJVMContract )
+import SAWServer.JVMSetup ( compileJVMContract )
 import SAWServer.OK ( OK, ok )
 import SAWServer.ProofScript
     ( ProofScript(ProofScript), interpretProofScript )

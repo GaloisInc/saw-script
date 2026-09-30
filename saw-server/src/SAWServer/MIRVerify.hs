@@ -37,7 +37,7 @@ import SAWServer.CryptolExpression (getCryptolExpr)
 import SAWServer.Data.Contract ( ContractMode(..) )
 import SAWServer.Data.MIRType ( JSONMIRType )
 import SAWServer.Exceptions ( notAtTopLevel )
-import SAWServer.MIRCrucibleSetup ( compileMIRContract )
+import SAWServer.MIRSetup ( compileMIRContract )
 import SAWServer.OK ( OK, ok )
 import SAWServer.ProofScript
     ( ProofScript(ProofScript), interpretProofScript )

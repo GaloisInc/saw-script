@@ -36,7 +36,7 @@ import SAWServer.CryptolExpression (getCryptolExpr)
 import SAWServer.Data.Contract ( ContractMode(..) )
 import SAWServer.Data.LLVMType ( JSONLLVMType )
 import SAWServer.Exceptions ( notAtTopLevel )
-import SAWServer.LLVMCrucibleSetup ( compileLLVMContract )
+import SAWServer.LLVMSetup ( compileLLVMContract )
 import SAWServer.OK ( OK, ok )
 import SAWServer.ProofScript
     ( ProofScript(ProofScript), interpretProofScript )

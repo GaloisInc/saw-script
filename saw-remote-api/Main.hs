@@ -31,9 +31,9 @@ import SAWServer.Eval
 import SAWServer.Ghost
     ( createGhostVariableDescr,
       createGhostVariable )
-import SAWServer.JVMCrucibleSetup
+import SAWServer.JVMSetup
 import SAWServer.JVMVerify
-import SAWServer.LLVMCrucibleSetup
+import SAWServer.LLVMSetup
     ( llvmLoadModuleDescr, llvmLoadModule )
 import SAWServer.LLVMVerify
     ( llvmVerifyDescr,
@@ -42,7 +42,7 @@ import SAWServer.LLVMVerify
       llvmAssume,
       llvmVerifyX86Descr,
       llvmVerifyX86 )
-import SAWServer.MIRCrucibleSetup
+import SAWServer.MIRSetup
     ( mirLoadModuleDescr, mirLoadModule )
 import SAWServer.MIRFindADT
     ( mirFindADTDescr, mirFindADT )
