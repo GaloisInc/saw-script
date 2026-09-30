@@ -1588,8 +1588,6 @@ type CrucibleSetup ext = Setup.CrucibleSetupT ext TopLevel
 
 -- | 'CrucibleMethodSpecIR' requires a specific syntax extension, but our method
 --   specifications should be polymorphic in the underlying architecture
--- type LLVMCrucibleMethodSpecIR = CMSLLVM.AllLLVM CMS.CrucibleMethodSpecIR
-
 newtype LLVMSetupM a =
   LLVMSetupM
     { runLLVMSetupM ::
