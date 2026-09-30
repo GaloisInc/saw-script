@@ -9,7 +9,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE TupleSections #-}
-module SAWServer.JVMCrucibleSetup
+module SAWServer.JVMSetup
   ( jvmLoadClass
   , jvmLoadClassDescr
   , compileJVMContract
@@ -72,21 +72,6 @@ import SAWServer.CryptolExpression (CryptolModuleException(..), getTypedTermOfCE
 import SAWServer.Exceptions ( notAtTopLevel )
 import SAWServer.OK ( OK, ok )
 import SAWServer.TopLevel ( tl )
-
-newtype StartJVMSetupParams
-  = StartJVMSetupParams ServerName
-
-instance FromJSON StartJVMSetupParams where
-  parseJSON =
-    withObject "params for \"SAW/Crucible setup\"" $ \o ->
-    StartJVMSetupParams <$> o .: "name"
-
-instance Doc.DescribedMethod StartJVMSetupParams OK where
-  parameterFieldDescription =
-    [ ("name",
-       Doc.Paragraph [Doc.Text "The name of the item to setup on the server."])
-    ]
-  resultFieldDescription = []
 
 newtype ServerSetupVal = Val (MS.SetupValue CJ.JVM)
 

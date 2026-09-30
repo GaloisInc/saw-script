@@ -118,7 +118,7 @@ module SAWCentral.Value (
     -- used in various places in SAWCentral, plus SAWScript.Interpreter
     printOutLnTop,
     -- used in SAWCentral.Crucible.*, SAWCentral.Builtins,
-    --    SAWServer.SAWServer, SAWServer.Ghost, SAWServer.LLVMCrucibleSetup
+    --    SAWServer.SAWServer, SAWServer.Ghost, SAWServer.LLVMSetup
     getHandleAlloc,
     -- used in SAWCentral.Builtins SAWScript.REPL.Monad, SAWScript.AutoMatch
     -- also accessible via SAWCentral.TopLevel
@@ -152,8 +152,8 @@ module SAWCentral.Value (
     --    XXX: it wraps TopLevel rather than being part of it; is that necessary?
     CrucibleSetup,
     -- used in SAWCentral.Crucible.LLVM.*,
-    --    SAWServer.SAWServer, SAWServer.LLVMCrucibleSetup
-    LLVMCrucibleSetupM(..),
+    --    SAWServer.SAWServer, SAWServer.LLVMSetup
+    LLVMSetupM(..),
     -- used in SAWCentral.Crucible.*.Builtins
     throwCrucibleSetup,
     -- used in SAWCentral.Crucible.LLVM.Skeleton.Builtins,
@@ -164,14 +164,14 @@ module SAWCentral.Value (
     -- used by SAWServer.SAWServer, SAWServer.JVMVerify, SAWScript.Interpreter
     JVMSetup,
     -- used by SAWCentral.Crucible.JVM.Builtins,
-    --    SAWServer.SAWServer, SAWServer.JVMCrucibleSetup
+    --    SAWServer.SAWServer, SAWServer.JVMSetup
     JVMSetupM(..),
     -- used by SAWCentral.Crucible.MIR.ResolveSetupValue,
     --    SAWServer.SAWServer, SAWServer.MIRVerify, SAWScript.Interpreter
     JavaCodebase(..),
     -- Used to initialize things; probably only need `JavaUninitialized`.
     MIRSetup,
-    -- used by SAWCentral.Crucible.MIR.Builtins, SAWServer.MIRCrucibleSetup
+    -- used by SAWCentral.Crucible.MIR.Builtins, SAWServer.MIRSetup
     MIRSetupM(..),
     -- used in SAWCentral.Crucible.LLVM.X86, SAWCentral.Crucible.*.Builtins,
     --    SAWCentral.Crucible.Common.Vacuity,
@@ -441,7 +441,7 @@ type RefChain = [(SS.Pos, SS.Name)]
 --        monadic actions:
 --           VTopLevel
 --           VProofScript
---           VLLVMCrucibleSetup
+--           VLLVMSetup
 --           VJVMSetup
 --           VMIRSetup
 --
@@ -648,9 +648,9 @@ data Value
   -----
     -- | A plain value containing a Haskell-level action in LLVMSetup.
     --   Like a VTopLevel, except in the other monad.
-  | VLLVMCrucibleSetup SS.Pos RefChain !(LLVMCrucibleSetupM Value)
-  | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.ProvedSpec)
-  | VLLVMCrucibleSetupValue (CMSLLVM.AllLLVM CMS.SetupValue)
+  | VLLVMSetup SS.Pos RefChain !(LLVMSetupM Value)
+  | VLLVMMethodSpec (CMSLLVM.SomeLLVM CMS.ProvedSpec)
+  | VLLVMSetupValue (CMSLLVM.AllLLVM CMS.SetupValue)
   -----
     -- | A plain value containing a Haskell-level action in JVMSetup.
     --   Like a VTopLevel, except in the other monad.
@@ -824,9 +824,9 @@ prettyValue sc = visit (0 :: Int)
         ppopts <- scGetPPOpts sc
         pure $ "Theorem" <+> PP.parens (prettyTheorem ppopts nenv thm)
       VBisimTheorem _ -> pure "<<Bisimulation theorem>>"
-      VLLVMCrucibleSetup{} -> pure "<<LLVM Setup>>"
-      VLLVMCrucibleSetupValue x -> CMS.prettySetupValue sc $ CMSLLVM.getAllLLVM x
-      VLLVMCrucibleMethodSpec{} -> pure "<<LLVM MethodSpec>>"
+      VLLVMSetup{} -> pure "<<LLVM Setup>>"
+      VLLVMSetupValue x -> CMS.prettySetupValue sc $ CMSLLVM.getAllLLVM x
+      VLLVMMethodSpec{} -> pure "<<LLVM MethodSpec>>"
       VLLVMModuleSkeleton s -> pure $ PP.viaShow s
       VLLVMFunctionSkeleton s -> pure $ PP.viaShow s
       VLLVMSkeletonState _ -> pure "<<Skeleton state>>"
@@ -891,9 +891,9 @@ uglyValue v0 = case v0 of
     VProofScript{} -> "<<proof script>>"
     VTheorem{} -> "<<Theorem>>"
     VBisimTheorem{} -> "<<Bisimulation theorem>>"
-    VLLVMCrucibleSetup{} -> "<<LLVM Setup>>"
-    VLLVMCrucibleSetupValue{} -> "<<LLVM Value>>"
-    VLLVMCrucibleMethodSpec{} -> "<<LLVM MethodSpec>>"
+    VLLVMSetup{} -> "<<LLVM Setup>>"
+    VLLVMSetupValue{} -> "<<LLVM Value>>"
+    VLLVMMethodSpec{} -> "<<LLVM MethodSpec>>"
     VLLVMModuleSkeleton{} -> "<<Module skeleton>>"
     VLLVMFunctionSkeleton{} -> "<<Function skeleton>>"
     VLLVMSkeletonState{} -> "<<Skeleton state>>"
@@ -1040,7 +1040,7 @@ rwSetCryptolEnv :: CEnv.CryptolEnv -> TopLevelRW -> TopLevelRW
 rwSetCryptolEnv ce rw =
     let Environ varenv tyenv _ = rwEnviron rw
     in rw { rwEnviron = Environ varenv tyenv ce }
- 
+
 -- | Modify the current Cryptol environment in a TopLevelRW.
 --
 --   (Accessor method for use in SAWServer and SAWScript.REPL, which
@@ -1415,7 +1415,7 @@ recordTheoremProof :: Theorem -> TopLevel ()
 recordTheoremProof thm = recordProof (VTheorem thm)
 
 returnLLVMProof :: CMSLLVM.SomeLLVM CMS.ProvedSpec -> TopLevel (CMSLLVM.SomeLLVM CMS.ProvedSpec)
-returnLLVMProof ms = recordProof (VLLVMCrucibleMethodSpec ms) >> return ms
+returnLLVMProof ms = recordProof (VLLVMMethodSpec ms) >> return ms
 
 returnJVMProof :: CMS.ProvedSpec CJ.JVM -> TopLevel (CMS.ProvedSpec CJ.JVM)
 returnJVMProof ms = recordProof (VJVMMethodSpec ms) >> return ms
@@ -1588,40 +1588,38 @@ type CrucibleSetup ext = Setup.CrucibleSetupT ext TopLevel
 
 -- | 'CrucibleMethodSpecIR' requires a specific syntax extension, but our method
 --   specifications should be polymorphic in the underlying architecture
--- type LLVMCrucibleMethodSpecIR = CMSLLVM.AllLLVM CMS.CrucibleMethodSpecIR
-
-newtype LLVMCrucibleSetupM a =
-  LLVMCrucibleSetupM
-    { runLLVMCrucibleSetupM ::
+newtype LLVMSetupM a =
+  LLVMSetupM
+    { runLLVMSetupM ::
         forall arch.
         (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
         CrucibleSetup (CMSLLVM.LLVM arch) a
     }
   deriving Functor
 
-instance Applicative LLVMCrucibleSetupM where
-  pure x = LLVMCrucibleSetupM (pure x)
-  LLVMCrucibleSetupM f <*> LLVMCrucibleSetupM m = LLVMCrucibleSetupM (f <*> m)
+instance Applicative LLVMSetupM where
+  pure x = LLVMSetupM (pure x)
+  LLVMSetupM f <*> LLVMSetupM m = LLVMSetupM (f <*> m)
 
-instance Monad LLVMCrucibleSetupM where
+instance Monad LLVMSetupM where
   return = pure
-  LLVMCrucibleSetupM m >>= f =
-    LLVMCrucibleSetupM (m >>= \x -> runLLVMCrucibleSetupM (f x))
+  LLVMSetupM m >>= f =
+    LLVMSetupM (m >>= \x -> runLLVMSetupM (f x))
 
 -- XXX this is required for the moment in the interpreter, and should
 -- be removed when we clean out error handling.
-instance MonadFail LLVMCrucibleSetupM where
-   fail msg = LLVMCrucibleSetupM $ lift $ lift $ fail msg
+instance MonadFail LLVMSetupM where
+   fail msg = LLVMSetupM $ lift $ lift $ fail msg
 
 throwCrucibleSetup :: ProgramLoc -> String -> CrucibleSetup ext a
 throwCrucibleSetup loc msg = X.throw $ SS.CrucibleSetupException loc msg
 
-throwLLVM :: ProgramLoc -> String -> LLVMCrucibleSetupM a
-throwLLVM loc msg = LLVMCrucibleSetupM $ throwCrucibleSetup loc msg
+throwLLVM :: ProgramLoc -> String -> LLVMSetupM a
+throwLLVM loc msg = LLVMSetupM $ throwCrucibleSetup loc msg
 
-throwLLVMFun :: Text -> String -> LLVMCrucibleSetupM a
+throwLLVMFun :: Text -> String -> LLVMSetupM a
 throwLLVMFun nm msg = do
-  loc <- LLVMCrucibleSetupM $ getW4Position nm
+  loc <- LLVMSetupM $ getW4Position nm
   throwLLVM loc msg
 
 -- | Get the current interpreter position and convert to a What4 position.
@@ -1696,8 +1694,8 @@ crucibleSetupTopLevel m = lift (lift m)
 scriptTopLevel :: TopLevel a -> ProofScript a
 scriptTopLevel m = ProofScript (lift (lift m))
 
-llvmTopLevel :: TopLevel a -> LLVMCrucibleSetupM a
-llvmTopLevel m = LLVMCrucibleSetupM (crucibleSetupTopLevel m)
+llvmTopLevel :: TopLevel a -> LLVMSetupM a
+llvmTopLevel m = LLVMSetupM (crucibleSetupTopLevel m)
 
 jvmTopLevel :: TopLevel a -> JVMSetupM a
 jvmTopLevel m = JVMSetupM (crucibleSetupTopLevel m)

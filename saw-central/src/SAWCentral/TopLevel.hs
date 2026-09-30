@@ -21,7 +21,7 @@ module SAWCentral.TopLevel
     --    SAWScript.Interpreter
   , getOptions
     -- used in SAWCentral.Crucible.*, SAWCentral.Builtins,
-    --    SAWServer.SAWServer, SAWServer.Ghost, SAWServer.LLVMCrucibleSetup
+    --    SAWServer.SAWServer, SAWServer.Ghost, SAWServer.LLVMSetup
   , getHandleAlloc
     -- used in SAWCentral.Builtins SAWScript.REPL.Monad, SAWScript.AutoMatch
     -- also accessible via SAWCentral.TopLevel

@@ -344,7 +344,7 @@ llvm_verify_x86 ::
   Text {- ^ Function's symbol in ELF file -} ->
   [(Text, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
-  LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
+  LLVMSetupM () {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
 llvm_verify_x86 llvmModule path nm globsyms checkSat =
@@ -360,7 +360,7 @@ llvm_verify_fixpoint_x86 ::
   [(Text, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
   TypedTerm {- ^ Function specifying the loop -} ->
-  LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
+  LLVMSetupM () {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
 llvm_verify_fixpoint_x86 llvmModule path nm globsyms checkSat f =
@@ -380,7 +380,7 @@ llvm_verify_fixpoint_chc_x86 ::
   [(Text, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
   TypedTerm {- ^ Function specifying the loop -} ->
-  LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
+  LLVMSetupM () {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
 llvm_verify_fixpoint_chc_x86 llvmModule path nm globsyms checkSat f =
@@ -396,7 +396,7 @@ llvm_verify_x86_with_invariant ::
   [(Text, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
   (Text, Integer, TypedTerm) {- ^ Name of the looping symbol, and function specifying the loop -} ->
-  LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
+  LLVMSetupM () {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
 llvm_verify_x86_with_invariant llvmModule path nm globsyms checkSat (loopName,loopNum,f) =
@@ -416,7 +416,7 @@ llvm_verify_x86_common ::
   [(Text, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
   FixpointSelect ->
-  LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
+  LLVMSetupM () {- ^ Specification to verify against -} ->
   ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.ProvedSpec)
 llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat fixpointSelect setup tactic
@@ -1013,7 +1013,7 @@ buildMethodSpec ::
   Text {- ^ Name of method -} ->
   String {- ^ Source location for method spec (here, we use the address) -} ->
   Bool {- ^ check sat -} ->
-  LLVMCrucibleSetupM () ->
+  LLVMSetupM () ->
   TopLevel (MS.CrucibleMethodSpecIR LLVM)
 buildMethodSpec lm nm loc checkSat setup =
   setupLLVMCrucibleContext checkSat lm $ \cc -> do
@@ -1033,7 +1033,7 @@ buildMethodSpec lm nm loc checkSat setup =
           methodId mtargs mtret programLoc lm
     view Setup.csMethodSpec <$>
       execStateT
-        (runReaderT (runLLVMCrucibleSetupM setup) Setup.makeCrucibleSetupRO)
+        (runReaderT (runLLVMSetupM setup) Setup.makeCrucibleSetupRO)
         (Setup.makeCrucibleSetupState emptyResolvedState cc initialMethodSpec)
 
 llvmTypeToMemType ::

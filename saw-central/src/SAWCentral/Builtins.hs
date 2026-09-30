@@ -2319,7 +2319,7 @@ summarize_verification :: TopLevel ()
 summarize_verification =
   do values <- rwProofs <$> getTopLevelRW
      let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
-         lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
+         lspecs  = [ s | SV.VLLVMMethodSpec s <- values ]
          mspecs  = [ s | SV.VMIRMethodSpec s <- values ]
          thms    = [ t | SV.VTheorem t <- values ]
      db <- SV.getTheoremDB
@@ -2332,7 +2332,7 @@ summarize_verification_json :: FilePath -> TopLevel ()
 summarize_verification_json fpath =
   do values <- rwProofs <$> getTopLevelRW
      let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
-         lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
+         lspecs  = [ s | SV.VLLVMMethodSpec s <- values ]
          mspecs  = [ s | SV.VMIRMethodSpec s <- values ]
          thms    = [ t | SV.VTheorem t <- values ]
      db <- SV.getTheoremDB
@@ -2345,7 +2345,7 @@ writeVerificationSummary = do
     db <- SV.getTheoremDB
     values <- rwProofs <$> getTopLevelRW
     let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
-        lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
+        lspecs  = [ s | SV.VLLVMMethodSpec s <- values ]
         mspecs  = [ s | SV.VMIRMethodSpec s <- values ]
         thms    = [ t | SV.VTheorem t <- values ]
         summary = computeVerificationSummary db jspecs lspecs mspecs thms

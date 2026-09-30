@@ -4,7 +4,6 @@ module SAWServer.Exceptions (
     serverValNotFound
   , notACryptolEnv
   , notAnLLVMModule
-  , notAnLLVMSetup
   , notACrucibleSetupVal
   , notAJVMMethodSpecIR
   , notAnLLVMMethodSpecIR
@@ -18,8 +17,6 @@ module SAWServer.Exceptions (
   , notAMIRMethodSpecIR
   , notAMIRAdt
   -- * Wrong monad errors
-  , notSettingUpCryptol
-  , notSettingUpLLVMCrucible
   , notAtTopLevel
   -- * Cryptol errors
   , cryptolError
@@ -70,16 +67,7 @@ notAnLLVMModule name =
      " is not an LLVM module")
     (Just $ object ["name" .= name])
 
-notAnLLVMSetup ::
-  (ToJSON name, Show name) =>
-  name {- ^ the name that should have been mapped to an LLVM setup script -}->
-  JSONRPCException
-notAnLLVMSetup name =
-  makeJSONRPCException 10030
-    ("The server value with name " <>
-     T.pack (show name) <>
-     " is not an LLVM setup script")
-    (Just $ object ["name" .= name])
+-- Exception code 10030 is currently unused
 
 notACrucibleSetupVal ::
   (ToJSON name, Show name) =>
@@ -147,14 +135,7 @@ notAJVMMethodSpecIR name =
      " is not a JVM method specification")
     (Just $ object ["name" .= name])
 
-notSettingUpCryptol :: JSONRPCException
-notSettingUpCryptol =
-  makeJSONRPCException 10100 "Not currently setting up Cryptol" noData
-
-notSettingUpLLVMCrucible :: JSONRPCException
-notSettingUpLLVMCrucible =
-  makeJSONRPCException
-    10110 "Not currently setting up Crucible/LLVM" noData
+-- Exception codes 10100 and 10110 are currently unused
 
 notAtTopLevel :: ToJSON a => [a] -> JSONRPCException
 notAtTopLevel tasks =
@@ -245,6 +226,3 @@ cryptolError message =
   makeJSONRPCException
     11000 "Cryptol exception"
     (Just (JSON.object ["error" .= message]))
-
-noData :: Maybe ()
-noData = Nothing

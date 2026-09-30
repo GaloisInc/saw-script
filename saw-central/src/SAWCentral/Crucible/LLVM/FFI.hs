@@ -111,7 +111,7 @@ data FFIConv = FFIConv
     ffiCryType :: OpenTerm
     -- | Assert any preconditions guaranteed by the Cryptol FFI on the LLVM
     -- representation.
-  , ffiPrecond :: OpenTerm {- : ffiLLVMType -} -> LLVMCrucibleSetupM ()
+  , ffiPrecond :: OpenTerm {- : ffiLLVMType -} -> LLVMSetupM ()
     -- | Convert from the foreign representation to the Cryptol representation.
   , ffiToCry :: OpenTerm {- : ffiLLVMType -} -> OpenTerm {- : ffiCryType -}
     -- | Convert from the Cryptol representation to the foreign representation.
@@ -127,13 +127,13 @@ data FFIPostcond
   -- | Convert the Cryptol result to the LLVM representation using the given
   -- function, for use with @llvm_return@ or @llvm_points_to@.
   = FFIPostcondConvToLLVM
-      (OpenTerm {- : ffiCryType -} -> LLVMCrucibleSetupM (AllLLVM SetupValue))
+      (OpenTerm {- : ffiCryType -} -> LLVMSetupM (AllLLVM SetupValue))
   -- | Given the LLVM result and the Cryptol result, convert the LLVM result to
   -- the Cryptol representation then assert as a postcondition that they are
   -- equal.
   | FFIPostcondConvToCryEq
       (TypedTerm {- ffiLLVMType -} -> OpenTerm {- ffiCryType -} ->
-        LLVMCrucibleSetupM ())
+        LLVMSetupM ())
 
 -- | Return 'True' if the term's type is a proposition in SAWCore sort @Prop@.
 isProofTerm :: Term -> Bool
@@ -149,7 +149,7 @@ isProofTerm t =
 -- monomorphic Cryptol term, consisting of a Cryptol foreign function fully
 -- applied to any type arguments, has a correct foreign (LLVM) implementation
 -- with respect to its Cryptol implementation.
-llvm_ffi_setup :: TypedTerm -> LLVMCrucibleSetupM ()
+llvm_ffi_setup :: TypedTerm -> LLVMSetupM ()
 llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
   let (funTerm, allArgTerms) = asApplyAll appTerm
   -- filter out proof terms for type constraints
@@ -192,7 +192,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
         "Not a (monomorphic instantiation of a) Cryptol foreign function"
 
 -- | Report an error in generating setup for a foreign function.
-throwFFISetup :: Ctx => String -> LLVMCrucibleSetupM a
+throwFFISetup :: Ctx => String -> LLVMSetupM a
 throwFFISetup msg = do
   tm' <- llvmTopLevel $ io $ ppTerm (sc ?ctx) (funTerm ?ctx)
   throwLLVMFun "llvm_ffi_setup" $
@@ -200,7 +200,7 @@ throwFFISetup msg = do
 
 -- | Given a list of type parameters and their actual values as terms, create a
 -- type environment binding them.
-buildTypeEnv :: Ctx => [Cry.TParam] -> [Term] -> LLVMCrucibleSetupM TypeEnv
+buildTypeEnv :: Ctx => [Cry.TParam] -> [Term] -> LLVMSetupM TypeEnv
 buildTypeEnv [] [] = pure mempty
 buildTypeEnv (param:params) (argTerm:argTerms) =
   case asGlobalApply "Cryptol.TCNum" argTerm of
@@ -239,10 +239,10 @@ mkSizeArg tyArgTerm = do
 -- | Do setup for an input argument, returning the term to pass to the Cryptol
 -- function and a list of arguments to pass to the LLVM function.
 setupInArg :: Ctx => TypeEnv -> Text -> FFIType ->
-  LLVMCrucibleSetupM (OpenTerm, [AllLLVM SetupValue])
+  LLVMSetupM (OpenTerm, [AllLLVM SetupValue])
 setupInArg tenv = go
   where
-  go :: Text -> FFIType -> LLVMCrucibleSetupM (OpenTerm, [AllLLVM SetupValue])
+  go :: Text -> FFIType -> LLVMSetupM (OpenTerm, [AllLLVM SetupValue])
   go name ffiType =
     case ffiType of
       FFIBool ->
@@ -260,11 +260,11 @@ setupInArg tenv = go
       FFIRecord ffiTypeMap ->
         recordInArgs <$> setupRecordArgs go name ffiTypeMap
     where
-    valueInArg :: FFITypeInfo -> LLVMCrucibleSetupM (OpenTerm, [AllLLVM SetupValue])
+    valueInArg :: FFITypeInfo -> LLVMSetupM (OpenTerm, [AllLLVM SetupValue])
     valueInArg ffiTypeInfo = do
       (x, cryTerm) <- singleInArg ffiTypeInfo
       pure (cryTerm, [anySetupTerm x])
-    singleInArg :: FFITypeInfo -> LLVMCrucibleSetupM (TypedTerm, OpenTerm)
+    singleInArg :: FFITypeInfo -> LLVMSetupM (TypedTerm, OpenTerm)
     singleInArg FFITypeInfo {..} = do
       x <- llvm_fresh_var name ffiLLVMType
       let ox = typedToOpenTerm x
@@ -294,7 +294,7 @@ setupInArg tenv = go
 -- to the LLVM function and a function that asserts functional correctness given
 -- the Cryptol result.
 setupRet :: Ctx => TypeEnv -> FFIType ->
-  LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMCrucibleSetupM ())
+  LLVMSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMSetupM ())
 setupRet tenv ffiType =
   case ffiType of
     FFIBool               -> pure $ retValue boolTypeInfo
@@ -318,12 +318,12 @@ setupRet tenv ffiType =
 -- result.
 setupOutArg ::
   Ctx => TypeEnv -> FFIType ->
-  LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMCrucibleSetupM ())
+  LLVMSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMSetupM ())
 setupOutArg tenv = go "out"
   where
   go ::
     Text -> FFIType ->
-    LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMCrucibleSetupM ())
+    LLVMSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMSetupM ())
   go name ffiType =
     case ffiType of
       FFIBool ->
@@ -354,7 +354,7 @@ setupOutArg tenv = go "out"
     where
     singleOutArg ::
       FFITypeInfo ->
-      LLVMCrucibleSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMCrucibleSetupM ())
+      LLVMSetupM ([AllLLVM SetupValue], OpenTerm -> LLVMSetupM ())
     singleOutArg FFITypeInfo {..} = do
       ptr <- llvm_alloc ffiLLVMType
       let post cryRet =
@@ -391,18 +391,18 @@ getFFIPostcond conv =
 
 -- | Call the given setup function on subparts of the tuple, naming them by
 -- index.
-setupTupleArgs :: (Text -> FFIType -> LLVMCrucibleSetupM a) ->
-  Text -> [FFIType] -> LLVMCrucibleSetupM [a]
+setupTupleArgs :: (Text -> FFIType -> LLVMSetupM a) ->
+  Text -> [FFIType] -> LLVMSetupM [a]
 setupTupleArgs setup name =
   zipWithM (\i -> setup (name <> "." <> Text.pack (show i))) [0 :: Integer ..]
 
 -- | Call the given setup function on subparts of the record, naming them by
 -- field name.
 setupRecordArgs ::
-  (Text -> FFIType -> LLVMCrucibleSetupM a) ->
+  (Text -> FFIType -> LLVMSetupM a) ->
   Text ->
   RecordMap Cry.Ident FFIType ->
-  LLVMCrucibleSetupM (RecordMap Cry.Ident a)
+  LLVMSetupM (RecordMap Cry.Ident a)
 setupRecordArgs setup name =
   traverseRecordMap $ \field ty -> setup (name <> "." <> identText field) ty
 
@@ -425,7 +425,7 @@ boolTypeInfo =
     }
 
 -- | Type info for a 'FFIBasicType'.
-basicTypeInfo :: Ctx => FFIBasicType -> LLVMCrucibleSetupM FFITypeInfo
+basicTypeInfo :: Ctx => FFIBasicType -> LLVMSetupM FFITypeInfo
 basicTypeInfo (FFIBasicVal ffiBasicValType) = pure
   case ffiBasicValType of
     FFIWord (fromInteger -> n) ffiWordSize ->
@@ -470,7 +470,7 @@ basicTypeInfo (FFIBasicRef _) =
 -- | Assert the precondition that a prefix of the given bitvector is zero.
 precondBVZeroPrefix :: Ctx =>
   Natural {- totalLen -} -> Natural ->
-  OpenTerm {- Vec totalLen Bool -} -> LLVMCrucibleSetupM ()
+  OpenTerm {- Vec totalLen Bool -} -> LLVMSetupM ()
 precondBVZeroPrefix totalLen zeroLen x = do
   let zeroLenTerm = OT.nat zeroLen
       precond =
@@ -493,7 +493,7 @@ precondBVZeroPrefix totalLen zeroLen x = do
 
 -- | Type info for the 'FFIArray' type.
 arrayTypeInfo :: Ctx => TypeEnv -> [Cry.Type] -> FFIBasicType ->
-  LLVMCrucibleSetupM FFITypeInfo
+  LLVMSetupM FFITypeInfo
 arrayTypeInfo tenv lenTypes ffiBasicType = do
   let lens :: Integral a => [a]
       lens = map (fromInteger . finNat' . evalNumType tenv) lenTypes
@@ -617,8 +617,8 @@ openToSetupTerm openTerm = anySetupTerm <$> openToTypedTerm openTerm
 typedToOpenTerm :: TypedTerm -> OpenTerm
 typedToOpenTerm = OT.term . ttTerm
 
-lll :: TopLevel a -> LLVMCrucibleSetupM a
-lll x = LLVMCrucibleSetupM $ lift $ lift x
+lll :: TopLevel a -> LLVMSetupM a
+lll x = LLVMSetupM $ lift $ lift x
 
-lio :: IO a -> LLVMCrucibleSetupM a
-lio x = LLVMCrucibleSetupM $ liftIO x
+lio :: IO a -> LLVMSetupM a
+lio x = LLVMSetupM $ liftIO x

@@ -9,7 +9,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE TupleSections #-}
-module SAWServer.LLVMCrucibleSetup
+module SAWServer.LLVMSetup
   ( llvmLoadModule
   , llvmLoadModuleDescr
   , Contract(..)
@@ -52,7 +52,7 @@ import qualified SAWCentral.Crucible.LLVM.CrucibleLLVM as CL
 import qualified SAWCentral.Crucible.LLVM.MethodSpecIR as CMS
 import qualified SAWCentral.Crucible.Common.MethodSpec as CMS (GhostGlobal)
 import SAWCentral.Value
-    ( BuiltinContext, LLVMCrucibleSetupM(..), TopLevelRW(..), biSharedContext )
+    ( BuiltinContext, LLVMSetupM(..), TopLevelRW(..), biSharedContext )
 import qualified CryptolSAWCore.CryptolEnv as CEnv
 import CryptolSAWCore.CryptolEnv (CryptolEnv)
 import CryptolSAWCore.TypedTerm (TypedTerm)
@@ -78,14 +78,6 @@ import SAWServer.Exceptions ( notAtTopLevel, cantLoadLLVMModule )
 import SAWServer.OK ( OK, ok )
 import SAWServer.TrackFile ( trackFile )
 
-newtype StartLLVMCrucibleSetupParams
-  = StartLLVMCrucibleSetupParams ServerName
-
-instance FromJSON StartLLVMCrucibleSetupParams where
-  parseJSON =
-    withObject "params for \"SAW/Crucible setup\"" $ \o ->
-    StartLLVMCrucibleSetupParams <$> o .: "name"
-
 newtype ServerSetupVal = Val (CMS.AllLLVM MS.SetupValue)
 
 compileLLVMContract ::
@@ -94,7 +86,7 @@ compileLLVMContract ::
   Map ServerName CMS.GhostGlobal ->
   CryptolEnv ->
   Contract JSONLLVMType (P.Expr P.PName) ->
-  LLVMCrucibleSetupM ()
+  LLVMSetupM ()
 compileLLVMContract fileReader bic ghostEnv cenv0 c =
   do mapM_ (llvm_alloc_global) (mutableGlobals c)
      allocsPre <- mapM setupAlloc (preAllocated c)
@@ -124,11 +116,11 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
         [(ServerName, CMS.AllLLVM MS.SetupValue)] ->
         (Map ServerName ServerSetupVal, CryptolEnv) ->
         [ContractVar JSONLLVMType] ->
-        LLVMCrucibleSetupM (Map ServerName ServerSetupVal, CryptolEnv)
+        LLVMSetupM (Map ServerName ServerSetupVal, CryptolEnv)
     setupState allocs (env, cenv) vars =
       do freshTerms <- mapM setupFresh vars
          let sc = biSharedContext bic
-         cenv' <- LLVMCrucibleSetupM $ liftIO $ foldrM (\(ServerName n, t) -> CEnv.bindExtraVar sc (mkIdent n, t)) cenv freshTerms
+         cenv' <- LLVMSetupM $ liftIO $ foldrM (\(ServerName n, t) -> CEnv.bindExtraVar sc (mkIdent n, t)) cenv freshTerms
          let env' = Map.union env $ Map.fromList $
                    [ (n, Val (CMS.anySetupTerm t)) | (n, t) <- freshTerms ] ++
                    [ (n, Val v) | (n, v) <- allocs ]
@@ -153,7 +145,7 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
     setupPointsToBitfield ::
       (Map ServerName ServerSetupVal, CryptolEnv) ->
       PointsToBitfield JSONLLVMType (P.Expr P.PName) ->
-      LLVMCrucibleSetupM ()
+      LLVMSetupM ()
     setupPointsToBitfield env (PointsToBitfield p fieldName v) =
       do ptr <- getSetupVal env p
          val <- getSetupVal env v
@@ -164,9 +156,9 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
          t <- getTypedTerm cenv e
          llvm_ghost_value g t
 
-    resolve :: Map ServerName a -> ServerName -> LLVMCrucibleSetupM a
+    resolve :: Map ServerName a -> ServerName -> LLVMSetupM a
     resolve env name =
-      LLVMCrucibleSetupM $
+      LLVMSetupM $
       case Map.lookup name env of
         Just v -> return v
         Nothing -> fail $ unlines
@@ -177,8 +169,8 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
     getTypedTerm ::
       CryptolEnv ->
       P.Expr P.PName ->
-      LLVMCrucibleSetupM TypedTerm
-    getTypedTerm cenv expr = LLVMCrucibleSetupM $
+      LLVMSetupM TypedTerm
+    getTypedTerm cenv expr = LLVMSetupM $
       do (res, warnings) <- liftIO $ getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
          case res of
            Right t -> return t
@@ -187,45 +179,45 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
     getSetupVal ::
       (Map ServerName ServerSetupVal, CryptolEnv) ->
       CrucibleSetupVal JSONLLVMType (P.Expr P.PName) ->
-      LLVMCrucibleSetupM (CMS.AllLLVM MS.SetupValue)
-    getSetupVal _ NullValue = LLVMCrucibleSetupM $ return CMS.anySetupNull
+      LLVMSetupM (CMS.AllLLVM MS.SetupValue)
+    getSetupVal _ NullValue = LLVMSetupM $ return CMS.anySetupNull
     getSetupVal env (ArrayValue _ elts) =
       do elts' <- mapM (getSetupVal env) elts
-         LLVMCrucibleSetupM $ return $ CMS.anySetupArray elts'
+         LLVMSetupM $ return $ CMS.anySetupArray elts'
     getSetupVal _env (StructValue (Just _) _elts) =
-      LLVMCrucibleSetupM $
+      LLVMSetupM $
       fail "LLVM verification does not support struct values with MIR ADTs."
     getSetupVal env (StructValue Nothing elts) =
       do elts' <- mapM (getSetupVal env) elts
-         LLVMCrucibleSetupM $ return $ CMS.anySetupStruct False elts'
+         LLVMSetupM $ return $ CMS.anySetupStruct False elts'
     getSetupVal _ (TupleValue _) =
-      LLVMCrucibleSetupM $ fail "Tuple setup values unsupported in the LLVM API."
+      LLVMSetupM $ fail "Tuple setup values unsupported in the LLVM API."
     getSetupVal _ (EnumValue _ _ _) =
-      LLVMCrucibleSetupM $ fail "Enum setup values unsupported in the LLVM API."
+      LLVMSetupM $ fail "Enum setup values unsupported in the LLVM API."
     getSetupVal _ (SliceValue _) =
-      LLVMCrucibleSetupM $ fail "Slice setup values unsupported in the LLVM API."
+      LLVMSetupM $ fail "Slice setup values unsupported in the LLVM API."
     getSetupVal _ (SliceRangeValue _ _ _) =
-      LLVMCrucibleSetupM $ fail "Slice range setup values unsupported in the LLVM API."
+      LLVMSetupM $ fail "Slice range setup values unsupported in the LLVM API."
     getSetupVal _ (StrSliceValue _) =
-      LLVMCrucibleSetupM $ fail "String slice setup values unsupported in the LLVM API."
+      LLVMSetupM $ fail "String slice setup values unsupported in the LLVM API."
     getSetupVal _ (StrSliceRangeValue _ _ _) =
-      LLVMCrucibleSetupM $ fail "String slice range setup values unsupported in the LLVM API."
+      LLVMSetupM $ fail "String slice range setup values unsupported in the LLVM API."
     getSetupVal env (FieldLValue base fld) =
       do base' <- getSetupVal env base
-         LLVMCrucibleSetupM $ return $ CMS.anySetupField base' fld
+         LLVMSetupM $ return $ CMS.anySetupField base' fld
     getSetupVal env (CastLValue base ty) =
       do base' <- getSetupVal env base
-         LLVMCrucibleSetupM $ return $ CMS.anySetupCast base' (llvmType ty)
+         LLVMSetupM $ return $ CMS.anySetupCast base' (llvmType ty)
     getSetupVal env (UnionLValue base fld) =
       do base' <- getSetupVal env base
-         LLVMCrucibleSetupM $ return $ CMS.anySetupUnion base' fld
+         LLVMSetupM $ return $ CMS.anySetupUnion base' fld
     getSetupVal env (ElementLValue base idx) =
       do base' <- getSetupVal env base
-         LLVMCrucibleSetupM $ return $ CMS.anySetupElem base' idx
+         LLVMSetupM $ return $ CMS.anySetupElem base' idx
     getSetupVal _ (GlobalInitializer name) =
-      LLVMCrucibleSetupM $ return $ CMS.anySetupGlobalInitializer name
+      LLVMSetupM $ return $ CMS.anySetupGlobalInitializer name
     getSetupVal _ (GlobalLValue name) =
-      LLVMCrucibleSetupM $ return $ CMS.anySetupGlobal name
+      LLVMSetupM $ return $ CMS.anySetupGlobal name
     getSetupVal (env, _) (NamedValue n) =
       resolve env n >>= \case Val x -> return x
     getSetupVal (_, cenv) (CryptolExpr expr) =

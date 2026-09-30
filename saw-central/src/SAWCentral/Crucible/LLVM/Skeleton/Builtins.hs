@@ -139,11 +139,11 @@ skeleton_guess_arg_sizes mskel (Some m) profiles = do
   pure $ mskel & modSkelFunctions .~ fskels
 
 --------------------------------------------------------------------------------
--- ** Writing SAWScript specifications using skeletons 
+-- ** Writing SAWScript specifications using skeletons
 
 skeleton_globals_pre ::
   ModuleSkeleton ->
-  LLVMCrucibleSetupM ()
+  LLVMSetupM ()
 skeleton_globals_pre mskel =
   forM_ (mskel ^. modSkelGlobals) $ \gskel ->
     when (gskel ^. globSkelMutable) $ do
@@ -155,7 +155,7 @@ skeleton_globals_pre mskel =
 
 skeleton_globals_post ::
   ModuleSkeleton ->
-  LLVMCrucibleSetupM ()
+  LLVMSetupM ()
 skeleton_globals_post mskel =
   forM_ (mskel ^. modSkelGlobals) $ \gskel -> do
     when (gskel ^. globSkelMutable && gskel ^. globSkelInitialized) $ do
@@ -166,7 +166,7 @@ skeleton_globals_post mskel =
 buildArg ::
   ArgSkeleton ->
   Int ->
-  LLVMCrucibleSetupM (Maybe TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text)
+  LLVMSetupM (Maybe TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text)
 buildArg arg idx
   | arg ^. argSkelType . typeSkelIsPointer
   = let
@@ -196,14 +196,14 @@ buildArg arg idx
 
 skeleton_prestate ::
   FunctionSkeleton ->
-  LLVMCrucibleSetupM SkeletonState
+  LLVMSetupM SkeletonState
 skeleton_prestate skel = do
   _skelArgs <- mapM (uncurry buildArg) $ zip (skel ^. funSkelArgs) [1,2..]
   pure $ SkeletonState{..}
 
 skeleton_exec ::
   SkeletonState ->
-  LLVMCrucibleSetupM ()
+  LLVMSetupM ()
 skeleton_exec prestate = do
   args <- forM (prestate ^. skelArgs) $ \(mval, mptr, _) ->
     case (mval, mptr) of
@@ -215,7 +215,7 @@ skeleton_exec prestate = do
 rebuildArg ::
   (ArgSkeleton, (Maybe TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text))  ->
   Int ->
-  LLVMCrucibleSetupM (Maybe TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text)
+  LLVMSetupM (Maybe TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text)
 rebuildArg (arg, prearg) idx
   | arg ^. argSkelType . typeSkelIsPointer
   , (_, Just ptr, nm) <- prearg
@@ -237,7 +237,7 @@ rebuildArg (arg, prearg) idx
 skeleton_poststate ::
   FunctionSkeleton ->
   SkeletonState ->
-  LLVMCrucibleSetupM SkeletonState
+  LLVMSetupM SkeletonState
 skeleton_poststate skel prestate = do
   _skelArgs <- zipWithM rebuildArg
     (zip (skel ^. funSkelArgs) (prestate ^. skelArgs))
@@ -252,7 +252,7 @@ skeleton_poststate skel prestate = do
 skeleton_arg_index ::
   SkeletonState ->
   Int ->
-  LLVMCrucibleSetupM TypedTerm
+  LLVMSetupM TypedTerm
 skeleton_arg_index state idx
   | idx < length (state ^. skelArgs)
   , (Just t, _, _) <- (state ^. skelArgs) !! idx
@@ -272,7 +272,7 @@ stateArgIndex state nm = flip findIndex (state ^. skelArgs) $ \(_, _, mnm) ->
 skeleton_arg ::
   SkeletonState ->
   Text ->
-  LLVMCrucibleSetupM TypedTerm
+  LLVMSetupM TypedTerm
 skeleton_arg state nm
   | Just idx <- stateArgIndex state nm
   = skeleton_arg_index state idx
@@ -283,7 +283,7 @@ skeleton_arg state nm
 skeleton_arg_index_pointer ::
   SkeletonState ->
   Int ->
-  LLVMCrucibleSetupM (AllLLVM SetupValue)
+  LLVMSetupM (AllLLVM SetupValue)
 skeleton_arg_index_pointer state idx
   | idx < length (state ^. skelArgs)
   , (_, mp, _) <- (state ^. skelArgs) !! idx
@@ -302,7 +302,7 @@ skeleton_arg_index_pointer state idx
 skeleton_arg_pointer ::
   SkeletonState ->
   Text ->
-  LLVMCrucibleSetupM (AllLLVM SetupValue)
+  LLVMSetupM (AllLLVM SetupValue)
 skeleton_arg_pointer state nm
   | Just idx <- stateArgIndex state nm
   = skeleton_arg_index_pointer state idx
