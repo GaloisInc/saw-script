@@ -458,7 +458,7 @@ instance InterpreterMonad ProofScript where
   popScopeAny = scriptTopLevel popScope
   withEnvironAny = withEnvironProofScript
 
-instance InterpreterMonad LLVMCrucibleSetupM where
+instance InterpreterMonad LLVMSetupM where
   liftTopLevel m = llvmTopLevel m
   actionFromValue = fromValue
   mkValue pos chain m = VLLVMSetup pos chain m
@@ -2097,14 +2097,14 @@ instance FromValue a => FromValue (ProofScript a) where
               "Invalid/ill-typed value: " <> uglyValue v'
           ]
 
-instance IsValue a => IsValue (LLVMCrucibleSetupM a) where
+instance IsValue a => IsValue (LLVMSetupM a) where
     toValue ty name m = case ty of
         SS.TyCon _ SS.BlockCon [SS.TyVar _ "LLVMSetup", ty'a] ->
             VLLVMSetup atRestPos [] (fmap (toValue ty'a name) m)
         _ ->
             toValuePanic "LLVMSetup" ty
 
-instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
+instance FromValue a => FromValue (LLVMSetupM a) where
     fromValue how v = do
       v' <- interpretMonadAction how v
       case v' of
@@ -2743,7 +2743,7 @@ print_stack = do
 proof_stack :: ProofScript ()
 proof_stack = scriptTopLevel print_stack
 
-llvm_stack :: LLVMCrucibleSetupM ()
+llvm_stack :: LLVMSetupM ()
 llvm_stack = llvmTopLevel print_stack
 
 jvm_stack :: JVMSetupM ()
@@ -3243,26 +3243,26 @@ do_llvm_boilerplate path mskel builtins =
 
 do_llvm_verify_x86 ::
   Some CIR.LLVMModule -> Text -> Text -> [(Text, Integer)] -> Bool ->
-    LLVMCrucibleSetupM () -> ProofScript () -> TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
+    LLVMSetupM () -> ProofScript () -> TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
 do_llvm_verify_x86 llvm path nm globsyms checkSat spec ps =
   llvm_verify_x86 llvm (Text.unpack path) nm globsyms checkSat spec ps
 
 do_llvm_verify_fixpoint_x86 ::
   Some CIR.LLVMModule -> Text -> Text -> [(Text, Integer)] -> Bool -> TypedTerm ->
-    LLVMCrucibleSetupM () -> ProofScript () -> TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
+    LLVMSetupM () -> ProofScript () -> TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
 do_llvm_verify_fixpoint_x86 llvm path nm globsyms checkSat tt spec ps =
   llvm_verify_fixpoint_x86 llvm (Text.unpack path) nm globsyms checkSat tt spec ps
 
 do_llvm_verify_fixpoint_chc_x86 ::
   Some CIR.LLVMModule -> Text -> Text -> [(Text, Integer)] -> Bool -> TypedTerm ->
-  LLVMCrucibleSetupM () -> ProofScript ()  -> TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
+  LLVMSetupM () -> ProofScript ()  -> TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
 do_llvm_verify_fixpoint_chc_x86 llvm path nm globsyms checkSat tt spec ps =
   llvm_verify_fixpoint_chc_x86 llvm (Text.unpack path) nm globsyms checkSat tt spec ps
 
 do_llvm_verify_x86_with_invariant ::
   Some CIR.LLVMModule -> Text -> Text -> [(Text, Integer)] -> Bool ->
   (Text, Integer, TypedTerm)  ->
-  LLVMCrucibleSetupM () -> ProofScript () -> TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
+  LLVMSetupM () -> ProofScript () -> TopLevel (CIR.SomeLLVM CMS.ProvedSpec)
 do_llvm_verify_x86_with_invariant llvm path nm globsyms checkSat info spec ps =
   llvm_verify_x86_with_invariant llvm (Text.unpack path) nm globsyms checkSat info spec ps
 

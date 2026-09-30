@@ -199,9 +199,9 @@ withEnvironProofScript :: Environ -> ProofScript a -> ProofScript a
 withEnvironProofScript env (ProofScript m) = do
   ProofScript (underExceptT (underStateT (withEnviron env)) m)
 
-withEnvironLLVM :: Environ -> LLVMCrucibleSetupM a -> LLVMCrucibleSetupM a
-withEnvironLLVM env (LLVMCrucibleSetupM m) = do
-  LLVMCrucibleSetupM (underReaderT (underStateT (withEnviron env)) m)
+withEnvironLLVM :: Environ -> LLVMSetupM a -> LLVMSetupM a
+withEnvironLLVM env (LLVMSetupM m) = do
+  LLVMSetupM (underReaderT (underStateT (withEnviron env)) m)
 
 withEnvironJVM :: Environ -> JVMSetupM a -> JVMSetupM a
 withEnvironJVM env (JVMSetupM m) = do

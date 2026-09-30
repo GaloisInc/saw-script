@@ -153,7 +153,7 @@ module SAWCentral.Value (
     CrucibleSetup,
     -- used in SAWCentral.Crucible.LLVM.*,
     --    SAWServer.SAWServer, SAWServer.LLVMCrucibleSetup
-    LLVMCrucibleSetupM(..),
+    LLVMSetupM(..),
     -- used in SAWCentral.Crucible.*.Builtins
     throwCrucibleSetup,
     -- used in SAWCentral.Crucible.LLVM.Skeleton.Builtins,
@@ -648,7 +648,7 @@ data Value
   -----
     -- | A plain value containing a Haskell-level action in LLVMSetup.
     --   Like a VTopLevel, except in the other monad.
-  | VLLVMSetup SS.Pos RefChain !(LLVMCrucibleSetupM Value)
+  | VLLVMSetup SS.Pos RefChain !(LLVMSetupM Value)
   | VLLVMMethodSpec (CMSLLVM.SomeLLVM CMS.ProvedSpec)
   | VLLVMSetupValue (CMSLLVM.AllLLVM CMS.SetupValue)
   -----
@@ -1590,38 +1590,38 @@ type CrucibleSetup ext = Setup.CrucibleSetupT ext TopLevel
 --   specifications should be polymorphic in the underlying architecture
 -- type LLVMCrucibleMethodSpecIR = CMSLLVM.AllLLVM CMS.CrucibleMethodSpecIR
 
-newtype LLVMCrucibleSetupM a =
-  LLVMCrucibleSetupM
-    { runLLVMCrucibleSetupM ::
+newtype LLVMSetupM a =
+  LLVMSetupM
+    { runLLVMSetupM ::
         forall arch.
         (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
         CrucibleSetup (CMSLLVM.LLVM arch) a
     }
   deriving Functor
 
-instance Applicative LLVMCrucibleSetupM where
-  pure x = LLVMCrucibleSetupM (pure x)
-  LLVMCrucibleSetupM f <*> LLVMCrucibleSetupM m = LLVMCrucibleSetupM (f <*> m)
+instance Applicative LLVMSetupM where
+  pure x = LLVMSetupM (pure x)
+  LLVMSetupM f <*> LLVMSetupM m = LLVMSetupM (f <*> m)
 
-instance Monad LLVMCrucibleSetupM where
+instance Monad LLVMSetupM where
   return = pure
-  LLVMCrucibleSetupM m >>= f =
-    LLVMCrucibleSetupM (m >>= \x -> runLLVMCrucibleSetupM (f x))
+  LLVMSetupM m >>= f =
+    LLVMSetupM (m >>= \x -> runLLVMSetupM (f x))
 
 -- XXX this is required for the moment in the interpreter, and should
 -- be removed when we clean out error handling.
-instance MonadFail LLVMCrucibleSetupM where
-   fail msg = LLVMCrucibleSetupM $ lift $ lift $ fail msg
+instance MonadFail LLVMSetupM where
+   fail msg = LLVMSetupM $ lift $ lift $ fail msg
 
 throwCrucibleSetup :: ProgramLoc -> String -> CrucibleSetup ext a
 throwCrucibleSetup loc msg = X.throw $ SS.CrucibleSetupException loc msg
 
-throwLLVM :: ProgramLoc -> String -> LLVMCrucibleSetupM a
-throwLLVM loc msg = LLVMCrucibleSetupM $ throwCrucibleSetup loc msg
+throwLLVM :: ProgramLoc -> String -> LLVMSetupM a
+throwLLVM loc msg = LLVMSetupM $ throwCrucibleSetup loc msg
 
-throwLLVMFun :: Text -> String -> LLVMCrucibleSetupM a
+throwLLVMFun :: Text -> String -> LLVMSetupM a
 throwLLVMFun nm msg = do
-  loc <- LLVMCrucibleSetupM $ getW4Position nm
+  loc <- LLVMSetupM $ getW4Position nm
   throwLLVM loc msg
 
 -- | Get the current interpreter position and convert to a What4 position.
@@ -1696,8 +1696,8 @@ crucibleSetupTopLevel m = lift (lift m)
 scriptTopLevel :: TopLevel a -> ProofScript a
 scriptTopLevel m = ProofScript (lift (lift m))
 
-llvmTopLevel :: TopLevel a -> LLVMCrucibleSetupM a
-llvmTopLevel m = LLVMCrucibleSetupM (crucibleSetupTopLevel m)
+llvmTopLevel :: TopLevel a -> LLVMSetupM a
+llvmTopLevel m = LLVMSetupM (crucibleSetupTopLevel m)
 
 jvmTopLevel :: TopLevel a -> JVMSetupM a
 jvmTopLevel m = JVMSetupM (crucibleSetupTopLevel m)
