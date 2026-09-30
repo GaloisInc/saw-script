@@ -22,7 +22,7 @@ import qualified Argo
 import qualified Argo.Doc as Doc
 import SAWServer.SAWServer
     ( SAWState,
-      SAWTask(LLVMCrucibleSetup),
+      SAWTask(LLVMSetup),
       sawBIC,
       sawTask,
       sawTopLevelRW,
@@ -53,7 +53,7 @@ llvmVerifyAssume mode (VerifyParams modName fun lemmaNames checkSat contract scr
      case tasks of
        (_:_) -> Argo.raise $ notAtTopLevel $ map fst tasks
        [] ->
-         do pushTask (LLVMCrucibleSetup lemmaName)
+         do pushTask (LLVMSetup lemmaName)
             state <- Argo.getState
             mod <- getLLVMModule modName
             let bic = view sawBIC state
@@ -109,7 +109,7 @@ llvmVerifyX86 (X86VerifyParams modName objName fun globals _lemmaNames checkSat 
      case tasks of
        (_:_) -> Argo.raise $ notAtTopLevel $ map fst tasks
        [] ->
-         do pushTask (LLVMCrucibleSetup lemmaName)
+         do pushTask (LLVMSetup lemmaName)
             state <- Argo.getState
             mod <- getLLVMModule modName
             let bic = view  sawBIC state

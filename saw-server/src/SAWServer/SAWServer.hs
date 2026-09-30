@@ -105,7 +105,7 @@ type CryptolAST = P.Expr P.PName
 
 data SAWTask
   = ProofScriptTask
-  | LLVMCrucibleSetup ServerName
+  | LLVMSetup ServerName
   | JVMSetup ServerName
   | MIRSetup ServerName
 
@@ -116,7 +116,7 @@ data SAWTask
 ppSAWTask :: SAWTask -> Text
 ppSAWTask task = case task of
   ProofScriptTask -> "ProofScript"
-  LLVMCrucibleSetup (ServerName n) -> "(LLVMCrucibleSetup\"" <> n <> "\")"
+  LLVMSetup (ServerName n) -> "(LLVMSetup\"" <> n <> "\")"
   JVMSetup (ServerName n) -> "(JVMSetup\"" <> n <> "\")"
   MIRSetup (ServerName n) -> "(MIRSetup\"" <> n <> "\")"
 
