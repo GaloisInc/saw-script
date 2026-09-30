@@ -42,11 +42,15 @@
 #
 # It seems that in an if: line, you must:
 #    - not use ${{ }}, just write an undecorated expression;
-#    - if you take a boolean value from the context (e.g.
+#    - if you take a boolean value from job or step outputs (e.g.
 #       needs.config.outputs.*), you must explicitly compare it to the
-#       _string_ values 'true' or 'false'.
+#       _string_ values 'true' or 'false';
+#    - if you take a boolean value from the run matrix (that is,
+#       matrix.*), you may treat it as a truth value and if you need
+#       to compare it, you must compare it to the non-string values
+#       true or false, without quotes.
 #
-# Apparently storing and retrieving values this way "promotes"
+# Apparently storing and retrieving values as outputs way "promotes"
 # booleans to strings, and then either value, not being '', evaluates
 # to true in a boolean context. But of course this doesn't produce a
 # type error (even a runtime type error), it just silently
@@ -508,7 +512,7 @@ jobs:
         run: .github/ci.sh build_cryptol
 
       - name: Run Haddock
-        if: matrix.haddock == 'true'
+        if: matrix.haddock == true
         shell: bash
         run: .github/ci.sh haddock
 
@@ -535,14 +539,14 @@ jobs:
       # the HPC-enabled binaries do not clobber the non-HPC-enabled binaries.
       - name: Upload non-coverage test bins
         uses: actions/upload-artifact@v5
-        if: matrix.ghc == '9.6.7' && matrix.hpc == 'false'
+        if: matrix.ghc == '9.6.7' && matrix.hpc == false
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}
 
       - name: Upload with-coverage test bins
         uses: actions/upload-artifact@v5
-        if: matrix.ghc == '9.6.7' && matrix.hpc == 'true'
+        if: matrix.ghc == '9.6.7' && matrix.hpc == true
         with:
           path: dist-tests
           name: dist-tests-${{ matrix.os }}-hpc
@@ -630,7 +634,7 @@ jobs:
       # distribution version matches the HPC version, the HPC build artifacts do
       # not clobber the non-HPC distribution artifacts.
       - name: Upload the SAW non-solvers binary distribution
-        if: matrix.ghc == '9.6.7' && matrix.hpc == 'false'
+        if: matrix.ghc == '9.6.7' && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
@@ -639,7 +643,7 @@ jobs:
           retention-days: ${{ needs.config.outputs.retention-days }}
 
       - name: Upload the SAW with-solvers binary distribution
-        if: matrix.ghc == '9.6.7' && matrix.hpc == 'false'
+        if: matrix.ghc == '9.6.7' && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.name }}-with-solvers
@@ -648,7 +652,7 @@ jobs:
           retention-days: ${{ needs.config.outputs.retention-days }}
 
       - name: Upload the Crux binary distribution
-        if: matrix.ghc == '9.6.7' && matrix.hpc == 'false'
+        if: matrix.ghc == '9.6.7' && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.config.outputs.crux-name }} (GHC ${{ matrix.ghc }})
@@ -657,19 +661,19 @@ jobs:
           retention-days: ${{ needs.config.outputs.retention-days }}
 
       - name: Upload the non-coverage test bins
-        if: matrix.ghc == '9.6.7' && matrix.run-tests && matrix.hpc == 'false'
+        if: matrix.ghc == '9.6.7' && matrix.run-tests && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           path: dist/bin
           name: ${{ matrix.os }}-bins
 
       - name: Collect the coverage-testing files
-        if: matrix.hpc == 'true'
+        if: matrix.hpc == true
         shell: bash
         run: .github/ci.sh collect_hpc_files
 
       - name: Upload the coverage-testing files
-        if: matrix.hpc == 'true'
+        if: matrix.hpc == true
         uses: actions/upload-artifact@v5
         with:
           path: hpc.tar.gz
