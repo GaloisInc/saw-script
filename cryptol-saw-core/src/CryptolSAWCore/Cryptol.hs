@@ -2800,9 +2800,11 @@ importCase sc env tyResult scrutinee altsMap mDfltAlt =
          (funcTys, funcs) = unzip funcTysAndFuncs
 
      -- the Cryptol to SAWCore translations:
-     tyArgs'    <- mapM (importType sc env) tyArgs
      tyResult'  <- importType sc env tyResult      -- type of whole case expr
      scrutinee' <- importExpr sc env scrutinee
+     -- The type of the scrutinee will always be a SAWCore datatype
+     -- applied to a full list of parameters and constraint proofs.
+     tyArgs' <- (snd . asApplyAll) <$> scTypeOf sc scrutinee'
 
      -- The recursor
      nmi        <- importName nm
