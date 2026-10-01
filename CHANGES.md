@@ -6,6 +6,9 @@ This release supports [version
 
 ## Bug Fixes
 
+* Fixed regression: SAW can once again import Cryptol `enum` types
+  with parameter constraints (#3452).
+
 * The `summarize_verification` command now reports which MIR functions were
   analyzed in addition to LLVM functions and JVM methods.
 
