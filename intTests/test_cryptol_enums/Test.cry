@@ -15,8 +15,13 @@ enum T1 n = MkT1 (Z n)
 
 enum T2 n = MkT2 [n - 4]
 
+enum T3 n = MkT3 (T1 n)
+
 unT1 : {n} (fin n, n >= 1) => T1 n -> Z n
 unT1 x = case x of MkT1 y -> y
 
 unT2 : {n} (n >= 4) => T2 n -> [n - 4]
 unT2 x = case x of MkT2 y -> y
+
+unT3 : {n} (fin n, n >= 1) => T3 n -> Z n
+unT3 x = case x of MkT3 y -> unT1 y
