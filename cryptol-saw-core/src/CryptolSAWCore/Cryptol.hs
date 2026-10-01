@@ -2581,14 +2581,8 @@ genCodeForEnum ::
   HasCallStack =>
   SharedContext -> NominalType -> [C.EnumCon] -> IO [(C.Name,Term)]
 genCodeForEnum sc nt ctors =
-  do (env, params) <- fmap (map fst) <$> bindTParams' sc mempty (C.ntParams nt)
-
-     let importConstraint :: C.Prop -> IO (VarName, Term)
-         importConstraint p =
-           do vn <- scFreshVarName sc "_"
-              prop <- importType sc env p
-              pure (vn, prop)
-     constraints <- traverse importConstraint (C.ntConstraints nt)
+  do (env0, params) <- fmap (map fst) <$> bindTParams' sc mempty (C.ntParams nt)
+     (env, constraints) <- bindProps sc env0 (C.ntConstraints nt) "_P"
 
      let importCtorSpec :: C.EnumCon -> IO CtorSpec
          importCtorSpec c =
@@ -2613,7 +2607,7 @@ genCodeForEnum sc nt ctors =
      let dtSpec =
            DataTypeSpec
            { dtsNameInfo = nmi
-           , dtsParams = mapMaybe asVariable params ++ constraints
+           , dtsParams = mapMaybe asVariable (params ++ constraints)
            , dtsIndices = []
            , dtsSort = mkSort 0
            , dtsCtors = ctorSpecs
