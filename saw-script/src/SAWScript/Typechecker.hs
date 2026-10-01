@@ -122,7 +122,7 @@ instance (UnifyVars a) => UnifyVars (Pos, PrimitiveLifecycle, Rebindable, a) whe
 instance UnifyVars Type where
     unifyVars t = case t of
         TyCon _ _ ts      -> unifyVars ts
-        TyApplyMonad _ ts   -> unifyVars ts
+        TyApplyMonad _ m arg -> Map.union (unifyVars m) (unifyVars arg)
         TyFunc _ _ params namedParams ret ->
             let paramsVars = unifyVars params
                 namedVars = unifyVars namedParams
@@ -251,7 +251,8 @@ instance AppSubst Decl where
 instance AppSubst Type where
     appSubst s t = case t of
         TyCon prov tc ts -> TyCon prov tc (appSubst s ts)
-        TyApplyMonad prov ts -> TyApplyMonad prov (appSubst s ts)
+        TyApplyMonad prov m arg ->
+            TyApplyMonad prov (appSubst s m) (appSubst s arg)
         TyFunc prov ninfo params namedParams ret ->
             let params' = appSubst s params
                 namedParams' = appSubst s namedParams
@@ -1003,13 +1004,11 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
                         (elts', subelts) = considerList getWhat prov elts
                     in
                     (ppTyCon' tc elts', prov, subelts)
-                TyApplyMonad prov elts ->
-                    let getWhat i = case i of
-                          0 -> "monad"
-                          _ -> ordin i <> " argument"
-                        (elts', subelts) = considerList getWhat prov elts
+                TyApplyMonad prov m arg ->
+                    let (m', subelts'm) = consider "monad" prov m
+                        (arg', subelts'arg) = consider "1st argument" prov arg
                     in
-                    (Text.intercalate " " elts', prov, subelts)
+                    (m' <> " " <> arg', prov, subelts'm ++ subelts'arg)
                 TyFunc prov _npi params namedParams ret ->
                     let mkWhat i = ordin (i + 1) <> " positional parameter"
                         (params', elts1) = considerList mkWhat prov params
@@ -1430,31 +1429,10 @@ unify exp0 pos found0 = visit [] exp0 found0
 
                 recList expTS foundTS
 
-            (TyApplyMonad _ expTS, TyApplyMonad _ foundTS) -> do
+            (TyApplyMonad _ exp'm exp'arg, TyApplyMonad _ found'm found'arg) -> do
                 -- both monad applications, unify the args
-                when (length expTS /= length foundTS) $ do
-                    -- This case is unreachable.
-                    --
-                    -- Monad application has a definite arity and
-                    -- every type is supposed to pass `checkType`
-                    -- before we do anything more significant with it;
-                    -- that does a kind check, and on failure produces
-                    -- a fresh unification var that can't cause
-                    -- further trouble.
-                    --
-                    -- Therefore, if we get here, something's broked and we should
-                    -- panic.
-                    --
-                    ppopts <- asks tiPPOpts
-                    let expTS'   = "LHS:" : map (\t -> "   " <> ppType ppopts t) expTS
-                        foundTS' = "RHS:" : map (\t -> "   " <> ppType ppopts t) foundTS
-                    let nexpect'   = Text.pack $ show $ length expTS
-                        nfound' = Text.pack $ show $ length foundTS
-                        heading = "Mismatched type constructor arguments: " <>
-                                  "expected " <> nexpect' <> ", found " <> nfound'
-                    panic "unify" (heading : expTS' ++ foundTS')
-
-                recList expTS foundTS
+                recOnce exp'm found'm
+                recOnce exp'arg found'arg
 
             (TyVar _ a, TyVar _ b) | a == b ->
                 -- Same named variable, nothing to do
@@ -1537,9 +1515,10 @@ inspectTypeFTVs kind ty = case ty of
     TyCon _prov ctor args -> do
         let kinds = lookupTyCon ctor
         Map.unions <$> zipWithM inspectTypeFTVs kinds args
-    TyApplyMonad _prov args -> do
-        let kinds = applyMonadKinds
-        Map.unions <$> zipWithM inspectTypeFTVs kinds args
+    TyApplyMonad _prov m arg -> do
+        m' <- inspectTypeFTVs kindStarToStar m
+        arg' <- inspectTypeFTVs kindStar arg
+        pure $ Map.union m' arg'
     TyFunc _prov _ params namedParams ret ->
         let np = Map.elems namedParams in
         Map.unions <$> mapM (inspectTypeFTVs kindStar) (ret : params ++ np)
@@ -2407,9 +2386,9 @@ addTypedef a ty = do
 --
 monadType :: Type -> Maybe (Type, Type)
 monadType ty = case ty of
-  TyApplyMonad _ [ctx@(TyCon _ (ContextCon _) []), valty] ->
+  TyApplyMonad _ ctx@(TyCon _ (ContextCon _) []) valty ->
       Just (ctx, valty)
-  TyApplyMonad _ [ctx@(TyVar _ name), valty] | isMonad name ->
+  TyApplyMonad _ ctx@(TyVar _ name) valty | isMonad name ->
       Just (ctx, valty)
   -- We don't currently ever generate these types, but be future-proof
   TyCon prov (ContextCon ctx) [valty] ->
@@ -2945,10 +2924,6 @@ lookupTyCon tycon = case tycon of
     MIRSpecCon -> []
     ContextCon _ctx -> [kindStar]
 
--- | Get the kinds of the parameters of a monad application
-applyMonadKinds :: [Kind]
-applyMonadKinds = [kindStarToStar, kindStar]
-
 -- | Check if a list of types contains a failure type. If so, return
 --   it. Uses `Either` with unit rather than `Maybe` so as to get the
 --   right combining behavior using `>>`.
@@ -3013,45 +2988,12 @@ checkType kind ty = case ty of
                 Left ty' -> ty'
                 Right () -> TyCon prov tycon args'
 
-    TyApplyMonad prov args -> do
+    TyApplyMonad prov m arg -> do
+        if kind == kindStar then do
+            m' <- checkType kindStarToStar m
+            arg' <- checkType kindStar arg
 
-        -- First, look up the constructor.
-        let params = applyMonadKinds
-        let nparams = genericLength params
-            nargs = genericLength args
-            argsleft = kindNumArgs kind
-
-        if nargs > nparams then do
-                ppopts <- asks tiPPOpts
-                let nargs' = PP.viaShow $ nargs - 1
-                    nparams' = PP.viaShow $ nparams - 1
-                    arg = case args of
-                        a : _ -> a
-                        [] ->
-                            panic "checkType / TyApplyMonad" [
-                                "impossible empty args with 0 > 2"
-                            ]
-                    tycon' = prettyType ppopts arg
-
-                let pos = Pos.getPos prov
-                recordError pos $ "Too many type arguments for type constructor" <+>
-                                  tycon' <> "; found" <+> nargs' <+>
-                                  "but expected only" <+> nparams'
-                getErrorTyVar pos
-        else if nargs + argsleft /= nparams then do
-            let pos = Pos.getPos prov
-            let kind' = prettyKind kind
-                kindExp' = prettyKind $ Kind (nparams - nargs)
-            recordError pos $ "Kind mismatch: expected" <+> kind' <+>
-                              "but found" <+> kindExp'
-            getErrorTyVar pos
-        else do
-            -- note that this will ignore the extra params, and return
-            -- a list of the same length as the args given, which is
-            -- exactly what we need here.
-            args' <- zipWithM checkType params args
-
-            -- If any of the arguments is an error var, something was
+            -- If either result is an error var, something was
             -- invalid. Return the error var directly. (Properly we
             -- should make a new one, but it's fresh and we can safely
             -- repurpose it.) This is a hack to avoid returning types
@@ -3061,9 +3003,16 @@ checkType kind ty = case ty of
             -- that will change the way type applications are done and
             -- that will likely change the way miskinded type
             -- applications are seen.
-            pure $ case checkForFailure args' of
+            pure $ case checkForFailure [m', arg'] of
                 Left ty' -> ty'
-                Right () -> TyApplyMonad prov args'
+                Right () -> TyApplyMonad prov m' arg'
+        else do
+            let pos = Pos.getPos prov
+            let kind' = prettyKind kind
+                kindStar' = prettyKind kindStar
+            recordError pos $ "Kind mismatch: expected" <+> kind' <+>
+                              "but found" <+> kindStar'
+            getErrorTyVar pos
 
     TyFunc prov nameinfo params namedParams ret -> do
         if kind /= kindStar then do
