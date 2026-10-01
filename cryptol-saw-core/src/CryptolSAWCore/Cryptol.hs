@@ -511,9 +511,9 @@ importPropsType sc env [] ty = importType sc env ty
 importPropsType sc env (prop : props) ty
   | isErasedProp prop = importPropsType sc env props ty
   | otherwise =
-    do p <- importType sc env prop
-       t <- importPropsType sc env props ty
-       scFun sc p t
+    do (env', v) <- bindProp sc env prop "_P"
+       t <- importPropsType sc env' props ty
+       scGeneralizeTerms sc [v] t
 
 nameToLocalName :: C.Name -> LocalName
 nameToLocalName = C.identText . C.nameIdent
