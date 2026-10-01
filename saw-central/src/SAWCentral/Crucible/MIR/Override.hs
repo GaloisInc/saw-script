@@ -1560,7 +1560,7 @@ matchArg opts sc cc cs prepost md = go False []
                   ]
 
         -- match the fields of a tuple point-wise
-        ([], MIRVal (TupleShape (Mir.TyTuple _) elems) ag, MS.SetupTuple () zs) ->
+        ([], MIRVal (AggregateShape (Mir.TyTuple _) elems) ag, MS.SetupTuple () zs) ->
           void $ accessMirAggregateF' sym (const fail_) elems zs ag $
             \_off _sz shp rv z -> go inCast [] (MIRVal shp rv) z
 
@@ -2202,7 +2202,7 @@ valueToSC sym fail_ tval (MIRVal shp val) =
       -> liftIO (toSC sym st val)
       |  n == 128, Just _ <- W4.testEquality w (W4.knownNat @128)
       -> liftIO (toSC sym st val)
-    (Cryptol.TVTuple tys, TupleShape _ elems)
+    (Cryptol.TVTuple tys, AggregateShape _ elems)
       -> do terms <- accessMirAggregate' sym elems tys val $
               \_off _sz shp' val' tval' -> valueToSC sym fail_ tval' (MIRVal shp' val')
             liftIO (scTupleReduced sc terms)

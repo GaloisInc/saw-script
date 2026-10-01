@@ -104,9 +104,15 @@ import qualified SAWCore.SharedTerm as SAW
 -- stored directly, but can be computed with `shapeType`.
 data TypeShape (tp :: CrucibleType) where
     PrimShape :: M.Ty -> BaseTypeRepr btp -> TypeShape (BaseToType btp)
-    -- | A shape for tuples, as well as for tuple-like types (e.g.,
-    -- 'M.TyFnDef', which is treated like an empty tuple).
-    TupleShape :: M.Ty -> [AgElemShape] -> TypeShape MirAggregateType
+    -- | A shape for (some) things that are represented with `MirAggregate`s. At
+    -- the moment, the following types use this shape:
+    -- - `M.TyTuple`
+    -- - `M.TyFnDef`, which is treated like an empty tuple
+    --
+    -- This notably does not include arrays or structs, even though they too are
+    -- represented with `MirAggregate`s - they currently use their own shapes,
+    -- `ArrayShape` and `StructShape`, below.
+    AggregateShape :: M.Ty -> [AgElemShape] -> TypeShape MirAggregateType
     ArrayShape :: M.Ty
                -- ^ The array type
                -> M.Ty
@@ -247,7 +253,7 @@ tyToShape col = go
         M.TyTuple _ -> goTuple ty
         M.TyClosure _ -> goTuple ty
         -- `FnDef` is represented like an empty tuple
-        M.TyFnDef _ -> Some $ TupleShape ty []
+        M.TyFnDef _ -> Some $ AggregateShape ty []
         M.TyArray ty' len | Some shp <- go ty' ->
           let elemSz = tySize col ty'
            in Some $ ArrayShape ty ty' elemSz shp (fromIntegral len)
@@ -275,7 +281,7 @@ tyToShape col = go
           | otherwise -> error ("goPrim: type " ++ show ty ++ " produced non-primitive type " ++ show tpr)
 
     goTuple :: M.Ty -> Some TypeShape
-    goTuple ty = Some $ TupleShape ty (tyFieldElemShapes ty)
+    goTuple ty = Some $ AggregateShape ty (tyFieldElemShapes ty)
 
     goStruct :: M.Ty -> Some TypeShape
     goStruct ty = Some $ StructShape ty (tyFieldElemShapes ty)
@@ -371,7 +377,7 @@ shapeType = go
   where
     go :: forall tp. TypeShape tp -> TypeRepr tp
     go (PrimShape _ btpr) = baseToType btpr
-    go (TupleShape _ _) = MirAggregateRepr
+    go (AggregateShape _ _) = MirAggregateRepr
     go (ArrayShape _ _ _ _ _) = MirAggregateRepr
     go (StructShape _ _) = MirAggregateRepr
     go (EnumShape _ _ variantTys _ discrShp) =
@@ -391,7 +397,7 @@ variantShapeType (VariantShape flds) =
 
 shapeMirTy :: TypeShape tp -> M.Ty
 shapeMirTy (PrimShape ty _) = ty
-shapeMirTy (TupleShape ty _) = ty
+shapeMirTy (AggregateShape ty _) = ty
 shapeMirTy (ArrayShape ty _ _ _ _) = ty
 shapeMirTy (StructShape ty _) = ty
 shapeMirTy (EnumShape ty _ _ _ _) = ty
@@ -461,7 +467,7 @@ shapeToTerm' sc = go
     go :: forall tp'. CryTermAdaptor Integer -> TypeShape tp' -> m SAW.Term
     go NoAdapt (PrimShape _ BaseBoolRepr) = liftIO $ SAW.scBoolType sc
     go NoAdapt (PrimShape _ (BaseBVRepr w)) = liftIO $ SAW.scBitvector sc (natValue w)
-    go ada (TupleShape _ elems) = do
+    go ada (AggregateShape _ elems) = do
         subAda <- case ada of
                     NoAdapt -> pure (repeat NoAdapt)
                     AdaptTuple as -> pure as
@@ -576,7 +582,7 @@ expandAgElems as = goList 0 as
         Nothing -> [AgElemShape (base + off) sz shp]
 
     goShape :: Word -> TypeShape tp -> Maybe [AgElemShape]
-    goShape base (TupleShape _ as') = Just $ goList base as'
+    goShape base (AggregateShape _ as') = Just $ goList base as'
     goShape base (ArrayShape _ _ sz shp len) =
       Just $ concat [go base (AgElemShape (i * sz) sz shp) | i <- init [0 .. len]]
     goShape base (StructShape _ as') = Just $ goList base as'

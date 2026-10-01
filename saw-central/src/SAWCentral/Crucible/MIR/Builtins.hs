@@ -456,7 +456,7 @@ constructExpandedSetupValue cc sc = go
         PrimShape ty _ -> do
           fv <- freshPrimVariable pfx ty
           pure $ MS.SetupTerm fv
-        TupleShape _ elems -> do
+        AggregateShape _ elems -> do
           flds <- mapM (goAgElem pfx) (zip [0..] elems)
           pure $ MS.SetupTuple () flds
         ArrayShape ty elemTy _ elemShp _ ->
@@ -2084,7 +2084,7 @@ setupArg sc cc ecRef mty0 tp0 =
           IO (Cryptol.Type, Term)
         typeShapeToSAWTypes shp =
           case shp of
-            TupleShape _ elems -> do
+            AggregateShape _ elems -> do
               (eltCtys, eltScTps) <-
                 mapAndUnzipM
                   (\(AgElemShape _ _ shp') -> typeShapeToSAWTypes shp')
@@ -2146,7 +2146,7 @@ setupArg sc cc ecRef mty0 tp0 =
           IO (Crucible.RegValue Sym tp')
         termToMirRegValue shp scTp t =
           case shp of
-            TupleShape ty elems -> do
+            AggregateShape ty elems -> do
               let sz = tySize col ty
               eltScTps <-
                 case asTupleType scTp of
@@ -2155,7 +2155,7 @@ setupArg sc cc ecRef mty0 tp0 =
                     scTp' <- ppTerm sc scTp
                     panic
                       "setupArg"
-                      [ "TupleShape with non-tuple type:"
+                      [ "AggregateShape with non-tuple type:"
                       , Text.pack $ scTp'
                       ]
               buildMirAggregate sym sz elems (zip [0..] eltScTps) $
@@ -2374,13 +2374,13 @@ setupResultTerm sc cc mty0 tpr0 val0 =
         go mty tpr val =
           let shp = tyToShapeEq col mty tpr in
           case shp of
-            TupleShape _ elems -> do
+            AggregateShape _ elems -> do
               tys <-
                 case mty of
                   Mir.TyTuple tys -> pure tys
                   _ -> panic
                          "setupResultTerm"
-                         [ "TupleShape with non-TyTuple type:"
+                         [ "AggregateShape with non-TyTuple type:"
                          , Text.pack $ show $ PP.pretty mty
                          ]
               terms <- accessMirAggregate' sym elems tys val $

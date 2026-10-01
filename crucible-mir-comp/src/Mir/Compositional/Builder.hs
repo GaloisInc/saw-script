@@ -718,7 +718,7 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
         visitExprVars cache expr $ \var -> do
             msbPrePost pp . seVars %= Set.insert (Some var)
         liftIO $ MS.SetupTerm <$> eval btpr expr
-    go (TupleShape _ elems) ag = do
+    go (AggregateShape _ elems) ag = do
       svs <- accessMirAggregate sym elems ag $ \_off _sz shp rv -> go shp rv
       return $ MS.SetupTuple () svs
     go (ArrayShape _ elemTy sz shp len) ag = do
