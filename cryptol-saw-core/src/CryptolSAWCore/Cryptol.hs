@@ -347,7 +347,11 @@ importType sc env ty = do
              do ni <- importName n
                 mnm <- scResolveQualName sc (toQualName ni)
                 case mnm of
-                  Just nm -> scConstApply sc nm =<< traverse go ts
+                  Just nm ->
+                    do t <- scConstApply sc nm =<< traverse go ts
+                       let props = map (plainSubst s) (C.ntConstraints nt)
+                       proofs <- traverse (proveProp sc env) props
+                       scApplyAll sc t proofs
                   Nothing -> panic "importType" ["Type name not found:", CryPP.pp n]
            C.Abstract
              | Just prim' <- C.asPrim n
