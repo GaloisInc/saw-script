@@ -1,1 +1,10 @@
 import "Test.cry";
+
+import "Instance.cry";
+
+prove_print (admit "test parameterized enum constructors with constraints") {{
+  \x y ->
+    case mkAffine x y of
+      Affine x' y' -> (x' == x) && (y' == y)
+      Infinity -> False
+}};

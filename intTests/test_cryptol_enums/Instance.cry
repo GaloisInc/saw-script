@@ -1,0 +1,3 @@
+module Instance = Parameterized where
+
+type P = 7
