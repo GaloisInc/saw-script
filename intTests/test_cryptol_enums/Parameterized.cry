@@ -1,0 +1,13 @@
+module Parameterized where
+
+parameter
+    type P : #
+    type constraint (fin P, P >= 1)
+
+enum Point =
+    Infinity
+  | Affine (Z P) (Z P)
+  // | Affine [P] [P]
+
+mkAffine : Z P -> Z P -> Point
+mkAffine x y = Affine x y

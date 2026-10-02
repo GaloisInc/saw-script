@@ -347,7 +347,11 @@ importType sc env ty = do
              do ni <- importName n
                 mnm <- scResolveQualName sc (toQualName ni)
                 case mnm of
-                  Just nm -> scConstApply sc nm =<< traverse go ts
+                  Just nm ->
+                    do t <- scConstApply sc nm =<< traverse go ts
+                       let props = map (plainSubst s) (C.ntConstraints nt)
+                       proofs <- traverse (proveProp sc env) props
+                       scApplyAll sc t proofs
                   Nothing -> panic "importType" ["Type name not found:", CryPP.pp n]
            C.Abstract
              | Just prim' <- C.asPrim n
@@ -507,9 +511,9 @@ importPropsType sc env [] ty = importType sc env ty
 importPropsType sc env (prop : props) ty
   | isErasedProp prop = importPropsType sc env props ty
   | otherwise =
-    do p <- importType sc env prop
-       t <- importPropsType sc env props ty
-       scFun sc p t
+    do (env', v) <- bindProp sc env prop "_P"
+       t <- importPropsType sc env' props ty
+       scGeneralizeTerms sc [v] t
 
 nameToLocalName :: C.Name -> LocalName
 nameToLocalName = C.identText . C.nameIdent
@@ -2577,7 +2581,8 @@ genCodeForEnum ::
   HasCallStack =>
   SharedContext -> NominalType -> [C.EnumCon] -> IO [(C.Name,Term)]
 genCodeForEnum sc nt ctors =
-  do (env, params) <- fmap (map fst) <$> bindTParams' sc mempty (C.ntParams nt)
+  do (env0, params) <- fmap (map fst) <$> bindTParams' sc mempty (C.ntParams nt)
+     (env, constraints) <- bindProps sc env0 (C.ntConstraints nt) "_P"
 
      let importCtorSpec :: C.EnumCon -> IO CtorSpec
          importCtorSpec c =
@@ -2602,7 +2607,7 @@ genCodeForEnum sc nt ctors =
      let dtSpec =
            DataTypeSpec
            { dtsNameInfo = nmi
-           , dtsParams = mapMaybe asVariable params
+           , dtsParams = mapMaybe asVariable (params ++ constraints)
            , dtsIndices = []
            , dtsSort = mkSort 0
            , dtsCtors = ctorSpecs
@@ -2650,171 +2655,174 @@ importCase ::
   LocalEnv ->
   C.Type -> C.Expr -> Map C.Ident C.CaseAlt -> Maybe C.CaseAlt -> IO Term
 importCase sc env tyResult scrutinee altsMap mDfltAlt =
-  do
-  allvars <- eAllVars sc
-  -- FUTURE: consider using scTypeOf once we have an information-
-  -- preserving translation of enum types into SAWCore.
-  let scrutineeTy = fastTypeOf allvars scrutinee
-  (nm,ctors,tyParams,tyArgs) <- case scrutineeTy of
-      (C.tIsNominal -> Just (C.NominalType{C.ntDef=C.Enum ctors, ntName=nm, ntParams=tyParams},tyArgs))
-        ->
-          return (nm,ctors,tyParams,tyArgs)
-      _ ->
-          panic "importCase" [
-              "`case` expression scrutinee is not an Enum type",
-              CryPP.pp scrutineeTy
-          ]
-  let sub = C.listParamSubst (zip tyParams tyArgs)
+  do allvars <- eAllVars sc
+     -- FUTURE: consider using scTypeOf once we have an information-
+     -- preserving translation of enum types into SAWCore.
+     let scrutineeTy = fastTypeOf allvars scrutinee
+     (nm, ctors, tyParams, tyArgs) <-
+       case scrutineeTy of
+         (C.tIsNominal -> Just (C.NominalType{C.ntDef=C.Enum ctors, ntName=nm, ntParams=tyParams}, tyArgs))
+           ->
+             return (nm, ctors, tyParams, tyArgs)
+         _ ->
+             panic "importCase" [
+                 "`case` expression scrutinee is not an Enum type",
+                 CryPP.pp scrutineeTy
+             ]
+     let sub = C.listParamSubst (zip tyParams tyArgs)
 
-  -- Create a sequential set of `C.CaseAlt`s that exactly match the
-  -- constructors:
-  --   - preconditions:
-  --      Assume `altsMap` is valid, thus not checking for extraneous
-  --      entries. (Call panic if a missing alternative is not covered
-  --      by presence of default in `mDfltAlt`.)
+     -- Create a sequential set of `C.CaseAlt`s that exactly match the
+     -- constructors:
+     --   - preconditions:
+     --      Assume `altsMap` is valid, thus not checking for extraneous
+     --      entries. (Call panic if a missing alternative is not covered
+     --      by presence of default in `mDfltAlt`.)
 
-  -- First, define what to do if alternative for constructor is missing:
-  let
-      -- | useDefaultAlt - when constructor (ctor) has no 'CaseAlt',
-      -- create a ctor specific alt-function from the mDfltAlt
-      -- "default expr".
-      --   - For each constructor we may need to generate a default alternative,
-      --     (the code cannot be shared as the arity and types for each constructor
-      --     will be different).
+     -- First, define what to do if alternative for constructor is missing:
+     let
+         -- | useDefaultAlt - when constructor (ctor) has no 'CaseAlt',
+         -- create a ctor specific alt-function from the mDfltAlt
+         -- "default expr".
+         --   - For each constructor we may need to generate a default alternative,
+         --     (the code cannot be shared as the arity and types for each constructor
+         --     will be different).
 
-      useDefaultAlt :: HasCallStack => C.EnumCon -> IO ([C.Type], C.CaseAlt)
-      useDefaultAlt ctor = case mDfltAlt of
-        Nothing ->
-            panic "importCase" [
-                "missing CaseAlt and no default CaseAlt: " <> CryPP.pp nm
-            ]
-        Just (C.CaseAlt [(nm',_)] dfltE)
-            | nameIsUnusedPat nm' ->
-                do
-                -- NOTE nm' is unused Name
-                let vts  = map
-                             (\ty-> (nm',plainSubst sub ty))
-                             (C.ecFields ctor)
-                  -- N.B.: to avoid extra name construction, we are
-                  --  using the same name (un-referenced!) nm' for
-                  --  each of the arguments of the CaseAlt function.
-                  --  This appears to work.  However, if the '_' name
-                  --  *was* actually referenced, it would not be what
-                  --  we would want However, typechecking would
-                  --  ascertain this.
+         useDefaultAlt :: HasCallStack => C.EnumCon -> IO ([C.Type], C.CaseAlt)
+         useDefaultAlt ctor =
+           case mDfltAlt of
+             Nothing ->
+               panic "importCase" [
+                   "missing CaseAlt and no default CaseAlt: " <> CryPP.pp nm
+               ]
+             Just (C.CaseAlt [(nm',_)] dfltE)
+               | nameIsUnusedPat nm' ->
+                   do
+                   -- NOTE nm' is unused Name
+                   let vts  = map
+                                (\ty-> (nm',plainSubst sub ty))
+                                (C.ecFields ctor)
+                     -- N.B.: to avoid extra name construction, we are
+                     --  using the same name (un-referenced!) nm' for
+                     --  each of the arguments of the CaseAlt function.
+                     --  This appears to work.  However, if the '_' name
+                     --  *was* actually referenced, it would not be what
+                     --  we would want However, typechecking would
+                     --  ascertain this.
 
-                return (map snd vts, C.CaseAlt vts dfltE)
+                   return (map snd vts, C.CaseAlt vts dfltE)
 
-            | otherwise ->
-                panic "importCase" [
-                    "Unsupported style of case expression: " <>
-                        "default case alternative that binds scrutinee",
-                    "pattern: " <> CryPP.pp nm
-                ]
+               | otherwise ->
+                   panic "importCase" [
+                       "Unsupported style of case expression: " <>
+                           "default case alternative that binds scrutinee",
+                       "pattern: " <> CryPP.pp nm
+                   ]
 
-          where
-          nameIsUnusedPat nm'' =
-            Text.take 3 (nameToLocalName nm'') == "__p"
+               where
+                 nameIsUnusedPat nm'' =
+                   Text.take 3 (nameToLocalName nm'') == "__p"
 
-            -- Except for the prefix, the indication that this is an unused pattern
-            -- is long gone. This name is created using `getIdent` in
-            --   deps/cryptol/src/Cryptol/Parser/Name.hs
-            -- FIXME:
-            --  - Clearly this is undesirable coupling.
-            --  - Best (but non-local, pervasive) solution is to have a more
-            --    precise type for default CaseAlt, the type is currently
-            --    too general.
+                   -- Except for the prefix, the indication that this is an unused pattern
+                   -- is long gone. This name is created using `getIdent` in
+                   --   deps/cryptol/src/Cryptol/Parser/Name.hs
+                   -- FIXME:
+                   --  - Clearly this is undesirable coupling.
+                   --  - Best (but non-local, pervasive) solution is to have a more
+                   --    precise type for default CaseAlt, the type is currently
+                   --    too general.
 
-        Just (C.CaseAlt nts _) ->
-            let nts' = map (\(n, _t) -> "   " <> CryPP.pp n) nts in
-            panic "importCase" $ [
-                "Default CaseAlt breaks invariant: " <>
-                    "(assumed) invariant is that exactly one variable pattern is allowed in the default CaseAlt"
-            ] ++ nts'
+             Just (C.CaseAlt nts _) ->
+               let nts' = map (\(n, _t) -> "   " <> CryPP.pp n) nts in
+               panic "importCase" $ [
+                   "Default CaseAlt breaks invariant: " <>
+                       "(assumed) invariant is that exactly one variable pattern is allowed in the default CaseAlt"
+               ] ++ nts'
 
-  -- For each constructor involved in the case expression, return two things:
-  --
-  -- 1. The types of the constructor's fields as determined by the type of the
-  --    scrutinee expression.
-  -- 2. A case alternative corresponding to each constructor.
-  --
-  -- Note that the types in (1) may not precisely correspond to the types of
-  -- the case alternative's field binders in (2). This is because Cryptol
-  -- sometimes simplifies numeric types in case alternatives (e.g., simplifying
-  -- `(n + 1) - 1` to `n`). It is not a big deal if such mismatches arise, as
-  -- we will make sure to insert coercions as needed when importing the case
-  -- alternatives later. (See `test3301` for an example of a program that
-  -- crucially relies on these coercions.)
-  fieldTysAndAlts :: [([C.Type], C.CaseAlt)] <-
-    forM ctors $ \ctor ->
-      case Map.lookup (C.nameIdent (C.ecName ctor)) altsMap of
-        Just a  -> return (plainSubst sub <$> C.ecFields ctor, a)
-        Nothing -> useDefaultAlt ctor
+     -- For each constructor involved in the case expression, return two things:
+     --
+     -- 1. The types of the constructor's fields as determined by the type of the
+     --    scrutinee expression.
+     -- 2. A case alternative corresponding to each constructor.
+     --
+     -- Note that the types in (1) may not precisely correspond to the types of
+     -- the case alternative's field binders in (2). This is because Cryptol
+     -- sometimes simplifies numeric types in case alternatives (e.g., simplifying
+     -- `(n + 1) - 1` to `n`). It is not a big deal if such mismatches arise, as
+     -- we will make sure to insert coercions as needed when importing the case
+     -- alternatives later. (See `test3301` for an example of a program that
+     -- crucially relies on these coercions.)
+     fieldTysAndAlts :: [([C.Type], C.CaseAlt)] <-
+       forM ctors $ \ctor ->
+         case Map.lookup (C.nameIdent (C.ecName ctor)) altsMap of
+           Just a  -> return (plainSubst sub <$> C.ecFields ctor, a)
+           Nothing -> useDefaultAlt ctor
 
-  {- |
-  What we just did is, in terms of the running ETT example above, this:
+     {- |
+     What we just did is, in terms of the running ETT example above, this:
 
-  Given this Cryptol
-    > case scrutinee  of
-    >   C1     -> RHS1
-    >   _      -> DFLT
-  we transform it into this Cryptol
-    > case scrutinee  of
-    >   C1     -> RHS1
-    >   C2 _   -> DFLT
-    >   C3 _ _ -> DFLT
+     Given this Cryptol
+       > case scrutinee  of
+       >   C1     -> RHS1
+       >   _      -> DFLT
+     we transform it into this Cryptol
+       > case scrutinee  of
+       >   C1     -> RHS1
+       >   C2 _   -> DFLT
+       >   C3 _ _ -> DFLT
 
-  And what we will do next is transform this last into this SAWCore:
+     And what we will do next is transform this last into this SAWCore:
 
-    > ETT#rec
-    >   T1                          -- type application, the instantiation of 'a1'
-    >   (\_ -> B)                   -- type application, the result of the whole case
-    >   RHS1                        -- deconstructor for C1
-    >   (\(_: Nat)         -> DFLT) -- deconstructor for C2
-    >   (\(_: Bool) (_:T1) -> DFLT) -- deconstructor for C3
-    >                               --  - note the 'a1' has been instantiated to T1
-    >   scrutinee
-  -}
+       > ETT#rec
+       >   T1                          -- type application, the instantiation of 'a1'
+       >   (\_ -> B)                   -- type application, the result of the whole case
+       >   RHS1                        -- deconstructor for C1
+       >   (\(_: Nat)         -> DFLT) -- deconstructor for C2
+       >   (\(_: Bool) (_:T1) -> DFLT) -- deconstructor for C3
+       >                               --  - note the 'a1' has been instantiated to T1
+       >   scrutinee
+     -}
 
-  let funcTysAndFuncs :: [(C.Type, C.Expr)]
-      funcTysAndFuncs =
-        map
-          (\(fieldTys, C.CaseAlt xs body) ->
-            let funcTy = foldr C.tFun tyResult fieldTys in
-            let func = foldr (\(n,t) e -> C.EAbs n t e) body xs in
-            (funcTy, func))
-          fieldTysAndAlts
+     let funcTysAndFuncs :: [(C.Type, C.Expr)]
+         funcTysAndFuncs =
+           map
+             (\(fieldTys, C.CaseAlt xs body) ->
+               let funcTy = foldr C.tFun tyResult fieldTys in
+               let func = foldr (\(n,t) e -> C.EAbs n t e) body xs in
+               (funcTy, func))
+             fieldTysAndAlts
 
-      (funcTys, funcs) = unzip funcTysAndFuncs
+         (funcTys, funcs) = unzip funcTysAndFuncs
 
-  -- the Cryptol to SAWCore translations:
-  tyArgs'    <- mapM (importType sc env) tyArgs
-  tyResult'  <- importType sc env tyResult      -- type of whole case expr
-  scrutinee' <- importExpr sc env scrutinee
+     -- the Cryptol to SAWCore translations:
+     tyResult'  <- importType sc env tyResult      -- type of whole case expr
+     scrutinee' <- importExpr sc env scrutinee
+     -- The type of the scrutinee will always be a SAWCore datatype
+     -- applied to a full list of parameters and constraint proofs.
+     tyArgs' <- (snd . asApplyAll) <$> scTypeOf sc scrutinee'
 
-  -- The recursor
-  nmi        <- importName nm
-  mName      <- scResolveQualName sc (toQualName nmi)
-  recursor   <- case mName of
-                  Just dtName -> scRecursor sc dtName (mkSort 0)
-                  Nothing -> panic "importCase" ["Type name not found:", CryPP.pp nm]
+     -- The recursor
+     nmi        <- importName nm
+     mName      <- scResolveQualName sc (toQualName nmi)
+     recursor   <- case mName of
+                     Just dtName -> scRecursor sc dtName (mkSort 0)
+                     Nothing -> panic "importCase" ["Type name not found:", CryPP.pp nm]
 
-  -- The deconstructors. Note that we import them with known types (using
-  -- importExpr') to resolve any type mismatches that arise between the
-  -- scrutinee type and the case alternatives' field binders. (See the comments
-  -- on `fieldTysAndAlts` above.)
+     -- The deconstructors. Note that we import them with known types (using
+     -- importExpr') to resolve any type mismatches that arise between the
+     -- scrutinee type and the case alternatives' field binders. (See the comments
+     -- on `fieldTysAndAlts` above.)
 
-  tyInput    <- scTypeOf sc scrutinee'
-  motive     <- scLambda sc wildcardVarName tyInput tyResult'
-  funcs'     <- zipWithM
-                  (\funcTy func -> importExpr' sc env (C.tMono funcTy) func)
-                  funcTys
-                  funcs
-  caseExpr   <- scApplyAll sc recursor $
-                  tyArgs'             -- recursor is expecting the type arguments
-                                      --   that the enumtype is instantiated to
-                  ++ [motive]         -- the result type of the case expression
-                  ++ funcs'           -- the eliminator funcs, one for each constructor
-                  ++ [scrutinee']     -- scrutinee of case, of enum type
+     tyInput    <- scTypeOf sc scrutinee'
+     motive     <- scLambda sc wildcardVarName tyInput tyResult'
+     funcs'     <- zipWithM
+                     (\funcTy func -> importExpr' sc env (C.tMono funcTy) func)
+                     funcTys
+                     funcs
+     caseExpr   <- scApplyAll sc recursor $
+                     tyArgs'             -- recursor is expecting the type arguments
+                                         --   that the enumtype is instantiated to
+                     ++ [motive]         -- the result type of the case expression
+                     ++ funcs'           -- the eliminator funcs, one for each constructor
+                     ++ [scrutinee']     -- scrutinee of case, of enum type
 
-  return caseExpr
+     return caseExpr
