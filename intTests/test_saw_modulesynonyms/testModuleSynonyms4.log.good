@@ -1,0 +1,81 @@
+Loading file "testModuleSynonyms4.saw"
+Error: Cryptol: [error] at testModuleSynonyms4.saw:13:21--13:25
+    Value not in scope: S::s
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testModuleSynonyms4.saw:13:1-13:31 (at top level)
+
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testModuleSynonyms4.saw:16:21--16:29
+    Value not in scope: S::s_pri
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testModuleSynonyms4.saw:16:1-16:35 (at top level)
+
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testModuleSynonyms4.saw:19:21--19:31
+    Value not in scope: Syn::s_pri
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testModuleSynonyms4.saw:19:1-19:38 (at top level)
+
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testModuleSynonyms4.saw:20:21--20:34
+    Value not in scope: SynSyn::s_pri
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testModuleSynonyms4.saw:20:1-20:41 (at top level)
+
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testModuleSynonyms4.saw:24:21--24:44
+    Value not in scope: S::S_Inner::s_inner_pri
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testModuleSynonyms4.saw:24:1-24:51 (at top level)
+
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testModuleSynonyms4.saw:25:21--25:46
+    Value not in scope: Syn::S_Inner::s_inner_pri
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testModuleSynonyms4.saw:25:1-25:53 (at top level)
+
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testModuleSynonyms4.saw:29:21--29:49
+    Value not in scope: Syn::S_InnerSyn::s_inner_pri
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testModuleSynonyms4.saw:29:1-29:56 (at top level)
+
+(Failure was expected, continuing)
+Error: Cryptol: [error] at testModuleSynonyms4.saw:30:21--30:52
+    Value not in scope: SynSyn::S_InnerSyn::s_inner_pri
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   testModuleSynonyms4.saw:30:1-30:59 (at top level)
+
+(Failure was expected, continuing)
+Assuming a = Integer
+1
+Assuming a = Integer
+4
+Assuming a = Integer
+4
+Assuming a = Integer
+4
+Assuming a = Integer
+3
+Assuming a = Integer
+3
+Assuming a = Integer
+3
+Assuming a = Integer
+3
