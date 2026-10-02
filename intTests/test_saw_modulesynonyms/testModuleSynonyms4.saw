@@ -1,13 +1,17 @@
 // Test: module aliases (aka submodule synonyms), i.e.
 //   submodule A = submodule B
 //
-// These tests are comparable to testModuleSynonyms2.saw, but they
-// ensure that aliases respect the 'public and private' import mechanism.
-// So here we replace `s_inner` with `s_inner_pri`
+// This file is comparable to testModuleSynonyms3.saw except
+//  - we import qualified
+//  - we check that nothing "slipped into scope" unqualified.
+//  - we check that we can now access the same vars, but via `M::`.
 
 import "Synonyms.cry" as M;
 
 /* ENSURE we can't access anything without M: *****************************/
+// public in submodule:
+fails (do{ print {{ S::s }}; });
+
 // private in submodule:
 fails (do{ print {{ S::s_pri }}; });
 
@@ -27,6 +31,9 @@ fails (do{ print {{ SynSyn::S_InnerSyn::s_inner_pri }};  });
 
 
 /* ENSURE everything can be accessed via M: *******************************/
+
+// public in submodule:
+print {{ M::S::s }};
 
 // private in submodule:
 print {{ M::S::s_pri }};
