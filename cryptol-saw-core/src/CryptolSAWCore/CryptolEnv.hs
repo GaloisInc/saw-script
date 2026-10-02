@@ -261,9 +261,7 @@ initCryptolEnv sc = do
 genTermEnv :: SharedContext -> IO ()
 genTermEnv sc = do
   modEnv <- eModuleEnv sc
-  let declGroups = concatMap T.mDecls
-                 $ filter (not . T.isParametrizedModule)
-                 $ ME.loadedModules modEnv
+  let declGroups = concatMap T.mDecls (ME.loadedNonParamModules modEnv)
       nominals   = loadedNonParamNominalTypes modEnv
   -- These update eAllTerms and eAllVars and leave the rest alone
   C.genCodeForNominalTypes sc nominals
@@ -288,14 +286,12 @@ ioParseSchema = ioParseGeneric P.parseSchemaWith
 --   entry points.
 ioParseGeneric ::
   (P.Config -> Text -> Either P.ParseError a) -> InputText -> IO a
-ioParseGeneric parse inp = ioParseResult (parse cfg str)
+ioParseGeneric parse inp = ioParseResult (parse cfg (inpText inp))
   where
-  cfg = P.defaultConfig { P.cfgSource = inpFile inp }
-  -- XXX this is kind of gross; maybe sometime we get a second parser
-  -- entry point that takes a start position... (this is saw-script #2175)
-  str = Text.concat [ Text.replicate (inpLine inp - 1) "\n"
-                    , Text.replicate (inpCol inp - 1) " "
-                    , inpText inp ]
+  cfg = P.defaultConfig { P.cfgSource = inpFile inp
+                        , P.cfgStart  = startPos
+                        }
+  startPos = P.advanceColBy (inpCol inp - 1) (P.startOfLine (inpLine inp))
 
 -- | Support function that prints Cryptol parse errors.
 ioParseResult :: Either P.ParseError a -> IO a
@@ -330,10 +326,7 @@ getNamingEnv :: SharedContext -> CryptolEnv -> IO MR.NamingEnv
 getNamingEnv sc env = do
   modEnv <- eModuleEnv sc
   return $ eExtraNaming env
-    `MR.shadowing`
-    (foldr (\i ne-> getNamingEnvOfImport modEnv i <> ne)
-           mempty
-           (eImports env))
+    `MR.shadowing` foldMap (getNamingEnvOfImport modEnv) (eImports env)
 
 -- | Get the `MR.NamingEnv` for a single import (`ImportData`)
 --
@@ -803,13 +796,10 @@ mkCryptolModule sc m = do
   return $
       CryptolModule
         -- create Map of type synonyms:
-        (Map.filterWithKey
-           (\k _ -> Set.member k tNameSet)
-           (T.mTySyns m)
-        )
+        (Map.restrictKeys (T.mTySyns m) tNameSet)
 
         -- create Map of the `TypedTerm` s:
-        ( Map.filterWithKey (\k _ -> Set.member k vNameSet)
+        ( (`Map.restrictKeys` vNameSet)
         $ Map.intersectionWith
              (\t x -> TypedTerm (TypedTermSchema t) x)
              types
@@ -894,8 +884,8 @@ bindCryptolModule sc (modName, CryptolModule sm tm) env0 = do
   addExtraTySyns sc sm
   addExtraVars sc (fmap fst tm')
   addToAllTerms sc (fmap snd tm')
-  return $ C.mapNaming (flip (foldr addName) (Map.keys tm') .
-               flip (foldr addTSyn) (Map.keys sm)) env0
+  return $ C.mapNaming (flip (foldr (addName C.NSValue)) (Map.keys tm') .
+               flip (foldr (addName C.NSType)) (Map.keys sm)) env0
   where
     -- | `tm'` is the typed terms from `tm` that have Cryptol schemas
     tm' = Map.mapMaybe f tm
@@ -903,13 +893,7 @@ bindCryptolModule sc (modName, CryptolModule sm tm) env0 = do
           f (TypedTerm (TypedTermSchema s) x) = Just (s,x)
           f _                                 = Nothing
 
-    addName name =
-      MN.shadowing
-       (MN.singletonNS C.NSValue (P.mkQual modName (MN.nameIdent name)) name)
-
-    addTSyn name =
-      MN.shadowing
-        (MN.singletonNS C.NSType (P.mkQual modName (MN.nameIdent name)) name)
+    addName ns name = shadowWith ns (P.mkQual modName (MN.nameIdent name)) name
 
 
 -- | @extractDefFromExtCryptolModule sc en ecm name@:
@@ -1067,7 +1051,7 @@ updateFFITypes sc m allTerms' eFFITypes' = do
                  ]
         pure $ (info, ty)
   decls <- mapM getNameInfo (T.findForeignDecls m)
-  pure $ foldr (\(info, ty) decl -> Map.insert info ty decl) eFFITypes' decls
+  pure $ Map.union (Map.fromList decls) eFFITypes'
 
 
 ---- import --------------------------------------------------------------------
@@ -1162,33 +1146,40 @@ mkImportData info vis nm as imps =
 
 ---- Binding -------------------------------------------------------------------
 
--- | Prepare an identifier for adding to the Cryptol environment.
---   May update the name supply.
+-- | Make a fresh `T.Name` for a value declared in the given module.
+--   Updates the name supply.
+declareIdent :: SharedContext -> P.ModName -> Ident -> IO T.Name
+declareIdent sc mname ident =
+  useModEnvSupply sc $
+    MN.mkDeclared C.NSValue (C.TopModule mname) MN.UserName ident
+                  Nothing P.emptyRange
+
+-- | Prepare an identifier for adding to the Cryptol environment as an
+--   "extra" declaration.  Updates the name supply.
 --
 --   XXX: @bind@ is the wrong name for this; it doesn't bind anything
 --   itself.
 --
---   XXX: should probably be unified with `declareName`.
---
 bindIdent :: SharedContext -> Ident -> IO T.Name
-bindIdent sc ident = useModEnvSupply sc $ \supply ->
-  let
-    fixity = Nothing
-    (name, supply') = MN.mkDeclared
-                        C.NSValue
-                        (C.TopModule interactiveName)
-                        MN.UserName
-                        ident fixity P.emptyRange supply
-  in (name, supply')
+bindIdent sc = declareIdent sc interactiveName
+
+-- | Put a name into a `MR.NamingEnv` under the given `P.PName`,
+--   shadowing whatever else that `P.PName` refers to.
+shadowWith ::
+  C.Namespace -> P.PName -> MN.Name -> MR.NamingEnv -> MR.NamingEnv
+shadowWith ns pname name = MR.shadowing (MN.singletonNS ns pname name)
+
+-- | Like `shadowWith`, using the name's unqualified identifier.
+shadowUnqual :: C.Namespace -> MN.Name -> MR.NamingEnv -> MR.NamingEnv
+shadowUnqual ns name = shadowWith ns (P.mkUnqual (MN.nameIdent name)) name
 
 -- | Add a new variable as an "extra" declaration.
 bindExtraVar :: SharedContext -> (Ident, TypedTerm) -> CryptolEnv -> IO CryptolEnv
 bindExtraVar sc (ident, TypedTerm (TypedTermSchema schema) trm) env0 = do
   name <- bindIdent sc ident
-  let pname = P.mkUnqual ident
   addExtraVars sc (Map.singleton name schema)
   addToAllTerms sc (Map.singleton name trm)
-  return $ C.mapNaming (MR.shadowing $ MN.singletonNS C.NSValue pname name) env0
+  return $ C.mapNaming (shadowUnqual C.NSValue name) env0
 
 -- Only bind terms that have Cryptol schemas.
 --
@@ -1225,19 +1216,15 @@ bindTySyn sc (ident, T.Forall [] [] ty) env = do
   name <- bindIdent sc ident
   let tysyn = T.TySyn name [] [] ty Nothing
   addExtraTySyns sc (Map.singleton name tysyn)
-  let pname = P.mkUnqual ident
-  return $ C.mapNaming (MR.shadowing (MN.singletonNS C.NSType pname name)) env
+  return $ C.mapNaming (shadowUnqual C.NSType name) env
 
 bindTySyn _ _ env = pure env -- only monomorphic types may be bound
 
--- | Add a new Cryptol integer type as an "extra" declration.
-bindIntegerType :: SharedContext -> (Ident, Integer) -> CryptolEnv -> IO CryptolEnv
-bindIntegerType sc (ident, n) env = do
-  name <- bindIdent sc ident
-  let tysyn = T.TySyn name [] [] (T.tNum n) Nothing
-  addExtraTySyns sc (Map.singleton name tysyn)
-  let pname = P.mkUnqual ident
-  return $ C.mapNaming (MR.shadowing (MN.singletonNS C.NSType pname name)) env
+-- | Add a new Cryptol integer type as an "extra" declaration.
+bindIntegerType ::
+  SharedContext -> (Ident, Integer) -> CryptolEnv -> IO CryptolEnv
+bindIntegerType sc (ident, n) =
+  bindTySyn sc (ident, T.Forall [] [] (T.tNum n))
 
 --------------------------------------------------------------------------------
 
@@ -1271,9 +1258,7 @@ resolveIdentifier' sc env nameSpace nm =
     (res, _ws) <- runModuleM sc $
       MM.interactive (MB.rename interactiveName nameEnv
                             (MR.resolveNameUse nameSpace pnm))
-    case res of
-      Left _  -> pure Nothing
-      Right x -> pure (Just x)
+    pure (either (const Nothing) Just res)
 
 -- | Like `resolveIdentifier'`, but instead of collapsing every failure
 --   into `Nothing`, it returns *all* the in-scope names that @nm@ could
@@ -1338,27 +1323,37 @@ pExprToTypedTerm sc env pexpr = do
       -- NOTE: if a name is not in scope, it is reported here.
 
     -- Infer types
-    ifDecls <- C.getAllIfaceDecls <$> MM.getModuleEnv
-    let range = fromMaybe P.emptyRange (P.getLoc re)
-    prims <- MB.getPrimMap
-    -- noIfaceParams because we don't support functors yet
-    tcEnv <- MB.genInferInput range prims NoParams ifDecls
-    let tcEnv' = tcEnv { TM.inpVars = Map.union extraVars (TM.inpVars tcEnv)
-                       , TM.inpTSyns = Map.union extraTySyns (TM.inpTSyns tcEnv)
-                       }
-
-    out <- MM.io (T.tcExpr re tcEnv')
+    tcEnv <- inferInputFor extraVars extraTySyns (P.getLoc re)
+    out <- MM.io (T.tcExpr re tcEnv)
     MM.interactive (runInferOutput out)
 
   -- Translate
   trm <- C.translateExpr sc expr
   return (TypedTerm (TypedTermSchema schema) trm)
+
+-- | Generate the typechecker's input for checking something (at the
+--   given location), adding SAW's "extra" variables and type synonyms
+--   to what is in scope.
+inferInputFor ::
+  Map T.Name T.Schema {- ^ extra variables -} ->
+  Map T.Name T.TySyn  {- ^ extra type synonyms -} ->
+  Maybe P.Range       {- ^ where the thing being checked is -} ->
+  MM.ModuleM TM.InferInput
+inferInputFor extraVars extraTySyns mrange = do
+  ifDecls <- C.getAllIfaceDecls <$> MM.getModuleEnv
+  prims <- MB.getPrimMap
+  -- NoParams because we don't support functors yet
+  tcEnv <- MB.genInferInput (fromMaybe P.emptyRange mrange)
+                            prims NoParams ifDecls
+  return tcEnv { TM.inpVars  = Map.union extraVars   (TM.inpVars tcEnv)
+               , TM.inpTSyns = Map.union extraTySyns (TM.inpTSyns tcEnv)
+               }
+
 -- | Read Cryptol declarations from `InputText` and ingest them into
 --   the `CryptolEnv`.
 parseDecls ::
   SharedContext -> CryptolEnv -> InputText -> IO CryptolEnv
 parseDecls sc env input = do
-  ifaceDecls <- C.getAllIfaceDecls <$> eModuleEnv sc
   namingEnv <- getNamingEnv sc env
   extraVars <- eExtraVars sc
   extraTySyns <- eExtraTySyns sc
@@ -1394,15 +1389,8 @@ parseDecls sc env input = do
                            }
 
     -- Infer types
-    let range = fromMaybe P.emptyRange (P.getLoc rdecls)
-    prims <- MB.getPrimMap
-    -- noIfaceParams because we don't support functors yet
-    tcEnv <- MB.genInferInput range prims NoParams ifaceDecls
-    let tcEnv' = tcEnv { TM.inpVars = Map.union extraVars (TM.inpVars tcEnv)
-                       , TM.inpTSyns = Map.union extraTySyns (TM.inpTSyns tcEnv)
-                       }
-
-    out <- MM.io (TM.runInferM tcEnv' (TI.inferTopModule rmodule))
+    tcEnv <- inferInputFor extraVars extraTySyns (P.getLoc rdecls)
+    out <- MM.io (TM.runInferM tcEnv (TI.inferTopModule rmodule))
     tmodule <- MM.interactive (runInferOutput out)
     m <- case tmodule of
            T.TCTopModule m -> pure m
@@ -1411,9 +1399,10 @@ parseDecls sc env input = do
     return m
 
   -- Add new type synonyms and their name bindings to the environment
-  let addName name = MR.shadowing (MN.singletonNS C.NSType (P.mkUnqual (MN.nameIdent name)) name)
   addExtraTySyns sc (T.mTySyns tmodule)
-  let env' = C.mapNaming (\ne -> foldr addName ne (Map.keys (T.mTySyns tmodule))) env
+  let addNames ne = foldr (shadowUnqual C.NSType) ne
+                          (Map.keys (T.mTySyns tmodule))
+      env' = C.mapNaming addNames env
 
   -- Translate
   let dgs = T.mDecls tmodule
@@ -1436,12 +1425,7 @@ parseSchema sc env input = do
              $ MB.rename interactiveName nameEnv
                 (MR.renameSchema pschema pure)
 
-    ifDecls <- C.getAllIfaceDecls <$> MM.getModuleEnv
-    let range = fromMaybe P.emptyRange (P.getLoc rschema)
-    prims <- MB.getPrimMap
-    -- noIfaceParams because we don't support functors yet
-    tcEnv <- MB.genInferInput range prims NoParams ifDecls
-    let tcEnv' = tcEnv { TM.inpTSyns = Map.union extraTySyns (TM.inpTSyns tcEnv) }
+    tcEnv <- inferInputFor Map.empty extraTySyns (P.getLoc rschema)
     let infer =
           case rschema of
             P.Forall [] [] t _ -> do
@@ -1449,23 +1433,18 @@ parseSchema sc env input = do
               (t', goals) <- TM.collectGoals $ TK.checkType t k
               return (T.Forall [] [] t', goals)
             _ -> TK.checkSchema TM.AllowWildCards rschema
-    out <- MM.io (TM.runInferM tcEnv' infer)
+    out <- MM.io (TM.runInferM tcEnv infer)
     (schema, _goals) <- MM.interactive (runInferOutput out)
     --mapM_ (MM.io . print . TP.ppWithNames TP.emptyNameMap) goals
     return (schemaNoUser schema)
   return schema
 
 -- | Prepare an identifier for adding to the Cryptol environment.
---   May update the name supply.
---
---   XXX: much the same as, and should probably be unified with, `bindIdent`.
+--   Updates the name supply.  (Like `bindIdent`, but for any module.)
 --
 declareName ::
   SharedContext -> P.ModName -> Text -> IO T.Name
-declareName sc mname input = do
-  let pname = P.mkUnqual (mkIdent input)
-  liftModuleM sc $ MM.interactive $
-    MN.liftSupply (MN.mkDeclared C.NSValue (C.TopModule mname) MN.UserName (P.getIdent pname) Nothing P.emptyRange)
+declareName sc mname input = declareIdent sc mname (mkIdent input)
 
 -- | Remove type synonym annotations from a Cryptol type.
 --
