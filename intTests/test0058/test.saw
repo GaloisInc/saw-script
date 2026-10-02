@@ -42,3 +42,40 @@ prove_print z3 thm1;
 let l2'' = list_term l2';
 let thm2 = {{ l2 == l2'' }};
 prove_print z3 thm2;
+
+
+// Tuples
+
+let t1  = {{ (0x01, 0x02, 0x03) }};
+let t1' = eval_tuple t1;
+print t1'; // [..] ... List of Cryptol terms representing 1, 2, and 3 ...
+
+let t2  = {{ ("the", "and", "for", "not") }};
+let t2' = eval_tuple t2;
+print (nth t2' 0);
+print (nth t2' 1);
+print (nth t2' 2);
+print (nth t2' 3);
+
+// eval_tuple and tuple_term should be inverses
+let t1'' = tuple_term t1';
+prove_print z3 {{ t1 == t1'' }};
+
+let t2'' = tuple_term t2';
+prove_print z3 {{ t2 == t2'' }};
+
+// tuple_term should work for non-cryptol types
+let t3 = tuple_term [parse_core "3", parse_core "4", {{ 0x5 }}];
+print_term t3;
+let t3' = nth (eval_tuple t3) 2;
+prove_print z3 {{ t3' == 0x5 }};
+
+// tuple_term fails on polymorphic values
+fails do { print (tuple_term [{{True}}, {{map}}]); };
+
+// eval_tuple fails on non-tuples
+fails do { print (eval_tuple {{ [0x2, 0x3, 0x4] }}); };
+
+// eval_tuple fails on polymorphic tuples
+fails do { print (eval_tuple {{ (3, 4) }}); };
+print (eval_tuple {{ (3:[8], 4:[8]) }});
