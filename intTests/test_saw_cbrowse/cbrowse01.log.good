@@ -1,0 +1,22 @@
+--------------------------------
+-- Browse
+Submodules
+==========
+
+  S1
+  S3
+
+Type Synonyms
+=============
+
+  type Type1 = [32]
+  type Type2 = [16]
+  type Type3 = [16]
+
+Symbols
+=======
+
+  x1 : Type1
+  x2 : Type2
+  x3 : Type3
+
