@@ -48,15 +48,17 @@ import System.Directory (
 import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
-import qualified Cryptol.ModuleSystem.Env as ME (modContextOf)
-import qualified Cryptol.Parser.AST as CP (ImportG(..), ImpName(..))
+import qualified Cryptol.ModuleSystem.Env as ME
+import qualified Cryptol.ModuleSystem.Interface as MI
+import qualified Cryptol.Parser.AST as CP (ImportG(..))
 import qualified Cryptol.Parser.Position as CP (thing)
 import qualified Cryptol.REPL.Browse as CB
 import qualified Cryptol.Utils.Ident as CI (modNameToText, textToModName)
 
 import qualified CryptolSAWCore.Pretty as CryPP
 import CryptolSAWCore.GlobalCryptolEnv (
-    ImportData(..), ImportInfo(..), eImports, eModuleEnv
+    ImportData(..), ImportInfo(..), ImportVisibility(..),
+    eImports, eModuleEnv
  )
 
 import qualified SAWSupport.Pretty as PPS
@@ -111,17 +113,30 @@ cbrowseCmd args =
            "Usage: :cbrowse MODULENAME"
            <> " | :cbrowse submodule SUBMODULENAME"
   where
-  -- Show the exported contents of a loaded top-level module.
+  -- Show the contents of a loaded top-level module: the exported
+  -- definitions, plus the private ones if the module was imported
+  -- with `PublicAndPrivate` visibility.
   browseTop modName = do
     rw <- getTopLevelRW
+    cenv <- getCryptolEnv
     ppopts <- getPPOpts
     modEnv <- liftIO $ eModuleEnv (rwSharedContext rw)
-    let impName = CP.ImpTop (CI.textToModName modName)
-    liftIO $ case ME.modContextOf impName modEnv of
-      Nothing  -> TextIO.putStrLn $
-                    "Module `" <> modName <> "' is not loaded."
-      Just ctx -> do
-        let doc = PP.unAnnotate $
+    let mName = CI.textToModName modName
+        showPrivate =
+          or [ True | d <- eImports cenv
+                    , ImportTop <- [importInfo d]
+                    , importVis d == PublicAndPrivate
+                    , CP.thing (CP.iModule (importCmd d)) == mName
+             ]
+    liftIO $ case ME.lookupModule mName modEnv of
+      Nothing -> TextIO.putStrLn $
+                   "Module `" <> modName <> "' is not loaded."
+      Just lm -> do
+        let ctx0 = ME.lmModContext modEnv lm
+            names = MI.ifNames (ME.lmInterface lm)
+            ctx | showPrivate = ctx0 { ME.mctxExported = MI.ifsDefines names }
+                | otherwise   = ctx0
+            doc = PP.unAnnotate $
                     CB.browseModContext CB.BrowseExported ctx
             -- Cryptol's output has whitespace-only lines; trim them.
             trim = Text.intercalate "\n" . map Text.stripEnd . Text.lines
