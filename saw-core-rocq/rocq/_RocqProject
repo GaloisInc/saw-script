@@ -1,6 +1,9 @@
 -Q generated/CryptolToRocq   CryptolToRocq
 -Q handwritten/CryptolToRocq CryptolToRocq
 
+handwritten/CryptolToRocq/Vector.v
+handwritten/CryptolToRocq/Bitvector.v
+
 generated/CryptolToRocq/SAWCorePrelude.v
 generated/CryptolToRocq/CryptolPrimitivesForSAWCore.v
 
