@@ -48,13 +48,15 @@ import System.Directory (
 import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
-import qualified Cryptol.Parser.AST as CP (ImportG(..))
+import qualified Cryptol.ModuleSystem.Env as ME (modContextOf)
+import qualified Cryptol.Parser.AST as CP (ImportG(..), ImpName(..))
 import qualified Cryptol.Parser.Position as CP (thing)
-import qualified Cryptol.Utils.Ident as CI (modNameToText)
+import qualified Cryptol.REPL.Browse as CB
+import qualified Cryptol.Utils.Ident as CI (modNameToText, textToModName)
 
 import qualified CryptolSAWCore.Pretty as CryPP
 import CryptolSAWCore.GlobalCryptolEnv (
-    ImportData(..), ImportInfo(..), eImports
+    ImportData(..), ImportInfo(..), eImports, eModuleEnv
  )
 
 import qualified SAWSupport.Pretty as PPS
@@ -103,13 +105,30 @@ cbrowseCmd :: [Text] -> REPL ()
 cbrowseCmd args =
   case args of
     [modName] | modName /= "submodule"
-                           -> browse False modName
-    ["submodule", modName] -> browse True modName
+                           -> browseTop modName
+    ["submodule", modName] -> browseSub modName
     _ -> liftIO $ TextIO.putStrLn $
            "Usage: :cbrowse MODULENAME"
            <> " | :cbrowse submodule SUBMODULENAME"
   where
-  browse isSub modName = do
+  -- Show the exported contents of a loaded top-level module.
+  browseTop modName = do
+    rw <- getTopLevelRW
+    ppopts <- getPPOpts
+    modEnv <- liftIO $ eModuleEnv (rwSharedContext rw)
+    let impName = CP.ImpTop (CI.textToModName modName)
+    liftIO $ case ME.modContextOf impName modEnv of
+      Nothing  -> TextIO.putStrLn $
+                    "Module `" <> modName <> "' is not loaded."
+      Just ctx -> do
+        let doc = PP.unAnnotate $
+                    CB.browseModContext CB.BrowseExported ctx
+            -- Cryptol's output has whitespace-only lines; trim them.
+            trim = Text.intercalate "\n" . map Text.stripEnd . Text.lines
+        TextIO.putStrLn $ trim $ PPS.renderText ppopts doc
+
+  -- Show the imports of a submodule.
+  browseSub modName = do
     cenv <- getCryptolEnv
     ppopts <- getPPOpts
     let isNested d = case importInfo d of
@@ -117,13 +136,12 @@ cbrowseCmd args =
           ImportTop      -> False
         nameOf d = CI.modNameToText $ CP.thing $ CP.iModule $ importCmd d
         matches = [ d | d <- eImports cenv
-                      , isNested d == isSub
+                      , isNested d
                       , nameOf d == modName
                   ]
-        kind = if isSub then "submodule" else "module"
     liftIO $ case matches of
       [] -> TextIO.putStrLn $
-              "No imports of " <> kind <> " `" <> modName <> "' found."
+              "No imports of submodule `" <> modName <> "' found."
       _  -> mapM_ (TextIO.putStrLn . PPS.renderText ppopts . ppImport)
                   matches
 
@@ -436,7 +454,7 @@ nbCommandList  =
   , CommandDescr ":type" [":t"]  (ExprArg typeOfCmd)
     "check the type of an expression"
   , CommandDescr ":cbrowse" []   (WordArgs cbrowseCmd)
-    "display imports of MODULE or of 'submodule SUBMODULE'"
+    "browse MODULE, or display imports of 'submodule SUBMODULE'"
   , CommandDescr ":llvmdis" []   (ModuleTargetArgs llvmDisCmd)
     llvmDisCmdHelp
   , CommandDescr ":?"    []      (SymbolNameArg helpCmd)
