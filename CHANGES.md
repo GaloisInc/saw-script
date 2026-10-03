@@ -6,6 +6,10 @@ This release supports [version
 
 ## Bug Fixes
 
+* The Python client no longer crashes while logging a failed verification
+  with `LogResults(verbose_failure=True)` when the server returns no stdout
+  (#1663).
+
 * Fixed regression: SAW can once again import Cryptol `enum` types
   with parameter constraints (#3452).
 

@@ -305,7 +305,7 @@ class LogResults(View):
         filename, lineno, lemma_name = self.__result_attributes(failure)
         message = f"⚠️  Failed to verify: {lemma_name}" + \
                   f" (defined at {filename}:{lineno}):\n{failure.exception}"
-        if self.verbose:
+        if self.verbose and failure.exception.stdout is not None:
             message += '\n\tstdout:\n' + '\n'.join(
                 '\t\t' + line for line in failure.exception.stdout.split('\n')
             )
