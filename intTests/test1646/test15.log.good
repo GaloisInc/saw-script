@@ -79,6 +79,7 @@ eval_bool : Term -> Bool
 eval_int : Term -> Int
 eval_list : Term -> [Term]
 eval_size : Type -> Int
+eval_tuple : Term -> [Term]
 exec : String -> [String] -> String -> TopLevel String
 exit : Int -> TopLevel ()
 fail : {a} String -> TopLevel a
@@ -391,6 +392,7 @@ timeout_handle :
    {a} Int -> TopLevel a -> TopLevel a -> TopLevel a
 trivial : ProofScript ()
 true : Bool
+tuple_term : [Term] -> Term
 type : Term -> Type
 undefined : {a} a
 unfold_term : [String] -> Term -> Term
