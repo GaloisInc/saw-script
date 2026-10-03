@@ -50,12 +50,13 @@ import Prettyprinter ((<+>))
 
 import qualified Cryptol.ModuleSystem.Env as ME
 import qualified Cryptol.ModuleSystem.Interface as MI
-import qualified Cryptol.Parser.AST as CP (ImportG(..))
+import qualified Cryptol.ModuleSystem.Name as MN (nameTopModuleMaybe)
+import qualified Cryptol.Parser.AST as CP (ImportG(..), ImpName(..))
 import qualified Cryptol.Parser.Position as CP (thing)
 import qualified Cryptol.REPL.Browse as CB
-import qualified Cryptol.Utils.Ident as CI (modNameToText, textToModName)
+import qualified Cryptol.TypeCheck.AST as T (ModuleG(..), Submodule(..))
+import qualified Cryptol.Utils.Ident as CI (textToModName)
 
-import qualified CryptolSAWCore.Pretty as CryPP
 import CryptolSAWCore.GlobalCryptolEnv (
     ImportData(..), ImportInfo(..), ImportVisibility(..),
     eImports, eModuleEnv
@@ -101,8 +102,10 @@ cdCmd f
             msg = "Directory " <> f' <> " not found or not a directory"
         liftIO $ TextIO.putStrLn msg
 
--- | Display the imports in the current `CryptolEnv` that match
---   either @MODULENAME@ or @submodule SUBMODULENAME@.
+-- | Display the contents of a Cryptol module (@:cbrowse MODULENAME@)
+--   or submodule (@:cbrowse submodule SUBMODULENAME@). Private
+--   definitions are included if the (sub)module was imported with
+--   `PublicAndPrivate` visibility.
 cbrowseCmd :: [Text] -> REPL ()
 cbrowseCmd args =
   case args of
@@ -113,65 +116,69 @@ cbrowseCmd args =
            "Usage: :cbrowse MODULENAME"
            <> " | :cbrowse submodule SUBMODULENAME"
   where
-  -- Show the contents of a loaded top-level module: the exported
-  -- definitions, plus the private ones if the module was imported
-  -- with `PublicAndPrivate` visibility.
+  -- Show a loaded top-level module.
   browseTop modName = do
-    rw <- getTopLevelRW
     cenv <- getCryptolEnv
-    ppopts <- getPPOpts
-    modEnv <- liftIO $ eModuleEnv (rwSharedContext rw)
+    modEnv <- getModEnv
     let mName = CI.textToModName modName
-        showPrivate =
-          or [ True | d <- eImports cenv
-                    , ImportTop <- [importInfo d]
-                    , importVis d == PublicAndPrivate
-                    , CP.thing (CP.iModule (importCmd d)) == mName
-             ]
-    liftIO $ case ME.lookupModule mName modEnv of
-      Nothing -> TextIO.putStrLn $
-                   "Module `" <> modName <> "' is not loaded."
+        imps = [ d | d <- eImports cenv
+                   , ImportTop <- [importInfo d]
+                   , importedAs d == mName
+               ]
+    case ME.lookupModule mName modEnv of
+      Nothing -> say $ "Module `" <> modName <> "' is not loaded."
       Just lm -> do
         let ctx0 = ME.lmModContext modEnv lm
             names = MI.ifNames (ME.lmInterface lm)
-            ctx | showPrivate = ctx0 { ME.mctxExported = MI.ifsDefines names }
-                | otherwise   = ctx0
-            doc = PP.unAnnotate $
-                    CB.browseModContext CB.BrowseExported ctx
-            -- Cryptol's output has whitespace-only lines; trim them.
-            trim = Text.intercalate "\n" . map Text.stripEnd . Text.lines
-        TextIO.putStrLn $ trim $ PPS.renderText ppopts doc
+        showCtx $ withPrivate imps (MI.ifsDefines names) ctx0
 
-  -- Show the imports of a submodule.
+  -- Show an imported submodule.
   browseSub modName = do
     cenv <- getCryptolEnv
-    ppopts <- getPPOpts
-    let isNested d = case importInfo d of
-          ImportNested _ -> True
-          ImportTop      -> False
-        nameOf d = CI.modNameToText $ CP.thing $ CP.iModule $ importCmd d
-        matches = [ d | d <- eImports cenv
-                      , isNested d
-                      , nameOf d == modName
-                  ]
-    liftIO $ case matches of
-      [] -> TextIO.putStrLn $
-              "No imports of submodule `" <> modName <> "' found."
-      _  -> mapM_ (TextIO.putStrLn . PPS.renderText ppopts . ppImport)
-                  matches
+    modEnv <- getModEnv
+    let mName = CI.textToModName modName
+        imps = [ (nm, d) | d <- eImports cenv
+                         , ImportNested nm <- [importInfo d]
+                         , importedAs d == mName
+               ]
+    case nub (map fst imps) of
+      [] -> say $ "No imports of submodule `" <> modName <> "' found."
+      [nm] ->
+        case ME.modContextOf (CP.ImpNested nm) modEnv of
+          Nothing -> say $ "Submodule `" <> modName <> "' not found."
+          Just ctx0 -> do
+            let defined = maybe (ME.mctxExported ctx0)
+                                (MI.ifsDefines . T.smIface)
+                                (lookupSubmodule modEnv nm)
+            showCtx $ withPrivate (map snd imps) defined ctx0
+      _ -> say $ "Submodule `" <> modName <> "' is ambiguous."
 
-  ppImport d =
-    let info = case importInfo d of
-          ImportNested nm -> "nested" <+> CryPP.pretty nm
-          ImportTop       -> "top"
-    in
-    PP.vsep
-      [ "import:" <+> PP.pretty (Text.strip $ CryPP.pp $ importCmd d)
-      , PP.indent 2 $ PP.vsep
-          [ "info:      " <+> info
-          , "visibility:" <+> PP.viaShow (importVis d)
-          ]
-      ]
+  importedAs d = CP.thing $ CP.iModule $ importCmd d
+
+  -- If any import is `PublicAndPrivate`, show all defined names.
+  withPrivate imps defined ctx
+    | any ((== PublicAndPrivate) . importVis) imps =
+        ctx { ME.mctxExported = defined }
+    | otherwise = ctx
+
+  -- Find a (non-alias, non-functor) submodule in its top module.
+  lookupSubmodule modEnv nm = do
+    top <- MN.nameTopModuleMaybe nm
+    lm <- ME.lookupModule top modEnv
+    Map.lookup nm (T.mSubmodules (ME.lmModule lm))
+
+  getModEnv = do
+    rw <- getTopLevelRW
+    liftIO $ eModuleEnv (rwSharedContext rw)
+
+  say = liftIO . TextIO.putStrLn
+
+  showCtx ctx = do
+    ppopts <- getPPOpts
+    let doc = PP.unAnnotate $ CB.browseModContext CB.BrowseExported ctx
+        -- Cryptol's output has whitespace-only lines; trim them.
+        trim = Text.intercalate "\n" . map Text.stripEnd . Text.lines
+    say $ trim $ PPS.renderText ppopts doc
 
 envCmd :: REPL ()
 envCmd = do
