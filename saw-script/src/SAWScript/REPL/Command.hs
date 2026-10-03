@@ -48,6 +48,15 @@ import System.Directory (
 import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
+import qualified Cryptol.Parser.AST as CP (ImportG(..))
+import qualified Cryptol.Parser.Position as CP (thing)
+import qualified Cryptol.Utils.Ident as CI (modNameToText)
+
+import qualified CryptolSAWCore.Pretty as CryPP
+import CryptolSAWCore.GlobalCryptolEnv (
+    ImportData(..), ImportInfo(..), eImports
+ )
+
 import qualified SAWSupport.Pretty as PPS
 import qualified SAWSupport.ScopedMap as ScopedMap
 import qualified SAWSupport.Trie as Trie
@@ -87,6 +96,49 @@ cdCmd f
         let f' = "`" <> Text.pack f <> "'"
             msg = "Directory " <> f' <> " not found or not a directory"
         liftIO $ TextIO.putStrLn msg
+
+-- | Display the imports in the current `CryptolEnv` that match
+--   either @MODULENAME@ or @submodule SUBMODULENAME@.
+cbrowseCmd :: [Text] -> REPL ()
+cbrowseCmd args =
+  case args of
+    [modName] | modName /= "submodule"
+                           -> browse False modName
+    ["submodule", modName] -> browse True modName
+    _ -> liftIO $ TextIO.putStrLn $
+           "Usage: :cbrowse MODULENAME"
+           <> " | :cbrowse submodule SUBMODULENAME"
+  where
+  browse isSub modName = do
+    cenv <- getCryptolEnv
+    ppopts <- getPPOpts
+    let isNested d = case importInfo d of
+          ImportNested _ -> True
+          ImportTop      -> False
+        nameOf d = CI.modNameToText $ CP.thing $ CP.iModule $ importCmd d
+        matches = [ d | d <- eImports cenv
+                      , isNested d == isSub
+                      , nameOf d == modName
+                  ]
+        kind = if isSub then "submodule" else "module"
+    liftIO $ case matches of
+      [] -> TextIO.putStrLn $
+              "No imports of " <> kind <> " `" <> modName <> "' found."
+      _  -> mapM_ (TextIO.putStrLn . PPS.renderText ppopts . ppImport)
+                  matches
+
+  ppImport d =
+    let info = case importInfo d of
+          ImportNested nm -> "nested" <+> CryPP.pretty nm
+          ImportTop       -> "top"
+    in
+    PP.vsep
+      [ "import:" <+> PP.pretty (Text.strip $ CryPP.pp $ importCmd d)
+      , PP.indent 2 $ PP.vsep
+          [ "info:      " <+> info
+          , "visibility:" <+> PP.viaShow (importVis d)
+          ]
+      ]
 
 envCmd :: REPL ()
 envCmd = do
@@ -353,6 +405,7 @@ data CommandBody
   | SymbolNameArg (Text     -> REPL ())
   | ModuleTargetArgs (Text -> Text -> REPL ())
   | TypeArgs      (Text     -> REPL ())
+  | WordArgs      ([Text]   -> REPL ())
   | FilenameArg   (FilePath -> REPL ())
   | NoArg         (REPL ())
 
@@ -382,6 +435,8 @@ nbCommandList  =
     "display the current sawscript type environment"
   , CommandDescr ":type" [":t"]  (ExprArg typeOfCmd)
     "check the type of an expression"
+  , CommandDescr ":cbrowse" []   (WordArgs cbrowseCmd)
+    "display imports of MODULE or of 'submodule SUBMODULE'"
   , CommandDescr ":llvmdis" []   (ModuleTargetArgs llvmDisCmd)
     llvmDisCmdHelp
   , CommandDescr ":?"    []      (SymbolNameArg helpCmd)
@@ -508,6 +563,8 @@ executeReplCommand cmd args0 =
         ModuleTargetArgs action -> twoarg action args0
         TypeArgs action ->
             action (Text.intercalate " " args0)
+        WordArgs action ->
+            action args0
         FilenameArg action -> do
             args' <- mapM expandHome args0
             onearg action args'
