@@ -1,0 +1,14 @@
+// :cbrowse submodule on submodule aliases
+
+import "Aliases.cry";
+import submodule SubAlias;
+import submodule TopAlias;
+
+print "--------------------------------"
+print "-- alias of a submodule"
+:cbrowse submodule SubAlias
+
+print "--------------------------------"
+print "-- alias of a top-level module"
+// NOTE: private definitions are not (yet) shown through an alias.
+:cbrowse submodule TopAlias
