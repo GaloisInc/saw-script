@@ -1,0 +1,26 @@
+--------------------------------
+-- alias of a submodule
+Symbols
+=======
+
+  demo : Bit
+
+--------------------------------
+-- alias of a top-level module
+Submodules
+==========
+
+  S1
+
+Type Synonyms
+=============
+
+  type Type1 = [32]
+  type Type2 = [16]
+
+Symbols
+=======
+
+  x1 : Type1
+  x2 : Type2
+
