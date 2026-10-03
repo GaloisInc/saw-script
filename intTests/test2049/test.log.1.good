@@ -28,5 +28,4 @@ Stack trace:
    (builtin) in llvm_verify
    test.saw:60:1-60:51 (at top level)
 Proof failed.
-
 FAILED

@@ -4,5 +4,4 @@ Stack trace:
    corelexer001.saw:2:1-2:46 (at top level)
 Module parsing failed:
 PosPair {_pos = Pos {posBase = ".", posPath = "corelexer001.sawcore", posLine = 1, posCol = 46}, val = UnexpectedToken TEnd}
-
 FAILED

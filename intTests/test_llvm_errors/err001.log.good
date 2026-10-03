@@ -23,5 +23,4 @@ Stack trace:
    (builtin) in llvm_verify
    err001.saw:13:1-13:40 (at top level)
 Proof failed.
-
 FAILED
