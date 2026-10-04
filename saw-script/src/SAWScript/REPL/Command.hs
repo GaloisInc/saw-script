@@ -31,6 +31,7 @@ import Control.Monad.State (modify)
 import Data.Char (isSpace)
 import Data.Function (on)
 import Data.List (intersperse, nub)
+import Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.Set as Set
@@ -53,18 +54,14 @@ import qualified Cryptol.ModuleSystem.Interface as MI
 import qualified Cryptol.ModuleSystem.Name as MN (
     nameIdent, nameModPathMaybe, nameTopModuleMaybe
  )
-import qualified Cryptol.Parser.AST as CP (ImportG(..), ImpName(..))
-import qualified Cryptol.Parser.Position as CP (thing)
+import qualified Cryptol.Parser.AST as CP (ImpName(..))
 import qualified Cryptol.REPL.Browse as CB
 import qualified Cryptol.TypeCheck.AST as T (ModuleG(..), Submodule(..))
 import qualified Cryptol.Utils.Ident as CI (
     identText, modNameChunksText, modPathSplit, textToModName
  )
 
-import CryptolSAWCore.GlobalCryptolEnv (
-    ImportData(..), ImportInfo(..), ImportVisibility(..),
-    eImports, eModuleEnv
- )
+import CryptolSAWCore.GlobalCryptolEnv (eModuleEnv)
 
 import qualified SAWSupport.Pretty as PPS
 import qualified SAWSupport.ScopedMap as ScopedMap
@@ -110,9 +107,7 @@ cdCmd f
 --   or submodule (@:cbrowse submodule SUBMODULENAME@).  Any loaded
 --   (sub)module can be browsed, whether or not it has been imported;
 --   it is named by its original name (not by an @import ... as@
---   qualifier).  Private definitions are included if the (sub)module
---   (or, for a submodule, its top-level module) was imported with
---   `PublicAndPrivate` visibility.
+--   qualifier).  Private definitions are always included.
 cbrowseCmd :: [Text] -> REPL ()
 cbrowseCmd args =
   case args of
@@ -125,26 +120,20 @@ cbrowseCmd args =
   where
   -- Show a loaded top-level module (loaded directly or indirectly).
   browseTop modName = do
-    cenv <- getCryptolEnv
     modEnv <- getModEnv
     let mName = CI.textToModName modName
-        imps = [ d | d <- eImports cenv
-                   , ImportTop <- [importInfo d]
-                   , importedAs d == mName
-               ]
     case ME.lookupModule mName modEnv of
       Nothing -> say $ "Module `" <> modName <> "' is not loaded."
       Just lm -> do
         let ctx0 = ME.lmModContext modEnv lm
             names = MI.ifNames (ME.lmInterface lm)
-        showCtx $ withPrivate imps (MI.ifsDefines names) ctx0
+        showCtx $ withPrivate (MI.ifsDefines names) ctx0
 
   -- Show a loaded submodule (or submodule alias), named by its path
   -- within its top-level module (e.g. @S1::S2@), or by its fully
   -- qualified path (e.g. @Browse::S1::S2@).  The submodule need not
   -- have been imported.
   browseSub modName = do
-    cenv <- getCryptolEnv
     modEnv <- getModEnv
     let want = Text.splitOn "::" modName
         cands = nub [ nm | lm <- ME.getLoadedModules
@@ -160,14 +149,9 @@ cbrowseCmd args =
         case ME.modContextOf (CP.ImpNested nm) modEnv of
           Nothing -> say $ "Submodule `" <> modName <> "' not found."
           Just ctx0 -> do
-            let defined = maybe (ME.mctxExported ctx0)
-                                (MI.ifsDefines . T.smIface)
-                                (lookupSubmodule modEnv nm)
-                imps = [ d | d <- eImports cenv
-                           , importsSub nm (importInfo d)
-                                           (importedAs d)
-                       ]
-            showCtx $ withPrivate imps defined ctx0
+            let defined = fromMaybe (ME.mctxExported ctx0)
+                                    (definedIn modEnv (CP.ImpNested nm))
+            showCtx $ withPrivate defined ctx0
       nms -> say $ Text.intercalate "\n" $
                ("Submodule `" <> modName <> "' is ambiguous:")
                : [ "  " <> Text.intercalate "::" (last (subPaths nm))
@@ -183,26 +167,25 @@ cbrowseCmd args =
             rel = map CI.identText (ids ++ [MN.nameIdent nm])
         in  [rel, CI.modNameChunksText top ++ rel]
 
-  -- Does an import bring in (the private names of) submodule @nm@?
-  -- Either it imports @nm@ itself, or @nm@'s top-level module.
-  importsSub nm info as =
-    case info of
-      ImportNested nm' -> nm' == nm
-      ImportTop        -> MN.nameTopModuleMaybe nm == Just as
+  -- Show all defined names, private ones included.
+  withPrivate defined ctx = ctx { ME.mctxExported = defined }
 
-  importedAs d = CP.thing $ CP.iModule $ importCmd d
-
-  -- If any import is `PublicAndPrivate`, show all defined names.
-  withPrivate imps defined ctx
-    | any ((== PublicAndPrivate) . importVis) imps =
-        ctx { ME.mctxExported = defined }
-    | otherwise = ctx
-
-  -- Find a (non-alias, non-functor) submodule in its top module.
-  lookupSubmodule modEnv nm = do
-    top <- MN.nameTopModuleMaybe nm
-    lm <- ME.lookupModule top modEnv
-    Map.lookup nm (T.mSubmodules (ME.lmModule lm))
+  -- All the names defined in a (sub)module, following module aliases
+  -- (bounded, to guard against alias cycles).
+  definedIn modEnv = go (10 :: Int)
+    where
+    go 0 _ = Nothing
+    go n imp =
+      case imp of
+        CP.ImpTop mn ->
+          MI.ifsDefines . MI.ifNames . ME.lmInterface
+            <$> ME.lookupModule mn modEnv
+        CP.ImpNested nm -> do
+          top <- MN.nameTopModuleMaybe nm
+          m <- ME.lmModule <$> ME.lookupModule top modEnv
+          case Map.lookup nm (T.mSubmodules m) of
+            Just sm -> Just (MI.ifsDefines (T.smIface sm))
+            Nothing -> go (n - 1) =<< Map.lookup nm (T.mModAliases m)
 
   getModEnv = do
     rw <- getTopLevelRW

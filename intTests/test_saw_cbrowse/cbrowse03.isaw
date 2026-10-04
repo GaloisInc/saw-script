@@ -10,5 +10,4 @@ print "-- alias of a submodule"
 
 print "--------------------------------"
 print "-- alias of a top-level module"
-// NOTE: private definitions are not (yet) shown through an alias.
 :cbrowse submodule TopAlias

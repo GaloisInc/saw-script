@@ -1,21 +1,24 @@
 --------------------------------
--- Browse (loaded indirectly; not imported)
+-- Browse (loaded indirectly; not imported; privates shown)
 Submodules
 ==========
 
   S1
+  S3
 
 Type Synonyms
 =============
 
   type Type1 = [32]
   type Type2 = [16]
+  type Type3 = [16]
 
 Symbols
 =======
 
   x1 : Type1
   x2 : Type2
+  x3 : Type3
 
 --------------------------------
 -- BB (an import qualifier, not a module name)
@@ -31,6 +34,7 @@ Symbols
 =======
 
   s1 : [8]
+  s1priv : [8]
 
 --------------------------------
 -- submodule S1::S2 (not imported)

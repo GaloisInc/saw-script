@@ -1,0 +1,27 @@
+module A where
+
+// want multiple values and various namespaces to test imports
+
+x1 = 1 : Type1
+
+x2 = 2 : Type2
+
+private x3 = 3 : Type3
+
+
+type Type1 = [32]
+type Type2 = [16]
+
+private type Type3 = [16]
+
+submodule S1 where
+
+  s1 = 11
+
+  submodule S2 where
+
+    s2 = 12
+
+private submodule S3 where
+
+  s3 = 13
