@@ -4,7 +4,7 @@
 import "Importer.cry";
 
 print "--------------------------------"
-print "-- Browse (loaded indirectly; not imported)"
+print "-- Browse (loaded indirectly; not imported; privates shown)"
 :cbrowse Browse
 
 print "--------------------------------"
