@@ -109,24 +109,35 @@ cdCmd f
 --   (sub)module can be browsed, whether or not it has been imported;
 --   it is named by its original name (not by an @import ... as@
 --   qualifier).  Private definitions are always included.  With no
---   arguments (@:cbrowse@), all loaded top-level modules are shown.
+--   arguments (@:cbrowse@), all loaded top-level modules are shown;
+--   with @:cbrowse -l@, just their names are listed.
 cbrowseCmd :: [Text] -> REPL ()
 cbrowseCmd args =
   case args of
     []                     -> browseAll
+    ["-l"]                 -> listAll
     [modName] | modName /= "submodule"
                            -> browseTop modName
     ["submodule", modName] -> browseSub modName
     _ -> liftIO $ TextIO.putStrLn $
-           "Usage: :cbrowse [MODULENAME]"
+           "Usage: :cbrowse -l"
+           <> " | :cbrowse [MODULENAME]"
            <> " | :cbrowse submodule SUBMODULENAME"
   where
-  -- Show every loaded top-level module (loaded directly or
-  -- indirectly), in order of module name.
+  -- All loaded top-level modules (loaded directly or indirectly),
+  -- in order of module name.
+  loadedMods modEnv =
+    sortOn ME.lmName $ ME.getLoadedModules (ME.meLoadedModules modEnv)
+
+  -- List the names of all loaded top-level modules.
+  listAll = do
+    modEnv <- getModEnv
+    mapM_ (say . CI.modNameToText . ME.lmName) (loadedMods modEnv)
+
+  -- Show every loaded top-level module.
   browseAll = do
     modEnv <- getModEnv
-    let lms = sortOn ME.lmName $
-                ME.getLoadedModules (ME.meLoadedModules modEnv)
+    let lms = loadedMods modEnv
         showOne lm = do
           let modName = CI.modNameToText (ME.lmName lm)
           say $ "Module `" <> modName <> "':"
@@ -513,7 +524,7 @@ nbCommandList  =
   , CommandDescr ":type" [":t"]  (ExprArg typeOfCmd)
     "check the type of an expression"
   , CommandDescr ":cbrowse" []   (WordArgs cbrowseCmd)
-    "browse all modules, MODULE, or 'submodule SUBMODULE'"
+    "list modules '-l', or browse modules ['MODULE' | 'submodule SUBMODULE']"
   , CommandDescr ":llvmdis" []   (ModuleTargetArgs llvmDisCmd)
     llvmDisCmdHelp
   , CommandDescr ":?"    []      (SymbolNameArg helpCmd)
