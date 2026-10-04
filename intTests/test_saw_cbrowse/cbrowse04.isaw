@@ -1,0 +1,32 @@
+// :cbrowse of modules and submodules that are loaded only indirectly
+// (Importer imports `Browse as BB`), named by their original names
+
+import "Importer.cry";
+
+print "--------------------------------"
+print "-- Browse (loaded indirectly; not imported)"
+:cbrowse Browse
+
+print "--------------------------------"
+print "-- BB (an import qualifier, not a module name)"
+:cbrowse BB
+
+print "--------------------------------"
+print "-- submodule S1 (not imported)"
+:cbrowse submodule S1
+
+print "--------------------------------"
+print "-- submodule S1::S2 (not imported)"
+:cbrowse submodule S1::S2
+
+print "--------------------------------"
+print "-- submodule Browse::S1::S2 (fully qualified)"
+:cbrowse submodule Browse::S1::S2
+
+print "--------------------------------"
+print "-- submodule S2 (not its path within Browse)"
+:cbrowse submodule S2
+
+print "--------------------------------"
+print "-- submodule BB::S1 (an import qualifier, not a module name)"
+:cbrowse submodule BB::S1

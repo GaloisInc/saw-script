@@ -1,0 +1,12 @@
+// :cbrowse submodule when the name is ambiguous across loaded modules
+
+import "Browse.cry";
+import "Ambig.cry";
+
+print "--------------------------------"
+print "-- submodule S1 (ambiguous)"
+:cbrowse submodule S1
+
+print "--------------------------------"
+print "-- submodule Ambig::S1 (fully qualified)"
+:cbrowse submodule Ambig::S1
