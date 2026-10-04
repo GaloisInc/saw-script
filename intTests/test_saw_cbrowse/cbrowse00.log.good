@@ -12,4 +12,4 @@ Usage: :cbrowse MODULENAME | :cbrowse submodule SUBMODULENAME
 Module `Nope' is not loaded.
 --------------------------------
 -- submodule not imported
-No imports of submodule `Nope' found.
+Submodule `Nope' is not loaded.

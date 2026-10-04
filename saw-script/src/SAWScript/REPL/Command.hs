@@ -50,12 +50,16 @@ import Prettyprinter ((<+>))
 
 import qualified Cryptol.ModuleSystem.Env as ME
 import qualified Cryptol.ModuleSystem.Interface as MI
-import qualified Cryptol.ModuleSystem.Name as MN (nameTopModuleMaybe)
+import qualified Cryptol.ModuleSystem.Name as MN (
+    nameIdent, nameModPathMaybe, nameTopModuleMaybe
+ )
 import qualified Cryptol.Parser.AST as CP (ImportG(..), ImpName(..))
 import qualified Cryptol.Parser.Position as CP (thing)
 import qualified Cryptol.REPL.Browse as CB
 import qualified Cryptol.TypeCheck.AST as T (ModuleG(..), Submodule(..))
-import qualified Cryptol.Utils.Ident as CI (textToModName)
+import qualified Cryptol.Utils.Ident as CI (
+    identText, modNameChunksText, modPathSplit, textToModName
+ )
 
 import CryptolSAWCore.GlobalCryptolEnv (
     ImportData(..), ImportInfo(..), ImportVisibility(..),
@@ -103,8 +107,11 @@ cdCmd f
         liftIO $ TextIO.putStrLn msg
 
 -- | Display the contents of a Cryptol module (@:cbrowse MODULENAME@)
---   or submodule (@:cbrowse submodule SUBMODULENAME@). Private
---   definitions are included if the (sub)module was imported with
+--   or submodule (@:cbrowse submodule SUBMODULENAME@).  Any loaded
+--   (sub)module can be browsed, whether or not it has been imported;
+--   it is named by its original name (not by an @import ... as@
+--   qualifier).  Private definitions are included if the (sub)module
+--   (or, for a submodule, its top-level module) was imported with
 --   `PublicAndPrivate` visibility.
 cbrowseCmd :: [Text] -> REPL ()
 cbrowseCmd args =
@@ -116,7 +123,7 @@ cbrowseCmd args =
            "Usage: :cbrowse MODULENAME"
            <> " | :cbrowse submodule SUBMODULENAME"
   where
-  -- Show a loaded top-level module.
+  -- Show a loaded top-level module (loaded directly or indirectly).
   browseTop modName = do
     cenv <- getCryptolEnv
     modEnv <- getModEnv
@@ -132,17 +139,23 @@ cbrowseCmd args =
             names = MI.ifNames (ME.lmInterface lm)
         showCtx $ withPrivate imps (MI.ifsDefines names) ctx0
 
-  -- Show an imported submodule.
+  -- Show a loaded submodule (or submodule alias), named by its path
+  -- within its top-level module (e.g. @S1::S2@), or by its fully
+  -- qualified path (e.g. @Browse::S1::S2@).  The submodule need not
+  -- have been imported.
   browseSub modName = do
     cenv <- getCryptolEnv
     modEnv <- getModEnv
-    let mName = CI.textToModName modName
-        imps = [ (nm, d) | d <- eImports cenv
-                         , ImportNested nm <- [importInfo d]
-                         , importedAs d == mName
-               ]
-    case nub (map fst imps) of
-      [] -> say $ "No imports of submodule `" <> modName <> "' found."
+    let want = Text.splitOn "::" modName
+        cands = nub [ nm | lm <- ME.getLoadedModules
+                                   (ME.meLoadedModules modEnv)
+                         , let m = ME.lmModule lm
+                         , nm <- Map.keys (T.mSubmodules m)
+                                 ++ Map.keys (T.mModAliases m)
+                         , want `elem` subPaths nm
+                    ]
+    case cands of
+      [] -> say $ "Submodule `" <> modName <> "' is not loaded."
       [nm] ->
         case ME.modContextOf (CP.ImpNested nm) modEnv of
           Nothing -> say $ "Submodule `" <> modName <> "' not found."
@@ -150,8 +163,32 @@ cbrowseCmd args =
             let defined = maybe (ME.mctxExported ctx0)
                                 (MI.ifsDefines . T.smIface)
                                 (lookupSubmodule modEnv nm)
-            showCtx $ withPrivate (map snd imps) defined ctx0
-      _ -> say $ "Submodule `" <> modName <> "' is ambiguous."
+                imps = [ d | d <- eImports cenv
+                           , importsSub nm (importInfo d)
+                                           (importedAs d)
+                       ]
+            showCtx $ withPrivate imps defined ctx0
+      nms -> say $ Text.intercalate "\n" $
+               ("Submodule `" <> modName <> "' is ambiguous:")
+               : [ "  " <> Text.intercalate "::" (last (subPaths nm))
+                 | nm <- nms ]
+
+  -- The ways to name a submodule: its path within its top-level
+  -- module, and its fully qualified path.
+  subPaths nm =
+    case MN.nameModPathMaybe nm of
+      Nothing -> []
+      Just p ->
+        let (top, ids) = CI.modPathSplit p
+            rel = map CI.identText (ids ++ [MN.nameIdent nm])
+        in  [rel, CI.modNameChunksText top ++ rel]
+
+  -- Does an import bring in (the private names of) submodule @nm@?
+  -- Either it imports @nm@ itself, or @nm@'s top-level module.
+  importsSub nm info as =
+    case info of
+      ImportNested nm' -> nm' == nm
+      ImportTop        -> MN.nameTopModuleMaybe nm == Just as
 
   importedAs d = CP.thing $ CP.iModule $ importCmd d
 
