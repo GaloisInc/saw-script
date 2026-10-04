@@ -198,8 +198,11 @@ cbrowseCmd args =
   -- Show all defined names, private ones included.
   withPrivate defined ctx = ctx { ME.mctxExported = defined }
 
-  -- All the names defined in a (sub)module, following module aliases
-  -- (bounded, to guard against alias cycles).
+  -- All the names defined in a (sub)module, following module aliases.
+  -- NOTE:
+  --   - bounded, to guard against alias cycles.
+  --     - FIXME: use better solution to avoid alias cycles.
+  --     - Question: does cryptol ensure no alias cycles?
   definedIn modEnv = go (10 :: Int)
     where
     go 0 _ = Nothing
