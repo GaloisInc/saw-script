@@ -1,0 +1,8 @@
+// :cbrowse with no arguments shows all loaded top-level modules
+// (including those loaded only indirectly)
+
+import "Importer.cry";
+
+print "--------------------------------"
+print "-- no arguments"
+:cbrowse
