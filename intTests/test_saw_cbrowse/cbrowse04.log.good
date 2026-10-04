@@ -1,0 +1,54 @@
+--------------------------------
+-- Browse (loaded indirectly; not imported)
+Submodules
+==========
+
+  S1
+
+Type Synonyms
+=============
+
+  type Type1 = [32]
+  type Type2 = [16]
+
+Symbols
+=======
+
+  x1 : Type1
+  x2 : Type2
+
+--------------------------------
+-- BB (an import qualifier, not a module name)
+Module `BB' is not loaded.
+--------------------------------
+-- submodule S1 (not imported)
+Submodules
+==========
+
+  S2
+
+Symbols
+=======
+
+  s1 : [8]
+
+--------------------------------
+-- submodule S1::S2 (not imported)
+Symbols
+=======
+
+  s2 : [8]
+
+--------------------------------
+-- submodule Browse::S1::S2 (fully qualified)
+Symbols
+=======
+
+  s2 : [8]
+
+--------------------------------
+-- submodule S2 (not its path within Browse)
+Submodule `S2' is not loaded.
+--------------------------------
+-- submodule BB::S1 (an import qualifier, not a module name)
+Submodule `BB::S1' is not loaded.
