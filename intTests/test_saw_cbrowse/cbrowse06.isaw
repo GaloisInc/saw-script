@@ -6,3 +6,7 @@ import "Importer.cry";
 print "--------------------------------"
 print "-- no arguments"
 :cbrowse
+
+print "--------------------------------"
+print "-- -l (list names only)"
+:cbrowse -l

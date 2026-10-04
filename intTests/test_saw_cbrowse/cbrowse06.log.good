@@ -329,3 +329,10 @@ Symbols
 
   i1 : Type1
 
+--------------------------------
+-- -l (list names only)
+Array
+Browse
+Cryptol
+Cryptol::Reference
+Importer
