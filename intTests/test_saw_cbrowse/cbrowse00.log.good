@@ -1,12 +1,9 @@
 --------------------------------
--- no arguments
-Usage: :cbrowse MODULENAME | :cbrowse submodule SUBMODULENAME
---------------------------------
 -- submodule with no name
-Usage: :cbrowse MODULENAME | :cbrowse submodule SUBMODULENAME
+Usage: :cbrowse [MODULENAME] | :cbrowse submodule SUBMODULENAME
 --------------------------------
 -- too many arguments
-Usage: :cbrowse MODULENAME | :cbrowse submodule SUBMODULENAME
+Usage: :cbrowse [MODULENAME] | :cbrowse submodule SUBMODULENAME
 --------------------------------
 -- module not loaded
 Module `Nope' is not loaded.
