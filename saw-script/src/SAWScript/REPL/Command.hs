@@ -30,7 +30,7 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (modify)
 import Data.Char (isSpace)
 import Data.Function (on)
-import Data.List (intersperse, nub)
+import Data.List (intersperse, nub, sortOn)
 import Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
 import Data.Map (Map)
@@ -58,7 +58,8 @@ import qualified Cryptol.Parser.AST as CP (ImpName(..))
 import qualified Cryptol.REPL.Browse as CB
 import qualified Cryptol.TypeCheck.AST as T (ModuleG(..), Submodule(..))
 import qualified Cryptol.Utils.Ident as CI (
-    identText, modNameChunksText, modPathSplit, textToModName
+    identText, modNameChunksText, modNameToText, modPathSplit,
+    textToModName
  )
 
 import CryptolSAWCore.GlobalCryptolEnv (eModuleEnv)
@@ -107,27 +108,43 @@ cdCmd f
 --   or submodule (@:cbrowse submodule SUBMODULENAME@).  Any loaded
 --   (sub)module can be browsed, whether or not it has been imported;
 --   it is named by its original name (not by an @import ... as@
---   qualifier).  Private definitions are always included.
+--   qualifier).  Private definitions are always included.  With no
+--   arguments (@:cbrowse@), all loaded top-level modules are shown.
 cbrowseCmd :: [Text] -> REPL ()
 cbrowseCmd args =
   case args of
+    []                     -> browseAll
     [modName] | modName /= "submodule"
                            -> browseTop modName
     ["submodule", modName] -> browseSub modName
     _ -> liftIO $ TextIO.putStrLn $
-           "Usage: :cbrowse MODULENAME"
+           "Usage: :cbrowse [MODULENAME]"
            <> " | :cbrowse submodule SUBMODULENAME"
   where
+  -- Show every loaded top-level module (loaded directly or
+  -- indirectly), in order of module name.
+  browseAll = do
+    modEnv <- getModEnv
+    let lms = sortOn ME.lmName $
+                ME.getLoadedModules (ME.meLoadedModules modEnv)
+        showOne lm = do
+          let modName = CI.modNameToText (ME.lmName lm)
+          say $ "Module `" <> modName <> "':"
+          showTop modEnv lm
+    sequence_ $ intersperse (say "") $ map showOne lms
+
   -- Show a loaded top-level module (loaded directly or indirectly).
   browseTop modName = do
     modEnv <- getModEnv
     let mName = CI.textToModName modName
     case ME.lookupModule mName modEnv of
       Nothing -> say $ "Module `" <> modName <> "' is not loaded."
-      Just lm -> do
-        let ctx0 = ME.lmModContext modEnv lm
-            names = MI.ifNames (ME.lmInterface lm)
-        showCtx $ withPrivate (MI.ifsDefines names) ctx0
+      Just lm -> showTop modEnv lm
+
+  showTop modEnv lm = do
+    let ctx0 = ME.lmModContext modEnv lm
+        names = MI.ifNames (ME.lmInterface lm)
+    showCtx $ withPrivate (MI.ifsDefines names) ctx0
 
   -- Show a loaded submodule (or submodule alias), named by its path
   -- within its top-level module (e.g. @S1::S2@), or by its fully
@@ -496,7 +513,7 @@ nbCommandList  =
   , CommandDescr ":type" [":t"]  (ExprArg typeOfCmd)
     "check the type of an expression"
   , CommandDescr ":cbrowse" []   (WordArgs cbrowseCmd)
-    "browse MODULE, or display imports of 'submodule SUBMODULE'"
+    "browse all modules, MODULE, or 'submodule SUBMODULE'"
   , CommandDescr ":llvmdis" []   (ModuleTargetArgs llvmDisCmd)
     llvmDisCmdHelp
   , CommandDescr ":?"    []      (SymbolNameArg helpCmd)

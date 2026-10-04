@@ -1,10 +1,6 @@
 // :cbrowse argument handling and lookup failures
 
 print "--------------------------------"
-print "-- no arguments"
-:cbrowse
-
-print "--------------------------------"
 print "-- submodule with no name"
 :cbrowse submodule
 
