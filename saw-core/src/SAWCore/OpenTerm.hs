@@ -77,6 +77,7 @@ import Numeric.Natural
 
 import SAWCore.Name
 import SAWCore.Panic
+import SAWCore.QualName (QualName)
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
 
@@ -251,9 +252,9 @@ projRecord (OpenTerm m) f =
      scRecordSelect sc t f
 
 -- | Build an 'OpenTerm' for a global name with a definition
-global :: Ident -> OpenTerm
-global ident =
-  OpenTerm $ \sc -> scGlobalDef sc ident
+global :: QualName -> OpenTerm
+global qn =
+  OpenTerm $ \sc -> scGlobalConst sc qn
 
 -- | Build an 'OpenTerm' for a named variable.
 variable :: VarName -> Term -> OpenTerm
@@ -273,8 +274,8 @@ apply :: OpenTerm -> [OpenTerm] -> OpenTerm
 apply = foldl app
 
 -- | Apply a named global to a list of zero or more arguments.
-applyGlobal :: Ident -> [OpenTerm] -> OpenTerm
-applyGlobal ident = apply (global ident)
+applyGlobal :: QualName -> [OpenTerm] -> OpenTerm
+applyGlobal qn = apply (global qn)
 
 -- | Build a lambda abstraction as an 'OpenTerm'
 lambda :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
