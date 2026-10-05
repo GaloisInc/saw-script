@@ -21,8 +21,8 @@ cbor2 = "^5.9.0"
 python-dateutil = "^2.8.2"
 # Add a fake dep on urllib3 (we don't directly depend on it but
 # some of the above packages do) to add a constraint for a security
-# issue.
-urllib3 = ">=2.7.0"
+# issue. Multiple security issues, in fact.
+urllib3 = ">=2.8.0"
 # Add a fake dep on idna (we don't directly depend on it but
 # some of the above packages do) to add a constraint for a security
 # issue.
