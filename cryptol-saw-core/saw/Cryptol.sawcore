@@ -2519,9 +2519,9 @@ ec_mult p _ x y =
 
 ec_twin_mult :
   (p : Num) -> PGeq p (TCNum 4) ->
-  IntModNum p ->
-  ProjectivePoint p -> ProjectivePoint p -> ProjectivePoint p;
-ec_twin_mult p _ x y z =
+  IntModNum p -> ProjectivePoint p ->
+  IntModNum p -> ProjectivePoint p -> ProjectivePoint p;
+ec_twin_mult p _ x _ y z =
   error (ProjectivePoint p) "Unimplemented: ec_twin_mult";
 
 --------------------------------------------------------------------------------
