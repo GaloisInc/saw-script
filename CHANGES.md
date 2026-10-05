@@ -4,6 +4,10 @@ This release supports [version
 13](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#13) of
 `mir-json`'s schema.
 
+## New Features
+
+* Support LLVM versions up to 23.
+
 ## Bug Fixes
 
 * Fixed regression: SAW can once again import Cryptol `enum` types
