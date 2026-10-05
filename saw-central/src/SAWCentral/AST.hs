@@ -19,6 +19,7 @@ module SAWCentral.AST
 
      , Kind(..)
      , kindStar, kindStarToStar
+     , kindAddStar
 
      , TyCtx(..)
      , TypeProvenance(..)
@@ -144,6 +145,9 @@ kindStarToStar = Kind 1
 -- this isn't currently used
 --kindStarToStarToStar :: Kind
 --kindStarToStarToStar = Kind 2
+
+kindAddStar :: Kind -> Kind
+kindAddStar (Kind n) = Kind (n + 1)
 
 
 ------------------------------------------------------------

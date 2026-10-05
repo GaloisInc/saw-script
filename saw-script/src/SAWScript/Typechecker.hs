@@ -1516,7 +1516,7 @@ inspectTypeFTVs kind ty = case ty of
         let kinds = lookupTyCon ctor
         Map.unions <$> zipWithM inspectTypeFTVs kinds args
     TyApplyMonad _prov m arg -> do
-        m' <- inspectTypeFTVs kindStarToStar m
+        m' <- inspectTypeFTVs (kindAddStar kind) m
         arg' <- inspectTypeFTVs kindStar arg
         pure $ Map.union m' arg'
     TyFunc _prov _ params namedParams ret ->
@@ -2989,30 +2989,11 @@ checkType kind ty = case ty of
                 Right () -> TyCon prov tycon args'
 
     TyApplyMonad prov m arg -> do
-        if kind == kindStar then do
-            m' <- checkType kindStarToStar m
-            arg' <- checkType kindStar arg
-
-            -- If either result is an error var, something was
-            -- invalid. Return the error var directly. (Properly we
-            -- should make a new one, but it's fresh and we can safely
-            -- repurpose it.) This is a hack to avoid returning types
-            -- _containing_ error vars out, which then lead to ugly
-            -- and confusing further errors downstream. This may need
-            -- to be revisited as we work to remove Block, because
-            -- that will change the way type applications are done and
-            -- that will likely change the way miskinded type
-            -- applications are seen.
-            pure $ case checkForFailure [m', arg'] of
-                Left ty' -> ty'
-                Right () -> TyApplyMonad prov m' arg'
-        else do
-            let pos = Pos.getPos prov
-            let kind' = prettyKind kind
-                kindStar' = prettyKind kindStar
-            recordError pos $ "Kind mismatch: expected" <+> kind' <+>
-                              "but found" <+> kindStar'
-            getErrorTyVar pos
+        m' <- checkType (kindAddStar kind) m
+        arg' <- checkType kindStar arg
+        pure $ case checkForFailure [m', arg'] of
+            Left ty' -> ty'
+            Right () -> TyApplyMonad prov m' arg'
 
     TyFunc prov nameinfo params namedParams ret -> do
         if kind /= kindStar then do
