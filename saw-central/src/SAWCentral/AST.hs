@@ -232,8 +232,7 @@ data Context
   deriving (Eq, Ord)
 
 data TyCon
-  = TupleCon Integer
-  | ArrayCon
+  = ArrayCon
   | StringCon
   | TermCon
   | TypeCon
@@ -318,6 +317,7 @@ instance Semigroup NamedParamInfo where
 data Type
   = TyCon TypeProvenance TyCon [Type]
   | TyApplyMonad TypeProvenance Type Type
+  | TyTuple TypeProvenance [Type]
   | TyFunc TypeProvenance NamedParamInfo [Type] (Map Name Type) Type
   | TyRecord TypeProvenance (Map Name Type)
   | TyVar TypeProvenance Name
@@ -524,6 +524,7 @@ instance Positioned Type where
   getPos ty = case ty of
       TyCon prov _ _ -> getPos prov
       TyApplyMonad prov _ _ -> getPos prov
+      TyTuple prov _ -> getPos prov
       TyFunc prov _ _ _ _ -> getPos prov
       TyRecord prov _ -> getPos prov
       TyVar prov _ -> getPos prov
@@ -608,7 +609,6 @@ ppContext c = case c of
 -- the rest can be folded into prettyType.
 prettyTyCon :: TyCon -> PP.Doc ann
 prettyTyCon tc = case tc of
-    TupleCon n     -> PP.parens $ PPS.replicate (n - 1) $ PP.pretty ','
     ArrayCon       -> PP.parens $ PP.brackets $ PP.emptyDoc
     StringCon      -> "String"
     TermCon        -> "Term"
@@ -631,12 +631,6 @@ prettyType ppopts = PP.group . visit 0
     visit :: Int -> Type -> PPS.Doc
     visit prec ty0 = case ty0 of
       TyCon _ ctor args -> case (ctor, args) of
-          (TupleCon n, _) ->
-              if fromIntegral (length args) /= n then
-                  -- These is no way to produce this state
-                  croak "tuple" n args
-              else
-                  PP.align $ PP.parens $ PP.fillSep $ PP.punctuate "," $ map (visit 0) args
           (ArrayCon, [ty1]) ->
               PP.brackets $ visit 0 ty1
           (ArrayCon, _) -> croak "array" 1 args
@@ -655,6 +649,8 @@ prettyType ppopts = PP.group . visit 0
           in
           if prec > 1 then PP.parens body else body
 
+      TyTuple _ args ->
+              PP.align $ PP.parens $ PP.fillSep $ PP.punctuate "," $ map (visit 0) args
       TyFunc _ _ params namedParams ret ->
               let params' = map (\p -> visit 1 p <+> "->") params
                   oneNamed (n, p) = PP.pretty n <> "?" <> visit 1 p <+> "->"
@@ -989,7 +985,7 @@ tUnit :: TypeProvenance -> Type
 tUnit prov = tTuple prov []
 
 tTuple :: TypeProvenance -> [Type] -> Type
-tTuple prov ts = TyCon prov (TupleCon $ fromIntegral $ length ts) ts
+tTuple prov ts = TyTuple prov ts
 
 tArray :: TypeProvenance -> Type -> Type
 tArray prov t = TyCon prov ArrayCon [t]

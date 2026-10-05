@@ -124,7 +124,6 @@ dumpType ty0 = case ty0 of
     TyCon prov tycon args ->
         let prov' = dumpTypeProvenance prov in
         let tycon' = case tycon of
-              TupleCon k -> "Tuple " <> Text.pack (show k)
               ArrayCon -> "Array"
               StringCon -> "String"
               TermCon -> "Term"
@@ -150,6 +149,9 @@ dumpType ty0 = case ty0 of
             ("m", m'),
             ("arg", arg')
         ]
+    TyTuple prov args ->
+        let prov' = dumpTypeProvenance prov in
+        Dump.subelements "TyTuple" (prov' : map dumpType args)
     TyFunc prov npi params namedParams ret ->
         let prov' = dumpTypeProvenance prov in
         let dumpNamedParam (name, ty) =

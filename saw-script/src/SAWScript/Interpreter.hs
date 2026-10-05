@@ -31,7 +31,6 @@ import Control.Monad.Reader (asks, ask)
 import Control.Monad.State (gets, get, put, modify)
 import qualified Data.ByteString as BS
 import Data.Maybe (fromMaybe, mapMaybe)
-import Data.List (genericLength)
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import Data.Sequence (Seq( (:|>) ))
@@ -180,6 +179,7 @@ isPolymorphic :: SS.Type -> Bool
 isPolymorphic ty0 = case ty0 of
     SS.TyCon _pos _tycon args -> any isPolymorphic args
     SS.TyApplyMonad _pos m arg -> isPolymorphic m || isPolymorphic arg
+    SS.TyTuple _pos args -> any isPolymorphic args
     SS.TyFunc _pos _ params namedParams ret ->
         any isPolymorphic params || any isPolymorphic namedParams || isPolymorphic ret
     SS.TyRecord _pos fields -> any isPolymorphic fields
@@ -202,7 +202,7 @@ getType pat = case pat of
     SS.PVar _allpos _xpos _x ~(Just t) -> t
     SS.PTuple tuplepos pats ->
         let prov = SS.TypeFromElement tuplepos SS.TyCtxPat in
-        SS.TyCon prov (SS.TupleCon (genericLength pats)) (map getType pats)
+        SS.TyTuple prov $ map getType pats
 
 -- Convert some text to an InputText for cryptol-saw-core.
 toInputText :: SS.Pos -> Text -> CEnv.InputText
@@ -403,7 +403,7 @@ bindPattern rb pat ms v =
             let mss = case ms of
                     Nothing ->
                         repeat Nothing
-                    Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts)) ->
+                    Just (SS.Forall ks (SS.TyTuple _ ts)) ->
                         [ Just (SS.Forall ks t) | t <- ts ]
                     Just t ->
                         panic "bindPattern" [
@@ -1992,7 +1992,7 @@ toValuePanic what ty =
 
 instance IsValue () where
     toValue ty _name _ = case ty of
-        SS.TyCon _ (SS.TupleCon 0) [] ->
+        SS.TyTuple _ [] ->
             VTuple []
         _ ->
             toValuePanic "unit" ty
@@ -2004,7 +2004,7 @@ instance FromValue () where
 
 instance (IsValue a, IsValue b) => IsValue (a, b) where
     toValue ty name (x, y) = case ty of
-        SS.TyCon _ (SS.TupleCon 2) [ty1, ty2] ->
+        SS.TyTuple _ [ty1, ty2] ->
             VTuple [toValue ty1 name x, toValue ty2 name y]
         _ ->
             toValuePanic "pair" ty
@@ -2015,7 +2015,7 @@ instance (FromValue a, FromValue b) => FromValue (a, b) where
 
 instance (IsValue a, IsValue b, IsValue c) => IsValue (a, b, c) where
     toValue ty name (x, y, z) = case ty of
-        SS.TyCon _ (SS.TupleCon 3) [ty1, ty2, ty3] ->
+        SS.TyTuple _ [ty1, ty2, ty3] ->
             VTuple [toValue ty1 name x, toValue ty2 name y, toValue ty3 name z]
         _ ->
             toValuePanic "triple" ty

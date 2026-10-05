@@ -78,6 +78,7 @@ instance NamedTyVars Type where
   namedTyVars t = case t of
     TyCon _ _ ts      -> namedTyVars ts
     TyApplyMonad _ m arg -> namedTyVars [m, arg]
+    TyTuple _ ts      -> namedTyVars ts
     TyFunc _ _ params namedParams ret ->
         let paramVars = namedTyVars params
             namedParamVars = namedTyVars namedParams
@@ -138,6 +139,7 @@ instance SubstituteTyVars Type where
             arg' = substituteTyVars avail tyenv arg
         in
         TyApplyMonad pos m' arg'
+    TyTuple pos ts      -> TyTuple pos (substituteTyVars avail tyenv ts)
     TyFunc pos nameinfo params namedParams ret ->
         let params' = substituteTyVars avail tyenv params
             namedParams' = substituteTyVars avail tyenv namedParams
@@ -193,6 +195,7 @@ instance SubstituteTyVars' Type where
             arg' = substituteTyVars' avail tyenv arg
         in
         TyApplyMonad pos m' arg'
+    TyTuple pos ts      -> TyTuple pos (substituteTyVars' avail tyenv ts)
     TyFunc pos nameinfo params namedParams ret ->
         let params' = substituteTyVars' avail tyenv params
             namedParams' = substituteTyVars' avail tyenv namedParams

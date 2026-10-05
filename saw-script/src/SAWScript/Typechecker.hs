@@ -29,7 +29,7 @@ import Control.Monad.State (MonadState(..), StateT, gets, modify, runState)
 import Control.Monad.Identity (Identity)
 import qualified Data.Text as Text
 import Data.Text (Text)
-import Data.List (genericTake, genericLength)
+import Data.List (genericLength)
 import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
@@ -123,6 +123,7 @@ instance UnifyVars Type where
     unifyVars t = case t of
         TyCon _ _ ts      -> unifyVars ts
         TyApplyMonad _ m arg -> Map.union (unifyVars m) (unifyVars arg)
+        TyTuple _ ts      -> unifyVars ts
         TyFunc _ _ params namedParams ret ->
             let paramsVars = unifyVars params
                 namedVars = unifyVars namedParams
@@ -253,6 +254,7 @@ instance AppSubst Type where
         TyCon prov tc ts -> TyCon prov tc (appSubst s ts)
         TyApplyMonad prov m arg ->
             TyApplyMonad prov (appSubst s m) (appSubst s arg)
+        TyTuple prov ts -> TyTuple prov (appSubst s ts)
         TyFunc prov ninfo params namedParams ret ->
             let params' = appSubst s params
                 namedParams' = appSubst s namedParams
@@ -690,7 +692,7 @@ patternBindingsWithSchema pat sch = case pat of
     PTuple _ ps ->
       case sch of
         Forall vs t -> case t of
-            TyCon _pos (TupleCon _) ts' ->
+            TyTuple _pos ts' ->
                 let once pat' t' =
                       patternBindingsWithSchema pat' (Forall vs t')
                 in
@@ -867,7 +869,7 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
                   -- case.
                   let enclosed = Pos.subspan subpos pos in
                   case ty of
-                      TyCon _ (TupleCon _) _ -> enclosed
+                      TyTuple _ _ -> enclosed
                       TyCon _ ArrayCon _ -> enclosed
                       TyRecord _ _ -> enclosed
                       _ -> False
@@ -889,8 +891,6 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
     --   prettyprinter docs.
     --
     let ppTyCon' tc args = case tc of
-          TupleCon _n ->
-              "(" <> Text.intercalate ", " args <> ")"
           ArrayCon -> "[" <> Text.intercalate " " args <> "]"
           StringCon -> "String"
           TermCon -> "Term"
@@ -908,8 +908,7 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
 
     -- | Get a subelement descriptor for a type constructor.
     let describeTyConElt :: TyCon -> Int -> Text
-        describeTyConElt tc i = case tc of
-          TupleCon _n -> ordin (i + 1) <> " element"
+        describeTyConElt tc _i = case tc of
           ArrayCon -> "element type"
           _ -> "???"  -- catchall for things that don't have subelements
     in
@@ -1009,6 +1008,12 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
                         (arg', subelts'arg) = consider "1st argument" prov arg
                     in
                     (m' <> " " <> arg', prov, subelts'm ++ subelts'arg)
+                TyTuple prov elts ->
+                    let getWhat i = ordin (i + 1) <> " element"
+                        (elts', subelts) = considerList getWhat prov elts
+                        body = "(" <> Text.intercalate ", " elts' <> ")"
+                    in
+                    (body, prov, subelts)
                 TyFunc prov _npi params namedParams ret ->
                     let mkWhat i = ordin (i + 1) <> " positional parameter"
                         (params', elts1) = considerList mkWhat prov params
@@ -1429,6 +1434,10 @@ unify exp0 pos found0 = visit [] exp0 found0
 
                 recList expTS foundTS
 
+            (TyTuple _ expTS, TyTuple _ foundTS) | length expTS == length foundTS -> do
+                -- same size tuple, unify the args
+                recList expTS foundTS
+
             (TyApplyMonad _ exp'm exp'arg, TyApplyMonad _ found'm found'arg) -> do
                 -- both monad applications, unify the args
                 recOnce exp'm found'm
@@ -1519,6 +1528,8 @@ inspectTypeFTVs kind ty = case ty of
         m' <- inspectTypeFTVs (kindAddStar kind) m
         arg' <- inspectTypeFTVs kindStar arg
         pure $ Map.union m' arg'
+    TyTuple _prov args -> do
+        Map.unions <$> mapM (inspectTypeFTVs kindStar) args
     TyFunc _prov _ params namedParams ret ->
         let np = Map.elems namedParams in
         Map.unions <$> mapM (inspectTypeFTVs kindStar) (ret : params ++ np)
@@ -1791,12 +1802,12 @@ inferExpr expr = case expr of
         (e1,t) <- inferExpr e
         t1 <- expandFully (Pos.getPos e1) t
         elTy <- case t1 of
-            TyCon _prov (TupleCon n) tys
-              | i < n ->
+            TyTuple _prov tys
+              | i < genericLength tys ->
                   return (tys !! fromIntegral i)
               | otherwise -> do
                   let i' = PP.viaShow i
-                      n' = PP.viaShow n
+                      n' = PP.viaShow $ length tys
                   recordError pos $
                       "Tuple index" <+> i' <+> "out of bounds; limit is" <+> n'
                   getErrorTyVar pos
@@ -2910,7 +2921,6 @@ inferDeclGroup rebindable dg = case dg of
 --   types) and return its params as a list of kinds.
 lookupTyCon :: TyCon -> [Kind]
 lookupTyCon tycon = case tycon of
-    TupleCon n -> genericTake n (repeat kindStar)
     ArrayCon -> [kindStar]
     StringCon -> []
     TermCon -> []
@@ -2968,9 +2978,9 @@ checkType kind ty = case ty of
         else if nargs + argsleft /= nparams then do
             let pos = Pos.getPos prov
             let kind' = prettyKind kind
-                kindExp' = prettyKind $ Kind (nparams - nargs)
+                kindFound' = prettyKind $ Kind (nparams - nargs)
             recordError pos $ "Kind mismatch: expected" <+> kind' <+>
-                              "but found" <+> kindExp'
+                              "but found" <+> kindFound'
             getErrorTyVar pos
         else do
             -- note that this will ignore the extra params, and return
@@ -2994,6 +3004,20 @@ checkType kind ty = case ty of
         pure $ case checkForFailure [m', arg'] of
             Left ty' -> ty'
             Right () -> TyApplyMonad prov m' arg'
+
+    TyTuple prov args -> do
+        if kind /= kindStar then do
+            let pos = Pos.getPos prov
+            let kind' = prettyKind kind
+                kindStar' = prettyKind kindStar
+            recordError pos $ "Kind mismatch: expected" <+> kind' <+>
+                              "but found" <+> kindStar'
+            getErrorTyVar pos
+        else do
+            args' <- mapM (checkType kindStar) args
+            pure $ case checkForFailure args' of
+                Left ty' -> ty'
+                Right () -> TyTuple prov args'
 
     TyFunc prov nameinfo params namedParams ret -> do
         if kind /= kindStar then do
