@@ -15,6 +15,7 @@ module CryptolSAWCore.Simpset
 
 import SAWCore.Module (moduleDefs, Def(..))
 import SAWCore.Name
+import SAWCore.QualName (QualName)
 import SAWCore.Rewriter
 import SAWCore.SharedTerm
 
@@ -34,9 +35,7 @@ mkCryptolSimpset sc =
   where
     cryptolDefs m = filter (not . excluded) $ moduleDefs m
     excluded d =
-      case nameInfo (defName d) of
-        ModuleIdentifier ident -> ident `elem` excludedNames
-        ImportedName{} -> True
+      toQualName (nameInfo (defName d)) `elem` excludedNames
     idents =
       [ "Prelude.coerce_same"
       , "Prelude.unsafeCoerce_same"
@@ -47,27 +46,26 @@ mkCryptolSimpset sc =
 cryptolModuleName :: ModuleName
 cryptolModuleName = mkModuleName ["Cryptol"]
 
-excludedNames :: [Ident]
+excludedNames :: [QualName]
 excludedNames =
-  map (mkIdent cryptolModuleName)
-  [ "fix"
-  , "pair_cong"
-  , "seq_cong"
-  , "pair_cong1"
-  , "pair_cong2"
-  , "seq_cong1"
-  , "fun_cong"
-  , "seq_TCNum"
-  , "seq_TCInf"
-  , "PZero"
-  , "PLiteral"
-  , "PLogic"
-  , "PRing"
-  , "PIntegral"
-  , "PField"
-  , "PRound"
-  , "PEq"
-  , "PCmp"
-  , "PSignedCmp"
-  , "ecEq"
+  [ "Prelude.fix"
+  , "Cryptol.pair_cong"
+  , "Cryptol.seq_cong"
+  , "Cryptol.pair_cong1"
+  , "Cryptol.pair_cong2"
+  , "Cryptol.seq_cong1"
+  , "Cryptol.fun_cong"
+  , "Cryptol.seq_TCNum"
+  , "Cryptol.seq_TCInf"
+  , "Cryptol.PZero"
+  , "Cryptol.PLiteral"
+  , "Cryptol.PLogic"
+  , "Cryptol.PRing"
+  , "Cryptol.PIntegral"
+  , "Cryptol.PField"
+  , "Cryptol.PRound"
+  , "Cryptol.PEq"
+  , "Cryptol.PCmp"
+  , "Cryptol.PSignedCmp"
+  , "Cryptol.ecEq"
   ]
