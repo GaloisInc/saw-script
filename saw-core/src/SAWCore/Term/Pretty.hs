@@ -345,11 +345,6 @@ withMemoVar termIdx term f =
 -- * The Pretty-Printing of Specific Constructs
 --------------------------------------------------------------------------------
 
--- | Pretty-print an identifier
-prettyIdent :: Ident -> PPS.Doc
-prettyIdent = viaShow
-
-
 memoVarToQualName ::
   PPS.MemoStyle -> Maybe LocalName -> Int -> Term -> QN.QualName
 memoVarToQualName style mlbl memoFresh' t =
@@ -530,8 +525,7 @@ prettyBestName nm =
        Nothing -> pure $ prettyName (nameInfo nm)
 
 prettyName :: NameInfo -> PPS.Doc
-prettyName (ModuleIdentifier i) = prettyIdent i
-prettyName (ImportedName qName _) = pretty (QN.ppQualName qName)
+prettyName nmi = pretty (QN.ppQualName (toQualName nmi))
 
 -- | Pretty-print a non-shared term
 prettyTermF :: Prec -> TermF Term -> PPM PPS.Doc
