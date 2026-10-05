@@ -552,9 +552,9 @@ convertModule sc env mname m0 =
 
      oneBitType <- SC.scBitvector sc 1
      xMsg <- SC.scString sc "Attempted to read X bit"
-     xTerm <- SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, xMsg]
+     xTerm <- SC.scGlobalApply sc "Prelude.error" [oneBitType, xMsg]
      zMsg <- SC.scString sc "Attempted to read Z bit"
-     zTerm <- SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, zMsg]
+     zTerm <- SC.scGlobalApply sc "Prelude.error" [oneBitType, zMsg]
      let inputs = Map.unions $ mconcat
            [ [ Map.fromList
                [ ( [BitrepZero], PretermBvNat 1 0 )

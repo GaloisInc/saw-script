@@ -22,7 +22,6 @@ import Data.Text (Text)
 import Numeric.Natural (Natural)
 
 import qualified SAWCore.SharedTerm as SC
-import qualified SAWCore.Name as SC
 
 import SAWCentral.Panic (panic)
 
@@ -186,21 +185,21 @@ combCellToTerm sc ctc args ywidth =
       do r <- SC.scBvXor sc w x y
          SC.scBvNot sc w r
     CellTypeReduceAnd ->
-      do r <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "and"
+      do r <- SC.scGlobalDef sc "Prelude.and"
          bvReduce True r
     CellTypeReduceOr ->
-      do r <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "or"
+      do r <- SC.scGlobalDef sc "Prelude.or"
          bvReduce False r
     CellTypeReduceXor ->
-      do r <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "xor"
+      do r <- SC.scGlobalDef sc "Prelude.xor"
          bvReduce False r
     CellTypeReduceXnor ->
       -- "~(reduceXor bits)" then extend if necessary.
-      do r <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "xor"
+      do r <- SC.scGlobalDef sc "Prelude.xor"
          bit <- bvReduce' False r
          outputBit =<< SC.scNot sc bit
     CellTypeReduceBool ->
-      do r <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "or"
+      do r <- SC.scGlobalDef sc "Prelude.or"
          bvReduce False r
     CellTypeShl ->
       -- If output size is larger, then we must extend before shifting
@@ -316,7 +315,7 @@ combCellToTerm sc ctc args ywidth =
          widthBv <- SC.scBitvector sc awidth
          bool <- SC.scBoolType sc
          splitb <- SC.scSplit sc swidth' awidth' bool tb
-         scPmux <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "pmux"
+         scPmux <- SC.scGlobalDef sc "Prelude.pmux"
          res <- SC.scApplyAll sc scPmux [swidth', widthBv, ts, splitb, ta]
          output $ CellTerm res awidth False
     CellTypeBmux ->
@@ -399,7 +398,7 @@ combCellToTerm sc ctc args ywidth =
          w <- SC.scNat sc twidth
          boolTy <- SC.scBoolType sc
          identity <- SC.scBool sc boolIdentity
-         scFoldr <- SC.scGlobalDef sc $ SC.mkIdent SC.preludeName "foldr"
+         scFoldr <- SC.scGlobalDef sc "Prelude.foldr"
          SC.scApplyAll sc scFoldr [boolTy, boolTy, w, boolFun, identity, t]
     -- | bvReduce', but extend or truncate output as necessary.
     bvReduce :: Bool -> SC.Term -> IO SC.Term

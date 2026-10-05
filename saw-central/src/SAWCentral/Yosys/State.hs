@@ -42,7 +42,6 @@ import Numeric.Natural (Natural)
 
 import qualified SAWCore.SharedTerm as SC
 import qualified CryptolSAWCore.TypedTerm as SC
-import qualified SAWCore.Name as SC
 
 import qualified Cryptol.TypeCheck.Type as C
 
@@ -144,9 +143,9 @@ convertModuleInline sc mname m0 =
 
      oneBitType <- SC.scBitvector sc 1
      xMsg <- SC.scString sc "Attempted to read X bit"
-     xTerm <- SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, xMsg]
+     xTerm <- SC.scGlobalApply sc "Prelude.error" [oneBitType, xMsg]
      zMsg <- SC.scString sc "Attempted to read Z bit"
-     zTerm <- SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [oneBitType, zMsg]
+     zTerm <- SC.scGlobalApply sc "Prelude.error" [oneBitType, zMsg]
      let inputs = Map.unions $ mconcat
            [ [ Map.fromList
                [ ( [BitrepZero], PretermBvNat 1 0 )
@@ -280,7 +279,7 @@ composeYosysSequential sc s n =
   do (t, cty) <- composeYosysSequentialHelper sc s n
      stateType <- fieldsToType sc $ s ^. yosysSequentialStateFields
      initialStateMsg <- SC.scString sc "Attempted to read initial state of sequential circuit"
-     initialState <- SC.scGlobalApply sc (SC.mkIdent SC.preludeName "error") [stateType, initialStateMsg]
+     initialState <- SC.scGlobalApply sc "Prelude.error" [stateType, initialStateMsg]
      res <- SC.scApply sc t initialState
      pure $ SC.TypedTerm (SC.TypedTermSchema $ C.tMono cty) res
 
