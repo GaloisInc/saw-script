@@ -144,7 +144,7 @@ termOfTValue sc val =
             b' <- termOfTValue sc b
             scGlobalApply sc "Prelude.RecordType" [fname', a', b']
     VDataType qn ps vs ->
-      do dt <- scGlobalConst sc qn
+      do dt <- scGlobalDef sc qn
          scApplyAll sc dt =<< traverse (termOfSValue sc) (ps ++ vs)
     _ -> fail $ "termOfTValue: " ++ show val
 

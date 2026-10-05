@@ -56,7 +56,6 @@ module SAWCore.Term.Certified
   , scmPiList
   , scmConst
   , scmGlobalDef
-  , scmGlobalConst
   , scmVariable
   , scmUnitValue
   , scmUnitType
@@ -179,7 +178,6 @@ import SAWCore.Module
   )
 import SAWCore.Name
 import SAWCore.Panic (panic)
-import SAWCore.Prelude.Constants
 import SAWCore.Recognizer
 import SAWCore.Term.Functor
 import SAWCore.Term.Raw
@@ -200,7 +198,6 @@ data TermError
   | NotType Term
   | NotPairType Term
   | NameNotFound Name
-  | IdentNotFound Ident
   | QualNameNotFound QN.QualName
   | NotRecord Term
   | FieldNotFound Term FieldName
@@ -877,20 +874,10 @@ scmGetInventedVarType i = do
   InventedVars m <- scmGetData
   return $ IntMap.lookup i m
 
--- | Returns shared term associated with ident.
--- Does not check module namespace.
-scmGlobalDef :: Ident -> SCM Term
-scmGlobalDef ident =
-  do sc <- scmSharedContext
-     m <- liftIO $ readIORef (scGlobalEnv sc)
-     case HMap.lookup (moduleIdentToQualName ident) m of
-       Nothing -> scmError (IdentNotFound ident)
-       Just t -> pure t
-
 -- | Return the constant 'Term' named by the given 'QN.QualName'.
 -- Raise an error if the 'QN.QualName' is not found in the context.
-scmGlobalConst :: QN.QualName -> SCM Term
-scmGlobalConst qn =
+scmGlobalDef :: QN.QualName -> SCM Term
+scmGlobalDef qn =
   do sc <- scmSharedContext
      m <- liftIO $ readIORef (scGlobalEnv sc)
      case HMap.lookup qn m of
@@ -1849,7 +1836,7 @@ scmString s =
 
 -- | Create a term representing the primitive saw-core type @String@.
 scmStringType :: SCM Term
-scmStringType = scmGlobalDef preludeStringIdent
+scmStringType = scmGlobalDef "Prelude.String"
 
 -- | Create a vector term from a type (as a 'Term') and a list of 'Term's of
 -- that type.
@@ -1871,7 +1858,7 @@ scmVector e xs =
 -- | Create a term representing a vector type, from a term giving the length
 -- and a term giving the element type.
 scmVecType :: Term -> Term -> SCM Term
-scmVecType n e = scmGlobalApply preludeVecIdent [n, e]
+scmVecType n e = scmGlobalApply "Prelude.Vec" [n, e]
 
 -- | Create a record term from a list of record fields.
 scmRecordValue :: [(FieldName, Term)] -> SCM Term
@@ -2057,9 +2044,9 @@ scmOpaqueConstant nmi ty =
 
 -- | Create a function application term from a global identifier and a list of
 -- arguments (as 'Term's).
-scmGlobalApply :: Ident -> [Term] -> SCM Term
-scmGlobalApply i ts =
-  do c <- scmGlobalDef i
+scmGlobalApply :: QN.QualName -> [Term] -> SCM Term
+scmGlobalApply qn ts =
+  do c <- scmGlobalDef qn
      scmApplyAll c ts
 
 

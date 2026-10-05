@@ -254,7 +254,7 @@ projRecord (OpenTerm m) f =
 -- | Build an 'OpenTerm' for a global name with a definition
 global :: QualName -> OpenTerm
 global qn =
-  OpenTerm $ \sc -> scGlobalConst sc qn
+  OpenTerm $ \sc -> scGlobalDef sc qn
 
 -- | Build an 'OpenTerm' for a named variable.
 variable :: VarName -> Term -> OpenTerm

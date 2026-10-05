@@ -121,6 +121,7 @@ import SAWCore.Simulator.MonadLazy (force)
 import SAWCore.Module (CtorArg(..))
 import SAWCore.Name (Name, VarName, nameInfo, toQualName, wildcardVarName)
 import SAWCore.Term.Functor (mkSort, FieldName, LocalName)
+import SAWCore.QualName (QualName)
 import qualified SAWCore.QualName as QN
 
 -- local modules:
@@ -550,7 +551,7 @@ importSchema sc env (C.Forall tparams props ty) =
 -- in which they are added to the 'IntroRuleSet'.
 -- When there are multiple class intro rules with overlapping
 -- patterns, the preferred rule should be listed first.
-classIntroIdents :: [Ident]
+classIntroIdents :: [QualName]
 classIntroIdents =
   [ "Cryptol.PZeroBit"
   , "Cryptol.PZeroInteger"
@@ -668,9 +669,9 @@ getInstanceRules sc =
             mapM_ loadRule (reverse classIntroIdents)
             maybe emptyIntroRuleSet id <$> eInstances sc
   where
-    loadRule :: Ident -> IO ()
-    loadRule i =
-      do t <- scGlobalDef sc i
+    loadRule :: QualName -> IO ()
+    loadRule qn =
+      do t <- scGlobalDef sc qn
          r <- mkIntroRule sc t
          addInstance sc r
 
@@ -2461,7 +2462,7 @@ deriveEqInstance sc env dtName dtParams props ctorArgTypes =
 -- given (non-recursive) datatype and register it as an class instance
 -- rule.
 deriveCmpInstanceGeneric ::
-  (Ident, FieldName, FieldName, FieldName, FieldName, Text) ->
+  (QualName, FieldName, FieldName, FieldName, FieldName, Text) ->
   SharedContext ->
   LocalEnv ->
   Name {- ^ datatype name -} ->
@@ -2470,7 +2471,7 @@ deriveCmpInstanceGeneric ::
   [[Term]] {- ^ constructor argument types -} ->
   IO ()
 deriveCmpInstanceGeneric
-  (classIdent, eqField, cmpField, leField, ltField, prefix)
+  (className, eqField, cmpField, leField, ltField, prefix)
   sc env dtName dtParams props ctorArgTypes =
   do dt <- scConst sc dtName
      dtParamsVars <- scVariables sc dtParams
@@ -2491,7 +2492,7 @@ deriveCmpInstanceGeneric
      let mkCmp :: Term -> Term -> IO Term
          mkCmp x y =
            do a <- scTypeOf sc x
-              cmpa <- scGlobalApply sc classIdent [a]
+              cmpa <- scGlobalApply sc className [a]
               pa <- proveInstance sc env' cmpa
               cmp <- scRecordSelect sc pa cmpField
               scApplyAll sc cmp [x, y]
@@ -2525,7 +2526,7 @@ deriveCmpInstanceGeneric
      cmpEq <- proveInstance sc env' eqty
 
      r <- scRecordValue sc [(eqField, cmpEq), (cmpField, cmp), (leField, le), (ltField, lt)]
-     r1 <- scAscribe sc r =<< scGlobalApply sc classIdent [ty]
+     r1 <- scAscribe sc r =<< scGlobalApply sc className [ty]
      r2 <- scAbstractTerms sc (dtParamsVars ++ propVars) r1
      let dtNameInfo = nameInfo dtName
      let dtQualName = toQualName dtNameInfo

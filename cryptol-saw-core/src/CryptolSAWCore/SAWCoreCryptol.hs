@@ -70,6 +70,7 @@ import qualified Cryptol.Utils.RecordMap as C
 import qualified SAWSupport.Pretty as PPS
 
 import qualified SAWCore.Name as SAW
+import           SAWCore.QualName (QualName)
 import           SAWCore.Recognizer
 import           SAWCore.SharedTerm
 import           SAWCore.Term.Functor
@@ -897,10 +898,10 @@ translateLambda vars fn = withVars vars $ do
         _ -> P.EFun P.emptyFunDesc vars' fn1
   return (tvars', fn2)
 
-lookupSAWConst :: Ident -> TT SAW.Name
-lookupSAWConst i = do
+lookupSAWConst :: QualName -> TT SAW.Name
+lookupSAWConst qn = do
   sc <- asks ttSc
-  t <- liftIO $ scGlobalDef sc i
+  t <- liftIO $ scGlobalDef sc qn
   mreturn $ asConstant t
 
 getConstType :: Name -> TT (P.Schema Name)

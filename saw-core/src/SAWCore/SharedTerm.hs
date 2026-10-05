@@ -105,7 +105,6 @@ module SAWCore.SharedTerm
   , scConst
   , scConstApply
   , scGlobalDef
-  , scGlobalConst
   , scGlobalApply
     -- ** Sorts
   , scSort
@@ -384,11 +383,11 @@ import SAWCore.Module
   , ResolvedName(..)
   )
 import SAWCore.Name
-import SAWCore.Prelude.Constants
 import SAWCore.Recognizer
 import SAWCore.Term.Certified
 import SAWCore.Term.Functor
 import SAWCore.Term.Pretty
+import SAWCore.QualName (QualName)
 import qualified SAWCore.QualName as QN
 
 --------------------------------------------------------------------------------
@@ -487,10 +486,8 @@ prettyTermErrorPure opts ne err =
       ]
     NameNotFound nm ->
       [ "No such constant:" PP.<+> prettyNameWithEnv opts ne nm ]
-    IdentNotFound ident ->
-      [ "No such global:" PP.<+> PP.pretty (show ident) ]
     QualNameNotFound qn ->
-      [ "No such global name:" PP.<+> PP.pretty (QN.ppQualName qn) ]
+      [ "No such global:" PP.<+> PP.pretty (QN.ppQualName qn) ]
     NotPairType t ->
       [ "Tuple field projection with non-tuple"
       , withFrees [t] $
@@ -773,13 +770,9 @@ scFreshName sc x = execSCM sc (scmFreshName x)
 scFreshVarName :: SharedContext -> Text -> IO VarName
 scFreshVarName sc x = execSCM sc (scmFreshVarName x)
 
--- | Create a 'Term' for the global constant with the given 'Ident'.
-scGlobalDef :: SharedContext -> Ident -> IO Term
-scGlobalDef sc ident = execSCM sc (scmGlobalDef ident)
-
--- | Create a 'Term' for the global constant with the given 'QN.QualName'.
-scGlobalConst :: SharedContext -> QN.QualName -> IO Term
-scGlobalConst sc qn = execSCM sc (scmGlobalConst qn)
+-- | Create a 'Term' for the global constant with the given 'QualName'.
+scGlobalDef :: SharedContext -> QualName -> IO Term
+scGlobalDef sc qn = execSCM sc (scmGlobalDef qn)
 
 -- | Create a recursor for the data type of the given 'Name', which
 -- eliminates to the given 'Sort'.
@@ -831,7 +824,7 @@ scString sc s = execSCM sc (scmString s)
 
 -- | Create a term representing the primitive saw-core type @String@.
 scStringType :: SharedContext -> IO Term
-scStringType sc = scGlobalDef sc preludeStringIdent
+scStringType sc = scGlobalDef sc "Prelude.String"
 
 -- | Create a vector term from a type (as a 'Term') and a list of 'Term's of
 -- that type.
@@ -951,9 +944,9 @@ scDefineDataType sc spec = execSCM sc (scmDefineDataType spec)
 
 -- | Create a function application term from a global identifier and a list of
 -- arguments (as 'Term's).
-scGlobalApply :: SharedContext -> Ident -> [Term] -> IO Term
-scGlobalApply sc i ts =
-  do c <- scGlobalDef sc i
+scGlobalApply :: SharedContext -> QualName -> [Term] -> IO Term
+scGlobalApply sc qn ts =
+  do c <- scGlobalDef sc qn
      scApplyAll sc c ts
 
 scResolveName :: SharedContext -> Text -> IO [VarIndex]
@@ -1432,7 +1425,7 @@ scBoolType sc = scGlobalDef sc "Prelude.Bool"
 
 -- | Create a term representing the prelude Natural type.
 scNatType :: SharedContext -> IO Term
-scNatType sc = scGlobalDef sc preludeNatIdent
+scNatType sc = scGlobalDef sc "Prelude.Nat"
 
 -- | Create a term representing a vector type, from a term giving the length
 -- and a term giving the element type.
@@ -1440,7 +1433,7 @@ scVecType :: SharedContext
           -> Term -- ^ The length of the vector
           -> Term -- ^ The element type
           -> IO Term
-scVecType sc n e = scGlobalApply sc preludeVecIdent [n, e]
+scVecType sc n e = scGlobalApply sc "Prelude.Vec" [n, e]
 
 -- | Create a term applying @Prelude.not@ to the given term.
 --
@@ -1542,7 +1535,7 @@ scSlice sc e i n o a = scGlobalApply sc "Prelude.slice" [e, i, n, o, a]
 -- > get : (n : Nat) -> (e : sort 0) -> Vec n e -> Fin n -> e;
 scGet :: SharedContext -> Term -> Term ->
          Term -> Term -> IO Term
-scGet sc n e v i = scGlobalApply sc (mkIdent preludeName "get") [n, e, v, i]
+scGet sc n e v i = scGlobalApply sc "Prelude.get" [n, e, v, i]
 
 -- | Create a term accessing a particular element of a vector with @bvAt@,
 -- which uses a bitvector for indexing.
@@ -1550,14 +1543,14 @@ scGet sc n e v i = scGlobalApply sc (mkIdent preludeName "get") [n, e, v, i]
 -- > bvAt : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> Vec w Bool -> a;
 scBvAt :: SharedContext -> Term -> Term ->
          Term -> Term -> Term -> IO Term
-scBvAt sc n a i xs idx = scGlobalApply sc (mkIdent preludeName "bvAt") [n, a, i, xs, idx]
+scBvAt sc n a i xs idx = scGlobalApply sc "Prelude.bvAt" [n, a, i, xs, idx]
 
 -- | Create a term accessing a particular element of a vector, with a default
 -- to return if the index is out of bounds.
 --
 -- > atWithDefault : (n : Nat) -> (a : sort 0) -> a -> Vec n a -> Nat -> a;
 scAtWithDefault :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
-scAtWithDefault sc n a v xs idx = scGlobalApply sc (mkIdent preludeName "atWithDefault") [n, a, v, xs, idx]
+scAtWithDefault sc n a v xs idx = scGlobalApply sc "Prelude.atWithDefault" [n, a, v, xs, idx]
 
 -- | Create a term accessing a particular element of a vector, failing if the
 -- index is out of bounds.
@@ -1565,27 +1558,27 @@ scAtWithDefault sc n a v xs idx = scGlobalApply sc (mkIdent preludeName "atWithD
 -- > at : (n : Nat) -> (a : sort 0) -> Vec n a -> Nat -> a;
 scAt :: SharedContext -> Term -> Term ->
         Term -> Term -> IO Term
-scAt sc n a xs idx = scGlobalApply sc (mkIdent preludeName "at") [n, a, xs, idx]
+scAt sc n a xs idx = scGlobalApply sc "Prelude.at" [n, a, xs, idx]
 
 -- | Create a term evaluating to a vector containing a single element.
 --
 -- > single : (e : sort 1) -> e -> Vec 1 e;
 scSingle :: SharedContext -> Term -> Term -> IO Term
-scSingle sc e x = scGlobalApply sc (mkIdent preludeName "single") [e, x]
+scSingle sc e x = scGlobalApply sc "Prelude.single" [e, x]
 
 -- | Create a term computing the least significant bit of a bitvector, given a
 -- length and bitvector.
 --
 -- > lsb : (n : Nat) -> Vec (Succ n) Bool -> Bool;
 scLsb :: SharedContext -> Term -> Term -> IO Term
-scLsb sc n x = scGlobalApply sc (mkIdent preludeName "lsb") [n, x]
+scLsb sc n x = scGlobalApply sc "Prelude.lsb" [n, x]
 
 -- | Create a term computing the most significant bit of a bitvector, given a
 -- length and bitvector.
 --
 -- > msb : (n : Nat) -> Vec (Succ n) Bool -> Bool;
 scMsb :: SharedContext -> Term -> Term -> IO Term
-scMsb sc n x = scGlobalApply sc (mkIdent preludeName "lsb") [n, x]
+scMsb sc n x = scGlobalApply sc "Prelude.msb" [n, x]
 
 -- Primitive operations on nats
 
@@ -1662,7 +1655,7 @@ scMaxNat sc x y = scGlobalApply sc "Prelude.maxNat" [x,y]
 
 -- | Create a term representing the prelude Integer type.
 scIntegerType :: SharedContext -> IO Term
-scIntegerType sc = scGlobalDef sc preludeIntegerIdent
+scIntegerType sc = scGlobalDef sc "Prelude.Integer"
 
 -- | Create an integer constant term from an 'Integer'.
 scIntegerConst :: SharedContext -> Integer -> IO Term

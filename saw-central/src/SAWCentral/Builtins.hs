@@ -274,6 +274,7 @@ import SAWCore.Parser.Grammar (parseSAW, parseSAWTerm)
 import SAWCore.ExternalFormat
 import SAWCore.Module (lookupVarIndexInMap, ResolvedName(..))
 import SAWCore.Name (ModuleName, Name(..), VarName(..), mkModuleName)
+import SAWCore.QualName (QualName)
 import SAWCore.SATQuery
 import SAWCore.Simulator.Concrete (constMap)
 import SAWCore.Simulator.Uninterpreted (generalizeHigherOrderFunctions)
@@ -2265,7 +2266,7 @@ cryptol_prims =
     <$> CryptolModule Map.empty
     <$> Map.fromList <$> traverse parsePrim prims
   where
-    prims :: [(Text, Ident, Text)]
+    prims :: [(Text, QualName, Text)]
     prims =
       [ ("trunc", "Cryptol.ecTrunc" , "{m, n} (fin m, fin n) => [m+n] -> [n]")
       , ("uext" , "Cryptol.ecUExt"  , "{m, n} (fin m, fin n) => [n] -> [m+n]")
@@ -2285,8 +2286,8 @@ cryptol_prims =
                 , CSC.inpCol  = 1 + 2 -- add 2 for dropped {{
                 }
 
-    parsePrim :: (Text, Ident, Text) -> TopLevel (C.Name, TypedTerm)
-    parsePrim (n, i, s) = do
+    parsePrim :: (Text, QualName, Text) -> TopLevel (C.Name, TypedTerm)
+    parsePrim (n, qn, s) = do
       sc <- getSharedContext
       cenv <- SV.getCryptolEnv
       unless (CSC.isToplevel cenv) $ do
@@ -2294,7 +2295,7 @@ cryptol_prims =
       let mname = C.packModName ["Prims"]
       n' <- io $ CSC.declareName sc mname n
       s' <- io $ CSC.parseSchema sc cenv (noLoc s)
-      t' <- io $ scGlobalDef sc i
+      t' <- io $ scGlobalDef sc qn
       return (n', TypedTerm (TypedTermSchema s') t')
 
 cryptol_load :: (FilePath -> IO StrictBS.ByteString) -> FilePath -> TopLevel CSC.ExtCryptolModule
