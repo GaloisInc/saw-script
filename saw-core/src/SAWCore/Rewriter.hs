@@ -84,6 +84,7 @@ import SAWCore.Module
 import SAWCore.Name
 import qualified SAWCore.OpenTerm as OT
 import SAWCore.Panic (panic)
+import SAWCore.QualName (QualName)
 import qualified SAWCore.Recognizer as R
 import SAWCore.SharedTerm
 import SAWCore.Term.Functor
@@ -408,11 +409,14 @@ ruleOfProp sc term ann =
     eqRule x y = pure $ Just $ mkRewriteRule [] x y False False ann
 
 -- | Generate a rewrite rule from the type of an identifier, using 'ruleOfTerm'
-scEqRewriteRule :: SharedContext -> Ident -> IO (RewriteRule a)
-scEqRewriteRule sc i = ruleOfTerm <$> scTypeOfIdent sc i <*> pure Nothing
+scEqRewriteRule :: SharedContext -> QualName -> IO (RewriteRule a)
+scEqRewriteRule sc qn =
+  do t <- scGlobalDef sc qn
+     ty <- scTypeOf sc t
+     pure (ruleOfTerm ty Nothing)
 
 -- | Collects rewrite rules from named constants, whose types must be equations.
-scEqsRewriteRules :: SharedContext -> [Ident] -> IO [RewriteRule a]
+scEqsRewriteRules :: SharedContext -> [QualName] -> IO [RewriteRule a]
 scEqsRewriteRules sc = mapM (scEqRewriteRule sc)
 
 -- | Transform the given rewrite rule to a set of one or more
@@ -579,10 +583,10 @@ addConv conv = Net.insert_term (conversionPat conv, Right conv)
 addConvs :: [Conversion] -> Simpset a -> Simpset a
 addConvs convs ss = foldr addConv ss convs
 
-scSimpset :: SharedContext -> [Def] -> [Ident] -> [Conversion] -> IO (Simpset a)
-scSimpset sc defs eqIdents convs = do
+scSimpset :: SharedContext -> [Def] -> [QualName] -> [Conversion] -> IO (Simpset a)
+scSimpset sc defs eqNames convs = do
   defRules <- concat <$> traverse (scDefRewriteRules sc) defs
-  eqRules <- mapM (scEqRewriteRule sc) eqIdents
+  eqRules <- mapM (scEqRewriteRule sc) eqNames
   return $ addRules defRules $ addRules eqRules $ addConvs convs $ emptySimpset
 
 listRules :: Simpset a -> [RewriteRule a]
@@ -868,7 +872,7 @@ hoistIfs :: SharedContext
 hoistIfs sc t = do
    cache <- newIntCache
 
-   rules <- map (\rt -> ruleOfTerm rt Nothing) <$> mapM (scTypeOfIdent sc)
+   rules <- scEqsRewriteRules sc
               [ "Prelude.ite_true"
               , "Prelude.ite_false"
               , "Prelude.ite_not"

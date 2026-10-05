@@ -273,7 +273,7 @@ import qualified SAWCore.Parser.AST as Un
 import SAWCore.Parser.Grammar (parseSAW, parseSAWTerm)
 import SAWCore.ExternalFormat
 import SAWCore.Module (lookupVarIndexInMap, ResolvedName(..))
-import SAWCore.Name (ModuleName, Name(..), VarName(..), mkModuleName)
+import SAWCore.Name (ModuleName, Name(..), VarName(..), mkModuleName, moduleIdentToQualName)
 import SAWCore.QualName (QualName)
 import SAWCore.SATQuery
 import SAWCore.Simulator.Concrete (constMap)
@@ -1586,14 +1586,14 @@ addPreludeEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
-    where qualify = mkIdent (mkModuleName ["Prelude"])
+    where qualify = moduleIdentToQualName . mkIdent (mkModuleName ["Prelude"])
 
 addCryptolEqs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addCryptolEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
-    where qualify = mkIdent (mkModuleName ["Cryptol"])
+    where qualify = moduleIdentToQualName . mkIdent (mkModuleName ["Cryptol"])
 
 add_defs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 add_defs names ss =

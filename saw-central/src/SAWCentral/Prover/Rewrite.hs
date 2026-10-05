@@ -9,14 +9,16 @@ Stability   : provisional
 
 module SAWCentral.Prover.Rewrite (basic_ss) where
 
+import SAWCore.Module (lookupVarIndexInMap, ResolvedName(..))
+import SAWCore.Name (nameIndex)
+import SAWCore.QualName (QualName)
 import SAWCore.Rewriter
          ( Simpset, emptySimpset, addRules, RewriteRule
          , scEqsRewriteRules, scDefRewriteRules
          , addConvs
          )
-import SAWCore.Name(preludeName, mkIdent, Ident, mkModuleName)
 import SAWCore.Conversion
-import SAWCore.SharedTerm(SharedContext,scFindDef)
+import SAWCore.SharedTerm (SharedContext, scGetModuleMap, scResolveQualName)
 
 basic_ss :: SharedContext -> IO (Simpset a)
 basic_ss sc =
@@ -24,60 +26,63 @@ basic_ss sc =
      rs2 <- scEqsRewriteRules sc eqs
      return $ addConvs procs (addRules (rs1 ++ rs2) emptySimpset)
      where
-       eqs = map (mkIdent preludeName)
-         [ "unsafeCoerce_same"
-         , "headRecord_RecordValue"
-         , "tailRecord_RecordValue"
-         , "PairValue_fst_snd"
-         , "PairValue_fst_Unit"
-         , "RecordValue_head_tail"
-         , "RecordValue_head_Empty"
-         , "not_not"
-         , "true_implies"
-         , "implies__eq"
-         , "and_True1"
-         , "and_False1"
-         , "and_True2"
-         , "and_False2"
-         , "and_idem"
-         , "or_True1"
-         , "or_False1"
-         , "or_True2"
-         , "or_False2"
-         , "or_idem"
-         , "not_True"
-         , "not_False"
-         , "not_or"
-         , "not_and"
-         , "ite_true"
-         , "ite_false"
-         , "ite_not"
-         , "ite_nest1"
-         , "ite_nest2"
-         , "ite_fold_not"
-         , "ite_eq"
-         , "ite_true"
-         , "ite_false"
-         , "or_triv1"
-         , "and_triv1"
-         , "or_triv2"
-         , "and_triv2"
-         , "bvAddZeroL"
-         , "bvAddZeroR"
-         , "bveq_sameL"
-         , "bveq_sameR"
-         , "bveq_same2"
-         , "bvEq_refl"
-         , "bvNat_bvToNat"
+       eqs =
+         [ "Prelude.unsafeCoerce_same"
+         , "Prelude.headRecord_RecordValue"
+         , "Prelude.tailRecord_RecordValue"
+         , "Prelude.PairValue_fst_snd"
+         , "Prelude.PairValue_fst_Unit"
+         , "Prelude.RecordValue_head_tail"
+         , "Prelude.RecordValue_head_Empty"
+         , "Prelude.not_not"
+         , "Prelude.true_implies"
+         , "Prelude.implies__eq"
+         , "Prelude.and_True1"
+         , "Prelude.and_False1"
+         , "Prelude.and_True2"
+         , "Prelude.and_False2"
+         , "Prelude.and_idem"
+         , "Prelude.or_True1"
+         , "Prelude.or_False1"
+         , "Prelude.or_True2"
+         , "Prelude.or_False2"
+         , "Prelude.or_idem"
+         , "Prelude.not_True"
+         , "Prelude.not_False"
+         , "Prelude.not_or"
+         , "Prelude.not_and"
+         , "Prelude.ite_true"
+         , "Prelude.ite_false"
+         , "Prelude.ite_not"
+         , "Prelude.ite_nest1"
+         , "Prelude.ite_nest2"
+         , "Prelude.ite_fold_not"
+         , "Prelude.ite_eq"
+         , "Prelude.ite_true"
+         , "Prelude.ite_false"
+         , "Prelude.or_triv1"
+         , "Prelude.and_triv1"
+         , "Prelude.or_triv2"
+         , "Prelude.and_triv2"
+         , "Prelude.bvAddZeroL"
+         , "Prelude.bvAddZeroR"
+         , "Prelude.bveq_sameL"
+         , "Prelude.bveq_sameR"
+         , "Prelude.bveq_same2"
+         , "Prelude.bvEq_refl"
+         , "Prelude.bvNat_bvToNat"
          ]
-       defs = map (mkIdent (mkModuleName ["Cryptol"])) ["seq", "ecEq", "ecNotEq"]
+       defs = ["Cryptol.seq", "Cryptol.ecEq", "Cryptol.ecNotEq"]
        procs = bvConversions ++ natConversions ++ vecConversions
 
 
-
-defRewrites :: SharedContext -> Ident -> IO [RewriteRule a]
-defRewrites sc ident =
-  scFindDef sc ident >>= \maybe_def ->
-  case maybe_def of
-    Nothing -> return []
-    Just def -> scDefRewriteRules sc def
+defRewrites :: SharedContext -> QualName -> IO [RewriteRule a]
+defRewrites sc qn =
+  do mname <- scResolveQualName sc qn
+     case mname of
+       Nothing -> pure []
+       Just nm ->
+         do mm <- scGetModuleMap sc
+            case lookupVarIndexInMap (nameIndex nm) mm of
+              Just (ResolvedDef def) -> scDefRewriteRules sc def
+              _ -> pure []
