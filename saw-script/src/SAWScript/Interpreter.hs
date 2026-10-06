@@ -178,7 +178,7 @@ import qualified Lang.Crucible.FunctionHandle as Crucible
 isPolymorphic :: SS.Type -> Bool
 isPolymorphic ty0 = case ty0 of
     SS.TyCon _pos _tycon -> False
-    SS.TyApplyMonad _pos m arg -> isPolymorphic m || isPolymorphic arg
+    SS.TyApply _pos m arg -> isPolymorphic m || isPolymorphic arg
     SS.TyTuple _pos args -> any isPolymorphic args
     SS.TyArray _pos arg -> isPolymorphic arg
     SS.TyFunc _pos _ params namedParams ret ->
@@ -1521,7 +1521,7 @@ interpretMain = do
       -- Don't fail or complain if there's no main.
       return ()
     Just (Current, tyFound, v) -> case tyFound of
-        SS.Forall _ (SS.TyApplyMonad _ _ _) -> do
+        SS.Forall _ (SS.TyApply _ _ _) -> do
             -- It looks like a monadic value, so check more carefully.
             ppopts <- getPPOpts
             case typesMatch ppopts avail tyenv "main" tyFound tyExpected of
@@ -2065,7 +2065,7 @@ instance IsValue a => IsValue (IO a) where
 
 instance IsValue a => IsValue (TopLevel a) where
     toValue ty name action = case ty of
-        SS.TyApplyMonad _ (SS.TyCon _ (SS.ContextCon SS.TopLevel)) ty'a ->
+        SS.TyApply _ (SS.TyCon _ (SS.ContextCon SS.TopLevel)) ty'a ->
             VTopLevel atRestPos [] (fmap (toValue ty'a name) action)
         _ ->
             toValuePanic "TopLevel" ty
@@ -2083,7 +2083,7 @@ instance FromValue a => FromValue (TopLevel a) where
 
 instance IsValue a => IsValue (ProofScript a) where
     toValue ty name m = case ty of
-        SS.TyApplyMonad _ (SS.TyCon _ (SS.ContextCon SS.ProofScript)) ty'a ->
+        SS.TyApply _ (SS.TyCon _ (SS.ContextCon SS.ProofScript)) ty'a ->
             VProofScript atRestPos [] (fmap (toValue ty'a name) m)
         _ ->
             toValuePanic "ProofScript" ty
@@ -2101,7 +2101,7 @@ instance FromValue a => FromValue (ProofScript a) where
 
 instance IsValue a => IsValue (LLVMSetupM a) where
     toValue ty name m = case ty of
-        SS.TyApplyMonad _ (SS.TyVar _ "LLVMSetup") ty'a ->
+        SS.TyApply _ (SS.TyVar _ "LLVMSetup") ty'a ->
             VLLVMSetup atRestPos [] (fmap (toValue ty'a name) m)
         _ ->
             toValuePanic "LLVMSetup" ty
@@ -2119,7 +2119,7 @@ instance FromValue a => FromValue (LLVMSetupM a) where
 
 instance IsValue a => IsValue (JVMSetupM a) where
     toValue ty name m = case ty of
-        SS.TyApplyMonad _ (SS.TyVar _ "JVMSetup") ty'a ->
+        SS.TyApply _ (SS.TyVar _ "JVMSetup") ty'a ->
             VJVMSetup atRestPos [] (fmap (toValue ty'a name) m)
         _ ->
             toValuePanic "JVMSetup" ty
@@ -2137,7 +2137,7 @@ instance FromValue a => FromValue (JVMSetupM a) where
 
 instance IsValue a => IsValue (MIRSetupM a) where
     toValue ty name m = case ty of
-        SS.TyApplyMonad _ (SS.TyVar _ "MIRSetup") ty'a ->
+        SS.TyApply _ (SS.TyVar _ "MIRSetup") ty'a ->
             VMIRSetup atRestPos [] (fmap (toValue ty'a name) m)
         _ ->
             toValuePanic "MIRSetup" ty

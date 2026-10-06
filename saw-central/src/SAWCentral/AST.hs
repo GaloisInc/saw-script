@@ -315,7 +315,7 @@ instance Semigroup NamedParamInfo where
 --
 data Type
   = TyCon TypeProvenance TyCon
-  | TyApplyMonad TypeProvenance Type Type
+  | TyApply TypeProvenance Type Type
   | TyTuple TypeProvenance [Type]
   | TyArray TypeProvenance Type
   | TyFunc TypeProvenance NamedParamInfo [Type] (Map Name Type) Type
@@ -523,7 +523,7 @@ instance Positioned TypeProvenance where
 instance Positioned Type where
   getPos ty = case ty of
       TyCon prov _ -> getPos prov
-      TyApplyMonad prov _ _ -> getPos prov
+      TyApply prov _ _ -> getPos prov
       TyTuple prov _ -> getPos prov
       TyArray prov _ -> getPos prov
       TyFunc prov _ _ _ _ -> getPos prov
@@ -629,7 +629,7 @@ prettyType _ppopts = PP.group . visit 0
       TyCon _ ctor ->
           prettyTyCon ctor
 
-      TyApplyMonad _ m arg ->
+      TyApply _ m arg ->
           let m' = visit 1 m
               arg' = visit 2 arg
               body = m' <+> arg'
@@ -989,7 +989,7 @@ tInt :: TypeProvenance -> Type
 tInt prov = TyCon prov IntCon
 
 tApply :: TypeProvenance -> Type -> Type -> Type
-tApply prov c t = TyApplyMonad prov c t
+tApply prov c t = TyApply prov c t
 
 tAIG :: TypeProvenance -> Type
 tAIG prov = TyCon prov AIGCon

@@ -122,7 +122,7 @@ instance (UnifyVars a) => UnifyVars (Pos, PrimitiveLifecycle, Rebindable, a) whe
 instance UnifyVars Type where
     unifyVars t = case t of
         TyCon _ _         -> Map.empty
-        TyApplyMonad _ m arg -> Map.union (unifyVars m) (unifyVars arg)
+        TyApply _ m arg   -> Map.union (unifyVars m) (unifyVars arg)
         TyTuple _ ts      -> unifyVars ts
         TyArray _ t1      -> unifyVars t1
         TyFunc _ _ params namedParams ret ->
@@ -253,8 +253,8 @@ instance AppSubst Decl where
 instance AppSubst Type where
     appSubst s t = case t of
         TyCon prov tc -> TyCon prov tc
-        TyApplyMonad prov m arg ->
-            TyApplyMonad prov (appSubst s m) (appSubst s arg)
+        TyApply prov m arg ->
+            TyApply prov (appSubst s m) (appSubst s arg)
         TyTuple prov ts -> TyTuple prov (appSubst s ts)
         TyArray prov t1 -> TyArray prov (appSubst s t1)
         TyFunc prov ninfo params namedParams ret ->
@@ -983,7 +983,7 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
             case ty of
                 TyCon prov tc ->
                     (ppTyCon' tc, prov, [])
-                TyApplyMonad prov m arg ->
+                TyApply prov m arg ->
                     let (m', subelts'm) = consider "monad" prov m
                         (arg', subelts'arg) = consider "1st argument" prov arg
                     in
@@ -1404,8 +1404,8 @@ unify exp0 pos found0 = visit [] exp0 found0
                 -- array, unify the arg
                 recOnce expT foundT
 
-            (TyApplyMonad _ exp'm exp'arg, TyApplyMonad _ found'm found'arg) -> do
-                -- both monad applications, unify the args
+            (TyApply _ exp'm exp'arg, TyApply _ found'm found'arg) -> do
+                -- both type applications, unify the args
                 recOnce exp'm found'm
                 recOnce exp'arg found'arg
 
@@ -1489,7 +1489,7 @@ inspectTypeFTVs :: Kind -> Type -> TI (Map Name (Pos, Kind))
 inspectTypeFTVs kind ty = case ty of
     TyCon _prov _ctor ->
         pure Map.empty
-    TyApplyMonad _prov m arg -> do
+    TyApply _prov m arg -> do
         m' <- inspectTypeFTVs (kindAddStar kind) m
         arg' <- inspectTypeFTVs kindStar arg
         pure $ Map.union m' arg'
@@ -2364,9 +2364,9 @@ addTypedef a ty = do
 --
 monadType :: Type -> Maybe (Type, Type)
 monadType ty = case ty of
-  TyApplyMonad _ ctx@(TyCon _ (ContextCon _)) valty ->
+  TyApply _ ctx@(TyCon _ (ContextCon _)) valty ->
       Just (ctx, valty)
-  TyApplyMonad _ ctx@(TyVar _ name) valty | isMonad name ->
+  TyApply _ ctx@(TyVar _ name) valty | isMonad name ->
       Just (ctx, valty)
   _ ->
       Nothing
@@ -2939,12 +2939,12 @@ checkType kind ty = case ty of
         else do
             pure $ TyCon prov tycon
 
-    TyApplyMonad prov m arg -> do
+    TyApply prov m arg -> do
         m' <- checkType (kindAddStar kind) m
         arg' <- checkType kindStar arg
         pure $ case checkForFailure [m', arg'] of
             Left ty' -> ty'
-            Right () -> TyApplyMonad prov m' arg'
+            Right () -> TyApply prov m' arg'
 
     TyTuple prov args -> do
         if kind /= kindStar then do

@@ -77,7 +77,7 @@ instance (NamedTyVars a) => NamedTyVars (Pos, a) where
 instance NamedTyVars Type where
   namedTyVars t = case t of
     TyCon _ _         -> Map.empty
-    TyApplyMonad _ m arg -> namedTyVars [m, arg]
+    TyApply _ m arg   -> namedTyVars [m, arg]
     TyTuple _ ts      -> namedTyVars ts
     TyArray _ t1      -> namedTyVars t1
     TyFunc _ _ params namedParams ret ->
@@ -135,11 +135,11 @@ instance (SubstituteTyVars a) => SubstituteTyVars (pos, a) where
 instance SubstituteTyVars Type where
   substituteTyVars avail tyenv ty = case ty of
     TyCon pos tc        -> TyCon pos tc
-    TyApplyMonad pos m arg ->
+    TyApply pos m arg ->
         let m' = substituteTyVars avail tyenv m
             arg' = substituteTyVars avail tyenv arg
         in
-        TyApplyMonad pos m' arg'
+        TyApply pos m' arg'
     TyTuple pos ts      -> TyTuple pos (substituteTyVars avail tyenv ts)
     TyArray pos t1      -> TyArray pos (substituteTyVars avail tyenv t1)
     TyFunc pos nameinfo params namedParams ret ->
@@ -192,11 +192,11 @@ instance (SubstituteTyVars' a) => SubstituteTyVars' (pos, a) where
 instance SubstituteTyVars' Type where
   substituteTyVars' avail tyenv ty = case ty of
     TyCon pos tc        -> TyCon pos tc
-    TyApplyMonad pos m arg ->
+    TyApply pos m arg ->
         let m' = substituteTyVars' avail tyenv m
             arg' = substituteTyVars' avail tyenv arg
         in
-        TyApplyMonad pos m' arg'
+        TyApply pos m' arg'
     TyTuple pos ts      -> TyTuple pos (substituteTyVars' avail tyenv ts)
     TyArray pos t1      -> TyArray pos (substituteTyVars' avail tyenv t1)
     TyFunc pos nameinfo params namedParams ret ->

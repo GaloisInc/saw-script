@@ -138,12 +138,12 @@ dumpType ty0 = case ty0 of
               ContextCon TopLevel -> "TopLevel"
         in
         Dump.subelements ("TyCon " <> tycon') [prov']
-    TyApplyMonad prov m arg ->
+    TyApply prov m arg ->
         let prov' = dumpTypeProvenance prov
             m' = dumpType m
             arg' = dumpType arg
         in
-        Dump.fields "TyApplyMonad" [
+        Dump.fields "TyApply" [
             ("provenance", prov'),
             ("m", m'),
             ("arg", arg')
