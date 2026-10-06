@@ -24,6 +24,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 
 import qualified SAWSupport.ScopedMap as ScopedMap
+import qualified SAWSupport.Pretty as PPS
 import SAWCentral.AST
 import SAWCentral.ASTUtil (namedTyVars)
 import SAWCentral.Value (TyEnv)
@@ -209,83 +210,64 @@ instance Ord Candidate where
         compare (cForallSubst c1) (cForallSubst c2) <>
         liftCompare compareType (cFreeVarSubst c1) (cFreeVarSubst c2)
           where
-            compareType ty1 ty2 = case (ty1, ty2) of
+            -- Number the constructors of Type. (There's
+            -- presumably no way to autogenerate this without
+            -- creating instances for Type that we don't want.)
+            -- This avoids needing a full MxN crossbar in
+            -- compareType.
+            ctorNum :: Type -> Int
+            ctorNum ty = case ty of
+                TyCon{} -> 0
+                TyApply{} -> 1
+                TyTuple{} -> 2
+                TyArray{} -> 3
+                TyFunc{} -> 4
+                TyRecord{} -> 5
+                TyVar{} -> 6
+                TyUnifyVar{} -> 7
+
+            compareType ty1 ty2 =
+                compare (ctorNum ty1) (ctorNum ty2) <>
+                compareTypeDiagonal ty1 ty2
+
+            compareTypeDiagonal ty1 ty2 = case (ty1, ty2) of
                 (TyCon _pos1 ctor1, TyCon _pos2 ctor2) ->
                     compare ctor1 ctor2
-                (TyCon _ _, TyApply _ _ _) -> LT
-                (TyCon _ _, TyTuple _ _) -> LT
-                (TyCon _ _, TyArray _ _) -> LT
-                (TyCon _ _, TyFunc _ _ _ _ _) -> LT
-                (TyCon _ _, TyRecord _ _) -> LT
-                (TyCon _ _, TyVar _ _) -> LT
-                (TyCon _ _, TyUnifyVar _ _) -> LT
-                (TyApply _ _ _, TyCon _ _) -> GT
                 (TyApply _pos1 m1 arg1, TyApply _pos2 m2 arg2) ->
                     compareType m1 m2 <>
                     compareType arg1 arg2
-                (TyApply _ _ _, TyTuple _ _) -> LT
-                (TyApply _ _ _, TyArray _ _) -> LT
-                (TyApply _ _ _, TyFunc _ _ _ _ _) -> LT
-                (TyApply _ _ _, TyRecord _ _) -> LT
-                (TyApply _ _ _, TyVar _ _) -> LT
-                (TyApply _ _ _, TyUnifyVar _ _) -> LT
-                (TyTuple _ _, TyCon _ _) -> GT
-                (TyTuple _ _, TyApply _ _ _) -> GT
                 (TyTuple _ args1, TyTuple _ args2) ->
                     liftCompare compareType args1 args2
-                (TyTuple _ _, TyArray _ _) -> LT
-                (TyTuple _ _, TyFunc _ _ _ _ _) -> LT
-                (TyTuple _ _, TyRecord _ _) -> LT
-                (TyTuple _ _, TyVar _ _) -> LT
-                (TyTuple _ _, TyUnifyVar _ _) -> LT
-                (TyArray _ _, TyCon _ _) -> GT
-                (TyArray _ _, TyApply _ _ _) -> GT
-                (TyArray _ _, TyTuple _ _) -> GT
                 (TyArray _ arg1, TyArray _ arg2) ->
                     compareType arg1 arg2
-                (TyArray _ _, TyFunc _ _ _ _ _) -> LT
-                (TyArray _ _, TyRecord _ _) -> LT
-                (TyArray _ _, TyVar _ _) -> LT
-                (TyArray _ _, TyUnifyVar _ _) -> LT
-                (TyFunc _ _ _ _ _, TyCon _ _) -> GT
-                (TyFunc _ _ _ _ _, TyApply _ _ _) -> GT
-                (TyFunc _ _ _ _ _, TyTuple _ _) -> GT
-                (TyFunc _ _ _ _ _, TyArray _ _) -> GT
-                (TyFunc _pos1 _ params1 namedParams1 ret1, TyFunc _pos2 _ params2 namedParams2 ret2) ->
+                (TyFunc _pos1 _ params1 namedParams1 ret1,
+                 TyFunc _pos2 _ params2 namedParams2 ret2) ->
                     liftCompare compareType params1 params2 <>
                     liftCompare compareType namedParams1 namedParams2 <>
                     compareType ret1 ret2
-                (TyFunc _ _ _ _ _, TyRecord _ _) -> LT
-                (TyFunc _ _ _ _ _, TyVar _ _) -> LT
-                (TyFunc _ _ _ _ _, TyUnifyVar _ _) -> LT
-                (TyRecord _ _, TyCon _ _) -> GT
-                (TyRecord _ _, TyApply _ _ _) -> GT
-                (TyRecord _ _, TyTuple _ _) -> GT
-                (TyRecord _ _, TyArray _ _) -> GT
-                (TyRecord _ _, TyFunc _ _ _ _ _) -> GT
                 (TyRecord _pos1 fields1, TyRecord _pos2 fields2) ->
                     liftCompare compareType fields1 fields2
-                (TyRecord _ _, TyVar _ _) -> LT
-                (TyRecord _ _, TyUnifyVar _ _) -> LT
-                (TyVar _ _, TyCon _ _) -> GT
-                (TyVar _ _, TyApply _ _ _) -> GT
-                (TyVar _ _, TyTuple _ _) -> GT
-                (TyVar _ _, TyArray _ _) -> GT
-                (TyVar _ _, TyFunc _ _ _ _ _) -> GT
-                (TyVar _ _, TyRecord _ _) -> GT
                 (TyVar _pos1 x1, TyVar _pos2 x2) ->
                     compare x1 x2
-                (TyVar _ _, TyUnifyVar _ _) -> LT
-                (TyUnifyVar _ _, TyCon _ _) -> GT
-                (TyUnifyVar _ _, TyApply _ _ _) -> GT
-                (TyUnifyVar _ _, TyTuple _ _) -> GT
-                (TyUnifyVar _ _, TyArray _ _) -> GT
-                (TyUnifyVar _ _, TyFunc _ _ _ _ _) -> GT
-                (TyUnifyVar _ _, TyRecord _ _) -> GT
-                (TyUnifyVar _ _, TyVar _ _) -> GT
                 (TyUnifyVar _pos1 x1, TyUnifyVar _pos2 x2) ->
                     compare x1 x2
-
+                -- List all the possible left sides without a default
+                -- case so the compiler reminds us if we need to add
+                -- cases.
+                (TyCon{}, _) -> oops ty1 ty2
+                (TyApply{}, _) -> oops ty1 ty2
+                (TyTuple{}, _) -> oops ty1 ty2
+                (TyArray{}, _) -> oops ty1 ty2
+                (TyFunc{}, _) -> oops ty1 ty2
+                (TyRecord{}, _) -> oops ty1 ty2
+                (TyVar{}, _) -> oops ty1 ty2
+                (TyUnifyVar{}, _) -> oops ty1 ty2
+            oops ty1 ty2 = panic "compareType" [
+                "Misrouted case",
+                "ty1: " <> ppType ppopts ty1,
+                "ty2: " <> ppType ppopts ty2
+             ]
+            ppopts = PPS.defaultOpts  -- ok: for a panic in an Ord instance
 
 -- | For a group of match candidates, use Set. This is not free, since
 -- it will exercise matchExact a lot, but it also means that we don't

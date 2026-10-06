@@ -2348,21 +2348,19 @@ addTypedef a ty = do
 --
 monadType :: Type -> Maybe (Type, Type)
 monadType ty = case ty of
-  TyApply _ ctx@(TyCon _ TopLevel) valty ->
-      Just (ctx, valty)
-  TyApply _ ctx@(TyCon _ ProofScript) valty ->
-      Just (ctx, valty)
-  TyApply _ ctx@(TyVar _ name) valty | isMonad name ->
+  TyApply _ ctx valty | isMonad ctx ->
       Just (ctx, valty)
   _ ->
       Nothing
   where
-    -- Baking in these strings is untidy. I'd worry more about it if
+    -- Baking in the strings is untidy. I'd worry more about it if
     -- this code were being used for real rather than as part of a
     -- temporary accomodation for compatibility purposes.
-    isMonad "LLVMSetup" = True
-    isMonad "JVMSetup" = True
-    isMonad "MIRSetup" = True
+    isMonad (TyCon _ TopLevel) = True
+    isMonad (TyCon _ ProofScript) = True
+    isMonad (TyVar _ "LLVMSetup") = True
+    isMonad (TyVar _ "JVMSetup") = True
+    isMonad (TyVar _ "MIRSetup") = True
     isMonad _ = False
 
 -- | Wrap an expression in @return@
@@ -2911,36 +2909,35 @@ checkForFailure tys = foldr visit (Right ()) tys
 --   downstream.
 --
 checkType :: Kind -> Type -> TI Type
-checkType kind ty = case ty of
+checkType kindExpected ty =
+  let reject prov kindFound = do
+        let pos = Pos.getPos prov
+        let kindExpected' = prettyKind kindExpected
+            kindFound' = prettyKind kindFound
+        recordError pos $ "Kind mismatch: expected" <+> kindExpected' <+>
+                          "but found" <+> kindFound'
+        getErrorTyVar pos
+  in
+  case ty of
     TyCon prov tycon -> do
         -- First, look up the constructor.
         let kindFound = lookupTyCon tycon
 
-        if kind /= kindFound then do
-            let pos = Pos.getPos prov
-            let kind' = prettyKind kind
-                kindFound' = prettyKind kindFound
-            recordError pos $ "Kind mismatch: expected" <+> kind' <+>
-                              "but found" <+> kindFound'
-            getErrorTyVar pos
+        if kindExpected /= kindFound then
+            reject prov kindFound
         else do
             pure $ TyCon prov tycon
 
     TyApply prov m arg -> do
-        m' <- checkType (kindAddStar kind) m
+        m' <- checkType (kindAddStar kindExpected) m
         arg' <- checkType kindStar arg
         pure $ case checkForFailure [m', arg'] of
             Left ty' -> ty'
             Right () -> TyApply prov m' arg'
 
     TyTuple prov args -> do
-        if kind /= kindStar then do
-            let pos = Pos.getPos prov
-            let kind' = prettyKind kind
-                kindStar' = prettyKind kindStar
-            recordError pos $ "Kind mismatch: expected" <+> kind' <+>
-                              "but found" <+> kindStar'
-            getErrorTyVar pos
+        if kindExpected /= kindStar then
+            reject prov kindStar
         else do
             args' <- mapM (checkType kindStar) args
             pure $ case checkForFailure args' of
@@ -2948,13 +2945,8 @@ checkType kind ty = case ty of
                 Right () -> TyTuple prov args'
 
     TyArray prov arg -> do
-        if kind /= kindStar then do
-            let pos = Pos.getPos prov
-            let kind' = prettyKind kind
-                kindStar' = prettyKind kindStar
-            recordError pos $ "Kind mismatch: expected" <+> kind' <+>
-                              "but found" <+> kindStar'
-            getErrorTyVar pos
+        if kindExpected /= kindStar then
+            reject prov kindStar
         else do
             arg' <- checkType kindStar arg
             pure $ case checkForFailure [arg'] of
@@ -2962,13 +2954,8 @@ checkType kind ty = case ty of
                 Right () -> TyArray prov arg'
 
     TyFunc prov nameinfo params namedParams ret -> do
-        if kind /= kindStar then do
-            let pos = Pos.getPos prov
-            let kind' = prettyKind kind
-                kindStar' = prettyKind kindStar
-            recordError pos $ "Kind mismatch: expected" <+> kind' <+>
-                              "but found" <+> kindStar'
-            getErrorTyVar pos
+        if kindExpected /= kindStar then
+            reject prov kindStar
         else do
             params' <- mapM (checkType kindStar) params
             namedParams' <- mapM (checkType kindStar) namedParams
@@ -2982,13 +2969,8 @@ checkType kind ty = case ty of
                 Right () -> TyFunc prov nameinfo params' namedParams' ret'
 
     TyRecord prov fields -> do
-        if kind /= kindStar then do
-            let pos = Pos.getPos prov
-            let kind' = prettyKind kind
-                kindStar' = prettyKind kindStar
-            recordError pos $ "Kind mismatch: expected" <+> kind' <+>
-                              "but found" <+> kindStar'
-            getErrorTyVar pos
+        if kindExpected /= kindStar then
+            reject prov kindStar
         else do
             -- Someone upstream had better have checked for duplicate
             -- field names because we can't once the fields are loaded
@@ -3024,12 +3006,8 @@ checkType kind ty = case ty of
         avail <- asks tiPrimsAvail
         if Set.member lc avail then do
             recordWarning pos $ "Type is deprecated:" <+> x
-            if kind /= kindFound then do
-                let kind' = prettyKind kind
-                    kindFound' = prettyKind kindFound
-                recordError pos $ "Kind mismatch: expected" <+> kind' <+>
-                                  "but found" <+> kindFound'
-                getErrorTyVar pos
+            if kindExpected /= kindFound then
+                reject prov kindFound
             else
                 -- Expand to LLVMSetup. Even though we don't expand
                 -- typedefs here, this isn't an ordinary typedef.
@@ -3076,13 +3054,8 @@ checkType kind ty = case ty of
                         ConcreteType _ -> kindStar
                         AbstractType kf -> kf
 
-                  if kind /= kindFound then do
-                      let pos = Pos.getPos prov
-                      let kind' = prettyKind kind
-                          kindFound' = prettyKind kindFound
-                      recordError pos $ "Kind mismatch: expected" <+> kind' <+>
-                                        "but found" <+> kindFound'
-                      getErrorTyVar pos
+                  if kindExpected /= kindFound then
+                      reject prov kindFound
                   else
                       -- We do _not_ want to expand typedefs when checking,
                       -- so return the original TyVar.
