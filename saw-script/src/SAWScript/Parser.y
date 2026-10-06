@@ -418,8 +418,8 @@ data ParseError
 -- Note: we return the position and the document separately so they
 -- can be passed to the error infrastructure separately.
 --
-prettyParseError :: PPS.Opts -> Text -> ParseError -> (Maybe Pos, PPS.Doc)
-prettyParseError ppopts eofName pe = case pe of
+prettyParseError :: Text -> ParseError -> (Maybe Pos, PPS.Doc)
+prettyParseError eofName pe = case pe of
     HappyError nextToks possibles ->
         let (optpos, tstr) = case nextToks of
               [] -> (Nothing, eofName)
@@ -441,7 +441,7 @@ prettyParseError ppopts eofName pe = case pe of
     UnsupportedModuleParameters pos ->
         (Just pos, "Unsupported module parameters")
     InvalidPattern pos e ->
-        (Just pos, "Parse error: invalid pattern" <+> prettyExpr ppopts e)
+        (Just pos, "Parse error: invalid pattern" <+> prettyExpr e)
     InvalidPatternAnnotation pos ->
         (Just pos, "Parse error: invalid pattern type annotation")
     InvalidNamedParam pos ->

@@ -98,7 +98,7 @@ envCmd = do
       unless (null rbenv) $ do
           let printrb (x, ty) = do
                 let x' = PP.pretty x
-                    ty' = prettySchema ppopts ty
+                    ty' = prettySchema ty
                     line1 = x' <+> ":"
                     line2 = "rebindable" <+> ty'
                     line2' = PP.flatAlt (PP.indent 3 line2) line2
@@ -110,7 +110,7 @@ envCmd = do
       let printscope entries = do
             let printentry (x, ty) = do
                   let x' = PP.pretty x
-                      ty' = prettySchema ppopts ty
+                      ty' = prettySchema ty
                       line1 = x' <+> ":"
                       line2 = ty'
                       line2' = PP.flatAlt (PP.indent 3 line2) line2
@@ -180,7 +180,7 @@ searchCmd str
          environ = rwEnviron rw
          rebindables = rwRebindables rw
      pat <- liftIO $
-         Loader.readSchemaPattern opts ppopts replFileName environ rebindables avail str
+         Loader.readSchemaPattern opts replFileName environ rebindables avail str
 
      let primsAvail = rwPrimsAvail rw
      let Environ varenv tyenv _cryenv = environ
@@ -233,7 +233,7 @@ searchCmd str
 
          printMatch (name, (lc, ty)) = do
            let name' = PP.pretty name
-               ty' = prettySchema ppopts ty
+               ty' = prettySchema ty
                lc' = case lc of
                    Current -> Nothing
                    WarnDeprecated -> Just "(DEPRECATED AND WILL WARN)"
@@ -299,7 +299,7 @@ tenvCmd = do
       let printscope entries = do
             let printentry (x, ty) = do
                   let x' = PP.pretty x
-                      ty' = prettyNamedType ppopts ty
+                      ty' = prettyNamedType ty
                       body = x' <+> "=" <+> ty'
                       body' = PP.group body
                   TextIO.putStrLn $ PPS.renderText ppopts body'

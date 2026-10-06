@@ -301,8 +301,7 @@ type StmtInterpreter = TopLevelRO -> TopLevelRW -> [SAWScript.Stmt] -> IO ()
 -- | How to interpret a MatchResult to the TopLevel monad
 actAfterMatch :: StmtInterpreter -> MatchResult -> TopLevel ()
 actAfterMatch interpretStmts MatchResult{..} = do
-   ppopts <- getPPOpts
-   let renderedScript = SAWScript.prettyWholeModule ppopts generatedScript
+   let renderedScript = SAWScript.prettyWholeModule generatedScript
    do
          io . awhen afterMatchSave $ \file ->
                  withFile file WriteMode $ \handle ->

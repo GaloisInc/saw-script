@@ -158,8 +158,8 @@ type GenericResult a = Either [(Pos, PPS.Doc)] ([(Pos, PPS.Doc)], a)
 --   the EOF token name passed to `prettyParseError`, which should
 --   generally be either "end of line" or "end of file".
 --
-readAny :: PPS.Opts -> FilePath -> Text -> Text -> Parser a -> GenericResult a
-readAny ppopts fileName str eofName parser =
+readAny :: FilePath -> Text -> Text -> Parser a -> GenericResult a
+readAny fileName str eofName parser =
     case lexSAW fileName eofName str of
         Left (_verbosity, pos, msg) ->
             Left [(pos, PP.pretty msg)]
@@ -173,7 +173,7 @@ readAny ppopts fileName str eofName parser =
             in
             case parser tokens of
                 Left err ->
-                    let (optpos, err') = prettyParseError ppopts eofName err
+                    let (optpos, err') = prettyParseError eofName err
                         pos = case optpos of
                             Nothing ->
                                 -- Happy is unable to provide the
@@ -277,12 +277,12 @@ dispatchTyMsgs (msgs, result) = do
 -- | Call `readAny` and panic if it generates any diagnostics.
 readAnyPure :: PPS.Opts -> FilePath -> Text -> Text -> Parser a -> Text -> a
 readAnyPure ppopts fileName str eofName parser whoAmI =
-    panicOnGenericMsgs ppopts whoAmI $ readAny ppopts fileName str eofName parser
+    panicOnGenericMsgs ppopts whoAmI $ readAny fileName str eofName parser
 
 -- | Call `readAny` then `dispatchGenericMsgs`.
-readAnyIO :: PPS.Opts -> FilePath -> Text -> Text -> Parser a -> IO a
-readAnyIO ppopts fileName str eofName parser =
-    dispatchGenericMsgs $ readAny ppopts fileName str eofName parser
+readAnyIO :: FilePath -> Text -> Text -> Parser a -> IO a
+readAnyIO fileName str eofName parser =
+    dispatchGenericMsgs $ readAny fileName str eofName parser
 
 -- | Run the readAny result through the `Include` module to resolve
 --   @include@ statements.
@@ -351,11 +351,11 @@ readSchemaPure name lc tyenv str =
 -- patterns, so no need to process includes in what we read.
 --
 readSchemaPattern ::
-    Options -> PPS.Opts ->
+    Options ->
     FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text ->
     IO SchemaPattern
-readSchemaPattern _opts ppopts fileName environ rbenv avail str = do
-  pat <- readAnyIO ppopts fileName str "end-of-line" parseSchemaPattern
+readSchemaPattern _opts fileName environ rbenv avail str = do
+  pat <- readAnyIO fileName str "end-of-line" parseSchemaPattern
   let Environ varenv tyenv _cryenv = environ
 
   -- XXX it should not be necessary to do this munging
@@ -387,7 +387,7 @@ readExpression opts ppopts fileName environ rbenv avail str = do
   seen <- emptySeenSet
   let incpath = (".", Options.importPath opts)
 
-  expr0 <- readAnyIO ppopts fileName str "end-of-line" parseExpression
+  expr0 <- readAnyIO fileName str "end-of-line" parseExpression
   expr <- resolveIncludes 0{-depth-} seen incpath opts ppopts Inc.processExpr expr0
   let Environ varenv tyenv _cryenvs = environ
 
@@ -429,7 +429,7 @@ readREPLTextUnchecked opts ppopts fileName str = do
   seen <- emptySeenSet
   let incpath = (".", Options.importPath opts)
 
-  stmts <- readAnyIO ppopts fileName str "end-of-line" parseREPLText
+  stmts <- readAnyIO fileName str "end-of-line" parseREPLText
   resolveIncludes 0{-depth-} seen incpath opts ppopts Inc.processStmts stmts
 
 -- | Find a file, potentially looking in a list of multiple search paths (as
@@ -503,7 +503,7 @@ includeFile depth seen incpath opts ppopts fname once = do
       Cons.noteN $ "Loading file \"" <> Text.pack fname' <> "\""
       ftext <- TextIO.readFile fname'
 
-      stmts <- wrapDir current' $ readAnyIO ppopts fname ftext "end-of-file" parseModule
+      stmts <- wrapDir current' $ readAnyIO fname ftext "end-of-file" parseModule
       resolveIncludes (depth + 1) seen incpath' opts ppopts Inc.processStmts stmts
 
 -- | Find a file, potentially looking in a list of multiple search paths (as

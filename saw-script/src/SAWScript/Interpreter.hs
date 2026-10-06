@@ -3083,7 +3083,7 @@ parser_printer_roundtrip _bic opts filetxt = do
     ppopts <- getPPOpts
     liftIO $ do
       stmts <- Loader.findAndLoadFileUnchecked opts ppopts file
-      PPS.renderStdout ppopts $ SS.prettyWholeModule ppopts stmts
+      PPS.renderStdout ppopts $ SS.prettyWholeModule stmts
 
 exec :: Text -> [Text] -> Text -> IO Text
 exec name args input = do

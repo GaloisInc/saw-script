@@ -744,11 +744,11 @@ patternBindingsWithSchema pat sch = case pat of
 --
 
 -- | Print a list of enclosing types.
-prettyEnclosing :: PPS.Opts -> [(Type, Type)] -> PPS.Doc
-prettyEnclosing ppopts tys =
+prettyEnclosing :: [(Type, Type)] -> PPS.Doc
+prettyEnclosing tys =
     let once (tyexp, tyfound) =
-          let tyexp' = prettyType ppopts tyexp
-              tyfound' = prettyType ppopts tyfound
+          let tyexp' = prettyType tyexp
+              tyfound' = prettyType tyfound
               expectedShort  = "Expected:" <+> tyexp'
               foundShort     = "Found:   " <+> tyfound'
               -- Use of nest here allows the open-brace of records to
@@ -1191,7 +1191,6 @@ unify exp0 pos found0 = visit [] exp0 found0
 
         -- | Fail with expected/found types
         let rejectCommon inhibitSubs msg more = do
-              ppopts <- asks tiPPOpts
               encs' <- do
                   let once (t1, t2) = do
                         t1' <- expandFully pos t1
@@ -1199,7 +1198,7 @@ unify exp0 pos found0 = visit [] exp0 found0
                         pure (t1', t2')
                   mapM once encs
               let body = PP.vsep $ more ++ [
-                      prettyEnclosing ppopts ((expect, found) : encs')
+                      prettyEnclosing ((expect, found) : encs')
                    ]
               recordError pos $ msg <> PP.line <> PP.indent 4 body
 
@@ -1248,11 +1247,10 @@ unify exp0 pos found0 = visit [] exp0 found0
               case Map.lookup i $ unifyVars ty of
                   Nothing -> pure ty
                   Just _otherprov -> do
-                      ppopts <- asks tiPPOpts
-                      let expect' = prettyType ppopts expect
-                          found' = prettyType ppopts found
-                          i' = prettyType ppopts $ TyUnifyVar prov'i i
-                          ty' = prettyType ppopts ty
+                      let expect' = prettyType expect
+                          found' = prettyType found
+                          i' = prettyType $ TyUnifyVar prov'i i
+                          ty' = prettyType ty
 
                       reject "Occurs check failure." [
                           "Cannot unify" <+> expect' <+>
@@ -1310,13 +1308,12 @@ unify exp0 pos found0 = visit [] exp0 found0
                 let expNames = Map.keysSet expNamedParams
                     foundNames = Map.keysSet foundNamedParams
                 if expNames /= foundNames then do
-                    ppopts <- asks tiPPOpts
-                    let expect' = prettyType ppopts expect
-                        found' = prettyType ppopts found
+                    let expect' = prettyType expect
+                        found' = prettyType found
                         expMissing = Map.difference foundNamedParams expNamedParams
                         foundMissing = Map.difference expNamedParams foundNamedParams
                         prettyMissing (name, ty) =
-                            let ty' = prettyType ppopts ty in
+                            let ty' = prettyType ty in
                             PP.pretty name <+> ":" <+> ty'
                         prettyMissingList fty' ms = case ms of
                             [] ->
@@ -1746,8 +1743,7 @@ inferExpr expr = case expr of
                     "; please use a type annotation"
                 getErrorTyVar pos
             _ -> do
-                ppopts <- asks tiPPOpts
-                let t1' = prettyType ppopts t1
+                let t1' = prettyType t1
                 recordError pos $
                     "Record lookup on non-record value of type" <+> t1'
                 getErrorTyVar pos
@@ -1773,8 +1769,7 @@ inferExpr expr = case expr of
                     "; please use a type annotation"
                 getErrorTyVar pos
             _ -> do
-                ppopts <- asks tiPPOpts
-                let t1' = prettyType ppopts t1
+                let t1' = prettyType t1
                 recordError pos $ "Tuple lookup on non-tuple value of type" <+>
                                   t1'
                 getErrorTyVar pos
@@ -2096,7 +2091,7 @@ inferExpr expr = case expr of
                       -- The value we got didn't accept any arguments at
                       -- all, so use the position of the function value
                       -- to complain that it isn't a function.
-                      let ty' = prettyType ppopts ty
+                      let ty' = prettyType ty
                       let nNamed = length (Map.toList namedArginfo)
                           nargs' = case length arginfo + nNamed of
                             1 -> "one argument"
@@ -2153,7 +2148,7 @@ inferExpr expr = case expr of
                       -- line, which isn't great either.)
                       --
                       let origTy' =
-                              let origTy2 = prettyType ppopts origTy1 in
+                              let origTy2 = prettyType origTy1 in
                               case Text.lines $ PPS.renderText ppopts origTy2 of
                                   [t] -> PP.pretty t
                                   ts -> PP.nest 3 $ PP.vsep $ map PP.pretty ts
@@ -2398,8 +2393,7 @@ wrapReturn e =
 --
 -- Updates the environment and returns an updated statement.
 inferStmt :: Bool -> TypeProvenance -> Type -> Stmt -> TI Stmt
-inferStmt atSyntacticTopLevel blockprov ctx s = do
-    ppopts <- asks tiPPOpts
+inferStmt atSyntacticTopLevel blockprov ctx s =
     case s of
         StmtBind spos pat e -> do
             (pty, pat') <- inferPattern ReadOnlyVar pat
@@ -2455,8 +2449,8 @@ inferStmt atSyntacticTopLevel blockprov ctx s = do
 
             -- The special case for the wrong monad
             let allowWrongMonad ctx' = do
-                  let pctx =  prettyType ppopts ctx
-                      pctx' = prettyType ppopts ctx'
+                  let pctx =  prettyType ctx
+                      pctx' = prettyType ctx'
                   recordError spos $ "Monadic bind with the wrong monad;" <+>
                                      "found" <+> pctx' <+>
                                      "but expected" <+> pctx
