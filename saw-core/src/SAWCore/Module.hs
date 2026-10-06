@@ -34,7 +34,6 @@ module SAWCore.Module
   , moduleName
   , emptyModule
   , resolveName
-  , resolveNameInMap
   , lookupVarIndexInMap
   , requireNameInMap
   , findDataType
@@ -49,9 +48,6 @@ module SAWCore.Module
   , moduleIsLoaded
   , loadModule
   , findModule
-  , findCtorInMap
-  , findDataTypeInMap
-  , findDefInMap
   , allModuleDefs
   , allModuleDecls
   , allModulePrimitives
@@ -406,27 +402,6 @@ requireNameInMap nm mm =
   case lookupVarIndexInMap (nameIndex nm) mm of
     Just r -> r
     Nothing -> panic "requireNameInMap" ["Constant not found: " <> toAbsoluteName (nameInfo nm)]
-
-resolveNameInMap :: ModuleMap -> Ident -> Maybe ResolvedName
-resolveNameInMap mm i =
-  do env <- Map.lookup (identModule i) (mmNameEnv mm)
-     vi <-
-       case resolveDisplayName env (identBaseName i) of
-         [vi] -> Just vi
-         _ -> Nothing
-     IntMap.lookup vi (mmIndexMap mm)
-
--- | Resolve an 'Ident' to a 'Ctor' in a 'ModuleMap'
-findCtorInMap :: Ident -> ModuleMap -> Maybe Ctor
-findCtorInMap i mm = resolveNameInMap mm i >>= asResolvedCtor
-
--- | Resolve an 'Ident' to a 'DataType' in a 'ModuleMap'
-findDataTypeInMap :: Ident -> ModuleMap -> Maybe DataType
-findDataTypeInMap i mm = resolveNameInMap mm i >>= asResolvedDataType
-
--- | Resolve an 'Ident' to a 'Def' in a 'ModuleMap'.
-findDefInMap :: Ident -> ModuleMap -> Maybe Def
-findDefInMap i mm = resolveNameInMap mm i >>= asResolvedDef
 
 -- | Get all definitions defined in any module in an entire module map. Note
 -- that the returned list might have redundancies if a definition is visible /

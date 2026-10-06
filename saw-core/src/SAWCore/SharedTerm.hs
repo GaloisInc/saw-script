@@ -164,19 +164,12 @@ module SAWCore.SharedTerm
   , scAscribe
   , asSort
   , reducePi
-  , scTypeOfIdent
   , scTypeOfName
     -- * Modules
   , scLoadModule
   , scImportModule
   , scModuleIsLoaded
   , scFindModule
-  , scFindDef
-  , scFindDataType
-  , scFindCtor
-  , scRequireDef
-  , scRequireDataType
-  , scRequireCtor
   , scInjectCode
     -- * Inspecting terms
   , isConstFoldTerm
@@ -369,13 +362,8 @@ import SAWCore.Module
   ( ctorNumParams
   , moduleIsLoaded
   , lookupVarIndexInMap
-  , findCtorInMap
-  , findDataTypeInMap
-  , findDefInMap
   , findModule
   , resolvedNameType
-  , resolveNameInMap
-  , Ctor(..)
   , DataType(..)
   , Def(..)
   , DefQualifier
@@ -980,42 +968,6 @@ scFindModule sc name =
        Nothing ->
          error ("scFindModule: module " ++ show name ++ " not found!")
 
--- | Look up a definition by its identifier
-scFindDef :: SharedContext -> Ident -> IO (Maybe Def)
-scFindDef sc i = findDefInMap i <$> scGetModuleMap sc
-
--- | Look up a 'Def' by its identifier, throwing an error if it is not found
-scRequireDef :: SharedContext -> Ident -> IO Def
-scRequireDef sc i =
-  scFindDef sc i >>= \maybe_d ->
-  case maybe_d of
-    Just d -> return d
-    Nothing -> fail ("Could not find definition: " ++ show i)
-
--- | Look up a datatype by its identifier
-scFindDataType :: SharedContext -> Ident -> IO (Maybe DataType)
-scFindDataType sc i = findDataTypeInMap i <$> scGetModuleMap sc
-
--- | Look up a datatype by its identifier, throwing an error if it is not found
-scRequireDataType :: SharedContext -> Ident -> IO DataType
-scRequireDataType sc i =
-  scFindDataType sc i >>= \maybe_d ->
-  case maybe_d of
-    Just d -> return d
-    Nothing -> fail ("Could not find datatype: " ++ show i)
-
--- | Look up a constructor by its identifier
-scFindCtor :: SharedContext -> Ident -> IO (Maybe Ctor)
-scFindCtor sc i = findCtorInMap i <$> scGetModuleMap sc
-
--- | Look up a constructor by its identifier, throwing an error if not found
-scRequireCtor :: SharedContext -> Ident -> IO Ctor
-scRequireCtor sc i =
-  scFindCtor sc i >>= \maybe_ctor ->
-  case maybe_ctor of
-    Just ctor -> return ctor
-    Nothing -> fail ("Could not find constructor: " ++ show i)
-
 ----------------------------------------------------------------------
 -- Printing
 
@@ -1137,16 +1089,6 @@ reducePi sc t arg = do
     _ -> do
       t'' <- ppTerm sc t'
       fail $ unlines ["reducePi: not a Pi term", t'']
-
-
--- | Look up the type of a global constant, primitive, data type, or
--- data constructor, given its name as an 'Ident'.
-scTypeOfIdent :: SharedContext -> Ident -> IO Term
-scTypeOfIdent sc ident =
-  do mm <- scGetModuleMap sc
-     case resolveNameInMap mm ident of
-       Just r -> pure (resolvedNameType r)
-       Nothing -> fail ("scTypeOfIdent: Identifier not found: " ++ show ident)
 
 -- | Look up the type of a global constant, given its 'Name'.
 scTypeOfName :: SharedContext -> Name -> IO Term
