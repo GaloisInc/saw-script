@@ -6,6 +6,11 @@ This release supports [version
 
 ## New Features
 
+* The new `add_defs` builtin extends a `Simpset` with rules that unfold
+  the definitions of the constants named as arguments.
+  It works for constants defined in SAWCore, Cryptol, or anywhere.
+  It supersedes the `add_prelude_defs` and `add_cryptol_defs` builtins.
+
 * Support LLVM versions up to 23.
 
 ## Bug Fixes
@@ -17,6 +22,12 @@ This release supports [version
   analyzed in addition to LLVM functions and JVM methods.
 
 ## Removals / Deprecations
+
+* Builtins `add_prelude_defs` and `add_cryptol_defs` have been
+  deprecated in favor of `add_defs`.
+  In most cases `add_defs` should work as a drop-in replacement.
+  Use qualified names in case of ambiguity: For example, replace
+  `add_prelude_defs ["map"] ss` with `add_defs ["Prelude::map"] ss`.
 
 * Support for CVC4 has been removed. Use CVC5.
 
