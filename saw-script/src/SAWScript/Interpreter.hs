@@ -178,14 +178,14 @@ import qualified Lang.Crucible.FunctionHandle as Crucible
 isPolymorphic :: SS.Type -> Bool
 isPolymorphic ty0 = case ty0 of
     SS.TyCon _pos _tycon -> False
-    SS.TyApply _pos m arg -> isPolymorphic m || isPolymorphic arg
-    SS.TyTuple _pos args -> any isPolymorphic args
     SS.TyArray _pos arg -> isPolymorphic arg
+    SS.TyTuple _pos args -> any isPolymorphic args
+    SS.TyRecord _pos fields -> any isPolymorphic fields
     SS.TyFunc _pos _ params namedParams ret ->
         any isPolymorphic params || any isPolymorphic namedParams || isPolymorphic ret
-    SS.TyRecord _pos fields -> any isPolymorphic fields
     SS.TyVar _pos _a -> False
     SS.TyUnifyVar _pos _ix -> True
+    SS.TyApply _pos m arg -> isPolymorphic m || isPolymorphic arg
 
 -- Get the type of an AST element. For now, only patterns because that's
 -- what we're using.

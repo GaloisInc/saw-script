@@ -120,41 +120,41 @@ matchExact :: Type -> Type -> Bool
 matchExact ty1 ty2 = case (ty1, ty2) of
     (TyCon _pos1 ctor1, TyCon _pos2 ctor2) ->
         ctor1 == ctor2
-    (TyApply _pos1 m1 arg1, TyApply _pos2 m2 arg2) ->
-        matchExact m1 m2 &&
+    (TyArray _pos1 arg1, TyArray _pos2 arg2) ->
         matchExact arg1 arg2
     (TyTuple _pos1 args1, TyTuple _pos2 args2) ->
         length args1 == length args2 &&
         liftEq matchExact args1 args2
-    (TyArray _pos1 arg1, TyArray _pos2 arg2) ->
-        matchExact arg1 arg2
+    (TyRecord _pos1 members1, TyRecord _pos2 members2) ->
+        -- member maps must be equivalent via matchExact
+        liftEq matchExact members1 members2
     (TyFunc _pos1 _ params1 namedParams1 ret1, TyFunc _pos2 _ params2 namedParams2 ret2) ->
         -- parameter lists must be equivalent via matchExact
         liftEq matchExact params1 params2 &&
         liftEq matchExact namedParams1 namedParams2 &&
         matchExact ret1 ret2
-    (TyRecord _pos1 members1, TyRecord _pos2 members2) ->
-        -- member maps must be equivalent via matchExact
-        liftEq matchExact members1 members2
     (TyVar _pos1 a1, TyVar _pos2 a2) ->
         a1 == a2
     (TyUnifyVar _pos1 a1, TyUnifyVar _pos2 a2) ->
         a1 == a2
+    (TyApply _pos1 m1 arg1, TyApply _pos2 m2 arg2) ->
+        matchExact m1 m2 &&
+        matchExact arg1 arg2
     (TyCon _ _, _) ->
-        False
-    (TyApply _ _ _, _) ->
-        False
-    (TyTuple _ _, _) ->
         False
     (TyArray _ _, _) ->
         False
-    (TyFunc _ _ _ _ _, _) ->
+    (TyTuple _ _, _) ->
         False
     (TyRecord _ _, _) ->
+        False
+    (TyFunc _ _ _ _ _, _) ->
         False
     (TyVar _ _, _) ->
         False
     (TyUnifyVar _ _, _) ->
+        False
+    (TyApply _ _ _, _) ->
         False
 
 
@@ -218,13 +218,13 @@ instance Ord Candidate where
             ctorNum :: Type -> Int
             ctorNum ty = case ty of
                 TyCon{} -> 0
-                TyApply{} -> 1
+                TyArray{} -> 1
                 TyTuple{} -> 2
-                TyArray{} -> 3
+                TyRecord{} -> 3
                 TyFunc{} -> 4
-                TyRecord{} -> 5
-                TyVar{} -> 6
-                TyUnifyVar{} -> 7
+                TyVar{} -> 5
+                TyUnifyVar{} -> 6
+                TyApply{} -> 7
 
             compareType ty1 ty2 =
                 compare (ctorNum ty1) (ctorNum ty2) <>
@@ -233,35 +233,35 @@ instance Ord Candidate where
             compareTypeDiagonal ty1 ty2 = case (ty1, ty2) of
                 (TyCon _pos1 ctor1, TyCon _pos2 ctor2) ->
                     compare ctor1 ctor2
-                (TyApply _pos1 m1 arg1, TyApply _pos2 m2 arg2) ->
-                    compareType m1 m2 <>
+                (TyArray _ arg1, TyArray _ arg2) ->
                     compareType arg1 arg2
                 (TyTuple _ args1, TyTuple _ args2) ->
                     liftCompare compareType args1 args2
-                (TyArray _ arg1, TyArray _ arg2) ->
-                    compareType arg1 arg2
+                (TyRecord _pos1 fields1, TyRecord _pos2 fields2) ->
+                    liftCompare compareType fields1 fields2
                 (TyFunc _pos1 _ params1 namedParams1 ret1,
                  TyFunc _pos2 _ params2 namedParams2 ret2) ->
                     liftCompare compareType params1 params2 <>
                     liftCompare compareType namedParams1 namedParams2 <>
                     compareType ret1 ret2
-                (TyRecord _pos1 fields1, TyRecord _pos2 fields2) ->
-                    liftCompare compareType fields1 fields2
                 (TyVar _pos1 x1, TyVar _pos2 x2) ->
                     compare x1 x2
                 (TyUnifyVar _pos1 x1, TyUnifyVar _pos2 x2) ->
                     compare x1 x2
+                (TyApply _pos1 m1 arg1, TyApply _pos2 m2 arg2) ->
+                    compareType m1 m2 <>
+                    compareType arg1 arg2
                 -- List all the possible left sides without a default
                 -- case so the compiler reminds us if we need to add
                 -- cases.
                 (TyCon{}, _) -> oops ty1 ty2
-                (TyApply{}, _) -> oops ty1 ty2
-                (TyTuple{}, _) -> oops ty1 ty2
                 (TyArray{}, _) -> oops ty1 ty2
-                (TyFunc{}, _) -> oops ty1 ty2
+                (TyTuple{}, _) -> oops ty1 ty2
                 (TyRecord{}, _) -> oops ty1 ty2
+                (TyFunc{}, _) -> oops ty1 ty2
                 (TyVar{}, _) -> oops ty1 ty2
                 (TyUnifyVar{}, _) -> oops ty1 ty2
+                (TyApply{}, _) -> oops ty1 ty2
             oops ty1 ty2 = panic "compareType" [
                 "Misrouted case",
                 "ty1: " <> ppType ppopts ty1,
@@ -311,26 +311,20 @@ compareBySelectivity ctx ty1 ty2 =
       score ty = case ty of
           TyCon _pos _ctor ->
               1
-          TyApply _pos m arg ->
-              -- take the max of the base type and the arg, deduct
-              -- one, clamp to one
-              -- (apply used to be a weird arguments case and this
-              -- behaves the the same as it used to)
-              max 1 (max (score m) (score arg) - 1)
+          TyArray _pos arg ->
+              -- same treatment, specialized to one arg
+              max 1 ((score arg) - 1)
           TyTuple _pos args ->
               -- take the max score of the args, deduct one,
               -- clamp to 1
               max 1 ((foldr max 1 $ map score args) - 1)
-          TyArray _pos arg ->
-              -- same treatment, specialized to one arg
-              max 1 ((score arg) - 1)
+          TyRecord _pos fields ->
+              -- same treatment
+              max 1 ((foldr max 1 $ map score $ Map.elems fields) - 1)
           TyFunc _pos _ninfo params namedParams ret ->
               -- same treatment
               let np' = Map.elems namedParams in
               max 1 ((foldr max 1 $ map score (ret : params ++ np')) - 1)
-          TyRecord _pos fields ->
-              -- same treatment
-              max 1 ((foldr max 1 $ map score $ Map.elems fields) - 1)
           TyVar _pos x
            | x == "_" ->
               -- wildcard matches everything
@@ -345,6 +339,12 @@ compareBySelectivity ctx ty1 ty2 =
               1
           TyUnifyVar _pos _x ->
               unifyVarPanic "compareBySelectivity" "pattern"
+          TyApply _pos m arg ->
+              -- take the max of the base type and the arg, deduct
+              -- one, clamp to one
+              -- (apply used to be a weird arguments case and this
+              -- behaves the the same as it used to)
+              max 1 (max (score m) (score arg) - 1)
 
 
 ------------------------------------------------------------
@@ -371,13 +371,12 @@ matchFullOnce ctx cand tgtType patType =
                   Just cand
               _ -> Nothing
 
-      TyApply _patpos patM patArg ->
-          -- The pattern is a monad application; only accept another.
+      TyArray _patpos patArg ->
+          -- The pattern is an array; only accept another.
           case tgtType of
-              TyApply _tgtpos tgtM tgtArg -> do
-                  -- use the maybe monad
-                  cand' <- matchFullOnce ctx cand tgtM patM
-                  matchFullOnce ctx cand' tgtArg patArg
+              TyArray _tgtpos tgtArg ->
+                  -- the arg must match
+                  matchFullOnce ctx cand tgtArg patArg
               _ -> Nothing
 
       TyTuple _patpos patArgs ->
@@ -388,12 +387,18 @@ matchFullOnce ctx cand tgtType patType =
                   matchFullAllPairs ctx cand (zip tgtArgs patArgs)
               _ -> Nothing
 
-      TyArray _patpos patArg ->
-          -- The pattern is an array; only accept another.
+      TyRecord _patpos patFields ->
+          -- The pattern is a record; only accept records. Match the
+          -- fields that exist in the pattern and accept others.
+          -- (FUTURE: if we ever get support for record inference and
+          -- with it partial record types, we can refine this.)
           case tgtType of
-              TyArray _tgtpos tgtArg ->
-                  -- the arg must match
-                  matchFullOnce ctx cand tgtArg patArg
+              TyRecord _tgtpos tgtFields ->
+                  let combine t p = (t, p)
+                      pairs = Map.intersectionWith combine tgtFields patFields
+                  in
+                  -- all the fields must match
+                  matchFullAllPairs ctx cand (Map.elems pairs)
               _ -> Nothing
 
       TyFunc _patpos _ninfo patParams patNamedParams patRet ->
@@ -411,20 +416,6 @@ matchFullOnce ctx cand tgtType patType =
                       -- We have all the same keys, pair them up with intersection
                       cand'' <- matchFullAllPairs ctx cand' (Map.elems $ Map.intersectionWith (\t p -> (t, p)) tgtNamedParams patNamedParams)
                       matchFullOnce ctx cand'' tgtRet patRet
-              _ -> Nothing
-
-      TyRecord _patpos patFields ->
-          -- The pattern is a record; only accept records. Match the
-          -- fields that exist in the pattern and accept others.
-          -- (FUTURE: if we ever get support for record inference and
-          -- with it partial record types, we can refine this.)
-          case tgtType of
-              TyRecord _tgtpos tgtFields ->
-                  let combine t p = (t, p)
-                      pairs = Map.intersectionWith combine tgtFields patFields
-                  in
-                  -- all the fields must match
-                  matchFullAllPairs ctx cand (Map.elems pairs)
               _ -> Nothing
 
       TyVar _patpos patVar
@@ -488,6 +479,15 @@ matchFullOnce ctx cand tgtType patType =
 
       TyUnifyVar _patpos _patVar ->
           unifyVarPanic "matchFullOnce" "pattern"
+
+      TyApply _patpos patM patArg ->
+          -- The pattern is a monad application; only accept another.
+          case tgtType of
+              TyApply _tgtpos tgtM tgtArg -> do
+                  -- use the maybe monad
+                  cand' <- matchFullOnce ctx cand tgtM patM
+                  matchFullOnce ctx cand' tgtArg patArg
+              _ -> Nothing
 
 -- | Run matchFullOnce on a list of target and pattern type pairs.
 --
@@ -563,16 +563,15 @@ matchFragOnceBody ctx cand tgtType patType =
         TyCon _tgtpos _tgtCtor ->
             -- The target is a type constructor; no subelements to match.
             Set.empty
-        TyApply _tgtpos tgtM tgtArg ->
-            -- The target is a monad application; we can match either
-            -- the monad or the result type.
-            Set.union (checkOnce tgtM) (checkOnce tgtArg)
-        TyTuple _tgtpos tgtArgs ->
-            -- The target is a tuple; we can match any argument.
-            checkList tgtArgs
         TyArray _tgtpos tgtArg ->
             -- The target is an array; can match the argument type.
             checkOnce tgtArg
+        TyTuple _tgtpos tgtArgs ->
+            -- The target is a tuple; we can match any argument.
+            checkList tgtArgs
+        TyRecord _tgtpos tgtFields ->
+            -- The target is a record. We can match any field.
+            checkList (Map.elems tgtFields)
         TyFunc _tgtpos _ tgtParams tgtNamedParams tgtRet ->
             -- The target is a function.
             case patType of
@@ -640,14 +639,15 @@ matchFragOnceBody ctx cand tgtType patType =
                     -- parameter or the return type.
                     checkList (tgtRet : tgtParams)
 
-        TyRecord _tgtpos tgtFields ->
-            -- The target is a record. We can match any field.
-            checkList (Map.elems tgtFields)
         TyVar _ _ ->
             -- The target is a variable. There aren't any subelements.
             Set.empty
         TyUnifyVar _tgtpos _tgtVar ->
             unifyVarPanic "matchFragOnceBody" "target"
+        TyApply _tgtpos tgtM tgtArg ->
+            -- The target is a monad application; we can match either
+            -- the monad or the result type.
+            Set.union (checkOnce tgtM) (checkOnce tgtArg)
 
 -- | Match one observed ("target") type against one pattern type, with
 -- one current match candidate; return possibly several updated match

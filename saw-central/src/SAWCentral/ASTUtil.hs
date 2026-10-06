@@ -77,18 +77,18 @@ instance (NamedTyVars a) => NamedTyVars (Pos, a) where
 instance NamedTyVars Type where
   namedTyVars t = case t of
     TyCon _ _         -> Map.empty
-    TyApply _ m arg   -> namedTyVars [m, arg]
-    TyTuple _ ts      -> namedTyVars ts
     TyArray _ t1      -> namedTyVars t1
+    TyTuple _ ts      -> namedTyVars ts
+    TyRecord _ tm     -> namedTyVars tm
     TyFunc _ _ params namedParams ret ->
         let paramVars = namedTyVars params
             namedParamVars = namedTyVars namedParams
             retVars = namedTyVars ret
         in
         Map.unions [paramVars, namedParamVars, retVars]
-    TyRecord _ tm     -> namedTyVars tm
     TyVar prov n      -> Map.singleton n (getPos prov)
     TyUnifyVar _ _    -> Map.empty
+    TyApply _ m arg   -> namedTyVars [m, arg]
 
 instance NamedTyVars Schema where
   namedTyVars (Forall ns t) = namedTyVars t Map.\\ Map.fromList ns'
@@ -135,21 +135,15 @@ instance (SubstituteTyVars a) => SubstituteTyVars (pos, a) where
 instance SubstituteTyVars Type where
   substituteTyVars avail tyenv ty = case ty of
     TyCon pos tc        -> TyCon pos tc
-    TyApply pos m arg ->
-        let m' = substituteTyVars avail tyenv m
-            arg' = substituteTyVars avail tyenv arg
-        in
-        TyApply pos m' arg'
-    TyTuple pos ts      -> TyTuple pos (substituteTyVars avail tyenv ts)
     TyArray pos t1      -> TyArray pos (substituteTyVars avail tyenv t1)
+    TyTuple pos ts      -> TyTuple pos (substituteTyVars avail tyenv ts)
+    TyRecord pos fs     -> TyRecord pos (fmap (substituteTyVars avail tyenv) fs)
     TyFunc pos nameinfo params namedParams ret ->
         let params' = substituteTyVars avail tyenv params
             namedParams' = substituteTyVars avail tyenv namedParams
             ret' = substituteTyVars avail tyenv ret
         in
         TyFunc pos nameinfo params' namedParams' ret'
-    TyRecord pos fs     -> TyRecord pos (fmap (substituteTyVars avail tyenv) fs)
-    TyUnifyVar _ _      -> ty
     TyVar _ n           ->
         case ScopedMap.lookup n tyenv of
             Nothing -> ty
@@ -162,6 +156,12 @@ instance SubstituteTyVars Type where
                 else case expansion of
                     AbstractType _kind  -> ty
                     ConcreteType ty' -> ty'
+    TyUnifyVar _ _      -> ty
+    TyApply pos m arg ->
+        let m' = substituteTyVars avail tyenv m
+            arg' = substituteTyVars avail tyenv arg
+        in
+        TyApply pos m' arg'
 
 --
 -- The prime version uses an ordinary map.
@@ -192,21 +192,15 @@ instance (SubstituteTyVars' a) => SubstituteTyVars' (pos, a) where
 instance SubstituteTyVars' Type where
   substituteTyVars' avail tyenv ty = case ty of
     TyCon pos tc        -> TyCon pos tc
-    TyApply pos m arg ->
-        let m' = substituteTyVars' avail tyenv m
-            arg' = substituteTyVars' avail tyenv arg
-        in
-        TyApply pos m' arg'
-    TyTuple pos ts      -> TyTuple pos (substituteTyVars' avail tyenv ts)
     TyArray pos t1      -> TyArray pos (substituteTyVars' avail tyenv t1)
+    TyTuple pos ts      -> TyTuple pos (substituteTyVars' avail tyenv ts)
+    TyRecord pos fs     -> TyRecord pos (fmap (substituteTyVars' avail tyenv) fs)
     TyFunc pos nameinfo params namedParams ret ->
         let params' = substituteTyVars' avail tyenv params
             namedParams' = substituteTyVars' avail tyenv namedParams
             ret' = substituteTyVars' avail tyenv ret
         in
         TyFunc pos nameinfo params' namedParams' ret'
-    TyRecord pos fs     -> TyRecord pos (fmap (substituteTyVars' avail tyenv) fs)
-    TyUnifyVar _ _      -> ty
     TyVar _ n           ->
         case Map.lookup n tyenv of
             Nothing -> ty
@@ -219,6 +213,12 @@ instance SubstituteTyVars' Type where
                 else case expansion of
                     AbstractType _kind -> ty
                     ConcreteType ty' -> ty'
+    TyUnifyVar _ _      -> ty
+    TyApply pos m arg ->
+        let m' = substituteTyVars' avail tyenv m
+            arg' = substituteTyVars' avail tyenv arg
+        in
+        TyApply pos m' arg'
 
 
 ------------------------------------------------------------

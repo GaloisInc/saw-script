@@ -124,36 +124,32 @@ dumpType ty0 = case ty0 of
     TyCon prov tycon ->
         let prov' = dumpTypeProvenance prov in
         let tycon' = case tycon of
+              BoolCon -> "Bool"
+              IntCon -> "Int"
               StringCon -> "String"
               TermCon -> "Term"
               TypeCon -> "Type"
-              BoolCon -> "Bool"
-              IntCon -> "Int"
               AIGCon -> "AIG"
               CFGCon -> "CFG"
-              JVMSpecCon -> "JVMSpec"
               LLVMSpecCon -> "LLVMSpec"
+              JVMSpecCon -> "JVMSpec"
               MIRSpecCon -> "MIRSpec"
-              ProofScript -> "ProofScript"
               TopLevel -> "TopLevel"
+              ProofScript -> "ProofScript"
         in
         Dump.subelements ("TyCon " <> tycon') [prov']
-    TyApply prov m arg ->
-        let prov' = dumpTypeProvenance prov
-            m' = dumpType m
-            arg' = dumpType arg
-        in
-        Dump.fields "TyApply" [
-            ("provenance", prov'),
-            ("m", m'),
-            ("arg", arg')
-        ]
-    TyTuple prov args ->
-        let prov' = dumpTypeProvenance prov in
-        Dump.subelements "TyTuple" (prov' : map dumpType args)
     TyArray prov ty1 ->
         let prov' = dumpTypeProvenance prov in
         Dump.subelements "TyArray" [prov', dumpType ty1]
+    TyTuple prov args ->
+        let prov' = dumpTypeProvenance prov in
+        Dump.subelements "TyTuple" (prov' : map dumpType args)
+    TyRecord prov members ->
+        let dumpMember (name, ty) = (name, dumpType ty) in
+        let prov' = dumpTypeProvenance prov
+            members' = map dumpMember $ Map.toList members
+        in
+        Dump.fields "TyRecord" (("(provenance", prov') : members')
     TyFunc prov npi params namedParams ret ->
         let prov' = dumpTypeProvenance prov in
         let dumpNamedParam (name, ty) =
@@ -167,18 +163,22 @@ dumpType ty0 = case ty0 of
             ("namedParams", Dump.list namedParams'),
             ("ret", dumpType ret)
         ]
-    TyRecord prov members ->
-        let dumpMember (name, ty) = (name, dumpType ty) in
-        let prov' = dumpTypeProvenance prov
-            members' = map dumpMember $ Map.toList members
-        in
-        Dump.fields "TyRecord" (("(provenance", prov') : members')
     TyVar prov name ->
         let prov' = dumpTypeProvenance prov in
         Dump.subelement ("TyVar " <> name) prov'
     TyUnifyVar prov n ->
         let prov' = dumpTypeProvenance prov in
         Dump.subelement ("TyUnifyVar " <> Text.pack (show n)) prov'
+    TyApply prov m arg ->
+        let prov' = dumpTypeProvenance prov
+            m' = dumpType m
+            arg' = dumpType arg
+        in
+        Dump.fields "TyApply" [
+            ("provenance", prov'),
+            ("m", m'),
+            ("arg", arg')
+        ]
 
 dumpSchema :: Schema -> Dump
 dumpSchema (Forall foralls ty) =

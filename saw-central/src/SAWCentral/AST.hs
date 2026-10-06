@@ -53,17 +53,17 @@ module SAWCentral.AST
      , ppPattern, prettyPattern
      , prettyWholeModule
 
-     , tUnit, tTuple, tArray, tFun
-     , tString, tTerm, tType, tBool, tInt, tApply
-     , tAIG, tCFG, tJVMSpec, tLLVMSpec, tMIRSpec
+     , tBool, tInt, tString, tTerm, tType
+     , tAIG, tCFG, tLLVMSpec, tJVMSpec, tMIRSpec
      , tTopLevel, tProofScript
-     , tRecord, tVar
+     , tArray, tUnit, tTuple, tRecord, tFun
+     , tVar, tApply
      , tMono, tForall
-     , txTuple, txArray, txFun
-     , txString, txTerm, txType, txBool, txInt, txApply
-     , txAIG, txCFG, txJVMSpec, txLLVMSpec, txMIRSpec
+     , txBool, txInt, txString, txTerm, txType
+     , txAIG, txCFG, txLLVMSpec, txJVMSpec, txMIRSpec
      , txTopLevel, txProofScript
-     , txRecord, txVar
+     , txArray, txTuple, txRecord, txFun
+     , txVar, txApply
      ) where
 
 import qualified SAWSupport.Pretty as PPS
@@ -226,18 +226,18 @@ type TypeIndex = Integer
 --   things, these days the @LLVMSetup@, @JVMSetup@, and @MIRSetup@
 --   monad types are not special.
 data TyCon
-  = StringCon
+  = BoolCon
+  | IntCon
+  | StringCon
   | TermCon
   | TypeCon
-  | BoolCon
-  | IntCon
   | AIGCon
   | CFGCon
-  | JVMSpecCon
   | LLVMSpecCon
+  | JVMSpecCon
   | MIRSpecCon
-  | ProofScript
   | TopLevel
+  | ProofScript
   deriving (Eq, Ord)
 
 -- | Information about the named parameters in a function type
@@ -310,14 +310,14 @@ instance Semigroup NamedParamInfo where
 --
 data Type
   = TyCon TypeProvenance TyCon
-  | TyApply TypeProvenance Type Type
-  | TyTuple TypeProvenance [Type]
   | TyArray TypeProvenance Type
-  | TyFunc TypeProvenance NamedParamInfo [Type] (Map Name Type) Type
+  | TyTuple TypeProvenance [Type]
   | TyRecord TypeProvenance (Map Name Type)
+  | TyFunc TypeProvenance NamedParamInfo [Type] (Map Name Type) Type
   | TyVar TypeProvenance Name
     -- | For internal typechecker use only.
   | TyUnifyVar TypeProvenance TypeIndex
+  | TyApply TypeProvenance Type Type
 
 -- | The positions in type schemes can be either explicit (the user
 --   gave a name at this position) or implicit (a fresh unification
@@ -518,13 +518,13 @@ instance Positioned TypeProvenance where
 instance Positioned Type where
   getPos ty = case ty of
       TyCon prov _ -> getPos prov
-      TyApply prov _ _ -> getPos prov
-      TyTuple prov _ -> getPos prov
       TyArray prov _ -> getPos prov
-      TyFunc prov _ _ _ _ -> getPos prov
+      TyTuple prov _ -> getPos prov
       TyRecord prov _ -> getPos prov
+      TyFunc prov _ _ _ _ -> getPos prov
       TyVar prov _ -> getPos prov
       TyUnifyVar prov _ -> getPos prov
+      TyApply prov _ _ -> getPos prov
 
 instance Positioned Expr where
   getPos (Bool pos _) = pos
@@ -596,18 +596,18 @@ prettyTyCtx ctx = PP.pretty $ ppTyCtx ctx
 
 ppTyCon :: TyCon -> Text
 ppTyCon tc = case tc of
+    BoolCon        -> "Bool"
+    IntCon         -> "Int"
     StringCon      -> "String"
     TermCon        -> "Term"
     TypeCon        -> "Type"
-    BoolCon        -> "Bool"
-    IntCon         -> "Int"
     AIGCon         -> "AIG"
     CFGCon         -> "CFG"
-    JVMSpecCon     -> "JVMSpec"
     LLVMSpecCon    -> "LLVMSpec"
+    JVMSpecCon     -> "JVMSpec"
     MIRSpecCon     -> "MIRSpec"
-    ProofScript    -> "ProofScript"
     TopLevel       -> "TopLevel"
+    ProofScript    -> "ProofScript"
 
 prettyType :: PPS.Opts -> Type -> PPS.Doc
 prettyType _ppopts = PP.group . visit 0
@@ -616,26 +616,10 @@ prettyType _ppopts = PP.group . visit 0
     visit prec ty0 = case ty0 of
       TyCon _ ctor ->
           PP.pretty $ ppTyCon ctor
-
-      TyApply _ m arg ->
-          let m' = visit 1 m
-              arg' = visit 2 arg
-              body = m' <+> arg'
-          in
-          if prec > 1 then PP.parens body else body
-
-      TyTuple _ args ->
-              PP.align $ PP.parens $ PP.fillSep $ PP.punctuate "," $ map (visit 0) args
       TyArray _ ty1 ->
               PP.brackets $ visit 0 ty1
-      TyFunc _ _ params namedParams ret ->
-              let params' = map (\p -> visit 1 p <+> "->") params
-                  oneNamed (n, p) = PP.pretty n <> "?" <> visit 1 p <+> "->"
-                  namedParams' = map oneNamed $ Map.toList namedParams
-                  ret' = visit 0 ret
-                  body = PP.vsep (params' ++ namedParams') <> PP.line <> ret'
-              in
-              if prec > 0 then PP.parens (PP.group body) else body
+      TyTuple _ args ->
+              PP.align $ PP.parens $ PP.fillSep $ PP.punctuate "," $ map (visit 0) args
       TyRecord _ fields ->
           let prettyField (name, ty) =
                 let name' = PP.pretty name
@@ -647,11 +631,26 @@ prettyType _ppopts = PP.group . visit 0
               body' = PP.flatAlt (PP.indent 3 body) body
           in
           PP.braces (PP.line <> body' <> PP.line)
+      TyFunc _ _ params namedParams ret ->
+              let params' = map (\p -> visit 1 p <+> "->") params
+                  oneNamed (n, p) = PP.pretty n <> "?" <> visit 1 p <+> "->"
+                  namedParams' = map oneNamed $ Map.toList namedParams
+                  ret' = visit 0 ret
+                  body = PP.vsep (params' ++ namedParams') <> PP.line <> ret'
+              in
+              if prec > 0 then PP.parens (PP.group body) else body
 
-      TyUnifyVar _ i ->
-          "t." <> PP.pretty i
       TyVar _ n ->
           PP.pretty n
+      TyUnifyVar _ i ->
+          "t." <> PP.pretty i
+
+      TyApply _ m arg ->
+          let m' = visit 1 m
+              arg' = visit 2 arg
+              body = m' <+> arg'
+          in
+          if prec > 1 then PP.parens body else body
 
 ppType :: PPS.Opts -> Type -> Text
 ppType ppopts ty =
@@ -948,18 +947,11 @@ prettyWholeModule ppopts stmts =
 -- The @tx@ forms wrap in `TypeExplicit` and are mostly used by the
 -- parser.
 
-tUnit :: TypeProvenance -> Type
-tUnit prov = tTuple prov []
+tBool :: TypeProvenance -> Type
+tBool prov = TyCon prov BoolCon
 
-tTuple :: TypeProvenance -> [Type] -> Type
-tTuple prov ts = TyTuple prov ts
-
-tArray :: TypeProvenance -> Type -> Type
-tArray prov t = TyArray prov t
-
--- | Create a function type a1 -> a2 -> ... -> b.
-tFun :: TypeProvenance -> NamedParamInfo -> [Type] -> Map Name Type -> Type -> Type
-tFun prov names params namedParams ret = TyFunc prov names params namedParams ret
+tInt :: TypeProvenance -> Type
+tInt prov = TyCon prov IntCon
 
 tString :: TypeProvenance -> Type
 tString prov = TyCon prov StringCon
@@ -970,26 +962,17 @@ tTerm prov = TyCon prov TermCon
 tType :: TypeProvenance -> Type
 tType prov = TyCon prov TypeCon
 
-tBool :: TypeProvenance -> Type
-tBool prov = TyCon prov BoolCon
-
-tInt :: TypeProvenance -> Type
-tInt prov = TyCon prov IntCon
-
-tApply :: TypeProvenance -> Type -> Type -> Type
-tApply prov c t = TyApply prov c t
-
 tAIG :: TypeProvenance -> Type
 tAIG prov = TyCon prov AIGCon
 
 tCFG :: TypeProvenance -> Type
 tCFG prov = TyCon prov CFGCon
 
-tJVMSpec :: TypeProvenance -> Type
-tJVMSpec prov = TyCon prov JVMSpecCon
-
 tLLVMSpec :: TypeProvenance -> Type
 tLLVMSpec prov = TyCon prov LLVMSpecCon
+
+tJVMSpec :: TypeProvenance -> Type
+tJVMSpec prov = TyCon prov JVMSpecCon
 
 tMIRSpec :: TypeProvenance -> Type
 tMIRSpec prov = TyCon prov MIRSpecCon
@@ -1000,11 +983,27 @@ tTopLevel prov = TyCon prov TopLevel
 tProofScript :: TypeProvenance -> Type
 tProofScript prov = TyCon prov ProofScript
 
+tArray :: TypeProvenance -> Type -> Type
+tArray prov t = TyArray prov t
+
+tUnit :: TypeProvenance -> Type
+tUnit prov = tTuple prov []
+
+tTuple :: TypeProvenance -> [Type] -> Type
+tTuple prov ts = TyTuple prov ts
+
 tRecord :: TypeProvenance -> [(Name, Type)] -> Type
 tRecord prov fields = TyRecord prov (Map.fromList fields)
 
+-- | Create a function type a1 -> a2 -> ... -> b.
+tFun :: TypeProvenance -> NamedParamInfo -> [Type] -> Map Name Type -> Type -> Type
+tFun prov names params namedParams ret = TyFunc prov names params namedParams ret
+
 tVar :: TypeProvenance -> Name -> Type
 tVar prov n = TyVar prov n
+
+tApply :: TypeProvenance -> Type -> Type -> Type
+tApply prov c t = TyApply prov c t
 
 
 tMono :: Type -> Schema
@@ -1014,14 +1013,11 @@ tForall :: [(SchemaNameProvenance, Name)] -> Schema -> Schema
 tForall xs (Forall ys t) = Forall (xs ++ ys) t
 
 
-txTuple :: Pos -> [Type] -> Type
-txTuple pos ts = tTuple (TypeExplicit pos) ts
+txBool :: Pos -> Type
+txBool pos = tBool (TypeExplicit pos)
 
-txArray :: Pos -> Type -> Type
-txArray pos t = tArray (TypeExplicit pos) t
-
-txFun :: Pos -> NamedParamInfo -> [Type] -> Map Name Type -> Type -> Type
-txFun pos n p np r = tFun (TypeExplicit pos) n p np r
+txInt :: Pos -> Type
+txInt pos = tInt (TypeExplicit pos)
 
 txString :: Pos -> Type
 txString pos = tString (TypeExplicit pos)
@@ -1032,26 +1028,17 @@ txTerm pos = tTerm (TypeExplicit pos)
 txType :: Pos -> Type
 txType pos = tType (TypeExplicit pos)
 
-txBool :: Pos -> Type
-txBool pos = tBool (TypeExplicit pos)
-
-txInt :: Pos -> Type
-txInt pos = tInt (TypeExplicit pos)
-
-txApply :: Pos -> Type -> Type -> Type
-txApply pos c t = tApply (TypeExplicit pos) c t
-
 txAIG :: Pos -> Type
 txAIG pos = tAIG (TypeExplicit pos)
 
 txCFG :: Pos -> Type
 txCFG pos = tCFG (TypeExplicit pos)
 
-txJVMSpec :: Pos -> Type
-txJVMSpec pos = tJVMSpec (TypeExplicit pos)
-
 txLLVMSpec :: Pos -> Type
 txLLVMSpec pos = tLLVMSpec (TypeExplicit pos)
+
+txJVMSpec :: Pos -> Type
+txJVMSpec pos = tJVMSpec (TypeExplicit pos)
 
 txMIRSpec :: Pos -> Type
 txMIRSpec pos = tMIRSpec (TypeExplicit pos)
@@ -1062,8 +1049,20 @@ txTopLevel pos = tTopLevel (TypeExplicit pos)
 txProofScript :: Pos -> Type
 txProofScript pos = tProofScript (TypeExplicit pos)
 
+txArray :: Pos -> Type -> Type
+txArray pos t = tArray (TypeExplicit pos) t
+
+txTuple :: Pos -> [Type] -> Type
+txTuple pos ts = tTuple (TypeExplicit pos) ts
+
 txRecord :: Pos -> [(Name, Type)] -> Type
 txRecord pos fields = tRecord (TypeExplicit pos) fields
 
+txFun :: Pos -> NamedParamInfo -> [Type] -> Map Name Type -> Type -> Type
+txFun pos n p np r = tFun (TypeExplicit pos) n p np r
+
 txVar :: Pos -> Name -> Type
 txVar pos a = tVar (TypeExplicit pos) a
+
+txApply :: Pos -> Type -> Type -> Type
+txApply pos c t = tApply (TypeExplicit pos) c t

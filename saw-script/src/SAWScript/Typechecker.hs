@@ -123,19 +123,19 @@ instance (UnifyVars a) => UnifyVars (Pos, PrimitiveLifecycle, Rebindable, a) whe
 instance UnifyVars Type where
     unifyVars t = case t of
         TyCon _ _         -> Map.empty
-        TyApply _ m arg   -> Map.union (unifyVars m) (unifyVars arg)
-        TyTuple _ ts      -> unifyVars ts
         TyArray _ t1      -> unifyVars t1
+        TyTuple _ ts      -> unifyVars ts
+        TyRecord _ tm     -> unifyVars tm
         TyFunc _ _ params namedParams ret ->
             let paramsVars = unifyVars params
                 namedVars = unifyVars namedParams
                 retVars = unifyVars ret
             in
             Map.unions [paramsVars, namedVars, retVars]
-        TyRecord _ tm     -> unifyVars tm
         TyVar _ _         -> Map.empty
         TyUnifyVar (TypeFailed _) _i -> Map.empty  -- ignore error vars
         TyUnifyVar prov i -> Map.singleton i prov
+        TyApply _ m arg   -> Map.union (unifyVars m) (unifyVars arg)
 
 instance UnifyVars Schema where
     unifyVars (Forall _ t) = unifyVars t
@@ -254,17 +254,15 @@ instance AppSubst Decl where
 instance AppSubst Type where
     appSubst s t = case t of
         TyCon prov tc -> TyCon prov tc
-        TyApply prov m arg ->
-            TyApply prov (appSubst s m) (appSubst s arg)
-        TyTuple prov ts -> TyTuple prov (appSubst s ts)
         TyArray prov t1 -> TyArray prov (appSubst s t1)
+        TyTuple prov ts -> TyTuple prov (appSubst s ts)
+        TyRecord prov fs -> TyRecord prov (appSubst s fs)
         TyFunc prov ninfo params namedParams ret ->
             let params' = appSubst s params
                 namedParams' = appSubst s namedParams
                 ret' = appSubst s ret
             in
             TyFunc prov ninfo params' namedParams' ret'
-        TyRecord prov fs -> TyRecord prov (appSubst s fs)
         TyVar _ _  -> t
         TyUnifyVar _ i -> case Map.lookup i s of
             Nothing -> t
@@ -278,6 +276,8 @@ instance AppSubst Type where
                 -- full expansion of existing substitutions, which
                 -- in general requires this call.
                 appSubst s t'
+        TyApply prov m arg ->
+            TyApply prov (appSubst s m) (appSubst s arg)
 
 instance AppSubst Schema where
     appSubst s (Forall ns t) =
@@ -872,8 +872,8 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
                   -- case.
                   let enclosed = Pos.subspan subpos pos in
                   case ty of
-                      TyTuple _ _ -> enclosed
                       TyArray _ _ -> enclosed
+                      TyTuple _ _ -> enclosed
                       TyRecord _ _ -> enclosed
                       _ -> False
 
@@ -967,22 +967,22 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
             case ty of
                 TyCon prov tc ->
                     (ppTyCon tc, prov, [])
-                TyApply prov m arg ->
-                    let (m', subelts'm) = consider "monad" prov m
-                        (arg', subelts'arg) = consider "1st argument" prov arg
+                TyArray prov elt ->
+                    let (elt', subelts) = consider "element type" prov elt
+                        body = "[" <> elt' <> "]"
                     in
-                    (m' <> " " <> arg', prov, subelts'm ++ subelts'arg)
+                    (body, prov, subelts)
                 TyTuple prov elts ->
                     let getWhat i = ordin (i + 1) <> " element"
                         (elts', subelts) = considerList getWhat prov elts
                         body = "(" <> Text.intercalate ", " elts' <> ")"
                     in
                     (body, prov, subelts)
-                TyArray prov elt ->
-                    let (elt', subelts) = consider "element type" prov elt
-                        body = "[" <> elt' <> "]"
+                TyRecord prov fields ->
+                    let (fields', elts) = considerFields prov fields
+                        str = "{ " <> Text.intercalate ", " fields' <> " }"
                     in
-                    (body, prov, subelts)
+                    (str, prov, elts)
                 TyFunc prov _npi params namedParams ret ->
                     let mkWhat i = ordin (i + 1) <> " positional parameter"
                         (params', elts1) = considerList mkWhat prov params
@@ -990,11 +990,6 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
                         (ret', elts3) = consider "return type" prov ret
                         str = Text.intercalate " -> " (params' ++ namedParams' ++ [ret'])
                         elts = elts1 ++ elts2 ++ elts3
-                    in
-                    (str, prov, elts)
-                TyRecord prov fields ->
-                    let (fields', elts) = considerFields prov fields
-                        str = "{ " <> Text.intercalate ", " fields' <> " }"
                     in
                     (str, prov, elts)
                 TyVar prov x ->
@@ -1005,6 +1000,11 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
                     -- share the code, even though it's one line
                     let str = "t." <> Text.pack (show i) in
                     (str, prov, [])
+                TyApply prov m arg ->
+                    let (m', subelts'm) = consider "monad" prov m
+                        (arg', subelts'arg) = consider "1st argument" prov arg
+                    in
+                    (m' <> " " <> arg', prov, subelts'm ++ subelts'arg)
     in
     let (str0, prov0, subelts) = extract (desc0 <> " type") ty0 in
 
@@ -1271,19 +1271,28 @@ unify exp0 pos found0 = visit [] exp0 found0
 
 
         case (expect, found) of
-            (TyUnifyVar _ i, TyUnifyVar _ j) | i == j ->
-                -- same unification var, nothing to do
+            -- matching/diagonal cases first --
+
+            (TyCon _ expTC, TyCon _ foundTC) | expTC == foundTC -> do
+                -- same type constructor, all good
                 pure ()
 
-            (TyUnifyVar prov'i i, _) -> do
-                -- one side is a unification var, resolve it
-                found' <- checkOccurs prov'i i found
-                resolveVar prov'i i found'
+            (TyArray _ expT, TyArray _ foundT) -> do
+                -- array, unify the arg
+                recOnce expT foundT
 
-            (_, TyUnifyVar prov'i i) -> do
-                -- the other side is a unification var, resolve it
-                expect' <- checkOccurs prov'i i expect
-                resolveVar prov'i i expect'
+            (TyTuple _ expTS, TyTuple _ foundTS) | length expTS == length foundTS -> do
+                -- same size tuple, unify the args
+                recList expTS foundTS
+
+            (TyRecord _ expFields, TyRecord _ foundFields)
+              | Map.keys expFields /= Map.keys foundFields ->
+                -- records with different keys
+                reject' "Record field names do not match." []
+
+              | otherwise ->
+                -- records with the same field names, try unifying the field types
+                recList (Map.elems expFields) (Map.elems foundFields)
 
             (TyFunc prov'expect _ expParams expNamedParams expRet,
              TyFunc prov'found _ foundParams foundNamedParams foundRet) -> do
@@ -1367,35 +1376,30 @@ unify exp0 pos found0 = visit [] exp0 found0
                 -- now unify the remainders / return types
                 recOnce expRemainder foundRemainder
 
-            (TyRecord _ expFields, TyRecord _ foundFields)
-              | Map.keys expFields /= Map.keys foundFields ->
-                -- records with different keys
-                reject' "Record field names do not match." []
-
-              | otherwise ->
-                -- records with the same field names, try unifying the field types
-                recList (Map.elems expFields) (Map.elems foundFields)
-
-            (TyCon _ expTC, TyCon _ foundTC) | expTC == foundTC -> do
-                -- same type constructor, all good
+            (TyVar _ a, TyVar _ b) | a == b ->
+                -- Same named variable, nothing to do
                 pure ()
 
-            (TyTuple _ expTS, TyTuple _ foundTS) | length expTS == length foundTS -> do
-                -- same size tuple, unify the args
-                recList expTS foundTS
-
-            (TyArray _ expT, TyArray _ foundT) -> do
-                -- array, unify the arg
-                recOnce expT foundT
+            (TyUnifyVar _ i, TyUnifyVar _ j) | i == j ->
+                -- same unification var, nothing to do
+                pure ()
 
             (TyApply _ exp'm exp'arg, TyApply _ found'm found'arg) -> do
                 -- both type applications, unify the args
                 recOnce exp'm found'm
                 recOnce exp'arg found'arg
 
-            (TyVar _ a, TyVar _ b) | a == b ->
-                -- Same named variable, nothing to do
-                pure ()
+            -- non-matching/catchall cases --
+
+            (TyUnifyVar prov'i i, _) -> do
+                -- one side is a unification var, resolve it
+                found' <- checkOccurs prov'i i found
+                resolveVar prov'i i found'
+
+            (_, TyUnifyVar prov'i i) -> do
+                -- the other side is a unification var, resolve it
+                expect' <- checkOccurs prov'i i expect
+                resolveVar prov'i i expect'
 
             (_, TyFunc{}) ->
                 -- If we expected a scalar and found a function, speculate that
@@ -1473,21 +1477,15 @@ inspectTypeFTVs :: Kind -> Type -> TI (Map Name (Pos, Kind))
 inspectTypeFTVs kind ty = case ty of
     TyCon _prov _ctor ->
         pure Map.empty
-    TyApply _prov m arg -> do
-        m' <- inspectTypeFTVs (kindAddStar kind) m
-        arg' <- inspectTypeFTVs kindStar arg
-        pure $ Map.union m' arg'
-    TyTuple _prov args -> do
-        Map.unions <$> mapM (inspectTypeFTVs kindStar) args
     TyArray _prov arg -> do
         inspectTypeFTVs kindStar arg
+    TyTuple _prov args -> do
+        Map.unions <$> mapM (inspectTypeFTVs kindStar) args
+    TyRecord _prov fields ->
+        Map.unions <$> traverse (inspectTypeFTVs kindStar) fields
     TyFunc _prov _ params namedParams ret ->
         let np = Map.elems namedParams in
         Map.unions <$> mapM (inspectTypeFTVs kindStar) (ret : params ++ np)
-    TyRecord _prov fields ->
-        Map.unions <$> traverse (inspectTypeFTVs kindStar) fields
-    TyUnifyVar _prov _x ->
-        return Map.empty
     TyVar prov x -> do
         tyenv <- gets tiTyEnv
         case ScopedMap.lookup x tyenv of
@@ -1514,6 +1512,12 @@ inspectTypeFTVs kind ty = case ty of
                 return $ Map.singleton x (pos, kind)
             Just _ ->
                 return $ Map.empty
+    TyUnifyVar _prov _x ->
+        return Map.empty
+    TyApply _prov m arg -> do
+        m' <- inspectTypeFTVs (kindAddStar kind) m
+        arg' <- inspectTypeFTVs kindStar arg
+        pure $ Map.union m' arg'
 
 -- Get the free type variables found in a Maybe Type.
 inspectMaybeTypeFTVs :: Kind -> Maybe Type -> TI (Map Name (Pos, Kind))
@@ -2866,15 +2870,15 @@ inferDeclGroup rebindable dg = case dg of
 --   types) and return its kind.
 lookupTyCon :: TyCon -> Kind
 lookupTyCon tycon = case tycon of
+    BoolCon -> kindStar
+    IntCon -> kindStar
     StringCon -> kindStar
     TermCon -> kindStar
     TypeCon -> kindStar
-    BoolCon -> kindStar
-    IntCon -> kindStar
     AIGCon -> kindStar
     CFGCon -> kindStar
-    JVMSpecCon -> kindStar
     LLVMSpecCon -> kindStar
+    JVMSpecCon -> kindStar
     MIRSpecCon -> kindStar
     TopLevel -> kindStarToStar
     ProofScript -> kindStarToStar
@@ -2928,12 +2932,14 @@ checkType kindExpected ty =
         else do
             pure $ TyCon prov tycon
 
-    TyApply prov m arg -> do
-        m' <- checkType (kindAddStar kindExpected) m
-        arg' <- checkType kindStar arg
-        pure $ case checkForFailure [m', arg'] of
-            Left ty' -> ty'
-            Right () -> TyApply prov m' arg'
+    TyArray prov arg -> do
+        if kindExpected /= kindStar then
+            reject prov kindStar
+        else do
+            arg' <- checkType kindStar arg
+            pure $ case checkForFailure [arg'] of
+                Left ty' -> ty'
+                Right () -> TyArray prov arg'
 
     TyTuple prov args -> do
         if kindExpected /= kindStar then
@@ -2944,14 +2950,17 @@ checkType kindExpected ty =
                 Left ty' -> ty'
                 Right () -> TyTuple prov args'
 
-    TyArray prov arg -> do
+    TyRecord prov fields -> do
         if kindExpected /= kindStar then
             reject prov kindStar
         else do
-            arg' <- checkType kindStar arg
-            pure $ case checkForFailure [arg'] of
+            -- Someone upstream had better have checked for duplicate
+            -- field names because we can't once the fields are loaded
+            -- into a map. (XXX: someone hasn't)
+            fields' <- traverse (checkType kindStar) fields
+            pure $ case checkForFailure fields' of
                 Left ty' -> ty'
-                Right () -> TyArray prov arg'
+                Right () -> TyRecord prov fields'
 
     TyFunc prov nameinfo params namedParams ret -> do
         if kindExpected /= kindStar then
@@ -2967,18 +2976,6 @@ checkType kindExpected ty =
             pure $ case checkForFailure (ret' : params') >> checkForFailure namedParams' of
                 Left ty' -> ty'
                 Right () -> TyFunc prov nameinfo params' namedParams' ret'
-
-    TyRecord prov fields -> do
-        if kindExpected /= kindStar then
-            reject prov kindStar
-        else do
-            -- Someone upstream had better have checked for duplicate
-            -- field names because we can't once the fields are loaded
-            -- into a map. (XXX: someone hasn't)
-            fields' <- traverse (checkType kindStar) fields
-            pure $ case checkForFailure fields' of
-                Left ty' -> ty'
-                Right () -> TyRecord prov fields'
 
     -- Special-case CrucibleSetup to mark it deprecated. It is an alias
     -- for LLVMSetup, and it would be nice if it could just be a
@@ -3078,6 +3075,13 @@ checkType kindExpected ty =
         -- possible unification var numbers are well formed, so we don't
         -- need to do anything.
         return ty
+
+    TyApply prov m arg -> do
+        m' <- checkType (kindAddStar kindExpected) m
+        arg' <- checkType kindStar arg
+        pure $ case checkForFailure [m', arg'] of
+            Left ty' -> ty'
+            Right () -> TyApply prov m' arg'
 
 
 ------------------------------------------------------------
