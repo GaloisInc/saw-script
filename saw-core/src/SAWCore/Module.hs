@@ -308,10 +308,11 @@ insTypeDeclInMap dt mm0 =
     Just _ -> Left (dtName dt)
     Nothing ->
       do let mm1 =
-               case nameInfo (dtName dt) of
-                 ModuleIdentifier i ->
-                   insDeclInMap (identModule i) (TypeDecl dt) mm0
-                 ImportedName{} -> mm0
+               case qualNameModule (nameQualName (dtName dt)) of
+                 Just mname ->
+                   insDeclInMap mname (TypeDecl dt) mm0
+                 Nothing ->
+                   mm0
          let rnames = ResolvedDataType dt : map ResolvedCtor (dtCtors dt)
          foldM (flip insResolvedNameInMap) mm1 rnames
 
@@ -322,9 +323,9 @@ localResolvedNames m =
   where
     isLocal :: ResolvedName -> Bool
     isLocal r =
-      case resolvedNameInfo r of
-        ModuleIdentifier i -> identModule i == moduleName m
-        ImportedName{} -> False
+      case qualNameModule (toQualName (resolvedNameInfo r)) of
+        Just mname -> mname == moduleName m
+        Nothing -> False
 
 -- | Get all definitions defined in a module
 moduleDefs :: Module -> [Def]
@@ -449,16 +450,16 @@ insResolvedNameInMap r mm =
   case lookupVarIndexInMap (resolvedNameVarIndex r) mm of
     Just _ -> Left (resolvedNameName r)
     Nothing ->
-      case resolvedNameInfo r of
-        ModuleIdentifier ident ->
+      case qualNameModule (toQualName (resolvedNameInfo r)) of
+        Just mname ->
           Right $ mm' { mmNameEnv = Map.insert mname env' (mmNameEnv mm) }
           where
             vi = resolvedNameVarIndex r
-            mname = identModule ident
-            base = identBaseName ident
+            base = toShortName (resolvedNameInfo r)
             env = fromMaybe emptyDisplayNameEnv $ Map.lookup mname (mmNameEnv mm)
             env' = extendDisplayNameEnv vi [base] env
-        ImportedName{} -> Right mm'
+        Nothing ->
+          Right mm'
 
 insDeclInMap :: ModuleName -> ModuleDecl -> ModuleMap -> ModuleMap
 insDeclInMap mname decl mm =
@@ -468,10 +469,9 @@ insDeclInMap mname decl mm =
 insDefInMap :: Def -> ModuleMap -> Either Name ModuleMap
 insDefInMap d mm =
   insResolvedNameInMap (ResolvedDef d) $
-  case nameInfo (defName d) of
-    ModuleIdentifier i ->
-      insDeclInMap (identModule i) (DefDecl d) mm
-    ImportedName{} -> mm
+  case qualNameModule (nameQualName (defName d)) of
+    Just mname -> insDeclInMap mname (DefDecl d) mm
+    Nothing -> mm
 
 -- | Insert an injectCode declaration into a 'ModuleMap'.
 insInjectCodeInMap :: ModuleName -> Text -> Text -> ModuleMap -> ModuleMap
