@@ -2088,12 +2088,10 @@ ecDeepseq : (a : sort 0) -> (b : sort 0) -> PEq a -> a -> b -> b;
 ecDeepseq a b pa x y = y;
 
 -- parmap : {a, b, n} (Eq b, fin n) => (a -> b) -> [n]a -> [n]b
-ecParmap : (a:isort 0) -> (b:isort 0) -> (n: Num) -> PEq b -> (a -> b) -> seq n a -> seq n b;
-ecParmap a b n pb =
-  Num#rec (\ (n:Num) -> (a -> b) -> seq n a -> seq n b)
-    ( \ (n:Nat) -> \ (f: a -> b) -> \ (xs: Vec n a) -> map a b f n xs )
-    ( \ (f: a -> b) -> \ (xs:Stream a) -> error (Stream b) "Unexpected infinite stream in parmap" )
-    n;
+ecParmap : (a:isort 0) -> (b:isort 0) -> (n: Num) -> PEq b -> PFin n -> (a -> b) -> seq n a -> seq n b;
+ecParmap a b n pb pn =
+  PFinNumRec n pn (\ (n:Num) -> (a -> b) -> seq n a -> seq n b)
+    (\ (n:Nat) -> \ (f: a -> b) -> \ (xs: Vec n a) -> map a b f n xs);
 
 -- foldl : {n, a, b} (fin n) => (a -> b -> a) -> a -> [n]b -> a
 ecFoldl :
@@ -2521,9 +2519,9 @@ ec_mult p _ x y =
 
 ec_twin_mult :
   (p : Num) -> PGeq p (TCNum 4) ->
-  IntModNum p ->
-  ProjectivePoint p -> ProjectivePoint p -> ProjectivePoint p;
-ec_twin_mult p _ x y z =
+  IntModNum p -> ProjectivePoint p ->
+  IntModNum p -> ProjectivePoint p -> ProjectivePoint p;
+ec_twin_mult p _ x _ y z =
   error (ProjectivePoint p) "Unimplemented: ec_twin_mult";
 
 --------------------------------------------------------------------------------

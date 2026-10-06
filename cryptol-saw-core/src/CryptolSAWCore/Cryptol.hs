@@ -763,7 +763,10 @@ importPrimitive sc primOpts n sch = do
   prims <- ePrims sc
   if
   -- lookup primitive in the main primitive lookup table
-      | Just nm <- C.asPrim n, Just term <- Map.lookup nm allPrims -> term sc
+      | Just nm <- C.asPrim n, Just term <- Map.lookup nm allPrims ->
+          do t <- importSchema sc mempty sch
+             e <- term sc
+             scAscribe sc e t
 
       -- lookup primitive in the main reference implementation lookup table
       | Just nm <- C.asPrim n, Just expr <- Map.lookup nm refPrims ->
@@ -774,7 +777,9 @@ importPrimitive sc primOpts n sch = do
              scDefineConstant sc nmi e'
 
       -- lookup primitive in the extra primitive lookup table
-      | Just nm <- C.asPrim n, Just t <- Map.lookup nm prims -> return t
+      | Just nm <- C.asPrim n, Just e <- Map.lookup nm prims ->
+          do t <- importSchema sc mempty sch
+             scAscribe sc e t
 
       -- Optionally, create an opaque constant representing the primitive
       -- if it doesn't match one of the ones we know about.
