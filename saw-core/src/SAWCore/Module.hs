@@ -440,9 +440,9 @@ insertResolvedName r mm =
     vi = resolvedNameVarIndex r
 
 -- | Insert a 'ResolvedName' into a 'ModuleMap', adding a mapping from
--- the 'Ident' name of that resolved name to it. Return 'Left' in the
--- case of a name clash, i.e., an existing binding for the same
--- 'Name'.
+-- the 'Name' of that resolved name to it.
+-- Return 'Left' in the case of a name clash, i.e., an existing
+-- binding for the same 'Name'.
 insResolvedNameInMap :: ResolvedName -> ModuleMap -> Either Name ModuleMap
 insResolvedNameInMap r mm =
   let mm' = insertResolvedName r mm in
