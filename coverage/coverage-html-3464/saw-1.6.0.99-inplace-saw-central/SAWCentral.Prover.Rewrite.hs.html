@@ -1,0 +1,111 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : SAWCentral.Provers.Rewrite
+<span class="lineno">    3 </span>Description : Useful rewrites.
+<span class="lineno">    4 </span>Maintainer  : GaloisInc
+<span class="lineno">    5 </span>Stability   : provisional
+<span class="lineno">    6 </span>-}
+<span class="lineno">    7 </span>
+<span class="lineno">    8 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    9 </span>
+<span class="lineno">   10 </span>module SAWCentral.Prover.Rewrite (basic_ss) where
+<span class="lineno">   11 </span>
+<span class="lineno">   12 </span>import SAWCore.Module (lookupVarIndexInMap, ResolvedName(..))
+<span class="lineno">   13 </span>import SAWCore.Name (nameIndex)
+<span class="lineno">   14 </span>import SAWCore.QualName (QualName)
+<span class="lineno">   15 </span>import SAWCore.Rewriter
+<span class="lineno">   16 </span>         ( Simpset, emptySimpset, addRules, RewriteRule
+<span class="lineno">   17 </span>         , scEqsRewriteRules, scDefRewriteRules
+<span class="lineno">   18 </span>         , addConvs
+<span class="lineno">   19 </span>         )
+<span class="lineno">   20 </span>import SAWCore.Conversion
+<span class="lineno">   21 </span>import SAWCore.SharedTerm (SharedContext, scGetModuleMap, scResolveQualName)
+<span class="lineno">   22 </span>
+<span class="lineno">   23 </span>basic_ss :: SharedContext -&gt; IO (Simpset a)
+<span class="lineno">   24 </span><span class="decl"><span class="istickedoff">basic_ss sc =</span>
+<span class="lineno">   25 </span><span class="spaces">  </span><span class="istickedoff">do rs1 &lt;- concat &lt;$&gt; traverse (defRewrites sc) defs</span>
+<span class="lineno">   26 </span><span class="spaces">     </span><span class="istickedoff">rs2 &lt;- scEqsRewriteRules sc eqs</span>
+<span class="lineno">   27 </span><span class="spaces">     </span><span class="istickedoff">return $ addConvs procs (addRules (rs1 ++ rs2) emptySimpset)</span>
+<span class="lineno">   28 </span><span class="spaces">     </span><span class="istickedoff">where</span>
+<span class="lineno">   29 </span><span class="spaces">       </span><span class="istickedoff">eqs =</span>
+<span class="lineno">   30 </span><span class="spaces">         </span><span class="istickedoff">[ &quot;Prelude.unsafeCoerce_same&quot;</span>
+<span class="lineno">   31 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.headRecord_RecordValue&quot;</span>
+<span class="lineno">   32 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.tailRecord_RecordValue&quot;</span>
+<span class="lineno">   33 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.PairValue_fst_snd&quot;</span>
+<span class="lineno">   34 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.PairValue_fst_Unit&quot;</span>
+<span class="lineno">   35 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.RecordValue_head_tail&quot;</span>
+<span class="lineno">   36 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.RecordValue_head_Empty&quot;</span>
+<span class="lineno">   37 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.not_not&quot;</span>
+<span class="lineno">   38 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.true_implies&quot;</span>
+<span class="lineno">   39 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.implies__eq&quot;</span>
+<span class="lineno">   40 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.and_True1&quot;</span>
+<span class="lineno">   41 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.and_False1&quot;</span>
+<span class="lineno">   42 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.and_True2&quot;</span>
+<span class="lineno">   43 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.and_False2&quot;</span>
+<span class="lineno">   44 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.and_idem&quot;</span>
+<span class="lineno">   45 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.or_True1&quot;</span>
+<span class="lineno">   46 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.or_False1&quot;</span>
+<span class="lineno">   47 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.or_True2&quot;</span>
+<span class="lineno">   48 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.or_False2&quot;</span>
+<span class="lineno">   49 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.or_idem&quot;</span>
+<span class="lineno">   50 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.not_True&quot;</span>
+<span class="lineno">   51 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.not_False&quot;</span>
+<span class="lineno">   52 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.not_or&quot;</span>
+<span class="lineno">   53 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.not_and&quot;</span>
+<span class="lineno">   54 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.ite_true&quot;</span>
+<span class="lineno">   55 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.ite_false&quot;</span>
+<span class="lineno">   56 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.ite_not&quot;</span>
+<span class="lineno">   57 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.ite_nest1&quot;</span>
+<span class="lineno">   58 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.ite_nest2&quot;</span>
+<span class="lineno">   59 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.ite_fold_not&quot;</span>
+<span class="lineno">   60 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.ite_eq&quot;</span>
+<span class="lineno">   61 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.ite_true&quot;</span>
+<span class="lineno">   62 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.ite_false&quot;</span>
+<span class="lineno">   63 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.or_triv1&quot;</span>
+<span class="lineno">   64 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.and_triv1&quot;</span>
+<span class="lineno">   65 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.or_triv2&quot;</span>
+<span class="lineno">   66 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.and_triv2&quot;</span>
+<span class="lineno">   67 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.bvAddZeroL&quot;</span>
+<span class="lineno">   68 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.bvAddZeroR&quot;</span>
+<span class="lineno">   69 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.bveq_sameL&quot;</span>
+<span class="lineno">   70 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.bveq_sameR&quot;</span>
+<span class="lineno">   71 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.bveq_same2&quot;</span>
+<span class="lineno">   72 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.bvEq_refl&quot;</span>
+<span class="lineno">   73 </span><span class="spaces">         </span><span class="istickedoff">, &quot;Prelude.bvNat_bvToNat&quot;</span>
+<span class="lineno">   74 </span><span class="spaces">         </span><span class="istickedoff">]</span>
+<span class="lineno">   75 </span><span class="spaces">       </span><span class="istickedoff">defs = [&quot;Cryptol.seq&quot;, &quot;Cryptol.ecEq&quot;, &quot;Cryptol.ecNotEq&quot;]</span>
+<span class="lineno">   76 </span><span class="spaces">       </span><span class="istickedoff">procs = bvConversions ++ natConversions ++ vecConversions</span></span>
+<span class="lineno">   77 </span>
+<span class="lineno">   78 </span>
+<span class="lineno">   79 </span>defRewrites :: SharedContext -&gt; QualName -&gt; IO [RewriteRule a]
+<span class="lineno">   80 </span><span class="decl"><span class="istickedoff">defRewrites sc qn =</span>
+<span class="lineno">   81 </span><span class="spaces">  </span><span class="istickedoff">do mname &lt;- scResolveQualName sc qn</span>
+<span class="lineno">   82 </span><span class="spaces">     </span><span class="istickedoff">case mname of</span>
+<span class="lineno">   83 </span><span class="spaces">       </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">pure []</span></span>
+<span class="lineno">   84 </span><span class="spaces">       </span><span class="istickedoff">Just nm -&gt;</span>
+<span class="lineno">   85 </span><span class="spaces">         </span><span class="istickedoff">do mm &lt;- scGetModuleMap sc</span>
+<span class="lineno">   86 </span><span class="spaces">            </span><span class="istickedoff">case lookupVarIndexInMap (nameIndex nm) mm of</span>
+<span class="lineno">   87 </span><span class="spaces">              </span><span class="istickedoff">Just (ResolvedDef def) -&gt; scDefRewriteRules sc def</span>
+<span class="lineno">   88 </span><span class="spaces">              </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">pure []</span></span></span>
+
+</pre>
+</body>
+</html>
