@@ -4795,6 +4795,13 @@ primitives = Map.fromList $
     , "Expected to be hidden by default in SAW 1.7."
     ]
 
+  , prim "add_defs"            "[String] -> Simpset -> Simpset"
+    (funVal2 add_defs)
+    Current
+    [ "Add rewrite rules that unfold the definitions of the named"
+    , "constants to a simplification rule set, and return the new set."
+    ]
+
   , prim "add_prelude_defs"    "[String] -> Simpset -> Simpset"
     (funVal2 add_prelude_defs)
     Current

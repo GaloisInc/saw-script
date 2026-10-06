@@ -144,6 +144,7 @@ module SAWCentral.Builtins (
     add_core_thms,
     addPreludeEqs,
     addCryptolEqs,
+    add_defs,
     add_prelude_defs,
     add_cryptol_defs,
     rewritePrim,
@@ -271,6 +272,7 @@ import qualified SAWSupport.ConsoleSupport as Cons
 import qualified SAWCore.Parser.AST as Un
 import SAWCore.Parser.Grammar (parseSAW, parseSAWTerm)
 import SAWCore.ExternalFormat
+import SAWCore.Module (lookupVarIndexInMap, ResolvedName(..))
 import SAWCore.Name (ModuleName, Name(..), VarName(..), mkModuleName, moduleIdentToQualName)
 import SAWCore.SATQuery
 import SAWCore.Simulator.Concrete (constMap)
@@ -1592,25 +1594,23 @@ addCryptolEqs names ss = do
   return (addRules eqRules ss)
     where qualify = mkIdent (mkModuleName ["Cryptol"])
 
-add_core_defs :: Text -> [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
-add_core_defs modname names ss =
+add_defs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
+add_defs names ss =
   do sc <- getSharedContext
-     defs <- io $ mapM (getDef sc) names -- FIXME: warn if not found
-     defRules <- io $ concat <$> (mapM (scDefRewriteRules sc) defs)
-     return (addRules defRules ss)
-  where
-    qualify = mkIdent (mkModuleName [modname])
-    getDef sc n =
-      scFindDef sc (qualify n) >>= \maybe_def ->
-      case maybe_def of
-        Just d -> return d
-        Nothing -> fail $ Text.unpack $ modname <> " definition " <> n <> " not found"
+     mm <- io $ scGetModuleMap sc
+     vis <- resolveNames names
+     let getRules vi =
+           case lookupVarIndexInMap vi mm of
+             Just (ResolvedDef def) -> io $ scDefRewriteRules sc def
+             _ -> pure []
+     rules <- concat <$> traverse getRules (Set.toList vis)
+     pure (addRules rules ss)
 
 add_prelude_defs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
-add_prelude_defs = add_core_defs "Prelude"
+add_prelude_defs names = add_defs [ "Prelude::" <> name | name <- names ]
 
 add_cryptol_defs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
-add_cryptol_defs = add_core_defs "Cryptol"
+add_cryptol_defs names = add_defs [ "Cryptol::" <> name | name <- names ]
 
 rewritePrim :: SV.SAWSimpset -> TypedTerm -> TopLevel TypedTerm
 rewritePrim ss (TypedTerm schema t) = do
