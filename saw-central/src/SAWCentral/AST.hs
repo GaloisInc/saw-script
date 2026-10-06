@@ -120,14 +120,23 @@ type Name = Text
 -- Kinds
 
 --
--- For the time being we can handle kinds using the number of expected
--- type arguments. That is, Kind 0 is *. Apart from tuples the only
--- things we have are of kinds *, * -> *, and * -> * -> *, but we do
--- have tuples of arbitrary arity.
+-- For the time being (and likely the foreseeable future) we can
+-- handle kinds using the number of expected type arguments; that is,
+-- Kind 0 is *. (We only actually have things of kind * and * -> *,
+-- but being able to represent more than that makes handling type
+-- application simpler.)
 --
--- If we ever want additional structure (e.g. distinguishing the
--- monad/context types from other types) we can extend this
--- representation easily enough.
+-- Note that we do have tuples of arbitrary arity, whose internal
+-- constructors notionally have kinds like * -> * -> * -> * and up,
+-- and function types with optional named arguments are more complex
+-- internally. But these never appear unapplied so we don't need (or
+-- want) to reason about their kinds.
+--
+-- We don't support higher-kinded types like monad transformers.
+--
+-- Should we ever want additional structure (e.g. distinguishing the
+-- monad types from other types, adding type-level nats, etc.) we can
+-- extend this representation easily enough.
 --
 
 newtype Kind = Kind { kindNumArgs :: Word }
@@ -138,10 +147,6 @@ kindStar = Kind 0
 
 kindStarToStar :: Kind
 kindStarToStar = Kind 1
-
--- this isn't currently used
---kindStarToStarToStar :: Kind
---kindStarToStarToStar = Kind 2
 
 kindAddStar :: Kind -> Kind
 kindAddStar (Kind n) = Kind (n + 1)

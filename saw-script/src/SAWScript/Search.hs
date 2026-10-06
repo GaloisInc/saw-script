@@ -215,6 +215,11 @@ instance Ord Candidate where
             -- creating instances for Type that we don't want.)
             -- This avoids needing a full MxN crossbar in
             -- compareType.
+            --
+            -- Note: because we don't need the ordering to mean
+            -- anything, just be self-consistent, this numbering is
+            -- arbitrary and doesn't have to reflect any particular
+            -- ordering of the constructors.
             ctorNum :: Type -> Int
             ctorNum ty = case ty of
                 TyCon{} -> 0
