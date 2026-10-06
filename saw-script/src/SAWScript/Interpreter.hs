@@ -177,7 +177,7 @@ import qualified Lang.Crucible.FunctionHandle as Crucible
 -- into the ether. So we have this hack to reject them.
 isPolymorphic :: SS.Type -> Bool
 isPolymorphic ty0 = case ty0 of
-    SS.TyCon _pos _tycon args -> any isPolymorphic args
+    SS.TyCon _pos _tycon -> False
     SS.TyApplyMonad _pos m arg -> isPolymorphic m || isPolymorphic arg
     SS.TyTuple _pos args -> any isPolymorphic args
     SS.TyArray _pos arg -> isPolymorphic arg
@@ -2065,7 +2065,7 @@ instance IsValue a => IsValue (IO a) where
 
 instance IsValue a => IsValue (TopLevel a) where
     toValue ty name action = case ty of
-        SS.TyApplyMonad _ (SS.TyCon _ (SS.ContextCon SS.TopLevel) []) ty'a ->
+        SS.TyApplyMonad _ (SS.TyCon _ (SS.ContextCon SS.TopLevel)) ty'a ->
             VTopLevel atRestPos [] (fmap (toValue ty'a name) action)
         _ ->
             toValuePanic "TopLevel" ty
@@ -2083,7 +2083,7 @@ instance FromValue a => FromValue (TopLevel a) where
 
 instance IsValue a => IsValue (ProofScript a) where
     toValue ty name m = case ty of
-        SS.TyApplyMonad _ (SS.TyCon _ (SS.ContextCon SS.ProofScript) []) ty'a ->
+        SS.TyApplyMonad _ (SS.TyCon _ (SS.ContextCon SS.ProofScript)) ty'a ->
             VProofScript atRestPos [] (fmap (toValue ty'a name) m)
         _ ->
             toValuePanic "ProofScript" ty
@@ -2188,7 +2188,7 @@ instance FromValue (CMS.SetupValue MIR) where
 
 instance IsValue SAW_CFG where
     toValue ty _name t = case ty of
-        SS.TyCon _ SS.CFGCon [] ->
+        SS.TyCon _ SS.CFGCon ->
             VCFG t
         _ ->
             toValuePanic "CFG" ty
@@ -2199,7 +2199,7 @@ instance FromValue SAW_CFG where
 
 instance IsValue (CIR.SomeLLVM CMS.ProvedSpec) where
     toValue ty _name mir = case ty of
-        SS.TyCon _ SS.LLVMSpecCon [] ->
+        SS.TyCon _ SS.LLVMSpecCon ->
             VLLVMMethodSpec mir
         _ ->
             toValuePanic "LLVMSpec" ty
@@ -2210,7 +2210,7 @@ instance FromValue (CIR.SomeLLVM CMS.ProvedSpec) where
 
 instance IsValue (CMS.ProvedSpec CJ.JVM) where
     toValue ty _name t = case ty of
-        SS.TyCon _ SS.JVMSpecCon [] ->
+        SS.TyCon _ SS.JVMSpecCon ->
             VJVMMethodSpec t
         _ ->
             toValuePanic "JVMSpec" ty
@@ -2221,7 +2221,7 @@ instance FromValue (CMS.ProvedSpec CJ.JVM) where
 
 instance IsValue (CMS.ProvedSpec MIR) where
     toValue ty _name t = case ty of
-        SS.TyCon _ SS.MIRSpecCon [] ->
+        SS.TyCon _ SS.MIRSpecCon ->
             VMIRMethodSpec t
         _ ->
             toValuePanic "MIRSpec" ty
@@ -2276,7 +2276,7 @@ instance FromValue FunctionProfile where
 
 instance IsValue (AIGNetwork) where
     toValue ty _name t = case ty of
-        SS.TyCon _ SS.AIGCon [] ->
+        SS.TyCon _ SS.AIGCon ->
             VAIG t
         _ ->
             toValuePanic "AIGNetwork" ty
@@ -2287,7 +2287,7 @@ instance FromValue (AIGNetwork) where
 
 instance IsValue TypedTerm where
     toValue ty _name t = case ty of
-        SS.TyCon _ SS.TermCon [] ->
+        SS.TyCon _ SS.TermCon ->
             VTerm t
         _ ->
             toValuePanic "Term" ty
@@ -2302,7 +2302,7 @@ instance FromValue Term where
 
 instance IsValue Cryptol.Schema where
     toValue ty _name s = case ty of
-        SS.TyCon _ SS.TypeCon [] ->
+        SS.TyCon _ SS.TypeCon ->
             VType s
         _ ->
             toValuePanic "Type" ty
@@ -2313,7 +2313,7 @@ instance FromValue Cryptol.Schema where
 
 instance IsValue Text where
     toValue ty _name n = case ty of
-        SS.TyCon _ SS.StringCon [] ->
+        SS.TyCon _ SS.StringCon ->
             VString n
         _ ->
             toValuePanic "String" ty
@@ -2324,7 +2324,7 @@ instance FromValue Text where
 
 instance IsValue Integer where
     toValue ty _name n = case ty of
-        SS.TyCon _ SS.IntCon [] ->
+        SS.TyCon _ SS.IntCon ->
             VInteger n
         _ ->
             toValuePanic "Int (Integer)" ty
@@ -2335,7 +2335,7 @@ instance FromValue Integer where
 
 instance IsValue Int where
     toValue ty _name n = case ty of
-        SS.TyCon _ SS.IntCon [] ->
+        SS.TyCon _ SS.IntCon ->
             VInteger (toInteger n)
         _ ->
             toValuePanic "Int (Int)" ty
@@ -2349,7 +2349,7 @@ instance FromValue Int where
 
 instance IsValue Bool where
     toValue ty _name b = case ty of
-        SS.TyCon _ SS.BoolCon [] ->
+        SS.TyCon _ SS.BoolCon ->
             VBool b
         _ ->
             toValuePanic "Bool" ty

@@ -23,7 +23,7 @@ module SAWScript.Typechecker
     , checkSchemaPattern
     ) where
 
-import Control.Monad (when, zipWithM, foldM, zipWithM_)
+import Control.Monad (when, foldM, zipWithM_)
 import Control.Monad.Reader (MonadReader(..), ReaderT(..), asks)
 import Control.Monad.State (MonadState(..), StateT, gets, modify, runState)
 import Control.Monad.Identity (Identity)
@@ -121,7 +121,7 @@ instance (UnifyVars a) => UnifyVars (Pos, PrimitiveLifecycle, Rebindable, a) whe
 
 instance UnifyVars Type where
     unifyVars t = case t of
-        TyCon _ _ ts      -> unifyVars ts
+        TyCon _ _         -> Map.empty
         TyApplyMonad _ m arg -> Map.union (unifyVars m) (unifyVars arg)
         TyTuple _ ts      -> unifyVars ts
         TyArray _ t1      -> unifyVars t1
@@ -252,7 +252,7 @@ instance AppSubst Decl where
 
 instance AppSubst Type where
     appSubst s t = case t of
-        TyCon prov tc ts -> TyCon prov tc (appSubst s ts)
+        TyCon prov tc -> TyCon prov tc
         TyApplyMonad prov m arg ->
             TyApplyMonad prov (appSubst s m) (appSubst s arg)
         TyTuple prov ts -> TyTuple prov (appSubst s ts)
@@ -879,20 +879,9 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
               (_, _) -> False
     in
 
-    -- | Alternate printer for type constructors. This takes argument
-    --   strings to insert into the output. We assume the application
-    --   has the right number of args; otherwise the regular type
-    --   printer would have croaked on it.
-    --
-    --   FUTURE: maybe the main `TyCon` printer should work this way;
-    --   that would avoid the objectionable corner cases. However,
-    --   note that the code here only works for fully applied
-    --   constructors of kind *, and will need further work to take
-    --   the place of the main printer. Also, it (deliberately) only
-    --   handles `Text` and the main printer does need to cope with
-    --   prettyprinter docs.
-    --
-    let ppTyCon' tc _args = case tc of
+    -- | Alternate printer for type constructors. XXX: This no longer
+    --   needs to exist as its own thing.
+    let ppTyCon' tc = case tc of
           StringCon -> "String"
           TermCon -> "Term"
           TypeCon -> "Type"
@@ -992,13 +981,8 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
             in
 
             case ty of
-                TyCon prov tc elts ->
-                    let -- catchall for things that don't have subelements
-                        getWhat :: Int -> Text
-                        getWhat _i = "???"
-                        (elts', subelts) = considerList getWhat prov elts
-                    in
-                    (ppTyCon' tc elts', prov, subelts)
+                TyCon prov tc ->
+                    (ppTyCon' tc, prov, [])
                 TyApplyMonad prov m arg ->
                     let (m', subelts'm) = consider "monad" prov m
                         (arg', subelts'arg) = consider "1st argument" prov arg
@@ -1408,32 +1392,9 @@ unify exp0 pos found0 = visit [] exp0 found0
                 -- records with the same field names, try unifying the field types
                 recList (Map.elems expFields) (Map.elems foundFields)
 
-            (TyCon _ expTC expTS, TyCon _ foundTC foundTS) | expTC == foundTC -> do
-                -- same type constructor, unify the args
-                when (length expTS /= length foundTS) $ do
-                    -- This case is unreachable.
-                    --
-                    -- Every distinct type constructor has a definite
-                    -- arity (tuples of different lengths are not the same
-                    -- type constructor) and every type is supposed to
-                    -- pass `checkType` before we do anything more
-                    -- significant with it; that does a kind check, and on
-                    -- failure produces a fresh unification var that can't
-                    -- cause further trouble.
-                    --
-                    -- Therefore, if we get here, something's broked and we should
-                    -- panic.
-                    --
-                    ppopts <- asks tiPPOpts
-                    let expTS'   = "LHS:" : map (\t -> "   " <> ppType ppopts t) expTS
-                        foundTS' = "RHS:" : map (\t -> "   " <> ppType ppopts t) foundTS
-                    let nexpect'   = Text.pack $ show $ length expTS
-                        nfound' = Text.pack $ show $ length foundTS
-                        heading = "Mismatched type constructor arguments: " <>
-                                  "expected " <> nexpect' <> ", found " <> nfound'
-                    panic "unify" (heading : expTS' ++ foundTS')
-
-                recList expTS foundTS
+            (TyCon _ expTC, TyCon _ foundTC) | expTC == foundTC -> do
+                -- same type constructor, all good
+                pure ()
 
             (TyTuple _ expTS, TyTuple _ foundTS) | length expTS == length foundTS -> do
                 -- same size tuple, unify the args
@@ -1526,9 +1487,8 @@ matches pos t1 t2 =
 -- Get the free type variables found in a Type.
 inspectTypeFTVs :: Kind -> Type -> TI (Map Name (Pos, Kind))
 inspectTypeFTVs kind ty = case ty of
-    TyCon _prov ctor args -> do
-        let kinds = lookupTyCon ctor
-        Map.unions <$> zipWithM inspectTypeFTVs kinds args
+    TyCon _prov _ctor ->
+        pure Map.empty
     TyApplyMonad _prov m arg -> do
         m' <- inspectTypeFTVs (kindAddStar kind) m
         arg' <- inspectTypeFTVs kindStar arg
@@ -2404,16 +2364,10 @@ addTypedef a ty = do
 --
 monadType :: Type -> Maybe (Type, Type)
 monadType ty = case ty of
-  TyApplyMonad _ ctx@(TyCon _ (ContextCon _) []) valty ->
+  TyApplyMonad _ ctx@(TyCon _ (ContextCon _)) valty ->
       Just (ctx, valty)
   TyApplyMonad _ ctx@(TyVar _ name) valty | isMonad name ->
       Just (ctx, valty)
-  -- We don't currently ever generate these types, but be future-proof
-  TyCon prov (ContextCon ctx) [valty] ->
-      Just (TyCon prov (ContextCon ctx) [], valty)
-  -- and this one can't even be represented yet
---TyVar prov name [valty] | isMonad name ->
---    Just (TyVar prov name, valty)
   _ ->
       Nothing
   where
@@ -2585,7 +2539,7 @@ inferStmt atSyntacticTopLevel blockprov ctx s = do
             -- behavior when it was a builtin function rather than
             -- syntax. FUTURE: consider relaxing the requirement.
             let sprov = TypeFromElement spos TyCtxStmt
-            let tm = TyCon sprov (ContextCon TopLevel) []
+            let tm = TyCon sprov (ContextCon TopLevel)
             tx <- getFreshTyVar spos
             unify (tApply blockprov ctx tx) spos (tApply sprov tm tx)
             return s
@@ -2925,20 +2879,20 @@ inferDeclGroup rebindable dg = case dg of
 --
 
 -- | Look up a type constructor (in our fixed environment of hardcoded
---   types) and return its params as a list of kinds.
-lookupTyCon :: TyCon -> [Kind]
+--   types) and return its kind.
+lookupTyCon :: TyCon -> Kind
 lookupTyCon tycon = case tycon of
-    StringCon -> []
-    TermCon -> []
-    TypeCon -> []
-    BoolCon -> []
-    IntCon -> []
-    AIGCon -> []
-    CFGCon -> []
-    JVMSpecCon -> []
-    LLVMSpecCon -> []
-    MIRSpecCon -> []
-    ContextCon _ctx -> [kindStar]
+    StringCon -> kindStar
+    TermCon -> kindStar
+    TypeCon -> kindStar
+    BoolCon -> kindStar
+    IntCon -> kindStar
+    AIGCon -> kindStar
+    CFGCon -> kindStar
+    JVMSpecCon -> kindStar
+    LLVMSpecCon -> kindStar
+    MIRSpecCon -> kindStar
+    ContextCon _ctx -> kindStarToStar
 
 -- | Check if a list of types contains a failure type. If so, return
 --   it. Uses `Either` with unit rather than `Maybe` so as to get the
@@ -2961,48 +2915,29 @@ checkForFailure tys = foldr visit (Right ()) tys
 --   source position of whatever the user typed. The error reporting
 --   relies on this.
 --
+--   If, after checking, any of the subelements in the type is an
+--   error var, something was invalid. In this case, return the error
+--   var directly instead of consing around it. (Properly we should
+--   make a new one, but it's fresh and we can safely repurpose it.)
+--   This is a hack to avoid returning types _containing_ error vars
+--   out, which then lead to ugly and confusing further errors
+--   downstream.
+--
 checkType :: Kind -> Type -> TI Type
 checkType kind ty = case ty of
-    TyCon prov tycon args -> do
-
+    TyCon prov tycon -> do
         -- First, look up the constructor.
-        let params = lookupTyCon tycon
-        let nparams = genericLength params
-            nargs = genericLength args
-            argsleft = kindNumArgs kind
+        let kindFound = lookupTyCon tycon
 
-        if nargs > nparams then do
-            let nargs' = PP.viaShow nargs
-                nparams' = PP.viaShow nparams
-                tycon' = prettyTyCon tycon
-
-            let pos = Pos.getPos prov
-            recordError pos $ "Too many type arguments for type constructor" <+>
-                              tycon' <> "; found" <+> nargs' <+>
-                              "but expected only" <+> nparams'
-            getErrorTyVar pos
-        else if nargs + argsleft /= nparams then do
+        if kind /= kindFound then do
             let pos = Pos.getPos prov
             let kind' = prettyKind kind
-                kindFound' = prettyKind $ Kind (nparams - nargs)
+                kindFound' = prettyKind kindFound
             recordError pos $ "Kind mismatch: expected" <+> kind' <+>
                               "but found" <+> kindFound'
             getErrorTyVar pos
         else do
-            -- note that this will ignore the extra params, and return
-            -- a list of the same length as the args given, which is
-            -- exactly what we need here.
-            args' <- zipWithM checkType params args
-
-            -- If any of the arguments is an error var, something was
-            -- invalid. Return the error var directly. (Properly we
-            -- should make a new one, but it's fresh and we can
-            -- safely repurpose it.) This is a hack to avoid returning
-            -- types _containing_ error vars out, which then lead to
-            -- ugly and confusing further errors downstream.
-            pure $ case checkForFailure args' of
-                Left ty' -> ty'
-                Right () -> TyCon prov tycon args'
+            pure $ TyCon prov tycon
 
     TyApplyMonad prov m arg -> do
         m' <- checkType (kindAddStar kind) m
@@ -3229,7 +3164,7 @@ checkStmt ppopts avail env tenv ctx stmt =
     --
     let pos = Pos.getPos stmt
         prov = TypeFromContext pos TyCtxStmt
-        ctxtype = TyCon prov (ContextCon ctx) []
+        ctxtype = TyCon prov (ContextCon ctx)
     in
     runTI ppopts avail env tenv (inferSingleStmt prov ctxtype stmt)
 

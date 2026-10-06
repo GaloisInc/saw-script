@@ -121,7 +121,7 @@ dumpNamedParamInfo (NamedParamInfo n names) =
 
 dumpType :: Type -> Dump
 dumpType ty0 = case ty0 of
-    TyCon prov tycon args ->
+    TyCon prov tycon ->
         let prov' = dumpTypeProvenance prov in
         let tycon' = case tycon of
               StringCon -> "String"
@@ -137,7 +137,7 @@ dumpType ty0 = case ty0 of
               ContextCon ProofScript -> "ProofScript"
               ContextCon TopLevel -> "TopLevel"
         in
-        Dump.subelements ("TyCon " <> tycon') (prov' : map dumpType args)
+        Dump.subelements ("TyCon " <> tycon') [prov']
     TyApplyMonad prov m arg ->
         let prov' = dumpTypeProvenance prov
             m' = dumpType m

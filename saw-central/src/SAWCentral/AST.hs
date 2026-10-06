@@ -314,7 +314,7 @@ instance Semigroup NamedParamInfo where
 --     typechecker.
 --
 data Type
-  = TyCon TypeProvenance TyCon [Type]
+  = TyCon TypeProvenance TyCon
   | TyApplyMonad TypeProvenance Type Type
   | TyTuple TypeProvenance [Type]
   | TyArray TypeProvenance Type
@@ -522,7 +522,7 @@ instance Positioned TypeProvenance where
 --
 instance Positioned Type where
   getPos ty = case ty of
-      TyCon prov _ _ -> getPos prov
+      TyCon prov _ -> getPos prov
       TyApplyMonad prov _ _ -> getPos prov
       TyTuple prov _ -> getPos prov
       TyArray prov _ -> getPos prov
@@ -604,10 +604,6 @@ ppContext c = case c of
     ProofScript  -> "ProofScript"
     TopLevel     -> "TopLevel"
 
--- XXX: currently the typechecker calls this directly; however, it
--- would probably be better if it didn't, at which point we don't
--- need the somewhat unfortunate cases for tuple and array, and
--- the rest can be folded into prettyType.
 prettyTyCon :: TyCon -> PP.Doc ann
 prettyTyCon tc = case tc of
     StringCon      -> "String"
@@ -626,18 +622,12 @@ ppTyCon :: PPS.Opts -> TyCon -> Text
 ppTyCon ppopts tc = PPS.renderText ppopts $ prettyTyCon tc
 
 prettyType :: PPS.Opts -> Type -> PPS.Doc
-prettyType ppopts = PP.group . visit 0
+prettyType _ppopts = PP.group . visit 0
   where
     visit :: Int -> Type -> PPS.Doc
     visit prec ty0 = case ty0 of
-      TyCon _ ctor args -> case (ctor, args) of
-          (_, _) ->
-              let ctor' = prettyTyCon ctor in
-              case args of
-                  [] -> ctor'
-                  _ ->
-                      let ctor'' = PPS.renderText ppopts ctor' in
-                      croak ctor'' 0 args
+      TyCon _ ctor ->
+          prettyTyCon ctor
 
       TyApplyMonad _ m arg ->
           let m' = visit 1 m
@@ -674,16 +664,6 @@ prettyType ppopts = PP.group . visit 0
           "t." <> PP.pretty i
       TyVar _ n ->
           PP.pretty n
-
-    croak :: Text -> Integer -> [Type] -> a
-    croak what n args =
-        let ppArg arg = "   " <> (PPS.renderText ppopts $ visit 0 arg)
-            args' = map ppArg args
-        in
-        panic "prettyType" $ [
-            "Malformed " <> what <> " type constructor",
-            "Expected " <> Text.pack (show n) <> " arguments, found:"
-        ] ++ args'
 
 ppType :: PPS.Opts -> Type -> Text
 ppType ppopts ty =
@@ -994,40 +974,40 @@ tFun :: TypeProvenance -> NamedParamInfo -> [Type] -> Map Name Type -> Type -> T
 tFun prov names params namedParams ret = TyFunc prov names params namedParams ret
 
 tString :: TypeProvenance -> Type
-tString prov = TyCon prov StringCon []
+tString prov = TyCon prov StringCon
 
 tTerm :: TypeProvenance -> Type
-tTerm prov = TyCon prov TermCon []
+tTerm prov = TyCon prov TermCon
 
 tType :: TypeProvenance -> Type
-tType prov = TyCon prov TypeCon []
+tType prov = TyCon prov TypeCon
 
 tBool :: TypeProvenance -> Type
-tBool prov = TyCon prov BoolCon []
+tBool prov = TyCon prov BoolCon
 
 tInt :: TypeProvenance -> Type
-tInt prov = TyCon prov IntCon []
+tInt prov = TyCon prov IntCon
 
 tApply :: TypeProvenance -> Type -> Type -> Type
 tApply prov c t = TyApplyMonad prov c t
 
 tAIG :: TypeProvenance -> Type
-tAIG prov = TyCon prov AIGCon []
+tAIG prov = TyCon prov AIGCon
 
 tCFG :: TypeProvenance -> Type
-tCFG prov = TyCon prov CFGCon []
+tCFG prov = TyCon prov CFGCon
 
 tJVMSpec :: TypeProvenance -> Type
-tJVMSpec prov = TyCon prov JVMSpecCon []
+tJVMSpec prov = TyCon prov JVMSpecCon
 
 tLLVMSpec :: TypeProvenance -> Type
-tLLVMSpec prov = TyCon prov LLVMSpecCon []
+tLLVMSpec prov = TyCon prov LLVMSpecCon
 
 tMIRSpec :: TypeProvenance -> Type
-tMIRSpec prov = TyCon prov MIRSpecCon []
+tMIRSpec prov = TyCon prov MIRSpecCon
 
 tContext :: TypeProvenance -> Context -> Type
-tContext prov c = TyCon prov (ContextCon c) []
+tContext prov c = TyCon prov (ContextCon c)
 
 tRecord :: TypeProvenance -> [(Name, Type)] -> Type
 tRecord prov fields = TyRecord prov (Map.fromList fields)
@@ -1108,5 +1088,5 @@ isContext ::
     -> Type             -- ^ The type 'ty' to inspect
     -> Bool
 isContext c ty = case ty of
-  TyCon _prov (ContextCon c') [] | c' == c -> True
+  TyCon _prov (ContextCon c') | c' == c -> True
   _ -> False
