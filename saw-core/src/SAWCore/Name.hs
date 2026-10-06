@@ -21,6 +21,7 @@ module SAWCore.Name
   , preludeName
   , moduleNameText
   , moduleNamePieces
+  , qualNameModule
    -- * Identifiers
   , Ident, identModule, identBaseName, identName, mkIdent, mkSafeIdent
   , parseIdent
@@ -102,6 +103,12 @@ mkModuleName (nm:nms) = ModuleName $ QN.fromPath QN.NamespaceCore (nm :| nms)
 
 preludeName :: ModuleName
 preludeName = mkModuleName ["Prelude"]
+
+qualNameModule :: QN.QualName -> Maybe ModuleName
+qualNameModule qn =
+  case QN.split qn of
+    Just (q, _, _) -> Just (ModuleName q)
+    Nothing -> Nothing
 
 
 -- Identifiers -----------------------------------------------------------------
