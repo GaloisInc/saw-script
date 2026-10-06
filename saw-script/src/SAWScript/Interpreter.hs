@@ -86,7 +86,7 @@ import SAWCentral.JavaExpr
 import SAWCentral.LLVMBuiltins
 import SAWCentral.Options
 import SAWScript.Typechecker (checkStmt, typesMatch)
-import qualified SAWScript.Typechecker as Ty (Message(..))
+import qualified SAWScript.Typechecker as Ty (Message(..), StmtContext(..))
 import SAWScript.Panic (HasCallStack, panic)
 import SAWCentral.TopLevel
 import SAWCentral.Utils
@@ -437,7 +437,7 @@ class (Monad m, MonadFail m) => InterpreterMonad m where
   liftTopLevel :: TopLevel a -> m a
   actionFromValue :: FromValue a => FromValueHow -> Value -> m a
   mkValue :: SS.Pos -> RefChain -> m Value -> Value
-  getMonadContext :: m SS.Context
+  getMonadContext :: m Ty.StmtContext
   pushScopeAny :: m ()
   popScopeAny :: m ()
   withEnvironAny :: Environ -> m a -> m a
@@ -446,7 +446,7 @@ instance InterpreterMonad TopLevel where
   liftTopLevel m = m
   actionFromValue = fromValue
   mkValue pos chain m = VTopLevel pos chain m
-  getMonadContext = return SS.TopLevel
+  getMonadContext = return Ty.InTopLevel
   pushScopeAny = pushScope
   popScopeAny = popScope
   withEnvironAny = withEnviron
@@ -455,7 +455,7 @@ instance InterpreterMonad ProofScript where
   liftTopLevel m = scriptTopLevel m
   actionFromValue = fromValue
   mkValue pos chain m = VProofScript pos chain m
-  getMonadContext = return SS.ProofScript
+  getMonadContext = return Ty.InProofScript
   pushScopeAny = scriptTopLevel pushScope
   popScopeAny = scriptTopLevel popScope
   withEnvironAny = withEnvironProofScript
@@ -1506,7 +1506,7 @@ interpretMain = do
       -- they call prove_print or prove_sat or whatever and don't
       -- explicitly throw away the result.
       tyRet = SS.TyVar prov "a"
-      tyMonadic = SS.tApply prov (SS.tContext prov SS.TopLevel) tyRet
+      tyMonadic = SS.tApply prov (SS.tTopLevel prov) tyRet
       tyExpected = SS.Forall [(SS.SchemaNameExplicit pos, "a")] tyMonadic
   let main = case ScopedMap.lookup "main" varenv of
           Just (_defpos, lc, tyFound, v, _doc) -> Just (lc, tyFound, v)
@@ -2065,7 +2065,7 @@ instance IsValue a => IsValue (IO a) where
 
 instance IsValue a => IsValue (TopLevel a) where
     toValue ty name action = case ty of
-        SS.TyApply _ (SS.TyCon _ (SS.ContextCon SS.TopLevel)) ty'a ->
+        SS.TyApply _ (SS.TyCon _ SS.TopLevel) ty'a ->
             VTopLevel atRestPos [] (fmap (toValue ty'a name) action)
         _ ->
             toValuePanic "TopLevel" ty
@@ -2083,7 +2083,7 @@ instance FromValue a => FromValue (TopLevel a) where
 
 instance IsValue a => IsValue (ProofScript a) where
     toValue ty name m = case ty of
-        SS.TyApply _ (SS.TyCon _ (SS.ContextCon SS.ProofScript)) ty'a ->
+        SS.TyApply _ (SS.TyCon _ SS.ProofScript) ty'a ->
             VProofScript atRestPos [] (fmap (toValue ty'a name) m)
         _ ->
             toValuePanic "ProofScript" ty

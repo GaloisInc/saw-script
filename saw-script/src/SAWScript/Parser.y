@@ -289,8 +289,8 @@ BaseType :: { Type }
  | 'JVMMethodSpec'                      { txJVMSpec (getPos $1)             }
  | 'JVMSpec'                            { txJVMSpec (getPos $1)             }
  | 'MIRSpec'                            { txMIRSpec (getPos $1)             }
- | 'ProofScript'                        { txContext (getPos $1) ProofScript }
- | 'TopLevel'                           { txContext (getPos $1) TopLevel    }
+ | 'ProofScript'                        { txProofScript (getPos $1)         }
+ | 'TopLevel'                           { txTopLevel (getPos $1)            }
  | 'CrucibleSetup'                      { txVar (getPos $1) "CrucibleSetup" }
  | '(' Type ')'                         { $2                                }
  | '(' commas2(Type) ')'                { txTuple (maxSpan [$1, $3]) $2     }

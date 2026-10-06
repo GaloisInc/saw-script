@@ -24,7 +24,6 @@ module SAWCentral.AST
      , TyCtx(..)
      , TypeProvenance(..)
      , TypeIndex
-     , Context(..)
      , TyCon(..)
      , NamedParamInfo(..), noNames
      , Type(..)
@@ -57,13 +56,13 @@ module SAWCentral.AST
      , tUnit, tTuple, tArray, tFun
      , tString, tTerm, tType, tBool, tInt, tApply
      , tAIG, tCFG, tJVMSpec, tLLVMSpec, tMIRSpec
-     , tContext
+     , tTopLevel, tProofScript
      , tRecord, tVar
      , tMono, tForall
      , txTuple, txArray, txFun
      , txString, txTerm, txType, txBool, txInt, txApply
      , txAIG, txCFG, txJVMSpec, txLLVMSpec, txMIRSpec
-     , txContext
+     , txTopLevel, txProofScript
      , txRecord, txVar
      ) where
 
@@ -221,14 +220,11 @@ data TypeProvenance
 -- | Type for unification variable serial numbers.
 type TypeIndex = Integer
 
--- | Type for the hardwired monad types. Note that these days the
---   @LLVMSetup@, @JVMSetup@, and @MIRSetup@ monad types are ordinary
---   abstract types defined in the builtin types list.
-data Context
-  = ProofScript
-  | TopLevel
-  deriving (Eq, Ord)
-
+-- | Type for the hardwired types. Note that which types live here and
+--   which are just ordinary abstract types defined in the builtin
+--   types list in Interpreter.hs is pretty arbitrary. Among other
+--   things, these days the @LLVMSetup@, @JVMSetup@, and @MIRSetup@
+--   monad types are not special.
 data TyCon
   = StringCon
   | TermCon
@@ -240,7 +236,8 @@ data TyCon
   | JVMSpecCon
   | LLVMSpecCon
   | MIRSpecCon
-  | ContextCon Context
+  | ProofScript
+  | TopLevel
   deriving (Eq, Ord)
 
 -- | Information about the named parameters in a function type
@@ -597,11 +594,6 @@ ppTyCtx ctx = case ctx of
 prettyTyCtx :: TyCtx -> PP.Doc ann
 prettyTyCtx ctx = PP.pretty $ ppTyCtx ctx
 
-ppContext :: Context -> Text
-ppContext c = case c of
-    ProofScript  -> "ProofScript"
-    TopLevel     -> "TopLevel"
-
 prettyTyCon :: TyCon -> PP.Doc ann
 prettyTyCon tc = case tc of
     StringCon      -> "String"
@@ -614,7 +606,8 @@ prettyTyCon tc = case tc of
     JVMSpecCon     -> "JVMSpec"
     LLVMSpecCon    -> "LLVMSpec"
     MIRSpecCon     -> "MIRSpec"
-    ContextCon cxt -> PP.pretty $ ppContext cxt
+    ProofScript    -> "ProofScript"
+    TopLevel       -> "TopLevel"
 
 ppTyCon :: PPS.Opts -> TyCon -> Text
 ppTyCon ppopts tc = PPS.renderText ppopts $ prettyTyCon tc
@@ -1004,8 +997,11 @@ tLLVMSpec prov = TyCon prov LLVMSpecCon
 tMIRSpec :: TypeProvenance -> Type
 tMIRSpec prov = TyCon prov MIRSpecCon
 
-tContext :: TypeProvenance -> Context -> Type
-tContext prov c = TyCon prov (ContextCon c)
+tTopLevel :: TypeProvenance -> Type
+tTopLevel prov = TyCon prov TopLevel
+
+tProofScript :: TypeProvenance -> Type
+tProofScript prov = TyCon prov ProofScript
 
 tRecord :: TypeProvenance -> [(Name, Type)] -> Type
 tRecord prov fields = TyRecord prov (Map.fromList fields)
@@ -1063,8 +1059,11 @@ txLLVMSpec pos = tLLVMSpec (TypeExplicit pos)
 txMIRSpec :: Pos -> Type
 txMIRSpec pos = tMIRSpec (TypeExplicit pos)
 
-txContext :: Pos -> Context -> Type
-txContext pos c = tContext (TypeExplicit pos) c
+txTopLevel :: Pos -> Type
+txTopLevel pos = tTopLevel (TypeExplicit pos)
+
+txProofScript :: Pos -> Type
+txProofScript pos = tProofScript (TypeExplicit pos)
 
 txRecord :: Pos -> [(Name, Type)] -> Type
 txRecord pos fields = tRecord (TypeExplicit pos) fields

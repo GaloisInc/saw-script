@@ -134,8 +134,8 @@ dumpType ty0 = case ty0 of
               JVMSpecCon -> "JVMSpec"
               LLVMSpecCon -> "LLVMSpec"
               MIRSpecCon -> "MIRSpec"
-              ContextCon ProofScript -> "ProofScript"
-              ContextCon TopLevel -> "TopLevel"
+              ProofScript -> "ProofScript"
+              TopLevel -> "TopLevel"
         in
         Dump.subelements ("TyCon " <> tycon') [prov']
     TyApply prov m arg ->

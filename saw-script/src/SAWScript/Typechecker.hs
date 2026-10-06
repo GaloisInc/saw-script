@@ -16,6 +16,7 @@ This module contains the typechecker for SAWScript.
 
 module SAWScript.Typechecker
     ( Message(..)
+    , StmtContext(..)
     , checkDecl
     , checkStmt
     , typesMatch
@@ -892,8 +893,8 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
           JVMSpecCon -> "JVMSpec"
           LLVMSpecCon -> "LLVMSpec"
           MIRSpecCon -> "MIRSpec"
-          ContextCon ProofScript -> "ProofScript"
-          ContextCon TopLevel -> "TopLevel"
+          ProofScript -> "ProofScript"
+          TopLevel -> "TopLevel"
     in
 
     -- Print a type, substituting "_" for subelements we want to print
@@ -2364,7 +2365,9 @@ addTypedef a ty = do
 --
 monadType :: Type -> Maybe (Type, Type)
 monadType ty = case ty of
-  TyApply _ ctx@(TyCon _ (ContextCon _)) valty ->
+  TyApply _ ctx@(TyCon _ TopLevel) valty ->
+      Just (ctx, valty)
+  TyApply _ ctx@(TyCon _ ProofScript) valty ->
       Just (ctx, valty)
   TyApply _ ctx@(TyVar _ name) valty | isMonad name ->
       Just (ctx, valty)
@@ -2539,7 +2542,7 @@ inferStmt atSyntacticTopLevel blockprov ctx s = do
             -- behavior when it was a builtin function rather than
             -- syntax. FUTURE: consider relaxing the requirement.
             let sprov = TypeFromElement spos TyCtxStmt
-            let tm = TyCon sprov (ContextCon TopLevel)
+            let tm = TyCon sprov TopLevel
             tx <- getFreshTyVar spos
             unify (tApply blockprov ctx tx) spos (tApply sprov tm tx)
             return s
@@ -2892,7 +2895,8 @@ lookupTyCon tycon = case tycon of
     JVMSpecCon -> kindStar
     LLVMSpecCon -> kindStar
     MIRSpecCon -> kindStar
-    ContextCon _ctx -> kindStarToStar
+    TopLevel -> kindStarToStar
+    ProofScript -> kindStarToStar
 
 -- | Check if a list of types contains a failure type. If so, return
 --   it. Uses `Either` with unit rather than `Maybe` so as to get the
@@ -3123,19 +3127,24 @@ checkType kind ty = case ty of
 ------------------------------------------------------------
 -- External interface
 
+data StmtContext = InTopLevel | InProofScript
+
 -- | Check a single statement. (This is an external interface.)
 --
---   The first two arguments are the starting variable and typedef
---   environments to use.
+--   The arguments are:
+--   - the prettyprinter options
+--   - the current builtin visibility setting
+--   - the starting variable environment to use
+--   - the starting typedef environment to use
+--   - the monad we're checking the statement in (only the REPL monads)
+--   - the statement
 --
---   The third is a current position, and the fourth is the
---   context/monad type associated with the execution.
 checkStmt ::
       PPS.Opts ->
       Set PrimitiveLifecycle ->
       VarEnv ->
       TyEnv ->
-      Context ->
+      StmtContext ->
       Stmt ->
       Result Stmt
 checkStmt ppopts avail env tenv ctx stmt =
@@ -3164,7 +3173,9 @@ checkStmt ppopts avail env tenv ctx stmt =
     --
     let pos = Pos.getPos stmt
         prov = TypeFromContext pos TyCtxStmt
-        ctxtype = TyCon prov (ContextCon ctx)
+        ctxtype = case ctx of
+            InTopLevel -> TyCon prov TopLevel
+            InProofScript -> TyCon prov ProofScript
     in
     runTI ppopts avail env tenv (inferSingleStmt prov ctxtype stmt)
 
