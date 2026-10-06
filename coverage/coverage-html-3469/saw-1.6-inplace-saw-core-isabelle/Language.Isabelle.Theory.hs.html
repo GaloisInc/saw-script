@@ -1,0 +1,207 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    2 </span>module Language.Isabelle.Theory
+<span class="lineno">    3 </span> ( Theory(..)
+<span class="lineno">    4 </span> , thyImports
+<span class="lineno">    5 </span> , Theories
+<span class="lineno">    6 </span> , singleton
+<span class="lineno">    7 </span> , forTheories
+<span class="lineno">    8 </span> , freshTheory
+<span class="lineno">    9 </span> , mkTheory
+<span class="lineno">   10 </span> , addDecl
+<span class="lineno">   11 </span> , addDecls
+<span class="lineno">   12 </span> , drop
+<span class="lineno">   13 </span> , lookup
+<span class="lineno">   14 </span> , update
+<span class="lineno">   15 </span> , adjust
+<span class="lineno">   16 </span> , adjustDecls
+<span class="lineno">   17 </span> , null
+<span class="lineno">   18 </span> ) where
+<span class="lineno">   19 </span>
+<span class="lineno">   20 </span>import           Prelude hiding (drop, lookup, null)
+<span class="lineno">   21 </span>
+<span class="lineno">   22 </span>import           Data.Foldable hiding (null)
+<span class="lineno">   23 </span>import qualified Data.Graph as Graph
+<span class="lineno">   24 </span>import           Data.List (intercalate, nub, sort)
+<span class="lineno">   25 </span>import qualified Data.Map as Map
+<span class="lineno">   26 </span>import           Data.Maybe (fromMaybe, mapMaybe)
+<span class="lineno">   27 </span>import qualified Data.Map.Merge.Strict as Map
+<span class="lineno">   28 </span>
+<span class="lineno">   29 </span>
+<span class="lineno">   30 </span>import qualified Language.Isabelle.Binding as Binding
+<span class="lineno">   31 </span>import qualified Language.Isabelle.Decl as Decl
+<span class="lineno">   32 </span>import qualified Language.Isabelle.Name as Name
+<span class="lineno">   33 </span>import qualified Language.Isabelle.Output as Output
+<span class="lineno">   34 </span>import qualified Language.Isabelle.Panic as Panic
+<span class="lineno">   35 </span>import qualified Data.List as List
+<span class="lineno">   36 </span>
+<span class="lineno">   37 </span>data Theory = Theory { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">thyNm</span></span></span> :: Name.TheoryName, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">thyDecls</span></span></span> :: Decl.Decls }
+<span class="lineno">   38 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
+<span class="lineno">   39 </span>
+<span class="lineno">   40 </span>mergeThys :: Theory -&gt; Theory -&gt; Theory
+<span class="lineno">   41 </span><span class="decl"><span class="nottickedoff">mergeThys thy1 thy2 = case thyNm thy1 == thyNm thy2 of</span>
+<span class="lineno">   42 </span><span class="spaces">  </span><span class="nottickedoff">True -&gt; Theory (thyNm thy1) $ (thyDecls thy1) &lt;&gt; (thyDecls thy2)</span>
+<span class="lineno">   43 </span><span class="spaces">  </span><span class="nottickedoff">False -&gt; Panic.panic &quot;mergeThys: Theory name clash&quot; [show (thyNm thy1), show (thyNm thy2)]</span></span>
+<span class="lineno">   44 </span>
+<span class="lineno">   45 </span>data Theories = Theories { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">thyMap</span></span></span> :: Map.Map Name.TheoryName Theory }
+<span class="lineno">   46 </span>
+<span class="lineno">   47 </span>null :: Theories -&gt; Bool
+<span class="lineno">   48 </span><span class="decl"><span class="nottickedoff">null thys = Map.null (thyMap thys)</span></span>
+<span class="lineno">   49 </span>
+<span class="lineno">   50 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Semigroup Theories</span></span></span></span> where
+<span class="lineno">   51 </span>  <span class="decl"><span class="nottickedoff">(Theories thys1) &lt;&gt; (Theories thys2) = Theories</span>
+<span class="lineno">   52 </span><span class="spaces">    </span><span class="nottickedoff">(Map.merge Map.preserveMissing Map.preserveMissing (Map.zipWithMatched (\_ -&gt; mergeThys)) thys1 thys2)</span></span>
+<span class="lineno">   53 </span>
+<span class="lineno">   54 </span>
+<span class="lineno">   55 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Monoid Theories</span></span></span></span> where
+<span class="lineno">   56 </span>  <span class="decl"><span class="nottickedoff">mempty = Theories Map.empty</span></span>
+<span class="lineno">   57 </span>
+<span class="lineno">   58 </span>singleton :: Theory -&gt; Theories
+<span class="lineno">   59 </span><span class="decl"><span class="nottickedoff">singleton thy = Theories (Map.singleton (thyNm thy) thy)</span></span>
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>-- | Create a theory with a variant of the given name that
+<span class="lineno">   62 </span>--   does not clash with any existing theories.
+<span class="lineno">   63 </span>freshTheory :: Theories -&gt; Name.TheoryName -&gt; Theory
+<span class="lineno">   64 </span><span class="decl"><span class="nottickedoff">freshTheory (Theories thys) nm =</span>
+<span class="lineno">   65 </span><span class="spaces">  </span><span class="nottickedoff">let</span>
+<span class="lineno">   66 </span><span class="spaces">      </span><span class="nottickedoff">nms = map Name.thyNm $ Map.keys thys</span>
+<span class="lineno">   67 </span><span class="spaces">      </span><span class="nottickedoff">freshNm = Name.freshIdent nms (Name.thyNm nm)</span>
+<span class="lineno">   68 </span><span class="spaces">  </span><span class="nottickedoff">in  mkTheory (nm { Name.thyNm = freshNm })</span></span>
+<span class="lineno">   69 </span>
+<span class="lineno">   70 </span>mkTheory :: Name.TheoryName -&gt; Theory
+<span class="lineno">   71 </span><span class="decl"><span class="nottickedoff">mkTheory nm = Theory nm mempty</span></span>
+<span class="lineno">   72 </span>
+<span class="lineno">   73 </span>adjustDecls :: (Decl.Decls -&gt; Decl.Decls) -&gt; Theory -&gt; Theory
+<span class="lineno">   74 </span><span class="decl"><span class="nottickedoff">adjustDecls f thy = thy { thyDecls = f (thyDecls thy) }</span></span>
+<span class="lineno">   75 </span>
+<span class="lineno">   76 </span>addDecl :: Decl.Decl -&gt; Theory -&gt; Theory
+<span class="lineno">   77 </span><span class="decl"><span class="nottickedoff">addDecl d = adjustDecls (\ds -&gt; Decl.singleton d &lt;&gt; ds)</span></span>
+<span class="lineno">   78 </span>
+<span class="lineno">   79 </span>addDecls :: Name.TheoryName -&gt; Decl.Decls -&gt; Theories -&gt; Theories
+<span class="lineno">   80 </span><span class="decl"><span class="nottickedoff">addDecls nm ds thys = thys {thyMap =  Map.insertWith mergeThys nm (Theory nm ds) (thyMap thys)}</span></span>
+<span class="lineno">   81 </span>
+<span class="lineno">   82 </span>lookup :: Name.TheoryName -&gt; Theories -&gt; Theory
+<span class="lineno">   83 </span><span class="decl"><span class="nottickedoff">lookup nm thys = fromMaybe (mkTheory nm) $ Map.lookup nm (thyMap thys)</span></span>
+<span class="lineno">   84 </span>
+<span class="lineno">   85 </span>adjust :: Name.TheoryName -&gt; (Decl.Decls -&gt; Decl.Decls) -&gt; Theories -&gt; Theories
+<span class="lineno">   86 </span><span class="decl"><span class="nottickedoff">adjust nm f thys = thys { thyMap = Map.adjust (\thy -&gt; thy { thyDecls = f (thyDecls thy) }) nm (thyMap thys) }</span></span>
+<span class="lineno">   87 </span>
+<span class="lineno">   88 </span>update :: Theory -&gt; Theories -&gt; Theories
+<span class="lineno">   89 </span><span class="decl"><span class="nottickedoff">update thy = addDecls (thyNm thy) (thyDecls thy)</span></span>
+<span class="lineno">   90 </span>
+<span class="lineno">   91 </span>-- | Drop the theory with the given name and return it, along with the
+<span class="lineno">   92 </span>--   modified 'Theories'.
+<span class="lineno">   93 </span>--   Resulting 'Theory' is empty if it is not in the map.
+<span class="lineno">   94 </span>drop :: Name.TheoryName -&gt; Theories -&gt; (Theory, Theories)
+<span class="lineno">   95 </span><span class="decl"><span class="nottickedoff">drop nm thys =</span>
+<span class="lineno">   96 </span><span class="spaces">  </span><span class="nottickedoff">let</span>
+<span class="lineno">   97 </span><span class="spaces">    </span><span class="nottickedoff">upd k _thy1 _thy2 = mkTheory k</span>
+<span class="lineno">   98 </span><span class="spaces">    </span><span class="nottickedoff">(res, thys') = Map.insertLookupWithKey upd nm (mkTheory nm) (thyMap thys)</span>
+<span class="lineno">   99 </span><span class="spaces">  </span><span class="nottickedoff">in (fromMaybe (mkTheory nm) res, Theories thys')</span></span>
+<span class="lineno">  100 </span>
+<span class="lineno">  101 </span>forTheories :: Monad m =&gt; Theories -&gt; a -&gt; (Theory -&gt; a -&gt; m a) -&gt; m a
+<span class="lineno">  102 </span><span class="decl"><span class="nottickedoff">forTheories thys a f = foldrM f a (thyMap thys)</span></span>
+<span class="lineno">  103 </span>
+<span class="lineno">  104 </span>
+<span class="lineno">  105 </span>defGraph :: [Decl.Decl] -&gt;
+<span class="lineno">  106 </span>   (Graph.Graph
+<span class="lineno">  107 </span>  , Graph.Vertex -&gt; (Decl.Decl, Name.Name, [Name.Name])
+<span class="lineno">  108 </span>  , Name.Name -&gt; Maybe Graph.Vertex)
+<span class="lineno">  109 </span><span class="decl"><span class="nottickedoff">defGraph decls =</span>
+<span class="lineno">  110 </span><span class="spaces">  </span><span class="nottickedoff">let</span>
+<span class="lineno">  111 </span><span class="spaces">    </span><span class="nottickedoff">go d = case d of</span>
+<span class="lineno">  112 </span><span class="spaces">      </span><span class="nottickedoff">Decl.Definition _ b _args _ _ -&gt; [(d, Binding.bindName b, deps)]</span>
+<span class="lineno">  113 </span><span class="spaces">      </span><span class="nottickedoff">Decl.ConstDecl _ b -&gt; [(d, Binding.bindName b, [])]</span>
+<span class="lineno">  114 </span><span class="spaces">      </span><span class="nottickedoff">Decl.Commented _ d' -&gt;</span>
+<span class="lineno">  115 </span><span class="spaces">        </span><span class="nottickedoff">map (\(_,nm,deps') -&gt; (d,nm,deps')) (go d')</span>
+<span class="lineno">  116 </span><span class="spaces">      </span><span class="nottickedoff">Decl.TypeSyn _ nm _ -&gt; [(d, nm, deps)]</span>
+<span class="lineno">  117 </span><span class="spaces">      </span><span class="nottickedoff">Decl.FixpointLocale nms -&gt;</span>
+<span class="lineno">  118 </span><span class="spaces">        </span><span class="nottickedoff">let locale_name = Name.SimpleName (Decl.localeName nms)</span>
+<span class="lineno">  119 </span><span class="spaces">        </span><span class="nottickedoff">in [(d,locale_name, deps)] ++ map (\nm -&gt; (Decl.NoDecl,nm, [locale_name])) nms</span>
+<span class="lineno">  120 </span><span class="spaces">      </span><span class="nottickedoff">Decl.DatatypeDecl _ nm _ -&gt; [(d, nm, deps)]</span>
+<span class="lineno">  121 </span><span class="spaces">      </span><span class="nottickedoff">{- Decl.TypeArgSyntax b _ _ _ -&gt; Just (d, syntaxName (Binding.bindName b), [Binding.bindName b]) -}</span>
+<span class="lineno">  122 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt; []</span>
+<span class="lineno">  123 </span><span class="spaces">      </span><span class="nottickedoff">where</span>
+<span class="lineno">  124 </span><span class="spaces">        </span><span class="nottickedoff">deps = Decl.dependencies d</span>
+<span class="lineno">  125 </span><span class="spaces">    </span><span class="nottickedoff">raw_graph = concat $ map go decls</span>
+<span class="lineno">  126 </span><span class="spaces">  </span><span class="nottickedoff">in Graph.graphFromEdges raw_graph</span></span>
+<span class="lineno">  127 </span>
+<span class="lineno">  128 </span>orderDecls :: Theory -&gt; (Decl.Decl -&gt; Bool) -&gt; [Decl.Decl]
+<span class="lineno">  129 </span><span class="decl"><span class="nottickedoff">orderDecls thy f =</span>
+<span class="lineno">  130 </span><span class="spaces">  </span><span class="nottickedoff">let (graph, nodeFromVertex, _) = defGraph (nub $ Decl.filter f (thyDecls thy))</span>
+<span class="lineno">  131 </span><span class="spaces">  </span><span class="nottickedoff">in map (\v -&gt; let (d, _, _) = nodeFromVertex v in d) (Graph.reverseTopSort graph)</span></span>
+<span class="lineno">  132 </span>
+<span class="lineno">  133 </span>isDef :: Decl.Decl -&gt; Bool
+<span class="lineno">  134 </span><span class="decl"><span class="nottickedoff">isDef = \case</span>
+<span class="lineno">  135 </span><span class="spaces">  </span><span class="nottickedoff">Decl.Definition{} -&gt; True</span>
+<span class="lineno">  136 </span><span class="spaces">  </span><span class="nottickedoff">Decl.ConstDecl{} -&gt; True</span>
+<span class="lineno">  137 </span><span class="spaces">  </span><span class="nottickedoff">Decl.FixpointLocale{} -&gt; True</span>
+<span class="lineno">  138 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; False</span></span>
+<span class="lineno">  139 </span>
+<span class="lineno">  140 </span>
+<span class="lineno">  141 </span>thyImports :: Theory -&gt; [Name.TheoryName]
+<span class="lineno">  142 </span><span class="decl"><span class="nottickedoff">thyImports thy = </span>
+<span class="lineno">  143 </span><span class="spaces">  </span><span class="nottickedoff">nub $ Decl.mapMaybe (\case Decl.Import nm -&gt; Just nm; _ -&gt; Nothing) (thyDecls thy)</span></span>
+<span class="lineno">  144 </span>
+<span class="lineno">  145 </span>instance Output.Output Theory where
+<span class="lineno">  146 </span>  <span class="decl"><span class="nottickedoff">out thy =</span>
+<span class="lineno">  147 </span><span class="spaces">    </span><span class="nottickedoff">let</span>
+<span class="lineno">  148 </span><span class="spaces">      </span><span class="nottickedoff">is = thyImports thy</span>
+<span class="lineno">  149 </span><span class="spaces">      </span><span class="nottickedoff">defs = orderDecls thy isDef</span>
+<span class="lineno">  150 </span><span class="spaces">      </span><span class="nottickedoff">recordDecls = nub $ Decl.filter (\case Decl.RecordDecl{} -&gt; True; _ -&gt; False) (thyDecls thy)</span>
+<span class="lineno">  151 </span><span class="spaces">      </span><span class="nottickedoff">tdecls = nub $ Decl.filter (\case Decl.TypeDecl{} -&gt; True;  _ -&gt; False) (thyDecls thy)</span>
+<span class="lineno">  152 </span><span class="spaces">      </span><span class="nottickedoff">hdecls = nub $ Decl.filter (\case Decl.HashDecl{} -&gt; True;  _ -&gt; False) (thyDecls thy)</span>
+<span class="lineno">  153 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  154 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  155 </span><span class="spaces">      </span><span class="nottickedoff">tsyns = orderDecls thy (\case Decl.TypeSyn{} -&gt; True; Decl.DatatypeDecl{} -&gt; True;_ -&gt; False)</span>
+<span class="lineno">  156 </span><span class="spaces">      </span><span class="nottickedoff">declLine d = case d of</span>
+<span class="lineno">  157 </span><span class="spaces">        </span><span class="nottickedoff">Decl.NoDecl{} -&gt; Nothing</span>
+<span class="lineno">  158 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; Just (Output.out d &lt;&gt; &quot;\n&quot;)</span>
+<span class="lineno">  159 </span><span class="spaces">      </span><span class="nottickedoff">declLines ds = mapMaybe declLine ds</span>
+<span class="lineno">  160 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  161 </span><span class="spaces">      </span><span class="nottickedoff">noDecls = List.null tdecls &amp;&amp; List.null tsyns &amp;&amp; List.null defs &amp;&amp; List.null comments</span>
+<span class="lineno">  162 </span><span class="spaces">      </span><span class="nottickedoff">-- Un-associated comments</span>
+<span class="lineno">  163 </span><span class="spaces">      </span><span class="nottickedoff">comments = Decl.filter (\case Decl.NoDecl{} -&gt; True; _ -&gt; False) (thyDecls thy)</span>
+<span class="lineno">  164 </span><span class="spaces">    </span><span class="nottickedoff">in</span>
+<span class="lineno">  165 </span><span class="spaces">      </span><span class="nottickedoff">unlines $</span>
+<span class="lineno">  166 </span><span class="spaces">        </span><span class="nottickedoff">[ &quot;theory &quot; ++ Output.quotes (Output.out (Name.thyNm (thyNm thy)))</span>
+<span class="lineno">  167 </span><span class="spaces">        </span><span class="nottickedoff">, &quot;imports &quot; ++ intercalate &quot; &quot; (sort (map (Output.out . Decl.Import) is))</span>
+<span class="lineno">  168 </span><span class="spaces">        </span><span class="nottickedoff">, &quot;begin&quot;</span>
+<span class="lineno">  169 </span><span class="spaces">        </span><span class="nottickedoff">, &quot;&quot;</span>
+<span class="lineno">  170 </span><span class="spaces">        </span><span class="nottickedoff">]</span>
+<span class="lineno">  171 </span><span class="spaces">        </span><span class="nottickedoff">++ declLines recordDecls</span>
+<span class="lineno">  172 </span><span class="spaces">        </span><span class="nottickedoff">++ (if noDecls then [&quot;end&quot;] else</span>
+<span class="lineno">  173 </span><span class="spaces">          </span><span class="nottickedoff">[&quot;context includes cryptol_translation_syntax begin&quot;]</span>
+<span class="lineno">  174 </span><span class="spaces">          </span><span class="nottickedoff">++ declLines tdecls</span>
+<span class="lineno">  175 </span><span class="spaces">          </span><span class="nottickedoff">++ []</span>
+<span class="lineno">  176 </span><span class="spaces">          </span><span class="nottickedoff">++ declLines tsyns</span>
+<span class="lineno">  177 </span><span class="spaces">          </span><span class="nottickedoff">++ []</span>
+<span class="lineno">  178 </span><span class="spaces">          </span><span class="nottickedoff">++ declLines defs</span>
+<span class="lineno">  179 </span><span class="spaces">          </span><span class="nottickedoff">++ []</span>
+<span class="lineno">  180 </span><span class="spaces">          </span><span class="nottickedoff">++ declLines hdecls</span>
+<span class="lineno">  181 </span><span class="spaces">          </span><span class="nottickedoff">++ []</span>
+<span class="lineno">  182 </span><span class="spaces">          </span><span class="nottickedoff">++ declLines comments</span>
+<span class="lineno">  183 </span><span class="spaces">          </span><span class="nottickedoff">++ []</span>
+<span class="lineno">  184 </span><span class="spaces">          </span><span class="nottickedoff">++ [ &quot;end&quot;, &quot;end&quot; ])</span></span>
+
+</pre>
+</body>
+</html>
