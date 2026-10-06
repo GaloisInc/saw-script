@@ -69,7 +69,6 @@ module SAWCore.SharedTerm
   , scRegisterName
   , scFreshName
   , scFreshVarName
-  , scFreshenGlobalIdent
   , scResolveName
   , scResolveQualName
     -- * Metadata

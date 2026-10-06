@@ -101,7 +101,6 @@ module SAWCore.Term.Certified
   , scImportModule
   , scLoadModule
   , scmFreshName
-  , scFreshenGlobalIdent
   , scResolveQualName
     -- * Checkpointing
   , SharedContextCheckpoint
@@ -131,13 +130,11 @@ import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
 import Data.IORef (IORef,newIORef,readIORef,modifyIORef',atomicModifyIORef',writeIORef)
-import Data.List (find)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Maybe
 import Data.Ref (C)
 import Data.Text (Text)
-import qualified Data.Text as Text
 import Data.Typeable
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
@@ -897,18 +894,6 @@ scmRegisterGlobal qn t =
       case HMap.lookup qn m of
         Just _ -> (m, True)
         Nothing -> (HMap.insert qn t m, False)
-
--- | Find a variant of an identifier that is not already being used as a global,
--- by possibly adding a numeric suffix
-scFreshenGlobalIdent :: SharedContext -> Ident -> IO Ident
-scFreshenGlobalIdent sc ident =
-  readIORef (scGlobalEnv sc) >>= \gmap ->
-  return $ fromJust $ find (\i -> not $ HMap.member (moduleIdentToQualName i) gmap) $
-  ident : map (mkIdent (identModule ident) .
-               Text.append (identBaseName ident) .
-               Text.pack . show) [(0::Integer) ..]
-
-
 
 -- | Get the current naming environment
 scGetNamingEnv :: SharedContext -> IO DisplayNameEnv
