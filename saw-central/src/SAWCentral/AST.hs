@@ -65,8 +65,6 @@ module SAWCentral.AST
      , txAIG, txCFG, txJVMSpec, txLLVMSpec, txMIRSpec
      , txContext
      , txRecord, txVar
-
-     , isContext
      ) where
 
 import qualified SAWSupport.Pretty as PPS
@@ -1073,20 +1071,3 @@ txRecord pos fields = tRecord (TypeExplicit pos) fields
 
 txVar :: Pos -> Name -> Type
 txVar pos a = tVar (TypeExplicit pos) a
-
-
-------------------------------------------------------------
--- Type Classifiers
-
--- The idea is that calling these is/should be less messy than direct
--- pattern matching, and also help a little to avoid splattering the
--- internal representation of types all over the place.
-
--- | Check if type 'ty' is a 'Context' type of context 'c'.
-isContext ::
-       Context          -- ^ The context 'c' to look for
-    -> Type             -- ^ The type 'ty' to inspect
-    -> Bool
-isContext c ty = case ty of
-  TyCon _prov (ContextCon c') | c' == c -> True
-  _ -> False
