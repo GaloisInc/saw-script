@@ -42,9 +42,8 @@ import GHC.Num.Natural (Natural)
 
 import SAWCore.FiniteValue (FirstOrderType(..))
 import SAWCore.Module (ModuleMap, ResolvedName(..), Def(..), DataType(..), Ctor(..), lookupVarIndexInMap)
-import SAWCore.Name (Name(..), VarCtx, pattern ImportedName, NameInfo, pattern ModuleIdentifier,
-                     emptyVarCtx, consVarCtx, lookupVarCtx, VarName(..), VarIndex,
-                     moduleIdentToQualName)
+import SAWCore.Name (Name(..), VarCtx, NameInfo, VarName(..), VarIndex,
+                     emptyVarCtx, consVarCtx, lookupVarCtx, toQualName)
 import qualified SAWCore.QualName as QN
 import SAWCore.SATQuery (SATQuery, SATAssert(..), satVariables, satUninterp, satAsserts)
 import SAWCore.Term.Functor (FlatTermF(..), TermF(..), Sort(..), CompiledRecursor(..))
@@ -138,10 +137,10 @@ instance Bytes Text where
   bytes txt = bytes (BS.length bs) <> BS.byteString bs
     where
       bs = encodeUtf8 txt
+
 instance Bytes NameInfo where
-  bytes = \case
-    ModuleIdentifier i -> byte 0x1 <> bytes (QN.ppQualName $ moduleIdentToQualName i)
-    ImportedName qn -> byte 0x2 <> bytes (QN.ppQualName qn)
+  bytes nmi = bytes (QN.ppQualName (toQualName nmi))
+
 instance Bytes Sort where
   bytes = \case
     PropSort   -> byte 0x1
