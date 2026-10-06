@@ -180,6 +180,7 @@ isPolymorphic ty0 = case ty0 of
     SS.TyCon _pos _tycon args -> any isPolymorphic args
     SS.TyApplyMonad _pos m arg -> isPolymorphic m || isPolymorphic arg
     SS.TyTuple _pos args -> any isPolymorphic args
+    SS.TyArray _pos arg -> isPolymorphic arg
     SS.TyFunc _pos _ params namedParams ret ->
         any isPolymorphic params || any isPolymorphic namedParams || isPolymorphic ret
     SS.TyRecord _pos fields -> any isPolymorphic fields
@@ -2027,7 +2028,7 @@ instance (FromValue a, FromValue b, FromValue c) => FromValue (a, b, c) where
 
 instance IsValue a => IsValue [a] where
     toValue ty name xs = case ty of
-        SS.TyCon _ SS.ArrayCon [tyelt] ->
+        SS.TyArray _ tyelt ->
             VArray (map (toValue tyelt name) xs)
         _ ->
             toValuePanic "array" ty

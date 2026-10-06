@@ -124,6 +124,7 @@ instance UnifyVars Type where
         TyCon _ _ ts      -> unifyVars ts
         TyApplyMonad _ m arg -> Map.union (unifyVars m) (unifyVars arg)
         TyTuple _ ts      -> unifyVars ts
+        TyArray _ t1      -> unifyVars t1
         TyFunc _ _ params namedParams ret ->
             let paramsVars = unifyVars params
                 namedVars = unifyVars namedParams
@@ -255,6 +256,7 @@ instance AppSubst Type where
         TyApplyMonad prov m arg ->
             TyApplyMonad prov (appSubst s m) (appSubst s arg)
         TyTuple prov ts -> TyTuple prov (appSubst s ts)
+        TyArray prov t1 -> TyArray prov (appSubst s t1)
         TyFunc prov ninfo params namedParams ret ->
             let params' = appSubst s params
                 namedParams' = appSubst s namedParams
@@ -870,7 +872,7 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
                   let enclosed = Pos.subspan subpos pos in
                   case ty of
                       TyTuple _ _ -> enclosed
-                      TyCon _ ArrayCon _ -> enclosed
+                      TyArray _ _ -> enclosed
                       TyRecord _ _ -> enclosed
                       _ -> False
 
@@ -890,8 +892,7 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
     --   handles `Text` and the main printer does need to cope with
     --   prettyprinter docs.
     --
-    let ppTyCon' tc args = case tc of
-          ArrayCon -> "[" <> Text.intercalate " " args <> "]"
+    let ppTyCon' tc _args = case tc of
           StringCon -> "String"
           TermCon -> "Term"
           TypeCon -> "Type"
@@ -904,13 +905,6 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
           MIRSpecCon -> "MIRSpec"
           ContextCon ProofScript -> "ProofScript"
           ContextCon TopLevel -> "TopLevel"
-    in
-
-    -- | Get a subelement descriptor for a type constructor.
-    let describeTyConElt :: TyCon -> Int -> Text
-        describeTyConElt tc _i = case tc of
-          ArrayCon -> "element type"
-          _ -> "???"  -- catchall for things that don't have subelements
     in
 
     -- Print a type, substituting "_" for subelements we want to print
@@ -999,7 +993,9 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
 
             case ty of
                 TyCon prov tc elts ->
-                    let getWhat = describeTyConElt tc
+                    let -- catchall for things that don't have subelements
+                        getWhat :: Int -> Text
+                        getWhat _i = "???"
                         (elts', subelts) = considerList getWhat prov elts
                     in
                     (ppTyCon' tc elts', prov, subelts)
@@ -1012,6 +1008,11 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
                     let getWhat i = ordin (i + 1) <> " element"
                         (elts', subelts) = considerList getWhat prov elts
                         body = "(" <> Text.intercalate ", " elts' <> ")"
+                    in
+                    (body, prov, subelts)
+                TyArray prov elt ->
+                    let (elt', subelts) = consider "element type" prov elt
+                        body = "[" <> elt' <> "]"
                     in
                     (body, prov, subelts)
                 TyFunc prov _npi params namedParams ret ->
@@ -1438,6 +1439,10 @@ unify exp0 pos found0 = visit [] exp0 found0
                 -- same size tuple, unify the args
                 recList expTS foundTS
 
+            (TyArray _ expT, TyArray _ foundT) -> do
+                -- array, unify the arg
+                recOnce expT foundT
+
             (TyApplyMonad _ exp'm exp'arg, TyApplyMonad _ found'm found'arg) -> do
                 -- both monad applications, unify the args
                 recOnce exp'm found'm
@@ -1530,6 +1535,8 @@ inspectTypeFTVs kind ty = case ty of
         pure $ Map.union m' arg'
     TyTuple _prov args -> do
         Map.unions <$> mapM (inspectTypeFTVs kindStar) args
+    TyArray _prov arg -> do
+        inspectTypeFTVs kindStar arg
     TyFunc _prov _ params namedParams ret ->
         let np = Map.elems namedParams in
         Map.unions <$> mapM (inspectTypeFTVs kindStar) (ret : params ++ np)
@@ -2921,7 +2928,6 @@ inferDeclGroup rebindable dg = case dg of
 --   types) and return its params as a list of kinds.
 lookupTyCon :: TyCon -> [Kind]
 lookupTyCon tycon = case tycon of
-    ArrayCon -> [kindStar]
     StringCon -> []
     TermCon -> []
     TypeCon -> []
@@ -3018,6 +3024,20 @@ checkType kind ty = case ty of
             pure $ case checkForFailure args' of
                 Left ty' -> ty'
                 Right () -> TyTuple prov args'
+
+    TyArray prov arg -> do
+        if kind /= kindStar then do
+            let pos = Pos.getPos prov
+            let kind' = prettyKind kind
+                kindStar' = prettyKind kindStar
+            recordError pos $ "Kind mismatch: expected" <+> kind' <+>
+                              "but found" <+> kindStar'
+            getErrorTyVar pos
+        else do
+            arg' <- checkType kindStar arg
+            pure $ case checkForFailure [arg'] of
+                Left ty' -> ty'
+                Right () -> TyArray prov arg'
 
     TyFunc prov nameinfo params namedParams ret -> do
         if kind /= kindStar then do

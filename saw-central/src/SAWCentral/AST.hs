@@ -232,8 +232,7 @@ data Context
   deriving (Eq, Ord)
 
 data TyCon
-  = ArrayCon
-  | StringCon
+  = StringCon
   | TermCon
   | TypeCon
   | BoolCon
@@ -318,6 +317,7 @@ data Type
   = TyCon TypeProvenance TyCon [Type]
   | TyApplyMonad TypeProvenance Type Type
   | TyTuple TypeProvenance [Type]
+  | TyArray TypeProvenance Type
   | TyFunc TypeProvenance NamedParamInfo [Type] (Map Name Type) Type
   | TyRecord TypeProvenance (Map Name Type)
   | TyVar TypeProvenance Name
@@ -525,6 +525,7 @@ instance Positioned Type where
       TyCon prov _ _ -> getPos prov
       TyApplyMonad prov _ _ -> getPos prov
       TyTuple prov _ -> getPos prov
+      TyArray prov _ -> getPos prov
       TyFunc prov _ _ _ _ -> getPos prov
       TyRecord prov _ -> getPos prov
       TyVar prov _ -> getPos prov
@@ -609,7 +610,6 @@ ppContext c = case c of
 -- the rest can be folded into prettyType.
 prettyTyCon :: TyCon -> PP.Doc ann
 prettyTyCon tc = case tc of
-    ArrayCon       -> PP.parens $ PP.brackets $ PP.emptyDoc
     StringCon      -> "String"
     TermCon        -> "Term"
     TypeCon        -> "Type"
@@ -631,9 +631,6 @@ prettyType ppopts = PP.group . visit 0
     visit :: Int -> Type -> PPS.Doc
     visit prec ty0 = case ty0 of
       TyCon _ ctor args -> case (ctor, args) of
-          (ArrayCon, [ty1]) ->
-              PP.brackets $ visit 0 ty1
-          (ArrayCon, _) -> croak "array" 1 args
           (_, _) ->
               let ctor' = prettyTyCon ctor in
               case args of
@@ -651,6 +648,8 @@ prettyType ppopts = PP.group . visit 0
 
       TyTuple _ args ->
               PP.align $ PP.parens $ PP.fillSep $ PP.punctuate "," $ map (visit 0) args
+      TyArray _ ty1 ->
+              PP.brackets $ visit 0 ty1
       TyFunc _ _ params namedParams ret ->
               let params' = map (\p -> visit 1 p <+> "->") params
                   oneNamed (n, p) = PP.pretty n <> "?" <> visit 1 p <+> "->"
@@ -988,7 +987,7 @@ tTuple :: TypeProvenance -> [Type] -> Type
 tTuple prov ts = TyTuple prov ts
 
 tArray :: TypeProvenance -> Type -> Type
-tArray prov t = TyCon prov ArrayCon [t]
+tArray prov t = TyArray prov t
 
 -- | Create a function type a1 -> a2 -> ... -> b.
 tFun :: TypeProvenance -> NamedParamInfo -> [Type] -> Map Name Type -> Type -> Type
