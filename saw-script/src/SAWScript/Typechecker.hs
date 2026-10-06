@@ -16,6 +16,7 @@ This module contains the typechecker for SAWScript.
 
 module SAWScript.Typechecker
     ( Message(..)
+    , StmtContext(..)
     , checkDecl
     , checkStmt
     , typesMatch
@@ -23,13 +24,13 @@ module SAWScript.Typechecker
     , checkSchemaPattern
     ) where
 
-import Control.Monad (when, zipWithM, foldM, zipWithM_)
+import Control.Monad (when, foldM, zipWithM_)
 import Control.Monad.Reader (MonadReader(..), ReaderT(..), asks)
 import Control.Monad.State (MonadState(..), StateT, gets, modify, runState)
 import Control.Monad.Identity (Identity)
 import qualified Data.Text as Text
 import Data.Text (Text)
-import Data.List (genericTake, genericLength)
+import Data.List (genericLength)
 import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
@@ -121,17 +122,20 @@ instance (UnifyVars a) => UnifyVars (Pos, PrimitiveLifecycle, Rebindable, a) whe
 
 instance UnifyVars Type where
     unifyVars t = case t of
-        TyCon _ _ ts      -> unifyVars ts
+        TyCon _ _         -> Map.empty
+        TyArray _ t1      -> unifyVars t1
+        TyTuple _ ts      -> unifyVars ts
+        TyRecord _ tm     -> unifyVars tm
         TyFunc _ _ params namedParams ret ->
             let paramsVars = unifyVars params
                 namedVars = unifyVars namedParams
                 retVars = unifyVars ret
             in
             Map.unions [paramsVars, namedVars, retVars]
-        TyRecord _ tm     -> unifyVars tm
         TyVar _ _         -> Map.empty
         TyUnifyVar (TypeFailed _) _i -> Map.empty  -- ignore error vars
         TyUnifyVar prov i -> Map.singleton i prov
+        TyApply _ m arg   -> Map.union (unifyVars m) (unifyVars arg)
 
 instance UnifyVars Schema where
     unifyVars (Forall _ t) = unifyVars t
@@ -249,14 +253,16 @@ instance AppSubst Decl where
 
 instance AppSubst Type where
     appSubst s t = case t of
-        TyCon prov tc ts -> TyCon prov tc (appSubst s ts)
+        TyCon prov tc -> TyCon prov tc
+        TyArray prov t1 -> TyArray prov (appSubst s t1)
+        TyTuple prov ts -> TyTuple prov (appSubst s ts)
+        TyRecord prov fs -> TyRecord prov (appSubst s fs)
         TyFunc prov ninfo params namedParams ret ->
             let params' = appSubst s params
                 namedParams' = appSubst s namedParams
                 ret' = appSubst s ret
             in
             TyFunc prov ninfo params' namedParams' ret'
-        TyRecord prov fs -> TyRecord prov (appSubst s fs)
         TyVar _ _  -> t
         TyUnifyVar _ i -> case Map.lookup i s of
             Nothing -> t
@@ -270,6 +276,8 @@ instance AppSubst Type where
                 -- full expansion of existing substitutions, which
                 -- in general requires this call.
                 appSubst s t'
+        TyApply prov m arg ->
+            TyApply prov (appSubst s m) (appSubst s arg)
 
 instance AppSubst Schema where
     appSubst s (Forall ns t) =
@@ -687,7 +695,7 @@ patternBindingsWithSchema pat sch = case pat of
     PTuple _ ps ->
       case sch of
         Forall vs t -> case t of
-            TyCon _pos (TupleCon _) ts' ->
+            TyTuple _pos ts' ->
                 let once pat' t' =
                       patternBindingsWithSchema pat' (Forall vs t')
                 in
@@ -736,11 +744,11 @@ patternBindingsWithSchema pat sch = case pat of
 --
 
 -- | Print a list of enclosing types.
-prettyEnclosing :: PPS.Opts -> [(Type, Type)] -> PPS.Doc
-prettyEnclosing ppopts tys =
+prettyEnclosing :: [(Type, Type)] -> PPS.Doc
+prettyEnclosing tys =
     let once (tyexp, tyfound) =
-          let tyexp' = prettyType ppopts tyexp
-              tyfound' = prettyType ppopts tyfound
+          let tyexp' = prettyType tyexp
+              tyfound' = prettyType tyfound
               expectedShort  = "Expected:" <+> tyexp'
               foundShort     = "Found:   " <+> tyfound'
               -- Use of nest here allows the open-brace of records to
@@ -864,57 +872,13 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
                   -- case.
                   let enclosed = Pos.subspan subpos pos in
                   case ty of
-                      TyCon _ (TupleCon _) _ -> enclosed
-                      TyCon _ ArrayCon _ -> enclosed
+                      TyArray _ _ -> enclosed
+                      TyTuple _ _ -> enclosed
                       TyRecord _ _ -> enclosed
                       _ -> False
 
               (_, _) -> False
     in
-
-    -- | Alternate printer for type constructors. This takes argument
-    --   strings to insert into the output. We assume the application
-    --   has the right number of args; otherwise the regular type
-    --   printer would have croaked on it.
-    --
-    --   FUTURE: maybe the main `TyCon` printer should work this way;
-    --   that would avoid the objectionable corner cases. However,
-    --   note that the code here only works for fully applied
-    --   constructors of kind *, and will need further work to take
-    --   the place of the main printer. Also, it (deliberately) only
-    --   handles `Text` and the main printer does need to cope with
-    --   prettyprinter docs.
-    --
-    let ppTyCon' tc args = case tc of
-          TupleCon _n ->
-              "(" <> Text.intercalate ", " args <> ")"
-          ArrayCon -> "[" <> Text.intercalate " " args <> "]"
-          StringCon -> "String"
-          TermCon -> "Term"
-          TypeCon -> "Type"
-          BoolCon -> "Bool"
-          IntCon -> "Int"
-          AIGCon -> "AIG"
-          CFGCon -> "CFG"
-          JVMSpecCon -> "JVMSpec"
-          LLVMSpecCon -> "LLVMSpec"
-          MIRSpecCon -> "MIRSpec"
-          BlockCon -> Text.intercalate " " args
-          ContextCon ProofScript -> "ProofScript"
-          ContextCon TopLevel -> "TopLevel"
-    in
-
-    -- | Get a subelement descriptor for a type constructor.
-    let describeTyConElt :: TyCon -> Int -> Text
-        describeTyConElt tc i = case tc of
-          TupleCon _n -> ordin (i + 1) <> " element"
-          ArrayCon -> "element type"
-          BlockCon -> case i of
-              0 -> "monad"
-              _ -> ordin i <> " argument"
-          _ -> "???"  -- catchall for things that don't have subelements
-    in
-
 
     -- Print a type, substituting "_" for subelements we want to print
     -- separately, and return the resulting string, the provenance
@@ -1001,11 +965,24 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
             in
 
             case ty of
-                TyCon prov tc elts ->
-                    let getWhat = describeTyConElt tc
-                        (elts', subelts) = considerList getWhat prov elts
+                TyCon prov tc ->
+                    (ppTyCon tc, prov, [])
+                TyArray prov elt ->
+                    let (elt', subelts) = consider "element type" prov elt
+                        body = "[" <> elt' <> "]"
                     in
-                    (ppTyCon' tc elts', prov, subelts)
+                    (body, prov, subelts)
+                TyTuple prov elts ->
+                    let getWhat i = ordin (i + 1) <> " element"
+                        (elts', subelts) = considerList getWhat prov elts
+                        body = "(" <> Text.intercalate ", " elts' <> ")"
+                    in
+                    (body, prov, subelts)
+                TyRecord prov fields ->
+                    let (fields', elts) = considerFields prov fields
+                        str = "{ " <> Text.intercalate ", " fields' <> " }"
+                    in
+                    (str, prov, elts)
                 TyFunc prov _npi params namedParams ret ->
                     let mkWhat i = ordin (i + 1) <> " positional parameter"
                         (params', elts1) = considerList mkWhat prov params
@@ -1013,11 +990,6 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
                         (ret', elts3) = consider "return type" prov ret
                         str = Text.intercalate " -> " (params' ++ namedParams' ++ [ret'])
                         elts = elts1 ++ elts2 ++ elts3
-                    in
-                    (str, prov, elts)
-                TyRecord prov fields ->
-                    let (fields', elts) = considerFields prov fields
-                        str = "{ " <> Text.intercalate ", " fields' <> " }"
                     in
                     (str, prov, elts)
                 TyVar prov x ->
@@ -1028,6 +1000,11 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
                     -- share the code, even though it's one line
                     let str = "t." <> Text.pack (show i) in
                     (str, prov, [])
+                TyApply prov m arg ->
+                    let (m', subelts'm) = consider "monad" prov m
+                        (arg', subelts'arg) = consider "1st argument" prov arg
+                    in
+                    (m' <> " " <> arg', prov, subelts'm ++ subelts'arg)
     in
     let (str0, prov0, subelts) = extract (desc0 <> " type") ty0 in
 
@@ -1214,7 +1191,6 @@ unify exp0 pos found0 = visit [] exp0 found0
 
         -- | Fail with expected/found types
         let rejectCommon inhibitSubs msg more = do
-              ppopts <- asks tiPPOpts
               encs' <- do
                   let once (t1, t2) = do
                         t1' <- expandFully pos t1
@@ -1222,7 +1198,7 @@ unify exp0 pos found0 = visit [] exp0 found0
                         pure (t1', t2')
                   mapM once encs
               let body = PP.vsep $ more ++ [
-                      prettyEnclosing ppopts ((expect, found) : encs')
+                      prettyEnclosing ((expect, found) : encs')
                    ]
               recordError pos $ msg <> PP.line <> PP.indent 4 body
 
@@ -1271,11 +1247,10 @@ unify exp0 pos found0 = visit [] exp0 found0
               case Map.lookup i $ unifyVars ty of
                   Nothing -> pure ty
                   Just _otherprov -> do
-                      ppopts <- asks tiPPOpts
-                      let expect' = prettyType ppopts expect
-                          found' = prettyType ppopts found
-                          i' = prettyType ppopts $ TyUnifyVar prov'i i
-                          ty' = prettyType ppopts ty
+                      let expect' = prettyType expect
+                          found' = prettyType found
+                          i' = prettyType $ TyUnifyVar prov'i i
+                          ty' = prettyType ty
 
                       reject "Occurs check failure." [
                           "Cannot unify" <+> expect' <+>
@@ -1294,19 +1269,28 @@ unify exp0 pos found0 = visit [] exp0 found0
 
 
         case (expect, found) of
-            (TyUnifyVar _ i, TyUnifyVar _ j) | i == j ->
-                -- same unification var, nothing to do
+            -- matching/diagonal cases first --
+
+            (TyCon _ expTC, TyCon _ foundTC) | expTC == foundTC -> do
+                -- same type constructor, all good
                 pure ()
 
-            (TyUnifyVar prov'i i, _) -> do
-                -- one side is a unification var, resolve it
-                found' <- checkOccurs prov'i i found
-                resolveVar prov'i i found'
+            (TyArray _ expT, TyArray _ foundT) -> do
+                -- array, unify the arg
+                recOnce expT foundT
 
-            (_, TyUnifyVar prov'i i) -> do
-                -- the other side is a unification var, resolve it
-                expect' <- checkOccurs prov'i i expect
-                resolveVar prov'i i expect'
+            (TyTuple _ expTS, TyTuple _ foundTS) | length expTS == length foundTS -> do
+                -- same size tuple, unify the args
+                recList expTS foundTS
+
+            (TyRecord _ expFields, TyRecord _ foundFields)
+              | Map.keys expFields /= Map.keys foundFields ->
+                -- records with different keys
+                reject' "Record field names do not match." []
+
+              | otherwise ->
+                -- records with the same field names, try unifying the field types
+                recList (Map.elems expFields) (Map.elems foundFields)
 
             (TyFunc prov'expect _ expParams expNamedParams expRet,
              TyFunc prov'found _ foundParams foundNamedParams foundRet) -> do
@@ -1324,13 +1308,12 @@ unify exp0 pos found0 = visit [] exp0 found0
                 let expNames = Map.keysSet expNamedParams
                     foundNames = Map.keysSet foundNamedParams
                 if expNames /= foundNames then do
-                    ppopts <- asks tiPPOpts
-                    let expect' = prettyType ppopts expect
-                        found' = prettyType ppopts found
+                    let expect' = prettyType expect
+                        found' = prettyType found
                         expMissing = Map.difference foundNamedParams expNamedParams
                         foundMissing = Map.difference expNamedParams foundNamedParams
                         prettyMissing (name, ty) =
-                            let ty' = prettyType ppopts ty in
+                            let ty' = prettyType ty in
                             PP.pretty name <+> ":" <+> ty'
                         prettyMissingList fty' ms = case ms of
                             [] ->
@@ -1390,45 +1373,30 @@ unify exp0 pos found0 = visit [] exp0 found0
                 -- now unify the remainders / return types
                 recOnce expRemainder foundRemainder
 
-            (TyRecord _ expFields, TyRecord _ foundFields)
-              | Map.keys expFields /= Map.keys foundFields ->
-                -- records with different keys
-                reject' "Record field names do not match." []
-
-              | otherwise ->
-                -- records with the same field names, try unifying the field types
-                recList (Map.elems expFields) (Map.elems foundFields)
-
-            (TyCon _ expTC expTS, TyCon _ foundTC foundTS) | expTC == foundTC -> do
-                -- same type constructor, unify the args
-                when (length expTS /= length foundTS) $ do
-                    -- This case is unreachable.
-                    --
-                    -- Every distinct type constructor has a definite
-                    -- arity (tuples of different lengths are not the same
-                    -- type constructor) and every type is supposed to
-                    -- pass `checkType` before we do anything more
-                    -- significant with it; that does a kind check, and on
-                    -- failure produces a fresh unification var that can't
-                    -- cause further trouble.
-                    --
-                    -- Therefore, if we get here, something's broked and we should
-                    -- panic.
-                    --
-                    ppopts <- asks tiPPOpts
-                    let expTS'   = "LHS:" : map (\t -> "   " <> ppType ppopts t) expTS
-                        foundTS' = "RHS:" : map (\t -> "   " <> ppType ppopts t) foundTS
-                    let nexpect'   = Text.pack $ show $ length expTS
-                        nfound' = Text.pack $ show $ length foundTS
-                        heading = "Mismatched type constructor arguments: " <>
-                                  "expected " <> nexpect' <> ", found " <> nfound'
-                    panic "unify" (heading : expTS' ++ foundTS')
-
-                recList expTS foundTS
-
             (TyVar _ a, TyVar _ b) | a == b ->
                 -- Same named variable, nothing to do
                 pure ()
+
+            (TyUnifyVar _ i, TyUnifyVar _ j) | i == j ->
+                -- same unification var, nothing to do
+                pure ()
+
+            (TyApply _ exp'm exp'arg, TyApply _ found'm found'arg) -> do
+                -- both type applications, unify the args
+                recOnce exp'm found'm
+                recOnce exp'arg found'arg
+
+            -- non-matching/catchall cases --
+
+            (TyUnifyVar prov'i i, _) -> do
+                -- one side is a unification var, resolve it
+                found' <- checkOccurs prov'i i found
+                resolveVar prov'i i found'
+
+            (_, TyUnifyVar prov'i i) -> do
+                -- the other side is a unification var, resolve it
+                expect' <- checkOccurs prov'i i expect
+                resolveVar prov'i i expect'
 
             (_, TyFunc{}) ->
                 -- If we expected a scalar and found a function, speculate that
@@ -1504,16 +1472,17 @@ matches pos t1 t2 =
 -- Get the free type variables found in a Type.
 inspectTypeFTVs :: Kind -> Type -> TI (Map Name (Pos, Kind))
 inspectTypeFTVs kind ty = case ty of
-    TyCon _prov ctor args -> do
-        let kinds = lookupTyCon ctor
-        Map.unions <$> zipWithM inspectTypeFTVs kinds args
+    TyCon _prov _ctor ->
+        pure Map.empty
+    TyArray _prov arg -> do
+        inspectTypeFTVs kindStar arg
+    TyTuple _prov args -> do
+        Map.unions <$> mapM (inspectTypeFTVs kindStar) args
+    TyRecord _prov fields ->
+        Map.unions <$> traverse (inspectTypeFTVs kindStar) fields
     TyFunc _prov _ params namedParams ret ->
         let np = Map.elems namedParams in
         Map.unions <$> mapM (inspectTypeFTVs kindStar) (ret : params ++ np)
-    TyRecord _prov fields ->
-        Map.unions <$> traverse (inspectTypeFTVs kindStar) fields
-    TyUnifyVar _prov _x ->
-        return Map.empty
     TyVar prov x -> do
         tyenv <- gets tiTyEnv
         case ScopedMap.lookup x tyenv of
@@ -1540,6 +1509,12 @@ inspectTypeFTVs kind ty = case ty of
                 return $ Map.singleton x (pos, kind)
             Just _ ->
                 return $ Map.empty
+    TyUnifyVar _prov _x ->
+        return Map.empty
+    TyApply _prov m arg -> do
+        m' <- inspectTypeFTVs (kindAddStar kind) m
+        arg' <- inspectTypeFTVs kindStar arg
+        pure $ Map.union m' arg'
 
 -- Get the free type variables found in a Maybe Type.
 inspectMaybeTypeFTVs :: Kind -> Maybe Type -> TI (Map Name (Pos, Kind))
@@ -1768,8 +1743,7 @@ inferExpr expr = case expr of
                     "; please use a type annotation"
                 getErrorTyVar pos
             _ -> do
-                ppopts <- asks tiPPOpts
-                let t1' = prettyType ppopts t1
+                let t1' = prettyType t1
                 recordError pos $
                     "Record lookup on non-record value of type" <+> t1'
                 getErrorTyVar pos
@@ -1779,12 +1753,12 @@ inferExpr expr = case expr of
         (e1,t) <- inferExpr e
         t1 <- expandFully (Pos.getPos e1) t
         elTy <- case t1 of
-            TyCon _prov (TupleCon n) tys
-              | i < n ->
+            TyTuple _prov tys
+              | i < genericLength tys ->
                   return (tys !! fromIntegral i)
               | otherwise -> do
                   let i' = PP.viaShow i
-                      n' = PP.viaShow n
+                      n' = PP.viaShow $ length tys
                   recordError pos $
                       "Tuple index" <+> i' <+> "out of bounds; limit is" <+> n'
                   getErrorTyVar pos
@@ -1795,8 +1769,7 @@ inferExpr expr = case expr of
                     "; please use a type annotation"
                 getErrorTyVar pos
             _ -> do
-                ppopts <- asks tiPPOpts
-                let t1' = prettyType ppopts t1
+                let t1' = prettyType t1
                 recordError pos $ "Tuple lookup on non-tuple value of type" <+>
                                   t1'
                 getErrorTyVar pos
@@ -2118,7 +2091,7 @@ inferExpr expr = case expr of
                       -- The value we got didn't accept any arguments at
                       -- all, so use the position of the function value
                       -- to complain that it isn't a function.
-                      let ty' = prettyType ppopts ty
+                      let ty' = prettyType ty
                       let nNamed = length (Map.toList namedArginfo)
                           nargs' = case length arginfo + nNamed of
                             1 -> "one argument"
@@ -2175,7 +2148,7 @@ inferExpr expr = case expr of
                       -- line, which isn't great either.)
                       --
                       let origTy' =
-                              let origTy2 = prettyType ppopts origTy1 in
+                              let origTy2 = prettyType origTy1 in
                               case Text.lines $ PPS.renderText ppopts origTy2 of
                                   [t] -> PP.pretty t
                                   ts -> PP.nest 3 $ PP.vsep $ map PP.pretty ts
@@ -2374,25 +2347,19 @@ addTypedef a ty = do
 --
 monadType :: Type -> Maybe (Type, Type)
 monadType ty = case ty of
-  TyCon _ BlockCon [ctx@(TyCon _ (ContextCon _) []), valty] ->
+  TyApply _ ctx valty | isMonad ctx ->
       Just (ctx, valty)
-  TyCon _ BlockCon [ctx@(TyVar _ name), valty] | isMonad name ->
-      Just (ctx, valty)
-  -- We don't currently ever generate these types, but be future-proof
-  TyCon prov (ContextCon ctx) [valty] ->
-      Just (TyCon prov (ContextCon ctx) [], valty)
-  -- and this one can't even be represented yet
---TyVar prov name [valty] | isMonad name ->
---    Just (TyVar prov name, valty)
   _ ->
       Nothing
   where
-    -- Baking in these strings is untidy. I'd worry more about it if
+    -- Baking in the strings is untidy. I'd worry more about it if
     -- this code were being used for real rather than as part of a
     -- temporary accomodation for compatibility purposes.
-    isMonad "LLVMSetup" = True
-    isMonad "JVMSetup" = True
-    isMonad "MIRSetup" = True
+    isMonad (TyCon _ TopLevel) = True
+    isMonad (TyCon _ ProofScript) = True
+    isMonad (TyVar _ "LLVMSetup") = True
+    isMonad (TyVar _ "JVMSetup") = True
+    isMonad (TyVar _ "MIRSetup") = True
     isMonad _ = False
 
 -- | Wrap an expression in @return@
@@ -2426,8 +2393,7 @@ wrapReturn e =
 --
 -- Updates the environment and returns an updated statement.
 inferStmt :: Bool -> TypeProvenance -> Type -> Stmt -> TI Stmt
-inferStmt atSyntacticTopLevel blockprov ctx s = do
-    ppopts <- asks tiPPOpts
+inferStmt atSyntacticTopLevel blockprov ctx s =
     case s of
         StmtBind spos pat e -> do
             (pty, pat') <- inferPattern ReadOnlyVar pat
@@ -2483,8 +2449,8 @@ inferStmt atSyntacticTopLevel blockprov ctx s = do
 
             -- The special case for the wrong monad
             let allowWrongMonad ctx' = do
-                  let pctx =  prettyType ppopts ctx
-                      pctx' = prettyType ppopts ctx'
+                  let pctx =  prettyType ctx
+                      pctx' = prettyType ctx'
                   recordError spos $ "Monadic bind with the wrong monad;" <+>
                                      "found" <+> pctx' <+>
                                      "but expected" <+> pctx
@@ -2555,7 +2521,7 @@ inferStmt atSyntacticTopLevel blockprov ctx s = do
             -- behavior when it was a builtin function rather than
             -- syntax. FUTURE: consider relaxing the requirement.
             let sprov = TypeFromElement spos TyCtxStmt
-            let tm = TyCon sprov (ContextCon TopLevel) []
+            let tm = TyCon sprov TopLevel
             tx <- getFreshTyVar spos
             unify (tApply blockprov ctx tx) spos (tApply sprov tm tx)
             return s
@@ -2895,23 +2861,21 @@ inferDeclGroup rebindable dg = case dg of
 --
 
 -- | Look up a type constructor (in our fixed environment of hardcoded
---   types) and return its params as a list of kinds.
-lookupTyCon :: TyCon -> [Kind]
+--   types) and return its kind.
+lookupTyCon :: TyCon -> Kind
 lookupTyCon tycon = case tycon of
-    TupleCon n -> genericTake n (repeat kindStar)
-    ArrayCon -> [kindStar]
-    StringCon -> []
-    TermCon -> []
-    TypeCon -> []
-    BoolCon -> []
-    IntCon -> []
-    BlockCon -> [kindStarToStar, kindStar]
-    AIGCon -> []
-    CFGCon -> []
-    JVMSpecCon -> []
-    LLVMSpecCon -> []
-    MIRSpecCon -> []
-    ContextCon _ctx -> [kindStar]
+    BoolCon -> kindStar
+    IntCon -> kindStar
+    StringCon -> kindStar
+    TermCon -> kindStar
+    TypeCon -> kindStar
+    AIGCon -> kindStar
+    CFGCon -> kindStar
+    LLVMSpecCon -> kindStar
+    JVMSpecCon -> kindStar
+    MIRSpecCon -> kindStar
+    TopLevel -> kindStarToStar
+    ProofScript -> kindStarToStar
 
 -- | Check if a list of types contains a failure type. If so, return
 --   it. Uses `Either` with unit rather than `Maybe` so as to get the
@@ -2934,68 +2898,67 @@ checkForFailure tys = foldr visit (Right ()) tys
 --   source position of whatever the user typed. The error reporting
 --   relies on this.
 --
+--   If, after checking, any of the subelements in the type is an
+--   error var, something was invalid. In this case, return the error
+--   var directly instead of consing around it. (Properly we should
+--   make a new one, but it's fresh and we can safely repurpose it.)
+--   This is a hack to avoid returning types _containing_ error vars
+--   out, which then lead to ugly and confusing further errors
+--   downstream.
+--
 checkType :: Kind -> Type -> TI Type
-checkType kind ty = case ty of
-    TyCon prov tycon args -> do
-
+checkType kindExpected ty =
+  let reject prov kindFound = do
+        let pos = Pos.getPos prov
+        let kindExpected' = prettyKind kindExpected
+            kindFound' = prettyKind kindFound
+        recordError pos $ "Kind mismatch: expected" <+> kindExpected' <+>
+                          "but found" <+> kindFound'
+        getErrorTyVar pos
+  in
+  case ty of
+    TyCon prov tycon -> do
         -- First, look up the constructor.
-        let params = lookupTyCon tycon
-        let nparams = genericLength params
-            nargs = genericLength args
-            argsleft = kindNumArgs kind
+        let kindFound = lookupTyCon tycon
 
-        if nargs > nparams then do
-            -- XXX special casing for BlockCon (remove along with BlockCon)
-            (nargs', nparams', tycon') <-
-                  case (tycon, args) of
-                      (BlockCon, arg : _) -> do
-                          ppopts <- asks tiPPOpts
-                          let ty' = prettyType ppopts arg
-                          pure (PP.viaShow $ nargs - 1, PP.viaShow $ nparams - 1, ty')
-                      (_, _) -> do
-                          let ty' = prettyTyCon tycon
-                          pure (PP.viaShow nargs, PP.viaShow nparams, ty')
-
-            let pos = Pos.getPos prov
-            recordError pos $ "Too many type arguments for type constructor" <+>
-                              tycon' <> "; found" <+> nargs' <+>
-                              "but expected only" <+> nparams'
-            getErrorTyVar pos
-        else if nargs + argsleft /= nparams then do
-            let pos = Pos.getPos prov
-            let kind' = prettyKind kind
-                kindExp' = prettyKind $ Kind (nparams - nargs)
-            recordError pos $ "Kind mismatch: expected" <+> kind' <+>
-                              "but found" <+> kindExp'
-            getErrorTyVar pos
+        if kindExpected /= kindFound then
+            reject prov kindFound
         else do
-            -- note that this will ignore the extra params, and return
-            -- a list of the same length as the args given, which is
-            -- exactly what we need here.
-            args' <- zipWithM checkType params args
+            pure $ TyCon prov tycon
 
-            -- If any of the arguments is an error var, something was
-            -- invalid. Return the error var directly. (Properly we
-            -- should make a new one, but it's fresh and we can
-            -- safely repurpose it.) This is a hack to avoid returning
-            -- types _containing_ error vars out, which then lead to
-            -- ugly and confusing further errors downstream. When
-            -- we manage to kill off Block it should be revisited,
-            -- because that will change the way type applications are
-            -- done and that will likely change the way miskinded
-            -- type applications are seen.
+    TyArray prov arg -> do
+        if kindExpected /= kindStar then
+            reject prov kindStar
+        else do
+            arg' <- checkType kindStar arg
+            pure $ case checkForFailure [arg'] of
+                Left ty' -> ty'
+                Right () -> TyArray prov arg'
+
+    TyTuple prov args -> do
+        if kindExpected /= kindStar then
+            reject prov kindStar
+        else do
+            args' <- mapM (checkType kindStar) args
             pure $ case checkForFailure args' of
                 Left ty' -> ty'
-                Right () -> TyCon prov tycon args'
+                Right () -> TyTuple prov args'
+
+    TyRecord prov fields -> do
+        if kindExpected /= kindStar then
+            reject prov kindStar
+        else do
+            -- Someone upstream had better have checked for duplicate
+            -- field names because we can't once the fields are loaded
+            -- into a map. (XXX: someone hasn't)
+            fields' <- traverse (checkType kindStar) fields
+            pure $ case checkForFailure fields' of
+                Left ty' -> ty'
+                Right () -> TyRecord prov fields'
 
     TyFunc prov nameinfo params namedParams ret -> do
-        if kind /= kindStar then do
-            let pos = Pos.getPos prov
-            let kind' = prettyKind kind
-                kindStar' = prettyKind kindStar
-            recordError pos $ "Kind mismatch: expected" <+> kind' <+>
-                              "but found" <+> kindStar'
-            getErrorTyVar pos
+        if kindExpected /= kindStar then
+            reject prov kindStar
         else do
             params' <- mapM (checkType kindStar) params
             namedParams' <- mapM (checkType kindStar) namedParams
@@ -3007,23 +2970,6 @@ checkType kind ty = case ty of
             pure $ case checkForFailure (ret' : params') >> checkForFailure namedParams' of
                 Left ty' -> ty'
                 Right () -> TyFunc prov nameinfo params' namedParams' ret'
-
-    TyRecord prov fields -> do
-        if kind /= kindStar then do
-            let pos = Pos.getPos prov
-            let kind' = prettyKind kind
-                kindStar' = prettyKind kindStar
-            recordError pos $ "Kind mismatch: expected" <+> kind' <+>
-                              "but found" <+> kindStar'
-            getErrorTyVar pos
-        else do
-            -- Someone upstream had better have checked for duplicate
-            -- field names because we can't once the fields are loaded
-            -- into a map. (XXX: someone hasn't)
-            fields' <- traverse (checkType kindStar) fields
-            pure $ case checkForFailure fields' of
-                Left ty' -> ty'
-                Right () -> TyRecord prov fields'
 
     -- Special-case CrucibleSetup to mark it deprecated. It is an alias
     -- for LLVMSetup, and it would be nice if it could just be a
@@ -3051,12 +2997,8 @@ checkType kind ty = case ty of
         avail <- asks tiPrimsAvail
         if Set.member lc avail then do
             recordWarning pos $ "Type is deprecated:" <+> x
-            if kind /= kindFound then do
-                let kind' = prettyKind kind
-                    kindFound' = prettyKind kindFound
-                recordError pos $ "Kind mismatch: expected" <+> kind' <+>
-                                  "but found" <+> kindFound'
-                getErrorTyVar pos
+            if kindExpected /= kindFound then
+                reject prov kindFound
             else
                 -- Expand to LLVMSetup. Even though we don't expand
                 -- typedefs here, this isn't an ordinary typedef.
@@ -3103,13 +3045,8 @@ checkType kind ty = case ty of
                         ConcreteType _ -> kindStar
                         AbstractType kf -> kf
 
-                  if kind /= kindFound then do
-                      let pos = Pos.getPos prov
-                      let kind' = prettyKind kind
-                          kindFound' = prettyKind kindFound
-                      recordError pos $ "Kind mismatch: expected" <+> kind' <+>
-                                        "but found" <+> kindFound'
-                      getErrorTyVar pos
+                  if kindExpected /= kindFound then
+                      reject prov kindFound
                   else
                       -- We do _not_ want to expand typedefs when checking,
                       -- so return the original TyVar.
@@ -3133,23 +3070,35 @@ checkType kind ty = case ty of
         -- need to do anything.
         return ty
 
+    TyApply prov m arg -> do
+        m' <- checkType (kindAddStar kindExpected) m
+        arg' <- checkType kindStar arg
+        pure $ case checkForFailure [m', arg'] of
+            Left ty' -> ty'
+            Right () -> TyApply prov m' arg'
+
 
 ------------------------------------------------------------
 -- External interface
 
+data StmtContext = InTopLevel | InProofScript
+
 -- | Check a single statement. (This is an external interface.)
 --
---   The first two arguments are the starting variable and typedef
---   environments to use.
+--   The arguments are:
+--   - the prettyprinter options
+--   - the current builtin visibility setting
+--   - the starting variable environment to use
+--   - the starting typedef environment to use
+--   - the monad we're checking the statement in (only the REPL monads)
+--   - the statement
 --
---   The third is a current position, and the fourth is the
---   context/monad type associated with the execution.
 checkStmt ::
       PPS.Opts ->
       Set PrimitiveLifecycle ->
       VarEnv ->
       TyEnv ->
-      Context ->
+      StmtContext ->
       Stmt ->
       Result Stmt
 checkStmt ppopts avail env tenv ctx stmt =
@@ -3178,7 +3127,9 @@ checkStmt ppopts avail env tenv ctx stmt =
     --
     let pos = Pos.getPos stmt
         prov = TypeFromContext pos TyCtxStmt
-        ctxtype = TyCon prov (ContextCon ctx) []
+        ctxtype = case ctx of
+            InTopLevel -> TyCon prov TopLevel
+            InProofScript -> TyCon prov ProofScript
     in
     runTI ppopts avail env tenv (inferSingleStmt prov ctxtype stmt)
 

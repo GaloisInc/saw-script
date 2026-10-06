@@ -764,18 +764,17 @@ prettyValue sc = visit (0 :: Int)
           pure $ PP.group $ PP.braces (PP.line <> body' <> PP.line)
 
       VLambda _env _mname params namedParams e -> do
-          ppopts <- scGetPPOpts sc
           let onePositional p =
-                  "\\" <+> SS.prettyPattern ppopts p <+> "->"
+                  "\\" <+> SS.prettyPattern p <+> "->"
               params' = map onePositional params
               oneNamed (n, (d, p)) =
                   let n' = PP.pretty n
-                      p' = SS.prettyPattern ppopts p
-                      d' = SS.prettyExpr ppopts d
+                      p' = SS.prettyPattern p
+                      d' = SS.prettyExpr d
                   in
                   "\\" <+> n' <+> "@" <> p' <+> "?=" <> d' <+> "->"
               namedParams' = map oneNamed $ Map.toList namedParams
-              e' = SS.prettyExpr ppopts e
+              e' = SS.prettyExpr e
               lines_ = params' ++ namedParams' ++ [e']
               -- Now indent each successive line by 3. As elsewhere,
               -- this needs to be done using PP.flatAlt or it comes out
@@ -804,12 +803,11 @@ prettyValue sc = visit (0 :: Int)
           v' <- visit (prec + 1) v
           pure $ "return" <+> v'
       VDo _chain _env body -> do
-        ppopts <- scGetPPOpts sc
         -- The printer for expressions doesn't print positions, so we can
         -- feed in a dummy.
         let pos = SS.PosInternal "<<do-block>>"
             e = SS.Block pos body
-        pure $ SS.prettyExpr ppopts e
+        pure $ SS.prettyExpr e
       VBindOnce _pos _chain v1 v2 -> do
         v1' <- visit 0 v1
         v2' <- visit 0 v2

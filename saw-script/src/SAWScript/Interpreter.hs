@@ -31,7 +31,6 @@ import Control.Monad.Reader (asks, ask)
 import Control.Monad.State (gets, get, put, modify)
 import qualified Data.ByteString as BS
 import Data.Maybe (fromMaybe, mapMaybe)
-import Data.List (genericLength)
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import Data.Sequence (Seq( (:|>) ))
@@ -87,7 +86,7 @@ import SAWCentral.JavaExpr
 import SAWCentral.LLVMBuiltins
 import SAWCentral.Options
 import SAWScript.Typechecker (checkStmt, typesMatch)
-import qualified SAWScript.Typechecker as Ty (Message(..))
+import qualified SAWScript.Typechecker as Ty (Message(..), StmtContext(..))
 import SAWScript.Panic (HasCallStack, panic)
 import SAWCentral.TopLevel
 import SAWCentral.Utils
@@ -178,12 +177,15 @@ import qualified Lang.Crucible.FunctionHandle as Crucible
 -- into the ether. So we have this hack to reject them.
 isPolymorphic :: SS.Type -> Bool
 isPolymorphic ty0 = case ty0 of
-    SS.TyCon _pos _tycon args -> any isPolymorphic args
+    SS.TyCon _pos _tycon -> False
+    SS.TyArray _pos arg -> isPolymorphic arg
+    SS.TyTuple _pos args -> any isPolymorphic args
+    SS.TyRecord _pos fields -> any isPolymorphic fields
     SS.TyFunc _pos _ params namedParams ret ->
         any isPolymorphic params || any isPolymorphic namedParams || isPolymorphic ret
-    SS.TyRecord _pos fields -> any isPolymorphic fields
     SS.TyVar _pos _a -> False
     SS.TyUnifyVar _pos _ix -> True
+    SS.TyApply _pos m arg -> isPolymorphic m || isPolymorphic arg
 
 -- Get the type of an AST element. For now, only patterns because that's
 -- what we're using.
@@ -201,7 +203,7 @@ getType pat = case pat of
     SS.PVar _allpos _xpos _x ~(Just t) -> t
     SS.PTuple tuplepos pats ->
         let prov = SS.TypeFromElement tuplepos SS.TyCtxPat in
-        SS.TyCon prov (SS.TupleCon (genericLength pats)) (map getType pats)
+        SS.TyTuple prov $ map getType pats
 
 -- Convert some text to an InputText for cryptol-saw-core.
 toInputText :: SS.Pos -> Text -> CEnv.InputText
@@ -402,7 +404,7 @@ bindPattern rb pat ms v =
             let mss = case ms of
                     Nothing ->
                         repeat Nothing
-                    Just (SS.Forall ks (SS.TyCon _ (SS.TupleCon _) ts)) ->
+                    Just (SS.Forall ks (SS.TyTuple _ ts)) ->
                         [ Just (SS.Forall ks t) | t <- ts ]
                     Just t ->
                         panic "bindPattern" [
@@ -435,7 +437,7 @@ class (Monad m, MonadFail m) => InterpreterMonad m where
   liftTopLevel :: TopLevel a -> m a
   actionFromValue :: FromValue a => FromValueHow -> Value -> m a
   mkValue :: SS.Pos -> RefChain -> m Value -> Value
-  getMonadContext :: m SS.Context
+  getMonadContext :: m Ty.StmtContext
   pushScopeAny :: m ()
   popScopeAny :: m ()
   withEnvironAny :: Environ -> m a -> m a
@@ -444,7 +446,7 @@ instance InterpreterMonad TopLevel where
   liftTopLevel m = m
   actionFromValue = fromValue
   mkValue pos chain m = VTopLevel pos chain m
-  getMonadContext = return SS.TopLevel
+  getMonadContext = return Ty.InTopLevel
   pushScopeAny = pushScope
   popScopeAny = popScope
   withEnvironAny = withEnviron
@@ -453,7 +455,7 @@ instance InterpreterMonad ProofScript where
   liftTopLevel m = scriptTopLevel m
   actionFromValue = fromValue
   mkValue pos chain m = VProofScript pos chain m
-  getMonadContext = return SS.ProofScript
+  getMonadContext = return Ty.InProofScript
   pushScopeAny = scriptTopLevel pushScope
   popScopeAny = scriptTopLevel popScope
   withEnvironAny = withEnvironProofScript
@@ -1504,7 +1506,7 @@ interpretMain = do
       -- they call prove_print or prove_sat or whatever and don't
       -- explicitly throw away the result.
       tyRet = SS.TyVar prov "a"
-      tyMonadic = SS.tApply prov (SS.tContext prov SS.TopLevel) tyRet
+      tyMonadic = SS.tApply prov (SS.tTopLevel prov) tyRet
       tyExpected = SS.Forall [(SS.SchemaNameExplicit pos, "a")] tyMonadic
   let main = case ScopedMap.lookup "main" varenv of
           Just (_defpos, lc, tyFound, v, _doc) -> Just (lc, tyFound, v)
@@ -1519,7 +1521,7 @@ interpretMain = do
       -- Don't fail or complain if there's no main.
       return ()
     Just (Current, tyFound, v) -> case tyFound of
-        SS.Forall _ (SS.TyCon _ SS.BlockCon [_, _]) -> do
+        SS.Forall _ (SS.TyApply _ _ _) -> do
             -- It looks like a monadic value, so check more carefully.
             ppopts <- getPPOpts
             case typesMatch ppopts avail tyenv "main" tyFound tyExpected of
@@ -1991,7 +1993,7 @@ toValuePanic what ty =
 
 instance IsValue () where
     toValue ty _name _ = case ty of
-        SS.TyCon _ (SS.TupleCon 0) [] ->
+        SS.TyTuple _ [] ->
             VTuple []
         _ ->
             toValuePanic "unit" ty
@@ -2003,7 +2005,7 @@ instance FromValue () where
 
 instance (IsValue a, IsValue b) => IsValue (a, b) where
     toValue ty name (x, y) = case ty of
-        SS.TyCon _ (SS.TupleCon 2) [ty1, ty2] ->
+        SS.TyTuple _ [ty1, ty2] ->
             VTuple [toValue ty1 name x, toValue ty2 name y]
         _ ->
             toValuePanic "pair" ty
@@ -2014,7 +2016,7 @@ instance (FromValue a, FromValue b) => FromValue (a, b) where
 
 instance (IsValue a, IsValue b, IsValue c) => IsValue (a, b, c) where
     toValue ty name (x, y, z) = case ty of
-        SS.TyCon _ (SS.TupleCon 3) [ty1, ty2, ty3] ->
+        SS.TyTuple _ [ty1, ty2, ty3] ->
             VTuple [toValue ty1 name x, toValue ty2 name y, toValue ty3 name z]
         _ ->
             toValuePanic "triple" ty
@@ -2026,7 +2028,7 @@ instance (FromValue a, FromValue b, FromValue c) => FromValue (a, b, c) where
 
 instance IsValue a => IsValue [a] where
     toValue ty name xs = case ty of
-        SS.TyCon _ SS.ArrayCon [tyelt] ->
+        SS.TyArray _ tyelt ->
             VArray (map (toValue tyelt name) xs)
         _ ->
             toValuePanic "array" ty
@@ -2063,7 +2065,7 @@ instance IsValue a => IsValue (IO a) where
 
 instance IsValue a => IsValue (TopLevel a) where
     toValue ty name action = case ty of
-        SS.TyCon _ SS.BlockCon [SS.TyCon _ (SS.ContextCon SS.TopLevel) [], ty'a] ->
+        SS.TyApply _ (SS.TyCon _ SS.TopLevel) ty'a ->
             VTopLevel atRestPos [] (fmap (toValue ty'a name) action)
         _ ->
             toValuePanic "TopLevel" ty
@@ -2081,7 +2083,7 @@ instance FromValue a => FromValue (TopLevel a) where
 
 instance IsValue a => IsValue (ProofScript a) where
     toValue ty name m = case ty of
-        SS.TyCon _ SS.BlockCon [SS.TyCon _ (SS.ContextCon SS.ProofScript) [], ty'a] ->
+        SS.TyApply _ (SS.TyCon _ SS.ProofScript) ty'a ->
             VProofScript atRestPos [] (fmap (toValue ty'a name) m)
         _ ->
             toValuePanic "ProofScript" ty
@@ -2099,7 +2101,7 @@ instance FromValue a => FromValue (ProofScript a) where
 
 instance IsValue a => IsValue (LLVMSetupM a) where
     toValue ty name m = case ty of
-        SS.TyCon _ SS.BlockCon [SS.TyVar _ "LLVMSetup", ty'a] ->
+        SS.TyApply _ (SS.TyVar _ "LLVMSetup") ty'a ->
             VLLVMSetup atRestPos [] (fmap (toValue ty'a name) m)
         _ ->
             toValuePanic "LLVMSetup" ty
@@ -2117,7 +2119,7 @@ instance FromValue a => FromValue (LLVMSetupM a) where
 
 instance IsValue a => IsValue (JVMSetupM a) where
     toValue ty name m = case ty of
-        SS.TyCon _ SS.BlockCon [SS.TyVar _ "JVMSetup", ty'a] ->
+        SS.TyApply _ (SS.TyVar _ "JVMSetup") ty'a ->
             VJVMSetup atRestPos [] (fmap (toValue ty'a name) m)
         _ ->
             toValuePanic "JVMSetup" ty
@@ -2135,7 +2137,7 @@ instance FromValue a => FromValue (JVMSetupM a) where
 
 instance IsValue a => IsValue (MIRSetupM a) where
     toValue ty name m = case ty of
-        SS.TyCon _ SS.BlockCon [SS.TyVar _ "MIRSetup", ty'a] ->
+        SS.TyApply _ (SS.TyVar _ "MIRSetup") ty'a ->
             VMIRSetup atRestPos [] (fmap (toValue ty'a name) m)
         _ ->
             toValuePanic "MIRSetup" ty
@@ -2186,7 +2188,7 @@ instance FromValue (CMS.SetupValue MIR) where
 
 instance IsValue SAW_CFG where
     toValue ty _name t = case ty of
-        SS.TyCon _ SS.CFGCon [] ->
+        SS.TyCon _ SS.CFGCon ->
             VCFG t
         _ ->
             toValuePanic "CFG" ty
@@ -2197,7 +2199,7 @@ instance FromValue SAW_CFG where
 
 instance IsValue (CIR.SomeLLVM CMS.ProvedSpec) where
     toValue ty _name mir = case ty of
-        SS.TyCon _ SS.LLVMSpecCon [] ->
+        SS.TyCon _ SS.LLVMSpecCon ->
             VLLVMMethodSpec mir
         _ ->
             toValuePanic "LLVMSpec" ty
@@ -2208,7 +2210,7 @@ instance FromValue (CIR.SomeLLVM CMS.ProvedSpec) where
 
 instance IsValue (CMS.ProvedSpec CJ.JVM) where
     toValue ty _name t = case ty of
-        SS.TyCon _ SS.JVMSpecCon [] ->
+        SS.TyCon _ SS.JVMSpecCon ->
             VJVMMethodSpec t
         _ ->
             toValuePanic "JVMSpec" ty
@@ -2219,7 +2221,7 @@ instance FromValue (CMS.ProvedSpec CJ.JVM) where
 
 instance IsValue (CMS.ProvedSpec MIR) where
     toValue ty _name t = case ty of
-        SS.TyCon _ SS.MIRSpecCon [] ->
+        SS.TyCon _ SS.MIRSpecCon ->
             VMIRMethodSpec t
         _ ->
             toValuePanic "MIRSpec" ty
@@ -2274,7 +2276,7 @@ instance FromValue FunctionProfile where
 
 instance IsValue (AIGNetwork) where
     toValue ty _name t = case ty of
-        SS.TyCon _ SS.AIGCon [] ->
+        SS.TyCon _ SS.AIGCon ->
             VAIG t
         _ ->
             toValuePanic "AIGNetwork" ty
@@ -2285,7 +2287,7 @@ instance FromValue (AIGNetwork) where
 
 instance IsValue TypedTerm where
     toValue ty _name t = case ty of
-        SS.TyCon _ SS.TermCon [] ->
+        SS.TyCon _ SS.TermCon ->
             VTerm t
         _ ->
             toValuePanic "Term" ty
@@ -2300,7 +2302,7 @@ instance FromValue Term where
 
 instance IsValue Cryptol.Schema where
     toValue ty _name s = case ty of
-        SS.TyCon _ SS.TypeCon [] ->
+        SS.TyCon _ SS.TypeCon ->
             VType s
         _ ->
             toValuePanic "Type" ty
@@ -2311,7 +2313,7 @@ instance FromValue Cryptol.Schema where
 
 instance IsValue Text where
     toValue ty _name n = case ty of
-        SS.TyCon _ SS.StringCon [] ->
+        SS.TyCon _ SS.StringCon ->
             VString n
         _ ->
             toValuePanic "String" ty
@@ -2322,7 +2324,7 @@ instance FromValue Text where
 
 instance IsValue Integer where
     toValue ty _name n = case ty of
-        SS.TyCon _ SS.IntCon [] ->
+        SS.TyCon _ SS.IntCon ->
             VInteger n
         _ ->
             toValuePanic "Int (Integer)" ty
@@ -2333,7 +2335,7 @@ instance FromValue Integer where
 
 instance IsValue Int where
     toValue ty _name n = case ty of
-        SS.TyCon _ SS.IntCon [] ->
+        SS.TyCon _ SS.IntCon ->
             VInteger (toInteger n)
         _ ->
             toValuePanic "Int (Int)" ty
@@ -2347,7 +2349,7 @@ instance FromValue Int where
 
 instance IsValue Bool where
     toValue ty _name b = case ty of
-        SS.TyCon _ SS.BoolCon [] ->
+        SS.TyCon _ SS.BoolCon ->
             VBool b
         _ ->
             toValuePanic "Bool" ty
@@ -3081,7 +3083,7 @@ parser_printer_roundtrip _bic opts filetxt = do
     ppopts <- getPPOpts
     liftIO $ do
       stmts <- Loader.findAndLoadFileUnchecked opts ppopts file
-      PPS.renderStdout ppopts $ SS.prettyWholeModule ppopts stmts
+      PPS.renderStdout ppopts $ SS.prettyWholeModule stmts
 
 exec :: Text -> [Text] -> Text -> IO Text
 exec name args input = do

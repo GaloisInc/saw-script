@@ -19,11 +19,11 @@ module SAWCentral.AST
 
      , Kind(..)
      , kindStar, kindStarToStar
+     , kindAddStar
 
      , TyCtx(..)
      , TypeProvenance(..)
      , TypeIndex
-     , Context(..)
      , TyCon(..)
      , NamedParamInfo(..), noNames
      , Type(..)
@@ -45,7 +45,7 @@ module SAWCentral.AST
 
      , ppKind, prettyKind
      , ppTyCtx, prettyTyCtx
-     , ppTyCon, prettyTyCon
+     , ppTyCon
      , ppType, prettyType
      , ppSchema, prettySchema
      , prettyNamedType
@@ -53,19 +53,17 @@ module SAWCentral.AST
      , ppPattern, prettyPattern
      , prettyWholeModule
 
-     , tUnit, tTuple, tArray, tFun
-     , tString, tTerm, tType, tBool, tInt, tApply
-     , tAIG, tCFG, tJVMSpec, tLLVMSpec, tMIRSpec
-     , tContext
-     , tRecord, tVar
+     , tBool, tInt, tString, tTerm, tType
+     , tAIG, tCFG, tLLVMSpec, tJVMSpec, tMIRSpec
+     , tTopLevel, tProofScript
+     , tArray, tUnit, tTuple, tRecord, tFun
+     , tVar, tApply
      , tMono, tForall
-     , txTuple, txArray, txFun
-     , txString, txTerm, txType, txBool, txInt, txApply
-     , txAIG, txCFG, txJVMSpec, txLLVMSpec, txMIRSpec
-     , txContext
-     , txRecord, txVar
-
-     , isContext
+     , txBool, txInt, txString, txTerm, txType
+     , txAIG, txCFG, txLLVMSpec, txJVMSpec, txMIRSpec
+     , txTopLevel, txProofScript
+     , txArray, txTuple, txRecord, txFun
+     , txVar, txApply
      ) where
 
 import qualified SAWSupport.Pretty as PPS
@@ -122,14 +120,23 @@ type Name = Text
 -- Kinds
 
 --
--- For the time being we can handle kinds using the number of expected
--- type arguments. That is, Kind 0 is *. Apart from tuples the only
--- things we have are of kinds *, * -> *, and * -> * -> *, but we do
--- have tuples of arbitrary arity.
+-- For the time being (and likely the foreseeable future) we can
+-- handle kinds using the number of expected type arguments; that is,
+-- Kind 0 is *. (We only actually have things of kind * and * -> *,
+-- but being able to represent more than that makes handling type
+-- application simpler.)
 --
--- If we ever want additional structure (e.g. distinguishing the
--- monad/context types from other types) we can extend this
--- representation easily enough.
+-- Note that we do have tuples of arbitrary arity, whose internal
+-- constructors notionally have kinds like * -> * -> * -> * and up,
+-- and function types with optional named arguments are more complex
+-- internally. But these never appear unapplied so we don't need (or
+-- want) to reason about their kinds.
+--
+-- We don't support higher-kinded types like monad transformers.
+--
+-- Should we ever want additional structure (e.g. distinguishing the
+-- monad types from other types, adding type-level nats, etc.) we can
+-- extend this representation easily enough.
 --
 
 newtype Kind = Kind { kindNumArgs :: Word }
@@ -141,9 +148,8 @@ kindStar = Kind 0
 kindStarToStar :: Kind
 kindStarToStar = Kind 1
 
--- this isn't currently used
---kindStarToStarToStar :: Kind
---kindStarToStarToStar = Kind 2
+kindAddStar :: Kind -> Kind
+kindAddStar (Kind n) = Kind (n + 1)
 
 
 ------------------------------------------------------------
@@ -219,29 +225,24 @@ data TypeProvenance
 -- | Type for unification variable serial numbers.
 type TypeIndex = Integer
 
--- | Type for the hardwired monad types. Note that these days the
---   @LLVMSetup@, @JVMSetup@, and @MIRSetup@ monad types are ordinary
---   abstract types defined in the builtin types list.
-data Context
-  = ProofScript
-  | TopLevel
-  deriving (Eq, Ord)
-
+-- | Type for the hardwired types. Note that which types live here and
+--   which are just ordinary abstract types defined in the builtin
+--   types list in Interpreter.hs is pretty arbitrary. Among other
+--   things, these days the @LLVMSetup@, @JVMSetup@, and @MIRSetup@
+--   monad types are not special.
 data TyCon
-  = TupleCon Integer
-  | ArrayCon
+  = BoolCon
+  | IntCon
   | StringCon
   | TermCon
   | TypeCon
-  | BoolCon
-  | IntCon
-  | BlockCon
   | AIGCon
   | CFGCon
-  | JVMSpecCon
   | LLVMSpecCon
+  | JVMSpecCon
   | MIRSpecCon
-  | ContextCon Context
+  | TopLevel
+  | ProofScript
   deriving (Eq, Ord)
 
 -- | Information about the named parameters in a function type
@@ -313,12 +314,15 @@ instance Semigroup NamedParamInfo where
 --     typechecker.
 --
 data Type
-  = TyCon TypeProvenance TyCon [Type]
-  | TyFunc TypeProvenance NamedParamInfo [Type] (Map Name Type) Type
+  = TyCon TypeProvenance TyCon
+  | TyArray TypeProvenance Type
+  | TyTuple TypeProvenance [Type]
   | TyRecord TypeProvenance (Map Name Type)
+  | TyFunc TypeProvenance NamedParamInfo [Type] (Map Name Type) Type
   | TyVar TypeProvenance Name
     -- | For internal typechecker use only.
   | TyUnifyVar TypeProvenance TypeIndex
+  | TyApply TypeProvenance Type Type
 
 -- | The positions in type schemes can be either explicit (the user
 --   gave a name at this position) or implicit (a fresh unification
@@ -518,11 +522,14 @@ instance Positioned TypeProvenance where
 --
 instance Positioned Type where
   getPos ty = case ty of
-      TyCon prov _ _ -> getPos prov
-      TyFunc prov _ _ _ _ -> getPos prov
+      TyCon prov _ -> getPos prov
+      TyArray prov _ -> getPos prov
+      TyTuple prov _ -> getPos prov
       TyRecord prov _ -> getPos prov
+      TyFunc prov _ _ _ _ -> getPos prov
       TyVar prov _ -> getPos prov
       TyUnifyVar prov _ -> getPos prov
+      TyApply prov _ _ -> getPos prov
 
 instance Positioned Expr where
   getPos (Bool pos _) = pos
@@ -592,73 +599,32 @@ ppTyCtx ctx = case ctx of
 prettyTyCtx :: TyCtx -> PP.Doc ann
 prettyTyCtx ctx = PP.pretty $ ppTyCtx ctx
 
-ppContext :: Context -> Text
-ppContext c = case c of
-    ProofScript  -> "ProofScript"
-    TopLevel     -> "TopLevel"
-
--- XXX: currently the typechecker calls this directly; however, it
--- would probably be better if it didn't, at which point we don't
--- need the somewhat unfortunate cases for tuple/array/function and
--- the rest can be folded into prettyType.
-prettyTyCon :: TyCon -> PP.Doc ann
-prettyTyCon tc = case tc of
-    TupleCon n     -> PP.parens $ PPS.replicate (n - 1) $ PP.pretty ','
-    ArrayCon       -> PP.parens $ PP.brackets $ PP.emptyDoc
+ppTyCon :: TyCon -> Text
+ppTyCon tc = case tc of
+    BoolCon        -> "Bool"
+    IntCon         -> "Int"
     StringCon      -> "String"
     TermCon        -> "Term"
     TypeCon        -> "Type"
-    BoolCon        -> "Bool"
-    IntCon         -> "Int"
     AIGCon         -> "AIG"
     CFGCon         -> "CFG"
-    JVMSpecCon     -> "JVMSpec"
     LLVMSpecCon    -> "LLVMSpec"
+    JVMSpecCon     -> "JVMSpec"
     MIRSpecCon     -> "MIRSpec"
-    BlockCon       -> "<Block>"
-    ContextCon cxt -> PP.pretty $ ppContext cxt
+    TopLevel       -> "TopLevel"
+    ProofScript    -> "ProofScript"
 
-ppTyCon :: PPS.Opts -> TyCon -> Text
-ppTyCon ppopts tc = PPS.renderText ppopts $ prettyTyCon tc
-
-prettyType :: PPS.Opts -> Type -> PPS.Doc
-prettyType ppopts = PP.group . visit 0
+prettyType :: Type -> PPS.Doc
+prettyType = PP.group . visit 0
   where
     visit :: Int -> Type -> PPS.Doc
     visit prec ty0 = case ty0 of
-      TyCon _ ctor args -> case (ctor, args) of
-          (TupleCon n, _) ->
-              if fromIntegral (length args) /= n then
-                  -- These is no way to produce this state
-                  croak "tuple" n args
-              else
-                  PP.align $ PP.parens $ PP.fillSep $ PP.punctuate "," $ map (visit 0) args
-          (ArrayCon, [ty1]) ->
+      TyCon _ ctor ->
+          PP.pretty $ ppTyCon ctor
+      TyArray _ ty1 ->
               PP.brackets $ visit 0 ty1
-          (BlockCon, [m, arg]) ->
-              let m' = visit 1 m
-                  arg' = visit 2 arg
-                  body = m' <+> arg'
-              in
-              if prec > 1 then PP.parens body else body
-          (ArrayCon, _) -> croak "array" 1 args
-          (BlockCon, _) -> croak "block" 2 args
-          (_, _) ->
-              let ctor' = prettyTyCon ctor in
-              case args of
-                  [] -> ctor'
-                  _ ->
-                      let ctor'' = PPS.renderText ppopts ctor' in
-                      croak ctor'' 0 args
-
-      TyFunc _ _ params namedParams ret ->
-              let params' = map (\p -> visit 1 p <+> "->") params
-                  oneNamed (n, p) = PP.pretty n <> "?" <> visit 1 p <+> "->"
-                  namedParams' = map oneNamed $ Map.toList namedParams
-                  ret' = visit 0 ret
-                  body = PP.vsep (params' ++ namedParams') <> PP.line <> ret'
-              in
-              if prec > 0 then PP.parens (PP.group body) else body
+      TyTuple _ args ->
+              PP.align $ PP.parens $ PP.fillSep $ PP.punctuate "," $ map (visit 0) args
       TyRecord _ fields ->
           let prettyField (name, ty) =
                 let name' = PP.pretty name
@@ -670,29 +636,34 @@ prettyType ppopts = PP.group . visit 0
               body' = PP.flatAlt (PP.indent 3 body) body
           in
           PP.braces (PP.line <> body' <> PP.line)
+      TyFunc _ _ params namedParams ret ->
+              let params' = map (\p -> visit 1 p <+> "->") params
+                  oneNamed (n, p) = PP.pretty n <> "?" <> visit 1 p <+> "->"
+                  namedParams' = map oneNamed $ Map.toList namedParams
+                  ret' = visit 0 ret
+                  body = PP.vsep (params' ++ namedParams') <> PP.line <> ret'
+              in
+              if prec > 0 then PP.parens (PP.group body) else body
 
-      TyUnifyVar _ i ->
-          "t." <> PP.pretty i
       TyVar _ n ->
           PP.pretty n
+      TyUnifyVar _ i ->
+          "t." <> PP.pretty i
 
-    croak :: Text -> Integer -> [Type] -> a
-    croak what n args =
-        let ppArg arg = "   " <> (PPS.renderText ppopts $ visit 0 arg)
-            args' = map ppArg args
-        in
-        panic "prettyType" $ [
-            "Malformed " <> what <> " type constructor",
-            "Expected " <> Text.pack (show n) <> " arguments, found:"
-        ] ++ args'
+      TyApply _ m arg ->
+          let m' = visit 1 m
+              arg' = visit 2 arg
+              body = m' <+> arg'
+          in
+          if prec > 1 then PP.parens body else body
 
 ppType :: PPS.Opts -> Type -> Text
 ppType ppopts ty =
-    PPS.renderText ppopts $ prettyType ppopts ty
+    PPS.renderText ppopts $ prettyType ty
 
-prettySchema :: PPS.Opts -> Schema -> PPS.Doc
-prettySchema ppopts (Forall ns t) =
-    let t' = prettyType ppopts t in
+prettySchema :: Schema -> PPS.Doc
+prettySchema (Forall ns t) =
+    let t' = prettyType t in
     case ns of
       [] -> t'
       _  ->
@@ -703,11 +674,11 @@ prettySchema ppopts (Forall ns t) =
 
 ppSchema :: PPS.Opts -> Schema -> Text
 ppSchema ppopts ty =
-    PPS.renderText ppopts $ prettySchema ppopts ty
+    PPS.renderText ppopts $ prettySchema ty
 
-prettyNamedType :: PPS.Opts -> NamedType -> PPS.Doc
-prettyNamedType ppopts ty = case ty of
-    ConcreteType ty' -> prettyType ppopts ty'
+prettyNamedType :: NamedType -> PPS.Doc
+prettyNamedType ty = case ty of
+    ConcreteType ty' -> prettyType ty'
     AbstractType kind -> "<opaque " <> PP.pretty (ppKind kind) <> ">"
 
 {- not used
@@ -716,18 +687,18 @@ ppNamedType ppopts ty =
     PPS.renderText ppopts $ prettyNamedType ty
 -}
 
-prettyExpr :: PPS.Opts -> Expr -> PPS.Doc
-prettyExpr ppopts expr0 = case expr0 of
+prettyExpr :: Expr -> PPS.Doc
+prettyExpr expr0 = case expr0 of
     Bool _ b   -> PP.viaShow b
     String _ s -> PP.pretty $ PPS.ppStringLiteral s
     Int _ i    -> PP.pretty i
     Code _ s   -> PP.braces $ PP.braces $ PP.pretty s
     CType _ s  -> PP.braces $ "|" <> PP.pretty s <> "|"
     Array _ xs ->
-        PP.brackets $ PP.fillSep $ PP.punctuate "," (map (prettyExpr ppopts) xs)
+        PP.brackets $ PP.fillSep $ PP.punctuate "," (map prettyExpr xs)
     Block _ (stmts, lastexpr) ->
-        let stmts' = map (prettyStmt ppopts) stmts
-            lastexpr' = prettyExpr ppopts lastexpr <> ";"
+        let stmts' = map prettyStmt stmts
+            lastexpr' = prettyExpr lastexpr <> ";"
             body = PP.align $ PP.vsep (stmts' ++ [lastexpr'])
             -- You would think this could unconditionally be `PP.nest 3
             -- body`. But that doesn't work. If you use `PP.nest`,
@@ -742,10 +713,10 @@ prettyExpr ppopts expr0 = case expr0 of
         in
         PP.group $ "do" <+> PP.braces (PP.line <> body' <> PP.line)
     Tuple _ exprs ->
-        PP.parens $ PP.fillSep $ PP.punctuate "," (map (prettyExpr ppopts) exprs)
+        PP.parens $ PP.fillSep $ PP.punctuate "," (map prettyExpr exprs)
     Record _ members ->
         let prettyMember (name, value) =
-                PP.pretty name <+> "=" <+> prettyExpr ppopts value
+                PP.pretty name <+> "=" <+> prettyExpr value
             members' = map prettyMember $ Map.assocs members
             body = PP.sep $ PP.punctuate PP.comma members'
             body' = PP.flatAlt (PP.indent 3 body) body
@@ -754,12 +725,12 @@ prettyExpr ppopts expr0 = case expr0 of
     Index _ _ _ ->
         panic "prettyExpr" ["There is no concrete syntax for AST node 'Index'"]
     Lookup _ expr name ->
-        let expr' = prettyExpr ppopts expr
+        let expr' = prettyExpr expr
             name' = PP.pretty name
         in
         expr' <> PP.dot <> name'
     TLookup _ expr n ->
-        let expr' = prettyExpr ppopts expr
+        let expr' = prettyExpr expr
             n' = PP.viaShow n
         in      
         expr' <> PP.dot <> n'
@@ -767,17 +738,17 @@ prettyExpr ppopts expr0 = case expr0 of
         PP.pretty name
     Lambda _ _mname _parampos params namedParams expr ->
         let onePositional pat =
-                let pat' = prettyPattern ppopts pat in
+                let pat' = prettyPattern pat in
                 "\\" <+> pat' <+> "->"
             oneNamed (name, (_namepos, (_pos, def, pat))) =
                 let name' = PP.pretty name
-                    def' = prettyExpr ppopts def
-                    pat' = prettyPattern ppopts pat
+                    def' = prettyExpr def
+                    pat' = prettyPattern pat
                 in
                 "\\" <+> name' <+> "@" <+> pat' <+> "?=" <> def' <+> "->"
             params' = map onePositional params
             namedParams' = map oneNamed $ Map.toList namedParams
-            expr' = prettyExpr ppopts expr
+            expr' = prettyExpr expr
         in
         let lines_ = params' ++ namedParams' ++ [expr']
             -- Now indent each successive line by 3. As elsewhere,
@@ -797,9 +768,9 @@ prettyExpr ppopts expr0 = case expr0 of
         foldr1 indent lines_
     Application _ f args ->
         -- XXX FIXME: use precedence to minimize parentheses
-        let f' = prettyExpr ppopts f
+        let f' = prettyExpr f
             once (mbName, arg) =
-                let arg' = prettyExpr ppopts arg in
+                let arg' = prettyExpr arg in
                 case mbName of
                     Nothing -> arg'
                     Just (_pos, name) -> PP.pretty name <> "=" <> arg'
@@ -818,8 +789,8 @@ prettyExpr ppopts expr0 = case expr0 of
         in
         pairify (f' : args')
     Let _ (NonRecursive decl) expr ->
-        let decl' = prettyDef ppopts decl
-            expr' = prettyExpr ppopts expr
+        let decl' = prettyDef decl
+            expr' = prettyExpr expr
             -- Break after the "in" when it doesn't fit. Maybe I've
             -- gotten too used to reading OCaml?
             line1 = "let" <+> decl' <+> "in"
@@ -827,22 +798,22 @@ prettyExpr ppopts expr0 = case expr0 of
         in
         PP.group $ line1 <> PP.line <> line2
     Let _ (Recursive decls) expr ->
-        let decls' = map (prettyDef ppopts) decls
-            expr' = prettyExpr ppopts expr
+        let decls' = map prettyDef decls
+            expr' = prettyExpr expr
             decls'' = case decls' of
               [] -> []  -- (not actually possible)
               first : rest -> ("rec" <+> first) : map (\d -> "and" <+> d) rest
         in
         PP.vsep decls'' <> PP.hardline <> "in" <> PP.hardline <> PP.nest 3 expr'
     TSig _ expr ty ->
-        let expr' = prettyExpr ppopts expr
-            ty' = prettyType ppopts ty
+        let expr' = prettyExpr expr
+            ty' = prettyType ty
         in
         PP.parens (expr' <+> PP.colon <+> ty')
     IfThenElse _ e1 e2 e3 ->
-        let e1' = prettyExpr ppopts e1
-            e2' = prettyExpr ppopts e2
-            e3' = prettyExpr ppopts e3
+        let e1' = prettyExpr e1
+            e2' = prettyExpr e2
+            e3' = prettyExpr e3
             -- plan for four lines
             line1 = "if" <+> e1' <+> "then"
             line2 = PP.flatAlt (PP.indent 3 e2') e2'
@@ -854,13 +825,13 @@ prettyExpr ppopts expr0 = case expr0 of
 
 ppExpr :: PPS.Opts -> Expr -> Text
 ppExpr ppopts e =
-    PPS.renderText ppopts $ prettyExpr ppopts e
+    PPS.renderText ppopts $ prettyExpr e
 
-prettyPattern :: PPS.Opts -> Pattern -> PPS.Doc
-prettyPattern ppopts pat =
+prettyPattern :: Pattern -> PPS.Doc
+prettyPattern pat =
     let prettyArg name' mty = case mty of
           Nothing -> name'
-          Just ty -> PP.parens $ name' <+> PP.colon <+> prettyType ppopts ty
+          Just ty -> PP.parens $ name' <+> PP.colon <+> prettyType ty
     in   
     case pat of
         PImplicit _ mty ->
@@ -870,21 +841,21 @@ prettyPattern ppopts pat =
         PVar _ _ name mty ->
           prettyArg (PP.pretty name) mty
         PTuple _ pats ->
-          PP.parens $ PP.fillSep $ PP.punctuate "," $ map (prettyPattern ppopts) pats
+          PP.parens $ PP.fillSep $ PP.punctuate "," $ map prettyPattern pats
 
 ppPattern :: PPS.Opts -> Pattern -> Text
 ppPattern ppopts pat =
-  PPS.renderText ppopts $ prettyPattern ppopts pat
+  PPS.renderText ppopts $ prettyPattern pat
 
-prettyStmt :: PPS.Opts -> Stmt -> PPS.Doc
-prettyStmt ppopts s0 = case s0 of
+prettyStmt :: Stmt -> PPS.Doc
+prettyStmt s0 = case s0 of
     StmtBind _ (PImplicit _ _ty) expr ->
-       prettyExpr ppopts expr <> ";"
+       prettyExpr expr <> ";"
     StmtBind _ (PWild _ _ty) expr ->
-       "_ <-" <+> prettyExpr ppopts expr <> ";"
+       "_ <-" <+> prettyExpr expr <> ";"
     StmtBind _ pat expr ->
-       let pat' = prettyPattern ppopts pat
-           expr' = prettyExpr ppopts expr
+       let pat' = prettyPattern pat
+           expr' = prettyExpr expr
            line1 = pat' <+> "<-"
            line2 = PP.flatAlt (PP.indent 3 expr') expr'
        in
@@ -893,11 +864,11 @@ prettyStmt ppopts s0 = case s0 of
        let header = case rebindable of
              RebindableVar -> "let rebindable"
              ReadOnlyVar -> "let"
-           decl' = prettyDef ppopts decl
+           decl' = prettyDef decl
        in
        PP.group $ header <+> decl' <> ";"
     StmtLet _ _ (Recursive decls) ->
-       let decls' = map (prettyDef ppopts) decls
+       let decls' = map prettyDef decls
            decls'' = case decls' of
              [] -> []  -- (not actually possible)
              first : rest -> ("rec" <+> first) : map (\d -> "and" <+> d) rest
@@ -937,7 +908,7 @@ prettyStmt ppopts s0 = case s0 of
         inc <+> name' <> ";"
     StmtTypedef _ _ name ty ->
        let name' = PP.pretty name
-           ty' = prettyType ppopts ty
+           ty' = prettyType ty
        in
        PP.group $ "typedef" <+> name' <+> "=" <+> ty' <> ";"
     StmtPushdir _ dir ->
@@ -945,8 +916,8 @@ prettyStmt ppopts s0 = case s0 of
     StmtPopdir _ ->
        ".popdir;"
 
-prettyDef :: PPS.Opts -> Decl -> PPS.Doc
-prettyDef ppopts (Decl _ pat0 _ def) =
+prettyDef :: Decl -> PPS.Doc
+prettyDef (Decl _ pat0 _ def) =
    let dissectLambda :: Expr -> ([Pattern], Map Text (Pos, (Pos, Expr, Pattern)), Expr)
        dissectLambda e0 = case e0 of
           Lambda _pos _name _parampos pats namedpats e1 ->
@@ -955,23 +926,23 @@ prettyDef ppopts (Decl _ pat0 _ def) =
           _ ->
               ([], Map.empty, e0)
        (params, namedParams, body) = dissectLambda def
-       params' = map (prettyPattern ppopts) (pat0 : params)
+       params' = map prettyPattern (pat0 : params)
        oneNamed (x, (_xpos, (_pos, defExpr, pat))) =
            let x' = PP.pretty x
-               defExpr' = prettyExpr ppopts defExpr
-               pat' = prettyPattern ppopts pat
+               defExpr' = prettyExpr defExpr
+               pat' = prettyPattern pat
            in
            x' <+> "@" <+> pat' <+> "?=" <> defExpr'
        namedParams' = map oneNamed (Map.toList namedParams)
        allParams' = PP.align $ PP.sep (params' ++ namedParams')
-       body' = prettyExpr ppopts body
+       body' = prettyExpr body
        body'' = PP.flatAlt (PP.indent 3 body') body'
    in
    allParams' <+> "=" <> PP.line <> body''
 
-prettyWholeModule :: PPS.Opts -> [Stmt] -> PPS.Doc
-prettyWholeModule ppopts stmts =
-    let stmts' = PP.vsep $ map (prettyStmt ppopts) stmts in
+prettyWholeModule :: [Stmt] -> PPS.Doc
+prettyWholeModule stmts =
+    let stmts' = PP.vsep $ map prettyStmt stmts in
     stmts' <> PP.line
 
 
@@ -981,60 +952,63 @@ prettyWholeModule ppopts stmts =
 -- The @tx@ forms wrap in `TypeExplicit` and are mostly used by the
 -- parser.
 
+tBool :: TypeProvenance -> Type
+tBool prov = TyCon prov BoolCon
+
+tInt :: TypeProvenance -> Type
+tInt prov = TyCon prov IntCon
+
+tString :: TypeProvenance -> Type
+tString prov = TyCon prov StringCon
+
+tTerm :: TypeProvenance -> Type
+tTerm prov = TyCon prov TermCon
+
+tType :: TypeProvenance -> Type
+tType prov = TyCon prov TypeCon
+
+tAIG :: TypeProvenance -> Type
+tAIG prov = TyCon prov AIGCon
+
+tCFG :: TypeProvenance -> Type
+tCFG prov = TyCon prov CFGCon
+
+tLLVMSpec :: TypeProvenance -> Type
+tLLVMSpec prov = TyCon prov LLVMSpecCon
+
+tJVMSpec :: TypeProvenance -> Type
+tJVMSpec prov = TyCon prov JVMSpecCon
+
+tMIRSpec :: TypeProvenance -> Type
+tMIRSpec prov = TyCon prov MIRSpecCon
+
+tTopLevel :: TypeProvenance -> Type
+tTopLevel prov = TyCon prov TopLevel
+
+tProofScript :: TypeProvenance -> Type
+tProofScript prov = TyCon prov ProofScript
+
+tArray :: TypeProvenance -> Type -> Type
+tArray prov t = TyArray prov t
+
 tUnit :: TypeProvenance -> Type
 tUnit prov = tTuple prov []
 
 tTuple :: TypeProvenance -> [Type] -> Type
-tTuple prov ts = TyCon prov (TupleCon $ fromIntegral $ length ts) ts
+tTuple prov ts = TyTuple prov ts
 
-tArray :: TypeProvenance -> Type -> Type
-tArray prov t = TyCon prov ArrayCon [t]
+tRecord :: TypeProvenance -> [(Name, Type)] -> Type
+tRecord prov fields = TyRecord prov (Map.fromList fields)
 
 -- | Create a function type a1 -> a2 -> ... -> b.
 tFun :: TypeProvenance -> NamedParamInfo -> [Type] -> Map Name Type -> Type -> Type
 tFun prov names params namedParams ret = TyFunc prov names params namedParams ret
 
-tString :: TypeProvenance -> Type
-tString prov = TyCon prov StringCon []
-
-tTerm :: TypeProvenance -> Type
-tTerm prov = TyCon prov TermCon []
-
-tType :: TypeProvenance -> Type
-tType prov = TyCon prov TypeCon []
-
-tBool :: TypeProvenance -> Type
-tBool prov = TyCon prov BoolCon []
-
-tInt :: TypeProvenance -> Type
-tInt prov = TyCon prov IntCon []
-
-tApply :: TypeProvenance -> Type -> Type -> Type
-tApply prov c t = TyCon prov BlockCon [c, t]
-
-tAIG :: TypeProvenance -> Type
-tAIG prov = TyCon prov AIGCon []
-
-tCFG :: TypeProvenance -> Type
-tCFG prov = TyCon prov CFGCon []
-
-tJVMSpec :: TypeProvenance -> Type
-tJVMSpec prov = TyCon prov JVMSpecCon []
-
-tLLVMSpec :: TypeProvenance -> Type
-tLLVMSpec prov = TyCon prov LLVMSpecCon []
-
-tMIRSpec :: TypeProvenance -> Type
-tMIRSpec prov = TyCon prov MIRSpecCon []
-
-tContext :: TypeProvenance -> Context -> Type
-tContext prov c = TyCon prov (ContextCon c) []
-
-tRecord :: TypeProvenance -> [(Name, Type)] -> Type
-tRecord prov fields = TyRecord prov (Map.fromList fields)
-
 tVar :: TypeProvenance -> Name -> Type
 tVar prov n = TyVar prov n
+
+tApply :: TypeProvenance -> Type -> Type -> Type
+tApply prov c t = TyApply prov c t
 
 
 tMono :: Type -> Schema
@@ -1044,14 +1018,11 @@ tForall :: [(SchemaNameProvenance, Name)] -> Schema -> Schema
 tForall xs (Forall ys t) = Forall (xs ++ ys) t
 
 
-txTuple :: Pos -> [Type] -> Type
-txTuple pos ts = tTuple (TypeExplicit pos) ts
+txBool :: Pos -> Type
+txBool pos = tBool (TypeExplicit pos)
 
-txArray :: Pos -> Type -> Type
-txArray pos t = tArray (TypeExplicit pos) t
-
-txFun :: Pos -> NamedParamInfo -> [Type] -> Map Name Type -> Type -> Type
-txFun pos n p np r = tFun (TypeExplicit pos) n p np r
+txInt :: Pos -> Type
+txInt pos = tInt (TypeExplicit pos)
 
 txString :: Pos -> Type
 txString pos = tString (TypeExplicit pos)
@@ -1062,52 +1033,41 @@ txTerm pos = tTerm (TypeExplicit pos)
 txType :: Pos -> Type
 txType pos = tType (TypeExplicit pos)
 
-txBool :: Pos -> Type
-txBool pos = tBool (TypeExplicit pos)
-
-txInt :: Pos -> Type
-txInt pos = tInt (TypeExplicit pos)
-
-txApply :: Pos -> Type -> Type -> Type
-txApply pos c t = tApply (TypeExplicit pos) c t
-
 txAIG :: Pos -> Type
 txAIG pos = tAIG (TypeExplicit pos)
 
 txCFG :: Pos -> Type
 txCFG pos = tCFG (TypeExplicit pos)
 
-txJVMSpec :: Pos -> Type
-txJVMSpec pos = tJVMSpec (TypeExplicit pos)
-
 txLLVMSpec :: Pos -> Type
 txLLVMSpec pos = tLLVMSpec (TypeExplicit pos)
+
+txJVMSpec :: Pos -> Type
+txJVMSpec pos = tJVMSpec (TypeExplicit pos)
 
 txMIRSpec :: Pos -> Type
 txMIRSpec pos = tMIRSpec (TypeExplicit pos)
 
-txContext :: Pos -> Context -> Type
-txContext pos c = tContext (TypeExplicit pos) c
+txTopLevel :: Pos -> Type
+txTopLevel pos = tTopLevel (TypeExplicit pos)
+
+txProofScript :: Pos -> Type
+txProofScript pos = tProofScript (TypeExplicit pos)
+
+txArray :: Pos -> Type -> Type
+txArray pos t = tArray (TypeExplicit pos) t
+
+txTuple :: Pos -> [Type] -> Type
+txTuple pos ts = tTuple (TypeExplicit pos) ts
 
 txRecord :: Pos -> [(Name, Type)] -> Type
 txRecord pos fields = tRecord (TypeExplicit pos) fields
 
+txFun :: Pos -> NamedParamInfo -> [Type] -> Map Name Type -> Type -> Type
+txFun pos n p np r = tFun (TypeExplicit pos) n p np r
+
 txVar :: Pos -> Name -> Type
 txVar pos a = tVar (TypeExplicit pos) a
 
-
-------------------------------------------------------------
--- Type Classifiers
-
--- The idea is that calling these is/should be less messy than direct
--- pattern matching, and also help a little to avoid splattering the
--- internal representation of types all over the place.
-
--- | Check if type 'ty' is a 'Context' type of context 'c'.
-isContext ::
-       Context          -- ^ The context 'c' to look for
-    -> Type             -- ^ The type 'ty' to inspect
-    -> Bool
-isContext c ty = case ty of
-  TyCon _prov (ContextCon c') [] | c' == c -> True
-  _ -> False
+txApply :: Pos -> Type -> Type -> Type
+txApply pos c t = tApply (TypeExplicit pos) c t
