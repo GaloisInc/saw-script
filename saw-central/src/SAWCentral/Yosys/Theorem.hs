@@ -164,9 +164,11 @@ applyOverride sc thm t = do
          Nothing -> yosysError . YosysErrorOverrideNameNotFound . QN.ppQualName $ thm ^. theoremQualName
          Just nm -> pure nm
   -- unfold everything except for theoremQualName and prelude constants
-  let isPreludeName (SC.ModuleIdentifier ident) = SC.identModule ident == SC.preludeModuleName
-      isPreludeName _ = False
-  let unfold nm = nm /= tnm && not (isPreludeName (SC.nameInfo nm))
+  let isPreludeName qn =
+        case SC.qualNameModule qn of
+          Just m -> m == SC.preludeModuleName
+          Nothing -> False
+  let unfold nm = nm /= tnm && not (isPreludeName (SC.nameQualName nm))
   unfolded <- SC.scUnfoldConstants sc unfold t
   cache <- SC.newIntCache
   let
