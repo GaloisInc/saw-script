@@ -36,11 +36,8 @@ module SAWCore.Module
   , resolveName
   , lookupVarIndexInMap
   , requireNameInMap
-  , findDataType
   , insImport
-  , findCtor
   , moduleDefs
-  , findDef
   , moduleDecls
     -- * Module Maps
   , ModuleMap
@@ -278,18 +275,6 @@ asResolvedDataType = \case { ResolvedDataType d -> Just d; _ -> Nothing }
 
 asResolvedDef :: ResolvedName -> Maybe Def
 asResolvedDef = \case { ResolvedDef d -> Just d; _ -> Nothing }
-
--- | Resolve a 'Text' name to a 'Ctor'
-findCtor :: Module -> Text -> Maybe Ctor
-findCtor m str = resolveName m str >>= asResolvedCtor
-
--- | Resolve a 'Text' name to a 'DataType'
-findDataType :: Module -> Text -> Maybe DataType
-findDataType m str = resolveName m str >>= asResolvedDataType
-
--- | Resolve a 'Text' name to a 'Def'
-findDef :: Module -> Text -> Maybe Def
-findDef m str = resolveName m str >>= asResolvedDef
 
 
 -- | Insert a 'ResolvedName' into a 'Module', adding a mapping from the 'Text'
