@@ -309,7 +309,7 @@ let ss1 = add_core_thms
   , "or_True1", "or_True2", "or_False1", "or_False2"
   , "implies_True1", "implies_False1"
   , "not_True", "not_False"
-  ] ss0; //(add_prelude_defs ["implies"] ss0);
+  ] ss0; //(add_defs ["implies"] ss0);
 let ss2 = add_core_thms [] ss1;
 
 
@@ -379,7 +379,7 @@ let basic_simps  = [ ec_join_split
                    ];
 let ss3 = addsimps basic_simps ss2;
 let ss4 = addsimps [mul_java_elim, sq_java_elim] ss3;
-let ss = add_prelude_defs
+let ss = add_defs
   [ "bvUpd"
   , "bvAt"
   ] ss4;
