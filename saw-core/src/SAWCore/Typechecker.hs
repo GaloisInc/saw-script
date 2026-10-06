@@ -503,10 +503,10 @@ processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =
    do typed_tp <- typeInferCompleteUTerm tp
       void $ liftSCM $ SC.scmEnsureSortType typed_tp
       mnm <- getModuleName
-      let ident = mkIdent mnm nm
+      let nmi = ModuleIdentifier (mkIdent mnm nm)
       let def_tp = typed_tp
       sc <- askSharedContext
-      liftIO $ scDeclarePrim sc ident q def_tp) >>
+      liftIO $ scDeclarePrim sc nmi q def_tp) >>
   processDecls rest
 
 processDecls (Un.TermDef (PosPair p nm) _ _ : _) =

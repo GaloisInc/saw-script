@@ -981,11 +981,10 @@ scmDeclareDef nm q ty body =
      pure t
 
 -- | Declare a SAW core primitive of the specified type.
-scmDeclarePrim :: Ident -> DefQualifier -> Term -> SCM ()
-scmDeclarePrim ident q def_tp =
+scmDeclarePrim :: NameInfo -> DefQualifier -> Term -> SCM ()
+scmDeclarePrim nmi q def_tp =
   do scmEnsureValidTerm def_tp
      _ <- scmEnsureSortType def_tp
-     let nmi = ModuleIdentifier ident
      nm <- scmRegisterName nmi
      _ <- scmDeclareDef nm q def_tp Nothing
      pure ()

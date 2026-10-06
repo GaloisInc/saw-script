@@ -922,8 +922,8 @@ scDefineConstant ::
 scDefineConstant sc nmi rhs = execSCM sc (scmDefineConstant nmi rhs)
 
 -- | Declare a SAW core primitive of the specified type.
-scDeclarePrim :: SharedContext -> Ident -> DefQualifier -> Term -> IO ()
-scDeclarePrim sc ident q ty = execSCM sc (scmDeclarePrim ident q ty)
+scDeclarePrim :: SharedContext -> NameInfo -> DefQualifier -> Term -> IO ()
+scDeclarePrim sc nmi q ty = execSCM sc (scmDeclarePrim nmi q ty)
 
 -- | Declare a global opaque constant with the specified name (as
 -- 'NameInfo') and type.
