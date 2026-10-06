@@ -4804,16 +4804,24 @@ primitives = Map.fromList $
 
   , prim "add_prelude_defs"    "[String] -> Simpset -> Simpset"
     (funVal2 add_prelude_defs)
-    Current
+    WarnDeprecated
     [ "Add the named definitions from the Prelude module to a"
     , "simplification rule set, and return a new set."
+    , ""
+    , "This function is deprecated: Use 'add_defs' instead, with the"
+    , "module prefix 'Prelude::' if necessary to disambiguate."
+    , "Expected to be hidden by default in SAW 1.8."
     ]
 
   , prim "add_cryptol_defs"    "[String] -> Simpset -> Simpset"
     (funVal2 add_cryptol_defs)
-    Current
+    WarnDeprecated
     [ "Add the named definitions from the Cryptol import module to a"
     , "simplification rule set, and return a new set."
+    , ""
+    , "This function is deprecated: Use 'add_defs' instead, with the"
+    , "module prefix 'Cryptol::' if necessary to disambiguate."
+    , "Expected to be hidden by default in SAW 1.8."
     ]
 
     ------------------------------------------------------------
