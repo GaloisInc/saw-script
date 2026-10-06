@@ -45,7 +45,7 @@ module SAWCentral.AST
 
      , ppKind, prettyKind
      , ppTyCtx, prettyTyCtx
-     , ppTyCon, prettyTyCon
+     , ppTyCon
      , ppType, prettyType
      , ppSchema, prettySchema
      , prettyNamedType
@@ -594,8 +594,8 @@ ppTyCtx ctx = case ctx of
 prettyTyCtx :: TyCtx -> PP.Doc ann
 prettyTyCtx ctx = PP.pretty $ ppTyCtx ctx
 
-prettyTyCon :: TyCon -> PP.Doc ann
-prettyTyCon tc = case tc of
+ppTyCon :: TyCon -> Text
+ppTyCon tc = case tc of
     StringCon      -> "String"
     TermCon        -> "Term"
     TypeCon        -> "Type"
@@ -609,16 +609,13 @@ prettyTyCon tc = case tc of
     ProofScript    -> "ProofScript"
     TopLevel       -> "TopLevel"
 
-ppTyCon :: PPS.Opts -> TyCon -> Text
-ppTyCon ppopts tc = PPS.renderText ppopts $ prettyTyCon tc
-
 prettyType :: PPS.Opts -> Type -> PPS.Doc
 prettyType _ppopts = PP.group . visit 0
   where
     visit :: Int -> Type -> PPS.Doc
     visit prec ty0 = case ty0 of
       TyCon _ ctor ->
-          prettyTyCon ctor
+          PP.pretty $ ppTyCon ctor
 
       TyApply _ m arg ->
           let m' = visit 1 m

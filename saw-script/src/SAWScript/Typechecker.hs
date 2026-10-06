@@ -880,23 +880,6 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
               (_, _) -> False
     in
 
-    -- | Alternate printer for type constructors. XXX: This no longer
-    --   needs to exist as its own thing.
-    let ppTyCon' tc = case tc of
-          StringCon -> "String"
-          TermCon -> "Term"
-          TypeCon -> "Type"
-          BoolCon -> "Bool"
-          IntCon -> "Int"
-          AIGCon -> "AIG"
-          CFGCon -> "CFG"
-          JVMSpecCon -> "JVMSpec"
-          LLVMSpecCon -> "LLVMSpec"
-          MIRSpecCon -> "MIRSpec"
-          ProofScript -> "ProofScript"
-          TopLevel -> "TopLevel"
-    in
-
     -- Print a type, substituting "_" for subelements we want to print
     -- separately, and return the resulting string, the provenance
     -- entry from the type, and a list of the same results for each
@@ -983,7 +966,7 @@ prettyTypeDetails inhibitSubs desc0 ty0 =
 
             case ty of
                 TyCon prov tc ->
-                    (ppTyCon' tc, prov, [])
+                    (ppTyCon tc, prov, [])
                 TyApply prov m arg ->
                     let (m', subelts'm) = consider "monad" prov m
                         (arg', subelts'arg) = consider "1st argument" prov arg
