@@ -2228,7 +2228,7 @@ exportValue ty v = case ty of
               TV.ConInfo ident argTs ->
                 do let args' = Vector.fromList (map (SC.runIdentity . force) args)
                    let vs = Vector.zipWith exportValue argTs args'
-                   let tag = V.mkBv (TV.enumTagWidth infos) (toInteger i)
+                   let tag = V.mkBv (TV.enumTagWidth (Vector.length infos)) (toInteger i)
                    pure (V.VEnum tag (IntMap.singleton i (TV.ConInfo ident vs)))
           _ -> error $ "exportValue (on enum type " ++ Text.unpack (CryPP.pp ty) ++ ")"
 
