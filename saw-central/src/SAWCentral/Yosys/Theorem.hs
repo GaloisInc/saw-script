@@ -115,7 +115,7 @@ buildTheorem sc _env ymod newmod precond body = do
       _ -> yosysError YosysErrorInvalidOverrideTarget
   qn <-
     case nmi of
-      SC.ImportedName qn _ -> pure qn
+      SC.ImportedName qn -> pure qn
       _ -> yosysError YosysErrorInvalidOverrideTarget
   pure YosysTheorem
     { _theoremQualName = qn

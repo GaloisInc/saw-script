@@ -180,18 +180,13 @@ pattern ModuleIdentifier i <- NameInfo (Ident -> i) False  where
 -- | This name was imported from some other programming language/scope
 pattern ImportedName ::
   QN.QualName -> -- ^ An absolutely-qualified name, which is required to be unique
-  [Text] ->  -- ^ A collection of aliases for this name.  Shorter or "less-qualified"
-             --   aliases should be nearer the front of the list
   NameInfo
-pattern ImportedName qn as <- NameInfo (qualNameWithAliases -> (qn,as)) True
+pattern ImportedName qn <- NameInfo qn True
 
 mkImportedName :: QN.QualName -> NameInfo
 mkImportedName qn = NameInfo qn True
 
 {-# COMPLETE ModuleIdentifier,ImportedName #-}
-
-qualNameWithAliases:: QN.QualName -> (QN.QualName, [Text])
-qualNameWithAliases qn = (qn,QN.aliases qn)
 
 instance Hashable NameInfo where
   hashWithSalt x (NameInfo a b) = x `hashWithSalt` a `hashWithSalt` b

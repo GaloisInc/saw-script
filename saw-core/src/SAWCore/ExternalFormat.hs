@@ -43,7 +43,7 @@ renderNames nms = show
  where
    f (Left s) = Left s
    f (Right (ModuleIdentifier i))  = Right (Left (show i))
-   f (Right (ImportedName qn _)) = Right (Right (QN.ppQualName qn))
+   f (Right (ImportedName qn)) = Right (Right (QN.ppQualName qn))
 
 readNames :: String -> Either String (Map VarIndex (Either Text NameInfo))
 readNames xs = Map.fromList <$> (mapM readName =<< readEither xs)
@@ -190,7 +190,7 @@ scReadExternal sc input =
              lift (scResolveQualName sc (moduleIdentToQualName ident)) >>= \case
                Just nm  -> pure nm
                Nothing  -> lift $ fail $ "scReadExternal: missing module identifier: " ++ show ident
-           ImportedName qn _aliases ->
+           ImportedName qn ->
              lift (scResolveQualName sc qn) >>= \case
                Just nm -> pure nm
                Nothing -> case Map.lookup vi vs of

@@ -141,7 +141,7 @@ instance Bytes Text where
 instance Bytes NameInfo where
   bytes = \case
     ModuleIdentifier i -> byte 0x1 <> bytes (QN.ppQualName $ moduleIdentToQualName i)
-    ImportedName qn _  -> byte 0x2 <> bytes (QN.ppQualName qn)
+    ImportedName qn -> byte 0x2 <> bytes (QN.ppQualName qn)
 instance Bytes Sort where
   bytes = \case
     PropSort   -> byte 0x1

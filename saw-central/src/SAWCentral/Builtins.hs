@@ -811,7 +811,7 @@ resolveNameIO sc cenv nm =
        Just cnm ->
          do importedName <- CSC.importName cnm
             case importedName of
-              ImportedName qn _ ->
+              ImportedName qn ->
                 do resolvedName <- scResolveQualName sc qn
                    case resolvedName of
                      Just n -> pure (nameIndex n : scnms)
