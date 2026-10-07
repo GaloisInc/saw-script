@@ -328,7 +328,7 @@ translateQualNameWithArgs qn args =
         do f <- macroFun <$> mapM translateTerm m_args
            Rocq.App f <$> mapM translateTerm args'
     applySpecialTreatment _identToRocq (UseMacro n _) =
-        let i' = Text.pack $ show qn
+        let i' = QN.ppQualName qn
             n' = Text.pack $ show n
         in
         -- XXX shouldn't this fail and report an error rather than stuff an
