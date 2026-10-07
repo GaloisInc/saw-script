@@ -1,6 +1,6 @@
 // This test ensures that rewrite rules using `intEq` and `intModEq` will work.
 
-let ss0 = add_cryptol_defs ["ecEq"] (cryptol_ss ());
+let ss0 = add_defs ["ecEq"] (cryptol_ss ());
 
 let {{
   squareInt : Integer -> Integer
