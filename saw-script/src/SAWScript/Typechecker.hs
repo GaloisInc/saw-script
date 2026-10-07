@@ -2899,7 +2899,7 @@ lookupTyCon tycon = case tycon of
 checkType :: Kind -> Type -> TI Type
 checkType kindExpected0 ty0 = do
 
-    -- The guts of this function run in @ExceptT pos TI a@. This
+    -- The guts of this function run in @ExceptT Pos TI a@. This
     -- produces either a failure position on error, or an updated type
     -- on success. On failure we generate a fresh error var that takes
     -- the place of the entire invalid type. We use the position of
