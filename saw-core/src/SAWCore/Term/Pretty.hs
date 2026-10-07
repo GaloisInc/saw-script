@@ -842,7 +842,7 @@ ppTermPure opts t =
 -- * Pretty-printers with naming environments
 --------------------------------------------------------------------------------
 
--- | Pretty-print a `NameInfo`, using the `DisplayNameEnv` to figure
+-- | Pretty-print a `Name`, using the `DisplayNameEnv` to figure
 --   how much name to print.
 prettyNameWithEnv :: PPS.Opts -> DisplayNameEnv -> Name -> PPS.Doc
 prettyNameWithEnv opts env name =

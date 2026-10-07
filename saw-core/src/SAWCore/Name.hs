@@ -125,9 +125,9 @@ scFreshQualName nm i = QN.fromNameIndex QN.NamespaceFresh (if Text.null nm then 
 type VarIndex = Int
 
 -- | A global name with a unique ID. We maintain a global invariant
--- that the 'VarIndex' and the 'NameInfo' must be in a strict
+-- that the 'VarIndex' and the 'QualName' must be in a strict
 -- one-to-one correspondence: Each 'VarIndex' is paired with a unique
--- 'NameInfo', and each 'NameInfo' is paired with a unique 'VarIndex'.
+-- 'QualName', and each 'QualName' is paired with a unique 'VarIndex'.
 data Name =
   Name
   { nameIndex :: !VarIndex
@@ -143,7 +143,7 @@ instance Eq Name where
 instance Ord Name where
   compare x y = compare (nameIndex x) (nameIndex y)
 
--- | For hashing, we consider only the 'NameInfo' and not the
+-- | For hashing, we consider only the 'QualName' and not the
 -- 'VarIndex'; this gives a stable hash value for a particular name,
 -- even if the unique IDs are assigned differently from run to run.
 instance Hashable Name where
