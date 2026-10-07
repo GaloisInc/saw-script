@@ -3234,6 +3234,16 @@ checkSchema ppopts contextLC tyenv schema fnName = do
           let ty' = Util.substituteTyVars' everythingAvailable substs ty
           -- The only way checking can return an updated type is if
           -- there's also an error, so discard the type
+          --
+          -- XXX: that is not true if the type is @CrucibleSetup@; it
+          -- turns into @LLVMSetup@. We want that to happen; however,
+          -- rebuilding the schema with the updated type after
+          -- instantiating all its tyvars is a headache. So we'll skip
+          -- it, on the grounds that this code is only used when
+          -- checking the builtins table and nothing in the builtins
+          -- table refers to, or should refer to, obsolete names like
+          -- @CrucibleSetup@. However, this is technically wrong.
+          --
           _ <- checkType kindStar ty'
           return schema
 
