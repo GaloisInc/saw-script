@@ -25,8 +25,10 @@ module SAWScript.Typechecker
     ) where
 
 import Control.Monad (when, foldM, zipWithM_)
+import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.Reader (MonadReader(..), ReaderT(..), asks)
 import Control.Monad.State (MonadState(..), StateT, gets, modify, runState)
+import Control.Monad.Trans.Class (lift)
 import Control.Monad.Identity (Identity)
 import qualified Data.Text as Text
 import Data.Text (Text)
@@ -2877,18 +2879,6 @@ lookupTyCon tycon = case tycon of
     TopLevel -> kindStarToStar
     ProofScript -> kindStarToStar
 
--- | Check if a list of types contains a failure type. If so, return
---   it. Uses `Either` with unit rather than `Maybe` so as to get the
---   right combining behavior using `>>`.
-checkForFailure :: Foldable t => t Type -> Either Type ()
-checkForFailure tys = foldr visit (Right ()) tys
-  where
-    visit arg' failure = case failure of
-        Left ty' -> Left ty'
-        Right () -> case arg' of
-            TyUnifyVar (TypeFailed _) _ -> Left arg'
-            _ -> Right ()
-
 -- | Check a type for validity and also for having the correct
 --   kinding.
 --
@@ -2898,184 +2888,198 @@ checkForFailure tys = foldr visit (Right ()) tys
 --   source position of whatever the user typed. The error reporting
 --   relies on this.
 --
---   If, after checking, any of the subelements in the type is an
---   error var, something was invalid. In this case, return the error
---   var directly instead of consing around it. (Properly we should
---   make a new one, but it's fresh and we can safely repurpose it.)
---   This is a hack to avoid returning types _containing_ error vars
---   out, which then lead to ugly and confusing further errors
---   downstream.
+--   If, upon checking, any of the subelements in the type fails, we
+--   fail the whole enclosing type and return a fresh error var to
+--   represent the whole thing. This means we can only report one
+--   failure even if multiple subelements of the type are invalid;
+--   however, that's not a big deal. More importantly, it means we
+--   never produce a type that _contains_ an error var; those lead to
+--   ugly and confusing further errors downstream.
 --
 checkType :: Kind -> Type -> TI Type
-checkType kindExpected ty =
-  let reject prov kindFound = do
-        let pos = Pos.getPos prov
-        let kindExpected' = prettyKind kindExpected
-            kindFound' = prettyKind kindFound
-        recordError pos $ "Kind mismatch: expected" <+> kindExpected' <+>
-                          "but found" <+> kindFound'
-        getErrorTyVar pos
-  in
-  case ty of
-    TyCon prov tycon -> do
-        -- First, look up the constructor.
-        let kindFound = lookupTyCon tycon
+checkType kindExpected0 ty0 = do
 
-        if kindExpected /= kindFound then
-            reject prov kindFound
-        else do
-            pure $ TyCon prov tycon
+    -- The guts of this function run in @ExceptT pos TI a@. This
+    -- produces either a failure position on error, or an updated type
+    -- on success. On failure we generate a fresh error var that takes
+    -- the place of the entire invalid type. We use the position of
+    -- the failed subelement as the position for the error var,
+    -- because once in a while that'll still feature in a further
+    -- error message.
+    result <- runExceptT (visit kindExpected0 ty0)
+    case result of
+        Left failpos -> getErrorTyVar failpos
+        Right ty -> pure ty
 
-    TyArray prov arg -> do
-        if kindExpected /= kindStar then
-            reject prov kindStar
-        else do
-            arg' <- checkType kindStar arg
-            pure $ case checkForFailure [arg'] of
-                Left ty' -> ty'
-                Right () -> TyArray prov arg'
+  where
+    -- Provide these wrappers to reduce horizontal space wastage in
+    -- the call sites.
+    recordError' :: Pos -> PPS.Doc -> ExceptT Pos TI ()
+    recordError' pos msg = lift $ recordError pos msg
+    recordWarning' :: Pos -> PPS.Doc -> ExceptT Pos TI ()
+    recordWarning' pos msg = lift $ recordWarning pos msg
+    recordComment' :: Pos -> PPS.Doc -> ExceptT Pos TI ()
+    recordComment' pos msg = lift $ recordComment pos msg
 
-    TyTuple prov args -> do
-        if kindExpected /= kindStar then
-            reject prov kindStar
-        else do
-            args' <- mapM (checkType kindStar) args
-            pure $ case checkForFailure args' of
-                Left ty' -> ty'
-                Right () -> TyTuple prov args'
+    -- The (recursive) guts of the function.
+    --
+    -- `throwError` is the `ExceptT` throw, so it only throws locally;
+    -- the failures it throws are caught by the `runExceptT` above.
+    --
+    visit :: Kind -> Type -> ExceptT Pos TI Type
+    visit kindExpected ty =
+        let checkKind :: TypeProvenance -> Kind -> ExceptT Pos TI ()
+            checkKind prov kindFound =
+                if kindExpected /= kindFound then do
+                    let pos = Pos.getPos prov
+                    let kindExpected' = prettyKind kindExpected
+                        kindFound' = prettyKind kindFound
+                    recordError' pos $ "Kind mismatch: expected" <+>
+                                       kindExpected' <+> "but found" <+>
+                                       kindFound'
+                    throwError pos
+                else
+                    pure ()
+        in
+        case ty of
+            TyCon prov tycon -> do
+                -- Look up the constructor.
+                let kindFound = lookupTyCon tycon
+                checkKind prov kindFound
+                pure $ TyCon prov tycon
 
-    TyRecord prov fields -> do
-        if kindExpected /= kindStar then
-            reject prov kindStar
-        else do
-            -- Someone upstream had better have checked for duplicate
-            -- field names because we can't once the fields are loaded
-            -- into a map. (XXX: someone hasn't)
-            fields' <- traverse (checkType kindStar) fields
-            pure $ case checkForFailure fields' of
-                Left ty' -> ty'
-                Right () -> TyRecord prov fields'
+            TyArray prov arg -> do
+                checkKind prov kindStar
+                arg' <- visit kindStar arg
+                pure $ TyArray prov arg'
 
-    TyFunc prov nameinfo params namedParams ret -> do
-        if kindExpected /= kindStar then
-            reject prov kindStar
-        else do
-            params' <- mapM (checkType kindStar) params
-            namedParams' <- mapM (checkType kindStar) namedParams
-            when (null params' && not (null namedParams')) $ do
+            TyTuple prov args -> do
+                checkKind prov kindStar
+                args' <- mapM (visit kindStar) args
+                pure $ TyTuple prov args'
+
+            TyRecord prov fields -> do
+                checkKind prov kindStar
+                -- Someone upstream had better have checked for duplicate
+                -- field names because we can't once the fields are loaded
+                -- into a map. (XXX: someone hasn't)
+                fields' <- traverse (visit kindStar) fields
+                pure $ TyRecord prov fields'
+
+            TyFunc prov nameinfo params namedParams ret -> do
+                checkKind prov kindStar
+                params' <- mapM (visit kindStar) params
+                namedParams' <- mapM (visit kindStar) namedParams
+                when (null params' && not (null namedParams')) $ do
+                    let pos = Pos.getPos prov
+                    recordError' pos $ "Functions may not have only named" <+>
+                                       "parameters; add ()"
+                ret' <- visit kindStar ret
+                pure $ TyFunc prov nameinfo params' namedParams' ret'
+
+            -- Special-case CrucibleSetup to mark it deprecated. It is
+            -- an alias for LLVMSetup, and it would be nice if it
+            -- could just be a typedef, but we don't support typedefs
+            -- of kind * -> *.
+            --
+            -- (In principle, we could just open a loophole in the
+            -- check for typedefs of kind other than * below, but I
+            -- don't think that's the only thing that would be needed
+            -- for it to actually work.)
+            --
+            -- So it is still a reserved word in the parser, which
+            -- sends it to us as "CrucibleSetup", and we intercept it
+            -- specially here to turn it into LLVMSetup and also issue
+            -- the deprecation warning.
+            --
+            -- CrucibleSetup is warn-deprecated in SAW 1.6, and should
+            -- be hidden by default in 1.7, which should require
+            -- nothing other than changing the binding for @lc@
+            -- immediately below. Then after 1.7 is released we can
+            -- delete this hackery. When doing so, be sure to remove
+            -- it from the parser as well.
+            TyVar prov "CrucibleSetup" -> do
                 let pos = Pos.getPos prov
-                recordError pos $ "Functions may not have only named" <+>
-                                  "parameters; add ()"
-            ret' <- checkType kindStar ret
-            pure $ case checkForFailure (ret' : params') >> checkForFailure namedParams' of
-                Left ty' -> ty'
-                Right () -> TyFunc prov nameinfo params' namedParams' ret'
+                let x = "CrucibleSetup"
+                    lc = WarnDeprecated
+                    kindFound = kindStarToStar
 
-    -- Special-case CrucibleSetup to mark it deprecated. It is an alias
-    -- for LLVMSetup, and it would be nice if it could just be a
-    -- typedef, but we don't support typedefs of kind * -> *.
-    --
-    -- (In principle, we could just open a loophole in the check for
-    -- typedefs of kind other than * below, but I don't think that's the
-    -- only thing that would be needed for it to actually work.)
-    --
-    -- So it is still a reserved word in the parser, which sends it to
-    -- us as "CrucibleSetup", and we intercept it specially here to turn
-    -- it into LLVMSetup and also issue the deprecation warning.
-    --
-    -- CrucibleSetup is warn-deprecated in SAW 1.6, and should be hidden
-    -- by default in 1.7, which should require nothing other than
-    -- changing the binding for @lc@ immediately below. Then after 1.7
-    -- is released we can delete this hackery. When doing so, be sure to
-    -- remove it from the parser as well.
-    TyVar prov "CrucibleSetup" -> do
-        let pos = Pos.getPos prov
-        let x = "CrucibleSetup"
-            lc = WarnDeprecated
-            kindFound = kindStarToStar
+                avail <- lift $ asks tiPrimsAvail
+                if Set.member lc avail then do
+                    recordWarning' pos $ "Type is deprecated:" <+> x
+                    checkKind prov kindFound
+                    -- Expand to LLVMSetup. Even though we don't expand
+                    -- typedefs here, this isn't an ordinary typedef.
+                    pure $ TyVar prov "LLVMSetup"
+                else do
+                    let x' = PP.dquotes x
+                    recordError' pos $ "Inaccessible type:" <+> x'
+                    recordComment' pos $ "This type is available only after" <+>
+                                         "running `enable_deprecated`."
+                    throwError pos
 
-        avail <- asks tiPrimsAvail
-        if Set.member lc avail then do
-            recordWarning pos $ "Type is deprecated:" <+> x
-            if kindExpected /= kindFound then
-                reject prov kindFound
-            else
-                -- Expand to LLVMSetup. Even though we don't expand
-                -- typedefs here, this isn't an ordinary typedef.
-                pure $ TyVar prov "LLVMSetup"
-        else do
-            let x' = PP.dquotes x
-            recordError pos $ "Inaccessible type:" <+> x'
-            recordComment pos $ "This type is available only after" <+>
-                                "running `enable_deprecated`."
-            getErrorTyVar pos
+            TyVar prov x -> do
+                avail <- lift $ asks tiPrimsAvail
+                tyenv <- lift $ gets tiTyEnv
+                case ScopedMap.lookup x tyenv of
+                    Nothing -> do
+                        let pos = Pos.getPos prov
+                        recordError' pos $ "Unbound type variable" <+> PP.pretty x
+                        throwError pos
+                    Just (lc, ty')
+                      | Set.member lc avail -> do
+                          when (Util.isDeprecated lc) $ do
+                              let pos = Pos.getPos prov
+                              recordWarning' pos $ "Type is deprecated:" <+> PP.pretty x
 
-    TyVar prov x -> do
-        avail <- asks tiPrimsAvail
-        tyenv <- gets tiTyEnv
-        case ScopedMap.lookup x tyenv of
-            Nothing -> do
-                let pos = Pos.getPos prov
-                recordError pos $ "Unbound type variable" <+> PP.pretty x
-                getErrorTyVar pos
-            Just (lc, ty')
-              | Set.member lc avail -> do
-                  when (Util.isDeprecated lc) $ do
-                      let pos = Pos.getPos prov
-                      recordWarning pos $ "Type is deprecated:" <+> PP.pretty x
+                          -- For typedefs, which appear here as ConcreteType
+                          -- expansions, assume ty' was checked when it was
+                          -- entered.
+                          --
+                          -- (If we entered it that's true, if it was in the
+                          -- initial environment we were given that depends on the
+                          -- interpreter not doing unfortunate things. This isn't
+                          -- currently seeming like a very good bet.)
+                          --
+                          -- For now at least we require typedefs to be kind *
+                          -- (they can't have parameters and the expansions are thus
+                          -- restricted) so just fail if we use one in a context
+                          -- expecting something else.
+                          --
+                          -- Abstract types may have any kind, because some are
+                          -- monads; we carry the kind around.
+                          --
+                          let kindFound = case ty' of
+                                ConcreteType _ -> kindStar
+                                AbstractType kf -> kf
 
-                  -- For typedefs, which appear here as ConcreteType
-                  -- expansions, assume ty' was checked when it was
-                  -- entered.
-                  --
-                  -- (If we entered it that's true, if it was in the
-                  -- initial environment we were given that depends on the
-                  -- interpreter not doing unfortunate things. This isn't
-                  -- currently seeming like a very good bet.)
-                  --
-                  -- For now at least we require typedefs to be kind *
-                  -- (they can't have parameters and the expansions are thus
-                  -- restricted) so just fail if we use one in a context
-                  -- expecting something else.
-                  --
-                  -- Abstract types may have any kind, because some are
-                  -- monads; we carry the kind around.
-                  -- 
-                  let kindFound = case ty' of
-                        ConcreteType _ -> kindStar
-                        AbstractType kf -> kf
+                          checkKind prov kindFound
+                          -- We do _not_ want to expand typedefs when checking,
+                          -- so return the original TyVar.
+                          pure ty
+                      | otherwise -> do
+                          let pos = Pos.getPos prov
+                          let x' = PP.dquotes (PP.pretty x)
+                          recordError' pos $ "Inaccessible type:" <+> x'
+                          let how = if lc == HideDeprecated then "deprecated"
+                                    else "experimental"
+                              cmd = "`enable_" <> how <> "`"
+                          recordComment' pos $ "This type is available only after" <+>
+                                              "running" <+> cmd <> "."
+                          throwError pos
 
-                  if kindExpected /= kindFound then
-                      reject prov kindFound
-                  else
-                      -- We do _not_ want to expand typedefs when checking,
-                      -- so return the original TyVar.
-                      return ty
-              | otherwise -> do
-                  let pos = Pos.getPos prov
-                  let x' = PP.dquotes (PP.pretty x)
-                  recordError pos $ "Inaccessible type:" <+> x'
-                  let how = if lc == HideDeprecated then "deprecated"
-                            else "experimental"
-                      cmd = "`enable_" <> how <> "`"
-                  recordComment pos $ "This type is available only after" <+>
-                                      "running" <+> cmd <> "."
-                  getErrorTyVar pos
+            TyUnifyVar _prov _ix ->
+                -- for now at least we don't track the kinds of unification vars
+                -- (types of mismatched kinds can't be the same types, so they
+                -- won't ever unify, so the possible mischief is limited) and all
+                -- possible unification var numbers are well formed, so we don't
+                -- need to do anything.
+                return ty
 
-    TyUnifyVar _prov _ix ->
-        -- for now at least we don't track the kinds of unification vars
-        -- (types of mismatched kinds can't be the same types, so they
-        -- won't ever unify, so the possible mischief is limited) and all
-        -- possible unification var numbers are well formed, so we don't
-        -- need to do anything.
-        return ty
-
-    TyApply prov m arg -> do
-        m' <- checkType (kindAddStar kindExpected) m
-        arg' <- checkType kindStar arg
-        pure $ case checkForFailure [m', arg'] of
-            Left ty' -> ty'
-            Right () -> TyApply prov m' arg'
+            TyApply prov m arg -> do
+                m' <- visit (kindAddStar kindExpected) m
+                arg' <- visit kindStar arg
+                pure $ TyApply prov m' arg'
 
 
 ------------------------------------------------------------
