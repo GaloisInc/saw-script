@@ -165,12 +165,8 @@ sometimes be helpful or essential. The `cryptol_ss` simpset includes
 rewrite rules to unfold all definitions in the `Cryptol` SAWCore module,
 but does not include any of the terms of equality type.
 
-- `add_cryptol_defs : [String] -> Simpset -> Simpset` adds unfolding
-rules for functions with the given names from the SAWCore `Cryptol` module
-to the given `Simpset`.
-
-- `add_prelude_defs : [String] -> Simpset -> Simpset` adds unfolding
-rules from the SAWCore `Prelude` module to a `Simpset`.
+- `add_defs : [String] -> Simpset -> Simpset` adds unfolding rules
+for the functions with the given names to the given `Simpset`.
 
 - `core_thm : String -> Theorem` parses a SAWCore term of type `Prop`
 from the SAWCore `Prelude` or any other loaded SAWCore module.
