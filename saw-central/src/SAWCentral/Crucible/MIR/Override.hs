@@ -1685,6 +1685,14 @@ matchArg opts sc cc cs prepost md = go False []
           withConditionalPred cNegPred $
             go inCast projStack actual f
 
+        (_, MIRVal (AggregateShape actTy []) _, MS.SetupZST expTy)
+          | actTy == expTy -> pure ()
+
+        (_, MIRVal (TransparentShape actTy innerShp) v, MS.SetupZST expTy)
+          | actTy == expTy ->
+            let innerMirTy = shapeMirTy innerShp
+             in go inCast projStack (MIRVal innerShp v) (MS.SetupZST innerMirTy)
+
         (_, _, MS.SetupNull empty)      -> absurd empty
         (_, _, MS.SetupUnion empty _ _) -> absurd empty
 

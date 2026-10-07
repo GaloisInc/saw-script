@@ -1,0 +1,116 @@
+// This tests support for zero-sized enums across the axes mentioned in
+// `test.rs`, as well as an additional axis: whether the value is
+// constructed via `mir_enum_value` or `mir_fresh_expanded_value`.
+
+m <- mir_load_module "test.linked-mir.json";
+
+
+let e1_adt = mir_find_adt m "test::E1" [];
+let e2_adt = mir_find_adt m "test::E2" [];
+
+
+let f_spec_normal e_adt = do {
+  e_ref <- mir_alloc (mir_adt e_adt);
+  let e_val = mir_enum_value e_adt "A" [mir_tuple_value []];
+  mir_points_to e_ref e_val;
+
+  mir_execute_func [e_ref];
+
+  mir_return (mir_tuple_value []);
+};
+
+let f_spec_expanded e_adt = do {
+  e_ref <- mir_alloc (mir_adt e_adt);
+  e_val <- mir_fresh_expanded_value "e" (mir_adt e_adt);
+  mir_points_to e_ref e_val;
+
+  mir_execute_func [e_ref];
+
+  mir_return (mir_tuple_value []);
+};
+
+f1_ov_normal <- mir_verify m "test::f1" [] false (f_spec_normal e1_adt) z3;
+f2_ov_normal <- mir_verify m "test::f2" [] false (f_spec_normal e2_adt) z3;
+f1_ov_expanded <- mir_verify m "test::f1" [] false (f_spec_expanded e1_adt) z3;
+f2_ov_expanded <- mir_verify m "test::f2" [] false (f_spec_expanded e2_adt) z3;
+
+
+let g_spec_normal e_adt = do {
+  let e = mir_enum_value e_adt "A" [mir_tuple_value []];
+
+  mir_execute_func [e];
+
+  mir_return (mir_tuple_value []);
+};
+
+let g_spec_expanded e_adt = do {
+  e <- mir_fresh_expanded_value "e" (mir_adt e_adt);
+
+  mir_execute_func [e];
+
+  mir_return (mir_tuple_value []);
+};
+
+g1_ov_normal <- mir_verify m "test::g1" [] false (g_spec_normal e1_adt) z3;
+g2_ov_normal <- mir_verify m "test::g2" [] false (g_spec_normal e2_adt) z3;
+g1_ov_expanded <- mir_verify m "test::g1" [] false (g_spec_expanded e1_adt) z3;
+g2_ov_expanded <- mir_verify m "test::g2" [] false (g_spec_expanded e2_adt) z3;
+
+
+for [
+  ("f1_normal", [f1_ov_normal]),
+  ("f1_expanded", [f1_ov_expanded])
+] (\(ov_tag, ovs) -> do {
+  for [
+    ("g_normal", g_spec_normal),
+    ("g_expanded", g_spec_expanded)
+  ] (\(g_tag, g_spec) -> do {
+    print "";
+    print (str_concats sep=" " ["verifying g1 against", g_tag, "with", ov_tag, "override"]);
+    mir_verify m "test::g1" ovs false (g_spec e1_adt) z3;
+  });
+});
+
+for [
+  ("f2_normal", [f2_ov_normal]),
+  ("f2_expanded", [f2_ov_expanded])
+] (\(ov_tag, ovs) -> do {
+  for [
+    ("g_normal", g_spec_normal),
+    ("g_expanded", g_spec_expanded)
+  ] (\(g_tag, g_spec) -> do {
+    print "";
+    print (str_concats sep=" " ["verifying g2 against", g_tag, "with", ov_tag, "override"]);
+    mir_verify m "test::g2" ovs false (g_spec e2_adt) z3;
+  });
+});
+
+for [
+  ("no", []),
+  ("g1_normal", [g1_ov_normal]),
+  ("g1_expanded", [g1_ov_expanded])
+] (\(ov_tag, ovs) -> do {
+  for [
+    ("h_normal", g_spec_normal),
+    ("h_expanded", g_spec_expanded)
+  ] (\(h_tag, g_spec) -> do {
+    print "";
+    print (str_concats sep=" " ["verifying h1 against", h_tag, "with", ov_tag, "override"]);
+    mir_verify m "test::h1" ovs false (g_spec e1_adt) z3;
+  });
+});
+
+for [
+  ("no", []),
+  ("g2_normal", [g2_ov_normal]),
+  ("g2_expanded", [g2_ov_expanded])
+] (\(ov_tag, ovs) -> do {
+  for [
+    ("h_normal", g_spec_normal),
+    ("h_expanded", g_spec_expanded)
+  ] (\(h_tag, g_spec) -> do {
+    print "";
+    print (str_concats sep=" " ["verifying h2 against", h_tag, "with", ov_tag, "override"]);
+    mir_verify m "test::h2" ovs false (g_spec e2_adt) z3;
+  });
+});

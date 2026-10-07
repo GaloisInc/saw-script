@@ -456,6 +456,8 @@ constructExpandedSetupValue cc sc = go
         PrimShape ty _ -> do
           fv <- freshPrimVariable pfx ty
           pure $ MS.SetupTerm fv
+        AggregateShape ty [] -> do
+          pure $ MS.SetupZST ty
         AggregateShape _ elems -> do
           flds <- mapM (goAgElem pfx) (zip [0..] elems)
           pure $ MS.SetupTuple () flds
@@ -513,12 +515,16 @@ constructExpandedSetupValue cc sc = go
           case ty of
             Mir.TyAdt adtName _ _ -> do
               case col ^. Mir.adts . at adtName of
-                Just adt@(Mir.Adt adtNm kind variants _ _ _ _) ->
+                Just adt@(Mir.Adt adtNm kind variants sz _ _ _) ->
                   case kind of
                     Mir.Struct -> do
                       val <- go pfx shp'
                       pure $ MS.SetupStruct adt [val]
                     Mir.Enum{}
+                      |  [_variant] <- variants
+                      ,  sz == 0
+                      -> pure $ MS.SetupZST ty
+
                       -- `repr(transparent)` enum values use MirSetupEnumVariant
                       -- rather than MirSetupEnumSymbolic. See the Haddocks for
                       -- MirSetupEnumSymbolic for an explanation.
@@ -994,14 +1000,16 @@ mir_enum_value ::
   m (MS.SetupValue MIR)
 mir_enum_value adt variantNm vs =
   case adt of
-    Mir.Adt adtNm (Mir.Enum _) variants _ _ _ _ -> do
+    Mir.Adt adtNm (Mir.Enum _) variants sz _ _ _ -> do
       (variantIdx, variant) <-
         case FWI.ifind (\_ v -> variantDefIdMatches v) variants of
           Just iv ->
             pure iv
           Nothing ->
             X.throwM $ MIREnumValueVariantNotFound adtNm variantNm
-      pure $ MS.SetupEnum $ MirSetupEnumVariant adt variant variantIdx vs
+      if sz == 0
+        then pure $ MS.SetupZST (mirAdtToTy adt)
+        else pure $ MS.SetupEnum $ MirSetupEnumVariant adt variant variantIdx vs
     Mir.Adt adtNm Mir.Struct _ _ _ _ _ ->
       X.throwM $ MIREnumValueNonEnum adtNm "struct"
     Mir.Adt adtNm Mir.Union _ _ _ _ _ ->

@@ -109,6 +109,7 @@ data TypeShape (tp :: CrucibleType) where
     -- the moment, the following types use this shape:
     -- - `M.TyTuple`
     -- - `M.TyFnDef`, which is treated like an empty tuple
+    -- - Enums of size zero
     --
     -- This notably does not include arrays or structs, even though they too are
     -- represented with `MirAggregate`s - they currently use their own shapes,
@@ -171,7 +172,8 @@ data TypeShape (tp :: CrucibleType) where
                -> TypeRepr tp
                -- ^ The Crucible representation of the element type.
                -> TypeShape MirSlice
-    -- | A shape for an enum type.
+    -- | A shape for an enum type of nonzero size (zero-sized enums use
+    -- `AggregateShape` instead).
     EnumShape :: M.Ty
               -- ^ The overall enum type.
               -> [[M.Ty]]
@@ -261,10 +263,12 @@ tyToShape col = go
         M.TyAdt nm _ _ -> case Map.lookup nm (col ^. M.adts) of
             Just adt | Just ty' <- reprTransparentFieldTy col adt ->
                 mapSome (TransparentShape ty) $ go ty'
-            Just (M.Adt _ kind vs _ _ _ _) ->
+            Just (M.Adt _ kind vs sz _ _ _) ->
               case kind of
                 M.Struct -> goStruct ty
-                M.Enum discrTy -> goEnum ty discrTy vs
+                M.Enum discrTy
+                  | sz == 0 -> Some $ AggregateShape ty []
+                  | otherwise -> goEnum ty discrTy vs
                 M.Union -> error "tyToShape: Union types NYI"
             Nothing -> error $ "tyToShape: bad adt: " ++ show ty
         M.TyRef ty' mutbl -> goRef ty ty' mutbl
