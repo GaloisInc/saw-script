@@ -1,3 +1,4 @@
+*.rawlog
 *.log
 *.v
 *.log.diff

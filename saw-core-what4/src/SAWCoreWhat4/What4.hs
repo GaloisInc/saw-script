@@ -86,6 +86,8 @@ import           What4.Interface(SymExpr,Pred,SymInteger, IsExpr,
                                  IsExprBuilder,IsSymExprBuilder, BoundVar)
 import qualified What4.Interface as W
 import           What4.BaseTypes
+import qualified What4.SFloat as SF
+import           What4.SFloat (SFloat(..))
 import qualified What4.SWord as SW
 import           What4.SWord (SWord(..))
 
@@ -124,6 +126,7 @@ prims sym =
   , Prims.bpMuxBool  = W.itePred sym
   , Prims.bpMuxWord  = SW.bvIte  sym
   , Prims.bpMuxInt   = W.intIte  sym
+  , Prims.bpMuxFloat = SF.fpIte sym
   , Prims.bpMuxArray = arrayIte sym
   , Prims.bpMuxExtra = muxWhat4Extra sym
     -- Booleans
@@ -187,6 +190,77 @@ prims sym =
   , Prims.bpIntMin = intMin  sym
   , Prims.bpIntMax = intMax  sym
   , Prims.bpNatToInt = natToInt sym
+    -- Float operations
+  , Prims.bpFpAbs = SF.fpAbs sym
+  , Prims.bpFpAdd = fpBinArith SF.fpAdd sym
+  , Prims.bpFpCast = \e p r x -> do
+      rm <- fpRoundingMode sym r
+      SF.fpCast sym (toInteger @Natural e) (toInteger @Natural p) rm x
+  , Prims.bpFpDiv = fpBinArith SF.fpDiv sym
+  , Prims.bpFpFMA = \r x y z -> do
+      rm <- fpRoundingMode sym r
+      SF.fpFMA sym rm x y z
+  , Prims.bpFpFromBits = \e p ->
+      SF.fpFromBinary sym (toInteger @Natural e) (toInteger @Natural p)
+  , Prims.bpFpFromBV = \e p r x -> do
+      rm <- fpRoundingMode sym r
+      SF.fpFromBV sym (toInteger @Natural e) (toInteger @Natural p) rm x
+  , Prims.bpFpFromInteger = \e p r x -> do
+      rm <- fpRoundingMode sym r
+      SF.fpFromInteger sym (toInteger @Natural e) (toInteger @Natural p) rm x
+  , Prims.bpFpFromRational = \e p r numer denom -> do
+      rm <- fpRoundingMode sym r
+      SF.fpFromRational sym (toInteger @Natural e) (toInteger @Natural p) rm numer denom
+  , Prims.bpFpFromSBV = \e p r x -> do
+      rm <- fpRoundingMode sym r
+      SF.fpFromSBV sym (toInteger @Natural e) (toInteger @Natural p) rm x
+  , Prims.bpFpIeeeEq = SF.fpEqIEEE sym
+  , Prims.bpFpIsInf = SF.fpIsInf sym
+  , Prims.bpFpIsNaN = SF.fpIsNaN sym
+  , Prims.bpFpIsNeg = SF.fpIsNeg sym
+  , Prims.bpFpIsNormal = SF.fpIsNorm sym
+  , Prims.bpFpIsPos = SF.fpIsPos sym
+  , Prims.bpFpIsSubnormal = SF.fpIsSubnorm sym
+  , Prims.bpFpIsZero = SF.fpIsZero sym
+  , Prims.bpFpLt = SF.fpLtIEEE sym
+  , Prims.bpFpLogicalEq = SF.fpEq sym
+  , Prims.bpFpMul = fpBinArith SF.fpMul sym
+  , Prims.bpFpNaN = \e p ->
+      SF.fpNaN sym (toInteger @Natural e) (toInteger @Natural p)
+  , Prims.bpFpNeg = SF.fpNeg sym
+  , Prims.bpFpPosInf = \e p ->
+      SF.fpPosInf sym (toInteger @Natural e) (toInteger @Natural p)
+  , Prims.bpFpPosZero = \e p ->
+      SF.fpPosZero sym (toInteger @Natural e) (toInteger @Natural p)
+  , Prims.bpFpRem = SF.fpRem sym
+  , Prims.bpFpRound = \r x -> do
+      rm <- fpRoundingMode sym r
+      SF.fpRound sym rm x
+  , Prims.bpFpSqrt = \r x -> do
+      rm <- fpRoundingMode sym r
+      SF.fpSqrt sym rm x
+  , Prims.bpFpSub = fpBinArith SF.fpSub sym
+  , Prims.bpFpToBits = SF.fpToBinary sym
+  , Prims.bpFpToBV = fpToBV sym
+    -- The implementations of bpFpToInteger and bpFpToRational below are
+    -- incomplete. Each operation has inputs that it *should* error out on, but
+    -- they currently do not due to
+    -- https://github.com/GaloisInc/saw-script/issues/2433.
+  , Prims.bpFpToInteger = \r x -> do
+      -- Inspired by Cryptol.Backend.What4.fpCvtToInteger. This implementation
+      -- ought to be rejecting infinite or NaN arguments, but this currently
+      -- does not happen (as evidenced by the fact that we ignore the `_rel`
+      -- safety predicate below).
+      (_rel,i) <- fpToIntegerPred sym r x
+      pure i
+  , Prims.bpFpToRational = \x -> do
+      -- Inspired by Cryptol.Backend.What4.fpCvtToRational. This implementation
+      -- ought to be rejecting infinite or NaN arguments, but this currently
+      -- does not happen (as evidenced by the fact that we ignore the `_rel`
+      -- safety predicate below).
+      (_rel,numer,denom) <- SF.fpToRational sym x
+      pure (numer, denom)
+  , Prims.bpFpToSBV = fpToSBV sym
     -- Array operations
   , Prims.bpArrayConstant = arrayConstant sym
   , Prims.bpArrayLookup = arrayLookup sym
@@ -285,6 +359,7 @@ symExprToValue tp expr = case tp of
   BaseIntegerRepr -> Just $ VInt expr
   (BaseBVRepr w) -> Just $ withKnownNat w $ VWord $ DBV expr
   (BaseArrayRepr (Ctx.Empty Ctx.:> _) _) -> Just $ VArray $ SArray expr
+  (BaseFloatRepr _) -> Just $ VFloat $ SFloat expr
   _ -> Nothing
 
 --
@@ -626,6 +701,149 @@ selectV sym merger maxValue valueFn vx =
       p <- SW.bvAtLE sym vx (toInteger j)
       merger p (impl j (y `setBit` j)) (impl j y) where j = i - 1
 
+fpRoundingMode ::
+  W.IsSymExprBuilder sym => sym -> SWord sym -> IO W.RoundingMode
+fpRoundingMode _sym v =
+  case SW.bvAsUnsignedInteger v of
+    Just i ->
+      case i of
+        0 -> pure W.RNE
+        1 -> pure W.RNA
+        2 -> pure W.RTP
+        3 -> pure W.RTN
+        4 -> pure W.RTZ
+        _ -> error $ "Invalid rounding mode: " ++ show i
+    Nothing -> error "Symbolic rounding modes not supported"
+
+fpBinArith ::
+  W.IsSymExprBuilder sym =>
+  SF.SFloatBinArith sym ->
+  sym ->
+  SWord sym ->
+  SFloat sym ->
+  SFloat sym ->
+  IO (SFloat sym)
+fpBinArith fun = \sym r x y ->
+  do rm <- fpRoundingMode sym r
+     fun sym rm x y
+
+-- Inspired by fpCvtToIntegerPred in Cryptol.Backend.What4
+fpToIntegerPred ::
+  W.IsSymExprBuilder sym =>
+  sym ->
+  SWord sym ->
+  SFloat sym ->
+  IO (W.Pred sym, SInt sym)
+fpToIntegerPred sym r x =
+  do bad1 <- SF.fpIsInf sym x
+     bad2 <- SF.fpIsNaN sym x
+     grd <- W.notPred sym =<< W.orPred sym bad1 bad2
+     rnd <- fpRoundingMode sym r
+     y <- SF.fpToReal sym x
+     res <-
+       case rnd of
+         W.RNE -> W.realRoundEven sym y
+         W.RNA -> W.realRound sym y
+         W.RTP -> W.realCeil sym y
+         W.RTN -> W.realFloor sym y
+         W.RTZ -> W.realTrunc sym y
+     pure (grd, res)
+
+-- Inspired by fpCvtToBV in Cryptol.Backend.What4
+fpToBV ::
+  W.IsSymExprBuilder sym =>
+  sym ->
+  Natural ->
+  SWord sym ->
+  SFloat sym ->
+  IO (SWord sym)
+fpToBV sym w r fp =
+  do Some w' <- pure $ mkNatRepr w
+     LeqProof <-
+       case isPosNat w' of
+         Just p -> pure p
+         Nothing -> panic "fpToBV" ["bit width must be non-zero"]
+     rnd <- fpRoundingMode sym r
+     fpBV <- SF.fpToBV sym w rnd fp
+     fpIsNaN' <- SF.fpIsNaN sym fp
+     fpIsNeg' <- SF.fpIsNeg sym fp
+     zeroBV <- SW.DBV <$> W.bvZero sym w'
+     maxUnsignedBV <- SW.DBV <$> W.maxUnsignedBV sym w'
+     case rnd of
+       W.RTZ ->
+         do let (e, p) = SF.fpSize fp
+            fp' <- SF.fpFromBV sym e p rnd fpBV
+            fpRounded <- SF.fpRound sym rnd fp
+            fpRoundedIsZero <- SF.fpIsZero sym fpRounded
+            roundtrips <- SF.fpEq sym fp' fpRounded
+            noOverflow <- W.orPred sym fpRoundedIsZero roundtrips
+            fpIsNaNOrNeg <- W.orPred sym fpIsNaN' fpIsNeg'
+            res <- SW.bvIte sym noOverflow fpBV maxUnsignedBV
+            SW.bvIte sym fpIsNaNOrNeg zeroBV res
+       _ ->
+         do (_, i) <- fpToIntegerPred sym r fp
+            fpIsInf' <- SF.fpIsInf sym fp
+            fpIsPos' <- SF.fpIsPos sym fp
+            fpIsNegInf <- W.andPred sym fpIsInf' fpIsNeg'
+            fpIsPosInf <- W.andPred sym fpIsInf' fpIsPos'
+            zeroInt <- W.intLit sym 0
+            maxUnsignedInt <- SW.bvToInteger sym maxUnsignedBV
+            overflowsMin <- W.intLt sym i zeroInt
+            overflowsMax <- W.intLt sym maxUnsignedInt i
+            res1 <- SW.bvIte sym overflowsMax maxUnsignedBV fpBV
+            res2 <- SW.bvIte sym overflowsMin zeroBV res1
+            res3 <- SW.bvIte sym fpIsPosInf maxUnsignedBV res2
+            res4 <- SW.bvIte sym fpIsNegInf zeroBV res3
+            SW.bvIte sym fpIsNaN' zeroBV res4
+
+-- Inspired by fpCvtToSBV in Cryptol.Backend.What4
+fpToSBV ::
+  W.IsSymExprBuilder sym =>
+  sym ->
+  Natural ->
+  SWord sym ->
+  SFloat sym ->
+  IO (SWord sym)
+fpToSBV sym w r fp =
+  do Some w' <- pure $ mkNatRepr w
+     LeqProof <-
+       case isPosNat w' of
+         Just p -> pure p
+         Nothing -> panic "fpToSBV" ["bit width must be non-zero"]
+     rnd <- fpRoundingMode sym r
+     fpSBV <- SF.fpToSBV sym w rnd fp
+     fpIsNaN' <- SF.fpIsNaN sym fp
+     fpIsNeg' <- SF.fpIsNeg sym fp
+     zeroBV <- SW.DBV <$> W.bvZero sym w'
+     minSignedBV <- SW.DBV <$> W.minSignedBV sym w'
+     maxSignedBV <- SW.DBV <$> W.maxSignedBV sym w'
+     case rnd of
+       W.RTZ ->
+         do let (e, p) = SF.fpSize fp
+            fp' <- SF.fpFromSBV sym e p rnd fpSBV
+            fpRounded <- SF.fpRound sym rnd fp
+            fpRoundedIsZero <- SF.fpIsZero sym fpRounded
+            roundtrips <- SF.fpEq sym fp' fpRounded
+            noOverflow <- W.orPred sym fpRoundedIsZero roundtrips
+            res1 <- SW.bvIte sym fpIsNeg' minSignedBV maxSignedBV
+            res2 <- SW.bvIte sym noOverflow fpSBV res1
+            SW.bvIte sym fpIsNaN' zeroBV res2
+       _ ->
+         do (_, i) <- fpToIntegerPred sym r fp
+            fpIsInf' <- SF.fpIsInf sym fp
+            fpIsPos' <- SF.fpIsPos sym fp
+            fpIsNegInf <- W.andPred sym fpIsInf' fpIsNeg'
+            fpIsPosInf <- W.andPred sym fpIsInf' fpIsPos'
+            minSignedInt <- SW.sbvToInteger sym minSignedBV
+            maxSignedInt <- SW.sbvToInteger sym maxSignedBV
+            overflowsMin <- W.intLt sym i minSignedInt
+            overflowsMax <- W.intLt sym maxSignedInt i
+            res1 <- SW.bvIte sym overflowsMax maxSignedBV fpSBV
+            res2 <- SW.bvIte sym overflowsMin minSignedBV res1
+            res3 <- SW.bvIte sym fpIsPosInf maxSignedBV res2
+            res4 <- SW.bvIte sym fpIsNegInf minSignedBV res3
+            SW.bvIte sym fpIsNaN' zeroBV res4
+
 arrayConstant ::
   W.IsSymExprBuilder sym =>
   sym ->
@@ -960,6 +1178,16 @@ boundFOTs sym vars =
             -- TODO(#2433): Assert that the denominator is non-zero.
             denom <- freshBnd x BaseIntegerRepr
             pure $ VRational numer denom
+       FOTFloat e p ->
+         case (someNat e, someNat p) of
+           (Just (Some e'), Just (Some p'))
+             | Just LeqProof <- testLeq (knownNat @2) e'
+             , Just LeqProof <- testLeq (knownNat @2) p' ->
+                 VFloat . SFloat <$>
+                   freshBnd x (BaseFloatRepr (FloatingPointPrecisionRepr e' p'))
+           _ -> fail $
+                  "boundFOTs: float type with unsupported exponent size " ++
+                  "(" ++ show e ++ ") or precision size (" ++ show p ++ ")"
 
        FOTVec n FOTBit ->
          case somePosNat n of
@@ -1244,6 +1472,8 @@ rebuildTerm sym st sc tv sv =
       chokeOn "VIntToNat"
     VRational{} ->
       chokeOn "VRational"
+    VFloat (SFloat f) ->
+      toSC sym st f
     VNat n ->
       scNat sc n
     VInt x ->

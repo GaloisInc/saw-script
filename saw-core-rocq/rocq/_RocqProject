@@ -6,6 +6,8 @@ generated/CryptolToRocq/CryptolPrimitivesForSAWCore.v
 
 handwritten/CryptolToRocq/RocqVectorsExtra.v
 handwritten/CryptolToRocq/CryptolPrimitivesForSAWCoreExtra.v
+handwritten/CryptolToRocq/IEEE754/BitsExtra.v
+handwritten/CryptolToRocq/IEEE754/BitsSingleNaN.v
 handwritten/CryptolToRocq/SAWCoreBitvectors.v
 handwritten/CryptolToRocq/SAWCoreBitvectorsZifyU64.v
 handwritten/CryptolToRocq/SAWCorePrelude_proofs.v
