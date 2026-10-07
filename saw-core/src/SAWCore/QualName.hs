@@ -267,7 +267,7 @@ parseQualName :: String -> QualName
 parseQualName s0 =
   case (Text.splitOn sep t0) of
     t1 : t2 -> fromPath NamespaceCore (t1 NE.:| t2)
-    _ -> panic "parseIdent" ["invalid identifier: " <> t0]
+    _ -> panic "parseQualName" ["Invalid identifier: " <> t0]
   where
     sep =
       case Text.any (\c -> c=='.') t0 of
