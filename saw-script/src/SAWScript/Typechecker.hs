@@ -2930,7 +2930,7 @@ checkType kindExpected0 ty0 = do
     visit kindExpected ty =
         let checkKind :: TypeProvenance -> Kind -> ExceptT Pos TI ()
             checkKind prov kindFound =
-                if kindExpected /= kindFound then do
+                when (kindExpected /= kindFound) $ do
                     let pos = Pos.getPos prov
                     let kindExpected' = prettyKind kindExpected
                         kindFound' = prettyKind kindFound
@@ -2938,8 +2938,6 @@ checkType kindExpected0 ty0 = do
                                        kindExpected' <+> "but found" <+>
                                        kindFound'
                     throwError pos
-                else
-                    pure ()
         in
         case ty of
             TyCon prov tycon -> do
