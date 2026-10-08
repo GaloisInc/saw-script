@@ -475,6 +475,8 @@ matchArg sym ppopts eval col allocSpecs md shp0 rv0 sv0 = go shp0 rv0 sv0
     go (AggregateShape _ elems) ag (MS.SetupTuple () svs) =
       void $ accessMirAggregate' sym elems svs ag $
         \_off _sz shp rv sv -> go shp rv sv
+    go (AggregateShape _ []) _ag (MS.SetupZST _) =
+      pure ()
     go (ArrayShape _ _ sz shp len) ag (MS.SetupArray _ svs) =
       void $ accessMirAggregateArray' sym sz shp len svs ag $
         \_off rv sv -> go shp rv sv
@@ -594,6 +596,8 @@ setupToReg sym col termSub myRegMap allocMap shp0 sv0 = go shp0 sv0
     go (AggregateShape tupleTy elems) (MS.SetupTuple _ svs) = do
         let tupleSz = tySize col tupleTy
         buildMirAggregate sym tupleSz elems svs $ \_off _sz shp sv -> go shp sv
+    go (AggregateShape _ []) (MS.SetupZST _) = do
+        pure zstMirAggregate
     go (ArrayShape _ _ sz shp len) (MS.SetupArray _ svs) = do
         buildMirAggregateArray sym sz shp len svs $ \_off sv -> go shp sv
     go (StructShape structTy elems) (MS.SetupStruct _ svs) = do
