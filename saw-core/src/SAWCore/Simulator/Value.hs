@@ -311,9 +311,9 @@ vTuple [] = vUnit
 vTuple (x : xs) = vPair x (ready (vTuple xs))
 
 vTupleType :: VMonad l => [TValue l] -> TValue l
-vTupleType [] = VDataType "Prelude.UnitType" [] []
+vTupleType [] = VDataType "Prelude::UnitType" [] []
 vTupleType (t : ts) =
-  VDataType "Prelude.PairType"
+  VDataType "Prelude::PairType"
   [TValue t, TValue (vTupleType ts)] []
 
 vEmptyRecord :: Value l
@@ -366,17 +366,17 @@ asFiniteTypeTValue v =
     VVecType n v1 -> do
       t1 <- asFiniteTypeTValue v1
       return (FTVec n t1)
-    VDataType "Prelude.UnitType" [] [] ->
+    VDataType "Prelude::UnitType" [] [] ->
       Just (FTTuple [])
-    VDataType "Prelude.PairType" [v1, v2] [] ->
+    VDataType "Prelude::PairType" [v1, v2] [] ->
       do t1 <- asFiniteTypeTValue =<< asTValue v1
          t2 <- asFiniteTypeTValue =<< asTValue v2
          case t2 of
            FTTuple ts -> Just (FTTuple (t1 : ts))
            _ -> Nothing
-    VDataType "Prelude.EmptyType" [] [] ->
+    VDataType "Prelude::EmptyType" [] [] ->
       Just (FTRec Map.empty)
-    VDataType "Prelude.RecordType"
+    VDataType "Prelude::RecordType"
       [VString fname, TValue v1, TValue v2] [] ->
       do t1 <- asFiniteTypeTValue v1
          t2 <- asFiniteTypeTValue v2
@@ -416,17 +416,17 @@ asFirstOrderTypeTValue v =
     VFloatType e p -> pure (FOTFloat e p)
     VArrayType a b ->
       FOTArray <$> asFirstOrderTypeTValue a <*> asFirstOrderTypeTValue b
-    VDataType "Prelude.UnitType" [] [] ->
+    VDataType "Prelude::UnitType" [] [] ->
       Just (FOTTuple [])
-    VDataType "Prelude.PairType" [v1, v2] [] ->
+    VDataType "Prelude::PairType" [v1, v2] [] ->
       do t1 <- asFirstOrderTypeTValue =<< asTValue v1
          t2 <- asFirstOrderTypeTValue =<< asTValue v2
          case t2 of
            FOTTuple ts -> Just (FOTTuple (t1 : ts))
            _ -> Nothing
-    VDataType "Prelude.EmptyType" [] [] ->
+    VDataType "Prelude::EmptyType" [] [] ->
       Just (FOTRec Map.empty)
-    VDataType "Prelude.RecordType"
+    VDataType "Prelude::RecordType"
       [VString fname, TValue v1, TValue v2] [] ->
       do t1 <- asFirstOrderTypeTValue v1
          t2 <- asFirstOrderTypeTValue v2
@@ -471,9 +471,9 @@ suffixTValue tv =
          b' <- suffixTValue b
          Just ("_Array" ++ a' ++ b')
     VPiType _ _ -> Nothing
-    VDataType "Prelude.UnitType" [] [] ->
+    VDataType "Prelude::UnitType" [] [] ->
       Just "_Unit"
-    VDataType "Prelude.PairType" [a, b] [] ->
+    VDataType "Prelude::PairType" [a, b] [] ->
       do a' <- suffixTValue =<< asTValue a
          b' <- suffixTValue =<< asTValue b
          Just ("_Pair" ++ a' ++ b')

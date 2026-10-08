@@ -129,20 +129,20 @@ termOfTValue sc val =
       do n' <- scNat sc n
          a' <- termOfTValue sc a
          scVecType sc n' a'
-    VDataType "Prelude.UnitType" [] []
+    VDataType "Prelude::UnitType" [] []
       -> scUnitType sc
-    VDataType "Prelude.PairType" [TValue a, TValue b] []
+    VDataType "Prelude::PairType" [TValue a, TValue b] []
       -> do a' <- termOfTValue sc a
             b' <- termOfTValue sc b
             scPairType sc a' b'
-    VDataType "Prelude.EmptyType" [] []
+    VDataType "Prelude::EmptyType" [] []
       -> scRecordType sc []
-    VDataType "Prelude.RecordType"
+    VDataType "Prelude::RecordType"
       [VString fname, TValue a, TValue b] []
       -> do fname' <- scString sc fname
             a' <- termOfTValue sc a
             b' <- termOfTValue sc b
-            scGlobalApply sc "Prelude.RecordType" [fname', a', b']
+            scGlobalApply sc "Prelude::RecordType" [fname', a', b']
     VDataType qn ps vs ->
       do dt <- scGlobalDef sc qn
          scApplyAll sc dt =<< traverse (termOfSValue sc) (ps ++ vs)

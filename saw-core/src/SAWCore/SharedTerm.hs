@@ -767,22 +767,22 @@ scSortWithFlags sc s flags = execSCM sc (scmSortWithFlags s flags)
 
 -- | Create a literal term from a 'Natural'.
 scNat :: SharedContext -> Natural -> IO Term
-scNat sc 0 = scGlobalDef sc "Prelude.Zero"
+scNat sc 0 = scGlobalDef sc "Prelude::Zero"
 scNat sc n =
   do p <- scPos sc n
-     scGlobalApply sc "Prelude.NatPos" [p]
+     scGlobalApply sc "Prelude::NatPos" [p]
 
 scPos :: SharedContext -> Natural -> IO Term
 scPos sc n
-  | n <= 1    = scGlobalDef sc "Prelude.One"
+  | n <= 1    = scGlobalDef sc "Prelude::One"
   | otherwise =
     do arg <- scPos sc (div n 2)
-       let ident = if even n then "Prelude.Bit0" else "Prelude.Bit1"
+       let ident = if even n then "Prelude::Bit0" else "Prelude::Bit1"
        scGlobalApply sc ident [arg]
 
 -- | Create a @Rational@ term from a numerator and denominator 'Term'.
 scRational :: SharedContext -> Term -> Term -> IO Term
-scRational sc numer denom = scGlobalApply sc "Prelude.ratio" [numer, denom]
+scRational sc numer denom = scGlobalApply sc "Prelude::ratio" [numer, denom]
 
 -- | Create a saw-core @Rational@ constant term from a Haskell 'Rational'
 -- value.
@@ -794,7 +794,7 @@ scRationalConst sc r =
 
 -- | Create a term representing the saw-core type @Rational@.
 scRationalType :: SharedContext -> IO Term
-scRationalType sc = scGlobalDef sc "Prelude.Rational"
+scRationalType sc = scGlobalDef sc "Prelude::Rational"
 
 -- | Create a term from a 'Sort'.
 scSort :: SharedContext -> Sort -> IO Term
@@ -806,7 +806,7 @@ scString sc s = execSCM sc (scmString s)
 
 -- | Create a term representing the primitive saw-core type @String@.
 scStringType :: SharedContext -> IO Term
-scStringType sc = scGlobalDef sc "Prelude.String"
+scStringType sc = scGlobalDef sc "Prelude::String"
 
 -- | Create a vector term from a type (as a 'Term') and a list of 'Term's of
 -- that type.
@@ -1329,10 +1329,10 @@ scVectorReduced sc ety xs
     asAny _ = Just ()
 
     asAt :: Term -> Maybe ((Natural :*: Term) :*: Natural)
-    asAt = (((isGlobalDef "Prelude.at" @> asNat) <@ asAny) <@> return) <@> asNat
+    asAt = (((isGlobalDef "Prelude::at" @> asNat) <@ asAny) <@> return) <@> asNat
 
     asBvAt :: Term -> Maybe ((Natural :*: Term) :*: Natural)
-    asBvAt = ((((isGlobalDef "Prelude.bvAt" @> asNat) <@ asAny) <@ asAny) <@> return) <@> asUnsignedConcreteBv
+    asBvAt = ((((isGlobalDef "Prelude::bvAt" @> asNat) <@ asAny) <@ asAny) <@> return) <@> asUnsignedConcreteBv
 
     asAtOrBvAt :: Term -> Maybe ((Natural :*: Term) :*: Natural)
     asAtOrBvAt term
@@ -1347,21 +1347,21 @@ scVectorReduced sc ety xs
 --
 -- > EqTrue : Bool -> sort 1;
 scEqTrue :: SharedContext -> Term -> IO Term
-scEqTrue sc t = scGlobalApply sc "Prelude.EqTrue" [t]
+scEqTrue sc t = scGlobalApply sc "Prelude::EqTrue" [t]
 
 -- | Create a @Prelude.Bool@-typed term from the given Boolean: @Prelude.True@
 -- for @True@, @Prelude.False@ for @False@.
 scBool :: SharedContext -> Bool -> IO Term
-scBool sc True  = scGlobalDef sc "Prelude.True"
-scBool sc False = scGlobalDef sc "Prelude.False"
+scBool sc True  = scGlobalDef sc "Prelude::True"
+scBool sc False = scGlobalDef sc "Prelude::False"
 
 -- | Create a term representing the prelude Boolean type, @Prelude.Bool@.
 scBoolType :: SharedContext -> IO Term
-scBoolType sc = scGlobalDef sc "Prelude.Bool"
+scBoolType sc = scGlobalDef sc "Prelude::Bool"
 
 -- | Create a term representing the prelude Natural type.
 scNatType :: SharedContext -> IO Term
-scNatType sc = scGlobalDef sc "Prelude.Nat"
+scNatType sc = scGlobalDef sc "Prelude::Nat"
 
 -- | Create a term representing a vector type, from a term giving the length
 -- and a term giving the element type.
@@ -1369,57 +1369,57 @@ scVecType :: SharedContext
           -> Term -- ^ The length of the vector
           -> Term -- ^ The element type
           -> IO Term
-scVecType sc n e = scGlobalApply sc "Prelude.Vec" [n, e]
+scVecType sc n e = scGlobalApply sc "Prelude::Vec" [n, e]
 
 -- | Create a term applying @Prelude.not@ to the given term.
 --
 -- > not : Bool -> Bool;
 scNot :: SharedContext -> Term -> IO Term
-scNot sc t = scGlobalApply sc "Prelude.not" [t]
+scNot sc t = scGlobalApply sc "Prelude::not" [t]
 
 -- | Create a term applying @Prelude.and@ to the two given terms.
 --
 -- > and : Bool -> Bool -> Bool;
 scAnd :: SharedContext -> Term -> Term -> IO Term
-scAnd sc x y = scGlobalApply sc "Prelude.and" [x,y]
+scAnd sc x y = scGlobalApply sc "Prelude::and" [x,y]
 
 -- | Create a term applying @Prelude.or@ to the two given terms.
 --
 -- > or : Bool -> Bool -> Bool;
 scOr :: SharedContext -> Term -> Term -> IO Term
-scOr sc x y = scGlobalApply sc "Prelude.or" [x,y]
+scOr sc x y = scGlobalApply sc "Prelude::or" [x,y]
 
 -- | Create a term applying @Prelude.implies@ to the two given terms.
 --
 -- > implies : Bool -> Bool -> Bool;
 scImplies :: SharedContext -> Term -> Term
           -> IO Term
-scImplies sc x y = scGlobalApply sc "Prelude.implies" [x,y]
+scImplies sc x y = scGlobalApply sc "Prelude::implies" [x,y]
 
 -- | Create a term applying @Prelude.xor@ to the two given terms.
 --
 -- > xor : Bool -> Bool -> Bool;
 scXor :: SharedContext -> Term -> Term -> IO Term
-scXor sc x y = scGlobalApply sc "Prelude.xor" [x,y]
+scXor sc x y = scGlobalApply sc "Prelude::xor" [x,y]
 
 -- | Create a term applying @Prelude.boolEq@ to the two given terms.
 --
 -- > boolEq : Bool -> Bool -> Bool;
 scBoolEq :: SharedContext -> Term -> Term -> IO Term
-scBoolEq sc x y = scGlobalApply sc "Prelude.boolEq" [x,y]
+scBoolEq sc x y = scGlobalApply sc "Prelude::boolEq" [x,y]
 
 -- | Create a universally quantified bitvector term.
 --
 -- > bvForall : (n : Nat) -> (Vec n Bool -> Bool) -> Bool;
 scBvForall :: SharedContext -> Term -> Term -> IO Term
-scBvForall sc w f = scGlobalApply sc "Prelude.bvForall" [w, f]
+scBvForall sc w f = scGlobalApply sc "Prelude::bvForall" [w, f]
 
 -- | Create a non-dependent if-then-else term.
 --
 -- > ite : (a : sort 1) -> Bool -> a -> a -> a;
 scIte :: SharedContext -> Term -> Term ->
          Term -> Term -> IO Term
-scIte sc t b x y = scGlobalApply sc "Prelude.ite" [t, b, x, y]
+scIte sc t b x y = scGlobalApply sc "Prelude::ite" [t, b, x, y]
 
 -- | Build a conjunction from a list of boolean terms.
 scAndList :: SharedContext -> [Term] -> IO Term
@@ -1445,33 +1445,33 @@ scOrList sc = disj . filter nontrivial
 -- > append : (m n : Nat) -> (e : sort 0) -> Vec m e -> Vec n e -> Vec (addNat m n) e;
 scAppend :: SharedContext -> Term -> Term -> Term ->
             Term -> Term -> IO Term
-scAppend sc m n t x y = scGlobalApply sc "Prelude.append" [m, n, t, x, y]
+scAppend sc m n t x y = scGlobalApply sc "Prelude::append" [m, n, t, x, y]
 
 -- | Create a term applying @Prelude.join@ to a vector of vectors.
 --
 -- > join  : (m n : Nat) -> (a : sort 0) -> Vec m (Vec n a) -> Vec (mulNat m n) a;
 scJoin :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
-scJoin sc m n a v = scGlobalApply sc "Prelude.join" [m, n, a, v]
+scJoin sc m n a v = scGlobalApply sc "Prelude::join" [m, n, a, v]
 
 -- | Create a term splitting a vector with @Prelude.split@.
 --
 -- > split : (m n : Nat) -> (a : sort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
 scSplit :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
-scSplit sc m n a v = scGlobalApply sc "Prelude.split" [m, n, a, v]
+scSplit sc m n a v = scGlobalApply sc "Prelude::split" [m, n, a, v]
 
 -- | Create a term selecting a range of values from a vector with @Prelude.slice@.
 --
 -- > slice : (e : sort 1) -> (i n o : Nat) -> Vec (addNat (addNat i n) o) e -> Vec n e;
 scSlice :: SharedContext -> Term -> Term ->
            Term -> Term -> Term -> IO Term
-scSlice sc e i n o a = scGlobalApply sc "Prelude.slice" [e, i, n, o, a]
+scSlice sc e i n o a = scGlobalApply sc "Prelude::slice" [e, i, n, o, a]
 
 -- | Create a term accessing a particular element of a vector with @get@.
 --
 -- > get : (n : Nat) -> (e : sort 0) -> Vec n e -> Fin n -> e;
 scGet :: SharedContext -> Term -> Term ->
          Term -> Term -> IO Term
-scGet sc n e v i = scGlobalApply sc "Prelude.get" [n, e, v, i]
+scGet sc n e v i = scGlobalApply sc "Prelude::get" [n, e, v, i]
 
 -- | Create a term accessing a particular element of a vector with @bvAt@,
 -- which uses a bitvector for indexing.
@@ -1479,14 +1479,14 @@ scGet sc n e v i = scGlobalApply sc "Prelude.get" [n, e, v, i]
 -- > bvAt : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> Vec w Bool -> a;
 scBvAt :: SharedContext -> Term -> Term ->
          Term -> Term -> Term -> IO Term
-scBvAt sc n a i xs idx = scGlobalApply sc "Prelude.bvAt" [n, a, i, xs, idx]
+scBvAt sc n a i xs idx = scGlobalApply sc "Prelude::bvAt" [n, a, i, xs, idx]
 
 -- | Create a term accessing a particular element of a vector, with a default
 -- to return if the index is out of bounds.
 --
 -- > atWithDefault : (n : Nat) -> (a : sort 0) -> a -> Vec n a -> Nat -> a;
 scAtWithDefault :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
-scAtWithDefault sc n a v xs idx = scGlobalApply sc "Prelude.atWithDefault" [n, a, v, xs, idx]
+scAtWithDefault sc n a v xs idx = scGlobalApply sc "Prelude::atWithDefault" [n, a, v, xs, idx]
 
 -- | Create a term accessing a particular element of a vector, failing if the
 -- index is out of bounds.
@@ -1494,27 +1494,27 @@ scAtWithDefault sc n a v xs idx = scGlobalApply sc "Prelude.atWithDefault" [n, a
 -- > at : (n : Nat) -> (a : sort 0) -> Vec n a -> Nat -> a;
 scAt :: SharedContext -> Term -> Term ->
         Term -> Term -> IO Term
-scAt sc n a xs idx = scGlobalApply sc "Prelude.at" [n, a, xs, idx]
+scAt sc n a xs idx = scGlobalApply sc "Prelude::at" [n, a, xs, idx]
 
 -- | Create a term evaluating to a vector containing a single element.
 --
 -- > single : (e : sort 1) -> e -> Vec 1 e;
 scSingle :: SharedContext -> Term -> Term -> IO Term
-scSingle sc e x = scGlobalApply sc "Prelude.single" [e, x]
+scSingle sc e x = scGlobalApply sc "Prelude::single" [e, x]
 
 -- | Create a term computing the least significant bit of a bitvector, given a
 -- length and bitvector.
 --
 -- > lsb : (n : Nat) -> Vec (Succ n) Bool -> Bool;
 scLsb :: SharedContext -> Term -> Term -> IO Term
-scLsb sc n x = scGlobalApply sc "Prelude.lsb" [n, x]
+scLsb sc n x = scGlobalApply sc "Prelude::lsb" [n, x]
 
 -- | Create a term computing the most significant bit of a bitvector, given a
 -- length and bitvector.
 --
 -- > msb : (n : Nat) -> Vec (Succ n) Bool -> Bool;
 scMsb :: SharedContext -> Term -> Term -> IO Term
-scMsb sc n x = scGlobalApply sc "Prelude.msb" [n, x]
+scMsb sc n x = scGlobalApply sc "Prelude::msb" [n, x]
 
 -- Primitive operations on nats
 
@@ -1522,76 +1522,76 @@ scMsb sc n x = scGlobalApply sc "Prelude.msb" [n, x]
 --
 -- > addNat : Nat -> Nat -> Nat;
 scAddNat :: SharedContext -> Term -> Term -> IO Term
-scAddNat sc x y = scGlobalApply sc "Prelude.addNat" [x,y]
+scAddNat sc x y = scGlobalApply sc "Prelude::addNat" [x,y]
 
 -- | Create a term computing the difference between the two given
 -- (natural number) terms.
 --
 -- > subNat : Nat -> Nat -> Nat
 scSubNat :: SharedContext -> Term -> Term -> IO Term
-scSubNat sc x y = scGlobalApply sc "Prelude.subNat" [x,y]
+scSubNat sc x y = scGlobalApply sc "Prelude::subNat" [x,y]
 
 -- | Create a term computing the product of the two given (natural number)
 -- terms.
 --
 -- > mulNat : Nat -> Nat -> Nat;
 scMulNat :: SharedContext -> Term -> Term -> IO Term
-scMulNat sc x y = scGlobalApply sc "Prelude.mulNat" [x,y]
+scMulNat sc x y = scGlobalApply sc "Prelude::mulNat" [x,y]
 
 -- | Create a term computing the quotient of the two given (natural number)
 -- terms.
 --
 -- > divNat : Nat -> Nat -> Nat;
 scDivNat :: SharedContext -> Term -> Term -> IO Term
-scDivNat sc x y = scGlobalApply sc "Prelude.divNat" [x,y]
+scDivNat sc x y = scGlobalApply sc "Prelude::divNat" [x,y]
 
 -- | Create a term computing the remainder upon division of the two given
 -- (natural number) terms.
 --
 -- > modNat : Nat -> Nat -> Nat;
 scModNat :: SharedContext -> Term -> Term -> IO Term
-scModNat sc x y = scGlobalApply sc "Prelude.modNat" [x,y]
+scModNat sc x y = scGlobalApply sc "Prelude::modNat" [x,y]
 
 -- | Create a term computing the quotient and remainder upon division of the
 -- two given (natural number) terms, giving the result as a pair.
 --
 -- > divModNat : Nat -> Nat -> Nat * Nat;
 scDivModNat :: SharedContext -> Term -> Term -> IO Term
-scDivModNat sc x y = scGlobalApply sc "Prelude.divModNat" [x,y]
+scDivModNat sc x y = scGlobalApply sc "Prelude::divModNat" [x,y]
 
 -- | Create a term computing whether the two given (natural number) terms are
 -- equal.
 --
 -- > equalNat : Nat -> Nat -> Bool;
 scEqualNat :: SharedContext -> Term -> Term -> IO Term
-scEqualNat sc x y = scGlobalApply sc "Prelude.equalNat" [x,y]
+scEqualNat sc x y = scGlobalApply sc "Prelude::equalNat" [x,y]
 
 -- | Create a term computing whether the first term (a natural number) is less
 -- than the second term (also a natural number).
 --
 -- > ltNat : Nat -> Nat -> Bool;
 scLtNat :: SharedContext -> Term -> Term -> IO Term
-scLtNat sc x y = scGlobalApply sc "Prelude.ltNat" [x,y]
+scLtNat sc x y = scGlobalApply sc "Prelude::ltNat" [x,y]
 
 -- | Create a term computing the minimum of the two given (natural number)
 -- terms.
 --
 -- > minNat : Nat -> Nat -> Nat
 scMinNat :: SharedContext -> Term -> Term -> IO Term
-scMinNat sc x y = scGlobalApply sc "Prelude.minNat" [x,y]
+scMinNat sc x y = scGlobalApply sc "Prelude::minNat" [x,y]
 
 -- | Create a term computing the maximum of the two given (natural number)
 -- terms.
 --
 -- > maxNat : Nat -> Nat -> Nat;
 scMaxNat :: SharedContext -> Term -> Term -> IO Term
-scMaxNat sc x y = scGlobalApply sc "Prelude.maxNat" [x,y]
+scMaxNat sc x y = scGlobalApply sc "Prelude::maxNat" [x,y]
 
 -- Primitive operations on Integer
 
 -- | Create a term representing the prelude Integer type.
 scIntegerType :: SharedContext -> IO Term
-scIntegerType sc = scGlobalDef sc "Prelude.Integer"
+scIntegerType sc = scGlobalDef sc "Prelude::Integer"
 
 -- | Create an integer constant term from an 'Integer'.
 scIntegerConst :: SharedContext -> Integer -> IO Term
@@ -1603,87 +1603,87 @@ scIntegerConst sc i
 --
 -- > intAdd : Integer -> Integer -> Integer
 scIntAdd :: SharedContext -> Term -> Term -> IO Term
-scIntAdd sc x y = scGlobalApply sc "Prelude.intAdd" [x, y]
+scIntAdd sc x y = scGlobalApply sc "Prelude::intAdd" [x, y]
 
 -- | Create a term applying the integer subtraction primitive.
 --
 -- > intSub : Integer -> Integer -> Integer
 scIntSub :: SharedContext -> Term -> Term -> IO Term
-scIntSub sc x y = scGlobalApply sc "Prelude.intSub" [x, y]
+scIntSub sc x y = scGlobalApply sc "Prelude::intSub" [x, y]
 
 -- | Create a term applying the integer multiplication primitive.
 --
 -- > intMul : Integer -> Integer -> Integer
 scIntMul :: SharedContext -> Term -> Term -> IO Term
-scIntMul sc x y = scGlobalApply sc "Prelude.intMul" [x, y]
+scIntMul sc x y = scGlobalApply sc "Prelude::intMul" [x, y]
 
 -- | Create a term applying the integer division primitive.
 --
 -- > intDiv : Integer -> Integer -> Integer
 scIntDiv :: SharedContext -> Term -> Term -> IO Term
-scIntDiv sc x y = scGlobalApply sc "Prelude.intDiv" [x, y]
+scIntDiv sc x y = scGlobalApply sc "Prelude::intDiv" [x, y]
 
 -- | Create a term applying the integer modulus primitive.
 --
 -- > intMod : Integer -> Integer -> Integer
 scIntMod :: SharedContext -> Term -> Term -> IO Term
-scIntMod sc x y = scGlobalApply sc "Prelude.intMod" [x, y]
+scIntMod sc x y = scGlobalApply sc "Prelude::intMod" [x, y]
 
 -- | Create a term applying the integer min primitive.
 --
 -- > intMin : Integer -> Integer -> Integer
 scIntMin :: SharedContext -> Term -> Term -> IO Term
-scIntMin sc x y = scGlobalApply sc "Prelude.intMin" [x, y]
+scIntMin sc x y = scGlobalApply sc "Prelude::intMin" [x, y]
 
 -- | Create a term applying the integer max primitive.
 --
 -- > intMax : Integer -> Integer -> Integer
 scIntMax :: SharedContext -> Term -> Term -> IO Term
-scIntMax sc x y = scGlobalApply sc "Prelude.intMax" [x, y]
+scIntMax sc x y = scGlobalApply sc "Prelude::intMax" [x, y]
 
 -- | Create a term applying the negation integer primitive.
 --
 -- > intNeg : Integer -> Integer;
 scIntNeg :: SharedContext -> Term -> IO Term
-scIntNeg sc x = scGlobalApply sc "Prelude.intNeg" [x]
+scIntNeg sc x = scGlobalApply sc "Prelude::intNeg" [x]
 
 -- | Create a term applying the absolute value integer primitive.
 --
 -- > intAbs : Integer -> Integer;
 scIntAbs :: SharedContext -> Term -> IO Term
-scIntAbs sc x = scGlobalApply sc "Prelude.intAbs" [x]
+scIntAbs sc x = scGlobalApply sc "Prelude::intAbs" [x]
 
 -- | Create a term applying the integer equality testing primitive.
 --
 -- > intEq : Integer -> Integer -> Bool;
 scIntEq :: SharedContext -> Term -> Term -> IO Term
-scIntEq sc x y = scGlobalApply sc "Prelude.intEq" [x, y]
+scIntEq sc x y = scGlobalApply sc "Prelude::intEq" [x, y]
 
 -- | Create a term applying the integer less-than-or-equal primitive.
 --
 -- > intLe : Integer -> Integer -> Bool;
 scIntLe :: SharedContext -> Term -> Term -> IO Term
-scIntLe sc x y = scGlobalApply sc "Prelude.intLe" [x, y]
+scIntLe sc x y = scGlobalApply sc "Prelude::intLe" [x, y]
 
 -- | Create a term applying the integer less-than primitive.
 --
 -- > intLt : Integer -> Integer -> Bool;
 scIntLt :: SharedContext -> Term -> Term -> IO Term
-scIntLt sc x y = scGlobalApply sc "Prelude.intLt" [x, y]
+scIntLt sc x y = scGlobalApply sc "Prelude::intLt" [x, y]
 
 -- | Create a term computing a @Nat@ from an @Integer@, if possible.
 --
 -- > intToNat : Integer -> Nat;
 scIntToNat
    :: SharedContext -> Term -> IO Term
-scIntToNat sc x = scGlobalApply sc "Prelude.intToNat" [x]
+scIntToNat sc x = scGlobalApply sc "Prelude::intToNat" [x]
 
 -- | Create a term computing an @Integer@ from a @Nat@.
 --
 -- > natToInt : Nat -> Integer;
 scNatToInt
    :: SharedContext -> Term -> IO Term
-scNatToInt sc x = scGlobalApply sc "Prelude.natToInt" [x]
+scNatToInt sc x = scGlobalApply sc "Prelude::natToInt" [x]
 
 -- | Create a term computing a bitvector of length n from an @Integer@, if
 -- possible.
@@ -1691,7 +1691,7 @@ scNatToInt sc x = scGlobalApply sc "Prelude.natToInt" [x]
 -- > intToBv : (n::Nat) -> Integer -> Vec n Bool;
 scIntToBv
    :: SharedContext -> Term -> Term -> IO Term
-scIntToBv sc n x = scGlobalApply sc "Prelude.intToBv" [n,x]
+scIntToBv sc n x = scGlobalApply sc "Prelude::intToBv" [n,x]
 
 -- | Create a term computing an @Integer@ from a bitvector of length n.
 -- This produces the unsigned value of the bitvector.
@@ -1699,7 +1699,7 @@ scIntToBv sc n x = scGlobalApply sc "Prelude.intToBv" [n,x]
 -- > bvToInt : (n : Nat) -> Vec n Bool -> Integer;
 scBvToInt
    :: SharedContext -> Term -> Term -> IO Term
-scBvToInt sc n x = scGlobalApply sc "Prelude.bvToInt" [n,x]
+scBvToInt sc n x = scGlobalApply sc "Prelude::bvToInt" [n,x]
 
 -- | Create a term computing an @Integer@ from a bitvector of length n.
 -- This produces the 2's complement signed value of the bitvector.
@@ -1707,7 +1707,7 @@ scBvToInt sc n x = scGlobalApply sc "Prelude.bvToInt" [n,x]
 -- > sbvToInt : (n : Nat) -> Vec n Bool -> Integer;
 scSbvToInt
    :: SharedContext -> Term -> Term -> IO Term
-scSbvToInt sc n x = scGlobalApply sc "Prelude.sbvToInt" [n,x]
+scSbvToInt sc n x = scGlobalApply sc "Prelude::sbvToInt" [n,x]
 
 
 -- Primitive operations on IntMod
@@ -1716,49 +1716,49 @@ scSbvToInt sc n x = scGlobalApply sc "Prelude.sbvToInt" [n,x]
 --
 -- > IntMod : Nat -> sort 0;
 scIntModType :: SharedContext -> Term -> IO Term
-scIntModType sc n = scGlobalApply sc "Prelude.IntMod" [n]
+scIntModType sc n = scGlobalApply sc "Prelude::IntMod" [n]
 
 -- | Convert an integer to an integer mod n.
 --
 -- > toIntMod : (n : Nat) -> Integer -> IntMod n;
 scToIntMod :: SharedContext -> Term -> Term -> IO Term
-scToIntMod sc n x = scGlobalApply sc "Prelude.toIntMod" [n, x]
+scToIntMod sc n x = scGlobalApply sc "Prelude::toIntMod" [n, x]
 
 -- | Convert an integer mod n to an integer.
 --
 -- > fromIntMod : (n : Nat) -> IntMod n -> Integer;
 scFromIntMod :: SharedContext -> Term -> Term -> IO Term
-scFromIntMod sc n x = scGlobalApply sc "Prelude.fromIntMod" [n, x]
+scFromIntMod sc n x = scGlobalApply sc "Prelude::fromIntMod" [n, x]
 
 -- | Equality test on the @IntMod@ type
 --
 -- > intModEq  : (n : Nat) -> IntMod n -> IntMod n -> Bool;
 scIntModEq :: SharedContext -> Term -> Term -> Term -> IO Term
-scIntModEq sc n x y = scGlobalApply sc "Prelude.intModEq" [n,x,y]
+scIntModEq sc n x y = scGlobalApply sc "Prelude::intModEq" [n,x,y]
 
 -- | Addition of @IntMod@ values
 --
 -- > intModAdd : (n : Nat) -> IntMod n -> IntMod n -> IntMod n;
 scIntModAdd :: SharedContext -> Term -> Term -> Term -> IO Term
-scIntModAdd sc n x y = scGlobalApply sc "Prelude.intModAdd" [n,x,y]
+scIntModAdd sc n x y = scGlobalApply sc "Prelude::intModAdd" [n,x,y]
 
 -- | Subtraction of @IntMod@ values
 --
 -- > intModSub : (n : Nat) -> IntMod n -> IntMod n -> IntMod n;
 scIntModSub :: SharedContext -> Term -> Term -> Term -> IO Term
-scIntModSub sc n x y = scGlobalApply sc "Prelude.intModSub" [n,x,y]
+scIntModSub sc n x y = scGlobalApply sc "Prelude::intModSub" [n,x,y]
 
 -- | Multiplication of @IntMod@ values
 --
 -- > intModMul : (n : Nat) -> IntMod n -> IntMod n -> IntMod n;
 scIntModMul :: SharedContext -> Term -> Term -> Term -> IO Term
-scIntModMul sc n x y = scGlobalApply sc "Prelude.intModMul" [n,x,y]
+scIntModMul sc n x y = scGlobalApply sc "Prelude::intModMul" [n,x,y]
 
 -- | Negation (additive inverse) of @IntMod@ values
 --
 -- > intModNeg : (n : Nat) -> IntMod n -> IntMod n;
 scIntModNeg :: SharedContext -> Term -> Term -> IO Term
-scIntModNeg sc n x = scGlobalApply sc "Prelude.intModNeg" [n,x]
+scIntModNeg sc n x = scGlobalApply sc "Prelude::intModNeg" [n,x]
 
 
 -- Primitive operations on bitvectors
@@ -1776,7 +1776,7 @@ scBitvector sc size =
 --
 -- > bvNat : (n : Nat) -> Nat -> Vec n Bool;
 scBvNat :: SharedContext -> Term -> Term -> IO Term
-scBvNat sc x y = scGlobalApply sc "Prelude.bvNat" [x, y]
+scBvNat sc x y = scGlobalApply sc "Prelude::bvNat" [x, y]
 
 -- | Create a term computing a @Nat@ from a bitvector of length n.
 --
@@ -1784,7 +1784,7 @@ scBvNat sc x y = scGlobalApply sc "Prelude.bvNat" [x, y]
 scBvToNat :: SharedContext -> Natural -> Term -> IO Term
 scBvToNat sc n x = do
     n' <- scNat sc n
-    scGlobalApply sc "Prelude.bvToNat" [n',x]
+    scGlobalApply sc "Prelude::bvToNat" [n',x]
 
 -- | Create a @bvNat@ term computing a bitvector of the given length
 -- representing the given 'Integer' value (if possible).
@@ -1792,7 +1792,7 @@ scBvConst :: SharedContext -> Natural -> Integer -> IO Term
 scBvConst sc w v = assert (w <= fromIntegral (maxBound :: Int)) $ do
   x <- scNat sc w
   y <- scNat sc $ fromInteger $ v .&. (1 `shiftL` fromIntegral w - 1)
-  scGlobalApply sc "Prelude.bvNat" [x, y]
+  scGlobalApply sc "Prelude::bvNat" [x, y]
 
 -- | Create a vector literal term computing a bitvector of the given length
 -- representing the given 'Integer' value (if possible).
@@ -1809,206 +1809,206 @@ scBvLit sc w v = assert (w <= fromIntegral (maxBound :: Int)) $ do
 --
 -- > bvBool : (n : Nat) -> Bool -> Vec n Bool;
 scBvBool :: SharedContext -> Term -> Term -> IO Term
-scBvBool sc n x = scGlobalApply sc "Prelude.bvBool" [n, x]
+scBvBool sc n x = scGlobalApply sc "Prelude::bvBool" [n, x]
 
 -- | Create a term returning true if and only if the given bitvector represents
 -- a nonzero value.
 --
 -- > bvNonzero : (n : Nat) -> Vec n Bool -> Bool;
 scBvNonzero :: SharedContext -> Term -> Term -> IO Term
-scBvNonzero sc n x = scGlobalApply sc "Prelude.bvNonzero" [n, x]
+scBvNonzero sc n x = scGlobalApply sc "Prelude::bvNonzero" [n, x]
 
 -- | Create a term computing the 2's complement negation of the given
 -- bitvector.
 -- > bvNeg : (n : Nat) -> Vec n Bool -> Vec n Bool;
 scBvNeg :: SharedContext -> Term -> Term -> IO Term
-scBvNeg sc n x = scGlobalApply sc "Prelude.bvNeg" [n, x]
+scBvNeg sc n x = scGlobalApply sc "Prelude::bvNeg" [n, x]
 
 -- | Create a term applying the bitvector addition primitive.
 --
 -- > bvAdd : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvAdd :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvAdd sc n x y = scGlobalApply sc "Prelude.bvAdd" [n, x, y]
+scBvAdd sc n x y = scGlobalApply sc "Prelude::bvAdd" [n, x, y]
 
 -- | Create a term applying the bitvector subtraction primitive.
 --
 -- > bvSub : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvSub :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvSub sc n x y = scGlobalApply sc "Prelude.bvSub" [n, x, y]
+scBvSub sc n x y = scGlobalApply sc "Prelude::bvSub" [n, x, y]
 
 -- | Create a term applying the bitvector multiplication primitive.
 --
 -- > bvMul : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvMul :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvMul sc n x y = scGlobalApply sc "Prelude.bvMul" [n, x, y]
+scBvMul sc n x y = scGlobalApply sc "Prelude::bvMul" [n, x, y]
 
 -- | Create a term applying the bitvector (unsigned) modulus primitive.
 --
 -- > bvURem : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvURem :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvURem sc n x y = scGlobalApply sc "Prelude.bvURem" [n, x, y]
+scBvURem sc n x y = scGlobalApply sc "Prelude::bvURem" [n, x, y]
 
 -- | Create a term applying the bitvector (unsigned) division primitive.
 --
 -- > bvUDiv : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvUDiv :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvUDiv sc n x y = scGlobalApply sc "Prelude.bvUDiv" [n, x, y]
+scBvUDiv sc n x y = scGlobalApply sc "Prelude::bvUDiv" [n, x, y]
 
 -- | Create a term applying the bitvector (signed) modulus primitive.
 --
 -- > bvSRem : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvSRem :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvSRem sc n x y = scGlobalApply sc "Prelude.bvSRem" [n, x, y]
+scBvSRem sc n x y = scGlobalApply sc "Prelude::bvSRem" [n, x, y]
 
 -- | Create a term applying the bitvector (signed) division primitive.
 --
 -- > bvSDiv : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvSDiv :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvSDiv sc n x y = scGlobalApply sc "Prelude.bvSDiv" [n, x, y]
+scBvSDiv sc n x y = scGlobalApply sc "Prelude::bvSDiv" [n, x, y]
 
 -- | Create a term applying the lg2 bitvector primitive.
 --
 -- > bvLg2 : (n : Nat) -> Vec n Bool -> Vec n Bool;
 scBvLg2 :: SharedContext -> Term -> Term -> IO Term
-scBvLg2 sc n x = scGlobalApply sc "Prelude.bvLg2" [n, x]
+scBvLg2 sc n x = scGlobalApply sc "Prelude::bvLg2" [n, x]
 
 -- | Create a term applying the population count bitvector primitive.
 --
 -- > bvPopcount : (n : Nat) -> Vec n Bool -> Vec n Bool;
 scBvPopcount :: SharedContext -> Term -> Term -> IO Term
-scBvPopcount sc n x = scGlobalApply sc "Prelude.bvPopcount" [n, x]
+scBvPopcount sc n x = scGlobalApply sc "Prelude::bvPopcount" [n, x]
 
 -- | Create a term applying the leading zero counting bitvector primitive.
 --
 -- > bvCountLeadingZeros : (n : Nat) -> Vec n Bool -> Vec n Bool;
 scBvCountLeadingZeros :: SharedContext -> Term -> Term -> IO Term
-scBvCountLeadingZeros sc n x = scGlobalApply sc "Prelude.bvCountLeadingZeros" [n, x]
+scBvCountLeadingZeros sc n x = scGlobalApply sc "Prelude::bvCountLeadingZeros" [n, x]
 
 -- | Create a term applying the trailing zero counting bitvector primitive.
 --
 -- > bvCountTrailingZeros : (n : Nat) -> Vec n Bool -> Vec n Bool;
 scBvCountTrailingZeros :: SharedContext -> Term -> Term -> IO Term
-scBvCountTrailingZeros sc n x = scGlobalApply sc "Prelude.bvCountTrailingZeros" [n, x]
+scBvCountTrailingZeros sc n x = scGlobalApply sc "Prelude::bvCountTrailingZeros" [n, x]
 
 -- | Create a term applying the bit-wise and primitive.
 --
 -- > bvAnd : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvAnd :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvAnd sc n x y = scGlobalApply sc "Prelude.bvAnd" [n, x, y]
+scBvAnd sc n x y = scGlobalApply sc "Prelude::bvAnd" [n, x, y]
 
 -- | Create a term applying the bit-wise xor primitive.
 --
 -- > bvXor : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvXor :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvXor sc n x y = scGlobalApply sc "Prelude.bvXor" [n, x, y]
+scBvXor sc n x y = scGlobalApply sc "Prelude::bvXor" [n, x, y]
 
 -- | Create a term applying the bit-wise or primitive.
 --
 -- > bvOr : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvOr :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvOr  sc n x y = scGlobalApply sc "Prelude.bvOr"  [n, x, y]
+scBvOr  sc n x y = scGlobalApply sc "Prelude::bvOr"  [n, x, y]
 
 -- | Create a term applying the bit-wise negation primitive.
 --
 -- > bvNot : (n : Nat) -> Vec n Bool -> Vec n Bool;
 scBvNot :: SharedContext -> Term -> Term -> IO Term
-scBvNot sc n x = scGlobalApply sc "Prelude.bvNot" [n, x]
+scBvNot sc n x = scGlobalApply sc "Prelude::bvNot" [n, x]
 
 -- | Create a term computing whether the two given bitvectors (of equal length)
 -- are equal.
 --
 -- > bvEq : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 scBvEq :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvEq  sc n x y = scGlobalApply sc "Prelude.bvEq"  [n, x, y]
+scBvEq  sc n x y = scGlobalApply sc "Prelude::bvEq"  [n, x, y]
 
 -- | Create a term applying the bitvector (unsigned) greater-than-or-equal
 -- primitive.
 --
 -- > bvuge : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 scBvUGe :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvUGe sc n x y = scGlobalApply sc "Prelude.bvuge" [n, x, y]
+scBvUGe sc n x y = scGlobalApply sc "Prelude::bvuge" [n, x, y]
 
 -- | Create a term applying the bitvector (unsigned) less-than-or-equal
 -- primitive.
 --
 -- > bvule : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 scBvULe :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvULe sc n x y = scGlobalApply sc "Prelude.bvule" [n, x, y]
+scBvULe sc n x y = scGlobalApply sc "Prelude::bvule" [n, x, y]
 
 -- | Create a term applying the bitvector (unsigned) greater-than primitive.
 --
 -- > bvugt : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 scBvUGt :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvUGt sc n x y = scGlobalApply sc "Prelude.bvugt" [n, x, y]
+scBvUGt sc n x y = scGlobalApply sc "Prelude::bvugt" [n, x, y]
 
 -- | Create a term applying the bitvector (unsigned) less-than primitive.
 --
 -- > bvult : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 scBvULt :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvULt sc n x y = scGlobalApply sc "Prelude.bvult" [n, x, y]
+scBvULt sc n x y = scGlobalApply sc "Prelude::bvult" [n, x, y]
 
 -- | Create a term applying the bitvector (signed) greater-than-or-equal
 -- primitive.
 --
 -- > bvsge : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 scBvSGe :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvSGe sc n x y = scGlobalApply sc "Prelude.bvsge" [n, x, y]
+scBvSGe sc n x y = scGlobalApply sc "Prelude::bvsge" [n, x, y]
 
 -- | Create a term applying the bitvector (signed) less-than-or-equal
 -- primitive.
 --
 -- > bvsle : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 scBvSLe :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvSLe sc n x y = scGlobalApply sc "Prelude.bvsle" [n, x, y]
+scBvSLe sc n x y = scGlobalApply sc "Prelude::bvsle" [n, x, y]
 
 -- | Create a term applying the bitvector (signed) greater-than primitive.
 --
 -- > bvsgt : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 scBvSGt :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvSGt sc n x y = scGlobalApply sc "Prelude.bvsgt" [n, x, y]
+scBvSGt sc n x y = scGlobalApply sc "Prelude::bvsgt" [n, x, y]
 
 -- | Create a term applying the bitvector (signed) less-than primitive.
 --
 -- > bvslt : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 scBvSLt :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvSLt sc n x y = scGlobalApply sc "Prelude.bvslt" [n, x, y]
+scBvSLt sc n x y = scGlobalApply sc "Prelude::bvslt" [n, x, y]
 
 -- | Create a term applying the left-shift primitive.
 --
 -- > bvShl : (n : Nat) -> Vec n Bool -> Nat -> Vec n Bool;
 scBvShl :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvShl sc n x y = scGlobalApply sc "Prelude.bvShl" [n, x, y]
+scBvShl sc n x y = scGlobalApply sc "Prelude::bvShl" [n, x, y]
 
 -- | Create a term applying the logical right-shift primitive.
 --
 -- > bvShr : (n : Nat) -> Vec n Bool -> Nat -> Vec n Bool;
 scBvShr :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvShr sc n x y = scGlobalApply sc "Prelude.bvShr" [n, x, y]
+scBvShr sc n x y = scGlobalApply sc "Prelude::bvShr" [n, x, y]
 
 -- | Create a term applying the arithmetic/signed right-shift primitive.
 --
 -- > bvSShr : (w : Nat) -> Vec (Succ w) Bool -> Nat -> Vec (Succ w) Bool;
 scBvSShr :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvSShr sc n x y = scGlobalApply sc "Prelude.bvSShr" [n, x, y]
+scBvSShr sc n x y = scGlobalApply sc "Prelude::bvSShr" [n, x, y]
 
 -- | Create a term applying the unsigned bitvector extension primitive.
 --
 -- > bvUExt : (m n : Nat) -> Vec n Bool -> Vec (addNat m n) Bool;
 scBvUExt :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvUExt sc n m x = scGlobalApply sc "Prelude.bvUExt" [n,m,x]
+scBvUExt sc n m x = scGlobalApply sc "Prelude::bvUExt" [n,m,x]
 
 -- | Create a term applying the signed bitvector extension primitive.
 --
 -- > bvSExt : (m n : Nat) -> Vec (Succ n) Bool -> Vec (addNat m (Succ n)) Bool;
 scBvSExt :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvSExt sc n m x = scGlobalApply sc "Prelude.bvSExt" [n,m,x]
+scBvSExt sc n m x = scGlobalApply sc "Prelude::bvSExt" [n,m,x]
 
 -- | Create a term applying the bitvector truncation primitive. Note that this
 -- truncates starting from the most significant bit.
 --
 -- > bvTrunc : (m n : Nat) -> Vec (addNat m n) Bool -> Vec n Bool;
 scBvTrunc :: SharedContext -> Term -> Term -> Term -> IO Term
-scBvTrunc sc n m x = scGlobalApply sc "Prelude.bvTrunc" [n,m,x]
+scBvTrunc sc n m x = scGlobalApply sc "Prelude::bvTrunc" [n,m,x]
 
 -- | Create a term applying the @updNatFun@ primitive, which satisfies the
 -- following laws:
@@ -2018,7 +2018,7 @@ scBvTrunc sc n m x = scGlobalApply sc "Prelude.bvTrunc" [n,m,x]
 -- > updNatFun a f i v x == f x, when i != x
 scUpdNatFun :: SharedContext -> Term -> Term
             -> Term -> Term -> IO Term
-scUpdNatFun sc a f i v = scGlobalApply sc "Prelude.updNatFun" [a, f, i, v]
+scUpdNatFun sc a f i v = scGlobalApply sc "Prelude::updNatFun" [a, f, i, v]
 
 -- | Create a term applying the @updBvFun@ primitive, which has the same
 -- behavior as @updNatFun@ but acts on bitvectors.
@@ -2026,54 +2026,54 @@ scUpdNatFun sc a f i v = scGlobalApply sc "Prelude.updNatFun" [a, f, i, v]
 -- > updBvFun : (n : Nat) -> (a : sort 0) -> (Vec n Bool -> a) -> Vec n Bool -> a -> (Vec n Bool -> a);
 scUpdBvFun :: SharedContext -> Term -> Term
            -> Term -> Term -> Term -> IO Term
-scUpdBvFun sc n a f i v = scGlobalApply sc "Prelude.updBvFun" [n, a, f, i, v]
+scUpdBvFun sc n a f i v = scGlobalApply sc "Prelude::updBvFun" [n, a, f, i, v]
 
 -- | Create a term representing the type of arrays, given an index type and
 -- element type (as 'Term's).
 --
 -- > Array : sort 0 -> sort 0 -> sort 0
 scArrayType :: SharedContext -> Term -> Term -> IO Term
-scArrayType sc a b = scGlobalApply sc "Prelude.Array" [a, b]
+scArrayType sc a b = scGlobalApply sc "Prelude::Array" [a, b]
 
 -- | Create a term computing a constant array, given an index type, element type,
 -- and element (all as 'Term's).
 --
 -- > arrayConstant : (a b : sort 0) -> b -> (Array a b);
 scArrayConstant :: SharedContext -> Term -> Term -> Term -> IO Term
-scArrayConstant sc a b e = scGlobalApply sc "Prelude.arrayConstant" [a, b, e]
+scArrayConstant sc a b e = scGlobalApply sc "Prelude::arrayConstant" [a, b, e]
 
 -- | Create a term computing the value at a particular index of an array.
 --
 -- > arrayLookup : (a b : sort 0) -> (Array a b) -> a -> b;
 scArrayLookup :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
-scArrayLookup sc a b f i = scGlobalApply sc "Prelude.arrayLookup" [a, b, f, i]
+scArrayLookup sc a b f i = scGlobalApply sc "Prelude::arrayLookup" [a, b, f, i]
 
 -- | Create a term computing an array updated at a particular index.
 --
 -- > arrayUpdate : (a b : sort 0) -> (Array a b) -> a -> b -> (Array a b);
 scArrayUpdate :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
-scArrayUpdate sc a b f i e = scGlobalApply sc "Prelude.arrayUpdate" [a, b, f, i, e]
+scArrayUpdate sc a b f i e = scGlobalApply sc "Prelude::arrayUpdate" [a, b, f, i, e]
 
 -- | Create a term computing the equality of two arrays.
 --
 -- > arrayEq : (a b : sort 0) -> (Array a b) -> (Array a b) -> Bool;
 scArrayEq :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
-scArrayEq sc a b x y = scGlobalApply sc "Prelude.arrayEq" [a, b, x, y]
+scArrayEq sc a b x y = scGlobalApply sc "Prelude::arrayEq" [a, b, x, y]
 
 -- > arrayCopy : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> Array (Vec n Bool) a -> Vec n Bool -> Vec n Bool -> Array (Vec n Bool) a;
 -- > arrayCopy n a dest_arr dest_idx src_arr src_idx len
 scArrayCopy :: SharedContext -> Term -> Term -> Term -> Term -> Term -> Term -> Term -> IO Term
-scArrayCopy sc n a f i g j l = scGlobalApply sc "Prelude.arrayCopy" [n, a, f, i, g, j, l]
+scArrayCopy sc n a f i g j l = scGlobalApply sc "Prelude::arrayCopy" [n, a, f, i, g, j, l]
 
 -- > arraySet : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> a -> Vec n Bool -> Array (Vec n Bool) a;
 -- > arraySet n a arr idx val len
 scArraySet :: SharedContext -> Term -> Term -> Term -> Term -> Term -> Term -> IO Term
-scArraySet sc n a f i e l = scGlobalApply sc "Prelude.arraySet" [n, a, f, i, e, l]
+scArraySet sc n a f i e l = scGlobalApply sc "Prelude::arraySet" [n, a, f, i, e, l]
 
 -- > arrayRangeEq : (n : Nat) -> (a : sort 0) -> Array (Vec n Bool) a -> Vec n Bool -> Array (Vec n Bool) a -> Vec n Bool -> Vec n Bool -> Bool;
 -- > arrayRangeEq n a lhs_arr lhs_idx rhs_arr rhs_idx len
 scArrayRangeEq :: SharedContext -> Term -> Term -> Term -> Term -> Term -> Term -> Term -> IO Term
-scArrayRangeEq sc n a f i g j l = scGlobalApply sc "Prelude.arrayRangeEq" [n, a, f, i, g, j, l]
+scArrayRangeEq sc n a f i g j l = scGlobalApply sc "Prelude::arrayRangeEq" [n, a, f, i, g, j, l]
 
 -- | Create an floating-point constant term from a 'BigFloat', along with the
 -- sizes of its exponent and precision represented as 'Term's.
@@ -2090,7 +2090,7 @@ scFloat sc e p bf = do
     Right r -> do
       r' <- scRationalConst sc r
       m' <- scRoundNearestEven sc
-      scGlobalApply sc "Prelude.fpFromRational" [e, p, m', r']
+      scGlobalApply sc "Prelude::fpFromRational" [e, p, m', r']
 
 -- | Create an floating-point constant term from a 'BigFloat', along with the
 -- sizes of its exponent and precision represented as 'Natural's.
@@ -2102,159 +2102,159 @@ scFloatConst sc e p bf = do
 
 -- | Create a term representing the saw-core type @Float@.
 scFloatType :: SharedContext -> Term -> Term -> IO Term
-scFloatType sc e p = scGlobalApply sc "Prelude.Float" [e, p]
+scFloatType sc e p = scGlobalApply sc "Prelude::Float" [e, p]
 
 -- primitive fpAbs : (e : Nat) -> (p : Nat) -> Float e p -> Float e p;
 scFpAbs :: SharedContext -> Term -> Term -> Term -> IO Term
-scFpAbs sc e p f = scGlobalApply sc "Prelude.fpAbs" [e, p, f]
+scFpAbs sc e p f = scGlobalApply sc "Prelude::fpAbs" [e, p, f]
 
 -- primitive fpAdd : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
 scFpAdd :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
-scFpAdd sc e p m f1 f2 = scGlobalApply sc "Prelude.fpAdd" [e, p, m, f1, f2]
+scFpAdd sc e p m f1 f2 = scGlobalApply sc "Prelude::fpAdd" [e, p, m, f1, f2]
 
 -- primitive fpCast : (e1 : Nat) (p1 : Nat) (e2 : Nat) (p2 : Nat) -> RoundingMode -> Float e1 p1 -> Float e2 p2;
 scFpCast :: SharedContext -> Term -> Term -> Term -> Term -> Term -> Term -> IO Term
-scFpCast sc e1 p1 e2 p2 m f = scGlobalApply sc "Prelude.fpCast" [e1, p1, e2, p2, m, f]
+scFpCast sc e1 p1 e2 p2 m f = scGlobalApply sc "Prelude::fpCast" [e1, p1, e2, p2, m, f]
 
 -- primitive fpDiv : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
 scFpDiv :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
-scFpDiv sc e p m f1 f2 = scGlobalApply sc "Prelude.fpDiv" [e, p, m, f1, f2]
+scFpDiv sc e p m f1 f2 = scGlobalApply sc "Prelude::fpDiv" [e, p, m, f1, f2]
 
 -- primitive fpFMA : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p -> Float e p;
 scFpFMA :: SharedContext -> Term -> Term -> Term -> Term -> Term -> Term -> IO Term
-scFpFMA sc e p m f1 f2 f3 = scGlobalApply sc "Prelude.fpFMA" [e, p, m, f1, f2, f3]
+scFpFMA sc e p m f1 f2 f3 = scGlobalApply sc "Prelude::fpFMA" [e, p, m, f1, f2, f3]
 
 -- primitive fpFromBits : (e : Nat) -> (p : Nat) -> Vec (addNat e p) Bool -> Float e p;
 scFpFromBits :: SharedContext -> Term -> Term -> Term -> IO Term
-scFpFromBits sc e p v = scGlobalApply sc "Prelude.fpFromBits" [e, p, v]
+scFpFromBits sc e p v = scGlobalApply sc "Prelude::fpFromBits" [e, p, v]
 
 -- primitive fpFromBV : (n : Nat) (e : Nat) -> (p : Nat) -> RoundingMode -> Vec (Succ n) Bool -> Float e p;
 scFpFromBV :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
-scFpFromBV sc n e p m v = scGlobalApply sc "Prelude.fpFromBV" [n, e, p, m, v]
+scFpFromBV sc n e p m v = scGlobalApply sc "Prelude::fpFromBV" [n, e, p, m, v]
 
 -- primitive fpFromSBV : (n : Nat) (e : Nat) -> (p : Nat) -> RoundingMode -> Vec (Succ n) Bool -> Float e p;
 scFpFromSBV :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
-scFpFromSBV sc n e p m v = scGlobalApply sc "Prelude.fpFromSBV" [n, e, p, m, v]
+scFpFromSBV sc n e p m v = scGlobalApply sc "Prelude::fpFromSBV" [n, e, p, m, v]
 
 -- primitive fpIeeeEq : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
 scFpIeeeEq :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
-scFpIeeeEq sc e p f1 f2 = scGlobalApply sc "Prelude.fpIeeeEq" [e, p, f1, f2]
+scFpIeeeEq sc e p f1 f2 = scGlobalApply sc "Prelude::fpIeeeEq" [e, p, f1, f2]
 
 -- primitive fpIsInf : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
 scFpIsInf :: SharedContext -> Term -> Term -> Term -> IO Term
-scFpIsInf sc e p f = scGlobalApply sc "Prelude.fpIsInf" [e, p, f]
+scFpIsInf sc e p f = scGlobalApply sc "Prelude::fpIsInf" [e, p, f]
 
 -- primitive fpIsNaN : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
 scFpIsNaN :: SharedContext -> Term -> Term -> Term -> IO Term
-scFpIsNaN sc e p f = scGlobalApply sc "Prelude.fpIsNaN" [e, p, f]
+scFpIsNaN sc e p f = scGlobalApply sc "Prelude::fpIsNaN" [e, p, f]
 
 -- primitive fpIsNeg : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
 scFpIsNeg :: SharedContext -> Term -> Term -> Term -> IO Term
-scFpIsNeg sc e p f = scGlobalApply sc "Prelude.fpIsNeg" [e, p, f]
+scFpIsNeg sc e p f = scGlobalApply sc "Prelude::fpIsNeg" [e, p, f]
 
 -- primitive fpIsNormal : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
 scFpIsNormal :: SharedContext -> Term -> Term -> Term -> IO Term
-scFpIsNormal sc e p f = scGlobalApply sc "Prelude.fpIsNormal" [e, p, f]
+scFpIsNormal sc e p f = scGlobalApply sc "Prelude::fpIsNormal" [e, p, f]
 
 -- primitive fpIsPos : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
 scFpIsPos :: SharedContext -> Term -> Term -> Term -> IO Term
-scFpIsPos sc e p f = scGlobalApply sc "Prelude.fpIsPos" [e, p, f]
+scFpIsPos sc e p f = scGlobalApply sc "Prelude::fpIsPos" [e, p, f]
 
 -- primitive fpIsSubnormal : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
 scFpIsSubnormal :: SharedContext -> Term -> Term -> Term -> IO Term
-scFpIsSubnormal sc e p f = scGlobalApply sc "Prelude.fpIsSubnormal" [e, p, f]
+scFpIsSubnormal sc e p f = scGlobalApply sc "Prelude::fpIsSubnormal" [e, p, f]
 
 -- primitive fpIsZero : (e : Nat) -> (p : Nat) -> Float e p -> Bool;
 scFpIsZero :: SharedContext -> Term -> Term -> Term -> IO Term
-scFpIsZero sc e p f = scGlobalApply sc "Prelude.fpIsZero" [e, p, f]
+scFpIsZero sc e p f = scGlobalApply sc "Prelude::fpIsZero" [e, p, f]
 
 -- fpLe : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
 scFpLe :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
-scFpLe sc e p f1 f2 = scGlobalApply sc "Prelude.fpLe" [e, p, f1, f2]
+scFpLe sc e p f1 f2 = scGlobalApply sc "Prelude::fpLe" [e, p, f1, f2]
 
 -- primitive fpLt : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
 scFpLt :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
-scFpLt sc e p f1 f2 = scGlobalApply sc "Prelude.fpLt" [e, p, f1, f2]
+scFpLt sc e p f1 f2 = scGlobalApply sc "Prelude::fpLt" [e, p, f1, f2]
 
 -- primitive fpLogicalEq : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Bool;
 scFpLogicalEq :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
-scFpLogicalEq sc e p f1 f2 = scGlobalApply sc "Prelude.fpLogicalEq" [e, p, f1, f2]
+scFpLogicalEq sc e p f1 f2 = scGlobalApply sc "Prelude::fpLogicalEq" [e, p, f1, f2]
 
 -- primitive fpMul : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
 scFpMul :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
-scFpMul sc e p m f1 f2 = scGlobalApply sc "Prelude.fpMul" [e, p, m, f1, f2]
+scFpMul sc e p m f1 f2 = scGlobalApply sc "Prelude::fpMul" [e, p, m, f1, f2]
 
 -- primitive fpNaN : (e : Nat) -> (p : Nat) -> Float e p;
 scFpNaN :: SharedContext -> Term -> Term -> IO Term
-scFpNaN sc e p = scGlobalApply sc "Prelude.fpNaN" [e, p]
+scFpNaN sc e p = scGlobalApply sc "Prelude::fpNaN" [e, p]
 
 -- primitive fpNeg : (e : Nat) -> (p : Nat) -> Float e p -> Float e p;
 scFpNeg :: SharedContext -> Term -> Term -> Term -> IO Term
-scFpNeg sc e p f = scGlobalApply sc "Prelude.fpNeg" [e, p, f]
+scFpNeg sc e p f = scGlobalApply sc "Prelude::fpNeg" [e, p, f]
 
 -- fpNegInf : (e : Nat) -> (p : Nat) -> Float e p;
 scFpNegInf :: SharedContext -> Term -> Term -> IO Term
-scFpNegInf sc e p = scGlobalApply sc "Prelude.fpNegInf" [e, p]
+scFpNegInf sc e p = scGlobalApply sc "Prelude::fpNegInf" [e, p]
 
 -- fpNegZero : (e : Nat) -> (p : Nat) -> Float e p;
 scFpNegZero :: SharedContext -> Term -> Term -> IO Term
-scFpNegZero sc e p = scGlobalApply sc "Prelude.fpNegZero" [e, p]
+scFpNegZero sc e p = scGlobalApply sc "Prelude::fpNegZero" [e, p]
 
 -- primitive fpPosInf : (e : Nat) -> (p : Nat) -> Float e p;
 scFpPosInf :: SharedContext -> Term -> Term -> IO Term
-scFpPosInf sc e p = scGlobalApply sc "Prelude.fpPosInf" [e, p]
+scFpPosInf sc e p = scGlobalApply sc "Prelude::fpPosInf" [e, p]
 
 -- primitive fpPosZero : (e : Nat) -> (p : Nat) -> Float e p;
 scFpPosZero :: SharedContext -> Term -> Term -> IO Term
-scFpPosZero sc e p = scGlobalApply sc "Prelude.fpPosZero" [e, p]
+scFpPosZero sc e p = scGlobalApply sc "Prelude::fpPosZero" [e, p]
 
 -- primitive fpRem : (e : Nat) -> (p : Nat) -> Float e p -> Float e p -> Float e p;
 scFpRem :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
-scFpRem sc e p f1 f2 = scGlobalApply sc "Prelude.fpRem" [e, p, f1, f2]
+scFpRem sc e p f1 f2 = scGlobalApply sc "Prelude::fpRem" [e, p, f1, f2]
 
 -- primitive fpRound : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p;
 scFpRound :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
-scFpRound sc e p m f = scGlobalApply sc "Prelude.fpRound" [e, p, m, f]
+scFpRound sc e p m f = scGlobalApply sc "Prelude::fpRound" [e, p, m, f]
 
 -- primitive fpSqrt : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p;
 scFpSqrt :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
-scFpSqrt sc e p m f = scGlobalApply sc "Prelude.fpSqrt" [e, p, m, f]
+scFpSqrt sc e p m f = scGlobalApply sc "Prelude::fpSqrt" [e, p, m, f]
 
 -- primitive fpSub : (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Float e p -> Float e p;
 scFpSub :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
-scFpSub sc e p m f1 f2 = scGlobalApply sc "Prelude.fpSub" [e, p, m, f1, f2]
+scFpSub sc e p m f1 f2 = scGlobalApply sc "Prelude::fpSub" [e, p, m, f1, f2]
 
 -- primitive fpToBits : (e : Nat) -> (p : Nat) -> Float e p -> Vec (addNat e p) Bool;
 scFpToBits :: SharedContext -> Term -> Term -> Term -> IO Term
-scFpToBits sc e p f = scGlobalApply sc "Prelude.fpToBits" [e, p, f]
+scFpToBits sc e p f = scGlobalApply sc "Prelude::fpToBits" [e, p, f]
 
 -- primitive fpToBV : (n : Nat) (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Vec (Succ n) Bool;
 scFpToBV :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
-scFpToBV sc n e p m f = scGlobalApply sc "Prelude.fpToBV" [n, e, p, m, f]
+scFpToBV sc n e p m f = scGlobalApply sc "Prelude::fpToBV" [n, e, p, m, f]
 
 -- primitive fpToSBV : (n : Nat) (e : Nat) -> (p : Nat) -> RoundingMode -> Float e p -> Vec (Succ n) Bool;
 scFpToSBV :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
-scFpToSBV sc n e p m f = scGlobalApply sc "Prelude.fpToSBV" [n, e, p, m, f]
+scFpToSBV sc n e p m f = scGlobalApply sc "Prelude::fpToSBV" [n, e, p, m, f]
 
 -- roundNearestEven : RoundingMode;
 scRoundNearestEven :: SharedContext -> IO Term
-scRoundNearestEven sc = scGlobalDef sc "Prelude.roundNearestEven"
+scRoundNearestEven sc = scGlobalDef sc "Prelude::roundNearestEven"
 
 -- roundNearestAway : RoundingMode;
 scRoundNearestAway :: SharedContext -> IO Term
-scRoundNearestAway sc = scGlobalDef sc "Prelude.roundNearestAway"
+scRoundNearestAway sc = scGlobalDef sc "Prelude::roundNearestAway"
 
 -- roundPositive : RoundingMode;
 scRoundPositive :: SharedContext -> IO Term
-scRoundPositive sc = scGlobalDef sc "Prelude.roundPositive"
+scRoundPositive sc = scGlobalDef sc "Prelude::roundPositive"
 
 -- roundNegative : RoundingMode;
 scRoundNegative :: SharedContext -> IO Term
-scRoundNegative sc = scGlobalDef sc "Prelude.roundNegative"
+scRoundNegative sc = scGlobalDef sc "Prelude::roundNegative"
 
 -- roundZero : RoundingMode;
 scRoundZero :: SharedContext -> IO Term
-scRoundZero sc = scGlobalDef sc "Prelude.roundZero"
+scRoundZero sc = scGlobalDef sc "Prelude::roundZero"
 
 ------------------------------------------------------------
 
@@ -2532,7 +2532,7 @@ scUnfoldOnceFixConstantSet sc b names t0 = do
           _ -> Nothing
   let unfold t idx rhs
         | Set.member idx names == b
-        , (isGlobalDef "Prelude.fix" -> Just (), [_, f]) <- asApplyAll rhs =
+        , (isGlobalDef "Prelude::fix" -> Just (), [_, f]) <- asApplyAll rhs =
           betaNormalize sc =<< scApply sc f t
         | otherwise =
           return t

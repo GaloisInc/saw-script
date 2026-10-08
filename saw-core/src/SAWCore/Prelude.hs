@@ -55,32 +55,32 @@ scDecEq ::
   IO Term
 scDecEq sc fot args = case fot of
   FOTBit ->
-    do fn <- scGlobalDef sc "Prelude.boolEq"
+    do fn <- scGlobalDef sc "Prelude::boolEq"
        case args of
          Nothing    -> return fn
          Just (x,y) -> scApplyAll sc fn [x,y]
 
   FOTInt ->
-    do fn <- scGlobalDef sc "Prelude.intEq"
+    do fn <- scGlobalDef sc "Prelude::intEq"
        case args of
          Nothing    -> return fn
          Just (x,y) -> scApplyAll sc fn [x,y]
 
   FOTIntMod m ->
-    do fn <- scGlobalDef sc "Prelude.intModEq"
+    do fn <- scGlobalDef sc "Prelude::intModEq"
        m' <- scNat sc m
        case args of
          Nothing    -> scApply sc fn m'
          Just (x,y) -> scApplyAll sc fn [m',x,y]
 
   FOTRational ->
-    do fn <- scGlobalDef sc "Prelude.rationalEq"
+    do fn <- scGlobalDef sc "Prelude::rationalEq"
        case args of
          Nothing    -> return fn
          Just (x,y) -> scApplyAll sc fn [x,y]
 
   FOTFloat e p ->
-    do fn <- scGlobalDef sc "Prelude.fpLogicalEq"
+    do fn <- scGlobalDef sc "Prelude::fpLogicalEq"
        e' <- scNat sc e
        p' <- scNat sc p
        case args of
@@ -88,14 +88,14 @@ scDecEq sc fot args = case fot of
          Just (x,y) -> scApplyAll sc fn [e',p',x,y]
 
   FOTVec w FOTBit ->
-    do fn <- scGlobalDef sc "Prelude.bvEq"
+    do fn <- scGlobalDef sc "Prelude::bvEq"
        w' <- scNat sc w
        case args of
          Nothing    -> scApply sc fn w'
          Just (x,y) -> scApplyAll sc fn [w',x,y]
 
   FOTVec w t ->
-    do fn <- scGlobalDef sc "Prelude.vecEq"
+    do fn <- scGlobalDef sc "Prelude::vecEq"
        w' <- scNat sc w
        t' <- scFirstOrderType sc t
        subFn <- scDecEq sc t Nothing
@@ -106,20 +106,20 @@ scDecEq sc fot args = case fot of
   FOTArray a b ->
     do a' <- scFirstOrderType sc a
        b' <- scFirstOrderType sc b
-       fn <- scGlobalDef sc "Prelude.arrayEq"
+       fn <- scGlobalDef sc "Prelude::arrayEq"
        case args of
          Nothing    -> scApplyAll sc fn [a',b']
          Just (x,y) -> scApplyAll sc fn [a',b',x,y]
 
   FOTTuple []  ->
     case args of
-      Nothing -> scGlobalDef sc "Prelude.unitEq"
+      Nothing -> scGlobalDef sc "Prelude::unitEq"
       Just _  -> scBool sc True
 
   FOTTuple (t:ts) ->
     do fnLeft  <- scDecEq sc t Nothing
        fnRight <- scDecEq sc (FOTTuple ts) Nothing
-       fn      <- scGlobalDef sc "Prelude.pairEq"
+       fn      <- scGlobalDef sc "Prelude::pairEq"
        t'      <- scFirstOrderType sc t
        ts'     <- scFirstOrderType sc (FOTTuple ts)
        case args of

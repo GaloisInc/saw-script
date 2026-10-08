@@ -277,37 +277,37 @@ constMap :: Map QualName RPrim
 constMap =
   Map.union (Prims.constMap prims) $
   Map.fromList
-  [ ("Prelude.bvShl" , bvShiftOp (Prims.vShiftL RME.false))
-  , ("Prelude.bvShr" , bvShiftOp (Prims.vShiftR RME.false))
-  , ("Prelude.bvSShr", bvShiftOp vSignedShiftR)
+  [ ("Prelude::bvShl" , bvShiftOp (Prims.vShiftL RME.false))
+  , ("Prelude::bvShr" , bvShiftOp (Prims.vShiftR RME.false))
+  , ("Prelude::bvSShr", bvShiftOp vSignedShiftR)
   -- Integers
-  , ("Prelude.intToNat", Prims.intToNatOp)
-  , ("Prelude.intToBv" , intToBvOp)
-  , ("Prelude.bvToInt" , bvToIntOp)
-  , ("Prelude.sbvToInt", sbvToIntOp)
+  , ("Prelude::intToNat", Prims.intToNatOp)
+  , ("Prelude::intToBv" , intToBvOp)
+  , ("Prelude::bvToInt" , bvToIntOp)
+  , ("Prelude::sbvToInt", sbvToIntOp)
   -- Integers mod n
-  , ("Prelude.toIntMod"  , toIntModOp)
-  , ("Prelude.fromIntMod", fromIntModOp)
-  , ("Prelude.intModEq"  , intModEqOp)
-  , ("Prelude.intModAdd" , intModBinOp (+))
-  , ("Prelude.intModSub" , intModBinOp (-))
-  , ("Prelude.intModMul" , intModBinOp (*))
-  , ("Prelude.intModNeg" , intModUnOp negate)
+  , ("Prelude::toIntMod"  , toIntModOp)
+  , ("Prelude::fromIntMod", fromIntModOp)
+  , ("Prelude::intModEq"  , intModEqOp)
+  , ("Prelude::intModAdd" , intModBinOp (+))
+  , ("Prelude::intModSub" , intModBinOp (-))
+  , ("Prelude::intModMul" , intModBinOp (*))
+  , ("Prelude::intModNeg" , intModUnOp negate)
   -- Streams
-  , ("Prelude.MkStream", mkStreamOp)
-  , ("Prelude.streamGet", streamGetOp)
+  , ("Prelude::MkStream", mkStreamOp)
+  , ("Prelude::streamGet", streamGetOp)
 
   -- Misc
-  , ("Prelude.expByNat", Prims.expByNatOp prims)
+  , ("Prelude::expByNat", Prims.expByNatOp prims)
   ]
 
 -- | Recursor overrides for the SAWCore simulator.
 recursor :: Name -> sort -> Maybe RPrim
 recursor nm _sort =
   case nameQualName nm of
-    "Prelude.Stream" -> Just streamRecOp
-    "Prelude.Bool" -> Just (Prims.boolRecOp prims)
-    "Prelude.Nat" -> Just (Prims.natRecOp prims)
+    "Prelude::Stream" -> Just streamRecOp
+    "Prelude::Bool" -> Just (Prims.boolRecOp prims)
+    "Prelude::Nat" -> Just (Prims.natRecOp prims)
     _ -> Nothing
 
 -- primitive bvToInt : (n : Nat) -> Vec n Bool -> Integer;

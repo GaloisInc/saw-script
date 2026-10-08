@@ -704,9 +704,9 @@ shouldMemoizeTerm t =
     FTermF Recursor{} -> False
     Constant{} -> False
     Variable{} -> False
-    App (isGlobalDef "Prelude.NatPos" -> Just ()) _ -> False
-    App (isGlobalDef "Prelude.Bit0" -> Just ()) _ -> False
-    App (isGlobalDef "Prelude.Bit1" -> Just ()) _ -> False
+    App (isGlobalDef "Prelude::NatPos" -> Just ()) _ -> False
+    App (isGlobalDef "Prelude::Bit0" -> Just ()) _ -> False
+    App (isGlobalDef "Prelude::Bit1" -> Just ()) _ -> False
     Label _ t1 -> shouldMemoizeTerm t1
     _ -> True
 

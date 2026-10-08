@@ -1796,17 +1796,17 @@ scmSortWithFlags s flags =
 
 -- | Create a literal term from a 'Natural'.
 scmNat :: Natural -> SCM Term
-scmNat 0 = scmGlobalDef "Prelude.Zero"
+scmNat 0 = scmGlobalDef "Prelude::Zero"
 scmNat n =
   do p <- scmPos n
-     scmGlobalApply "Prelude.NatPos" [p]
+     scmGlobalApply "Prelude::NatPos" [p]
 
 scmPos :: Natural -> SCM Term
 scmPos n
-  | n <= 1 = scmGlobalDef "Prelude.One"
+  | n <= 1 = scmGlobalDef "Prelude::One"
   | otherwise =
     do arg <- scmPos (div n 2)
-       let ident = if even n then "Prelude.Bit0" else "Prelude.Bit1"
+       let ident = if even n then "Prelude::Bit0" else "Prelude::Bit1"
        scmGlobalApply ident [arg]
 
 -- | Create a literal term (of saw-core type @String@) from a 'Text'.
@@ -1817,7 +1817,7 @@ scmString s =
 
 -- | Create a term representing the primitive saw-core type @String@.
 scmStringType :: SCM Term
-scmStringType = scmGlobalDef "Prelude.String"
+scmStringType = scmGlobalDef "Prelude::String"
 
 -- | Create a vector term from a type (as a 'Term') and a list of 'Term's of
 -- that type.
@@ -1839,18 +1839,18 @@ scmVector e xs =
 -- | Create a term representing a vector type, from a term giving the length
 -- and a term giving the element type.
 scmVecType :: Term -> Term -> SCM Term
-scmVecType n e = scmGlobalApply "Prelude.Vec" [n, e]
+scmVecType n e = scmGlobalApply "Prelude::Vec" [n, e]
 
 -- | Create a record term from a list of record fields.
 scmRecordValue :: [(FieldName, Term)] -> SCM Term
 scmRecordValue [] =
-  scmGlobalDef "Prelude.Empty"
+  scmGlobalDef "Prelude::Empty"
 scmRecordValue ((fname, x) : fields) =
   do s <- scmString fname
      a <- scmTypeOf x
      y <- scmRecordValue fields
      b <- scmTypeOf y
-     scmGlobalApply "Prelude.RecordValue" [s, a, b, x, y]
+     scmGlobalApply "Prelude::RecordValue" [s, a, b, x, y]
 
 -- | Create a record field access term from a 'Term' representing a record and
 -- a 'FieldName'.
@@ -1866,39 +1866,39 @@ scmRecordSelect t0 fname =
            Nothing -> scmError (FieldNotFound t0 fname)
            Just (f, s, a, b)
              | f == fname ->
-               scmGlobalApply "Prelude.headRecord" [s, a, b, t]
+               scmGlobalApply "Prelude::headRecord" [s, a, b, t]
              | otherwise ->
-               do y <- scmGlobalApply "Prelude.tailRecord" [s, a, b, t]
+               do y <- scmGlobalApply "Prelude::tailRecord" [s, a, b, t]
                   go y b
     asRecordTy :: Term -> Maybe (Maybe (Text, Term, Term, Term))
     asRecordTy t =
-      case isGlobalDef "Prelude.EmptyType" t of
+      case isGlobalDef "Prelude::EmptyType" t of
         Just () -> Just Nothing
         Nothing ->
           do (t1, b) <- asApp t
              (t2, a) <- asApp t1
              (t3, s) <- asApp t2
              f <- asStringLit s
-             () <- isGlobalDef "Prelude.RecordType" t3
+             () <- isGlobalDef "Prelude::RecordType" t3
              Just (Just (f, s, a, b))
 
 -- | Create a term representing the type of a record from a list associating
 -- field names (as 'FieldName's) and types (as 'Term's). Note that the order of
 -- the given list is irrelevant, as record fields are not ordered.
 scmRecordType :: [(FieldName, Term)] -> SCM Term
-scmRecordType [] = scmGlobalDef "Prelude.EmptyType"
+scmRecordType [] = scmGlobalDef "Prelude::EmptyType"
 scmRecordType ((fname, a) : fields) =
   do s <- scmString fname
      b <- scmRecordType fields
-     scmGlobalApply "Prelude.RecordType" [s, a, b]
+     scmGlobalApply "Prelude::RecordType" [s, a, b]
 
 -- | Create a unit-valued term.
 scmUnitValue :: SCM Term
-scmUnitValue = scmGlobalDef "Prelude.Unit"
+scmUnitValue = scmGlobalDef "Prelude::Unit"
 
 -- | Create a term representing the unit type.
 scmUnitType :: SCM Term
-scmUnitType = scmGlobalDef "Prelude.UnitType"
+scmUnitType = scmGlobalDef "Prelude::UnitType"
 
 -- | Create a pair term from two terms.
 scmPairValue ::
@@ -1908,7 +1908,7 @@ scmPairValue ::
 scmPairValue t1 t2 =
   do a <- scmTypeOf t1
      b <- scmTypeOf t2
-     scmGlobalApply "Prelude.PairValue" [a, b, t1, t2]
+     scmGlobalApply "Prelude::PairValue" [a, b, t1, t2]
 
 -- | Create a term representing a pair type from two other terms, each
 -- representing a type.
@@ -1917,19 +1917,19 @@ scmPairType ::
   Term {- ^ Right projection type -} ->
   SCM Term
 scmPairType t1 t2 =
-  scmGlobalApply "Prelude.PairType" [t1, t2]
+  scmGlobalApply "Prelude::PairType" [t1, t2]
 
 -- | Create a term giving the left projection of a 'Term' representing a pair.
 scmPairLeft :: Term -> SCM Term
 scmPairLeft t =
   do (a, b) <- scmEnsurePairType t
-     scmGlobalApply "Prelude.Pair_fst" [a, b, t]
+     scmGlobalApply "Prelude::Pair_fst" [a, b, t]
 
 -- | Create a term giving the right projection of a 'Term' representing a pair.
 scmPairRight :: Term -> SCM Term
 scmPairRight t =
   do (a, b) <- scmEnsurePairType t
-     scmGlobalApply "Prelude.Pair_snd" [a, b, t]
+     scmGlobalApply "Prelude::Pair_snd" [a, b, t]
 
 -- | Create a term representing the type of a non-dependent function, given a
 -- parameter and result type (as 'Term's).

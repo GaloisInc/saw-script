@@ -334,12 +334,12 @@ countUninterpreted scale count ty =
       , Just (Some elm_repr) <- valueAsBaseType ety
       -> add (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr) count
 
-    VDataType "Prelude.UnitType" [] [] -> count
+    VDataType "Prelude::UnitType" [] [] -> count
 
-    VDataType "Prelude.PairType" [TValue ty1, TValue ty2] [] ->
+    VDataType "Prelude::PairType" [TValue ty1, TValue ty2] [] ->
       countUninterpreted scale (countUninterpreted scale count ty1) ty2
 
-    VDataType "Prelude.RecordType"
+    VDataType "Prelude::RecordType"
       [VString _fname, TValue ty1, TValue ty2] [] ->
       countUninterpreted scale (countUninterpreted scale count ty1) ty2
 
@@ -509,17 +509,17 @@ parseUninterpreted' saw ref app ty =
       -> (VArray . SArray) <$>
           mkUninterpreted (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr) saw
 
-    VDataType "Prelude.UnitType" [] []
+    VDataType "Prelude::UnitType" [] []
       -> pure vUnit
 
-    VDataType "Prelude.PairType" [TValue ty1, TValue ty2] []
+    VDataType "Prelude::PairType" [TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted' (mapArgTerm ArgTermPairLeft saw) ref app ty1
             x2 <- parseUninterpreted' (mapArgTerm ArgTermPairRight saw) ref app ty2
             pure (vPair (ready x1) (ready x2))
 
-    VDataType "Prelude.EmptyType" [] []
+    VDataType "Prelude::EmptyType" [] []
       -> pure vEmptyRecord
-    VDataType "Prelude.RecordType"
+    VDataType "Prelude::RecordType"
       [VString fname, TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted' (mapArgTerm (`ArgTermRecordSelect` fname) saw) ref app ty1
             x2 <- parseUninterpreted' saw ref app ty2
@@ -741,7 +741,7 @@ reconstructArgTerm atrm sc ts =
              (x2, ts2) <- parse at2 ts1
              ty1 <- scTypeOf sc x1
              ty2 <- scTypeOf sc x2
-             x <- scGlobalApply sc "Prelude.RecordValue" [s, ty1, ty2, x1, x2]
+             x <- scGlobalApply sc "Prelude::RecordValue" [s, ty1, ty2, x1, x2]
              pure (x, ts2)
         ArgTermRecordSelect at1 fname ->
           do (x1, ts1) <- parse at1 ts0
@@ -817,24 +817,24 @@ mkArgTerm sc ty val =
          ety' <- termOfTValue sc ety
          return (ArgTermVector ety' xs)
 
-    (VDataType "Prelude.UnitType" [] [],
+    (VDataType "Prelude::UnitType" [] [],
      VCtorApp 0 _ [])
                          -> return ArgTermUnit
-    (VDataType "Prelude.PairType" [TValue ty1, TValue ty2] [],
+    (VDataType "Prelude::PairType" [TValue ty1, TValue ty2] [],
      VCtorApp 0 _ [v1, v2]) ->
       do x1 <- mkArgTerm sc ty1 =<< force v1
          x2 <- mkArgTerm sc ty2 =<< force v2
          return (ArgTermPair x1 x2)
 
-    (VDataType "Prelude.EmptyType" [] [],
+    (VDataType "Prelude::EmptyType" [] [],
      VCtorApp 0 _ []) ->
       pure ArgTermEmpty
-    (VDataType "Prelude.Eq" [TValue ety, x] [y],
+    (VDataType "Prelude::Eq" [TValue ety, x] [y],
      VCtorApp 0 _ []) ->
       do ety' <- termOfTValue sc ety
          x' <- termOfValue sc ety x
          y' <- termOfValue sc ety y
-         pf <- scGlobalApply sc "Prelude.unsafeAssert" [ety', x', y']
+         pf <- scGlobalApply sc "Prelude::unsafeAssert" [ety', x', y']
          pure (ArgTermConst pf)
     (VDataType _nm [VString fname, TValue ty1, TValue ty2] [],
      VCtorApp 0 _ [v1, v2]) ->

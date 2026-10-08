@@ -87,39 +87,39 @@ revMap f m = Map.fromList $ mapMaybe (\(k,v) -> (,k) <$> (f v)) (Map.toList m)
 extraPrims :: C.PrimMap -> [(SAW.QualName, C.Name)]
 extraPrims pm = map go
   [ -- types from Prelude.sawcore
-      ("Prelude.Integer", "Integer")
-    , ("Prelude.Bool", "Bit")
+      ("Prelude::Integer", "Integer")
+    , ("Prelude::Bool", "Bit")
     -- types from Cryptol.sawcore
 
     -- from CryptolSAWCore.Cryptol.importPC
-    , ("Cryptol.PZero"            , "Zero")
-    , ("Cryptol.PLogic"           , "Logic")
-    , ("Cryptol.PRing"            , "Ring")
-    , ("Cryptol.PIntegral"        , "Integral")
-    , ("Cryptol.PField"           , "Field")
-    , ("Cryptol.PRound"           , "Round")
-    , ("Cryptol.PEq"              , "Eq")
-    , ("Cryptol.PCmp"             , "Cmp")
-    , ("Cryptol.PSignedCmp"       , "SignedCmp")
-    , ("Cryptol.PLiteral"         , "Literal")
-    , ("Cryptol.PLiteralLessThan" , "LiteralLessThan")
-    , ("Cryptol.PFLiteral"        , "FLiteral")
-    , ("Cryptol.PGeq"             , ">=")
-    , ("Cryptol.PNeq"             , "!=")
-    , ("Cryptol.PFin"             , "fin")
+    , ("Cryptol::PZero"            , "Zero")
+    , ("Cryptol::PLogic"           , "Logic")
+    , ("Cryptol::PRing"            , "Ring")
+    , ("Cryptol::PIntegral"        , "Integral")
+    , ("Cryptol::PField"           , "Field")
+    , ("Cryptol::PRound"           , "Round")
+    , ("Cryptol::PEq"              , "Eq")
+    , ("Cryptol::PCmp"             , "Cmp")
+    , ("Cryptol::PSignedCmp"       , "SignedCmp")
+    , ("Cryptol::PLiteral"         , "Literal")
+    , ("Cryptol::PLiteralLessThan" , "LiteralLessThan")
+    , ("Cryptol::PFLiteral"        , "FLiteral")
+    , ("Cryptol::PGeq"             , ">=")
+    , ("Cryptol::PNeq"             , "!=")
+    , ("Cryptol::PFin"             , "fin")
     -- from CryptolSAWCore.Cryptol.importTFun
-    , ("Cryptol.tcWidth"          , "width")
-    , ("Cryptol.tcAdd"            , "+")
-    , ("Cryptol.tcSub"            , "-")
-    , ("Cryptol.tcMul"            , "*")
-    , ("Cryptol.tcDiv"            , "/")
-    , ("Cryptol.tcMod"            , "%")
-    , ("Cryptol.tcExp"            , "^^")
-    , ("Cryptol.tcMin"            , "min")
-    , ("Cryptol.tcMax"            , "max")
-    , ("Cryptol.tcCeilDiv"        , "/^")
-    , ("Cryptol.tcCeilMod"        , "%^")
-    , ("Cryptol.tcLenFromThenTo"  , "lengthFromThenTo")
+    , ("Cryptol::tcWidth"          , "width")
+    , ("Cryptol::tcAdd"            , "+")
+    , ("Cryptol::tcSub"            , "-")
+    , ("Cryptol::tcMul"            , "*")
+    , ("Cryptol::tcDiv"            , "/")
+    , ("Cryptol::tcMod"            , "%")
+    , ("Cryptol::tcExp"            , "^^")
+    , ("Cryptol::tcMin"            , "min")
+    , ("Cryptol::tcMax"            , "max")
+    , ("Cryptol::tcCeilDiv"        , "/^")
+    , ("Cryptol::tcCeilMod"        , "%^")
+    , ("Cryptol::tcLenFromThenTo"  , "lengthFromThenTo")
   ]
   where
     go (x,txt) = (x, C.lookupPrimType (C.prelPrim txt) pm)
@@ -659,12 +659,12 @@ translateAsType =
 translateAsType' :: Term -> TT Type
 translateAsType' t = alts "translateAsType" t
   [ translateAsInfixTypeApp t
-  , do [n,a] <- mreturn $ asGlobalApply "Cryptol.seq" t
+  , do [n,a] <- mreturn $ asGlobalApply "Cryptol::seq" t
        commit $ do
          n' <- translateAsType n
          a' <- translateAsType a
          return $ P.TSeq n' a'
-  , do [n] <- mreturn $ asGlobalApply "Cryptol.TCNum" t
+  , do [n] <- mreturn $ asGlobalApply "Cryptol::TCNum" t
        n' <- mreturn $ (asNat n <|> asPos n)
        return $ P.TNum (fromIntegral n')
   , do mreturn $ asBoolType t
@@ -731,7 +731,7 @@ translateAsConstraint t = withTermContext "translateAsConstraint" t $ do
 
 translateAsKind :: Term -> TT P.Kind
 translateAsKind t = alts "translateAsKind" t
-  [ mreturn $ isGlobalDef "Cryptol.Num" t >> return P.KNum
+  [ mreturn $ isGlobalDef "Cryptol::Num" t >> return P.KNum
   , mreturn $ asNatType t >> return P.KNum
   , do (TypeSort 0) <- mreturn $ asSort t
        return P.KType
@@ -931,8 +931,8 @@ asInfixExprOp :: Term -> TT (Name, C.Fixity)
 asInfixExprOp t = alts "asInfixExprOp" t
   [ do (pnm,Just fx) <- translateAsConst t
        return (pnm, fx)
-  , do mreturn $ isGlobalDef "Prelude.bvslt" t
-       nm <- constToName =<< lookupSAWConst "Cryptol.ecSLt"
+  , do mreturn $ isGlobalDef "Prelude::bvslt" t
+       nm <- constToName =<< lookupSAWConst "Cryptol::ecSLt"
        fx <- mreturn $ C.nameFixity nm
        pnm <- uncheckName nm
        return (pnm, fx)
@@ -947,9 +947,9 @@ translateAsPrefixExprApp t = do
 
 asPrefixExprOp :: Term -> TT P.PrefixOp
 asPrefixExprOp t = alts "asPrefixExprOp" t
-  [ do mreturn $ isGlobalDef "Cryptol.ecNeg" t
+  [ do mreturn $ isGlobalDef "Cryptol::ecNeg" t
        return $ P.PrefixNeg
-  , do mreturn $ isGlobalDef "Cryptol.ecCompl" t
+  , do mreturn $ isGlobalDef "Cryptol::ecCompl" t
        return $ P.PrefixComplement
   ]
 
@@ -961,8 +961,8 @@ asInfixTypeOp t = alts "asInfixTypeOp" t
        fx <- mreturn $ C.nameFixity nm'
        pnm <- uncheckName nm'
        return (pnm, fx)
-  , do mreturn $ isGlobalDef "Prelude.addNat" t
-       nm <- constToName =<< lookupSAWConst "Cryptol.tcAdd"
+  , do mreturn $ isGlobalDef "Prelude::addNat" t
+       nm <- constToName =<< lookupSAWConst "Cryptol::tcAdd"
        fx <- mreturn $ C.nameFixity nm
        pnm <- uncheckName nm
        return (pnm, fx)
@@ -1097,7 +1097,7 @@ stripTyped = \case
 unNumber :: Expr -> TT Expr
 unNumber e = case e of
   P.EAppT (P.EVar nm) [P.PosInst val, P.PosInst rep] -> do
-    number <- (uncheckName =<< constToName =<< lookupSAWConst "Cryptol.ecNumber")
+    number <- (uncheckName =<< constToName =<< lookupSAWConst "Cryptol::ecNumber")
     case nm == number of
       True -> unNumber =<< eTyped (P.ETypeVal val) rep
       False -> return e
@@ -1131,12 +1131,12 @@ translateAsExpr' t = unNumber =<< alts "translateAsExpr'" t
        commit $ do
          recv' <- translateAsExpr recv
          return $ P.ESel recv' (P.RecordSel (C.mkIdent fld) Nothing)
-  , do [n,x] <- mreturn $ asGlobalApply "Prelude.bvNat" t
+  , do [n,x] <- mreturn $ asGlobalApply "Prelude::bvNat" t
        n' <- translateAsType n
        x' <- translateAsType x
        eTyped (P.ETypeVal x') (P.TSeq n' P.TBit)
   , do (fn, _) <- return $ asApplyAll t
-       mreturn $ isGlobalDef "Prelude.headRecord" fn
+       mreturn $ isGlobalDef "Prelude::headRecord" fn
        commit $ do
          (t1,t2) <- mreturn $ asApp t
          t1' <- translateAsExpr t1

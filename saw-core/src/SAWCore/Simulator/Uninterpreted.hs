@@ -110,7 +110,7 @@ mkSimpsetSub sc (t : ts) =
      ty' <- scPiList sc vars ty
      v <- scVariable sc vn ty'
      rhs <- scApplyAll sc v =<< scVariables sc vars
-     eq <- scGlobalApply sc "Prelude.Eq" [ty, t, rhs]
+     eq <- scGlobalApply sc "Prelude::Eq" [ty, t, rhs]
      prop <- scPiList sc vars eq
      let rule = ruleOfTerm prop Nothing
      let ss' = addRule rule ss
@@ -195,9 +195,9 @@ isSimpleType sc t =
        -- Sorts are simple.
        (asSort -> Just _) -> pure True
        -- Primitive base types are simple.
-       (asGlobalDef -> Just "Prelude.String") -> pure True
-       (asGlobalDef -> Just "Prelude.Float") -> pure True
-       (asGlobalDef -> Just "Prelude.Double") -> pure True
+       (asGlobalDef -> Just "Prelude::String") -> pure True
+       (asGlobalDef -> Just "Prelude::Float") -> pure True
+       (asGlobalDef -> Just "Prelude::Double") -> pure True
        (asRationalType -> Just ()) -> pure True
        (asIntegerType -> Just ()) -> pure True
        (asIntModType -> Just _) -> pure True

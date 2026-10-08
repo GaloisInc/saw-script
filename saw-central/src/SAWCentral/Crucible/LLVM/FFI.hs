@@ -203,7 +203,7 @@ throwFFISetup msg = do
 buildTypeEnv :: Ctx => [Cry.TParam] -> [Term] -> LLVMSetupM TypeEnv
 buildTypeEnv [] [] = pure mempty
 buildTypeEnv (param:params) (argTerm:argTerms) =
-  case asGlobalApply "Cryptol.TCNum" argTerm of
+  case asGlobalApply "Cryptol::TCNum" argTerm of
     Just [asNat -> Just n] ->
       bindTypeVar (Cry.TVBound param) (Left (Nat (toInteger n))) <$>
         buildTypeEnv params argTerms
@@ -226,11 +226,11 @@ mkSizeArg tyArgTerm = do
                       (Cryptol.PLiteralSeqBool (Cryptol.TCNum sizeBitSize))
   -}
   openToSetupTerm $
-    OT.applyGlobal "Cryptol.ecNumber"
+    OT.applyGlobal "Cryptol::ecNumber"
       [ OT.term tyArgTerm
       , OT.vectorType sizeBitSize OT.boolType
-      , OT.applyGlobal "Cryptol.PLiteralSeqBool"
-          [OT.applyGlobal "Cryptol.TCNum" [sizeBitSize]]
+      , OT.applyGlobal "Cryptol::PLiteralSeqBool"
+          [OT.applyGlobal "Cryptol::TCNum" [sizeBitSize]]
       ]
   where
   sizeBitSize = OT.nat $
@@ -419,7 +419,7 @@ boolTypeInfo =
           , ffiToCry = \x {- : Vec 8 Bool -} -> -- : Bool
               {- x != zero
               => bvNonzero 8 x -}
-              OT.applyGlobal "Prelude.bvNonzero" [OT.nat 8, x]
+              OT.applyGlobal "Prelude::bvNonzero" [OT.nat 8, x]
           , ffiToLLVM = Nothing
           }
     }
@@ -443,7 +443,7 @@ basicTypeInfo (FFIBasicVal ffiBasicValType) = pure
               , ffiToCry = \x {- : Vec llvmSize Bool -} -> -- : Vec n Bool
                   {- drop (llvmSize - n) x
                   => Prelude.bvTrunc (llvmSize - n) n x -}
-                  OT.applyGlobal "Prelude.bvTrunc"
+                  OT.applyGlobal "Prelude::bvTrunc"
                     [OT.nat (llvmSize - n), OT.nat n, x]
               , ffiToLLVM = Nothing
               }
@@ -459,8 +459,8 @@ basicTypeInfo (FFIBasicVal ffiBasicValType) = pure
     FFIFloat _ _ ffiFloatSize ->
       let (ffiLLVMType, ffiLLVMCoreType) =
             case ffiFloatSize of
-              FFIFloat32 -> (llvm_float, OT.global "Prelude.Float")
-              FFIFloat64 -> (llvm_double, OT.global "Prelude.Double")
+              FFIFloat32 -> (llvm_float, OT.global "Prelude::Float")
+              FFIFloat64 -> (llvm_double, OT.global "Prelude::Double")
       in  FFITypeInfo
             { ffiConv = Nothing
             , .. }
@@ -478,15 +478,15 @@ precondBVZeroPrefix totalLen zeroLen x = do
         => Prelude.bvEq zeroLen
                         (take Bool zeroLen (totalLen - zeroLen) x)
                         (bvNat zeroLen 0) -}
-        OT.applyGlobal "Prelude.bvEq"
+        OT.applyGlobal "Prelude::bvEq"
           [ zeroLenTerm
-          , OT.applyGlobal "Prelude.take"
+          , OT.applyGlobal "Prelude::take"
               [ OT.boolType
               , zeroLenTerm
               , OT.nat (totalLen - zeroLen)
               , x
               ]
-          , OT.applyGlobal "Prelude.bvNat"
+          , OT.applyGlobal "Prelude::bvNat"
               [zeroLenTerm, OT.nat 0]
           ]
   llvm_precond =<< lio (openToTypedTerm precond)
@@ -546,7 +546,7 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                       {- arr @ i
                       => Prelude.at len ffiLLVMCoreType arr i -}
                       ffiPrecond $
-                        OT.applyGlobal "Prelude.at"
+                        OT.applyGlobal "Prelude::at"
                           [totalLenTerm, ffiLLVMCoreType, arr, OT.nat i]
               , ffiToCry = \llvmArr {- : Vec totalLen ffiLLVMCoreType -} ->
                   let flatCryArr =
@@ -558,7 +558,7 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                                            (\x -> ffiToCry x)
                                            totalLen
                                            llvmArr -}
-                            OT.applyGlobal "Prelude.map"
+                            OT.applyGlobal "Prelude::map"
                               [ ffiLLVMCoreType
                               , ffiCryType
                               , OT.lambda "x" ffiLLVMCoreType ffiToCry
@@ -572,7 +572,7 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                                 (split (x * y) z ffiCryType flatCryArr) -}
                       foldr
                         (\(cumulLen, dimLen, arrElemType) arr ->
-                          OT.applyGlobal "Prelude.split"
+                          OT.applyGlobal "Prelude::split"
                             [cumulLen, dimLen, arrElemType, arr])
                         flatCryArr
                         cumul
@@ -585,7 +585,7 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                                  (join x y (Vec z ffiCryType) cryArr) -}
                         foldr
                           (\(cumulLen, dimLen, arrElemType) arr ->
-                            OT.applyGlobal "Prelude.join"
+                            OT.applyGlobal "Prelude::join"
                               [cumulLen, dimLen, arrElemType, arr])
                           cryArr
                           (reverse cumul)
@@ -595,7 +595,7 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                                      (\x -> toLLVM x)
                                      totalLen
                                      flatCryArr -}
-                      OT.applyGlobal "Prelude.map"
+                      OT.applyGlobal "Prelude::map"
                         [ basicCryType
                         , ffiLLVMCoreType
                         , OT.lambda "x" basicCryType toLLVM

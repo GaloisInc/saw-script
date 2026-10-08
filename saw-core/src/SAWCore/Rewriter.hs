@@ -125,7 +125,7 @@ annRewriteRule = annotation
 propOfRewriteRule :: SharedContext -> RewriteRule a -> IO Term
 propOfRewriteRule sc rule =
   do ty <- scTypeOf sc (lhs rule)
-     eq <- scGlobalApply sc "Prelude.Eq" [ty, lhs rule, rhs rule]
+     eq <- scGlobalApply sc "Prelude::Eq" [ty, lhs rule, rhs rule]
      scPiList sc (ctxt rule) eq
 
 ----------------------------------------------------------------------
@@ -176,27 +176,27 @@ firstOrderMatch ctxt pat term = match pat term IntMap.empty
 asConstantNat :: Term -> Maybe Natural
 asConstantNat t =
   case t of
-    (R.asGlobalApply "Prelude.Zero" -> Just []) -> Just 0
-    (R.asGlobalApply "Prelude.Succ" -> Just [x]) -> (+ 1) <$> asConstantNat x
+    (R.asGlobalApply "Prelude::Zero" -> Just []) -> Just 0
+    (R.asGlobalApply "Prelude::Succ" -> Just [x]) -> (+ 1) <$> asConstantNat x
     _ ->
       do let (f, xs) = R.asApplyAll t
          i <- R.asGlobalDef f
          case xs of
            [x, y]
-             | i == "Prelude.addNat" -> (+) <$> asConstantNat x <*> asConstantNat y
-             | i == "Prelude.mulNat" -> (*) <$> asConstantNat x <*> asConstantNat y
-             | i == "Prelude.expNat" -> (^) <$> asConstantNat x <*> asConstantNat y
-             | i == "Prelude.subNat" ->
+             | i == "Prelude::addNat" -> (+) <$> asConstantNat x <*> asConstantNat y
+             | i == "Prelude::mulNat" -> (*) <$> asConstantNat x <*> asConstantNat y
+             | i == "Prelude::expNat" -> (^) <$> asConstantNat x <*> asConstantNat y
+             | i == "Prelude::subNat" ->
                  do x' <- asConstantNat x
                     y' <- asConstantNat y
                     guard (x' >= y')
                     return (x' - y')
-             | i == "Prelude.divNat" ->
+             | i == "Prelude::divNat" ->
                  do x' <- asConstantNat x
                     y' <- asConstantNat y
                     guard (y' > 0)
                     return (x' `div` y')
-             | i == "Prelude.remNat" ->
+             | i == "Prelude::remNat" ->
                  do x' <- asConstantNat x
                     y' <- asConstantNat y
                     guard (y' > 0)
@@ -332,7 +332,7 @@ scMatch sc ctxt pat term =
 ruleOfTerm :: Term -> Maybe a -> RewriteRule a
 ruleOfTerm t ann =
   do let (vars, body) = R.asPiList t
-     case R.asGlobalApply "Prelude.Eq" body of
+     case R.asGlobalApply "Prelude::Eq" body of
        Just [_, x, y] -> mkRewriteRule vars x y False False ann
        _ -> panic "ruleOfTerm" ["Illegal argument"]
 
@@ -379,15 +379,15 @@ ruleOfProp sc term ann =
          pure $ (\r -> r { ctxt = (nm, tp) : ctxt r}) <$> rule
     Nothing ->
       case term of
-        (R.asGlobalApply "Cryptol.ecEq" -> Just [_, _, x, y]) -> eqRule x y
-        (R.asGlobalApply "Prelude.bvEq" -> Just [_, x, y]) -> eqRule x y
-        (R.asGlobalApply "Prelude.equalNat" -> Just [x, y]) -> eqRule x y
-        (R.asGlobalApply "Prelude.boolEq" -> Just [x, y]) -> eqRule x y
-        (R.asGlobalApply "Prelude.vecEq" -> Just [_, _, _, x, y]) -> eqRule x y
-        (R.asGlobalApply "Prelude.pairEq" -> Just [_, _, _, _, x, y]) -> eqRule x y
-        (R.asGlobalApply "Prelude.arrayEq" -> Just [_, _, x, y]) -> eqRule x y
-        (R.asGlobalApply "Prelude.intEq" -> Just [x, y]) -> eqRule x y
-        (R.asGlobalApply "Prelude.intModEq" -> Just [_, x, y]) -> eqRule x y
+        (R.asGlobalApply "Cryptol::ecEq" -> Just [_, _, x, y]) -> eqRule x y
+        (R.asGlobalApply "Prelude::bvEq" -> Just [_, x, y]) -> eqRule x y
+        (R.asGlobalApply "Prelude::equalNat" -> Just [x, y]) -> eqRule x y
+        (R.asGlobalApply "Prelude::boolEq" -> Just [x, y]) -> eqRule x y
+        (R.asGlobalApply "Prelude::vecEq" -> Just [_, _, _, x, y]) -> eqRule x y
+        (R.asGlobalApply "Prelude::pairEq" -> Just [_, _, _, _, x, y]) -> eqRule x y
+        (R.asGlobalApply "Prelude::arrayEq" -> Just [_, _, x, y]) -> eqRule x y
+        (R.asGlobalApply "Prelude::intEq" -> Just [x, y]) -> eqRule x y
+        (R.asGlobalApply "Prelude::intModEq" -> Just [_, x, y]) -> eqRule x y
         (R.asConstant -> Just nm) ->
           do mres <- lookupVarIndexInMap (nameIndex nm) <$> scGetModuleMap sc
              case mres of
@@ -617,12 +617,12 @@ asRecordRedex t =
      -- match t to pattern "t1 _ _ _ t2"
      t1 R.:*: t2 <- (pure R.<@ wild R.<@ wild R.<@ wild R.<@> pure) t
      -- match t2 to pattern "RecordValue _ _ _ x y"
-     let rv = R.isGlobalDef "Prelude.RecordValue"
+     let rv = R.isGlobalDef "Prelude::RecordValue"
      x R.:*: y <- (rv R.@> wild R.@> wild R.@> wild R.@> pure R.<@> pure) t2
-     case R.isGlobalDef "Prelude.headRecord" t1 of
+     case R.isGlobalDef "Prelude::headRecord" t1 of
        Just () -> Just x
        Nothing ->
-         case R.isGlobalDef "Prelude.tailRecord" t1 of
+         case R.isGlobalDef "Prelude::tailRecord" t1 of
            Just () -> Just y
            Nothing -> Nothing
 
@@ -872,28 +872,28 @@ hoistIfs sc t = do
    cache <- newIntCache
 
    rules <- scEqsRewriteRules sc
-              [ "Prelude.ite_true"
-              , "Prelude.ite_false"
-              , "Prelude.ite_not"
-              , "Prelude.ite_nest1"
-              , "Prelude.ite_nest2"
-              , "Prelude.ite_eq"
-              , "Prelude.ite_bit_false_1"
-              , "Prelude.ite_bit_true_1"
-              , "Prelude.ite_bit"
-              , "Prelude.not_not"
-              , "Prelude.and_True1"
-              , "Prelude.and_False1"
-              , "Prelude.and_True2"
-              , "Prelude.and_False2"
-              , "Prelude.and_idem"
-              , "Prelude.or_True1"
-              , "Prelude.or_False1"
-              , "Prelude.or_True2"
-              , "Prelude.or_False2"
-              , "Prelude.or_idem"
-              , "Prelude.not_or"
-              , "Prelude.not_and"
+              [ "Prelude::ite_true"
+              , "Prelude::ite_false"
+              , "Prelude::ite_not"
+              , "Prelude::ite_nest1"
+              , "Prelude::ite_nest2"
+              , "Prelude::ite_eq"
+              , "Prelude::ite_bit_false_1"
+              , "Prelude::ite_bit_true_1"
+              , "Prelude::ite_bit"
+              , "Prelude::not_not"
+              , "Prelude::and_True1"
+              , "Prelude::and_False1"
+              , "Prelude::and_True2"
+              , "Prelude::and_False2"
+              , "Prelude::and_idem"
+              , "Prelude::or_True1"
+              , "Prelude::or_False1"
+              , "Prelude::or_True2"
+              , "Prelude::or_False2"
+              , "Prelude::or_idem"
+              , "Prelude::not_or"
+              , "Prelude::not_and"
               ]
    let ss :: Simpset () = addRules rules emptySimpset
 
@@ -918,7 +918,7 @@ splitCond sc ss c t = do
 
    (_,then_branch) <- replaceTerm sc ss (c, trueTerm) t
    (_,else_branch) <- replaceTerm sc ss (c, falseTerm) t
-   scGlobalApply sc "Prelude.ite" [ty, c, then_branch, else_branch]
+   scGlobalApply sc "Prelude::ite" [ty, c, then_branch, else_branch]
 
 
 type HoistIfs s = (Term, [(Term, Map VarName Term)])
@@ -941,11 +941,11 @@ doHoistIfs sc ss hoistCache = go
 
        top :: Term -> TermF Term -> IO (HoistIfs s)
        top t tf =
-         case R.asGlobalApply "Prelude.ite" t of
+         case R.asGlobalApply "Prelude::ite" t of
            Just [branch_tp, cond, then_branch, else_branch] ->
              do (then_branch',conds1) <- go then_branch
                 (else_branch',conds2) <- go else_branch
-                t' <- scGlobalApply sc "Prelude.ite" [branch_tp, cond, then_branch', else_branch']
+                t' <- scGlobalApply sc "Prelude::ite" [branch_tp, cond, then_branch', else_branch']
                 let vars = getAllVarsMap cond
                 return (t', (cond, vars) : conds1 ++ conds2)
            _ ->

@@ -278,36 +278,36 @@ constMap sym =
   Map.fromList
   [
   -- Shifts
-    ("Prelude.bvShl" , bvShLOp sym)
-  , ("Prelude.bvShr" , bvShROp sym)
-  , ("Prelude.bvSShr", bvSShROp sym)
+    ("Prelude::bvShl" , bvShLOp sym)
+  , ("Prelude::bvShr" , bvShROp sym)
+  , ("Prelude::bvSShr", bvSShROp sym)
   -- Integers
-  , ("Prelude.intToNat", intToNatOp sym)
-  , ("Prelude.intToBv" , intToBvOp sym)
-  , ("Prelude.bvToInt" , bvToIntOp sym)
-  , ("Prelude.sbvToInt", sbvToIntOp sym)
+  , ("Prelude::intToNat", intToNatOp sym)
+  , ("Prelude::intToBv" , intToBvOp sym)
+  , ("Prelude::bvToInt" , bvToIntOp sym)
+  , ("Prelude::sbvToInt", sbvToIntOp sym)
   -- Integers mod n
-  , ("Prelude.toIntMod"  , toIntModOp)
-  , ("Prelude.fromIntMod", fromIntModOp sym)
-  , ("Prelude.intModEq"  , intModEqOp sym)
-  , ("Prelude.intModAdd" , intModBinOp sym W.intAdd)
-  , ("Prelude.intModSub" , intModBinOp sym W.intSub)
-  , ("Prelude.intModMul" , intModBinOp sym W.intMul)
-  , ("Prelude.intModNeg" , intModUnOp sym W.intNeg)
+  , ("Prelude::toIntMod"  , toIntModOp)
+  , ("Prelude::fromIntMod", fromIntModOp sym)
+  , ("Prelude::intModEq"  , intModEqOp sym)
+  , ("Prelude::intModAdd" , intModBinOp sym W.intAdd)
+  , ("Prelude::intModSub" , intModBinOp sym W.intSub)
+  , ("Prelude::intModMul" , intModBinOp sym W.intMul)
+  , ("Prelude::intModNeg" , intModUnOp sym W.intNeg)
   -- Streams
-  , ("Prelude.MkStream", mkStreamOp)
-  , ("Prelude.streamGet", streamGetOp sym)
+  , ("Prelude::MkStream", mkStreamOp)
+  , ("Prelude::streamGet", streamGetOp sym)
   -- Misc
-  , ("Prelude.expByNat", Prims.expByNatOp (prims sym))
+  , ("Prelude::expByNat", Prims.expByNatOp (prims sym))
   ]
 
 -- | Recursor overrides for the SAWCore simulator.
 recursor :: Sym sym => sym -> Name -> sort -> Maybe (SPrim sym)
 recursor sym nm _sort =
   case nameQualName nm of
-    "Prelude.Stream" -> Just (streamRecOp sym)
-    "Prelude.Bool" -> Just (Prims.boolRecOp (prims sym))
-    "Prelude.Nat" -> Just (Prims.natRecOp (prims sym))
+    "Prelude::Stream" -> Just (streamRecOp sym)
+    "Prelude::Bool" -> Just (Prims.boolRecOp (prims sym))
+    "Prelude::Nat" -> Just (Prims.natRecOp (prims sym))
     _ -> Nothing
 
 -----------------------------------------------------------------------
@@ -1435,7 +1435,7 @@ rebuildTerm sym st sc tv sv =
       scUnitValue sc
     VCtorApp 0 _ [x, y] ->
       case tv of
-        VDataType "Prelude.PairType" [TValue tx, TValue ty] [] ->
+        VDataType "Prelude::PairType" [TValue tx, TValue ty] [] ->
           do vx <- force x
              vy <- force y
              x' <- rebuildTerm sym st sc tx vx

@@ -36,7 +36,7 @@ prelude_bveq_sameL_test =
   testCase "prelude_bveq_sameL_test" $ do
     sc <- mkSharedContext
     scLoadPreludeModule sc
-    let eqs = [ "Prelude.bveq_sameL" ]
+    let eqs = [ "Prelude::bveq_sameL" ]
     ss <- scSimpset sc [] eqs [] :: IO (Simpset ())
     natType <- scNatType sc
     n <- scFreshVariable sc "n" natType
@@ -45,15 +45,15 @@ prelude_bveq_sameL_test =
     x <- scFreshVariable sc "x" bvType
     z <- scFreshVariable sc "z" bvType
     let lhs =
-          OT.applyGlobal "Prelude.bvEq"
+          OT.applyGlobal "Prelude::bvEq"
           [ OT.term n
           , OT.term x
-          , OT.applyGlobal "Prelude.bvAdd" [OT.term n, OT.term x, OT.term z]
+          , OT.applyGlobal "Prelude::bvAdd" [OT.term n, OT.term x, OT.term z]
           ]
     let rhs =
-          OT.applyGlobal "Prelude.bvEq"
+          OT.applyGlobal "Prelude::bvEq"
           [ OT.term n
-          , OT.applyGlobal "Prelude.bvNat" [OT.term n, OT.nat 0]
+          , OT.applyGlobal "Prelude::bvNat" [OT.term n, OT.nat 0]
           , OT.term z
           ]
     (_, lhs_term) <- rewriteSharedTerm sc ss =<< scMkTerm sc lhs

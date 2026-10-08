@@ -38,7 +38,7 @@ the SAW core term
 
 can be built with the 'OpenTerm' expression
 
-> let boolTy = global "Prelude.Bool" in
+> let boolTy = global "Prelude::Bool" in
 > lambda "f" (arrow boolTy boolTy) $ \f ->
 > lambda "x" boolTy $ \x ->
 > apply f x
@@ -130,24 +130,24 @@ stringLit = flat . StringLit
 
 -- | Return the SAW core type @String@ of strings.
 stringType :: OpenTerm
-stringType = global "Prelude.String"
+stringType = global "Prelude::String"
 
 -- | The 'True' value as a SAW core term
 true :: OpenTerm
-true = global "Prelude.True"
+true = global "Prelude::True"
 
 -- | The 'False' value as a SAW core term
 false :: OpenTerm
-false = global "Prelude.False"
+false = global "Prelude::False"
 
 -- | Convert a 'Bool' to a SAW core term
 bool :: Bool -> OpenTerm
-bool True = global "Prelude.True"
-bool False = global "Prelude.False"
+bool True = global "Prelude::True"
+bool False = global "Prelude::False"
 
 -- | The 'Bool' type as a SAW core term
 boolType :: OpenTerm
-boolType = global "Prelude.Bool"
+boolType = global "Prelude::Bool"
 
 -- | Build an 'OpenTerm' for an array literal
 arrayValue :: OpenTerm -> [OpenTerm] -> OpenTerm
@@ -161,12 +161,12 @@ bvLit bits =
 
 -- | Create a SAW core term for a vector type
 vectorType :: OpenTerm -> OpenTerm -> OpenTerm
-vectorType n a = applyGlobal "Prelude.Vec" [n,a]
+vectorType n a = applyGlobal "Prelude::Vec" [n,a]
 
 -- | Create a SAW core term for the type of a bitvector
 bvType :: Integral a => a -> OpenTerm
 bvType n =
-  apply (global "Prelude.Vec")
+  apply (global "Prelude::Vec")
   [nat (fromIntegral n), boolType]
 
 -- | Build an 'OpenTerm' for a pair
@@ -330,20 +330,20 @@ sawLet ::
   LocalName -> OpenTerm -> OpenTerm -> OpenTerm ->
   (OpenTerm -> OpenTerm) -> OpenTerm
 sawLet x tp tp_ret rhs body_f =
-  apply (global "Prelude.sawLet")
+  apply (global "Prelude::sawLet")
   [tp, tp_ret, rhs, lambda x tp body_f]
 
 -- | Build a bitvector type with the given length
 bitvectorType :: OpenTerm -> OpenTerm
 bitvectorType w =
-  applyGlobal "Prelude.Vec" [w, global "Prelude.Bool"]
+  applyGlobal "Prelude::Vec" [w, global "Prelude::Bool"]
 
 -- | Build a SAW core term for a list with the given element type
 list :: OpenTerm -> [OpenTerm] -> OpenTerm
 list tp elems =
-  foldr (\x l -> applyGlobal "Prelude.Cons" [tp, x, l])
-  (applyGlobal "Prelude.Nil" [tp]) elems
+  foldr (\x l -> applyGlobal "Prelude::Cons" [tp, x, l])
+  (applyGlobal "Prelude::Nil" [tp]) elems
 
 -- | Build the type @Either a b@ from types @a@ and @b@
 eitherType :: OpenTerm -> OpenTerm -> OpenTerm
-eitherType a b = applyGlobal "Prelude.Either" [a, b]
+eitherType a b = applyGlobal "Prelude::Either" [a, b]

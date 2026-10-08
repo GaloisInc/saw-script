@@ -293,35 +293,35 @@ beConstMap be =
   Map.union (Prims.constMap (prims be)) $
   Map.fromList
   -- Shifts
-  [ ("Prelude.bvShl" , bvShiftOp (AIG.shl be) (lvShl (AIG.falseLit be)))
-  , ("Prelude.bvShr" , bvShiftOp (AIG.ushr be) (lvShr (AIG.falseLit be)))
-  , ("Prelude.bvSShr", bvShiftOp (AIG.sshr be) lvSShr)
+  [ ("Prelude::bvShl" , bvShiftOp (AIG.shl be) (lvShl (AIG.falseLit be)))
+  , ("Prelude::bvShr" , bvShiftOp (AIG.ushr be) (lvShr (AIG.falseLit be)))
+  , ("Prelude::bvSShr", bvShiftOp (AIG.sshr be) lvSShr)
   -- Integers
-  , ("Prelude.intToNat", Prims.intToNatOp)
-  , ("Prelude.intToBv" , intToBvOp be)
-  , ("Prelude.bvToInt" , bvToIntOp be)
-  , ("Prelude.sbvToInt", sbvToIntOp be)
+  , ("Prelude::intToNat", Prims.intToNatOp)
+  , ("Prelude::intToBv" , intToBvOp be)
+  , ("Prelude::bvToInt" , bvToIntOp be)
+  , ("Prelude::sbvToInt", sbvToIntOp be)
   -- Integers mod n
-  , ("Prelude.toIntMod"  , toIntModOp)
-  , ("Prelude.fromIntMod", fromIntModOp)
-  , ("Prelude.intModEq"  , intModEqOp be)
-  , ("Prelude.intModAdd" , intModBinOp (+))
-  , ("Prelude.intModSub" , intModBinOp (-))
-  , ("Prelude.intModMul" , intModBinOp (*))
-  , ("Prelude.intModNeg" , intModUnOp negate)
+  , ("Prelude::toIntMod"  , toIntModOp)
+  , ("Prelude::fromIntMod", fromIntModOp)
+  , ("Prelude::intModEq"  , intModEqOp be)
+  , ("Prelude::intModAdd" , intModBinOp (+))
+  , ("Prelude::intModSub" , intModBinOp (-))
+  , ("Prelude::intModMul" , intModBinOp (*))
+  , ("Prelude::intModNeg" , intModUnOp negate)
   -- Streams
-  , ("Prelude.MkStream", mkStreamOp)
-  , ("Prelude.streamGet", streamGetOp be)
+  , ("Prelude::MkStream", mkStreamOp)
+  , ("Prelude::streamGet", streamGetOp be)
   -- Misc
-  , ("Prelude.expByNat", Prims.expByNatOp (prims be))
+  , ("Prelude::expByNat", Prims.expByNatOp (prims be))
   ]
 
 -- | Recursor overrides for the SAWCore simulator.
 recursor :: AIG.IsAIG l g => g s -> Name -> sort -> Maybe (BPrim (l s))
 recursor be nm _sort =
   case nameQualName nm of
-    "Prelude.Bool" -> Just (Prims.boolRecOp (prims be))
-    "Prelude.Nat" -> Just (Prims.natRecOp (prims be))
+    "Prelude::Bool" -> Just (Prims.boolRecOp (prims be))
+    "Prelude::Nat" -> Just (Prims.natRecOp (prims be))
     _ -> Nothing
 
 -- | Lifts a strict mux operation to a lazy mux

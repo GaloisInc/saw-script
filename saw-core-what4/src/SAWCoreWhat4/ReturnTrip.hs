@@ -750,7 +750,7 @@ evaluateExpr sym st sc cache = f Map.empty
           do bit <- SC.scBoolType sc
              n <- SC.scNat sc (natValue w)
              x <- f env p
-             SAWExpr <$> SC.scGlobalApply sc "Prelude.replicate" [n, bit, x]
+             SAWExpr <$> SC.scGlobalApply sc "Prelude::replicate" [n, bit, x]
 
         B.BVTestBit i bv -> fmap SAWExpr $ do
              w <- SC.scNat sc (natValue (bvWidth bv))
@@ -803,13 +803,13 @@ evaluateExpr sym st sc cache = f Map.empty
            bit <- SC.scBoolType sc
            x' <- f env x
            y' <- SC.scBvToNat sc (natValue w) =<< f env y
-           SC.scGlobalApply sc "Prelude.rotateL" [n, bit, x', y']
+           SC.scGlobalApply sc "Prelude::rotateL" [n, bit, x', y']
         B.BVRor w x y -> fmap SAWExpr $ do
            n <- SC.scNat sc (natValue w)
            bit <- SC.scBoolType sc
            x' <- f env x
            y' <- SC.scBvToNat sc (natValue w) =<< f env y
-           SC.scGlobalApply sc "Prelude.rotateR" [n, bit, x', y']
+           SC.scGlobalApply sc "Prelude::rotateR" [n, bit, x', y']
         B.BVConcat _ x y -> fmap SAWExpr $ do
            m <- SC.scNat sc (natValue (bvWidth x))
            n <- SC.scNat sc (natValue (bvWidth y))

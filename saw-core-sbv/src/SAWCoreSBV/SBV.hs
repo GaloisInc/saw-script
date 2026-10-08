@@ -252,36 +252,36 @@ constMap =
   Map.fromList
   [
   -- Shifts
-    ("Prelude.bvShl" , bvShLOp)
-  , ("Prelude.bvShr" , bvShROp)
-  , ("Prelude.bvSShr", bvSShROp)
+    ("Prelude::bvShl" , bvShLOp)
+  , ("Prelude::bvShr" , bvShROp)
+  , ("Prelude::bvSShr", bvSShROp)
   -- Integers
-  , ("Prelude.intToNat", intToNatOp)
-  , ("Prelude.intToBv" , intToBvOp)
-  , ("Prelude.bvToInt" , bvToIntOp)
-  , ("Prelude.sbvToInt", sbvToIntOp)
+  , ("Prelude::intToNat", intToNatOp)
+  , ("Prelude::intToBv" , intToBvOp)
+  , ("Prelude::bvToInt" , bvToIntOp)
+  , ("Prelude::sbvToInt", sbvToIntOp)
   -- Integers mod n
-  , ("Prelude.toIntMod"  , toIntModOp)
-  , ("Prelude.fromIntMod", fromIntModOp)
-  , ("Prelude.intModEq"  , intModEqOp)
-  , ("Prelude.intModAdd" , intModBinOp svPlus)
-  , ("Prelude.intModSub" , intModBinOp svMinus)
-  , ("Prelude.intModMul" , intModBinOp svTimes)
-  , ("Prelude.intModNeg" , intModUnOp svUNeg)
+  , ("Prelude::toIntMod"  , toIntModOp)
+  , ("Prelude::fromIntMod", fromIntModOp)
+  , ("Prelude::intModEq"  , intModEqOp)
+  , ("Prelude::intModAdd" , intModBinOp svPlus)
+  , ("Prelude::intModSub" , intModBinOp svMinus)
+  , ("Prelude::intModMul" , intModBinOp svTimes)
+  , ("Prelude::intModNeg" , intModUnOp svUNeg)
   -- Streams
-  , ("Prelude.MkStream", mkStreamOp)
-  , ("Prelude.streamGet", streamGetOp)
+  , ("Prelude::MkStream", mkStreamOp)
+  , ("Prelude::streamGet", streamGetOp)
   -- Misc
-  , ("Prelude.expByNat", Prims.expByNatOp prims)
+  , ("Prelude::expByNat", Prims.expByNatOp prims)
   ]
 
 -- | Recursor overrides for the SAWCore simulator.
 recursor :: Name -> sort -> Maybe SPrim
 recursor nm _sort =
   case nameQualName nm of
-    "Prelude.Stream" -> Just streamRecOp
-    "Prelude.Bool" -> Just (Prims.boolRecOp prims)
-    "Prelude.Nat" -> Just (Prims.natRecOp prims)
+    "Prelude::Stream" -> Just streamRecOp
+    "Prelude::Bool" -> Just (Prims.boolRecOp prims)
+    "Prelude::Nat" -> Just (Prims.natRecOp prims)
     _ -> Nothing
 
 ------------------------------------------------------------
@@ -747,16 +747,16 @@ parseUninterpreted cws nm ty =
                   | i <- [0 .. n-1] ]
             return (VVector (V.fromList (map ready xs)))
 
-    VDataType "Prelude.UnitType" [] []
+    VDataType "Prelude::UnitType" [] []
       -> pure vUnit
-    VDataType "Prelude.PairType" [TValue ty1, TValue ty2] []
+    VDataType "Prelude::PairType" [TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted cws (nm ++ ".L") ty1
             x2 <- parseUninterpreted cws (nm ++ ".R") ty2
             pure (vPair (ready x1) (ready x2))
 
-    VDataType "Prelude.EmptyType" [] []
+    VDataType "Prelude::EmptyType" [] []
       -> pure vEmptyRecord
-    VDataType "Prelude.RecordType"
+    VDataType "Prelude::RecordType"
       [VString fname, TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted cws (nm ++ "." ++ Text.unpack fname) ty1
             x2 <- parseUninterpreted cws nm ty2

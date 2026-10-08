@@ -261,18 +261,15 @@ instance PP.Pretty QualName where
 instance Show QualName where
   show qn = Text.unpack (ppQualName qn)
 
--- | Parse a fully-qualified identifier.
--- Supports either '.' or '::' as path separator.
+-- | Parse a fully-qualified identifier, using @::@ as a path
+-- separator.
 parseQualName :: String -> QualName
 parseQualName s0 =
-  case (Text.splitOn sep t0) of
+  case Text.splitOn "::" t0 of
     t1 : t2 -> fromPath NamespaceCore (t1 NE.:| t2)
+    -- Can never happen because Text.splitOn never returns an empty list
     _ -> panic "parseQualName" ["Invalid identifier: " <> t0]
   where
-    sep =
-      case Text.any (\c -> c=='.') t0 of
-        True -> "."
-        False -> "::"
     t0 = Text.pack s0
 
 instance IsString QualName where

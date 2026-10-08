@@ -640,19 +640,19 @@ translateTermUnshared t =
       case f of
       (asConstant -> Just (nameQualName -> qn)) | QN.namespace qn == Just QN.NamespaceCore ->
         case qn of
-        "Prelude.natToInt" ->
+        "Prelude::natToInt" ->
           case args of
           [n] -> translateTerm n >>= \case
             Rocq.NatLit n' -> pure $ Rocq.ZLit n'
-            _ -> translateQualNameWithArgs "Prelude.natToInt" [n]
+            _ -> translateQualNameWithArgs "Prelude::natToInt" [n]
           _ -> badTerm
-        "Prelude.intNeg" ->
+        "Prelude::intNeg" ->
           case args of
           [z] -> translateTerm z >>= \case
             Rocq.ZLit z' -> pure $ Rocq.ZLit (-z')
-            _ -> translateQualNameWithArgs "Prelude.intNeg" [z]
+            _ -> translateQualNameWithArgs "Prelude::intNeg" [z]
           _ -> badTerm
-        "Prelude.ite" ->
+        "Prelude::ite" ->
           case args of
           -- `rest` can be non-empty in examples like:
           -- (if b then f else g) arg1 arg2
@@ -667,7 +667,7 @@ translateTermUnshared t =
           _ -> translateQualNameWithArgs qn args
 
         -- Refuse to translate any recursive value defined using Prelude.fix
-        "Prelude.fix" -> badTerm
+        "Prelude::fix" -> badTerm
 
         _ -> translateQualNameWithArgs qn args
       _ -> Rocq.App <$> translateTerm f <*> traverse translateTerm args

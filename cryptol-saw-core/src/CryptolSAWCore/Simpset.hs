@@ -35,10 +35,10 @@ mkCryptolSimpset sc =
     cryptolDefs m = filter (not . excluded) $ moduleDefs m
     excluded d = nameQualName (defName d) `elem` excludedNames
     idents =
-      [ "Prelude.coerce_same"
-      , "Prelude.unsafeCoerce_same"
-      , "Prelude.headRecord_RecordValue"
-      , "Prelude.tailRecord_RecordValue"
+      [ "Prelude::coerce_same"
+      , "Prelude::unsafeCoerce_same"
+      , "Prelude::headRecord_RecordValue"
+      , "Prelude::tailRecord_RecordValue"
       ]
 
 cryptolModuleName :: ModuleName
@@ -46,24 +46,24 @@ cryptolModuleName = mkModuleName ["Cryptol"]
 
 excludedNames :: [QualName]
 excludedNames =
-  [ "Prelude.fix"
-  , "Cryptol.pair_cong"
-  , "Cryptol.seq_cong"
-  , "Cryptol.pair_cong1"
-  , "Cryptol.pair_cong2"
-  , "Cryptol.seq_cong1"
-  , "Cryptol.fun_cong"
-  , "Cryptol.seq_TCNum"
-  , "Cryptol.seq_TCInf"
-  , "Cryptol.PZero"
-  , "Cryptol.PLiteral"
-  , "Cryptol.PLogic"
-  , "Cryptol.PRing"
-  , "Cryptol.PIntegral"
-  , "Cryptol.PField"
-  , "Cryptol.PRound"
-  , "Cryptol.PEq"
-  , "Cryptol.PCmp"
-  , "Cryptol.PSignedCmp"
-  , "Cryptol.ecEq"
+  [ "Prelude::fix"
+  , "Cryptol::pair_cong"
+  , "Cryptol::seq_cong"
+  , "Cryptol::pair_cong1"
+  , "Cryptol::pair_cong2"
+  , "Cryptol::seq_cong1"
+  , "Cryptol::fun_cong"
+  , "Cryptol::seq_TCNum"
+  , "Cryptol::seq_TCInf"
+  , "Cryptol::PZero"
+  , "Cryptol::PLiteral"
+  , "Cryptol::PLogic"
+  , "Cryptol::PRing"
+  , "Cryptol::PIntegral"
+  , "Cryptol::PField"
+  , "Cryptol::PRound"
+  , "Cryptol::PEq"
+  , "Cryptol::PCmp"
+  , "Cryptol::PSignedCmp"
+  , "Cryptol::ecEq"
   ]

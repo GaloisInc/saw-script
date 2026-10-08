@@ -401,8 +401,8 @@ typeInferCompleteTerm uterm =
              [] -> throwTCError $ EmptyVectorLit
          liftSCM $ SC.scmVector typed_tp typed_ts
     Un.BVLit _ bits ->
-      do tp <- liftSCM $ SC.scmGlobalDef "Prelude.Bool"
-         let bit b = SC.scmGlobalDef (if b then "Prelude.True" else "Prelude.False")
+      do tp <- liftSCM $ SC.scmGlobalDef "Prelude::Bool"
+         let bit b = SC.scmGlobalDef (if b then "Prelude::True" else "Prelude::False")
          bit_tms <- liftSCM $ traverse bit bits
          liftSCM $ SC.scmVector tp bit_tms
 

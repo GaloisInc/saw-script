@@ -2140,8 +2140,8 @@ size_to_term s =
                   C.Forall [] [] t ->
                     case C.evalType mempty t of
                       Left (C.Nat x) | x >= 0 ->
-                        scGlobalApply sc "Cryptol.TCNum" =<< sequence [scNat sc (fromInteger x)]
-                      Left C.Inf -> scGlobalApply sc "Cryptol.TCInf" []
+                        scGlobalApply sc "Cryptol::TCNum" =<< sequence [scNat sc (fromInteger x)]
+                      Left C.Inf -> scGlobalApply sc "Cryptol::TCInf" []
                       _ -> fail "size_to_term: not a numeric type"
                   _ -> fail "size_to_term: unsupported polymorphic type"
 
@@ -2264,13 +2264,13 @@ cryptol_prims =
   where
     prims :: [(Text, QualName, Text)]
     prims =
-      [ ("trunc", "Cryptol.ecTrunc" , "{m, n} (fin m, fin n) => [m+n] -> [n]")
-      , ("uext" , "Cryptol.ecUExt"  , "{m, n} (fin m, fin n) => [n] -> [m+n]")
-      , ("sext" , "Cryptol.ecSExt"  , "{m, n} (fin m, fin n, n >= 1) => [n] -> [m+n]")
-      , ("sgt"  , "Cryptol.ecSgt"   , "{n} (fin n) => [n] -> [n] -> Bit")
-      , ("sge"  , "Cryptol.ecSge"   , "{n} (fin n) => [n] -> [n] -> Bit")
-      , ("slt"  , "Cryptol.ecSlt"   , "{n} (fin n) => [n] -> [n] -> Bit")
-      , ("sle"  , "Cryptol.ecSle"   , "{n} (fin n) => [n] -> [n] -> Bit")
+      [ ("trunc", "Cryptol::ecTrunc" , "{m, n} (fin m, fin n) => [m+n] -> [n]")
+      , ("uext" , "Cryptol::ecUExt"  , "{m, n} (fin m, fin n) => [n] -> [m+n]")
+      , ("sext" , "Cryptol::ecSExt"  , "{m, n} (fin m, fin n, n >= 1) => [n] -> [m+n]")
+      , ("sgt"  , "Cryptol::ecSgt"   , "{n} (fin n) => [n] -> [n] -> Bit")
+      , ("sge"  , "Cryptol::ecSge"   , "{n} (fin n) => [n] -> [n] -> Bit")
+      , ("slt"  , "Cryptol::ecSlt"   , "{n} (fin n) => [n] -> [n] -> Bit")
+      , ("sle"  , "Cryptol::ecSle"   , "{n} (fin n) => [n] -> [n] -> Bit")
       ]
       -- TODO: sext, sdiv, srem, sshr
 

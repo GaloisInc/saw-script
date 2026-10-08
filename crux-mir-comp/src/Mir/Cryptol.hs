@@ -300,7 +300,7 @@ cryptolRun col name (CryFunArgs (CryFunArgs' tpArgs ctrs normArgs)) retShp funcT
             liftIO $
               do
                 i    <- SAW.scNat sc (fromInteger conc)
-                term <- SAW.scGlobalApply sc "Cryptol.TCNum" [i]
+                term <- SAW.scGlobalApply sc "Cryptol::TCNum" [i]
                 pure (Const ((tp, Cry.tNum conc), term))
           Nothing ->
             do
@@ -337,31 +337,31 @@ cryptolRun col name (CryFunArgs (CryFunArgs' tpArgs ctrs normArgs)) retShp funcT
       proveProp p =
         case p of
           (Cry.pIsTrue -> True) ->
-            SAW.scGlobalDef sc "Cryptol.TruePropI"
+            SAW.scGlobalDef sc "Cryptol::TruePropI"
           (Cry.pIsEqual -> Just (m, _)) ->
             -- Constraint `m == n` is translated as `Eq Num m n`
             case Cry.tIsNum (Cry.apSubst su m) of
               Just i ->
-                do t <- SAW.scGlobalDef sc "Cryptol.Num"
+                do t <- SAW.scGlobalDef sc "Cryptol::Num"
                    i' <- SAW.scNat sc (fromIntegral i)
-                   x <- SAW.scGlobalApply sc "Cryptol.TCNum" [i']
-                   SAW.scGlobalApply sc "Prelude.Refl" [t, x]
+                   x <- SAW.scGlobalApply sc "Cryptol::TCNum" [i']
+                   SAW.scGlobalApply sc "Prelude::Refl" [t, x]
               Nothing -> fail "Invalid size parameter"
           (Cry.pIsNeq -> Just _) ->
             -- `PNeq m n` is defined as `Eq Bool (tcEqual m n) False`
             do t <- SAW.scBoolType sc
                x <- SAW.scBool sc False
-               SAW.scGlobalApply sc "Prelude.Refl" [t, x]
+               SAW.scGlobalApply sc "Prelude::Refl" [t, x]
           (Cry.pIsGeq -> Just _) ->
             -- `PGeq m n` is defined as `Eq Bool (tcLt m n) False`
             do t <- SAW.scBoolType sc
                x <- SAW.scBool sc False
-               SAW.scGlobalApply sc "Prelude.Refl" [t, x]
+               SAW.scGlobalApply sc "Prelude::Refl" [t, x]
           (Cry.pIsFin -> Just _) ->
             -- `PFin n` is defined as `Eq Bool (tcFin n) True`
             do t <- SAW.scBoolType sc
                x <- SAW.scBool sc True
-               SAW.scGlobalApply sc "Prelude.Refl" [t, x]
+               SAW.scGlobalApply sc "Prelude::Refl" [t, x]
           _ ->
             fail $ "Unsupported constraint form: " ++ show (pp p)
 
