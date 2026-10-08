@@ -1,0 +1,4 @@
+test zst_struct/<DISAMB>::f_equiv[0]: ok
+test zst_struct/<DISAMB>::g_equiv[0]: ok
+
+[Crux] Overall status: Valid.
