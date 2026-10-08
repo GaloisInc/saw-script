@@ -1058,7 +1058,7 @@ jobs:
           echo $GITHUB_WORKSPACE/dist-tests >> $GITHUB_PATH
 
       - name: Run crux-mir-comp test suite
-        continue-on-error: ${{ matrix.continue-on-error }}
+        continue-on-error: false
         working-directory: crux-mir-comp
         shell: bash
         run: crux-mir-comp-tests
