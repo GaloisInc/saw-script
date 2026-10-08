@@ -10759,12 +10759,12 @@ Definition ecDeepseq: forall (a b: Type) (_1: PEq a) (_2: a) (_3: b), b :=
 
 Definition ecParmap: forall (a: Type) {Inh_a: SAWCoreScaffolding.Inhabited a}
         (b: Type) {Inh_b: SAWCoreScaffolding.Inhabited b} (n: Num) (_1: PEq b)
-        (_2: forall (_2: a), b) (_3: seq n a),
+        (_2: PFin n) (_3: forall (_3: a), b) (_4: seq n a),
         seq n b :=
    fun (a: Type) (Inh_a: SAWCoreScaffolding.Inhabited a) (b: Type) (Inh_b: 
-           SAWCoreScaffolding.Inhabited b) (n: Num) (pb: PEq b)
+           SAWCoreScaffolding.Inhabited b) (n: Num) (pb: PEq b) (pn: PFin n)
       =>
-      @CryptolPrimitivesForSAWCore.Num_rect (fun (n1: Num)
+      PFinNumRec n pn (fun (n1: Num)
             =>
             forall (_1: forall (_1: a), b) (_2: seq n1 a),
                  seq n1 b
@@ -10772,11 +10772,7 @@ Definition ecParmap: forall (a: Type) {Inh_a: SAWCoreScaffolding.Inhabited a}
                  SAWCoreVectorsAsRocqVectors.Vec n1 a)
             =>
             SAWCorePrelude.map a b f n1 xs
-         ) (fun (f: forall (_1: a), b) (xs: SAWCorePrelude.Stream a)
-            =>
-            SAWCoreScaffolding.error (SAWCorePrelude.Stream b)
-               "Unexpected infinite stream in parmap"%string
-         ) n
+         )
    .
 
 Definition ecFoldl: forall (n: Num) (a b: Type) {Inh_b: 
@@ -12419,7 +12415,8 @@ Definition ec_twin_mult: forall (p: Num)
                 (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
                          (Stdlib.PArith.BinPos.xO 
                             (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-        (_2: IntModNum p) (_3 _4: ProjectivePoint p),
+        (_2: IntModNum p) (_3: ProjectivePoint p) (_4: IntModNum p) (_5: 
+           ProjectivePoint p),
         ProjectivePoint p :=
    fun
         (p: Num)
@@ -12427,7 +12424,8 @@ Definition ec_twin_mult: forall (p: Num)
                 (TCNum (Stdlib.PArith.BinPos.Pos.to_nat 
                          (Stdlib.PArith.BinPos.xO 
                             (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
-        (x: IntModNum p) (y z: ProjectivePoint p)
+        (x: IntModNum p) (_2: ProjectivePoint p) (y: IntModNum p) (z: 
+           ProjectivePoint p)
       =>
       SAWCoreScaffolding.error (ProjectivePoint p)
          "Unimplemented: ec_twin_mult"%string
