@@ -177,7 +177,7 @@ checkConvertible t1 t2 = do
         errMsg "Terms are not convertible"
 
 prettySawName :: SAW.Name -> String
-prettySawName nm = Text.unpack (SAW.toAbsoluteName $ SAW.nameQualName nm)
+prettySawName nm = Text.unpack (SAW.ppQualName $ SAW.nameQualName nm)
 
 stripTopProofs :: C.Expr -> C.Expr
 stripTopProofs = \case
@@ -454,7 +454,7 @@ constToName nm = do
     , do let qn = SAW.nameQualName nm
          mreturn $ Map.lookup qn mT
     , errMsg $ "No corresponding Cryptol name for SAW constant: " ++
-        Text.unpack (SAW.toAbsoluteName $ SAW.nameQualName nm)
+        Text.unpack (SAW.ppQualName $ SAW.nameQualName nm)
     ]
 
 mkFreshName :: Text -> TT Name

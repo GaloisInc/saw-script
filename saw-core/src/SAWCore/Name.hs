@@ -27,7 +27,7 @@ module SAWCore.Name
   , mkQualName
   , identText
   , toShortName
-  , toAbsoluteName
+  , ppQualName
   , nameAliases
   , scFreshQualName
     -- * Name
@@ -67,7 +67,7 @@ import qualified Data.Text as Text
 import qualified Language.Haskell.TH.Syntax as TH
 
 import SAWCore.Panic (panic)
-import SAWCore.QualName (QualName)
+import SAWCore.QualName (QualName, ppQualName)
 import qualified SAWCore.QualName as QN
 
 -- Module Names ----------------------------------------------------------------
@@ -113,9 +113,6 @@ nameAliases = QN.aliases
 
 toShortName :: QualName -> Text
 toShortName = QN.baseName
-
-toAbsoluteName :: QualName -> Text
-toAbsoluteName = QN.ppQualName
 
 scFreshQualName :: Text -> VarIndex -> QualName
 scFreshQualName nm i = QN.fromNameIndex QN.NamespaceFresh (if Text.null nm then "_" else nm) i

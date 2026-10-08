@@ -18,7 +18,7 @@ import SAWCore.SharedTerm
 
 
 namedMsg :: QualName -> String -> String
-namedMsg sym msg = "In " ++ show (toAbsoluteName sym) ++ ": " ++ msg
+namedMsg sym msg = "In " ++ show (ppQualName sym) ++ ": " ++ msg
 
 checkDef :: Def -> Assertion
 checkDef d = do

@@ -327,7 +327,7 @@ evalLTerm cfg consts vars lets t0 =
                 _ ->
                   panic "evalTermF"
                   [ "Data type not found for recursor: " <>
-                    toAbsoluteName (nameQualName (recursorDataType r)) ]
+                    ppQualName (nameQualName (recursorDataType r)) ]
         Sort s _h ->
           pure $ TValue (VSort s)
         ArrayValue _ tv ->
@@ -412,7 +412,7 @@ evalLTerm cfg consts vars lets t0 =
           ["Unsupported symbolic recursor argument of type Nat"]
         _ ->
           panic "evalTermF / evalRecursor"
-          ["Expected constructor for datatype: " <> toAbsoluteName (nameQualName (dtName dt))]
+          ["Expected constructor for datatype: " <> ppQualName (nameQualName (dtName dt))]
 
     evalCtorMuxBranch ::
       VRecursor l ->
@@ -576,7 +576,7 @@ evalGlobal' modmap prims variable constant recursor primHandler lazymux =
     primitive nm =
       case Map.lookup (nameQualName nm) prims of
         Just v  -> evalPrim (primHandler nm) v
-        Nothing -> panic "evalGlobal'" ["Unimplemented global: " <> toAbsoluteName (nameQualName nm)]
+        Nothing -> panic "evalGlobal'" ["Unimplemented global: " <> ppQualName (nameQualName nm)]
 
     recursor' :: Name -> Sort -> Maybe (MValue l)
     recursor' nm s = evalPrim (primHandler nm) <$> recursor nm s
@@ -768,7 +768,7 @@ defaultPrimHandler ::
   Name -> Text -> [Thunk l] -> MValue l
 defaultPrimHandler nm msg env =
   fail $ unlines
-  [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameQualName nm))
+  [ "Could not evaluate primitive " ++ Text.unpack (ppQualName (nameQualName nm))
   , "On argument " ++ show (length env)
   , Text.unpack msg
   ]

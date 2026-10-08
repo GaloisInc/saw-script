@@ -72,7 +72,7 @@ evalSharedTerm m addlPrims varVals t =
         _ -> Nothing
     primHandler nm msg env =
       return $ Prim.userError $ unlines
-        [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameQualName nm))
+        [ "Could not evaluate primitive " ++ Text.unpack (ppQualName (nameQualName nm))
         , "On argument " ++ show (length env)
         , Text.unpack msg
         ]

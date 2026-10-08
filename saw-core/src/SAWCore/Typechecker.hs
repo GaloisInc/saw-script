@@ -301,7 +301,7 @@ typeInferCompleteTerm uterm =
 
     Un.Recursor (PosPair _ str) s ->
       do results <- resolveGlobalName str
-         let ppResolvedName = toAbsoluteName . resolvedQualName
+         let ppResolvedName = ppQualName . resolvedQualName
          case results of
            [r] ->
              case r of

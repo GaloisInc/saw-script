@@ -1108,7 +1108,7 @@ scmDefineDataType dts =
      liftIO $ modifyIORef' (scModuleMap sc) $ \mm ->
        case insTypeDeclInMap dt mm of
          -- This should never happen; duplicate names are detected by scRegisterName.
-         Left nm -> panic "scmDefineDataType" ["Duplicate name: " <> toAbsoluteName (nameQualName nm)]
+         Left nm -> panic "scmDefineDataType" ["Duplicate name: " <> ppQualName (nameQualName nm)]
          Right mm' -> mm'
      -- Register data type constant in scGlobalEnv.
      scmRegisterGlobal (dtsQualName dts) d
@@ -1394,7 +1394,7 @@ scmReduceRecursor r crec params motive elims c args =
        Just (ResolvedCtor ctor) ->
          ctorIotaReduction ctor r_applied cs_fs args
        _ ->
-         panic "scReduceRecursor" ["Could not find constructor: " <> toAbsoluteName (nameQualName c)]
+         panic "scReduceRecursor" ["Could not find constructor: " <> ppQualName (nameQualName c)]
 
 -- | Function for computing the result of one step of iota reduction
 -- of the term
@@ -1418,7 +1418,7 @@ ctorIotaReduction ctor r cs_fs args =
         Just e -> e
         Nothing ->
           panic "ctorIotaReduction"
-          ["no eliminator for constructor " <> toAbsoluteName (nameQualName (ctorName ctor))]
+          ["no eliminator for constructor " <> ppQualName (nameQualName (ctorName ctor))]
 
 --------------------------------------------------------------------------------
 -- Reduction to head-normal form

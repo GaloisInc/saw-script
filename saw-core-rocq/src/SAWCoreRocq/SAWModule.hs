@@ -133,7 +133,7 @@ _mapped sawIdent newIdent =
 
 skipped' :: QualName -> Rocq.Decl
 skipped' qn =
-  Rocq.Comment $ "\"" <> toAbsoluteName qn <> "\" was skipped"
+  Rocq.Comment $ "\"" <> ppQualName qn <> "\" was skipped"
 
 skipped :: QualName -> Rocq.Decl
 skipped sawIdent =
