@@ -273,7 +273,7 @@ import qualified SAWCore.Parser.AST as Un
 import SAWCore.Parser.Grammar (parseSAW, parseSAWTerm)
 import SAWCore.ExternalFormat
 import SAWCore.Module (lookupVarIndexInMap, ResolvedName(..))
-import SAWCore.Name (ModuleName, Name(..), VarName(..), mkModuleName, moduleIdentToQualName)
+import SAWCore.Name (ModuleName, Name(..), VarName(..), mkModuleName)
 import SAWCore.SATQuery
 import SAWCore.Simulator.Concrete (constMap)
 import SAWCore.Simulator.Uninterpreted (generalizeHigherOrderFunctions)
@@ -809,13 +809,10 @@ resolveNameIO sc cenv nm =
      case res of
        Just cnm ->
          do importedName <- CSC.importName cnm
-            case importedName of
-              ImportedName qn _ ->
-                do resolvedName <- scResolveQualName sc qn
-                   case resolvedName of
-                     Just n -> pure (nameIndex n : scnms)
-                     Nothing -> pure scnms
-              _ -> pure scnms
+            resolvedName <- scResolveQualName sc importedName
+            case resolvedName of
+              Just n -> pure (nameIndex n : scnms)
+              Nothing -> pure scnms
        Nothing -> pure scnms
 
 -- | Given a user-provided name, resolve it to (potentially several)
@@ -840,7 +837,7 @@ normalize_term_opaque opaque tt =
   do sc <- getSharedContext
      idxs <- mconcat <$> mapM (resolveName sc) opaque
      -- Also exclude defined SAWCore constants that are implemented as primitives
-     let primQualNames = map moduleIdentToQualName (Map.keys constMap)
+     let primQualNames = Map.keys constMap
      primIdxs <- io $ traverse (scResolveQualName sc) primQualNames
      let opaqueSet = Set.fromList (map nameIndex (catMaybes primIdxs) ++ idxs)
      let unfold nm = Set.notMember (nameIndex nm) opaqueSet
@@ -853,7 +850,7 @@ goal_normalize opaque =
     do sc <- getSharedContext
        idxs <- mconcat <$> mapM (resolveName sc) opaque
        -- Also exclude defined SAWCore constants that are implemented as primitives
-       let primQualNames = map moduleIdentToQualName (Map.keys constMap)
+       let primQualNames = Map.keys constMap
        primIdxs <- io $ traverse (scResolveQualName sc) primQualNames
        let opaqueSet = Set.fromList (map nameIndex (catMaybes primIdxs) ++ idxs)
        sqt' <- io $ traverseSequentWithFocus (normalizeProp sc opaqueSet) (goalSequent goal)
@@ -1585,14 +1582,14 @@ addPreludeEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
-    where qualify = mkIdent (mkModuleName ["Prelude"])
+    where qualify = mkQualName (mkModuleName ["Prelude"])
 
 addCryptolEqs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 addCryptolEqs names ss = do
   sc <- getSharedContext
   eqRules <- io $ mapM (scEqRewriteRule sc) (map qualify names)
   return (addRules eqRules ss)
-    where qualify = mkIdent (mkModuleName ["Cryptol"])
+    where qualify = mkQualName (mkModuleName ["Cryptol"])
 
 add_defs :: [Text] -> SV.SAWSimpset -> TopLevel SV.SAWSimpset
 add_defs names ss =
@@ -2143,8 +2140,8 @@ size_to_term s =
                   C.Forall [] [] t ->
                     case C.evalType mempty t of
                       Left (C.Nat x) | x >= 0 ->
-                        scGlobalApply sc "Cryptol.TCNum" =<< sequence [scNat sc (fromInteger x)]
-                      Left C.Inf -> scGlobalApply sc "Cryptol.TCInf" []
+                        scGlobalApply sc "Cryptol::TCNum" =<< sequence [scNat sc (fromInteger x)]
+                      Left C.Inf -> scGlobalApply sc "Cryptol::TCInf" []
                       _ -> fail "size_to_term: not a numeric type"
                   _ -> fail "size_to_term: unsupported polymorphic type"
 
@@ -2265,15 +2262,15 @@ cryptol_prims =
     <$> CryptolModule Map.empty
     <$> Map.fromList <$> traverse parsePrim prims
   where
-    prims :: [(Text, Ident, Text)]
+    prims :: [(Text, QualName, Text)]
     prims =
-      [ ("trunc", "Cryptol.ecTrunc" , "{m, n} (fin m, fin n) => [m+n] -> [n]")
-      , ("uext" , "Cryptol.ecUExt"  , "{m, n} (fin m, fin n) => [n] -> [m+n]")
-      , ("sext" , "Cryptol.ecSExt"  , "{m, n} (fin m, fin n, n >= 1) => [n] -> [m+n]")
-      , ("sgt"  , "Cryptol.ecSgt"   , "{n} (fin n) => [n] -> [n] -> Bit")
-      , ("sge"  , "Cryptol.ecSge"   , "{n} (fin n) => [n] -> [n] -> Bit")
-      , ("slt"  , "Cryptol.ecSlt"   , "{n} (fin n) => [n] -> [n] -> Bit")
-      , ("sle"  , "Cryptol.ecSle"   , "{n} (fin n) => [n] -> [n] -> Bit")
+      [ ("trunc", "Cryptol::ecTrunc" , "{m, n} (fin m, fin n) => [m+n] -> [n]")
+      , ("uext" , "Cryptol::ecUExt"  , "{m, n} (fin m, fin n) => [n] -> [m+n]")
+      , ("sext" , "Cryptol::ecSExt"  , "{m, n} (fin m, fin n, n >= 1) => [n] -> [m+n]")
+      , ("sgt"  , "Cryptol::ecSgt"   , "{n} (fin n) => [n] -> [n] -> Bit")
+      , ("sge"  , "Cryptol::ecSge"   , "{n} (fin n) => [n] -> [n] -> Bit")
+      , ("slt"  , "Cryptol::ecSlt"   , "{n} (fin n) => [n] -> [n] -> Bit")
+      , ("sle"  , "Cryptol::ecSle"   , "{n} (fin n) => [n] -> [n] -> Bit")
       ]
       -- TODO: sext, sdiv, srem, sshr
 
@@ -2285,8 +2282,8 @@ cryptol_prims =
                 , CSC.inpCol  = 1 + 2 -- add 2 for dropped {{
                 }
 
-    parsePrim :: (Text, Ident, Text) -> TopLevel (C.Name, TypedTerm)
-    parsePrim (n, i, s) = do
+    parsePrim :: (Text, QualName, Text) -> TopLevel (C.Name, TypedTerm)
+    parsePrim (n, qn, s) = do
       sc <- getSharedContext
       cenv <- SV.getCryptolEnv
       unless (CSC.isToplevel cenv) $ do
@@ -2294,7 +2291,7 @@ cryptol_prims =
       let mname = C.packModName ["Prims"]
       n' <- io $ CSC.declareName sc mname n
       s' <- io $ CSC.parseSchema sc cenv (noLoc s)
-      t' <- io $ scGlobalDef sc i
+      t' <- io $ scGlobalDef sc qn
       return (n', TypedTerm (TypedTermSchema s') t')
 
 cryptol_load :: (FilePath -> IO StrictBS.ByteString) -> FilePath -> TopLevel CSC.ExtCryptolModule

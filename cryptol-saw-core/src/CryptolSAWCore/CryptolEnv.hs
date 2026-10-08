@@ -117,9 +117,9 @@ import           CryptolSAWCore.GlobalCryptolEnv
 import           CryptolSAWCore.Panic
 import qualified CryptolSAWCore.Pretty as CryPP
 import           CryptolSAWCore.TypedTerm
-import           SAWCore.Name (nameInfo)
+import           SAWCore.Name (nameQualName)
 import           SAWCore.Recognizer (asConstant)
-import           SAWCore.SharedTerm ( NameInfo, SharedContext, Term
+import           SAWCore.SharedTerm ( QualName, SharedContext, Term
                                     , scGetPPOpts, ppTerm)
 import           SAWSupport.Console
 import qualified SAWSupport.Pretty as PPS
@@ -1086,10 +1086,10 @@ updateFFITypes ::
   SharedContext ->
   T.Module ->
   Map MN.Name Term ->
-  Map NameInfo T.FFI ->
-  IO (Map NameInfo T.FFI)
+  Map QualName T.FFI ->
+  IO (Map QualName T.FFI)
 updateFFITypes sc m allTerms' eFFITypes' = do
-  let getNameInfo (nm, ty) = do
+  let getQualName (nm, ty) = do
         let tm = case Map.lookup nm allTerms' of
               Just tm' -> tm'
               Nothing ->
@@ -1099,7 +1099,7 @@ updateFFITypes sc m allTerms' eFFITypes' = do
                   ]
         info <- case asConstant tm of
               Just n ->
-                pure $ nameInfo n
+                pure $ nameQualName n
               Nothing -> do
                 tm' <- ppTerm sc tm
                 panic "updateFFITypes" [
@@ -1108,7 +1108,7 @@ updateFFITypes sc m allTerms' eFFITypes' = do
                     "Term: " <> Text.pack tm'
                  ]
         pure $ (info, ty)
-  decls <- mapM getNameInfo (T.findForeignDecls m)
+  decls <- mapM getQualName (T.findForeignDecls m)
   pure $ Map.union (Map.fromList decls) eFFITypes'
 
 

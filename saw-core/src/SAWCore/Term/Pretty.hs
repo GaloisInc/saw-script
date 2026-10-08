@@ -345,11 +345,6 @@ withMemoVar termIdx term f =
 -- * The Pretty-Printing of Specific Constructs
 --------------------------------------------------------------------------------
 
--- | Pretty-print an identifier
-prettyIdent :: Ident -> PPS.Doc
-prettyIdent = viaShow
-
-
 memoVarToQualName ::
   PPS.MemoStyle -> Maybe LocalName -> Int -> Term -> QN.QualName
 memoVarToQualName style mlbl memoFresh' t =
@@ -527,11 +522,16 @@ prettyBestName nm =
   do ne <- asks ppNamingEnv
      case bestDisplayName ne (nameIndex nm) of
        Just alias -> pure $ pretty alias
-       Nothing -> pure $ prettyName (nameInfo nm)
+       Nothing -> pure $ prettyQualName (nameQualName nm)
 
-prettyName :: NameInfo -> PPS.Doc
-prettyName (ModuleIdentifier i) = prettyIdent i
-prettyName (ImportedName qName _) = pretty (QN.ppQualName qName)
+-- | Print a fully-qualified name, but suppress the @core@ suffix on
+-- names in the SAWCore namespace.
+prettyQualName :: QualName -> PPS.Doc
+prettyQualName qn =
+  pretty $ QN.ppQualName qn{ QN.namespace = f (QN.namespace qn) }
+  where
+    f (Just QN.NamespaceCore) = Nothing
+    f ns = ns
 
 -- | Pretty-print a non-shared term
 prettyTermF :: Prec -> TermF Term -> PPM PPS.Doc
@@ -704,9 +704,9 @@ shouldMemoizeTerm t =
     FTermF Recursor{} -> False
     Constant{} -> False
     Variable{} -> False
-    App (isGlobalDef "Prelude.NatPos" -> Just ()) _ -> False
-    App (isGlobalDef "Prelude.Bit0" -> Just ()) _ -> False
-    App (isGlobalDef "Prelude.Bit1" -> Just ()) _ -> False
+    App (isGlobalDef "Prelude::NatPos" -> Just ()) _ -> False
+    App (isGlobalDef "Prelude::Bit0" -> Just ()) _ -> False
+    App (isGlobalDef "Prelude::Bit1" -> Just ()) _ -> False
     Label _ t1 -> shouldMemoizeTerm t1
     _ -> True
 
@@ -842,7 +842,7 @@ ppTermPure opts t =
 -- * Pretty-printers with naming environments
 --------------------------------------------------------------------------------
 
--- | Pretty-print a `NameInfo`, using the `DisplayNameEnv` to figure
+-- | Pretty-print a `Name`, using the `DisplayNameEnv` to figure
 --   how much name to print.
 prettyNameWithEnv :: PPS.Opts -> DisplayNameEnv -> Name -> PPS.Doc
 prettyNameWithEnv opts env name =

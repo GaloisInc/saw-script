@@ -119,7 +119,7 @@ import SAWCore.Recognizer
 import SAWCore.SharedTerm
 import SAWCore.Simulator.MonadLazy (force)
 import SAWCore.Module (CtorArg(..))
-import SAWCore.Name (Name, VarName, nameInfo, toQualName, wildcardVarName)
+import SAWCore.Name (Name, VarName, nameQualName, wildcardVarName)
 import SAWCore.Term.Functor (mkSort, FieldName, LocalName)
 import qualified SAWCore.QualName as QN
 
@@ -261,56 +261,56 @@ importKind :: SharedContext -> C.Kind -> IO Term
 importKind sc kind =
   case kind of
     C.KType       -> scISort sc (mkSort 0)
-    C.KNum        -> scGlobalApply sc "Cryptol.Num" []
+    C.KNum        -> scGlobalApply sc "Cryptol::Num" []
     C.KProp       -> scSort sc (mkSort 0)
     (C.:->) k1 k2 -> join $ scFun sc <$> importKind sc k1 <*> importKind sc k2
 
 importTFun :: SharedContext -> C.TFun -> IO Term
 importTFun sc tf =
   case tf of
-    C.TCWidth         -> scGlobalDef sc "Cryptol.tcWidth"
-    C.TCAdd           -> scGlobalDef sc "Cryptol.tcAdd"
-    C.TCSub           -> scGlobalDef sc "Cryptol.tcSub"
-    C.TCMul           -> scGlobalDef sc "Cryptol.tcMul"
-    C.TCDiv           -> scGlobalDef sc "Cryptol.tcDiv"
-    C.TCMod           -> scGlobalDef sc "Cryptol.tcMod"
-    C.TCExp           -> scGlobalDef sc "Cryptol.tcExp"
-    C.TCMin           -> scGlobalDef sc "Cryptol.tcMin"
-    C.TCMax           -> scGlobalDef sc "Cryptol.tcMax"
-    C.TCCeilDiv       -> scGlobalDef sc "Cryptol.tcCeilDiv"
-    C.TCCeilMod       -> scGlobalDef sc "Cryptol.tcCeilMod"
-    C.TCLenFromThenTo -> scGlobalDef sc "Cryptol.tcLenFromThenTo"
+    C.TCWidth         -> scGlobalDef sc "Cryptol::tcWidth"
+    C.TCAdd           -> scGlobalDef sc "Cryptol::tcAdd"
+    C.TCSub           -> scGlobalDef sc "Cryptol::tcSub"
+    C.TCMul           -> scGlobalDef sc "Cryptol::tcMul"
+    C.TCDiv           -> scGlobalDef sc "Cryptol::tcDiv"
+    C.TCMod           -> scGlobalDef sc "Cryptol::tcMod"
+    C.TCExp           -> scGlobalDef sc "Cryptol::tcExp"
+    C.TCMin           -> scGlobalDef sc "Cryptol::tcMin"
+    C.TCMax           -> scGlobalDef sc "Cryptol::tcMax"
+    C.TCCeilDiv       -> scGlobalDef sc "Cryptol::tcCeilDiv"
+    C.TCCeilMod       -> scGlobalDef sc "Cryptol::tcCeilMod"
+    C.TCLenFromThenTo -> scGlobalDef sc "Cryptol::tcLenFromThenTo"
 
 -- | Precondition: @not ('isErasedPC' pc)@.
 importPC :: SharedContext -> C.PC -> IO Term
 importPC sc pc =
   case pc of
-    C.PEqual           -> do eq <- scGlobalDef sc "Prelude.Eq"
-                             num <- scGlobalDef sc "Cryptol.Num"
+    C.PEqual           -> do eq <- scGlobalDef sc "Prelude::Eq"
+                             num <- scGlobalDef sc "Cryptol::Num"
                              scApply sc eq num
-    C.PNeq             -> scGlobalDef sc "Cryptol.PNeq"
-    C.PGeq             -> scGlobalDef sc "Cryptol.PGeq"
-    C.PFin             -> scGlobalDef sc "Cryptol.PFin"
+    C.PNeq             -> scGlobalDef sc "Cryptol::PNeq"
+    C.PGeq             -> scGlobalDef sc "Cryptol::PGeq"
+    C.PFin             -> scGlobalDef sc "Cryptol::PFin"
     C.PHas _           -> panic "importPC" ["found PHas"]
     C.PPrime           -> panic "importPC" ["found PPrime"]
     C.PNotPrime        -> panic "importPC" ["found PNotPrime"]
-    C.PZero            -> scGlobalDef sc "Cryptol.PZero"
-    C.PLogic           -> scGlobalDef sc "Cryptol.PLogic"
-    C.PRing            -> scGlobalDef sc "Cryptol.PRing"
-    C.PIntegral        -> scGlobalDef sc "Cryptol.PIntegral"
-    C.PField           -> scGlobalDef sc "Cryptol.PField"
-    C.PRound           -> scGlobalDef sc "Cryptol.PRound"
-    C.PEq              -> scGlobalDef sc "Cryptol.PEq"
-    C.PCmp             -> scGlobalDef sc "Cryptol.PCmp"
-    C.PSignedCmp       -> scGlobalDef sc "Cryptol.PSignedCmp"
-    C.PLiteral         -> scGlobalDef sc "Cryptol.PLiteral"
+    C.PZero            -> scGlobalDef sc "Cryptol::PZero"
+    C.PLogic           -> scGlobalDef sc "Cryptol::PLogic"
+    C.PRing            -> scGlobalDef sc "Cryptol::PRing"
+    C.PIntegral        -> scGlobalDef sc "Cryptol::PIntegral"
+    C.PField           -> scGlobalDef sc "Cryptol::PField"
+    C.PRound           -> scGlobalDef sc "Cryptol::PRound"
+    C.PEq              -> scGlobalDef sc "Cryptol::PEq"
+    C.PCmp             -> scGlobalDef sc "Cryptol::PCmp"
+    C.PSignedCmp       -> scGlobalDef sc "Cryptol::PSignedCmp"
+    C.PLiteral         -> scGlobalDef sc "Cryptol::PLiteral"
     -- Translate LiteralLessThan also as PLiteral to reuse the same
     -- instance rules because they are defined identically.
-    C.PLiteralLessThan -> scGlobalDef sc "Cryptol.PLiteral"
-    C.PFLiteral        -> scGlobalDef sc "Cryptol.PFLiteral"
+    C.PLiteralLessThan -> scGlobalDef sc "Cryptol::PLiteral"
+    C.PFLiteral        -> scGlobalDef sc "Cryptol::PFLiteral"
     C.PAnd             -> panic "importPC" ["found PAnd"]
-    C.PTrue            -> scGlobalDef sc "Prelude.TrueProp"
-    C.PValidFloat      -> scGlobalDef sc "Cryptol.PValidFloat"
+    C.PTrue            -> scGlobalDef sc "Prelude::TrueProp"
+    C.PValidFloat      -> scGlobalDef sc "Cryptol::PValidFloat"
 
 -- | Import a Cryptol `C.Type` as a SAWCore term.
 --
@@ -347,8 +347,8 @@ importType sc env ty = do
            C.Enum {} ->
              -- The (parameterized) type should be in the sc env,
              -- just apply types to it:
-             do ni <- importName n
-                mnm <- scResolveQualName sc (toQualName ni)
+             do qn <- importName n
+                mnm <- scResolveQualName sc qn
                 case mnm of
                   Just nm ->
                     do t <- scConstApply sc nm =<< traverse go ts
@@ -380,17 +380,17 @@ importType sc env ty = do
       case tcon of
         C.TC tc ->
           case tc of
-            C.TCNum n    -> scGlobalApply sc "Cryptol.TCNum" =<< sequence [scNat sc (fromInteger n)]
-            C.TCInf      -> scGlobalApply sc "Cryptol.TCInf" []
+            C.TCNum n    -> scGlobalApply sc "Cryptol::TCNum" =<< sequence [scNat sc (fromInteger n)]
+            C.TCInf      -> scGlobalApply sc "Cryptol::TCInf" []
             C.TCBit      -> scBoolType sc
             C.TCInteger  -> scIntegerType sc
-            C.TCIntMod   -> scGlobalApply sc "Cryptol.IntModNum" =<< traverse go tyargs
-            C.TCFloat    -> scGlobalApply sc "Cryptol.FloatNum"  =<< traverse go tyargs
+            C.TCIntMod   -> scGlobalApply sc "Cryptol::IntModNum" =<< traverse go tyargs
+            C.TCFloat    -> scGlobalApply sc "Cryptol::FloatNum"  =<< traverse go tyargs
             C.TCArray    -> do a <- go (tyargs !! 0)
                                b <- go (tyargs !! 1)
                                scArrayType sc a b
             C.TCRational -> scRationalType sc
-            C.TCSeq      -> scGlobalApply sc "Cryptol.seq" =<< traverse go tyargs
+            C.TCSeq      -> scGlobalApply sc "Cryptol::seq" =<< traverse go tyargs
             C.TCFun      -> do a <- go (tyargs !! 0)
                                b <- go (tyargs !! 1)
                                scFun sc a b
@@ -404,15 +404,15 @@ importType sc env ty = do
             -- See Note [Literal, LiteralLessThan, and FLiteral in SAWCore].
             C.PLiteral ->
               do a <- go (tyargs !! 1)
-                 scGlobalApply sc "Cryptol.PLiteral" [a]
+                 scGlobalApply sc "Cryptol::PLiteral" [a]
             -- Translate LiteralLessThan as PLiteral to reuse the same
             -- instance rules because they are defined identically.
             C.PLiteralLessThan ->
               do a <- go (tyargs !! 1)
-                 scGlobalApply sc "Cryptol.PLiteral" [a]
+                 scGlobalApply sc "Cryptol::PLiteral" [a]
             C.PFLiteral -> -- we omit the first three arguments to class FLiteral
               do a <- go (tyargs !! 3)
-                 scGlobalApply sc "Cryptol.PFLiteral" [a]
+                 scGlobalApply sc "Cryptol::PFLiteral" [a]
             _ ->
               do pc' <- importPC sc pc
                  tyargs' <- traverse go tyargs
@@ -484,12 +484,12 @@ importNumericConstraintAsBool sc env prop =
       -- Convert 'lhs >= rhs' into '(rhs < lhs) \/ (rhs == lhs)'
       lhs' <- importType sc env lhs
       rhs' <- importType sc env rhs
-      lt <- scGlobalApply sc "Cryptol.tcLt" [rhs', lhs']
-      eq <- scGlobalApply sc "Cryptol.tcEqual" [rhs', lhs']
+      lt <- scGlobalApply sc "Cryptol::tcLt" [rhs', lhs']
+      eq <- scGlobalApply sc "Cryptol::tcEqual" [rhs', lhs']
       scOr sc lt eq
     C.TCon (C.PC C.PFin) [x] -> do
       x' <- importType sc env x
-      scGlobalApply sc "Cryptol.tcFin" [x']
+      scGlobalApply sc "Cryptol::tcFin" [x']
     C.TCon (C.PC C.PAnd) [lhs, rhs] -> do
       lhs' <- importType sc env lhs
       rhs' <- importType sc env rhs
@@ -507,7 +507,7 @@ importNumericConstraintAsBool sc env prop =
     eqTerm lhs rhs = do
       lhs' <- importType sc env lhs
       rhs' <- importType sc env rhs
-      scGlobalApply sc "Cryptol.tcEqual" [lhs', rhs']
+      scGlobalApply sc "Cryptol::tcEqual" [lhs', rhs']
 
 importPropsType :: SharedContext -> LocalEnv -> [C.Prop] -> C.Type -> IO Term
 importPropsType sc env [] ty = importType sc env ty
@@ -550,109 +550,109 @@ importSchema sc env (C.Forall tparams props ty) =
 -- in which they are added to the 'IntroRuleSet'.
 -- When there are multiple class intro rules with overlapping
 -- patterns, the preferred rule should be listed first.
-classIntroIdents :: [Ident]
+classIntroIdents :: [QualName]
 classIntroIdents =
-  [ "Cryptol.PZeroBit"
-  , "Cryptol.PZeroInteger"
-  , "Cryptol.PZeroIntModNum"
-  , "Cryptol.PZeroRational"
-  , "Cryptol.PZeroFloatNum"
-  , "Cryptol.PZeroSeqBool" -- prefer over PZeroSeq
-  , "Cryptol.PZeroSeqBool"
-  , "Cryptol.PZeroFloat"
-  , "Cryptol.PZeroSeq"
-  , "Cryptol.PZeroFun"
-  , "Cryptol.PZeroUnit"
-  , "Cryptol.PZeroPair"
-  , "Cryptol.PZeroEmpty"
-  , "Cryptol.PZeroRecord"
-  , "Cryptol.PLogicBit"
-  , "Cryptol.PLogicSeqBool" -- prefer over PLogicSeq
-  , "Cryptol.PLogicSeq"
-  , "Cryptol.PLogicFun"
-  , "Cryptol.PLogicUnit"
-  , "Cryptol.PLogicPair"
-  , "Cryptol.PLogicEmpty"
-  , "Cryptol.PLogicRecord"
-  , "Cryptol.PRingInteger"
-  , "Cryptol.PRingIntModNum"
-  , "Cryptol.PRingRational"
-  , "Cryptol.PRingFloatNum"
-  , "Cryptol.PRingSeqBool" -- prefer over PRingSeq
-  , "Cryptol.PRingFloat"
-  , "Cryptol.PRingSeq"
-  , "Cryptol.PRingFun"
-  , "Cryptol.PRingUnit"
-  , "Cryptol.PRingPair"
-  , "Cryptol.PRingEmpty"
-  , "Cryptol.PRingRecord"
-  , "Cryptol.PIntegralInteger"
-  , "Cryptol.PIntegralSeqBool"
-  , "Cryptol.PFieldRational"
-  , "Cryptol.PFieldFloatNum"
-  , "Cryptol.PFieldIntModNum"
-  , "Cryptol.PFieldFloat"
-  , "Cryptol.PRoundRational"
-  , "Cryptol.PRoundFloatNum"
-  , "Cryptol.PRoundFloat"
-  , "Cryptol.PEqBit"
-  , "Cryptol.PEqInteger"
-  , "Cryptol.PEqIntModNum"
-  , "Cryptol.PEqRational"
-  , "Cryptol.PEqFloatNum"
-  , "Cryptol.PEqFloat"
-  , "Cryptol.PEqSeqBool" -- prefer over PEqSeq
-  , "Cryptol.PEqSeq"
-  , "Cryptol.PEqUnit"
-  , "Cryptol.PEqPair"
-  , "Cryptol.PEqEmpty"
-  , "Cryptol.PEqRecord"
-  , "Cryptol.PCmpBit"
-  , "Cryptol.PCmpInteger"
-  , "Cryptol.PCmpRational"
-  , "Cryptol.PCmpFloatNum"
-  , "Cryptol.PCmpFloat"
-  , "Cryptol.PCmpSeqBool" -- prefer over PCmpSeq
-  , "Cryptol.PCmpSeq"
-  , "Cryptol.PCmpUnit"
-  , "Cryptol.PCmpPair"
-  , "Cryptol.PCmpEmpty"
-  , "Cryptol.PCmpRecord"
-  , "Cryptol.PSignedCmpSeqBool" -- prefer over PSignedCmpSeq
-  , "Cryptol.PSignedCmpSeq"
-  , "Cryptol.PSignedCmpUnit"
-  , "Cryptol.PSignedCmpPair"
-  , "Cryptol.PSignedCmpEmpty"
-  , "Cryptol.PSignedCmpRecord"
-  , "Cryptol.PLiteralBit"
-  , "Cryptol.PLiteralInteger"
-  , "Cryptol.PLiteralIntModNum"
-  , "Cryptol.PLiteralRational"
-  , "Cryptol.PLiteralFloatNum"
-  , "Cryptol.PLiteralSeqBool"
-  , "Cryptol.PLiteralFloat"
-  , "Cryptol.PFLiteralRational"
-  , "Cryptol.PFLiteralFloatNum"
-  , "Cryptol.PFLiteralFloat"
-  , "Cryptol.PFin_TCNum"
-  , "Cryptol.PFin_tcAdd"
-  , "Cryptol.PFin_tcMul"
-  , "Cryptol.PFin_tcSub"
-  , "Cryptol.PFin_tcDiv"
-  , "Cryptol.PFin_tcCeilDiv"
-  , "Cryptol.unsafeAssumePFin" -- lowest priority of all PFin rules
-  , "Prelude.Refl" -- prefer over unsafeAssert
-  , "Prelude.unsafeAssert"
-  , "Cryptol.PGeq_0" -- prefer over unsafeAssumePGeq
-  , "Cryptol.unsafeAssumePGeq"
-  , "Cryptol.unsafeAssumePNeq"
-  , "Cryptol.PValidFloat_16"
-  , "Cryptol.PValidFloat_32"
-  , "Cryptol.PValidFloat_64"
-  , "Cryptol.PValidFloat_128"
-  , "Cryptol.PValidFloat_256"
-  , "Cryptol.unsafeAssumePValidFloat"
-  , "Cryptol.TruePropI"
+  [ "Cryptol::PZeroBit"
+  , "Cryptol::PZeroInteger"
+  , "Cryptol::PZeroIntModNum"
+  , "Cryptol::PZeroRational"
+  , "Cryptol::PZeroFloatNum"
+  , "Cryptol::PZeroSeqBool" -- prefer over PZeroSeq
+  , "Cryptol::PZeroSeqBool"
+  , "Cryptol::PZeroFloat"
+  , "Cryptol::PZeroSeq"
+  , "Cryptol::PZeroFun"
+  , "Cryptol::PZeroUnit"
+  , "Cryptol::PZeroPair"
+  , "Cryptol::PZeroEmpty"
+  , "Cryptol::PZeroRecord"
+  , "Cryptol::PLogicBit"
+  , "Cryptol::PLogicSeqBool" -- prefer over PLogicSeq
+  , "Cryptol::PLogicSeq"
+  , "Cryptol::PLogicFun"
+  , "Cryptol::PLogicUnit"
+  , "Cryptol::PLogicPair"
+  , "Cryptol::PLogicEmpty"
+  , "Cryptol::PLogicRecord"
+  , "Cryptol::PRingInteger"
+  , "Cryptol::PRingIntModNum"
+  , "Cryptol::PRingRational"
+  , "Cryptol::PRingFloatNum"
+  , "Cryptol::PRingSeqBool" -- prefer over PRingSeq
+  , "Cryptol::PRingFloat"
+  , "Cryptol::PRingSeq"
+  , "Cryptol::PRingFun"
+  , "Cryptol::PRingUnit"
+  , "Cryptol::PRingPair"
+  , "Cryptol::PRingEmpty"
+  , "Cryptol::PRingRecord"
+  , "Cryptol::PIntegralInteger"
+  , "Cryptol::PIntegralSeqBool"
+  , "Cryptol::PFieldRational"
+  , "Cryptol::PFieldFloatNum"
+  , "Cryptol::PFieldIntModNum"
+  , "Cryptol::PFieldFloat"
+  , "Cryptol::PRoundRational"
+  , "Cryptol::PRoundFloatNum"
+  , "Cryptol::PRoundFloat"
+  , "Cryptol::PEqBit"
+  , "Cryptol::PEqInteger"
+  , "Cryptol::PEqIntModNum"
+  , "Cryptol::PEqRational"
+  , "Cryptol::PEqFloatNum"
+  , "Cryptol::PEqFloat"
+  , "Cryptol::PEqSeqBool" -- prefer over PEqSeq
+  , "Cryptol::PEqSeq"
+  , "Cryptol::PEqUnit"
+  , "Cryptol::PEqPair"
+  , "Cryptol::PEqEmpty"
+  , "Cryptol::PEqRecord"
+  , "Cryptol::PCmpBit"
+  , "Cryptol::PCmpInteger"
+  , "Cryptol::PCmpRational"
+  , "Cryptol::PCmpFloatNum"
+  , "Cryptol::PCmpFloat"
+  , "Cryptol::PCmpSeqBool" -- prefer over PCmpSeq
+  , "Cryptol::PCmpSeq"
+  , "Cryptol::PCmpUnit"
+  , "Cryptol::PCmpPair"
+  , "Cryptol::PCmpEmpty"
+  , "Cryptol::PCmpRecord"
+  , "Cryptol::PSignedCmpSeqBool" -- prefer over PSignedCmpSeq
+  , "Cryptol::PSignedCmpSeq"
+  , "Cryptol::PSignedCmpUnit"
+  , "Cryptol::PSignedCmpPair"
+  , "Cryptol::PSignedCmpEmpty"
+  , "Cryptol::PSignedCmpRecord"
+  , "Cryptol::PLiteralBit"
+  , "Cryptol::PLiteralInteger"
+  , "Cryptol::PLiteralIntModNum"
+  , "Cryptol::PLiteralRational"
+  , "Cryptol::PLiteralFloatNum"
+  , "Cryptol::PLiteralSeqBool"
+  , "Cryptol::PLiteralFloat"
+  , "Cryptol::PFLiteralRational"
+  , "Cryptol::PFLiteralFloatNum"
+  , "Cryptol::PFLiteralFloat"
+  , "Cryptol::PFin_TCNum"
+  , "Cryptol::PFin_tcAdd"
+  , "Cryptol::PFin_tcMul"
+  , "Cryptol::PFin_tcSub"
+  , "Cryptol::PFin_tcDiv"
+  , "Cryptol::PFin_tcCeilDiv"
+  , "Cryptol::unsafeAssumePFin" -- lowest priority of all PFin rules
+  , "Prelude::Refl" -- prefer over unsafeAssert
+  , "Prelude::unsafeAssert"
+  , "Cryptol::PGeq_0" -- prefer over unsafeAssumePGeq
+  , "Cryptol::unsafeAssumePGeq"
+  , "Cryptol::unsafeAssumePNeq"
+  , "Cryptol::PValidFloat_16"
+  , "Cryptol::PValidFloat_32"
+  , "Cryptol::PValidFloat_64"
+  , "Cryptol::PValidFloat_128"
+  , "Cryptol::PValidFloat_256"
+  , "Cryptol::unsafeAssumePValidFloat"
+  , "Cryptol::TruePropI"
   ]
 
 -- | Retrieve the current set of instance introduction rules,
@@ -668,9 +668,9 @@ getInstanceRules sc =
             mapM_ loadRule (reverse classIntroIdents)
             maybe emptyIntroRuleSet id <$> eInstances sc
   where
-    loadRule :: Ident -> IO ()
-    loadRule i =
-      do t <- scGlobalDef sc i
+    loadRule :: QualName -> IO ()
+    loadRule qn =
+      do t <- scGlobalDef sc qn
          r <- mkIntroRule sc t
          addInstance sc r
 
@@ -834,212 +834,212 @@ prelPrims =
   first C.prelPrim <$>
   [ ("True",         flip scBool True)
   , ("False",        flip scBool False)
-  , ("number",       flip scGlobalDef "Cryptol.ecNumber")      -- Converts a numeric type into its corresponding value.
+  , ("number",       flip scGlobalDef "Cryptol::ecNumber")      -- Converts a numeric type into its corresponding value.
      --                                                        -- {val, a} (Literal val a) => a
 
-  , ("fromZ",        flip scGlobalDef "Cryptol.ecFromZ")       -- {n} (fin n, n >= 1) => Z n -> Integer
+  , ("fromZ",        flip scGlobalDef "Cryptol::ecFromZ")       -- {n} (fin n, n >= 1) => Z n -> Integer
 
     -- -- Zero
-  , ("zero",         flip scGlobalDef "Cryptol.ecZero")        -- {a} (Zero a) => a
+  , ("zero",         flip scGlobalDef "Cryptol::ecZero")        -- {a} (Zero a) => a
 
     -- -- Logic
-  , ("&&",           flip scGlobalDef "Cryptol.ecAnd")         -- {a} (Logic a) => a -> a -> a
-  , ("||",           flip scGlobalDef "Cryptol.ecOr")          -- {a} (Logic a) => a -> a -> a
-  , ("^",            flip scGlobalDef "Cryptol.ecXor")         -- {a} (Logic a) => a -> a -> a
-  , ("complement",   flip scGlobalDef "Cryptol.ecCompl")       -- {a} (Logic a) => a -> a
+  , ("&&",           flip scGlobalDef "Cryptol::ecAnd")         -- {a} (Logic a) => a -> a -> a
+  , ("||",           flip scGlobalDef "Cryptol::ecOr")          -- {a} (Logic a) => a -> a -> a
+  , ("^",            flip scGlobalDef "Cryptol::ecXor")         -- {a} (Logic a) => a -> a -> a
+  , ("complement",   flip scGlobalDef "Cryptol::ecCompl")       -- {a} (Logic a) => a -> a
 
     -- -- Ring
-  , ("fromInteger",  flip scGlobalDef "Cryptol.ecFromInteger") -- {a} (Ring a) => Integer -> a
-  , ("+",            flip scGlobalDef "Cryptol.ecPlus")        -- {a} (Ring a) => a -> a -> a
-  , ("-",            flip scGlobalDef "Cryptol.ecMinus")       -- {a} (Ring a) => a -> a -> a
-  , ("*",            flip scGlobalDef "Cryptol.ecMul")         -- {a} (Ring a) => a -> a -> a
-  , ("negate",       flip scGlobalDef "Cryptol.ecNeg")         -- {a} (Ring a) => a -> a
+  , ("fromInteger",  flip scGlobalDef "Cryptol::ecFromInteger") -- {a} (Ring a) => Integer -> a
+  , ("+",            flip scGlobalDef "Cryptol::ecPlus")        -- {a} (Ring a) => a -> a -> a
+  , ("-",            flip scGlobalDef "Cryptol::ecMinus")       -- {a} (Ring a) => a -> a -> a
+  , ("*",            flip scGlobalDef "Cryptol::ecMul")         -- {a} (Ring a) => a -> a -> a
+  , ("negate",       flip scGlobalDef "Cryptol::ecNeg")         -- {a} (Ring a) => a -> a
 
     -- -- Integral
-  , ("toInteger",    flip scGlobalDef "Cryptol.ecToInteger")   -- {a} (Integral a) => a -> Integer
-  , ("/",            flip scGlobalDef "Cryptol.ecDiv")         -- {a} (Integral a) => a -> a -> a
-  , ("%",            flip scGlobalDef "Cryptol.ecMod")         -- {a} (Integral a) => a -> a -> a
-  , ("^^",           flip scGlobalDef "Cryptol.ecExp")         -- {a} (Ring a, Integral b) => a -> b -> a
-  , ("infFrom",      flip scGlobalDef "Cryptol.ecInfFrom")     -- {a} (Integral a) => a -> [inf]a
-  , ("infFromThen",  flip scGlobalDef "Cryptol.ecInfFromThen") -- {a} (Integral a) => a -> a -> [inf]a
+  , ("toInteger",    flip scGlobalDef "Cryptol::ecToInteger")   -- {a} (Integral a) => a -> Integer
+  , ("/",            flip scGlobalDef "Cryptol::ecDiv")         -- {a} (Integral a) => a -> a -> a
+  , ("%",            flip scGlobalDef "Cryptol::ecMod")         -- {a} (Integral a) => a -> a -> a
+  , ("^^",           flip scGlobalDef "Cryptol::ecExp")         -- {a} (Ring a, Integral b) => a -> b -> a
+  , ("infFrom",      flip scGlobalDef "Cryptol::ecInfFrom")     -- {a} (Integral a) => a -> [inf]a
+  , ("infFromThen",  flip scGlobalDef "Cryptol::ecInfFromThen") -- {a} (Integral a) => a -> a -> [inf]a
 
     -- -- Field
-  , ("recip",        flip scGlobalDef "Cryptol.ecRecip")       -- {a} (Field a) => a -> a
-  , ("/.",           flip scGlobalDef "Cryptol.ecFieldDiv")    -- {a} (Field a) => a -> a -> a
+  , ("recip",        flip scGlobalDef "Cryptol::ecRecip")       -- {a} (Field a) => a -> a
+  , ("/.",           flip scGlobalDef "Cryptol::ecFieldDiv")    -- {a} (Field a) => a -> a -> a
 
     -- -- Round
-  , ("ceiling",      flip scGlobalDef "Cryptol.ecCeiling")     -- {a} (Round a) => a -> Integer
-  , ("floor",        flip scGlobalDef "Cryptol.ecFloor")       -- {a} (Round a) => a -> Integer
-  , ("trunc",        flip scGlobalDef "Cryptol.ecTruncate")    -- {a} (Round a) => a -> Integer
-  , ("roundAway",    flip scGlobalDef "Cryptol.ecRoundAway")   -- {a} (Round a) => a -> Integer
-  , ("roundToEven",  flip scGlobalDef "Cryptol.ecRoundToEven") -- {a} (Round a) => a -> Integer
+  , ("ceiling",      flip scGlobalDef "Cryptol::ecCeiling")     -- {a} (Round a) => a -> Integer
+  , ("floor",        flip scGlobalDef "Cryptol::ecFloor")       -- {a} (Round a) => a -> Integer
+  , ("trunc",        flip scGlobalDef "Cryptol::ecTruncate")    -- {a} (Round a) => a -> Integer
+  , ("roundAway",    flip scGlobalDef "Cryptol::ecRoundAway")   -- {a} (Round a) => a -> Integer
+  , ("roundToEven",  flip scGlobalDef "Cryptol::ecRoundToEven") -- {a} (Round a) => a -> Integer
 
     -- -- Eq
-  , ("==",           flip scGlobalDef "Cryptol.ecEq")          -- {a} (Eq a) => a -> a -> Bit
-  , ("!=",           flip scGlobalDef "Cryptol.ecNotEq")       -- {a} (Eq a) => a -> a -> Bit
+  , ("==",           flip scGlobalDef "Cryptol::ecEq")          -- {a} (Eq a) => a -> a -> Bit
+  , ("!=",           flip scGlobalDef "Cryptol::ecNotEq")       -- {a} (Eq a) => a -> a -> Bit
 
     -- -- Cmp
-  , ("<",            flip scGlobalDef "Cryptol.ecLt")          -- {a} (Cmp a) => a -> a -> Bit
-  , (">",            flip scGlobalDef "Cryptol.ecGt")          -- {a} (Cmp a) => a -> a -> Bit
-  , ("<=",           flip scGlobalDef "Cryptol.ecLtEq")        -- {a} (Cmp a) => a -> a -> Bit
-  , (">=",           flip scGlobalDef "Cryptol.ecGtEq")        -- {a} (Cmp a) => a -> a -> Bit
+  , ("<",            flip scGlobalDef "Cryptol::ecLt")          -- {a} (Cmp a) => a -> a -> Bit
+  , (">",            flip scGlobalDef "Cryptol::ecGt")          -- {a} (Cmp a) => a -> a -> Bit
+  , ("<=",           flip scGlobalDef "Cryptol::ecLtEq")        -- {a} (Cmp a) => a -> a -> Bit
+  , (">=",           flip scGlobalDef "Cryptol::ecGtEq")        -- {a} (Cmp a) => a -> a -> Bit
 
     -- -- SignedCmp
-  , ("<$",           flip scGlobalDef "Cryptol.ecSLt")         -- {a} (SignedCmp a) => a -> a -> Bit
+  , ("<$",           flip scGlobalDef "Cryptol::ecSLt")         -- {a} (SignedCmp a) => a -> a -> Bit
 
     -- -- Bitvector primitives
-  , ("/$",           flip scGlobalDef "Cryptol.ecSDiv")        -- {n} (fin n, n>=1) => [n] -> [n] -> [n]
-  , ("%$",           flip scGlobalDef "Cryptol.ecSMod")        -- {n} (fin n, n>=1) => [n] -> [n] -> [n]
-  , ("lg2",          flip scGlobalDef "Cryptol.ecLg2")         -- {n} (fin n) => [n] -> [n]
-  , (">>$",          flip scGlobalDef "Cryptol.ecSShiftR")     -- {n, ix} (fin n, n >= 1, Integral ix) => [n] -> ix -> [n]
+  , ("/$",           flip scGlobalDef "Cryptol::ecSDiv")        -- {n} (fin n, n>=1) => [n] -> [n] -> [n]
+  , ("%$",           flip scGlobalDef "Cryptol::ecSMod")        -- {n} (fin n, n>=1) => [n] -> [n] -> [n]
+  , ("lg2",          flip scGlobalDef "Cryptol::ecLg2")         -- {n} (fin n) => [n] -> [n]
+  , (">>$",          flip scGlobalDef "Cryptol::ecSShiftR")     -- {n, ix} (fin n, n >= 1, Integral ix) => [n] -> ix -> [n]
   , ("toSignedInteger",
-                     flip scGlobalDef "Cryptol.toSignedInteger") -- {n} (fin n, n >= 1) => [n] -> Integer
+                     flip scGlobalDef "Cryptol::toSignedInteger") -- {n} (fin n, n >= 1) => [n] -> Integer
 
     -- -- Rational primitives
-  , ("ratio",        flip scGlobalDef "Prelude.ratio")         -- Integer -> Integer -> Rational
+  , ("ratio",        flip scGlobalDef "Prelude::ratio")         -- Integer -> Integer -> Rational
 
     -- -- FLiteral
-  , ("fraction",     flip scGlobalDef "Cryptol.ecFraction")    -- {m, n, r, a} FLiteral m n r a => a
+  , ("fraction",     flip scGlobalDef "Cryptol::ecFraction")    -- {m, n, r, a} FLiteral m n r a => a
 
     -- -- Shifts/rotates
-  , ("<<",           flip scGlobalDef "Cryptol.ecShiftL")      -- {n, ix, a} (Integral ix, Zero a) => [n]a -> ix -> [n]a
-  , (">>",           flip scGlobalDef "Cryptol.ecShiftR")      -- {n, ix, a} (Integral ix, Zero a) => [n]a -> ix -> [n]a
-  , ("<<<",          flip scGlobalDef "Cryptol.ecRotL")        -- {n, ix, a} (fin n, Integral ix) => [n]a -> ix -> [n]a
-  , (">>>",          flip scGlobalDef "Cryptol.ecRotR")        -- {n, ix, a} (fin n, Integral ix) => [n]a -> ix -> [n]a
+  , ("<<",           flip scGlobalDef "Cryptol::ecShiftL")      -- {n, ix, a} (Integral ix, Zero a) => [n]a -> ix -> [n]a
+  , (">>",           flip scGlobalDef "Cryptol::ecShiftR")      -- {n, ix, a} (Integral ix, Zero a) => [n]a -> ix -> [n]a
+  , ("<<<",          flip scGlobalDef "Cryptol::ecRotL")        -- {n, ix, a} (fin n, Integral ix) => [n]a -> ix -> [n]a
+  , (">>>",          flip scGlobalDef "Cryptol::ecRotR")        -- {n, ix, a} (fin n, Integral ix) => [n]a -> ix -> [n]a
 
     -- -- Sequences primitives
-  , ("#",            flip scGlobalDef "Cryptol.ecCat")         -- {a,b,d} (fin a) => [a] d -> [b] d -> [a + b] d
-  , ("take",         flip scGlobalDef "Cryptol.ecTake")        -- {front, back, a} [front + back]a -> [front]a
-  , ("drop",         flip scGlobalDef "Cryptol.ecDrop")        -- {front, back, a} (fin front) => [front + back]a -> [back]a
-  , ("join",         flip scGlobalDef "Cryptol.ecJoin")        -- {a,b,c} (fin b) => [a][b]c -> [a * b]c
-  , ("split",        flip scGlobalDef "Cryptol.ecSplit")       -- {a,b,c} (fin b) => [a * b] c -> [a][b] c
-  , ("reverse",      flip scGlobalDef "Cryptol.ecReverse")     -- {a,b} (fin a) => [a] b -> [a] b
-  , ("transpose",    flip scGlobalDef "Cryptol.ecTranspose")   -- {a,b,c} [a][b]c -> [b][a]c
-  , ("@",            flip scGlobalDef "Cryptol.ecAt")          -- {n, a, ix} (Integral ix) => [n]a -> ix -> a
-  , ("!",            flip scGlobalDef "Cryptol.ecAtBack")      -- {n, a, ix} (fin n, Integral ix) => [n]a -> ix -> a
-  , ("update",       flip scGlobalDef "Cryptol.ecUpdate")      -- {n, a, ix} (Integral ix) => [n]a -> ix -> a -> [n]a
-  , ("updateEnd",    flip scGlobalDef "Cryptol.ecUpdateEnd")   -- {n, a, ix} (fin n, Integral ix) => [n]a -> ix -> a -> [n]a
+  , ("#",            flip scGlobalDef "Cryptol::ecCat")         -- {a,b,d} (fin a) => [a] d -> [b] d -> [a + b] d
+  , ("take",         flip scGlobalDef "Cryptol::ecTake")        -- {front, back, a} [front + back]a -> [front]a
+  , ("drop",         flip scGlobalDef "Cryptol::ecDrop")        -- {front, back, a} (fin front) => [front + back]a -> [back]a
+  , ("join",         flip scGlobalDef "Cryptol::ecJoin")        -- {a,b,c} (fin b) => [a][b]c -> [a * b]c
+  , ("split",        flip scGlobalDef "Cryptol::ecSplit")       -- {a,b,c} (fin b) => [a * b] c -> [a][b] c
+  , ("reverse",      flip scGlobalDef "Cryptol::ecReverse")     -- {a,b} (fin a) => [a] b -> [a] b
+  , ("transpose",    flip scGlobalDef "Cryptol::ecTranspose")   -- {a,b,c} [a][b]c -> [b][a]c
+  , ("@",            flip scGlobalDef "Cryptol::ecAt")          -- {n, a, ix} (Integral ix) => [n]a -> ix -> a
+  , ("!",            flip scGlobalDef "Cryptol::ecAtBack")      -- {n, a, ix} (fin n, Integral ix) => [n]a -> ix -> a
+  , ("update",       flip scGlobalDef "Cryptol::ecUpdate")      -- {n, a, ix} (Integral ix) => [n]a -> ix -> a -> [n]a
+  , ("updateEnd",    flip scGlobalDef "Cryptol::ecUpdateEnd")   -- {n, a, ix} (fin n, Integral ix) => [n]a -> ix -> a -> [n]a
 
     -- -- Enumerations
-  , ("fromTo",         flip scGlobalDef "Cryptol.ecFromTo")
+  , ("fromTo",         flip scGlobalDef "Cryptol::ecFromTo")
                                   -- fromTo : {first, last, a}
                                   --           ( fin last, last >= first,
                                   --             Literal last a)
                                   --        => [1 + (last - first)]a
-  , ("fromToLessThan", flip scGlobalDef "Cryptol.ecFromToLessThan")
+  , ("fromToLessThan", flip scGlobalDef "Cryptol::ecFromToLessThan")
                                   -- fromToLessThan : {first, bound, a}
                                   --                   ( fin first, bound >= first,
                                   --                     LiteralLessThan bound a)
                                   --                => [bound - first]a
-  , ("fromThenTo",     flip scGlobalDef "Cryptol.ecFromThenTo")
+  , ("fromThenTo",     flip scGlobalDef "Cryptol::ecFromThenTo")
                                   -- fromThenTo : {first, next, last, a, len}
                                   --              ( fin first, fin next, fin last
                                   --              , Literal first a, Literal next a, Literal last a
                                   --              , first != next
                                   --              , lengthFromThenTo first next last == len) => [len]a
-  , ("fromToBy",       flip scGlobalDef "Cryptol.ecFromToBy")
+  , ("fromToBy",       flip scGlobalDef "Cryptol::ecFromToBy")
                                   -- fromToBy : {first, last, stride, a}
                                   --   (fin last, fin stride, stride >= 1, last >= first, Literal last a) =>
                                   --   [1 + (last - first)/stride]a
-  , ("fromToByLessThan", flip scGlobalDef "Cryptol.ecFromToByLessThan")
+  , ("fromToByLessThan", flip scGlobalDef "Cryptol::ecFromToByLessThan")
                                   -- fromToByLessThan : {first, bound, stride, a}
                                   --   (fin first, fin stride, stride >= 1, bound >= first, LiteralLessThan bound a) =>
                                   --   [(bound - first)/^stride]a
-  , ("fromToDownBy", flip scGlobalDef "Cryptol.ecFromToDownBy")
+  , ("fromToDownBy", flip scGlobalDef "Cryptol::ecFromToDownBy")
                                   -- fromToDownBy : {first, last, stride, a}
                                   --   (fin first, fin stride, stride >= 1, first >= last, Literal first a) =>
                                   --   [1 + (first - last)/stride]a
-  , ("fromToDownByGreaterThan", flip scGlobalDef "Cryptol.ecFromToDownByGreaterThan")
+  , ("fromToDownByGreaterThan", flip scGlobalDef "Cryptol::ecFromToDownByGreaterThan")
                                   -- fromToDownByGreaterThan : {first, bound, stride, a}
                                   --   (fin first, fin stride, stride >= 1, first >= bound, Literal first a) =>
                                   --   [(first - bound)/^stride]a
 
     -- GF2 Polynomial primitives
-  , ("pmult",        flip scGlobalDef "Cryptol.ecPmult")     -- {u, v} (fin u, fin v) => [1 + u] -> [1 + v] -> [1 + (u + v)]
-  , ("pmod",         flip scGlobalDef "Cryptol.ecPmod")      -- {u, v} (fin u, fin v) => [u] -> [1 + v] -> [v]
+  , ("pmult",        flip scGlobalDef "Cryptol::ecPmult")     -- {u, v} (fin u, fin v) => [1 + u] -> [1 + v] -> [1 + (u + v)]
+  , ("pmod",         flip scGlobalDef "Cryptol::ecPmod")      -- {u, v} (fin u, fin v) => [u] -> [1 + v] -> [v]
 
     -- Evaluation primitives: deepseq, parmap
-  , ("deepseq",      flip scGlobalDef "Cryptol.ecDeepseq")     -- {a, b} (Eq b) => a -> b -> b
-  , ("parmap",       flip scGlobalDef "Cryptol.ecParmap")      -- {a, b, n} (Eq b, fin n) => (a -> b) -> [n]a -> [n]b
-  , ("foldl",        flip scGlobalDef "Cryptol.ecFoldl")       -- {n, a, b} (fin n) => (a -> b -> a) -> a -> [n]b -> a
-  , ("foldl'",       flip scGlobalDef "Cryptol.ecFoldlPrime")  -- {n, a, b} (fin n, Eq a) => (a -> b -> a) -> a -> [n]b -> a
-  , ("scanl",        flip scGlobalDef "Cryptol.ecScanl")       -- {n, a, b}  (a -> b -> a) -> a -> [n]b -> [1+n]a
-  , ("error",        flip scGlobalDef "Cryptol.ecError")       -- {at,len} (fin len) => [len][8] -> at -- Run-time error
-  , ("random",       flip scGlobalDef "Cryptol.ecRandom")      -- {a} => [32] -> a -- Random values
-  , ("trace",        flip scGlobalDef "Cryptol.ecTrace")       -- {n,a,b} (fin n) => [n][8] -> a -> b -> b
+  , ("deepseq",      flip scGlobalDef "Cryptol::ecDeepseq")     -- {a, b} (Eq b) => a -> b -> b
+  , ("parmap",       flip scGlobalDef "Cryptol::ecParmap")      -- {a, b, n} (Eq b, fin n) => (a -> b) -> [n]a -> [n]b
+  , ("foldl",        flip scGlobalDef "Cryptol::ecFoldl")       -- {n, a, b} (fin n) => (a -> b -> a) -> a -> [n]b -> a
+  , ("foldl'",       flip scGlobalDef "Cryptol::ecFoldlPrime")  -- {n, a, b} (fin n, Eq a) => (a -> b -> a) -> a -> [n]b -> a
+  , ("scanl",        flip scGlobalDef "Cryptol::ecScanl")       -- {n, a, b}  (a -> b -> a) -> a -> [n]b -> [1+n]a
+  , ("error",        flip scGlobalDef "Cryptol::ecError")       -- {at,len} (fin len) => [len][8] -> at -- Run-time error
+  , ("random",       flip scGlobalDef "Cryptol::ecRandom")      -- {a} => [32] -> a -- Random values
+  , ("trace",        flip scGlobalDef "Cryptol::ecTrace")       -- {n,a,b} (fin n) => [n][8] -> a -> b -> b
   ]
 
 arrayPrims :: Map C.PrimIdent (SharedContext -> IO Term)
 arrayPrims =
   Map.fromList $
   first C.arrayPrim <$>
-  [ ("arrayConstant", flip scGlobalDef "Cryptol.ecArrayConstant") -- {a,b} b -> Array a b
-  , ("arrayLookup",   flip scGlobalDef "Cryptol.ecArrayLookup") -- {a,b} Array a b -> a -> b
-  , ("arrayUpdate",   flip scGlobalDef "Cryptol.ecArrayUpdate") -- {a,b} Array a b -> a -> b -> Array a b
-  , ("arrayCopy", flip scGlobalDef "Cryptol.ecArrayCopy") -- {n,a} Array [n] a -> [n] -> Array [n] a -> [n] -> [n] -> Array [n] a
-  , ("arrayEq", flip scGlobalDef "Cryptol.ecArrayEq")     -- {a, b} (Array a b) -> (Array a b) -> Bool
-  , ("arraySet", flip scGlobalDef "Cryptol.ecArraySet") -- {n,a} Array [n] a -> [n] -> a -> [n] -> Array [n] a
-  , ("arrayRangeEqual", flip scGlobalDef "Cryptol.ecArrayRangeEq") -- {n,a} Array [n] a -> [n] -> Array [n] a -> [n] -> [n] -> Bit
+  [ ("arrayConstant", flip scGlobalDef "Cryptol::ecArrayConstant") -- {a,b} b -> Array a b
+  , ("arrayLookup",   flip scGlobalDef "Cryptol::ecArrayLookup") -- {a,b} Array a b -> a -> b
+  , ("arrayUpdate",   flip scGlobalDef "Cryptol::ecArrayUpdate") -- {a,b} Array a b -> a -> b -> Array a b
+  , ("arrayCopy", flip scGlobalDef "Cryptol::ecArrayCopy") -- {n,a} Array [n] a -> [n] -> Array [n] a -> [n] -> [n] -> Array [n] a
+  , ("arrayEq", flip scGlobalDef "Cryptol::ecArrayEq")     -- {a, b} (Array a b) -> (Array a b) -> Bool
+  , ("arraySet", flip scGlobalDef "Cryptol::ecArraySet") -- {n,a} Array [n] a -> [n] -> a -> [n] -> Array [n] a
+  , ("arrayRangeEqual", flip scGlobalDef "Cryptol::ecArrayRangeEq") -- {n,a} Array [n] a -> [n] -> Array [n] a -> [n] -> [n] -> Bit
   ]
 
 floatPrims :: Map C.PrimIdent (SharedContext -> IO Term)
 floatPrims =
   Map.fromList $
   first C.floatPrim <$>
-  [ ("fpNaN",          flip scGlobalDef "Cryptol.ecFpNaN")
-  , ("fpPosInf",       flip scGlobalDef "Cryptol.ecFpPosInf")
-  , ("fpFromBits",     flip scGlobalDef "Cryptol.ecFpFromBits")
-  , ("fpToBits",       flip scGlobalDef "Cryptol.ecFpToBits")
-  , ("=.=",            flip scGlobalDef "Cryptol.ecFpLogicalEq")
-  , ("fpAdd",          flip scGlobalDef "Cryptol.ecFpAdd")
-  , ("fpSub",          flip scGlobalDef "Cryptol.ecFpSub")
-  , ("fpMul",          flip scGlobalDef "Cryptol.ecFpMul")
-  , ("fpDiv",          flip scGlobalDef "Cryptol.ecFpDiv")
-  , ("fpRem",          flip scGlobalDef "Cryptol.ecFpRem")
-  , ("fpToRational",   flip scGlobalDef "Cryptol.ecFpToRational")
-  , ("fpFromRational", flip scGlobalDef "Cryptol.ecFpFromRational")
-  , ("fpIsNaN",        flip scGlobalDef "Cryptol.ecFpIsNaN")
-  , ("fpIsInf",        flip scGlobalDef "Cryptol.ecFpIsInf")
-  , ("fpIsZero",       flip scGlobalDef "Cryptol.ecFpIsZero")
-  , ("fpIsPos",        flip scGlobalDef "Cryptol.ecFpIsPos")
-  , ("fpIsNeg",        flip scGlobalDef "Cryptol.ecFpIsNeg")
-  , ("fpIsNormal",     flip scGlobalDef "Cryptol.ecFpIsNormal")
-  , ("fpIsSubnormal",  flip scGlobalDef "Cryptol.ecFpIsSubnormal")
-  , ("fpFMA",          flip scGlobalDef "Cryptol.ecFpFMA")
-  , ("fpAbs",          flip scGlobalDef "Cryptol.ecFpAbs")
-  , ("fpSqrt",         flip scGlobalDef "Cryptol.ecFpSqrt")
-  , ("fpCast",         flip scGlobalDef "Cryptol.ecFpCast")
-  , ("fpRound",        flip scGlobalDef "Cryptol.ecFpRound")
-  , ("fpFromBV",       flip scGlobalDef "Cryptol.ecFpFromBV")
-  , ("fpFromSBV",      flip scGlobalDef "Cryptol.ecFpFromSBV")
-  , ("fpToBV",         flip scGlobalDef "Cryptol.ecFpToBV")
-  , ("fpToSBV",        flip scGlobalDef "Cryptol.ecFpToSBV")
+  [ ("fpNaN",          flip scGlobalDef "Cryptol::ecFpNaN")
+  , ("fpPosInf",       flip scGlobalDef "Cryptol::ecFpPosInf")
+  , ("fpFromBits",     flip scGlobalDef "Cryptol::ecFpFromBits")
+  , ("fpToBits",       flip scGlobalDef "Cryptol::ecFpToBits")
+  , ("=.=",            flip scGlobalDef "Cryptol::ecFpLogicalEq")
+  , ("fpAdd",          flip scGlobalDef "Cryptol::ecFpAdd")
+  , ("fpSub",          flip scGlobalDef "Cryptol::ecFpSub")
+  , ("fpMul",          flip scGlobalDef "Cryptol::ecFpMul")
+  , ("fpDiv",          flip scGlobalDef "Cryptol::ecFpDiv")
+  , ("fpRem",          flip scGlobalDef "Cryptol::ecFpRem")
+  , ("fpToRational",   flip scGlobalDef "Cryptol::ecFpToRational")
+  , ("fpFromRational", flip scGlobalDef "Cryptol::ecFpFromRational")
+  , ("fpIsNaN",        flip scGlobalDef "Cryptol::ecFpIsNaN")
+  , ("fpIsInf",        flip scGlobalDef "Cryptol::ecFpIsInf")
+  , ("fpIsZero",       flip scGlobalDef "Cryptol::ecFpIsZero")
+  , ("fpIsPos",        flip scGlobalDef "Cryptol::ecFpIsPos")
+  , ("fpIsNeg",        flip scGlobalDef "Cryptol::ecFpIsNeg")
+  , ("fpIsNormal",     flip scGlobalDef "Cryptol::ecFpIsNormal")
+  , ("fpIsSubnormal",  flip scGlobalDef "Cryptol::ecFpIsSubnormal")
+  , ("fpFMA",          flip scGlobalDef "Cryptol::ecFpFMA")
+  , ("fpAbs",          flip scGlobalDef "Cryptol::ecFpAbs")
+  , ("fpSqrt",         flip scGlobalDef "Cryptol::ecFpSqrt")
+  , ("fpCast",         flip scGlobalDef "Cryptol::ecFpCast")
+  , ("fpRound",        flip scGlobalDef "Cryptol::ecFpRound")
+  , ("fpFromBV",       flip scGlobalDef "Cryptol::ecFpFromBV")
+  , ("fpFromSBV",      flip scGlobalDef "Cryptol::ecFpFromSBV")
+  , ("fpToBV",         flip scGlobalDef "Cryptol::ecFpToBV")
+  , ("fpToSBV",        flip scGlobalDef "Cryptol::ecFpToSBV")
   ]
 
 suiteBPrims :: Map C.PrimIdent (SharedContext -> IO Term)
 suiteBPrims =
   Map.fromList $
   first C.suiteBPrim <$>
-  [ ("AESEncRound",      flip scGlobalDef "Cryptol.AESEncRound")
-  , ("AESEncFinalRound", flip scGlobalDef "Cryptol.AESEncFinalRound")
-  , ("AESDecRound",      flip scGlobalDef "Cryptol.AESDecRound")
-  , ("AESDecFinalRound", flip scGlobalDef "Cryptol.AESDecFinalRound")
-  , ("AESInvMixColumns", flip scGlobalDef "Cryptol.AESInvMixColumns")
-  , ("AESKeyExpand",     flip scGlobalDef "Cryptol.AESKeyExpand")
-  , ("processSHA2_224",  flip scGlobalDef "Cryptol.processSHA2_224")
-  , ("processSHA2_256",  flip scGlobalDef "Cryptol.processSHA2_256")
-  , ("processSHA2_384",  flip scGlobalDef "Cryptol.processSHA2_384")
-  , ("processSHA2_512",  flip scGlobalDef "Cryptol.processSHA2_512")
+  [ ("AESEncRound",      flip scGlobalDef "Cryptol::AESEncRound")
+  , ("AESEncFinalRound", flip scGlobalDef "Cryptol::AESEncFinalRound")
+  , ("AESDecRound",      flip scGlobalDef "Cryptol::AESDecRound")
+  , ("AESDecFinalRound", flip scGlobalDef "Cryptol::AESDecFinalRound")
+  , ("AESInvMixColumns", flip scGlobalDef "Cryptol::AESInvMixColumns")
+  , ("AESKeyExpand",     flip scGlobalDef "Cryptol::AESKeyExpand")
+  , ("processSHA2_224",  flip scGlobalDef "Cryptol::processSHA2_224")
+  , ("processSHA2_256",  flip scGlobalDef "Cryptol::processSHA2_256")
+  , ("processSHA2_384",  flip scGlobalDef "Cryptol::processSHA2_384")
+  , ("processSHA2_512",  flip scGlobalDef "Cryptol::processSHA2_512")
   ]
 
 primeECPrims :: Map C.PrimIdent (SharedContext -> IO Term)
 primeECPrims =
   Map.fromList $
   first C.primeECPrim <$>
-  [ ("ec_double",      flip scGlobalDef "Cryptol.ec_double")
-  , ("ec_add_nonzero", flip scGlobalDef "Cryptol.ec_add_nonzero")
-  , ("ec_mult",        flip scGlobalDef "Cryptol.ec_mult")
-  , ("ec_twin_mult",   flip scGlobalDef "Cryptol.ec_twin_mult")
+  [ ("ec_double",      flip scGlobalDef "Cryptol::ec_double")
+  , ("ec_add_nonzero", flip scGlobalDef "Cryptol::ec_add_nonzero")
+  , ("ec_mult",        flip scGlobalDef "Cryptol::ec_mult")
+  , ("ec_twin_mult",   flip scGlobalDef "Cryptol::ec_twin_mult")
   ]
 
 -- | Convert a Cryptol expression to a SAWCore term. Calling
@@ -1085,7 +1085,7 @@ importExpr sc env expr =
                if | Just (n, a) <- asSeqType t ->
                       return (n, a)
                   | Just (n, a) <- asVectorType t -> do
-                      n' <- scGlobalApply sc "Cryptol.TCNum" [n]
+                      n' <- scGlobalApply sc "Cryptol::TCNum" [n]
                       return (n', a)
                   | otherwise -> do
                       t' <- ppTerm sc t
@@ -1093,7 +1093,7 @@ importExpr sc env expr =
                           "ListSel: not a list type",
                           "Type: " <> Text.pack t'
                        ]
-             scGlobalApply sc "Cryptol.eListSel" [a, n, e', i']
+             scGlobalApply sc "Cryptol::eListSel" [a, n, e', i']
 
     C.ESet t1 e1 sel e2 ->
       case sel of
@@ -1110,7 +1110,7 @@ importExpr sc env expr =
                  let t2  = ts  !! i
                  let t2' = ts' !! i
                  e2' <- importExpr' sc env (C.tMono t2) e2
-                 f <- scGlobalApply sc "Cryptol.const" [t2', t2', e2']
+                 f <- scGlobalApply sc "Cryptol::const" [t2', t2', e2']
                  g <- tupleUpdate sc f i ts'
                  scApply sc g e1'
         C.RecordSel x _ ->
@@ -1152,7 +1152,7 @@ importExpr sc env expr =
          let ty = fastTypeOf allvars e2
          ty' <- scTypeOf sc e2'
          e3' <- importExpr' sc env (C.tMono ty) e3
-         scGlobalApply sc "Prelude.ite" [ty', e1', e2', e3']
+         scGlobalApply sc "Prelude::ite" [ty', e1', e2', e3']
 
     C.EComp len eltty e mss ->
       importComp sc env len eltty e mss
@@ -1237,7 +1237,7 @@ importExpr sc env expr =
       -- Convert prop guards to nested if-then-elses
       typ' <- importType sc env typ
       errMsg <- scString sc "No constraints satisfied in constraint guard"
-      err <- scGlobalApply sc "Prelude.error" [typ', errMsg]
+      err <- scGlobalApply sc "Prelude::error" [typ', errMsg]
       -- NOTE: Must use a right fold to maintain order of prop guards in
       -- generated if-then-else
       Fold.foldrM (propGuardToIte typ') err arms
@@ -1275,7 +1275,7 @@ importExpr sc env expr =
       mCondition <- Fold.foldlM conjoinErasedProps Nothing props
       condition <- maybe (scBool sc True) pure mCondition
       trueBranch <- importExpr sc env body
-      scGlobalApply sc "Prelude.ite" [typ, condition, trueBranch, falseBranch]
+      scGlobalApply sc "Prelude::ite" [typ, condition, trueBranch, falseBranch]
 
 
 -- | Convert a Cryptol expression with the given type schema to a
@@ -1309,7 +1309,7 @@ importExpr' sc env schema expr =
          e1' <- importExpr sc env e1
          e2' <- importExpr' sc env schema e2
          e3' <- importExpr' sc env schema e3
-         scGlobalApply sc "Prelude.ite" [ty', e1', e2', e3']
+         scGlobalApply sc "Prelude::ite" [ty', e1', e2', e3']
 
     C.ETAbs tp e ->
       do schema' <-
@@ -1393,11 +1393,11 @@ importExpr' sc env schema expr =
 tupleUpdate :: SharedContext -> Term -> Int -> [Term] -> IO Term
 tupleUpdate sc f 0 (a : ts) =
   do b <- scTupleType sc ts
-     scGlobalApply sc "Cryptol.updFst" [a, b, f]
+     scGlobalApply sc "Cryptol::updFst" [a, b, f]
 tupleUpdate sc f n (a : ts) =
   do g <- tupleUpdate sc f (n - 1) ts
      b <- scTupleType sc ts
-     scGlobalApply sc "Cryptol.updSnd" [a, b, g]
+     scGlobalApply sc "Cryptol::updSnd" [a, b, g]
 tupleUpdate _ _ _ [] = panic "tupleUpdate" ["empty tuple"]
 
 -- | Convert a Cryptol record update expression to a SAWCore term. This works
@@ -1420,7 +1420,7 @@ importRecordUpdate sc env e1 e2 x fields =
      t2  <- the "field name not found" (C.lookupField x fields)
      t2' <- the "field name not found" (C.lookupField x fields')
      e2' <- importExpr' sc env (C.tMono t2) e2
-     f <- scGlobalApply sc "Cryptol.const" [t2', t2', e2']
+     f <- scGlobalApply sc "Cryptol::const" [t2', t2', e2']
      let canonicalFields = C.canonicalFields fields'
      let canonicalFields' = map (first C.identText) canonicalFields
      g <- recordUpdate sc f (C.identText x) canonicalFields'
@@ -1436,12 +1436,12 @@ recordUpdate sc f fname ((fname', a) : fields)
   | fname == fname' =
     do s <- scString sc fname'
        b <- scRecordType sc fields
-       scGlobalApply sc "Cryptol.updHeadRecord" [s, a, b, f]
+       scGlobalApply sc "Cryptol::updHeadRecord" [s, a, b, f]
   | otherwise =
     do s <- scString sc fname'
        b <- scRecordType sc fields
        g <- recordUpdate sc f fname fields
-       scGlobalApply sc "Cryptol.updTailRecord" [s, a, b, g]
+       scGlobalApply sc "Cryptol::updTailRecord" [s, a, b, g]
 
 -- | Apply a substitution to a type *without* simplifying
 -- constraints like @Ring [n]a@ to @Ring a@. (This is in contrast to
@@ -1480,8 +1480,8 @@ cryptolQualName ::
 cryptolQualName ps sps nm midx =
   QN.QualName ps sps nm midx (Just QN.NamespaceCryptol)
 
--- | Import a Cryptol `C.Name` and produce a SAWCore `NameInfo`.
-importName :: C.Name -> IO NameInfo
+-- | Import a Cryptol `C.Name` and produce a SAWCore `QualName`.
+importName :: C.Name -> IO QualName
 importName cnm =
   case C.nameInfo cnm of
     C.LocalName {} -> fail ("Cannot import non-top-level name: " ++ Text.unpack (CryPP.pp cnm))
@@ -1489,7 +1489,7 @@ importName cnm =
       | C.ogModule og == C.TopModule C.interactiveName ->
           let shortNm = C.identText (C.nameIdent cnm)
               qn = cryptolQualName [] [] shortNm (Just (C.nameUnique cnm))
-           in pure (mkImportedName qn)
+           in pure qn
 
       | otherwise -> do
           let (topMod, nested) = C.modPathSplit (C.ogModule og)
@@ -1524,14 +1524,14 @@ importName cnm =
                   fail $ Text.unpack $ "Unexpected/unsupported module " <>
                                        "parameter name " <> C.identText i <>
                                        " in Cryptol name " <> QN.ppQualName qn
-          pure (mkImportedName qn)
+          pure qn
 
 -- | Recognize 'Term's of the form @PairType1 a b@.
 asPairType1 :: Term -> Maybe (Term, Term)
 asPairType1 t =
   do (t1, b) <- asApp t
      (t2, a) <- asApp t1
-     () <- isGlobalDef "Prelude.PairType1" t2
+     () <- isGlobalDef "Prelude::PairType1" t2
      Just (a, b)
 
 -- | Recognize 'Term's of the form @seq (TCNum n) a@.
@@ -1539,7 +1539,7 @@ asSeqType :: Term -> Maybe (Term, Term)
 asSeqType t0 = do
     (t1, a) <- asApp t0
     (t2, n) <- asApp t1
-    () <- isGlobalDef "Cryptol.seq" t2
+    () <- isGlobalDef "Cryptol::seq" t2
     Just (n, a)
 
 -- | Given a list of (variable, body) pairs (each represented as
@@ -1568,7 +1568,7 @@ scFixedPoints sc vts =
   do let (vs, ts) = unzip vts
      body <- makeTuple ts
      (f, ty, _) <- abstractTuple vs body
-     fixpoint <- scGlobalApply sc "Prelude.fix" [ty, f]
+     fixpoint <- scGlobalApply sc "Prelude::fix" [ty, f]
      tupleFields fixpoint (length vs)
   where
     -- | Make a sort-1 tuple from a non-empty list of terms.
@@ -1579,7 +1579,7 @@ scFixedPoints sc vts =
       do y <- makeTuple xs
          a <- scTypeOf sc x
          b <- scTypeOf sc y
-         scGlobalApply sc "Prelude.PairValue1" [a, b, x, y]
+         scGlobalApply sc "Prelude::PairValue1" [a, b, x, y]
 
     -- | Abstract a term over a sort-1 tuple of variables, also
     -- returning the tuple type and the type of the body.
@@ -1594,8 +1594,8 @@ scFixedPoints sc vts =
       do a <- scTypeOf sc v
          (f1, b, c) <- abstractTuple vs body
          f <- scAbstractTerms sc [v] f1
-         f' <- scGlobalApply sc "Prelude.uncurry1" [a, b, c, f]
-         b' <- scGlobalApply sc "Prelude.PairType1" [a, b]
+         f' <- scGlobalApply sc "Prelude::uncurry1" [a, b, c, f]
+         b' <- scGlobalApply sc "Prelude::PairType1" [a, b]
          pure (f', b', c)
 
     -- | Project all fields out of a right-nested sort-1 tuple.
@@ -1608,8 +1608,8 @@ scFixedPoints sc vts =
            Nothing ->
              panic "scFixedPoints" ["Bad argument type"]
            Just (a, b) ->
-             do t1 <- scGlobalApply sc "Prelude.fstPairType1" [a, b, t]
-                t2 <- scGlobalApply sc "Prelude.sndPairType1" [a, b, t]
+             do t1 <- scGlobalApply sc "Prelude::fstPairType1" [a, b, t]
+                t2 <- scGlobalApply sc "Prelude::sndPairType1" [a, b, t]
                 ts <- tupleFields t2 (n - 1)
                 pure (t1 : ts)
 
@@ -1750,14 +1750,14 @@ coerceTerm sc env t1 t2 e
          True -> pure e -- ascribe type t2' to e
          False ->
            do q <- proveEq sc env t1 t2
-              scGlobalApply sc "Prelude.coerce" [t1', t2', q, e]
+              scGlobalApply sc "Prelude::coerce" [t1', t2', q, e]
 
 proveEq :: SharedContext -> LocalEnv -> C.Type -> C.Type -> IO Term
 proveEq sc env t1 t2
   | t1 == t2 =
     do s <- scSort sc (mkSort 0)
        t' <- importType sc env t1
-       scGlobalApply sc "Prelude.Refl" [s, t']
+       scGlobalApply sc "Prelude::Refl" [s, t']
   | otherwise =
     case (C.tNoUser t1, C.tNoUser t2) of
       (C.tIsSeq -> Just (n1, a1), C.tIsSeq -> Just (n2, a2)) ->
@@ -1766,15 +1766,15 @@ proveEq sc env t1 t2
            a2' <- importType sc env a2
            aEq <- proveEq sc env a1 a2
            if a1 == a2
-             then scGlobalApply sc "Cryptol.seq_cong1" [n1', n2', a1', nEq]
-             else scGlobalApply sc "Cryptol.seq_cong" [n1', n2', a1', a2', nEq, aEq]
+             then scGlobalApply sc "Cryptol::seq_cong1" [n1', n2', a1', nEq]
+             else scGlobalApply sc "Cryptol::seq_cong" [n1', n2', a1', a2', nEq, aEq]
       (C.tIsFloat -> Just (e1, p1), C.tIsFloat -> Just (e2, p2)) ->
         do (e1', e2', eEq) <- proveNumEq sc env e1 e2
            (p1', p2', pEq) <- proveNumEq sc env p1 p2
-           scGlobalApply sc "Cryptol.FloatNum_cong" [e1', e2', p1', p2', eEq, pEq]
+           scGlobalApply sc "Cryptol::FloatNum_cong" [e1', e2', p1', p2', eEq, pEq]
       (C.tIsIntMod -> Just n1, C.tIsIntMod -> Just n2) ->
         do (n1', n2', nEq) <- proveNumEq sc env n1 n2
-           scGlobalApply sc "Cryptol.IntModNum_cong" [n1', n2', nEq]
+           scGlobalApply sc "Cryptol::IntModNum_cong" [n1', n2', nEq]
       (C.tIsFun -> Just (a1, b1), C.tIsFun -> Just (a2, b2)) ->
         do a1' <- importType sc env a1
            a2' <- importType sc env a2
@@ -1782,7 +1782,7 @@ proveEq sc env t1 t2
            b2' <- importType sc env b2
            aEq <- proveEq sc env a1 a2
            bEq <- proveEq sc env b1 b2
-           scGlobalApply sc "Cryptol.fun_cong" [a1', a2', b1', b2', aEq, bEq]
+           scGlobalApply sc "Cryptol::fun_cong" [a1', a2', b1', b2', aEq, bEq]
       (tIsPair -> Just (a1, b1), tIsPair -> Just (a2, b2)) ->
         do a1' <- importType sc env a1
            a2' <- importType sc env a2
@@ -1791,10 +1791,10 @@ proveEq sc env t1 t2
            aEq <- proveEq sc env a1 a2
            bEq <- proveEq sc env b1 b2
            if b1 == b2
-             then scGlobalApply sc "Cryptol.pair_cong1" [a1', a2', b1', aEq]
+             then scGlobalApply sc "Cryptol::pair_cong1" [a1', a2', b1', aEq]
              else if a1 == a2
-                  then scGlobalApply sc "Cryptol.pair_cong2" [a1', b1', b2', bEq]
-                  else scGlobalApply sc "Cryptol.pair_cong" [a1', a2', b1', b2', aEq, bEq]
+                  then scGlobalApply sc "Cryptol::pair_cong2" [a1', b1', b2', bEq]
+                  else scGlobalApply sc "Cryptol::pair_cong" [a1', a2', b1', b2', aEq, bEq]
       (tIsRecord -> Just (s1, a1, b1), tIsRecord -> Just (s2, a2, b2)) | s1 == s2 ->
         proveRecordEq sc env s1 a1 b1 a2 b2
 
@@ -1842,10 +1842,10 @@ proveNumEq ::
 proveNumEq sc env n1 n2 =
   do n1' <- importType sc env n1
      n2' <- importType sc env n2
-     num <- scGlobalApply sc "Cryptol.Num" []
+     num <- scGlobalApply sc "Cryptol::Num" []
      nEq <- if n1 == n2
-            then scGlobalApply sc "Prelude.Refl" [num, n1']
-            else scGlobalApply sc "Prelude.unsafeAssert" [num, n1', n2']
+            then scGlobalApply sc "Prelude::Refl" [num, n1']
+            else scGlobalApply sc "Prelude::unsafeAssert" [num, n1', n2']
      pure (n1', n2', nEq)
 
 -- | Create an equality term between two @RecordType@ values with the same
@@ -1874,10 +1874,10 @@ proveRecordEq sc env s a1 b1 a2 b2 =
      bEq <- proveEq sc env b1 b2
      s' <- scString sc (C.identText s)
      if b1 == b2
-       then scGlobalApply sc "Cryptol.record_cong1" [s', a1', a2', b1', aEq]
+       then scGlobalApply sc "Cryptol::record_cong1" [s', a1', a2', b1', aEq]
        else if a1 == a2
-            then scGlobalApply sc "Cryptol.record_cong2" [s', a1', b1', b2', bEq]
-            else scGlobalApply sc "Cryptol.record_cong" [s', a1', a2', b1', b2', aEq, bEq]
+            then scGlobalApply sc "Cryptol::record_cong2" [s', a1', b1', b2', bEq]
+            else scGlobalApply sc "Cryptol::record_cong" [s', a1', a2', b1', b2', aEq, bEq]
 
 -- | Compute the fields of a newtype as a 'C.RecordMap', ensuring that the
 -- newtype's parameters are appropriately instantiated.
@@ -1933,16 +1933,16 @@ importComp sc env lenT elemT expr mss =
               (ys, n, b, argss, len') <- zipAll branches
               ab <- scTupleType sc [a, b]
               if len == len' then
-                do zs <- scGlobalApply sc "Cryptol.seqZipSame" [a, b, m, xs, ys]
+                do zs <- scGlobalApply sc "Cryptol::seqZipSame" [a, b, m, xs, ys]
                    return (zs, m, ab, args : argss, len)
               else
-                do zs <- scGlobalApply sc "Cryptol.seqZip" [a, b, m, n, xs, ys]
-                   mn <- scGlobalApply sc "Cryptol.tcMin" [m, n]
+                do zs <- scGlobalApply sc "Cryptol::seqZip" [a, b, m, n, xs, ys]
+                   mn <- scGlobalApply sc "Cryptol::tcMin" [m, n]
                    return (zs, mn, ab, args : argss, C.tMin len len')
      (xs, n, a, argss, lenT') <- zipAll mss
      f <- lambdaTuples sc env elemT expr argss
      b <- importType sc env elemT
-     ys <- scGlobalApply sc "Cryptol.seqMap" [a, b, n, f, xs]
+     ys <- scGlobalApply sc "Cryptol::seqMap" [a, b, n, f, xs]
      -- The resulting type might not match the annotation, so we coerce
      coerceTerm sc env (C.tSeq lenT' elemT) (C.tSeq lenT elemT) ys
 
@@ -1957,7 +1957,7 @@ lambdaTuples sc env ty expr (args : argss) =
        else do a <- importType sc env (tNestedTuple (map snd args))
                b <- importType sc env (tNestedTuple (map (tNestedTuple . map snd) argss))
                c <- importType sc env ty
-               scGlobalApply sc "Prelude.uncurry" [a, b, c, f]
+               scGlobalApply sc "Prelude::uncurry" [a, b, c, f]
 
 lambdaTuple ::
   SharedContext -> LocalEnv ->
@@ -1973,7 +1973,7 @@ lambdaTuple sc env ty expr argss ((x, t) : args) =
         else do b <- importType sc env (tNestedTuple (map snd args))
                 let tuple = tNestedTuple (map (tNestedTuple . map snd) argss)
                 c <- importType sc env (if null argss then ty else C.tFun tuple ty)
-                scGlobalApply sc "Prelude.uncurry" [a, b, c, f]
+                scGlobalApply sc "Prelude::uncurry" [a, b, c, f]
 
 tNestedTuple :: [C.Type] -> C.Type
 tNestedTuple [] = C.tTuple []
@@ -2029,7 +2029,7 @@ importMatches sc env (C.From name _len _eltty expr : matches) =
      b <- importType sc env ty2
      f <- scAbstractTerms sc [v] body
 
-     result <- scGlobalApply sc "Cryptol.from" [a, b, m, n, xs, f]
+     result <- scGlobalApply sc "Cryptol::from" [a, b, m, n, xs, f]
      return (result, C.tMul len1 len2, C.tTuple [ty1, ty2], (name, ty1) : args)
 
 importMatches sc env [C.Let decl] =
@@ -2056,7 +2056,7 @@ importMatches sc env [C.Let decl] =
                        "   " <> CryPP.pp decl
                    ]
      a <- importType sc env ty1
-     result <- scGlobalApply sc "Prelude.single" [a, e]
+     result <- scGlobalApply sc "Prelude::single" [a, e]
      return (result, C.tOne, ty1, [(C.dName decl, ty1)])
 
 importMatches sc env (C.Let decl : matches) =
@@ -2088,7 +2088,7 @@ importMatches sc env (C.Let decl : matches) =
      a <- importType sc env ty1
      b <- importType sc env ty2
      f <- scAbstractTerms sc [v] body
-     result <- scGlobalApply sc "Cryptol.mlet" [a, b, n, e, f]
+     result <- scGlobalApply sc "Cryptol::mlet" [a, b, n, e, f]
      return (result, len, C.tTuple [ty1, ty2], (C.dName decl, ty1) : args)
 
 
@@ -2167,24 +2167,24 @@ scCryptolType sc t =
         | s == mkSort 0 -> return (Left C.KType)
         | otherwise     -> Nothing
 
-      SC.VDataType (ModuleIdentifier "Prelude.Stream") [SC.TValue v1] [] ->
+      SC.VDataType "Prelude::Stream" [SC.TValue v1] [] ->
           do Right t1 <- asCryptolTypeValue v1
              return (Right (C.tSeq C.tInf t1))
 
-      SC.VDataType (ModuleIdentifier "Cryptol.Num") [] [] ->
+      SC.VDataType "Cryptol::Num" [] [] ->
         return (Left C.KNum)
 
-      SC.VDataType (ModuleIdentifier "Prelude.UnitType") [] [] ->
+      SC.VDataType "Prelude::UnitType" [] [] ->
         Just (Right (C.tTuple []))
-      SC.VDataType (ModuleIdentifier "Prelude.PairType") [SC.TValue v1, SC.TValue v2] [] ->
+      SC.VDataType "Prelude::PairType" [SC.TValue v1, SC.TValue v2] [] ->
         do Right t1 <- asCryptolTypeValue v1
            Right t2 <- asCryptolTypeValue v2
            ts <- C.tIsTuple t2
            Just (Right (C.tTuple (t1 : ts)))
 
-      SC.VDataType (ModuleIdentifier "Prelude.EmptyType") [] [] ->
+      SC.VDataType "Prelude::EmptyType" [] [] ->
         Just (Right (C.tRec (C.recordFromFields [])))
-      SC.VDataType (ModuleIdentifier "Prelude.RecordType")
+      SC.VDataType "Prelude::RecordType"
         [SC.VString s, SC.TValue v1, SC.TValue v2] [] ->
         do Right t1 <- asCryptolTypeValue v1
            Right t2 <- asCryptolTypeValue v2
@@ -2427,9 +2427,9 @@ deriveEqInstance sc env dtName dtParams props ctorArgTypes =
      let mkEq :: Term -> Term -> IO Term
          mkEq x y =
            do a <- scTypeOf sc x
-              eqa <- scGlobalApply sc "Cryptol.PEq" [a]
+              eqa <- scGlobalApply sc "Cryptol::PEq" [a]
               pa <- proveInstance sc env' eqa
-              scGlobalApply sc "Cryptol.ecEq" [a, pa, x, y]
+              scGlobalApply sc "Cryptol::ecEq" [a, pa, x, y]
      let eqSubbranch i xs j argTs =
            do ys <- traverse (scFreshVariable sc "y") argTs
               body <-
@@ -2447,13 +2447,11 @@ deriveEqInstance sc env dtName dtParams props ctorArgTypes =
      branches <- sequence $ zipWith eqBranch [0..] ctorArgTypes
      eqf <- scApplyAll sc recursor1 branches
      r <- scRecordValue sc [("eq", eqf)]
-     r1 <- scAscribe sc r =<< scGlobalApply sc "Cryptol.PEq" [ty]
+     r1 <- scAscribe sc r =<< scGlobalApply sc "Cryptol::PEq" [ty]
      r2 <- scAbstractTerms sc (dtParamsVars ++ propVars) r1
-     let dtNameInfo = nameInfo dtName
-     let dtQualName = toQualName dtNameInfo
+     let dtQualName = nameQualName dtName
      let instQualName = dtQualName { QN.baseName = "PEq__" <> QN.baseName dtQualName }
-     let instNameInfo = mkImportedName instQualName
-     c <- scDefineConstant sc instNameInfo r2
+     c <- scDefineConstant sc instQualName r2
      rule <- mkIntroRule sc c
      addInstance sc rule
 
@@ -2461,7 +2459,7 @@ deriveEqInstance sc env dtName dtParams props ctorArgTypes =
 -- given (non-recursive) datatype and register it as an class instance
 -- rule.
 deriveCmpInstanceGeneric ::
-  (Ident, FieldName, FieldName, FieldName, FieldName, Text) ->
+  (QualName, FieldName, FieldName, FieldName, FieldName, Text) ->
   SharedContext ->
   LocalEnv ->
   Name {- ^ datatype name -} ->
@@ -2470,7 +2468,7 @@ deriveCmpInstanceGeneric ::
   [[Term]] {- ^ constructor argument types -} ->
   IO ()
 deriveCmpInstanceGeneric
-  (classIdent, eqField, cmpField, leField, ltField, prefix)
+  (className, eqField, cmpField, leField, ltField, prefix)
   sc env dtName dtParams props ctorArgTypes =
   do dt <- scConst sc dtName
      dtParamsVars <- scVariables sc dtParams
@@ -2491,7 +2489,7 @@ deriveCmpInstanceGeneric
      let mkCmp :: Term -> Term -> IO Term
          mkCmp x y =
            do a <- scTypeOf sc x
-              cmpa <- scGlobalApply sc classIdent [a]
+              cmpa <- scGlobalApply sc className [a]
               pa <- proveInstance sc env' cmpa
               cmp <- scRecordSelect sc pa cmpField
               scApplyAll sc cmp [x, y]
@@ -2521,17 +2519,15 @@ deriveCmpInstanceGeneric
           lt <- scAbstractTerms sc [x, y] =<< scApply sc cmp_x_y false
           pure (le, lt)
 
-     eqty <- scGlobalApply sc "Cryptol.PEq" [ty]
+     eqty <- scGlobalApply sc "Cryptol::PEq" [ty]
      cmpEq <- proveInstance sc env' eqty
 
      r <- scRecordValue sc [(eqField, cmpEq), (cmpField, cmp), (leField, le), (ltField, lt)]
-     r1 <- scAscribe sc r =<< scGlobalApply sc classIdent [ty]
+     r1 <- scAscribe sc r =<< scGlobalApply sc className [ty]
      r2 <- scAbstractTerms sc (dtParamsVars ++ propVars) r1
-     let dtNameInfo = nameInfo dtName
-     let dtQualName = toQualName dtNameInfo
+     let dtQualName = nameQualName dtName
      let instQualName = dtQualName { QN.baseName = prefix <> QN.baseName dtQualName }
-     let instNameInfo = mkImportedName instQualName
-     c <- scDefineConstant sc instNameInfo r2
+     c <- scDefineConstant sc instQualName r2
      rule <- mkIntroRule sc c
      addInstance sc rule
 
@@ -2602,7 +2598,7 @@ deriveCmpInstance ::
   IO ()
 deriveCmpInstance =
   deriveCmpInstanceGeneric
-  ("Cryptol.PCmp", "cmpEq", "cmp", "le", "lt", "PCmp__")
+  ("Cryptol::PCmp", "cmpEq", "cmp", "le", "lt", "PCmp__")
 
 -- | Generate a @PSignedCmp@ dictionary combinator for the given
 -- (non-recursive) datatype and register it as an class instance rule.
@@ -2618,7 +2614,7 @@ deriveSignedCmpInstance ::
   IO ()
 deriveSignedCmpInstance =
   deriveCmpInstanceGeneric
-  ("Cryptol.PSignedCmp", "signedCmpEq", "scmp", "sle", "slt", "PSignedCmp__")
+  ("Cryptol::PSignedCmp", "signedCmpEq", "scmp", "sle", "slt", "PSignedCmp__")
 
 -- | Define a Cryptol @enum@ type as a SAWCore datatype.
 -- If the Cryptol type definition has a @deriving@ clause, then
@@ -2643,7 +2639,7 @@ genCodeForEnum sc nt ctors =
                    pure (vn, ConstArg ty)
               pure $
                 CtorSpec
-                { cspecNameInfo = nmi
+                { cspecQualName = nmi
                 , cspecArgs = args
                 , cspecIndices = []
                 }
@@ -2655,7 +2651,7 @@ genCodeForEnum sc nt ctors =
      argName <- scFreshVarName sc "arg"
      let dtSpec =
            DataTypeSpec
-           { dtsNameInfo = nmi
+           { dtsQualName = nmi
            , dtsParams = mapMaybe asVariable (params ++ constraints)
            , dtsIndices = []
            , dtsSort = mkSort 0
@@ -2850,8 +2846,8 @@ importCase sc env tyResult scrutinee altsMap mDfltAlt =
      tyArgs' <- (snd . asApplyAll) <$> scTypeOf sc scrutinee'
 
      -- The recursor
-     nmi        <- importName nm
-     mName      <- scResolveQualName sc (toQualName nmi)
+     qn         <- importName nm
+     mName      <- scResolveQualName sc qn
      recursor   <- case mName of
                      Just dtName -> scRecursor sc dtName (mkSort 0)
                      Nothing -> panic "importCase" ["Type name not found:", CryPP.pp nm]

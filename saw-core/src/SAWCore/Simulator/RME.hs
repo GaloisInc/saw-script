@@ -52,7 +52,7 @@ import SAWCore.SATQuery
 ------------------------------------------------------------
 
 -- | Evaluator for shared terms.
-evalSharedTerm :: ModuleMap -> Map Ident RPrim -> Term -> RValue
+evalSharedTerm :: ModuleMap -> Map QualName RPrim -> Term -> RValue
 evalSharedTerm m addlPrims t =
   runIdentity $ do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
@@ -63,7 +63,7 @@ evalSharedTerm m addlPrims t =
     variable vn _tp = return $ Prim.userError $ "Unimplemented: free variable " ++ show (vnName vn)
     primHandler nm msg env =
       return $ Prim.userError $ unlines
-        [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))
+        [ "Could not evaluate primitive " ++ Text.unpack (ppQualName (nameQualName nm))
         , "On argument " ++ show (length env)
         , Text.unpack msg
         ]
@@ -273,41 +273,41 @@ prims =
 unsupportedRMEPrimitive :: String -> a
 unsupportedRMEPrimitive = Prim.unsupportedPrimitive "RME"
 
-constMap :: Map Ident RPrim
+constMap :: Map QualName RPrim
 constMap =
   Map.union (Prims.constMap prims) $
   Map.fromList
-  [ ("Prelude.bvShl" , bvShiftOp (Prims.vShiftL RME.false))
-  , ("Prelude.bvShr" , bvShiftOp (Prims.vShiftR RME.false))
-  , ("Prelude.bvSShr", bvShiftOp vSignedShiftR)
+  [ ("Prelude::bvShl" , bvShiftOp (Prims.vShiftL RME.false))
+  , ("Prelude::bvShr" , bvShiftOp (Prims.vShiftR RME.false))
+  , ("Prelude::bvSShr", bvShiftOp vSignedShiftR)
   -- Integers
-  , ("Prelude.intToNat", Prims.intToNatOp)
-  , ("Prelude.intToBv" , intToBvOp)
-  , ("Prelude.bvToInt" , bvToIntOp)
-  , ("Prelude.sbvToInt", sbvToIntOp)
+  , ("Prelude::intToNat", Prims.intToNatOp)
+  , ("Prelude::intToBv" , intToBvOp)
+  , ("Prelude::bvToInt" , bvToIntOp)
+  , ("Prelude::sbvToInt", sbvToIntOp)
   -- Integers mod n
-  , ("Prelude.toIntMod"  , toIntModOp)
-  , ("Prelude.fromIntMod", fromIntModOp)
-  , ("Prelude.intModEq"  , intModEqOp)
-  , ("Prelude.intModAdd" , intModBinOp (+))
-  , ("Prelude.intModSub" , intModBinOp (-))
-  , ("Prelude.intModMul" , intModBinOp (*))
-  , ("Prelude.intModNeg" , intModUnOp negate)
+  , ("Prelude::toIntMod"  , toIntModOp)
+  , ("Prelude::fromIntMod", fromIntModOp)
+  , ("Prelude::intModEq"  , intModEqOp)
+  , ("Prelude::intModAdd" , intModBinOp (+))
+  , ("Prelude::intModSub" , intModBinOp (-))
+  , ("Prelude::intModMul" , intModBinOp (*))
+  , ("Prelude::intModNeg" , intModUnOp negate)
   -- Streams
-  , ("Prelude.MkStream", mkStreamOp)
-  , ("Prelude.streamGet", streamGetOp)
+  , ("Prelude::MkStream", mkStreamOp)
+  , ("Prelude::streamGet", streamGetOp)
 
   -- Misc
-  , ("Prelude.expByNat", Prims.expByNatOp prims)
+  , ("Prelude::expByNat", Prims.expByNatOp prims)
   ]
 
 -- | Recursor overrides for the SAWCore simulator.
 recursor :: Name -> sort -> Maybe RPrim
 recursor nm _sort =
-  case nameInfo nm of
-    ModuleIdentifier "Prelude.Stream" -> Just streamRecOp
-    ModuleIdentifier "Prelude.Bool" -> Just (Prims.boolRecOp prims)
-    ModuleIdentifier "Prelude.Nat" -> Just (Prims.natRecOp prims)
+  case nameQualName nm of
+    "Prelude::Stream" -> Just streamRecOp
+    "Prelude::Bool" -> Just (Prims.boolRecOp prims)
+    "Prelude::Nat" -> Just (Prims.natRecOp prims)
     _ -> Nothing
 
 -- primitive bvToInt : (n : Nat) -> Vec n Bool -> Integer;
@@ -453,15 +453,16 @@ newVars' shape = ready <$> newVars shape
 ------------------------------------------------------------
 -- Bit-blasting primitives.
 
-bitBlastBasic :: ModuleMap
-              -> Map Ident RPrim
-              -> Map VarIndex RValue
-              -> Term
-              -> RValue
+bitBlastBasic ::
+  ModuleMap ->
+  Map QualName RPrim ->
+  Map VarIndex RValue ->
+  Term ->
+  RValue
 bitBlastBasic m addlPrims varMap t = runIdentity $ do
   let primHandler nm msg env =
          return $ Prim.userError $ unlines
-           [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))
+           [ "Could not evaluate primitive " ++ Text.unpack (ppQualName (nameQualName nm))
            , "On argument " ++ show (length env)
            , Text.unpack msg
            ]
@@ -486,7 +487,7 @@ processVar (vn, fot) =
 
 withBitBlastedSATQuery ::
   SharedContext ->
-  Map Ident RPrim ->
+  Map QualName RPrim ->
   SATQuery ->
   (RME -> [(VarName, FiniteType)] -> IO a) ->
   IO a

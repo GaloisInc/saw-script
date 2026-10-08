@@ -56,7 +56,6 @@ module SAWCore.Term.Certified
   , scmPiList
   , scmConst
   , scmGlobalDef
-  , scmGlobalConst
   , scmVariable
   , scmUnitValue
   , scmUnitType
@@ -102,7 +101,6 @@ module SAWCore.Term.Certified
   , scImportModule
   , scLoadModule
   , scmFreshName
-  , scFreshenGlobalIdent
   , scResolveQualName
     -- * Checkpointing
   , SharedContextCheckpoint
@@ -132,13 +130,11 @@ import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
 import Data.IORef (IORef,newIORef,readIORef,modifyIORef',atomicModifyIORef',writeIORef)
-import Data.List (find)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Maybe
 import Data.Ref (C)
 import Data.Text (Text)
-import qualified Data.Text as Text
 import Data.Typeable
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
@@ -179,7 +175,6 @@ import SAWCore.Module
   )
 import SAWCore.Name
 import SAWCore.Panic (panic)
-import SAWCore.Prelude.Constants
 import SAWCore.Recognizer
 import SAWCore.Term.Functor
 import SAWCore.Term.Raw
@@ -200,7 +195,6 @@ data TermError
   | NotType Term
   | NotPairType Term
   | NameNotFound Name
-  | IdentNotFound Ident
   | QualNameNotFound QN.QualName
   | NotRecord Term
   | FieldNotFound Term FieldName
@@ -330,11 +324,12 @@ emptyAppCache = emptyTFM
 -- extended at run-time with new names and declarations.
 
 -- Invariant: scGlobalEnv is a cache with one entry for every global
--- declaration in 'scModuleMap' whose name is a 'ModuleIdentifier'.
--- Each map entry points to a 'Constant' term with the same 'Ident'.
+-- declaration in 'scModuleMap'.
+-- Each map entry points to a 'Constant' term with the same 'QualName'.
 -- It exists only to save one map lookup when building terms: Without
--- it we would first have to look up the Ident by QualName in scQualNameEnv, and
--- then do another lookup for hash-consing the Constant term.
+-- it we would first have to look up the 'QualName' in
+-- 'scQualNameEnv', and then do another lookup for hash-consing the
+-- Constant term.
 -- Invariant: All entries in 'scAppCache' must have 'TermIndex'es that
 -- are less than 'scNextTermIndex' and marked valid in 'scValidTerms'.
 --
@@ -347,7 +342,7 @@ data SharedContext = SharedContext
   , scAppCache       :: AppCacheRef
   , scDisplayNameEnv :: IORef DisplayNameEnv
   , scQualNameEnv    :: IORef (Map QN.QualName Name)
-  , scGlobalEnv      :: IORef (HashMap Ident Term)
+  , scGlobalEnv      :: IORef (HashMap QN.QualName Term)
   , scNextVarIndex   :: IORef VarIndex
   , scNextTermIndex  :: IORef TermIndex
   , scValidTerms     :: IORef IntRangeSet
@@ -412,7 +407,7 @@ data SharedContextCheckpoint =
   { sccModuleMap :: ModuleMap
   , sccNamingEnv :: DisplayNameEnv
   , sccQualNameEnv :: Map QN.QualName Name
-  , sccGlobalEnv :: HashMap Ident Term
+  , sccGlobalEnv :: HashMap QN.QualName Term
   , sccTermIndex :: TermIndex
   , sccMetadata :: TypedStore (Metadata Identity)
   }
@@ -796,25 +791,24 @@ scmFreshVarIndex =
 -- 'VarIndex'.
 -- Valid aliases are generated based on the provided 'QN.POpts'.
 -- Not exported.
-scmRegisterNameInfoWithIndex :: VarIndex -> QN.POpts -> NameInfo -> SCM Name
-scmRegisterNameInfoWithIndex i opts nmi =
+scmRegisterQualNameWithIndex :: VarIndex -> QN.POpts -> QualName -> SCM Name
+scmRegisterQualNameWithIndex i opts qn =
   do sc <- scmSharedContext
-     let qn = toQualName nmi
      qns <- liftIO $ readIORef (scQualNameEnv sc)
      when (Map.member qn qns) $ scmError (DuplicateQualName qn)
-     let nm = Name i nmi
+     let nm = Name i qn
      liftIO $ writeIORef (scQualNameEnv sc) (Map.insert qn nm qns)
      let aliases = QN.aliasesOpts opts qn
      liftIO $ modifyIORef' (scDisplayNameEnv sc) $ extendDisplayNameEnv i aliases
      pure nm
 
 -- | Generate a 'Name' with a fresh 'VarIndex' for the given
--- 'NameInfo' and register everything together in the naming
+-- 'QualName' and register everything together in the naming
 -- environment of the 'SharedContext'.
-scmRegisterName :: NameInfo -> SCM Name
-scmRegisterName nmi =
+scmRegisterName :: QualName -> SCM Name
+scmRegisterName qn =
   do i <- scmFreshVarIndex
-     scmRegisterNameInfoWithIndex i QN.allAliasesPOpts nmi
+     scmRegisterQualNameWithIndex i QN.allAliasesPOpts qn
 
 scResolveQualName :: SharedContext -> QN.QualName -> IO (Maybe Name)
 scResolveQualName sc qn =
@@ -826,8 +820,7 @@ scmFreshName :: Text -> SCM Name
 scmFreshName x =
   do i <- scmFreshVarIndex
      let qn = scFreshQualName x i
-     let nmi = mkImportedName qn
-     scmRegisterNameInfoWithIndex i QN.allAliasesPOpts nmi
+     scmRegisterQualNameWithIndex i QN.allAliasesPOpts qn
 
 -- | Create a 'VarName' with the given identifier (which may be "_").
 scmFreshVarName :: Text -> SCM VarName
@@ -852,12 +845,11 @@ scmFreshInventedVar name ty = do
           { QN.pPath = QN.AlwaysPrint
           , QN.pSubPath = QN.AlwaysPrint
           }
-    qn = case parseQualName "" "" (LText.fromStrict name)  of
+    qn = case parseQualName "" "" (LText.fromStrict name) of
         Right qn_@(QN.QualName _ _ _ Nothing Nothing) -> qn_
         _ -> QN.simpleName name
     qn' = qn { QN.index = Just (vnIndex vn), QN.namespace = Just QN.NamespaceFresh }
-    nmi = mkImportedName qn'
-  _nm <- scmRegisterNameInfoWithIndex (vnIndex vn) popts nmi
+  _nm <- scmRegisterQualNameWithIndex (vnIndex vn) popts qn'
   scmUpdateData $ \(InventedVars m) ->
     InventedVars (IntMap.insert (vnIndex vn) ty m)
   return vn
@@ -876,51 +868,29 @@ scmGetInventedVarType i = do
   InventedVars m <- scmGetData
   return $ IntMap.lookup i m
 
--- | Returns shared term associated with ident.
--- Does not check module namespace.
-scmGlobalDef :: Ident -> SCM Term
-scmGlobalDef ident =
-  do sc <- scmSharedContext
-     m <- liftIO $ readIORef (scGlobalEnv sc)
-     case HMap.lookup ident m of
-       Nothing -> scmError (IdentNotFound ident)
-       Just t -> pure t
-
 -- | Return the constant 'Term' named by the given 'QN.QualName'.
 -- Raise an error if the 'QN.QualName' is not found in the context.
-scmGlobalConst :: QN.QualName -> SCM Term
-scmGlobalConst qn =
+scmGlobalDef :: QN.QualName -> SCM Term
+scmGlobalDef qn =
   do sc <- scmSharedContext
-     m <- liftIO $ readIORef (scQualNameEnv sc)
-     case Map.lookup qn m of
+     m <- liftIO $ readIORef (scGlobalEnv sc)
+     case HMap.lookup qn m of
        Nothing -> scmError (QualNameNotFound qn)
-       Just nm -> scmConst nm
+       Just t -> pure t
 
--- | Internal function to register an 'Ident' with a 'Term' (which
--- must be a 'Constant' term with the same 'Ident') in the
+-- | Internal function to register a 'QualName' with a 'Term' (which
+-- must be a 'Constant' term with the same 'QualName') in the
 -- 'scGlobalEnv' map of the 'SharedContext'. Not exported.
-scmRegisterGlobal :: Ident -> Term -> SCM ()
-scmRegisterGlobal ident t =
+scmRegisterGlobal :: QN.QualName -> Term -> SCM ()
+scmRegisterGlobal qn t =
   do sc <- scmSharedContext
      dup <- liftIO $ atomicModifyIORef' (scGlobalEnv sc) f
-     when dup $ scmError (DuplicateQualName (moduleIdentToQualName ident))
+     when dup $ scmError (DuplicateQualName qn)
   where
     f m =
-      case HMap.lookup ident m of
+      case HMap.lookup qn m of
         Just _ -> (m, True)
-        Nothing -> (HMap.insert ident t m, False)
-
--- | Find a variant of an identifier that is not already being used as a global,
--- by possibly adding a numeric suffix
-scFreshenGlobalIdent :: SharedContext -> Ident -> IO Ident
-scFreshenGlobalIdent sc ident =
-  readIORef (scGlobalEnv sc) >>= \gmap ->
-  return $ fromJust $ find (\i -> not $ HMap.member i gmap) $
-  ident : map (mkIdent (identModule ident) .
-               Text.append (identBaseName ident) .
-               Text.pack . show) [(0::Integer) ..]
-
-
+        Nothing -> (HMap.insert qn t m, False)
 
 -- | Get the current naming environment
 scGetNamingEnv :: SharedContext -> IO DisplayNameEnv
@@ -988,19 +958,16 @@ scmDeclareDef nm q ty body =
        , defBody = body
        }
      t <- scmConst nm
-     -- Register constant in scGlobalEnv if it has an Ident name
-     case nameInfo nm of
-       ModuleIdentifier ident -> scmRegisterGlobal ident t
-       ImportedName{} -> pure ()
+     -- Register constant in scGlobalEnv
+     scmRegisterGlobal (nameQualName nm) t
      pure t
 
 -- | Declare a SAW core primitive of the specified type.
-scmDeclarePrim :: Ident -> DefQualifier -> Term -> SCM ()
-scmDeclarePrim ident q def_tp =
+scmDeclarePrim :: QualName -> DefQualifier -> Term -> SCM ()
+scmDeclarePrim qn q def_tp =
   do scmEnsureValidTerm def_tp
      _ <- scmEnsureSortType def_tp
-     let nmi = ModuleIdentifier ident
-     nm <- scmRegisterName nmi
+     nm <- scmRegisterName qn
      _ <- scmDeclareDef nm q def_tp Nothing
      pure ()
 
@@ -1022,7 +989,7 @@ scInjectCode sc mnm ns txt =
 
 data DataTypeSpec =
   DataTypeSpec
-  { dtsNameInfo :: NameInfo
+  { dtsQualName :: QualName
     -- ^ The name of this data type
   , dtsParams :: [(VarName, Term)]
     -- ^ The context of parameters of this data type.
@@ -1043,7 +1010,7 @@ data DataTypeSpec =
 
 data CtorSpec =
   CtorSpec
-  { cspecNameInfo :: NameInfo
+  { cspecQualName :: QualName
     -- ^ The name of this constructor
   , cspecArgs :: [(VarName, CtorArg)]
     -- ^ The argument types of this constructor.
@@ -1062,7 +1029,7 @@ data CtorSpec =
 -- bound variables and inhabit the appropriate sorts.
 scmDefineDataType :: DataTypeSpec -> SCM (Name, [Name])
 scmDefineDataType dts =
-  do dName <- scmRegisterName (dtsNameInfo dts)
+  do dName <- scmRegisterName (dtsQualName dts)
      -- Enforce that sorts of dtsParams do not exceed dtsSort
      let checkParam (x, ty) =
            do paramSort <- scmEnsureSortType ty
@@ -1106,7 +1073,7 @@ scmDefineDataType dts =
               scmPiList (dtsParams dts) body
      let makeCtor :: (Int, CtorSpec) -> SCM Ctor
          makeCtor (n, cs) =
-           do cName <- scmRegisterName (cspecNameInfo cs)
+           do cName <- scmRegisterName (cspecQualName cs)
               cType <- ctorSpecType cName cs
               -- Enforce that cType is closed.
               unless (closedTerm cType) $
@@ -1141,19 +1108,15 @@ scmDefineDataType dts =
      liftIO $ modifyIORef' (scModuleMap sc) $ \mm ->
        case insTypeDeclInMap dt mm of
          -- This should never happen; duplicate names are detected by scRegisterName.
-         Left nm -> panic "scmDefineDataType" ["Duplicate name: " <> toAbsoluteName (nameInfo nm)]
+         Left nm -> panic "scmDefineDataType" ["Duplicate name: " <> ppQualName (nameQualName nm)]
          Right mm' -> mm'
-     -- Register data type constant in scGlobalEnv if it has an Ident name.
-     case dtsNameInfo dts of
-       ImportedName{} -> pure ()
-       ModuleIdentifier i -> scmRegisterGlobal i d
-     -- Register constructors in scGlobalEnv if they have Ident names.
+     -- Register data type constant in scGlobalEnv.
+     scmRegisterGlobal (dtsQualName dts) d
+     -- Register constructors in scGlobalEnv.
      forM_ ctors $ \ctor ->
-       case nameInfo (ctorName ctor) of
-         ImportedName{} -> pure ()
-         ModuleIdentifier i ->
-           do c <- scmConst (ctorName ctor)
-              scmRegisterGlobal i c
+       do let nm = ctorName ctor
+          c <- scmConst nm
+          scmRegisterGlobal (nameQualName nm) c
      -- Return Names of data type and constructors.
      pure (dName, map ctorName ctors)
 
@@ -1431,7 +1394,7 @@ scmReduceRecursor r crec params motive elims c args =
        Just (ResolvedCtor ctor) ->
          ctorIotaReduction ctor r_applied cs_fs args
        _ ->
-         panic "scReduceRecursor" ["Could not find constructor: " <> toAbsoluteName (nameInfo c)]
+         panic "scReduceRecursor" ["Could not find constructor: " <> ppQualName (nameQualName c)]
 
 -- | Function for computing the result of one step of iota reduction
 -- of the term
@@ -1455,7 +1418,7 @@ ctorIotaReduction ctor r cs_fs args =
         Just e -> e
         Nothing ->
           panic "ctorIotaReduction"
-          ["no eliminator for constructor " <> toAbsoluteName (nameInfo (ctorName ctor))]
+          ["no eliminator for constructor " <> ppQualName (nameQualName (ctorName ctor))]
 
 --------------------------------------------------------------------------------
 -- Reduction to head-normal form
@@ -1833,17 +1796,17 @@ scmSortWithFlags s flags =
 
 -- | Create a literal term from a 'Natural'.
 scmNat :: Natural -> SCM Term
-scmNat 0 = scmGlobalDef "Prelude.Zero"
+scmNat 0 = scmGlobalDef "Prelude::Zero"
 scmNat n =
   do p <- scmPos n
-     scmGlobalApply "Prelude.NatPos" [p]
+     scmGlobalApply "Prelude::NatPos" [p]
 
 scmPos :: Natural -> SCM Term
 scmPos n
-  | n <= 1 = scmGlobalDef "Prelude.One"
+  | n <= 1 = scmGlobalDef "Prelude::One"
   | otherwise =
     do arg <- scmPos (div n 2)
-       let ident = if even n then "Prelude.Bit0" else "Prelude.Bit1"
+       let ident = if even n then "Prelude::Bit0" else "Prelude::Bit1"
        scmGlobalApply ident [arg]
 
 -- | Create a literal term (of saw-core type @String@) from a 'Text'.
@@ -1854,7 +1817,7 @@ scmString s =
 
 -- | Create a term representing the primitive saw-core type @String@.
 scmStringType :: SCM Term
-scmStringType = scmGlobalDef preludeStringIdent
+scmStringType = scmGlobalDef "Prelude::String"
 
 -- | Create a vector term from a type (as a 'Term') and a list of 'Term's of
 -- that type.
@@ -1876,18 +1839,18 @@ scmVector e xs =
 -- | Create a term representing a vector type, from a term giving the length
 -- and a term giving the element type.
 scmVecType :: Term -> Term -> SCM Term
-scmVecType n e = scmGlobalApply preludeVecIdent [n, e]
+scmVecType n e = scmGlobalApply "Prelude::Vec" [n, e]
 
 -- | Create a record term from a list of record fields.
 scmRecordValue :: [(FieldName, Term)] -> SCM Term
 scmRecordValue [] =
-  scmGlobalDef "Prelude.Empty"
+  scmGlobalDef "Prelude::Empty"
 scmRecordValue ((fname, x) : fields) =
   do s <- scmString fname
      a <- scmTypeOf x
      y <- scmRecordValue fields
      b <- scmTypeOf y
-     scmGlobalApply "Prelude.RecordValue" [s, a, b, x, y]
+     scmGlobalApply "Prelude::RecordValue" [s, a, b, x, y]
 
 -- | Create a record field access term from a 'Term' representing a record and
 -- a 'FieldName'.
@@ -1903,39 +1866,39 @@ scmRecordSelect t0 fname =
            Nothing -> scmError (FieldNotFound t0 fname)
            Just (f, s, a, b)
              | f == fname ->
-               scmGlobalApply "Prelude.headRecord" [s, a, b, t]
+               scmGlobalApply "Prelude::headRecord" [s, a, b, t]
              | otherwise ->
-               do y <- scmGlobalApply "Prelude.tailRecord" [s, a, b, t]
+               do y <- scmGlobalApply "Prelude::tailRecord" [s, a, b, t]
                   go y b
     asRecordTy :: Term -> Maybe (Maybe (Text, Term, Term, Term))
     asRecordTy t =
-      case isGlobalDef "Prelude.EmptyType" t of
+      case isGlobalDef "Prelude::EmptyType" t of
         Just () -> Just Nothing
         Nothing ->
           do (t1, b) <- asApp t
              (t2, a) <- asApp t1
              (t3, s) <- asApp t2
              f <- asStringLit s
-             () <- isGlobalDef "Prelude.RecordType" t3
+             () <- isGlobalDef "Prelude::RecordType" t3
              Just (Just (f, s, a, b))
 
 -- | Create a term representing the type of a record from a list associating
 -- field names (as 'FieldName's) and types (as 'Term's). Note that the order of
 -- the given list is irrelevant, as record fields are not ordered.
 scmRecordType :: [(FieldName, Term)] -> SCM Term
-scmRecordType [] = scmGlobalDef "Prelude.EmptyType"
+scmRecordType [] = scmGlobalDef "Prelude::EmptyType"
 scmRecordType ((fname, a) : fields) =
   do s <- scmString fname
      b <- scmRecordType fields
-     scmGlobalApply "Prelude.RecordType" [s, a, b]
+     scmGlobalApply "Prelude::RecordType" [s, a, b]
 
 -- | Create a unit-valued term.
 scmUnitValue :: SCM Term
-scmUnitValue = scmGlobalDef "Prelude.Unit"
+scmUnitValue = scmGlobalDef "Prelude::Unit"
 
 -- | Create a term representing the unit type.
 scmUnitType :: SCM Term
-scmUnitType = scmGlobalDef "Prelude.UnitType"
+scmUnitType = scmGlobalDef "Prelude::UnitType"
 
 -- | Create a pair term from two terms.
 scmPairValue ::
@@ -1945,7 +1908,7 @@ scmPairValue ::
 scmPairValue t1 t2 =
   do a <- scmTypeOf t1
      b <- scmTypeOf t2
-     scmGlobalApply "Prelude.PairValue" [a, b, t1, t2]
+     scmGlobalApply "Prelude::PairValue" [a, b, t1, t2]
 
 -- | Create a term representing a pair type from two other terms, each
 -- representing a type.
@@ -1954,19 +1917,19 @@ scmPairType ::
   Term {- ^ Right projection type -} ->
   SCM Term
 scmPairType t1 t2 =
-  scmGlobalApply "Prelude.PairType" [t1, t2]
+  scmGlobalApply "Prelude::PairType" [t1, t2]
 
 -- | Create a term giving the left projection of a 'Term' representing a pair.
 scmPairLeft :: Term -> SCM Term
 scmPairLeft t =
   do (a, b) <- scmEnsurePairType t
-     scmGlobalApply "Prelude.Pair_fst" [a, b, t]
+     scmGlobalApply "Prelude::Pair_fst" [a, b, t]
 
 -- | Create a term giving the right projection of a 'Term' representing a pair.
 scmPairRight :: Term -> SCM Term
 scmPairRight t =
   do (a, b) <- scmEnsurePairType t
-     scmGlobalApply "Prelude.Pair_snd" [a, b, t]
+     scmGlobalApply "Prelude::Pair_snd" [a, b, t]
 
 -- | Create a term representing the type of a non-dependent function, given a
 -- parameter and result type (as 'Term's).
@@ -2027,44 +1990,44 @@ scmFreshConstant name rhs =
      ty <- scmTypeOf rhs
      scmDeclareDef nm NoQualifier ty (Just rhs)
 
--- | Define a global constant with the specified name (as 'NameInfo')
+-- | Define a global constant with the specified name (as 'QualName')
 -- and body.
--- The QualName in the given 'NameInfo' must be globally unique.
+-- The 'QualName' must be globally unique.
 -- The term for the body must not have any free variables.
 -- The type of the body determines the type of the constant; to
 -- specify a different formulation of the type, use 'scAscribe'.
 scmDefineConstant ::
-  NameInfo {- ^ The name -} ->
+  QualName {- ^ The name -} ->
   Term {- ^ The body -} ->
   SCM Term
-scmDefineConstant nmi rhs =
+scmDefineConstant qn rhs =
   do scmEnsureValidTerm rhs
      ty <- scmTypeOf rhs
-     nm <- scmRegisterName nmi
+     nm <- scmRegisterName qn
      unless (closedTerm rhs) $
        scmError (ConstantNotClosed nm rhs)
      scmDeclareDef nm NoQualifier ty (Just rhs)
 
 -- | Declare a global opaque constant with the specified name (as
--- 'NameInfo') and type.
+-- 'QualName') and type.
 -- Such a constant has no definition, but unlike a variable it may be
 -- used in other constant definitions and is not subject to
 -- lambda-binding or substitution.
 scmOpaqueConstant ::
-  NameInfo ->
+  QualName ->
   Term {- ^ type of the constant -} ->
   SCM Term
-scmOpaqueConstant nmi ty =
+scmOpaqueConstant qn ty =
   do scmEnsureValidTerm ty
      _ <- scmEnsureSortType ty
-     nm <- scmRegisterName nmi
+     nm <- scmRegisterName qn
      scmDeclareDef nm NoQualifier ty Nothing
 
 -- | Create a function application term from a global identifier and a list of
 -- arguments (as 'Term's).
-scmGlobalApply :: Ident -> [Term] -> SCM Term
-scmGlobalApply i ts =
-  do c <- scmGlobalDef i
+scmGlobalApply :: QN.QualName -> [Term] -> SCM Term
+scmGlobalApply qn ts =
+  do c <- scmGlobalDef qn
      scmApplyAll c ts
 
 

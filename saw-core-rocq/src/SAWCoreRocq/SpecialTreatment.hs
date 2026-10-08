@@ -85,25 +85,26 @@ translateModuleName mn =
 
 findSpecialTreatment' ::
   TranslationConfigurationMonad r m =>
-  NameInfo -> m IdentSpecialTreatment
-findSpecialTreatment' nmi =
-  case nmi of
-    ModuleIdentifier ident -> findSpecialTreatment ident
-    ImportedName{} -> pure $ IdentSpecialTreatment DefPreserve UsePreserve
+  QualName -> m IdentSpecialTreatment
+findSpecialTreatment' qn = findSpecialTreatment qn
 
 findSpecialTreatment ::
   TranslationConfigurationMonad r m =>
-  Ident -> m IdentSpecialTreatment
-findSpecialTreatment ident = do
-  configuration <- asks translationConfiguration
-  let moduleMap =
-        Map.findWithDefault Map.empty (identModule ident) (specialTreatmentMap configuration)
-  let defaultTreatment =
-        IdentSpecialTreatment
-        { atDefSite = DefPreserve
-        , atUseSite = UsePreserve
-        }
-  pure $ Map.findWithDefault defaultTreatment (Text.pack $ identName ident) moduleMap
+  QualName -> m IdentSpecialTreatment
+findSpecialTreatment qn =
+  case qualNameModule qn of
+    Nothing -> pure defaultTreatment
+    Just mname ->
+      do configuration <- asks translationConfiguration
+         let moduleMap =
+               Map.findWithDefault Map.empty mname (specialTreatmentMap configuration)
+         pure $ Map.findWithDefault defaultTreatment (toShortName qn) moduleMap
+  where
+    defaultTreatment =
+      IdentSpecialTreatment
+      { atDefSite = DefPreserve
+      , atUseSite = UsePreserve
+      }
 
 -- | Use `mapsTo` for identifiers whose definition has a matching definition
 -- already on the Rocq side.  As such, their definition can be skipped, and use

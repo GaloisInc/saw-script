@@ -60,9 +60,7 @@ translateCtor ::
   Ctor -> m Rocq.Constructor
 translateCtor inductiveParameters (Ctor {..}) = do
   maybe_constructorName <-
-    case nameInfo ctorName of
-      ModuleIdentifier ident -> liftTermTranslationMonad $ TermTranslation.translateIdentToIdent ident
-      ImportedName{} -> pure Nothing
+    liftTermTranslationMonad $ TermTranslation.translateQualNameToIdent (nameQualName ctorName)
   let constructorName = case maybe_constructorName of
         -- Drop qualifiers from constructor name
         Just (Rocq.Ident n) -> Rocq.Ident $ Text.takeWhileEnd (/= '.') n
@@ -84,16 +82,16 @@ translateDataType :: ModuleTranslationMonad m => DataType -> m Rocq.Decl
 -- translateDataType (DataType {..})
 --   | trace ("translateDataType: " ++ show dtName) False = undefined
 translateDataType (DataType {..}) =
-  case nameInfo dtName of
-    ModuleIdentifier dtIdent ->
-      atDefSite <$> findSpecialTreatment dtIdent >>= \case
-      DefPreserve            -> translateNamed $ Rocq.Ident (Text.pack $ identName dtIdent)
-      DefRename   targetName -> translateNamed $ targetName
-      DefReplace  str        -> return $ Rocq.Snippet str
-      DefSkip                -> return $ skipped dtIdent
-    ImportedName{} ->
-      translateNamed $ Rocq.Ident $ toShortName (nameInfo dtName)
+  do treatment <- atDefSite <$> findSpecialTreatment dtQualName
+     case treatment of
+       DefPreserve            -> translateNamed $ Rocq.Ident (toShortName dtQualName)
+       DefRename   targetName -> translateNamed $ targetName
+       DefReplace  str        -> return $ Rocq.Snippet str
+       DefSkip                -> return $ skipped dtQualName
   where
+    dtQualName :: QualName
+    dtQualName = nameQualName dtName
+
     translateNamed :: ModuleTranslationMonad m => Rocq.Ident -> m Rocq.Decl
     translateNamed name = do
       let inductiveName = name
@@ -129,30 +127,30 @@ translateDataType (DataType {..}) =
 --   TypeDecl dataType -> translateDataType dataType
 --   DefDecl definition -> translateDef definition
 
-_mapped :: Ident -> Ident -> Rocq.Decl
+_mapped :: QualName -> QualName -> Rocq.Decl
 _mapped sawIdent newIdent =
   Rocq.Comment $ identText sawIdent <> " is mapped to " <> identText newIdent
 
-skipped' :: NameInfo -> Rocq.Decl
-skipped' nmi =
-  Rocq.Comment $ "\"" <> toAbsoluteName nmi <> "\" was skipped"
+skipped' :: QualName -> Rocq.Decl
+skipped' qn =
+  Rocq.Comment $ "\"" <> ppQualName qn <> "\" was skipped"
 
-skipped :: Ident -> Rocq.Decl
+skipped :: QualName -> Rocq.Decl
 skipped sawIdent =
   Rocq.Comment $ "\"" <> identText sawIdent <> "\" was skipped"
 
 translateDef :: ModuleTranslationMonad m => Def -> m Rocq.Decl
 translateDef (Def {..}) = {- trace ("translateDef " ++ show defIdent) $ -} do
-  specialTreatment <- findSpecialTreatment' (nameInfo defName)
+  specialTreatment <- findSpecialTreatment' (nameQualName defName)
   translateAccordingly (atDefSite specialTreatment)
 
   where
 
     translateAccordingly :: ModuleTranslationMonad m => DefSiteTreatment -> m Rocq.Decl
-    translateAccordingly  DefPreserve           = translateNamed $ Rocq.Ident $ toShortName (nameInfo defName)
+    translateAccordingly  DefPreserve           = translateNamed $ Rocq.Ident $ toShortName (nameQualName defName)
     translateAccordingly (DefRename targetName) = translateNamed $ targetName
     translateAccordingly (DefReplace  str)      = return $ Rocq.Snippet str
-    translateAccordingly  DefSkip               = return $ skipped' (nameInfo defName)
+    translateAccordingly  DefSkip               = return $ skipped' (nameQualName defName)
 
     translateNamed :: ModuleTranslationMonad m => Rocq.Ident -> m Rocq.Decl
     translateNamed name = liftTermTranslationMonad (go defQualifier defBody)

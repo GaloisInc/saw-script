@@ -89,7 +89,6 @@ import Data.Text (Text)
 import Numeric.Natural (Natural)
 
 import SAWCore.Name
-import SAWCore.Prelude.Constants
 import SAWCore.Term.Functor
 import SAWCore.Term.Raw
 
@@ -138,19 +137,13 @@ asLabel t = case unwrapTermF t of
   Label tg t1 -> return (tg, t1)
   _ -> Nothing
 
-asModuleIdentifier :: Recognizer Name Ident
-asModuleIdentifier nm =
-  case nameInfo nm of
-    ModuleIdentifier ident -> Just ident
-    _ -> Nothing
-
-asGlobalDef :: Recognizer Term Ident
+asGlobalDef :: Recognizer Term QualName
 asGlobalDef (unlabel -> t) =
   case unwrapTermF t of
-    Constant nm -> asModuleIdentifier nm
+    Constant nm -> Just (nameQualName nm)
     _ -> Nothing
 
-isGlobalDef :: Ident -> Recognizer Term ()
+isGlobalDef :: QualName -> Recognizer Term ()
 isGlobalDef i t = do
   o <- asGlobalDef t
   if i == o then Just () else Nothing
@@ -183,7 +176,7 @@ asApplyAll = go []
             Nothing -> (t, xs)
             Just (t', x) -> go (x : xs) t'
 
-asGlobalApply :: Ident -> Recognizer Term [Term]
+asGlobalApply :: QualName -> Recognizer Term [Term]
 asGlobalApply i t =
   do let (f, xs) = asApplyAll t
      isGlobalDef i f
@@ -193,7 +186,7 @@ asPairType :: Recognizer Term (Term, Term)
 asPairType t =
   do (t1, b) <- asApp t
      (t2, a) <- asApp t1
-     () <- isGlobalDef "Prelude.PairType" t2
+     () <- isGlobalDef "Prelude::PairType" t2
      Just (a, b)
 
 asPairValue :: Recognizer Term (Term, Term)
@@ -202,7 +195,7 @@ asPairValue t =
      (t2, x) <- asApp t1
      (t3, _b) <- asApp t2
      (t4, _a) <- asApp t3
-     () <- isGlobalDef "Prelude.PairValue" t4
+     () <- isGlobalDef "Prelude::PairValue" t4
      Just (x, y)
 
 -- | Return @(t, False)@ for a term of the form @Pair_fst a b t@, and
@@ -214,13 +207,13 @@ asPairSelector t =
      (t3, _a) <- asApp t2
      i <- asGlobalDef t3
      case i of
-       "Prelude.Pair_fst" -> Just (x, False)
-       "Prelude.Pair_snd" -> Just (x, True)
+       "Prelude::Pair_fst" -> Just (x, False)
+       "Prelude::Pair_snd" -> Just (x, True)
        _ -> Nothing
 
 asTupleType :: Recognizer Term [Term]
 asTupleType t =
-  case isGlobalDef "Prelude.UnitType" t of
+  case isGlobalDef "Prelude::UnitType" t of
     Just () -> Just []
     Nothing ->
       do (t1, t2) <- asPairType t
@@ -229,7 +222,7 @@ asTupleType t =
 
 asTupleValue :: Recognizer Term [Term]
 asTupleValue t =
-  case isGlobalDef "Prelude.Unit" t of
+  case isGlobalDef "Prelude::Unit" t of
     Just () -> Just []
     Nothing ->
       do (t1, t2) <- asPairValue t
@@ -252,20 +245,20 @@ asTupleSelector t =
 
 asRecordType :: Recognizer Term [(FieldName, Term)]
 asRecordType t =
-  case isGlobalDef "Prelude.EmptyType" t of
+  case isGlobalDef "Prelude::EmptyType" t of
     Just () -> Just []
     Nothing ->
       do (t1, b) <- asApp t
          (t2, a) <- asApp t1
          (t3, s) <- asApp t2
-         () <- isGlobalDef "Prelude.RecordType" t3
+         () <- isGlobalDef "Prelude::RecordType" t3
          fname <- asStringLit s
          fields <- asRecordType b
          Just ((fname, a) : fields)
 
 asRecordValue :: Recognizer Term [(FieldName, Term)]
 asRecordValue t0 =
-  case isGlobalDef "Prelude.Empty" t0 of
+  case isGlobalDef "Prelude::Empty" t0 of
     Just () -> Just []
     Nothing ->
       do (t1, y) <- asApp t0
@@ -273,7 +266,7 @@ asRecordValue t0 =
          (t3, _b) <- asApp t2
          (t4, _a) <- asApp t3
          (t5, s) <- asApp t4
-         () <- isGlobalDef "Prelude.RecordValue" t5
+         () <- isGlobalDef "Prelude::RecordValue" t5
          fname <- asStringLit s
          fields <- asRecordValue y
          Just ((fname, x) : fields)
@@ -284,13 +277,13 @@ asRecordSelector t0 =
      (t2, _b) <- asApp t1
      (t3, _a) <- asApp t2
      (t4, s) <- asApp t3
-     () <- isGlobalDef "Prelude.headRecord" t4
+     () <- isGlobalDef "Prelude::headRecord" t4
      fname <- asStringLit s
      Just (go r, fname)
   where
     go :: Term -> Term
     go t =
-      case asGlobalApply "Prelude.tailRecord" t of
+      case asGlobalApply "Prelude::tailRecord" t of
         Just [_s, _a, _b, t'] -> go t'
         _ -> t
 
@@ -315,42 +308,42 @@ asRecursorApp t =
             Just (crec, params, motive, elims, ixs)
 
 asPos :: Recognizer Term Natural
-asPos (asGlobalApply "Prelude.One" -> Just []) = pure 1
-asPos (asGlobalApply "Prelude.Bit0" -> Just [asPos -> Just n]) = pure (2*n)
-asPos (asGlobalApply "Prelude.Bit1" -> Just [asPos -> Just n]) = pure (2*n+1)
+asPos (asGlobalApply "Prelude::One" -> Just []) = pure 1
+asPos (asGlobalApply "Prelude::Bit0" -> Just [asPos -> Just n]) = pure (2*n)
+asPos (asGlobalApply "Prelude::Bit1" -> Just [asPos -> Just n]) = pure (2*n+1)
 asPos _ = Nothing
 
 asNat :: Recognizer Term Natural
-asNat (asGlobalApply preludeZeroIdent -> Just []) = pure 0
-asNat (asGlobalApply "Prelude.NatPos" -> Just [asPos -> Just n]) = pure n
+asNat (asGlobalApply "Prelude::Zero" -> Just []) = pure 0
+asNat (asGlobalApply "Prelude::NatPos" -> Just [asPos -> Just n]) = pure n
 asNat _ = Nothing
 
 -- | Recognize an application of @bvNat@
 asBvNat :: Recognizer Term (Term, Term)
-asBvNat = fmap toPair . ((isGlobalDef "Prelude.bvNat" @> return) <@> return)
+asBvNat = fmap toPair . ((isGlobalDef "Prelude::bvNat" @> return) <@> return)
 
 -- | Try to convert the given term of type @Vec w Bool@ to a concrete 'Natural',
 -- taking into account nat, bitvector and integer conversions (treating all
 -- bitvectors as unsigned)
 asUnsignedConcreteBv :: Recognizer Term Natural
-asUnsignedConcreteBv (asApplyAll -> (asGlobalDef -> Just "Prelude.bvNat",
+asUnsignedConcreteBv (asApplyAll -> (asGlobalDef -> Just "Prelude::bvNat",
                                      [asNat -> Just n, v])) =
   (`mod` (2 ^ n)) <$> asUnsignedConcreteBvToNat v
 asUnsignedConcreteBv (asArrayValue -> Just (asBoolType -> Just _,
                                             mapM asBool -> Just bits)) =
   return $ foldl' (\n bit -> if bit then 2*n+1 else 2*n) 0 bits
-asUnsignedConcreteBv (asApplyAll -> (asGlobalDef -> Just "Prelude.intToBv",
+asUnsignedConcreteBv (asApplyAll -> (asGlobalDef -> Just "Prelude::intToBv",
                                      [asNat -> Just n, i])) = case i of
-  (asApplyAll -> (asGlobalDef -> Just "Prelude.natToInt", [v])) ->
+  (asApplyAll -> (asGlobalDef -> Just "Prelude::natToInt", [v])) ->
     (`mod` (2 ^ n)) <$> asUnsignedConcreteBvToNat v
-  (asApplyAll -> (asGlobalDef -> Just "Prelude.bvToInt", [_, bv])) ->
+  (asApplyAll -> (asGlobalDef -> Just "Prelude::bvToInt", [_, bv])) ->
     asUnsignedConcreteBv bv
   _ -> Nothing
 asUnsignedConcreteBv _ = Nothing
 
 -- | Recognize an application of @bvToNat@
 asBvToNat :: Recognizer Term (Term, Term)
-asBvToNat = fmap toPair . ((isGlobalDef "Prelude.bvToNat" @> return) <@> return)
+asBvToNat = fmap toPair . ((isGlobalDef "Prelude::bvToNat" @> return) <@> return)
 
 -- | Try to convert the given term of type @Nat@ to a concrete 'Natural',
 -- taking into account nat, bitvector and integer conversions (treating all
@@ -358,11 +351,11 @@ asBvToNat = fmap toPair . ((isGlobalDef "Prelude.bvToNat" @> return) <@> return)
 asUnsignedConcreteBvToNat :: Recognizer Term Natural
 asUnsignedConcreteBvToNat (asNat -> Just v) = return v
 asUnsignedConcreteBvToNat (asBvToNat -> Just (_, bv)) = asUnsignedConcreteBv bv
-asUnsignedConcreteBvToNat (asApplyAll -> (asGlobalDef -> Just "Prelude.intToNat",
+asUnsignedConcreteBvToNat (asApplyAll -> (asGlobalDef -> Just "Prelude::intToNat",
                                         [i])) = case i of
-  (asApplyAll -> (asGlobalDef -> Just "Prelude.natToInt", [v])) ->
+  (asApplyAll -> (asGlobalDef -> Just "Prelude::natToInt", [v])) ->
     asUnsignedConcreteBvToNat v
-  (asApplyAll -> (asGlobalDef -> Just "Prelude.bvToInt", [_, bv])) ->
+  (asApplyAll -> (asGlobalDef -> Just "Prelude::bvToInt", [_, bv])) ->
     asUnsignedConcreteBv bv
   _ -> Nothing
 asUnsignedConcreteBvToNat _ = Nothing
@@ -442,61 +435,59 @@ asSortWithFlags t = do
 
 -- | Returns term as a constant Boolean if it is one.
 asBool :: Recognizer Term Bool
-asBool (isGlobalDef "Prelude.True" -> Just ()) = return True
-asBool (isGlobalDef "Prelude.False" -> Just ()) = return False
+asBool (isGlobalDef "Prelude::True" -> Just ()) = return True
+asBool (isGlobalDef "Prelude::False" -> Just ()) = return False
 asBool _ = Nothing
 
 asBoolType :: Recognizer Term ()
-asBoolType = isGlobalDef "Prelude.Bool"
+asBoolType = isGlobalDef "Prelude::Bool"
 
 asNatType :: Recognizer Term ()
-asNatType (asConstant -> Just o)
-  | nameInfo o == ModuleIdentifier preludeNatIdent = pure ()
-asNatType _ = Nothing
+asNatType = isGlobalDef "Prelude::Nat"
 
 asIntegerType :: Recognizer Term ()
-asIntegerType = isGlobalDef "Prelude.Integer"
+asIntegerType = isGlobalDef "Prelude::Integer"
 
 asIntModType :: Recognizer Term Natural
-asIntModType = isGlobalDef "Prelude.IntMod" @> asNat
+asIntModType = isGlobalDef "Prelude::IntMod" @> asNat
 
 asRationalType :: Recognizer Term ()
-asRationalType = isGlobalDef "Prelude.Rational"
+asRationalType = isGlobalDef "Prelude::Rational"
 
 asFloatType :: Recognizer Term (Natural, Natural)
-asFloatType = fmap toPair . ((isGlobalDef "Prelude.Float" @> asNat) <@> asNat)
+asFloatType = fmap toPair . ((isGlobalDef "Prelude::Float" @> asNat) <@> asNat)
 
 asVectorType :: Recognizer Term (Term, Term)
-asVectorType = fmap toPair . ((isGlobalDef "Prelude.Vec" @> return) <@> return)
+asVectorType = fmap toPair . ((isGlobalDef "Prelude::Vec" @> return) <@> return)
 
 isVecType :: Recognizer Term a -> Recognizer Term (Natural :*: a)
-isVecType tp = (isGlobalDef "Prelude.Vec" @> asNat) <@> tp
+isVecType tp = (isGlobalDef "Prelude::Vec" @> asNat) <@> tp
 
 asVecType :: Recognizer Term (Natural :*: Term)
 asVecType = isVecType return
 
 asBitvectorType :: Recognizer Term Natural
-asBitvectorType = (isGlobalDef "Prelude.Vec" @> asNat) <@ asBoolType
+asBitvectorType = (isGlobalDef "Prelude::Vec" @> asNat) <@ asBoolType
 
 asMux :: Recognizer Term (Term :*: Term :*: Term :*: Term)
-asMux = isGlobalDef "Prelude.ite" @> return <@> return <@> return <@> return
+asMux = isGlobalDef "Prelude::ite" @> return <@> return <@> return <@> return
 
 asEq :: Recognizer Term (Term, Term, Term)
 asEq t =
-  do l <- asGlobalApply "Prelude.Eq" t
+  do l <- asGlobalApply "Prelude::Eq" t
      case l of
        [a, x, y] -> Just (a, x, y)
        _ -> Nothing
 
 asEqTrue :: Recognizer Term Term
 asEqTrue t =
-  case (isGlobalDef "Prelude.EqTrue" @> return) t of
+  case (isGlobalDef "Prelude::EqTrue" @> return) t of
     Just x -> Just x
     Nothing ->
       do (a,x,y) <- asEq t
-         isGlobalDef "Prelude.Bool" a
-         isGlobalDef "Prelude.True" y
+         isGlobalDef "Prelude::Bool" a
+         isGlobalDef "Prelude::True" y
          return x
 
 asArrayType :: Recognizer Term (Term :*: Term)
-asArrayType = (isGlobalDef "Prelude.Array" @> return) <@> return
+asArrayType = (isGlobalDef "Prelude::Array" @> return) <@> return

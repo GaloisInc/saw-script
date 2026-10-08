@@ -109,13 +109,9 @@ buildTheorem sc _env ymod newmod precond body = do
       _ -> yosysError YosysErrorInvalidOverrideTarget
   inpTy <- CSC.translateType sc cinpTy
   outTy <- CSC.translateType sc coutTy
-  nmi <-
-    case reduceSelectors (SC.ttTerm ymod) of
-      (R.asConstant -> Just (SC.Name _ nmi)) -> pure nmi
-      _ -> yosysError YosysErrorInvalidOverrideTarget
   qn <-
-    case nmi of
-      SC.ImportedName qn _ -> pure qn
+    case reduceSelectors (SC.ttTerm ymod) of
+      (R.asConstant -> Just (SC.Name _ qn)) -> pure qn
       _ -> yosysError YosysErrorInvalidOverrideTarget
   pure YosysTheorem
     { _theoremQualName = qn
@@ -164,9 +160,11 @@ applyOverride sc thm t = do
          Nothing -> yosysError . YosysErrorOverrideNameNotFound . QN.ppQualName $ thm ^. theoremQualName
          Just nm -> pure nm
   -- unfold everything except for theoremQualName and prelude constants
-  let isPreludeName (SC.ModuleIdentifier ident) = SC.identModule ident == SC.preludeModuleName
-      isPreludeName _ = False
-  let unfold nm = nm /= tnm && not (isPreludeName (SC.nameInfo nm))
+  let isPreludeName qn =
+        case SC.qualNameModule qn of
+          Just m -> m == SC.preludeModuleName
+          Nothing -> False
+  let unfold nm = nm /= tnm && not (isPreludeName (SC.nameQualName nm))
   unfolded <- SC.scUnfoldConstants sc unfold t
   cache <- SC.newIntCache
   let

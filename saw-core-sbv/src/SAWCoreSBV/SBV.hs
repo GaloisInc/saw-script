@@ -74,7 +74,7 @@ import Control.Monad.IO.Class
 import Control.Monad.State as ST (MonadState(..), StateT(..), evalStateT, modify)
 import Numeric.Natural (Natural)
 
-import SAWCore.Name (Name(..), VarName(..), toShortName)
+import SAWCore.Name (Name(..), VarName(..), toShortName, nameQualName)
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Recognizer as R
 import qualified SAWCore.Simulator as Sim
@@ -246,42 +246,42 @@ prims =
 unsupportedSBVPrimitive :: String -> a
 unsupportedSBVPrimitive = Prim.unsupportedPrimitive "SBV"
 
-constMap :: Map Ident SPrim
+constMap :: Map QualName SPrim
 constMap =
   Map.union (Prims.constMap prims) $
   Map.fromList
   [
   -- Shifts
-    ("Prelude.bvShl" , bvShLOp)
-  , ("Prelude.bvShr" , bvShROp)
-  , ("Prelude.bvSShr", bvSShROp)
+    ("Prelude::bvShl" , bvShLOp)
+  , ("Prelude::bvShr" , bvShROp)
+  , ("Prelude::bvSShr", bvSShROp)
   -- Integers
-  , ("Prelude.intToNat", intToNatOp)
-  , ("Prelude.intToBv" , intToBvOp)
-  , ("Prelude.bvToInt" , bvToIntOp)
-  , ("Prelude.sbvToInt", sbvToIntOp)
+  , ("Prelude::intToNat", intToNatOp)
+  , ("Prelude::intToBv" , intToBvOp)
+  , ("Prelude::bvToInt" , bvToIntOp)
+  , ("Prelude::sbvToInt", sbvToIntOp)
   -- Integers mod n
-  , ("Prelude.toIntMod"  , toIntModOp)
-  , ("Prelude.fromIntMod", fromIntModOp)
-  , ("Prelude.intModEq"  , intModEqOp)
-  , ("Prelude.intModAdd" , intModBinOp svPlus)
-  , ("Prelude.intModSub" , intModBinOp svMinus)
-  , ("Prelude.intModMul" , intModBinOp svTimes)
-  , ("Prelude.intModNeg" , intModUnOp svUNeg)
+  , ("Prelude::toIntMod"  , toIntModOp)
+  , ("Prelude::fromIntMod", fromIntModOp)
+  , ("Prelude::intModEq"  , intModEqOp)
+  , ("Prelude::intModAdd" , intModBinOp svPlus)
+  , ("Prelude::intModSub" , intModBinOp svMinus)
+  , ("Prelude::intModMul" , intModBinOp svTimes)
+  , ("Prelude::intModNeg" , intModUnOp svUNeg)
   -- Streams
-  , ("Prelude.MkStream", mkStreamOp)
-  , ("Prelude.streamGet", streamGetOp)
+  , ("Prelude::MkStream", mkStreamOp)
+  , ("Prelude::streamGet", streamGetOp)
   -- Misc
-  , ("Prelude.expByNat", Prims.expByNatOp prims)
+  , ("Prelude::expByNat", Prims.expByNatOp prims)
   ]
 
 -- | Recursor overrides for the SAWCore simulator.
 recursor :: Name -> sort -> Maybe SPrim
 recursor nm _sort =
-  case nameInfo nm of
-    ModuleIdentifier "Prelude.Stream" -> Just streamRecOp
-    ModuleIdentifier "Prelude.Bool" -> Just (Prims.boolRecOp prims)
-    ModuleIdentifier "Prelude.Nat" -> Just (Prims.natRecOp prims)
+  case nameQualName nm of
+    "Prelude::Stream" -> Just streamRecOp
+    "Prelude::Bool" -> Just (Prims.boolRecOp prims)
+    "Prelude::Nat" -> Just (Prims.natRecOp prims)
     _ -> Nothing
 
 ------------------------------------------------------------
@@ -693,14 +693,14 @@ muxSbvExtra c x y =
 
 -- | Abstract constants with names in the list 'unints' are kept as
 -- uninterpreted constants; all others are unfolded.
-sbvSolveBasic :: SharedContext -> Map Ident SPrim -> Set VarIndex -> Term -> IO SValue
+sbvSolveBasic :: SharedContext -> Map QualName SPrim -> Set VarIndex -> Term -> IO SValue
 sbvSolveBasic sc addlPrims unintSet t = do
   m <- scGetModuleMap sc
 
   let variable (VarName ix nm) ty = parseUninterpreted [] (Text.unpack nm ++ "#" ++ show ix) ty
   let uninterpreted nm ty
         | Set.member (nameIndex nm) unintSet =
-          let vn = VarName (nameIndex nm) (toShortName (nameInfo nm)) in Just (variable vn ty)
+          let vn = VarName (nameIndex nm) (toShortName (nameQualName nm)) in Just (variable vn ty)
         | otherwise                          = Nothing
   let primHandler = Sim.defaultPrimHandler
   let mux = Prims.lazyMuxValue prims
@@ -747,16 +747,16 @@ parseUninterpreted cws nm ty =
                   | i <- [0 .. n-1] ]
             return (VVector (V.fromList (map ready xs)))
 
-    VDataType (ModuleIdentifier "Prelude.UnitType") [] []
+    VDataType "Prelude::UnitType" [] []
       -> pure vUnit
-    VDataType (ModuleIdentifier "Prelude.PairType") [TValue ty1, TValue ty2] []
+    VDataType "Prelude::PairType" [TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted cws (nm ++ ".L") ty1
             x2 <- parseUninterpreted cws (nm ++ ".R") ty2
             pure (vPair (ready x1) (ready x2))
 
-    VDataType (ModuleIdentifier "Prelude.EmptyType") [] []
+    VDataType "Prelude::EmptyType" [] []
       -> pure vEmptyRecord
-    VDataType (ModuleIdentifier "Prelude.RecordType")
+    VDataType "Prelude::RecordType"
       [VString fname, TValue ty1, TValue ty2] []
       -> do x1 <- parseUninterpreted cws (nm ++ "." ++ Text.unpack fname) ty1
             x2 <- parseUninterpreted cws nm ty2
@@ -777,7 +777,11 @@ mkUninterpreted k args nm =
                   args
   where nm' = "|" ++ nm ++ "|" -- enclose name to allow primes and other non-alphanum chars
 
-sbvSATQuery :: SharedContext -> Map Ident SPrim -> SATQuery -> IO ([Labeler], [VarName], Symbolic SBool)
+sbvSATQuery ::
+  SharedContext ->
+  Map QualName SPrim ->
+  SATQuery ->
+  IO ([Labeler], [VarName], Symbolic SBool)
 sbvSATQuery sc addlPrims query =
   do t <- liftIO (satQueryAsTerm sc query)
      let qvars = Map.toList (satVariables query)
@@ -801,7 +805,7 @@ sbvSATQuery sc addlPrims query =
                 | otherwise = mkUninterp vn tp
           let uninterpreted nm ty
                 | Set.member (nameIndex nm) unintSet =
-                  let vn = VarName (nameIndex nm) (toShortName (nameInfo nm))
+                  let vn = VarName (nameIndex nm) (toShortName (nameQualName nm))
                   in Just (mkUninterp vn ty)
                 | otherwise                          = Nothing
           let primHandler = Sim.defaultPrimHandler
@@ -991,13 +995,13 @@ argTypes sc t = do
        return (t1:ts, res)
     _ -> return ([], t')
 
-sbvCodeGen_definition
-  :: SharedContext
-  -> Map Ident SPrim
-  -> Set VarIndex
-  -> Term
-  -> (Natural -> Bool) -- ^ Allowed word sizes
-  -> IO (SBVCodeGen (), [FirstOrderType], FirstOrderType)
+sbvCodeGen_definition ::
+  SharedContext ->
+  Map QualName SPrim ->
+  Set VarIndex ->
+  Term ->
+  (Natural -> Bool) {- ^ Allowed word sizes -} ->
+  IO (SBVCodeGen (), [FirstOrderType], FirstOrderType)
 sbvCodeGen_definition sc addlPrims unintSet t checkSz = do
   ty <- scTypeOf sc t
   (argTs,resTy) <- argTypes sc ty
@@ -1077,13 +1081,12 @@ sbvSetOutput _checkSz _ft _v _i = do
    fail "sbvCode gen: type mismatch when setting output values"
 
 
-sbvCodeGen :: SharedContext
-           -> Map Ident SPrim
-           -> Set VarIndex
-           -> Maybe FilePath
-           -> String
-           -> Term
-           -> IO ()
+sbvCodeGen ::
+  SharedContext ->
+  Map QualName SPrim ->
+  Set VarIndex ->
+  Maybe FilePath ->
+  String -> Term -> IO ()
 sbvCodeGen sc addlPrims unintSet path fname t = do
   -- The SBV C code generator expects only these word sizes
   let checkSz n = n `elem` [8,16,32,64]

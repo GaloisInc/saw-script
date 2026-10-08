@@ -17,29 +17,29 @@ import SAWCore.Name
 preludeModuleName :: ModuleName
 preludeModuleName = mkModuleName ["Prelude"]
 
-preludeNatIdent :: Ident
-preludeNatIdent =  mkIdent preludeModuleName "Nat"
+preludeNatQualName :: QualName
+preludeNatQualName =  mkQualName preludeModuleName "Nat"
 
-preludeZeroIdent :: Ident
-preludeZeroIdent =  mkIdent preludeModuleName "Zero"
+preludeZeroQualName :: QualName
+preludeZeroQualName =  mkQualName preludeModuleName "Zero"
 
-preludeSuccIdent :: Ident
-preludeSuccIdent =  mkIdent preludeModuleName "Succ"
+preludeSuccQualName :: QualName
+preludeSuccQualName =  mkQualName preludeModuleName "Succ"
 
-preludeIntegerIdent :: Ident
-preludeIntegerIdent =  mkIdent preludeModuleName "Integer"
+preludeIntegerQualName :: QualName
+preludeIntegerQualName =  mkQualName preludeModuleName "Integer"
 
-preludeVecIdent :: Ident
-preludeVecIdent =  mkIdent preludeModuleName "Vec"
+preludeVecQualName :: QualName
+preludeVecQualName =  mkQualName preludeModuleName "Vec"
 
-preludeFloatIdent :: Ident
-preludeFloatIdent =  mkIdent preludeModuleName "Float"
+preludeFloatQualName :: QualName
+preludeFloatQualName =  mkQualName preludeModuleName "Float"
 
-preludeDoubleIdent :: Ident
-preludeDoubleIdent =  mkIdent preludeModuleName "Double"
+preludeDoubleQualName :: QualName
+preludeDoubleQualName =  mkQualName preludeModuleName "Double"
 
-preludeStringIdent :: Ident
-preludeStringIdent =  mkIdent preludeModuleName "String"
+preludeStringQualName :: QualName
+preludeStringQualName =  mkQualName preludeModuleName "String"
 
-preludeArrayIdent :: Ident
-preludeArrayIdent =  mkIdent preludeModuleName "Array"
+preludeArrayQualName :: QualName
+preludeArrayQualName =  mkQualName preludeModuleName "Array"

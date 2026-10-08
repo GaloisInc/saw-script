@@ -141,7 +141,7 @@ data GlobalCryptolEnv = GlobalCryptolEnv
   , geRefPrims    :: Map C.PrimIdent C.Expr
   , gePrims       :: Map C.PrimIdent Term
   , gePrimTypes   :: Map C.PrimIdent Term
-  , geFFITypes    :: Map NameInfo C.FFI
+  , geFFITypes    :: Map QualName C.FFI
   , geInstances   :: Maybe IntroRuleSet
   }
 
@@ -479,11 +479,11 @@ addToAllTerms sc m = mapGlobal sc $ \genv ->
   genv { geAllTerms = Map.union m (geAllTerms genv) }
 
 -- | Map from SAWCore names to Cryptol FFI info where relevant.
-eFFITypes :: SharedContext -> IO (Map NameInfo C.FFI)
+eFFITypes :: SharedContext -> IO (Map QualName C.FFI)
 eFFITypes = getGlobal geFFITypes
 
 -- | Add entries to 'eFFITypes'
-addFFITypes :: SharedContext -> Map NameInfo C.FFI -> IO ()
+addFFITypes :: SharedContext -> Map QualName C.FFI -> IO ()
 addFFITypes sc m = mapGlobal sc $ \genv ->
   genv { geFFITypes = Map.union m (geFFITypes genv) }
 

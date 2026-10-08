@@ -676,7 +676,7 @@ scAsFixConstant sc t =
          case lookupVarIndexInMap (nameIndex nm) mm of
            Just (ResolvedDef (defBody -> Just body)) ->
              case asApplyAll body of
-               (isGlobalDef "Prelude.fix" -> Just (), [_, f]) -> pure (Just f)
+               (isGlobalDef "Prelude::fix" -> Just (), [_, f]) -> pure (Just f)
                _ -> pure Nothing
            _ -> pure Nothing
        Nothing -> pure Nothing

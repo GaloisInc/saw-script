@@ -51,7 +51,7 @@ import SAWCore.SharedTerm
 ------------------------------------------------------------
 
 -- | Evaluator for shared terms.
-evalSharedTerm :: ModuleMap -> Map Ident CPrim -> Map VarIndex CValue -> Term -> CValue
+evalSharedTerm :: ModuleMap -> Map QualName CPrim -> Map VarIndex CValue -> Term -> CValue
 evalSharedTerm m addlPrims varVals t =
   runIdentity $ do
     cfg <-
@@ -65,14 +65,14 @@ evalSharedTerm m addlPrims varVals t =
         Just v  -> return v
         Nothing -> return $ Prim.userError $ "Unimplemented: free variable " ++ show (vnName vn)
     recursor nm _sort =
-      case nameInfo nm of
-        ModuleIdentifier "Prelude.Stream" -> Just streamRecOp
-        ModuleIdentifier "Prelude.Bool" -> Just (Prims.boolRecOp prims)
-        ModuleIdentifier "Prelude.Nat" -> Just (Prims.natRecOp prims)
+      case nameQualName nm of
+        "Prelude::Stream" -> Just streamRecOp
+        "Prelude::Bool" -> Just (Prims.boolRecOp prims)
+        "Prelude::Nat" -> Just (Prims.natRecOp prims)
         _ -> Nothing
     primHandler nm msg env =
       return $ Prim.userError $ unlines
-        [ "Could not evaluate primitive " ++ Text.unpack (toAbsoluteName (nameInfo nm))
+        [ "Could not evaluate primitive " ++ Text.unpack (ppQualName (nameQualName nm))
         , "On argument " ++ show (length env)
         , Text.unpack msg
         ]
@@ -359,33 +359,33 @@ prims =
 unsupportedConcretePrimitive :: String -> a
 unsupportedConcretePrimitive = Prim.unsupportedPrimitive "concrete"
 
-constMap :: Map Ident CPrim
+constMap :: Map QualName CPrim
 constMap =
   flip Map.union (Prims.constMap prims) $
   Map.fromList
   -- Shifts
-  [ ("Prelude.bvShl" , bvShiftOp (Prim.bvShl undefined))
-  , ("Prelude.bvShr" , bvShiftOp (Prim.bvShr undefined))
-  , ("Prelude.bvSShr", bvShiftOp (Prim.bvSShr undefined))
+  [ ("Prelude::bvShl" , bvShiftOp (Prim.bvShl undefined))
+  , ("Prelude::bvShr" , bvShiftOp (Prim.bvShr undefined))
+  , ("Prelude::bvSShr", bvShiftOp (Prim.bvSShr undefined))
   -- Integers
-  , ("Prelude.intToNat", Prims.intToNatOp)
-  , ("Prelude.intToBv" , intToBvOp)
-  , ("Prelude.bvToInt" , bvToIntOp)
-  , ("Prelude.sbvToInt", sbvToIntOp)
+  , ("Prelude::intToNat", Prims.intToNatOp)
+  , ("Prelude::intToBv" , intToBvOp)
+  , ("Prelude::bvToInt" , bvToIntOp)
+  , ("Prelude::sbvToInt", sbvToIntOp)
   -- Integers mod n
-  , ("Prelude.toIntMod"  , toIntModOp)
-  , ("Prelude.fromIntMod", fromIntModOp)
-  , ("Prelude.intModEq"  , intModEqOp)
-  , ("Prelude.intModAdd" , intModBinOp (+))
-  , ("Prelude.intModSub" , intModBinOp (-))
-  , ("Prelude.intModMul" , intModBinOp (*))
-  , ("Prelude.intModNeg" , intModUnOp negate)
+  , ("Prelude::toIntMod"  , toIntModOp)
+  , ("Prelude::fromIntMod", fromIntModOp)
+  , ("Prelude::intModEq"  , intModEqOp)
+  , ("Prelude::intModAdd" , intModBinOp (+))
+  , ("Prelude::intModSub" , intModBinOp (-))
+  , ("Prelude::intModMul" , intModBinOp (*))
+  , ("Prelude::intModNeg" , intModUnOp negate)
   -- Streams
-  , ("Prelude.MkStream", mkStreamOp)
-  , ("Prelude.streamGet", streamGetOp)
+  , ("Prelude::MkStream", mkStreamOp)
+  , ("Prelude::streamGet", streamGetOp)
   -- Miscellaneous
-  , ("Prelude.bvToNat", bvToNatOp) -- override Prims.constMap
-  , ("Prelude.expByNat", Prims.expByNatOp prims)
+  , ("Prelude::bvToNat", bvToNatOp) -- override Prims.constMap
+  , ("Prelude::expByNat", Prims.expByNatOp prims)
   ]
 
 ------------------------------------------------------------

@@ -46,6 +46,7 @@ import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
+import           Data.String (IsString(..))
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import           Language.Haskell.TH.Syntax (Lift)
@@ -259,3 +260,17 @@ instance PP.Pretty QualName where
 
 instance Show QualName where
   show qn = Text.unpack (ppQualName qn)
+
+-- | Parse a fully-qualified identifier, using @::@ as a path
+-- separator.
+parseQualName :: String -> QualName
+parseQualName s0 =
+  case Text.splitOn "::" t0 of
+    t1 : t2 -> fromPath NamespaceCore (t1 NE.:| t2)
+    -- Can never happen because Text.splitOn never returns an empty list
+    _ -> panic "parseQualName" ["Invalid identifier: " <> t0]
+  where
+    t0 = Text.pack s0
+
+instance IsString QualName where
+  fromString = parseQualName

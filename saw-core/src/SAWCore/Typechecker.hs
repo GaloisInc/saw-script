@@ -41,7 +41,7 @@ import SAWCore.Module
   , resolvedNameName
   , CtorArg(..)
   , DefQualifier(..)
-  , DataType(dtName), ResolvedName(..), lookupVarIndexInMap, resolvedNameInfo
+  , DataType(dtName), ResolvedName(..), lookupVarIndexInMap, resolvedQualName
   )
 import qualified SAWCore.Parser.AST as Un
 import SAWCore.Name
@@ -257,7 +257,7 @@ inferResolveQualName qn = do
       Left (VarName i nm, _) -> resolveInventedVar i >>= \case
         Just (nms,_) -> return $ last nms
         Nothing -> panic "inferResolveQualName" ["unexpected missing name: " <> nm]
-      Right rn -> return $ QN.ppQualName $ toQualName $ resolvedNameInfo rn
+      Right rn -> return $ QN.ppQualName $ resolvedQualName rn
     bad rs = (mapM mk_qn rs) >>= \nms -> throwTCError $ AmbiguousName n nms
 
     go r = case r of
@@ -301,7 +301,7 @@ typeInferCompleteTerm uterm =
 
     Un.Recursor (PosPair _ str) s ->
       do results <- resolveGlobalName str
-         let ppResolvedName = toAbsoluteName . resolvedNameInfo
+         let ppResolvedName = ppQualName . resolvedQualName
          case results of
            [r] ->
              case r of
@@ -401,8 +401,8 @@ typeInferCompleteTerm uterm =
              [] -> throwTCError $ EmptyVectorLit
          liftSCM $ SC.scmVector typed_tp typed_ts
     Un.BVLit _ bits ->
-      do tp <- liftSCM $ SC.scmGlobalDef "Prelude.Bool"
-         let bit b = SC.scmGlobalDef (if b then "Prelude.True" else "Prelude.False")
+      do tp <- liftSCM $ SC.scmGlobalDef "Prelude::Bool"
+         let bit b = SC.scmGlobalDef (if b then "Prelude::True" else "Prelude::False")
          bit_tms <- liftSCM $ traverse bit bits
          liftSCM $ SC.scmVector tp bit_tms
 
@@ -487,8 +487,8 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
 
      -- Step 4: add the definition to the current module
      mnm <- getModuleName
-     let nmi = ModuleIdentifier (mkIdent mnm nm)
-     void $ liftIO $ scDefineConstant sc nmi def_tm) >>
+     let qn = mkQualName mnm nm
+     void $ liftIO $ scDefineConstant sc qn def_tm) >>
   processDecls rest
 
 processDecls (Un.TypeDecl NoQualifier (PosPair p nm) _ : _) =
@@ -503,10 +503,10 @@ processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =
    do typed_tp <- typeInferCompleteUTerm tp
       void $ liftSCM $ SC.scmEnsureSortType typed_tp
       mnm <- getModuleName
-      let ident = mkIdent mnm nm
+      let qn = mkQualName mnm nm
       let def_tp = typed_tp
       sc <- askSharedContext
-      liftIO $ scDeclarePrim sc ident q def_tp) >>
+      liftIO $ scDeclarePrim sc qn q def_tp) >>
   processDecls rest
 
 processDecls (Un.TermDef (PosPair p nm) _ _ : _) =
@@ -552,8 +552,8 @@ processDataDecl (PosPair p nm) param_ctx dt_tp c_decls =
   ctors <-
     withVar nm dtVarName dtType $
     forM typed_ctors $ \(c, tp) ->
-    do let nmi = ModuleIdentifier (mkIdent mnm c)
-       let result = mkCtorSpec nmi dtVarName dtParams dtIndices tp
+    do let qn = mkQualName mnm c
+       let result = mkCtorSpec qn dtVarName dtParams dtIndices tp
        case result of
          Just spec -> pure spec
          Nothing -> err ("Malformed type form constructor: " ++ show c)
@@ -563,7 +563,7 @@ processDataDecl (PosPair p nm) param_ctx dt_tp c_decls =
   argName <- liftSCM $ SC.scmFreshVarName "arg"
   let dts =
         SC.DataTypeSpec
-        { SC.dtsNameInfo = ModuleIdentifier (mkIdent mnm nm)
+        { SC.dtsQualName = mkQualName mnm nm
         , SC.dtsParams = dtParams
         , SC.dtsIndices = dtIndices
         , SC.dtsSort = dtSort
@@ -757,14 +757,14 @@ mkCtorArgsIxs d params dt_ixs ty =
 -- Test that the constructor type is an allowed type for a constructor of this
 -- datatype, and, if so, build a 'CtorSpec' for it.
 mkCtorSpec ::
-  NameInfo ->
+  QualName ->
   VarName ->
   [(VarName, Term)] ->
   [(VarName, Term)] ->
   Term ->
   Maybe CtorSpec
-mkCtorSpec nmi d params dt_ixs ctor_tp =
+mkCtorSpec qn d params dt_ixs ctor_tp =
   case mkCtorArgsIxs d params dt_ixs ctor_tp of
     Nothing -> Nothing
     Just (args, ctor_ixs) ->
-      Just (CtorSpec nmi args ctor_ixs)
+      Just (CtorSpec qn args ctor_ixs)

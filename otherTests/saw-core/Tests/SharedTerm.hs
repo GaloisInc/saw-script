@@ -33,5 +33,5 @@ preludeSharedSmokeTest =
   testCase "preludeSharedSmokeTest" $ do
     sc <- mkSharedContext
     scLoadPreludeModule sc
-    void $ scGlobalDef sc "Prelude.Bool"
+    void $ scGlobalDef sc "Prelude::Bool"
     return ()

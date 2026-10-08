@@ -17,7 +17,6 @@ import qualified Control.Monad.State.Strict as State
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Map (Map)
 import qualified Data.Map as Map
-import qualified Data.Text as Text
 import qualified Data.Text.Lazy as LText
 import Data.Text (Text)
 import qualified Data.Vector as V
@@ -33,27 +32,24 @@ import qualified SAWCore.QualName as QN
 --------------------------------------------------------------------------------
 -- External text format
 
-type WriteM = State.State (Map TermIndex Int, Map VarIndex (Either Text NameInfo), [String], Int)
+type WriteM = State.State (Map TermIndex Int, Map VarIndex (Either Text QualName), [String], Int)
 
-renderNames :: Map VarIndex (Either Text NameInfo) -> String
-renderNames nms = show
-  [ (idx, f nmi)
-  | (idx,nmi) <- Map.toList nms
-  ]
- where
-   f (Left s) = Left s
-   f (Right (ModuleIdentifier i))  = Right (Left (show i))
-   f (Right (ImportedName qn _)) = Right (Right (QN.ppQualName qn))
+renderNames :: Map VarIndex (Either Text QualName) -> String
+renderNames nms =
+  show [ (idx, f x) | (idx, x) <- Map.toList nms ]
+  where
+    f (Left s) = Left s
+    f (Right qn) = Right (QN.ppQualName qn)
 
-readNames :: String -> Either String (Map VarIndex (Either Text NameInfo))
+readNames :: String -> Either String (Map VarIndex (Either Text QualName))
 readNames xs = Map.fromList <$> (mapM readName =<< readEither xs)
  where
-   readName :: (VarIndex, Either Text (Either Text (Text))) -> Either String (VarIndex, Either Text NameInfo)
+   readName :: (VarIndex, Either Text Text) -> Either String (VarIndex, Either Text QualName)
    readName (idx, Left x) = pure (idx, Left x)
-   readName (idx, Right (Left i)) = pure (idx, Right (ModuleIdentifier (parseIdent (Text.unpack i))))
-   readName (idx, Right (Right (qn_txt))) = case parseQualName "" "" (LText.fromStrict qn_txt) of
-    Right qn -> pure (idx, Right (mkImportedName qn))
-    Left err -> Left (show err)
+   readName (idx, Right qn_txt) =
+     case parseQualName "" "" (LText.fromStrict qn_txt) of
+       Right qn -> pure (idx, Right qn)
+       Left err -> Left (show err)
 
 -- | Render to external text format
 scWriteExternal :: Term -> String
@@ -74,9 +70,9 @@ scWriteExternal t0 =
           State.put (Map.insert i x m, nms, lns, x+1)
           return x
     stashName :: Name -> WriteM ()
-    stashName ec =
+    stashName nm =
        do (m, nms, lns, x) <- State.get
-          State.put (m, Map.insert (nameIndex ec) (Right (nameInfo ec)) nms, lns, x)
+          State.put (m, Map.insert (nameIndex nm) (Right (nameQualName nm)) nms, lns, x)
     stashVarName :: VarName -> WriteM ()
     stashVarName vn =
        do (m, nms, lns, x) <- State.get
@@ -136,7 +132,7 @@ data ReadState =
   ReadState
   { rsTerms :: Map Int Term
     -- ^ Map 'Int' term identifiers from external core file to SAWCore terms
-  , rsNames :: Map VarIndex (Either Text NameInfo)
+  , rsNames :: Map VarIndex (Either Text QualName)
     -- ^ Map 'VarIndex'es from external core file to global names
   , rsVars :: Map VarIndex VarIndex
     -- ^ Map 'VarIndex'es from external core file to variables
@@ -182,23 +178,20 @@ scReadExternal sc input =
     readName' vi =
       do nms <- State.gets rsNames
          vs <- State.gets rsVars
-         nmi <- case Map.lookup vi nms of
-                  Just (Right nmi) -> pure nmi
-                  _ -> lift $ fail $ "scReadExternal: Name missing name info: " ++ show vi
-         case nmi of
-           ModuleIdentifier ident ->
-             lift (scResolveQualName sc (moduleIdentToQualName ident)) >>= \case
-               Just nm  -> pure nm
-               Nothing  -> lift $ fail $ "scReadExternal: missing module identifier: " ++ show ident
-           ImportedName qn _aliases ->
-             lift (scResolveQualName sc qn) >>= \case
-               Just nm -> pure nm
-               Nothing -> case Map.lookup vi vs of
-                 Just vi' -> pure $ Name vi' nmi
-                 Nothing ->
-                   do nm <- lift $ scRegisterName sc nmi
-                      State.modify $ \s -> s { rsVars = Map.insert vi (nameIndex nm) (rsVars s) }
-                      pure nm
+         qn <-
+           case Map.lookup vi nms of
+             Just (Right qn) -> pure qn
+             _ -> lift $ fail $ "scReadExternal: Name missing name info: " ++ show vi
+         mnm <- lift (scResolveQualName sc qn)
+         case mnm of
+           Just nm -> pure nm
+           Nothing ->
+             case Map.lookup vi vs of
+               Just vi' -> pure $ Name vi' qn
+               Nothing ->
+                 do nm <- lift $ scRegisterName sc qn
+                    State.modify $ \s -> s { rsVars = Map.insert vi (nameIndex nm) (rsVars s) }
+                    pure nm
 
     readName :: String -> ReadM Name
     readName i =
