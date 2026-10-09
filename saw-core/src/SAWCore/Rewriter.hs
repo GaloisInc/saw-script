@@ -486,7 +486,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _ shallow convFlag ann) =
          dt <-
            case lookupVarIndexInMap (nameIndex d) mm of
              Just (ResolvedDataType dt) -> pure dt
-             _ -> panic "scExpandRewriteRule" ["Datatype not found: " <> ppQualName (nameQualName d)]
+             _ -> panic "scExpandRewriteRule" ["Datatype not found: " <> ppNameFullyQualified d]
          rules <- traverse ctorRule (dtCtors dt)
          return (Just rules)
     _ -> return Nothing

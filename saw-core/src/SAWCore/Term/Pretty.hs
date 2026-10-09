@@ -522,7 +522,7 @@ prettyBestName nm =
   do ne <- asks ppNamingEnv
      case bestDisplayName ne (nameIndex nm) of
        Just alias -> pure $ pretty alias
-       Nothing -> pure $ pretty $ ppQualName (nameQualName nm)
+       Nothing -> pure $ pretty $ ppNameFullyQualified nm
 
 -- | Pretty-print a non-shared term
 prettyTermF :: Prec -> TermF Term -> PPM PPS.Doc

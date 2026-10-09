@@ -420,7 +420,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
            Nothing -> do
              -- XXX: this should really use ppName but that's a can of worms
              -- XXX: shouldn't this fail rather than issue an error into the output?
-             let d' = ppQualName (nameQualName d)
+             let d' = ppNameFullyQualified d
              errorTermM ("Recursor for " <> d' <>
                          " cannot be translated because the datatype " <>
                          "is mapped to an arbitrary Rocq term")

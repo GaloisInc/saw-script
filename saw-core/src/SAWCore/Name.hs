@@ -32,6 +32,7 @@ module SAWCore.Name
     -- * Name
   , VarIndex
   , Name(..)
+  , ppNameFullyQualified
     -- * VarName
   , VarName(..)
   , wildcardVarName
@@ -141,6 +142,10 @@ instance Ord Name where
 -- even if the unique IDs are assigned differently from run to run.
 instance Hashable Name where
   hashWithSalt x nm = hashWithSalt x (nameQualName nm)
+
+-- | Render a 'Name' as 'Text' in its longest, fully-qualified form.
+ppNameFullyQualified :: Name -> Text
+ppNameFullyQualified nm = ppQualName (nameQualName nm)
 
 
 -- Variable Names --------------------------------------------------------------

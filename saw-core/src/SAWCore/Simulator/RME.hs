@@ -63,7 +63,7 @@ evalSharedTerm m addlPrims t =
     variable vn _tp = return $ Prim.userError $ "Unimplemented: free variable " ++ show (vnName vn)
     primHandler nm msg env =
       return $ Prim.userError $ unlines
-        [ "Could not evaluate primitive " ++ Text.unpack (ppQualName (nameQualName nm))
+        [ "Could not evaluate primitive " ++ Text.unpack (ppNameFullyQualified nm)
         , "On argument " ++ show (length env)
         , Text.unpack msg
         ]
@@ -462,7 +462,7 @@ bitBlastBasic ::
 bitBlastBasic m addlPrims varMap t = runIdentity $ do
   let primHandler nm msg env =
          return $ Prim.userError $ unlines
-           [ "Could not evaluate primitive " ++ Text.unpack (ppQualName (nameQualName nm))
+           [ "Could not evaluate primitive " ++ Text.unpack (ppNameFullyQualified nm)
            , "On argument " ++ show (length env)
            , Text.unpack msg
            ]
