@@ -369,7 +369,7 @@ Stack trace:
 core006.sawcore:5:5:
 Universe level of parameters greater than data type sort
 Data type name:
-  core006::Foo
+  Foo
 Data type sort:
   sort 0
 Parameter name:
@@ -388,7 +388,7 @@ Stack trace:
 core007.sawcore:5:5:
 Universe level of indices not contained in data type sort
 Data type name:
-  core007::Foo
+  Foo
 Data type sort:
   sort 0
 Index name:
@@ -409,18 +409,18 @@ Stack trace:
 core008.sawcore:5:5:
 Universe level of constructor not contained in data type sort
 Data type name:
-  core008::Foo
+  Foo
 Data type sort:
   sort 0
 Constructor name:
-  core008::MkFoo
+  MkFoo
 Constructor type:
   let { t@free : sort 0;
       }
    in (a : sort 0)
       -> t@free
       -> a
-      -> core008::Foo t@free
+      -> Foo t@free
 Constructor sort:
   sort 1
 

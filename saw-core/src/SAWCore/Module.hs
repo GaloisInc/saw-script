@@ -387,7 +387,7 @@ requireNameInMap :: Name -> ModuleMap -> ResolvedName
 requireNameInMap nm mm =
   case lookupVarIndexInMap (nameIndex nm) mm of
     Just r -> r
-    Nothing -> panic "requireNameInMap" ["Constant not found: " <> ppQualName (nameQualName nm)]
+    Nothing -> panic "requireNameInMap" ["Constant not found: " <> ppNameFullyQualified nm]
 
 -- | Get all definitions defined in any module in an entire module map. Note
 -- that the returned list might have redundancies if a definition is visible /

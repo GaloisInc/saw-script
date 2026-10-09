@@ -522,16 +522,7 @@ prettyBestName nm =
   do ne <- asks ppNamingEnv
      case bestDisplayName ne (nameIndex nm) of
        Just alias -> pure $ pretty alias
-       Nothing -> pure $ prettyQualName (nameQualName nm)
-
--- | Print a fully-qualified name, but suppress the @core@ suffix on
--- names in the SAWCore namespace.
-prettyQualName :: QualName -> PPS.Doc
-prettyQualName qn =
-  pretty $ QN.ppQualName qn{ QN.namespace = f (QN.namespace qn) }
-  where
-    f (Just QN.NamespaceCore) = Nothing
-    f ns = ns
+       Nothing -> pure $ pretty $ ppNameFullyQualified nm
 
 -- | Pretty-print a non-shared term
 prettyTermF :: Prec -> TermF Term -> PPM PPS.Doc
@@ -817,9 +808,9 @@ prettyTermPure opts = prettyTermWithEnv opts emptyDisplayNameEnv
 
 -- | Like 'prettyTermPure', but also supply a context of bound names, where
 -- the earliest-bound variable is listed first in the context.
-prettyTermWithNameList :: PPS.Opts -> [VarName] -> Term -> PPS.Doc
-prettyTermWithNameList opts ctx trm =
-  runPPM opts emptyDisplayNameEnv $
+prettyTermWithNameList :: PPS.Opts -> DisplayNameEnv -> [VarName] -> Term -> PPS.Doc
+prettyTermWithNameList opts ne ctx trm =
+  runPPM opts ne $
   -- reserve names from ctx first, so that they get priority naming
   -- don't mark them as loose, so they won't be let-bound as
   -- free variables

@@ -177,7 +177,7 @@ checkConvertible t1 t2 = do
         errMsg "Terms are not convertible"
 
 prettySawName :: SAW.Name -> String
-prettySawName nm = Text.unpack (SAW.ppQualName $ SAW.nameQualName nm)
+prettySawName nm = Text.unpack (SAW.ppNameFullyQualified nm)
 
 stripTopProofs :: C.Expr -> C.Expr
 stripTopProofs = \case

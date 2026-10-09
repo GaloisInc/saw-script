@@ -66,12 +66,12 @@ inferCompleteTerm sc mnm t =
             ppopts <- scGetPPOpts sc
             pure (Left (prettyTCError ppopts ne err))
 
--- | Pretty-print a type-checking error
-ppTCError :: PPS.Opts -> TCError -> String
-ppTCError ppopts e =
-  PPS.render ppopts $ prettyTCError ppopts emptyDisplayNameEnv e
+-- | Pretty-print a type-checking error.
+ppTCError :: PPS.Opts -> DisplayNameEnv -> TCError -> String
+ppTCError ppopts ne e =
+  PPS.render ppopts $ prettyTCError ppopts ne e
 
--- | Pretty-print a type-checking error
+-- | Pretty-print a type-checking error.
 prettyTCError :: PPS.Opts -> DisplayNameEnv -> TCError -> PPS.Doc
 prettyTCError opts ne e = helper Nothing e where
 
@@ -588,9 +588,10 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
   -- Finally, process all the decls
   decls_res <- runTCM (processDecls decls) sc (Just mnm)
   case decls_res of
-    Left err -> do
-      ppopts <- scGetPPOpts sc
-      fail $ ppTCError ppopts err
+    Left err ->
+      do ppopts <- scGetPPOpts sc
+         ne <- scGetNamingEnv sc
+         fail $ ppTCError ppopts ne err
     Right _ -> return ()
 
 

@@ -25,7 +25,6 @@ module SAWCore.Name
    -- * Qualified Names
   , QualName
   , mkQualName
-  , identText
   , toShortName
   , ppQualName
   , nameAliases
@@ -33,6 +32,7 @@ module SAWCore.Name
     -- * Name
   , VarIndex
   , Name(..)
+  , ppNameFullyQualified
     -- * VarName
   , VarName(..)
   , wildcardVarName
@@ -102,9 +102,6 @@ qualNameModule qn =
 
 -- Qualified Names -------------------------------------------------------------
 
-identText :: QualName -> Text
-identText qn = QN.ppQualName (qn{ QN.namespace = Nothing })
-
 mkQualName :: ModuleName -> Text -> QualName
 mkQualName (ModuleName m) s = QN.qualify m s
 
@@ -145,6 +142,10 @@ instance Ord Name where
 -- even if the unique IDs are assigned differently from run to run.
 instance Hashable Name where
   hashWithSalt x nm = hashWithSalt x (nameQualName nm)
+
+-- | Render a 'Name' as 'Text' in its longest, fully-qualified form.
+ppNameFullyQualified :: Name -> Text
+ppNameFullyQualified nm = ppQualName (nameQualName nm)
 
 
 -- Variable Names --------------------------------------------------------------

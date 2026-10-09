@@ -49,6 +49,7 @@ module SAWCore.SharedTerm
   , scGetNamingEnv
   -- * Pretty printing
   , ppName
+  , ppNameWithEnv
   , prettyName
   , ppTerm
   , prettyTerm
@@ -997,6 +998,12 @@ prettyName sc opts nm =
 ppName :: SharedContext -> PPS.Opts -> Name -> IO Text
 ppName sc opts nm =
   PPS.renderText opts <$> prettyName sc opts nm
+
+-- | A pure variant of `ppName` with a user-supplied `PPS.Opts` and
+-- `DisplayNameEnv`.
+ppNameWithEnv :: PPS.Opts -> DisplayNameEnv -> Name -> Text
+ppNameWithEnv opts env nm =
+  PPS.renderText opts (prettyNameWithEnv opts env nm)
 
 newtype PrettyOpts = PrettyOpts PPS.Opts
 
