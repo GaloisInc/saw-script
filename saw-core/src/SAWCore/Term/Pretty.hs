@@ -522,16 +522,7 @@ prettyBestName nm =
   do ne <- asks ppNamingEnv
      case bestDisplayName ne (nameIndex nm) of
        Just alias -> pure $ pretty alias
-       Nothing -> pure $ prettyQualName (nameQualName nm)
-
--- | Print a fully-qualified name, but suppress the @core@ suffix on
--- names in the SAWCore namespace.
-prettyQualName :: QualName -> PPS.Doc
-prettyQualName qn =
-  pretty $ QN.ppQualName qn{ QN.namespace = f (QN.namespace qn) }
-  where
-    f (Just QN.NamespaceCore) = Nothing
-    f ns = ns
+       Nothing -> pure $ pretty $ ppQualName (nameQualName nm)
 
 -- | Pretty-print a non-shared term
 prettyTermF :: Prec -> TermF Term -> PPM PPS.Doc
