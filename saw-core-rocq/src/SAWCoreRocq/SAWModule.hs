@@ -129,7 +129,7 @@ translateDataType (DataType {..}) =
 
 _mapped :: QualName -> QualName -> Rocq.Decl
 _mapped sawIdent newIdent =
-  Rocq.Comment $ identText sawIdent <> " is mapped to " <> identText newIdent
+  Rocq.Comment $ ppQualName sawIdent <> " is mapped to " <> ppQualName newIdent
 
 skipped' :: QualName -> Rocq.Decl
 skipped' qn =
@@ -137,7 +137,7 @@ skipped' qn =
 
 skipped :: QualName -> Rocq.Decl
 skipped sawIdent =
-  Rocq.Comment $ "\"" <> identText sawIdent <> "\" was skipped"
+  Rocq.Comment $ "\"" <> ppQualName sawIdent <> "\" was skipped"
 
 translateDef :: ModuleTranslationMonad m => Def -> m Rocq.Decl
 translateDef (Def {..}) = {- trace ("translateDef " ++ show defIdent) $ -} do

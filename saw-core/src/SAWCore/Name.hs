@@ -25,7 +25,6 @@ module SAWCore.Name
    -- * Qualified Names
   , QualName
   , mkQualName
-  , identText
   , toShortName
   , ppQualName
   , nameAliases
@@ -101,9 +100,6 @@ qualNameModule qn =
 
 
 -- Qualified Names -------------------------------------------------------------
-
-identText :: QualName -> Text
-identText qn = QN.ppQualName (qn{ QN.namespace = Nothing })
 
 mkQualName :: ModuleName -> Text -> QualName
 mkQualName (ModuleName m) s = QN.qualify m s
