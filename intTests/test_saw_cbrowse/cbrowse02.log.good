@@ -1,0 +1,30 @@
+--------------------------------
+-- submodule S1
+Submodules
+==========
+
+  S2
+
+Symbols
+=======
+
+  s1 : [8]
+  s1priv : [8]
+
+--------------------------------
+-- submodule S1::S2
+Symbols
+=======
+
+  s2 : [8]
+
+--------------------------------
+-- private submodule S3
+Symbols
+=======
+
+  s3 : [8]
+
+--------------------------------
+-- top-level module S1 (not a top-level module)
+Module `S1' is not loaded.

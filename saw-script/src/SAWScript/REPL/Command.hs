@@ -30,7 +30,8 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (modify)
 import Data.Char (isSpace)
 import Data.Function (on)
-import Data.List (intersperse, nub)
+import Data.List (intersperse, nub, sortOn)
+import Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.Set as Set
@@ -47,6 +48,21 @@ import System.Directory (
 
 import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
+
+import qualified Cryptol.ModuleSystem.Env as ME
+import qualified Cryptol.ModuleSystem.Interface as MI
+import qualified Cryptol.ModuleSystem.Name as MN (
+    nameIdent, nameModPathMaybe, nameTopModuleMaybe
+ )
+import qualified Cryptol.Parser.AST as CP (ImpName(..))
+import qualified Cryptol.REPL.Browse as CB
+import qualified Cryptol.TypeCheck.AST as T (ModuleG(..), Submodule(..))
+import qualified Cryptol.Utils.Ident as CI (
+    identText, modNameChunksText, modNameToText, modPathSplit,
+    textToModName
+ )
+
+import CryptolSAWCore.GlobalCryptolEnv (eModuleEnv)
 
 import qualified SAWSupport.Pretty as PPS
 import qualified SAWSupport.ScopedMap as ScopedMap
@@ -87,6 +103,133 @@ cdCmd f
         let f' = "`" <> Text.pack f <> "'"
             msg = "Directory " <> f' <> " not found or not a directory"
         liftIO $ TextIO.putStrLn msg
+
+-- | Display the contents of a Cryptol module (@:cbrowse MODULENAME@)
+--   or submodule (@:cbrowse submodule SUBMODULENAME@).  Any loaded
+--   (sub)module can be browsed, whether or not it has been imported;
+--   it is named by its original name (not by an @import ... as@
+--   qualifier).  Private definitions are always included.  With no
+--   arguments (@:cbrowse@), all loaded top-level modules are shown;
+--   with @:cbrowse -l@, just their names are listed.
+cbrowseCmd :: [Text] -> REPL ()
+cbrowseCmd args =
+  case args of
+    []                     -> browseAll
+    ["-l"]                 -> listAll
+    [modName] | modName /= "submodule"
+                           -> browseTop modName
+    ["submodule", modName] -> browseSub modName
+    _ -> liftIO $ TextIO.putStrLn $
+           "Usage: :cbrowse -l"
+           <> " | :cbrowse [MODULENAME]"
+           <> " | :cbrowse submodule SUBMODULENAME"
+  where
+  -- All loaded top-level modules (loaded directly or indirectly),
+  -- in order of module name.
+  loadedMods modEnv =
+    sortOn ME.lmName $ ME.getLoadedModules (ME.meLoadedModules modEnv)
+
+  -- List the names of all loaded top-level modules.
+  listAll = do
+    modEnv <- getModEnv
+    mapM_ (say . CI.modNameToText . ME.lmName) (loadedMods modEnv)
+
+  -- Show every loaded top-level module.
+  browseAll = do
+    modEnv <- getModEnv
+    let lms = loadedMods modEnv
+        showOne lm = do
+          let modName = CI.modNameToText (ME.lmName lm)
+          say $ "Module `" <> modName <> "':"
+          showTop modEnv lm
+    sequence_ $ intersperse (say "") $ map showOne lms
+
+  -- Show a loaded top-level module (loaded directly or indirectly).
+  browseTop modName = do
+    modEnv <- getModEnv
+    let mName = CI.textToModName modName
+    case ME.lookupModule mName modEnv of
+      Nothing -> say $ "Module `" <> modName <> "' is not loaded."
+      Just lm -> showTop modEnv lm
+
+  showTop modEnv lm = do
+    let ctx0 = ME.lmModContext modEnv lm
+        names = MI.ifNames (ME.lmInterface lm)
+    showCtx $ withPrivate (MI.ifsDefines names) ctx0
+
+  -- Show a loaded submodule (or submodule alias), named by its path
+  -- within its top-level module (e.g. @S1::S2@), or by its fully
+  -- qualified path (e.g. @Browse::S1::S2@).  The submodule need not
+  -- have been imported.
+  browseSub modName = do
+    modEnv <- getModEnv
+    let want = Text.splitOn "::" modName
+        cands = nub [ nm | lm <- ME.getLoadedModules
+                                   (ME.meLoadedModules modEnv)
+                         , let m = ME.lmModule lm
+                         , nm <- Map.keys (T.mSubmodules m)
+                                 ++ Map.keys (T.mModAliases m)
+                         , want `elem` subPaths nm
+                    ]
+    case cands of
+      [] -> say $ "Submodule `" <> modName <> "' is not loaded."
+      [nm] ->
+        case ME.modContextOf (CP.ImpNested nm) modEnv of
+          Nothing -> say $ "Submodule `" <> modName <> "' not found."
+          Just ctx0 -> do
+            let defined = fromMaybe (ME.mctxExported ctx0)
+                                    (definedIn modEnv (CP.ImpNested nm))
+            showCtx $ withPrivate defined ctx0
+      nms -> say $ Text.intercalate "\n" $
+               ("Submodule `" <> modName <> "' is ambiguous:")
+               : [ "  " <> Text.intercalate "::" (last (subPaths nm))
+                 | nm <- nms ]
+
+  -- The ways to name a submodule: its path within its top-level
+  -- module, and its fully qualified path.
+  subPaths nm =
+    case MN.nameModPathMaybe nm of
+      Nothing -> []
+      Just p ->
+        let (top, ids) = CI.modPathSplit p
+            rel = map CI.identText (ids ++ [MN.nameIdent nm])
+        in  [rel, CI.modNameChunksText top ++ rel]
+
+  -- Show all defined names, private ones included.
+  withPrivate defined ctx = ctx { ME.mctxExported = defined }
+
+  -- All the names defined in a (sub)module, following module aliases.
+  -- NOTE:
+  --   - bounded, to guard against alias cycles.
+  --     - FIXME: use better solution to avoid alias cycles.
+  --     - Question: does cryptol ensure no alias cycles?
+  definedIn modEnv = go (10 :: Int)
+    where
+    go 0 _ = Nothing
+    go n imp =
+      case imp of
+        CP.ImpTop mn ->
+          MI.ifsDefines . MI.ifNames . ME.lmInterface
+            <$> ME.lookupModule mn modEnv
+        CP.ImpNested nm -> do
+          top <- MN.nameTopModuleMaybe nm
+          m <- ME.lmModule <$> ME.lookupModule top modEnv
+          case Map.lookup nm (T.mSubmodules m) of
+            Just sm -> Just (MI.ifsDefines (T.smIface sm))
+            Nothing -> go (n - 1) =<< Map.lookup nm (T.mModAliases m)
+
+  getModEnv = do
+    rw <- getTopLevelRW
+    liftIO $ eModuleEnv (rwSharedContext rw)
+
+  say = liftIO . TextIO.putStrLn
+
+  showCtx ctx = do
+    ppopts <- getPPOpts
+    let doc = PP.unAnnotate $ CB.browseModContext CB.BrowseExported ctx
+        -- Cryptol's output has whitespace-only lines; trim them.
+        trim = Text.intercalate "\n" . map Text.stripEnd . Text.lines
+    say $ trim $ PPS.renderText ppopts doc
 
 envCmd :: REPL ()
 envCmd = do
@@ -353,6 +496,7 @@ data CommandBody
   | SymbolNameArg (Text     -> REPL ())
   | ModuleTargetArgs (Text -> Text -> REPL ())
   | TypeArgs      (Text     -> REPL ())
+  | WordArgs      ([Text]   -> REPL ())
   | FilenameArg   (FilePath -> REPL ())
   | NoArg         (REPL ())
 
@@ -382,6 +526,8 @@ nbCommandList  =
     "display the current sawscript type environment"
   , CommandDescr ":type" [":t"]  (ExprArg typeOfCmd)
     "check the type of an expression"
+  , CommandDescr ":cbrowse" []   (WordArgs cbrowseCmd)
+    "list modules '-l', or browse modules ['MODULE' | 'submodule SUBMODULE']"
   , CommandDescr ":llvmdis" []   (ModuleTargetArgs llvmDisCmd)
     llvmDisCmdHelp
   , CommandDescr ":?"    []      (SymbolNameArg helpCmd)
@@ -508,6 +654,8 @@ executeReplCommand cmd args0 =
         ModuleTargetArgs action -> twoarg action args0
         TypeArgs action ->
             action (Text.intercalate " " args0)
+        WordArgs action ->
+            action args0
         FilenameArg action -> do
             args' <- mapM expandHome args0
             onearg action args'
