@@ -57,8 +57,8 @@ import qualified SAWSupport.Pretty as PPS (Doc, Opts, renderText)
 import qualified SAWCentral.Trace as Trace (empty)
 
 import SAWCore.Module (emptyModule)
-import SAWCore.Name (mkModuleName)
-import SAWCore.SharedTerm (SharedContext, mkSharedContext, scLoadModule, scGetPPOpts)
+import SAWCore.Name (mkModuleName, DisplayNameEnv)
+import SAWCore.SharedTerm (SharedContext, mkSharedContext, scLoadModule, scGetPPOpts, scGetNamingEnv)
 
 import CryptolSAWCore.TypedTerm (TypedTerm, prettyTypedTerm, prettyTypedTermPure, CryptolModule)
 import qualified CryptolSAWCore.Pretty as CryPP
@@ -248,12 +248,12 @@ trackedFiles = lens _trackedFiles (\v tf -> v { _trackedFiles = tf })
 
 -- | This is used only for debug logging, so keep it non-monadic to
 --   avoid evaluating any of it when not in debug mode.
-prettySAWStatePure :: PPS.Opts -> SAWState -> PPS.Doc
-prettySAWStatePure ppopts st =
-    let env' = prettySAWEnvPure ppopts $ st ^. sawEnv
+prettySAWStatePure :: PPS.Opts -> DisplayNameEnv -> SAWState -> PPS.Doc
+prettySAWStatePure ppopts ne st =
+    let env' = prettySAWEnvPure ppopts ne $ st ^. sawEnv
         prettyOneTask (task, taskenv) =
             let task' = PP.pretty $ ppSAWTask task
-                taskenv' = prettySAWEnvPure ppopts taskenv
+                taskenv' = prettySAWEnvPure ppopts ne taskenv
             in
             PP.vsep [task', "--------", taskenv']
         tasks' = PP.vsep $ map prettyOneTask (st ^. sawTask)
@@ -272,9 +272,9 @@ prettySAWStatePure ppopts st =
         PP.indent 6 tf'
     ]
 
-ppSAWStatePure :: PPS.Opts -> SAWState -> Text
-ppSAWStatePure ppopts st =
-  PPS.renderText ppopts $ prettySAWStatePure ppopts st
+ppSAWStatePure :: PPS.Opts -> DisplayNameEnv -> SAWState -> Text
+ppSAWStatePure ppopts ne st =
+  PPS.renderText ppopts $ prettySAWStatePure ppopts ne st
 
 pushTask :: SAWTask -> Argo.Command SAWState ()
 pushTask t = Argo.modifyState mod
@@ -403,10 +403,10 @@ emptyEnv = SAWEnv Map.empty
 -- | Print a whole environment. This is only used for debug logging,
 --   so avoid making it monadic to avoid evaluating parts of it that
 --   won't actually be used most of the time.
-prettySAWEnvPure :: PPS.Opts -> SAWEnv -> PPS.Doc
-prettySAWEnvPure ppopts (SAWEnv env) =
+prettySAWEnvPure :: PPS.Opts -> DisplayNameEnv -> SAWEnv -> PPS.Doc
+prettySAWEnvPure ppopts ne (SAWEnv env) =
     let once (ServerName name, v) =
-          let v' = prettyServerValPure ppopts v in
+          let v' = prettyServerValPure ppopts ne v in
           PP.pretty name <+> PP.align v'
     in
     PP.vsep $ map once $ Map.toList env
@@ -442,11 +442,11 @@ data ServerVal
   | VYosysSequential YosysSequential
 
 -- | Shared ServerVal printing code for the straightforward cases
-prettyServerValCommon :: PPS.Opts -> ServerVal -> PPS.Doc
-prettyServerValCommon ppopts v = case v of
+prettyServerValCommon :: PPS.Opts -> DisplayNameEnv -> ServerVal -> PPS.Doc
+prettyServerValCommon ppopts ne v = case v of
   VTerm _ -> "VTerm" -- not reached
   VSimpset set ->
-      let set' = prettySimpset ppopts set in
+      let set' = prettySimpset ppopts ne set in
       "(VSimpset" <+> set' <> ")"
   VType t -> "(VType " <> CryPP.pretty t <> ")"
   VCryptolModule _ -> "VCryptolModule"
@@ -470,7 +470,8 @@ prettyServerVal sc v = case v of
       pure $ "(VTerm" <+> t' <> ")"
   _ -> do
       ppopts <- scGetPPOpts sc
-      pure $ prettyServerValCommon ppopts v
+      ne <- scGetNamingEnv sc
+      pure $ prettyServerValCommon ppopts ne v
 
 ppServerVal :: SharedContext -> ServerVal -> IO Text
 ppServerVal sc v = do
@@ -483,13 +484,13 @@ ppServerVal sc v = do
 -- This prints SAWCore elements in degraded mode and should be
 -- avoided.
 --
-prettyServerValPure :: PPS.Opts -> ServerVal -> PPS.Doc
-prettyServerValPure ppopts v = case v of
+prettyServerValPure :: PPS.Opts -> DisplayNameEnv -> ServerVal -> PPS.Doc
+prettyServerValPure ppopts ne v = case v of
   VTerm t ->
       let t' = prettyTypedTermPure ppopts t in
       "(VTerm" <+> t' <> ")"
   _ ->
-      prettyServerValCommon ppopts v
+      prettyServerValCommon ppopts ne v
 
 class IsServerVal a where
   toServerVal :: a -> ServerVal
@@ -554,6 +555,10 @@ getPPOpts st = do
   v <- scGetPPOpts sc
   pure $ v
 
+getDisplayNameEnv :: SAWState -> IO DisplayNameEnv
+getDisplayNameEnv st =
+  scGetNamingEnv (rwSharedContext $ st ^. sawTopLevelRW)
+
 setServerVal :: IsServerVal val => ServerName -> val -> Argo.Command SAWState ()
 setServerVal name val =
   do Argo.debugLog $ "Saving " <> (Text.pack (show name))
@@ -564,7 +569,8 @@ setServerVal name val =
      Argo.debugLog $ "Saved " <> (Text.pack (show name))
      st <- Argo.getState @SAWState
      ppopts <- liftIO $ getPPOpts st
-     Argo.debugLog $ "State is " <> ppSAWStatePure ppopts st
+     ne <- liftIO $ getDisplayNameEnv st
+     Argo.debugLog $ "State is " <> ppSAWStatePure ppopts ne st
 
 
 getServerVal :: ServerName -> Argo.Command SAWState ServerVal
@@ -572,7 +578,8 @@ getServerVal n =
   do sawenv <- view sawEnv <$> Argo.getState
      st <- Argo.getState @SAWState
      ppopts <- liftIO $ getPPOpts st
-     Argo.debugLog $ "Looking up " <> Text.pack (show n) <> " in " <> ppSAWStatePure ppopts st
+     ne <- liftIO $ getDisplayNameEnv st
+     Argo.debugLog $ "Looking up " <> Text.pack (show n) <> " in " <> ppSAWStatePure ppopts ne st
      case getServerValEither sawenv n of
        Left ex -> Argo.raise ex
        Right val -> return val

@@ -817,9 +817,9 @@ prettyTermPure opts = prettyTermWithEnv opts emptyDisplayNameEnv
 
 -- | Like 'prettyTermPure', but also supply a context of bound names, where
 -- the earliest-bound variable is listed first in the context.
-prettyTermWithNameList :: PPS.Opts -> [VarName] -> Term -> PPS.Doc
-prettyTermWithNameList opts ctx trm =
-  runPPM opts emptyDisplayNameEnv $
+prettyTermWithNameList :: PPS.Opts -> DisplayNameEnv -> [VarName] -> Term -> PPS.Doc
+prettyTermWithNameList opts ne ctx trm =
+  runPPM opts ne $
   -- reserve names from ctx first, so that they get priority naming
   -- don't mark them as loose, so they won't be let-bound as
   -- free variables

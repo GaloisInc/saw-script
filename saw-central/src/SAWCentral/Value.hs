@@ -270,7 +270,7 @@ import SAWCentral.Crucible.LLVM.X86Support (X86Unsupported(..), X86Error(..))
 import SAWCentral.Yosys.Theorem (YosysTheorem)
 import SAWCentral.Yosys.State (YosysSequential)
 
-import SAWCore.Name (VarName(..))
+import SAWCore.Name (VarName(..), DisplayNameEnv)
 import qualified CryptolSAWCore.CryptolEnv as CEnv
 import qualified CryptolSAWCore.GlobalCryptolEnv as CEnv
 import SAWCore.FiniteValue (FirstOrderValue, prettyFirstOrderValue)
@@ -724,15 +724,15 @@ ppSatResult :: PPS.Opts -> SatResult -> Text
 ppSatResult opts r =
     PPS.renderText opts $ prettySatResult opts r
 
-prettySimpset :: PPS.Opts -> Simpset a -> PPS.Doc
-prettySimpset opts ss =
+prettySimpset :: PPS.Opts -> DisplayNameEnv -> Simpset a -> PPS.Doc
+prettySimpset opts ne ss =
   PP.vsep ([
       "Rewrite Rules",
       "============="
    ] ++ map prettyRule (listRules ss))
   where
     -- XXX: shouldn't this print using _all_ the vars over all the rules?
-    prettyTerm' vars t = SAWCorePP.prettyTermWithNameList opts vars t
+    prettyTerm' vars t = SAWCorePP.prettyTermWithNameList opts ne vars t
     prettyRule r =
       let vars = map fst (ctxtRewriteRule r)
           lhs = prettyTerm' vars (lhsRewriteRule r)
@@ -815,7 +815,8 @@ prettyValue sc = visit (0 :: Int)
       VTopLevel {} -> pure "<<TopLevel>>"
       VSimpset ss -> do
         ppopts <- scGetPPOpts sc
-        pure $ prettySimpset ppopts ss
+        ne <- scGetNamingEnv sc
+        pure $ prettySimpset ppopts ne ss
       VProofScript {} -> pure "<<proof script>>"
       VTheorem thm -> do
         nenv <- scGetNamingEnv sc
