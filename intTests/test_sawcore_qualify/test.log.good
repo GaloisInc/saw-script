@@ -234,7 +234,7 @@ Invalid: [
 (\(x1 : Bool) -> x1) !?"x&&y"
 Rewrite Rules
 =============
-* Prelude::not (Prelude::not x) = x
+* not (not x`1) = x`1
 let { _x`1 = (0, 7);
       _x`2 = \(_x_4 : Bool) ->
                let { _x`2 = (_x_4, _x_4, _x`1); } in (_x_4, _x_4, _x`2, _x`2);
