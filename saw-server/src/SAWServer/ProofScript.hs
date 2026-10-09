@@ -66,6 +66,7 @@ data Prover
   | W4_Bitwuzla [Text]
   | W4_Boolector [Text]
   | W4_CVC5 [Text]
+  | W4_RME [Text]
   | W4_Yices [Text]
   | W4_Z3 [Text]
 
@@ -105,6 +106,7 @@ instance FromJSON Prover where
         "w4-bitwuzla"    -> W4_Bitwuzla <$> unints
         "w4-boolector"   -> W4_Boolector <$> unints
         "w4-cvc5"        -> W4_CVC5   <$> unints
+        "w4-rme"         -> W4_RME    <$> unints
         "w4-yices"       -> W4_Yices  <$> unints
         "w4-z3"          -> W4_Z3     <$> unints
         "yices"          -> SBV_Yices <$> unints
@@ -296,6 +298,7 @@ interpretProofScript (ProofScript ts) = go ts
             W4_Bitwuzla unints    -> return $ SB.w4_unint_bitwuzla unints
             W4_Boolector unints   -> return $ SB.w4_unint_boolector unints
             W4_CVC5 unints        -> return $ SB.w4_unint_cvc5 unints
+            W4_RME unints         -> return $ SB.w4_unint_rme unints
             W4_Yices unints       -> return $ SB.w4_unint_yices unints
             W4_Z3 unints          -> return $ SB.w4_unint_z3 unints
         go [Trivial]                  = return $ SB.trivial

@@ -1,6 +1,8 @@
 from abc import ABCMeta, abstractmethod
 from typing import Any, List
 
+# Provers without uninterpreted function support
+
 class Prover(metaclass=ABCMeta):
   @abstractmethod
   def to_json(self) -> Any: pass
@@ -33,6 +35,8 @@ class RME(Prover):
   def to_json(self) -> Any:
     return { "name": "rme" }
 
+# Provers with uninterpreted function support
+
 class UnintProver(Prover):
   def __init__(self, name : str, unints : List[str]) -> None:
     self.name = name
@@ -40,6 +44,8 @@ class UnintProver(Prover):
 
   def to_json(self) -> Any:
     return { "name": self.name, "uninterpreted functions": self.unints }
+
+# W4
 
 class Bitwuzla(UnintProver):
   def __init__(self, unints : List[str]) -> None:
@@ -49,6 +55,10 @@ class CVC5(UnintProver):
   def __init__(self, unints : List[str]) -> None:
     super().__init__("w4-cvc5", unints)
 
+class RME_W4(UnintProver):
+  def __init__(self, unints : List[str]) -> None:
+    super().__init__("w4-rme", unints)
+
 class Yices(UnintProver):
   def __init__(self, unints : List[str]) -> None:
     super().__init__("w4-yices", unints)
@@ -56,6 +66,8 @@ class Yices(UnintProver):
 class Z3(UnintProver):
   def __init__(self, unints : List[str]) -> None:
     super().__init__("w4-z3", unints)
+
+# SBV
 
 class Bitwuzla_SBV(UnintProver):
   def __init__(self, unints : List[str]) -> None:
@@ -139,6 +151,9 @@ def bitwuzla(unints : List[str]) -> ProofTactic:
 
 def cvc5(unints : List[str]) -> ProofTactic:
   return UseProver(CVC5(unints))
+
+def rme_w4(unints : List[str]) -> ProofTactic:
+  return UseProver(RME_W4(unints))
 
 def yices(unints : List[str]) -> ProofTactic:
   return UseProver(Yices(unints))
