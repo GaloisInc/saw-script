@@ -302,6 +302,7 @@ prettySetupValue sc setupval = case setupval of
         absurd empty
       (MIRExt, ()) ->
         pure $ "mux" <> PP.parens (c' <> PP.comma <+> t' <> PP.comma <+> f')
+  SetupZST _ -> pure "{}"
   where
     ext :: SAWExt ext
     ext = sawExt @ext

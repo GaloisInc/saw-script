@@ -38,6 +38,7 @@ module SAWCentral.Crucible.MIR.TypeShape
   -- `MirAggregate` / `AgElemShape` helpers
   , expandAgElem
   , expandAgElems
+  , zstMirAggregate
   , buildMirAggregate
   , traverseMirAggregate
   , accessMirAggregate
@@ -104,9 +105,16 @@ import qualified SAWCore.SharedTerm as SAW
 -- stored directly, but can be computed with `shapeType`.
 data TypeShape (tp :: CrucibleType) where
     PrimShape :: M.Ty -> BaseTypeRepr btp -> TypeShape (BaseToType btp)
-    -- | A shape for tuples, as well as for tuple-like types (e.g.,
-    -- 'M.TyFnDef', which is treated like an empty tuple).
-    TupleShape :: M.Ty -> [AgElemShape] -> TypeShape MirAggregateType
+    -- | A shape for (some) things that are represented with `MirAggregate`s. At
+    -- the moment, the following types use this shape:
+    -- - `M.TyTuple`
+    -- - `M.TyFnDef`, which is treated like an empty tuple
+    -- - Enums of size zero
+    --
+    -- This notably does not include arrays or structs, even though they too are
+    -- represented with `MirAggregate`s - they currently use their own shapes,
+    -- `ArrayShape` and `StructShape`, below.
+    AggregateShape :: M.Ty -> [AgElemShape] -> TypeShape MirAggregateType
     ArrayShape :: M.Ty
                -- ^ The array type
                -> M.Ty
@@ -164,7 +172,8 @@ data TypeShape (tp :: CrucibleType) where
                -> TypeRepr tp
                -- ^ The Crucible representation of the element type.
                -> TypeShape MirSlice
-    -- | A shape for an enum type.
+    -- | A shape for an enum type of nonzero size (zero-sized enums use
+    -- `AggregateShape` instead).
     EnumShape :: M.Ty
               -- ^ The overall enum type.
               -> [[M.Ty]]
@@ -247,17 +256,19 @@ tyToShape col = go
         M.TyTuple _ -> goTuple ty
         M.TyClosure _ -> goTuple ty
         -- `FnDef` is represented like an empty tuple
-        M.TyFnDef _ -> Some $ TupleShape ty []
+        M.TyFnDef _ -> Some $ AggregateShape ty []
         M.TyArray ty' len | Some shp <- go ty' ->
           let elemSz = tySize col ty'
            in Some $ ArrayShape ty ty' elemSz shp (fromIntegral len)
         M.TyAdt nm _ _ -> case Map.lookup nm (col ^. M.adts) of
             Just adt | Just ty' <- reprTransparentFieldTy col adt ->
                 mapSome (TransparentShape ty) $ go ty'
-            Just (M.Adt _ kind vs _ _ _ _) ->
+            Just (M.Adt _ kind vs sz _ _ _) ->
               case kind of
                 M.Struct -> goStruct ty
-                M.Enum discrTy -> goEnum ty discrTy vs
+                M.Enum discrTy
+                  | sz == 0 -> Some $ AggregateShape ty []
+                  | otherwise -> goEnum ty discrTy vs
                 M.Union -> error "tyToShape: Union types NYI"
             Nothing -> error $ "tyToShape: bad adt: " ++ show ty
         M.TyRef ty' mutbl -> goRef ty ty' mutbl
@@ -275,7 +286,7 @@ tyToShape col = go
           | otherwise -> error ("goPrim: type " ++ show ty ++ " produced non-primitive type " ++ show tpr)
 
     goTuple :: M.Ty -> Some TypeShape
-    goTuple ty = Some $ TupleShape ty (tyFieldElemShapes ty)
+    goTuple ty = Some $ AggregateShape ty (tyFieldElemShapes ty)
 
     goStruct :: M.Ty -> Some TypeShape
     goStruct ty = Some $ StructShape ty (tyFieldElemShapes ty)
@@ -371,7 +382,7 @@ shapeType = go
   where
     go :: forall tp. TypeShape tp -> TypeRepr tp
     go (PrimShape _ btpr) = baseToType btpr
-    go (TupleShape _ _) = MirAggregateRepr
+    go (AggregateShape _ _) = MirAggregateRepr
     go (ArrayShape _ _ _ _ _) = MirAggregateRepr
     go (StructShape _ _) = MirAggregateRepr
     go (EnumShape _ _ variantTys _ discrShp) =
@@ -391,7 +402,7 @@ variantShapeType (VariantShape flds) =
 
 shapeMirTy :: TypeShape tp -> M.Ty
 shapeMirTy (PrimShape ty _) = ty
-shapeMirTy (TupleShape ty _) = ty
+shapeMirTy (AggregateShape ty _) = ty
 shapeMirTy (ArrayShape ty _ _ _ _) = ty
 shapeMirTy (StructShape ty _) = ty
 shapeMirTy (EnumShape ty _ _ _ _) = ty
@@ -461,7 +472,7 @@ shapeToTerm' sc = go
     go :: forall tp'. CryTermAdaptor Integer -> TypeShape tp' -> m SAW.Term
     go NoAdapt (PrimShape _ BaseBoolRepr) = liftIO $ SAW.scBoolType sc
     go NoAdapt (PrimShape _ (BaseBVRepr w)) = liftIO $ SAW.scBitvector sc (natValue w)
-    go ada (TupleShape _ elems) = do
+    go ada (AggregateShape _ elems) = do
         subAda <- case ada of
                     NoAdapt -> pure (repeat NoAdapt)
                     AdaptTuple as -> pure as
@@ -576,7 +587,7 @@ expandAgElems as = goList 0 as
         Nothing -> [AgElemShape (base + off) sz shp]
 
     goShape :: Word -> TypeShape tp -> Maybe [AgElemShape]
-    goShape base (TupleShape _ as') = Just $ goList base as'
+    goShape base (AggregateShape _ as') = Just $ goList base as'
     goShape base (ArrayShape _ _ sz shp len) =
       Just $ concat [go base (AgElemShape (i * sz) sz shp) | i <- init [0 .. len]]
     goShape base (StructShape _ as') = Just $ goList base as'
@@ -601,6 +612,9 @@ agCheckKeysEqF fail_ loc elems ag = do
         ++ show (elemsKeys IntSet.\\ mKeys)
       else fail_ $ loc ++ ": expected aggregate to have fields at offsets "
         ++ show elemsKeys ++ ", but got fields at offsets " ++ show mKeys
+
+zstMirAggregate :: MirAggregate sym
+zstMirAggregate = MirAggregate 0 mempty
 
 -- | Build a `MirAggregate` with one entry for each provided `AgElemShape`.
 -- The callback receives the offset, size, and type of the entry, along with

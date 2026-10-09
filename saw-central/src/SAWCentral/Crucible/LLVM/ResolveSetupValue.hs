@@ -815,6 +815,8 @@ typeOfSetupValue cc env nameEnv val =
 
     SetupMux empty _ _ _ ->
       absurd empty
+    SetupZST empty ->
+      absurd empty
   where
     lc = ccTypeCtx cc
     dl = Crucible.llvmDataLayout lc
@@ -945,6 +947,8 @@ resolveSetupVal cc mem env tyenv nameEnv val =
         Nothing ->
           fail $ Text.unpack $ "resolveSetupVal: global not found: " <> name
     SetupMux empty _ _ _ ->
+      absurd empty
+    SetupZST empty ->
       absurd empty
 
 

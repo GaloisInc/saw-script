@@ -57,7 +57,7 @@ traverseTypeShape sym nameStr f shp0 rv0 = go shp0 rv0
     go (PrimShape _ _) rv = return rv
     go (ArrayShape _ _ sz shp len) ag = do
         traverseMirAggregateArray sym sz shp len ag $ \_off rv -> f shp rv
-    go (TupleShape _ elems) ag =
+    go (AggregateShape _ elems) ag =
         traverseMirAggregate sym elems ag $ \_off _sz shp rv -> f shp rv
     go (StructShape _ elems) ag =
         traverseMirAggregate sym elems ag $ \_off _sz shp rv -> f shp rv

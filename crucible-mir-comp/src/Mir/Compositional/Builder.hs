@@ -662,6 +662,7 @@ substMethodSpec sc sm ms = do
         MS.SetupGlobal _ _ -> return sv
         MS.SetupGlobalInitializer _ _ -> return sv
         MS.SetupMux b c t f -> MS.SetupMux b <$> goTypedTerm c <*> goSetupValue t <*> goSetupValue f
+        MS.SetupZST _ -> return sv
 
     goSetupCondition (MS.SetupCond_Equal loc sv1 sv2) =
         MS.SetupCond_Equal loc <$> goSetupValue sv1 <*> goSetupValue sv2
@@ -718,7 +719,9 @@ regToSetup bak pp eval shp0 rv0 = go shp0 rv0
         visitExprVars cache expr $ \var -> do
             msbPrePost pp . seVars %= Set.insert (Some var)
         liftIO $ MS.SetupTerm <$> eval btpr expr
-    go (TupleShape _ elems) ag = do
+    go (AggregateShape ty []) _ag = do
+      return $ MS.SetupZST ty
+    go (AggregateShape _ elems) ag = do
       svs <- accessMirAggregate sym elems ag $ \_off _sz shp rv -> go shp rv
       return $ MS.SetupTuple () svs
     go (ArrayShape _ elemTy sz shp len) ag = do

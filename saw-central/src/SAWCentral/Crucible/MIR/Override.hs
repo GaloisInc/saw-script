@@ -1047,6 +1047,7 @@ instantiateSetupValue sc s v =
                                            <$> doTerm c
                                            <*> instantiateSetupValue sc s t
                                            <*> instantiateSetupValue sc s f
+    MS.SetupZST _                     -> return v
   where
     doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiate sc s t
 
@@ -1560,7 +1561,7 @@ matchArg opts sc cc cs prepost md = go False []
                   ]
 
         -- match the fields of a tuple point-wise
-        ([], MIRVal (TupleShape (Mir.TyTuple _) elems) ag, MS.SetupTuple () zs) ->
+        ([], MIRVal (AggregateShape (Mir.TyTuple _) elems) ag, MS.SetupTuple () zs) ->
           void $ accessMirAggregateF' sym (const fail_) elems zs ag $
             \_off _sz shp rv z -> go inCast [] (MIRVal shp rv) z
 
@@ -1683,6 +1684,14 @@ matchArg opts sc cc cs prepost md = go False []
           cNegPred <- liftIO $ W4.notPred sym cPred
           withConditionalPred cNegPred $
             go inCast projStack actual f
+
+        (_, MIRVal (AggregateShape actTy []) _, MS.SetupZST expTy)
+          | actTy == expTy -> pure ()
+
+        (_, MIRVal (TransparentShape actTy innerShp) v, MS.SetupZST expTy)
+          | actTy == expTy ->
+            let innerMirTy = shapeMirTy innerShp
+             in go inCast projStack (MIRVal innerShp v) (MS.SetupZST innerMirTy)
 
         (_, _, MS.SetupNull empty)      -> absurd empty
         (_, _, MS.SetupUnion empty _ _) -> absurd empty
@@ -1893,6 +1902,7 @@ matchPointsTos opts sc cc spec prepost = go False []
         MS.SetupUnion empty _ _           -> absurd empty
         MS.SetupNull empty                -> absurd empty
         MS.SetupMux _ _ t f               -> setupVars t <> setupVars f
+        MS.SetupZST _                     -> Set.empty
 
     -- Compute the set of variable identifiers in a 'MirSetupEnum'
     setupEnum :: MirSetupEnum -> Set AllocIndex
@@ -2202,7 +2212,7 @@ valueToSC sym fail_ tval (MIRVal shp val) =
       -> liftIO (toSC sym st val)
       |  n == 128, Just _ <- W4.testEquality w (W4.knownNat @128)
       -> liftIO (toSC sym st val)
-    (Cryptol.TVTuple tys, TupleShape _ elems)
+    (Cryptol.TVTuple tys, AggregateShape _ elems)
       -> do terms <- accessMirAggregate' sym elems tys val $
               \_off _sz shp' val' tval' -> valueToSC sym fail_ tval' (MIRVal shp' val')
             liftIO (scTupleReduced sc terms)

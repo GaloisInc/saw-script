@@ -1,0 +1,8 @@
+test zst_enum/<DISAMB>::f1_equiv[0]: ok
+test zst_enum/<DISAMB>::f2_equiv[0]: ok
+test zst_enum/<DISAMB>::g1_equiv[0]: ok
+test zst_enum/<DISAMB>::g2_equiv[0]: ok
+test zst_enum/<DISAMB>::h1_equiv[0]: ok
+test zst_enum/<DISAMB>::h2_equiv[0]: ok
+
+[Crux] Overall status: Valid.

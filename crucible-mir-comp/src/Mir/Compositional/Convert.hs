@@ -167,8 +167,8 @@ termToReg col sym term shp0 = do
                 _ -> typeError  "termToReg" (show (shapeType shp))
                                             ("a vector containing " <> show x)
             buildBitVector w bits
-        (TupleShape _ [], SAW.VCtorApp 0 _ []) -> mirAggregate_zstIO
-        (TupleShape ty elems, _) -> do
+        (AggregateShape _ [], SAW.VCtorApp 0 _ []) -> mirAggregate_zstIO
+        (AggregateShape ty elems, _) -> do
             let tupleSz = tySize col ty
             svs <- reverse <$> tupleToListRev (length elems) [] sv
             buildMirAggregate sym tupleSz elems svs $ \_ _ shp' sv' -> go shp' sv'
@@ -340,7 +340,7 @@ regToTermWithAdapt sym sc name ada0 shp0 rv0 = go ada0 shp0 rv0
     go ada shp rv =
       case (ada, shp, rv) of
         (NoAdapt, _, _) -> regToTerm sym sc name shp rv
-        (AdaptTuple as, TupleShape _ elems, ag) -> do
+        (AdaptTuple as, AggregateShape _ elems, ag) -> do
             terms <- accessMirAggregate' sym elems as ag $ \_off _sz shp' rv' a -> go a shp' rv'
             liftIO $ SAW.scTuple sc terms
         (AdaptArray a, ArrayShape _ _ sz shp' len, ag) -> do
@@ -396,7 +396,7 @@ regToTerm sym sc name shp0 rv0 = go shp0 rv0
         m SAW.Term
     go shp rv = case (shp, rv) of
         (PrimShape _ _, expr) -> exprToTerm sym expr
-        (TupleShape _ elems, ag) -> do
+        (AggregateShape _ elems, ag) -> do
             terms <- accessMirAggregate sym elems ag $ \_off _sz shp' rv' -> go shp' rv'
             liftIO $ SAW.scTuple sc terms
         (ArrayShape _ _ sz shp' len, ag) -> do

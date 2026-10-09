@@ -134,7 +134,7 @@ prettyMIRVal sym (MIRVal shp val) =
   case shp of
     PrimShape _ _ ->
       W4.printSymExpr val
-    TupleShape _ elems -> prettyAggregate elems val
+    AggregateShape _ elems -> prettyAggregate elems val
     ArrayShape _ _ elemSz shp' len -> prettyAggregateArray elemSz shp' len val
     StructShape _ elems -> prettyAggregate elems val
     EnumShape _ _ variantShps _ _
@@ -561,6 +561,8 @@ typeOfSetupValue mcc env nameEnv val =
               let sc = sawCoreSharedContext (mcc ^. mccSym)
               ppopts <- liftIO $ scGetPPOpts sc
               X.throwM $ MIRFieldAccessWrongTy ppopts accessMode structValOrPtrTy
+    MS.SetupZST ty ->
+      pure ty
 
     MS.SetupNull empty                -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
@@ -837,9 +839,9 @@ resolveSetupVal mcc env tyenv nameEnv val =
       let tupleSz = tySize col mirTy
       Some (tupleShp :: TypeShape tp) <- pure $ tyToShape col mirTy
       (elems :: [AgElemShape], Refl :: tp :~: Mir.MirAggregateType) <- case tupleShp of
-        TupleShape _ elems -> return (elems, Refl)
+        AggregateShape _ elems -> return (elems, Refl)
         _ -> panic "resolveSetupVal"
-          ["TyTuple produced non-TupleShape", Text.pack $ show tupleShp]
+          ["TyTuple produced non-AggregateShape", Text.pack $ show tupleShp]
       ag <- buildMirAggregateWithVal sym tupleSz elems flds' $ \_off _sz _shp rv -> return rv
       pure $ MIRVal tupleShp ag
     MS.SetupSlice slice ->
@@ -1034,6 +1036,8 @@ resolveSetupVal mcc env tyenv nameEnv val =
       let muxTpr = tTpr
       muxVal <- muxRegForType sym iTypes muxTpr cVal tVal fVal
       pure $ MIRVal muxShp muxVal
+    MS.SetupZST ty ->
+      pure $ MIRVal (AggregateShape ty []) zstMirAggregate
   where
     cs  = mcc ^. mccRustModule . Mir.rmCS
     col = cs ^. Mir.collection
@@ -1274,9 +1278,9 @@ resolveSAWTerm mcc tp tm =
       let tupleSz = tySize col mirTupleTy
       Some (tupleShp :: TypeShape tp) <- pure $ tyToShape col mirTupleTy
       (elems :: [AgElemShape], Refl :: tp :~: Mir.MirAggregateType) <- case tupleShp of
-        TupleShape _ elems -> return (elems, Refl)
+        AggregateShape _ elems -> return (elems, Refl)
         _ -> panic "resolveSAWTerm"
-          ["TyTuple produced non-TupleShape", Text.pack $ show tupleShp]
+          ["TyTuple produced non-AggregateShape", Text.pack $ show tupleShp]
       ag <- buildMirAggregateWithVal sym tupleSz elems vals $ \_off _sz _shp rv -> return rv
       pure $ MIRVal tupleShp ag
     Cryptol.TVRec _flds ->
@@ -1450,7 +1454,7 @@ equalValsPred cc mv1 mv2 =
          -> MaybeT IO (W4.Pred Sym)
     goTy (PrimShape _ _) v1 v2 =
       liftIO $ W4.isEq sym v1 v2
-    goTy (TupleShape _ elems) ag1 ag2 =
+    goTy (AggregateShape _ elems) ag1 ag2 =
       goAg elems ag1 ag2
     goTy (ArrayShape _ _ elemSz shp len) ag1 ag2 =
       let elems = arrayAgElemShapes elemSz shp len in
@@ -2098,3 +2102,4 @@ containsCast (MS.SetupEnum enum_) =
 containsCast (MS.SetupGlobal () _) = False
 containsCast (MS.SetupGlobalInitializer () _) = False
 containsCast (MS.SetupMux () _ vt vf) = containsCast vt || containsCast vf
+containsCast (MS.SetupZST _) = False

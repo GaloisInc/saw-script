@@ -1089,6 +1089,7 @@ matchPointsTos opts sc cc spec prepost = go False []
         SetupGlobal _ _            -> Set.empty
         SetupGlobalInitializer _ _ -> Set.empty
         SetupMux empty _ _ _       -> absurd empty
+        SetupZST empty             -> absurd empty
 
 
 ------------------------------------------------------------------------
@@ -2426,6 +2427,7 @@ instantiateSetupValue sc s v =
     SetupEnum  empty         -> absurd empty
     SetupTuple empty _       -> absurd empty
     SetupSlice empty         -> absurd empty
+    SetupZST empty           -> absurd empty
   where
     doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiate sc s t
 

@@ -383,7 +383,7 @@ munge col sym shp0 rv0 = do
 
     let go :: forall tp. TypeShape tp -> RegValue sym tp -> IO (RegValue sym tp)
         go shp@(PrimShape _ _) expr = eval expr >>= uneval shp
-        go (TupleShape _ elems) ag =
+        go (AggregateShape _ elems) ag =
             traverseMirAggregate sym elems ag $ \_off _sz shp rv -> go shp rv
         go (ArrayShape _ _ sz shp len) ag =
             traverseMirAggregateArray sym sz shp len ag $ \_off rv -> go shp rv
@@ -564,7 +564,7 @@ typecheckFnSig _ppopts col fnSig argShps0 (Some retShp) (SAW.TypedTermSchema sch
           | fromIntegral (intValue w) == n -> Right NoAdapt
           | otherwise -> typeErr desc shp ty $
             "bitvector width " ++ show n ++ " does not match " ++ show (intValue w)
-        (TupleShape _ elems, Cry.TCon (Cry.TC (Cry.TCTuple n)) tys)
+        (AggregateShape _ elems, Cry.TCon (Cry.TC (Cry.TCTuple n)) tys)
           | length elems == n ->
             adaptTuple <$>
               forM (zip elems tys)
