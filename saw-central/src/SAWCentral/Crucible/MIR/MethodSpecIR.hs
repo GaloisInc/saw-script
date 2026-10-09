@@ -74,7 +74,6 @@ module SAWCentral.Crucible.MIR.MethodSpecIR
   , MirFieldAccessMode(..)
 
     -- * Initial CrucibleSetupMethodSpec
-  , initialDefCrucibleMethodSpecIR
   , initialCrucibleSetupState
 
     -- * Intrinsics
@@ -96,12 +95,12 @@ import Lang.Crucible.Simulator.Intrinsics
 import Mir.Generator
 import Mir.Intrinsics
 import qualified Mir.Mir as M
-import What4.ProgramLoc (ProgramLoc)
 
 import qualified SAWSupport.Pretty as PPS
 
 import SAWCore.SharedTerm (SharedContext, scGetPPOpts)
 
+import qualified SAWCentral.Position as Pos
 import           SAWCentral.Crucible.Common
 import qualified SAWCentral.Crucible.Common.MethodSpec as MS
 import qualified SAWCentral.Crucible.Common.Setup.Type as Setup
@@ -206,28 +205,30 @@ type MIRMethodSpec = MS.CrucibleMethodSpecIR MIR
 initialDefCrucibleMethodSpecIR ::
   CollectionState ->
   M.Fn ->
-  ProgramLoc ->
+  Pos.Pos ->
+  Text ->
   MS.CrucibleMethodSpecIR MIR
-initialDefCrucibleMethodSpecIR rm fn loc =
+initialDefCrucibleMethodSpecIR rm fn srcPos execFunc =
   let fname = fn ^. M.fname
       fsig = fn ^. M.fsig
       argTys = fsig ^. M.fsarg_tys
       retTy = case fsig ^. M.fsreturn_ty of
                 M.TyTuple [] -> Nothing
                 ty -> Just ty in
-  MS.makeCrucibleMethodSpecIR fname argTys retTy loc rm
+  MS.makeCrucibleMethodSpecIR fname argTys retTy srcPos execFunc rm
 
 initialCrucibleSetupState ::
   MIRCrucibleContext ->
   M.Fn ->
-  ProgramLoc ->
+  Pos.Pos ->
+  Text ->
   Setup.CrucibleSetupState MIR
-initialCrucibleSetupState cc fn loc =
+initialCrucibleSetupState cc fn srcPos execFunc =
   Setup.makeCrucibleSetupState () cc $
     initialDefCrucibleMethodSpecIR
       (cc ^. mccRustModule ^. rmCS)
       fn
-      loc
+      srcPos execFunc
 
 -- | The default MIR intrinsics extended with the 'MS.GhostValue' intrinsic,
 -- which powers ghost state.

@@ -620,13 +620,13 @@ data Value
     --   the list of arguments applied so far, as a Seq to allow
     --   appending to the end reasonably. FUTURE: is never (Nothing, Nothing),
     --   consider defining a different type to exclude that case.
-  | VBuiltin SS.Name (Seq (Maybe SS.Name, Maybe Value)) (Map SS.Name Value) BuiltinWrapper
+  | VBuiltin SS.Pos SS.Name (Seq (Maybe SS.Name, Maybe Value)) (Map SS.Name Value) BuiltinWrapper
   | VTerm TypedTerm
   | VType Cryptol.Schema
     -- | Returned value in unspecified monad.
   | VReturn SS.Pos RefChain Value
     -- | Not-yet-executed do-block in unspecified monad.
-  | VDo RefChain Environ ([SS.Stmt], SS.Expr)
+  | VDo SS.Pos RefChain Environ ([SS.Stmt], SS.Expr)
     -- | Single monadic bind in unspecified monad.
     --
     --   This exists only to support the "for" builtin; see notes there
@@ -791,7 +791,7 @@ prettyValue sc = visit (0 :: Int)
           -- matching changes to the Expr printer too.
           pure $ foldr1 indent lines_
 
-      VBuiltin name _args _unappliedNamedArgs _wrapper ->
+      VBuiltin _pos name _args _unappliedNamedArgs _wrapper ->
           let name' = PP.pretty name in
           pure $ PP.sep ["<<", "builtin", name', ">>"]
 
@@ -802,11 +802,11 @@ prettyValue sc = visit (0 :: Int)
       VReturn _pos _chain v -> do
           v' <- visit (prec + 1) v
           pure $ "return" <+> v'
-      VDo _chain _env body -> do
-        -- The printer for expressions doesn't print positions, so we can
-        -- feed in a dummy.
-        let pos = SS.PosInternal "<<do-block>>"
-            e = SS.Block pos body
+      VDo pos _chain _env body -> do
+        -- Note: if we don't need a position in VDo elsewhere, we
+        -- don't need it here; the expression printer doesn't print
+        -- positions so we could use a dummy.
+        let e = SS.Block pos body
         pure $ SS.prettyExpr e
       VBindOnce _pos _chain v1 v2 -> do
         v1' <- visit 0 v1
@@ -1666,7 +1666,10 @@ runProofScript ::
   Bool {- ^ do we need to normalize the sequent goal? -} ->
   TopLevel ProofResult
 runProofScript (ProofScript m) concl gl ploc rsn recordThm useSequentGoals =
-  do pos <- getPosition
+  do -- FUTURE: decide what kind of positions the proof system uses
+     -- XXX: also figure out why it expects two positions, especially
+     -- since I think both are always the result of getPosition.
+     pos <- getPosition
      ps <- io (startProof gl pos ploc rsn)
      (r,pstate) <- runStateT (runExceptT m) ps
      case r of

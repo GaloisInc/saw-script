@@ -32,6 +32,7 @@ import qualified Lang.Crucible.JVM as CJ
 
 import Mir.Intrinsics (MIR)
 
+import SAWSupport.Position
 import qualified SAWSupport.Pretty as PPS (Opts)
 
 import SAWCentral.Crucible.Common.MethodSpec
@@ -86,7 +87,7 @@ msToJSON cms = object [
     ("type" .= ("method" :: String))
     , ("id" .= (indexValue $ cms ^. psSpecIdent))
     , ("method" .= (show $ pretty $ cms ^. psSpec.csMethod))
-    , ("loc" .= (show $ pretty $ plSourceLoc $ cms ^. psSpec.csLoc))
+    , ("loc" .= ((ppPosition $ cms ^. psSpec.csSourcePos) <> " in " <> (cms ^. psSpec.csExecFunc)))
     , ("status" .= case cms ^. psProofMethod of
                      SpecAdmitted -> "assumed" :: String
                      SpecProved   -> "verified")
