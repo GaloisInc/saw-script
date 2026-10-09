@@ -1047,6 +1047,7 @@ instantiateSetupValue sc s v =
                                            <$> doTerm c
                                            <*> instantiateSetupValue sc s t
                                            <*> instantiateSetupValue sc s f
+    MS.SetupZST _                     -> return v
   where
     doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiate sc s t
 
@@ -1893,6 +1894,7 @@ matchPointsTos opts sc cc spec prepost = go False []
         MS.SetupUnion empty _ _           -> absurd empty
         MS.SetupNull empty                -> absurd empty
         MS.SetupMux _ _ t f               -> setupVars t <> setupVars f
+        MS.SetupZST _                     -> Set.empty
 
     -- Compute the set of variable identifiers in a 'MirSetupEnum'
     setupEnum :: MirSetupEnum -> Set AllocIndex

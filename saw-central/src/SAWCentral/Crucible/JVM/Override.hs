@@ -992,6 +992,7 @@ instantiateSetupValue sc s v =
     MS.SetupUnion empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
     MS.SetupMux empty _ _ _           -> absurd empty
+    MS.SetupZST empty                 -> absurd empty
   where
     doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiate sc s t
 

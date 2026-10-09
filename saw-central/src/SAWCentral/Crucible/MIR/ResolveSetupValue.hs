@@ -561,6 +561,8 @@ typeOfSetupValue mcc env nameEnv val =
               let sc = sawCoreSharedContext (mcc ^. mccSym)
               ppopts <- liftIO $ scGetPPOpts sc
               X.throwM $ MIRFieldAccessWrongTy ppopts accessMode structValOrPtrTy
+    MS.SetupZST ty ->
+      pure ty
 
     MS.SetupNull empty                -> absurd empty
     MS.SetupUnion empty _ _           -> absurd empty
@@ -1034,6 +1036,8 @@ resolveSetupVal mcc env tyenv nameEnv val =
       let muxTpr = tTpr
       muxVal <- muxRegForType sym iTypes muxTpr cVal tVal fVal
       pure $ MIRVal muxShp muxVal
+    MS.SetupZST ty ->
+      pure $ MIRVal (AggregateShape ty []) zstMirAggregate
   where
     cs  = mcc ^. mccRustModule . Mir.rmCS
     col = cs ^. Mir.collection
@@ -2098,3 +2102,4 @@ containsCast (MS.SetupEnum enum_) =
 containsCast (MS.SetupGlobal () _) = False
 containsCast (MS.SetupGlobalInitializer () _) = False
 containsCast (MS.SetupMux () _ vt vf) = containsCast vt || containsCast vf
+containsCast (MS.SetupZST _) = False

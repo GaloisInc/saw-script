@@ -662,6 +662,7 @@ substMethodSpec sc sm ms = do
         MS.SetupGlobal _ _ -> return sv
         MS.SetupGlobalInitializer _ _ -> return sv
         MS.SetupMux b c t f -> MS.SetupMux b <$> goTypedTerm c <*> goSetupValue t <*> goSetupValue f
+        MS.SetupZST _ -> return sv
 
     goSetupCondition (MS.SetupCond_Equal loc sv1 sv2) =
         MS.SetupCond_Equal loc <$> goSetupValue sv1 <*> goSetupValue sv2

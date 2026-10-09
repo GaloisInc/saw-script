@@ -37,6 +37,7 @@ module SAWCentral.Crucible.Common.Setup.Value
   , ResolvedState
 
   , XSetupNull
+  , XSetupZST
   , XSetupStruct
   , XSetupEnum
   , XSetupTuple
@@ -144,6 +145,7 @@ type family XSetupCast ext
 type family XSetupUnion ext
 type family XSetupGlobalInitializer ext
 type family XSetupMux ext
+type family XSetupZST ext
 
 -- | From the manual: \"The SetupValue type corresponds to values that can occur
 -- during symbolic execution, which includes both 'Term' values, pointers, and
@@ -168,6 +170,9 @@ data SetupValue ext where
   -- | An enumeration value. At the moment, this is only ever used for MIR
   -- verification.
   SetupEnum :: XSetupEnum ext -> SetupValue ext
+  -- | A value of a zero-sized type. At the moment, this is only ever used for
+  -- MIR verification.
+  SetupZST :: XSetupZST ext -> SetupValue ext
 
   -- | A pointer to a global variable
   SetupGlobal :: XSetupGlobal ext -> Text -> SetupValue ext
@@ -204,6 +209,7 @@ type SetupValueHas (c :: Type -> Constraint) ext =
   , c (XSetupGlobal ext)
   , c (XSetupGlobalInitializer ext)
   , c (XSetupMux ext)
+  , c (XSetupZST ext)
   )
 
 deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)

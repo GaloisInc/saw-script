@@ -110,6 +110,8 @@ type instance MS.XSetupCast MIR = M.Ty
 type instance MS.XSetupUnion MIR = Void
 type instance MS.XSetupGlobalInitializer MIR = ()
 type instance MS.XSetupMux MIR = ()
+-- The 'M.Ty' represents the original MIR type of the value.
+type instance MS.XSetupZST MIR = M.Ty
 
 type instance MS.TypeName MIR = Text
 type instance MS.ExtType MIR = M.Ty

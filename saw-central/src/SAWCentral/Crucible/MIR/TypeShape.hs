@@ -38,6 +38,7 @@ module SAWCentral.Crucible.MIR.TypeShape
   -- `MirAggregate` / `AgElemShape` helpers
   , expandAgElem
   , expandAgElems
+  , zstMirAggregate
   , buildMirAggregate
   , traverseMirAggregate
   , accessMirAggregate
@@ -607,6 +608,9 @@ agCheckKeysEqF fail_ loc elems ag = do
         ++ show (elemsKeys IntSet.\\ mKeys)
       else fail_ $ loc ++ ": expected aggregate to have fields at offsets "
         ++ show elemsKeys ++ ", but got fields at offsets " ++ show mKeys
+
+zstMirAggregate :: MirAggregate sym
+zstMirAggregate = MirAggregate 0 mempty
 
 -- | Build a `MirAggregate` with one entry for each provided `AgElemShape`.
 -- The callback receives the offset, size, and type of the entry, along with
