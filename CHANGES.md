@@ -15,6 +15,10 @@ This release supports [version
 
 ## Bug Fixes
 
+* The Python client no longer crashes while logging a failed verification
+  with `LogResults(verbose_failure=True)` when the server returns no stdout
+  (#1663).
+
 * The positions of conditions reported in the verification summary output are
   now the source positions where they were asserted, not the position of the
   `llvm_verify` or similar call.
