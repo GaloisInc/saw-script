@@ -1,6 +1,6 @@
 {- |
 Module      : SAWScript.ValueOps
-Description : Operations on the SAWScript Value datatype, plus other code from Value.hs
+Description : Operations on the SAWScript `Value` datatype, plus other code from @Value.hs@
 License     : BSD3
 Maintainer  : saw@galois.com
 Stability   : provisional

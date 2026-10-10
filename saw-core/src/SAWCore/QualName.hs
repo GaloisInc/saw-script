@@ -166,7 +166,7 @@ asBoundVar qn =
         Just idx -> base <> Text.pack (show idx)
 
 -- | True if the given path element may be printed directly. If not, it
--- must be prefixed with '!?', quoted and escaped.
+-- must be prefixed with @!?@, quoted and escaped.
 validPathElem :: Text -> Bool
 validPathElem txt = case Text.uncons txt of
   Just (c, txt') ->

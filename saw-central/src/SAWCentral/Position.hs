@@ -51,46 +51,42 @@ import SAWSupport.Position as Support
 
 -- Pos ------------------------------------------------------------------------
 
--- Source position.
+-- | Source position.
 --
 -- Mostly, this is a physical range within a file.
 --
--- XXX: some logic uses Range with zero line/column numbers for end-of-file.
+-- XXX: some logic uses `Range` with zero line/column numbers for end-of-file.
 -- This should be replaced with an explicit end-of-file position.
 --
--- FileOnlyPos is for both whole-file things (such as symbol tables in
+-- `FileOnlyPos` is for both whole-file things (such as symbol tables in
 -- executable images) and cases where we just don't have any more
 -- detailed info.
 --
--- FileAndFunctionPos is for cases where we have a function name in a
+-- `FileAndFunctionPos` is for cases where we have a function name in a
 -- file but not a position as such (e.g. because it's compiled code
 -- in an object file)
 --
--- FunctionOnlyPos is for cases where we have a function name but not
+-- `FunctionOnlyPos` is for cases where we have a function name but not
 -- a filename. (FUTURE: ideally this should be eliminated)
 --
--- Internally generated objects use PosInternal with descriptive text.
--- (FUTURE: eliminate PosInternal in favor of explicit constructors
--- for the cases that currently generate PosInternal, so we can keep
+-- Internally generated objects use `PosInternal` with descriptive text.
+-- (FUTURE: eliminate `PosInternal` in favor of explicit constructors
+-- for the cases that currently generate `PosInternal`, so we can keep
 -- track of what they are.)
 --
--- PosInsideBuiltin is the position associated with code within a
+-- `PosInsideBuiltin` is the position associated with code within a
 -- builtin. This is separate so it prints differently from other
 -- things, and it prints in the way we want for printing stack
 -- traces. XXX: source positions and runtime positions shouldn't
 -- necessarily even be in the same data type...
 --
--- PosREPL is for things typed at the repl, or in some cases (that
+-- `PosREPL` is for things typed at the repl, or in some cases (that
 -- should get cleaned out) for things we assume came from the repl.
 --
--- If you add an Ord instance here (there is currently no need for
--- one) be sure to take steps to avoid confusion with the comparison
--- in comparePosQuality, which is a different kind of comparison.
---
 -- XXX we should rearrange this so that either the usage is
--- "import qualified SAWCentral.Position as Pos" and this type is T
--- (so the normal name of the type is Pos.T and the constructors
--- are Pos.Range, Pos.Unknown, etc.) or insert Pos in the names of
+-- @import qualified SAWCentral.Position as Pos@ and this type is @T@
+-- (so the normal name of the type is @Pos.T@ and the constructors
+-- are @Pos.Range@, @Pos.Unknown@, etc.) or insert @Pos@ in the names of
 -- all the constructors instead of just some.
 data Pos = Range !FilePath -- file
                  !Int !Int -- start line, col
@@ -117,7 +113,7 @@ differentLines p1 p2 =
         (_, _) ->
             False
 
--- | Check if position p1 is a subspan of position p2. This is used to
+-- | Check if position @p1@ is a subspan of position @p2@. This is used to
 --   guide certain reporting in the SAWScript typechecker.  It is not
 --   intended to do anything useful on more exotic kinds of position.
 subspan :: Pos -> Pos -> Bool
@@ -133,8 +129,8 @@ subspan p1 p2 =
             )
         (_, _) -> False
 
--- | Check if position p1 starts before position p2. This is also used
---   to guide certain reporting in the SAWSCript typechecker, and not
+-- | Check if position @p1@ starts before position @p2@. This is also used
+--   to guide certain reporting in the SAWScript typechecker, and not
 --   intended to do anything useful on more exotic kinds of position.
 startsBefore :: Pos -> Pos -> Bool
 startsBefore p1 p2 =
@@ -150,7 +146,7 @@ startsBefore p1 p2 =
 --   80 characters of the first line of the original source text the
 --   position refers to. The other contains carets underlining the
 --   portion of that text the position covers. If the position is
---   beyond column 80, returns None. FUTURE: instead of hardwiring 80,
+--   beyond column 80, returns `Nothing`. FUTURE: instead of hardwiring 80,
 --   maybe we can arrange to pass in or know the terminal width.
 --
 --   FUTURE: also, maybe we should add "..." if there's more lines,
@@ -190,7 +186,7 @@ getSourceText pos = case pos of
     _ ->
         Nothing
 
--- Get the empty position at the beginning of the position of
+-- | Get the empty position at the beginning of the position of
 -- something else. This can be used to provide positions for implicit
 -- elements, such as the not-physically-present wildcard in a
 -- do-notation binding that doesn't bind anything.
@@ -199,7 +195,7 @@ leadingPos pos = case pos of
    Range f l1 c1 _l2 _c2 txt -> Range f l1 c1 l1 c1 txt
    _ -> pos
 
--- Get the empty position at the end of the position of something
+-- | Get the empty position at the end of the position of something
 -- else.
 trailingPos :: Pos -> Pos
 trailingPos pos = case pos of
@@ -213,7 +209,7 @@ trailingPos pos = case pos of
                 Nothing -> ""
                 Just offset -> skipLines (n - 1) (Text.drop (offset + 1) txt)
 
--- Paste together two positions.
+-- | Paste together two positions.
 --
 -- Note that pasting together inferred positions isn't meaningful.
 -- Even if the positions are from related elements, the positions will
@@ -233,8 +229,8 @@ trailingPos pos = case pos of
 --
 -- If we mix an inferred position and a real one, just use the real one.
 --
--- Similar considerations arise from pasting FileOnlyPos and
--- FileAndFunctionPos. These should also only appear downstream of the
+-- Similar considerations arise from pasting `FileOnlyPos` and
+-- `FileAndFunctionPos`. These should also only appear downstream of the
 -- saw-script parser.
 spanPos :: Pos -> Pos -> Pos
 -- prefer internal and REPL to anything else
@@ -316,7 +312,7 @@ routePathThroughPos pos fp
         FileAndFunctionPos f _ -> takeDirectory f </> fp
         _ -> fp
 
--- Show instance for positions.
+-- | Show instance for positions.
 --
 -- XXX: while this is adequate for basic positions, printing the
 -- position information for inferred types is more complicated.  Most
@@ -347,6 +343,10 @@ instance Support.IsPosition Pos where
   ppPosition pos = Text.pack $ show pos
   prettyPosition pos = PP.viaShow pos
 
+-- | Convert a filename string and a `Pos` to a What4 `W4.ProgramLoc`.
+--
+--   Note: loses information and should not be used unless necessary.
+--
 toW4Loc :: Text.Text -> Pos -> W4.ProgramLoc
 toW4Loc fnm =
   \case

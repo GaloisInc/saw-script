@@ -1056,7 +1056,7 @@ w4SolveBasic ::
   Map QualName (SPrim sym) {- ^ additional primitives -} ->
   Map VarIndex (SValue sym) {- ^ bindings for free variables -} ->
   IORef (SymFnCache sym) {- ^ cache for uninterpreted function symbols -} ->
-  Set VarIndex {- ^ 'unints' Constants in this list are kept uninterpreted -} ->
+  Set VarIndex {- ^ @unints@ Constants in this list are kept uninterpreted -} ->
   Term {- ^ term to simulate -} ->
   IO (SValue sym)
 w4SolveBasic sym sc addlPrims varMap ref unintSet t0 =

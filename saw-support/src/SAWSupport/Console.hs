@@ -9,8 +9,8 @@ Stability   : provisional
 This module contains the infrastructure for printing messages to the
 console from inside SAW.
 
-Panic messages should use `panic`. Each component of SAW has its own
-`Panic` module that defines the appropriate `panic` function for code
+Panic messages should use @panic@. Each component of SAW has its own
+"Panic" module that defines the appropriate @panic@ for code
 in that component.
 
 All other messages, apart from directly user-facing UI logic, should
@@ -56,17 +56,19 @@ import SAWSupport.ConsoleSupport (Fatal(..))
 -- | Monad class for SAW message printing.
 --
 --   There are four basic kinds of diagnostic messages:
---      - @err@ prints an error;
---      - @warn@ prints a warning;
---      - @note@ prints a notice.
---      - @comment@ prints a comment that is a second or subsequent
+--
+--      * @err@ prints an error;
+--      * @warn@ prints a warning;
+--      * @note@ prints a notice.
+--      * @comment@ prints a comment that is a second or subsequent
 --        part of a prior message.
 --
 --   These are then further qualified as follows:
---      - @N@ prints without any position;
---      - @P@ prints with an explicit position;
---      - @X@ prints with the current execution position.
---      - The primed versions generate a prettyprinter doc rather than `Text`.
+--
+--      * @N@ prints without any position;
+--      * @P@ prints with an explicit position;
+--      * @X@ prints with the current execution position.
+--      * The primed versions generate a prettyprinter doc rather than `Text`.
 --
 --   The @D@ variants of the error functions defer exit: they record
 --   that a fatal error occurred but continue execution. This is
@@ -79,14 +81,15 @@ import SAWSupport.ConsoleSupport (Fatal(..))
 --   unimplemented features / missing code paths. We haven't been able
 --   to decide if unimplemented features should be panics or errors,
 --   and I think the reason is that they have properties of both:
---      - they are a problem in SAW, not something the user did, which
+--
+--      * they are a problem in SAW, not something the user did, which
 --        is like a panic;
---      - it typically does not make sense to continue executing with
+--      * it typically does not make sense to continue executing with
 --        a dummy value, which is like a panic;
---      - they do not represent a corrupted internal state and there's
+--      * they do not represent a corrupted internal state and there's
 --        no need to shut down, which is like an error.
 --
---   The arguments of `unimplemented` are like `panic`. The first is
+--   The arguments of `unimplemented` are like @panic@. The first is
 --   the "location", generally the function in which something's
 --   missing, and the second is the message. The message is restricted
 --   to a single line -- that should be all that is needed to name
@@ -163,7 +166,7 @@ class (Monad m) => SAWConsole m where
 
 
 ------------------------------------------------------------
--- IO instanace
+-- IO instance
 
 -- | Internal function for the `IO` instance.
 say :: Text -> IO ()
@@ -181,8 +184,8 @@ dummyPos = DummyPos ()
 --   expected to be removed in the long run.
 --
 --   Also note that there are, properly, prettyprinter options that
---   should get passed to `render`, which `IO` doesn't and can't
---   track. And it doesn't know what the current execution position
+--   should get passed to `PPS.render`, which `IO` doesn't and can't
+--   track. And it doesn't know what the \"current execution position\"
 --   means.
 instance SAWConsole IO where
     errN msg = Supp.errN say msg >> throwIO (Fatal False)

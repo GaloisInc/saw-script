@@ -4,23 +4,29 @@ Description : Datatypes representing SAWScript statements, expressions, and type
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
+
+SAWScript abstract syntax.
 -}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module SAWCentral.AST
-     ( PrimitiveLifecycle(..)
+module SAWCentral.AST (
+       -- * Lifecycle and deprecation
+       PrimitiveLifecycle(..)
      , everythingAvailable
      , defaultAvailable
 
+       -- * Names
      , Name
 
+       -- * Kinds
      , Kind(..)
      , kindStar, kindStarToStar
      , kindAddStar
 
+       -- * Types
      , TyCtx(..)
      , TypeProvenance(..)
      , TypeIndex
@@ -32,17 +38,22 @@ module SAWCentral.AST
      , SchemaPattern(..)
      , NamedType(..)
 
+       -- * Expressions
      , Expr(..)
 
+       -- * Patterns
      , Pattern(..)
 
+       -- * Statements
      , Rebindable(..)
      , Import(..)
      , Stmt(..)
 
+       -- * Declarations
      , Decl(..)
      , DeclGroup(..)
 
+       -- * Printing
      , ppKind, prettyKind
      , ppTyCtx, prettyTyCtx
      , ppTyCon
@@ -53,12 +64,15 @@ module SAWCentral.AST
      , ppPattern, prettyPattern
      , prettyWholeModule
 
+       -- * Type formers (taking `TypeProvenance`)
      , tBool, tInt, tString, tTerm, tType
      , tAIG, tCFG, tLLVMSpec, tJVMSpec, tMIRSpec
      , tTopLevel, tProofScript
      , tArray, tUnit, tTuple, tRecord, tFun
      , tVar, tApply
      , tMono, tForall
+
+       -- * Type formers (taking `Pos`)
      , txBool, txInt, txString, txTerm, txType
      , txAIG, txCFG, txLLVMSpec, txJVMSpec, txMIRSpec
      , txTopLevel, txProofScript
@@ -139,15 +153,19 @@ type Name = Text
 -- extend this representation easily enough.
 --
 
+-- | Kind representation
 newtype Kind = Kind { kindNumArgs :: Word }
   deriving Eq
 
+-- | The kind @*@.
 kindStar :: Kind
 kindStar = Kind 0
 
+-- | The kind @* -> *@.
 kindStarToStar :: Kind
 kindStarToStar = Kind 1
 
+-- | Add a prefixed @* ->@ to a kind.
 kindAddStar :: Kind -> Kind
 kindAddStar (Kind n) = Kind (n + 1)
 
@@ -167,40 +185,48 @@ data TyCtx
 
 -- | Extended provenance/position information for types.
 --
--- TypeExplicit means that the type was written in the input text
---    at the given position.
--- TypeFresh means that the type was generated at the given position
---    to represent a type that that construct implies must exist.
--- TypeFailed means that the type arose from a prior type error and
---    is thus not itself very interesting.
--- TypeFromForallNamed means that the type was forall-bound from the
---    named variable at the given position, with the given name, in
---    the function of the given name.
--- TypeFromForallFresh means that the type was forall-bound from a
---    fresh type variable implicitly generated at the given position,
---    using the given typechecker-generated name, in the function of
---    the given name.
--- TypeFromElement means that the construct at the given position
---    prompted us to choose the accompanying type; e.g. "[]" has type
---    List t.
--- TypeFromContext means that the usage of the construct at the given
---    position prompted us to choose the accompanying type; e.g. in "f
---    x", f has function type.
--- TypeFromFuncWithSig means that the type came from the function
---    header (with adjacent return type annotation) at the given
---    position. For example: @let foo (x: Int) : Int = ...@. The
---    span of the position includes the parameter list and return
---    type but not the function name or the equal sign.
--- TypeFromFuncWithBody means that the type came from the function
---    header at the first position, and the function body at the
---    second position. This is for cases without an explicit type
---    signature where we inferred the body type.
+-- `TypeExplicit` means that the type was written in the input text
+-- at the given position.
+--
+-- `TypeFresh` means that the type was generated at the given position
+-- to represent a type that that construct implies must exist.
+--
+-- `TypeFailed` means that the type arose from a prior type error and
+-- is thus not itself very interesting.
+--
+-- `TypeFromForallNamed` means that the type was forall-bound from the
+--  named variable at the given position, with the given name, in
+--  the function of the given name.
+--
+-- `TypeFromForallFresh` means that the type was forall-bound from a
+-- fresh type variable implicitly generated at the given position,
+-- using the given typechecker-generated name, in the function of
+-- the given name.
+--
+-- `TypeFromElement` means that the construct at the given position
+-- prompted us to choose the accompanying type; e.g. @[]@ has type
+-- @List t@.
+--
+-- `TypeFromContext` means that the usage of the construct at the
+-- given position prompted us to choose the accompanying type; e.g. in
+-- @f x@, @f@ has function type.
+--
+-- `TypeFromFuncWithSig` means that the type came from the function
+-- header (with adjacent return type annotation) at the given
+-- position. For example: @let foo (x: Int) : Int = ...@. The
+-- span of the position includes the parameter list and return
+-- type but not the function name or the equal sign.
+--
+-- `TypeFromFuncWithBody` means that the type came from the function
+-- header at the first position, and the function body at the
+-- second position. This is for cases without an explicit type
+-- signature where we inferred the body type.
 --
 -- The positions stored in these will ordinarily be concrete source
 -- positions (`Range`) because they come from parsed source text, but
 -- other things may appear, especially in corner cases. The
 -- typechecker does now attempt to interpret the positions in two
--- places; however, in both cases if it doesn't get concrete souce
+-- places; however, in both cases if it doesn't get concrete source
 -- positions it will fall back to the default behavior.
 --
 -- Be aware that `TypeFailed` is operationally significant, which
@@ -255,7 +281,7 @@ data TyCon
 --   underlying Haskell function; we must preserve the ordering or
 --   utter chaos results.)
 --
---   The `Int` argument gives the number of positional arguments (all
+--   The t`Int` argument gives the number of positional arguments (all
 --   positional arguments come first in the underlying Haskell
 --   functions); the list argument gives the names of the named
 --   arguments.
@@ -330,6 +356,7 @@ data Type
 --   bound). XXX: this could use a shorter name.
 data SchemaNameProvenance = SchemaNameExplicit Pos | SchemaNameImplicit Pos
 
+-- | Type scheme.
 data Schema = Forall [(SchemaNameProvenance, Name)] Type
 
 -- | A schema pattern is like a schema but has potentially multiple
@@ -353,6 +380,7 @@ data NamedType = ConcreteType Type | AbstractType Kind
 ------------------------------------------------------------
 -- Expressions
 
+-- | Expression
 data Expr
   -- Constants
   = Bool Pos Bool
@@ -378,14 +406,16 @@ data Expr
   --   from the function declaration (if there was one) for use in
   --   stack traces. The second position (after the name) is the
   --   combined position of the whole parameter list. The list of
-  --   patterns holdes the positional parameters; the map from text
+  --   patterns holds the positional parameters; the map from text
   --   holds the optional named parameters. The elements of that map
   --   are:
-  --      - the position of the name text
-  --      - the overall position
-  --      - the pattern with the local-facing name (which might be different)
+  --
+  --      * the position of the name text
+  --      * the overall position
+  --      * the pattern with the local-facing name (which might be different)
   --        and any type
-  --      - the default value
+  --      * the default value
+  --
   --   The tuple nesting is supposed to make it possible to remember
   --   which position is which: the one belonging to the map key is
   --   the closest to it.
@@ -404,14 +434,14 @@ data Expr
 
 -- | Patterns.
 --
---   `PImplicit` represents the `_` in the implicit `_ <- e` that
+--   `PImplicit` represents the @_@ in the implicit @_ <- e@ that
 --   arises when we see a plain expression in statement context. The
---   position is the position of the expression `e`. No type can be
+--   position is the position of the expression @e@. No type can be
 --   provided by the concrete syntax, but we still carry a type slot
 --   for the typechecker to fill in.
 --
---   `PWild` represents an explicit `_`, and the position is the
---   position of the `_` along with any type annotation. (So far there
+--   `PWild` represents an explicit @_@, and the position is the
+--   position of the @_@ along with any type annotation. (So far there
 --   doesn't seem to be any reason to want the position of just the
 --   undersccore.)
 --
@@ -439,6 +469,7 @@ data Rebindable
   | ReadOnlyVar   -- ^ produced by ordinary @let@ and by @rec@
   deriving Eq
 
+-- | Info about an import
 data Import = Import
   { iIsSubmodule :: Bool
   , iModule    :: Either FilePath P.ModName
@@ -462,7 +493,7 @@ data Import = Import
 --   generated by the @include@ handling. See notes in the interpreter
 --   for why they're needed.
 --
---   The `Bool` in `StmtInclude` is `True` for @include_once@ and
+--   The t`Bool` in `StmtInclude` is `True` for @include_once@ and
 --   `False` for ordinary @include@.
 --
 data Stmt
@@ -581,13 +612,16 @@ instance Positioned Decl where
 ------------------------------------------------------------
 -- Printing
 
+-- | Printer for `Kind`
 ppKind :: Kind -> Text
 ppKind (Kind n) =
     Text.intercalate " -> " $ genericReplicate (n + 1) "*"
 
+-- | Printer for `Kind`
 prettyKind :: Kind -> PPS.Doc
 prettyKind k = PP.pretty $ ppKind k
 
+-- | Printer for `TyCtx`
 ppTyCtx :: TyCtx -> Text
 ppTyCtx ctx = case ctx of
     TyCtxConstant -> "constant"
@@ -596,9 +630,11 @@ ppTyCtx ctx = case ctx of
     TyCtxStmt     -> "statement"
     TyCtxArgList  -> "argument list"
 
+-- | Printer for `TyCtx`
 prettyTyCtx :: TyCtx -> PP.Doc ann
 prettyTyCtx ctx = PP.pretty $ ppTyCtx ctx
 
+-- | Printer for `TyCon`
 ppTyCon :: TyCon -> Text
 ppTyCon tc = case tc of
     BoolCon        -> "Bool"
@@ -614,6 +650,7 @@ ppTyCon tc = case tc of
     TopLevel       -> "TopLevel"
     ProofScript    -> "ProofScript"
 
+-- | Printer for `Type`
 prettyType :: Type -> PPS.Doc
 prettyType = PP.group . visit 0
   where
@@ -657,10 +694,12 @@ prettyType = PP.group . visit 0
           in
           if prec > 1 then PP.parens body else body
 
+-- | Printer for `Type`
 ppType :: PPS.Opts -> Type -> Text
 ppType ppopts ty =
     PPS.renderText ppopts $ prettyType ty
 
+-- | Printer for `Schema`
 prettySchema :: Schema -> PPS.Doc
 prettySchema (Forall ns t) =
     let t' = prettyType t in
@@ -672,10 +711,12 @@ prettySchema (Forall ns t) =
           in
           ns' <+> t'
 
+-- | Printer for `Schema`
 ppSchema :: PPS.Opts -> Schema -> Text
 ppSchema ppopts ty =
     PPS.renderText ppopts $ prettySchema ty
 
+-- | Printer for `NamedType`
 prettyNamedType :: NamedType -> PPS.Doc
 prettyNamedType ty = case ty of
     ConcreteType ty' -> prettyType ty'
@@ -687,6 +728,7 @@ ppNamedType ppopts ty =
     PPS.renderText ppopts $ prettyNamedType ty
 -}
 
+-- | Printer for `Expr`
 prettyExpr :: Expr -> PPS.Doc
 prettyExpr expr0 = case expr0 of
     Bool _ b   -> PP.viaShow b
@@ -823,10 +865,12 @@ prettyExpr expr0 = case expr0 of
         -- Use PP.sep so it'll fold to one line if it fits
         PP.group $ PP.sep [line1, line2, line3, line4]
 
+-- | Printer for `Expr`
 ppExpr :: PPS.Opts -> Expr -> Text
 ppExpr ppopts e =
     PPS.renderText ppopts $ prettyExpr e
 
+-- | Printer for `Pattern`
 prettyPattern :: Pattern -> PPS.Doc
 prettyPattern pat =
     let prettyArg name' mty = case mty of
@@ -843,10 +887,12 @@ prettyPattern pat =
         PTuple _ pats ->
           PP.parens $ PP.fillSep $ PP.punctuate "," $ map prettyPattern pats
 
+-- | Printer for `Pattern`
 ppPattern :: PPS.Opts -> Pattern -> Text
 ppPattern ppopts pat =
   PPS.renderText ppopts $ prettyPattern pat
 
+-- | Printer for `Stmt`
 prettyStmt :: Stmt -> PPS.Doc
 prettyStmt s0 = case s0 of
     StmtBind _ (PImplicit _ _ty) expr ->
@@ -916,6 +962,7 @@ prettyStmt s0 = case s0 of
     StmtPopdir _ ->
        ".popdir;"
 
+-- | Printer for `Decl`. XXX misnamed
 prettyDef :: Decl -> PPS.Doc
 prettyDef (Decl _ pat0 _ def) =
    let dissectLambda :: Expr -> ([Pattern], Map Text (Pos, (Pos, Expr, Pattern)), Expr)
@@ -940,6 +987,7 @@ prettyDef (Decl _ pat0 _ def) =
    in
    allParams' <+> "=" <> PP.line <> body''
 
+-- | Printer for a full SAWScript file.
 prettyWholeModule :: [Stmt] -> PPS.Doc
 prettyWholeModule stmts =
     let stmts' = PP.vsep $ map prettyStmt stmts in

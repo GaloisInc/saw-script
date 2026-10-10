@@ -1,6 +1,6 @@
 {- |
 Module      : SAWScript.Interpreter
-Description : Interpreter for SAW-Script files and statements.
+Description : Interpreter for SAWScript files and statements.
 License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
@@ -1407,9 +1407,10 @@ interpretTopStmt printBinds replTypingHacks stmt = do
     SS.StmtPushdir _ dir -> liftTopLevel $ pushdir dir
     SS.StmtPopdir _ -> liftTopLevel popdir
 
--- | Interpret multiple top-level statements in an interpreter monad
---   (in practice only the REPL ones, TopLevel and ProofScript, but in
---   principle any of the SAWScript monads)
+-- | Interpret multiple (syntactic top-level) statements in an
+--   interpreter monad. In practice this will be only the REPL monads,
+--   `TopLevel` and `ProofScript`, but in principle could be any of
+--   the SAWScript monads.
 --
 --   This is the entry point used by the REPL for executing stuff the
 --   user types in.
@@ -1420,7 +1421,7 @@ interpretReplStmts stmts = do
   let replTypingHacks = True
   mapM_ (interpretTopStmt printBinds replTypingHacks) stmts
 
--- Hook for AutoMatch
+-- | Hook for AutoMatch
 stmtInterpreter :: StmtInterpreter
 stmtInterpreter ro rw stmts =
   -- What AutoMatch provides is supposed to be a full script for the
@@ -1552,6 +1553,7 @@ interpretMain = do
       ]
 
 
+-- | Set up the interpreter. Used by the REPL.
 buildTopLevelEnv :: Options
                  -> [Text]
                  -> TopLevelShellHook
@@ -1626,6 +1628,7 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
                    }
        return (ro0, rw0)
 
+-- | Interpret syntactic-top-level statements from a file.
 processFile ::
   Options ->
   FilePath ->

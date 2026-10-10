@@ -3083,6 +3083,11 @@ checkType kindExpected0 ty0 = do
 ------------------------------------------------------------
 -- External interface
 
+-- | Type to indicate which monad we're running single statements in.
+--
+--   This can only be the monads you can run the REPL in, or, for
+--   interpreter reasons, you can run whole files in. Code that runs
+--   in the other monads gets defined first from one of these.
 data StmtContext = InTopLevel | InProofScript
 
 -- | Check a single statement. (This is an external interface.)
@@ -3188,7 +3193,7 @@ typesMatch ppopts avail tenv name schema'found schema'expected =
 --   in. More on that below. The second is the typedef environment to
 --   use. The third argument is the schema to check.
 --
---   All types found should be of kind *.
+--   All types found should be of kind @*@.
 --
 --   Purely a validity check; there's no updates it can make to the
 --   schema that are of use to the caller, on the assumption that the
@@ -3252,7 +3257,7 @@ checkSchema ppopts contextLC tyenv schema fnName = do
           Experimental -> [Current, Experimental]
     runTI ppopts avail ScopedMap.empty tyenv check
 
--- | Check a schema (type) pattern as used by :search. (This is an
+-- | Check a schema (type) pattern as used by @:search@. (This is an
 --   external interface.)
 --
 --   The first two arguments are the starting variable and typedef

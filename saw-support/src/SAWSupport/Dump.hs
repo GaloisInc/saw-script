@@ -16,35 +16,36 @@ The goal of a dumper is somewhat different. Readability is still a
 concern, but the primary goal is to make sure the output reflects
 exactly what the representation contains. Prettyprinter output will
 usually, for example, not distinguish the difference between
-```
-   Add (Add (Var x) (Var y)) (Var z)
-```
+
+> Add (Add (Var x) (Var y)) (Var z)
+
 and
-```
-   Add (Var x) (Add (Var y) (Var z))
-```
+
+> Add (Var x) (Add (Var y) (Var z))
+
 Most of the time, that doesn't matter. However, when you're chasing
-after a problem where your optimizing pass is failing to see `y`, it
+after a problem where your optimizing pass is failing to see @y@, it
 matters a great deal. Dumps are intended to serve this debugging need.
 
 The schematic dump format supported by this module has the general
 format
-```
+
+@
     Heading
         Subelement
         Subelement
         Subelement
-```
+@
 
 or
 
-```
+@
     Heading
         field
             Element
         field
             Element
-```
+@
 
 where the heading is generally the AST constructor name plus any
 information that reliably fits on the same line.
@@ -53,22 +54,25 @@ Small single subelements may be pulled up onto the heading line to
 save vertical space. This is automatic.
 
 This file is meant to be imported as follows:
-```
-    import qualified SAWSupport.Dump as Dump
-    import SAWSupport.Dump (Dump)
+
+> import qualified SAWSupport.Dump as Dump
+> import SAWSupport.Dump (Dump)
 
 -}
 {-# LANGUAGE OverloadedStrings #-}
 
 module SAWSupport.Dump (
+    -- * Types
     Dump,
 
+    -- * Basic dumps
     phantom,
     singleton,
     subelement,
     subelements,
     fields,
 
+    -- * Dumps for standard data types
     bool,
     int,
     text,
@@ -78,8 +82,10 @@ module SAWSupport.Dump (
     maybe,
     list,
 
+    -- * Other operations
     prepend,
 
+    -- * Rendering
     render,
     renderString
   ) where
@@ -178,7 +184,7 @@ stringize txt0 =
 ------------------------------------------------------------
 -- Basic dumps
 
--- | Completely empty dump
+-- | Completely empty dump.
 phantom :: Dump
 phantom = Phantom
 

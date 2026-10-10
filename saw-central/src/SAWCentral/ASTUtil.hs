@@ -1,6 +1,16 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+{- |
+Module      : SAWCentral.ASTUtil
+Description : AST-related support code.
+License     : BSD3
+Maintainer  : saw@galois.com
+Stability   : provisional
+
+Assorted utility functions on "AST" types.
+-}
+
 module SAWCentral.ASTUtil (
     namedTyVars,
     SubstituteTyVars(..),
@@ -25,10 +35,10 @@ import SAWCentral.AST
 ------------------------------------------------------------
 -- NamedTyVars
 
--- | namedTyVars is a type-class-polymorphic function for extracting named
--- type variables from a type or type schema. It returns a set of Name
--- (Name is just Text) manifested as a map from those Names to their
--- originating positions.
+-- | `namedTyVars` is a type-class-polymorphic function for extracting
+-- named type variables from a type or type schema. It returns a set
+-- of `Name` (`Name` is just `Text`) manifested as a map from those
+-- `Name`s to their originating positions.
 --
 -- We take the first position we see. The calls to `Map.union` are
 -- organized accordingly (it favors its left argument).
@@ -98,8 +108,8 @@ instance NamedTyVars Schema where
 ------------------------------------------------------------
 -- SubstituteTyVars
 
---
--- substituteTyVars is a typeclass-polymorphic function for
+-- |
+-- `substituteTyVars` is a typeclass-polymorphic function for
 -- substituting named type variables (such as those declared with
 -- typedef) in a Type.
 --
@@ -109,10 +119,9 @@ instance NamedTyVars Schema where
 -- handling of typedefs during execution as well as by the
 -- typechecker.
 --
--- XXX: it's not clear that the instances for Maybe and List warrant
+-- XXX: it's not clear that the instances for `Maybe` and @List@ warrant
 -- setting up the typeclass.
 --
-
 class SubstituteTyVars t where
   -- | @substituteTyVars m x@ applies the (scoped) map @m@ to type variables in @x@.
   substituteTyVars ::
@@ -163,13 +172,13 @@ instance SubstituteTyVars Type where
         in
         TyApply pos m' arg'
 
+-- | Variant of `SubstituteTyVars`.
 --
 -- The prime version uses an ordinary map.
 --
 -- This is used by the typechecker for the time being until the
--- typechecker gets taught to use ScopedMap.
+-- typechecker gets taught to use `ScopedMap`.
 --
-
 class SubstituteTyVars' t where
   -- | @substituteTyVars' m x@ applies the (ordinary) map @m@ to type variables in @x@.
   substituteTyVars' ::
@@ -224,6 +233,7 @@ instance SubstituteTyVars' Type where
 ------------------------------------------------------------
 -- Deprecation
 
+-- | Check if a `PrimitiveLifecycle` value indicates deprecation.
 isDeprecated :: PrimitiveLifecycle -> Bool
 isDeprecated lc = case lc of
     Current -> False

@@ -325,13 +325,13 @@ prettyUTerm t = prettyPrecUTerm 0 t
 -- | Precedence values:
 -- 0: type ascription
 -- 1: lambda or pi expression
--- 2: infix '*' operator
+-- 2: infix @*@ operator
 -- 3: function application
 -- 4: atomic expression
 --
--- Term0 := Term1 | Term1 ':' Term1
--- Term1 := Term2 | Term2 '->' Term1 | '\\' VarCtx '->' Term1
--- Term2 := Term3 | Term3 '*' Term2
+-- Term0 := Term1 | Term1 @:@ Term1
+-- Term1 := Term2 | Term2 @->@ Term1 | @\\@ VarCtx @->@ Term1
+-- Term2 := Term3 | Term3 @*@ Term2
 -- Term3 := Term4 | Term3 Term4
 -- Term4 (atomic)
 prettyPrecUTerm :: Int -> UTerm -> PPS.Doc

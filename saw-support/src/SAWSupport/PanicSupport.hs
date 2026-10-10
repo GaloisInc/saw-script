@@ -1,14 +1,17 @@
 {-# LANGUAGE Safe #-}
 -- |
 -- Module      : SAWSupport.PanicSupport
+-- Description : Wrapper around the panic library
 -- License     : BSD3
 -- Maintainer  : saw@galois.com
 -- Stability   : provisional
-
+--
+--
 -- Wrapper around the panic library.
 --
--- Each library in SAW defines its own Panic module so that panics in
--- it come out with the "component name" set to the library involved.
+-- Each library in SAW defines its own @Panic@ module so that panics
+-- in it come out with the \"component name\" set to the library
+-- involved.
 --
 -- This module contains the shared plumbing to make those modules as
 -- small as reasonably possible.
@@ -17,51 +20,54 @@
 -- Ideally users should never see panics, and if they do see a panic
 -- they should file a bug report about it.
 --
--- Note: any uses of the Haskell "error" function should be converted
+-- Note: any uses of the Haskell `error` function should be converted
 -- to use panic instead, provided they are actually panic conditions.
 -- Any others should be updated to use proper error handling channels.
 --
--- Panic is immediately fatal and may be used in pure ("pure") code
+-- Panic is immediately fatal and may be used in pure (\"pure\") code
 -- when needed.
 --
 -- The exposed panic interface in SAW takes two arguments:
---    - the "location of the problem" (a single string)
---    - the "problem description" (a list of strings, one per line)
 --
--- The infrastructure then adds the "component name" as well as the
--- Haskell module and line (via HasCallStack) and the git commit
--- information, and generates a print of the following form:
+--    * the \"location of the problem\" (a single string)
+--    * the \"problem description\" (a list of strings, one per line)
 --
---    [18:30:30.500] You have encountered a bug in <component name>'s implementation.
+-- The infrastructure then adds the \"component name\" as well as the
+-- Haskell module and line (via `Panic.HasCallStack`) and the git
+-- commit information, and generates a print of the following form:
+--
+-- @
+--    [18:30:30.500] You have encountered a bug in (component name)'s implementation.
 --    *** Please create an issue at https://github.com/GaloisInc/saw-script/issues
 --
 --    %< --------------------------------------------------- 
 --      Revision:  abcd1234abcd1234cdef5678cdef5678abcd1234
 --      Branch:    master (uncommited files present)
---      Location:  <location of the problem>
---      Message:   <problem description>
---                 <problem description>
---                 <problem description>
+--      Location:  (location of the problem)
+--      Message:   (problem description)
+--                 (problem description)
+--                 (problem description)
 --    CallStack (from HasCallStack):
---      panic, called at src/SAWScript/Panic.hs:20:9 in saw-script-1.3-inplace:SAWScript.Panic
---      panic, called at src/SAWCentral/Proof.hs:300:15 in saw-script-1.3-inplace:SAWCentral.Proof
+--      panic, called at src/SAWScript/Panic.hs:20:9 in saw-script-1.6-inplace:SAWScript.Panic
+--      panic, called at src/SAWCentral/Proof.hs:300:15 in saw-script-1.6-inplace:SAWCentral.Proof
 --    %< ---------------------------------------------------
+-- @
 --
 -- The arguments to each panic should be written so they make sense in
 -- this context.
 --
--- Also note that because the description lines are indented after
--- being unlines'd, they should not contain their own newlines.
+-- Also note that because the description lines are indented by
+-- the infrastructure, they should not contain their own newlines.
 --
--- It is reasonable to use the function name as the "location of the
--- problem"; however, it's often more helpful to use a short string
+-- It is reasonable to use the function name as the \"location of the
+-- problem\"; however, it's often more helpful to use a short string
 -- that describes what SAW was trying to do when things came unstuck.
 --
 -- Then, the rest of the message should indicate what happened and
 -- also include the values of relevant variables. What gets printed
 -- here may be all you ever get to try to figure out what broke.
 --
--- It's important that the combination of the "location" string and
+-- It's important that the combination of the \"location\" string and
 -- the beginning of the rest of the message should be unique.
 --
 -- Rationale:
@@ -70,7 +76,7 @@
 -- reality of software is that sooner or later someone will see every
 -- panic in the system. Furthermore, chances are that person will
 -- probably be a downstream user, in the field. This will be someone
--- who has little or no familiarity with SAW's internals -- given the
+-- who has little or no familiarity with SAW's internals; given the
 -- nature of SAW they will probably not be a completely clueless end
 -- user, but even so internal minutiae won't be helpful.
 --
@@ -82,7 +88,7 @@
 -- whatever they're working on to something they can send upstream
 -- with a bug report.
 --
--- The SAW developer is the _secondary_ audience for every panic
+-- The SAW developer is the /secondary/ audience for every panic
 -- message, but in general only via the bug reports that come from the
 -- primary audience.
 --
@@ -103,6 +109,7 @@
 -- almost entirely by analysis of the panic message and the code
 -- around it. For this reason panics should include as much relevant
 -- information as possible without flooding the recipient.
+
 
 -- re-export HasCallStack for use by the per-library modules
 -- export PanicException so upper-level code can avoid catching it
@@ -130,8 +137,10 @@ type PanicException = Panic.Panic SAWPanic
 
 -- | Trigger a panic. This is called by each library's panic function;
 --   the first argument should be the component name, and the second
---   and third should be the "location" and "description" to pass
+--   and third should be the \"location\" and \"description\" to pass
 --   through to the upstream panic function.
+--
+--   As implied by the type signature, does not return.
 doPanic :: Panic.HasCallStack => Text -> Text -> [Text] -> a
 doPanic component loc descs =
   Panic.panic (SAWPanic component) loc' descs'
