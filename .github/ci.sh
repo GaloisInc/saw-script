@@ -380,7 +380,7 @@ configure_for_event() {
                     type=tag
                     is_tag=true
                     ;;
-                master)
+                refs/heads/master)
                     type=master
                     is_master=true
                     ;;
