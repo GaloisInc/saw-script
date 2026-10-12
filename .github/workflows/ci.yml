@@ -380,6 +380,149 @@ jobs:
 # All of this is indented two spaces because it actually hangs under
 # the "jobs:" line in the "job config" section above.
 
+  build-push-image:
+    name: "Build the ${{ matrix.which }} docker image"
+    runs-on: ubuntu-24.04
+    needs: [config]
+    # Restrict this to the main repository where the needed secrets
+    # will be available. As noted above, scheduled runs also happen in
+    # forks. It would be nice to run all of it but the final push step,
+    # but we appear to need docker login to build.
+    if: needs.config.outputs.want-docker-images == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - which: saw
+            file: saw/Dockerfile
+            image: ghcr.io/galoisinc/saw
+            cache: ghcr.io/galoisinc/cache-saw
+            image-repo: GaloisInc/saw-script
+            image-tag: ${{ needs.config.outputs.saw-version }}
+          - which: saw-remote-api
+            file: saw-remote-api/Dockerfile
+            image: ghcr.io/galoisinc/saw-remote-api
+            cache: ghcr.io/galoisinc/cache-saw-remote-api
+            image-repo: GaloisInc/saw-script
+            image-tag: ${{ needs.config.outputs.saw-version }}
+          - which: crux-mir-comp
+            file: crux-mir-comp/Dockerfile
+            image: ghcr.io/galoisinc/crux-mir-comp
+            cache: ghcr.io/galoisinc/cache-crux-mir-comp
+            image-repo: GaloisInc/crux
+            image-tag: ${{ needs.config.outputs.crux-version }}
+    steps:
+      - name: Report relevant config
+        run: |
+          echo "Want docker images: ${{ needs.config.outputs.want-docker-images }}"
+          echo "File: ${{ matrix.file }}"
+          echo "Image: ${{ matrix.image }}"
+          echo "Cache image: ${{ matrix.cache }}"
+          echo "Repo: ${{ matrix.image-repo }}"
+          echo "Tag: ${{ matrix.image-tag }}"
+
+      - name: Check out the repository with submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: Capture git state in GitRev.hs
+        run: ./build.sh gitrev
+
+      - name: Clear up some disk space
+        run: |
+          # The crux-mir-comp Docker image is rather large (~1GB compressed),
+          # and the mere act of building the image requires just over 14 GB of
+          # disk space, which exceeds the maximum provided by a GitHub Action
+          # CI runner. To clear up some extra space, we delete ~10GB worth of
+          # pre-installed GitHub Actions tools, none of which we make use of.
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY" # Python installations
+
+      - uses: rlespinasse/github-slug-action@v3.x
+
+      - name: Set COMMON_TAG
+        id: common-tag
+        run: |
+          echo "::set-output name=common-tag::$GITHUB_REF_SLUG"
+          echo "COMMON_TAG=$GITHUB_REF_SLUG" >> $GITHUB_ENV
+
+      - name: Docker build setup
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker labels
+        id: labels
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ matrix.image }}
+          labels: |
+             org.opencontainers.image.source=https://github.com/${{ matrix.image-repo }}
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Do the image build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          tags: ${{ matrix.image }}:${{ steps.common-tag.outputs.common-tag }}
+          labels: ${{ steps.labels.outputs.labels }}
+          load: true
+          push: false
+          file: ${{ matrix.file }}
+          build-args: ${{ matrix.build-args }}
+          cache-from: |
+            type=registry,ref=${{ matrix.cache }}:${{ steps.prefix.outputs.prefix }}master
+            type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }}
+
+      - name: Cache the image build
+        uses: docker/build-push-action@v6
+        continue-on-error: true  # Tolerate cache upload failures - this should be handled better
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          build-args: ${{ matrix.build-args }}
+          cache-to: type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }},mode=max
+
+      - name: Set up Python
+        if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
+        uses: actions/setup-python@v6
+        with:
+          # Ensure that this matches saw-python/mypy.ini file
+          # and that saw-python/pyproject.toml file is compatible with this version
+          python-version: '3.12'
+
+      - name: Set up Poetry
+        if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
+        uses: abatilo/actions-poetry@v4
+        with:
+          poetry-version: 2.4.1
+
+      - name: Test saw-remote-api
+        if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
+        run: ./saw-remote-api/scripts/test_docker.sh ${{ matrix.image }}:$COMMON_TAG
+
+        # Scheduled events upload as "nightly"
+      - name: Upload ${{ matrix.image }}:nightly
+        if: needs.config.outputs.event-is-scheduled == 'true'
+        run: |
+          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:nightly
+          docker push ${{ matrix.image }}:nightly
+
+        # Stable branch events upload by the version
+      - name: Upload ${{ matrix.image }}:${{ matrix.image-tag }}
+        if: needs.config.outputs.event-is-stable-branch == 'true'
+        run: |
+          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:${{ matrix.image-tag }}
+          docker push ${{ matrix.image }}:${{ matrix.image-tag }}
+          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:latest
+          docker push ${{ matrix.image }}:latest
+
   build:
     name: "Build on ${{ matrix.os }} with GHC ${{ matrix.ghc }}: haddock=${{ matrix.haddock }} tests=${{ matrix.run-tests }} coverage=${{ matrix.hpc }}"
     runs-on: ${{ matrix.os }}
@@ -690,149 +833,6 @@ jobs:
             dist-newstyle
           key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
 
-  build-push-image:
-    name: "Build the ${{ matrix.which }} docker image"
-    runs-on: ubuntu-24.04
-    needs: [config]
-    # Restrict this to the main repository where the needed secrets
-    # will be available. As noted above, scheduled runs also happen in
-    # forks. It would be nice to run all of it but the final push step,
-    # but we appear to need docker login to build.
-    if: needs.config.outputs.want-docker-images == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - which: saw
-            file: saw/Dockerfile
-            image: ghcr.io/galoisinc/saw
-            cache: ghcr.io/galoisinc/cache-saw
-            image-repo: GaloisInc/saw-script
-            image-tag: ${{ needs.config.outputs.saw-version }}
-          - which: saw-remote-api
-            file: saw-remote-api/Dockerfile
-            image: ghcr.io/galoisinc/saw-remote-api
-            cache: ghcr.io/galoisinc/cache-saw-remote-api
-            image-repo: GaloisInc/saw-script
-            image-tag: ${{ needs.config.outputs.saw-version }}
-          - which: crux-mir-comp
-            file: crux-mir-comp/Dockerfile
-            image: ghcr.io/galoisinc/crux-mir-comp
-            cache: ghcr.io/galoisinc/cache-crux-mir-comp
-            image-repo: GaloisInc/crux
-            image-tag: ${{ needs.config.outputs.crux-version }}
-    steps:
-      - name: Report relevant config
-        run: |
-          echo "Want docker images: ${{ needs.config.outputs.want-docker-images }}"
-          echo "File: ${{ matrix.file }}"
-          echo "Image: ${{ matrix.image }}"
-          echo "Cache image: ${{ matrix.cache }}"
-          echo "Repo: ${{ matrix.image-repo }}"
-          echo "Tag: ${{ matrix.image-tag }}"
-
-      - name: Check out the repository with submodules
-        uses: actions/checkout@v7
-        with:
-          submodules: true
-
-      - name: Capture git state in GitRev.hs
-        run: ./build.sh gitrev
-
-      - name: Clear up some disk space
-        run: |
-          # The crux-mir-comp Docker image is rather large (~1GB compressed),
-          # and the mere act of building the image requires just over 14 GB of
-          # disk space, which exceeds the maximum provided by a GitHub Action
-          # CI runner. To clear up some extra space, we delete ~10GB worth of
-          # pre-installed GitHub Actions tools, none of which we make use of.
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY" # Python installations
-
-      - uses: rlespinasse/github-slug-action@v3.x
-
-      - name: Set COMMON_TAG
-        id: common-tag
-        run: |
-          echo "::set-output name=common-tag::$GITHUB_REF_SLUG"
-          echo "COMMON_TAG=$GITHUB_REF_SLUG" >> $GITHUB_ENV
-
-      - name: Docker build setup
-        uses: docker/setup-buildx-action@v3
-
-      - name: Docker labels
-        id: labels
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ matrix.image }}
-          labels: |
-             org.opencontainers.image.source=https://github.com/${{ matrix.image-repo }}
-
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Do the image build
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          tags: ${{ matrix.image }}:${{ steps.common-tag.outputs.common-tag }}
-          labels: ${{ steps.labels.outputs.labels }}
-          load: true
-          push: false
-          file: ${{ matrix.file }}
-          build-args: ${{ matrix.build-args }}
-          cache-from: |
-            type=registry,ref=${{ matrix.cache }}:${{ steps.prefix.outputs.prefix }}master
-            type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }}
-
-      - name: Cache the image build
-        uses: docker/build-push-action@v6
-        continue-on-error: true  # Tolerate cache upload failures - this should be handled better
-        with:
-          context: .
-          file: ${{ matrix.file }}
-          build-args: ${{ matrix.build-args }}
-          cache-to: type=registry,ref=${{ matrix.cache }}:${{ steps.common-tag.outputs.common-tag }},mode=max
-
-      - name: Set up Python
-        if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
-        uses: actions/setup-python@v6
-        with:
-          # Ensure that this matches saw-python/mypy.ini file
-          # and that saw-python/pyproject.toml file is compatible with this version
-          python-version: '3.12'
-
-      - name: Set up Poetry
-        if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
-        uses: abatilo/actions-poetry@v4
-        with:
-          poetry-version: 2.4.1
-
-      - name: Test saw-remote-api
-        if: matrix.image == 'ghcr.io/galoisinc/saw-remote-api'
-        run: ./saw-remote-api/scripts/test_docker.sh ${{ matrix.image }}:$COMMON_TAG
-
-        # Scheduled events upload as "nightly"
-      - name: Upload ${{ matrix.image }}:nightly
-        if: needs.config.outputs.event-is-scheduled == 'true'
-        run: |
-          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:nightly
-          docker push ${{ matrix.image }}:nightly
-
-        # Stable branch events upload by the version
-      - name: Upload ${{ matrix.image }}:${{ matrix.image-tag }}
-        if: needs.config.outputs.event-is-stable-branch == 'true'
-        run: |
-          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:${{ matrix.image-tag }}
-          docker push ${{ matrix.image }}:${{ matrix.image-tag }}
-          docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:latest
-          docker push ${{ matrix.image }}:latest
-
 ############################################################
 #
 # Test jobs
@@ -840,6 +840,119 @@ jobs:
 
 # All of this is indented two spaces because it actually hangs under
 # the "jobs:" line in the "job config" section above.
+
+  cabal-test:
+    name: "cabal-test ${{ matrix.suite }} (${{ matrix.os }})"
+    runs-on: ${{ matrix.os }}
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
+        os: [ubuntu-24.04]
+        continue-on-error: [false]
+        include:
+          - suite: integration-tests
+            os: macos-15
+            continue-on-error: false
+          - suite: integration-tests
+            os: windows-2022
+            timeout-minutes: 60
+            continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/2648
+        exclude:
+          - suite: integration-tests
+            os: windows-2022
+            continue-on-error: false
+          # We exclude crux-mir-comp-tests as it requires some Rust-specific
+          # setup that is unique to that particular test suite. See the
+          # crux-mir-comp-tests job, which is defined separately.
+          - suite: crux-mir-comp-tests
+    steps:
+      - name: Report relevant config
+        run: |
+          echo "Runner OS: ${{ runner.os }}"
+          echo "Suite: ${{ matrix.suite }}"
+          echo "Continue on error: ${{ matrix.continue-on-error }}"
+
+      - name: Check out the repository with submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: Download what4-solvers
+        uses: GaloisInc/what4-solvers@v1
+        with:
+          dest: bin
+          release: ${{ env.SOLVER_PKG_VERSION }}
+
+      - name: Add what4-solvers to GITHUB_PATH
+        shell: bash
+        run: echo "$PWD/bin" >> $GITHUB_PATH
+
+      - name: Download the SAW bins
+        uses: actions/download-artifact@v4
+        with:
+          name: "${{ matrix.os }}-bins"
+          path: dist/bin
+
+      - name: Chmod the bins
+        shell: bash
+        if: runner.os != 'Windows'
+        run: chmod +x dist/bin/*
+
+      - name: Chmod more bins
+        shell: bash
+        if: runner.os != 'Windows'
+        run: chmod +x bin/*
+
+      - name: Download the test bins
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-tests-${{ matrix.os }}
+          path: dist-tests
+
+      - name: Chmod the test bins
+        shell: bash
+        if: runner.os != 'Windows'
+        run: chmod +x dist-tests/*
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        if: matrix.suite == 'integration-tests'
+        with:
+          distribution: "zulu"
+          java-version: "8"
+          java-package: jdk
+
+      - name: Restore SMT solver result cache
+        uses: actions/cache/restore@v6
+        if: matrix.suite == 'integration-tests'
+        with:
+          path: ${{ matrix.suite }}.cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
+          restore-keys: |
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-
+
+      - name: Enable solver caching
+        shell: bash
+        if: matrix.suite == 'integration-tests'
+        run: |
+          echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
+          dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
+
+      - name: Run test suite ${{ matrix.suite }}
+        continue-on-error: ${{ matrix.continue-on-error }}
+        shell: bash
+        run: |
+          export PATH="$PWD/dist/bin:$PATH"
+          dist-tests/${{ matrix.suite }}
+
+      - name: Save SMT solver result cache
+        uses: actions/cache/save@v6
+        if: matrix.suite == 'integration-tests'
+        with:
+          path: ${{ matrix.suite }}.cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
 
   rocq-builds:
     needs: [build]
@@ -1131,119 +1244,6 @@ jobs:
           saw --version
           saw-remote-api --help
           ${{ matrix.test }}
-
-  cabal-test:
-    name: "cabal-test ${{ matrix.suite }} (${{ matrix.os }})"
-    runs-on: ${{ matrix.os }}
-    needs: [build]
-    strategy:
-      fail-fast: false
-      matrix:
-        suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
-        os: [ubuntu-24.04]
-        continue-on-error: [false]
-        include:
-          - suite: integration-tests
-            os: macos-15
-            continue-on-error: false
-          - suite: integration-tests
-            os: windows-2022
-            timeout-minutes: 60
-            continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/2648
-        exclude:
-          - suite: integration-tests
-            os: windows-2022
-            continue-on-error: false
-          # We exclude crux-mir-comp-tests as it requires some Rust-specific
-          # setup that is unique to that particular test suite. See the
-          # crux-mir-comp-tests job, which is defined separately.
-          - suite: crux-mir-comp-tests
-    steps:
-      - name: Report relevant config
-        run: |
-          echo "Runner OS: ${{ runner.os }}"
-          echo "Suite: ${{ matrix.suite }}"
-          echo "Continue on error: ${{ matrix.continue-on-error }}"
-
-      - name: Check out the repository with submodules
-        uses: actions/checkout@v7
-        with:
-          submodules: true
-
-      - name: Download what4-solvers
-        uses: GaloisInc/what4-solvers@v1
-        with:
-          dest: bin
-          release: ${{ env.SOLVER_PKG_VERSION }}
-
-      - name: Add what4-solvers to GITHUB_PATH
-        shell: bash
-        run: echo "$PWD/bin" >> $GITHUB_PATH
-
-      - name: Download the SAW bins
-        uses: actions/download-artifact@v4
-        with:
-          name: "${{ matrix.os }}-bins"
-          path: dist/bin
-
-      - name: Chmod the bins
-        shell: bash
-        if: runner.os != 'Windows'
-        run: chmod +x dist/bin/*
-
-      - name: Chmod more bins
-        shell: bash
-        if: runner.os != 'Windows'
-        run: chmod +x bin/*
-
-      - name: Download the test bins
-        uses: actions/download-artifact@v4
-        with:
-          name: dist-tests-${{ matrix.os }}
-          path: dist-tests
-
-      - name: Chmod the test bins
-        shell: bash
-        if: runner.os != 'Windows'
-        run: chmod +x dist-tests/*
-
-      - name: Set up Java
-        uses: actions/setup-java@v5
-        if: matrix.suite == 'integration-tests'
-        with:
-          distribution: "zulu"
-          java-version: "8"
-          java-package: jdk
-
-      - name: Restore SMT solver result cache
-        uses: actions/cache/restore@v6
-        if: matrix.suite == 'integration-tests'
-        with:
-          path: ${{ matrix.suite }}.cache
-          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
-          restore-keys: |
-            ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-
-
-      - name: Enable solver caching
-        shell: bash
-        if: matrix.suite == 'integration-tests'
-        run: |
-          echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
-          dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
-
-      - name: Run test suite ${{ matrix.suite }}
-        continue-on-error: ${{ matrix.continue-on-error }}
-        shell: bash
-        run: |
-          export PATH="$PWD/dist/bin:$PATH"
-          dist-tests/${{ matrix.suite }}
-
-      - name: Save SMT solver result cache
-        uses: actions/cache/save@v6
-        if: matrix.suite == 'integration-tests'
-        with:
-          path: ${{ matrix.suite }}.cache
-          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
 
   # The coverage job is similar to the cabal-test job, but it only runs the HPC
   # enabled SAW build against the integration test suite. It then collects the
