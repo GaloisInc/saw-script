@@ -108,9 +108,12 @@ import           Data.Text (Text)
 import qualified Data.Text as Text
 import           Data.Time.Clock (getCurrentTime, diffUTCTime)
 import qualified Data.Vector as V
-import           Prettyprinter
 import           System.IO
 import qualified Text.LLVM.AST as L
+
+-- XXX: one import should be enough
+import           Prettyprinter
+import qualified Prettyprinter as PP
 
 -- parameterized-utils
 import           Data.Parameterized.Classes
@@ -264,21 +267,31 @@ findDecl llmod nm =
   where
     nm' = fromString $ Text.unpack nm
 
-resolveSpecName :: Text -> TopLevel (Text, Maybe Text)
-resolveSpecName nm =
+-- | Check for and split off any cutpoint 
+resolveSpecName ::
+    Text ->  -- ^ Verification builtin we're in
+    Text ->  -- ^ Function name given to that builtin 
+    TopLevel (Text, Maybe Text)
+resolveSpecName execFunc nm =
   if Crucible.testCutpointFunction (Text.unpack nm)
-  then
+  then do
     let (fnName, fnSuffix) = Text.break (== '#') nm
-        parentName =
+    parentName <- do
           case Text.uncons fnSuffix of
-            Just (_, parentName') -> parentName'
-            -- TODO: Give a proper error message here instead of panicking,
-            -- and document __cutpoint__ naming requirements. See #2097.
-            Nothing -> panic "resolveSpecName" [
-                      "__cutpoint__ function not followed by #<parent_name>",
-                      "See https://github.com/GaloisInc/saw-script/issues/2097"
-                  ]
-    in
+            Just (_, parentName') ->
+                pure parentName'
+            Nothing -> do
+                let execFunc' = PP.pretty execFunc
+                    nm' = PP.pretty nm
+                    line1 = execFunc' <> ": Invalid cutpoint reference " <> nm'
+                    line2 = "When verifying a cutpoint specification, the" <+>
+                            "cutpoint name beginning with __cutpoint__ must" <+>
+                            "be followed by a hash-sign and the name of the" <+>
+                            "real function containing the cutpoint, which" <+>
+                            "may not be empty."
+                    msg = PP.vsep [line1, line2]
+                ppopts <- getPPOpts
+                fail $ PPS.render ppopts msg
     return
       ( fnName
       , Just parentName
@@ -544,7 +557,7 @@ withMethodSpec ::
      TopLevel a) ->
   TopLevel a
 withMethodSpec pathSat lm nm srcPos execFunc setup action =
-  do (nm', parent) <- resolveSpecName nm
+  do (nm', parent) <- resolveSpecName execFunc nm
      let edef = findDefMaybeStatic (modAST lm) nm'
      let edecl = findDecl (modAST lm) nm'
      let mtrans = modTrans lm
