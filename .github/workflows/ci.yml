@@ -910,7 +910,6 @@ jobs:
 
       - name: Set up Java
         uses: actions/setup-java@v5
-        if: matrix.suite == 'integration-tests'
         with:
           distribution: "zulu"
           java-version: "8"
@@ -918,7 +917,6 @@ jobs:
 
       - name: Restore SMT solver result cache
         uses: actions/cache/restore@v6
-        if: matrix.suite == 'integration-tests'
         with:
           path: ${{ matrix.suite }}.cache
           key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
@@ -927,7 +925,6 @@ jobs:
 
       - name: Enable solver caching
         shell: bash
-        if: matrix.suite == 'integration-tests'
         run: |
           echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
           dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
@@ -941,7 +938,6 @@ jobs:
 
       - name: Save SMT solver result cache
         uses: actions/cache/save@v6
-        if: matrix.suite == 'integration-tests'
         with:
           path: ${{ matrix.suite }}.cache
           key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
@@ -957,9 +953,6 @@ jobs:
         os: [ubuntu-24.04]
         continue-on-error: [false]
         exclude:
-          - suite: integration-tests
-            os: windows-2022
-            continue-on-error: false
           # We exclude crux-mir-comp-tests as it requires some Rust-specific
           # setup that is unique to that particular test suite. See the
           # crux-mir-comp-tests job, which is defined separately.
@@ -1016,43 +1009,12 @@ jobs:
         if: runner.os != 'Windows'
         run: chmod +x dist-tests/*
 
-      - name: Set up Java
-        uses: actions/setup-java@v5
-        if: matrix.suite == 'integration-tests'
-        with:
-          distribution: "zulu"
-          java-version: "8"
-          java-package: jdk
-
-      - name: Restore SMT solver result cache
-        uses: actions/cache/restore@v6
-        if: matrix.suite == 'integration-tests'
-        with:
-          path: ${{ matrix.suite }}.cache
-          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
-          restore-keys: |
-            ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-
-
-      - name: Enable solver caching
-        shell: bash
-        if: matrix.suite == 'integration-tests'
-        run: |
-          echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
-          dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
-
       - name: Run test suite ${{ matrix.suite }}
         continue-on-error: ${{ matrix.continue-on-error }}
         shell: bash
         run: |
           export PATH="$PWD/dist/bin:$PATH"
           dist-tests/${{ matrix.suite }}
-
-      - name: Save SMT solver result cache
-        uses: actions/cache/save@v6
-        if: matrix.suite == 'integration-tests'
-        with:
-          path: ${{ matrix.suite }}.cache
-          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
 
   rocq-builds:
     needs: [build]
