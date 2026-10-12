@@ -51,7 +51,7 @@ import Data.Parameterized.Pair
 
 import Data.Parameterized.TraversableF
 
--- | Internal wrapper for 'TypeRep' that we provide an 'OrdF'
+-- | Internal wrapper for t'TypeRep' that we provide an 'OrdF'
 --   instance for.
 newtype TypeRep' a = TypeRep' (TypeRep a)
   deriving (TestEquality, Show)
@@ -77,14 +77,14 @@ newtype TypedStore f = TypedStore (MapF TypeRep' f)
 empty :: TypedStore f
 empty = TypedStore MapF.empty
 
--- | Lookup the value of type 'f a' from the store.
+-- | Lookup the value of type @f a@ from the store.
 lookup :: forall a f. Typeable a => TypedStore f -> Maybe (f a)
 lookup (TypedStore tm) = MapF.lookup rep tm
   where
     rep = TypeRep' @a TypeRep
 
--- | Alter the data of type 'f a' in the store, inserting or
---   deleting based on the result of 'g'.
+-- | Alter the data of type @f a@ in the store, inserting/updating or
+--   deleting based on the result of @g@.
 alter :: forall a f.
   Typeable a =>
   (Maybe (f a) -> Maybe (f a)) ->
@@ -92,8 +92,8 @@ alter :: forall a f.
   TypedStore f
 alter g ts = runIdentity $ alterM (\ma -> Identity (g ma)) ts
 
--- | Alter the data of type 'f a' in the store, inserting or deleting
--- based on the result of the monadic action 'g'.
+-- | Alter the data of type @f a@ in the store, inserting or deleting
+-- based on the result of the monadic action @g@.
 alterM :: forall a f m.
   Typeable a =>
   Monad m =>
@@ -112,12 +112,12 @@ alterM g (TypedStore tm) =
 
     tm' = MapF.updateAtKey rep (g Nothing) go tm
 
--- | Insert a value of type 'f a' in the store, overwriting existing
+-- | Insert a value of type @f a@ in the store, overwriting existing
 --   data.
 insert :: forall a f. Typeable a => f a -> TypedStore f -> TypedStore f
 insert a = alter (\_ -> Just a)
 
--- | Create a 'TypedStore' with a single entry of type 'f a'.
+-- | Create a 'TypedStore' with a single entry of type @f a@.
 singleton :: forall a f. (Typeable f, Typeable a) => f a -> TypedStore f
 singleton a = TypedStore (MapF.singleton rep a)
   where
@@ -126,7 +126,7 @@ singleton a = TypedStore (MapF.singleton rep a)
 size :: TypedStore f -> Int
 size (TypedStore ts) = MapF.size ts
 
--- | Delete the value of type 'f a' from the store, if present.
+-- | Delete the value of type @f a@ from the store, if present.
 delete :: forall a f proxy. Typeable a => proxy a -> TypedStore f -> TypedStore f
 delete _ tm = alter @a (\_ -> Nothing) tm
 

@@ -168,19 +168,19 @@ data PiBody l
 
 type Thunk l = Lazy (EvalM l) (Value l)
 
--- | Evaluation monad for value instantiation 'l'
+-- | Evaluation monad for value instantiation @l@
 type family EvalM l :: Type -> Type
--- | Booleans for value instantiation 'l'
+-- | Booleans for value instantiation @l@
 type family VBool l :: Type
--- | Words for value instantiation 'l'
+-- | Words for value instantiation @l@
 type family VWord l :: Type
--- | Integers for value instantiation 'l'
+-- | Integers for value instantiation @l@
 type family VInt  l :: Type
--- | Floats for value instantiation 'l'
+-- | Floats for value instantiation @l@
 type family VFloat l :: Type
--- | SMT arrays for value instantiation 'l'
+-- | SMT arrays for value instantiation @l@
 type family VArray l :: Type
--- | Additional constructors for instantiation 'l'
+-- | Additional constructors for instantiation @l@
 type family Extra l :: Type
 
 -- | SAWCore encodes rounding modes as 3-bit words.

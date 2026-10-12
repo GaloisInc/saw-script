@@ -18,16 +18,16 @@ import qualified What4.ProgramLoc as W4
 
 import SAWSupport.Position
 
--- | SAW IsPosition instance for What4 Position.
+-- | SAW `IsPosition` instance for What4 `W4.Position`.
 --
---   What4 provides a `Pretty` instance for its `Position` type,
+--   What4 provides a `PP.Pretty` instance for its `W4.Position` type,
 --   so we can just use that.
 instance IsPosition W4.Position where
     prettyPosition pos = PP.pretty pos
 
--- | SAW IsPosition instance for What4 ProgramLoc.
+-- | SAW `IsPosition` instance for What4 `W4.ProgramLoc`.
 --
---   What4 does _not_ provide a `Pretty` instance for `ProgramLoc`, so
+--   What4 does _not_ provide a `PP.Pretty` instance for `W4.ProgramLoc`, so
 --   we need to roll one. (Instead, it provides a derived `Show`
 --   instance. Blegh.)
 instance IsPosition W4.ProgramLoc where

@@ -660,10 +660,10 @@ scmLabel :: Text -> Term -> SCM Term
 scmLabel lbl t =
   scmMakeTerm (stAppVarTypes t) (Label lbl t) (stAppType t)
 
--- | Update the global metadata of type 'a'.
-
+-- | Update the global metadata of type @a@.
+--
 -- Each individual metadata type is stored as its own IORef, which
--- simply allows for entries to be modified without requiring updates
+-- easily allows for entries to be modified without requiring updates
 -- to the 'TypedStore' itself.
 scmUpdateData :: IsMetadata a => (a -> a) -> SCM ()
 scmUpdateData f = do
@@ -1423,7 +1423,7 @@ ctorIotaReduction ctor r cs_fs args =
 --------------------------------------------------------------------------------
 -- Reduction to head-normal form
 
--- | An elimination for 'scWhnf'
+-- | An elimination for `SharedTerm.scWhnf`
 data WHNFElim
   = ElimApp Term
   | ElimRecursor Term CompiledRecursor [Term] Term [Term] [Term]
@@ -1976,9 +1976,9 @@ scmPiList ((x, t) : xts) body =
 -- 'Text') and body.
 -- The term for the body must not have any free variables.
 -- A globally-unique name with the specified base name will be created
--- using 'scFreshName'.
+-- using 'SharedTerm.scFreshName'.
 -- The type of the body determines the type of the constant; to
--- specify a different formulation of the type, use 'scAscribe'.
+-- specify a different formulation of the type, use 'SharedTerm.scAscribe'.
 scmFreshConstant ::
   Text {- ^ The base name -} ->
   Term {- ^ The body -} ->
@@ -1995,7 +1995,7 @@ scmFreshConstant name rhs =
 -- The 'QualName' must be globally unique.
 -- The term for the body must not have any free variables.
 -- The type of the body determines the type of the constant; to
--- specify a different formulation of the type, use 'scAscribe'.
+-- specify a different formulation of the type, use 'SharedTerm.scAscribe'.
 scmDefineConstant ::
   QualName {- ^ The name -} ->
   Term {- ^ The body -} ->

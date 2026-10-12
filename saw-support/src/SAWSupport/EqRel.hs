@@ -30,12 +30,14 @@ import qualified Data.HashSet as HashSet
 -- | Represents an equivalence relation that is defined pointwise.
 --   Values marked as equivalent via 'insert' are considered to
 --   belong to the same equivalence class.
---   The relation is implicitly transitive, symmetric and reflexive.
+--   The relation is implicitly reflexive, symmetric, and transitive.
 --   Specifically, for any @r@:
+--
+--     * if @x == y@ is @True@ then @eq r x y@ is @True@;
+--       thus, @eq r x x@ is @True@
+--     * @eq (insert x y r) x y @ is @True@
 --     * if @eq r x y@ is @True@
 --       then @eq (insert a b r) x y@ is @True@
---     * if @x == y@ is @True@ then @eq r x y@ is @True@
---     * @eq (insert x y r) x y @ is @True@
 --     * if @eq r x y@ is @True@,
 --       then @eq r y x@ is @True@
 --     * if @eq r x y@ and @eq r y z@ are @True@,
@@ -47,7 +49,7 @@ import qualified Data.HashSet as HashSet
 newtype EqRel a = EqRel (HashMap a (HashSet a))
 
 -- | An empty 'EqRel', where values are equivalent iff they
---   are exactly equal.
+--   are exactly equal (via `Eq`).
 empty :: EqRel a
 empty = EqRel HashMap.empty
 

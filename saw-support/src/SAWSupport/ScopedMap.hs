@@ -25,17 +25,17 @@
 -- and should be used when the client enters and leaves a nested
 -- naming environment.
 --
--- The `flatten` operation produces a single-layer Data.Map that
+-- The `flatten` operation produces a single-layer `Data.Map` that
 -- contains all the visible mappings. (That is, duplicate keys in
 -- outer scopes are suppressed.)
 --
 -- Other operations correspond to the ordinary operations on
--- Data.Map. Operations that generate collections (e.g. @keys@) come
+-- `Data.Map`. Operations that generate collections (e.g. @keys@) come
 -- in two versions: one that preserves the scope structure
 -- (generally called @scoped@), and one that flattens it (generally
 -- called @all@).
 --
--- In principle we should provide all the operations on Data.Map.
+-- In principle we should provide all the operations on `Data.Map`.
 -- However, the implementation has been lazily evaluated and the
 -- operations present are the ones that have been needed so far.
 -- Add more as desired.

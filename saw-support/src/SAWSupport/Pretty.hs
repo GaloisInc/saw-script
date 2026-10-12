@@ -1,12 +1,3 @@
-{- |
-Module      : SAWSupport.Pretty
-Copyright   : Galois, Inc. 2025
-License     : BSD3
-Maintainer  : saw@galois.com
-Stability   : experimental
-Portability : non-portable (language extensions)
--}
-
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -17,14 +8,30 @@ Portability : non-portable (language extensions)
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE PatternGuards #-}
 
+-- |
+-- Module      : SAWSupport.Pretty
+-- Description : Assorted prettyprinting infrastructure
+-- Copyright   : Galois, Inc. 2025
+-- License     : BSD3
+-- Maintainer  : saw@galois.com
+-- Stability   : experimental
+-- Portability : non-portable (language extensions)
+--
+--
 -- Prettyprinting infrastructure.
 --
 -- This module is meant to be used like this:
+--
+-- @
 --    import qualified SAWSupport.Pretty as PPS
+-- @
 --
 -- or if you like, it's reasonable to import the print functions unqualified:
+--
+-- @
 --    import SAWSupport.Pretty (ppNat, ppTypeConstraint)
 --    import qualified SAWSupport.Pretty as PPS
+-- @
 --
 -- This module is a haphazard collection of prettyprinting
 -- infrastructure that used to be scattered in random places around
@@ -33,39 +40,32 @@ Portability : non-portable (language extensions)
 -- prettyprinter, none of which shared any logic other than the
 -- upstream prettyprinter package.
 --
--- XXX: Someone should try to systematize the naming. In particular
--- we'd like to have some kind of convention like (perhaps)
--- "prettyFoo" generates a Doc for a Foo and "ppFoo" generates a Doc
--- and also renders it to Text. (Note that in the prettyprinter
--- package, "pretty" generates Doc and there is no "pp", so this
--- choice seems preferable to the other way around.) I've done some
--- of this, but there's a lot more out in the rest of the tree that
--- ought to be updated to match it.
+-- The naming convention for printing in SAW is that @prettyFoo@
+-- generates a `Doc` for a @Foo@ and @ppFoo@ generates `Text` for a
+-- @Foo@. Generally the latter calls the former and then renders the
+-- `Doc`; for simple cases it's reasonable to do things the other way
+-- around.
 --
--- Update: that convention has now been adopted, but is still not
--- widely honored.
+-- This matches the upstream @prettyprinter@ package, where @pretty@
+-- generates `Doc` and there is no @pp@. It is the other way around
+-- from Cryptol, and seemingly a lot of other Haskell code. Beware.
 --
--- XXX: should come up with a better name for pShowText, and remove
--- pShow entirely. These shouldn't be called "show" because they
--- aren't Show instances and don't have the properties of Show
--- instances. And we don't want people writing or using Show instances
--- except maybe for extremely simple types.
---
--- XXX: The ShowS material at the bottom should go away; that requires
--- cleaning up the callers to use prettyprinting instead of Show
--- instances.
---
--- XXX: Also we should crack down on callers using "show" instead of
--- "render" to produce output text.
+-- XXX: We should crack down on callers using `show` instead of
+-- `render` (or `renderText`) to produce output text.
 --
 -- It would also be nice in the long run to be able to do
+--
+-- @
 --    import qualified Prettyprinter as PP
 --    import qualified SAWSupport.Pretty as PP
+-- @
+--
 -- without this causing problems.
 --
--- It may also be that this should be split into two or more modules,
--- one meant to be used qualified and one meant for selective import,
--- or something. It isn't at all clear yet what a good interface is.
+-- It may also be that this file should be split into two or more
+-- modules, one meant to be used qualified and one meant for selective
+-- import, or something. It isn't at all clear yet what a good
+-- interface is.
 --
 -- FUTURE: there's also been some talk of adopting Cryptol's technique
 -- of wrapping the upstream prettyprinter and exposing a monad, or
@@ -73,20 +73,28 @@ Portability : non-portable (language extensions)
 -- document after it's assembled instead of needing to be threaded
 -- through everywhere.
 --
--- XXX: in any event, it's problematic that seemingly more than half
--- of the call sites for things that want options pass the default
--- options. If we're actually going to support the things the options
--- allows the user to set, we should make sure the user's settings
--- make it to the places that do prints. This includes errors.
+-- In the meantime, the default options (@PPS.defaultOpts@) should be
+-- used only to initialize the system. The idea of those options is
+-- that the user can adjust them; therefore, the user's settings
+-- should be used when something needs to be printed. We have done a
+-- fair amount of work plumbing the current options through so that
+-- they're available nearly everywhere in the system.
 --
 
 module SAWSupport.Pretty (
+    -- * Documents
     Doc,
+
+    -- * Styles
     Style(..),
     MemoStyle(..),
+
+    -- * Options
     Opts(..),
     defaultOpts,
     limitMaxDepth,
+
+    -- * Miscellaneous printers
     prettyStringDQ,
     ppStringLiteral,
     prettyInteger,
@@ -99,6 +107,8 @@ module SAWSupport.Pretty (
     commaSepAll,
     squotesMatching,
     prettyLetBlock,
+
+    -- * Rendering
     render,
     renderText,
     renderStdout,
@@ -123,6 +133,7 @@ import qualified Prettyprinter.Render.Terminal as PP
 ------------------------------------------------------------
 -- Document and document style
 
+-- | Annotation style for SAW.
 data Style
   = PrimitiveStyle
   | ConstantStyle
@@ -147,6 +158,7 @@ colorStyle =
     RecursorStyle -> mempty
     FieldNameStyle -> mempty
 
+-- | SAW prettyprinter document, using our `Style`.
 type Doc = PP.Doc Style
 
 
@@ -155,7 +167,7 @@ type Doc = PP.Doc Style
 
 -- | Global options for pretty-printing
 data Opts = Opts {
-    -- | Passed to the "useAscii" setting of Cryptol's prettyprinter.
+    -- | Passed to the @useAscii@ setting of Cryptol's prettyprinter.
     --   Default is false.
     ppUseAscii :: Bool,
 
@@ -169,8 +181,9 @@ data Opts = Opts {
     --   limit. Default is unset.
     ppMaxDepth :: Maybe Int,
 
-    -- | The numeric identifiers, as seen in the 'memoFresh' field of
-    --   'MemoVar', of SAWCore variables that shouldn't be inlined.
+    -- | The numeric identifiers, as seen in the @memoFresh@ field of
+    --   @MemoVar@ in the SAWCore prettyprinter, of SAWCore variables
+    --   that shouldn't be inlined.
     ppNoInlineMemoFresh :: [Int],
 
     -- | The way to display SAWCore memoization variables.
@@ -186,19 +199,19 @@ data Opts = Opts {
 
 -- | How should memoization variables be displayed?
 --
--- Note: actual text stylization is the province of 'ppMemoVar', this just
--- describes the semantic information 'ppMemoVar' should be prepared to display.
+-- Note: actual text stylization is the province of @ppMemoVar@; this just
+-- describes the semantic information @ppMemoVar@ should be prepared to display.
 data MemoStyle
   = Incremental
   -- ^ 'Incremental' says to display a term's memoization variable with the
   -- value of a counter that increments after a term is memoized. The first
-  -- term to be memoized will be displayed with '1', the second with '2', etc.
+  -- term to be memoized will be displayed with @1@, the second with @2@, etc.
   | Hash Int
-  -- ^ 'Hash i' says to display a term's memoization variable with the first 'i'
+  -- ^ @Hash i@ says to display a term's memoization variable with the first @i@
   -- digits of the term's hash.
   | HashIncremental Int
-  -- ^ 'HashIncremental i' says to display a term's memoization variable with
-  -- _both_ the first 'i' digits of the term's hash _and_ the value of the
+  -- ^ @HashIncremental i@ says to display a term's memoization variable with
+  -- /both/ the first @i@ digits of the term's hash /and/ the value of the
   -- counter described in 'Incremental'.
   | LabelIncremental Bool
   -- ^ Same as 'Incremental', but use term labels as the base name. If the
@@ -222,6 +235,7 @@ defaultOpts = Opts {
     ppMinSharing = 2
  }
 
+-- | Update an `Opts` with a new (smaller) `ppMaxDepth`.
 limitMaxDepth :: Int -> Opts -> Opts
 limitMaxDepth limit opts =
   let adjust depth = case depth of
@@ -381,6 +395,7 @@ prettyLetBlock defs body =
 ------------------------------------------------------------
 -- Render documents
 
+-- | Render a `Doc` to a `String`.
 render :: Opts -> Doc -> String
 render opts doc =
   TextL.unpack (PP.renderLazy (style (PP.layoutPretty layoutOpts doc)))
@@ -389,6 +404,7 @@ render opts doc =
     layoutOpts = PP.LayoutOptions (PP.AvailablePerLine 8000 0.008)
     style = if ppColor opts then PP.reAnnotateS colorStyle else PP.unAnnotateS
 
+-- | Render a `Doc` to a `Text`.
 renderText :: Opts -> Doc -> Text
 renderText opts doc =
   PP.renderStrict (style (PP.layoutPretty layoutOpts doc))
@@ -397,6 +413,11 @@ renderText opts doc =
     layoutOpts = PP.LayoutOptions (PP.AvailablePerLine 8000 0.008)
     style = if ppColor opts then PP.reAnnotateS colorStyle else PP.unAnnotateS
 
+-- | Render a `Doc` and print directly to standard output. This may
+--   allocate less for larger documents, or at least that's the only
+--   obvious reason for this function to exist. Should not be used
+--   anywhere other than UI code, because it will do the wrong thing
+--   in the remote API server.
 renderStdout :: Opts -> Doc -> IO ()
 renderStdout opts doc =
   PP.renderIO stdout (style (PP.layoutPretty layoutOpts doc))

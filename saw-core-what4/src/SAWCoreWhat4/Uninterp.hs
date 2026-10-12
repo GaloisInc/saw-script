@@ -1,12 +1,11 @@
-{- |
-Given a constant of type `T`, construct an uninterpreted
-constant with that type.  The type `T` is *not* limited to What4 BaseTypes or
+{- | Given a constant of type @T@, construct an uninterpreted
+constant with that type.  The type @T@ is *not* limited to What4 BaseTypes or
 FirstOrderTypes, and we support polymorphic and function types.
 Note that this is used for both uninterpreted functions and when we create
 symbolic variables.
 
-The Algorithm for Uninterpreted Functions
-=========================================
+
+== The Algorithm for Uninterpreted Functions
 
 Our strategy is to generate a separate uninterpreted function for each
 base type that is mentioned in the result of the original uninterpreted
@@ -14,43 +13,53 @@ function.  If we need more than one value of a type, then we return an
 *array* of values, and the actual results of the original function are
 obtained by selecting elements of this array.
 
-For example, consider a function `f: [16] -> ([4][8],Bool)`.
-A call `f x` will be translated like this:
+For example, consider a function @f: [16] -> ([4][8],Bool)@.
+A call @f x@ will be translated like this:
 
+@
   f_bv8:  [16] -> Array [2] [8]   // Uninterpreted
   f_bool: [16] -> Bool            // Uninterpreted
   w8s   = f_bv8 x                 // This has some auto-generated name
   bools = f_bool x                // This has some auto-generated name
+@
 
-Value for `f x`:
+Value for @f x@:
+
+@
   ([ w8s ! 0, w8s ! 1, w8s ! 2, w8s ! 3 ], bools)
+@
 
 The reason we do this is to reduce the size of terms in examples like this:
 
+@
   g: [1024][8] -> [1024][8]
+@
 
-`g` becomes a function of 1024 [8] arguments.  With the naive translation
+@g@ becomes a function of 1024 [8] arguments.  With the naive translation
 we'd end up with:
 
+@
   g_0 a0 .. a1023
   g_1 a0 .. a1023
   ..
   g_1023 a0 .. a1023
+@
 
 Note that this has 1024 * 1024 terms.  With the array translation, we
 should end up with:
 
+@
   arr = g_u8 a0 .. a0123
   el0 = arr @ 0
   el1 = arr @ 1
   ..
   el1023 = arr @ 1023
+@
 
 This is of size 1024 + 1024, which is much smaller.
 
 
-Handling Functions and Polymorphism (UnintApp, SymFnCache)
-==========================================================
+== Handling Functions and Polymorphism (UnintApp, SymFnCache)
 
 When working with a function type (`Pi`), we don't generate uninterpreted
 functions immediately.  Instead, we generate a Haskell function that collects
@@ -69,26 +78,33 @@ we instead modify the root name of the function.  This means that different
 size instantiations of the functions end up with different uninterpreted
 function instances.   Here's an example:
 
+@
 sum : {n} (fin n) => [n][8] -> [8]
 xs: [16][8]
 ys: [32][8]
+@
 
 `sum xs` will result in something like this:
 
+@
 sum_16_bv8: [8] -> [8] ..  [8] -> [8]     /* Has 16 arguments */
 sum_16_bv8 (xs @ 0) (xs @ 1) .. (xs @ 15)
+@
 
 otoh, `sum ys` will result in something like this:
+
+@
 sum_32_bv8: [8] -> [8] ..  [8] -> [8]     /* Has 32 arguments */
 sum_32_bv8 (ys @ 0) (ys @ 1) .. (ys @ 31)
+@
 
 See `applyUnintApp` for the full details.
 
 
-Reinterpreting Terms Back Back to SAW Core (ArgTerm)
-====================================================
+== Reinterpreting Terms Back Back to SAW Core (ArgTerm)
 
 Also we have two cases to consider:
+
   1. When translating to the solver (`parseUninterpreted`)
   2. When doing symbolic simulation for SAW (`parseUninterpretedSAW`).
 
@@ -98,6 +114,7 @@ Core term.  To do this, we need to provide interpretations for all the functions
 that were left as uninterpreted during the original translation.  For example,
 we'd need to register the following interpretations for the examples above:
 
+@
 f_bv8 x = [ tup1 @ 0, tup1 @ 1, tup1 @ 2, tup1 @ 3 ]
   where tup1 = (f x).0
 
@@ -105,12 +122,13 @@ f_bool x = (f x).1
 
 g_u8 x0 x1 .. x1023 = [ fx @ 0, fx @ f1, ... fx @ 1023 ]
   where fx = f [ x0, x1 .., x1023 ]
+@
 
 Note 1: the sharing in this examples (the `where` clause) happens
 automatically due to sharing inherent in SAW Core terms.
 
 Note 2: we also need to reconstruct the arguments to the original functions
-from their components before calling (e.g., as in `g_u8`).
+from their components before calling (e.g., as in @g_u8@).
 
 We use the type `ArgTerm` to help us create the interpretation.  The
 constructors in `ArgTerm` are used to reassemble the arguments to the original
@@ -123,6 +141,7 @@ uninterpreted functions, there's a special case for terms that started as
 SAW Core *variables* rather than SAW Core *constant*, and don't have any
 arguments---these use `bindSAWTerm` instead of `sawRegisterSymFunInterp`.
 -}
+
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
