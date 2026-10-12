@@ -841,6 +841,111 @@ jobs:
 # All of this is indented two spaces because it actually hangs under
 # the "jobs:" line in the "job config" section above.
 
+  integration-tests:
+    name: "cabal-test ${{ matrix.suite }} (${{ matrix.os }})"
+    runs-on: ${{ matrix.os }}
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: integration-tests
+            os: ubuntu-24.04
+            continue-on-error: false
+          - suite: integration-tests
+            os: macos-15
+            continue-on-error: false
+          - suite: integration-tests
+            os: windows-2022
+            timeout-minutes: 60
+            continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/2648
+    steps:
+      - name: Report relevant config
+        run: |
+          echo "Runner OS: ${{ runner.os }}"
+          echo "Suite: ${{ matrix.suite }}"
+          echo "Continue on error: ${{ matrix.continue-on-error }}"
+
+      - name: Check out the repository with submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: Download what4-solvers
+        uses: GaloisInc/what4-solvers@v1
+        with:
+          dest: bin
+          release: ${{ env.SOLVER_PKG_VERSION }}
+
+      - name: Add what4-solvers to GITHUB_PATH
+        shell: bash
+        run: echo "$PWD/bin" >> $GITHUB_PATH
+
+      - name: Download the SAW bins
+        uses: actions/download-artifact@v4
+        with:
+          name: "${{ matrix.os }}-bins"
+          path: dist/bin
+
+      - name: Chmod the bins
+        shell: bash
+        if: runner.os != 'Windows'
+        run: chmod +x dist/bin/*
+
+      - name: Chmod more bins
+        shell: bash
+        if: runner.os != 'Windows'
+        run: chmod +x bin/*
+
+      - name: Download the test bins
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-tests-${{ matrix.os }}
+          path: dist-tests
+
+      - name: Chmod the test bins
+        shell: bash
+        if: runner.os != 'Windows'
+        run: chmod +x dist-tests/*
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        if: matrix.suite == 'integration-tests'
+        with:
+          distribution: "zulu"
+          java-version: "8"
+          java-package: jdk
+
+      - name: Restore SMT solver result cache
+        uses: actions/cache/restore@v6
+        if: matrix.suite == 'integration-tests'
+        with:
+          path: ${{ matrix.suite }}.cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
+          restore-keys: |
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-
+
+      - name: Enable solver caching
+        shell: bash
+        if: matrix.suite == 'integration-tests'
+        run: |
+          echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
+          dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
+
+      - name: Run test suite ${{ matrix.suite }}
+        continue-on-error: ${{ matrix.continue-on-error }}
+        shell: bash
+        run: |
+          export PATH="$PWD/dist/bin:$PATH"
+          dist-tests/${{ matrix.suite }}
+
+      - name: Save SMT solver result cache
+        uses: actions/cache/save@v6
+        if: matrix.suite == 'integration-tests'
+        with:
+          path: ${{ matrix.suite }}.cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
+
   cabal-test:
     name: "cabal-test ${{ matrix.suite }} (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
@@ -851,14 +956,6 @@ jobs:
         suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
         os: [ubuntu-24.04]
         continue-on-error: [false]
-        include:
-          - suite: integration-tests
-            os: macos-15
-            continue-on-error: false
-          - suite: integration-tests
-            os: windows-2022
-            timeout-minutes: 60
-            continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/2648
         exclude:
           - suite: integration-tests
             os: windows-2022
@@ -867,6 +964,9 @@ jobs:
           # setup that is unique to that particular test suite. See the
           # crux-mir-comp-tests job, which is defined separately.
           - suite: crux-mir-comp-tests
+          # The integration-tests suite has its own job also, for the time
+          # being.
+          - suite: integration-tests
     steps:
       - name: Report relevant config
         run: |
