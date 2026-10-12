@@ -524,54 +524,127 @@ jobs:
           docker push ${{ matrix.image }}:latest
 
   build:
-    name: "Build on ${{ matrix.os }} with GHC ${{ matrix.ghc }}: haddock=${{ matrix.haddock }} tests=${{ matrix.run-tests }} coverage=${{ matrix.hpc }}"
+    name: "Build on ${{ matrix.os }} with GHC ${{ matrix.ghc }}: haddock=${{ matrix.haddock }} integration-tests=${{ matrix.run-integration-tests }} other-tests=${{ matrix.run-other-tests }} coverage=${{ matrix.hpc }}"
     runs-on: ${{ matrix.os }}
     needs: [config]
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04]
-        cabal: ["3.14.1.0"]
-        ghc: ["9.4.8", "9.6.7", "9.8.4"]
-        haddock: [true]
-        run-tests: [true]
-        hpc: [false]
+        # The build strategy is as follows: to make sure we cover all
+        # the supported GHC versions and platforms, we want one build
+        # with each GHC version, and one build with each platform. But
+        # we don't need to try every GHC version on every platform;
+        # GHC-version-dependent and platform-dependent issues are both
+        # rare and the combination isn't worth worrying about.
+        #
+        # So we pick a default platform (currently ubuntu 24.04) and a
+        # default GHC (currently 9.6.7) and run the non-default GHC
+        # builds on the default platform and the non-default platforms
+        # using the default GHC. For five platforms (two Ubuntu, two
+        # MacOS, and Windows) and three GHC versions that gives us
+        # seven builds. Then we add another one using the default GHC
+        # and the default platform with coverage tracking enabled, for
+        # eight total.
+        #
+        # These are written out rather than generated combinatorially
+        # because we also turn other stuff on and off to save build
+        # cycles, particularly on the more expensive MacOS and Windows
+        # runners. Specifically:
+        #    - we do a haddock run with each GHC version but only on
+        #      the default platform;
+        #    - we run the main test suite (integration-tests or
+        #      intTests) on each OS, but only with the default GHC,
+        #      and not on minor OS variants;
+        #    - we run other tests only on the default platform and
+        #      using the default GHC.
+        #
+        # We also track a specific cabal version for each build in
+        # case it needs to vary; currently it doesn't.
+
         include:
-          # We include one job from an older Ubuntu LTS release to increase our
-          # coverage of possible Linux configurations. Since we already run the
-          # tests with the newest LTS release, we won't bother testing this one.
+            # Default OS, older GHC
+          - os: ubuntu-24.04
+            ghc: "9.4.8"
+            cabal: "3.14.1.0"
+            haddock: true
+            run-integration-tests: false
+            run-other-tests: false
+            hpc: false
+
+            # Default OS, default GHC
+            # Run the other tests as well as the integration tests.
+          - os: ubuntu-24.04
+            ghc: "9.6.7"
+            cabal: "3.14.1.0"
+            haddock: true
+            run-integration-tests: true
+            run-other-tests: true
+            hpc: false
+
+            # Default OS, default GHC
+          - os: ubuntu-24.04
+            ghc: "9.8.4"
+            cabal: "3.14.1.0"
+            haddock: true
+            run-integration-tests: false
+            run-other-tests: false
+            hpc: false
+
+            # Older Ubuntu, default GHC
+            # Don't do a haddock run.
+            # Don't run the tests. 
           - os: ubuntu-22.04
             ghc: "9.6.7"
             cabal: "3.14.1.0"
             haddock: false
-            run-tests: false
+            run-integration-tests: false
+            run-other-tests: false
             hpc: false
-          # Include one job with HPC enabled
+
+          # HPC (coverage) enabled, default OS and GHC
+          # Don't run haddock.
+          # Do run the tests, because that's what gives us coverage data.
+          # But we only run the integration tests, not the rest of them.
+          # (FUTURE: maybe change that.)
           - os: ubuntu-24.04
             ghc: "9.6.7"
             cabal: "3.14.1.0"
             haddock: false
-            run-tests: true
+            run-integration-tests: true
+            run-other-tests: false
             hpc: true
-          # Windows and macOS CI runners are more expensive than Linux runners,
-          # so we only build one particular GHC version to test them on. We
-          # include both an x86-64 macOS runner (macos-15-intel) as well as an
-          # AArch64 (arm64) macOS runner (macos-15).
+
+          # Windows, default GHC
+          # Don't run Haddock, but do run the tests.
           - os: windows-2022
             ghc: 9.6.7
+            cabal: "3.14.1.0"
             haddock: false
-            run-tests: true
+            run-integration-tests: true
+            run-other-tests: false
             hpc: false
+
+            # Intel (x86-64) MacOS
+            # Don't run Haddock, don't run the tests.
           - os: macos-15-intel
             ghc: 9.6.7
+            cabal: "3.14.1.0"
             haddock: false
-            run-tests: true
+            run-integration-tests: false
+            run-other-tests: false
             hpc: false
+
+            # Default (AArch64, aka arm64) MacOS
+            # Don't run Haddock, but do run the tests.
+            # Integration tests only, though.
           - os: macos-15
             ghc: 9.6.7
+            cabal: "3.14.1.0"
             haddock: false
-            run-tests: true
+            run-integration-tests: true
+            run-other-tests: false
             hpc: false
+
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
@@ -580,7 +653,8 @@ jobs:
           echo "OS: ${{ matrix.os }}"
           echo "GHC: ${{ matrix.ghc }}"
           echo "Haddock: ${{ matrix.haddock }}"
-          echo "Run tests: ${{ matrix.run-tests }}"
+          echo "Run integration tests: ${{ matrix.run-integration-tests }}"
+          echo "Run other tests: ${{ matrix.run-other-tests }}"
           echo "Coverage (HPC): ${{ matrix.hpc }}"
           echo "Want signing: ${{ needs.config.outputs.want-signing }}"
           echo "Want notarization: $$ {{ needs.config.outputs.want-apple-notarization }}"
@@ -806,7 +880,7 @@ jobs:
           retention-days: ${{ needs.config.outputs.retention-days }}
 
       - name: Upload the non-coverage test bins
-        if: matrix.ghc == '9.6.7' && matrix.run-tests && matrix.hpc == false
+        if: matrix.ghc == '9.6.7' && matrix.run-integration-tests && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           path: dist/bin
