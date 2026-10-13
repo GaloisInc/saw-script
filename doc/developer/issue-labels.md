@@ -42,6 +42,10 @@ applied to new issues.
 * _missing cryptol features_ - marks issues related to features in
 Cryptol that don't work in SAW.
 
+* _missing python features_ - marks issues related to features in
+SAWScript that don't work or are missing in the Python bindings and/or
+the remote API.
+
 * _needs administrative review_ - marks issues that need
 administrative (rather than purely technical) review, e.g. to assess
 relevance, priorities, or strategic planning.
@@ -68,6 +72,10 @@ However, we shouldn't assume these updates will get done and in
 particular searching for closed issues with this label is not expected
 to be useful.
 
+* _normal_ - issues that are relatively tractable.
+These may not be short or easy or simple, but they're expected not to
+require digging through legacy messes or tangles.
+
 * _obsolete_ - marks issues that involve or depend on deprecated
 code such that they are not worth pursuing.
 For example, if there's a bug in a deprecated command such that it
@@ -93,6 +101,10 @@ a new issue having been filed, it may make sense to reopen it rather
 than filing a new issue.
 In that case, when reopening the previous issue, mark it as a
 regression.
+
+* _severe_ - marks issues that intersect with one or more significant
+outstanding legacy problems and are thus intended to be involved
+and/or complicated.
 
 * _unsoundness_ - marks issues that can lead to unsoundness or
 incorrect verifications.
@@ -242,6 +254,11 @@ This includes processes related to snapshots and nightlies.
 
 ## Project subsystems (cornflower blue)
 
+* _subproject_ - issues involving one of the various subprojects SAW
+depends on.
+Note that this intentionally does not have the "subsystem:" prefix as
+the string "subsystem: subproject" is confusing.
+
 * _subsystem: crucible-jvm_ - issues related to Java verification
 using the crucible-jvm tooling.
 
@@ -265,6 +282,10 @@ Heapster. (historical)
 * _subsystem: MRSolver_ - issues related to the Mr. Solver
 monadic-recursive solver in Heapster. (historical)
 
+* _subsystem: proofs_ - issues related to the proof system, proof
+sequents, dispatching proofs to solvers, and/or the interactive proof
+interface.
+
 * _subsystem: saw-core_ - issues related to the saw-core
 representation or the saw-core subsystem.
 
@@ -278,11 +299,6 @@ the RPC SAW server.
 its RPC bindings.
 
 * _subsystem: x86_ - issues related to verifying x86 binaries via Macaw.
-
-* _subproject_ - issues involving one of the various subprojects SAW
-depends on.
-Note that this intentionally does not have the "subsystem:" prefix as
-the string "subsystem: subproject" is confusing.
 
 # Pull request labels
 
@@ -300,6 +316,10 @@ There is one category of pull request labels.
 
 ## Pull request properties
 
+* _PR: backport candidate_ - use this to mark pull requests we might
+want to backport to the last release branch, but haven't yet, or
+haven't decided.
+
 * _PR: dependency bump_ - use this to mark pull requests that adjust
 dependency constraints.
 (Other than via git submodules; use _PR: submodule bump_ for those.)
@@ -309,11 +329,11 @@ trunk into your pull request branch for you when the trunk updates.
 Because of the assorted risks associated with more than one party
 applying changes to the same git branch, this should generally be used
 only for branches that are not currently under active development.
+Historical; we are no longer using Mergify.
 
 * _PR: ready to merge_ - this label asks Mergify to merge your pull
 request as soon as there's both an approval and a successful CI run.
-We are no longer using this Mergify feature and expect to remove
-support for it in the near future.
+Historical; we are no longer using Mergify.
 
 * _PR: submodule bump_ - use this to mark pull requests that change
 git submodule references.
