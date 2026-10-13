@@ -111,9 +111,8 @@ import qualified Data.Vector as V
 import           System.IO
 import qualified Text.LLVM.AST as L
 
--- XXX: one import should be enough
-import           Prettyprinter
 import qualified Prettyprinter as PP
+import           Prettyprinter ((<+>))
 
 -- parameterized-utils
 import           Data.Parameterized.Classes
@@ -630,6 +629,7 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
   do printOutLnTop Info $ Text.unpack $
          "Verifying " <> (methodSpec ^. csName) <> "..."
 
+     ppopts <- getPPOpts
      let sym = cc^.ccSym
 
      profFile <- rwProfilingFile <$> getTopLevelRW
@@ -641,7 +641,7 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
      -- set up the LLVM memory with a pristine heap
      let globals = cc^.ccLLVMGlobals
      let mvar = Crucible.llvmMemVar (ccLLVMContext cc)
-     let mem0 = lookupMemGlobal mvar globals
+     let mem0 = lookupMemGlobal ppopts mvar globals
      -- push a memory stack frame if starting from a cutpoint
      let mem = case methodSpec^.csParentName of
                Just parent -> mem0
@@ -658,7 +658,7 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
      execPos <- getPosition
      allocMode <- gets rwLLVMGlobalAllocMode
      (args, assumes, env, globals2) <-
-       io $ verifyPrestate opts execPos allocMode cc methodSpec globals1
+       io $ verifyPrestate opts ppopts execPos allocMode cc methodSpec globals1
 
      when (detectVacuity opts)
        $ Vacuity.checkAssumptionsForContradictions sym methodSpec tactic assumes
@@ -715,6 +715,7 @@ refineMethodSpec ::
 refineMethodSpec cc _srcPos methodSpec lemmas tactic =
   ccWithBackend cc $ \bak ->
   do let sym = cc^.ccSym
+     ppopts <- getPPOpts
 
      let fnm = methodSpec ^. MS.csMethod
 
@@ -724,27 +725,26 @@ refineMethodSpec cc _srcPos methodSpec lemmas tactic =
      let (relevantLemmas, irrelevantLemmas) =
            partition isRelevant (map (view MS.psSpec) lemmas)
 
+     unless (null irrelevantLemmas) $ do
+         let hdr = "Irrelevant overrides included in specification" <+>
+                   "refinement for" <+> PP.pretty fnm <> ":"
+             names = nubOrd $ map (view MS.csMethod) $ irrelevantLemmas
+             once name = " *  " <> PP.pretty name
+             msg = PP.vsep $ (hdr : map once names)
+         printOutLnTop Warn $ PPS.render ppopts msg
+
      relevantLemmas' <-
         case relevantLemmas of
-          [] -> fail $ unlines $
-                  [ "No relevant overrides included in specification refinement for " ++ show (pretty fnm) ] ++
-                  (if null irrelevantLemmas then [] else [ "Overrides provided for irrelevant methods:" ]) ++
-                  [ " *  " ++ show (pretty nm)
-                  | nm <- nubOrd $ map (view MS.csMethod) $ irrelevantLemmas
-                  ]
-          (x:xs) -> return (x NE.:| xs)
+          [] -> do
+              let fnm' = PP.pretty fnm
+                  msg = "No relevant overrides included in specification" <+>
+                        "refinement for" <+> fnm'
+              fail $ PPS.render ppopts msg
+          (x:xs) ->
+              return (x NE.:| xs)
 
      printOutLnTop Info $ Text.unpack $
          "Refining specification for " <> (methodSpec ^. csName) <> "..."
-
-     unless (null irrelevantLemmas) $ do
-         printOutLnTop Warn $ Text.unpack $
-             "Irrelevant overrides included in specification refinement for " <>
-             ppLLVMMethodId fnm
-         mapM_ (printOutLnTop Warn) $
-           [ " *  " ++ show (pretty nm)
-           | nm <- nubOrd $ map (view MS.csMethod) $ irrelevantLemmas
-           ]
 
      profFile <- rwProfilingFile <$> getTopLevelRW
      (writeFinalProfile, pfs) <- io $ Common.setupProfiling sym "llvm_refine_spec" profFile
@@ -755,7 +755,7 @@ refineMethodSpec cc _srcPos methodSpec lemmas tactic =
      -- set up the LLVM memory with a pristine heap
      let globals = cc^.ccLLVMGlobals
      let mvar = Crucible.llvmMemVar (ccLLVMContext cc)
-     let mem = lookupMemGlobal mvar globals
+     let mem = lookupMemGlobal ppopts mvar globals
 
      let globals1 = Crucible.llvmGlobals mvar mem
 
@@ -764,7 +764,7 @@ refineMethodSpec cc _srcPos methodSpec lemmas tactic =
      execPos <- getPosition
      allocMode <- gets rwLLVMGlobalAllocMode
      (args, assumes, env, globals2) <-
-       io $ verifyPrestate opts execPos allocMode cc methodSpec globals1
+       io $ verifyPrestate opts ppopts execPos allocMode cc methodSpec globals1
 
      when (detectVacuity opts)
        $ Vacuity.checkAssumptionsForContradictions sym methodSpec tactic assumes
@@ -965,6 +965,7 @@ verifyPrestate ::
   , Crucible.HasLLVMAnn Sym
   ) =>
   Options ->
+  PPS.Opts ->
   Pos ->
   LLVMGlobalAllocMode ->
   LLVMCrucibleContext arch ->
@@ -974,14 +975,14 @@ verifyPrestate ::
       [Crucible.LabeledPred Term AssumptionReason],
       Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)),
       Crucible.SymGlobalState Sym)
-verifyPrestate opts execPos allocMode cc mspec globals =
+verifyPrestate opts ppopts execPos allocMode cc mspec globals =
   do let ?lc = ccTypeCtx cc
      let sym = cc^.ccSym
      let prestateLoc = toW4Loc "_SAW_LLVM_verifyPrestate" execPos
      liftIO $ W4.setCurrentProgramLoc sym prestateLoc
 
      let lvar = Crucible.llvmMemVar (ccLLVMContext cc)
-     let mem = lookupMemGlobal lvar globals
+     let mem = lookupMemGlobal ppopts lvar globals
 
      -- Allocate LLVM memory for each 'llvm_alloc'
      (env, mem') <- runStateT
@@ -1212,26 +1213,37 @@ doAlloc cc i (LLVMAllocSpec mut _memTy alignment sz md fresh initialization)
 
 --------------------------------------------------------------------------------
 
-lookupMemGlobal :: Crucible.GlobalVar tp -> Crucible.SymGlobalState sym -> Crucible.RegValue sym tp
-lookupMemGlobal mvar globals =
-  fromMaybe
-    -- this used to claim it happens in pushFreshReturnAddress from X86.hs,
-    -- which seems to be possible but far from the only entry point...
-    (panic "lookupMemGlobal" ["LLVM Memory global not found: " <> Text.pack (show $ pretty mvar)])
-    (Crucible.lookupGlobal mvar globals)
+lookupMemGlobal ::
+    PPS.Opts ->
+    Crucible.GlobalVar tp ->
+    Crucible.SymGlobalState sym ->
+    Crucible.RegValue sym tp
+lookupMemGlobal ppopts mvar globals =
+  let croak =
+        let mvar' = PPS.renderText ppopts $ PP.pretty mvar in
+        -- this used to claim it happens in pushFreshReturnAddress from X86.hs,
+        -- which seems to be possible but far from the only entry point...
+        panic "lookupMemGlobal" ["LLVM Memory global not found: " <> mvar']
+  in
+  fromMaybe croak $ Crucible.lookupGlobal mvar globals
 
-ppAbortedResult :: LLVMCrucibleContext arch
-                -> Crucible.AbortedResult Sym a
-                -> Doc ann
-ppAbortedResult cc = Common.ppAbortedResult (ppGlobalPair cc)
+prettyAbortedResult ::
+    PPS.Opts ->
+    LLVMCrucibleContext arch ->
+    Crucible.AbortedResult Sym a ->
+    PP.Doc ann
+prettyAbortedResult ppopts cc =
+    Common.prettyAbortedResult (prettyGlobalPair ppopts cc)
 
-ppGlobalPair :: LLVMCrucibleContext arch
-             -> Crucible.GlobalPair Sym a
-             -> Doc ann
-ppGlobalPair cc gp =
+prettyGlobalPair ::
+    PPS.Opts ->
+    LLVMCrucibleContext arch ->
+    Crucible.GlobalPair Sym a ->
+    PP.Doc ann
+prettyGlobalPair ppopts cc gp =
   let mvar = Crucible.llvmMemVar (ccLLVMContext cc)
       globals = gp ^. Crucible.gpGlobals in
-  Crucible.ppMem $ Crucible.memImplHeap $ lookupMemGlobal mvar globals
+  Crucible.ppMem $ Crucible.memImplHeap $ lookupMemGlobal ppopts mvar globals
 
 
 --------------------------------------------------------------------------------
@@ -1400,7 +1412,8 @@ verifySimulate ::
   Maybe (IORef (Map Text.Text [Crucible.FunctionProfile])) ->
   IORef MetadataMap ->
   TopLevel (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym, MapF (W4.SymFnWrapper Sym) (W4.SymFnWrapper Sym))
-verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp mdMap =
+verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp mdMap = do
+  ppopts <- getPPOpts
   io $ withCfgAndBlockId opts cc mspec $ \cfg entryId -> ccWithBackend cc $ \bak -> do
      let sym = cc^.ccSym
      let argTys = Crucible.blockInputs $
@@ -1474,11 +1487,11 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
 
        Crucible.TimeoutResult _ -> fail $ "Symbolic execution timed out"
 
-       Crucible.AbortedResult _ ar ->
-         do let resultDoc = ppAbortedResult cc ar
-            fail $ unlines [ "Symbolic execution failed."
-                           , show resultDoc
-                           ]
+       Crucible.AbortedResult _ ar -> do
+           let part1 = "Symbolic execution failed."
+               part2 = prettyAbortedResult ppopts cc ar
+               msg = PP.vsep [part1, part2]
+           fail $ PPS.render ppopts msg
 
 
 refineSimulate ::
@@ -1566,11 +1579,13 @@ refineSimulate opts cc pfs mspec args assumes top_loc lemmas globals mdMap =
 
            Crucible.TimeoutResult _ -> fail $ "Symbolic execution timed out"
 
-           Crucible.AbortedResult _ ar ->
-             do let resultDoc = ppAbortedResult cc ar
-                fail $ unlines [ "Symbolic execution failed."
-                               , show resultDoc
-                               ]
+           Crucible.AbortedResult _ ar -> do
+               let sc = sawCoreSharedContext sym
+               ppopts <- scGetPPOpts sc
+               let part1 = "Symbolic execution failed."
+                   part2 = prettyAbortedResult ppopts cc ar
+                   msg = PP.vsep [part1, part2]
+               fail $ PPS.render ppopts msg
 
 
 prepareArgs ::
@@ -1951,11 +1966,12 @@ extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
                 _ -> fail $ unwords ["Unexpected return type:", show rt]
             tt' <- abstractTypedVars sc (toList ecs) tt
             pure tt'
-       Crucible.AbortedResult _ ar ->
-         do let resultDoc = ppAbortedResult cc ar
-            fail $ unlines [ "Symbolic execution failed."
-                           , show resultDoc
-                           ]
+       Crucible.AbortedResult _ ar -> do
+           ppopts <- scGetPPOpts sc
+           let part1 = "Symbolic execution failed."
+               part2 = prettyAbortedResult ppopts cc ar
+               msg = PP.vsep [part1, part2]
+           fail $ PPS.render ppopts msg
 
        Crucible.TimeoutResult _ ->
          fail "Symbolic execution timed out."

@@ -11,7 +11,7 @@ Stability   : provisional
 {-# LANGUAGE RankNTypes #-}
 
 module SAWCentral.Crucible.Common
-  ( ppAbortedResult
+  ( prettyAbortedResult
   , Sym
   , Backend
   , SomeOnlineBackend(..)
@@ -61,7 +61,9 @@ import qualified What4.ProgramLoc as W4 (plSourceLoc)
 
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
+
 import qualified Prettyprinter as PP
+import           Prettyprinter ((<+>))
 
 
 import SAWCore.SharedTerm as SC
@@ -110,28 +112,29 @@ newSAWCoreBackendWithTimeout PathSat_Z3 sym timeout =
      _ <- W4.setOpt z3TimeoutSetting timeout
      return (SomeOnlineBackend (bak :: Backend (SMT2.Writer Z3.Z3)))
 
-ppAbortedResult :: (forall l args. GlobalPair Sym (SimFrame Sym ext l args) -> PP.Doc ann)
-                -> AbortedResult Sym ext
-                -> PP.Doc ann
-ppAbortedResult _ (AbortedExec InfeasibleBranch{} _) =
+prettyAbortedResult ::
+    (forall l args. GlobalPair Sym (SimFrame Sym ext l args) -> PP.Doc ann) ->
+    AbortedResult Sym ext ->
+    PP.Doc ann
+prettyAbortedResult _ (AbortedExec InfeasibleBranch{} _) =
   "Infeasible branch"
-ppAbortedResult ppGP (AbortedExec abt gp) = do
+prettyAbortedResult prettyGP (AbortedExec abt gp) = do
   PP.vcat
     [ ppAbortExecReason abt
-    , ppGP gp
+    , prettyGP gp
     ]
-ppAbortedResult ppGP (AbortedBranch loc _predicate trueBranch falseBranch) =
+prettyAbortedResult prettyGP (AbortedBranch loc _predicate trueBranch falseBranch) =
   PP.vcat
     [ "Both branches aborted after a symbolic branch."
     , "Location of control-flow branching:"
     , PP.indent 2 (PP.pretty (W4.plSourceLoc loc))
     , "Message from the true branch:"
-    , PP.indent 2 (ppAbortedResult ppGP trueBranch)
+    , PP.indent 2 (prettyAbortedResult prettyGP trueBranch)
     , "Message from the false branch:"
-    , PP.indent 2 (ppAbortedResult ppGP falseBranch)
+    , PP.indent 2 (prettyAbortedResult prettyGP falseBranch)
     ]
-ppAbortedResult _ (AbortedExit ec _gp) =
-  "Branch exited:" PP.<+> PP.viaShow ec
+prettyAbortedResult _ (AbortedExit ec _gp) =
+  "Branch exited:" <+> PP.viaShow ec
 
 setupProfiling ::
   IsSymInterface sym =>

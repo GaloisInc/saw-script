@@ -14,7 +14,6 @@ Abort due to assertion failure:
   attempted to read empty mux tree
 
 
-
 Verifying test/54123856::g[0] ...
 Simulating test/54123856::g[0] ...
 == Anticipated failure message ==
@@ -33,7 +32,6 @@ Abort due to assertion failure:
     ... 1 calling frames omitted
 
 
-
 Verifying test/54123856::g[0] ...
 Simulating test/54123856::g[0] ...
 == Anticipated failure message ==
@@ -50,6 +48,5 @@ Abort due to assertion failure:
   Context:
     test.rs:2:14: 2:16: test/54123856::f[0]
     test.rs:8:5: 8:9: test/54123856::g[0]
-
 
 

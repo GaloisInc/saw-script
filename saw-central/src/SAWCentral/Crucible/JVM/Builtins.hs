@@ -145,11 +145,20 @@ type Lemma = MS.ProvedSpec CJ.JVM
 type MethodSpec = MS.CrucibleMethodSpecIR CJ.JVM
 type SetupCondition = MS.SetupCondition CJ.JVM
 
--- TODO: something useful with the global pair?
-ppJVMAbortedResult :: JVMCrucibleContext
-                -> Crucible.AbortedResult Sym a
-                -> Doc ann
-ppJVMAbortedResult _cc = Common.ppAbortedResult (\_gp -> mempty)
+prettyJVMAbortedResult ::
+    JVMCrucibleContext ->
+    Crucible.AbortedResult Sym a ->
+    Doc ann
+prettyJVMAbortedResult cc =
+    Common.prettyAbortedResult (prettyGlobalPair cc)
+
+-- XXX TODO: something useful with the global pair?
+prettyGlobalPair ::
+    JVMCrucibleContext ->
+    Crucible.GlobalPair Sym a ->
+    PP.Doc ann
+prettyGlobalPair _cc _gp =
+    PP.emptyDoc
 
 -- FIXME: We need a better way to identify a set of class names to
 -- load. This function has two problems: First, unless we put in a
@@ -744,11 +753,13 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat md
                         Just v -> return (Just (ret_mt, v))
             return (retval', globals1)
 
-       Crucible.AbortedResult _ ar ->
-         do let resultDoc = ppJVMAbortedResult cc ar
-            fail $ unlines [ "Symbolic execution failed."
-                           , show resultDoc
-                           ]
+       Crucible.AbortedResult _ ar -> do
+           let part1 = "Symbolic execution failed."
+               part2 = prettyJVMAbortedResult cc ar
+               msg = PP.vsep [part1, part2]
+           let sc = sawCoreSharedContext sym
+           ppopts <- scGetPPOpts sc
+           fail $ PPS.render ppopts msg
 
        Crucible.TimeoutResult _cxt -> fail "Symbolic execution timed out."
 

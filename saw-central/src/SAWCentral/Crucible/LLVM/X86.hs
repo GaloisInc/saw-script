@@ -63,6 +63,8 @@ import Data.Maybe
 
 import qualified Text.LLVM.AST as LLVM
 
+import qualified Prettyprinter as PP
+
 import Data.Parameterized.Some
 import Data.Parameterized.Map (MapF)
 import qualified Data.Parameterized.Map as MapF
@@ -71,6 +73,7 @@ import Data.Parameterized.Nonce (GlobalNonceGenerator)
 import Data.Parameterized.Context hiding (view, zipWithM)
 
 import SAWSupport.Position
+import qualified SAWSupport.Pretty as PPS
 
 import CryptolSAWCore.CryptolEnv
 import CryptolSAWCore.GlobalCryptolEnv
@@ -652,23 +655,25 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
 
       let execFeatures = simpleLoopFixpointFeature ++ psatf
 
+      ppopts <- getPPOpts
       finalState <- liftIO $ C.executeCrucible execFeatures initial >>= \case
         C.FinishedResult _ pr -> do
           gp <- getGlobalPair opts pr
-          let mem' = lookupMemGlobal mvar $ gp ^. C.gpGlobals
+          let mem' = lookupMemGlobal ppopts mvar $ gp ^. C.gpGlobals
           return $ preState
             { _x86Mem = mem'
             , _x86Regs = C.regValue $ gp ^. C.gpValue
             , _x86CrucibleContext = cc & ccLLVMGlobals .~ (gp ^. C.gpGlobals)
             }
         C.AbortedResult _ ar -> do
-          let resultDoc = Common.ppAbortedResult
-                (\gp ->  C.LLVM.ppMem $ C.LLVM.memImplHeap $ lookupMemGlobal mvar $ gp ^. C.gpGlobals)
+          let part1 = "Execution failed: function never returns."
+              part2 = Common.prettyAbortedResult
+                (\gp ->  C.LLVM.ppMem $ C.LLVM.memImplHeap $ lookupMemGlobal ppopts mvar $ gp ^. C.gpGlobals)
                 ar
-          fail $ unlines [ "Execution failed: function never returns."
-                         , show resultDoc
-                         ]
-        C.TimeoutResult{} -> fail "Execution timed out"
+              msg = PP.vsep [part1, part2]
+          fail $ PPS.render ppopts msg
+        C.TimeoutResult{} ->
+          fail "Execution timed out"
 
       (invSubst, loopFunEquivConds) <- liftIO $ case maybe_ref of
         Just fixpoint_state_ref -> do
