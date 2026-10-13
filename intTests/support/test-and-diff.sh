@@ -152,6 +152,15 @@ run-tests() {
         # super aggravating because it changes all the time, usually
         # when you aren't expecting it.
         #
+        # There's at least one test that generates warnings referring
+        # to Cryptol's built-in Cryptol module. This may result in
+        # printing an absolute path, depending on where Cryptol finds
+        # the module (which depends on your setup, which the test
+        # suite shouldn't depend on...) if we find an absolute path in
+        # front of "Cryptol.cry" and a line number, prune the path and
+        # replace with just "Cryptol", which is what it prints in the
+        # base case.
+        #
         # Also remove the "Solver cache enabled in..." message
         # entirely (rather than just pruning the path out of it)
         # because whether the tests use the solver cache at all
@@ -164,6 +173,7 @@ run-tests() {
             tagain
 
             /^  error, called at [^ :]*\.hs:[0-9:]* in saw-/s/\.hs:.*/.hs/
+            /^    \/[^ :]*\/Cryptol\.cry:[0-9][0-9]*:/s/^[^:]*:/    Cryptol:/
             /^Solver cache enabled in [^ ][^ ]*$/d
         ' | (
             # If there's a custom postprocess script for this test,
