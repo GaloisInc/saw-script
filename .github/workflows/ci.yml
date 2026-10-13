@@ -947,13 +947,54 @@ jobs:
         if: matrix.run-integration-tests == true
         timeout-minutes: 60
         continue-on-error: ${{ matrix.allow-test-failures }}
+        env:
+          ENABLE_HPC: ${{ matrix.hpc }}
         shell: bash
         run: |
           export PATH="$PWD/dist/bin:$PATH"
           dist-tests/integration-tests
 
+      - name: Compute coverage
+        if: matrix.hpc == true
+        shell: bash
+        run: |
+          ./compute-coverage.sh
+
+      - name: Upload the coverage data
+        if: matrix.hpc == true
+        uses: actions/upload-artifact@v5
+        with:
+          path: hpc-html
+          name: coverage-html-${{ github.event.number }}
+
+      - name: Gather HPC coverage files
+        if: matrix.hpc == true
+        run: .github/ci.sh collect_all_html
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Deploy coverage reports
+        if: matrix.hpc == true
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: all-html
+          destination_dir: coverage
+          keep_files: false
+
+        # NOTE: The coverage test run uses the SMT solver cache to
+        # improve performance but doesn't save the updated SMT solver
+        # cache. Instead, it shares cache with the non-coverage run on
+        # the same platform. That run will upload an updated cache.
+        # Because the test suite is the same, the resulting cache
+        # files would also be identical. FUTURE: it is not absolutely
+        # clear how well this works without serializing the jobs,
+        # which we've never done and isn't currently possible. It
+        # might be better to extend the cache key scheme so the
+        # coverage run gets its own cache. Revisit this when we have
+        # a good solution for #3379 and can assess the effectiveness.
       - name: Save SMT solver result cache
-        if: matrix.run-integration-tests == true
+        if: matrix.run-integration-tests == true && matrix.hpc == false
         uses: actions/cache/save@v6
         with:
           path: integration-tests.cache
@@ -1331,127 +1372,6 @@ jobs:
           saw --version
           saw-remote-api --help
           ${{ matrix.test }}
-
-  # The coverage job is similar to the cabal-test job, but it only runs the HPC
-  # enabled SAW build against the integration test suite. It then collects the
-  # test coverage results, generates an HTML summary, and publishes the results
-  # to github pages.
-  coverage:
-    name: "Run integration tests with coverage reporting (${{ matrix.os }})"
-    needs: [config, build]
-    runs-on: ${{ matrix.os }}
-    # Do not run this job in forks, as the deployment to GitHub pages will fail
-    # unless it has GITHUB_TOKEN permissions from a user within the GaloisInc
-    # organization (see #2216). Also exclude dependabot, because it apparently
-    # works like a fork but isn't one. See crucible #1642 for discussion.
-    if: needs.config.outputs.want-coverage == 'true'
-    strategy:
-      matrix:
-        suite: ['integration-tests']
-        os: [ubuntu-24.04]
-    steps:
-      - name: Report relevant config
-        run: |
-          echo "Want coverage: ${{ needs.config.outputs.want-coverage }}"
-
-      # Need a copy of the source to generate coverage HTML
-      - name: Check out the repository with submodules
-        uses: actions/checkout@v7
-        with:
-          submodules: true
-
-      - name: Set up Haskell
-        uses: haskell-actions/setup@v2
-        id: setup-haskell
-        with:
-          ghc-version: "9.6.7"
-
-      - name: Download what4-solvers
-        uses: GaloisInc/what4-solvers@v1
-        with:
-          dest: bin
-          release: ${{ env.SOLVER_PKG_VERSION }}
-
-      - name: Add what4-solvers to GITHUB_PATH
-        shell: bash
-        run: echo "$PWD/bin" >> $GITHUB_PATH
-
-      - name: Download the with-coverage test bins
-        uses: actions/download-artifact@v4
-        with:
-          name: dist-tests-${{ matrix.os }}-hpc
-          path: dist-tests
-
-      - name: Download the coverage files
-        uses: actions/download-artifact@v4
-        with:
-          name: "${{ matrix.os }}-hpc.tar.gz"
-
-      - name: Set up test environment
-        shell: bash
-        run: |
-          tar xvf hpc.tar.gz
-          chmod +x dist/bin/*
-          chmod +x bin/*
-          chmod +x dist-tests/*
-
-      - name: Set up Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: "zulu"
-          java-version: "8"
-          java-package: jdk
-
-      # NOTE: This job uses the SMT solver cache to improve performance but it
-      # does not save the updated SMT solver cache. This is because the
-      # `cabal-test` also runs the integration tests and uploads an updated
-      # cache. Because the test suite is the same, the resulting cache files
-      # would also be identical.
-      - name: Restore SMT solver result cache
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ matrix.suite }}.cache
-          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
-          restore-keys: |
-            ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-
-
-      - name: Enable solver caching
-        shell: bash
-        run: |
-          echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
-          dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
-
-      - name: Run integration tests
-        shell: bash
-        run: |
-          export PATH="$PWD/dist/bin:$PATH"
-          dist-tests/integration-tests
-        env:
-          ENABLE_HPC: true
-
-      - name: Compute coverage
-        shell: bash
-        run: |
-          ./compute-coverage.sh
-
-      - name: Upload the coverage data
-        uses: actions/upload-artifact@v5
-        with:
-          path: hpc-html
-          name: coverage-html-${{ github.event.number }}
-
-      - name: Gather HPC coverage files
-        run: .github/ci.sh collect_all_html
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Deploy coverage reports
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: all-html
-          destination_dir: coverage
-          keep_files: false
 
   s2n-tests:
     name: "Test s2n proofs: ${{ matrix.s2n-target }}"
