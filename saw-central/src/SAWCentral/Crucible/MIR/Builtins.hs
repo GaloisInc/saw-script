@@ -192,10 +192,14 @@ type Lemma = MS.ProvedSpec MIR
 type MethodSpec = MS.CrucibleMethodSpecIR MIR
 type SetupCondition = MS.SetupCondition MIR
 
--- TODO: something useful with the global pair?
-ppMIRAbortedResult :: Crucible.AbortedResult Sym a
-                   -> PP.Doc ann
-ppMIRAbortedResult = ppAbortedResult (\_gp -> mempty)
+prettyMIRAbortedResult :: Crucible.AbortedResult Sym a -> PP.Doc ann
+prettyMIRAbortedResult =
+    prettyAbortedResult prettyGlobalPair
+
+-- XXX TODO: something useful with the global pair?
+prettyGlobalPair:: Crucible.GlobalPair Sym a -> PP.Doc ann
+prettyGlobalPair _gp =
+    mempty
 
 -----
 -- Commands
@@ -919,6 +923,7 @@ mir_verify rm nm lemmas checkSat setupWithPos tactic =
      let setup = setupWithPos ^. Pos.wpVal
      start <- io getCurrentTime
      opts <- getOptions
+     ppopts <- getPPOpts
 
      -- set up the metadata map for tracking proof obligation metadata
      mdMap <- io $ newIORef mempty
@@ -965,7 +970,7 @@ mir_verify rm nm lemmas checkSat setupWithPos tactic =
        unwords ["Simulating", show (methodSpec ^. MS.csMethod), "..."]
      top_loc <- Pos.toW4Loc "mir_verify" <$> getPosition
      (ret, globals2) <-
-       io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals1 checkSat mdMap
+       io $ verifySimulate opts ppopts cc pfs methodSpec args assumes top_loc lemmas globals1 checkSat mdMap
 
      -- collect the proof obligations
      asserts <- verifyPoststate cc
@@ -1710,6 +1715,7 @@ verifyPrestate cc mspec globals0 =
 verifySimulate ::
   (?singleOverrideSpecialCase :: Bool) =>
   Options ->
+  PPS.Opts ->
   MIRCrucibleContext ->
   [Crucible.GenericExecutionFeature Sym] ->
   MethodSpec ->
@@ -1721,7 +1727,7 @@ verifySimulate ::
   Bool {- ^ path sat checking -} ->
   IORef MetadataMap {- ^ metadata map -} ->
   IO (Maybe MIRVal, Crucible.SymGlobalState Sym)
-verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat mdMap =
+verifySimulate opts ppopts cc pfs mspec args assumes top_loc lemmas globals checkSat mdMap =
   mccWithBackend cc $ \bak ->
   do let rm = cc^.mccRustModule
      let cs = rm ^. Mir.rmCS
@@ -1756,7 +1762,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat md
                           let loc = MS.conditionLoc md
                           Crucible.addAssumption bak (Crucible.GenericAssumption loc reason expr)
                    fnCall
-          runCrucible opts simctx globals (map Crucible.genericToExecutionFeature feats)
+          runCrucible opts ppopts simctx globals (map Crucible.genericToExecutionFeature feats)
                       methodRetTy overrideSim
 
      let ret_ty = mspec ^. MS.csRet
@@ -1943,11 +1949,12 @@ extractFromMirCFG opts sc cc argTys retTy (Crucible.AnyCFG cfg) =
             let tt = TypedTerm (TypedTermSchema (Cryptol.tMono cty)) term
             tt' <- abstractTypedVars sc (toList ecs) tt
             pure tt'
-       Crucible.AbortedResult _ ar ->
-         do let resultDoc = ppMIRAbortedResult ar
-            fail $ unlines [ "Symbolic execution failed."
-                           , show resultDoc
-                           ]
+       Crucible.AbortedResult _ ar -> do
+           let part1 = "Symbolic execution failed."
+               part2 = prettyMIRAbortedResult ar
+               msg = PP.vsep [part1, part2]
+           ppopts <- scGetPPOpts sc
+           fail $ PPS.render ppopts msg
 
        Crucible.TimeoutResult _ ->
          fail "Symbolic execution timed out."
@@ -2030,13 +2037,14 @@ lookupDefIdCFG rm method =
 runCrucible ::
   Crucible.IsSyntaxExtension ext =>
   Options ->
+  PPS.Opts ->
   Crucible.SimContext p Sym ext ->
   Crucible.SymGlobalState Sym ->
   [Crucible.ExecutionFeature p Sym ext (Crucible.RegEntry Sym a)] ->
   Crucible.TypeRepr a ->
   Crucible.OverrideSim p Sym ext (Crucible.RegEntry Sym a) Crucible.EmptyCtx a (Crucible.RegValue Sym a) ->
   IO (Crucible.SimContext p Sym ext, Crucible.GlobalPair Sym (Crucible.RegEntry Sym a))
-runCrucible opts simCtx globals execFeatures ovRetTpr ovSim = do
+runCrucible opts ppopts simCtx globals execFeatures ovRetTpr ovSim = do
   let initExecState =
         Crucible.InitialState simCtx globals Crucible.defaultAbortHandler ovRetTpr $
         Crucible.runOverrideSim ovRetTpr ovSim
@@ -2047,10 +2055,10 @@ runCrucible opts simCtx globals execFeatures ovRetTpr ovSim = do
       return (simctx, gp)
 
     Crucible.AbortedResult _ ar -> do
-      let resultDoc = ppMIRAbortedResult ar
-      fail $ unlines [ "Symbolic execution failed."
-                     , show resultDoc
-                     ]
+      let part1 = "Symbolic execution failed."
+          part2 = prettyMIRAbortedResult ar
+          msg = PP.vsep [part1, part2]
+      fail $ PPS.render ppopts msg
 
     Crucible.TimeoutResult _cxt ->
       fail "Symbolic execution timed out."
@@ -2241,6 +2249,7 @@ setupArgs sc cc mirArgTys fn =
 setupCrucibleContext :: Mir.RustModule -> TopLevel MIRCrucibleContext
 setupCrucibleContext rustMod =
   do halloc <- getHandleAlloc
+     ppopts <- getPPOpts
      sc <- getSharedContext
      cryenv <- getCryptolEnv
      pathSatSolver <- gets rwPathSatSolver
@@ -2308,7 +2317,7 @@ setupCrucibleContext rustMod =
      let globals0 = Crucible.emptyGlobals
      let setupGlobals = Crucible.regValue <$> Crucible.callCFG staticInitCfg Crucible.emptyRegMap
      -- Step (1) in Note [Translating MIR statics in SAW]
-     (simctx1, gp) <- io $ runCrucible opts simctx0 globals0 [] Crucible.UnitRepr setupGlobals
+     (simctx1, gp) <- io $ runCrucible opts ppopts simctx0 globals0 [] Crucible.UnitRepr setupGlobals
      let globalsAllStatics = gp ^. Crucible.gpGlobals
      -- Step (2) in Note [Translating MIR statics in SAW]
      let (globalsImmutStaticsOnly, staticInitializerPairs) =
