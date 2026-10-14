@@ -11,4 +11,4 @@ True
     \(x1 : u1342) ->
       x (x (x (x (x (x (x (x (x (x (x (x (x (x (x (x x1)))))))))))))))
 True
-\(x : Vec 8 Bool) -> bvAdd 8 (bvAdd 8 (bvNat 8 6) (bvNat 8 7)) x
+\(x : Vec Bool 8) -> bvAdd 8 (bvAdd 8 (bvNat 8 6) (bvNat 8 7)) x

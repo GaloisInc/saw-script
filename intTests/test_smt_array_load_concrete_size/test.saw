@@ -1,7 +1,7 @@
 enable_experimental;
 
 import "Mix.cry";
-let arrayRangeEq = parse_core "arrayRangeEq 64 (Vec 8 Bool)";
+let arrayRangeEq = parse_core "arrayRangeEq 64 (Vec Bool 8)";
 
 m <- llvm_load_module "test.bc";
 
