@@ -175,7 +175,12 @@ The consequence of this, though, is that the SAWCore prettyprinter and
 everything else that ultimately recurses into the SAWCore
 prettyprinter needs the current printing options value.
 Some prints use the default options instead, but every such instance
-is a bug -- we should honor the user settings.
+is a bug; we should honor the user settings.
+
+The `PPOpts` value is stored in the SAWCore `SharedContext` and can
+be gotten from there in `IO` with `scGetPPOpts sc`.
+Higher-level code that has access to the SAWScript interpreter state
+can also use `getPPOpts` in the `TopLevel` monad.
 
 The SAWCore prettyprinter also needs access to the SAWCore naming
 environment to print nicely.
@@ -206,12 +211,6 @@ Monadically-tainted printing is not going away unless something
 substantial changes in SAWCore.
 There is some hope of being able to make it simpler and more
 systematic in the long run though.)
-
-Note that the `SharedContext` does not contain a copy of the `PPOpts`
-so it has to be passed around explicitly.  This might change, because
-there are a lot of places in lower levels of the system where it isn't
-otherwise available and, as noted, printing without it isn't
-desirable.
 
 ### The prettyprinting options
 
@@ -366,13 +365,13 @@ The following will get you an adequate but not great starter:
 
 - Turn on `OverloadedStrings` if you haven't already.
 
-- First, write the necssary `prettyFoo` skeletons with cases for each
+- First, write the necessary `prettyFoo` skeletons with cases for each
   constructor and so forth.
   Then write the cases according to the remaining steps.
 
 - Call the appropriate `prettyFoo` functions for subelements.
 
-- Use `text` to convert any explicit `Text` values (e.g. identifier
+- Use `PP.pretty` to convert any explicit `Text` values (e.g. identifier
   names) to `Doc`.
 
 - String literals are already `Doc` when they need to be.
@@ -387,7 +386,7 @@ The following will get you an adequate but not great starter:
   - `intercalate` becomes `hcat $ intersperse`.
   - `intercalate` that inserts spaces can just be `hsep`.
   - `unlines` becomes `vsep`.
-  - If you have `<>` with an explicit space on either side, remove the
+  - If you have `<>` with an explicit space on one side, remove the
     space and replace `<>` with `<$>`.
   - You can replace explicit leading spaces on a line with `indent n` for
     the appropriate constant `n`.
@@ -414,25 +413,29 @@ The following will get you an adequate but not great starter:
 
 ## Dumping in SAW
 
-The dump infrastructure hasn't been built out yet, so this is still
-theoretical.
+The dump infrastructure hasn't been deployed widely yet, so this is
+still largely theoretical.
 
-The plan is for every nontrivial type `Foo` to have a dumper function
-`dumpFoo` that returns a prettyprinter document in the recommended
-schematic form.
-There will be infrastructure so writing these functions takes very little
-effort.
+The dumper infrastructure is found in `SAWSupport.Dump`.
+It provides a `Dump` type for output documents, and some tools for
+producing those documents in the recommended schematic form.
+See the comments in the source for further information.
+(Duplicating that information here so it goes out of date is not
+helpful.)
+
+Every nontrivial type `Foo` should have a dumper function
+`dumpFoo` that produces a `Dump`.
+Writing these functions should take very little effort.
 
 The primary consumer of the dump interface is intended to be explicit
 dump points in the system, where you can tell SAW to dump the internal
 representation and it will do so.
+These don't exist yet.
 
 However, one will sometimes want dump output in debug prints.
-It isn't clear at the moment if we should have a second dump function
-for every type that produces `Text`, and if so what to call it.
-(`ddFoo`? that's not so wonderful...)
-For debug prints, `show $ dump foo` may be sufficient -- there is no
-need to worry about rendering options.
-(However, that produces `String`, so in many cases it will end up
-being `Text.pack $ show $ dump foo`, and every extra widget like that
-in the common-case call chain is an extra annoyance.)
+The `render` function in `SAWSupport.Dump` produces a list of `Text`,
+one per line of output.
+For a debug print probably the best approach is to use `mapM_` and a
+suitable printing function.
+If you need `String`, e.g. for vanilla `putStrLn`, use `renderString`.
+(Thus, the simplest debug print: `mapM_ putStrLn $ dumpFoo f`.)
