@@ -153,16 +153,13 @@ collect_hpc_files() {
 collect_all_html() {
   local HTML_DIR=all-html
   local API_URL='repos/{owner}/{repo}/actions/artifacts'
-  local QUERY='[ .artifacts[]
-    | select(.expired == false)
-    ] | if length == 0 then "EMPTY" else .[]
-    | select (.name | startswith("coverage-html-"))
-    | "\(.id) \(.name) "
-    end'
   mkdir -p ${HTML_DIR}
   cd ${HTML_DIR}
 
-  local ARTIFACTS=$(gh api ${API_URL} --method GET -F per_page=100 --paginate --jq "${QUERY}" | sed -n -e '/^EMPTY$/q' -e 'p')
+  local ARTIFACTS
+  # Sort newest (highest id) first so the existence check below keeps the
+  # most recent artifact for each name.
+  ARTIFACTS=$(../.github/list-coverage-artifacts.sh "${GITHUB_REPOSITORY:-GaloisInc/saw-script}" | sort -rn)
   while read -r id name; do
     [ -z "$id" ] && continue
     # don't overwrite existing results, which are newer
