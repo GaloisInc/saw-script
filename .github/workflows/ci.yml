@@ -917,7 +917,7 @@ jobs:
             dist-newstyle
           key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
 
-        # Now run the integration tests.
+        # Now run tests.
 
       - name: Set up Java
         if: matrix.run-integration-tests == true
@@ -943,6 +943,37 @@ jobs:
           echo "SAW_SOLVER_CACHE_PATH=$(pwd)/integration-tests.cache" >> "$GITHUB_ENV"
           dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/integration-tests.cache
 
+        # The crux-mir-comp tests require a Rust toolchain and
+        # mir-json. Install Rust, but only if we're going to run them.
+      - name: Install Rust toolchain
+        if: matrix.run-other-tests == true
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          override: true
+          components: rustc-dev, rust-src
+
+      - name: Engage the Cargo cache
+        if: matrix.run-other-tests == true
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: "true"
+          prefix-key: "${{ env.CARGO_CACHE_VERSION }}-${{ matrix.os }}"
+          shared-key: "cargo-cache"
+          workspaces: "deps/mir-json"
+
+      - name: Build and install mir-json
+        if: matrix.run-other-tests == true
+        working-directory: deps/mir-json
+        run: |
+          cargo install --locked --force
+          mir-json-translate-libs
+          echo "CRUX_RUST_LIBRARY_PATH=$(pwd)/rlibs" >> $GITHUB_ENV
+
+        # Now we can _actually_ run tests...
+
+        # First run the integration tests. This is like 99% of the
+        # test suite.
       - name: Run integration-tests
         if: matrix.run-integration-tests == true
         timeout-minutes: 60
@@ -953,6 +984,24 @@ jobs:
         run: |
           export PATH="$PWD/dist/bin:$PATH"
           dist-tests/integration-tests
+
+        # Run the tests from otherTests. We don't currently include
+        # this in the coverage run, but provide the ENABLE_HPC setting
+        # in case we decide we want to, so it works to just switch it
+        # on in the run matrix.
+        #
+        # All of these together take only a few seconds to run.
+      - name: Run other-tests
+        if: matrix.run-other-tests == true
+        env:
+          ENABLE_HPC: ${{ matrix.hpc }}
+        shell: bash
+        run: |
+          export PATH="$PWD/dist/bin:$PATH"
+          ./build.sh other-tests
+
+        # Process and upload coverage results, if we were doing
+        # coverage.
 
       - name: Compute coverage
         if: matrix.hpc == true
@@ -1007,80 +1056,6 @@ jobs:
 
 # All of this is indented two spaces because it actually hangs under
 # the "jobs:" line in the "job config" section above.
-
-  cabal-test:
-    name: "cabal-test ${{ matrix.suite }} (${{ matrix.os }})"
-    runs-on: ${{ matrix.os }}
-    needs: [build]
-    strategy:
-      fail-fast: false
-      matrix:
-        suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
-        os: [ubuntu-24.04]
-        continue-on-error: [false]
-        exclude:
-          # We exclude crux-mir-comp-tests as it requires some Rust-specific
-          # setup that is unique to that particular test suite. See the
-          # crux-mir-comp-tests job, which is defined separately.
-          - suite: crux-mir-comp-tests
-          # The integration-tests suite has its own job also, for the time
-          # being.
-          - suite: integration-tests
-    steps:
-      - name: Report relevant config
-        run: |
-          echo "Runner OS: ${{ runner.os }}"
-          echo "Suite: ${{ matrix.suite }}"
-          echo "Continue on error: ${{ matrix.continue-on-error }}"
-
-      - name: Check out the repository with submodules
-        uses: actions/checkout@v7
-        with:
-          submodules: true
-
-      - name: Download what4-solvers
-        uses: GaloisInc/what4-solvers@v1
-        with:
-          dest: bin
-          release: ${{ env.SOLVER_PKG_VERSION }}
-
-      - name: Add what4-solvers to GITHUB_PATH
-        shell: bash
-        run: echo "$PWD/bin" >> $GITHUB_PATH
-
-      - name: Download the SAW bins
-        uses: actions/download-artifact@v4
-        with:
-          name: "${{ matrix.os }}-bins"
-          path: dist/bin
-
-      - name: Chmod the bins
-        shell: bash
-        if: runner.os != 'Windows'
-        run: chmod +x dist/bin/*
-
-      - name: Chmod more bins
-        shell: bash
-        if: runner.os != 'Windows'
-        run: chmod +x bin/*
-
-      - name: Download the test bins
-        uses: actions/download-artifact@v4
-        with:
-          name: dist-tests-${{ matrix.os }}
-          path: dist-tests
-
-      - name: Chmod the test bins
-        shell: bash
-        if: runner.os != 'Windows'
-        run: chmod +x dist-tests/*
-
-      - name: Run test suite ${{ matrix.suite }}
-        continue-on-error: ${{ matrix.continue-on-error }}
-        shell: bash
-        run: |
-          export PATH="$PWD/dist/bin:$PATH"
-          dist-tests/${{ matrix.suite }}
 
   rocq-builds:
     needs: [build]
@@ -1240,69 +1215,6 @@ jobs:
             ~/.isabelle/contrib
             ~/.isabelle/heaps
           key: ${{ steps.cache-isabelle-restore.outputs.cache-primary-key }}
-
-  crux-mir-comp-tests:
-    needs: [build]
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-15]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Check out repo and submodules
-        uses: actions/checkout@v7
-        with:
-          submodules: true
-
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          override: true
-          components: rustc-dev, rust-src
-
-      - name: Engage the Cargo cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: "true"
-          prefix-key: "${{ env.CARGO_CACHE_VERSION }}-${{ matrix.os }}"
-          shared-key: "cargo-cache"
-          workspaces: "deps/mir-json"
-
-      - name: Download what4-solvers
-        uses: GaloisInc/what4-solvers@v1
-        with:
-          dest: bin
-          release: ${{ env.SOLVER_PKG_VERSION }}
-
-      - name: Add what4-solvers to GITHUB_PATH
-        shell: bash
-        run: echo "$PWD/bin" >> $GITHUB_PATH
-
-      - name: Install mir-json
-        working-directory: deps/mir-json
-        run: |
-          cargo install --locked --force
-          mir-json-translate-libs
-          echo "CRUX_RUST_LIBRARY_PATH=$(pwd)/rlibs" >> $GITHUB_ENV
-
-      - name: Download test binaries
-        uses: actions/download-artifact@v4
-        with:
-          name: dist-tests-${{ matrix.os }}
-          path: dist-tests
-
-      - name: Update PATH to include crux-mir-comp
-        shell: bash
-        run: |
-          chmod +x dist-tests/*
-          echo $GITHUB_WORKSPACE/dist-tests >> $GITHUB_PATH
-
-      - name: Run crux-mir-comp test suite
-        continue-on-error: false
-        working-directory: crux-mir-comp
-        shell: bash
-        run: crux-mir-comp-tests
 
   saw-remote-api-tests:
     name: "saw-remote-api-tests (${{ matrix.name }} on ${{ matrix.os }})"
