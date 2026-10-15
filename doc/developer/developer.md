@@ -154,6 +154,12 @@ The following can be run with `cabal test`:
 - `saw-core-isabelle-tests`
 - `crux-mir-comp-tests`
 
+You can also run via build.sh:
+
+- `build.sh integration-tests` runs just `integration-tests`
+- `build.sh other-tests` runs everything but `integration-tests`
+- `build.sh test` or `build.sh all-tests` runs all of them.
+
 There is one other set of tests:
 
 - `saw-remote-api tests`
