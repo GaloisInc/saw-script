@@ -849,6 +849,7 @@ library saw-server
     prettyprinter,
     silently,
     text,
+    transformers,
     unordered-containers,
     vector >= 0.12 && < 0.14,
 

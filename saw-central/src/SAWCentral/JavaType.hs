@@ -12,7 +12,8 @@ types in Crucible specifications and in SAWScript.
 
 module SAWCentral.JavaType (
     JavaType(..),
-    prettyJavaType
+    prettyJavaType,
+    ppJavaType
   ) where
 
 import Data.Text (Text)
@@ -23,7 +24,10 @@ import qualified Prettyprinter as PP
 import qualified SAWSupport.Pretty as PPS
 
 
--- | Adapted from type 'JavaType' in Java.sawcore.
+-- | The @jvm-parser@ package has this type (in "Language/JVM/Common")
+--   ...but its version is unfortunately slightly different in that it
+--   doesn't store the lengths of arrays. Which is consistent with
+--   upstream Java. But we need the lengths and thus our own version.
 data JavaType
   = JavaBoolean
   | JavaByte
@@ -35,8 +39,9 @@ data JavaType
   | JavaDouble
   | JavaArray Int JavaType
   | JavaClass Text
-  deriving (Eq, Show)
+  deriving Eq
 
+-- | Printer for `JavaType`.
 prettyJavaType :: PPS.Opts -> JavaType -> PPS.Doc
 prettyJavaType ppopts ty0 = case ty0 of
     JavaBoolean -> "bool"
@@ -49,3 +54,7 @@ prettyJavaType ppopts ty0 = case ty0 of
     JavaDouble -> "double"
     JavaArray sz ty1 -> prettyJavaType ppopts ty1 <> "[" <> PPS.prettyInt ppopts sz <> "]"
     JavaClass name -> PP.pretty name
+
+-- | Printer for `JavaType`.
+ppJavaType :: PPS.Opts -> JavaType -> Text
+ppJavaType ppopts ty0 = PPS.renderText ppopts $ prettyJavaType ppopts ty0
