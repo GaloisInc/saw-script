@@ -31,6 +31,10 @@ This release supports [version
 
 ## Removals / Deprecations
 
+* The type `JVMMethodSpec`, which is an old name for `JVMSpec`, is now
+  marked deprecated.
+  It is also no longer a reserved word in the parser.
+
 * Builtins `add_prelude_defs` and `add_cryptol_defs` have been
   deprecated in favor of `add_defs`.
   In most cases `add_defs` should work as a drop-in replacement.
