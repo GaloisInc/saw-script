@@ -524,7 +524,7 @@ jobs:
           docker push ${{ matrix.image }}:latest
 
   build:
-    name: "Build and test on ${{ matrix.os }} with GHC ${{ matrix.ghc }}: haddock=${{ matrix.haddock }} integration-tests=${{ matrix.run-integration-tests }} other-tests=${{ matrix.run-other-tests }} coverage=${{ matrix.hpc }}"
+    name: "${{ matrix.label }} on ${{ matrix.os }} with GHC ${{ matrix.ghc }}: haddock=${{ matrix.haddock }} integration-tests=${{ matrix.run-integration-tests }} other-tests=${{ matrix.run-other-tests }} coverage=${{ matrix.hpc }}"
     runs-on: ${{ matrix.os }}
     needs: [config]
     strategy:
@@ -571,6 +571,7 @@ jobs:
             run-other-tests: false
             allow-test-failures: false
             hpc: false
+            label: "Build"
 
             # Default OS, default GHC
             # Run the other tests as well as the integration tests.
@@ -582,8 +583,9 @@ jobs:
             run-other-tests: true
             allow-test-failures: false
             hpc: false
+            label: "Build and all tests"
 
-            # Default OS, default GHC
+            # Default OS, newer GHC
           - os: ubuntu-24.04
             ghc: "9.8.4"
             cabal: "3.14.1.0"
@@ -592,6 +594,7 @@ jobs:
             run-other-tests: false
             allow-test-failures: false
             hpc: false
+            label: "Build"
 
             # Older Ubuntu, default GHC
             # Don't do a haddock run.
@@ -604,6 +607,7 @@ jobs:
             run-other-tests: false
             allow-test-failures: false
             hpc: false
+            label: "Build"
 
           # HPC (coverage) enabled, default OS and GHC
           # Don't run haddock.
@@ -618,6 +622,7 @@ jobs:
             run-other-tests: false
             allow-test-failures: false
             hpc: true
+            label: "Build and test with coverage"
 
           # Windows, default GHC
           # Don't run Haddock, but do run the tests.
@@ -631,6 +636,7 @@ jobs:
             run-other-tests: false
             allow-test-failures: true
             hpc: false
+            label: "Build and test"
 
             # Intel (x86-64) MacOS
             # Don't run Haddock, don't run the tests.
@@ -642,6 +648,7 @@ jobs:
             run-other-tests: false
             allow-test-failures: false
             hpc: false
+            label: "Build"
 
             # Default (AArch64, aka arm64) MacOS
             # Don't run Haddock, but do run the tests.
@@ -654,6 +661,7 @@ jobs:
             run-other-tests: false
             allow-test-failures: false
             hpc: false
+            label: "Build and test"
 
     outputs:
       cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
