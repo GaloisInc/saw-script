@@ -48,7 +48,7 @@ $codechar  = [$graphic $whitechar \n]
              |rebindable
              |ProofScript|TopLevel|CrucibleSetup
              |Int|String|Term|Type|Bool|AIG|CFG
-             |LLVMSpec|JVMMethodSpec|JVMSpec|MIRSpec
+             |LLVMSpec|JVMSpec|MIRSpec
 
 @punct       = "," | ";" | "(" | ")" | ":" | "::" | "[" | "]" | "<-" | "->"
              | "=" | "{" | "}" | "." | "\" | "@"  | "?" | "`"

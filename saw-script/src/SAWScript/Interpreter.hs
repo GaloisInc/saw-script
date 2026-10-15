@@ -3433,6 +3433,10 @@ primTypes = foldl doadd Map.empty
   -- is via special-case code in the typechecker :-(
   , conctype "SetupValue" "LLVMValue" WarnDeprecated
   , conctype "CrucibleMethodSpec" "LLVMSpec" WarnDeprecated
+  -- JVMMethodSpec will start warning in 1.7 and should be hidden by
+  -- default in 1.8. Unfortunately it got overlooked when we did the
+  -- others.
+  , conctype "JVMMethodSpec" "JVMSpec" WarnDeprecated
   , abstype "__DEPRECATED__" HideDeprecated
   ]
   where
