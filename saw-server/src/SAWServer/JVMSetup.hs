@@ -44,7 +44,7 @@ import SAWCentral.Crucible.JVM.Builtins
       jvm_precond,
       jvm_return )
 import SAWCentral.Crucible.JVM.BuiltinsJVM ( loadJavaClass )
-import SAWCentral.JavaExpr (JavaType(..))
+import SAWCentral.JavaType (JavaType(..))
 import SAWCentral.Value (BuiltinContext, JVMSetupM(..), biSharedContext)
 import qualified CryptolSAWCore.CryptolEnv as CEnv
 import CryptolSAWCore.CryptolEnv (CryptolEnv)

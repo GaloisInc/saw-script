@@ -123,7 +123,7 @@ import qualified SAWCentral.Position as Pos
 import SAWCentral.Options
 import SAWCentral.Crucible.JVM.BuiltinsJVM (prepareClassTopLevel)
 
-import SAWCentral.JavaExpr (JavaType(..), prettyJavaType)
+import SAWCentral.JavaType (JavaType(..), prettyJavaType)
 
 import qualified SAWCentral.Crucible.Common as Common
 import           SAWCentral.Crucible.Common

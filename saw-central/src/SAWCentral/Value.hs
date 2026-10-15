@@ -258,7 +258,7 @@ import qualified SAWCentral.Crucible.JVM.MethodSpecIR ()
 import qualified SAWCentral.Crucible.MIR.MethodSpecIR ()
 import qualified Lang.JVM.Codebase as JSS
 import qualified Text.LLVM.AST as LLVM (Type)
-import SAWCentral.JavaExpr (JavaType(..))
+import SAWCentral.JavaType (JavaType(..))
 import SAWCentral.JavaPretty (prettyClass)
 import SAWCentral.Options (Options, printOutLn, Verbosity(..))
 import qualified SAWCentral.Options as Opt

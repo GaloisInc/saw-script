@@ -47,8 +47,6 @@ module SAWCentral.JavaExpr
   , ppActualType
   , parseJavaExpr
   , MethodLocation (..)
-  , JavaType(..)
-  , prettyJavaType
   ) where
 
 -- Imports
@@ -65,11 +63,7 @@ import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Text.Read hiding (lift)
 
-import qualified Prettyprinter as PP
-
 import Lang.JVM.Codebase as JSS
-
-import qualified SAWSupport.Pretty as PPS
 
 import CryptolSAWCore.Cryptol (CryptolEnv, translateType)
 import SAWCore.Name (VarName(..))
@@ -356,30 +350,3 @@ parseJavaExpr cb cls meth estr = parseParts eparts
               fid <- findField cb pos jt fname
               return $ CC.Term $ InstanceField e fid
         eparts = reverse $ splitOn "." estr
-
--- | Adapted from type 'JavaType' in Java.sawcore.
-data JavaType
-  = JavaBoolean
-  | JavaByte
-  | JavaChar
-  | JavaShort
-  | JavaInt
-  | JavaLong
-  | JavaFloat
-  | JavaDouble
-  | JavaArray Int JavaType
-  | JavaClass Text
-  deriving (Eq, Show)
-
-prettyJavaType :: PPS.Opts -> JavaType -> PPS.Doc
-prettyJavaType ppopts ty0 = case ty0 of
-    JavaBoolean -> "bool"
-    JavaByte -> "byte"
-    JavaChar -> "char"
-    JavaShort -> "short"
-    JavaInt -> "int"
-    JavaLong -> "long"
-    JavaFloat -> "float"
-    JavaDouble -> "double"
-    JavaArray sz ty1 -> prettyJavaType ppopts ty1 <> "[" <> PPS.prettyInt ppopts sz <> "]"
-    JavaClass name -> PP.pretty name
