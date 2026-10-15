@@ -652,8 +652,6 @@ library saw-central
     SAWCentral.ASTUtil
     SAWCentral.Trace
     SAWCentral.Exceptions
-    SAWCentral.CongruenceClosure
-    SAWCentral.JavaExpr
     SAWCentral.JavaPretty
     SAWCentral.JavaType
     SAWCentral.ImportAIG
