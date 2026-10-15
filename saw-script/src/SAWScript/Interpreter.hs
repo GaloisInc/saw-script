@@ -82,7 +82,7 @@ import SAWCentral.AST (Import(..), PrimitiveLifecycle(..), defaultAvailable)
 import SAWCentral.Bisimulation
 import SAWCentral.Builtins
 import qualified SAWScript.Loader as Loader
-import SAWCentral.JavaExpr
+import SAWCentral.JavaType
 import SAWCentral.LLVMBuiltins
 import SAWCentral.Options
 import SAWScript.Typechecker (checkStmt, typesMatch)

@@ -652,9 +652,8 @@ library saw-central
     SAWCentral.ASTUtil
     SAWCentral.Trace
     SAWCentral.Exceptions
-    SAWCentral.CongruenceClosure
-    SAWCentral.JavaExpr
     SAWCentral.JavaPretty
+    SAWCentral.JavaType
     SAWCentral.ImportAIG
 
     SAWCentral.Yosys.Utils
@@ -850,6 +849,7 @@ library saw-server
     prettyprinter,
     silently,
     text,
+    transformers,
     unordered-containers,
     vector >= 0.12 && < 0.14,
 

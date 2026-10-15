@@ -14,7 +14,7 @@ import qualified Data.Map as Map
 import qualified SAWCentral.Position as Pos
 import SAWCentral.Crucible.JVM.Builtins
     ( jvm_unsafe_assume_spec, jvm_verify )
-import SAWCentral.JavaExpr (JavaType(..))
+import SAWCentral.JavaType (JavaType(..))
 import SAWCentral.Value (rwGetCryptolEnv)
 
 import qualified Argo

@@ -19,11 +19,12 @@ import Control.Exception (throw)
 import Control.Lens ( view )
 import Control.Monad (unless)
 import Control.Monad.IO.Class ( MonadIO(liftIO) )
+import Control.Monad.Trans.Class (lift)
 import Data.Aeson (FromJSON(..), withObject, (.:))
 import Data.ByteString (ByteString)
 import Data.Foldable (foldrM)
 import Data.Text (Text)
---import qualified Data.Text as Text
+import qualified Data.Text as Text
 import Data.Map (Map)
 import qualified Data.Map as Map
 
@@ -44,8 +45,8 @@ import SAWCentral.Crucible.JVM.Builtins
       jvm_precond,
       jvm_return )
 import SAWCentral.Crucible.JVM.BuiltinsJVM ( loadJavaClass )
-import SAWCentral.JavaExpr (JavaType(..))
-import SAWCentral.Value (BuiltinContext, JVMSetupM(..), biSharedContext)
+import SAWCentral.JavaType (JavaType(..), ppJavaType)
+import SAWCentral.Value (BuiltinContext, JVMSetupM(..), biSharedContext, getPPOpts)
 import qualified CryptolSAWCore.CryptolEnv as CEnv
 import CryptolSAWCore.CryptolEnv (CryptolEnv)
 import CryptolSAWCore.TypedTerm (TypedTerm)
@@ -124,7 +125,10 @@ compileJVMContract fileReader bic ghostEnv cenv0 c =
       case ty of
         JavaArray sz ety -> (n,) <$> jvm_alloc_array sz ety
         JavaClass cname -> (n,) <$> jvm_alloc_object cname
-        _ -> JVMSetupM $ fail $ "Cannot allocate Java object of type " ++ show ty
+        _ -> JVMSetupM $ do
+             ppopts <- lift $ lift $ getPPOpts
+             let ty' = Text.unpack (ppJavaType ppopts ty)
+             fail $ "Cannot allocate Java object of type " ++ ty'
 
     setupPointsTo _ (PointsTo _ _ (Just _) _) =
       JVMSetupM $ fail "Points-to without type checking not supported in JVM API."
