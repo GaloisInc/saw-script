@@ -1107,10 +1107,9 @@ executable yosys-specs
 ------------------------------------------------------------
 -- test suites
 
--- If you add or rename a test suite there are (at least) three other
+-- If you add or rename a test suite there are (at least) two other
 -- places to update:
---    build.sh (controls what gets built by default)
---    .github/workflows/ci.yml (controls what runs during CI)
+--    build.sh (controls what gets built and run by default, incl. in the CI)
 --    doc/developer/developer.md (tells people they exist)
 
 -- The integration-tests/intTests test suite is the main SAW test

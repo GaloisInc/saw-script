@@ -745,41 +745,6 @@ jobs:
         shell: bash
         run: .github/ci.sh haddock
 
-      - name: Collect test bins
-        id: cabal-test-suites
-        uses: GaloisInc/.github/actions/cabal-collect-bins@v1.1.1
-        with:
-          # Keep this list in sync. There are four lists of tests:
-          #   - here
-          #   - build.sh (in the "build" target)
-          #   - doc/developer/developer.md
-          #   - and of course the definitions in the *.cabal files
-          targets: |
-            integration-tests
-            saw-core-tests
-            cryptol-saw-core-tests
-            crux-mir-comp-tests
-            saw-core-rocq-tests
-            saw-core-isabelle-tests
-          dest: dist-tests
-
-      # In the next 2 steps, we upload to different names depending on whether
-      # the binaries were compiled using HPC or not. This is done to ensure that
-      # the HPC-enabled binaries do not clobber the non-HPC-enabled binaries.
-      - name: Upload non-coverage test bins
-        uses: actions/upload-artifact@v5
-        if: matrix.ghc == '9.6.7' && matrix.hpc == false
-        with:
-          path: dist-tests
-          name: dist-tests-${{ matrix.os }}
-
-      - name: Upload with-coverage test bins
-        uses: actions/upload-artifact@v5
-        if: matrix.ghc == '9.6.7' && matrix.hpc == true
-        with:
-          path: dist-tests
-          name: dist-tests-${{ matrix.os }}-hpc
-
       - name: Collect SAW and Cryptol bins
         shell: bash
         run: .github/ci.sh setup_dist_bins
@@ -889,24 +854,12 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.config.outputs.retention-days }}
 
-      - name: Upload the non-coverage test bins
+      - name: Upload the non-coverage bins for other jobs
         if: matrix.ghc == '9.6.7' && matrix.run-integration-tests && matrix.hpc == false
         uses: actions/upload-artifact@v5
         with:
           path: dist/bin
           name: ${{ matrix.os }}-bins
-
-      - name: Collect the coverage-testing files
-        if: matrix.hpc == true
-        shell: bash
-        run: .github/ci.sh collect_hpc_files
-
-      - name: Upload the coverage-testing files
-        if: matrix.hpc == true
-        uses: actions/upload-artifact@v5
-        with:
-          path: hpc.tar.gz
-          name: ${{ matrix.os }}-hpc.tar.gz
 
       - name: Save cabal store cache
         if: always()
@@ -983,7 +936,7 @@ jobs:
         shell: bash
         run: |
           export PATH="$PWD/dist/bin:$PATH"
-          dist-tests/integration-tests
+          ./build.sh integration-tests
 
         # Run the tests from otherTests. We don't currently include
         # this in the coverage run, but provide the ENABLE_HPC setting
@@ -1051,7 +1004,7 @@ jobs:
 
 ############################################################
 #
-# Test jobs
+# Further test jobs
 #
 
 # All of this is indented two spaces because it actually hangs under

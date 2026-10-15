@@ -44,9 +44,8 @@ else
     JOBSOPT=''
 fi
 
-# Keep the list of tests in sync. There are four lists of tests:
+# Keep the list of tests in sync. There are three lists of tests:
 #   - here
-#   - .github/workflows/ci.yml
 #   - doc/developer/developer.md
 #   - and of course the definitions in the *.cabal files
 #

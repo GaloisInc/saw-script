@@ -138,9 +138,8 @@ The main test suite is called `integration-tests` and the contents
 can be found in the `intTests` directory.
 
 <!--
-  -- Keep the list of tests in sync. There are four copies:
+  -- Keep the list of tests in sync. There are three copies:
   --    o here
-  --    o .github/workflows/ci.yml
   --    o build.sh
   --    o and of course the definitions in the *.cabal files
   -->
