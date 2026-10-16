@@ -176,9 +176,6 @@ checkConvertible t1 t2 = do
       withContext (CallContext  "checkConvertible" ppts) $
         errMsg "Terms are not convertible"
 
-prettySawName :: SAW.Name -> String
-prettySawName nm = Text.unpack (SAW.ppNameFullyQualified nm)
-
 stripTopProofs :: C.Expr -> C.Expr
 stripTopProofs = \case
   C.ETAbs _ e -> stripTopProofs e
@@ -560,7 +557,9 @@ withTermContext msg t f = do
   withContext (CallContext msg (prettyTerm sc t)) f
 
 withNameContext :: String -> SAW.Name -> TT a -> TT a
-withNameContext msg nm = withContext $ CallContext msg (return $ PP.pretty $ prettySawName nm)
+withNameContext msg nm f = do
+  sc <- asks ttSc
+  withContext (CallContext msg (prettyName sc nm)) f
 
 -- Alternative branches are implicit try-catches as long as the
 -- thrown error is not committed (i.e. uncaught during a 'commit' action).
@@ -712,7 +711,9 @@ nameToTCon nm = withNameContext "nameToTCon" nm $ msum
        tc <- mreturn $ C.builtInType nm'
        pnm <- uncheckName nm'
        return $ (tc, pnm)
-  , errMsg $ "Could not find Cryptol type for: " ++ prettySawName nm
+  , do sc <- asks ttSc
+       nm' <- liftIO $ ppName sc nm
+       errMsg $ "Could not find Cryptol type for: " ++ Text.unpack nm'
   ]
 
 translateAsTCon :: Term -> TT (C.TCon, Name, [Term])
