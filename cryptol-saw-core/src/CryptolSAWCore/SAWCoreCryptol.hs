@@ -559,8 +559,7 @@ withTermContext msg t f = do
 withNameContext :: String -> SAW.Name -> TT a -> TT a
 withNameContext msg nm f = do
   sc <- asks ttSc
-  ppopts <- liftIO $ scGetPPOpts sc
-  withContext (CallContext msg (prettyName sc ppopts nm)) f
+  withContext (CallContext msg (prettyName sc nm)) f
 
 -- Alternative branches are implicit try-catches as long as the
 -- thrown error is not committed (i.e. uncaught during a 'commit' action).
@@ -713,8 +712,7 @@ nameToTCon nm = withNameContext "nameToTCon" nm $ msum
        pnm <- uncheckName nm'
        return $ (tc, pnm)
   , do sc <- asks ttSc
-       ppopts <- liftIO $ scGetPPOpts sc
-       nm' <- liftIO $ ppName sc ppopts nm
+       nm' <- liftIO $ ppName sc nm
        errMsg $ "Could not find Cryptol type for: " ++ Text.unpack nm'
   ]
 
