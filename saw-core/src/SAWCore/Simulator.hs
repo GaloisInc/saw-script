@@ -366,7 +366,7 @@ evalLTerm cfg consts vars lets t0 =
     LConst nm ->
       case IntMap.lookup (nameIndex nm) consts of
         Just x -> force x
-        Nothing -> panic "evalLTerm" ["Constant name not found", Text.pack (show nm)]
+        Nothing -> panic "evalLTerm" ["Constant name not found", ppNameFullyQualified nm]
 
     LLetVar i ->
       case IntMap.lookup i lets of
