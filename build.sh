@@ -125,18 +125,13 @@ runtests() {
 
     set +e
     for test in "$@"; do
-        (
-            # While you can "cabal run test-suite:crux-mir-comp-tests"
-            # from the top level of the tree... if you do, it quietly
-            # skips all the actual tests and "succeeds". It needs to
-            # be run from the crux-mir-comp subdir.
-            if [ "$test" = crux-mir-comp-tests ]; then
-                echo "cd crux-mir-comp"
-                cd crux-mir-comp
-            fi
-            echo "cabal run test-suite:$test"
-            cabal run test-suite:$test
-        )
+        # Use cabal test, not cabal run: if you use cabal run from the
+        # top level of the tree, crux-mir-comp-tests silently does
+        # nothing. (As in, it runs the test driver fine, but the test
+        # driver thinks there are no tests to run.) It works to run it
+        # inside crux-mir-comp/, but this is simpler.
+        echo "cabal test test-suite:$test"
+        cabal test test-suite:$test
         if [ $? != 0 ]; then
             echo "$0: $test failed" 1>&2
             bad=1
