@@ -1,0 +1,12 @@
+--------------------------------
+-- submodule with no name
+Usage: :cbrowse -l | :cbrowse [MODULENAME] | :cbrowse submodule SUBMODULENAME
+--------------------------------
+-- too many arguments
+Usage: :cbrowse -l | :cbrowse [MODULENAME] | :cbrowse submodule SUBMODULENAME
+--------------------------------
+-- module not loaded
+Module `Nope' is not loaded.
+--------------------------------
+-- submodule not imported
+Submodule `Nope' is not loaded.
