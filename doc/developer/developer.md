@@ -138,9 +138,8 @@ The main test suite is called `integration-tests` and the contents
 can be found in the `intTests` directory.
 
 <!--
-  -- Keep the list of tests in sync. There are four copies:
+  -- Keep the list of tests in sync. There are three copies:
   --    o here
-  --    o .github/workflows/ci.yml
   --    o build.sh
   --    o and of course the definitions in the *.cabal files
   -->
@@ -153,6 +152,12 @@ The following can be run with `cabal test`:
 - `saw-core-rocq-tests`
 - `saw-core-isabelle-tests`
 - `crux-mir-comp-tests`
+
+You can also run via build.sh:
+
+- `build.sh integration-tests` runs just `integration-tests`
+- `build.sh other-tests` runs everything but `integration-tests`
+- `build.sh test` or `build.sh all-tests` runs all of them.
 
 There is one other set of tests:
 
