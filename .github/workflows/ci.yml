@@ -142,7 +142,7 @@ on:
 # should ordinarily be the latest one.
 #
 env:
-  CABAL_CACHE_VERSION: 12
+  CABAL_CACHE_VERSION: 13
   CARGO_CACHE_VERSION: 1
   SOLVER_CACHE_VERSION: 1
 
