@@ -32,6 +32,7 @@ module SAWCoreWhat4.Common
 import Data.IORef
 import Data.Kind (Type)
 import Data.Map (Map)
+import qualified Data.Text as Text
 import Numeric.Natural (Natural)
 
 -- saw-core
@@ -44,6 +45,7 @@ import SAWCore.Module
   , lookupVarIndexInMap
   )
 import SAWCore.Name (nameIndex)
+import qualified SAWCore.QualName as QN
 import qualified SAWCore.Simulator.Prims as Prims
 import SAWCore.Simulator.Value
 
@@ -180,8 +182,10 @@ termOfValue sc ty val =
                        ps' <- traverse (termOfSValue sc) ps
                        vv' <- traverse (\v -> termOfSValue sc =<< force v) vv
                        scConstApply sc (ctorName ctor) (ps' ++ vv')
-                  _ ->
-                    fail $ "termOfValue: data type not found: " ++ show qn
-           Nothing ->
-             fail $ "termOfValue: data type not found: " ++ show qn
+                  _ -> do
+                    nm' <- ppName sc nm
+                    fail $ "termOfValue: not a data type: " ++ Text.unpack nm'
+           Nothing -> do
+             let qn' = QN.ppQualName qn
+             fail $ "termOfValue: data type not found: " ++ Text.unpack qn'
     _ -> termOfSValue sc val
