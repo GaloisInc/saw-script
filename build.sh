@@ -6,6 +6,9 @@
 #    build (the default)
 #    gitrev (included in build, needed before building)
 #    submodules (included in build, at least for now)
+#    test
+#       integration-tests
+#       other-tests
 #    clean
 #
 # Setting environment variable SAW_SUPPRESS_GITREV suppresses updating
@@ -41,6 +44,20 @@ else
     JOBSOPT=''
 fi
 
+# Keep the list of tests in sync. There are three lists of tests:
+#   - here
+#   - doc/developer/developer.md
+#   - and of course the definitions in the *.cabal files
+#
+OTHERTESTS='
+   saw-core-tests
+   crux-mir-comp-tests
+   cryptol-saw-core-tests
+   saw-core-rocq-tests
+   saw-core-isabelle-tests
+'
+ALLTESTS="integration-tests $OTHERTESTS"
+TESTSUITES=$(echo "$ALLTESTS" | tr '\n' ' ' | sed 's/^/test-suite:/')
 
 ##############################
 # gitrev
@@ -71,12 +88,6 @@ tgt_build() {
     tgt_gitrev
     tgt_submodules
 
-    # Keep the list of tests in sync. There are four lists of tests:
-    #   - here
-    #   - .github/workflows/ci.yml
-    #   - doc/developer/developer.md
-    #   - and of course the definitions in the *.cabal files
-    #
     # Note that although we don't include the cryptol-remote-api executables in
     # binary distributions, it is nevertheless worthwhile to build them here to
     # ensure that they are compatible with the particular submodule commits in
@@ -88,10 +99,7 @@ tgt_build() {
                 exe:saw exe:saw-remote-api \
                 exe:crux-mir-comp exe:css exe:extcore-info exe:verif-viewer \
                 exe:cryptol-to-isabelle \
-                test-suite:integration-tests test-suite:saw-core-tests \
-                test-suite:crux-mir-comp-tests \
-                test-suite:cryptol-saw-core-tests \
-                test-suite:saw-core-rocq-tests
+                $TESTSUITES
 
     echo "rm -rf bin && mkdir bin"
     rm -rf bin && mkdir bin
@@ -106,6 +114,51 @@ tgt_build() {
 
     echo
     echo "COPIED EXECUTABLES TO `pwd`/bin."
+}
+
+##############################
+# tests
+
+runtests() {
+    local test
+    local bad=0
+
+    set +e
+    for test in "$@"; do
+        (
+            # While you can "cabal run test-suite:crux-mir-comp-tests"
+            # from the top level of the tree... if you do, it quietly
+            # skips all the actual tests and "succeeds". It needs to
+            # be run from the crux-mir-comp subdir.
+            if [ "$test" = crux-mir-comp-tests ]; then
+                echo "cd crux-mir-comp"
+                cd crux-mir-comp
+            fi
+            echo "cabal run test-suite:$test"
+            cabal run test-suite:$test
+        )
+        if [ $? != 0 ]; then
+            echo "$0: $test failed" 1>&2
+            bad=1
+        fi
+    done
+    set -e
+    if [ $bad != 0 ]; then
+        echo "$0: Tests failed" 1>&2
+        exit $bad
+    fi
+}
+
+tgt_integrationtests() {
+    runtests integration-tests
+}
+
+tgt_othertests() {
+    runtests $OTHERTESTS
+}
+
+tgt_tests() {
+    runtests $ALLTESTS
 }
 
 ##############################
@@ -127,6 +180,9 @@ case "X$1" in
     Xgitrev) tgt_gitrev;;
     Xsubmodules) tgt_submodules;;
     X|Xbuild) tgt_build;;
+    Xintegration-tests) tgt_integrationtests;;
+    Xother-tests) tgt_othertests;;
+    Xtest|tests|all-tests) tgt_test;;
     Xclean) tgt_clean;;
     *)
         echo "$0: Don't know how to build $1" 1>&2

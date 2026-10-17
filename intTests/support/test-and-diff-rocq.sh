@@ -50,8 +50,17 @@ run-tests() {
 
         # run the test
         # (do not fail if saw does, instead log it)
-        echo "$SAW $TEST.saw"
-        $SAW $TEST.saw > $TEST.log 2>&1 || echo FAILED >> $TEST.log
+        echo "$SAW $TEST.saw > $TEST.rawlog"
+        $SAW $TEST.saw > $TEST.rawlog 2>&1 || echo FAILED >> $TEST.rawlog
+
+        # Prune unwanted text from the log.
+        #
+        # Here this just means removing the solver cache enabled
+        # message.
+        echo "sed ... < $TEST.rawlog > $TEST.log"
+        sed < $TEST.rawlog '
+            /^Solver cache enabled in [^ ][^ ]*$/d
+        ' > $TEST.log
 
         # Check the output against the expected version.
         # Note: because we (intentionally) aren't using set -e, we
@@ -158,8 +167,8 @@ good() {
 
 # shell function for the clean op
 clean() {
-    echo "rm -f *_[0-9]*.v *.log *.diff"
-    rm -f *_[0-9]*.v *.log *.diff
+    echo "rm -f *_[0-9]*.v *.rawlog *.log *.diff"
+    rm -f *_[0-9]*.v *.rawlog *.log *.diff
 }
 
 # shell function for the test op

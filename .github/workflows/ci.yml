@@ -380,316 +380,6 @@ jobs:
 # All of this is indented two spaces because it actually hangs under
 # the "jobs:" line in the "job config" section above.
 
-  build:
-    name: "Build on ${{ matrix.os }} with GHC ${{ matrix.ghc }}: haddock=${{ matrix.haddock }} tests=${{ matrix.run-tests }} coverage=${{ matrix.hpc }}"
-    runs-on: ${{ matrix.os }}
-    needs: [config]
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04]
-        cabal: ["3.14.1.0"]
-        ghc: ["9.4.8", "9.6.7", "9.8.4"]
-        haddock: [true]
-        run-tests: [true]
-        hpc: [false]
-        include:
-          # We include one job from an older Ubuntu LTS release to increase our
-          # coverage of possible Linux configurations. Since we already run the
-          # tests with the newest LTS release, we won't bother testing this one.
-          - os: ubuntu-22.04
-            ghc: "9.6.7"
-            cabal: "3.14.1.0"
-            haddock: false
-            run-tests: false
-            hpc: false
-          # Include one job with HPC enabled
-          - os: ubuntu-24.04
-            ghc: "9.6.7"
-            cabal: "3.14.1.0"
-            haddock: false
-            run-tests: true
-            hpc: true
-          # Windows and macOS CI runners are more expensive than Linux runners,
-          # so we only build one particular GHC version to test them on. We
-          # include both an x86-64 macOS runner (macos-15-intel) as well as an
-          # AArch64 (arm64) macOS runner (macos-15).
-          - os: windows-2022
-            ghc: 9.6.7
-            haddock: false
-            run-tests: true
-            hpc: false
-          - os: macos-15-intel
-            ghc: 9.6.7
-            haddock: false
-            run-tests: true
-            hpc: false
-          - os: macos-15
-            ghc: 9.6.7
-            haddock: false
-            run-tests: true
-            hpc: false
-    outputs:
-      cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
-    steps:
-      - name: Report relevant config
-        run: |
-          echo "OS: ${{ matrix.os }}"
-          echo "GHC: ${{ matrix.ghc }}"
-          echo "Haddock: ${{ matrix.haddock }}"
-          echo "Run tests: ${{ matrix.run-tests }}"
-          echo "Coverage (HPC): ${{ matrix.hpc }}"
-          echo "Want signing: ${{ needs.config.outputs.want-signing }}"
-          echo "Want notarization: $$ {{ needs.config.outputs.want-apple-notarization }}"
-
-      - name: Check out repository with submodules
-        uses: actions/checkout@v7
-        with:
-          submodules: true
-
-      - name: Build job configuration
-        id: config
-        shell: bash
-        run: |
-          NAME="${{ needs.config.outputs.name }}-${{ matrix.os }}-${{ runner.arch }}"
-          .github/ci.sh output name $NAME
-          echo "NAME=${{ needs.config.outputs.name }}-${{ matrix.os }}-${{ runner.arch }}" >> $GITHUB_ENV
-          CRUX_NAME="${{ needs.config.outputs.crux-name }}-${{ matrix.os }}-${{ runner.arch }}"
-          .github/ci.sh output crux-name $CRUX_NAME
-          echo "CRUX_NAME=${{ needs.config.outputs.crux-name }}-${{ matrix.os }}-${{ runner.arch }}" >> $GITHUB_ENV
-
-      # On macOS, import the signing certificate, which we will use later to
-      # sign the binaries after they have been built.
-      # Do not run this step in forks, as this requires repo-specific secrets.
-      - name: Import signing certificate (macOS)
-        uses: apple-actions/import-codesign-certs@v7
-        if: runner.os == 'macOS' && needs.config.outputs.want-signing == 'true'
-        with:
-          p12-file-base64: ${{ secrets.APPLE_P12_CERTIFICATE }}
-          p12-password: ${{ secrets.APPLE_P12_PASSWORD }}
-
-      - name: Set up Haskell
-        id: setup-haskell
-        uses: haskell-actions/setup@v2
-        with:
-          ghc-version: ${{ matrix.ghc }}
-          cabal-version: ${{ matrix.cabal }}
-
-      - name: Post-GHC installation fixups on Windows
-        shell: bash
-        if: runner.os == 'Windows'
-        run: |
-          # A workaround for https://github.com/Mistuke/CabalChoco/issues/5
-          cabal user-config update -a "extra-include-dirs: \"\""
-          cabal user-config update -a "extra-lib-dirs: \"\""
-
-      - name: Download what4-solvers
-        uses: GaloisInc/what4-solvers@v1
-        with:
-          dest: bin
-          release: ${{ env.SOLVER_PKG_VERSION }}
-
-      - name: Add what4-solvers to GITHUB_PATH
-        shell: bash
-        run: echo "$PWD/bin" >> $GITHUB_PATH
-
-      - name: Restore cabal store cache
-        uses: actions/cache/restore@v6
-        with:
-          path: |
-            ${{ steps.setup-haskell.outputs.cabal-store }}
-            dist-newstyle
-          key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
-          restore-keys: |
-            ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
-
-      - name: Build SAW
-        shell: bash
-        run: .github/ci.sh build
-        env:
-          ENABLE_HPC: ${{ matrix.hpc }}
-
-      - name: Build Cryptol
-        shell: bash
-        run: .github/ci.sh build_cryptol
-
-      - name: Run Haddock
-        if: matrix.haddock == true
-        shell: bash
-        run: .github/ci.sh haddock
-
-      - name: Collect test bins
-        id: cabal-test-suites
-        uses: GaloisInc/.github/actions/cabal-collect-bins@v1.1.1
-        with:
-          # Keep this list in sync. There are four lists of tests:
-          #   - here
-          #   - build.sh (in the "build" target)
-          #   - doc/developer/developer.md
-          #   - and of course the definitions in the *.cabal files
-          targets: |
-            integration-tests
-            saw-core-tests
-            cryptol-saw-core-tests
-            crux-mir-comp-tests
-            saw-core-rocq-tests
-            saw-core-isabelle-tests
-          dest: dist-tests
-
-      # In the next 2 steps, we upload to different names depending on whether
-      # the binaries were compiled using HPC or not. This is done to ensure that
-      # the HPC-enabled binaries do not clobber the non-HPC-enabled binaries.
-      - name: Upload non-coverage test bins
-        uses: actions/upload-artifact@v5
-        if: matrix.ghc == '9.6.7' && matrix.hpc == false
-        with:
-          path: dist-tests
-          name: dist-tests-${{ matrix.os }}
-
-      - name: Upload with-coverage test bins
-        uses: actions/upload-artifact@v5
-        if: matrix.ghc == '9.6.7' && matrix.hpc == true
-        with:
-          path: dist-tests
-          name: dist-tests-${{ matrix.os }}-hpc
-
-      - name: Collect SAW and Cryptol bins
-        shell: bash
-        run: .github/ci.sh setup_dist_bins
-
-      - name: Collect Crux bins
-        shell: bash
-        run: .github/ci.sh setup_crux_dist_bins dist-crux
-
-      # On macOS, code sign the binaries to verify that Galois is the author.
-      # Do not run this step in forks, as this requires repo-specific secrets.
-      - name: Sign binaries (macOS)
-        if: runner.os == 'macOS' && needs.config.outputs.want-signing == 'true'
-        env:
-          IDENTITY_NAME: ${{ secrets.APPLE_P12_IDENTITY_NAME }}
-        run: |
-          codesign \
-            --force \
-            --options runtime \
-            --sign "$IDENTITY_NAME" \
-            dist/bin/* dist-crux/bin/*
-
-      # On macOS, notarize the binaries so that users can run them without
-      # needing to whitelist them.
-      - name: Notarize binaries (macOS)
-        if: runner.os == 'macOS' && needs.config.outputs.want-signing == 'true' && needs.config.outputs.want-apple-notarization == 'true'
-        env:
-          KEY_ID: ${{ secrets.APPLE_P8_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APPLE_P8_ISSUER_ID }}
-          API_KEY: ${{ secrets.APPLE_P8_API_KEY }}
-        run: |
-          zip binaries.zip dist/bin/* dist-crux/bin/*
-          echo "$API_KEY" > "AuthKey_$KEY_ID.p8"
-          xcrun notarytool submit binaries.zip \
-            --key "AuthKey_$KEY_ID.p8" \
-            --key-id "$KEY_ID" \
-            --issuer "$ISSUER_ID" \
-            --wait
-
-      - name: Create SAW binary distribution tree
-        shell: bash
-        run: .github/ci.sh bundle_files
-
-      - name: Zip up the SAW non-solvers binary distribution
-        shell: bash
-        run: .github/ci.sh zip_dist $NAME
-
-      - name: Zip up the SAW with-solvers binary distribution
-        shell: bash
-        run: .github/ci.sh zip_dist_with_solvers $NAME-with-solvers
-
-      - name: Zip up the Crux binary distribution
-        shell: bash
-        run: .github/ci.sh zip_dist $CRUX_NAME dist-crux
-
-      # Restrict this step so it only runs when the secrets needed are
-      # available.
-      - name: Sign the binary distributions
-        if: matrix.ghc == '9.6.7' && needs.config.outputs.want-signing == 'true'
-        shell: bash
-        env:
-          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
-          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-        run: .github/ci.sh sign $NAME.tar.gz $NAME-with-solvers.tar.gz $CRUX_NAME.tar.gz
-
-      ##########################################################################
-      # We upload an archive containing SAW, and also and archive containing SAW
-      # and the set of possible SMT solvers, but only for our "primary"
-      # distribution (currently: GHC 9.6.7).  These archives are utilized in
-      # subsequent CI jobs, but are also published for external users, and are
-      # therefore signed.
-      #
-      # In addition, if we built with HPC, we upload a tarball containing the
-      # HPC-enabled binaries and HPC-specific files generated during the build
-      # process.  These are mostly used for subsequent CI jobs that will
-      # generate a coverage report, and the binaries are essentially the same as
-      # those collected for the previous operation, but they are captured in
-      # their original cabal-generated locations where they are expected to live
-      # for subsequent coverage collection.
-
-      # In the next 3 steps we check that `matrix.hpc == false` so that if the
-      # distribution version matches the HPC version, the HPC build artifacts do
-      # not clobber the non-HPC distribution artifacts.
-      - name: Upload the SAW non-solvers binary distribution
-        if: matrix.ghc == '9.6.7' && matrix.hpc == false
-        uses: actions/upload-artifact@v5
-        with:
-          name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
-          path: "${{ steps.config.outputs.name }}.tar.gz*"
-          if-no-files-found: error
-          retention-days: ${{ needs.config.outputs.retention-days }}
-
-      - name: Upload the SAW with-solvers binary distribution
-        if: matrix.ghc == '9.6.7' && matrix.hpc == false
-        uses: actions/upload-artifact@v5
-        with:
-          name: ${{ steps.config.outputs.name }}-with-solvers
-          path: "${{ steps.config.outputs.name }}-with-solvers.tar.gz*"
-          if-no-files-found: error
-          retention-days: ${{ needs.config.outputs.retention-days }}
-
-      - name: Upload the Crux binary distribution
-        if: matrix.ghc == '9.6.7' && matrix.hpc == false
-        uses: actions/upload-artifact@v5
-        with:
-          name: ${{ steps.config.outputs.crux-name }} (GHC ${{ matrix.ghc }})
-          path: "${{ steps.config.outputs.crux-name }}.tar.gz*"
-          if-no-files-found: error
-          retention-days: ${{ needs.config.outputs.retention-days }}
-
-      - name: Upload the non-coverage test bins
-        if: matrix.ghc == '9.6.7' && matrix.run-tests && matrix.hpc == false
-        uses: actions/upload-artifact@v5
-        with:
-          path: dist/bin
-          name: ${{ matrix.os }}-bins
-
-      - name: Collect the coverage-testing files
-        if: matrix.hpc == true
-        shell: bash
-        run: .github/ci.sh collect_hpc_files
-
-      - name: Upload the coverage-testing files
-        if: matrix.hpc == true
-        uses: actions/upload-artifact@v5
-        with:
-          path: hpc.tar.gz
-          name: ${{ matrix.os }}-hpc.tar.gz
-
-      - name: Save cabal store cache
-        if: always()
-        uses: actions/cache/save@v6
-        with:
-          path: |
-            ${{ steps.setup-haskell.outputs.cabal-store }}
-            dist-newstyle
-          key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
-
   build-push-image:
     name: "Build the ${{ matrix.which }} docker image"
     runs-on: ubuntu-24.04
@@ -833,9 +523,496 @@ jobs:
           docker tag ${{ matrix.image }}:$COMMON_TAG ${{ matrix.image }}:latest
           docker push ${{ matrix.image }}:latest
 
+  build:
+    name: "${{ matrix.label }} on ${{ matrix.os }} with GHC ${{ matrix.ghc }}: haddock=${{ matrix.haddock }} integration-tests=${{ matrix.run-integration-tests }} other-tests=${{ matrix.run-other-tests }} coverage=${{ matrix.hpc }}"
+    runs-on: ${{ matrix.os }}
+    needs: [config]
+    strategy:
+      fail-fast: false
+      matrix:
+        # The build strategy is as follows: to make sure we cover all
+        # the supported GHC versions and platforms, we want one build
+        # with each GHC version, and one build with each platform. But
+        # we don't need to try every GHC version on every platform;
+        # GHC-version-dependent and platform-dependent issues are both
+        # rare and the combination isn't worth worrying about.
+        #
+        # So we pick a default platform (currently ubuntu 24.04) and a
+        # default GHC (currently 9.6.7) and run the non-default GHC
+        # builds on the default platform and the non-default platforms
+        # using the default GHC. For five platforms (two Ubuntu, two
+        # MacOS, and Windows) and three GHC versions that gives us
+        # seven builds. Then we add another one using the default GHC
+        # and the default platform with coverage tracking enabled, for
+        # eight total.
+        #
+        # These are written out rather than generated combinatorially
+        # because we also turn other stuff on and off to save build
+        # cycles, particularly on the more expensive MacOS and Windows
+        # runners. Specifically:
+        #    - we do a haddock run with each GHC version but only on
+        #      the default platform;
+        #    - we run the main test suite (integration-tests or
+        #      intTests) on each OS, but only with the default GHC,
+        #      and not on minor OS variants;
+        #    - we run other tests only on the default platform and
+        #      using the default GHC.
+        #
+        # We also track a specific cabal version for each build in
+        # case it needs to vary; currently it doesn't.
+
+        include:
+            # Default OS, older GHC
+          - os: ubuntu-24.04
+            ghc: "9.4.8"
+            cabal: "3.14.1.0"
+            haddock: true
+            run-integration-tests: false
+            run-other-tests: false
+            allow-test-failures: false
+            hpc: false
+            label: "Build"
+
+            # Default OS, default GHC
+            # Run the other tests as well as the integration tests.
+          - os: ubuntu-24.04
+            ghc: "9.6.7"
+            cabal: "3.14.1.0"
+            haddock: true
+            run-integration-tests: true
+            run-other-tests: true
+            allow-test-failures: false
+            hpc: false
+            label: "Build and all tests"
+
+            # Default OS, newer GHC
+          - os: ubuntu-24.04
+            ghc: "9.8.4"
+            cabal: "3.14.1.0"
+            haddock: true
+            run-integration-tests: false
+            run-other-tests: false
+            allow-test-failures: false
+            hpc: false
+            label: "Build"
+
+            # Older Ubuntu, default GHC
+            # Don't do a haddock run.
+            # Don't run the tests. 
+          - os: ubuntu-22.04
+            ghc: "9.6.7"
+            cabal: "3.14.1.0"
+            haddock: false
+            run-integration-tests: false
+            run-other-tests: false
+            allow-test-failures: false
+            hpc: false
+            label: "Build"
+
+          # HPC (coverage) enabled, default OS and GHC
+          # Don't run haddock.
+          # Do run the tests, because that's what gives us coverage data.
+          # But we only run the integration tests, not the rest of them.
+          # (FUTURE: maybe change that.)
+          - os: ubuntu-24.04
+            ghc: "9.6.7"
+            cabal: "3.14.1.0"
+            haddock: false
+            run-integration-tests: true
+            run-other-tests: false
+            allow-test-failures: false
+            hpc: true
+            label: "Build and test with coverage"
+
+          # Windows, default GHC
+          # Don't run Haddock, but do run the tests.
+          # Allow the tests to fail. See
+          # See https://github.com/GaloisInc/saw-script/issues/2648
+          - os: windows-2022
+            ghc: 9.6.7
+            cabal: "3.14.1.0"
+            haddock: false
+            run-integration-tests: true
+            run-other-tests: false
+            allow-test-failures: true
+            hpc: false
+            label: "Build and test"
+
+            # Intel (x86-64) MacOS
+            # Don't run Haddock, don't run the tests.
+          - os: macos-15-intel
+            ghc: 9.6.7
+            cabal: "3.14.1.0"
+            haddock: false
+            run-integration-tests: false
+            run-other-tests: false
+            allow-test-failures: false
+            hpc: false
+            label: "Build"
+
+            # Default (AArch64, aka arm64) MacOS
+            # Don't run Haddock, but do run the tests.
+            # Integration tests only, though.
+          - os: macos-15
+            ghc: 9.6.7
+            cabal: "3.14.1.0"
+            haddock: false
+            run-integration-tests: true
+            run-other-tests: false
+            allow-test-failures: false
+            hpc: false
+            label: "Build and test"
+
+    outputs:
+      cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
+    steps:
+      - name: Report relevant config
+        run: |
+          echo "OS: ${{ matrix.os }}"
+          echo "GHC: ${{ matrix.ghc }}"
+          echo "Haddock: ${{ matrix.haddock }}"
+          echo "Run integration tests: ${{ matrix.run-integration-tests }}"
+          echo "Run other tests: ${{ matrix.run-other-tests }}"
+          echo "Coverage (HPC): ${{ matrix.hpc }}"
+          echo "Want signing: ${{ needs.config.outputs.want-signing }}"
+          echo "Want notarization: $$ {{ needs.config.outputs.want-apple-notarization }}"
+
+      - name: Check out repository with submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: Build job configuration
+        id: config
+        shell: bash
+        run: |
+          NAME="${{ needs.config.outputs.name }}-${{ matrix.os }}-${{ runner.arch }}"
+          .github/ci.sh output name $NAME
+          echo "NAME=${{ needs.config.outputs.name }}-${{ matrix.os }}-${{ runner.arch }}" >> $GITHUB_ENV
+          CRUX_NAME="${{ needs.config.outputs.crux-name }}-${{ matrix.os }}-${{ runner.arch }}"
+          .github/ci.sh output crux-name $CRUX_NAME
+          echo "CRUX_NAME=${{ needs.config.outputs.crux-name }}-${{ matrix.os }}-${{ runner.arch }}" >> $GITHUB_ENV
+
+      # On macOS, import the signing certificate, which we will use later to
+      # sign the binaries after they have been built.
+      # Do not run this step in forks, as this requires repo-specific secrets.
+      - name: Import signing certificate (macOS)
+        uses: apple-actions/import-codesign-certs@v7
+        if: runner.os == 'macOS' && needs.config.outputs.want-signing == 'true'
+        with:
+          p12-file-base64: ${{ secrets.APPLE_P12_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_P12_PASSWORD }}
+
+      - name: Set up Haskell
+        id: setup-haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          cabal-version: ${{ matrix.cabal }}
+
+      - name: Post-GHC installation fixups on Windows
+        shell: bash
+        if: runner.os == 'Windows'
+        run: |
+          # A workaround for https://github.com/Mistuke/CabalChoco/issues/5
+          cabal user-config update -a "extra-include-dirs: \"\""
+          cabal user-config update -a "extra-lib-dirs: \"\""
+
+      - name: Download what4-solvers
+        uses: GaloisInc/what4-solvers@v1
+        with:
+          dest: bin
+          release: ${{ env.SOLVER_PKG_VERSION }}
+
+      - name: Add what4-solvers to GITHUB_PATH
+        shell: bash
+        run: echo "$PWD/bin" >> $GITHUB_PATH
+
+      - name: Restore cabal store cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ${{ steps.setup-haskell.outputs.cabal-store }}
+            dist-newstyle
+          key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
+          restore-keys: |
+            ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
+
+      - name: Build SAW
+        shell: bash
+        run: .github/ci.sh build
+        env:
+          ENABLE_HPC: ${{ matrix.hpc }}
+
+      - name: Build Cryptol
+        shell: bash
+        run: .github/ci.sh build_cryptol
+
+      - name: Run Haddock
+        if: matrix.haddock == true
+        shell: bash
+        run: .github/ci.sh haddock
+
+      - name: Collect SAW and Cryptol bins
+        shell: bash
+        run: .github/ci.sh setup_dist_bins
+
+      - name: Collect Crux bins
+        shell: bash
+        run: .github/ci.sh setup_crux_dist_bins dist-crux
+
+      # On macOS, code sign the binaries to verify that Galois is the author.
+      # Do not run this step in forks, as this requires repo-specific secrets.
+      - name: Sign binaries (macOS)
+        if: runner.os == 'macOS' && needs.config.outputs.want-signing == 'true'
+        env:
+          IDENTITY_NAME: ${{ secrets.APPLE_P12_IDENTITY_NAME }}
+        run: |
+          codesign \
+            --force \
+            --options runtime \
+            --sign "$IDENTITY_NAME" \
+            dist/bin/* dist-crux/bin/*
+
+      # On macOS, notarize the binaries so that users can run them without
+      # needing to whitelist them.
+      - name: Notarize binaries (macOS)
+        if: runner.os == 'macOS' && needs.config.outputs.want-signing == 'true' && needs.config.outputs.want-apple-notarization == 'true'
+        env:
+          KEY_ID: ${{ secrets.APPLE_P8_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPLE_P8_ISSUER_ID }}
+          API_KEY: ${{ secrets.APPLE_P8_API_KEY }}
+        run: |
+          zip binaries.zip dist/bin/* dist-crux/bin/*
+          echo "$API_KEY" > "AuthKey_$KEY_ID.p8"
+          xcrun notarytool submit binaries.zip \
+            --key "AuthKey_$KEY_ID.p8" \
+            --key-id "$KEY_ID" \
+            --issuer "$ISSUER_ID" \
+            --wait
+
+      - name: Create SAW binary distribution tree
+        shell: bash
+        run: .github/ci.sh bundle_files
+
+      - name: Zip up the SAW non-solvers binary distribution
+        shell: bash
+        run: .github/ci.sh zip_dist $NAME
+
+      - name: Zip up the SAW with-solvers binary distribution
+        shell: bash
+        run: .github/ci.sh zip_dist_with_solvers $NAME-with-solvers
+
+      - name: Zip up the Crux binary distribution
+        shell: bash
+        run: .github/ci.sh zip_dist $CRUX_NAME dist-crux
+
+      # Restrict this step so it only runs when the secrets needed are
+      # available.
+      - name: Sign the binary distributions
+        if: matrix.ghc == '9.6.7' && needs.config.outputs.want-signing == 'true'
+        shell: bash
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: .github/ci.sh sign $NAME.tar.gz $NAME-with-solvers.tar.gz $CRUX_NAME.tar.gz
+
+      ##########################################################################
+      # We upload an archive containing SAW, and also and archive containing SAW
+      # and the set of possible SMT solvers, but only for our "primary"
+      # distribution (currently: GHC 9.6.7).  These archives are utilized in
+      # subsequent CI jobs, but are also published for external users, and are
+      # therefore signed.
+      #
+      # In addition, if we built with HPC, we upload a tarball containing the
+      # HPC-enabled binaries and HPC-specific files generated during the build
+      # process.  These are mostly used for subsequent CI jobs that will
+      # generate a coverage report, and the binaries are essentially the same as
+      # those collected for the previous operation, but they are captured in
+      # their original cabal-generated locations where they are expected to live
+      # for subsequent coverage collection.
+
+      # In the next 3 steps we check that `matrix.hpc == false` so that if the
+      # distribution version matches the HPC version, the HPC build artifacts do
+      # not clobber the non-HPC distribution artifacts.
+      - name: Upload the SAW non-solvers binary distribution
+        if: matrix.ghc == '9.6.7' && matrix.hpc == false
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ steps.config.outputs.name }} (GHC ${{ matrix.ghc }})
+          path: "${{ steps.config.outputs.name }}.tar.gz*"
+          if-no-files-found: error
+          retention-days: ${{ needs.config.outputs.retention-days }}
+
+      - name: Upload the SAW with-solvers binary distribution
+        if: matrix.ghc == '9.6.7' && matrix.hpc == false
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ steps.config.outputs.name }}-with-solvers
+          path: "${{ steps.config.outputs.name }}-with-solvers.tar.gz*"
+          if-no-files-found: error
+          retention-days: ${{ needs.config.outputs.retention-days }}
+
+      - name: Upload the Crux binary distribution
+        if: matrix.ghc == '9.6.7' && matrix.hpc == false
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ steps.config.outputs.crux-name }} (GHC ${{ matrix.ghc }})
+          path: "${{ steps.config.outputs.crux-name }}.tar.gz*"
+          if-no-files-found: error
+          retention-days: ${{ needs.config.outputs.retention-days }}
+
+      - name: Upload the non-coverage bins for other jobs
+        if: matrix.ghc == '9.6.7' && matrix.run-integration-tests && matrix.hpc == false
+        uses: actions/upload-artifact@v5
+        with:
+          path: dist/bin
+          name: ${{ matrix.os }}-bins
+
+      - name: Save cabal store cache
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ${{ steps.setup-haskell.outputs.cabal-store }}
+            dist-newstyle
+          key: ${{ env.CABAL_CACHE_VERSION }}-cabal-${{ matrix.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
+
+        # Now run tests.
+
+      - name: Set up Java
+        if: matrix.run-integration-tests == true
+        uses: actions/setup-java@v5
+        with:
+          distribution: "zulu"
+          java-version: "8"
+          java-package: jdk
+
+      - name: Restore SMT solver result cache
+        if: matrix.run-integration-tests == true
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ matrix.suite }}.cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-integration-tests-${{ matrix.os }}-${{ github.sha }}
+          restore-keys: |
+            ${{ env.SOLVER_CACHE_VERSION }}-solver-integration-tests-${{ matrix.os }}-
+
+      - name: Enable solver caching
+        if: matrix.run-integration-tests == true
+        shell: bash
+        run: |
+          echo "SAW_SOLVER_CACHE_PATH=$(pwd)/integration-tests.cache" >> "$GITHUB_ENV"
+          dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/integration-tests.cache
+
+        # The crux-mir-comp tests require a Rust toolchain and
+        # mir-json. Install Rust, but only if we're going to run them.
+      - name: Install Rust toolchain
+        if: matrix.run-other-tests == true
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          override: true
+          components: rustc-dev, rust-src
+
+      - name: Engage the Cargo cache
+        if: matrix.run-other-tests == true
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: "true"
+          prefix-key: "${{ env.CARGO_CACHE_VERSION }}-${{ matrix.os }}"
+          shared-key: "cargo-cache"
+          workspaces: "deps/mir-json"
+
+      - name: Build and install mir-json
+        if: matrix.run-other-tests == true
+        working-directory: deps/mir-json
+        run: |
+          cargo install --locked --force
+          mir-json-translate-libs
+          echo "CRUX_RUST_LIBRARY_PATH=$(pwd)/rlibs" >> $GITHUB_ENV
+
+        # Now we can _actually_ run tests...
+
+        # First run the integration tests. This is like 99% of the
+        # test suite.
+      - name: Run integration-tests
+        if: matrix.run-integration-tests == true
+        timeout-minutes: 60
+        continue-on-error: ${{ matrix.allow-test-failures }}
+        env:
+          ENABLE_HPC: ${{ matrix.hpc }}
+        shell: bash
+        run: |
+          export PATH="$PWD/dist/bin:$PATH"
+          ./build.sh integration-tests
+
+        # Run the tests from otherTests. We don't currently include
+        # this in the coverage run, but provide the ENABLE_HPC setting
+        # in case we decide we want to, so it works to just switch it
+        # on in the run matrix.
+        #
+        # All of these together take only a few seconds to run.
+      - name: Run other-tests
+        if: matrix.run-other-tests == true
+        env:
+          ENABLE_HPC: ${{ matrix.hpc }}
+        shell: bash
+        run: |
+          export PATH="$PWD/dist/bin:$PATH"
+          ./build.sh other-tests
+
+        # Process and upload coverage results, if we were doing
+        # coverage.
+
+      - name: Compute coverage
+        if: matrix.hpc == true
+        shell: bash
+        run: |
+          ./compute-coverage.sh
+
+      - name: Upload the coverage data
+        if: matrix.hpc == true
+        uses: actions/upload-artifact@v5
+        with:
+          path: hpc-html
+          name: coverage-html-${{ github.event.number }}
+
+      - name: Gather HPC coverage files
+        if: matrix.hpc == true
+        run: .github/ci.sh collect_all_html
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Deploy coverage reports
+        if: matrix.hpc == true
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: all-html
+          destination_dir: coverage
+          keep_files: false
+
+        # NOTE: The coverage test run uses the SMT solver cache to
+        # improve performance but doesn't save the updated SMT solver
+        # cache. Instead, it shares cache with the non-coverage run on
+        # the same platform. That run will upload an updated cache.
+        # Because the test suite is the same, the resulting cache
+        # files would also be identical. FUTURE: it is not absolutely
+        # clear how well this works without serializing the jobs,
+        # which we've never done and isn't currently possible. It
+        # might be better to extend the cache key scheme so the
+        # coverage run gets its own cache. Revisit this when we have
+        # a good solution for #3379 and can assess the effectiveness.
+      - name: Save SMT solver result cache
+        if: matrix.run-integration-tests == true && matrix.hpc == false
+        uses: actions/cache/save@v6
+        with:
+          path: integration-tests.cache
+          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-integration-tests-${{ matrix.os }}-${{ github.sha }}
+
 ############################################################
 #
-# Test jobs
+# Further test jobs
 #
 
 # All of this is indented two spaces because it actually hangs under
@@ -1000,69 +1177,6 @@ jobs:
             ~/.isabelle/heaps
           key: ${{ steps.cache-isabelle-restore.outputs.cache-primary-key }}
 
-  crux-mir-comp-tests:
-    needs: [build]
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-15]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Check out repo and submodules
-        uses: actions/checkout@v7
-        with:
-          submodules: true
-
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          override: true
-          components: rustc-dev, rust-src
-
-      - name: Engage the Cargo cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: "true"
-          prefix-key: "${{ env.CARGO_CACHE_VERSION }}-${{ matrix.os }}"
-          shared-key: "cargo-cache"
-          workspaces: "deps/mir-json"
-
-      - name: Download what4-solvers
-        uses: GaloisInc/what4-solvers@v1
-        with:
-          dest: bin
-          release: ${{ env.SOLVER_PKG_VERSION }}
-
-      - name: Add what4-solvers to GITHUB_PATH
-        shell: bash
-        run: echo "$PWD/bin" >> $GITHUB_PATH
-
-      - name: Install mir-json
-        working-directory: deps/mir-json
-        run: |
-          cargo install --locked --force
-          mir-json-translate-libs
-          echo "CRUX_RUST_LIBRARY_PATH=$(pwd)/rlibs" >> $GITHUB_ENV
-
-      - name: Download test binaries
-        uses: actions/download-artifact@v4
-        with:
-          name: dist-tests-${{ matrix.os }}
-          path: dist-tests
-
-      - name: Update PATH to include crux-mir-comp
-        shell: bash
-        run: |
-          chmod +x dist-tests/*
-          echo $GITHUB_WORKSPACE/dist-tests >> $GITHUB_PATH
-
-      - name: Run crux-mir-comp test suite
-        continue-on-error: false
-        working-directory: crux-mir-comp
-        shell: bash
-        run: crux-mir-comp-tests
-
   saw-remote-api-tests:
     name: "saw-remote-api-tests (${{ matrix.name }} on ${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
@@ -1131,240 +1245,6 @@ jobs:
           saw --version
           saw-remote-api --help
           ${{ matrix.test }}
-
-  cabal-test:
-    name: "cabal-test ${{ matrix.suite }} (${{ matrix.os }})"
-    runs-on: ${{ matrix.os }}
-    needs: [build]
-    strategy:
-      fail-fast: false
-      matrix:
-        suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
-        os: [ubuntu-24.04]
-        continue-on-error: [false]
-        include:
-          - suite: integration-tests
-            os: macos-15
-            continue-on-error: false
-          - suite: integration-tests
-            os: windows-2022
-            timeout-minutes: 60
-            continue-on-error: true  # https://github.com/GaloisInc/saw-script/issues/2648
-        exclude:
-          - suite: integration-tests
-            os: windows-2022
-            continue-on-error: false
-          # We exclude crux-mir-comp-tests as it requires some Rust-specific
-          # setup that is unique to that particular test suite. See the
-          # crux-mir-comp-tests job, which is defined separately.
-          - suite: crux-mir-comp-tests
-    steps:
-      - name: Report relevant config
-        run: |
-          echo "Runner OS: ${{ runner.os }}"
-          echo "Suite: ${{ matrix.suite }}"
-          echo "Continue on error: ${{ matrix.continue-on-error }}"
-
-      - name: Check out the repository with submodules
-        uses: actions/checkout@v7
-        with:
-          submodules: true
-
-      - name: Download what4-solvers
-        uses: GaloisInc/what4-solvers@v1
-        with:
-          dest: bin
-          release: ${{ env.SOLVER_PKG_VERSION }}
-
-      - name: Add what4-solvers to GITHUB_PATH
-        shell: bash
-        run: echo "$PWD/bin" >> $GITHUB_PATH
-
-      - name: Download the SAW bins
-        uses: actions/download-artifact@v4
-        with:
-          name: "${{ matrix.os }}-bins"
-          path: dist/bin
-
-      - name: Chmod the bins
-        shell: bash
-        if: runner.os != 'Windows'
-        run: chmod +x dist/bin/*
-
-      - name: Chmod more bins
-        shell: bash
-        if: runner.os != 'Windows'
-        run: chmod +x bin/*
-
-      - name: Download the test bins
-        uses: actions/download-artifact@v4
-        with:
-          name: dist-tests-${{ matrix.os }}
-          path: dist-tests
-
-      - name: Chmod the test bins
-        shell: bash
-        if: runner.os != 'Windows'
-        run: chmod +x dist-tests/*
-
-      - name: Set up Java
-        uses: actions/setup-java@v5
-        if: matrix.suite == 'integration-tests'
-        with:
-          distribution: "zulu"
-          java-version: "8"
-          java-package: jdk
-
-      - name: Restore SMT solver result cache
-        uses: actions/cache/restore@v6
-        if: matrix.suite == 'integration-tests'
-        with:
-          path: ${{ matrix.suite }}.cache
-          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
-          restore-keys: |
-            ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-
-
-      - name: Enable solver caching
-        shell: bash
-        if: matrix.suite == 'integration-tests'
-        run: |
-          echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
-          dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
-
-      - name: Run test suite ${{ matrix.suite }}
-        continue-on-error: ${{ matrix.continue-on-error }}
-        shell: bash
-        run: |
-          export PATH="$PWD/dist/bin:$PATH"
-          dist-tests/${{ matrix.suite }}
-
-      - name: Save SMT solver result cache
-        uses: actions/cache/save@v6
-        if: matrix.suite == 'integration-tests'
-        with:
-          path: ${{ matrix.suite }}.cache
-          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
-
-  # The coverage job is similar to the cabal-test job, but it only runs the HPC
-  # enabled SAW build against the integration test suite. It then collects the
-  # test coverage results, generates an HTML summary, and publishes the results
-  # to github pages.
-  coverage:
-    name: "Run integration tests with coverage reporting (${{ matrix.os }})"
-    needs: [config, build]
-    runs-on: ${{ matrix.os }}
-    # Do not run this job in forks, as the deployment to GitHub pages will fail
-    # unless it has GITHUB_TOKEN permissions from a user within the GaloisInc
-    # organization (see #2216). Also exclude dependabot, because it apparently
-    # works like a fork but isn't one. See crucible #1642 for discussion.
-    if: needs.config.outputs.want-coverage == 'true'
-    strategy:
-      matrix:
-        suite: ['integration-tests']
-        os: [ubuntu-24.04]
-    steps:
-      - name: Report relevant config
-        run: |
-          echo "Want coverage: ${{ needs.config.outputs.want-coverage }}"
-
-      # Need a copy of the source to generate coverage HTML
-      - name: Check out the repository with submodules
-        uses: actions/checkout@v7
-        with:
-          submodules: true
-
-      - name: Set up Haskell
-        uses: haskell-actions/setup@v2
-        id: setup-haskell
-        with:
-          ghc-version: "9.6.7"
-
-      - name: Download what4-solvers
-        uses: GaloisInc/what4-solvers@v1
-        with:
-          dest: bin
-          release: ${{ env.SOLVER_PKG_VERSION }}
-
-      - name: Add what4-solvers to GITHUB_PATH
-        shell: bash
-        run: echo "$PWD/bin" >> $GITHUB_PATH
-
-      - name: Download the with-coverage test bins
-        uses: actions/download-artifact@v4
-        with:
-          name: dist-tests-${{ matrix.os }}-hpc
-          path: dist-tests
-
-      - name: Download the coverage files
-        uses: actions/download-artifact@v4
-        with:
-          name: "${{ matrix.os }}-hpc.tar.gz"
-
-      - name: Set up test environment
-        shell: bash
-        run: |
-          tar xvf hpc.tar.gz
-          chmod +x dist/bin/*
-          chmod +x bin/*
-          chmod +x dist-tests/*
-
-      - name: Set up Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: "zulu"
-          java-version: "8"
-          java-package: jdk
-
-      # NOTE: This job uses the SMT solver cache to improve performance but it
-      # does not save the updated SMT solver cache. This is because the
-      # `cabal-test` also runs the integration tests and uploads an updated
-      # cache. Because the test suite is the same, the resulting cache files
-      # would also be identical.
-      - name: Restore SMT solver result cache
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ matrix.suite }}.cache
-          key: ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
-          restore-keys: |
-            ${{ env.SOLVER_CACHE_VERSION }}-solver-${{ matrix.suite }}-${{ matrix.os }}-
-
-      - name: Enable solver caching
-        shell: bash
-        run: |
-          echo "SAW_SOLVER_CACHE_PATH=$(pwd)/${{ matrix.suite }}.cache" >> "$GITHUB_ENV"
-          dist/bin/saw --clean-mismatched-versions-solver-cache=$(pwd)/${{ matrix.suite }}.cache
-
-      - name: Run integration tests
-        shell: bash
-        run: |
-          export PATH="$PWD/dist/bin:$PATH"
-          dist-tests/integration-tests
-        env:
-          ENABLE_HPC: true
-
-      - name: Compute coverage
-        shell: bash
-        run: |
-          ./compute-coverage.sh
-
-      - name: Upload the coverage data
-        uses: actions/upload-artifact@v5
-        with:
-          path: hpc-html
-          name: coverage-html-${{ github.event.number }}
-
-      - name: Gather HPC coverage files
-        run: .github/ci.sh collect_all_html
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Deploy coverage reports
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: all-html
-          destination_dir: coverage
-          keep_files: false
 
   s2n-tests:
     name: "Test s2n proofs: ${{ matrix.s2n-target }}"
