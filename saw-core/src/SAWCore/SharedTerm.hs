@@ -989,15 +989,17 @@ ppTerm sc t = do
   PPS.render opts <$> prettyTerm sc t
 
 -- | The preferred printing mechanism for `Name`, as a `Doc`.
-prettyName :: SharedContext -> PPS.Opts -> Name -> IO PPS.Doc
-prettyName sc opts nm =
-  do env <- scGetNamingEnv sc
+prettyName :: SharedContext -> Name -> IO PPS.Doc
+prettyName sc nm =
+  do opts <- scGetPPOpts sc
+     env <- scGetNamingEnv sc
      pure $ prettyNameWithEnv opts env nm
 
 -- | The preferred printing mechanism for `Name`, as `Text`.
-ppName :: SharedContext -> PPS.Opts -> Name -> IO Text
-ppName sc opts nm =
-  PPS.renderText opts <$> prettyName sc opts nm
+ppName :: SharedContext -> Name -> IO Text
+ppName sc nm = do
+  opts <- scGetPPOpts sc
+  PPS.renderText opts <$> prettyName sc nm
 
 -- | A pure variant of `ppName` with a user-supplied `PPS.Opts` and
 -- `DisplayNameEnv`.
@@ -1098,8 +1100,7 @@ scTypeOfName sc nm =
      case lookupVarIndexInMap (nameIndex nm) mm of
        Just r -> pure (resolvedNameType r)
        Nothing -> do
-         ppopts <- scGetPPOpts sc
-         nm' <- ppName sc ppopts nm
+         nm' <- ppName sc nm
          fail ("scTypeOfName: Name not found: " ++ Text.unpack nm')
 
 --------------------------------------------------------------------------------

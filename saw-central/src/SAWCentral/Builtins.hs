@@ -777,12 +777,11 @@ print_goal_depth n =
 printGoalConsts :: ProofScript ()
 printGoalConsts =
   execTactic $ tacticId $ \goal ->
-  do opts <- SV.getPPOpts
-     sc <- getSharedContext
+  do sc <- getSharedContext
      let cs = sequentConstantSet (goalSequent goal)
          printOne (idnum, info) = do
              let nm = Name idnum info
-             nm' <- liftIO $ ppName sc opts nm
+             nm' <- liftIO $ ppName sc nm
              printOutLnTop Info (Text.unpack nm')
      mapM_ printOne $ Map.toList cs
 
