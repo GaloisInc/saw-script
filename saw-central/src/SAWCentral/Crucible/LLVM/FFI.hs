@@ -228,7 +228,7 @@ mkSizeArg tyArgTerm = do
   openToSetupTerm $
     OT.applyGlobal "Cryptol::ecNumber"
       [ OT.term tyArgTerm
-      , OT.vectorType sizeBitSize OT.boolType
+      , OT.vectorType OT.boolType sizeBitSize
       , OT.applyGlobal "Cryptol::PLiteralSeqBool"
           [OT.applyGlobal "Cryptol::TCNum" [sizeBitSize]]
       ]
@@ -504,7 +504,7 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
   FFITypeInfo {..} <- basicTypeInfo ffiBasicType
   pure FFITypeInfo
     { ffiLLVMType = llvm_array totalLen ffiLLVMType
-    , ffiLLVMCoreType = OT.vectorType totalLenTerm ffiLLVMCoreType
+    , ffiLLVMCoreType = OT.vectorType ffiLLVMCoreType totalLenTerm
     , ffiConv =
         case (lenTerms, ffiConv) of
           -- If the array is flat and there is no need to convert individual
@@ -515,7 +515,7 @@ arrayTypeInfo tenv lenTypes ffiBasicType = do
                 basicToLLVM = maybe (Just id) ffiToLLVM ffiConv
                 cumulLenTerms = map OT.nat $ scanl1 (*) lens
                 arrCryType :| cumulElemTypes =
-                  NE.scanr OT.vectorType basicCryType lenTerms
+                  NE.scanr (flip OT.vectorType) basicCryType lenTerms
 
                 noArrayLengths :: a
                 noArrayLengths =
