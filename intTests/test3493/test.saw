@@ -1,0 +1,1 @@
+write_rocq_cryptol_module "Foo.cry" "Foo.v" [] [];

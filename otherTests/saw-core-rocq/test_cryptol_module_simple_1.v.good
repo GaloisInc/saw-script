@@ -243,8 +243,8 @@ Section Simple.
          ) ciphertext.
 
    Definition roundtrip
-           (u944: CryptolPrimitivesForSAWCore.Num)
-           (_P: CryptolPrimitivesForSAWCore.PFin u944)
+           (u1331: CryptolPrimitivesForSAWCore.Num)
+           (_P: CryptolPrimitivesForSAWCore.PFin u1331)
            (k: CryptolPrimitivesForSAWCore.seq 
                  (CryptolPrimitivesForSAWCore.TCNum 
                     (Stdlib.PArith.BinPos.Pos.to_nat 
@@ -252,7 +252,7 @@ Section Simple.
                           (Stdlib.PArith.BinPos.xO 
                              (Stdlib.PArith.BinPos.xO Stdlib.PArith.BinPos.xH)))))
                  Init.Datatypes.bool)
-           (ip: CryptolPrimitivesForSAWCore.seq u944 
+           (ip: CryptolPrimitivesForSAWCore.seq u1331 
                  (CryptolPrimitivesForSAWCore.seq 
                     (CryptolPrimitivesForSAWCore.TCNum 
                        (Stdlib.PArith.BinPos.Pos.to_nat 
@@ -274,9 +274,9 @@ Section Simple.
          CryptolPrimitivesForSAWCore.seq var__0 Init.Datatypes.bool
       in
       CryptolPrimitivesForSAWCore.ecEq 
-         (CryptolPrimitivesForSAWCore.seq u944 var__1) 
-         (CryptolPrimitivesForSAWCore.PEqSeq u944 var__1 
+         (CryptolPrimitivesForSAWCore.seq u1331 var__1) 
+         (CryptolPrimitivesForSAWCore.PEqSeq u1331 var__1 
             (CryptolPrimitivesForSAWCore.PEqSeqBool var__0)) 
-         (decrypt u944 _P k (encrypt u944 _P k ip)) ip.
+         (decrypt u1331 _P k (encrypt u1331 _P k ip)) ip.
 
 End Simple.
