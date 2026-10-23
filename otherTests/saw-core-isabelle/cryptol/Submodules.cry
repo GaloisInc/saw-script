@@ -1,0 +1,21 @@
+module Submodules where
+x : [8]
+x = 3
+
+submodule Sub_SubSub where
+   x : [64]
+   x = 6
+
+submodule Sub where
+   x : [16]
+   x = 4
+
+   submodule SubSub where
+      x : [32]
+      x = 5
+
+p1 : Bit
+p1 = Sub_SubSub::x == (6 : [64])
+
+p2 : Bit
+p2 = Sub::SubSub::x == (5 : [32])
