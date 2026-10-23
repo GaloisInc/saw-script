@@ -27,3 +27,9 @@ opt_valid x y = case x of
   None -> case y of
     Some b -> ~(x == y)
     None -> (x == y)
+
+myEnum_discr : Bit
+myEnum_discr = ~( (MyNone : MyEnum Integer 1) == MySome (0 : Integer))
+
+opt_discr : Bit
+opt_discr = ~( (None : Option Integer) == Some (0 : Integer))

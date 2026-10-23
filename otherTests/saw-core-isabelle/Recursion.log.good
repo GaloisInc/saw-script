@@ -31,6 +31,8 @@ cryptol_definition rec_fn_spec :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b,Eq 'b) =?> (
 
 end
 
+qualifier ""
+
 locale rec_fn_rec_spec =
   assumes "rec_fnlba_gt_0rb_spec = rec_fnlba_gt_0rb_impl"and "rec_fn_spec = rec_fn_impl"
 begin
@@ -48,6 +50,8 @@ alias rec_fn = rec_fn_rec_spec.rec_fn
 
 hide_fact rec_fn_rec_spec.rec_fnlba_gt_0rb_def
 hide_fact rec_fn_rec_spec.rec_fn_def
+
+end_qualifier ""
 
 context includes cryptol_translation_syntax begin
 

@@ -17,7 +17,7 @@ lemma "\<And>a b c x y. Enums.myEnum_eq_valid a b c x y"
 
 lemma "\<And>a b x y. Enums.opt_valid a b x y"
   unfolding Enums.opt_valid_def
-  by (auto split: option.splits)
+  by (auto split: Cryptol.Option.splits)
 
 lemma "\<And>n x y. ArithMap.map2_plus n x y"
   unfolding ArithMap.map2_plus_def ArithMap.map2_def
