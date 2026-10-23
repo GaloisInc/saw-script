@@ -1,0 +1,48 @@
+module Submodules where
+x : [8]
+x = 3
+
+submodule Sub_SubSub where
+   x : [64]
+   x = 6
+
+submodule Sub where
+   x : [16]
+   x = 4
+
+   fib : Integer -> Integer
+   fib i = if i <= 0 then 0 else if i == 1 then i else
+     fib (i-1) + fib (i-2)
+
+   submodule SubSub where
+      x : [32]
+      x = 5
+
+      type R n = { b : Bit, w : [n] }
+
+      enum MyEnum a b = MyNone | MySome a | MyCtr2 Integer [b] a Bit
+        deriving (Eq)
+
+p0 : Bit
+p0 = x == (3 : [8])
+
+p1 : Bit
+p1 = Sub_SubSub::x == (6 : [64])
+
+p2 : Bit
+p2 = Sub::SubSub::x == (5 : [32])
+
+p3 : Integer -> Bit
+p3 n = ( n > 1 ) ==> Sub::fib n == Sub::fib (n - 1) + Sub::fib (n - 2)
+
+p4 : Bit
+p4 = ~( (Sub::SubSub::MyNone : Sub::SubSub::MyEnum Integer 1) == Sub::SubSub::MySome (0 : Integer))
+
+p5 : Bit
+p5 = ~(({ b = True, w = 0 } : Sub::SubSub::R 3) == { b = True, w = 1 })
+
+p6 : {a,b} (Eq a, fin b) => Sub::SubSub::MyEnum a b -> Bit
+p6 z = case z of
+  Sub::SubSub::MyNone -> (z == Sub::SubSub::MyNone)
+  Sub::SubSub::MySome i -> (z == Sub::SubSub::MySome i)
+  Sub::SubSub::MyCtr2 i ys a c -> (z == Sub::SubSub::MyCtr2 i ys a c)

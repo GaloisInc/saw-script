@@ -8,6 +8,8 @@ module Language.Isabelle.Name
   , Name(..)
   , TheoryName
   , pattern TheoryName
+  , pattern Name
+  , nmQual
   , thyNm
   , thyQualified
   , HasName(..)
@@ -17,9 +19,11 @@ module Language.Isabelle.Name
   , guardUnderscores
   , freshIdent
   , qualifiedIdent
+  , stripQualifier
+  , unqualify
   ) where
 
-import           Data.List (stripPrefix)
+import           Data.List (stripPrefix, intercalate)
 
 import qualified Cryptol.TypeCheck.PP as Cry
 
@@ -75,9 +79,17 @@ isTypeK = \case
   TNum -> True
 
 data Name =
-    Name { nmThy :: TheoryName, nmStr :: Ident, nmSyn :: Syntax, nmKind :: IsaKind  }
+    QName { nmThy :: TheoryName, nmStr :: Ident, nmQual_ :: [Ident], nmSyn :: Syntax, nmKind :: IsaKind  }
   | SimpleName { nmStr :: Ident }
   deriving (Eq, Ord, Show)
+
+nmQual :: Name -> [Ident]
+nmQual nm = case nm of
+  QName{} -> nmQual_ nm
+  SimpleName{} -> []
+
+pattern Name :: TheoryName -> Ident -> Syntax -> IsaKind -> Name
+pattern Name nmThy nmStr nmSyn nmKind = QName nmThy nmStr [] nmSyn nmKind
 
 instance HasName Name where
   nameOf nm = nm
@@ -96,8 +108,19 @@ class HasName t where
 
 qualifiedIdent :: HasName t => t -> String
 qualifiedIdent t = case nameOf t of
-  nm@Name{} -> thyNm (nmThy nm) ++ "." ++ cleanName nm
+  nm@QName{} -> thyNm (nmThy nm) ++ "." ++ cleanName nm
   nm@SimpleName{} -> cleanName nm
+
+unqualifyName :: Name -> Name
+unqualifyName = \case
+  nm@QName{} -> nm { nmQual_ = [] }
+  nm -> nm
+
+stripQualifier :: HasName t => t -> (t, [String])
+stripQualifier t = (mapName unqualifyName t, nmQual (nameOf t))
+
+unqualify :: HasName t => t -> t
+unqualify = mapName unqualifyName
 
 keywords :: [String]
 keywords = ["mod", "div", "xor", "undefined", "in"]
@@ -150,16 +173,18 @@ cleanSymbol c = case c of
 cleanNameSymbols :: Ident -> Ident
 cleanNameSymbols s = concat $ map cleanSymbol s
 
-
-cleanName :: Name -> Ident
-cleanName nm =
-     symbolOverrides
+cleanIdent :: String -> Ident
+cleanIdent str = symbolOverrides
    $ guardBackslash
    $ cleanPrefix "_" "i_"
    $ cleanPrefix "$" "s_"
    $ cleanSuffix "_" "_U"
    $ cleanNameSymbols
-   $ guardKeywords (nmStr nm)
+   $ guardKeywords str
+
+cleanName :: Name -> Ident
+cleanName nm =
+  intercalate "." (map cleanIdent (nmQual nm ++ [nmStr nm]))
 
 guardUnderscores :: Ident -> Ident
 guardUnderscores i = concat $ map go i
@@ -207,7 +232,7 @@ freshIdent exNms tryNm = go (tryNm:variantIdents tryNm)
 
 instance Output Name where
   out t = case t of
-    Name{} -> case nmSyn t of
+    QName{} -> case nmSyn t of
       InfixSyn s -> symbolOverrides $ guardBackslash $ s
       _ -> thyQual (nmThy t) (cleanName t)
     SimpleName{} -> cleanName t

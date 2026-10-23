@@ -258,7 +258,7 @@ stripETAbs = \case
 
 setNameKind :: Cry.Kind -> Name.Name -> Name.Name
 setNameKind _ nm@(Name.SimpleName{}) = nm
-setNameKind k nm@(Name.Name {}) = case k of
+setNameKind k nm@(Name.QName {}) = case k of
   Cry.KNum -> nm { Name.nmKind = Name.TNum }
   _ -> nm { Name.nmKind = Name.Typ }
 
@@ -355,16 +355,18 @@ bindingToVar :: Binding.Binding -> IsaM Expr
 bindingToVar b = nameToVar (Binding.bindName b)
 -}
 
-pathToTheory :: Cry.ModPath -> IsaM Name.TheoryName
+pathToTheory :: Cry.ModPath -> IsaM (Name.TheoryName, [Cry.Ident])
 pathToTheory = \case
   Cry.TopModule mnm -> do
     thynm <- modToTheory mnm
     cthy <- curTheory
     if (thynm == cthy || isBuiltinThy thynm) then
-      return thynm
+      return (thynm,[])
     else 
-      return $ thynm { Name.thyQualified = True}
-  Cry.Nested{} -> throwError $ UnsupportedEntity $ "ModPath.Nested"
+      return $ (thynm { Name.thyQualified = True},[])
+  Cry.Nested p i -> do
+    (thynm,is) <- pathToTheory p
+    return (thynm,i:is)
 
 isBinOp :: Cry.Name -> Bool
 isBinOp nm = isJust (Cry.nameFixity nm)
@@ -378,16 +380,18 @@ translateName nm = do
     Cry.NSConstructor -> return $ Name.Term
     Cry.NSModule -> throwError $ UnsupportedEntity $ "Namespace.NSModule"
 
-  thynm <- case Cry.nameInfo nm of
+  (thynm,path) <- case Cry.nameInfo nm of
     Cry.GlobalName _ on -> pathToTheory (Cry.ogModule on)
-    Cry.LocalName{} -> curTheory
+    Cry.LocalName{} -> do
+      thynm <- curTheory
+      return (thynm,[])
   let syn = case Cry.nameFixity nm of
         Just{} -> Syntax.InfixSyn (Cry.unpackIdent ident)
         Nothing -> Syntax.NoSyn
   let isaIdent = case (Name.isTypeK k, Cry.nameInfo nm) of
         (True, Cry.LocalName{}) -> "'" ++ Cry.unpackIdent ident
         _ -> Cry.unpackIdent ident
-  return $ Name.Name thynm isaIdent syn k
+  return $ Name.QName thynm isaIdent (reverse (map Cry.unpackIdent path)) syn k
 
 translateTParam :: Cry.TParam -> IsaM Expr
 translateTParam tp = withPosition (Cry.tvarSource $ Cry.tpInfo tp) $ do
@@ -689,9 +693,10 @@ translateExpr = rethrow UnsupportedExpr $ \case
             Just ctr -> do
               ctr' <- translateName (Cry.ecName ctr) >>= nameToVar
               withBindings (map (\(n,t) -> (n, Cry.tMono t)) vars) $ do
+                let typats = map (\_ -> dummy) (Cry.ntParams nt)
                 vars' <- mapM (\(n,_) -> translateName n >>= nameToVar) vars
                 body' <- translateExpr body
-                return $ (appExpr ctr' vars', body')
+                return $ (appExpr ctr' (typats ++ vars'), body')
             Nothing -> fail $ "Missing constructor for name: " ++ show nm
           case dflt of
             Nothing -> return $ Expr.Case e' cs'

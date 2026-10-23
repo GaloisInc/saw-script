@@ -1,5 +1,5 @@
 theory Cryptol_Definition
-  imports Main Type_Args Type_Predicate
+  imports Main Type_Args Type_Predicate Name_Qualifier
   keywords "cryptol_definition":: thy_defn 
        and "cryptol_termination":: thy_goal_defn
 begin
@@ -279,6 +279,14 @@ fun base_name nm =
      val q = Long_Name.qualifier nm
   in String.substring (q, 0, String.size q - 9) end
 
+fun name_path space name =
+  let val {suppress, ...} = Name_Space.the_entry space name
+  in fst (split_last (Long_Name.explode name ~~ suppress)) end
+
+fun set_path path =
+  Sign.root_path #> fold (fn (q, optional) =>
+    if optional then Sign.add_path q else Sign.mandatory_path q) path
+
 fun cryptol_termination_cmd const_name_raw includes_raw thy =
   let   
     val ctxt = Proof_Context.init_global thy
@@ -286,6 +294,7 @@ fun cryptol_termination_cmd const_name_raw includes_raw thy =
     val Const(full_const_name, _) = Proof_Context.read_const {proper=false,strict=false} ctxt const_name_raw
     val const_name = base_name full_const_name
     val rec_spec_locale = Long_Name.qualifier full_const_name
+    val thy0 = set_path (name_path (Locale.locale_space thy) rec_spec_locale) thy
 
     (* construct a function equation based on the shape of the _spec definition *)
     val (spec_def, raw_const, T, free_t, args, asm, rhs) = dest_def ctxt const_name
@@ -294,7 +303,7 @@ fun cryptol_termination_cmd const_name_raw includes_raw thy =
     val specs = [(((Binding.empty,[]),HOLogic.mk_Trueprop f), [], []) ]
     val rec_nm = fst (Term.dest_Free free_t)
 
-    val lthy_ov = Overloading.overloading [(rec_nm, Term.dest_Const raw_const, false)] thy
+    val lthy_ov = Overloading.overloading [(rec_nm, Term.dest_Const raw_const, false)] thy0
     val b_ov = Binding.name rec_nm
     val fun_cfg = Function_Common.default_config
 
@@ -364,7 +373,9 @@ fun cryptol_termination_cmd const_name_raw includes_raw thy =
 
       in ctxt3
        |> Local_Theory.note ((Binding.name ((Long_Name.base_name const_name) ^ "_alt_def"),[Code.singleton_default_equation_attrib]),[alt_def'])
-       |-> K Local_Theory.exit
+       |-> K Local_Theory.exit_global
+       |> Sign.restore_naming thy
+       |> Proof_Context.init_global
       end
 
     val st = Proof.theorem NONE afterqed [[(Logic.mk_implies (asm, term_goal),[])]] lthy1
@@ -423,8 +434,6 @@ let
     | _ => error ("FORALL: unexpected term: " ^ Syntax.string_of_term ctxt x)
 in [(@{syntax_const "_forall"}, forall_tr)] end
 \<close>
-
-setup \<open>Sign.add_path "experiment"\<close>
 
 (* when a definition body is omitted, an auxiliary constant is
    created that can be overridden *)
@@ -507,6 +516,8 @@ NOTE: Because this installs a definition for the _impl_raw constant via an overr
 is only allowed at the toplevel.
 \<close>
 
+qualifier "experiment"
+
 context includes type_arg_syntax and assuming_syntax begin
 
 cryptol_definition rec_test_impl :: "{'a} ('a > 0) =?> (int \<Rightarrow> 'a itself \<Rightarrow> nat)" 
@@ -519,35 +530,40 @@ cryptol_definition rec_test_spec :: "{'a} ('a > 0) =?>  (int \<Rightarrow> 'a it
 end
 
 locale rec_test_rec_spec =
-  assumes "rec_test_spec = rec_test_impl"
+  assumes "experiment.rec_test_spec = experiment.rec_test_impl"
 begin
 
-definition [simplified rec_test_impl_def[abs_def]]: 
-  "rec_test = rec_test_impl"
+definition [simplified experiment.rec_test_impl_def[abs_def]]:
+  "rec_test = experiment.rec_test_impl"
 
 end
 
-alias rec_test = rec_test_rec_spec.rec_test
+alias rec_test = experiment.rec_test_rec_spec.rec_test
 
-declare [[set_const_hash rec_test 0xB]]
+end_qualifier "experiment"
 
-ML \<open>case Cryptol_Definition.get_const_hash @{theory} (dest_Const_name @{term rec_test}) of
+declare [[set_const_hash experiment.rec_test 0xB]]
+
+ML \<open>case Cryptol_Definition.get_const_hash @{theory} (dest_Const_name @{term experiment.rec_test}) of
   SOME 11 => ()
  | _ => error "get_const_hash failed"
 \<close>
 
-cryptol_termination rec_test
+cryptol_termination experiment.rec_test
   apply (relation "measure (\<lambda>(_, i, _). nat (abs i))")
   by auto
 
-print_theorems
-thm rec_test_alt_def
-value "rec_test TY(32) 12 TYPE(32)"
+ML \<open>\<^assert> (Sign.full_bname \<^theory> "baz" = "Cryptol_Definition.baz")\<close>
 
-hide_const rec_test_impl rec_test_spec rec_test
+term experiment.rec_test
 
-hide_fact rec_test_impl_def rec_test_spec_def
-          rec_test_alt_def rec_test_def rec_test_impl_raw.elims 
-          rec_test_impl_raw.simps rec_test_impl_raw.induct rec_test_rec_spec_axioms
+value "experiment.rec_test TY(32) 12 TYPE(32)"
+
+hide_const experiment.rec_test_impl experiment.rec_test_spec experiment.rec_test
+
+hide_fact experiment.rec_test_impl_def experiment.rec_test_spec_def
+          experiment.rec_test_alt_def experiment.rec_test_def experiment.rec_test_impl_raw.elims
+          experiment.rec_test_impl_raw.simps experiment.rec_test_impl_raw.induct
+          experiment.rec_test_rec_spec_axioms
 
 end

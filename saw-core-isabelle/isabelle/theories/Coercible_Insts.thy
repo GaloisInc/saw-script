@@ -510,7 +510,8 @@ end
 lemma tyarg_type_name[simp]: "type_name TYPE(('a::strip_type) tyarg) = STR ''tyarg''"
   by (simp add: strip_type_tyarg_def type_name_def)
 
-lemma tyarg_same_type[simp,code_unfold]: "same_type TYPE('a tyarg) TYPE('b tyarg) = same_type TYPE('a::strip_type) TYPE('b::strip_type)"
+lemma tyarg_same_type[unconstrain_cases,simp,code_unfold]:
+  "same_type TYPE('a tyarg) TYPE('b tyarg) = same_type TYPE('a::strip_type) TYPE('b::strip_type)"
   by (simp add: strip_type_tyarg_def same_type_def)
 
 primrec (nonexhaustive) index_of :: " 'a \<Rightarrow> 'a list \<Rightarrow> nat" where
@@ -627,6 +628,16 @@ instance
   by auto
 end
 interpretation strip_drop_code "TYPE(num1)" .
+
+instantiation tyarg :: (_) coercible_atom begin
+definition "strip_tyarg (x :: 'a tyarg) \<equiv> strip ()"
+definition "unstrip_tyarg (_ :: stripped) \<equiv> tyargCtr"
+instance
+  apply standard
+  unfolding strip_tyarg_def unstrip_tyarg_def
+  by auto
+end
+interpretation strip_drop_code "TYPE('a tyarg)" .
 
 lemma not_same_type_prodL[simp,code_unfold]: "\<not> same_type TYPE('a::strip_type) TYPE('a \<times> ('b::strip_type))"
   apply (simp add: same_type_def strip_type_prod_def)

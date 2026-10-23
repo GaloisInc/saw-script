@@ -5,7 +5,7 @@ theory Cryptol_Syntax
   
   imports Main Alt_Type_Length Seq Coercible_Insts Word_Insts Type_Predicate Type_Args
           WordSeq Cryptol_Definition "Word_Lib.Word_Syntax" "HOL-Library.Product_Plus"
-          Log2 Cryptol_Quickcheck
+          Log2 Cryptol_Quickcheck CryOption
 
 begin
 
@@ -1023,7 +1023,9 @@ alias tail = Cryptol_Syntax.translation.tail
 alias last = Cryptol_Syntax.translation.last
 alias lg2 = Cryptol_Syntax.translation.lg2
 
-type_alias Option=option
+type_alias Option = Cryptol.Option
+alias None = Cryptol.None
+alias Some = Cryptol.Some
 
 end
 
