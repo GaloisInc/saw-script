@@ -372,3 +372,6 @@ mapRecord recNm nms f =
 recordUpdate :: Expr.Expr -> Name.Name -> Expr.Expr -> Expr.Expr
 recordUpdate e fieldnm fieldv = Expr.Ctr [e, Expr.Var fieldnm, coerceExpr fieldv]
   (Name.Name holThy "record_upd" (Syntax.ListSyn Syntax.Prefix " := "  "\\<lparr>" "\\<rparr>")  Name.Term)
+
+tyargT :: Expr.Type -> Expr.Type
+tyargT t = Expr.Ctr [t] $ Name.Name cryThy "tyarg" Syntax.NoSyn Name.Typ

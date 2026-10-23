@@ -693,9 +693,10 @@ translateExpr = rethrow UnsupportedExpr $ \case
             Just ctr -> do
               ctr' <- translateName (Cry.ecName ctr) >>= nameToVar
               withBindings (map (\(n,t) -> (n, Cry.tMono t)) vars) $ do
+                let typats = map (\_ -> dummy) (Cry.ntParams nt)
                 vars' <- mapM (\(n,_) -> translateName n >>= nameToVar) vars
                 body' <- translateExpr body
-                return $ (appExpr ctr' vars', body')
+                return $ (appExpr ctr' (typats ++ vars'), body')
             Nothing -> fail $ "Missing constructor for name: " ++ show nm
           case dflt of
             Nothing -> return $ Expr.Case e' cs'

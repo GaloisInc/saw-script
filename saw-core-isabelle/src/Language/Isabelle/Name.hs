@@ -19,6 +19,8 @@ module Language.Isabelle.Name
   , guardUnderscores
   , freshIdent
   , qualifiedIdent
+  , stripQualifier
+  , unqualify
   ) where
 
 import           Data.List (stripPrefix, intercalate)
@@ -109,6 +111,17 @@ qualifiedIdent t = case nameOf t of
   nm@QName{} -> thyNm (nmThy nm) ++ "." ++ cleanName nm
   nm@SimpleName{} -> cleanName nm
 
+unqualifyName :: Name -> Name
+unqualifyName = \case
+  nm@QName{} -> nm { nmQual_ = [] }
+  nm -> nm
+
+stripQualifier :: HasName t => t -> (t, [String])
+stripQualifier t = (mapName unqualifyName t, nmQual (nameOf t))
+
+unqualify :: HasName t => t -> t
+unqualify = mapName unqualifyName
+
 keywords :: [String]
 keywords = ["mod", "div", "xor", "undefined", "in"]
 
@@ -169,13 +182,9 @@ cleanIdent str = symbolOverrides
    $ cleanNameSymbols
    $ guardKeywords str
 
-pathIdent :: String -> String
-pathIdent [] = []
-pathIdent (p:ps) = ("\\<^sub>" ++ [p]) ++ pathIdent ps
-
 cleanName :: Name -> Ident
-cleanName nm = cleanIdent (nmStr nm) ++
-  intercalate "_" (map (pathIdent . cleanIdent) (nmQual nm))
+cleanName nm =
+  intercalate "." (map cleanIdent (nmQual nm ++ [nmStr nm]))
 
 guardUnderscores :: Ident -> Ident
 guardUnderscores i = concat $ map go i
