@@ -712,144 +712,145 @@ span.spaces    { background: white }
 <span class="lineno">  693 </span><span class="spaces">            </span><span class="nottickedoff">Just ctr -&gt; do</span>
 <span class="lineno">  694 </span><span class="spaces">              </span><span class="nottickedoff">ctr' &lt;- translateName (Cry.ecName ctr) &gt;&gt;= nameToVar</span>
 <span class="lineno">  695 </span><span class="spaces">              </span><span class="nottickedoff">withBindings (map (\(n,t) -&gt; (n, Cry.tMono t)) vars) $ do</span>
-<span class="lineno">  696 </span><span class="spaces">                </span><span class="nottickedoff">vars' &lt;- mapM (\(n,_) -&gt; translateName n &gt;&gt;= nameToVar) vars</span>
-<span class="lineno">  697 </span><span class="spaces">                </span><span class="nottickedoff">body' &lt;- translateExpr body</span>
-<span class="lineno">  698 </span><span class="spaces">                </span><span class="nottickedoff">return $ (appExpr ctr' vars', body')</span>
-<span class="lineno">  699 </span><span class="spaces">            </span><span class="nottickedoff">Nothing -&gt; fail $ &quot;Missing constructor for name: &quot; ++ show nm</span>
-<span class="lineno">  700 </span><span class="spaces">          </span><span class="nottickedoff">case dflt of</span>
-<span class="lineno">  701 </span><span class="spaces">            </span><span class="nottickedoff">Nothing -&gt; return $ Expr.Case e' cs'</span>
-<span class="lineno">  702 </span><span class="spaces">            </span><span class="nottickedoff">Just (Cry.CaseAlt vars body) -&gt; case vars of</span>
-<span class="lineno">  703 </span><span class="spaces">              </span><span class="nottickedoff">[(v,_)] | Just{} &lt;- T.stripPrefix &quot;__&quot; $ Cry.identText $ Cry.nameIdent v -&gt; do</span>
-<span class="lineno">  704 </span><span class="spaces">                </span><span class="nottickedoff">body' &lt;- translateExpr body</span>
-<span class="lineno">  705 </span><span class="spaces">                </span><span class="nottickedoff">return $ Expr.Case e' (cs' ++ [(dummy, body')])</span>
-<span class="lineno">  706 </span><span class="spaces">              </span><span class="nottickedoff">_ -&gt; fail $ &quot;Unexpected default case&quot; ++ show (length vars)</span>
-<span class="lineno">  707 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; fail &quot;Unexpected case expression&quot;</span>
-<span class="lineno">  708 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt; fail &quot;Unexpected type for case expression&quot;</span>
-<span class="lineno">  709 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  710 </span><span class="spaces">  </span><span class="nottickedoff">(Cry.EComp _lenT elemT e [inner_matches]) -&gt; do</span>
-<span class="lineno">  711 </span><span class="spaces">    </span><span class="nottickedoff">elemT' &lt;- translateType elemT</span>
-<span class="lineno">  712 </span><span class="spaces">    </span><span class="nottickedoff">(_, result) &lt;- translateMatches elemT' e inner_matches</span>
-<span class="lineno">  713 </span><span class="spaces">    </span><span class="nottickedoff">return result</span>
-<span class="lineno">  714 </span><span class="spaces">  </span><span class="nottickedoff">(Cry.EComp _lenT elemT e matches) -&gt; do</span>
-<span class="lineno">  715 </span><span class="spaces">    </span><span class="nottickedoff">elemT' &lt;- translateType elemT</span>
-<span class="lineno">  716 </span><span class="spaces">    </span><span class="nottickedoff">let </span>
-<span class="lineno">  717 </span><span class="spaces">      </span><span class="nottickedoff">go :: [Cry.Match] -&gt; IsaM ([(Cry.Name, Cry.Schema)], ((Type,Type), Expr))</span>
-<span class="lineno">  718 </span><span class="spaces">      </span><span class="nottickedoff">go inner_matches = do</span>
-<span class="lineno">  719 </span><span class="spaces">        </span><span class="nottickedoff">let (matchSchems, matchNms) = unzip $ matchToTuple inner_matches</span>
-<span class="lineno">  720 </span><span class="spaces">        </span><span class="nottickedoff">matchTs &lt;- mapM toMono matchSchems</span>
-<span class="lineno">  721 </span><span class="spaces">        </span><span class="nottickedoff">matchTs' &lt;- mapM translateType matchTs</span>
-<span class="lineno">  722 </span><span class="spaces">        </span><span class="nottickedoff">(mslen, result) &lt;- translateMatches (tTuple matchTs') (Cry.ETuple (map Cry.EVar matchNms)) inner_matches</span>
-<span class="lineno">  723 </span><span class="spaces">        </span><span class="nottickedoff">case mslen of</span>
-<span class="lineno">  724 </span><span class="spaces">          </span><span class="nottickedoff">Nothing -&gt; throwError $ UnsupportedMatchShape matches</span>
-<span class="lineno">  725 </span><span class="spaces">          </span><span class="nottickedoff">Just slen -&gt; return (zip matchNms matchSchems, ((slen, (tTuple matchTs')), result))</span>
-<span class="lineno">  726 </span><span class="spaces">    </span><span class="nottickedoff">(match_names, match_bodies) &lt;- unzip &lt;$&gt; (mapM go matches)</span>
-<span class="lineno">  727 </span><span class="spaces">    </span><span class="nottickedoff">let ((len_final, elem_final), body) = seqZipMany match_bodies</span>
-<span class="lineno">  728 </span><span class="spaces">    </span><span class="nottickedoff">withBindings (concat match_names) $ do</span>
-<span class="lineno">  729 </span><span class="spaces">      </span><span class="nottickedoff">e' &lt;- translateExpr e</span>
-<span class="lineno">  730 </span><span class="spaces">      </span><span class="nottickedoff">nms' &lt;- forM match_names $ \nms -&gt; forM nms $ \(nm,schem) -&gt; do</span>
-<span class="lineno">  731 </span><span class="spaces">        </span><span class="nottickedoff">nm' &lt;- translateName nm</span>
-<span class="lineno">  732 </span><span class="spaces">        </span><span class="nottickedoff">nmT &lt;- toMono schem &gt;&gt;= translateType</span>
-<span class="lineno">  733 </span><span class="spaces">        </span><span class="nottickedoff">return (nm',nmT)</span>
-<span class="lineno">  734 </span><span class="spaces">      </span><span class="nottickedoff">return $ seqCompr1' len_final elem_final elemT' (tupleAbs nms' e') body</span>
-<span class="lineno">  735 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  736 </span><span class="spaces">  </span><span class="nottickedoff">Cry.EVar nm  -&gt; nameToVar =&lt;&lt; translateName nm</span>
-<span class="lineno">  737 </span><span class="spaces">  </span><span class="nottickedoff">Cry.ETAbs{} -&gt; throwError $ UnsupportedEntity $ &quot;Cry.ETAbs&quot;</span>
-<span class="lineno">  738 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  739 </span><span class="spaces">  </span><span class="nottickedoff">et@Cry.ETApp{} -&gt; do</span>
-<span class="lineno">  740 </span><span class="spaces">    </span><span class="nottickedoff">let (e,ts) = collectTApps et</span>
-<span class="lineno">  741 </span><span class="spaces">    </span><span class="nottickedoff">case unNumber e ts of</span>
-<span class="lineno">  742 </span><span class="spaces">      </span><span class="nottickedoff">Just (i,t) -&gt; do</span>
-<span class="lineno">  743 </span><span class="spaces">        </span><span class="nottickedoff">t' &lt;- translateType t</span>
-<span class="lineno">  744 </span><span class="spaces">        </span><span class="nottickedoff">return $ constrain (Expr.IntLitCtr i (isHexType t)) t'</span>
-<span class="lineno">  745 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt; do</span>
-<span class="lineno">  746 </span><span class="spaces">        </span><span class="nottickedoff">ts' &lt;- mapM translateType ts</span>
-<span class="lineno">  747 </span><span class="spaces">        </span><span class="nottickedoff">e' &lt;- translateExpr e</span>
-<span class="lineno">  748 </span><span class="spaces">        </span><span class="nottickedoff">let ret = tApp e' ts'</span>
-<span class="lineno">  749 </span><span class="spaces">        </span><span class="nottickedoff">case e of </span>
-<span class="lineno">  750 </span><span class="spaces">          </span><span class="nottickedoff">Cry.EVar nm | Just{} &lt;- Cry.nameFixity nm -&gt;</span>
-<span class="lineno">  751 </span><span class="spaces">            </span><span class="nottickedoff">return $ unOp ret</span>
-<span class="lineno">  752 </span><span class="spaces">          </span><span class="nottickedoff">_ -&gt; return ret</span>
-<span class="lineno">  753 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  754 </span><span class="spaces">  </span><span class="nottickedoff">Cry.EApp (Cry.EApp e1 e2) e3 |</span>
-<span class="lineno">  755 </span><span class="spaces">    </span><span class="nottickedoff">(Cry.EVar nm,ts) &lt;- collectTApps e1,</span>
-<span class="lineno">  756 </span><span class="spaces">    </span><span class="nottickedoff">isBinOp nm</span>
-<span class="lineno">  757 </span><span class="spaces">    </span><span class="nottickedoff">-&gt; do</span>
-<span class="lineno">  758 </span><span class="spaces">    </span><span class="nottickedoff">nm' &lt;- translateName nm</span>
-<span class="lineno">  759 </span><span class="spaces">    </span><span class="nottickedoff">ts' &lt;- mapM translateType ts</span>
-<span class="lineno">  760 </span><span class="spaces">    </span><span class="nottickedoff">let e1' = tApp (Expr.Var nm') ts'</span>
-<span class="lineno">  761 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  762 </span><span class="spaces">    </span><span class="nottickedoff">e2' &lt;- translateExpr e2</span>
-<span class="lineno">  763 </span><span class="spaces">    </span><span class="nottickedoff">e3' &lt;- translateExpr e3</span>
-<span class="lineno">  764 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  765 </span><span class="spaces">    </span><span class="nottickedoff">return $ Expr.BinOp e2' e1' e3'</span>
-<span class="lineno">  766 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  767 </span><span class="spaces">  </span><span class="nottickedoff">e@(Cry.EApp{}) -&gt; do</span>
-<span class="lineno">  768 </span><span class="spaces">    </span><span class="nottickedoff">let (e1, args) = stripApp e</span>
-<span class="lineno">  769 </span><span class="spaces">    </span><span class="nottickedoff">e1' &lt;- translateExpr e1</span>
-<span class="lineno">  770 </span><span class="spaces">    </span><span class="nottickedoff">args' &lt;- mapM translateExpr args</span>
-<span class="lineno">  771 </span><span class="spaces">    </span><span class="nottickedoff">case e1' of</span>
-<span class="lineno">  772 </span><span class="spaces">      </span><span class="nottickedoff">{- adds an empty type argument for user-made definitions with</span>
-<span class="lineno">  773 </span><span class="spaces">         </span><span class="nottickedoff">arguments in order to invoke the implicit argument coercion</span>
-<span class="lineno">  774 </span><span class="spaces">         </span><span class="nottickedoff">parser -}</span>
-<span class="lineno">  775 </span><span class="spaces">      </span><span class="nottickedoff">Expr.Var nm </span>
-<span class="lineno">  776 </span><span class="spaces">        </span><span class="nottickedoff">| not (isBuiltinName nm)</span>
-<span class="lineno">  777 </span><span class="spaces">        </span><span class="nottickedoff">, not (null args) -&gt; </span>
-<span class="lineno">  778 </span><span class="spaces">          </span><span class="nottickedoff">return $ appExpr (Expr.TApp e1' []) args'</span>
-<span class="lineno">  779 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt; return $ appExpr e1' args'</span>
-<span class="lineno">  780 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  781 </span><span class="spaces">  </span><span class="nottickedoff">e@(Cry.EAbs{}) -&gt; do</span>
-<span class="lineno">  782 </span><span class="spaces">    </span><span class="nottickedoff">(binds,body) &lt;- translateAbs e</span>
-<span class="lineno">  783 </span><span class="spaces">    </span><span class="nottickedoff">return $ absExpr binds body</span>
-<span class="lineno">  784 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">  785 </span><span class="spaces">  </span><span class="nottickedoff">Cry.ELocated r e -&gt; withPosition r $ translateExpr e</span>
-<span class="lineno">  786 </span><span class="spaces">  </span><span class="nottickedoff">-- do we need proofs?</span>
-<span class="lineno">  787 </span><span class="spaces">  </span><span class="nottickedoff">Cry.EProofAbs _ e -&gt; translateExpr e</span>
-<span class="lineno">  788 </span><span class="spaces">  </span><span class="nottickedoff">Cry.EProofApp e -&gt; translateExpr e</span>
-<span class="lineno">  789 </span><span class="spaces">  </span><span class="nottickedoff">Cry.EWhere body grps -&gt; withDeclGroups grps $ do</span>
-<span class="lineno">  790 </span><span class="spaces">    </span><span class="nottickedoff">let f grp = case grp of</span>
-<span class="lineno">  791 </span><span class="spaces">          </span><span class="nottickedoff">-- a let-binding inside a recursive block is deemed recursive</span>
-<span class="lineno">  792 </span><span class="spaces">          </span><span class="nottickedoff">-- regardless if it actually has mutually recursive bindings</span>
-<span class="lineno">  793 </span><span class="spaces">          </span><span class="nottickedoff">-- in general this can be detected by examining the bindings themselves,</span>
-<span class="lineno">  794 </span><span class="spaces">          </span><span class="nottickedoff">-- but this handles the common case where only one binding exists</span>
-<span class="lineno">  795 </span><span class="spaces">          </span><span class="nottickedoff">Cry.Recursive [d] -&gt; (:[]) &lt;$&gt; translateDecl' d</span>
-<span class="lineno">  796 </span><span class="spaces">          </span><span class="nottickedoff">Cry.Recursive ds | IsaOpts.keepGoing -&gt; do</span>
-<span class="lineno">  797 </span><span class="spaces">            </span><span class="nottickedoff">undef &lt;- mkUndefined (UnsupportedRecursion ds)</span>
-<span class="lineno">  798 </span><span class="spaces">            </span><span class="nottickedoff">forM ds $ \d -&gt; withDeclBinding d $ \b _ -&gt;</span>
-<span class="lineno">  799 </span><span class="spaces">              </span><span class="nottickedoff">return (b, undef (Binding.bindType b))</span>
-<span class="lineno">  800 </span><span class="spaces">          </span><span class="nottickedoff">Cry.Recursive ds -&gt; do</span>
-<span class="lineno">  801 </span><span class="spaces">            </span><span class="nottickedoff">throwError $ UnsupportedRecursion ds</span>
-<span class="lineno">  802 </span><span class="spaces">          </span><span class="nottickedoff">Cry.NonRecursive d -&gt; (:[]) &lt;$&gt; translateDecl' d</span>
-<span class="lineno">  803 </span><span class="spaces">    </span><span class="nottickedoff">binds &lt;- concat &lt;$&gt; mapM f grps</span>
-<span class="lineno">  804 </span><span class="spaces">    </span><span class="nottickedoff">body' &lt;- translateExpr body</span>
-<span class="lineno">  805 </span><span class="spaces">    </span><span class="nottickedoff">return $ letExpr binds body'</span>
-<span class="lineno">  806 </span><span class="spaces">  </span><span class="nottickedoff">Cry.EPropGuards [g] _ -&gt; translateGuards Nothing [g]</span>
-<span class="lineno">  807 </span><span class="spaces">  </span><span class="nottickedoff">-- if we have multiple branches, we need to coerce each into</span>
-<span class="lineno">  808 </span><span class="spaces">  </span><span class="nottickedoff">-- the target type, in case the branches disagree on the Isabelle type</span>
-<span class="lineno">  809 </span><span class="spaces">  </span><span class="nottickedoff">Cry.EPropGuards gs t -&gt; do</span>
-<span class="lineno">  810 </span><span class="spaces">    </span><span class="nottickedoff">t' &lt;- translateType t</span>
-<span class="lineno">  811 </span><span class="spaces">    </span><span class="nottickedoff">translateGuards (Just t') gs</span></span>
-<span class="lineno">  812 </span>
-<span class="lineno">  813 </span>maybeCoerce :: Maybe Type -&gt; Expr -&gt; Expr
-<span class="lineno">  814 </span><span class="decl"><span class="nottickedoff">maybeCoerce Nothing e = e</span>
-<span class="lineno">  815 </span><span class="spaces"></span><span class="nottickedoff">maybeCoerce (Just t) e = coerceToExpr e t</span></span>
-<span class="lineno">  816 </span>
-<span class="lineno">  817 </span>translateGuards :: Maybe Type -&gt; [([Cry.Type], Cry.Expr)] -&gt; IsaM (Expr)
-<span class="lineno">  818 </span><span class="decl"><span class="nottickedoff">translateGuards outerT [(ts,e)] = do</span>
-<span class="lineno">  819 </span><span class="spaces">  </span><span class="nottickedoff">e' &lt;- translateExpr e</span>
-<span class="lineno">  820 </span><span class="spaces">  </span><span class="nottickedoff">ts' &lt;- mapM translateType ts</span>
-<span class="lineno">  821 </span><span class="spaces">  </span><span class="nottickedoff">return $ eAssuming ts' (maybeCoerce outerT e')</span>
-<span class="lineno">  822 </span><span class="spaces"></span><span class="nottickedoff">translateGuards outerT ((ts,e):gs) = do</span>
-<span class="lineno">  823 </span><span class="spaces">  </span><span class="nottickedoff">gs' &lt;- translateGuards outerT gs</span>
-<span class="lineno">  824 </span><span class="spaces">  </span><span class="nottickedoff">e' &lt;- translateExpr e</span>
-<span class="lineno">  825 </span><span class="spaces">  </span><span class="nottickedoff">ts' &lt;- mapM translateType ts</span>
-<span class="lineno">  826 </span><span class="spaces">  </span><span class="nottickedoff">return $ ifExpr (eHolds ts') (maybeCoerce outerT e') gs'</span>
-<span class="lineno">  827 </span><span class="spaces"></span><span class="nottickedoff">translateGuards _ [] = throwError $ UnsupportedEntity $ &quot;Expr.EPropGuards: empty&quot;</span></span>
-<span class="lineno">  828 </span>
+<span class="lineno">  696 </span><span class="spaces">                </span><span class="nottickedoff">let typats = map (\_ -&gt; dummy) (Cry.ntParams nt)</span>
+<span class="lineno">  697 </span><span class="spaces">                </span><span class="nottickedoff">vars' &lt;- mapM (\(n,_) -&gt; translateName n &gt;&gt;= nameToVar) vars</span>
+<span class="lineno">  698 </span><span class="spaces">                </span><span class="nottickedoff">body' &lt;- translateExpr body</span>
+<span class="lineno">  699 </span><span class="spaces">                </span><span class="nottickedoff">return $ (appExpr ctr' (typats ++ vars'), body')</span>
+<span class="lineno">  700 </span><span class="spaces">            </span><span class="nottickedoff">Nothing -&gt; fail $ &quot;Missing constructor for name: &quot; ++ show nm</span>
+<span class="lineno">  701 </span><span class="spaces">          </span><span class="nottickedoff">case dflt of</span>
+<span class="lineno">  702 </span><span class="spaces">            </span><span class="nottickedoff">Nothing -&gt; return $ Expr.Case e' cs'</span>
+<span class="lineno">  703 </span><span class="spaces">            </span><span class="nottickedoff">Just (Cry.CaseAlt vars body) -&gt; case vars of</span>
+<span class="lineno">  704 </span><span class="spaces">              </span><span class="nottickedoff">[(v,_)] | Just{} &lt;- T.stripPrefix &quot;__&quot; $ Cry.identText $ Cry.nameIdent v -&gt; do</span>
+<span class="lineno">  705 </span><span class="spaces">                </span><span class="nottickedoff">body' &lt;- translateExpr body</span>
+<span class="lineno">  706 </span><span class="spaces">                </span><span class="nottickedoff">return $ Expr.Case e' (cs' ++ [(dummy, body')])</span>
+<span class="lineno">  707 </span><span class="spaces">              </span><span class="nottickedoff">_ -&gt; fail $ &quot;Unexpected default case&quot; ++ show (length vars)</span>
+<span class="lineno">  708 </span><span class="spaces">        </span><span class="nottickedoff">_ -&gt; fail &quot;Unexpected case expression&quot;</span>
+<span class="lineno">  709 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt; fail &quot;Unexpected type for case expression&quot;</span>
+<span class="lineno">  710 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  711 </span><span class="spaces">  </span><span class="nottickedoff">(Cry.EComp _lenT elemT e [inner_matches]) -&gt; do</span>
+<span class="lineno">  712 </span><span class="spaces">    </span><span class="nottickedoff">elemT' &lt;- translateType elemT</span>
+<span class="lineno">  713 </span><span class="spaces">    </span><span class="nottickedoff">(_, result) &lt;- translateMatches elemT' e inner_matches</span>
+<span class="lineno">  714 </span><span class="spaces">    </span><span class="nottickedoff">return result</span>
+<span class="lineno">  715 </span><span class="spaces">  </span><span class="nottickedoff">(Cry.EComp _lenT elemT e matches) -&gt; do</span>
+<span class="lineno">  716 </span><span class="spaces">    </span><span class="nottickedoff">elemT' &lt;- translateType elemT</span>
+<span class="lineno">  717 </span><span class="spaces">    </span><span class="nottickedoff">let </span>
+<span class="lineno">  718 </span><span class="spaces">      </span><span class="nottickedoff">go :: [Cry.Match] -&gt; IsaM ([(Cry.Name, Cry.Schema)], ((Type,Type), Expr))</span>
+<span class="lineno">  719 </span><span class="spaces">      </span><span class="nottickedoff">go inner_matches = do</span>
+<span class="lineno">  720 </span><span class="spaces">        </span><span class="nottickedoff">let (matchSchems, matchNms) = unzip $ matchToTuple inner_matches</span>
+<span class="lineno">  721 </span><span class="spaces">        </span><span class="nottickedoff">matchTs &lt;- mapM toMono matchSchems</span>
+<span class="lineno">  722 </span><span class="spaces">        </span><span class="nottickedoff">matchTs' &lt;- mapM translateType matchTs</span>
+<span class="lineno">  723 </span><span class="spaces">        </span><span class="nottickedoff">(mslen, result) &lt;- translateMatches (tTuple matchTs') (Cry.ETuple (map Cry.EVar matchNms)) inner_matches</span>
+<span class="lineno">  724 </span><span class="spaces">        </span><span class="nottickedoff">case mslen of</span>
+<span class="lineno">  725 </span><span class="spaces">          </span><span class="nottickedoff">Nothing -&gt; throwError $ UnsupportedMatchShape matches</span>
+<span class="lineno">  726 </span><span class="spaces">          </span><span class="nottickedoff">Just slen -&gt; return (zip matchNms matchSchems, ((slen, (tTuple matchTs')), result))</span>
+<span class="lineno">  727 </span><span class="spaces">    </span><span class="nottickedoff">(match_names, match_bodies) &lt;- unzip &lt;$&gt; (mapM go matches)</span>
+<span class="lineno">  728 </span><span class="spaces">    </span><span class="nottickedoff">let ((len_final, elem_final), body) = seqZipMany match_bodies</span>
+<span class="lineno">  729 </span><span class="spaces">    </span><span class="nottickedoff">withBindings (concat match_names) $ do</span>
+<span class="lineno">  730 </span><span class="spaces">      </span><span class="nottickedoff">e' &lt;- translateExpr e</span>
+<span class="lineno">  731 </span><span class="spaces">      </span><span class="nottickedoff">nms' &lt;- forM match_names $ \nms -&gt; forM nms $ \(nm,schem) -&gt; do</span>
+<span class="lineno">  732 </span><span class="spaces">        </span><span class="nottickedoff">nm' &lt;- translateName nm</span>
+<span class="lineno">  733 </span><span class="spaces">        </span><span class="nottickedoff">nmT &lt;- toMono schem &gt;&gt;= translateType</span>
+<span class="lineno">  734 </span><span class="spaces">        </span><span class="nottickedoff">return (nm',nmT)</span>
+<span class="lineno">  735 </span><span class="spaces">      </span><span class="nottickedoff">return $ seqCompr1' len_final elem_final elemT' (tupleAbs nms' e') body</span>
+<span class="lineno">  736 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  737 </span><span class="spaces">  </span><span class="nottickedoff">Cry.EVar nm  -&gt; nameToVar =&lt;&lt; translateName nm</span>
+<span class="lineno">  738 </span><span class="spaces">  </span><span class="nottickedoff">Cry.ETAbs{} -&gt; throwError $ UnsupportedEntity $ &quot;Cry.ETAbs&quot;</span>
+<span class="lineno">  739 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  740 </span><span class="spaces">  </span><span class="nottickedoff">et@Cry.ETApp{} -&gt; do</span>
+<span class="lineno">  741 </span><span class="spaces">    </span><span class="nottickedoff">let (e,ts) = collectTApps et</span>
+<span class="lineno">  742 </span><span class="spaces">    </span><span class="nottickedoff">case unNumber e ts of</span>
+<span class="lineno">  743 </span><span class="spaces">      </span><span class="nottickedoff">Just (i,t) -&gt; do</span>
+<span class="lineno">  744 </span><span class="spaces">        </span><span class="nottickedoff">t' &lt;- translateType t</span>
+<span class="lineno">  745 </span><span class="spaces">        </span><span class="nottickedoff">return $ constrain (Expr.IntLitCtr i (isHexType t)) t'</span>
+<span class="lineno">  746 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt; do</span>
+<span class="lineno">  747 </span><span class="spaces">        </span><span class="nottickedoff">ts' &lt;- mapM translateType ts</span>
+<span class="lineno">  748 </span><span class="spaces">        </span><span class="nottickedoff">e' &lt;- translateExpr e</span>
+<span class="lineno">  749 </span><span class="spaces">        </span><span class="nottickedoff">let ret = tApp e' ts'</span>
+<span class="lineno">  750 </span><span class="spaces">        </span><span class="nottickedoff">case e of </span>
+<span class="lineno">  751 </span><span class="spaces">          </span><span class="nottickedoff">Cry.EVar nm | Just{} &lt;- Cry.nameFixity nm -&gt;</span>
+<span class="lineno">  752 </span><span class="spaces">            </span><span class="nottickedoff">return $ unOp ret</span>
+<span class="lineno">  753 </span><span class="spaces">          </span><span class="nottickedoff">_ -&gt; return ret</span>
+<span class="lineno">  754 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  755 </span><span class="spaces">  </span><span class="nottickedoff">Cry.EApp (Cry.EApp e1 e2) e3 |</span>
+<span class="lineno">  756 </span><span class="spaces">    </span><span class="nottickedoff">(Cry.EVar nm,ts) &lt;- collectTApps e1,</span>
+<span class="lineno">  757 </span><span class="spaces">    </span><span class="nottickedoff">isBinOp nm</span>
+<span class="lineno">  758 </span><span class="spaces">    </span><span class="nottickedoff">-&gt; do</span>
+<span class="lineno">  759 </span><span class="spaces">    </span><span class="nottickedoff">nm' &lt;- translateName nm</span>
+<span class="lineno">  760 </span><span class="spaces">    </span><span class="nottickedoff">ts' &lt;- mapM translateType ts</span>
+<span class="lineno">  761 </span><span class="spaces">    </span><span class="nottickedoff">let e1' = tApp (Expr.Var nm') ts'</span>
+<span class="lineno">  762 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  763 </span><span class="spaces">    </span><span class="nottickedoff">e2' &lt;- translateExpr e2</span>
+<span class="lineno">  764 </span><span class="spaces">    </span><span class="nottickedoff">e3' &lt;- translateExpr e3</span>
+<span class="lineno">  765 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  766 </span><span class="spaces">    </span><span class="nottickedoff">return $ Expr.BinOp e2' e1' e3'</span>
+<span class="lineno">  767 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  768 </span><span class="spaces">  </span><span class="nottickedoff">e@(Cry.EApp{}) -&gt; do</span>
+<span class="lineno">  769 </span><span class="spaces">    </span><span class="nottickedoff">let (e1, args) = stripApp e</span>
+<span class="lineno">  770 </span><span class="spaces">    </span><span class="nottickedoff">e1' &lt;- translateExpr e1</span>
+<span class="lineno">  771 </span><span class="spaces">    </span><span class="nottickedoff">args' &lt;- mapM translateExpr args</span>
+<span class="lineno">  772 </span><span class="spaces">    </span><span class="nottickedoff">case e1' of</span>
+<span class="lineno">  773 </span><span class="spaces">      </span><span class="nottickedoff">{- adds an empty type argument for user-made definitions with</span>
+<span class="lineno">  774 </span><span class="spaces">         </span><span class="nottickedoff">arguments in order to invoke the implicit argument coercion</span>
+<span class="lineno">  775 </span><span class="spaces">         </span><span class="nottickedoff">parser -}</span>
+<span class="lineno">  776 </span><span class="spaces">      </span><span class="nottickedoff">Expr.Var nm </span>
+<span class="lineno">  777 </span><span class="spaces">        </span><span class="nottickedoff">| not (isBuiltinName nm)</span>
+<span class="lineno">  778 </span><span class="spaces">        </span><span class="nottickedoff">, not (null args) -&gt; </span>
+<span class="lineno">  779 </span><span class="spaces">          </span><span class="nottickedoff">return $ appExpr (Expr.TApp e1' []) args'</span>
+<span class="lineno">  780 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt; return $ appExpr e1' args'</span>
+<span class="lineno">  781 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  782 </span><span class="spaces">  </span><span class="nottickedoff">e@(Cry.EAbs{}) -&gt; do</span>
+<span class="lineno">  783 </span><span class="spaces">    </span><span class="nottickedoff">(binds,body) &lt;- translateAbs e</span>
+<span class="lineno">  784 </span><span class="spaces">    </span><span class="nottickedoff">return $ absExpr binds body</span>
+<span class="lineno">  785 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">  786 </span><span class="spaces">  </span><span class="nottickedoff">Cry.ELocated r e -&gt; withPosition r $ translateExpr e</span>
+<span class="lineno">  787 </span><span class="spaces">  </span><span class="nottickedoff">-- do we need proofs?</span>
+<span class="lineno">  788 </span><span class="spaces">  </span><span class="nottickedoff">Cry.EProofAbs _ e -&gt; translateExpr e</span>
+<span class="lineno">  789 </span><span class="spaces">  </span><span class="nottickedoff">Cry.EProofApp e -&gt; translateExpr e</span>
+<span class="lineno">  790 </span><span class="spaces">  </span><span class="nottickedoff">Cry.EWhere body grps -&gt; withDeclGroups grps $ do</span>
+<span class="lineno">  791 </span><span class="spaces">    </span><span class="nottickedoff">let f grp = case grp of</span>
+<span class="lineno">  792 </span><span class="spaces">          </span><span class="nottickedoff">-- a let-binding inside a recursive block is deemed recursive</span>
+<span class="lineno">  793 </span><span class="spaces">          </span><span class="nottickedoff">-- regardless if it actually has mutually recursive bindings</span>
+<span class="lineno">  794 </span><span class="spaces">          </span><span class="nottickedoff">-- in general this can be detected by examining the bindings themselves,</span>
+<span class="lineno">  795 </span><span class="spaces">          </span><span class="nottickedoff">-- but this handles the common case where only one binding exists</span>
+<span class="lineno">  796 </span><span class="spaces">          </span><span class="nottickedoff">Cry.Recursive [d] -&gt; (:[]) &lt;$&gt; translateDecl' d</span>
+<span class="lineno">  797 </span><span class="spaces">          </span><span class="nottickedoff">Cry.Recursive ds | IsaOpts.keepGoing -&gt; do</span>
+<span class="lineno">  798 </span><span class="spaces">            </span><span class="nottickedoff">undef &lt;- mkUndefined (UnsupportedRecursion ds)</span>
+<span class="lineno">  799 </span><span class="spaces">            </span><span class="nottickedoff">forM ds $ \d -&gt; withDeclBinding d $ \b _ -&gt;</span>
+<span class="lineno">  800 </span><span class="spaces">              </span><span class="nottickedoff">return (b, undef (Binding.bindType b))</span>
+<span class="lineno">  801 </span><span class="spaces">          </span><span class="nottickedoff">Cry.Recursive ds -&gt; do</span>
+<span class="lineno">  802 </span><span class="spaces">            </span><span class="nottickedoff">throwError $ UnsupportedRecursion ds</span>
+<span class="lineno">  803 </span><span class="spaces">          </span><span class="nottickedoff">Cry.NonRecursive d -&gt; (:[]) &lt;$&gt; translateDecl' d</span>
+<span class="lineno">  804 </span><span class="spaces">    </span><span class="nottickedoff">binds &lt;- concat &lt;$&gt; mapM f grps</span>
+<span class="lineno">  805 </span><span class="spaces">    </span><span class="nottickedoff">body' &lt;- translateExpr body</span>
+<span class="lineno">  806 </span><span class="spaces">    </span><span class="nottickedoff">return $ letExpr binds body'</span>
+<span class="lineno">  807 </span><span class="spaces">  </span><span class="nottickedoff">Cry.EPropGuards [g] _ -&gt; translateGuards Nothing [g]</span>
+<span class="lineno">  808 </span><span class="spaces">  </span><span class="nottickedoff">-- if we have multiple branches, we need to coerce each into</span>
+<span class="lineno">  809 </span><span class="spaces">  </span><span class="nottickedoff">-- the target type, in case the branches disagree on the Isabelle type</span>
+<span class="lineno">  810 </span><span class="spaces">  </span><span class="nottickedoff">Cry.EPropGuards gs t -&gt; do</span>
+<span class="lineno">  811 </span><span class="spaces">    </span><span class="nottickedoff">t' &lt;- translateType t</span>
+<span class="lineno">  812 </span><span class="spaces">    </span><span class="nottickedoff">translateGuards (Just t') gs</span></span>
+<span class="lineno">  813 </span>
+<span class="lineno">  814 </span>maybeCoerce :: Maybe Type -&gt; Expr -&gt; Expr
+<span class="lineno">  815 </span><span class="decl"><span class="nottickedoff">maybeCoerce Nothing e = e</span>
+<span class="lineno">  816 </span><span class="spaces"></span><span class="nottickedoff">maybeCoerce (Just t) e = coerceToExpr e t</span></span>
+<span class="lineno">  817 </span>
+<span class="lineno">  818 </span>translateGuards :: Maybe Type -&gt; [([Cry.Type], Cry.Expr)] -&gt; IsaM (Expr)
+<span class="lineno">  819 </span><span class="decl"><span class="nottickedoff">translateGuards outerT [(ts,e)] = do</span>
+<span class="lineno">  820 </span><span class="spaces">  </span><span class="nottickedoff">e' &lt;- translateExpr e</span>
+<span class="lineno">  821 </span><span class="spaces">  </span><span class="nottickedoff">ts' &lt;- mapM translateType ts</span>
+<span class="lineno">  822 </span><span class="spaces">  </span><span class="nottickedoff">return $ eAssuming ts' (maybeCoerce outerT e')</span>
+<span class="lineno">  823 </span><span class="spaces"></span><span class="nottickedoff">translateGuards outerT ((ts,e):gs) = do</span>
+<span class="lineno">  824 </span><span class="spaces">  </span><span class="nottickedoff">gs' &lt;- translateGuards outerT gs</span>
+<span class="lineno">  825 </span><span class="spaces">  </span><span class="nottickedoff">e' &lt;- translateExpr e</span>
+<span class="lineno">  826 </span><span class="spaces">  </span><span class="nottickedoff">ts' &lt;- mapM translateType ts</span>
+<span class="lineno">  827 </span><span class="spaces">  </span><span class="nottickedoff">return $ ifExpr (eHolds ts') (maybeCoerce outerT e') gs'</span>
+<span class="lineno">  828 </span><span class="spaces"></span><span class="nottickedoff">translateGuards _ [] = throwError $ UnsupportedEntity $ &quot;Expr.EPropGuards: empty&quot;</span></span>
 <span class="lineno">  829 </span>
 <span class="lineno">  830 </span>
 <span class="lineno">  831 </span>
 <span class="lineno">  832 </span>
 <span class="lineno">  833 </span>
+<span class="lineno">  834 </span>
 
 </pre>
 </body>
