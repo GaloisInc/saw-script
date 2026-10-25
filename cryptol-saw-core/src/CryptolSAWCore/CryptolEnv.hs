@@ -654,7 +654,7 @@ namesOfLoadedModule lm vis =
                           -- FIXME:
                           --   Q. is this always true: ?
                           --     nmsPublic `subset` nmsTopLevels
-                          --   If so, could simplify this to `nmsPublic`
+                          --   If so, could simplify the above to `nmsPublic`
 
   where
     -- names in scope at Top level of module
