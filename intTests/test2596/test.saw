@@ -7,6 +7,8 @@ m <- mir_load_module "test.linked-mir.json";
 // parts of the JSQN for inspection:
 //      jq '.tys.[] | select(.ty.kind == "Adt" or .ty.kind == "Const")' \
 //          <test2596/test.linked-mir.json
+//
+// Be sure to update `saw-python/tests/saw/test_mir_find_mangled_adt.py` also.
 let words4_adt = mir_find_mangled_adt m "test::Words::_adta8a889bbf5c77e2e";
 let words7_adt = mir_find_mangled_adt m "test::Words::_adt10e17d75078c9c64";
 
