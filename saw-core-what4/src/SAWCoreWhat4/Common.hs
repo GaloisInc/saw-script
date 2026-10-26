@@ -32,7 +32,6 @@ module SAWCoreWhat4.Common
 import Data.IORef
 import Data.Kind (Type)
 import Data.Map (Map)
-import qualified Data.Text as Text
 import Numeric.Natural (Natural)
 
 -- saw-core
@@ -62,6 +61,7 @@ import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.Some
 
 -- saw-core-what4
+import SAWCoreWhat4.Panic
 import SAWCoreWhat4.FirstOrder
 
 ---------------------------------------------------------------------
@@ -184,8 +184,8 @@ termOfValue sc ty val =
                        scConstApply sc (ctorName ctor) (ps' ++ vv')
                   _ -> do
                     nm' <- ppName sc nm
-                    fail $ "termOfValue: not a data type: " ++ Text.unpack nm'
+                    panic "termOfValue" ["Not a data type: " <> nm']
            Nothing -> do
              let qn' = QN.ppQualName qn
-             fail $ "termOfValue: data type not found: " ++ Text.unpack qn'
+             panic "termOfValue" ["Data type not found: " <> qn']
     _ -> termOfSValue sc val
