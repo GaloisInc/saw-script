@@ -528,8 +528,6 @@ writeRocqCryptolModule inputFile outputFile notations skips = io $ do
   ()  <- scLoadCryptolModule sc
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
   cm <- loadCryptolModule sc inputFile
-               -- NOTE: implementation of loadCryptolModule, now uses this default:
-               --   defaultPrimitiveOptions = ImportPrimitiveOptions{allowUnknownPrimitives=True}
   mm <- scGetModuleMap sc
   let ?mm = mm
   let cryptolPreludeDecls =
