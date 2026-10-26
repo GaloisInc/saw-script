@@ -1,5 +1,7 @@
 end
 
+qualifier "$6"
+
 locale $1 =
   assumes $2
 begin
@@ -10,5 +12,7 @@ end
 $4
 
 $5
+
+end_qualifier "$6"
 
 context includes cryptol_translation_syntax begin

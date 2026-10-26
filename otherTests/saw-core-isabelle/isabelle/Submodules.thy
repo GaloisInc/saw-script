@@ -1,0 +1,144 @@
+theory "Submodules"
+imports "Cryptol.Cryptol" b_w_recordT
+begin
+
+context includes cryptol_translation_syntax begin
+qualifier Sub.SubSub
+
+context notes [[typedef_overloaded]] begin
+datatype ('a,'b) MyEnum = MyNone "('a) tyarg" "('b) tyarg" | MySome "('a) tyarg" "('b) tyarg" "'a" | MyCtr2 "('a) tyarg" "('b) tyarg" "Integer" "['b]" "'a" "Bit"
+end
+end_qualifier "Sub.SubSub."
+
+end
+
+qualifier "Sub.SubSub."
+
+instantiation Sub.SubSub.MyEnum :: (strip_type,_) strip_type begin
+definition "strip_type_MyEnum \<equiv> (\<lambda>(_ :: ('a,'b) Sub.SubSub.MyEnum itself). T [strip_type TYPE('a),Tn LEN('b)] (STR ''Sub.SubSub.MyEnum''))"
+instance ..
+end
+
+context includes cryptol_translation_syntax begin
+lemma MyEnum_same_type[simp]:
+  "same_type TYPE((('a::coercible_atom),'b) Sub.SubSub.MyEnum) TYPE((('a1::coercible_atom),'b1) Sub.SubSub.MyEnum) = ((same_type TYPE('a) TYPE('a1)) \<and> (LEN('b) = LEN('b1)))"
+  by (simp add: same_type_def Sub.SubSub.strip_type_MyEnum_def strip_type_seq_def)
+end
+
+instantiation Sub.SubSub.MyEnum :: (coercible_atom,_) coercible
+begin
+definition strip_MyEnum :: "('a,'b) Sub.SubSub.MyEnum => stripped" where
+  "strip_MyEnum \<equiv> Sub.SubSub.case_MyEnum ((curry)(curry strip (0::nat))) ((curry o curry)(curry strip (1::nat))) ((curry o curry o curry o curry o curry)(curry strip (2::nat)))"
+
+definition unstrip_MyEnum :: "stripped => ('a,'b) Sub.SubSub.MyEnum" where
+  "unstrip_MyEnum \<equiv> (\<lambda> r. let (a :: nat, b :: stripped) = unstrip r in
+     (case a of 0 \<Rightarrow> (uncurry) Sub.SubSub.MyNone o unstrip | Suc (0) \<Rightarrow> (uncurry o uncurry) Sub.SubSub.MySome o unstrip | Suc (Suc (0)) \<Rightarrow> (uncurry o uncurry o uncurry o uncurry o uncurry) Sub.SubSub.MyCtr2 o unstrip) b)"
+
+instance
+  apply standard
+  apply (simp add: strip_MyEnum_def unstrip_MyEnum_def)
+  by (auto split: Sub.SubSub.MyEnum.splits)
+end
+
+instance Sub.SubSub.MyEnum :: (coercible_atom,_) coercible_atom
+  apply standard
+  by (auto simp add: Sub.SubSub.strip_MyEnum_def split: Sub.SubSub.MyEnum.splits)
+
+interpretation Sub.SubSub.MyEnum: coercion "Sub.SubSub.case_MyEnum (\<lambda>_ _. (Sub.SubSub.MyNone tyargCtr tyargCtr)) (\<lambda>_ _. (Sub.SubSub.MySome tyargCtr tyargCtr) o coerce) (\<lambda>_ _. (curry o curry o curry) ((uncurry o uncurry o uncurry) (Sub.SubSub.MyCtr2 tyargCtr tyargCtr) o coerce))"
+  apply standard
+  supply [simp] = Sub.SubSub.unstrip_MyEnum_def Sub.SubSub.strip_MyEnum_def coerce_to_def
+  by (auto split: Sub.SubSub.MyEnum.splits)
+
+instantiation Sub.SubSub.MyEnum :: (_,_) not_bool begin
+definition "is_bool0_MyEnum (_ :: ('a,'b) Sub.SubSub.MyEnum itself) \<equiv> False"
+instance by (rule not_bool_class[OF is_bool0_MyEnum_def])
+end
+interpretation not_bool_code "TYPE(('a,'b) Sub.SubSub.MyEnum)" .
+
+end_qualifier "Sub.SubSub."
+
+context includes cryptol_translation_syntax begin
+
+qualifier "Sub.SubSub."
+end_qualifier Sub.SubSub
+
+qualifier Sub.SubSub
+type_synonym ('n) R = "\<lparr>b_w_recordT.b :: Bit,b_w_recordT.w :: ['n]\<rparr>"
+end_qualifier Sub.SubSub
+
+qualifier Sub
+(* Recursive call stub (to be overridden)*)
+cryptol_definition fib_impl :: "Integer \<Rightarrow> Integer"
+end_qualifier Sub
+
+qualifier Sub
+(* Recursive call schema*)
+cryptol_definition fib_spec :: "Integer \<Rightarrow> Integer" where
+"fib_spec i \<equiv> if i <=`{Integer} (0 :: Integer) then (0 :: Integer) else coerce (if i ==`{Integer} (1 :: Integer) then i else coerce ((Sub.fib_impl`{} (i -`{Integer} (1 :: Integer))) +`{Integer} (Sub.fib_impl`{} (i -`{Integer} (2 :: Integer)))))"
+end_qualifier Sub
+
+end
+
+qualifier "Sub."
+
+locale fib_rec_spec =
+  assumes "Sub.fib_spec = Sub.fib_impl"
+begin
+
+definition [simplified Sub.fib_impl_def[abs_def],export_global]: 
+  "fib = Sub.fib_impl"
+
+end
+
+alias fib = Sub.fib_rec_spec.fib
+
+hide_fact Sub.fib_rec_spec.fib_def
+
+end_qualifier "Sub."
+
+context includes cryptol_translation_syntax begin
+
+cryptol_definition x :: "[8]" where
+"x  \<equiv> 0x3 :: [8]"
+
+cryptol_definition p0 :: "Bit" where
+"p0  \<equiv> x ==`{[8]} (0x3 :: [8])"
+
+qualifier Sub_SubSub
+cryptol_definition x :: "[64]" where
+"x  \<equiv> 0x6 :: [64]"
+end_qualifier Sub_SubSub
+
+cryptol_definition p1 :: "Bit" where
+"p1  \<equiv> Sub_SubSub.x ==`{[64]} (0x6 :: [64])"
+
+qualifier Sub.SubSub
+cryptol_definition x :: "[32]" where
+"x  \<equiv> 0x5 :: [32]"
+end_qualifier Sub.SubSub
+
+cryptol_definition p2 :: "Bit" where
+"p2  \<equiv> Sub.SubSub.x ==`{[32]} (0x5 :: [32])"
+
+cryptol_definition p3 :: "Integer \<Rightarrow> Bit" where
+"p3 n \<equiv> (n >`{Integer} (1 :: Integer)) \<longrightarrow> ((Sub.fib`{} n) ==`{Integer} ((Sub.fib`{} (n -`{Integer} (1 :: Integer))) +`{Integer} (Sub.fib`{} (n -`{Integer} (2 :: Integer)))))"
+
+cryptol_definition p4 :: "Bit" where
+"p4  \<equiv> complement`{Bit} ((Sub.SubSub.MyNone`{Integer,1}) ==`{(Integer,1) Sub.SubSub.MyEnum} (Sub.SubSub.MySome`{Integer,1} (0 :: Integer)))"
+
+cryptol_definition p5 :: "Bit" where
+"p5  \<equiv> complement`{Bit} ((\<lparr>b_w_recordT.b = True,b_w_recordT.w = (0x0 :: [3])\<rparr>) ==`{(3) Sub.SubSub.R} (\<lparr>b_w_recordT.b = True,b_w_recordT.w = (0x1 :: [3])\<rparr>))"
+
+cryptol_definition p6 :: "{'a,'b} ((Eq 'a,fin 'b) =?> ((('a,'b) Sub.SubSub.MyEnum) \<Rightarrow> Bit))" where
+"p6 z \<equiv> case z of
+    Sub.SubSub.MyCtr2 _ _ i ys a c \<Rightarrow> (z ==`{('a,'b) Sub.SubSub.MyEnum} (Sub.SubSub.MyCtr2`{'a,'b} i ys a c))
+  | Sub.SubSub.MyNone _ _ \<Rightarrow> (z ==`{('a,'b) Sub.SubSub.MyEnum} (Sub.SubSub.MyNone`{'a,'b}))
+  | Sub.SubSub.MySome _ _ i \<Rightarrow> (z ==`{('a,'b) Sub.SubSub.MyEnum} (Sub.SubSub.MySome`{'a,'b} i))"
+
+qualifier Sub
+cryptol_definition x :: "[16]" where
+"x  \<equiv> 0x4 :: [16]"
+end_qualifier Sub
+
+end
+end

@@ -13,9 +13,13 @@ begin
 context includes cryptol_translation_syntax begin
 
 context notes [[typedef_overloaded]] begin
-datatype ('a,'b) MyEnum = MyNone  | MySome "'a" | MyCtr2 "Integer" "['b]" "'a" "Bit"
+datatype ('a,'b) MyEnum = MyNone "('a) tyarg" "('b) tyarg" | MySome "('a) tyarg" "('b) tyarg" "'a" | MyCtr2 "('a) tyarg" "('b) tyarg" "Integer" "['b]" "'a" "Bit"
 end
+end_qualifier ""
+
 end
+
+qualifier ""
 
 instantiation MyEnum :: (strip_type,_) strip_type begin
 definition "strip_type_MyEnum \<equiv> (\<lambda>(_ :: ('a,'b) MyEnum itself). T [strip_type TYPE('a),Tn LEN('b)] (STR ''MyEnum''))"
@@ -31,11 +35,11 @@ end
 instantiation MyEnum :: (coercible_atom,_) coercible
 begin
 definition strip_MyEnum :: "('a,'b) MyEnum => stripped" where
-  "strip_MyEnum \<equiv> case_MyEnum (strip ((0::nat),())) (curry strip (1::nat)) ((curry o curry o curry)(curry strip (2::nat)))"
+  "strip_MyEnum \<equiv> case_MyEnum ((curry)(curry strip (0::nat))) ((curry o curry)(curry strip (1::nat))) ((curry o curry o curry o curry o curry)(curry strip (2::nat)))"
 
 definition unstrip_MyEnum :: "stripped => ('a,'b) MyEnum" where
   "unstrip_MyEnum \<equiv> (\<lambda> r. let (a :: nat, b :: stripped) = unstrip r in
-     (case a of 0 \<Rightarrow> \<lambda> _. MyNone | Suc (0) \<Rightarrow> MySome o unstrip | Suc (Suc (0)) \<Rightarrow> (uncurry o uncurry o uncurry) MyCtr2 o unstrip) b)"
+     (case a of 0 \<Rightarrow> (uncurry) MyNone o unstrip | Suc (0) \<Rightarrow> (uncurry o uncurry) MySome o unstrip | Suc (Suc (0)) \<Rightarrow> (uncurry o uncurry o uncurry o uncurry o uncurry) MyCtr2 o unstrip) b)"
 
 instance
   apply standard
@@ -47,7 +51,7 @@ instance MyEnum :: (coercible_atom,_) coercible_atom
   apply standard
   by (auto simp add: strip_MyEnum_def split: MyEnum.splits)
 
-interpretation MyEnum: coercion "case_MyEnum (MyNone) (MySome o coerce) ((curry o curry o curry) ((uncurry o uncurry o uncurry) MyCtr2 o coerce))"
+interpretation MyEnum: coercion "case_MyEnum (\<lambda>_ _. (MyNone tyargCtr tyargCtr)) (\<lambda>_ _. (MySome tyargCtr tyargCtr) o coerce) (\<lambda>_ _. (curry o curry o curry) ((uncurry o uncurry o uncurry) (MyCtr2 tyargCtr tyargCtr) o coerce))"
   apply standard
   supply [simp] = unstrip_MyEnum_def strip_MyEnum_def coerce_to_def
   by (auto split: MyEnum.splits)
@@ -58,31 +62,41 @@ instance by (rule not_bool_class[OF is_bool0_MyEnum_def])
 end
 interpretation not_bool_code "TYPE(('a,'b) MyEnum)" .
 
+end_qualifier ""
+
 context includes cryptol_translation_syntax begin
+
+qualifier ""
+
+cryptol_definition myEnum_discr :: "Bit" where
+"myEnum_discr  \<equiv> complement`{Bit} ((MyNone`{Integer,1}) ==`{(Integer,1) MyEnum} (MySome`{Integer,1} (0 :: Integer)))"
 
 cryptol_definition myEnum_eq :: "{'a,'b} ((Eq 'a,fin 'b) =?> ((('a,'b) MyEnum) \<Rightarrow> ((('a,'b) MyEnum) \<Rightarrow> Bit)))" where
 "myEnum_eq x y \<equiv> case x of
-    MyCtr2 i b a c \<Rightarrow> (case y of
-      MyCtr2 i1 b1 a1 c1 \<Rightarrow> ((i ==`{Integer} i1) \<and> ((b ==`{['b]} b1) \<and> ((a ==`{'a} a1) \<and> (c ==`{Bit} c1))))
+    MyCtr2 _ _ i b a c \<Rightarrow> (case y of
+      MyCtr2 _ _ i1 b1 a1 c1 \<Rightarrow> ((i ==`{Integer} i1) \<and> ((b ==`{['b]} b1) \<and> ((a ==`{'a} a1) \<and> (c ==`{Bit} c1))))
     | _ \<Rightarrow> (False))
-  | MyNone \<Rightarrow> (case y of
-      MyNone \<Rightarrow> (True)
+  | MyNone _ _ \<Rightarrow> (case y of
+      MyNone _ _ \<Rightarrow> (True)
     | _ \<Rightarrow> (False))
-  | MySome a \<Rightarrow> (case y of
-      MySome a1 \<Rightarrow> (a ==`{'a} a1)
+  | MySome _ _ a \<Rightarrow> (case y of
+      MySome _ _ a1 \<Rightarrow> (a ==`{'a} a1)
     | _ \<Rightarrow> (False))"
 
 cryptol_definition myEnum_eq_valid :: "{'a,'b,'c} ((Eq 'a,fin 'b,'b = 'c) =?> ((('a,'b) MyEnum) \<Rightarrow> ((('a,'c) MyEnum) \<Rightarrow> Bit)))" where
 "myEnum_eq_valid x y \<equiv> (myEnum_eq`{'a,'b} x y) ==`{Bit} (x ==`{('a,'b) MyEnum} y)"
 
+cryptol_definition opt_discr :: "Bit" where
+"opt_discr  \<equiv> complement`{Bit} ((None`{Integer}) ==`{(Integer) Option} (Some`{Integer} (0 :: Integer)))"
+
 cryptol_definition opt_valid :: "{'a,'b} ((fin 'a,'a = 'b) =?> (((['a]) Option) \<Rightarrow> (((['b]) Option) \<Rightarrow> Bit)))" where
 "opt_valid x y \<equiv> case x of
-    None \<Rightarrow> (case y of
-      None \<Rightarrow> (x ==`{(['a]) Option} y)
-    | Some b \<Rightarrow> (complement`{Bit} (x ==`{(['a]) Option} y)))
-  | Some a \<Rightarrow> (case y of
-      None \<Rightarrow> (complement`{Bit} (x ==`{(['a]) Option} y))
-    | Some b \<Rightarrow> ((a ==`{['b]} b) ==`{Bit} (x ==`{(['a]) Option} y)))"
+    None _ \<Rightarrow> (case y of
+      None _ \<Rightarrow> (x ==`{(['a]) Option} y)
+    | Some _ b \<Rightarrow> (complement`{Bit} (x ==`{(['a]) Option} y)))
+  | Some _ a \<Rightarrow> (case y of
+      None _ \<Rightarrow> (complement`{Bit} (x ==`{(['a]) Option} y))
+    | Some _ b \<Rightarrow> ((a ==`{['b]} b) ==`{Bit} (x ==`{(['a]) Option} y)))"
 
 end
 end

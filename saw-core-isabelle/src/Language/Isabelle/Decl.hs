@@ -54,6 +54,36 @@ data Decl =
   | NoDecl
   deriving (Eq, Ord, Show)
 
+noName :: Name.Name
+noName = Name.SimpleName ""
+
+instance Name.HasName Decl where
+  nameOf = \case
+    Definition _ b _ _ _ -> Name.nameOf b
+    ConstDecl _ b -> Name.nameOf b
+    TypeSyn _ nm _ -> nm
+    TypeDecl _ nm -> nm
+    Import _ -> noName
+    RecordDecl _ -> noName
+    DatatypeDecl _ nm _ -> nm
+    Commented _ d -> Name.nameOf d
+    FixpointLocale _ -> noName
+    HashDecl nm _ -> nm
+    NoDecl -> noName
+
+  mapName f d = case d of
+    Definition q b args e deps -> Definition q (Name.mapName f b) args e deps
+    ConstDecl q b -> ConstDecl q (Name.mapName f b)
+    TypeSyn ts nm t -> TypeSyn ts (f nm) t
+    TypeDecl ts nm -> TypeDecl ts (f nm)
+    Import{} -> d
+    RecordDecl{} -> d
+    DatatypeDecl ts nm flds -> DatatypeDecl ts (f nm) flds
+    Commented msg d' -> Commented msg (Name.mapName f d')
+    FixpointLocale{} -> d
+    HashDecl nm h -> HashDecl (f nm) h
+    NoDecl -> d
+
 newtype Decls = Decls { toList :: [Decl] }
   deriving (Semigroup, Monoid, Eq, Ord)
 
@@ -175,37 +205,43 @@ asRecSpec = Name.mapIdent (\ident -> ident <> "_spec")
 
 fixPointLocale :: 
  Output.HasOutput => 
- [Name.Name] -> 
+ [Name.Name] ->
+ [String] ->
  Template.Template ->
  String
-fixPointLocale baseNames template = 
+fixPointLocale baseNames path template =
   let 
     impls = map asRecImpl baseNames
     specs = map asRecSpec baseNames
     asms = map (\(lhs,rhs) -> eqExpr (Expr.Var lhs) (Expr.Var rhs)) (zip specs impls)
-    defs = map (\(lhs,rhs) -> eqExpr (Expr.Var lhs) (Expr.Var rhs)) (zip baseNames impls)
+    defs = map (\(lhs,rhs) -> eqExpr (Expr.Var (Name.unqualify lhs)) (Expr.Var rhs)) (zip baseNames impls)
     def_template = (Output.getTemplate "Fixpoint_Locale_Def")
 
     def_cmds = map (\(nm,e) -> 
-         Output.out $ Template.apply def_template [Output.out nm, Output.out e])
+         Output.out $ Template.apply def_template
+           [Output.out nm, Output.out e])
          (zip impls defs)
 
     locale_name = localeName baseNames
+    path_str = if path == [] then "" else outPath path ++ "."
+
     aliases = 
-      map (\nm -> "alias " ++ Output.out nm ++ " = " 
-                 ++ locale_name ++ "." ++ Output.out nm) baseNames
+      map (\nm -> "alias " ++ Output.out (Name.unqualify nm) ++ " = "
+                 ++ path_str
+                 ++ locale_name ++ "." ++ Output.out (Name.unqualify nm)) baseNames
     hides = 
-      map (\nm -> "hide_fact " ++ locale_name ++ "." ++ Output.out nm ++ "_def") baseNames
+      map (\nm -> "hide_fact " ++ path_str ++ locale_name ++ "." ++ Output.out (Name.unqualify nm) ++ "_def") baseNames
   in Output.out $ Template.apply template $ 
      [ locale_name
      , Output.spaces (Output.addSep "and" (map (\e -> Output.quotes (Output.out e)) asms))
      , Output.lines def_cmds
      , Output.lines aliases
      , Output.lines hides
+     , path_str
      ]
 
 localeName :: [Name.Name] -> String
-localeName bs = lcp (map Name.identOf bs) ++ "_rec_spec"
+localeName bs = lcp (map (\nm -> Name.cleanName (Name.unqualify nm)) bs) ++ "_rec_spec"
 
 isTNum :: Expr.Type -> Bool
 isTNum t = case t of
@@ -238,11 +274,14 @@ datatypeDecl ::
  [Expr.Type] -> 
  Name.Name ->
  [(Name.Name,[Expr.Type])] ->
+ [String] ->
  Template.Template ->
  String
-datatypeDecl targs nm flds template =
+datatypeDecl targs nm flds0 path template =
   let targs' = freshVars targs
-      defs = map (\(fnm,fts) -> Name.cleanName fnm ++ " " ++ List.intercalate " " (map (Output.quotes . Output.out) fts)) flds
+      flds = map (\(fnm,fts) -> (fnm,map tyargT targs ++ fts)) flds0
+      defs = map (\(fnm,fts) -> Name.cleanName (Name.unqualify fnm) ++ " " ++ List.intercalate " "
+        (map (Output.quotes . Output.out) fts)) flds
       sorts s = List.intercalate "," $ map (\t -> if isTNum t then "_" else s) targs
       commas xs = List.intercalate "," (map Output.out xs)
       shownat n = Output.brackets $ show n ++ "::nat"
@@ -267,10 +306,15 @@ datatypeDecl targs nm flds template =
         Expr.Var tnm | Name.TNum <- Name.nmKind tnm -> 
           "Tn LEN(" ++ Output.out tnm ++ ")"
         _ -> "strip_type TYPE(" ++ Output.out tp ++ ")"
-      mk_coerce (fnm,fts) = Output.brackets $ case length fts of
-        0 -> Output.out fnm
-        1 -> Output.out fnm ++ " o coerce"
-        _ -> let s = mk_comp "uncurry" (length fts - 1) ++ " " ++ Output.out fnm ++ " o coerce"
+      mk_coerce (fnm0,fts) = Output.brackets $
+        let preamble = case targs of
+              [] -> ""
+              _ -> "\\<lambda>" ++ List.intercalate " " (map (\_ -> "_") targs) ++ ". "
+            fnm = Output.brackets $ List.intercalate " " (Output.out fnm0:map (\_ -> "tyargCtr") targs)
+        in preamble ++ case length fts of
+        0 -> fnm
+        1 -> fnm ++ " o coerce"
+        _ -> let s = mk_comp "uncurry" (length fts - 1) ++ " " ++ fnm ++ " o coerce"
           in  mk_comp "curry" (length fts - 1) ++ " " ++ Output.brackets s
 
   in Output.out $ Template.apply template $ 
@@ -287,21 +331,40 @@ datatypeDecl targs nm flds template =
     , commas $ map catom targs
     , commas $ map catom targs'
     , List.intercalate " \\<and> " $ map mkSameType (zip targs targs')
-    , ""
-    , List.intercalate " " $ map mk_coerce flds
+    , if path == [] then "" else outPath path ++ "."
+    , List.intercalate " " $ map mk_coerce flds0
     ]
 
+outDecl :: Output.HasOutput => Decl -> [String] -> String
+outDecl d qs = case d of
+  Definition q b args e _ -> definitionCmd q b (Just (args,e))
+  ConstDecl q b -> definitionCmd q b Nothing
+  Import i -> Output.out (Name.thyNm i)
+  TypeSyn targs nm rhs ->
+      "type_synonym " ++ tyHeader targs nm ++ " = " ++ Output.quotes (Output.out rhs)
+  TypeDecl targs nm -> "typedecl " ++ tyHeader targs nm
+  RecordDecl args -> recordCmd args (Output.getTemplate "Coercible_Record")
+  DatatypeDecl targs nm flds -> datatypeDecl targs nm flds qs (Output.getTemplate "Coercible_Datatype")
+  FixpointLocale args -> fixPointLocale args qs (Output.getTemplate "Fixpoint_Locale")
+  Commented msg d' -> "(* " ++ msg ++ "*)\n" ++ Output.out d'
+  HashDecl nm h -> "declare [[set_const_hash " ++ Output.out nm ++ " 0x" ++ showHex (fromIntegral h :: Word) "" ++ "]]"
+  NoDecl -> ""
+
+outPath :: Output.HasOutput => [String] -> String
+outPath qs = List.intercalate "." (map (Name.cleanName . Name.SimpleName) qs)
+
+qualifiedBlock :: Output.HasOutput => [String] -> String -> String
+qualifiedBlock qs s = Output.lines
+  [ "qualifier " ++ outPath qs
+  , s
+  , "end_qualifier " ++ outPath qs
+  ]
+
 instance Output.Output Decl where
-  out = \case
-    Definition q b args e _ -> definitionCmd q b (Just (args,e))
-    ConstDecl q b -> definitionCmd q b Nothing
-    Import i -> Output.out (Name.thyNm i)
-    TypeSyn targs nm rhs -> 
-        "type_synonym " ++ tyHeader targs nm ++ " = " ++ Output.quotes (Output.out rhs)
-    TypeDecl targs nm -> "typedecl " ++ tyHeader targs nm
-    RecordDecl args -> recordCmd args (Output.getTemplate "Coercible_Record")
-    DatatypeDecl targs nm flds -> datatypeDecl targs nm flds (Output.getTemplate "Coercible_Datatype")
-    FixpointLocale args -> fixPointLocale args (Output.getTemplate "Fixpoint_Locale")
-    Commented msg d -> "(* " ++ msg ++ "*)\n" ++ Output.out d
-    HashDecl nm h -> "declare [[set_const_hash " ++ Output.out nm ++ " 0x" ++ showHex (fromIntegral h :: Word) "" ++ "]]"
-    NoDecl -> ""
+  out d = case d of
+    FixpointLocale args@(nm:_) -> case Name.stripQualifier nm of
+      (_,[]) -> outDecl d []
+      (_,qs) -> fixPointLocale args qs (Output.getTemplate "Fixpoint_Locale")
+    _ -> case Name.stripQualifier d of
+      (_,[]) -> outDecl d []
+      (d',qs) -> qualifiedBlock qs $ outDecl d' qs
