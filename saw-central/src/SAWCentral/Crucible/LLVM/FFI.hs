@@ -160,8 +160,7 @@ llvm_ffi_setup TypedTerm { ttTerm = appTerm } = do
   case asConstant funTerm of
     Just nm -> case Map.lookup (nameQualName nm) ffiTypes of
       Nothing -> do
-        opts <- lll $ getPPOpts
-        nm' <- lio $ ppName sc opts nm
+        nm' <- lio $ ppName sc nm
         throwFFISetup $ "No Cryptol foreign function " ++ Text.unpack nm' ++ " found"
       Just (CallC (FFIFunType {..})) -> do
         mm <- lio $ scGetModuleMap sc
