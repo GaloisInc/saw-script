@@ -652,8 +652,10 @@ namesOfLoadedModule lm vis =
                           -- i.e., what's exported: note that
                           -- `nmsTopLevels` excludes anything defined
                           -- inside a submodule.
-                          -- FIXME: could simplify if this were always true:
-                          --   nmsPublic `subset` nmsTopLevels
+                          -- FIXME:
+                          --   Q. is this always true: ?
+                          --     nmsPublic `subset` nmsTopLevels
+                          --   If so, could simplify this to `nmsPublic`
 
   where
     -- names in scope at Top level of module
@@ -813,13 +815,14 @@ loadExtCryptolModule sc path =
 --  - There is only one path to this function from the command line,
 --    and it is only via the experimental command,
 --      "write_rocq_cryptol_module".
---  - It is also used from crux-mir-comp.
 --
--- XXX: probably those callers should be updated to instead use
+-- XXX: probably this caller should be updated to instead use
 -- loadExtCryptolModule, at which point this code can be dropped.
 --
 -- This function (note `mkCryptolModule`) returns the public types and values
 -- of the module in a `CryptolModule` structure.
+--
+-- FIXME: Currently it does not support submodules (or module aliases).
 --
 loadCryptolModule ::
   SharedContext ->
@@ -839,10 +842,12 @@ loadCryptolModule sc path =
 -- This is used in two places: in `loadCryptolModule`, which is a
 -- legacy code path that would ideally be removed, and in
 -- `loadExtCryptolModule` as part of generating the print output.
--- Ideally all of this could be consolidated.
+-- Ideally all of this could be consolidated as we want this function and
+--  CryptolModule to go away.
 --
 mkCryptolModule :: SharedContext -> T.Module -> IO CryptolModule
-mkCryptolModule sc m = do
+mkCryptolModule sc m =
+  do
   modEnv <- eModuleEnv sc
   allterms <- eAllTerms sc
   let
@@ -1283,6 +1288,7 @@ bindIntegerType ::
   SharedContext -> (Ident, Integer) -> CryptolEnv -> IO CryptolEnv
 bindIntegerType sc (ident, n) =
   bindTySyn sc (ident, T.Forall [] [] (T.tNum n))
+
 
 --------------------------------------------------------------------------------
 
