@@ -652,8 +652,10 @@ namesOfLoadedModule lm vis =
                           -- i.e., what's exported: note that
                           -- `nmsTopLevels` excludes anything defined
                           -- inside a submodule.
-                          -- FIXME: could simplify if this were always true:
+                          -- FIXME:
+                          --   Q. is this always true: ?
                           --   nmsPublic `subset` nmsTopLevels
+                          --   If so, could simplify this to `nmsPublic`
 
   where
     -- names in scope at Top level of module

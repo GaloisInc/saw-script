@@ -1,0 +1,17 @@
+// :cbrowse argument handling and lookup failures
+
+print "--------------------------------"
+print "-- submodule with no name"
+:cbrowse submodule
+
+print "--------------------------------"
+print "-- too many arguments"
+:cbrowse submodule S1 S2
+
+print "--------------------------------"
+print "-- module not loaded"
+:cbrowse Nope
+
+print "--------------------------------"
+print "-- submodule not imported"
+:cbrowse submodule Nope
