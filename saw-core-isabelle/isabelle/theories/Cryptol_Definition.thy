@@ -10,7 +10,7 @@ sig
   val cryptol_definition_cmd :
     binding * string * mixfix -> string option -> string list -> 
     (binding * string option * mixfix) list -> local_theory -> local_theory
-  val cryptol_termination_cmd : string -> Bundle.xname list -> theory -> Proof.state
+  val cryptol_termination_cmd : string -> string option -> Bundle.xname list -> theory -> Proof.state
   val rec_prover_tac : Proof.context -> thm -> thm -> thm list -> tactic
 
   val set_cryptol_hash : int -> theory -> theory
@@ -247,10 +247,20 @@ fun get_asms ctxt t = case t of
           (HOLogic.mk_Trueprop (Const(@{const_name holds},dummyT) $ Logic.mk_type asmT)),e)
   | _ => (@{prop True},t)
 
-fun dest_def ctxt const_name = 
-  let val thm = Proof_Context.get_thm ctxt (const_name ^ "_spec_def")
-      val ((_,[thm']),_) = Variable.import true [thm] ctxt
-      val (lhs,rhs) = Logic.dest_equals (Thm.prop_of thm')
+fun dest_def ctxt const_name opt_type =
+  let val thm0 = Proof_Context.get_thm ctxt (const_name ^ "_spec_def")
+      val thm1 = case opt_type of
+          SOME const_typ =>
+            let
+              val (lhs_raw,_) = Logic.dest_equals (Thm.prop_of thm0)
+              val (Const(_,T_var), _) = Term.strip_comb lhs_raw
+              val te = Type.typ_match (Proof_Context.tsig_of ctxt) (T_var,const_typ) Vartab.empty
+              val tve = TVars.build (Vartab.fold (fn (k,(s,U)) => TVars.add ((k,s), Thm.ctyp_of ctxt U)) te)
+            in Thm.instantiate (tve, Vars.empty) thm0 end
+        | NONE => thm0
+      val ((_,[thm2]),_) = Variable.import true [thm1] ctxt
+
+      val (lhs,rhs) = Logic.dest_equals (Thm.prop_of thm2)
       val (Const(_,T), args) = Term.strip_comb lhs
 
       val rec_t = Const(const_name ^ "_impl", T)
@@ -262,7 +272,7 @@ fun dest_def ctxt const_name =
       val rhs' = Term.map_aterms (fn t => if t = rec_t then free_t else t) rhs
       val (asm,_) = get_asms ctxt rhs'
 
-  in (thm, rec_t_raw, T, free_t, args, asm, rhs') end
+  in (thm0, rec_t_raw, T, free_t, args, asm, rhs') end
 
 fun extract_goal st = 
   let val g = #goal (Proof.simple_goal st)
@@ -287,17 +297,34 @@ fun set_path path =
   Sign.root_path #> fold (fn (q, optional) =>
     if optional then Sign.add_path q else Sign.mandatory_path q) path
 
-fun cryptol_termination_cmd const_name_raw includes_raw thy =
-  let   
+fun validate_locale thy loc = case Locale.intros_of thy loc of
+  (SOME asm,NONE) => (case Thm.nprems_of asm of
+      1 => let
+        fun val_tyargs ta = case ta of
+          ((_,Type(@{type_name tyarg}, [TFree _])),_) => ()
+          | ((nm,T),_) => error ("Unexpected locale parameter: " ^ Syntax.string_of_term_global thy (Free(nm,T)))
+        in map val_tyargs (Locale.params_of thy loc) end
+    | i => error ("Unexpected number of locale assumptions for " ^ loc ^ ". Expected 1, got " ^ Int.toString i))
+  | _ => error ("Unexpected locale shape for " ^ loc)
+
+fun cryptol_termination_cmd const_name_raw opt_typ_raw includes_raw thy =
+  let
     val ctxt = Proof_Context.init_global thy
     val includes = map (Bundle.check_name ctxt) includes_raw
-    val Const(full_const_name, _) = Proof_Context.read_const {proper=false,strict=false} ctxt const_name_raw
+    val parse_ctxt = Named_Target.init includes "" thy
+    val Const(full_const_name, _) = Proof_Context.read_const {proper=false,strict=false} parse_ctxt const_name_raw
+    val opt_type = case Option.map (Proof_Context.read_typ parse_ctxt) opt_typ_raw of
+      SOME U =>
+      let val Const(_,U') = Proof_Context.cert_term parse_ctxt (Const(full_const_name, U))
+      in SOME U' end
+    | NONE => NONE
     val const_name = base_name full_const_name
     val rec_spec_locale = Long_Name.qualifier full_const_name
+    val _ = validate_locale thy rec_spec_locale
     val thy0 = set_path (name_path (Locale.locale_space thy) rec_spec_locale) thy
 
     (* construct a function equation based on the shape of the _spec definition *)
-    val (spec_def, raw_const, T, free_t, args, asm, rhs) = dest_def ctxt const_name
+    val (spec_def, raw_const, T, free_t, args, asm, rhs) = dest_def ctxt const_name opt_type
 
     val f = HOLogic.mk_eq (Term.list_comb (free_t,args), rhs)
     val specs = [(((Binding.empty,[]),HOLogic.mk_Trueprop f), [], []) ]
@@ -322,7 +349,10 @@ fun cryptol_termination_cmd const_name_raw includes_raw thy =
        start an interactive proof, extract the subgoal(s), and then discard the proof state.
        Then we initiate the proof again via "Proof.theorem" and install our own after_qed hook. *)
     val term_goal = extract_goal (Function.termination (SOME raw_const) lthy)
-    val expr = (rec_spec_locale, (("",false),(Expression.Positional [], [])))
+
+    val (targs,_) = strip_tyargs T
+    val tyargCtrs = map (fn V => Const(@{const_name tyargCtr},Type (@{type_name tyarg}, [V]))) targs
+    val expr = (rec_spec_locale, (("",false),(Expression.Positional (map SOME tyargCtrs), [])))
     val impl_def = Proof_Context.get_thm lthy (const_name ^ "_impl_def")
 
     val lthy1 = Variable.declare_term term_goal lthy
@@ -414,11 +444,13 @@ val _ =
 
 val _ =
   Outer_Syntax.command \<^command_keyword>\<open>cryptol_termination\<close> "install a recursive schema given a termination proof"
-    (Parse.const -- Scan.optional Parse_Spec.includes []  >> (fn (const_name_raw, incls) => 
-       Toplevel.theory_to_proof (Cryptol_Definition.cryptol_termination_cmd const_name_raw incls)))
+    (Parse.const -- (Scan.option (Parse.$$$ "::" |-- Parse.!!! Parse.typ)) --
+      Scan.optional Parse_Spec.includes []  >> (fn ((const_name_raw,opt_typ),incls) =>
+       Toplevel.theory_to_proof (Cryptol_Definition.cryptol_termination_cmd const_name_raw opt_typ incls)))
 \<close>
 
-
+abbreviation use_snd :: "'a \<Rightarrow> 'a \<Rightarrow> 'a" where
+  "use_snd _ x \<equiv> x"
 
 syntax "_forall" :: "term \<Rightarrow> bool"  (\<open>(\<open>notation=\<open>prefix\<close>\<close>FORALL)\<close>)
 
@@ -529,12 +561,12 @@ cryptol_definition rec_test_spec :: "{'a} ('a > 0) =?>  (int \<Rightarrow> 'a it
 
 end
 
-locale rec_test_rec_spec =
-  assumes "experiment.rec_test_spec = experiment.rec_test_impl"
+locale rec_test_rec_spec = fixes a
+  assumes "experiment.rec_test_spec a = experiment.rec_test_impl a"
 begin
 
 definition [simplified experiment.rec_test_impl_def[abs_def]]:
-  "rec_test = experiment.rec_test_impl"
+  "rec_test = (\<lambda>a'. experiment.rec_test_impl (use_snd a a'))"
 
 end
 
@@ -549,8 +581,10 @@ ML \<open>case Cryptol_Definition.get_const_hash @{theory} (dest_Const_name @{te
  | _ => error "get_const_hash failed"
 \<close>
 
-cryptol_termination experiment.rec_test
-  apply (relation "measure (\<lambda>(_, i, _). nat (abs i))")
+cryptol_termination
+  experiment.rec_test :: "{'a::zero} int \<Rightarrow> 'a itself \<Rightarrow> nat"
+  includes type_arg_syntax
+  apply (relation "measure (\<lambda>(a :: 'a :: zero tyarg, i, _). nat (abs i))")
   by auto
 
 ML \<open>\<^assert> (Sign.full_bname \<^theory> "baz" = "Cryptol_Definition.baz")\<close>

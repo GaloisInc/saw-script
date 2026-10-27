@@ -2,8 +2,8 @@ end
 
 qualifier "$6"
 
-locale $1 =
-  assumes $2
+locale $1 = $7
+  assumes [export_global]: $2
 begin
 
 $3

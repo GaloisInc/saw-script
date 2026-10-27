@@ -10,6 +10,7 @@ import qualified Language.Isabelle.Name as Name
 import           Language.Isabelle.Name (Name)
 import qualified Language.Isabelle.Syntax as Syntax
 import qualified Language.Isabelle.Panic as Panic
+import Data.List (stripPrefix)
 
 scratchThy :: Name.TheoryName
 scratchThy = Name.TheoryName "Scratch" False
@@ -112,6 +113,21 @@ tAbs [] body = body
 tAbs ts body = Expr.Ctr (body:ts) $
   Name.Name cryThy "TAbs" (Syntax.ListSyn Syntax.Postfix "," "{" "} ") Name.Typ
 
+stripTAbs :: Type -> ([String], Type)
+stripTAbs e = case e of
+  Expr.Ctr (t:ts) (nm@Name.Name{})
+    | "TAbs" <- Name.nmStr nm
+    , Name.nmThy nm == cryThy
+    , Just nms <- mapM asTVar ts
+    -> (nms,t)
+  _ -> ([],e)
+  where
+
+asTVar :: Type -> Maybe String
+asTVar t = case t of
+  Expr.Var nm -> stripPrefix "'" (Name.nmStr nm)
+  _ -> Nothing
+
 tApp :: Expr -> [Type] -> Expr
 tApp body [] = body
 tApp body ts = Expr.TApp body ts
@@ -212,6 +228,7 @@ tFromThenTo x y z =
   Expr.Ctr [x, y, z] (Name.Name tLenThy "FromThenTo" Syntax.NoSyn Name.Typ)
 
 eAbs :: [Expr] -> Expr -> Expr
+eAbs [] body = body
 eAbs args body = Expr.Binder "\\<lambda>" args body
 
 tupleSelect :: Name.Name -> Expr -> Int -> Int -> Expr
@@ -375,3 +392,6 @@ recordUpdate e fieldnm fieldv = Expr.Ctr [e, Expr.Var fieldnm, coerceExpr fieldv
 
 tyargT :: Expr.Type -> Expr.Type
 tyargT t = Expr.Ctr [t] $ Name.Name cryThy "tyarg" Syntax.NoSyn Name.Typ
+
+useSnd :: Expr -> Expr -> Expr
+useSnd e1 e2 = Expr.Ctr [e1,e2] (Name.Name cryThy "use_snd" Syntax.NoSyn Name.Term)

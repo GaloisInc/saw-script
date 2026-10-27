@@ -227,7 +227,7 @@ translateDeclGroup = \case
         Right (args, body)  -> do
           addDecl (Decl.Commented "Recursive call stub (to be overridden)" $ (Decl.ConstDecl False (Decl.asRecImpl b)))
           addDecl (Decl.Commented "Recursive call schema" $ Decl.Definition False (Decl.asRecSpec b) args (fixRecs body) [])
-          return (Just (crynm, Binding.bindName b))
+          return (Just (crynm, b))
         Left (StubbedFunction{}) | isStubbedFnName b -> do
           addDecl (Decl.Commented ("Stubbed Function") (Decl.ConstDecl False b))
           return Nothing
@@ -236,7 +236,7 @@ translateDeclGroup = \case
           return Nothing
         Left er -> throwError er
     addDecl (Decl.FixpointLocale (map snd bs))
-    mapM_ (\(crynm,isanm) -> addHashDecl crynm isanm) bs
+    mapM_ (\(crynm,isanm) -> addHashDecl crynm isanm) (map (\(cnm, b) -> (cnm,Binding.bindName b)) bs)
 
   Cry.NonRecursive d -> do
     (b,mbody) <- translateDecl d
@@ -285,7 +285,6 @@ extraGuard ctx tv = case Cry.tpKind tv of
       let rng = Cry.tvarSource $ Cry.tpInfo tv
       IsaOpts.log (-1) $  "[warning] at " ++ pp rng ++ "\n Type parameter is not constrained to fin: " ++ pp tp
       return $ Just $ Cry.TCon (Cry.PC Cry.PFin) [tp]
-  Cry.KType -> return $ Just $ Cry.TCon (Cry.PC Cry.PEq) [tp]
   _ -> return Nothing
   where
     tp = Cry.TVar (Cry.TVBound tv)

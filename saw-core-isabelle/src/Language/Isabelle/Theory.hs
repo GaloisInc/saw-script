@@ -114,8 +114,10 @@ defGraph decls =
       Decl.Commented _ d' ->
         map (\(_,nm,deps') -> (d,nm,deps')) (go d')
       Decl.TypeSyn _ nm _ -> [(d, nm, deps)]
-      Decl.FixpointLocale nms ->
-        let locale_name = Name.SimpleName (Decl.localeName nms)
+      Decl.FixpointLocale bs ->
+        let
+          nms = map Binding.bindName bs
+          locale_name = Name.SimpleName (Decl.localeName nms)
         in [(d,locale_name, deps)] ++ map (\nm -> (Decl.NoDecl,nm, [locale_name])) nms
       Decl.DatatypeDecl _ nm _ -> [(d, nm, deps)]
       {- Decl.TypeArgSyntax b _ _ _ -> Just (d, syntaxName (Binding.bindName b), [Binding.bindName b]) -}
