@@ -33,7 +33,7 @@ module CryptolSAWCore.CryptolEnv
   , ExtCryptolModule(..)
   , prettyExtCryptolModule
   , initCryptolEnv
-  , loadCryptolModule
+  , loadAndTranslateModule
   , loadExtCryptolModule
   , bindExtCryptolModule
 
@@ -137,7 +137,6 @@ data InputText = InputText
 
 
 -- Finding things --------------------------------------------------------------
-
 
 -- | Look up a name in a map containing Cryptol names.
 --
@@ -652,8 +651,10 @@ namesOfLoadedModule lm vis =
                           -- i.e., what's exported: note that
                           -- `nmsTopLevels` excludes anything defined
                           -- inside a submodule.
-                          -- FIXME: could simplify if this were always true:
-                          --   nmsPublic `subset` nmsTopLevels
+                          -- FIXME:
+                          --   Q. is this always true: ?
+                          --     nmsPublic `subset` nmsTopLevels
+                          --   If so, could simplify this to `nmsPublic`
 
   where
     -- names in scope at Top level of module
@@ -800,6 +801,7 @@ loadExtCryptolModule sc path =
           -- FIXME: Since the complete public and private interface is
           -- extractable, we should show the whole thing with public,
           -- private, typesyns, constructors, submodules.
+          --   - and then mkCryptolModule goes away.
           -- See Issue #2700
           --
           -- FUTURE: there's no remaining barrier to giving
@@ -807,42 +809,13 @@ loadExtCryptolModule sc path =
   return (ECM_LoadedModule (locatedUnknown (T.mName m)) doc)
 
 
--- | loadCryptolModule - load a Cryptol module and return a handle to it
---
--- NOTE RE CALLS TO THIS:
---  - There is only one path to this function from the command line,
---    and it is only via the experimental command,
---      "write_rocq_cryptol_module".
---  - It is also used from crux-mir-comp.
---
--- XXX: probably those callers should be updated to instead use
--- loadExtCryptolModule, at which point this code can be dropped.
---
--- This function (note `mkCryptolModule`) returns the public types and values
--- of the module in a `CryptolModule` structure.
---
-loadCryptolModule ::
-  SharedContext ->
-  FilePath ->
-  IO (CryptolModule)
-loadCryptolModule sc path =
-  do
-  mod' <- loadAndTranslateModule sc (Left path)
-  mkCryptolModule sc mod'
-
-
 -- | mkCryptolModule m env - translate a @m :: T.Module@ to a `CryptolModule`
 --
 -- This function returns the public types and values of the module @m@
 -- as a `CryptolModule` structure.
---
--- This is used in two places: in `loadCryptolModule`, which is a
--- legacy code path that would ideally be removed, and in
--- `loadExtCryptolModule` as part of generating the print output.
--- Ideally all of this could be consolidated.
---
 mkCryptolModule :: SharedContext -> T.Module -> IO CryptolModule
-mkCryptolModule sc m = do
+mkCryptolModule sc m =
+  do
   modEnv <- eModuleEnv sc
   allterms <- eAllTerms sc
   let
@@ -1011,9 +984,9 @@ extractDefFromExtCryptolModule sc env_0 ecm name =
 -- There are three paths that lead here:
 --    - `importCryptolModule`, which is the back end for SAWScript @import@
 --    - `loadExtCryptolModule`, which is the back end for SAWScript @cryptol_load@
---    - `loadCryptolModule`, which is used for Rocq export and from crux-mir-comp
+--    -  the Rocq exporter (writeRocqCryptolModule) calls it directly.
 --
--- These can probably be unified.
+-- The first two could probably be unified.
 --
 loadAndTranslateModule ::
   SharedContext             {- ^ Shared context for creating terms -} ->
@@ -1283,6 +1256,7 @@ bindIntegerType ::
   SharedContext -> (Ident, Integer) -> CryptolEnv -> IO CryptolEnv
 bindIntegerType sc (ident, n) =
   bindTySyn sc (ident, T.Forall [] [] (T.tNum n))
+
 
 --------------------------------------------------------------------------------
 

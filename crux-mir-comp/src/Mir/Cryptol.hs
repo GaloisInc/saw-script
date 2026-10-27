@@ -240,8 +240,6 @@ loadCryptolFunc col sig modulePath name = do
     let modName = Cry.textToModName modulePath
     ce' <- liftIO $ SAW.importCryptolModule sc ce (Right modName) Nothing False SAW.PublicAndPrivate Nothing
     liftIO (writeIORef (mirCryEnv mirState) ce')
-    -- (m, _ce') <- liftIO $ SAW.loadCryptolModule sc ce (Text.unpack modulePath)
-    -- tt <- liftIO $ SAW.extractDefFromCryptolModule m (Text.unpack name)
     tt <- liftIO $ SAW.parseTypedTerm sc ce' $
         SAW.InputText name "<string>" 1 1
     liftIO (writeIORef (mirCryEnv mirState) ce')
