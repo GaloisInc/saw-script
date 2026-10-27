@@ -3,22 +3,24 @@
 
 module SAWCoreRocq.CryptolModule (translateCryptolModule) where
 
+-- base & standard modules:
 import           Control.Lens              (over, view)
 import           Control.Monad             (forM)
 import           Control.Monad.State       (modify)
 import qualified Data.Map                  as Map
 
+-- cryptol pkg:
 import           Cryptol.ModuleSystem.Name (Name, nameIdent)
 import           Cryptol.Utils.Ident       (identText)
-import qualified Language.Rocq.AST         as Rocq
 
-import           SAWCore.Term.Raw          (Term)
-import           SAWCore.SharedTerm        (SharedContext, scGetModuleMap)
-
+-- local:
 import           CryptolSAWCore.TypedTerm
-
+import qualified Language.Rocq.AST         as Rocq
+import           SAWCore.SharedTerm        (SharedContext, scGetModuleMap)
+import           SAWCore.Term.Raw          (Term)
 import           SAWCoreRocq.Monad
 import qualified SAWCoreRocq.Term          as TermTranslation
+
 
 -- | Translate a list of named terms with their types to a Rocq definitions
 translateTypedTermMap ::

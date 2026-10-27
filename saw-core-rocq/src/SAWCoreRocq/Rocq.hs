@@ -21,24 +21,27 @@ module SAWCoreRocq.Rocq (
   ppTranslationError  -- re-export from Module for convenience downstream
   ) where
 
+-- base & standard modules:
 import           Data.String.Interpolate      (i)
---import qualified Data.Text                    as Text
 import           Data.Text                    (Text)
 import           Prelude                      hiding (fail)
+
+-- pretty-printer pkg:
 import           Prettyprinter
 
+-- local:
+import           CryptolSAWCore.TypedTerm
 import qualified Language.Rocq.AST            as Rocq
 import qualified Language.Rocq.Pretty         as Rocq
 import           SAWCore.Module
 import           SAWCore.Name
 import           SAWCore.SharedTerm
-
 import qualified SAWCoreRocq.CryptolModule    as CMT
-import qualified SAWCoreRocq.SAWModule        as SAWModuleTranslation
 import           SAWCoreRocq.Monad
+import qualified SAWCoreRocq.SAWModule        as SAWModuleTranslation
 import           SAWCoreRocq.SpecialTreatment
 import qualified SAWCoreRocq.Term             as TermTranslation
-import           CryptolSAWCore.TypedTerm
+
 
 text :: String -> Doc ann
 text = pretty
@@ -78,7 +81,7 @@ translateTermAsDeclImports configuration mm name t tp = do
       [] name t tp
   return $ vcat [preamble configuration, hardline <> doc]
 
--- | Translate a SAW core module to a Rocq module
+-- | Translate a SAWCore module to a Rocq module
 translateSAWModule :: SharedContext -> TranslationConfiguration -> ModuleMap -> Module -> IO (Doc ann)
 translateSAWModule sc configuration mm m = do
   let name = translateModuleName (moduleName m)
