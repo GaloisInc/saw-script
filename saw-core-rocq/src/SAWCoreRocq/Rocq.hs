@@ -29,8 +29,10 @@ import           Prelude                      hiding (fail)
 -- pretty-printer pkg:
 import           Prettyprinter
 
+-- cryptol pkg:
+import qualified Cryptol.TypeCheck.AST        as Cryptol
+
 -- local:
-import           CryptolSAWCore.TypedTerm
 import qualified Language.Rocq.AST            as Rocq
 import qualified Language.Rocq.Pretty         as Rocq
 import           SAWCore.Module
@@ -99,7 +101,7 @@ translateCryptolModule ::
   TranslationConfiguration ->
   -- | List of already translated global declarations
   [Rocq.Ident] ->
-  CryptolModule ->
+  Cryptol.Module ->
   IO (Either TranslationError (Doc ann))
 translateCryptolModule sc nm configuration globalDecls m = do
   translated <- CMT.translateCryptolModule sc configuration globalDecls m

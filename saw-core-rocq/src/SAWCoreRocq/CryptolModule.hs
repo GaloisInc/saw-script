@@ -10,10 +10,14 @@ import           Control.Monad.State       (modify)
 import qualified Data.Map                  as Map
 
 -- cryptol pkg:
-import           Cryptol.ModuleSystem.Name (Name, nameIdent)
-import           Cryptol.Utils.Ident       (identText)
+import           Cryptol.ModuleSystem.Exports    as Cryptol
+import           Cryptol.ModuleSystem.Interface  as Cryptol
+import           Cryptol.ModuleSystem.Name       (Name, nameIdent)
+import qualified Cryptol.TypeCheck.AST           as Cryptol
+import           Cryptol.Utils.Ident             (identText,Namespace(..))
 
 -- local:
+import           CryptolSAWCore.GlobalCryptolEnv as CSC
 import           CryptolSAWCore.TypedTerm
 import qualified Language.Rocq.AST         as Rocq
 import           SAWCore.SharedTerm        (SharedContext, scGetModuleMap)
@@ -36,7 +40,29 @@ translateTypedTermMap defs = forM defs translateAndRegisterEntry
       modify $ over TermTranslation.globalDeclarations (nameStr :)
       return decl
 
--- | Translates a Cryptol Module into a list of Rocq declarations.  This is done
+-- | create a `Map Name TypedTerm` from the Cryptol.Module
+--   - this only extracts the exported values!
+cryptolModuleToMapOfTypedTerm
+  :: SharedContext -> Cryptol.Module -> IO (Map.Map Name TypedTerm)
+cryptolModuleToMapOfTypedTerm sc m =
+  do
+  modEnv   <- eModuleEnv sc
+  allterms <- eAllTerms sc
+  let
+      ifaceDecls = CSC.getAllIfaceDecls modEnv
+      types = Map.map Cryptol.ifDeclSig (Cryptol.ifDecls ifaceDecls)
+
+      -- we're keeping only the Value exports of `m`:
+      vNameSet = Cryptol.exported NSValue (Cryptol.mExports m)
+
+  return $ Map.restrictKeys
+             (Map.intersectionWith
+               (\t x -> TypedTerm (TypedTermSchema t) x)
+                 types
+                 allterms)
+             vNameSet
+
+-- | Translates a Cryptol.Module into a list of Rocq declarations.  This is done
 -- by going through the term map corresponding to the module, translating all
 -- terms, and accumulating the translated declarations of all top-level
 -- declarations encountered.
@@ -45,13 +71,14 @@ translateCryptolModule ::
   TranslationConfiguration ->
   -- | List of already translated global declarations
   [Rocq.Ident] ->
-  CryptolModule ->
+  Cryptol.Module ->
   IO (Either TranslationError [Rocq.Decl])
-translateCryptolModule sc configuration globalDecls (CryptolModule _ tm) =
-  do defs <-
+translateCryptolModule sc configuration globalDecls cm =
+  do tm <- cryptolModuleToMapOfTypedTerm sc cm
+     defs <-
        forM (Map.assocs tm) $ \(nm, t) ->
-       do tp <- ttTypeAsTerm sc t
-          return (nm, ttTerm t, tp)
+         do tp <- ttTypeAsTerm sc t
+            return (nm, ttTerm t, tp)
      mm <- scGetModuleMap sc
      return
        (reverse . view TermTranslation.topLevelDeclarations . snd <$>

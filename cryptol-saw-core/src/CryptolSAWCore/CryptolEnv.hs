@@ -33,7 +33,7 @@ module CryptolSAWCore.CryptolEnv
   , ExtCryptolModule(..)
   , prettyExtCryptolModule
   , initCryptolEnv
-  , loadCryptolModule
+  , loadAndTranslateModule
   , loadExtCryptolModule
   , bindExtCryptolModule
 
@@ -137,7 +137,6 @@ data InputText = InputText
 
 
 -- Finding things --------------------------------------------------------------
-
 
 -- | Look up a name in a map containing Cryptol names.
 --
@@ -809,42 +808,14 @@ loadExtCryptolModule sc path =
   return (ECM_LoadedModule (locatedUnknown (T.mName m)) doc)
 
 
--- | loadCryptolModule - load a Cryptol module and return a handle to it
---
--- NOTE RE CALLS TO THIS:
---  - There is only one path to this function from the command line,
---    and it is only via the experimental command,
---      "write_rocq_cryptol_module".
---
--- XXX: probably this caller should be updated to instead use
--- loadExtCryptolModule, at which point this code can be dropped.
---
--- This function (note `mkCryptolModule`) returns the public types and values
--- of the module in a `CryptolModule` structure.
---
--- FIXME: Currently it does not support submodules (or module aliases).
---
-loadCryptolModule ::
-  SharedContext ->
-  FilePath ->
-  IO (CryptolModule)
-loadCryptolModule sc path =
-  do
-  mod' <- loadAndTranslateModule sc (Left path)
-  mkCryptolModule sc mod'
-
-
 -- | mkCryptolModule m env - translate a @m :: T.Module@ to a `CryptolModule`
 --
 -- This function returns the public types and values of the module @m@
 -- as a `CryptolModule` structure.
 --
--- This is used in two places: in `loadCryptolModule`, which is a
--- legacy code path that would ideally be removed, and in
--- `loadExtCryptolModule` as part of generating the print output.
--- Ideally all of this could be consolidated as we want this function and
---  CryptolModule to go away.
---
+-- This is only used in `loadExtCryptolModule` as part of generating
+-- the print output.
+--   FIXME: see `loadExtCryptolModule`: this also should go away.
 mkCryptolModule :: SharedContext -> T.Module -> IO CryptolModule
 mkCryptolModule sc m =
   do

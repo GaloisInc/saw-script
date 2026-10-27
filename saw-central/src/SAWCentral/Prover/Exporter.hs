@@ -80,7 +80,7 @@ import SAWCore.Recognizer (asPi)
 import SAWCore.SATQuery
 import SAWCore.SharedTerm as SC
 
-import CryptolSAWCore.CryptolEnv (loadCryptolModule, ExtCryptolModule)
+import CryptolSAWCore.CryptolEnv (loadAndTranslateModule, ExtCryptolModule)
 import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import CryptolSAWCore.TypedTerm
 
@@ -527,8 +527,8 @@ writeRocqCryptolModule inputFile outputFile notations skips = io $ do
   ()  <- scLoadPreludeModule sc
   ()  <- scLoadCryptolModule sc
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
-  cm <- loadCryptolModule sc inputFile
-  mm <- scGetModuleMap sc
+  cm  <- loadAndTranslateModule sc (Left inputFile)
+  mm  <- scGetModuleMap sc
   let ?mm = mm
   let cryptolPreludeDecls =
         map Rocq.Ident $
