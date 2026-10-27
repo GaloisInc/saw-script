@@ -42,7 +42,7 @@ replace inp outp src@(hd:tl) =
     False -> hd : replace inp outp tl
 
 cleanTheoryName :: Ident -> Ident
-cleanTheoryName i = replace "::" "_" i
+cleanTheoryName i = replace "'" "P" $ replace "::" "_" i
 
 data TheoryName = TheoryNameCtr { thyNm :: Ident, thyQualified :: Bool }
   deriving (Eq, Ord)
