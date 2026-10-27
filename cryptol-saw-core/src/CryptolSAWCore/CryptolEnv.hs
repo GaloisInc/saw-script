@@ -801,6 +801,7 @@ loadExtCryptolModule sc path =
           -- FIXME: Since the complete public and private interface is
           -- extractable, we should show the whole thing with public,
           -- private, typesyns, constructors, submodules.
+          --   - and then mkCryptolModule goes away.
           -- See Issue #2700
           --
           -- FUTURE: there's no remaining barrier to giving
@@ -812,10 +813,6 @@ loadExtCryptolModule sc path =
 --
 -- This function returns the public types and values of the module @m@
 -- as a `CryptolModule` structure.
---
--- This is only used in `loadExtCryptolModule` as part of generating
--- the print output.
---   FIXME: see `loadExtCryptolModule`: this also should go away.
 mkCryptolModule :: SharedContext -> T.Module -> IO CryptolModule
 mkCryptolModule sc m =
   do
@@ -987,9 +984,9 @@ extractDefFromExtCryptolModule sc env_0 ecm name =
 -- There are three paths that lead here:
 --    - `importCryptolModule`, which is the back end for SAWScript @import@
 --    - `loadExtCryptolModule`, which is the back end for SAWScript @cryptol_load@
---    - `loadCryptolModule`, which is used for Rocq export and from crux-mir-comp
+--    -  the Rocq exporter (writeRocqCryptolModule) calls it directly.
 --
--- These can probably be unified.
+-- The first two could probably be unified.
 --
 loadAndTranslateModule ::
   SharedContext             {- ^ Shared context for creating terms -} ->
