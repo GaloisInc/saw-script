@@ -12,6 +12,28 @@ if [ $? != 0 ]; then
     exit 1
 fi
 
+# Function to extract the timestamp for a file.
+#
+# Linux stat(1) accepts -c for format, and the format is %y.
+# BSD stat(1) accepts -f for format, and the format is %Sm.
+dostat() {
+    case $(uname -s || echo unknown) in
+        Linux)
+            stat -c %y "$@"
+            ;;
+        *BSD|Darwin)
+            # "Darwin" is MacOS
+            stat -f %Sm "$@"
+            ;;
+        *)
+            # Even with LC_ALL=C this may not print the right fields,
+            # and with traditional ls it won't print the year for
+            # recent dates. But it's better than failing entirely.
+            LC_ALL=C ls -ld "$@" | awk '{ print $6, $7, $8 }'
+            ;;
+    esac
+}
+
 # Get its timestamp.
 # Note: type -p to print just the path is a bashism, and doesn't
 # work in dash or ash-derived shells.
@@ -24,7 +46,7 @@ fi
 # Don't print the path to mir-json as that may expose internal config
 # on people's devel machines.
 LOCATION=$(type mir-json | awk '{ print $NF }' | sed 's/^(//;s/)$//')
-TIMESTAMP=$(stat -f %Sm $(echo "$LOCATION" | awk '{ print $3 }'))
+TIMESTAMP=$(dostat "$LOCATION")
 echo "mir-json mtime: $TIMESTAMP"
 
 # Now, we want the mir-json version as well. This is not so easy,
