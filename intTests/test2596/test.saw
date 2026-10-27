@@ -2,8 +2,15 @@ m <- mir_load_module "test.linked-mir.json";
 
 // SAW doesn't have a way to look up instantiations of ADTs that use const
 // generics, so as a workaround, we look up the mangled identifiers instead.
-let words4_adt = mir_find_mangled_adt m "test::Words::_adta4a904df508e9aad";
-let words7_adt = mir_find_mangled_adt m "test::Words::_adt96fbb9234cd1add7";
+//
+// When updating these hashes, you can use this command to extract the relevant
+// parts of the JSQN for inspection:
+//      jq '.tys.[] | select(.ty.kind == "Adt" or .ty.kind == "Const")' \
+//          <test2596/test.linked-mir.json
+//
+// Be sure to update `saw-python/tests/saw/test_mir_find_mangled_adt.py` also.
+let words4_adt = mir_find_mangled_adt m "test::Words::_adta8a889bbf5c77e2e";
+let words7_adt = mir_find_mangled_adt m "test::Words::_adt10e17d75078c9c64";
 
 let h_spec words_adt N = do {
     a_arr <- mir_fresh_var "a_arr" (mir_array N mir_u8);

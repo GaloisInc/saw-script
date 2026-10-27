@@ -11,7 +11,7 @@ m <- mir_load_module "test.linked-mir.json";
 let GlobalAlloc = mir_find_adt m "alloc::alloc::Global" [];
 let Vec_i32 = mir_find_adt m "alloc::vec::Vec" [mir_i32, mir_adt GlobalAlloc];
 let RawVec_i32 = mir_find_adt m "alloc::raw_vec::RawVec" [mir_i32, mir_adt GlobalAlloc];
-let TypedAllocator_i32 = mir_find_adt m "crucible::alloc::TypedAllocator" [mir_i32];
+let TypedAllocator_i32 = mir_find_adt m "alloc::crucible::alloc::TypedAllocator" [mir_i32];
 let RawVecInner_i32 = mir_find_adt m "alloc::raw_vec::RawVecInner" [mir_adt TypedAllocator_i32];
 let Unique_u8 = mir_find_adt m "core::ptr::unique::Unique" [mir_u8];
 let NonNull_u8 = mir_find_adt m "core::ptr::non_null::NonNull" [mir_u8];

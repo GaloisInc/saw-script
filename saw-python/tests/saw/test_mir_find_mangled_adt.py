@@ -34,8 +34,15 @@ class MIRFindMangledAdtTest(unittest.TestCase):
         # SAW doesn't have a way to look up instantiations of ADTs that use
         # const generics, so as a workaround, we look up the mangled
         # identifiers instead.
-        words4_adt = mir_find_mangled_adt(mod, "mir_find_mangled_adt::Words::_adta4a904df508e9aad")
-        words7_adt = mir_find_mangled_adt(mod, "mir_find_mangled_adt::Words::_adt96fbb9234cd1add7")
+        #
+        # When updating these hashes, you can use this command to extract the relevant
+        # parts of the JSQN for inspection:
+        #      jq '.tys.[] | select(.ty.kind == "Adt" or .ty.kind == "Const")' \
+        #          <test2596/test.linked-mir.json
+        #
+        # Be sure to update `intTests/test2596/test.saw` also.
+        words4_adt = mir_find_mangled_adt(mod, "mir_find_mangled_adt::Words::_adta8a889bbf5c77e2e")
+        words7_adt = mir_find_mangled_adt(mod, "mir_find_mangled_adt::Words::_adt10e17d75078c9c64")
 
         h4_result = mir_verify(mod, 'mir_find_mangled_adt::h4', HContract(words4_adt, 4))
         self.assertIs(h4_result.is_success(), True)

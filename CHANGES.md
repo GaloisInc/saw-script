@@ -1,8 +1,10 @@
 # next
 
 This release supports [version
-13](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#13) of
+14](https://github.com/GaloisInc/mir-json/blob/master/SCHEMA_CHANGELOG.md#14) of
 `mir-json`'s schema.
+
+* Support verifying Rust code up to version 1.99 (`nightly-2026-08-24`).
 
 ## New Features
 

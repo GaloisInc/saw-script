@@ -1118,7 +1118,7 @@ mir_vec_of prefix elemTy contents = do
       rawVecTAdt <-
         find "alloc::raw_vec::RawVec" [elemTy, mir_adt globalAllocAdt]
       typedAllocatorTAdt <-
-        find "crucible::alloc::TypedAllocator" [elemTy]
+        find "alloc::crucible::alloc::TypedAllocator" [elemTy]
       rawVecInnerTAdt <-
         find "alloc::raw_vec::RawVecInner" [mir_adt typedAllocatorTAdt]
       uniqueU8Adt <-
