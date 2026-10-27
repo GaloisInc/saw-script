@@ -391,6 +391,9 @@ span.spaces    { background: white }
 <span class="lineno">  372 </span>recordUpdate :: Expr.Expr -&gt; Name.Name -&gt; Expr.Expr -&gt; Expr.Expr
 <span class="lineno">  373 </span><span class="decl"><span class="nottickedoff">recordUpdate e fieldnm fieldv = Expr.Ctr [e, Expr.Var fieldnm, coerceExpr fieldv]</span>
 <span class="lineno">  374 </span><span class="spaces">  </span><span class="nottickedoff">(Name.Name holThy &quot;record_upd&quot; (Syntax.ListSyn Syntax.Prefix &quot; := &quot;  &quot;\\&lt;lparr&gt;&quot; &quot;\\&lt;rparr&gt;&quot;)  Name.Term)</span></span>
+<span class="lineno">  375 </span>
+<span class="lineno">  376 </span>tyargT :: Expr.Type -&gt; Expr.Type
+<span class="lineno">  377 </span><span class="decl"><span class="nottickedoff">tyargT t = Expr.Ctr [t] $ Name.Name cryThy &quot;tyarg&quot; Syntax.NoSyn Name.Typ</span></span>
 
 </pre>
 </body>

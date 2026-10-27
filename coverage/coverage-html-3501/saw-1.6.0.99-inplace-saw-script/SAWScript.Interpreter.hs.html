@@ -3233,8 +3233,8 @@ span.spaces    { background: white }
 <span class="lineno"> 3214 </span><span class="spaces">  </span><span class="istickedoff">writeRocqTerm name <span class="nottickedoff">notations</span> <span class="nottickedoff">skips</span> (Text.unpack path) t</span></span>
 <span class="lineno"> 3215 </span>
 <span class="lineno"> 3216 </span>do_write_rocq_cryptol_module :: Text -&gt; Text -&gt; [(Text, Text)] -&gt; [Text] -&gt; TopLevel ()
-<span class="lineno"> 3217 </span><span class="decl"><span class="istickedoff">do_write_rocq_cryptol_module infile outfile notations skips =</span>
-<span class="lineno"> 3218 </span><span class="spaces">  </span><span class="istickedoff">writeRocqCryptolModule (Text.unpack infile) (Text.unpack outfile) <span class="nottickedoff">notations</span> <span class="nottickedoff">skips</span></span></span>
+<span class="lineno"> 3217 </span><span class="decl"><span class="nottickedoff">do_write_rocq_cryptol_module infile outfile notations skips =</span>
+<span class="lineno"> 3218 </span><span class="spaces">  </span><span class="nottickedoff">writeRocqCryptolModule (Text.unpack infile) (Text.unpack outfile) notations skips</span></span>
 <span class="lineno"> 3219 </span>
 <span class="lineno"> 3220 </span>do_write_rocq_sawcore_prelude :: Text -&gt; [(Text, Text)] -&gt; [Text] -&gt; IO ()
 <span class="lineno"> 3221 </span><span class="decl"><span class="nottickedoff">do_write_rocq_sawcore_prelude outfile notations skips =</span>
@@ -6030,7 +6030,7 @@ span.spaces    { background: white }
 <span class="lineno"> 6011 </span><span class="spaces">  </span><span class="istickedoff">, prim &quot;write_rocq_cryptol_module&quot; (&quot;String -&gt; String -&gt; &quot; &lt;&gt;</span>
 <span class="lineno"> 6012 </span><span class="spaces">                                      </span><span class="istickedoff">&quot;[(String, String)] -&gt; [String] -&gt; &quot; &lt;&gt;</span>
 <span class="lineno"> 6013 </span><span class="spaces">                                      </span><span class="istickedoff">&quot;TopLevel ()&quot;)</span>
-<span class="lineno"> 6014 </span><span class="spaces">    </span><span class="istickedoff">(pureVal do_write_rocq_cryptol_module)</span>
+<span class="lineno"> 6014 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">(pureVal do_write_rocq_cryptol_module)</span></span>
 <span class="lineno"> 6015 </span><span class="spaces">    </span><span class="istickedoff">Current</span>
 <span class="lineno"> 6016 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">[ &quot;Write out a representation of a Cryptol module in Gallina syntax&quot;</span></span>
 <span class="lineno"> 6017 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">, &quot;for Rocq.&quot;</span></span>

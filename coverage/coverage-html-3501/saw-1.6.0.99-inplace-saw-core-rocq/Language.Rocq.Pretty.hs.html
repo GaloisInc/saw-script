@@ -703,16 +703,16 @@ span.spaces    { background: white }
 <span class="lineno">  684 </span><span class="spaces">    </span><span class="istickedoff">InductiveDecl ind -&gt;</span>
 <span class="lineno">  685 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">prettyInductive ind &lt;&gt; PP.hardline</span></span>
 <span class="lineno">  686 </span><span class="spaces">    </span><span class="istickedoff">Section nm ds -&gt;</span>
-<span class="lineno">  687 </span><span class="spaces">        </span><span class="istickedoff">let nm' = prettyIdent nm</span>
-<span class="lineno">  688 </span><span class="spaces">            </span><span class="istickedoff">header = &quot;Section&quot; &lt;+&gt; nm' &lt;&gt; &quot;.&quot; &lt;&gt; PP.hardline</span>
-<span class="lineno">  689 </span><span class="spaces">            </span><span class="istickedoff">ds' = map <span class="nottickedoff">prettyDecl</span> ds</span>
-<span class="lineno">  690 </span><span class="spaces">            </span><span class="istickedoff">footer = &quot;End&quot; &lt;+&gt; nm' &lt;&gt; &quot;.&quot; &lt;&gt; PP.hardline</span>
-<span class="lineno">  691 </span><span class="spaces">        </span><span class="istickedoff">in</span>
-<span class="lineno">  692 </span><span class="spaces">        </span><span class="istickedoff">-- Note that because every declaration ends with PP.hardline (or</span>
-<span class="lineno">  693 </span><span class="spaces">        </span><span class="istickedoff">-- at least PP.line, which we don't group away), we don't need</span>
-<span class="lineno">  694 </span><span class="spaces">        </span><span class="istickedoff">-- another one after ds'. Except, without one, the indent for the</span>
-<span class="lineno">  695 </span><span class="spaces">        </span><span class="istickedoff">-- declarations bleeds into the footer. (wut?)</span>
-<span class="lineno">  696 </span><span class="spaces">        </span><span class="istickedoff">header &lt;&gt; PP.indent 3 (PP.vsep ds') &lt;&gt; PP.hardline &lt;&gt; footer</span>
+<span class="lineno">  687 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">let nm' = prettyIdent nm</span></span>
+<span class="lineno">  688 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">header = &quot;Section&quot; &lt;+&gt; nm' &lt;&gt; &quot;.&quot; &lt;&gt; PP.hardline</span></span>
+<span class="lineno">  689 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">ds' = map prettyDecl ds</span></span>
+<span class="lineno">  690 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">footer = &quot;End&quot; &lt;+&gt; nm' &lt;&gt; &quot;.&quot; &lt;&gt; PP.hardline</span></span>
+<span class="lineno">  691 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  692 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- Note that because every declaration ends with PP.hardline (or</span></span>
+<span class="lineno">  693 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- at least PP.line, which we don't group away), we don't need</span></span>
+<span class="lineno">  694 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- another one after ds'. Except, without one, the indent for the</span></span>
+<span class="lineno">  695 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">-- declarations bleeds into the footer. (wut?)</span></span>
+<span class="lineno">  696 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">header &lt;&gt; PP.indent 3 (PP.vsep ds') &lt;&gt; PP.hardline &lt;&gt; footer</span></span>
 <span class="lineno">  697 </span><span class="spaces">    </span><span class="istickedoff">Snippet s -&gt;</span>
 <span class="lineno">  698 </span><span class="spaces">        </span><span class="istickedoff">-- This assumes all the text snippets we have are multi-line blocks</span>
 <span class="lineno">  699 </span><span class="spaces">        </span><span class="istickedoff">-- that include newlines, including at the end.</span>

@@ -844,10 +844,10 @@ span.spaces    { background: white }
 <span class="lineno">  825 </span>  SharedContext -&gt;
 <span class="lineno">  826 </span>  FilePath -&gt;
 <span class="lineno">  827 </span>  IO (CryptolModule)
-<span class="lineno">  828 </span><span class="decl"><span class="istickedoff">loadCryptolModule sc path =</span>
-<span class="lineno">  829 </span><span class="spaces">  </span><span class="istickedoff">do</span>
-<span class="lineno">  830 </span><span class="spaces">  </span><span class="istickedoff">mod' &lt;- loadAndTranslateModule sc (Left path)</span>
-<span class="lineno">  831 </span><span class="spaces">  </span><span class="istickedoff">mkCryptolModule sc mod'</span></span>
+<span class="lineno">  828 </span><span class="decl"><span class="nottickedoff">loadCryptolModule sc path =</span>
+<span class="lineno">  829 </span><span class="spaces">  </span><span class="nottickedoff">do</span>
+<span class="lineno">  830 </span><span class="spaces">  </span><span class="nottickedoff">mod' &lt;- loadAndTranslateModule sc (Left path)</span>
+<span class="lineno">  831 </span><span class="spaces">  </span><span class="nottickedoff">mkCryptolModule sc mod'</span></span>
 <span class="lineno">  832 </span>
 <span class="lineno">  833 </span>
 <span class="lineno">  834 </span>-- | mkCryptolModule m env - translate a @m :: T.Module@ to a `CryptolModule`
