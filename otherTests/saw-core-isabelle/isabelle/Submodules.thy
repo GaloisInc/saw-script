@@ -82,7 +82,7 @@ end
 qualifier "Sub."
 
 locale fib_rec_spec =
-  assumes "Sub.fib_spec = Sub.fib_impl"
+  assumes [export_global]: "Sub.fib_spec = Sub.fib_impl"
 begin
 
 definition [simplified Sub.fib_impl_def[abs_def],export_global]: 
