@@ -27,6 +27,9 @@ urllib3 = ">=2.8.0"
 # some of the above packages do) to add a constraint for a security
 # issue.
 idna = ">=3.15"
+# Add a fake dep on certifi (we don't directly depend on it but at
+# least requests does) to add a constraint for a security issue.
+certifi = ">=2026.10.19"
 
 [tool.poetry.dev-dependencies]
 mypy = "^1.10"
