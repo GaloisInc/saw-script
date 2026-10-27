@@ -42,6 +42,11 @@ translateTypedTermMap defs = forM defs translateAndRegisterEntry
 
 -- | create a `Map Name TypedTerm` from the Cryptol.Module
 --   - this only extracts the exported values!
+--
+--   - FIXME: Thus, we see why, per #3491, the Rocq exporter does not
+--     export submodules. This is where (or close to) the fix should
+--     be made.
+
 cryptolModuleToMapOfTypedTerm
   :: SharedContext -> Cryptol.Module -> IO (Map.Map Name TypedTerm)
 cryptolModuleToMapOfTypedTerm sc m =
