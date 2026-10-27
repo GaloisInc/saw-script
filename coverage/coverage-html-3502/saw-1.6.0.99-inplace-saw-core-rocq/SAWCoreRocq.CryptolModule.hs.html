@@ -61,53 +61,58 @@ span.spaces    { background: white }
 <span class="lineno">   42 </span>
 <span class="lineno">   43 </span>-- | create a `Map Name TypedTerm` from the Cryptol.Module
 <span class="lineno">   44 </span>--   - this only extracts the exported values!
-<span class="lineno">   45 </span>cryptolModuleToMapOfTypedTerm
-<span class="lineno">   46 </span>  :: SharedContext -&gt; Cryptol.Module -&gt; IO (Map.Map Name TypedTerm)
-<span class="lineno">   47 </span><span class="decl"><span class="nottickedoff">cryptolModuleToMapOfTypedTerm sc m =</span>
-<span class="lineno">   48 </span><span class="spaces">  </span><span class="nottickedoff">do</span>
-<span class="lineno">   49 </span><span class="spaces">  </span><span class="nottickedoff">modEnv   &lt;- eModuleEnv sc</span>
-<span class="lineno">   50 </span><span class="spaces">  </span><span class="nottickedoff">allterms &lt;- eAllTerms sc</span>
-<span class="lineno">   51 </span><span class="spaces">  </span><span class="nottickedoff">let</span>
-<span class="lineno">   52 </span><span class="spaces">      </span><span class="nottickedoff">ifaceDecls = CSC.getAllIfaceDecls modEnv</span>
-<span class="lineno">   53 </span><span class="spaces">      </span><span class="nottickedoff">types = Map.map Cryptol.ifDeclSig (Cryptol.ifDecls ifaceDecls)</span>
-<span class="lineno">   54 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">   55 </span><span class="spaces">      </span><span class="nottickedoff">-- we're keeping only the Value exports of `m`:</span>
-<span class="lineno">   56 </span><span class="spaces">      </span><span class="nottickedoff">vNameSet = Cryptol.exported NSValue (Cryptol.mExports m)</span>
-<span class="lineno">   57 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno">   58 </span><span class="spaces">  </span><span class="nottickedoff">return $ Map.restrictKeys</span>
-<span class="lineno">   59 </span><span class="spaces">             </span><span class="nottickedoff">(Map.intersectionWith</span>
-<span class="lineno">   60 </span><span class="spaces">               </span><span class="nottickedoff">(\t x -&gt; TypedTerm (TypedTermSchema t) x)</span>
-<span class="lineno">   61 </span><span class="spaces">                 </span><span class="nottickedoff">types</span>
-<span class="lineno">   62 </span><span class="spaces">                 </span><span class="nottickedoff">allterms)</span>
-<span class="lineno">   63 </span><span class="spaces">             </span><span class="nottickedoff">vNameSet</span></span>
-<span class="lineno">   64 </span>
-<span class="lineno">   65 </span>-- | Translates a Cryptol.Module into a list of Rocq declarations.  This is done
-<span class="lineno">   66 </span>-- by going through the term map corresponding to the module, translating all
-<span class="lineno">   67 </span>-- terms, and accumulating the translated declarations of all top-level
-<span class="lineno">   68 </span>-- declarations encountered.
-<span class="lineno">   69 </span>translateCryptolModule ::
-<span class="lineno">   70 </span>  SharedContext -&gt;
-<span class="lineno">   71 </span>  TranslationConfiguration -&gt;
-<span class="lineno">   72 </span>  -- | List of already translated global declarations
-<span class="lineno">   73 </span>  [Rocq.Ident] -&gt;
-<span class="lineno">   74 </span>  Cryptol.Module -&gt;
-<span class="lineno">   75 </span>  IO (Either TranslationError [Rocq.Decl])
-<span class="lineno">   76 </span><span class="decl"><span class="nottickedoff">translateCryptolModule sc configuration globalDecls cm =</span>
-<span class="lineno">   77 </span><span class="spaces">  </span><span class="nottickedoff">do tm &lt;- cryptolModuleToMapOfTypedTerm sc cm</span>
-<span class="lineno">   78 </span><span class="spaces">     </span><span class="nottickedoff">defs &lt;-</span>
-<span class="lineno">   79 </span><span class="spaces">       </span><span class="nottickedoff">forM (Map.assocs tm) $ \(nm, t) -&gt;</span>
-<span class="lineno">   80 </span><span class="spaces">         </span><span class="nottickedoff">do tp &lt;- ttTypeAsTerm sc t</span>
-<span class="lineno">   81 </span><span class="spaces">            </span><span class="nottickedoff">return (nm, ttTerm t, tp)</span>
-<span class="lineno">   82 </span><span class="spaces">     </span><span class="nottickedoff">mm &lt;- scGetModuleMap sc</span>
-<span class="lineno">   83 </span><span class="spaces">     </span><span class="nottickedoff">return</span>
-<span class="lineno">   84 </span><span class="spaces">       </span><span class="nottickedoff">(reverse . view TermTranslation.topLevelDeclarations . snd &lt;$&gt;</span>
-<span class="lineno">   85 </span><span class="spaces">        </span><span class="nottickedoff">TermTranslation.runTermTranslationMonad</span>
-<span class="lineno">   86 </span><span class="spaces">        </span><span class="nottickedoff">configuration</span>
-<span class="lineno">   87 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -- TODO: this should be Just no?</span>
-<span class="lineno">   88 </span><span class="spaces">        </span><span class="nottickedoff">mm</span>
-<span class="lineno">   89 </span><span class="spaces">        </span><span class="nottickedoff">globalDecls</span>
-<span class="lineno">   90 </span><span class="spaces">        </span><span class="nottickedoff">[]</span>
-<span class="lineno">   91 </span><span class="spaces">        </span><span class="nottickedoff">(translateTypedTermMap defs))</span></span>
+<span class="lineno">   45 </span>--
+<span class="lineno">   46 </span>--   - FIXME: Thus, we see why, per #3491, the Rocq exporter does not
+<span class="lineno">   47 </span>--     export submodules. This is where (or close to) the fix should
+<span class="lineno">   48 </span>--     be made.
+<span class="lineno">   49 </span>
+<span class="lineno">   50 </span>cryptolModuleToMapOfTypedTerm
+<span class="lineno">   51 </span>  :: SharedContext -&gt; Cryptol.Module -&gt; IO (Map.Map Name TypedTerm)
+<span class="lineno">   52 </span><span class="decl"><span class="nottickedoff">cryptolModuleToMapOfTypedTerm sc m =</span>
+<span class="lineno">   53 </span><span class="spaces">  </span><span class="nottickedoff">do</span>
+<span class="lineno">   54 </span><span class="spaces">  </span><span class="nottickedoff">modEnv   &lt;- eModuleEnv sc</span>
+<span class="lineno">   55 </span><span class="spaces">  </span><span class="nottickedoff">allterms &lt;- eAllTerms sc</span>
+<span class="lineno">   56 </span><span class="spaces">  </span><span class="nottickedoff">let</span>
+<span class="lineno">   57 </span><span class="spaces">      </span><span class="nottickedoff">ifaceDecls = CSC.getAllIfaceDecls modEnv</span>
+<span class="lineno">   58 </span><span class="spaces">      </span><span class="nottickedoff">types = Map.map Cryptol.ifDeclSig (Cryptol.ifDecls ifaceDecls)</span>
+<span class="lineno">   59 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">   60 </span><span class="spaces">      </span><span class="nottickedoff">-- we're keeping only the Value exports of `m`:</span>
+<span class="lineno">   61 </span><span class="spaces">      </span><span class="nottickedoff">vNameSet = Cryptol.exported NSValue (Cryptol.mExports m)</span>
+<span class="lineno">   62 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno">   63 </span><span class="spaces">  </span><span class="nottickedoff">return $ Map.restrictKeys</span>
+<span class="lineno">   64 </span><span class="spaces">             </span><span class="nottickedoff">(Map.intersectionWith</span>
+<span class="lineno">   65 </span><span class="spaces">               </span><span class="nottickedoff">(\t x -&gt; TypedTerm (TypedTermSchema t) x)</span>
+<span class="lineno">   66 </span><span class="spaces">                 </span><span class="nottickedoff">types</span>
+<span class="lineno">   67 </span><span class="spaces">                 </span><span class="nottickedoff">allterms)</span>
+<span class="lineno">   68 </span><span class="spaces">             </span><span class="nottickedoff">vNameSet</span></span>
+<span class="lineno">   69 </span>
+<span class="lineno">   70 </span>-- | Translates a Cryptol.Module into a list of Rocq declarations.  This is done
+<span class="lineno">   71 </span>-- by going through the term map corresponding to the module, translating all
+<span class="lineno">   72 </span>-- terms, and accumulating the translated declarations of all top-level
+<span class="lineno">   73 </span>-- declarations encountered.
+<span class="lineno">   74 </span>translateCryptolModule ::
+<span class="lineno">   75 </span>  SharedContext -&gt;
+<span class="lineno">   76 </span>  TranslationConfiguration -&gt;
+<span class="lineno">   77 </span>  -- | List of already translated global declarations
+<span class="lineno">   78 </span>  [Rocq.Ident] -&gt;
+<span class="lineno">   79 </span>  Cryptol.Module -&gt;
+<span class="lineno">   80 </span>  IO (Either TranslationError [Rocq.Decl])
+<span class="lineno">   81 </span><span class="decl"><span class="nottickedoff">translateCryptolModule sc configuration globalDecls cm =</span>
+<span class="lineno">   82 </span><span class="spaces">  </span><span class="nottickedoff">do tm &lt;- cryptolModuleToMapOfTypedTerm sc cm</span>
+<span class="lineno">   83 </span><span class="spaces">     </span><span class="nottickedoff">defs &lt;-</span>
+<span class="lineno">   84 </span><span class="spaces">       </span><span class="nottickedoff">forM (Map.assocs tm) $ \(nm, t) -&gt;</span>
+<span class="lineno">   85 </span><span class="spaces">         </span><span class="nottickedoff">do tp &lt;- ttTypeAsTerm sc t</span>
+<span class="lineno">   86 </span><span class="spaces">            </span><span class="nottickedoff">return (nm, ttTerm t, tp)</span>
+<span class="lineno">   87 </span><span class="spaces">     </span><span class="nottickedoff">mm &lt;- scGetModuleMap sc</span>
+<span class="lineno">   88 </span><span class="spaces">     </span><span class="nottickedoff">return</span>
+<span class="lineno">   89 </span><span class="spaces">       </span><span class="nottickedoff">(reverse . view TermTranslation.topLevelDeclarations . snd &lt;$&gt;</span>
+<span class="lineno">   90 </span><span class="spaces">        </span><span class="nottickedoff">TermTranslation.runTermTranslationMonad</span>
+<span class="lineno">   91 </span><span class="spaces">        </span><span class="nottickedoff">configuration</span>
+<span class="lineno">   92 </span><span class="spaces">        </span><span class="nottickedoff">Nothing -- TODO: this should be Just no?</span>
+<span class="lineno">   93 </span><span class="spaces">        </span><span class="nottickedoff">mm</span>
+<span class="lineno">   94 </span><span class="spaces">        </span><span class="nottickedoff">globalDecls</span>
+<span class="lineno">   95 </span><span class="spaces">        </span><span class="nottickedoff">[]</span>
+<span class="lineno">   96 </span><span class="spaces">        </span><span class="nottickedoff">(translateTypedTermMap defs))</span></span>
 
 </pre>
 </body>
