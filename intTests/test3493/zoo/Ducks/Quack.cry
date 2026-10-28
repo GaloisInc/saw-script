@@ -1,0 +1,3 @@
+module Ducks::Quack where
+volume : [8]
+volume = 9

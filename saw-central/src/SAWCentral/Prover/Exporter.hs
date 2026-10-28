@@ -80,7 +80,7 @@ import SAWCore.Recognizer (asPi)
 import SAWCore.SATQuery
 import SAWCore.SharedTerm as SC
 
-import CryptolSAWCore.CryptolEnv (loadAndTranslateModule, ExtCryptolModule)
+import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadAndTranslateModule, ExtCryptolModule)
 import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import CryptolSAWCore.TypedTerm
 
@@ -527,6 +527,10 @@ writeRocqCryptolModule inputFile outputFile notations skips = io $ do
   ()  <- scLoadPreludeModule sc
   ()  <- scLoadCryptolModule sc
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
+  -- We do not need the local Cryptol environment handle this returns,
+  -- but we do need the setup it does under the covers.
+  _ <- initCryptolEnv sc
+
   cm  <- loadAndTranslateModule sc (Left inputFile)
   mm  <- scGetModuleMap sc
   let ?mm = mm
