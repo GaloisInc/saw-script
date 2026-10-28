@@ -359,10 +359,18 @@ fun cryptol_termination_cmd const_name_raw opt_typ_raw includes_raw thy =
     val b_ov = Binding.name rec_nm
     val fun_cfg = Function_Common.default_config
 
-    (* we expect the pattern coverage proof to be trivial, since there is exactly one
-       equation, thus we simply use "auto" rather than adding another manual proof step *)
+    (* the compatibility goal has the shape "(x1,..,xn) = (y1,..,yn) ==> rhs x = rhs y":
+       split the tuple and substitute instead of simplifying, since simp can blow up on large
+       Cryptol bodies (e.g. the let_simp simproc on nested lets) *)
+    fun pat_tac ctxt =
+      Pat_Completeness.pat_completeness_tac ctxt 1
+      THEN ALLGOALS (REPEAT_ALL_NEW (eresolve_tac ctxt @{thms Pair_inject})
+        THEN_ALL_NEW (REPEAT o hyp_subst_tac ctxt)
+        THEN_ALL_NEW resolve_tac ctxt @{thms refl})
+
+    (* we expect the pattern coverage proof to be trivial, since there is exactly one equation *)
     val (_, lthy_ov') =            
-      Function.add_function [(b_ov, SOME T, NoSyn)] specs fun_cfg Clasimp.auto_tac lthy_ov
+      Function.add_function [(b_ov, SOME T, NoSyn)] specs fun_cfg pat_tac lthy_ov
 
     val lthy = lthy_ov'
       |> Local_Theory.exit_global
