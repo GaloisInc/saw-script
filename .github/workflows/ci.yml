@@ -1049,6 +1049,22 @@ jobs:
           opam pin -y coq-bits https://github.com/rocq-community/bits.git#f50fc3e5f1eabcb0b0b94c8d25f75e61a255c2ba
           opam pin -y coq-flocq https://gitlab.inria.fr/flocq/flocq.git#27143972fc1dc96e281626d5194b5b371f05db80
 
+
+        # It seems that ocaml-setup creates a local opam switch in the
+        # current directory, not a global one in the build user's
+        # homedir, and doesn't provide a way to change this. The problem
+        # with this is that opam then only finds the switch when that's
+        # the current directory. We used to finesse this by letting it
+        # do that in saw-core-rocq/rocq, but that requires a repository
+        # checkout and we'd like the ocaml arrangements to be standalone.
+        #
+        # Set the current opam switch to the local switch in the
+        # current directory.
+      - name: Set the opam switch
+        run: |
+          pwd
+          opam switch set $(pwd)
+
       - name: Report the opam setup
         run: |
           opam switch
