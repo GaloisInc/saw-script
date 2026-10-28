@@ -98,24 +98,36 @@ fun dest_coerce_funT T = case dest_coerceT T of
 (* drop trivial coercions, and rewrite top-level function coercions to be pointwise *)
 fun post_coerce x = case x of
       (Const (\<^const_name>\<open>coerce_to\<close>, T) $ _ $ y) => if is_trivial_coerce T then post_coerce y
-        else eta_coerce T y
+        else extra_coerce T y
     | Const (\<^const_name>\<open>coerce_to\<close>, T) => 
         if is_trivial_coerce T then error "err" else 
          (case dest_coerce_funT T of
-            SOME _ => eta_coerce T x
+            SOME _ => extra_coerce T x
           | NONE => x)
     | y $ z => post_coerce y $ post_coerce z
     | Abs (nm, T, y) => Abs (nm, T, post_coerce y)
     | _ => x
- and eta_coerce T t = case dest_coerce_funT T of
-      SOME (U_dom,U_rng,V_dom,V_rng) =>
+ and extra_coerce T t = case dest_coerceT T of 
+      SOME (U, V) => (case eta_coerce U V t of
+        SOME t' => post_coerce t'
+      | NONE => (case tuple_coerce U V t of
+          SOME t' => post_coerce t'
+        | NONE => mk_coerce U V (post_coerce t)))
+    | NONE => error "extra_coerce: unexpected coerce type"
+ and tuple_coerce U V t = case (U,V) of
+  (Type(\<^type_name>\<open>prod\<close>,[U1,U2]),Type(\<^type_name>\<open>prod\<close>,[V1,V2])) =>
+    (case t of 
+      (Const (\<^const_name>\<open>Pair\<close>, _) $ t1 $ t2) 
+         => (SOME (Const (\<^const_name>\<open>Pair\<close>, V1 --> V2 --> V) $ mk_coerce U1 V1 t1 $ mk_coerce U2 V2 t2))
+     | _ => NONE)
+  | _ => NONE
+ and eta_coerce U V t = case (dest_funT U, dest_funT V) of
+      (SOME (U_dom,U_rng), SOME (V_dom,V_rng)) =>
          (case t of 
-            Abs (x,_,y) => post_coerce (Abs(x,V_dom,
-              mk_coerce U_rng V_rng (Term.subst_bound (post_coerce (mk_coerce V_dom U_dom (Bound 0)), y))))
-          | _ => post_coerce (eta_coerce T (Abs ("x", U_dom, t $ Bound 0))))
-       | NONE => case dest_coerceT T of 
-           SOME (U,V) => mk_coerce U V (post_coerce t)
-         | NONE => error "eta_coerce: unexpected type"
+            Abs (x,_,y) => SOME (Abs(x,V_dom,
+              mk_coerce U_rng V_rng (Term.subst_bound (mk_coerce V_dom U_dom (Bound 0), y))))
+          | _ => eta_coerce U V (Abs ("x", U_dom, t $ Bound 0)))
+       | _ => NONE
 
 fun strip_guard  T = case T of
       Type("fun", [ (targ as Type (\<^type_name>\<open>tyarg\<close>, _)), T2]) => (case strip_guard T2 of
@@ -632,5 +644,24 @@ hide_fact experiment.rec_test_impl_def experiment.rec_test_spec_def
           experiment.rec_test_alt_def experiment.rec_test_def experiment.rec_test_impl_raw.elims
           experiment.rec_test_impl_raw.simps experiment.rec_test_impl_raw.induct
           experiment.rec_test_rec_spec_axioms
+
+context includes type_arg_syntax and assuming_syntax and seq_syntax begin
+
+cryptol_definition fn_coerce_spec :: "{'a, 'b, 'c::coercible_atom, 'd::coercible} ('a = 'b) =?> (['a]('c \<Rightarrow> 'd) \<Rightarrow> ['b]('c \<Rightarrow> 'd)) \<Rightarrow> (['b]('c \<Rightarrow> 'd) \<Rightarrow> ['a]('c \<Rightarrow> 'd))"  where
+  "fn_coerce_spec x \<equiv> x"
+
+
+lemma "fn_coerce_spec`{1+1,2, 'a::coercible_atom, 'b::coercible} (fn_coerce_spec`{2,1+1,'a::coercible_atom,'b::coercible} f) = f"
+  unfolding fn_coerce_spec_def
+  by simp
+
+cryptol_definition pair_coerce_spec :: "{'a, 'b, 'c} ('a = 'b) =?> (['a]'c \<times> ['b]'c) \<Rightarrow> (['b]'c \<times> ['a]'c)"  where
+  "pair_coerce_spec x \<equiv> (fst x, snd x)"
+
+lemma "LEN('a) = LEN('b) \<Longrightarrow> pair_coerce_spec`{'a,'b,'c} (x,y) = (coerce x, coerce y)"
+  unfolding pair_coerce_spec_def
+  by simp
+
+end
 
 end
