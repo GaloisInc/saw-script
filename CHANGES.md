@@ -8,6 +8,13 @@ This release supports [version
 
 * The Rocq exporter now honors CRYPTOLPATH properly (#3493).
 
+## Other Changes
+
+* Updated version constraints in Python dependencies for security issues.
+  (#3503, #3469)
+
+* Type-check Cryptol primitives as they are imported. (#3471)
+
 # 1.6 -- 2026-09-17
 
 This release supports [version
