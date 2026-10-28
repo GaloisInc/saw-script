@@ -138,9 +138,8 @@ recordName :: [String] -> Name.Name
 recordName args =
   let 
     rawnm = List.intercalate "_" args ++ "_recordT"
-    thynm = Name.TheoryName (Name.cleanName $ Name.SimpleName rawnm) True
+    thynm = Name.TheoryName (Name.cleanName $ Name.SimpleName rawnm) False
   in Name.Name thynm rawnm Syntax.NoSyn Name.Typ
-
 
 recordCmd :: Output.HasOutput => [String] -> Template.Template -> String
 recordCmd args template =
@@ -382,12 +381,12 @@ datatypeDecl targs nm flds0 path template =
 
 outDecl :: Output.HasOutput => Decl -> [String] -> String
 outDecl d qs = case d of
-  Definition q b args e _ -> definitionCmd q b (Just (args,e))
-  ConstDecl q b -> definitionCmd q b Nothing
+  Definition q b args e _ -> definitionCmd q (Name.unqualify b) (Just (args,e))
+  ConstDecl q b -> definitionCmd q (Name.unqualify b) Nothing
   Import i -> Output.out (Name.thyNm i)
   TypeSyn targs nm rhs ->
-      "type_synonym " ++ tyHeader targs nm ++ " = " ++ Output.quotes (Output.out rhs)
-  TypeDecl targs nm -> "typedecl " ++ tyHeader targs nm
+      "type_synonym " ++ tyHeader targs (Name.unqualify nm) ++ " = " ++ Output.quotes (Output.out rhs)
+  TypeDecl targs nm -> "typedecl " ++ tyHeader targs (Name.unqualify nm)
   RecordDecl args -> recordCmd args (Output.getTemplate "Coercible_Record")
   DatatypeDecl targs nm flds -> datatypeDecl targs nm flds qs (Output.getTemplate "Coercible_Datatype")
   FixpointLocale args -> fixPointLocale args qs (Output.getTemplate "Fixpoint_Locale")

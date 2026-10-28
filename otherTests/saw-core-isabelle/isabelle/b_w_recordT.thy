@@ -6,6 +6,8 @@ record ('a,'b) b_w_recordT =
   b :: 'a
   w :: 'b
 
+lemmas b_w_recordT_ext_def_real = b_w_recordT.b_w_recordT_ext_def
+
 free_constructors b_w_recordT_ext for b_w_recordT.b_w_recordT_ext
   by (erule b_w_recordT.cases_scheme) (rule b_w_recordT.ext_inject)
 
@@ -58,7 +60,7 @@ lemmas b_w_recordT_all_defs =
   unstrip_b_w_recordT_ext_def
   b_w_recordT.select_defs 
   b_w_recordT.defs
-  b_w_recordT.b_w_recordT.b_w_recordT_ext_def
+  b_w_recordT_ext_def_real
   Rep_b_w_recordT_ext_inverse 
   Abs_b_w_recordT_ext_inverse
 

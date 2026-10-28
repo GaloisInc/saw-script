@@ -113,7 +113,7 @@ qualifiedIdent t = case nameOf t of
 
 unqualifyName :: Name -> Name
 unqualifyName = \case
-  nm@QName{} -> nm { nmQual_ = [] }
+  nm@QName{} -> nm { nmThy = (nmThy nm){thyQualified = False}, nmQual_ = [] }
   nm -> nm
 
 stripQualifier :: HasName t => t -> (t, [String])

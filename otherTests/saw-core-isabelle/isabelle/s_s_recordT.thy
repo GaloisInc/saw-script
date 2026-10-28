@@ -5,6 +5,8 @@ begin
 record ('a) s_s_recordT =
   s :: 'a
 
+lemmas s_s_recordT_ext_def_real = s_s_recordT.s_s_recordT_ext_def
+
 free_constructors s_s_recordT_ext for s_s_recordT.s_s_recordT_ext
   by (erule s_s_recordT.cases_scheme) (rule s_s_recordT.ext_inject)
 
@@ -57,7 +59,7 @@ lemmas s_s_recordT_all_defs =
   unstrip_s_s_recordT_ext_def
   s_s_recordT.select_defs 
   s_s_recordT.defs
-  s_s_recordT.s_s_recordT.s_s_recordT_ext_def
+  s_s_recordT_ext_def_real
   Rep_s_s_recordT_ext_inverse 
   Abs_s_s_recordT_ext_inverse
 

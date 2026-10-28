@@ -382,17 +382,22 @@ translateName nm = do
     Cry.NSConstructor -> return $ Name.Term
     Cry.NSModule -> throwError $ UnsupportedEntity $ "Namespace.NSModule"
 
-  (thynm,path) <- case Cry.nameInfo nm of
-    Cry.GlobalName _ on -> pathToTheory (Cry.ogModule on)
-    Cry.LocalName{} -> do
-      thynm <- curTheory
-      return (thynm,[])
   let syn = case Cry.nameFixity nm of
         Just{} -> Syntax.InfixSyn (Cry.unpackIdent ident)
         Nothing -> Syntax.NoSyn
   let isaIdent = case (Name.isTypeK k, Cry.nameInfo nm) of
         (True, Cry.LocalName{}) -> "'" ++ Cry.unpackIdent ident
         _ -> Cry.unpackIdent ident
+  (thynm,path) <- case Cry.nameInfo nm of
+    Cry.GlobalName _ on -> do
+      (thynm,path) <- pathToTheory (Cry.ogModule on)
+      let thynm' = if not (isBuiltinThy thynm) && mayShadowBuiltin isaIdent
+            then thynm{ Name.thyQualified = True } else thynm
+      return (thynm',path)
+    Cry.LocalName{} -> do
+      thynm <- curTheory
+      return (thynm,[])
+
   return $ Name.QName thynm isaIdent (reverse (map Cry.unpackIdent path)) syn k
 
 translateTParam :: Cry.TParam -> IsaM Expr
@@ -608,7 +613,10 @@ isHexType t = isJust (asWordType t)
 recordField :: [Cry.Ident] -> Cry.Ident -> Name.Name
 recordField flds field = 
   let rnm = Decl.recordName (map Cry.unpackIdent flds)
-  in Name.Name (Name.nmThy rnm) (Cry.unpackIdent field) Syntax.NoSyn Name.Term
+  in Name.QName (Name.nmThy rnm)
+      (Cry.unpackIdent field)
+      [Name.nmStr rnm]
+      Syntax.NoSyn Name.Term
 
 isRec :: Cry.Type -> Maybe (Cry.RecordMap Cry.Ident Cry.Type)
 isRec t = Cry.tIsRec t <|> do

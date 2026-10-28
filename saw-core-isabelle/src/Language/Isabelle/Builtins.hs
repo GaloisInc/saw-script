@@ -1,6 +1,9 @@
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 module Language.Isabelle.Builtins where
 
+import Data.List (stripPrefix)
+import qualified Data.Set as Set
+
 import qualified Cryptol.TypeCheck.PP as Cry
 
 import qualified Language.Isabelle.Binding as Binding
@@ -10,7 +13,7 @@ import qualified Language.Isabelle.Name as Name
 import           Language.Isabelle.Name (Name)
 import qualified Language.Isabelle.Syntax as Syntax
 import qualified Language.Isabelle.Panic as Panic
-import Data.List (stripPrefix)
+
 
 scratchThy :: Name.TheoryName
 scratchThy = Name.TheoryName "Scratch" False
@@ -76,6 +79,20 @@ isBuiltinName :: Name.Name -> Bool
 isBuiltinName nm = case nm of
   Name.Name{} -> isBuiltinThy (Name.nmThy nm)
   _ -> False
+
+-- all aliases introduced by the translation bundle in Cryptol_Syntax.thy
+builtinIdents :: Set.Set String
+builtinIdents =
+  Set.fromList $
+     ["length","join","take","drop","zero","map","seq_compr","reverse"]
+  ++ ["zip","zipWith","zip_mismatch","seq_concat_map","complement","sum"]
+  ++ ["product","update","updateEnd","updates","updatesEnd","carry","scarry"]
+  ++ ["sborrow","and","or","negate","fromZ","fromInteger","toSignedInteger"]
+  ++ ["toInteger","all","any","scanl","foldl","foldl'","foldr","foldr'"]
+  ++ ["transpose","min","max","head","tail","last","lg2","Option","None","Some"]
+
+mayShadowBuiltin :: String -> Bool
+mayShadowBuiltin nm = Set.member nm builtinIdents
 
 tFun :: Type -> Type -> Type
 tFun e1 e2 = Expr.Ctr [e1, e2] $
