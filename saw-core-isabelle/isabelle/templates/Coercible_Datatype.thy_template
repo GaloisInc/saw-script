@@ -34,7 +34,7 @@ instance
   by (auto split: $14$1.splits)
 end
 
-instance $14$1 :: ($6) coercible_atom
+instance $14$1 :: ($16) coercible_atom
   apply standard
   by (auto simp add: $14strip_$1_def split: $14$1.splits)
 

@@ -43,7 +43,7 @@ instance
   done
 end
 
-instantiation $1_ext :: ($5) coercible_atom begin
+instantiation $1_ext :: ($14) coercible_atom begin
 instance
   apply standard
   by (simp add: strip_$1_ext_def)

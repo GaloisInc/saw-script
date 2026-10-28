@@ -26,17 +26,17 @@ end
 
 context includes cryptol_translation_syntax begin
 lemma s_s_recordT_ext_same_type[simp]: 
-  "same_type (TYPE((('a::coercible_atom),('b::coercible_atom)) s_s_recordT_ext)) (TYPE((('c::coercible_atom),('d::coercible_atom)) s_s_recordT_ext)) = same_type TYPE({('a::coercible_atom),('b::coercible_atom)} unit) TYPE({('c::coercible_atom),('d::coercible_atom)} unit)"
+  "same_type (TYPE((('a::coercible),('b::coercible)) s_s_recordT_ext)) (TYPE((('c::coercible),('d::coercible)) s_s_recordT_ext)) = same_type TYPE({('a::coercible),('b::coercible)} unit) TYPE({('c::coercible),('d::coercible)} unit)"
   apply simp
   by (simp add: same_type_def strip_type_s_s_recordT_ext_def strip_type_prod_def)
 end
 
-instantiation s_s_recordT_ext :: (coercible_atom,coercible_atom) coercible
+instantiation s_s_recordT_ext :: (coercible,coercible) coercible
 begin
-definition strip_s_s_recordT_ext :: "(('a::coercible_atom),('b::coercible_atom)) s_s_recordT_ext \<Rightarrow> stripped" where
+definition strip_s_s_recordT_ext :: "(('a::coercible),('b::coercible)) s_s_recordT_ext \<Rightarrow> stripped" where
   "strip_s_s_recordT_ext \<equiv> (\<lambda> r. strip (Record.iso_tuple_fst s_s_recordT_ext_Tuple_Iso r, Record.iso_tuple_snd s_s_recordT_ext_Tuple_Iso r))"
 
-definition unstrip_s_s_recordT_ext :: "stripped \<Rightarrow> (('a::coercible_atom),('b::coercible_atom)) s_s_recordT_ext" where
+definition unstrip_s_s_recordT_ext :: "stripped \<Rightarrow> (('a::coercible),('b::coercible)) s_s_recordT_ext" where
   "unstrip_s_s_recordT_ext \<equiv> (\<lambda> r. let (a, b) = unstrip r in Record.iso_tuple_cons s_s_recordT_ext_Tuple_Iso a b)"
 
 instance

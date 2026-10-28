@@ -150,13 +150,13 @@ recordCmd args template =
     (ts, ts') = freshTs (length args + 1)
     coercion = mapRecord nm args (\(_,x) -> coerceExpr x)
     fields = map (\(anm,t) -> Output.out anm ++ " :: " ++ t) (zip args ts)
-    catom s = "(" ++ s ++ "::coercible_atom" ++ ")"
+    coercible s = "(" ++ s ++ "::coercible" ++ ")"
   in Output.out $ Template.apply template $ 
     [ nm
-    , commas (map catom ts)
-    , commas (map catom ts')
+    , commas (map coercible ts)
+    , commas (map coercible ts')
     , commas (take (length args) ts)
-    , sorts "coercible_atom"
+    , sorts "coercible"
     , sorts "strip_type"
     , Output.indent 1 $ Output.lines $ fields
     , Output.out coercion
@@ -165,6 +165,7 @@ recordCmd args template =
     , Output.out $ recordCtr $ (map (\s -> (Name.SimpleName s, Expr.IntLit 0)) args) ++ [(dots, Expr.IntLit 0)]
     , sorts "_"
     , commas ts
+    , sorts "coercible_atom"
     ]
 
 collectDeps :: Expr.Expr -> [Name.Name]
@@ -332,9 +333,9 @@ datatypeDecl targs nm flds0 path template =
       natcase n = case n of
         0 -> "0"
         _ -> "Suc (" ++ natcase (n-1) ++ ")"
-      catom s = case isTNum s of
+      coercible s = case isTNum s of
         True -> Output.out s
-        False -> "(" ++ Output.out s ++ "::coercible_atom" ++ ")"
+        False -> "(" ++ Output.out s ++ "::coercible" ++ ")"
       mk_comp f n = Output.brackets $ List.intercalate " o " (replicate n f)
       mk_strip (n,(_,fts)) = Output.brackets $ case length fts of
         0 -> "strip (" ++ shownat n ++ ",())"
@@ -367,16 +368,17 @@ datatypeDecl targs nm flds0 path template =
     , List.intercalate " | " defs
     , commas $ map mk_strip_type targs
     , commas targs'
-    , sorts "coercible_atom"
+    , sorts "coercible"
     , List.intercalate " " (map mk_strip (zip [0::Integer ..] flds))
     , List.intercalate " | " (map mk_unstrip (zip [0::Integer ..] flds))
     , sorts "_"
     , sorts "strip_type"
-    , commas $ map catom targs
-    , commas $ map catom targs'
+    , commas $ map coercible targs
+    , commas $ map coercible targs'
     , List.intercalate " \\<and> " $ map mkSameType (zip targs targs')
     , if path == [] then "" else outPath path ++ "."
     , List.intercalate " " $ map mk_coerce flds0
+    , sorts "coercible_atom"
     ]
 
 outDecl :: Output.HasOutput => Decl -> [String] -> String
