@@ -4779,14 +4779,18 @@ primitives = Map.fromList $
     (pureVal summarize_verification)
     Experimental
     [ "Print a human-readable summary of all verifications performed so"
-    , "far."
+    , "far. Use \"summarize_verification_json\" for machine-readable"
+    , "output. These commands produce the same output as the -s option"
+    , "on SAW's command line."
     ]
 
   , prim "summarize_verification_json" "String -> TopLevel ()"
     (pureVal do_summarize_verification_json)
     Experimental
     [ "Print a JSON summary of all verifications performed so far into"
-    , "the named file."
+    , "the named file. Use \"summarize_verification\" for human-readable"
+    , "output. These commands produce the same output as the -s option"
+    , "on SAW's command line."
     ]
 
     ------------------------------------------------------------
