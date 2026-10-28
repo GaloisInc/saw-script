@@ -254,6 +254,10 @@ lemma "zipWith_as_map`{'n,'a::coercible_atom,'b::coercible_atom,'c::coercible_at
   apply (rule seq_eq_nthI)
   by simp
 
+lemma "seq_of_fn_valid`{'a,'b} i f"
+  unfolding seq_of_fn_valid_def seq_of_fn_def
+  by clarsimp
+
 end
 
 end

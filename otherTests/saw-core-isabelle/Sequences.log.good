@@ -92,6 +92,15 @@ cryptol_definition selects_as_map :: "{'n,'k,'a} ((fin 'n,fin 'k,Eq 'a) =?> ((['
 cryptol_definition selects_end_as_map :: "{'n,'k,'a} ((fin 'n,fin 'k,Eq 'a) =?> ((['n]'a) \<Rightarrow> ((['k]Integer) \<Rightarrow> Bit)))" where
 "selects_end_as_map xs ixs \<equiv> (all`{'k,Integer} (\<lambda>(ix :: Integer). ((ix >=`{Integer} (0 :: Integer)) \<and> (ix <`{Integer} (number`{'n,Integer})))) ixs) \<longrightarrow> ((xs !!`{'n,'k,Integer,'a} ixs) ==`{['k]'a} (map`{'k,Integer,'a} (\<lambda>(ix :: Integer). (xs !`{'n,'a,Integer} ix)) ixs))"
 
+cryptol_definition seq_of_fn :: "{'a,'b,'c,'d} ((fin 'a,'a = 'b) =?> (((['a]('c \<Rightarrow> 'd)) \<Rightarrow> (['b]('c \<Rightarrow> 'd))) \<Rightarrow> ((['b]('c \<Rightarrow> 'd)) \<Rightarrow> (['a]('c \<Rightarrow> 'd)))))" where
+"seq_of_fn f \<equiv> f"
+
+cryptol_definition seq_of_fn_valid :: "{'a,'b} ((fin 'a,'a = 'b) =?> (Integer \<Rightarrow> (((['a](Integer \<Rightarrow> (['a]))) \<Rightarrow> (['b](Integer \<Rightarrow> (['a])))) \<Rightarrow> Bit)))" where
+"seq_of_fn_valid i f \<equiv> 
+  let
+    xs = ((map`{'a,Integer,Integer \<Rightarrow> (['a])} (\<lambda>(i__p2 :: Integer). (fromInteger`{['a]})) (fromToLessThan`{0,'a,Integer})) : (['a](Integer \<Rightarrow> (['a]))))
+  in ((i <`{Integer} (number`{'a,Integer})) \<longrightarrow> ((((seq_of_fn`{'a,'b,Integer,['a]} (seq_of_fn`{'b,'a,Integer,['a]} f) xs) @`{'a,Integer \<Rightarrow> (['a]),Integer} i) i) ==`{['a]} (((f`{} xs) @`{'b,Integer \<Rightarrow> (['a]),Integer} i) i)))"
+
 cryptol_definition shift_r_l_neg :: "{'n,'a} ((fin 'n,Eq 'a,Zero 'a) =?> ((['n]'a) \<Rightarrow> (Integer \<Rightarrow> Bit)))" where
 "shift_r_l_neg xs i \<equiv> (xs >>`{'n,Integer,'a} i) ==`{['n]'a} (xs <<`{'n,Integer,'a} (negate`{Integer} i))"
 

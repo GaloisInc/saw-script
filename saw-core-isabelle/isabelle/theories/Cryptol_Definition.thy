@@ -83,14 +83,39 @@ fun is_trivial_coerce t = case dest_funT t of
      | NONE => false)
   | NONE => false
 
-fun unwrap_no_coerce x = case x of
-      (Const (\<^const_name>\<open>coerce_to\<close>, T) $ U $ y) => if is_trivial_coerce T then unwrap_no_coerce y
-        else Const (\<^const_name>\<open>coerce_to\<close>, T) $ U $ unwrap_no_coerce y
+fun mk_coerce U V x = Const (\<^const_name>\<open>coerce_to\<close>, Term.itselfT V --> U --> V) $ Logic.mk_type V $ x
+
+fun dest_coerceT T = case dest_funT T of
+      SOME(_,U) => dest_funT U
+    | NONE => NONE
+
+fun dest_coerce_funT T = case dest_coerceT T of
+      SOME (U,V) => (case (dest_funT U, dest_funT V) of
+        (SOME (U_dom,U_rng), SOME (V_dom,V_rng)) => SOME (U_dom,U_rng,V_dom,V_rng)
+       | _ => NONE)
+    | _ => NONE
+
+(* drop trivial coercions, and rewrite top-level function coercions to be pointwise *)
+fun post_coerce x = case x of
+      (Const (\<^const_name>\<open>coerce_to\<close>, T) $ _ $ y) => if is_trivial_coerce T then post_coerce y
+        else eta_coerce T y
     | Const (\<^const_name>\<open>coerce_to\<close>, T) => 
-        if is_trivial_coerce T then Term.Abs ("x", T, Term.Bound 0) else x
-    | y $ z => unwrap_no_coerce y $ unwrap_no_coerce z
-    | Abs (nm, T, y) => Abs (nm, T, unwrap_no_coerce y)
+        if is_trivial_coerce T then error "err" else 
+         (case dest_coerce_funT T of
+            SOME _ => eta_coerce T x
+          | NONE => x)
+    | y $ z => post_coerce y $ post_coerce z
+    | Abs (nm, T, y) => Abs (nm, T, post_coerce y)
     | _ => x
+ and eta_coerce T t = case dest_coerce_funT T of
+      SOME (U_dom,U_rng,V_dom,V_rng) =>
+         (case t of 
+            Abs (x,_,y) => post_coerce (Abs(x,V_dom,
+              mk_coerce U_rng V_rng (Term.subst_bound (post_coerce (mk_coerce V_dom U_dom (Bound 0)), y))))
+          | _ => post_coerce (eta_coerce T (Abs ("x", U_dom, t $ Bound 0))))
+       | NONE => case dest_coerceT T of 
+           SOME (U,V) => mk_coerce U V (post_coerce t)
+         | NONE => error "eta_coerce: unexpected type"
 
 fun strip_guard  T = case T of
       Type("fun", [ (targ as Type (\<^type_name>\<open>tyarg\<close>, _)), T2]) => (case strip_guard T2 of
@@ -189,7 +214,7 @@ let
           SOME T1 => (Const (\<^const_name>\<open>assuming\<close>, dummyT)) $ (tyarg T1) $ rhs'
         | NONE => rhs'
     in Const (\<^const_name>\<open>Pure.eq\<close>, dummyT) $ lhs' $ rhs'' end
-  val concl' = unwrap_no_coerce (Syntax.check_term (Proof_Context.allow_dummies lthy2) concl)
+  val concl' = post_coerce (Syntax.check_term (Proof_Context.allow_dummies lthy2) concl)
   val lthy3 = #2 (Specification.definition (SOME (b,SOME T,mfx)) params' prems' (Binding.empty_atts, concl') lthy_outer)
   in lthy3 end
 
