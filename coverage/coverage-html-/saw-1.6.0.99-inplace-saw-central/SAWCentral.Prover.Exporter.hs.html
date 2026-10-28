@@ -99,7 +99,7 @@ span.spaces    { background: white }
 <span class="lineno">   80 </span>import SAWCore.SATQuery
 <span class="lineno">   81 </span>import SAWCore.SharedTerm as SC
 <span class="lineno">   82 </span>
-<span class="lineno">   83 </span>import CryptolSAWCore.CryptolEnv (loadAndTranslateModule, ExtCryptolModule)
+<span class="lineno">   83 </span>import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadAndTranslateModule, ExtCryptolModule)
 <span class="lineno">   84 </span>import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 <span class="lineno">   85 </span>import CryptolSAWCore.TypedTerm
 <span class="lineno">   86 </span>
@@ -458,11 +458,11 @@ span.spaces    { background: white }
 <span class="lineno">  439 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
 <span class="lineno">  440 </span>
 <span class="lineno">  441 </span>withImportSAWCorePreludeExtra :: Rocq.TranslationConfiguration  -&gt; Rocq.TranslationConfiguration
-<span class="lineno">  442 </span><span class="decl"><span class="nottickedoff">withImportSAWCorePreludeExtra config@(Rocq.TranslationConfiguration { Rocq.postPreamble }) =</span>
-<span class="lineno">  443 </span><span class="spaces">  </span><span class="nottickedoff">config {</span>
-<span class="lineno">  444 </span><span class="spaces">      </span><span class="nottickedoff">Rocq.postPreamble = postPreamble &lt;&gt;</span>
-<span class="lineno">  445 </span><span class="spaces">          </span><span class="nottickedoff">&quot;From CryptolToRocq Require Import SAWCorePreludeExtra.\n&quot;</span>
-<span class="lineno">  446 </span><span class="spaces">  </span><span class="nottickedoff">}</span></span>
+<span class="lineno">  442 </span><span class="decl"><span class="istickedoff">withImportSAWCorePreludeExtra config@(Rocq.TranslationConfiguration { Rocq.postPreamble }) =</span>
+<span class="lineno">  443 </span><span class="spaces">  </span><span class="istickedoff">config {</span>
+<span class="lineno">  444 </span><span class="spaces">      </span><span class="istickedoff">Rocq.postPreamble = postPreamble &lt;&gt;</span>
+<span class="lineno">  445 </span><span class="spaces">          </span><span class="istickedoff">&quot;From CryptolToRocq Require Import SAWCorePreludeExtra.\n&quot;</span>
+<span class="lineno">  446 </span><span class="spaces">  </span><span class="istickedoff">}</span></span>
 <span class="lineno">  447 </span>
 <span class="lineno">  448 </span>
 <span class="lineno">  449 </span>withImportCryptolPrimitivesForSAWCore ::
@@ -541,123 +541,127 @@ span.spaces    { background: white }
 <span class="lineno">  522 </span>  -- | List of identifiers to skip during translation
 <span class="lineno">  523 </span>  [Text] -&gt;
 <span class="lineno">  524 </span>  TopLevel ()
-<span class="lineno">  525 </span><span class="decl"><span class="nottickedoff">writeRocqCryptolModule inputFile outputFile notations skips = io $ do</span>
-<span class="lineno">  526 </span><span class="spaces">  </span><span class="nottickedoff">sc  &lt;- mkSharedContext</span>
-<span class="lineno">  527 </span><span class="spaces">  </span><span class="nottickedoff">()  &lt;- scLoadPreludeModule sc</span>
-<span class="lineno">  528 </span><span class="spaces">  </span><span class="nottickedoff">()  &lt;- scLoadCryptolModule sc</span>
-<span class="lineno">  529 </span><span class="spaces">  </span><span class="nottickedoff">cryptolPrimitivesForSAWCoreModule &lt;- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule</span>
-<span class="lineno">  530 </span><span class="spaces">  </span><span class="nottickedoff">cm  &lt;- loadAndTranslateModule sc (Left inputFile)</span>
-<span class="lineno">  531 </span><span class="spaces">  </span><span class="nottickedoff">mm  &lt;- scGetModuleMap sc</span>
-<span class="lineno">  532 </span><span class="spaces">  </span><span class="nottickedoff">let ?mm = mm</span>
-<span class="lineno">  533 </span><span class="spaces">  </span><span class="nottickedoff">let cryptolPreludeDecls =</span>
-<span class="lineno">  534 </span><span class="spaces">        </span><span class="nottickedoff">map Rocq.Ident $</span>
-<span class="lineno">  535 </span><span class="spaces">        </span><span class="nottickedoff">mapMaybe Rocq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)</span>
-<span class="lineno">  536 </span><span class="spaces">  </span><span class="nottickedoff">let configuration =</span>
-<span class="lineno">  537 </span><span class="spaces">        </span><span class="nottickedoff">withImportCryptolPrimitivesForSAWCoreExtra $</span>
-<span class="lineno">  538 </span><span class="spaces">        </span><span class="nottickedoff">withImportCryptolPrimitivesForSAWCore $</span>
-<span class="lineno">  539 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePreludeExtra $</span>
-<span class="lineno">  540 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePrelude $</span>
-<span class="lineno">  541 </span><span class="spaces">        </span><span class="nottickedoff">rocqTranslationConfiguration notations skips</span>
-<span class="lineno">  542 </span><span class="spaces">  </span><span class="nottickedoff">let nm = Rocq.Ident (Text.pack $ takeBaseName inputFile)</span>
-<span class="lineno">  543 </span><span class="spaces">  </span><span class="nottickedoff">res &lt;- Rocq.translateCryptolModule sc nm configuration cryptolPreludeDecls cm</span>
-<span class="lineno">  544 </span><span class="spaces">  </span><span class="nottickedoff">case res of</span>
-<span class="lineno">  545 </span><span class="spaces">    </span><span class="nottickedoff">Left err -&gt; do</span>
-<span class="lineno">  546 </span><span class="spaces">      </span><span class="nottickedoff">err' &lt;- Rocq.ppTranslationError sc err</span>
-<span class="lineno">  547 </span><span class="spaces">      </span><span class="nottickedoff">putStrLn $ Text.unpack err'</span>
-<span class="lineno">  548 </span><span class="spaces">    </span><span class="nottickedoff">Right cmDoc -&gt; do</span>
-<span class="lineno">  549 </span><span class="spaces">      </span><span class="nottickedoff">let doc = PP.vcat [ Rocq.preamble configuration, cmDoc ]</span>
-<span class="lineno">  550 </span><span class="spaces">      </span><span class="nottickedoff">writeRocqDoc outputFile doc</span></span>
-<span class="lineno">  551 </span>
-<span class="lineno">  552 </span>nameOfSAWCorePrelude :: Un.ModuleName
-<span class="lineno">  553 </span><span class="decl"><span class="nottickedoff">nameOfSAWCorePrelude = Un.moduleName preludeModule</span></span>
-<span class="lineno">  554 </span>
-<span class="lineno">  555 </span>nameOfCryptolPrimitivesForSAWCoreModule :: Un.ModuleName
-<span class="lineno">  556 </span><span class="decl"><span class="nottickedoff">nameOfCryptolPrimitivesForSAWCoreModule = Un.moduleName cryptolModule</span></span>
-<span class="lineno">  557 </span>
-<span class="lineno">  558 </span>writeRocqSAWCorePrelude ::
-<span class="lineno">  559 </span>  FilePath -&gt;
-<span class="lineno">  560 </span>  [(Text, Text)] -&gt;
-<span class="lineno">  561 </span>  [Text] -&gt;
-<span class="lineno">  562 </span>  IO ()
-<span class="lineno">  563 </span><span class="decl"><span class="nottickedoff">writeRocqSAWCorePrelude outputFile notations skips = do</span>
-<span class="lineno">  564 </span><span class="spaces">  </span><span class="nottickedoff">sc  &lt;- mkSharedContext</span>
-<span class="lineno">  565 </span><span class="spaces">  </span><span class="nottickedoff">()  &lt;- scLoadPreludeModule sc</span>
-<span class="lineno">  566 </span><span class="spaces">  </span><span class="nottickedoff">mm  &lt;- scGetModuleMap sc</span>
-<span class="lineno">  567 </span><span class="spaces">  </span><span class="nottickedoff">m   &lt;- scFindModule sc nameOfSAWCorePrelude</span>
-<span class="lineno">  568 </span><span class="spaces">  </span><span class="nottickedoff">let configuration = rocqTranslationConfiguration notations skips</span>
-<span class="lineno">  569 </span><span class="spaces">  </span><span class="nottickedoff">m'  &lt;- Rocq.translateSAWModule sc configuration mm m</span>
-<span class="lineno">  570 </span><span class="spaces">  </span><span class="nottickedoff">let doc = PP.vcat [ Rocq.preamble configuration, m']</span>
-<span class="lineno">  571 </span><span class="spaces">  </span><span class="nottickedoff">writeRocqDoc outputFile doc</span></span>
-<span class="lineno">  572 </span>
-<span class="lineno">  573 </span>writeRocqCryptolPrimitivesForSAWCore ::
-<span class="lineno">  574 </span>  FilePath -&gt;
-<span class="lineno">  575 </span>  [(Text, Text)] -&gt;
-<span class="lineno">  576 </span>  [Text] -&gt;
-<span class="lineno">  577 </span>  IO ()
-<span class="lineno">  578 </span><span class="decl"><span class="nottickedoff">writeRocqCryptolPrimitivesForSAWCore cryFile notations skips = do</span>
-<span class="lineno">  579 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- mkSharedContext</span>
-<span class="lineno">  580 </span><span class="spaces">  </span><span class="nottickedoff">() &lt;- scLoadPreludeModule sc</span>
-<span class="lineno">  581 </span><span class="spaces">  </span><span class="nottickedoff">() &lt;- scLoadCryptolModule sc</span>
-<span class="lineno">  582 </span><span class="spaces">  </span><span class="nottickedoff">() &lt;- scLoadModule sc (emptyModule (mkModuleName [&quot;CryptolPrimitivesForSAWCore&quot;]))</span>
-<span class="lineno">  583 </span><span class="spaces">  </span><span class="nottickedoff">m  &lt;- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule</span>
-<span class="lineno">  584 </span><span class="spaces">  </span><span class="nottickedoff">mm &lt;- scGetModuleMap sc</span>
-<span class="lineno">  585 </span><span class="spaces">  </span><span class="nottickedoff">let configuration =</span>
-<span class="lineno">  586 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePreludeExtra $</span>
-<span class="lineno">  587 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePrelude $</span>
-<span class="lineno">  588 </span><span class="spaces">        </span><span class="nottickedoff">withImportIEEE754BinarySingleNaN $</span>
-<span class="lineno">  589 </span><span class="spaces">        </span><span class="nottickedoff">rocqTranslationConfiguration notations skips</span>
-<span class="lineno">  590 </span><span class="spaces">  </span><span class="nottickedoff">m' &lt;- Rocq.translateSAWModule sc configuration mm m</span>
-<span class="lineno">  591 </span><span class="spaces">  </span><span class="nottickedoff">let doc = PP.vcat [ Rocq.preamble configuration, m']</span>
-<span class="lineno">  592 </span><span class="spaces">  </span><span class="nottickedoff">writeRocqDoc cryFile doc</span></span>
-<span class="lineno">  593 </span>
-<span class="lineno">  594 </span>-- | Translate a SAWCore term into an AIG
-<span class="lineno">  595 </span>bitblastPrim :: (AIG.IsAIG l g) =&gt; AIG.Proxy l g -&gt; SharedContext -&gt; Term -&gt; IO (AIG.Network l g)
-<span class="lineno">  596 </span><span class="decl"><span class="istickedoff">bitblastPrim proxy sc t = do</span>
-<span class="lineno">  597 </span><span class="spaces"></span><span class="istickedoff">{-</span>
-<span class="lineno">  598 </span><span class="spaces">  </span><span class="istickedoff">let s = ttSchema t'</span>
-<span class="lineno">  599 </span><span class="spaces">  </span><span class="istickedoff">case s of</span>
-<span class="lineno">  600 </span><span class="spaces">    </span><span class="istickedoff">C.Forall [] [] _ -&gt; return ()</span>
-<span class="lineno">  601 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; fail $ &quot;Attempting to bitblast a term with a polymorphic type: &quot; ++ pretty s</span>
-<span class="lineno">  602 </span><span class="spaces"></span><span class="istickedoff">-}</span>
-<span class="lineno">  603 </span><span class="spaces">  </span><span class="istickedoff">BBSim.withBitBlastedTerm <span class="nottickedoff">proxy</span> sc mempty t $ \be ls -&gt; do</span>
-<span class="lineno">  604 </span><span class="spaces">    </span><span class="istickedoff">return (AIG.Network be (toList ls))</span></span>
-<span class="lineno">  605 </span>
-<span class="lineno">  606 </span>
-<span class="lineno">  607 </span>execIsabelleTT :: Isabelle.TopTT () -&gt; TopLevel ()
-<span class="lineno">  608 </span><span class="decl"><span class="nottickedoff">execIsabelleTT f = do</span>
-<span class="lineno">  609 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  610 </span><span class="spaces">  </span><span class="nottickedoff">cenv &lt;- getCryptolEnv</span>
-<span class="lineno">  611 </span><span class="spaces">  </span><span class="nottickedoff">opts &lt;- getPPOpts</span>
-<span class="lineno">  612 </span><span class="spaces">  </span><span class="nottickedoff">merr &lt;- io $ Isabelle.execTopTT (Isabelle.TopTTEnv sc cenv opts) f</span>
-<span class="lineno">  613 </span><span class="spaces">  </span><span class="nottickedoff">case merr of</span>
-<span class="lineno">  614 </span><span class="spaces">    </span><span class="nottickedoff">Just er -&gt; fail er</span>
-<span class="lineno">  615 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; return ()</span></span>
-<span class="lineno">  616 </span>
-<span class="lineno">  617 </span>writeIsabelleProp ::
-<span class="lineno">  618 </span>  Text -&gt;
-<span class="lineno">  619 </span>  FilePath -&gt;
-<span class="lineno">  620 </span>  Prop -&gt;
-<span class="lineno">  621 </span>  TopLevel ()
-<span class="lineno">  622 </span><span class="decl"><span class="nottickedoff">writeIsabelleProp tnm dest p = do</span>
-<span class="lineno">  623 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
-<span class="lineno">  624 </span><span class="spaces">  </span><span class="nottickedoff">t &lt;- io (propToTerm sc p)</span>
-<span class="lineno">  625 </span><span class="spaces">  </span><span class="nottickedoff">execIsabelleTT $ Isabelle.writeTerm tnm dest t</span></span>
-<span class="lineno">  626 </span>
-<span class="lineno">  627 </span>writeIsabelleTerm ::
-<span class="lineno">  628 </span>  Text -&gt;
-<span class="lineno">  629 </span>  FilePath -&gt;
-<span class="lineno">  630 </span>  Term -&gt;
-<span class="lineno">  631 </span>  TopLevel ()
-<span class="lineno">  632 </span><span class="decl"><span class="nottickedoff">writeIsabelleTerm tnm dest t = </span>
-<span class="lineno">  633 </span><span class="spaces">  </span><span class="nottickedoff">execIsabelleTT $ Isabelle.writeTerm tnm dest t</span></span>
-<span class="lineno">  634 </span>
-<span class="lineno">  635 </span>writeIsabelleCryptolModules ::
-<span class="lineno">  636 </span>  [ExtCryptolModule] -&gt;
-<span class="lineno">  637 </span>  [FilePath] -&gt;
-<span class="lineno">  638 </span>  FilePath -&gt;
-<span class="lineno">  639 </span>  TopLevel ()
-<span class="lineno">  640 </span><span class="decl"><span class="nottickedoff">writeIsabelleCryptolModules extmods sources dest =</span>
-<span class="lineno">  641 </span><span class="spaces">  </span><span class="nottickedoff">execIsabelleTT $ Isabelle.writeCryptolModules extmods sources dest</span></span>
+<span class="lineno">  525 </span><span class="decl"><span class="istickedoff">writeRocqCryptolModule inputFile outputFile notations skips = io $ do</span>
+<span class="lineno">  526 </span><span class="spaces">  </span><span class="istickedoff">sc  &lt;- mkSharedContext</span>
+<span class="lineno">  527 </span><span class="spaces">  </span><span class="istickedoff">()  &lt;- scLoadPreludeModule sc</span>
+<span class="lineno">  528 </span><span class="spaces">  </span><span class="istickedoff">()  &lt;- scLoadCryptolModule sc</span>
+<span class="lineno">  529 </span><span class="spaces">  </span><span class="istickedoff">cryptolPrimitivesForSAWCoreModule &lt;- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule</span>
+<span class="lineno">  530 </span><span class="spaces">  </span><span class="istickedoff">-- We do not need the local Cryptol environment handle this returns,</span>
+<span class="lineno">  531 </span><span class="spaces">  </span><span class="istickedoff">-- but we do need the setup it does under the covers.</span>
+<span class="lineno">  532 </span><span class="spaces">  </span><span class="istickedoff">_ &lt;- initCryptolEnv sc</span>
+<span class="lineno">  533 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  534 </span><span class="spaces">  </span><span class="istickedoff">cm  &lt;- loadAndTranslateModule sc (Left inputFile)</span>
+<span class="lineno">  535 </span><span class="spaces">  </span><span class="istickedoff">mm  &lt;- scGetModuleMap sc</span>
+<span class="lineno">  536 </span><span class="spaces">  </span><span class="istickedoff">let ?mm = <span class="nottickedoff">mm</span></span>
+<span class="lineno">  537 </span><span class="spaces">  </span><span class="istickedoff">let <span class="nottickedoff">cryptolPreludeDecls =</span></span>
+<span class="lineno">  538 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">map Rocq.Ident $</span></span>
+<span class="lineno">  539 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">mapMaybe Rocq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)</span></span>
+<span class="lineno">  540 </span><span class="spaces">  </span><span class="istickedoff">let configuration =</span>
+<span class="lineno">  541 </span><span class="spaces">        </span><span class="istickedoff">withImportCryptolPrimitivesForSAWCoreExtra $</span>
+<span class="lineno">  542 </span><span class="spaces">        </span><span class="istickedoff">withImportCryptolPrimitivesForSAWCore $</span>
+<span class="lineno">  543 </span><span class="spaces">        </span><span class="istickedoff">withImportSAWCorePreludeExtra $</span>
+<span class="lineno">  544 </span><span class="spaces">        </span><span class="istickedoff">withImportSAWCorePrelude $</span>
+<span class="lineno">  545 </span><span class="spaces">        </span><span class="istickedoff">rocqTranslationConfiguration <span class="nottickedoff">notations</span> <span class="nottickedoff">skips</span></span>
+<span class="lineno">  546 </span><span class="spaces">  </span><span class="istickedoff">let nm = Rocq.Ident (Text.pack $ takeBaseName inputFile)</span>
+<span class="lineno">  547 </span><span class="spaces">  </span><span class="istickedoff">res &lt;- Rocq.translateCryptolModule sc nm <span class="nottickedoff">configuration</span> <span class="nottickedoff">cryptolPreludeDecls</span> cm</span>
+<span class="lineno">  548 </span><span class="spaces">  </span><span class="istickedoff">case res of</span>
+<span class="lineno">  549 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  550 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">err' &lt;- Rocq.ppTranslationError sc err</span></span>
+<span class="lineno">  551 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">putStrLn $ Text.unpack err'</span></span>
+<span class="lineno">  552 </span><span class="spaces">    </span><span class="istickedoff">Right cmDoc -&gt; do</span>
+<span class="lineno">  553 </span><span class="spaces">      </span><span class="istickedoff">let doc = PP.vcat [ Rocq.preamble configuration, cmDoc ]</span>
+<span class="lineno">  554 </span><span class="spaces">      </span><span class="istickedoff">writeRocqDoc outputFile doc</span></span>
+<span class="lineno">  555 </span>
+<span class="lineno">  556 </span>nameOfSAWCorePrelude :: Un.ModuleName
+<span class="lineno">  557 </span><span class="decl"><span class="nottickedoff">nameOfSAWCorePrelude = Un.moduleName preludeModule</span></span>
+<span class="lineno">  558 </span>
+<span class="lineno">  559 </span>nameOfCryptolPrimitivesForSAWCoreModule :: Un.ModuleName
+<span class="lineno">  560 </span><span class="decl"><span class="istickedoff">nameOfCryptolPrimitivesForSAWCoreModule = Un.moduleName cryptolModule</span></span>
+<span class="lineno">  561 </span>
+<span class="lineno">  562 </span>writeRocqSAWCorePrelude ::
+<span class="lineno">  563 </span>  FilePath -&gt;
+<span class="lineno">  564 </span>  [(Text, Text)] -&gt;
+<span class="lineno">  565 </span>  [Text] -&gt;
+<span class="lineno">  566 </span>  IO ()
+<span class="lineno">  567 </span><span class="decl"><span class="nottickedoff">writeRocqSAWCorePrelude outputFile notations skips = do</span>
+<span class="lineno">  568 </span><span class="spaces">  </span><span class="nottickedoff">sc  &lt;- mkSharedContext</span>
+<span class="lineno">  569 </span><span class="spaces">  </span><span class="nottickedoff">()  &lt;- scLoadPreludeModule sc</span>
+<span class="lineno">  570 </span><span class="spaces">  </span><span class="nottickedoff">mm  &lt;- scGetModuleMap sc</span>
+<span class="lineno">  571 </span><span class="spaces">  </span><span class="nottickedoff">m   &lt;- scFindModule sc nameOfSAWCorePrelude</span>
+<span class="lineno">  572 </span><span class="spaces">  </span><span class="nottickedoff">let configuration = rocqTranslationConfiguration notations skips</span>
+<span class="lineno">  573 </span><span class="spaces">  </span><span class="nottickedoff">m'  &lt;- Rocq.translateSAWModule sc configuration mm m</span>
+<span class="lineno">  574 </span><span class="spaces">  </span><span class="nottickedoff">let doc = PP.vcat [ Rocq.preamble configuration, m']</span>
+<span class="lineno">  575 </span><span class="spaces">  </span><span class="nottickedoff">writeRocqDoc outputFile doc</span></span>
+<span class="lineno">  576 </span>
+<span class="lineno">  577 </span>writeRocqCryptolPrimitivesForSAWCore ::
+<span class="lineno">  578 </span>  FilePath -&gt;
+<span class="lineno">  579 </span>  [(Text, Text)] -&gt;
+<span class="lineno">  580 </span>  [Text] -&gt;
+<span class="lineno">  581 </span>  IO ()
+<span class="lineno">  582 </span><span class="decl"><span class="nottickedoff">writeRocqCryptolPrimitivesForSAWCore cryFile notations skips = do</span>
+<span class="lineno">  583 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- mkSharedContext</span>
+<span class="lineno">  584 </span><span class="spaces">  </span><span class="nottickedoff">() &lt;- scLoadPreludeModule sc</span>
+<span class="lineno">  585 </span><span class="spaces">  </span><span class="nottickedoff">() &lt;- scLoadCryptolModule sc</span>
+<span class="lineno">  586 </span><span class="spaces">  </span><span class="nottickedoff">() &lt;- scLoadModule sc (emptyModule (mkModuleName [&quot;CryptolPrimitivesForSAWCore&quot;]))</span>
+<span class="lineno">  587 </span><span class="spaces">  </span><span class="nottickedoff">m  &lt;- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule</span>
+<span class="lineno">  588 </span><span class="spaces">  </span><span class="nottickedoff">mm &lt;- scGetModuleMap sc</span>
+<span class="lineno">  589 </span><span class="spaces">  </span><span class="nottickedoff">let configuration =</span>
+<span class="lineno">  590 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePreludeExtra $</span>
+<span class="lineno">  591 </span><span class="spaces">        </span><span class="nottickedoff">withImportSAWCorePrelude $</span>
+<span class="lineno">  592 </span><span class="spaces">        </span><span class="nottickedoff">withImportIEEE754BinarySingleNaN $</span>
+<span class="lineno">  593 </span><span class="spaces">        </span><span class="nottickedoff">rocqTranslationConfiguration notations skips</span>
+<span class="lineno">  594 </span><span class="spaces">  </span><span class="nottickedoff">m' &lt;- Rocq.translateSAWModule sc configuration mm m</span>
+<span class="lineno">  595 </span><span class="spaces">  </span><span class="nottickedoff">let doc = PP.vcat [ Rocq.preamble configuration, m']</span>
+<span class="lineno">  596 </span><span class="spaces">  </span><span class="nottickedoff">writeRocqDoc cryFile doc</span></span>
+<span class="lineno">  597 </span>
+<span class="lineno">  598 </span>-- | Translate a SAWCore term into an AIG
+<span class="lineno">  599 </span>bitblastPrim :: (AIG.IsAIG l g) =&gt; AIG.Proxy l g -&gt; SharedContext -&gt; Term -&gt; IO (AIG.Network l g)
+<span class="lineno">  600 </span><span class="decl"><span class="istickedoff">bitblastPrim proxy sc t = do</span>
+<span class="lineno">  601 </span><span class="spaces"></span><span class="istickedoff">{-</span>
+<span class="lineno">  602 </span><span class="spaces">  </span><span class="istickedoff">let s = ttSchema t'</span>
+<span class="lineno">  603 </span><span class="spaces">  </span><span class="istickedoff">case s of</span>
+<span class="lineno">  604 </span><span class="spaces">    </span><span class="istickedoff">C.Forall [] [] _ -&gt; return ()</span>
+<span class="lineno">  605 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; fail $ &quot;Attempting to bitblast a term with a polymorphic type: &quot; ++ pretty s</span>
+<span class="lineno">  606 </span><span class="spaces"></span><span class="istickedoff">-}</span>
+<span class="lineno">  607 </span><span class="spaces">  </span><span class="istickedoff">BBSim.withBitBlastedTerm <span class="nottickedoff">proxy</span> sc mempty t $ \be ls -&gt; do</span>
+<span class="lineno">  608 </span><span class="spaces">    </span><span class="istickedoff">return (AIG.Network be (toList ls))</span></span>
+<span class="lineno">  609 </span>
+<span class="lineno">  610 </span>
+<span class="lineno">  611 </span>execIsabelleTT :: Isabelle.TopTT () -&gt; TopLevel ()
+<span class="lineno">  612 </span><span class="decl"><span class="nottickedoff">execIsabelleTT f = do</span>
+<span class="lineno">  613 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
+<span class="lineno">  614 </span><span class="spaces">  </span><span class="nottickedoff">cenv &lt;- getCryptolEnv</span>
+<span class="lineno">  615 </span><span class="spaces">  </span><span class="nottickedoff">opts &lt;- getPPOpts</span>
+<span class="lineno">  616 </span><span class="spaces">  </span><span class="nottickedoff">merr &lt;- io $ Isabelle.execTopTT (Isabelle.TopTTEnv sc cenv opts) f</span>
+<span class="lineno">  617 </span><span class="spaces">  </span><span class="nottickedoff">case merr of</span>
+<span class="lineno">  618 </span><span class="spaces">    </span><span class="nottickedoff">Just er -&gt; fail er</span>
+<span class="lineno">  619 </span><span class="spaces">    </span><span class="nottickedoff">Nothing -&gt; return ()</span></span>
+<span class="lineno">  620 </span>
+<span class="lineno">  621 </span>writeIsabelleProp ::
+<span class="lineno">  622 </span>  Text -&gt;
+<span class="lineno">  623 </span>  FilePath -&gt;
+<span class="lineno">  624 </span>  Prop -&gt;
+<span class="lineno">  625 </span>  TopLevel ()
+<span class="lineno">  626 </span><span class="decl"><span class="nottickedoff">writeIsabelleProp tnm dest p = do</span>
+<span class="lineno">  627 </span><span class="spaces">  </span><span class="nottickedoff">sc &lt;- getSharedContext</span>
+<span class="lineno">  628 </span><span class="spaces">  </span><span class="nottickedoff">t &lt;- io (propToTerm sc p)</span>
+<span class="lineno">  629 </span><span class="spaces">  </span><span class="nottickedoff">execIsabelleTT $ Isabelle.writeTerm tnm dest t</span></span>
+<span class="lineno">  630 </span>
+<span class="lineno">  631 </span>writeIsabelleTerm ::
+<span class="lineno">  632 </span>  Text -&gt;
+<span class="lineno">  633 </span>  FilePath -&gt;
+<span class="lineno">  634 </span>  Term -&gt;
+<span class="lineno">  635 </span>  TopLevel ()
+<span class="lineno">  636 </span><span class="decl"><span class="nottickedoff">writeIsabelleTerm tnm dest t = </span>
+<span class="lineno">  637 </span><span class="spaces">  </span><span class="nottickedoff">execIsabelleTT $ Isabelle.writeTerm tnm dest t</span></span>
+<span class="lineno">  638 </span>
+<span class="lineno">  639 </span>writeIsabelleCryptolModules ::
+<span class="lineno">  640 </span>  [ExtCryptolModule] -&gt;
+<span class="lineno">  641 </span>  [FilePath] -&gt;
+<span class="lineno">  642 </span>  FilePath -&gt;
+<span class="lineno">  643 </span>  TopLevel ()
+<span class="lineno">  644 </span><span class="decl"><span class="nottickedoff">writeIsabelleCryptolModules extmods sources dest =</span>
+<span class="lineno">  645 </span><span class="spaces">  </span><span class="nottickedoff">execIsabelleTT $ Isabelle.writeCryptolModules extmods sources dest</span></span>
 
 </pre>
 </body>

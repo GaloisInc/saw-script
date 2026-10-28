@@ -122,9 +122,9 @@ span.spaces    { background: white }
 <span class="lineno">  103 </span>  [Rocq.Ident] -&gt;
 <span class="lineno">  104 </span>  Cryptol.Module -&gt;
 <span class="lineno">  105 </span>  IO (Either TranslationError (Doc ann))
-<span class="lineno">  106 </span><span class="decl"><span class="nottickedoff">translateCryptolModule sc nm configuration globalDecls m = do</span>
-<span class="lineno">  107 </span><span class="spaces">  </span><span class="nottickedoff">translated &lt;- CMT.translateCryptolModule sc configuration globalDecls m</span>
-<span class="lineno">  108 </span><span class="spaces">  </span><span class="nottickedoff">return $ Rocq.prettyDecl . Rocq.Section (escapeIdent nm) &lt;$&gt; translated</span></span>
+<span class="lineno">  106 </span><span class="decl"><span class="istickedoff">translateCryptolModule sc nm configuration globalDecls m = do</span>
+<span class="lineno">  107 </span><span class="spaces">  </span><span class="istickedoff">translated &lt;- CMT.translateCryptolModule sc <span class="nottickedoff">configuration</span> <span class="nottickedoff">globalDecls</span> m</span>
+<span class="lineno">  108 </span><span class="spaces">  </span><span class="istickedoff">return $ Rocq.prettyDecl . Rocq.Section (escapeIdent nm) &lt;$&gt; translated</span></span>
 <span class="lineno">  109 </span>
 <span class="lineno">  110 </span>-- | Extract out the 'Text' name of a declaration in a SAW core module
 <span class="lineno">  111 </span>moduleDeclName :: ModuleDecl -&gt; Maybe Text
