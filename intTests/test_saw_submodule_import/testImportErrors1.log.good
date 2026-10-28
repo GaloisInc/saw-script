@@ -2,5 +2,4 @@ Loading file "testImportErrors1.saw"
 Stack trace:
    (builtin) (at top level)
 `import submodule PATHNAME` is not allowed.
-
 FAILED

@@ -8,5 +8,4 @@ The trivial tactic cannot prove this equality
 (y : Bool)
 -> EqTrue (ecEq Bool PEqBit y y)
 
-
 FAILED

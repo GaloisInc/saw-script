@@ -8,5 +8,4 @@ Proof term does not prove the required proposition:
    Offered proof term: EqTrue False
    Type of proof term: Prop
    Expected type: EqTrue False
-
 FAILED
