@@ -24,6 +24,6 @@
 #    - the devel version can then be bumped to the current day if needed
 #
 
-# BSD/Linux: date +%s -d "09/15/2026 00:00:00 GMT"
-# OSX: date -j -f "%m/%d/%Y %H:%M:%S %Z" "09/15/2026 00:00:00 GMT" +%s
-SOURCE_DATE_EPOCH=1789430400
+# BSD/Linux: date +%s -d "10/28/2026 00:00:00 GMT"
+# OSX: date -j -f "%m/%d/%Y %H:%M:%S %Z" "10/28/2026 00:00:00 GMT" +%s
+SOURCE_DATE_EPOCH=1793145600
