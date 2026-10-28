@@ -1,6 +1,8 @@
 record ($4) $1 =
   $7
 
+lemmas $1_ext_def_real = $1.$1_ext_def
+
 free_constructors $1_ext for $1.$1_ext
   by (erule $1.cases_scheme) (rule $1.ext_inject)
 
@@ -53,7 +55,7 @@ lemmas $1_all_defs =
   unstrip_$1_ext_def
   $1.select_defs 
   $1.defs
-  $1.$1.$1_ext_def
+  $1_ext_def_real
   Rep_$1_ext_inverse 
   Abs_$1_ext_inverse
 
