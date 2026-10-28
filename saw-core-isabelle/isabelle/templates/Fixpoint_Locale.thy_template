@@ -2,7 +2,7 @@ end
 
 qualifier "$6"
 
-locale $1 = $7
+locale $1 =$7
   assumes [export_global]: $2
 begin
 

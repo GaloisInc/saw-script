@@ -85,7 +85,7 @@ locale fib_rec_spec =
   assumes [export_global]: "Sub.fib_spec = Sub.fib_impl"
 begin
 
-definition [simplified Sub.fib_impl_def[abs_def],export_global]: 
+definition [simplified Sub.fib_impl_def[abs_def],export_global]:
   "fib = Sub.fib_impl"
 
 end

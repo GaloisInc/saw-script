@@ -37,10 +37,10 @@ locale rec_fn_rec_spec = fixes a b a1 b1
   assumes [export_global]: "(rec_fnlba_gt_0rb_spec a b) = (rec_fnlba_gt_0rb_impl a b)"and "(rec_fn_spec a1 b1) = (rec_fn_impl a1 b1)"
 begin
 
-definition [simplified rec_fnlba_gt_0rb_impl_def[abs_def],export_global]: 
+definition [simplified rec_fnlba_gt_0rb_impl_def[abs_def],export_global]:
   "rec_fnlba_gt_0rb = (\<lambda>a' b'. (rec_fnlba_gt_0rb_impl (use_snd a a') (use_snd b b')))"
 
-definition [simplified rec_fn_impl_def[abs_def],export_global]: 
+definition [simplified rec_fn_impl_def[abs_def],export_global]:
   "rec_fn = (\<lambda>a1' b1'. (rec_fn_impl (use_snd a1 a1') (use_snd b1 b1')))"
 
 end

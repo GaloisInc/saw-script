@@ -271,7 +271,7 @@ fixPointLocale baseBinds0 path template =
      , Output.lines aliases
      , Output.lines hides
      , path_str
-     , if null allvars then "" else "fixes " ++ Output.spaces (map (Output.out . Name.SimpleName) allvars)
+     , if null allvars then "" else " fixes " ++ Output.spaces (map (Output.out . Name.SimpleName) allvars)
      ]
 
 localeName :: [Name.Name] -> String
