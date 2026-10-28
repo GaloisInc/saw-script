@@ -17,6 +17,8 @@ This release supports [version
 
 ## Bug Fixes
 
+* The Rocq exporter now honors CRYPTOLPATH properly (#3493).
+
 * The Python client no longer crashes while logging a failed verification
   with `LogResults(verbose_failure=True)` when the server returns no stdout
   (#1663).
