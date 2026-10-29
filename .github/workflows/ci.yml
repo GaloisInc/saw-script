@@ -1049,22 +1049,6 @@ jobs:
           opam pin -y coq-bits https://github.com/rocq-community/bits.git#f50fc3e5f1eabcb0b0b94c8d25f75e61a255c2ba
           opam pin -y coq-flocq https://gitlab.inria.fr/flocq/flocq.git#27143972fc1dc96e281626d5194b5b371f05db80
 
-
-        # It seems that ocaml-setup creates a local opam switch in the
-        # current directory, not a global one in the build user's
-        # homedir, and doesn't provide a way to change this. The problem
-        # with this is that opam then only finds the switch when that's
-        # the current directory. We used to finesse this by letting it
-        # do that in saw-core-rocq/rocq, but that requires a repository
-        # checkout and we'd like the ocaml arrangements to be standalone.
-        #
-        # Set the current opam switch to the local switch in the
-        # current directory.
-      - name: Set the opam switch
-        run: |
-          pwd
-          opam switch set $(pwd)
-
       - name: Report the opam setup
         run: |
           opam switch
@@ -1102,9 +1086,22 @@ jobs:
       # should become their own build artifact, to avoid re-compiling the Rocq
       # libraries
       - name: Build the handwritten Rocq infrastructure
-        working-directory: saw-core-rocq/rocq
         shell: bash
-        run: opam exec -- make -j
+        # It seems that ocaml-setup creates a local opam switch in the
+        # default current directory, not a global one in the build user's
+        # homedir, and doesn't provide a way to change this. The problem
+        # with this is that opam then only finds the switch when that's
+        # the current directory. We used to finesse this by letting it
+        # do that in saw-core-rocq/rocq, but that requires a repository
+        # checkout and we'd like the ocaml arrangements to be standalone
+        # and happen before we do any SAW things.
+        #
+        # Use opam env to set the current switch in the shell environment
+        # to that local switch in the current directory, _then_ chdir and
+        # use opam exec.
+        run: |
+          eval $(opam env --set-switch)
+          (cd saw-core-rocq/rocq && opam exec -- make -j)
 
       # Regenerate the test .v files, since we don't have the ones from the
       # test run and rebuilding them isn't super expensive.
@@ -1115,9 +1112,10 @@ jobs:
 
       # Now build, or try to build, all the output files.
       - name: Build the saw-core-rocq-tests outputs
-        working-directory: otherTests/saw-core-rocq
         shell: bash
-        run: opam exec -- make -j rocq
+        run: |
+          eval $(opam env --set-switch)
+          (cd otherTests/saw-core-rocq && opam exec -- make -j rocq)
 
   isabelle-builds:
     needs: [config]
