@@ -1101,7 +1101,7 @@ jobs:
         # use opam exec.
         run: |
           pwd
-          eval $(opam env --set-switch --switch=$(pwd))
+          eval $(opam env)
           (cd saw-core-rocq/rocq && opam exec -- make -j)
 
       # Regenerate the test .v files, since we don't have the ones from the
