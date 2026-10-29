@@ -374,11 +374,14 @@ fun cryptol_termination_cmd const_name_raw opt_typ_raw includes_raw thy =
     (* the compatibility goal has the shape "(x1,..,xn) = (y1,..,yn) ==> rhs x = rhs y":
        split the tuple and substitute instead of simplifying, since simp can blow up on large
        Cryptol bodies (e.g. the let_simp simproc on nested lets) *)
+    fun fail_tac ctxt msg st = error (msg ^ "\n" ^ Goal_Display.print_goal ctxt "" st)
     fun pat_tac ctxt =
-      Pat_Completeness.pat_completeness_tac ctxt 1
-      THEN ALLGOALS (REPEAT_ALL_NEW (eresolve_tac ctxt @{thms Pair_inject})
+      (Pat_Completeness.pat_completeness_tac ctxt 1
+        ORELSE fail_tac ctxt "Pattern completeness proof failed:")
+      THEN (ALLGOALS (TRY o REPEAT_ALL_NEW (eresolve_tac ctxt @{thms Pair_inject})
         THEN_ALL_NEW (REPEAT o hyp_subst_tac ctxt)
         THEN_ALL_NEW resolve_tac ctxt @{thms refl})
+        ORELSE fail_tac ctxt "Compatibility proof failed:")
 
     (* we expect the pattern coverage proof to be trivial, since there is exactly one equation *)
     val (_, lthy_ov') =            
