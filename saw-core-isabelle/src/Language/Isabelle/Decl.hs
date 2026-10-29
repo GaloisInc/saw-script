@@ -20,6 +20,8 @@ module Language.Isabelle.Decl
 import           Prelude hiding (filter)
 
 import qualified Data.List as List
+import qualified Data.Set as Set
+import           Data.Traversable (mapAccumL)
 
 import qualified Cryptol.TypeCheck.PP as Cry
 
@@ -47,7 +49,7 @@ data Decl =
   | RecordDecl [String]
   | DatatypeDecl [Expr.Type] Name.Name [(Name.Name,[Expr.Type])]
   | Commented String Decl
-  | FixpointLocale [Name.Name]
+  | FixpointLocale [Binding.Binding]
   | HashDecl 
       Name.Name {- ^ const name -}
       Int {- ^ deep cryptol hash -}
@@ -136,9 +138,8 @@ recordName :: [String] -> Name.Name
 recordName args =
   let 
     rawnm = List.intercalate "_" args ++ "_recordT"
-    thynm = Name.TheoryName (Name.cleanName $ Name.SimpleName rawnm) True
+    thynm = Name.TheoryName (Name.cleanName $ Name.SimpleName rawnm) False
   in Name.Name thynm rawnm Syntax.NoSyn Name.Typ
-
 
 recordCmd :: Output.HasOutput => [String] -> Template.Template -> String
 recordCmd args template =
@@ -149,13 +150,13 @@ recordCmd args template =
     (ts, ts') = freshTs (length args + 1)
     coercion = mapRecord nm args (\(_,x) -> coerceExpr x)
     fields = map (\(anm,t) -> Output.out anm ++ " :: " ++ t) (zip args ts)
-    catom s = "(" ++ s ++ "::coercible_atom" ++ ")"
+    coercible s = "(" ++ s ++ "::coercible" ++ ")"
   in Output.out $ Template.apply template $ 
     [ nm
-    , commas (map catom ts)
-    , commas (map catom ts')
+    , commas (map coercible ts)
+    , commas (map coercible ts')
     , commas (take (length args) ts)
-    , sorts "coercible_atom"
+    , sorts "coercible"
     , sorts "strip_type"
     , Output.indent 1 $ Output.lines $ fields
     , Output.out coercion
@@ -164,6 +165,7 @@ recordCmd args template =
     , Output.out $ recordCtr $ (map (\s -> (Name.SimpleName s, Expr.IntLit 0)) args) ++ [(dots, Expr.IntLit 0)]
     , sorts "_"
     , commas ts
+    , sorts "coercible_atom"
     ]
 
 collectDeps :: Expr.Expr -> [Name.Name]
@@ -182,7 +184,7 @@ dependencies = \case
   RecordDecl{} -> []
   DatatypeDecl targs _ flds -> concat $ map collectDeps $ ((concat $ map (\(_,ts) -> ts) flds) List.\\ targs)
   Import{} -> []
-  FixpointLocale nms -> (map asRecImpl nms ++ map asRecSpec nms)
+  FixpointLocale nms -> (map (asRecImpl . Binding.bindName) nms ++ map (asRecSpec . Binding.bindName) nms)
   HashDecl nm _ -> [nm]
   NoDecl -> []
 
@@ -203,23 +205,55 @@ asRecImpl = Name.mapIdent (\ident -> ident <> "_impl")
 asRecSpec :: Name.HasIdent t => t -> t
 asRecSpec = Name.mapIdent (\ident -> ident <> "_spec")
 
+freshenTVarBinds :: [Binding.Binding] -> [Binding.Binding]
+freshenTVarBinds = freshenVars
+  (\b -> fst $ stripTAbs $ Binding.bindType b)
+  (\tvars b ->
+    let
+      bT = Binding.bindType b
+      baseT = snd $ stripTAbs bT
+      tvarsT = map (\nm -> Expr.Var (Name.SimpleName ("'" ++ nm))) tvars
+    in b { Binding.bindType = tAbs tvarsT baseT })
+
 fixPointLocale :: 
  Output.HasOutput => 
- [Name.Name] ->
+ [Binding.Binding] ->
  [String] ->
  Template.Template ->
  String
-fixPointLocale baseNames path template =
-  let 
-    impls = map asRecImpl baseNames
-    specs = map asRecSpec baseNames
-    asms = map (\(lhs,rhs) -> eqExpr (Expr.Var lhs) (Expr.Var rhs)) (zip specs impls)
-    defs = map (\(lhs,rhs) -> eqExpr (Expr.Var (Name.unqualify lhs)) (Expr.Var rhs)) (zip baseNames impls)
+fixPointLocale baseBinds0 path template =
+  let
+    baseBinds = freshenTVarBinds baseBinds0
+    baseNames = map Binding.bindName baseBinds
+    allvars = concat $ map (fst . stripTAbs . Binding.bindType) baseBinds
+
+    impls = map asRecImpl baseBinds
+    specs = map asRecSpec baseBinds
+
+    eta_expand b =
+      let
+        (tvars,_) = stripTAbs (Binding.bindType b)
+        args = map (Expr.Var . Name.SimpleName) tvars
+      in appExpr (Expr.Var (Binding.bindName b)) args
+
+    mkRhs b =
+      let
+        (tvars,_) = stripTAbs (Binding.bindType b)
+        bvs = map (\nm -> Expr.Var (Name.SimpleName (nm ++ "'"))) tvars
+        lvs = map (Expr.Var . Name.SimpleName) tvars
+        args = zipWith useSnd lvs bvs
+      in eAbs bvs (appExpr (Expr.Var (Binding.bindName b)) args)
+
+    asms = map (\(lhs,rhs) -> eqExpr (eta_expand lhs) (eta_expand rhs))
+      (zip specs impls)
+    defs = map (\(lhs,rhs) ->
+      eqExpr (Expr.Var (Name.unqualify (Binding.bindName lhs))) (mkRhs rhs))
+      (zip baseBinds impls)
     def_template = (Output.getTemplate "Fixpoint_Locale_Def")
 
-    def_cmds = map (\(nm,e) -> 
+    def_cmds = map (\(b,e) ->
          Output.out $ Template.apply def_template
-           [Output.out nm, Output.out e])
+           [Output.out (Binding.bindName b), Output.out e])
          (zip impls defs)
 
     locale_name = localeName baseNames
@@ -238,6 +272,7 @@ fixPointLocale baseNames path template =
      , Output.lines aliases
      , Output.lines hides
      , path_str
+     , if null allvars then "" else " fixes " ++ Output.spaces (map (Output.out . Name.SimpleName) allvars)
      ]
 
 localeName :: [Name.Name] -> String
@@ -248,21 +283,31 @@ isTNum t = case t of
   Expr.Var tnm | Name.TNum <- Name.nmKind tnm -> True
   _ -> False
 
-nameIdx :: Name.Name -> Int -> Name.Name
-nameIdx nm 0 = nm
-nameIdx nm i = Name.mapIdent (\x -> x ++ show i) nm
+freshenVars :: Traversable t => (a -> [String]) -> ([String] -> a -> a) -> t a -> t a
+freshenVars toNms updNames xs_all =
+  snd (mapAccumL go Set.empty xs_all)
+  where
+    mkNm :: String -> Int -> String
+    mkNm nm i = case i of
+      0 -> nm
+      _ -> nm ++ show i
+
+    inner i acc nm =
+      let nm' = mkNm nm i
+      in case Set.member nm' acc of
+        True -> inner (i+1) acc nm
+        False -> (Set.insert nm' acc, nm')
+    go acc x =
+      let
+        nms = toNms x
+        (acc', nms') = mapAccumL (inner 0) acc nms
+      in (acc', updNames nms' x)
 
 freshVars :: [Expr.Type] -> [Expr.Type]
-freshVars = go [] 0
-  where
-    go acc i = \case
-      ts@(Expr.Var nm:ts') -> 
-        let t' = Expr.Var (nameIdx nm i)
-        in case elem t' (ts ++ acc) of
-          True -> go acc (i+1) (t':ts')
-          False -> go (t':acc) 0 ts'
-      (t':ts) -> go (t':acc) 0 ts
-      [] -> reverse acc
+freshVars tvs = drop (length tvs) $ freshenVars
+  (\case Expr.Var nm -> [Name.nmStr nm]; _ -> [])
+  (\nms t -> case (nms,t) of ([nm_raw],Expr.Var nm) -> Expr.Var (nm { Name.nmStr = nm_raw }); _ -> t)
+  (tvs ++ tvs)
 
 mkSameType :: Output.HasOutput => (Expr.Type, Expr.Type) -> String
 mkSameType (t1, t2) = Output.brackets $ case isTNum t1 of
@@ -288,9 +333,9 @@ datatypeDecl targs nm flds0 path template =
       natcase n = case n of
         0 -> "0"
         _ -> "Suc (" ++ natcase (n-1) ++ ")"
-      catom s = case isTNum s of
+      coercible s = case isTNum s of
         True -> Output.out s
-        False -> "(" ++ Output.out s ++ "::coercible_atom" ++ ")"
+        False -> "(" ++ Output.out s ++ "::coercible" ++ ")"
       mk_comp f n = Output.brackets $ List.intercalate " o " (replicate n f)
       mk_strip (n,(_,fts)) = Output.brackets $ case length fts of
         0 -> "strip (" ++ shownat n ++ ",())"
@@ -323,26 +368,27 @@ datatypeDecl targs nm flds0 path template =
     , List.intercalate " | " defs
     , commas $ map mk_strip_type targs
     , commas targs'
-    , sorts "coercible_atom"
+    , sorts "coercible"
     , List.intercalate " " (map mk_strip (zip [0::Integer ..] flds))
     , List.intercalate " | " (map mk_unstrip (zip [0::Integer ..] flds))
     , sorts "_"
     , sorts "strip_type"
-    , commas $ map catom targs
-    , commas $ map catom targs'
+    , commas $ map coercible targs
+    , commas $ map coercible targs'
     , List.intercalate " \\<and> " $ map mkSameType (zip targs targs')
     , if path == [] then "" else outPath path ++ "."
     , List.intercalate " " $ map mk_coerce flds0
+    , sorts "coercible_atom"
     ]
 
 outDecl :: Output.HasOutput => Decl -> [String] -> String
 outDecl d qs = case d of
-  Definition q b args e _ -> definitionCmd q b (Just (args,e))
-  ConstDecl q b -> definitionCmd q b Nothing
+  Definition q b args e _ -> definitionCmd q (Name.unqualify b) (Just (args,e))
+  ConstDecl q b -> definitionCmd q (Name.unqualify b) Nothing
   Import i -> Output.out (Name.thyNm i)
   TypeSyn targs nm rhs ->
-      "type_synonym " ++ tyHeader targs nm ++ " = " ++ Output.quotes (Output.out rhs)
-  TypeDecl targs nm -> "typedecl " ++ tyHeader targs nm
+      "type_synonym " ++ tyHeader targs (Name.unqualify nm) ++ " = " ++ Output.quotes (Output.out rhs)
+  TypeDecl targs nm -> "typedecl " ++ tyHeader targs (Name.unqualify nm)
   RecordDecl args -> recordCmd args (Output.getTemplate "Coercible_Record")
   DatatypeDecl targs nm flds -> datatypeDecl targs nm flds qs (Output.getTemplate "Coercible_Datatype")
   FixpointLocale args -> fixPointLocale args qs (Output.getTemplate "Fixpoint_Locale")

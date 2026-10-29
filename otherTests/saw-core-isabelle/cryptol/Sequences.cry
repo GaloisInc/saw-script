@@ -129,3 +129,13 @@ zipWith_as_map f xs ys = zipWith f xs ys == map (\ix -> f (xs @ ix) (ys @ ix)) [
 
 map_valid: {n,a,b} (fin n, Eq b) => (a -> b) -> [n]a -> Bit
 map_valid f xs = all (\ix -> (map f xs) @ ix == f (xs @ ix)) [0..<n]
+
+seq_of_fn: {a,b,c,d} (fin a, a == b) => ([a](c -> d) -> [b](c -> d)) -> ([b](c -> d) -> [a](c -> d))
+seq_of_fn f = f
+
+seq_of_fn_valid : {a,b} (fin a, a == b) => Integer -> ([a](Integer -> [a]) -> [b](Integer -> [a])) -> Bit
+seq_of_fn_valid i f = i < `(a) ==> 
+   (((seq_of_fn`{a,b,Integer,[a]} (seq_of_fn`{b,a,Integer,[a]} f)) xs) @ i) i == (f xs @ i) i
+  where
+    xs : [a](Integer -> [a])
+    xs = map (\_ -> fromInteger) [0..<a]

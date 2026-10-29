@@ -117,6 +117,11 @@ exprToString = go
       Ctr _ nm | Syntax.ListSyn{} <- Name.nmSyn nm -> braks te
       BinOp{} -> braks te
       _ -> go te
+    
+    braks_prefix :: Expr -> String
+    braks_prefix te = case te of
+      BinOp{} -> braks te
+      _ -> go te
 
     abs_arg :: Expr -> String
     abs_arg te = case te of
@@ -156,8 +161,8 @@ exprToString = go
           ++ ". " ++ (Output.indent 1 $ braks e)
       BinOp e1 op e2 -> Output.spaces
         ([braks e1, go op, braks e2])
-      App e' args->
-        go e' ++ " " ++ (Output.spaces (map braks args))
+      App e' args-> 
+        braks_prefix e' ++ " " ++ (Output.spaces (map braks args))
       TApp e ts -> go $ mkTAppSyn e ts
       Var nm -> out nm
       ConstrainT e1 typ -> out e1 ++ " :: " ++ out typ

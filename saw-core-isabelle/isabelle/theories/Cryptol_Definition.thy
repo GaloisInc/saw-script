@@ -10,7 +10,7 @@ sig
   val cryptol_definition_cmd :
     binding * string * mixfix -> string option -> string list -> 
     (binding * string option * mixfix) list -> local_theory -> local_theory
-  val cryptol_termination_cmd : string -> Bundle.xname list -> theory -> Proof.state
+  val cryptol_termination_cmd : string -> string option -> Bundle.xname list -> theory -> Proof.state
   val rec_prover_tac : Proof.context -> thm -> thm -> thm list -> tactic
 
   val set_cryptol_hash : int -> theory -> theory
@@ -83,14 +83,51 @@ fun is_trivial_coerce t = case dest_funT t of
      | NONE => false)
   | NONE => false
 
-fun unwrap_no_coerce x = case x of
-      (Const (\<^const_name>\<open>coerce_to\<close>, T) $ U $ y) => if is_trivial_coerce T then unwrap_no_coerce y
-        else Const (\<^const_name>\<open>coerce_to\<close>, T) $ U $ unwrap_no_coerce y
+fun mk_coerce U V x = Const (\<^const_name>\<open>coerce_to\<close>, Term.itselfT V --> U --> V) $ Logic.mk_type V $ x
+
+fun dest_coerceT T = case dest_funT T of
+      SOME(_,U) => dest_funT U
+    | NONE => NONE
+
+fun dest_coerce_funT T = case dest_coerceT T of
+      SOME (U,V) => (case (dest_funT U, dest_funT V) of
+        (SOME (U_dom,U_rng), SOME (V_dom,V_rng)) => SOME (U_dom,U_rng,V_dom,V_rng)
+       | _ => NONE)
+    | _ => NONE
+
+(* drop trivial coercions, and rewrite top-level function coercions to be pointwise *)
+fun post_coerce x = case x of
+      (Const (\<^const_name>\<open>coerce_to\<close>, T) $ _ $ y) => if is_trivial_coerce T then post_coerce y
+        else extra_coerce T y
     | Const (\<^const_name>\<open>coerce_to\<close>, T) => 
-        if is_trivial_coerce T then Term.Abs ("x", T, Term.Bound 0) else x
-    | y $ z => unwrap_no_coerce y $ unwrap_no_coerce z
-    | Abs (nm, T, y) => Abs (nm, T, unwrap_no_coerce y)
+        if is_trivial_coerce T then error "err" else 
+         (case dest_coerce_funT T of
+            SOME _ => extra_coerce T x
+          | NONE => x)
+    | y $ z => post_coerce y $ post_coerce z
+    | Abs (nm, T, y) => Abs (nm, T, post_coerce y)
     | _ => x
+ and extra_coerce T t = case dest_coerceT T of 
+      SOME (U, V) => (case eta_coerce U V t of
+        SOME t' => post_coerce t'
+      | NONE => (case tuple_coerce U V t of
+          SOME t' => post_coerce t'
+        | NONE => mk_coerce U V (post_coerce t)))
+    | NONE => error "extra_coerce: unexpected coerce type"
+ and tuple_coerce U V t = case (U,V) of
+  (Type(\<^type_name>\<open>prod\<close>,[U1,U2]),Type(\<^type_name>\<open>prod\<close>,[V1,V2])) =>
+    (case t of 
+      (Const (\<^const_name>\<open>Pair\<close>, _) $ t1 $ t2) 
+         => (SOME (Const (\<^const_name>\<open>Pair\<close>, V1 --> V2 --> V) $ mk_coerce U1 V1 t1 $ mk_coerce U2 V2 t2))
+     | _ => NONE)
+  | _ => NONE
+ and eta_coerce U V t = case (dest_funT U, dest_funT V) of
+      (SOME (U_dom,U_rng), SOME (V_dom,V_rng)) =>
+         (case t of 
+            Abs (x,_,y) => SOME (Abs(x,V_dom,
+              mk_coerce U_rng V_rng (Term.subst_bound (mk_coerce V_dom U_dom (Bound 0), y))))
+          | _ => eta_coerce U V (Abs ("x", U_dom, t $ Bound 0)))
+       | _ => NONE
 
 fun strip_guard  T = case T of
       Type("fun", [ (targ as Type (\<^type_name>\<open>tyarg\<close>, _)), T2]) => (case strip_guard T2 of
@@ -189,7 +226,7 @@ let
           SOME T1 => (Const (\<^const_name>\<open>assuming\<close>, dummyT)) $ (tyarg T1) $ rhs'
         | NONE => rhs'
     in Const (\<^const_name>\<open>Pure.eq\<close>, dummyT) $ lhs' $ rhs'' end
-  val concl' = unwrap_no_coerce (Syntax.check_term (Proof_Context.allow_dummies lthy2) concl)
+  val concl' = post_coerce (Syntax.check_term (Proof_Context.allow_dummies lthy2) concl)
   val lthy3 = #2 (Specification.definition (SOME (b,SOME T,mfx)) params' prems' (Binding.empty_atts, concl') lthy_outer)
   in lthy3 end
 
@@ -247,10 +284,20 @@ fun get_asms ctxt t = case t of
           (HOLogic.mk_Trueprop (Const(@{const_name holds},dummyT) $ Logic.mk_type asmT)),e)
   | _ => (@{prop True},t)
 
-fun dest_def ctxt const_name = 
-  let val thm = Proof_Context.get_thm ctxt (const_name ^ "_spec_def")
-      val ((_,[thm']),_) = Variable.import true [thm] ctxt
-      val (lhs,rhs) = Logic.dest_equals (Thm.prop_of thm')
+fun dest_def ctxt const_name opt_type =
+  let val thm0 = Proof_Context.get_thm ctxt (const_name ^ "_spec_def")
+      val thm1 = case opt_type of
+          SOME const_typ =>
+            let
+              val (lhs_raw,_) = Logic.dest_equals (Thm.prop_of thm0)
+              val (Const(_,T_var), _) = Term.strip_comb lhs_raw
+              val te = Type.typ_match (Proof_Context.tsig_of ctxt) (T_var,const_typ) Vartab.empty
+              val tve = TVars.build (Vartab.fold (fn (k,(s,U)) => TVars.add ((k,s), Thm.ctyp_of ctxt U)) te)
+            in Thm.instantiate (tve, Vars.empty) thm0 end
+        | NONE => thm0
+      val ((_,[thm2]),_) = Variable.import true [thm1] ctxt
+
+      val (lhs,rhs) = Logic.dest_equals (Thm.prop_of thm2)
       val (Const(_,T), args) = Term.strip_comb lhs
 
       val rec_t = Const(const_name ^ "_impl", T)
@@ -262,7 +309,7 @@ fun dest_def ctxt const_name =
       val rhs' = Term.map_aterms (fn t => if t = rec_t then free_t else t) rhs
       val (asm,_) = get_asms ctxt rhs'
 
-  in (thm, rec_t_raw, T, free_t, args, asm, rhs') end
+  in (thm0, rec_t_raw, T, free_t, args, asm, rhs') end
 
 fun extract_goal st = 
   let val g = #goal (Proof.simple_goal st)
@@ -287,17 +334,34 @@ fun set_path path =
   Sign.root_path #> fold (fn (q, optional) =>
     if optional then Sign.add_path q else Sign.mandatory_path q) path
 
-fun cryptol_termination_cmd const_name_raw includes_raw thy =
-  let   
+fun validate_locale thy loc = case Locale.intros_of thy loc of
+  (SOME asm,NONE) => (case Thm.nprems_of asm of
+      1 => let
+        fun val_tyargs ta = case ta of
+          ((_,Type(@{type_name tyarg}, [TFree _])),_) => ()
+          | ((nm,T),_) => error ("Unexpected locale parameter: " ^ Syntax.string_of_term_global thy (Free(nm,T)))
+        in map val_tyargs (Locale.params_of thy loc) end
+    | i => error ("Unexpected number of locale assumptions for " ^ loc ^ ". Expected 1, got " ^ Int.toString i))
+  | _ => error ("Unexpected locale shape for " ^ loc)
+
+fun cryptol_termination_cmd const_name_raw opt_typ_raw includes_raw thy =
+  let
     val ctxt = Proof_Context.init_global thy
     val includes = map (Bundle.check_name ctxt) includes_raw
-    val Const(full_const_name, _) = Proof_Context.read_const {proper=false,strict=false} ctxt const_name_raw
+    val parse_ctxt = Named_Target.init includes "" thy
+    val Const(full_const_name, _) = Proof_Context.read_const {proper=false,strict=false} parse_ctxt const_name_raw
+    val opt_type = case Option.map (Proof_Context.read_typ parse_ctxt) opt_typ_raw of
+      SOME U =>
+      let val Const(_,U') = Proof_Context.cert_term parse_ctxt (Const(full_const_name, U))
+      in SOME U' end
+    | NONE => NONE
     val const_name = base_name full_const_name
     val rec_spec_locale = Long_Name.qualifier full_const_name
+    val _ = validate_locale thy rec_spec_locale
     val thy0 = set_path (name_path (Locale.locale_space thy) rec_spec_locale) thy
 
     (* construct a function equation based on the shape of the _spec definition *)
-    val (spec_def, raw_const, T, free_t, args, asm, rhs) = dest_def ctxt const_name
+    val (spec_def, raw_const, T, free_t, args, asm, rhs) = dest_def ctxt const_name opt_type
 
     val f = HOLogic.mk_eq (Term.list_comb (free_t,args), rhs)
     val specs = [(((Binding.empty,[]),HOLogic.mk_Trueprop f), [], []) ]
@@ -307,10 +371,21 @@ fun cryptol_termination_cmd const_name_raw includes_raw thy =
     val b_ov = Binding.name rec_nm
     val fun_cfg = Function_Common.default_config
 
-    (* we expect the pattern coverage proof to be trivial, since there is exactly one
-       equation, thus we simply use "auto" rather than adding another manual proof step *)
+    (* the compatibility goal has the shape "(x1,..,xn) = (y1,..,yn) ==> rhs x = rhs y":
+       split the tuple and substitute instead of simplifying, since simp can blow up on large
+       Cryptol bodies (e.g. the let_simp simproc on nested lets) *)
+    fun fail_tac ctxt msg st = error (msg ^ "\n" ^ Goal_Display.print_goal ctxt "" st)
+    fun pat_tac ctxt =
+      (Pat_Completeness.pat_completeness_tac ctxt 1
+        ORELSE fail_tac ctxt "Pattern completeness proof failed:")
+      THEN (ALLGOALS (TRY o REPEAT_ALL_NEW (eresolve_tac ctxt @{thms Pair_inject})
+        THEN_ALL_NEW (REPEAT o hyp_subst_tac ctxt)
+        THEN_ALL_NEW resolve_tac ctxt @{thms refl})
+        ORELSE fail_tac ctxt "Compatibility proof failed:")
+
+    (* we expect the pattern coverage proof to be trivial, since there is exactly one equation *)
     val (_, lthy_ov') =            
-      Function.add_function [(b_ov, SOME T, NoSyn)] specs fun_cfg Clasimp.auto_tac lthy_ov
+      Function.add_function [(b_ov, SOME T, NoSyn)] specs fun_cfg pat_tac lthy_ov
 
     val lthy = lthy_ov'
       |> Local_Theory.exit_global
@@ -322,7 +397,10 @@ fun cryptol_termination_cmd const_name_raw includes_raw thy =
        start an interactive proof, extract the subgoal(s), and then discard the proof state.
        Then we initiate the proof again via "Proof.theorem" and install our own after_qed hook. *)
     val term_goal = extract_goal (Function.termination (SOME raw_const) lthy)
-    val expr = (rec_spec_locale, (("",false),(Expression.Positional [], [])))
+
+    val (targs,_) = strip_tyargs T
+    val tyargCtrs = map (fn V => Const(@{const_name tyargCtr},Type (@{type_name tyarg}, [V]))) targs
+    val expr = (rec_spec_locale, (("",false),(Expression.Positional (map SOME tyargCtrs), [])))
     val impl_def = Proof_Context.get_thm lthy (const_name ^ "_impl_def")
 
     val lthy1 = Variable.declare_term term_goal lthy
@@ -414,11 +492,13 @@ val _ =
 
 val _ =
   Outer_Syntax.command \<^command_keyword>\<open>cryptol_termination\<close> "install a recursive schema given a termination proof"
-    (Parse.const -- Scan.optional Parse_Spec.includes []  >> (fn (const_name_raw, incls) => 
-       Toplevel.theory_to_proof (Cryptol_Definition.cryptol_termination_cmd const_name_raw incls)))
+    (Parse.const -- (Scan.option (Parse.$$$ "::" |-- Parse.!!! Parse.typ)) --
+      Scan.optional Parse_Spec.includes []  >> (fn ((const_name_raw,opt_typ),incls) =>
+       Toplevel.theory_to_proof (Cryptol_Definition.cryptol_termination_cmd const_name_raw opt_typ incls)))
 \<close>
 
-
+abbreviation use_snd :: "'a \<Rightarrow> 'a \<Rightarrow> 'a" where
+  "use_snd _ x \<equiv> x"
 
 syntax "_forall" :: "term \<Rightarrow> bool"  (\<open>(\<open>notation=\<open>prefix\<close>\<close>FORALL)\<close>)
 
@@ -529,12 +609,12 @@ cryptol_definition rec_test_spec :: "{'a} ('a > 0) =?>  (int \<Rightarrow> 'a it
 
 end
 
-locale rec_test_rec_spec =
-  assumes "experiment.rec_test_spec = experiment.rec_test_impl"
+locale rec_test_rec_spec = fixes a
+  assumes "experiment.rec_test_spec a = experiment.rec_test_impl a"
 begin
 
 definition [simplified experiment.rec_test_impl_def[abs_def]]:
-  "rec_test = experiment.rec_test_impl"
+  "rec_test = (\<lambda>a'. experiment.rec_test_impl (use_snd a a'))"
 
 end
 
@@ -549,8 +629,10 @@ ML \<open>case Cryptol_Definition.get_const_hash @{theory} (dest_Const_name @{te
  | _ => error "get_const_hash failed"
 \<close>
 
-cryptol_termination experiment.rec_test
-  apply (relation "measure (\<lambda>(_, i, _). nat (abs i))")
+cryptol_termination
+  experiment.rec_test :: "{'a::zero} int \<Rightarrow> 'a itself \<Rightarrow> nat"
+  includes type_arg_syntax
+  apply (relation "measure (\<lambda>(a :: 'a :: zero tyarg, i, _). nat (abs i))")
   by auto
 
 ML \<open>\<^assert> (Sign.full_bname \<^theory> "baz" = "Cryptol_Definition.baz")\<close>
@@ -565,5 +647,24 @@ hide_fact experiment.rec_test_impl_def experiment.rec_test_spec_def
           experiment.rec_test_alt_def experiment.rec_test_def experiment.rec_test_impl_raw.elims
           experiment.rec_test_impl_raw.simps experiment.rec_test_impl_raw.induct
           experiment.rec_test_rec_spec_axioms
+
+context includes type_arg_syntax and assuming_syntax and seq_syntax begin
+
+cryptol_definition fn_coerce_spec :: "{'a, 'b, 'c::coercible_atom, 'd::coercible} ('a = 'b) =?> (['a]('c \<Rightarrow> 'd) \<Rightarrow> ['b]('c \<Rightarrow> 'd)) \<Rightarrow> (['b]('c \<Rightarrow> 'd) \<Rightarrow> ['a]('c \<Rightarrow> 'd))"  where
+  "fn_coerce_spec x \<equiv> x"
+
+
+lemma "fn_coerce_spec`{1+1,2, 'a::coercible_atom, 'b::coercible} (fn_coerce_spec`{2,1+1,'a::coercible_atom,'b::coercible} f) = f"
+  unfolding fn_coerce_spec_def
+  by simp
+
+cryptol_definition pair_coerce_spec :: "{'a, 'b, 'c} ('a = 'b) =?> (['a]'c \<times> ['b]'c) \<Rightarrow> (['b]'c \<times> ['a]'c)"  where
+  "pair_coerce_spec x \<equiv> (fst x, snd x)"
+
+lemma "LEN('a) = LEN('b) \<Longrightarrow> pair_coerce_spec`{'a,'b,'c} (x,y) = (coerce x, coerce y)"
+  unfolding pair_coerce_spec_def
+  by simp
+
+end
 
 end

@@ -42,7 +42,7 @@ replace inp outp src@(hd:tl) =
     False -> hd : replace inp outp tl
 
 cleanTheoryName :: Ident -> Ident
-cleanTheoryName i = replace "::" "_" i
+cleanTheoryName i = replace "'" "P" $ replace "::" "_" i
 
 data TheoryName = TheoryNameCtr { thyNm :: Ident, thyQualified :: Bool }
   deriving (Eq, Ord)
@@ -113,7 +113,7 @@ qualifiedIdent t = case nameOf t of
 
 unqualifyName :: Name -> Name
 unqualifyName = \case
-  nm@QName{} -> nm { nmQual_ = [] }
+  nm@QName{} -> nm { nmThy = (nmThy nm){thyQualified = False}, nmQual_ = [] }
   nm -> nm
 
 stripQualifier :: HasName t => t -> (t, [String])

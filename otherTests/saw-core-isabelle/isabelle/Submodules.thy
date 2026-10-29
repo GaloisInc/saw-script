@@ -21,11 +21,11 @@ end
 
 context includes cryptol_translation_syntax begin
 lemma MyEnum_same_type[simp]:
-  "same_type TYPE((('a::coercible_atom),'b) Sub.SubSub.MyEnum) TYPE((('a1::coercible_atom),'b1) Sub.SubSub.MyEnum) = ((same_type TYPE('a) TYPE('a1)) \<and> (LEN('b) = LEN('b1)))"
+  "same_type TYPE((('a::coercible),'b) Sub.SubSub.MyEnum) TYPE((('a1::coercible),'b1) Sub.SubSub.MyEnum) = ((same_type TYPE('a) TYPE('a1)) \<and> (LEN('b) = LEN('b1)))"
   by (simp add: same_type_def Sub.SubSub.strip_type_MyEnum_def strip_type_seq_def)
 end
 
-instantiation Sub.SubSub.MyEnum :: (coercible_atom,_) coercible
+instantiation Sub.SubSub.MyEnum :: (coercible,_) coercible
 begin
 definition strip_MyEnum :: "('a,'b) Sub.SubSub.MyEnum => stripped" where
   "strip_MyEnum \<equiv> Sub.SubSub.case_MyEnum ((curry)(curry strip (0::nat))) ((curry o curry)(curry strip (1::nat))) ((curry o curry o curry o curry o curry)(curry strip (2::nat)))"
@@ -82,10 +82,10 @@ end
 qualifier "Sub."
 
 locale fib_rec_spec =
-  assumes "Sub.fib_spec = Sub.fib_impl"
+  assumes [export_global]: "Sub.fib_spec = Sub.fib_impl"
 begin
 
-definition [simplified Sub.fib_impl_def[abs_def],export_global]: 
+definition [simplified Sub.fib_impl_def[abs_def],export_global]:
   "fib = Sub.fib_impl"
 
 end

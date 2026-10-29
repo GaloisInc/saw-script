@@ -227,7 +227,7 @@ translateDeclGroup = \case
         Right (args, body)  -> do
           addDecl (Decl.Commented "Recursive call stub (to be overridden)" $ (Decl.ConstDecl False (Decl.asRecImpl b)))
           addDecl (Decl.Commented "Recursive call schema" $ Decl.Definition False (Decl.asRecSpec b) args (fixRecs body) [])
-          return (Just (crynm, Binding.bindName b))
+          return (Just (crynm, b))
         Left (StubbedFunction{}) | isStubbedFnName b -> do
           addDecl (Decl.Commented ("Stubbed Function") (Decl.ConstDecl False b))
           return Nothing
@@ -236,7 +236,7 @@ translateDeclGroup = \case
           return Nothing
         Left er -> throwError er
     addDecl (Decl.FixpointLocale (map snd bs))
-    mapM_ (\(crynm,isanm) -> addHashDecl crynm isanm) bs
+    mapM_ (\(crynm,isanm) -> addHashDecl crynm isanm) (map (\(cnm, b) -> (cnm,Binding.bindName b)) bs)
 
   Cry.NonRecursive d -> do
     (b,mbody) <- translateDecl d
@@ -285,7 +285,6 @@ extraGuard ctx tv = case Cry.tpKind tv of
       let rng = Cry.tvarSource $ Cry.tpInfo tv
       IsaOpts.log (-1) $  "[warning] at " ++ pp rng ++ "\n Type parameter is not constrained to fin: " ++ pp tp
       return $ Just $ Cry.TCon (Cry.PC Cry.PFin) [tp]
-  Cry.KType -> return $ Just $ Cry.TCon (Cry.PC Cry.PEq) [tp]
   _ -> return Nothing
   where
     tp = Cry.TVar (Cry.TVBound tv)
@@ -340,12 +339,15 @@ translateDecl d = withDeclBinding' d $ \b mbody -> case mbody of
   _ -> return (b, Left $ StubbedFunction d)
 
 -- | Returns Undefined if translation fails
-translateDecl' :: Cry.Decl -> IsaM (Binding.Binding, Expr)
-translateDecl' d = withDeclBinding d $ \b body -> (tryError $ translateExpr body) >>= \case
-  Left err -> do
-    warn err
-    return $ (b, Expr.Undefined (Binding.bindType b) (Error.showErr err))
-  Right body' -> return $ (b, body')
+translateWhereDecl :: Cry.Decl -> IsaM (Binding.Binding, Expr)
+translateWhereDecl d = do
+  _ <- toMono (Cry.dSignature d)
+  withDeclBinding d $ \b body ->
+    (tryError $ translateExpr body) >>= \case
+    Left err -> do
+      warn err
+      return $ (b, Expr.Undefined (Binding.bindType b) (Error.showErr err))
+    Right body' -> return $ (b, body')
 
 nameToVar :: Name.Name -> IsaM Expr
 nameToVar nm = return $ Expr.Var nm
@@ -380,17 +382,22 @@ translateName nm = do
     Cry.NSConstructor -> return $ Name.Term
     Cry.NSModule -> throwError $ UnsupportedEntity $ "Namespace.NSModule"
 
-  (thynm,path) <- case Cry.nameInfo nm of
-    Cry.GlobalName _ on -> pathToTheory (Cry.ogModule on)
-    Cry.LocalName{} -> do
-      thynm <- curTheory
-      return (thynm,[])
   let syn = case Cry.nameFixity nm of
         Just{} -> Syntax.InfixSyn (Cry.unpackIdent ident)
         Nothing -> Syntax.NoSyn
   let isaIdent = case (Name.isTypeK k, Cry.nameInfo nm) of
         (True, Cry.LocalName{}) -> "'" ++ Cry.unpackIdent ident
         _ -> Cry.unpackIdent ident
+  (thynm,path) <- case Cry.nameInfo nm of
+    Cry.GlobalName _ on -> do
+      (thynm,path) <- pathToTheory (Cry.ogModule on)
+      let thynm' = if not (isBuiltinThy thynm) && mayShadowBuiltin isaIdent
+            then thynm{ Name.thyQualified = True } else thynm
+      return (thynm',path)
+    Cry.LocalName{} -> do
+      thynm <- curTheory
+      return (thynm,[])
+
   return $ Name.QName thynm isaIdent (reverse (map Cry.unpackIdent path)) syn k
 
 translateTParam :: Cry.TParam -> IsaM Expr
@@ -606,7 +613,10 @@ isHexType t = isJust (asWordType t)
 recordField :: [Cry.Ident] -> Cry.Ident -> Name.Name
 recordField flds field = 
   let rnm = Decl.recordName (map Cry.unpackIdent flds)
-  in Name.Name (Name.nmThy rnm) (Cry.unpackIdent field) Syntax.NoSyn Name.Term
+  in Name.QName (Name.nmThy rnm)
+      (Cry.unpackIdent field)
+      [Name.nmStr rnm]
+      Syntax.NoSyn Name.Term
 
 isRec :: Cry.Type -> Maybe (Cry.RecordMap Cry.Ident Cry.Type)
 isRec t = Cry.tIsRec t <|> do
@@ -793,14 +803,14 @@ translateExpr = rethrow UnsupportedExpr $ \case
           -- regardless if it actually has mutually recursive bindings
           -- in general this can be detected by examining the bindings themselves,
           -- but this handles the common case where only one binding exists
-          Cry.Recursive [d] -> (:[]) <$> translateDecl' d
+          Cry.Recursive [d] -> (:[]) <$> translateWhereDecl d
           Cry.Recursive ds | IsaOpts.keepGoing -> do
             undef <- mkUndefined (UnsupportedRecursion ds)
             forM ds $ \d -> withDeclBinding d $ \b _ ->
               return (b, undef (Binding.bindType b))
           Cry.Recursive ds -> do
             throwError $ UnsupportedRecursion ds
-          Cry.NonRecursive d -> (:[]) <$> translateDecl' d
+          Cry.NonRecursive d -> (:[]) <$> translateWhereDecl d
     binds <- concat <$> mapM f grps
     body' <- translateExpr body
     return $ letExpr binds body'

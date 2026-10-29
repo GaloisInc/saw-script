@@ -1,6 +1,9 @@
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 module Language.Isabelle.Builtins where
 
+import Data.List (stripPrefix)
+import qualified Data.Set as Set
+
 import qualified Cryptol.TypeCheck.PP as Cry
 
 import qualified Language.Isabelle.Binding as Binding
@@ -10,6 +13,7 @@ import qualified Language.Isabelle.Name as Name
 import           Language.Isabelle.Name (Name)
 import qualified Language.Isabelle.Syntax as Syntax
 import qualified Language.Isabelle.Panic as Panic
+
 
 scratchThy :: Name.TheoryName
 scratchThy = Name.TheoryName "Scratch" False
@@ -76,6 +80,20 @@ isBuiltinName nm = case nm of
   Name.Name{} -> isBuiltinThy (Name.nmThy nm)
   _ -> False
 
+-- all aliases introduced by the translation bundle in Cryptol_Syntax.thy
+builtinIdents :: Set.Set String
+builtinIdents =
+  Set.fromList $
+     ["length","join","take","drop","zero","map","seq_compr","reverse"]
+  ++ ["zip","zipWith","zip_mismatch","seq_concat_map","complement","sum"]
+  ++ ["product","update","updateEnd","updates","updatesEnd","carry","scarry"]
+  ++ ["sborrow","and","or","negate","fromZ","fromInteger","toSignedInteger"]
+  ++ ["toInteger","all","any","scanl","foldl","foldl'","foldr","foldr'"]
+  ++ ["transpose","min","max","head","tail","last","lg2","Option","None","Some"]
+
+mayShadowBuiltin :: String -> Bool
+mayShadowBuiltin nm = Set.member nm builtinIdents
+
 tFun :: Type -> Type -> Type
 tFun e1 e2 = Expr.Ctr [e1, e2] $
   Name.Name pureThy "fun" (Syntax.InfixSyn ("\\<Rightarrow>")) Name.Typ
@@ -111,6 +129,21 @@ tAbs :: [Type] -> Type -> Type
 tAbs [] body = body
 tAbs ts body = Expr.Ctr (body:ts) $
   Name.Name cryThy "TAbs" (Syntax.ListSyn Syntax.Postfix "," "{" "} ") Name.Typ
+
+stripTAbs :: Type -> ([String], Type)
+stripTAbs e = case e of
+  Expr.Ctr (t:ts) (nm@Name.Name{})
+    | "TAbs" <- Name.nmStr nm
+    , Name.nmThy nm == cryThy
+    , Just nms <- mapM asTVar ts
+    -> (nms,t)
+  _ -> ([],e)
+  where
+
+asTVar :: Type -> Maybe String
+asTVar t = case t of
+  Expr.Var nm -> stripPrefix "'" (Name.nmStr nm)
+  _ -> Nothing
 
 tApp :: Expr -> [Type] -> Expr
 tApp body [] = body
@@ -212,6 +245,7 @@ tFromThenTo x y z =
   Expr.Ctr [x, y, z] (Name.Name tLenThy "FromThenTo" Syntax.NoSyn Name.Typ)
 
 eAbs :: [Expr] -> Expr -> Expr
+eAbs [] body = body
 eAbs args body = Expr.Binder "\\<lambda>" args body
 
 tupleSelect :: Name.Name -> Expr -> Int -> Int -> Expr
@@ -375,3 +409,6 @@ recordUpdate e fieldnm fieldv = Expr.Ctr [e, Expr.Var fieldnm, coerceExpr fieldv
 
 tyargT :: Expr.Type -> Expr.Type
 tyargT t = Expr.Ctr [t] $ Name.Name cryThy "tyarg" Syntax.NoSyn Name.Typ
+
+useSnd :: Expr -> Expr -> Expr
+useSnd e1 e2 = Expr.Ctr [e1,e2] (Name.Name cryThy "use_snd" Syntax.NoSyn Name.Term)

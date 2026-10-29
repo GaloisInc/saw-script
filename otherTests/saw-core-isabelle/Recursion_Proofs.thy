@@ -60,4 +60,10 @@ lemma rec_fn_valid: "rec_fn_valid`{'a,'b::cryptol_ring} xs"
   
 end
 
+cryptol_termination simple_rec
+  includes cryptol_syntax
+  apply (relation "measure (\<lambda>(_,_,_,i,_,_).  LEN('c) - nat i)")
+  by (auto simp: cryptol_prim_defs)
+
+
 end

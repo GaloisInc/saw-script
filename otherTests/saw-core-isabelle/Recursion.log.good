@@ -10,20 +10,20 @@ begin
 
 context includes cryptol_translation_syntax begin
 (* Recursive call stub (to be overridden)*)
-cryptol_definition rec_fnlba_gt_0rb_impl :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b,'a > 0,Eq 'b) =?> ((['a]'b) \<Rightarrow> 'b))"
+cryptol_definition rec_fnlba_gt_0rb_impl :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b,'a > 0) =?> ((['a]'b) \<Rightarrow> 'b))"
 
 (* Recursive call stub (to be overridden)*)
-cryptol_definition rec_fn_impl :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b,Eq 'b) =?> ((['a]'b) \<Rightarrow> 'b))"
+cryptol_definition rec_fn_impl :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b) =?> ((['a]'b) \<Rightarrow> 'b))"
 
 (* Recursive call schema*)
-cryptol_definition rec_fnlba_gt_0rb_spec :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b,'a > 0,Eq 'b) =?> ((['a]'b) \<Rightarrow> 'b))" where
+cryptol_definition rec_fnlba_gt_0rb_spec :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b,'a > 0) =?> ((['a]'b) \<Rightarrow> 'b))" where
 "rec_fnlba_gt_0rb_spec x \<equiv> (head`{'a - 1,'b} x) +`{'b} (rec_fn_impl`{'a - 1,'b} (tail`{'a - 1,'b} x))"
 
-cryptol_definition rec_fnlba_eqeq_0rb :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b,'a = 0,Eq 'b) =?> ((['a]'b) \<Rightarrow> 'b))" where
+cryptol_definition rec_fnlba_eqeq_0rb :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b,'a = 0) =?> ((['a]'b) \<Rightarrow> 'b))" where
 "rec_fnlba_eqeq_0rb x \<equiv> zero`{'b}"
 
 (* Recursive call schema*)
-cryptol_definition rec_fn_spec :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b,Eq 'b) =?> ((['a]'b) \<Rightarrow> 'b))" where
+cryptol_definition rec_fn_spec :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b) =?> ((['a]'b) \<Rightarrow> 'b))" where
 "rec_fn_spec  \<equiv> 
   let
     s_mono = ((if PRED('a > 0) then ((rec_fnlba_gt_0rb_impl`{'a,'b}) : ((['a]'b) \<Rightarrow> 'b)) else coerce (('a = 0) \<Rightarrow> ((rec_fnlba_eqeq_0rb`{'a,'b}) : ((['a]'b) \<Rightarrow> 'b)))) : ((['a]'b) \<Rightarrow> 'b))
@@ -33,15 +33,15 @@ end
 
 qualifier ""
 
-locale rec_fn_rec_spec =
-  assumes "rec_fnlba_gt_0rb_spec = rec_fnlba_gt_0rb_impl"and "rec_fn_spec = rec_fn_impl"
+locale rec_fn_rec_spec = fixes a b a1 b1
+  assumes [export_global]: "(rec_fnlba_gt_0rb_spec a b) = (rec_fnlba_gt_0rb_impl a b)"and "(rec_fn_spec a1 b1) = (rec_fn_impl a1 b1)"
 begin
 
-definition [simplified rec_fnlba_gt_0rb_impl_def[abs_def],export_global]: 
-  "rec_fnlba_gt_0rb = rec_fnlba_gt_0rb_impl"
+definition [simplified rec_fnlba_gt_0rb_impl_def[abs_def],export_global]:
+  "rec_fnlba_gt_0rb = (\<lambda>a' b'. (rec_fnlba_gt_0rb_impl (use_snd a a') (use_snd b b')))"
 
-definition [simplified rec_fn_impl_def[abs_def],export_global]: 
-  "rec_fn = rec_fn_impl"
+definition [simplified rec_fn_impl_def[abs_def],export_global]:
+  "rec_fn = (\<lambda>a1' b1'. (rec_fn_impl (use_snd a1 a1') (use_snd b1 b1')))"
 
 end
 
@@ -57,6 +57,34 @@ context includes cryptol_translation_syntax begin
 
 cryptol_definition rec_fn_valid :: "{'a,'b} ((fin 'a,Ring 'b,Zero 'b,Eq 'b) =?> ((['a]'b) \<Rightarrow> Bit))" where
 "rec_fn_valid x \<equiv> (rec_fn`{'a,'b} x) ==`{'b} (sum`{'a,'b} x)"
+
+(* Recursive call stub (to be overridden)*)
+cryptol_definition simple_rec_impl :: "{'a,'b,'c} ((fin 'b,fin 'c) =?> (Integer \<Rightarrow> ((['b]'a) \<Rightarrow> ((['c]'a) \<Rightarrow> ([2 * 'c]'a)))))"
+
+(* Recursive call schema*)
+cryptol_definition simple_rec_spec :: "{'a,'b,'c} ((fin 'b,fin 'c) =?> (Integer \<Rightarrow> ((['b]'a) \<Rightarrow> ((['c]'a) \<Rightarrow> ([2 * 'c]'a)))))" where
+"simple_rec_spec i x y \<equiv> if (i >=`{Integer} (0 :: Integer)) &&`{Bit} (i <`{Integer} (number`{'b,Integer})) then (simple_rec_impl`{'a,'b,'c} (i +`{Integer} (1 :: Integer)) x (update`{'c,'a,Integer} y i (x @`{'b,'a,Integer} i))) else coerce (y #`{'c,'c,'a} y)"
+
+end
+
+qualifier ""
+
+locale simple_rec_rec_spec = fixes a b c
+  assumes [export_global]: "(simple_rec_spec a b c) = (simple_rec_impl a b c)"
+begin
+
+definition [simplified simple_rec_impl_def[abs_def],export_global]:
+  "simple_rec = (\<lambda>a' b' c'. (simple_rec_impl (use_snd a a') (use_snd b b') (use_snd c c')))"
+
+end
+
+alias simple_rec = simple_rec_rec_spec.simple_rec
+
+hide_fact simple_rec_rec_spec.simple_rec_def
+
+end_qualifier ""
+
+context includes cryptol_translation_syntax begin
 
 end
 end

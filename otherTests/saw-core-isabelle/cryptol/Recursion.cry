@@ -7,3 +7,7 @@ rec_fn x
 
 rec_fn_valid : {a,b} (fin a, Ring b, Zero b, Eq b) => [a]b -> Bit
 rec_fn_valid x = rec_fn x == sum x
+
+
+simple_rec : {a, b, c} (fin b, fin c) => Integer -> [b]a -> [c]a -> [c * 2]a
+simple_rec i x y = if (i >= 0) && (i < `(b)) then simple_rec (i+1) x (update y i (x @ i)) else (y # y)
