@@ -430,6 +430,11 @@ definition "len_of_Width == \<lambda>(_ :: 'a Width itself).(log2_nat (Suc LEN('
 instance ..
 end
 
+instance Width :: (len) len
+  apply standard
+  unfolding len_of_Width_def len_of_alt_def
+  by simp
+
 datatype 'a lg2 = lg2TypeCtr
 instantiation lg2 :: (_)len0 begin
 definition "len_of_lg2 == \<lambda>(_ :: 'a lg2 itself).(log2_nat LEN('a))"
