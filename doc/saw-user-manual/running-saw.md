@@ -105,9 +105,9 @@ Common options include:
 `-s` _file_ or `--summary=`_file_
 : Write a verification summary to the given file.
 
-`-f pretty` or `--summary-format=pretty`
-: Generate a human-readable verification summary.
-  (The default is JSON.)
+`-f json` or `--summary-format=json`
+: Generate a machine-readable verification summary.
+  (The default is "pretty", which is meant to be human-readable.)
 
 `--detect-vacuity`
 : Check for specifications whose precondition is unsatisfiable.
