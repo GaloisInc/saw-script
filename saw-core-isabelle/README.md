@@ -220,10 +220,10 @@ Isabelle. The resulting Isabelle theory will also depend on the
 `Unsupported` theory from the Cryptol library. This theory is *not*
 logically consistent, and should only be used for testing purposes.
 
-## Recursive where-bindings
+## Recursive and polymorphic where-bindings
 
 Cryptol's where-bindings are translated directly into let-bindings in
-Isabelle, which cannot be mutually recursive.
+Isabelle, which cannot be mutually recursive or polymorphic.
 
 ## Newtype abstraction
 
@@ -242,6 +242,9 @@ User-defined Cryptol functions with infix syntax are not supported.
 The module structure of the source Cryptol is flattened during translation.
 Each top-level Cryptol module results in a single Isabelle theory, and each
 instance of a parameterized module will result in a distinct copy during translation.
+
+Submodules are translated as a qualified namespace within the theory
+of the parent module.
 
 # Word vs. Seq
 
