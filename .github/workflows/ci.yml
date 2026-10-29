@@ -1100,7 +1100,8 @@ jobs:
         # to that local switch in the current directory, _then_ chdir and
         # use opam exec.
         run: |
-          eval $(opam env --set-switch)
+          pwd
+          eval $(opam env --set-switch --switch=$(pwd))
           (cd saw-core-rocq/rocq && opam exec -- make -j)
 
       # Regenerate the test .v files, since we don't have the ones from the
