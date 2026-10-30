@@ -5,5 +5,9 @@
 // involved happens at runtime rather than in the typechecker.
 //
 // See #2425.
+//
+// As of 20261030 after changing how undefined is implemented, this
+// now trips on undefined first before it hits the polymorphism
+// check. But that could change again in the future...
 
 undefined;

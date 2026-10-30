@@ -426,6 +426,27 @@ type RefChain = [(SS.Pos, SS.Name)]
 --   FUTURE: this should be fixed, but not until it can be done
 --   without tying a gigantic knot in the module dependencies.
 --
+--   `VUndefined` is the implementation of the "undefined" builtin:
+--   "undefined" is a constant whose value is VUndefined. The
+--   interpreter checks for VUndefined when reading a variable and
+--   fails if it's found. This causes "undefined" to crash when
+--   evaluated. This mechanism replaces a previous one that used a
+--   Haskell "pure" throw (actually a call to `error`) masquerading as
+--   a `Value`. The advantage of that mechanism was that it required
+--   no explicit checks, and there was no need for explicit matching
+--   on values to consider the "undefined" case. The disadvantage was
+--   that it was impossible to report the source location that tripped
+--   on the "undefined": the throw has to be "pure" at the Haskell
+--   level to be able to masquerade as a plain `Value`, and that means
+--   it has no access of its own to interpreter state. (It might have
+--   been possible to change the interpreter's symbol table to have
+--   type @Pos -> Value@ and pass /every/ value the position where it
+--   gets loaded... but that seems invasive and expensive and not like
+--   a good idea.) So now there's a concrete value and the interpreter
+--   checks for it. This also has the advantage that if we want to
+--   make the behavior of @undefined@ lazier in the future we can move
+--   the check around.
+--
 --   Because monadic values are irreducible until executed (they're
 --   effectively lambdas) but we also want to be able to know what
 --   they are when we execute them (for stack traces and error
@@ -608,7 +629,8 @@ type RefChain = [(SS.Pos, SS.Name)]
 --   underlying native one.
 --
 data Value
-  = VBool Bool
+  = VUndefined
+  | VBool Bool
   | VString Text
   | VInteger Integer
   | VArray [Value]
@@ -744,6 +766,7 @@ prettyValue :: SharedContext -> Value -> IO PPS.Doc
 prettyValue sc = visit (0 :: Int)
   where
     visit prec v0 = case v0 of
+      VUndefined -> pure "undefined"
       VBool True -> pure "true"
       VBool False -> pure "false"
       VString s -> pure $ PP.pretty $ PPS.ppStringLiteral s
@@ -871,6 +894,7 @@ ppValue sc v = do
 --   in detail is probably not actually necessary.
 uglyValue :: Value -> Text
 uglyValue v0 = case v0 of
+    VUndefined -> "undefined"
     VBool True -> "true"
     VBool False -> "false"
     VString s -> "\"" <> s <> "\""

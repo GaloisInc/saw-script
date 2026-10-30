@@ -1,7 +1,10 @@
 Loading file "undefined5.saw"
 not dead yet
 still not dead
-interpret: undefined
-CallStack (from HasCallStack):
-  error, called at saw-script/src/SAWScript/Interpreter.hs
+Stack trace:
+   (builtin) in f
+   undefined5.saw:5:9-5:13 in x
+   undefined5.saw:7:1-7:2 (at top level)
+undefined5.saw:3:17-3:26: Error: evaluated "undefined"
+
 FAILED
