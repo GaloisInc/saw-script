@@ -324,6 +324,8 @@ library saw-core-rocq
     SAWCoreRocq.Monad
     SAWCoreRocq.Term
     SAWCoreRocq.SpecialTreatment
+  other-modules:
+    SAWCoreRocq.Panic
 
 ------------------------------------------------------------
 -- saw-core-isabelle
@@ -374,7 +376,6 @@ library saw-core-isabelle
     Language.Isabelle.Expr
     Language.Isabelle.Name
     Language.Isabelle.Output
-    Language.Isabelle.Panic
     Language.Isabelle.Syntax
     Language.Isabelle.Template
     Language.Isabelle.Theory
@@ -386,6 +387,8 @@ library saw-core-isabelle
     SAWCoreIsabelle.Runner
     SAWCoreIsabelle.Translate
     SAWCoreIsabelle.TranslateSAW
+  other-modules:
+    Language.Isabelle.Panic
 
 -- Independent executable for translating cryptol modules to Isabelle
 executable cryptol-to-isabelle

@@ -300,12 +300,12 @@ toMaybeBool _  = Nothing
 
 toBool :: SValue -> SBool
 toBool (VBool b) = b
-toBool sv = error $ unwords ["toBool failed:", show sv]
+toBool sv = panic "toBool" ["Expected bool, got " <> Text.pack (show sv)]
 
 toWord :: SValue -> IO SWord
 toWord (VWord w) = return w
 toWord (VVector vv) = symFromBits <$> traverse (fmap toBool . force) vv
-toWord x = fail $ unwords ["SAWCoreSBV.SBV.toWord", show x]
+toWord x = panic "toWord" ["Expected word or vector, got " <> Text.pack (show x)]
 
 toMaybeWord :: SValue -> IO (Maybe SWord)
 toMaybeWord (VWord w) = return (Just w)
@@ -428,7 +428,7 @@ bvShiftOp bvOp natOp =
       VNat i | j < toInteger (maxBound :: Int) -> return (vWord (natOp x (fromInteger j)))
         where j = toInteger i `min` toInteger (intSizeOf x)
       VBVToNat _ v -> fmap (vWord . bvOp x) (toWord v)
-      _        -> error $ unwords ["SAWCoreSBV.SBV.bvShiftOp", show y]
+      _ -> panic "bvShiftOp" ["Expected Nat or BVToNat, got " <> Text.pack (show y)]
 
 -- bvShl : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
 bvShLOp :: SPrim
@@ -893,9 +893,19 @@ getLabels ::
 
 getLabels ls d args
   | length args == length xs = Just (zip args xs)
-  | otherwise = error $ unwords
-                [ "SBV SAT results do not match expected arguments "
-                , show (map vnName args), show xs]
+  | otherwise =
+        let args' = map (\arg -> "   " <> vnName arg) args
+            xs' = map (\x -> "   " <> Text.pack (show x)) xs
+            nargs' = Text.pack (show $ length args')
+            nxs' = Text.pack (show $ length xs')
+
+            line1 = "SBV SAT results do not match expected arguments"
+            line2 = nargs' <> " args:"
+            lines3 = args'
+            line4 = nxs' <> " results:"
+            lines5 = xs'
+        in
+        panic "getLabels" ([line1, line2] ++ lines3 ++ [line4] ++ lines5)
 
   where
   xs = fmap getLabel ls
@@ -928,17 +938,17 @@ getLabels ls d args
   cvKind cv =
     case kindOf cv of
       KBounded _ k -> fromIntegral k
-      _                -> error "cvKind"
+      _ -> panic "getLabels / cvKind" ["Not KBounded"]
 
   cvToInteger cv =
     case cvVal cv of
       CInteger i -> i
-      _               -> error "cvToInteger"
+      _ -> panic "getLabels / cvToInteger" ["Not integer"]
 
   cvToFP cv =
     case cvVal cv of
       CFP fp -> fp
-      _ -> error "cvToFP"
+      _ -> panic "getLabels/ cvToFP" ["Not CFP"]
 
 
 ------------------------------------------------------------

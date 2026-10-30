@@ -1480,7 +1480,7 @@ equalValsPred cc mv1 mv2 =
       lenPred <- goTy lenShp len1 len2
       liftIO $ W4.andPred sym refPred lenPred
     goTy (FnPtrShape _ _ _) _fh1 _fh2 =
-      error "Function pointers not currently supported in overrides"
+      fail "Function pointers not currently supported in overrides"
 
     goFldAssn :: Ctx.Assignment FieldShape ctx
               -> Ctx.Assignment (RegValue' Sym) ctx

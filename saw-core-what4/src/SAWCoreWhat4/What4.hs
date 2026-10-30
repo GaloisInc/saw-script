@@ -458,7 +458,9 @@ bvShiftOp sym bvOp natOp =
       VNat i   -> VWord <$> natOp x j
         where j = toInteger i `min` SW.bvWidth x
       VBVToNat _ v -> VWord <$> (bvOp x =<< toWord sym v)
-      _        -> error $ unwords ["SAWCoreWhat4.What4.bvShiftOp", show y]
+      _ ->
+        let y' = Text.pack $ show y in
+        panic "bvShiftOp" ["Invalid value: " <> y']
 
 -- bvShl : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
 bvShLOp :: forall sym. Sym sym => sym -> SPrim sym
@@ -712,8 +714,9 @@ fpRoundingMode _sym v =
         2 -> pure W.RTP
         3 -> pure W.RTN
         4 -> pure W.RTZ
-        _ -> error $ "Invalid rounding mode: " ++ show i
-    Nothing -> error "Symbolic rounding modes not supported"
+        _ -> fail $ "fpRoundingMode: Invalid rounding mode: " ++ show i
+    Nothing ->
+      fail "fpRoundingMode: Symbolic rounding modes not supported"
 
 fpBinArith ::
   W.IsSymExprBuilder sym =>

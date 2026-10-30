@@ -352,6 +352,7 @@ import qualified Prettyprinter as PP
 import qualified SAWSupport.IntRangeSet as IntRangeSet
 import qualified SAWSupport.Pretty as PPS (Doc, Opts, defaultOpts, render, renderText)
 
+import SAWCore.Panic
 import SAWCore.Cache
 import SAWCore.Change
 import SAWCore.FloatHelpers (NotRationalError(..), floatToRational)
@@ -961,7 +962,8 @@ scFindModule sc name =
      case maybe_mod of
        Just m -> return m
        Nothing ->
-         error ("scFindModule: module " ++ show name ++ " not found!")
+         let name' = Text.pack (show name) in
+         panic "scFindModule" ["Module " <> name' <> " not found!"]
 
 ----------------------------------------------------------------------
 -- Printing

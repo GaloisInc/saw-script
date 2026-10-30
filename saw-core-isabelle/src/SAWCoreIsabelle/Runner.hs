@@ -40,6 +40,7 @@ import qualified Cryptol.TypeCheck.AST as Cry
 import qualified Cryptol.Utils.Ident as Cry
 import           Cryptol.Utils.PP (pretty)
 
+import           Language.Isabelle.Panic
 import           Language.Isabelle.Builtins (cryThy)
 import qualified Language.Isabelle.Decl as Decl
 import qualified Language.Isabelle.Name as Name
@@ -123,7 +124,7 @@ recordDeclThy :: Decl.Decl -> Theory.Theory
 recordDeclThy d@(Decl.RecordDecl flds) = 
   let thynm = Name.nmThy $ Decl.recordName flds
   in Theory.Theory thynm (Decl.singleton d) 
-recordDeclThy _ = error "recordDeclThy: unexpected Decl kind"
+recordDeclThy _ = panic "recordDeclThy" ["unexpected Decl kind"]
 
 allDepsOf :: Deps.CryptolDeps -> [Cry.ModName] -> Set.Set Cry.ModName
 allDepsOf deps ms = 

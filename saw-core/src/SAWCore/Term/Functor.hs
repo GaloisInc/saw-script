@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveLift #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 {- |
 Module      : SAWCore.Term.Functor
@@ -43,6 +44,7 @@ import Numeric.Natural
 import qualified Language.Haskell.TH.Syntax as TH
 import Instances.TH.Lift () -- for instance TH.Lift Text
 
+import SAWCore.Panic
 import SAWCore.Name
 
 type FieldName = Text
@@ -185,7 +187,7 @@ alistAllFields (fld:flds) alist
   | Just val <- lookup fld alist =
     (val :) <$> alistAllFields flds (deleteField fld alist)
   where
-    deleteField _ [] = error "deleteField"
+    deleteField _ [] = panic "alistAllFields / deleteField" ["empty"]
     deleteField f ((f',_):rest) | f == f' = rest
     deleteField f (x:rest) = x : deleteField f rest
 alistAllFields _ _ = Nothing

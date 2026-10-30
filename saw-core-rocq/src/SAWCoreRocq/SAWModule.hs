@@ -30,6 +30,7 @@ import           SAWCore.Module
 import           SAWCore.Name
 import           SAWCore.SharedTerm
 
+import           SAWCoreRocq.Panic
 import qualified SAWCoreRocq.Monad            as M
 import           SAWCoreRocq.SpecialTreatment
 import qualified SAWCoreRocq.Term             as TermTranslation
@@ -64,7 +65,7 @@ translateCtor inductiveParameters (Ctor {..}) = do
   let constructorName = case maybe_constructorName of
         -- Drop qualifiers from constructor name
         Just (Rocq.Ident n) -> Rocq.Ident $ Text.takeWhileEnd (/= '.') n
-        Nothing -> error "translateCtor: unexpected translation for constructor"
+        Nothing -> panic "translateCtor" ["Unexpected translation for constructor"]
   constructorType <-
     -- Unfortunately, `ctorType` qualifies the inductive type's name in the
     -- return type.
@@ -103,7 +104,7 @@ translateDataType (DataType {..}) =
         -- constraints, so the result of calling `translateParams dtIndices` above should
         -- only return explicit, not implicit, Binders.  Moreover, `translateParams`
         -- always returns Binders where the second field is `Just t`, where `t` is the type.
-        let errorBecause msg = error $ "translateDataType.translateNamed: " ++ msg in
+        let errorBecause msg = panic "translateDataType / translateNamed" [msg] in
         let bs = map (\case Rocq.Binder Rocq.Explicit s (Just t) ->
                               Rocq.PiBinder Rocq.Explicit (Just s) t
                             Rocq.Binder Rocq.Explicit _ Nothing ->
@@ -158,7 +159,7 @@ translateDef (Def {..}) = {- trace ("translateDef " ++ show defIdent) $ -} do
       where
 
         go :: TermTranslation.TermTranslationMonad m => DefQualifier -> Maybe Term -> m Rocq.Decl
-        go NoQualifier    Nothing     = error "Terms should have a body (unless axiom/primitive)"
+        go NoQualifier    Nothing     = panic "translateDef" ["Terms should have a body (unless axiom/primitive)"]
         go NoQualifier    (Just body) = Rocq.Definition
                                         <$> pure name
                                         <*> pure []

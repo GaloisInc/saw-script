@@ -177,5 +177,6 @@ tupleToList (viewAssign -> AssignEmpty) (viewAssign -> AssignEmpty) = Right []
 tupleToList (viewAssign -> AssignExtend rs r) (viewAssign -> AssignExtend gvs gv) =
   (:) <$> groundToFOV r (unGVW gv) <*> tupleToList rs gvs
 #if !MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
-tupleToList _ _ = error "GADTs should rule this out."
+-- GADTs should rule this out
+tupleToList _ _ = panic "tupleToList" ["Not tuple"]
 #endif

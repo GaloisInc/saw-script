@@ -516,8 +516,8 @@ llvm_verify_x86_common (Some (llvmModule :: LLVMModule x)) path nm globsyms chec
           , _ccUninterp = Set.empty
 
           -- It's unpleasant that we need to do this to use resolveSetupVal.
-          , _ccLLVMSimContext = error "Attempted to access ccLLVMSimContext"
-          , _ccLLVMGlobals = error "Attempted to access ccLLVMGlobals"
+          , _ccLLVMSimContext = panic "x86" ["Attempted to access ccLLVMSimContext"]
+          , _ccLLVMGlobals = panic "x86" ["Attempted to access ccLLVMGlobals"]
           }
 
       liftIO . printOutLn opts Info $ Text.unpack $

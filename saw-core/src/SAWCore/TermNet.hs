@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 {- |
@@ -36,6 +37,8 @@ import qualified Data.List as List
 import Data.Text (Text)
 import qualified Prelude
 import Prelude hiding (lookup, filter)
+
+import SAWCore.Panic
 
 {-
 Based on Pure/net.ML from Isabelle 2012.
@@ -91,7 +94,7 @@ add_key_of_terms t cs
 add_key_of_terms' :: Pat -> [Key] -> [Key]
 add_key_of_terms' (App f t) cs = CombK : add_key_of_terms' f (add_key_of_terms t cs)
 add_key_of_terms' (Atom c)  cs = AtomK c : cs
-add_key_of_terms' Var       _  = error "impossible"
+add_key_of_terms' Var       _  = panic "add_key_of_terms'" ["impossible: got Var"]
 
 {-convert a term to a list of keys-}
 key_of_term :: Pat -> [Key]
@@ -156,8 +159,8 @@ insert (keys0, x) net = ins1 keys0 net
     ins1 (AtomK a : keys) (Net {comb, var, atoms}) =
       let atoms' = Map.alter (Just . ins1 keys . fromMaybe empty) a atoms
       in Net {comb = comb, var = var, atoms = atoms'}
-    ins1 [] (Net {}) = error "impossible"
-    ins1 (_ : _) (Leaf (_ : _)) = error "impossible"
+    ins1 [] (Net {}) = panic "insert" ["impossible: empty Net"]
+    ins1 (_ : _) (Leaf (_ : _)) = panic "insert" ["impossible: nonempty keys and Leaf"]
 
 insert_term :: (Eq a) => (Pat, a) -> Net a -> Net a
 insert_term (pat, x) = insert (key_of_term pat, x)
@@ -187,8 +190,8 @@ delete (keys0, x) net0 = del1 keys0 net0
           nonempty net = Just net
           atoms' = Map.update (nonempty . del1 keys) a atoms
       in newnet comb var atoms'
-    del1 [] (Net {}) = error "impossible"
-    del1 (_ : _) (Leaf (_ : _)) = error "impossible"
+    del1 [] (Net {}) = panic "delete" ["impossible: empty Net"]
+    del1 (_ : _) (Leaf (_ : _)) = panic "delete" ["impossible: nonempty keys and Leaf"]
 
 delete_term :: (Eq a) => (Pat, a) -> Net a -> Net a
 delete_term (pat, x) = delete (key_of_term pat, x)
@@ -206,7 +209,7 @@ lookup (Net {atoms}) (AtomK a : keys) =
   case Map.lookup a atoms of
     Just net -> lookup net keys
     Nothing -> []
-lookup (Net {}) [] = error "impossible"
+lookup (Net {}) [] = panic "lookup" ["impossible: empty Net"]
 
 {-Skipping a term in a net.  Recursively skip 2 levels if a combination-}
 net_skip :: Net a -> [Net a] -> [Net a]
@@ -252,7 +255,7 @@ matching unif = match
 extract_leaves :: [Net a] -> [a]
 extract_leaves = concatMap $ \case
   Leaf xs -> xs
-  Net{}   -> error "extract_leaves: Unexpected Net node"
+  Net{}   -> panic "extract_leaves" ["Unexpected Net node"]
 
 {-return items whose key could match pat, WHICH MUST BE BETA-ETA NORMAL-}
 match_term :: Net a -> Pat -> [a]

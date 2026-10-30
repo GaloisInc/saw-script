@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module SAWScript.AutoMatch.Util (
     bitSeqType,
     formatIndexedArg,
@@ -26,6 +28,7 @@ import Data.List (intersperse)
 import Control.Monad (mfilter)
 import Control.Arrow ( (&&&) )
 
+import SAWScript.Panic
 import SAWScript.AutoMatch.Declaration
 
 -- Some project-specific utilities...
@@ -54,7 +57,7 @@ corresponds = " <-> "
 
 -- | Like fromJust, but with an error message which makes you feel worse about yourself
 assertJust :: Maybe a -> a
-assertJust = fromMaybe (error "assertJust: Impossible! A call to assertJust was made when it was not, in fact, *just*ified!")
+assertJust = fromMaybe (panic "assertJust" ["Impossible! A call to assertJust was made when it was not, in fact, *just*ified!"])
 
 -- | Apply a function to both sides of a homogeneous pair
 both :: (a -> b) -> (a, a) -> (b, b)
@@ -120,4 +123,4 @@ yes, no :: [String]
        no'  = ["n","no","nope","nah","nay","negative"]
    in case fastIntersect yes' no' of
          [] -> (yes', no')
-         _  -> error "Internal error: English synonyms for 'yes' and 'no' cannot overlap."
+         _  -> panic "yes, no" ["Internal error: English synonyms for 'yes' and 'no' cannot overlap."]

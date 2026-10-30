@@ -42,8 +42,6 @@ module SAWScript.ValueOps (
     withOptions,
  ) where
 
-import Prelude hiding (fail)
-
 import Control.Monad.Catch (MonadThrow(..), try)
 import Control.Monad.State (get, gets, modify, put)
 import qualified Control.Exception as X
@@ -77,7 +75,7 @@ isVUnit _ = False
 indexValue :: SS.Pos -> Value -> Value -> TopLevel Value
 indexValue pos (VArray vs) (VInteger x)
     | i < length vs = pure (vs !! i)
-    | otherwise = error $ Text.unpack $ ppPosition pos <> ": Array index out of bounds"
+    | otherwise = fail $ Text.unpack $ ppPosition pos <> ": Array index out of bounds"
     where i = fromInteger x
 indexValue pos v1 v2 = do
     sc <- getSharedContext
@@ -93,7 +91,7 @@ indexValue pos v1 v2 = do
 lookupValue :: SS.Pos -> Value -> Text -> TopLevel Value
 lookupValue pos (VRecord vm) name =
     case Map.lookup name vm of
-      Nothing -> error $ Text.unpack $ ppPosition pos <> ": No such record field: " <> name
+      Nothing -> fail $ Text.unpack $ ppPosition pos <> ": No such record field: " <> name
       Just x -> pure x
 lookupValue pos v1 v2 = do
     sc <- getSharedContext
@@ -108,7 +106,7 @@ lookupValue pos v1 v2 = do
 tupleLookupValue :: SS.Pos -> Value -> Integer -> TopLevel Value
 tupleLookupValue pos (VTuple vs) i
   | 0 <= i && fromIntegral i < length vs = pure (vs !! fromIntegral i)
-  | otherwise = error $ Text.unpack $ ppPosition pos <> ": No such tuple index: " <> Text.pack (show i)
+  | otherwise = fail $ Text.unpack $ ppPosition pos <> ": No such tuple index: " <> Text.pack (show i)
 tupleLookupValue pos v1 v2 = do
     sc <- getSharedContext
     v1' <- liftIO $ ppValue sc v1

@@ -103,7 +103,7 @@ instance Show CExtra where
 
 toBool :: CValue -> Bool
 toBool (VBool b) = b
-toBool x = error $ unwords ["SAWCore.Simulator.Concrete.toBool", show x]
+toBool x = panic "toBool" ["Expected bool, got " <> Text.pack (show x)]
 
 vWord :: BitVector -> CValue
 vWord x = VWord x
@@ -111,14 +111,14 @@ vWord x = VWord x
 toWord :: CValue -> BitVector
 toWord (VWord x) = x
 toWord (VVector vv) = Prim.packBitVector (fmap (toBool . runIdentity . force) vv)
-toWord x = error $ unwords ["SAWCore.Simulator.Concrete.toWord", show x]
+toWord x = panic "toWord" ["Expected word or vector, got " <> Text.pack (show x)]
 
 vStream :: IntTrie CValue -> CValue
 vStream x = VExtra (CStream x)
 
 toStream :: CValue -> IntTrie CValue
 toStream (VExtra (CStream x)) = x
-toStream x = error $ unwords ["SAWCore.Simulator.Concrete.toStream", show x]
+toStream x = panic "toStream" ["Expected stream, got " <> Text.pack (show x)]
 
 wordFun :: (BitVector -> CPrim) -> CPrim
 wordFun f = Prims.strictFun (\x -> f (toWord x))
@@ -131,7 +131,8 @@ bvShiftOp natOp =
   Prims.strictFun $ \y -> Prims.PrimValue $
     case y of
       VNat n | toInteger n < toInteger (maxBound :: Int) -> vWord (natOp x (fromIntegral n))
-      _      -> error $ unwords ["SAWCore.Simulator.Concrete.shiftOp", show y]
+      _ ->
+          panic "bvShiftOp" ["Expected nat, got " <> Text.pack (show y)]
 
 ------------------------------------------------------------
 
@@ -505,5 +506,5 @@ fpRoundMode :: BitVector -> BF.RoundMode
 fpRoundMode w =
   let uw = unsigned w in
   case fpRound uw of
-    Nothing -> error $ "Invalid rounding mode: " ++ show uw
+    Nothing -> panic "fpRoundMode" ["Invalid rounding mode: " <> Text.pack (show uw)]
     Just a  -> a
