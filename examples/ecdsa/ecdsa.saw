@@ -1943,4 +1943,40 @@ method "verifySignature"
     unint_z3 ufs;
   };
 
+////////////////////////////////////////////////////////////
+/* Concrete check of the 32-bit backend (P384ECC32) on a
+counter-example to a bug in NIST32.group_red, which is otherwise not
+covered by this proof. Previously, group_red treated the −1 borrow
+returned by sub as if it were +1, causing its final loop to run 2^32 -
+1 times on this input and return an incorrect result. */
+
+c32 <- java_load_class "com.galois.ecc.P384ECC32";
+
+let {{
+  cex_x : [384]
+  cex_x = 3 << 352
+
+  cex_y : [384]
+  cex_y = join (repeat`{12} 0xaaaaaaaa)
+
+  cex_expected : [384]
+  cex_expected = drop`{384} (((zero # cex_x) * (zero # cex_y) : [768]) % (zero # group_order))
+}};
+
+// Timed out before the fix, now should take ~1 second.
+timeout 60000 (jvm_verify c32 "group_mul" [] false
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC32";
+    ecdsa_uses_group_order this;
+    ecdsa_arr384_constant this "com/galois/ecc/NIST32.neg_group_order" {{ ec_split (0 - group_order) }};
+    pr <- jvm_alloc_array 12 java_int;
+    px <- jvm_alloc_array 12 java_int;
+    jvm_array12_is px {{ ec_split cex_x }};
+    py <- jvm_alloc_array 12 java_int;
+    jvm_array12_is py {{ ec_split cex_y }};
+    jvm_execute_func [this, pr, px, py];
+    jvm_array12_is pr {{ ec_split cex_expected }};
+  }
+  z3);
+
 print "Done.";
