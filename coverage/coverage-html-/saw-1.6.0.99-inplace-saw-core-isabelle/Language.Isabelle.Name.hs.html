@@ -61,7 +61,7 @@ span.spaces    { background: white }
 <span class="lineno">   42 </span><span class="spaces">    </span><span class="nottickedoff">False -&gt; hd : replace inp outp tl</span></span>
 <span class="lineno">   43 </span>
 <span class="lineno">   44 </span>cleanTheoryName :: Ident -&gt; Ident
-<span class="lineno">   45 </span><span class="decl"><span class="nottickedoff">cleanTheoryName i = replace &quot;::&quot; &quot;_&quot; i</span></span>
+<span class="lineno">   45 </span><span class="decl"><span class="nottickedoff">cleanTheoryName i = replace &quot;'&quot; &quot;P&quot; $ replace &quot;::&quot; &quot;_&quot; i</span></span>
 <span class="lineno">   46 </span>
 <span class="lineno">   47 </span>data TheoryName = TheoryNameCtr { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">thyNm</span></span></span> :: Ident, <span class="nottickedoff"><span class="decl"><span class="nottickedoff">thyQualified</span></span></span> :: Bool }
 <span class="lineno">   48 </span>  deriving (<span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Eq</span></span></span></span>, <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Ord</span></span></span></span></span></span></span></span></span></span></span></span></span></span>)
@@ -132,7 +132,7 @@ span.spaces    { background: white }
 <span class="lineno">  113 </span>
 <span class="lineno">  114 </span>unqualifyName :: Name -&gt; Name
 <span class="lineno">  115 </span><span class="decl"><span class="nottickedoff">unqualifyName = \case</span>
-<span class="lineno">  116 </span><span class="spaces">  </span><span class="nottickedoff">nm@QName{} -&gt; nm { nmQual_ = [] }</span>
+<span class="lineno">  116 </span><span class="spaces">  </span><span class="nottickedoff">nm@QName{} -&gt; nm { nmThy = (nmThy nm){thyQualified = False}, nmQual_ = [] }</span>
 <span class="lineno">  117 </span><span class="spaces">  </span><span class="nottickedoff">nm -&gt; nm</span></span>
 <span class="lineno">  118 </span>
 <span class="lineno">  119 </span>stripQualifier :: HasName t =&gt; t -&gt; (t, [String])
