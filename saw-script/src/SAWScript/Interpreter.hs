@@ -889,6 +889,9 @@ interpretExpr expr =
                   panic "interpretExpr" [
                       "Read of unknown variable " <> x
                   ]
+              Just (_lc, VUndefined) -> do
+                  let pos' = ppPosition pos
+                  fail $ Text.unpack $ pos' <> ": Error: evaluated \"undefined\""
               Just (lc, v)
                 | Set.member lc avail -> do
                       let v' = injectPositionIntoMonadicValue pos v
@@ -3530,11 +3533,7 @@ primitives = Map.fromList $
     ]
 
   , prim "undefined"           "{a} a"
-    -- In order to work as expected this has to be "error" in place of
-    -- a Value and not a Value (of whatever kind) wrapping "error". So
-    -- there must be no toValue and none of the pureVal/funVal/etc.
-    -- ops are suitable.
-    (\_ _ _ -> error "interpret: undefined")
+    (pureVal VUndefined)
     Current
     [ "An undefined value. Evaluating 'undefined' makes the program"
     , "crash. Because it does not actually produce a value, it can have"
