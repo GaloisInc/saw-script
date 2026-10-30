@@ -150,7 +150,7 @@ options =
             "Set simulator verbosity level",
 
     reqArg setSummaryFormat "f" "summary-format" "json|pretty"
-            "Format for verification summary; default is 'json'",
+            "Format for verification summary; default is 'pretty'",
 
     noArg setRunInteractively "I" "interactive"
             "Run interactively (with a REPL)",

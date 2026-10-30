@@ -80,8 +80,9 @@ The following additional options are available:
 
 `-f` _format_, `--summary-format=`_format_
 : Set the output format for the verification summary generated with `-s`.
-  The recognized formats are `json` and `pretty`; the default is `json`.
-  `pretty` is intended to be more human-readable.
+  The recognized formats are `json` and `pretty`; the default is `pretty`.
+  `pretty` is intended to be human-readable; `json` is more useful for
+  automated processing.
 
 `-h`, `--help`, `-?`
 : Print a usage message.
