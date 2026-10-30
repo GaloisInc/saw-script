@@ -1059,6 +1059,11 @@ jobs:
         with:
           submodules: true
 
+      - name: Report the opam setup again
+        run: |
+          opam switch
+          opam list
+
       - name: Download what4-solvers
         uses: GaloisInc/what4-solvers@v1
         with:
