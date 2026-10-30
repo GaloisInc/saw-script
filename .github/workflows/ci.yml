@@ -1100,9 +1100,7 @@ jobs:
         # to that local switch in the current directory, _then_ chdir and
         # use opam exec.
         run: |
-          pwd
-          eval $(opam env)
-          (cd saw-core-rocq/rocq && opam exec -- make -j)
+          opam exec -- sh -c 'cd saw-core-rocq/rocq && make -j'
 
       # Regenerate the test .v files, since we don't have the ones from the
       # test run and rebuilding them isn't super expensive.
@@ -1115,8 +1113,7 @@ jobs:
       - name: Build the saw-core-rocq-tests outputs
         shell: bash
         run: |
-          eval $(opam env --set-switch)
-          (cd otherTests/saw-core-rocq && opam exec -- make -j rocq)
+          opam exec -- sh -c 'cd otherTests/saw-core-rocq && make -j rocq'
 
   isabelle-builds:
     needs: [config]
