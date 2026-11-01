@@ -11,3 +11,7 @@ print "-- alias of a submodule"
 print "--------------------------------"
 print "-- alias of a top-level module"
 :cbrowse submodule TopAlias
+
+print "--------------------------------"
+print "-- module containing submodule aliases"
+:cbrowse Aliases

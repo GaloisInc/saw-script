@@ -29,3 +29,17 @@ From Aliases::TopAlias
     x1 : Type1
     x2 : Type2
     x3 : Type3
+--------------------------------
+-- module containing submodule aliases
+From Aliases
+------------
+  Submodules
+  ==========
+
+    Sub
+
+  Submodule Aliases
+  =================
+
+    SubAlias = submodule Sub
+    TopAlias = Browse

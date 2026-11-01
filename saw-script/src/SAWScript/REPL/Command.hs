@@ -226,7 +226,8 @@ cbrowseCmd args =
   -- underlined, with the contents indented by 2.
   showCtx modName ctx = do
     ppopts <- getPPOpts
-    let doc = PP.unAnnotate $ CB.browseModContext CB.BrowseExported ctx
+    let doc = PP.unAnnotate $
+                CB.browseModContextWith cbrowseSections CB.BrowseExported ctx
         header = "From " <> modName
         -- Cryptol's output has whitespace-only lines and trailing
         -- blank lines; trim them.
@@ -235,6 +236,18 @@ cbrowseCmd args =
         indent l = if Text.null l then l else "  " <> l
     say $ Text.intercalate "\n" $
       header : Text.replicate (Text.length header) "-" : map indent body
+
+  -- Cryptol's @:browse@ sections, plus a section for submodule aliases.
+  cbrowseSections =
+    [ CB.browseSignatures
+    , CB.browseMods
+    , CB.browseModAliases
+    , CB.browseFunctors
+    , CB.browseTSyns
+    , CB.browsePrimTys
+    , CB.browseNominalTypes
+    , CB.browseVars
+    ]
 
 envCmd :: REPL ()
 envCmd = do
