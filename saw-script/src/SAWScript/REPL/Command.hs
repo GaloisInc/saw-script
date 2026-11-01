@@ -25,15 +25,12 @@ module SAWScript.REPL.Command (
     sanitize
   ) where
 
-import Control.Applicative ((<|>))
 import Control.Monad (unless, void)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (modify)
 import Data.Char (isSpace)
-import Data.Foldable (asum)
 import Data.Function (on)
-import Data.List (dropWhileEnd, intersperse, nub, sortOn)
-import Data.Maybe (fromMaybe)
+import Data.List (intersperse, nub)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.Set as Set
@@ -50,21 +47,6 @@ import System.Directory (
 
 import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
-
-import qualified Cryptol.ModuleSystem.Env as ME
-import qualified Cryptol.ModuleSystem.Interface as MI
-import qualified Cryptol.ModuleSystem.Name as MN (
-    Name, nameIdent, nameModPathMaybe, nameTopModuleMaybe
- )
-import qualified Cryptol.Parser.AST as CP (ImpName(..))
-import qualified Cryptol.REPL.Browse as CB
-import qualified Cryptol.TypeCheck.AST as T (ModuleG(..), Submodule(..))
-import qualified Cryptol.Utils.Ident as CI (
-    identText, modNameChunksText, modNameToText, modPathSplit,
-    textToModName
- )
-
-import CryptolSAWCore.GlobalCryptolEnv (eModuleEnv)
 
 import qualified SAWSupport.Pretty as PPS
 import qualified SAWSupport.ScopedMap as ScopedMap
@@ -83,6 +65,7 @@ import SAWScript.Interpreter (interpretReplStmts)
 import SAWScript.REPL.Monad
 import SAWScript.REPL.Data
 
+import SAWScript.REPL.Command.CryptolCommands ( cbrowseCmd, cbrowseCmdHelp )
 import SAWScript.REPL.Command.LLVMCommands ( llvmDisCmd, llvmDisCmdHelp )
 
 
@@ -105,196 +88,6 @@ cdCmd f
         let f' = "`" <> Text.pack f <> "'"
             msg = "Directory " <> f' <> " not found or not a directory"
         liftIO $ TextIO.putStrLn msg
-
--- | Display the contents of a Cryptol module (@:cbrowse MODULENAME@)
---   or submodule (@:cbrowse submodule SUBMODULENAME@).  Any loaded
---   (sub)module can be browsed, whether or not it has been imported;
---   it is named by its original name (not by an @import ... as@
---   qualifier).  Private definitions are always included.  With no
---   arguments (@:cbrowse@), all loaded top-level modules are shown;
---   with @:cbrowse -l@, just their names are listed.
-cbrowseCmd :: [Text] -> REPL ()
-cbrowseCmd args =
-  case args of
-    []                     -> browseAll
-    ["-l"]                 -> listAll
-    [modName] | modName /= "submodule"
-                           -> browseTop modName
-    ["submodule", modName] -> browseSub modName
-    _ -> liftIO $ TextIO.putStrLn $
-           "Usage: :cbrowse -l"
-           <> " | :cbrowse [MODULENAME]"
-           <> " | :cbrowse submodule SUBMODULENAME"
-  where
-  -- All loaded top-level modules (loaded directly or indirectly),
-  -- in order of module name.
-  loadedMods modEnv =
-    sortOn ME.lmName $ ME.getLoadedModules (ME.meLoadedModules modEnv)
-
-  -- List the names of all loaded top-level modules.
-  listAll = do
-    modEnv <- getModEnv
-    mapM_ (say . CI.modNameToText . ME.lmName) (loadedMods modEnv)
-
-  -- Show every loaded top-level module.
-  browseAll = do
-    modEnv <- getModEnv
-    let lms = loadedMods modEnv
-    sequence_ $ intersperse (say "") $ map (showTop modEnv) lms
-
-  -- Show a loaded top-level module (loaded directly or indirectly).
-  browseTop modName = do
-    modEnv <- getModEnv
-    let mName = CI.textToModName modName
-    case ME.lookupModule mName modEnv of
-      Nothing -> say $ "Module `" <> modName <> "' is not loaded."
-      Just lm -> showTop modEnv lm
-
-  showTop modEnv lm = do
-    let ctx0 = ME.lmModContext modEnv lm
-        names = MI.ifNames (ME.lmInterface lm)
-        modName = CI.modNameToText (ME.lmName lm)
-    showCtx modName $ withPrivate modEnv (MI.ifsDefines names) ctx0
-
-  -- Show a loaded submodule, submodule alias, or submodule functor
-  -- (or a submodule nested in a functor), named by its path within
-  -- its top-level module (e.g. @S1::S2@), or by its fully qualified
-  -- path (e.g. @Browse::S1::S2@).  The submodule need not have been
-  -- imported.  Interface submodules are not supported (Cryptol's
-  -- 'ME.modContextOf' does not support them).
-  browseSub modName = do
-    modEnv <- getModEnv
-    let want = Text.splitOn "::" modName
-        cands = nub [ nm | lm <- ME.getLoadedModules
-                                   (ME.meLoadedModules modEnv)
-                         , nm <- nestedIn (ME.lmModule lm)
-                         , want `elem` subPaths nm
-                    ]
-    case cands of
-      [] -> say $ "Submodule `" <> modName <> "' is not loaded."
-      [nm] ->
-        case ME.modContextOf (CP.ImpNested nm) modEnv of
-          Nothing -> say $ "Submodule `" <> modName <> "' not found."
-          Just ctx0 -> do
-            let defined = fromMaybe (ME.mctxExported ctx0)
-                                    (definedIn modEnv (CP.ImpNested nm))
-                fullName = Text.intercalate "::" (last (subPaths nm))
-            showCtx fullName $ withPrivate modEnv defined ctx0
-      nms -> say $ Text.intercalate "\n" $
-               ("Submodule `" <> modName <> "' is ambiguous:")
-               : [ "  " <> Text.intercalate "::" (last (subPaths nm))
-                 | nm <- nms ]
-
-  -- The ways to name a submodule: its path within its top-level
-  -- module, and its fully qualified path.
-  subPaths nm =
-    case MN.nameModPathMaybe nm of
-      Nothing -> []
-      Just p ->
-        let (top, ids) = CI.modPathSplit p
-            rel = map CI.identText (ids ++ [MN.nameIdent nm])
-        in  [rel, CI.modNameChunksText top ++ rel]
-
-  -- The submodules, submodule aliases, and submodule functors in a
-  -- module, including those nested in functors.  (Those nested in
-  -- ordinary submodules are already included in the module's maps.)
-  nestedIn :: T.ModuleG a -> [MN.Name]
-  nestedIn m =
-       Map.keys (T.mSubmodules m)
-    ++ Map.keys (T.mModAliases m)
-    ++ Map.keys (T.mFunctors m)
-    ++ concatMap nestedIn (Map.elems (T.mFunctors m))
-
-  -- The virtual submodules in a module (including those nested in
-  -- functors): these are generated by Cryptol, e.g., to hold the
-  -- arguments of a functor instantiation.
-  virtualIn :: T.ModuleG a -> [MN.Name]
-  virtualIn m =
-       Map.keys (Map.filter T.smVirtual (T.mSubmodules m))
-    ++ concatMap virtualIn (Map.elems (T.mFunctors m))
-
-  -- Show all defined names, private ones included, but not virtual
-  -- submodules (which Cryptol keeps private).
-  withPrivate modEnv defined ctx =
-    let virtuals = Set.fromList
-                     [ nm | lm <- ME.getLoadedModules
-                                    (ME.meLoadedModules modEnv)
-                          , nm <- virtualIn (ME.lmModule lm)
-                     ]
-    in  ctx { ME.mctxExported = Set.difference defined virtuals }
-
-  -- All the names defined in a (sub)module, following module aliases.
-  -- NOTE:
-  --   - bounded, to guard against alias cycles.
-  --     - FIXME: use better solution to avoid alias cycles.
-  --     - Question: does cryptol ensure no alias cycles?
-  definedIn modEnv = go (10 :: Int)
-    where
-    go 0 _ = Nothing
-    go n imp =
-      case imp of
-        CP.ImpTop mn ->
-          MI.ifsDefines . MI.ifNames . ME.lmInterface
-            <$> ME.lookupModule mn modEnv
-        CP.ImpNested nm -> do
-          top <- MN.nameTopModuleMaybe nm
-          lm <- ME.lookupModule top modEnv
-          case findNested nm (ME.lmModule lm) of
-            Just (Left sm)   -> Just (MI.ifsDefines (T.smIface sm))
-            Just (Right tgt) -> go (n - 1) tgt
-            Nothing ->
-              MI.ifsDefines . MI.ifNames
-                <$> findFunctor nm (MI.ifDefines (ME.lmInterface lm))
-
-  -- Find a submodule (Left) or submodule alias (Right), searching
-  -- inside functors too.
-  findNested ::
-    MN.Name -> T.ModuleG a ->
-    Maybe (Either T.Submodule (CP.ImpName MN.Name))
-  findNested nm m =
-        Left  <$> Map.lookup nm (T.mSubmodules m)
-    <|> Right <$> Map.lookup nm (T.mModAliases m)
-    <|> asum (map (findNested nm) (Map.elems (T.mFunctors m)))
-
-  -- Find the interface of a submodule functor, searching inside
-  -- functors too.
-  findFunctor nm decls =
-        Map.lookup nm (MI.ifFunctors decls)
-    <|> asum [ findFunctor nm (MI.ifDefines i)
-             | i <- Map.elems (MI.ifFunctors decls) ]
-
-  getModEnv = do
-    rw <- getTopLevelRW
-    liftIO $ eModuleEnv (rwSharedContext rw)
-
-  say = liftIO . TextIO.putStrLn
-
-  -- Show a (sub)module's contents under a "From MODNAME" header,
-  -- underlined, with the contents indented by 2.
-  showCtx modName ctx = do
-    ppopts <- getPPOpts
-    let doc = PP.unAnnotate $
-                CB.browseModContextWith cbrowseSections CB.BrowseExported ctx
-        header = "From " <> modName
-        -- Cryptol's output has whitespace-only lines and trailing
-        -- blank lines; trim them.
-        body = dropWhileEnd Text.null $ map Text.stripEnd $
-                 Text.lines $ PPS.renderText ppopts doc
-        indent l = if Text.null l then l else "  " <> l
-    say $ Text.intercalate "\n" $
-      header : Text.replicate (Text.length header) "-" : map indent body
-
-  -- Cryptol's @:browse@ sections, plus a section for submodule aliases.
-  cbrowseSections =
-    [ CB.browseSignatures
-    , CB.browseMods
-    , CB.browseModAliases
-    , CB.browseFunctors
-    , CB.browseTSyns
-    , CB.browsePrimTys
-    , CB.browseNominalTypes
-    , CB.browseVars
-    ]
 
 envCmd :: REPL ()
 envCmd = do
@@ -592,7 +385,7 @@ nbCommandList  =
   , CommandDescr ":type" [":t"]  (ExprArg typeOfCmd)
     "check the type of an expression"
   , CommandDescr ":cbrowse" []   (WordArgs cbrowseCmd)
-    "list modules '-l', or browse modules ['MODULE' | 'submodule SUBMODULE']"
+    cbrowseCmdHelp
   , CommandDescr ":llvmdis" []   (ModuleTargetArgs llvmDisCmd)
     llvmDisCmdHelp
   , CommandDescr ":?"    []      (SymbolNameArg helpCmd)

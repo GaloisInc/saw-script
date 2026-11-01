@@ -265,6 +265,7 @@ library cryptol-saw-core
 
   hs-source-dirs: cryptol-saw-core/src
   exposed-modules:
+    CryptolSAWCore.Browse
     CryptolSAWCore.Cryptol
     CryptolSAWCore.CryptolEnv
     CryptolSAWCore.FileReader
@@ -816,6 +817,7 @@ library saw-script
 
     SAWScript.REPL
     SAWScript.REPL.Command
+    SAWScript.REPL.Command.CryptolCommands
     SAWScript.REPL.Command.LLVMCommands
     SAWScript.REPL.Data
     SAWScript.REPL.Haskeline
