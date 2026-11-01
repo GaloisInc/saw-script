@@ -1,0 +1,158 @@
+--------------------------------
+-- module containing functors
+From Functors
+-------------
+  Interface Submodules
+  ====================
+
+    I
+
+  Submodules
+  ==========
+
+    FI
+    Four
+    G4
+
+  Parameterized Submodules
+  ========================
+
+    F
+    G
+
+  Symbols
+  =======
+
+    ex : [8]
+--------------------------------
+-- submodule functor with inline parameters
+From Functors::F
+----------------
+  Module Parameters
+  =================
+
+    parameter F__parameter : interface submodule F__parameter
+      p : [8]
+
+  Submodules
+  ==========
+
+    FM
+
+  Parameterized Submodules
+  ========================
+
+    FF
+
+  Symbols
+  =======
+
+    f : [8]
+    fpriv : [8]
+--------------------------------
+-- submodule within a submodule functor
+From Functors::F::FM
+--------------------
+  Symbols
+  =======
+
+    z : [8]
+--------------------------------
+-- submodule functor within a submodule functor
+From Functors::F::FF
+--------------------
+  Module Parameters
+  =================
+
+    parameter FF__parameter : interface submodule FF__parameter
+      r : [8]
+
+  Symbols
+  =======
+
+    ff : [8]
+--------------------------------
+-- submodule functor with an interface parameter
+From Functors::G
+----------------
+  Module Parameters
+  =================
+
+    parameter I : interface submodule I
+      type n : #
+
+  Type Synonyms
+  =============
+
+    type W = [n]
+
+  Symbols
+  =======
+
+    g : W -> W
+--------------------------------
+-- interface submodule
+Submodule `I' is not loaded.
+--------------------------------
+-- instantiation with an anonymous argument module
+From Functors::FI
+-----------------
+  Submodules
+  ==========
+
+    FM
+
+  Parameterized Submodules
+  ========================
+
+    Functors::F::FF
+
+  Symbols
+  =======
+
+    f : [8]
+    fpriv : [8]
+--------------------------------
+-- submodule within an instantiation
+From Functors::FI::FM
+---------------------
+  Symbols
+  =======
+
+    z : [8]
+--------------------------------
+-- instantiation with a named argument module
+From Functors::G4
+-----------------
+  Type Synonyms
+  =============
+
+    type W = [4]
+
+  Symbols
+  =======
+
+    g : W -> W
+--------------------------------
+-- top-level functor (loaded indirectly)
+From TopFunctor
+---------------
+  Module Parameters
+  =================
+
+    parameter TopFunctor__parameter : interface TopFunctor__parameter
+      type k : #
+      q : [k]
+
+  Symbols
+  =======
+
+    h : [k] -> [k]
+--------------------------------
+-- instantiation of a top-level functor
+From TopInst
+------------
+  Symbols
+  =======
+
+    h : [8] -> [8]

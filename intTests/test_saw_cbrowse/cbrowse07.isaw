@@ -1,0 +1,49 @@
+// :cbrowse on functors (parameterized modules), interfaces, and
+// functor instantiations
+
+import "Functors.cry";
+import "TopInst.cry";
+
+print "--------------------------------"
+print "-- module containing functors"
+:cbrowse Functors
+
+print "--------------------------------"
+print "-- submodule functor with inline parameters"
+:cbrowse submodule F
+
+print "--------------------------------"
+print "-- submodule within a submodule functor"
+:cbrowse submodule F::FM
+
+print "--------------------------------"
+print "-- submodule functor within a submodule functor"
+:cbrowse submodule F::FF
+
+print "--------------------------------"
+print "-- submodule functor with an interface parameter"
+:cbrowse submodule G
+
+print "--------------------------------"
+print "-- interface submodule"
+:cbrowse submodule I
+
+print "--------------------------------"
+print "-- instantiation with an anonymous argument module"
+:cbrowse submodule FI
+
+print "--------------------------------"
+print "-- submodule within an instantiation"
+:cbrowse submodule FI::FM
+
+print "--------------------------------"
+print "-- instantiation with a named argument module"
+:cbrowse submodule G4
+
+print "--------------------------------"
+print "-- top-level functor (loaded indirectly)"
+:cbrowse TopFunctor
+
+print "--------------------------------"
+print "-- instantiation of a top-level functor"
+:cbrowse TopInst

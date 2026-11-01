@@ -1,0 +1,3 @@
+module TopInst = TopFunctor where
+  type k = 8
+  q = 5

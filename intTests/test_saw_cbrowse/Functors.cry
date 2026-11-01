@@ -1,0 +1,48 @@
+module Functors where
+
+// submodule functors, interfaces, and instantiations, for testing
+// :cbrowse
+
+interface submodule I where
+  type n : #
+  type constraint (fin n, n >= 1)
+
+// a functor with an inline parameter block
+submodule F where
+  parameter
+    p : [8]
+
+  f = 2 * p
+
+  private fpriv = p + 1
+
+  submodule FM where
+    z = 0x03 + p
+
+  // a functor nested in a functor
+  submodule FF where
+    parameter
+      r : [8]
+
+    ff = r + p
+
+// a functor parameterized by a named interface
+submodule G where
+  import interface submodule I
+
+  type W = [n]
+
+  g : W -> W
+  g x = x
+
+submodule Four where
+  type n = 4
+
+// instantiation with an anonymous argument module
+submodule FI = submodule F where
+  p = 11
+
+// instantiation with a named argument module
+submodule G4 = submodule G { submodule Four }
+
+ex = FI::f + 2
