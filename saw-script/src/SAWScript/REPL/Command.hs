@@ -30,7 +30,7 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (modify)
 import Data.Char (isSpace)
 import Data.Function (on)
-import Data.List (intersperse, nub, sortOn)
+import Data.List (dropWhileEnd, intersperse, nub, sortOn)
 import Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
 import Data.Map (Map)
@@ -138,11 +138,7 @@ cbrowseCmd args =
   browseAll = do
     modEnv <- getModEnv
     let lms = loadedMods modEnv
-        showOne lm = do
-          let modName = CI.modNameToText (ME.lmName lm)
-          say $ "Module `" <> modName <> "':"
-          showTop modEnv lm
-    sequence_ $ intersperse (say "") $ map showOne lms
+    sequence_ $ intersperse (say "") $ map (showTop modEnv) lms
 
   -- Show a loaded top-level module (loaded directly or indirectly).
   browseTop modName = do
@@ -155,7 +151,8 @@ cbrowseCmd args =
   showTop modEnv lm = do
     let ctx0 = ME.lmModContext modEnv lm
         names = MI.ifNames (ME.lmInterface lm)
-    showCtx $ withPrivate (MI.ifsDefines names) ctx0
+        modName = CI.modNameToText (ME.lmName lm)
+    showCtx modName $ withPrivate (MI.ifsDefines names) ctx0
 
   -- Show a loaded submodule (or submodule alias), named by its path
   -- within its top-level module (e.g. @S1::S2@), or by its fully
@@ -179,7 +176,8 @@ cbrowseCmd args =
           Just ctx0 -> do
             let defined = fromMaybe (ME.mctxExported ctx0)
                                     (definedIn modEnv (CP.ImpNested nm))
-            showCtx $ withPrivate defined ctx0
+                fullName = Text.intercalate "::" (last (subPaths nm))
+            showCtx fullName $ withPrivate defined ctx0
       nms -> say $ Text.intercalate "\n" $
                ("Submodule `" <> modName <> "' is ambiguous:")
                : [ "  " <> Text.intercalate "::" (last (subPaths nm))
@@ -224,12 +222,19 @@ cbrowseCmd args =
 
   say = liftIO . TextIO.putStrLn
 
-  showCtx ctx = do
+  -- Show a (sub)module's contents under a "From MODNAME" header,
+  -- underlined, with the contents indented by 2.
+  showCtx modName ctx = do
     ppopts <- getPPOpts
     let doc = PP.unAnnotate $ CB.browseModContext CB.BrowseExported ctx
-        -- Cryptol's output has whitespace-only lines; trim them.
-        trim = Text.intercalate "\n" . map Text.stripEnd . Text.lines
-    say $ trim $ PPS.renderText ppopts doc
+        header = "From " <> modName
+        -- Cryptol's output has whitespace-only lines and trailing
+        -- blank lines; trim them.
+        body = dropWhileEnd Text.null $ map Text.stripEnd $
+                 Text.lines $ PPS.renderText ppopts doc
+        indent l = if Text.null l then l else "  " <> l
+    say $ Text.intercalate "\n" $
+      header : Text.replicate (Text.length header) "-" : map indent body
 
 envCmd :: REPL ()
 envCmd = do

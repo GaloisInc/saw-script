@@ -5,8 +5,9 @@ Submodule `S1' is ambiguous:
   Ambig::S1
 --------------------------------
 -- submodule Ambig::S1 (fully qualified)
-Symbols
-=======
+From Ambig::S1
+--------------
+  Symbols
+  =======
 
-  a1 : Bit
-
+    a1 : Bit
