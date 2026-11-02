@@ -1,0 +1,13 @@
+Loading file "undefined10.saw"
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in (callback)
+   (builtin) in fails
+   undefined10.saw:2:1-2:36 (at top level)
+undefined10.saw:2:13-2:22: Error: evaluated "undefined"
+
+Stack trace:
+   (builtin) (at top level)
+undefined10.saw:6:7-6:16: Error: evaluated "undefined"
+
+FAILED

@@ -1,6 +1,6 @@
 Loading file "undefined1.saw"
 Stack trace:
    (builtin) (at top level)
-Not a monomorphic type: t.0
+undefined1.saw:13:1-13:10: Error: evaluated "undefined"
 
 FAILED

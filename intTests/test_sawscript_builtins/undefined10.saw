@@ -1,0 +1,6 @@
+// this catches the undefined
+fails (do { undefined; return (); });
+
+// as of 20261102 this does not
+// (which is consistent with other "pure" builtin failures)
+fails undefined;

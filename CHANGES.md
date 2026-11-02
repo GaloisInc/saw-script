@@ -17,6 +17,16 @@ This release supports [version
 
 ## Bug Fixes
 
+* The `undefined` builtin now reports the source position that
+  triggered it (#3508).
+  It also now fails in a way that's consistent with failures in other
+  builtins, instead of being subtly different.
+  In particular, just as `fails (head [])` will not catch the
+  resulting failure in `head`, `fails undefined` will no longer catch
+  the failure from `undefined`; you need to wrap the argument to
+  `fails` in a do-block to prevent it from being executed before `fails`
+  sees it.
+
 * The Rocq exporter now honors CRYPTOLPATH properly (#3493).
 
 * The Python client no longer crashes while logging a failed verification

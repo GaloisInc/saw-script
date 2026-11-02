@@ -1,5 +1,6 @@
 Loading file "undefined3.saw"
-interpret: undefined
-CallStack (from HasCallStack):
-  error, called at saw-script/src/SAWScript/Interpreter.hs
+Stack trace:
+   (builtin) (at top level)
+undefined3.saw:5:9-5:18: Error: evaluated "undefined"
+
 FAILED
