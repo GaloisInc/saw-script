@@ -338,7 +338,7 @@ abstract class NIST32 extends ECCProvider {
       r[j] = vl & INT_MASK | vh << 16;
       c = (vh >>> 16) + (mlh >>> 16) + (mhl >>> 16) + mhh;
     }
-    while (c != 0) c -= sub(r, r, group_order);
+    while (c != 0) c += sub(r, r, group_order);
   }
 
   /**
