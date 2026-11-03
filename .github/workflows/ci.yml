@@ -1071,7 +1071,6 @@ jobs:
       # FIXME: replace pinned versions with compatible opam-released
       # versions when available.
       - name: Install coq-bits
-        working-directory: saw-core-rocq/rocq
         run: |
           opam install -y coq=9.1.0 # coq-* packages include compatibility shims (e.g., coq_makefile).
           opam pin -y coq-bits https://github.com/rocq-community/bits.git#f50fc3e5f1eabcb0b0b94c8d25f75e61a255c2ba
