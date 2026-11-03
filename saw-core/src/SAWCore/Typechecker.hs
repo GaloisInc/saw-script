@@ -75,8 +75,8 @@ ppTCError ppopts ne e =
 prettyTCError :: PPS.Opts -> DisplayNameEnv -> TCError -> PPS.Doc
 prettyTCError opts ne e = helper Nothing e where
 
-  ppWithPos :: Maybe Pos -> [PPS.Doc] -> PPS.Doc
-  ppWithPos maybe_p strs =
+  prettyWithPos :: Maybe Pos -> [PPS.Doc] -> PPS.Doc
+  prettyWithPos maybe_p strs =
     case maybe_p of
       Just p -> vcat (pretty (ppPos p) : strs)
       Nothing -> vcat strs
@@ -85,26 +85,27 @@ prettyTCError opts ne e = helper Nothing e where
   helper mp err =
     case err of
       AmbiguousName str [] ->
-        ppWithPos mp [ "Unbound name:" <+> pretty str ]
+        prettyWithPos mp [ "Unbound name:" <+> pretty str ]
       AmbiguousName str rnms ->
-        ppWithPos mp $ [ "Ambiguous name:" <+> pretty str, "Possible matches:"] ++
+        prettyWithPos mp $ [ "Ambiguous name:" <+> pretty str, "Possible matches:"] ++
           map pretty rnms
       EmptyVectorLit ->
-        ppWithPos mp [ "Empty vector literal"]
+        prettyWithPos mp [ "Empty vector literal"]
       NoSuchDataType d ->
         let d' = pretty d in
-        ppWithPos mp [ "No such data type:" <+> d' ]
+        prettyWithPos mp [ "No such data type:" <+> d' ]
       DeclError nm reason ->
-        ppWithPos mp [ "Malformed declaration for" <+> pretty (show nm), pretty reason ]
+        prettyWithPos mp [ "Malformed declaration for" <+> pretty (show nm), pretty reason ]
       ErrorPos p err' ->
         helper (Just p) err'
       ErrorUTerm t err' ->
-        ppWithPos mp [ "While typechecking term:"
-                     , indent 2 $ Un.prettyUTerm t
-                     , helper mp err'
-                     ]
+        prettyWithPos mp
+            [ "While typechecking term:"
+            , indent 2 $ Un.prettyUTerm t
+            , helper mp err'
+            ]
       TermError err' ->
-        ppWithPos mp [ prettyTermErrorPure opts ne err' ]
+        prettyWithPos mp [ prettyTermErrorPure opts ne err' ]
 
 ----------------------------------------------------------------------
 -- Type Checking Monad
