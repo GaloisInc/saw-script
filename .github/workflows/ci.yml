@@ -1077,6 +1077,13 @@ jobs:
           opam pin -y coq-bits https://github.com/rocq-community/bits.git#f50fc3e5f1eabcb0b0b94c8d25f75e61a255c2ba
           opam pin -y coq-flocq https://gitlab.inria.fr/flocq/flocq.git#27143972fc1dc96e281626d5194b5b371f05db80
 
+      - name: Report the opam setup
+        run: |
+          echo "opam switch list:"
+          opam switch list
+          echo "opam list:"
+          opam list
+
       # FIXME: the following steps generate Rocq libraries for the SAWCore to
       # Rocq translator and builds them; if we do other Rocq tests, these steps
       # should become their own build artifact, to avoid re-compiling the Rocq
