@@ -241,7 +241,6 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TIO
 import qualified Data.Text.Lazy as LText
-import qualified Data.Text.Lazy.IO as TLIO
 import Data.Time.Clock
 
 import System.Directory
@@ -269,11 +268,11 @@ import SAWSupport.Position
 import qualified SAWSupport.ConsoleSupport as Cons
 
 -- saw-core
-import qualified SAWCore.Parser.AST as Un
 import qualified SAWCore.Parser.Grammar as Un
+import SAWCore.Parser.TH (readModuleFromFile)
 import SAWCore.ExternalFormat
 import SAWCore.Module (lookupVarIndexInMap, ResolvedName(..))
-import SAWCore.Name (ModuleName, Name(..), VarName(..), mkModuleName)
+import SAWCore.Name (Name(..), VarName(..), mkModuleName)
 import SAWCore.SATQuery
 import SAWCore.Simulator.Concrete (constMap)
 import SAWCore.Simulator.Uninterpreted (generalizeHigherOrderFunctions)
@@ -2443,25 +2442,14 @@ ghost_value srcPos func ghost val =
               }
      addCondition (MS.SetupCond_Ghost md ghost val)
 
--- | Based on the function of the same name in SAWCore.ParserUtils.
--- Unlike that function, this calls 'fail' instead of 'error'.
---
--- XXX: we only need one; unify these once the error handling gets fixed.
-readModuleFromFile :: FilePath -> TopLevel (Un.Module, ModuleName)
-readModuleFromFile path =
-  do base <- liftIO getCurrentDirectory
-     txt <- liftIO $ TLIO.readFile path
-     case Un.parseSAW base path txt of
-       Right m@(Un.Module (Un.PosPair _ mnm) _ _) -> pure (m, mnm)
-       Left err ->
-           let msg = Text.unpack $ Un.ppParseError err in
-           fail $ "Module parsing failed:\n" ++ msg
-
 load_sawcore_from_file :: FilePath -> TopLevel ()
 load_sawcore_from_file mod_filename =
   do sc <- getSharedContext
-     (saw_mod, _) <- readModuleFromFile mod_filename
-     liftIO $ tcInsertModule sc saw_mod
+     result <- liftIO $ readModuleFromFile mod_filename
+     case result of
+         Left msg -> fail $ Text.unpack $ "Module parsing failed:\n" <> msg
+         Right saw_mod ->
+             liftIO $ tcInsertModule sc saw_mod
 
 write_vcd :: FilePath -> TypedTerm -> TopLevel ()
 write_vcd filename t =
