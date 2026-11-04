@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 {- |
@@ -17,6 +18,7 @@ module SAWCore.Parser.TH
  , defineModuleFromFile
  ) where
 
+import qualified Data.Text as Text
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.IO as TLIO
 import Language.Haskell.TH
@@ -34,7 +36,7 @@ readModule :: FilePath -> FilePath -> TL.Text -> Un.Module
 readModule base path b =
   case Un.parseSAW base path b of
     Right m -> m
-    Left err -> error $ "Module parsing failed:\n" ++ show err
+    Left err -> error $ "Module parsing failed:\n" ++ Text.unpack (Un.ppParseError err)
 
 -- | Parse an untyped module from file
 readModuleFromFile :: FilePath -> IO Un.Module

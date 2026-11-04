@@ -270,7 +270,7 @@ import qualified SAWSupport.ConsoleSupport as Cons
 
 -- saw-core
 import qualified SAWCore.Parser.AST as Un
-import SAWCore.Parser.Grammar (parseSAW, parseSAWTerm)
+import qualified SAWCore.Parser.Grammar as Un
 import SAWCore.ExternalFormat
 import SAWCore.Module (lookupVarIndexInMap, ResolvedName(..))
 import SAWCore.Name (ModuleName, Name(..), VarName(..), mkModuleName)
@@ -2167,10 +2167,11 @@ parseCoreMod mnm_str input =
      let base = "<interactive>"
          path = "<interactive>"
      uterm <-
-       case parseSAWTerm base path (LText.fromStrict input) of
+       case Un.parseSAWTerm base path (LText.fromStrict input) of
          Right uterm -> return uterm
          Left err ->
-           do let msg = show err
+              -- XXX doesn't this print twice?
+           do let msg = Text.unpack $ Un.ppParseError err
               printOutLnTop Opts.Error msg
               fail msg
      let mnm =
@@ -2450,9 +2451,11 @@ readModuleFromFile :: FilePath -> TopLevel (Un.Module, ModuleName)
 readModuleFromFile path =
   do base <- liftIO getCurrentDirectory
      txt <- liftIO $ TLIO.readFile path
-     case parseSAW base path txt of
+     case Un.parseSAW base path txt of
        Right m@(Un.Module (Un.PosPair _ mnm) _ _) -> pure (m, mnm)
-       Left err -> fail $ "Module parsing failed:\n" ++ show err
+       Left err ->
+           let msg = Text.unpack $ Un.ppParseError err in
+           fail $ "Module parsing failed:\n" ++ msg
 
 load_sawcore_from_file :: FilePath -> TopLevel ()
 load_sawcore_from_file mod_filename =

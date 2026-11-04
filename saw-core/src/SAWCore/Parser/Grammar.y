@@ -17,6 +17,7 @@ module SAWCore.Parser.Grammar
   ( parseSAW
   , parseSAWTerm
   , parseQualName
+  , ppParseError
   ) where
 
 import Control.Applicative ((<$>))
@@ -35,6 +36,8 @@ import Numeric.Natural
 import System.Directory (getCurrentDirectory)
 
 import Prelude hiding (mapM, sequence)
+
+import SAWSupport.Position
 
 import SAWCore.Panic
 import SAWCore.Parser.AST
@@ -318,10 +321,27 @@ data ParseError
   = UnexpectedLex Text
   | UnexpectedToken Token
   | ParseError String
-  deriving (Show)
 
 newtype Parser a = Parser { _unParser :: ExceptT (PosPair ParseError) (State LexerState) a }
   deriving (Applicative, Functor, Monad)
+
+ppParseError' :: ParseError -> Text
+ppParseError' err = case err of
+  UnexpectedLex chars -> "Invalid input characters: " <> chars
+  UnexpectedToken t -> "Unexpected " <> ppTokenShort t
+  ParseError msg -> "Parse error: " <> Text.pack msg
+
+-- For general convenience, make this the exported interface.
+-- (The type actually returned on error is a PosPair ParseError, and
+-- PosPair is internal enough to the parser and untyped AST that it's
+-- cumbersome, ugly, and pretty pointless to have the callers handle
+-- it themselves.)
+ppParseError :: PosPair ParseError -> Text
+ppParseError (PosPair pos err) =
+  let pos' = ppPosition pos
+      err' = ppParseError' err
+  in
+  pos' <> ": " <> err'
 
 addError :: Pos -> ParseError -> Parser a
 addError p err = Parser $ throwError (PosPair p err)
@@ -336,7 +356,7 @@ lexer = do
   Parser $ put inp'
   let issue (pos, msg) = case msg of
         InvalidInput chars -> addError pos $ UnexpectedLex chars
-        UnclosedComment -> addError pos $ ParseError "Unclosed Comment"
+        UnclosedComment -> addError pos $ ParseError "Unclosed comment"
         MissingEOL ->
           -- XXX: this should be a warning but we have no such ability here yet
           --addWarning pos $ "No newline at end of file"

@@ -33,6 +33,7 @@ import Numeric.Natural
 import Prettyprinter hiding (Doc)
 
 import qualified SAWSupport.Pretty as PPS (Doc, Opts, render)
+import SAWSupport.Position
 
 import SAWCore.Panic (panic)
 
@@ -78,7 +79,7 @@ prettyTCError opts ne e = helper Nothing e where
   prettyWithPos :: Maybe Pos -> [PPS.Doc] -> PPS.Doc
   prettyWithPos maybe_p strs =
     case maybe_p of
-      Just p -> vcat (pretty (ppPos p) : strs)
+      Just p -> vcat (prettyPosition p <> ":" : strs)
       Nothing -> vcat strs
 
   helper :: Maybe Pos -> TCError -> PPS.Doc
