@@ -1,0 +1,4 @@
+Loading file "err004.saw"
+pureFail call at SAWCore.Simulator.Prims expByNatOp:
+Got symbolic integer
+FAILED
