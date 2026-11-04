@@ -2205,8 +2205,16 @@ scCryptolType sc t =
 -- Cryptol type schema.
 exportValueWithSchema :: C.Schema -> SC.CValue -> V.Eval V.Value
 exportValueWithSchema (C.Forall [] [] ty) v = exportValue (evalValType mempty ty) v
-exportValueWithSchema _ _ = pure (V.VPoly mempty (error "exportValueWithSchema"))
--- TODO: proper support for polymorphic values
+exportValueWithSchema ty v = do
+  -- TODO: proper support for polymorphic values
+  -- (for the time being this is unreachable)
+  let ty' = CryPP.pp ty
+      v' = Text.pack $ show v
+  panic "exportValueWithSchema" [
+      "Polymorphic value " <> v',
+      "Type scheme: " <> ty'
+   ]
+  -- pure (V.VPoly mempty ...)
 
 exportValue :: TV.TValue -> SC.CValue -> V.Eval V.Value
 exportValue ty v = case ty of
@@ -2214,18 +2222,26 @@ exportValue ty v = case ty of
   TV.TVBit ->
     pure (V.VBit (SC.toBool v))
 
-  TV.TVInteger ->
-    pure (V.VInteger (case v of SC.VInt x -> x; _ -> error "exportValue: expected integer"))
+  TV.TVInteger -> case v of
+    SC.VInt x -> pure $ V.VInteger x
+    _ -> do
+        let v' = Text.pack $ show v
+        panic "exportValue" ["Expected integer, got " <> v']
 
-  TV.TVIntMod _modulus ->
-    pure (V.VInteger (case v of SC.VIntMod _ x -> x; _ -> error "exportValue: expected intmod"))
+  TV.TVIntMod _modulus -> case v of
+    SC.VIntMod _ x -> pure $ V.VInteger x
+    _ -> do
+        let v' = Text.pack $ show v
+        panic "exportValue" ["Expected intmod, got " <> v']
 
   TV.TVArray{} -> panic "exportValue" ["Not yet implemented: array type: " <> CryPP.pp (TV.tValTy ty)]
 
   TV.TVRational ->
     case v of
       SC.VRational numer denom -> pure $ V.VRational $ V.SRational numer denom
-      _ -> error $ "exportValue (on rational type " ++ show ty ++ ")"
+      _ -> do
+          let v' = Text.pack $ show v
+          panic "exportValue" ["Expected rational, got " <> v']
 
   TV.TVFloat e p ->
     case v of
@@ -2235,7 +2251,9 @@ exportValue ty v = case ty of
           , V.bfPrecWidth = p
           , V.bfValue = fofValue fof
           }
-      _ -> error $ "exportValue (on float type " ++ show ty ++ ")"
+      _ -> do
+          let v' = Text.pack $ show v
+          panic "exportValue" ["Expected float, got " <> v']
 
   TV.TVSeq _ e ->
     case v of
@@ -2246,13 +2264,19 @@ exportValue ty v = case ty of
                  (V.finiteSeqMap V.Concrete . map (V.ready . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)
         | otherwise   -> V.mkSeq V.Concrete (C.Nat (toInteger (Vector.length xs))) e $ V.finiteSeqMap V.Concrete $
                             map (\x -> exportValue e (SC.runIdentity (force x))) (Vector.toList xs)
-      _ -> error $ "exportValue (on seq type " ++ Text.unpack (CryPP.pp ty) ++ ")"
+      _ -> do
+          let ty' = CryPP.pp ty
+              v' = Text.pack $ show v
+          panic "exportValue" ["Expected " <> ty' <> ", got " <> v']
 
   -- infinite streams
   TV.TVStream e ->
     case v of
       SC.VExtra (SC.CStream trie) -> pure $ V.VStream (V.indexSeqMap $ \i -> exportValue e (IntTrie.apply trie i))
-      _ -> error $ "exportValue (on seq type " ++ Text.unpack (CryPP.pp ty) ++ ")"
+      _ -> do
+          let ty' = CryPP.pp ty
+              v' = Text.pack $ show v
+          panic "exportValue" ["Expected " <> ty' <> ", got " <> v']
 
   -- tuples
   TV.TVTuple etys -> pure $ V.VTuple $ exportTupleValue etys v
@@ -2262,14 +2286,26 @@ exportValue ty v = case ty of
     pure . V.VRecord . C.recordFromFieldsWithDisplay (C.displayOrder fields) $ exportRecordValue (C.canonicalFields fields) v
 
   -- functions
-  TV.TVFun _aty _bty ->
-    pure $ V.VFun mempty (error "exportValue: TODO functions")
+  TV.TVFun _aty _bty -> do
+    -- XXX TODO
+    -- XXX: also should not use panic for unimplemented
+    -- XXX: also, it is ugly to create a bomb value like this and put it
+    -- inside something else; however, if this case just panics you can
+    -- trigger it like this:
+    --    let cp = cryptol_prims ();
+    --    print {{ cp::uext }}
+    --
+    let bomb = panic "exportValue" ["Functions not supported"]
+    pure $ V.VFun mempty bomb
 
   -- nominal types
   TV.TVNominal _ _ fields ->
     case fields of
       TV.TVStruct fs   -> exportValue (TV.TVRec fs) v
-      TV.TVAbstract {} -> error "exportValue: TODO abstract types"
+      TV.TVAbstract {} -> do
+        -- XXX TODO
+        -- XXX: also should not use panic for unimplemented
+        panic "exportValue" ["Abstract types not supported"]
       TV.TVEnum infos ->
         case v of
           SC.VCtorApp i _ args ->
@@ -2279,8 +2315,10 @@ exportValue ty v = case ty of
                    let vs = Vector.zipWith exportValue argTs args'
                    let tag = V.mkBv (TV.enumTagWidth (Vector.length infos)) (toInteger i)
                    pure (V.VEnum tag (IntMap.singleton i (TV.ConInfo ident vs)))
-          _ -> error $ "exportValue (on enum type " ++ Text.unpack (CryPP.pp ty) ++ ")"
-
+          _ -> do
+              let ty' = CryPP.pp ty
+                  v' = Text.pack $ show v
+              panic "exportValue" ["Expected " <> ty' <> ", got " <> v']
 
 exportTupleValue :: [TV.TValue] -> SC.CValue -> [V.Eval V.Value]
 exportTupleValue tys v =
@@ -2288,7 +2326,9 @@ exportTupleValue tys v =
     ([]    , SC.VCtorApp 0 _ []) -> []
     (t : ts, SC.VCtorApp 0 _ [x, y])
       -> (exportValue t (run x)) : exportTupleValue ts (run y)
-    _ -> error $ "exportValue: expected tuple"
+    _ -> do
+        let v' = Text.pack $ show v
+        panic "exportTupleValue" ["Expected tuple, got " <> v']
   where
     run = SC.runIdentity . force
 
@@ -2298,7 +2338,9 @@ exportRecordValue fields v =
     ([], SC.VCtorApp 0 _ [])  -> []
     ((n, t) : ts, SC.VCtorApp 0 _ [x, y])
       -> (n, exportValue t (run x)) : exportRecordValue ts (run y)
-    _ -> error $ "exportValue: expected record"
+    _ -> do
+        let v' = Text.pack $ show v
+        panic "exportRecordValue" ["Expected record, got " <> v']
   where
     run = SC.runIdentity . force
 

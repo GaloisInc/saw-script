@@ -1773,7 +1773,7 @@ verifySimulate opts ppopts cc pfs mspec args assumes top_loc lemmas globals chec
            case retval of
              Crucible.RegEntry ty val ->
                case decodeMIRVal col ret_mt (Crucible.AnyValue ty val) of
-                 Nothing -> error $ "FIXME: Unsupported return type: " ++ show ret_ty
+                 Nothing -> fail $ "FIXME: Unsupported return type: " ++ show ret_ty
                  Just v -> return (Just v)
      return (retval', globals1)
 

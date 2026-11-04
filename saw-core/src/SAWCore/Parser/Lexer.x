@@ -26,6 +26,7 @@ module SAWCore.Parser.Lexer
   ( Token(..)
   , LexerMessage(..)
   , LexerState
+  , ppTokenShort
   , initialLexerState
   , lexSAWCore
   ) where
@@ -33,6 +34,7 @@ module SAWCore.Parser.Lexer
 import Codec.Binary.UTF8.Generic ()
 import Control.Monad.State.Strict
 import qualified Data.Text as Text
+import Data.Text (Text)
 import qualified Data.Text.Lazy as LText
 import Data.Word (Word8)
 import Data.Bits
@@ -125,7 +127,6 @@ data Token
   | TCommentL       -- ^ Start of a line comment
   | TEOL            -- ^ End of line (ends a line comment)
   | TIllegal String -- ^ Illegal character
-  deriving (Show)
 
 data LexerMessage = InvalidInput Text.Text | UnclosedComment | MissingEOL
 
@@ -134,6 +135,24 @@ type AlexInput = PosPair Buffer
 
 -- Wrap the input type for export, in case we end up wanting other state
 type LexerState = AlexInput
+
+-- | Printer for Token. This does not print the contents, just the
+--   token type.
+ppTokenShort :: Token -> Text
+ppTokenShort tok = case tok of
+  TIdent{} -> "identifier"
+  TRecursor{} -> "recursor"
+  TInductor{} -> "inductor"
+  TNat{} -> "integer literal"
+  TBitvector{} -> "bitvector literal"
+  TString{} -> "string literal"
+  TKey str -> Text.pack $ "\"" ++ str ++ "\""
+  TEnd -> "end of file"
+  TCommentS -> "start of block comment"
+  TCommentE -> "end of block comment"
+  TCommentL -> "start of line comment"
+  TEOL -> "end of line"
+  TIllegal str -> "unknown token " <> Text.pack str
 
 -- | Parse a recursor identifier with "#rec" followed by a Natural.
 -- A missing number is treated as 0.

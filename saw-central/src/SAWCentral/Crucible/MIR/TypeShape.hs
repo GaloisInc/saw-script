@@ -269,21 +269,40 @@ tyToShape col = go
                 M.Enum discrTy
                   | sz == 0 -> Some $ AggregateShape ty []
                   | otherwise -> goEnum ty discrTy vs
-                M.Union -> error "tyToShape: Union types NYI"
-            Nothing -> error $ "tyToShape: bad adt: " ++ show ty
+                M.Union ->
+                    -- XXX TODO
+                    -- XXX also better not to use panic for unimplemented paths
+                    panic "tyToShape" ["Union types not yet implemented"]
+            Nothing ->
+                panic "tyToShape" ["Bad adt: " <> Text.pack (show ty)]
         M.TyRef ty' mutbl -> goRef ty ty' mutbl
         M.TyRawPtr ty' mutbl -> goRef ty ty' mutbl
         M.TyFnPtr sig -> goFnPtr ty sig
         M.TyPat ty' -> go ty'
-        _ -> error $ "tyToShape: " ++ show ty ++ " NYI"
+        _ ->
+            -- XXX TODO
+            -- XXX also better not to use panic for unimplemented paths
+            let ty' = Text.pack $ show ty in
+            panic "tyToShape" ["Not yet implemented: " <> ty']
 
     goPrim :: M.Ty -> Some TypeShape
     goPrim ty =
       case tyToRepr col ty of
-        Left err -> error ("goPrim: type " ++ show ty ++ " not supported: " ++ err)
+        Left err ->
+            let ty' = Text.pack $ show ty in
+            panic "tyToShape / goPrim" [
+                "Type " <> ty' <> " not supported:",
+                Text.pack err
+            ]
         Right (Some tpr)
           | AsBaseType btpr <- asBaseType tpr -> Some (PrimShape ty btpr)
-          | otherwise -> error ("goPrim: type " ++ show ty ++ " produced non-primitive type " ++ show tpr)
+          | otherwise ->
+              let ty' = Text.pack $ show ty
+                  tpr' = Text.pack $ show tpr
+              in
+              panic "tyToShape / goPrim" [
+                  "Type " <> ty' <> " produced non-primitive type " <> tpr'
+              ]
 
     goTuple :: M.Ty -> Some TypeShape
     goTuple ty = Some $ AggregateShape ty (tyFieldElemShapes ty)
@@ -335,15 +354,16 @@ tyToShape col = go
     goRef ty ty' mutbl
       | M.TySlice slicedTy <- ty' =
         case tyToRepr col slicedTy of
-          Left err -> error ("goRef: " ++ err)
+          Left err -> panic "tyToShape / goRef" ["tyToRepr failed:", Text.pack err]
           Right (Some tpr) -> Some (SliceShape ty slicedTy mutbl tpr)
       | M.TyStr <- ty'
       = Some $ SliceShape ty (M.TyUint M.B8) mutbl (BVRepr (knownNat @8))
-    goRef ty ty' _ | isUnsized ty' = error $
-        "tyToShape: fat pointer " ++ show ty ++ " NYI"
+    goRef ty ty' _ | isUnsized ty' =
+        let pty = Text.pack $ show ty in
+        panic "tyToShape / goRef" ["Fat pointer " <> pty <> " not yet implemented"]
     goRef ty ty' mutbl =
       case tyToRepr col ty' of
-        Left err -> error ("goRef: " ++ err)
+        Left err -> panic "tyToShape / goRef" ["tyToRepr failed:", Text.pack err]
         Right (Some tpr) -> Some (RefShape ty ty' mutbl tpr)
 
     goFnPtr :: M.Ty -> M.FnSig -> Some TypeShape
@@ -351,7 +371,7 @@ tyToShape col = go
         case tyListToCtx col args $ \argsr  ->
              tyToReprCont col ret $ \retr ->
              Right (Some (FnPtrShape ty argsr retr)) of
-          Left err -> error ("goFnPtr: " ++ err)
+          Left err -> panic "tyToShape / goFnPtr" [Text.pack err]
           Right x -> x
 
     -- Retrieve the field types in a variant. This used for both struct and enum
@@ -367,15 +387,21 @@ tyToShape col = go
         , let elemSz = tySize col ty' ]
 
 -- | Given a `Ty` and the result of `tyToRepr ty`, produce a `TypeShape` with
--- the same index `tp`.  Raises an `error` if the `TypeRepr` doesn't match
+-- the same index `tp`.  Panics if the `TypeRepr` doesn't match
 -- `tyToRepr ty`.
 tyToShapeEq :: HasCallStack => M.Collection -> M.Ty -> TypeRepr tp -> TypeShape tp
 tyToShapeEq col ty tpr | Some shp <- tyToShape col ty =
     case testEquality (shapeType shp) tpr of
         Just Refl -> shp
-        Nothing -> error $ "tyToShapeEq: type " ++ show ty ++
-            " does not have representation " ++ show tpr ++
-            " (got " ++ show (shapeType shp) ++ " instead)"
+        Nothing ->
+            let ty' = Text.pack $ show ty
+                tpr' = Text.pack $ show tpr
+                shp' = Text.pack $ show (shapeType shp)
+            in
+            panic "tyToShapeEq" [
+                "Type " <> ty' <> " does not have representation " <> tpr',
+                "(got " <> shp' <> " instead)"
+            ]
 
 shapeType :: TypeShape tp -> TypeRepr tp
 shapeType = go
@@ -924,7 +950,7 @@ accessMirAggregateArrayF' sym fail_ elemSz elemShp len xs ag f = do
 
 -- | Read the value out of a 'MaybeType' expression that is assumed to be
 -- assigned to a value. If this assumption does not hold (i.e., if the value is
--- unassigned), then this function will raise an error.
+-- unassigned), then this function will panic.
 readMaybeType ::
   IsSymInterface sym =>
   sym ->
@@ -935,8 +961,14 @@ readMaybeType ::
 readMaybeType sym desc tpr rv =
   case readPartExprMaybe sym rv of
     Just x -> x
-    Nothing -> error $ "readMaybeType: accessed possibly-uninitialized " ++ desc ++
-        " of type " ++ show tpr
+    Nothing ->
+        let desc' = Text.pack desc
+            tpr' = Text.pack $ show tpr
+        in
+        panic "readMaybeType" [
+            "Accessed possibly-uninitialized " <> desc' <> " of type " <> tpr'
+        ]
+        
 
 readPartExprMaybe ::
   IsSymInterface sym =>
@@ -1141,7 +1173,9 @@ baseSizeView M.USize =
   case Map.lookup (W4.natValue sizeBitsRepr) bitSizesMap of
     Just bsv -> bsv
     Nothing ->
-      error $ "M.Intrinsics.BaseSize bit size not supported: " ++ show sizeBitsRepr
+      panic "baseSizeView" [
+          "M.Intrinsics.BaseSize bit size not supported: " <> Text.pack (show sizeBitsRepr)
+      ]
   where
     sizeBitsRepr = W4.knownNat @SizeBits
 

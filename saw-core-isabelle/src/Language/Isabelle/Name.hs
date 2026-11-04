@@ -27,6 +27,7 @@ import           Data.List (stripPrefix, intercalate)
 
 import qualified Cryptol.TypeCheck.PP as Cry
 
+import           Language.Isabelle.Panic
 import           Language.Isabelle.Syntax (Syntax, pattern InfixSyn)
 import           Language.Isabelle.Output (Output,HasOutput,out)
 
@@ -228,7 +229,7 @@ freshIdent exNms tryNm = go (tryNm:variantIdents tryNm)
     go :: [String] -> String
     go (nm:nms) | nm `elem` exNms = go nms
     go (nm:_) = nm
-    go [] = error "freshIdent: impossible empty list"
+    go [] = panic "freshIdent" ["impossible empty list"]
 
 instance Output Name where
   out t = case t of

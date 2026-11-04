@@ -1995,6 +1995,12 @@ instance IsValue Value where
     toValue _ty _name x = x
 
 
+-- | Panic wrapper for ordinary `FromValue` instances
+fromValuePanic :: HasCallStack => Text -> Value -> a
+fromValuePanic what v =
+    let v' = uglyValue v in
+    panic ("fromValue / " <> what) ["Unexpected value: " <> v']
+
 -- | Panic wrapper for ordinary `ToValue` instances
 toValuePanic :: HasCallStack => Text -> SS.Type -> a
 toValuePanic what ty =
@@ -2023,7 +2029,7 @@ instance (IsValue a, IsValue b) => IsValue (a, b) where
 
 instance (FromValue a, FromValue b) => FromValue (a, b) where
     fromValue how (VTuple [x, y]) = (fromValue how x, fromValue how y)
-    fromValue _ _ = error "fromValue (,)"
+    fromValue _ v = fromValuePanic "pair" v
 
 instance (IsValue a, IsValue b, IsValue c) => IsValue (a, b, c) where
     toValue ty name (x, y, z) = case ty of
@@ -2034,7 +2040,7 @@ instance (IsValue a, IsValue b, IsValue c) => IsValue (a, b, c) where
 
 instance (FromValue a, FromValue b, FromValue c) => FromValue (a, b, c) where
     fromValue how (VTuple [x, y, z]) = (fromValue how x, fromValue how y, fromValue how z)
-    fromValue _ _ = error "fromValue (,,)"
+    fromValue _ v = fromValuePanic "triple" v
 
 
 instance IsValue a => IsValue [a] where
@@ -2046,7 +2052,7 @@ instance IsValue a => IsValue [a] where
 
 instance FromValue a => FromValue [a] where
     fromValue how (VArray xs) = map (fromValue how) xs
-    fromValue _ _ = error "fromValue []"
+    fromValue _ v = fromValuePanic "list" v
 
 
 -- | Common logic for the FromValue instances for plain monadic values.
@@ -2233,7 +2239,7 @@ instance IsValue (CIR.AllLLVM CMS.SetupValue) where
 
 instance FromValue (CIR.AllLLVM CMS.SetupValue) where
   fromValue _ (VLLVMSetupValue v) = v
-  fromValue _ _ = error "fromValue Crucible.SetupValue"
+  fromValue _ v = fromValuePanic "LLVMValue" v
 
 instance IsValue (CMS.SetupValue CJ.JVM) where
     toValue ty _name v = case ty of
@@ -2244,7 +2250,7 @@ instance IsValue (CMS.SetupValue CJ.JVM) where
 
 instance FromValue (CMS.SetupValue CJ.JVM) where
   fromValue _ (VJVMSetupValue v) = v
-  fromValue _ _ = error "fromValue Crucible.SetupValue"
+  fromValue _ v = fromValuePanic "JVMValue" v
 
 instance IsValue (CMS.SetupValue MIR) where
     toValue ty _name v = case ty of
@@ -2255,7 +2261,7 @@ instance IsValue (CMS.SetupValue MIR) where
 
 instance FromValue (CMS.SetupValue MIR) where
   fromValue _ (VMIRSetupValue v) = v
-  fromValue _ _ = error "fromValue Crucible.SetupValue"
+  fromValue _ v = fromValuePanic "MIRValue" v
 
 instance IsValue SAW_CFG where
     toValue ty _name t = case ty of
@@ -2266,7 +2272,7 @@ instance IsValue SAW_CFG where
 
 instance FromValue SAW_CFG where
     fromValue _ (VCFG t) = t
-    fromValue _ _ = error "fromValue CFG"
+    fromValue _ v = fromValuePanic "CFG" v
 
 instance IsValue (CIR.SomeLLVM CMS.ProvedSpec) where
     toValue ty _name mir = case ty of
@@ -2277,7 +2283,7 @@ instance IsValue (CIR.SomeLLVM CMS.ProvedSpec) where
 
 instance FromValue (CIR.SomeLLVM CMS.ProvedSpec) where
     fromValue _ (VLLVMMethodSpec mir) = mir
-    fromValue _ _ = error "fromValue ProvedSpec LLVM"
+    fromValue _ v = fromValuePanic "LLVMSpec" v
 
 instance IsValue (CMS.ProvedSpec CJ.JVM) where
     toValue ty _name t = case ty of
@@ -2288,7 +2294,7 @@ instance IsValue (CMS.ProvedSpec CJ.JVM) where
 
 instance FromValue (CMS.ProvedSpec CJ.JVM) where
     fromValue _ (VJVMMethodSpec t) = t
-    fromValue _ _ = error "fromValue ProvedSpec JVM"
+    fromValue _ v = fromValuePanic "JVMSpec" v
 
 instance IsValue (CMS.ProvedSpec MIR) where
     toValue ty _name t = case ty of
@@ -2299,7 +2305,7 @@ instance IsValue (CMS.ProvedSpec MIR) where
 
 instance FromValue (CMS.ProvedSpec MIR) where
     fromValue _ (VMIRMethodSpec t) = t
-    fromValue _ _ = error "fromValue ProvedSpec MIR"
+    fromValue _ v = fromValuePanic "MIRSpec" v
 
 instance IsValue ModuleSkeleton where
     toValue ty _name s = case ty of
@@ -2310,7 +2316,7 @@ instance IsValue ModuleSkeleton where
 
 instance FromValue ModuleSkeleton where
     fromValue _ (VLLVMModuleSkeleton s) = s
-    fromValue _ _ = error "fromValue ModuleSkeleton"
+    fromValue _ v = fromValuePanic "ModuleSkeleton" v
 
 instance IsValue FunctionSkeleton where
     toValue ty _name s = case ty of
@@ -2321,7 +2327,7 @@ instance IsValue FunctionSkeleton where
 
 instance FromValue FunctionSkeleton where
     fromValue _ (VLLVMFunctionSkeleton s) = s
-    fromValue _ _ = error "fromValue FunctionSkeleton"
+    fromValue _ v = fromValuePanic "FunctionSkeleton" v
 
 instance IsValue SkeletonState where
     toValue ty _name s = case ty of
@@ -2332,7 +2338,7 @@ instance IsValue SkeletonState where
 
 instance FromValue SkeletonState where
     fromValue _ (VLLVMSkeletonState s) = s
-    fromValue _ _ = error "fromValue SkeletonState"
+    fromValue _ v = fromValuePanic "SkeletonState" v
 
 instance IsValue FunctionProfile where
     toValue ty _name s = case ty of
@@ -2343,7 +2349,7 @@ instance IsValue FunctionProfile where
 
 instance FromValue FunctionProfile where
     fromValue _ (VLLVMFunctionProfile s) = s
-    fromValue _ _ = error "fromValue FunctionProfile"
+    fromValue _ v = fromValuePanic "FunctionProfile" v
 
 instance IsValue (AIGNetwork) where
     toValue ty _name t = case ty of
@@ -2354,7 +2360,7 @@ instance IsValue (AIGNetwork) where
 
 instance FromValue (AIGNetwork) where
     fromValue _ (VAIG t) = t
-    fromValue _ _ = error "fromValue AIGNetwork"
+    fromValue _ v = fromValuePanic "AIGNetwork" v
 
 instance IsValue TypedTerm where
     toValue ty _name t = case ty of
@@ -2365,11 +2371,11 @@ instance IsValue TypedTerm where
 
 instance FromValue TypedTerm where
     fromValue _ (VTerm t) = t
-    fromValue _ _ = error "fromValue TypedTerm"
+    fromValue _ v = fromValuePanic "TypedTerm" v
 
 instance FromValue Term where
     fromValue _ (VTerm t) = ttTerm t
-    fromValue _ _ = error "fromValue SharedTerm"
+    fromValue _ v = fromValuePanic "Term" v
 
 instance IsValue Cryptol.Schema where
     toValue ty _name s = case ty of
@@ -2380,7 +2386,7 @@ instance IsValue Cryptol.Schema where
 
 instance FromValue Cryptol.Schema where
     fromValue _ (VType s) = s
-    fromValue _ _ = error "fromValue Schema"
+    fromValue _ v = fromValuePanic "Type" v
 
 instance IsValue Text where
     toValue ty _name n = case ty of
@@ -2391,7 +2397,7 @@ instance IsValue Text where
 
 instance FromValue Text where
     fromValue _ (VString n) = n
-    fromValue _ _ = error "fromValue Text"
+    fromValue _ v = fromValuePanic "String" v
 
 instance IsValue Integer where
     toValue ty _name n = case ty of
@@ -2402,7 +2408,7 @@ instance IsValue Integer where
 
 instance FromValue Integer where
     fromValue _ (VInteger n) = n
-    fromValue _ _ = error "fromValue Integer"
+    fromValue _ v = fromValuePanic "Int (Integer)" v
 
 instance IsValue Int where
     toValue ty _name n = case ty of
@@ -2415,8 +2421,8 @@ instance FromValue Int where
     fromValue _ (VInteger n)
       | toInteger (minBound :: Int) <= n &&
         toInteger (maxBound :: Int) >= n = fromIntegral n
-      | otherwise = error $ "fromValue Int: out of range: " ++ show n
-    fromValue _ _ = error "fromValue Int"
+      | otherwise = panic "fromValue Int (Int)" ["Out of range: " <> Text.pack (show n)]
+    fromValue _ v = fromValuePanic "Int (Int)" v
 
 instance IsValue Bool where
     toValue ty _name b = case ty of
@@ -2427,7 +2433,7 @@ instance IsValue Bool where
 
 instance FromValue Bool where
     fromValue _ (VBool b) = b
-    fromValue _ _ = error "fromValue Bool"
+    fromValue _ v = fromValuePanic "Bool" v
 
 instance IsValue SAWSimpset where
     toValue ty _name ss = case ty of
@@ -2438,7 +2444,7 @@ instance IsValue SAWSimpset where
 
 instance FromValue SAWSimpset where
     fromValue _ (VSimpset ss) = ss
-    fromValue _ _ = error "fromValue Simpset"
+    fromValue _ v = fromValuePanic "Simpset" v
 
 instance IsValue Theorem where
     toValue ty _name t = case ty of
@@ -2449,7 +2455,7 @@ instance IsValue Theorem where
 
 instance FromValue Theorem where
     fromValue _ (VTheorem t) = t
-    fromValue _ _ = error "fromValue Theorem"
+    fromValue _ v = fromValuePanic "Theorem" v
 
 instance IsValue BisimTheorem where
     toValue ty _name = case ty of
@@ -2460,7 +2466,7 @@ instance IsValue BisimTheorem where
 
 instance FromValue BisimTheorem where
     fromValue _ (VBisimTheorem t) = t
-    fromValue _ _ = error "fromValue BisimTheorem"
+    fromValue _ v = fromValuePanic "BisimTheorem" v
 
 instance IsValue JavaType where
     toValue ty _name t = case ty of
@@ -2471,7 +2477,7 @@ instance IsValue JavaType where
 
 instance FromValue JavaType where
     fromValue _ (VJavaType t) = t
-    fromValue _ _ = error "fromValue JavaType"
+    fromValue _ v = fromValuePanic "JavaType" v
 
 instance IsValue LLVM.Type where
     toValue ty _name t = case ty of
@@ -2482,7 +2488,7 @@ instance IsValue LLVM.Type where
 
 instance FromValue LLVM.Type where
     fromValue _ (VLLVMType t) = t
-    fromValue _ _ = error "fromValue LLVMType"
+    fromValue _ v = fromValuePanic "LLVMType" v
 
 instance IsValue MIR.Ty where
     toValue ty _name t = case ty of
@@ -2493,7 +2499,7 @@ instance IsValue MIR.Ty where
 
 instance FromValue MIR.Ty where
     fromValue _ (VMIRType t) = t
-    fromValue _ _ = error "fromValue MIRType"
+    fromValue _ v = fromValuePanic "MIRType" v
 
 instance IsValue CEnv.ExtCryptolModule where
     toValue ty _name m = case ty of
@@ -2504,7 +2510,7 @@ instance IsValue CEnv.ExtCryptolModule where
 
 instance FromValue CEnv.ExtCryptolModule where
     fromValue _ (VCryptolModule m) = m
-    fromValue _ _ = error "fromValue CryptolModule"
+    fromValue _ v = fromValuePanic "CryptolModule" v
 
 instance IsValue JSS.Class where
     toValue ty _name c = case ty of
@@ -2515,7 +2521,7 @@ instance IsValue JSS.Class where
 
 instance FromValue JSS.Class where
     fromValue _ (VJavaClass c) = c
-    fromValue _ _ = error "fromValue JavaClass"
+    fromValue _ v = fromValuePanic "JavaClass" v
 
 instance IsValue (Some CIR.LLVMModule) where
     toValue ty _name m = case ty of
@@ -2533,7 +2539,7 @@ instance IsValue (CIR.LLVMModule arch) where
 
 instance FromValue (Some CIR.LLVMModule) where
     fromValue _ (VLLVMModule m) = m
-    fromValue _ _ = error "fromValue LLVMModule"
+    fromValue _ v = fromValuePanic "LLVMModule" v
 
 instance IsValue MIR.RustModule where
     toValue ty _name m = case ty of
@@ -2544,7 +2550,7 @@ instance IsValue MIR.RustModule where
 
 instance FromValue MIR.RustModule where
     fromValue _ (VMIRModule m) = m
-    fromValue _ _ = error "fromValue RustModule"
+    fromValue _ v = fromValuePanic "MIRModule" v
 
 instance IsValue MIR.Adt where
     toValue ty _name adt = case ty of
@@ -2555,7 +2561,7 @@ instance IsValue MIR.Adt where
 
 instance FromValue MIR.Adt where
     fromValue _ (VMIRAdt adt) = adt
-    fromValue _ _ = error "fromValue Adt"
+    fromValue _ v = fromValuePanic "MIRAdt" v
 
 instance IsValue ProofResult where
     toValue ty _name r = case ty of
@@ -2566,7 +2572,7 @@ instance IsValue ProofResult where
 
 instance FromValue ProofResult where
    fromValue _ (VProofResult r) = r
-   fromValue _ v = error $ "fromValue ProofResult: " ++ Text.unpack (uglyValue v)
+   fromValue _ v = fromValuePanic "ProofResult" v
 
 instance IsValue SatResult where
     toValue ty _name r = case ty of
@@ -2577,7 +2583,7 @@ instance IsValue SatResult where
 
 instance FromValue SatResult where
    fromValue _ (VSatResult r) = r
-   fromValue _ v = error $ "fromValue SatResult: " ++ Text.unpack (uglyValue v)
+   fromValue _ v = fromValuePanic "SatResult" v
 
 instance IsValue CMS.GhostGlobal where
     toValue ty _name x = case ty of
@@ -2588,7 +2594,7 @@ instance IsValue CMS.GhostGlobal where
 
 instance FromValue CMS.GhostGlobal where
   fromValue _ (VGhostVar r) = r
-  fromValue _ v = error ("fromValue GhostVar: " ++ Text.unpack (uglyValue v))
+  fromValue _ v = fromValuePanic "Ghost" v
 
 instance IsValue Yo.YosysSequential where
     toValue ty _name ysq = case ty of
@@ -2599,7 +2605,7 @@ instance IsValue Yo.YosysSequential where
 
 instance FromValue Yo.YosysSequential where
   fromValue _ (VYosysSequential s) = s
-  fromValue _ v = error ("fromValue YosysSequential: " ++ Text.unpack (uglyValue v))
+  fromValue _ v = fromValuePanic "YosysSequential" v
 
 instance IsValue Yo.YosysTheorem where
     toValue ty _name yt = case ty of
@@ -2610,7 +2616,7 @@ instance IsValue Yo.YosysTheorem where
 
 instance FromValue Yo.YosysTheorem where
   fromValue _ (VYosysTheorem thm) = thm
-  fromValue _ v = error ("fromValue YosysTheorem: " ++ Text.unpack (uglyValue v))
+  fromValue _ v = fromValuePanic "YosysTheorem" v
 
 
 ------------------------------------------------------------

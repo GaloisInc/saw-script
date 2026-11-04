@@ -38,6 +38,8 @@ import Data.RME (RME)
 import qualified Data.RME as RME
 import qualified Data.RME.Vector as RMEV
 
+import SAWSupport.PureFail (pureFail)
+
 import SAWCore.Module (ModuleMap)
 import SAWCore.Name
 import SAWCore.Panic (panic)
@@ -95,7 +97,7 @@ vBool b = VBool b
 
 toBool :: RValue -> RME
 toBool (VBool b) = b
-toBool x = error $ unwords ["SAWCore.Simulator.RME.toBool", show x]
+toBool x = panic "toBool" ["Expected bool, got " <> Text.pack (show x)]
 
 vWord :: Vector RME -> RValue
 vWord x = VWord x
@@ -103,14 +105,14 @@ vWord x = VWord x
 toWord :: RValue -> Vector RME
 toWord (VWord x) = x
 toWord (VVector vv) = fmap (toBool . runIdentity . force) vv
-toWord x = error $ unwords ["SAWCore.Simulator.RME.toWord", show x]
+toWord x = panic "toWord" ["Expected word or vector, got " <> Text.pack (show x)]
 
 vStream :: IntTrie RValue -> RValue
 vStream x = VExtra (AStream x)
 
 toStream :: RValue -> IntTrie RValue
 toStream (VExtra (AStream x)) = x
-toStream x = error $ unwords ["SAWCore.Simulator.RME.toStream", show x]
+toStream x = panic "toStream" ["Expected stream, got " <> Text.pack (show x)]
 
 wordFun :: (Vector RME -> RPrim) -> RPrim
 wordFun f = Prims.strictFun (\x -> f (toWord x))
@@ -131,8 +133,12 @@ bvShiftOp op =
     case y of
       VNat n   -> vWord (op x (toInteger n))
       VBVToNat _sz v -> vWord (genShift muxRMEV op x (toWord v))
-      VIntToNat _i   -> error "RME.shiftOp: intToNat TODO"
-      _        -> error $ unwords ["SAWCore.Simulator.RME.shiftOp", show y]
+      VIntToNat _i   ->
+          -- XXX TODO
+          -- XXX also should not use panic for unimplemented paths
+          panic "bvShiftOp" ["intToNat not implemented"]
+      _ ->
+          panic "bvShiftOp" ["Expected shiftable, got " <> Text.pack (show y)]
 
 ------------------------------------------------------------
 
@@ -332,7 +338,14 @@ muxInt :: RME -> Integer -> Integer -> Integer
 muxInt b x y =
   case RME.isBool b of
     Just c -> if c then x else y
-    Nothing -> if x == y then x else error $ "muxRValue: VInt " ++ show (x, y)
+    Nothing ->
+        if x == y then x
+        else
+            let x' = Text.pack $ show x
+                y' = Text.pack $ show y
+            in
+            pureFail "SAWCore.Simulator.RME muxInt" $
+                "got: VInt " <> x' <> " " <> y'
 
 muxExtra :: RME -> RExtra -> RExtra -> RExtra
 muxExtra b (AStream xs) (AStream ys) =
@@ -404,7 +417,9 @@ streamGet :: RValue -> RValue -> Identity RValue
 streamGet xs ix =
   case ix of
     VNat n -> pure $ IntTrie.apply (toStream xs) (toInteger n)
-    VIntToNat _i -> error "RME.streamGetOp : symbolic integer TODO"
+    VIntToNat _i ->
+        -- XXX should not use panic for unimplemented paths
+        panic "streamGet" ["RME: symbolic integer TODO"]
     VBVToNat _sz bv ->
       do let trie = toStream xs
              loop k [] = IntTrie.apply trie k
@@ -420,7 +435,7 @@ streamGet xs ix =
                k1 = k0 + 1
          pure $ loop (0::Integer) (V.toList (toWord bv))
 
-    _ -> panic "streamGetOp" ["Expected Nat value; found " <> Text.pack (show ix)]
+    _ -> panic "streamGet" ["Expected Nat value; found " <> Text.pack (show ix)]
 
 -- Stream#rec :
 --   (a : sort 0) -> (p : Stream a -> sort 0) ->
@@ -469,7 +484,10 @@ bitBlastBasic m addlPrims varMap t = runIdentity $ do
   cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
          (\vn _ -> case Map.lookup (vnIndex vn) varMap of
                    Just v -> pure v
-                   Nothing -> error ("RME: unknown variable: " ++ show (vnName vn)))
+                   Nothing ->
+                       let vn' = vnName vn in
+                       panic "bitBlastBasic" ["RME: unknown variable: " <> vn']
+         )
          (\_ _ -> Nothing)
          recursor
          primHandler

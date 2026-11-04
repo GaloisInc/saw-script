@@ -131,7 +131,7 @@ freshVal sym t ptrOk nm =
   where
   symName s =
     case userSymbol ("macaw_" ++ s) of
-      Left err -> error ("Invalid symbol name " ++ show s ++ ": " ++ show err)
+      Left err -> fail ("Invalid symbol name " ++ show s ++ ": " ++ show err)
       Right a -> return a
 
 

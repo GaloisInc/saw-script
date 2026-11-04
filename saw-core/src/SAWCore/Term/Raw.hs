@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 {- |
 Module      : SAWCore.Term.Raw
 Copyright   : Galois, Inc. 2012-2025
@@ -36,6 +38,7 @@ import Data.IntSet (IntSet)
 
 import Instances.TH.Lift () -- for instance TH.Lift Text
 
+import SAWCore.Panic
 import SAWCore.Name
 import SAWCore.Term.Functor
 
@@ -175,7 +178,7 @@ alphaEquiv = term emptyVarCtx emptyVarCtx
     termf _ _ Pi{}       _ = False
     termf _ _ Constant{} _ = False
     termf _ _ Variable{} _ = False
-    termf _ _ Label{}      _ = error "Unexpected Label"
+    termf _ _ Label{}      _ = panic "alphaEquiv" ["Unexpected Label"]
 
     ftermf :: VarCtx -> VarCtx -> FlatTermF Term -> FlatTermF Term -> Bool
     ftermf env1 env2 ftf1 ftf2 =

@@ -18,12 +18,13 @@ import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text.Lazy as LText
+import qualified Data.Text as Text
 import Data.Text (Text)
 import qualified Data.Vector as V
 import Text.Read (readEither, readMaybe)
 
 import SAWCore.Name
-import SAWCore.Parser.Grammar ( parseQualName )
+import SAWCore.Parser.Grammar ( parseQualName, ppParseError )
 import SAWCore.Term.Functor
 import SAWCore.SharedTerm
 import qualified SAWCore.QualName as QN
@@ -49,7 +50,7 @@ readNames xs = Map.fromList <$> (mapM readName =<< readEither xs)
    readName (idx, Right qn_txt) =
      case parseQualName "" "" (LText.fromStrict qn_txt) of
        Right qn -> pure (idx, Right qn)
-       Left err -> Left (show err)
+       Left err -> Left (Text.unpack $ ppParseError err)
 
 -- | Render to external text format
 scWriteExternal :: Term -> String

@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveLift #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 {- |
 Module      : SAWCore.Parser.Position
@@ -11,15 +12,18 @@ Portability : non-portable (language extensions)
 
 module SAWCore.Parser.Position
   ( Pos(..)
-  , ppPos
   , incLine
   , incCol
   , Positioned(..)
   , PosPair(..)
   ) where
 
-import qualified Language.Haskell.TH.Syntax as TH
+import qualified Data.Text as Text
 import System.FilePath (makeRelative)
+
+import qualified Language.Haskell.TH.Syntax as TH
+
+import SAWSupport.Position
 
 data Pos = Pos { -- | Base directory to use for pretty printing purposes
                  posBase :: !FilePath
@@ -40,9 +44,11 @@ instance Eq Pos where
 instance Ord Pos where
   compare x y = compare (posTuple x) (posTuple y)
 
-ppPos :: Pos -> String
-ppPos p = rp ++ ':' : show (posLine p) ++ ':' : show (posCol p) ++ ":"
-  where rp = makeRelative (posBase p) (posPath p)
+instance IsPosition Pos where
+  ppPosition p = rp <> ":" <> line <> ":" <> col
+    where rp = Text.pack $ makeRelative (posBase p) (posPath p)
+          line = Text.pack $ show (posLine p)
+          col = Text.pack $ show (posCol p)
 
 incLine :: Pos -> Pos
 incLine p = p { posLine = 1 + posLine p, posCol = 0 }

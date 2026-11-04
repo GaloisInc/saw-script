@@ -1,0 +1,6 @@
+// Visit the "Invalid rounding mode" message
+import Float;
+fails (prove_print (w4_unint_z3 []) {{ fpAdd`{8, 24} 6 1.0 2.0 == 3.0 }});
+
+// and the "Symbolic rounding modes not supported" message
+fails (prove_print (w4_unint_z3 []) {{ \m -> fpAdd`{8, 24} m 1.0 2.0 == 3.0 }});

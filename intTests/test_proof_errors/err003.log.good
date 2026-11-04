@@ -1,0 +1,21 @@
+Loading file "err003.saw"
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in w4_unint_z3
+   err003.saw:3:21-3:35 in (callback)
+   (builtin) in prove_print
+   err003.saw:3:8-3:73 in (callback)
+   (builtin) in fails
+   err003.saw:3:1-3:73 (at top level)
+fpRoundingMode: Invalid rounding mode: 6
+
+== Anticipated failure message ==
+Stack trace:
+   (builtin) in w4_unint_z3
+   err003.saw:6:21-6:35 in (callback)
+   (builtin) in prove_print
+   err003.saw:6:8-6:79 in (callback)
+   (builtin) in fails
+   err003.saw:6:1-6:79 (at top level)
+fpRoundingMode: Symbolic rounding modes not supported
+

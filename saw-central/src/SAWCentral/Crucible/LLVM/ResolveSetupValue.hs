@@ -81,6 +81,7 @@ import SAWCore.SharedTerm
 import CryptolSAWCore.Cryptol (translateType)
 import CryptolSAWCore.TypedTerm
 import SAWCoreWhat4.ReturnTrip
+import SAWCentral.Panic
 
 import           SAWCentral.Crucible.Common (Sym, HasSymInterface(..))
 import           SAWCentral.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..), prettyAllocIndex)
@@ -894,7 +895,7 @@ resolveSetupVal cc mem env tyenv nameEnv val =
       let t = Crucible.mkStructType (V.fromList (mkFields packed dl Crucible.noAlignment 0 tps))
       let flds = case Crucible.storageTypeF t of
                    Crucible.Struct v -> v
-                   _ -> error "impossible"
+                   _ -> panic "resolveSetupVal" ["impossible: struct not struct"]
       return $ Crucible.LLVMValStruct (V.zip flds (V.fromList vals))
     SetupEnum empty ->
       absurd empty

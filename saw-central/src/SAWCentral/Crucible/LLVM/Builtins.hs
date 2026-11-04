@@ -1477,9 +1477,15 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
               case ret_ty of
                 Nothing -> return Nothing
                 Just ret_mt ->
-                  do v <- Crucible.packMemValue sym
-                            (fromMaybe (error ("Expected storable type:" ++ show ret_ty))
-                                 (Crucible.toStorableType ret_mt))
+                  do let st = case Crucible.toStorableType ret_mt of
+                           Nothing ->
+                               let ret_ty' = Text.pack $ show ret_ty in
+                               panic "verifySimulate" [
+                                   "Expected storable type, found " <> ret_ty'
+                               ]
+                           Just st' -> st'
+                     v <- Crucible.packMemValue sym
+                            st
                             (Crucible.regType  retval)
                             (Crucible.regValue retval)
                      return (Just (ret_mt, v))
@@ -1569,9 +1575,15 @@ refineSimulate opts cc pfs mspec args assumes top_loc lemmas globals mdMap =
                   case ret_ty of
                     Nothing -> return Nothing
                     Just ret_mt ->
-                      do v <- Crucible.packMemValue sym
-                                (fromMaybe (error ("Expected storable type:" ++ show ret_ty))
-                                     (Crucible.toStorableType ret_mt))
+                      do let st = case Crucible.toStorableType ret_mt of
+                               Nothing ->
+                                   let ret_ty' = Text.pack $ show ret_ty in
+                                   panic "refineSimulate" [
+                                       "Expected storable type, found " <> ret_ty'
+                                   ]
+                               Just st' -> st'
+                         v <- Crucible.packMemValue sym
+                                st
                                 (Crucible.regType  retval)
                                 (Crucible.regValue retval)
                          return (Just (ret_mt, v))

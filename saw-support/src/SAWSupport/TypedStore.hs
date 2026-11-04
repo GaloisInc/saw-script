@@ -15,6 +15,7 @@ A store of arbitrary data, indexed by type.
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module SAWSupport.TypedStore
   ( TypedStore
@@ -51,6 +52,8 @@ import Data.Parameterized.Pair
 
 import Data.Parameterized.TraversableF
 
+import SAWSupport.Panic
+
 -- | Internal wrapper for t'TypeRep' that we provide an 'OrdF'
 --   instance for.
 newtype TypeRep' a = TypeRep' (TypeRep a)
@@ -63,7 +66,7 @@ instance OrdF TypeRep' where
       Nothing -> case compare (SomeTypeRep tr1) (SomeTypeRep tr2) of
         LT -> LTF
         GT -> GTF
-        EQ -> error "inconsistent TypeRep equality"
+        EQ -> panic "compareF" ["inconsistent TypeRep equality"]
 
 instance ShowF TypeRep'
 

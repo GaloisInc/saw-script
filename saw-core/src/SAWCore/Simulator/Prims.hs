@@ -74,6 +74,8 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
+import SAWSupport.PureFail
+
 import SAWCore.Panic (panic)
 import SAWCore.QualName (QualName)
 import SAWCore.Simulator.Value
@@ -1187,9 +1189,9 @@ expByNatOp bp =
          loop one . V.toList =<< toBits (bpUnpack bp) w
 
     -- This can't really be implemented, we should throw an unsupported exception
-    -- of some kind instead
-    -- XXX: don't panic please
-    VIntToNat _ | bpIsSymbolicEvaluator bp -> panic "expByNatOp" ["Got symbolic integer"]
+    -- of some kind instead. For now use pureFail...
+    VIntToNat _ | bpIsSymbolicEvaluator bp ->
+        pureFail "SAWCore.Simulator.Prims expByNatOp" "Got symbolic integer"
 
     VNat n ->
       do let loop acc [] = return acc

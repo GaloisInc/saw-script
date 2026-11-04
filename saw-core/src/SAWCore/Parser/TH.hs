@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 {- |
@@ -17,6 +18,7 @@ module SAWCore.Parser.TH
  , defineModuleFromFile
  ) where
 
+import Data.Text (Text)
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.IO as TLIO
 import Language.Haskell.TH
@@ -26,22 +28,35 @@ import Language.Haskell.TH.Syntax (qAddDependentFile)
 import System.Directory
 import qualified Language.Haskell.TH.Syntax as TH (lift)
 
+import SAWCore.Panic
 import qualified SAWCore.Parser.AST as Un
 import qualified SAWCore.Parser.Grammar as Un
 
 -- | Parse an untyped module declaration from a (lazy) Text
-readModule :: FilePath -> FilePath -> TL.Text -> Un.Module
+readModule :: FilePath -> FilePath -> TL.Text -> Either Text Un.Module
 readModule base path b =
   case Un.parseSAW base path b of
-    Right m -> m
-    Left err -> error $ "Module parsing failed:\n" ++ show err
+    Right m -> Right m
+    Left err -> Left $ Un.ppParseError err
 
 -- | Parse an untyped module from file
-readModuleFromFile :: FilePath -> IO Un.Module
+readModuleFromFile :: FilePath -> IO (Either Text Un.Module)
 readModuleFromFile path =
   do base <- getCurrentDirectory
      txt <- TLIO.readFile path
      return $ readModule base path txt
+
+-- | Parse an untyped module from file and panic if it fails
+readBuiltinModuleFromFile :: FilePath -> IO Un.Module
+readBuiltinModuleFromFile path = do
+  result <- readModuleFromFile path
+  case result of
+    Right m -> pure m
+    Left msg ->
+        panic "readBuiltinModuleFromFile" [
+            "Module parsing failed:",
+            msg
+        ]
 
 -- | Record @path@ as a dependency for this compilation.
 addDep :: FilePath -> Q ()
@@ -57,7 +72,7 @@ addDep path = pure ()
 defineModuleFromFile :: String -> FilePath -> Q [Dec]
 defineModuleFromFile decNameStr path =
   do addDep path
-     m <- runIO $ readModuleFromFile path
+     m <- runIO $ readBuiltinModuleFromFile path
      let decName = mkName decNameStr
      moduleTp <- [t| Un.Module |]
      body <- TH.lift m

@@ -38,6 +38,8 @@ import qualified SAWCore.Simulator.Concrete as Concrete
 import qualified SAWCore.Prim as Prim
 import qualified SAWCore.Recognizer as R
 
+import SAWCoreAIG.Panic
+
 import qualified Data.AIG as AIG
 
 type LitVector l = AIG.BV l
@@ -104,7 +106,7 @@ vBool l = VBool l
 
 toBool :: BValue l -> l
 toBool (VBool l) = l
-toBool x = error $ unwords ["SAWCoreAIG.BitBlast.toBool", show x]
+toBool x = panic "toBool" ["Expected bool, got " <> Text.pack (show x)]
 
 vWord :: LitVector l -> BValue l
 vWord lv = VWord lv
@@ -112,12 +114,12 @@ vWord lv = VWord lv
 toWord :: BValue l -> IO (LitVector l)
 toWord (VWord lv) = return lv
 toWord (VVector vv) = lvFromV <$> traverse (fmap toBool . force) vv
-toWord x = fail $ unwords ["SAWCoreAIG.BitBlast.toWord", show x]
+toWord x = panic "toWord" ["Expected word or vector, got " <> Text.pack (show x)]
 
 flattenBValue :: BValue l -> IO (LitVector l)
 flattenBValue (VBool l) = return (AIG.replicate 1 l)
 flattenBValue (VWord lv) = return lv
-flattenBValue (VExtra (BStream _ _)) = error "SAWCoreAIG.BitBlast.flattenBValue: BStream"
+flattenBValue (VExtra (BStream _ _)) = panic "flattenBValue" ["Encountered BStream"]
 flattenBValue (VVector vv) =
   AIG.concat <$> traverse (flattenBValue <=< force) (V.toList vv)
 flattenBValue (VCtorApp 0 _ []) = pure $ AIG.concat []
@@ -125,7 +127,8 @@ flattenBValue (VCtorApp 0 _ [x, y]) =
   do vx <- flattenBValue =<< force x
      vy <- flattenBValue =<< force y
      pure $ AIG.concat [vx, vy]
-flattenBValue _ = error $ unwords ["SAWCoreAIG.BitBlast.flattenBValue: unsupported value"]
+flattenBValue _ =
+    fail "SAWCoreAIG.BitBlast.flattenBValue: unsupported value"
 
 ------------------------------------------------------------
 
@@ -140,7 +143,7 @@ bvShiftOp bvOp natOp =
     case y of
       VNat n   -> return (vWord (natOp x n))
       VBVToNat _ v -> fmap vWord (bvOp x =<< toWord v)
-      _        -> error $ unwords ["SAWCoreAIG.BitBlast.shiftOp", show y]
+      _ -> panic "bvShiftOp" ["Expected Nat or BVToNat, got " <> Text.pack (show y)]
 
 lvSShr :: LitVector l -> Natural -> LitVector l
 lvSShr v i = lvShr (AIG.msb v) v i
