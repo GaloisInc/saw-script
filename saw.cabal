@@ -103,6 +103,7 @@ library saw-support
     SAWSupport.PanicSupport
     SAWSupport.Position
     SAWSupport.Pretty
+    SAWSupport.PureFail
     SAWSupport.ScopedMap
     SAWSupport.Trie
     SAWSupport.TypedStore
