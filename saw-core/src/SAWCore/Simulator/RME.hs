@@ -38,6 +38,8 @@ import Data.RME (RME)
 import qualified Data.RME as RME
 import qualified Data.RME.Vector as RMEV
 
+import SAWSupport.PureFail (pureFail)
+
 import SAWCore.Module (ModuleMap)
 import SAWCore.Name
 import SAWCore.Panic (panic)
@@ -332,7 +334,14 @@ muxInt :: RME -> Integer -> Integer -> Integer
 muxInt b x y =
   case RME.isBool b of
     Just c -> if c then x else y
-    Nothing -> if x == y then x else error $ "muxRValue: VInt " ++ show (x, y)
+    Nothing ->
+        if x == y then x
+        else
+            let x' = Text.pack $ show x
+                y' = Text.pack $ show y
+            in
+            pureFail "SAWCore.Simulator.RME muxInt" $
+                "got: VInt " <> x' <> " " <> y'
 
 muxExtra :: RME -> RExtra -> RExtra -> RExtra
 muxExtra b (AStream xs) (AStream ys) =

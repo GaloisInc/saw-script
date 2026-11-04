@@ -36,6 +36,8 @@ import LibBF (BFOpts, BigFloat, Status)
 import qualified LibBF as BF
 import Numeric.Natural (Natural)
 
+import SAWSupport.PureFail (pureFail)
+
 import SAWCore.FiniteValue (FirstOrderFloat(..))
 import SAWCore.FloatHelpers
 import SAWCore.Module (ModuleMap)
@@ -338,11 +340,15 @@ prims =
   , Prims.bpFpToInteger = pure2 $ \r x ->
       case floatToInteger (fpRoundMode r) (fofValue x) of
         Right i -> i
-        Left err -> error $ ppNotRationalError err
+        Left err ->
+            pureFail "SAWCore.Simulator.Concrete prims bpFpToInteger" $
+                Text.pack $ ppNotRationalError err
   , Prims.bpFpToRational = pure1 $ \x ->
       case floatToRational (fofValue x) of
         Right r -> (numerator r, denominator r)
-        Left err -> error $ ppNotRationalError err
+        Left err ->
+            pureFail "SAWCore.Simulator.Concrete prims bpFpToRational" $
+                Text.pack $ ppNotRationalError err
   , Prims.bpFpToSBV = pure3 $ \w r x ->
       bv (fromIntegral @Natural @Int w)
          (floatToSBV w (fpRoundMode r) (fofValue x))
