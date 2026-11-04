@@ -129,6 +129,8 @@ on:
 #       the mir-json build.
 #    SPHINX_CACHE_VERSION controls the cache of the Python virtual
 #       environment used by the documentation build.
+#    OPAM_CACHE_VERSION controls the cache of the opam (OCaml) install
+#       environment used by the Rocq test-build.
 #    SOLVER_CACHE_VERSION controls the cached version of the SAW
 #       solver cache used by the test suite.
 #
@@ -145,6 +147,7 @@ env:
   CABAL_CACHE_VERSION: 12
   CARGO_CACHE_VERSION: 1
   SPHINX_CACHE_VERSION: 0
+  OPAM_CACHE_VERSION: 0
   SOLVER_CACHE_VERSION: 1
 
   DISABLED_TESTS: "test0000 test_FNV_a1_rev test0010_jss_cnf_exp test0039_rust test_boilerplate test_external_abc"
@@ -1054,10 +1057,34 @@ jobs:
           chmod +x dist/bin/*
           echo $GITHUB_WORKSPACE/dist/bin >> $GITHUB_PATH
 
+        # Note: the logic that tells opam what to install is below,
+        # not in a separate file. Rather than hashing ci.yml (and thus
+        # incurring a new cache every time anything about the CI
+        # changes), we'll manually bump OPAM_CACHE_VERSION when we
+        # change the packages.
+        #
+        # Also note: things that are not pinned will not get updated
+        # or rebuilt until that's done, except randomly if the cache
+        # expires. If we want to instead always build the latest
+        # version, add a step that does "opam update" followed by
+        # either an overall "opam upgrade" or "opam upgrade" on
+        # specific packages.
+        #
+        # And note: we turn off the cache handling in setup-ocaml
+        # because it deliberately caches only part of the install,
+        # which isn't what we want, and letting it do that will
+        # conflict with caching everything.
+      - name: Cache opam environment
+        uses: actions/cache@v6
+        with:
+          path: _opam
+          key: ${{ env.OPAM_CACHE_VERSION }}-opam-${{ matrix.os }}
+
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: "4.14"
+          cache: false
 
       - name: Add Rocq upstream to opam
         run: opam repo add rocq-released https://rocq-prover.org/opam/released
