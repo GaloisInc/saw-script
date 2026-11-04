@@ -1,0 +1,104 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE CPP #-}
+<span class="lineno">    2 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    3 </span>{-# LANGUAGE TemplateHaskell #-}
+<span class="lineno">    4 </span>
+<span class="lineno">    5 </span>{- |
+<span class="lineno">    6 </span>Module      : SAWCore.Parser.TH
+<span class="lineno">    7 </span>Copyright   : Galois, Inc. 2025
+<span class="lineno">    8 </span>License     : BSD3
+<span class="lineno">    9 </span>Maintainer  : saw@galois.com
+<span class="lineno">   10 </span>Stability   : experimental
+<span class="lineno">   11 </span>Portability : non-portable (language extensions)
+<span class="lineno">   12 </span>-}
+<span class="lineno">   13 </span>
+<span class="lineno">   14 </span>module SAWCore.Parser.TH
+<span class="lineno">   15 </span> ( -- * Parser utilities.
+<span class="lineno">   16 </span>   readModuleFromFile
+<span class="lineno">   17 </span>   -- * Template haskell utilities.
+<span class="lineno">   18 </span> , defineModuleFromFile
+<span class="lineno">   19 </span> ) where
+<span class="lineno">   20 </span>
+<span class="lineno">   21 </span>import Data.Text (Text)
+<span class="lineno">   22 </span>import qualified Data.Text.Lazy as TL
+<span class="lineno">   23 </span>import qualified Data.Text.Lazy.IO as TLIO
+<span class="lineno">   24 </span>import Language.Haskell.TH
+<span class="lineno">   25 </span>#if MIN_VERSION_template_haskell(2,7,0)
+<span class="lineno">   26 </span>import Language.Haskell.TH.Syntax (qAddDependentFile)
+<span class="lineno">   27 </span>#endif
+<span class="lineno">   28 </span>import System.Directory
+<span class="lineno">   29 </span>import qualified Language.Haskell.TH.Syntax as TH (lift)
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>import SAWCore.Panic
+<span class="lineno">   32 </span>import qualified SAWCore.Parser.AST as Un
+<span class="lineno">   33 </span>import qualified SAWCore.Parser.Grammar as Un
+<span class="lineno">   34 </span>
+<span class="lineno">   35 </span>-- | Parse an untyped module declaration from a (lazy) Text
+<span class="lineno">   36 </span>readModule :: FilePath -&gt; FilePath -&gt; TL.Text -&gt; Either Text Un.Module
+<span class="lineno">   37 </span><span class="decl"><span class="istickedoff">readModule base path b =</span>
+<span class="lineno">   38 </span><span class="spaces">  </span><span class="istickedoff">case Un.parseSAW base path b of</span>
+<span class="lineno">   39 </span><span class="spaces">    </span><span class="istickedoff">Right m -&gt; Right m</span>
+<span class="lineno">   40 </span><span class="spaces">    </span><span class="istickedoff">Left err -&gt; Left $ Un.ppParseError err</span></span>
+<span class="lineno">   41 </span>
+<span class="lineno">   42 </span>-- | Parse an untyped module from file
+<span class="lineno">   43 </span>readModuleFromFile :: FilePath -&gt; IO (Either Text Un.Module)
+<span class="lineno">   44 </span><span class="decl"><span class="istickedoff">readModuleFromFile path =</span>
+<span class="lineno">   45 </span><span class="spaces">  </span><span class="istickedoff">do base &lt;- getCurrentDirectory</span>
+<span class="lineno">   46 </span><span class="spaces">     </span><span class="istickedoff">txt &lt;- TLIO.readFile path</span>
+<span class="lineno">   47 </span><span class="spaces">     </span><span class="istickedoff">return $ readModule base path txt</span></span>
+<span class="lineno">   48 </span>
+<span class="lineno">   49 </span>-- | Parse an untyped module from file and panic if it fails
+<span class="lineno">   50 </span>readBuiltinModuleFromFile :: FilePath -&gt; IO Un.Module
+<span class="lineno">   51 </span><span class="decl"><span class="nottickedoff">readBuiltinModuleFromFile path = do</span>
+<span class="lineno">   52 </span><span class="spaces">  </span><span class="nottickedoff">result &lt;- readModuleFromFile path</span>
+<span class="lineno">   53 </span><span class="spaces">  </span><span class="nottickedoff">case result of</span>
+<span class="lineno">   54 </span><span class="spaces">    </span><span class="nottickedoff">Right m -&gt; pure m</span>
+<span class="lineno">   55 </span><span class="spaces">    </span><span class="nottickedoff">Left msg -&gt;</span>
+<span class="lineno">   56 </span><span class="spaces">        </span><span class="nottickedoff">panic &quot;readModule&quot; [</span>
+<span class="lineno">   57 </span><span class="spaces">            </span><span class="nottickedoff">&quot;Module parsing failed:&quot;,</span>
+<span class="lineno">   58 </span><span class="spaces">            </span><span class="nottickedoff">msg</span>
+<span class="lineno">   59 </span><span class="spaces">        </span><span class="nottickedoff">]</span></span>
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>-- | Record @path@ as a dependency for this compilation.
+<span class="lineno">   62 </span>addDep :: FilePath -&gt; Q ()
+<span class="lineno">   63 </span>#if MIN_VERSION_template_haskell(2,7,0)
+<span class="lineno">   64 </span><span class="decl"><span class="nottickedoff">addDep path = qAddDependentFile path</span></span>
+<span class="lineno">   65 </span>#else
+<span class="lineno">   66 </span>addDep path = pure ()
+<span class="lineno">   67 </span>#endif
+<span class="lineno">   68 </span>
+<span class="lineno">   69 </span>-- | Read a SAWCore module from @file@ at compile time, and add a TH
+<span class="lineno">   70 </span>-- declaration of the name @str@ that is bound to that module (with
+<span class="lineno">   71 </span>-- Haskell type 'Un.Module') at runtime.
+<span class="lineno">   72 </span>defineModuleFromFile :: String -&gt; FilePath -&gt; Q [Dec]
+<span class="lineno">   73 </span><span class="decl"><span class="nottickedoff">defineModuleFromFile decNameStr path =</span>
+<span class="lineno">   74 </span><span class="spaces">  </span><span class="nottickedoff">do addDep path</span>
+<span class="lineno">   75 </span><span class="spaces">     </span><span class="nottickedoff">m &lt;- runIO $ readBuiltinModuleFromFile path</span>
+<span class="lineno">   76 </span><span class="spaces">     </span><span class="nottickedoff">let decName = mkName decNameStr</span>
+<span class="lineno">   77 </span><span class="spaces">     </span><span class="nottickedoff">moduleTp &lt;- [t| Un.Module |]</span>
+<span class="lineno">   78 </span><span class="spaces">     </span><span class="nottickedoff">body &lt;- TH.lift m</span>
+<span class="lineno">   79 </span><span class="spaces">     </span><span class="nottickedoff">pure [ SigD decName moduleTp</span>
+<span class="lineno">   80 </span><span class="spaces">          </span><span class="nottickedoff">, FunD decName [ Clause [] (NormalB body) [] ]</span>
+<span class="lineno">   81 </span><span class="spaces">          </span><span class="nottickedoff">]</span></span>
+
+</pre>
+</body>
+</html>
