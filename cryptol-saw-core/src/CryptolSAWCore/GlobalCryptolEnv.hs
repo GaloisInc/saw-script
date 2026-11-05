@@ -24,6 +24,7 @@ module CryptolSAWCore.GlobalCryptolEnv
   , CryptolSettings(..)
   , defaultCryptolSettings
   , getCryptolSettings
+  , putCryptolSettings
   , initEnv
   , CryptolEnv
   , useModEnvSupply
@@ -239,6 +240,9 @@ initEnv = CryptolEnv {
 
 getCryptolSettings :: CryptolEnv -> CryptolSettings
 getCryptolSettings env = ceSettings env
+
+putCryptolSettings :: CryptolEnv -> CryptolSettings -> CryptolEnv
+putCryptolSettings env cs = env { ceSettings = cs }
 
 isToplevel :: CryptolEnv -> Bool
 isToplevel (CryptolEnv (_ :| frames) _) = null frames
