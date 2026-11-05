@@ -1499,7 +1499,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1480 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">lenPred &lt;- goTy lenShp len1 len2</span></span>
 <span class="lineno"> 1481 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">liftIO $ W4.andPred sym refPred lenPred</span></span>
 <span class="lineno"> 1482 </span><span class="spaces">    </span><span class="istickedoff">goTy (FnPtrShape _ _ _) _fh1 _fh2 =</span>
-<span class="lineno"> 1483 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">error &quot;Function pointers not currently supported in overrides&quot;</span></span>
+<span class="lineno"> 1483 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">fail &quot;Function pointers not currently supported in overrides&quot;</span></span>
 <span class="lineno"> 1484 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1485 </span><span class="spaces">    </span><span class="istickedoff">goFldAssn :: Ctx.Assignment FieldShape ctx</span>
 <span class="lineno"> 1486 </span><span class="spaces">              </span><span class="istickedoff">-&gt; Ctx.Assignment (RegValue' Sym) ctx</span>

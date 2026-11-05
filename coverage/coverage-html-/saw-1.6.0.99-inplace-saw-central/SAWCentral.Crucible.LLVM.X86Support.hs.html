@@ -150,7 +150,7 @@ span.spaces    { background: white }
 <span class="lineno">  131 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  132 </span><span class="spaces">  </span><span class="istickedoff">symName s =</span>
 <span class="lineno">  133 </span><span class="spaces">    </span><span class="istickedoff">case userSymbol (&quot;macaw_&quot; ++ s) of</span>
-<span class="lineno">  134 </span><span class="spaces">      </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">error (&quot;Invalid symbol name &quot; ++ show s ++ &quot;: &quot; ++ show err)</span></span>
+<span class="lineno">  134 </span><span class="spaces">      </span><span class="istickedoff">Left err -&gt; <span class="nottickedoff">fail (&quot;Invalid symbol name &quot; ++ show s ++ &quot;: &quot; ++ show err)</span></span>
 <span class="lineno">  135 </span><span class="spaces">      </span><span class="istickedoff">Right a -&gt; return a</span></span>
 <span class="lineno">  136 </span>
 <span class="lineno">  137 </span>

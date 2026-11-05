@@ -1792,7 +1792,7 @@ span.spaces    { background: white }
 <span class="lineno"> 1773 </span><span class="spaces">           </span><span class="istickedoff">case retval of</span>
 <span class="lineno"> 1774 </span><span class="spaces">             </span><span class="istickedoff">Crucible.RegEntry ty val -&gt;</span>
 <span class="lineno"> 1775 </span><span class="spaces">               </span><span class="istickedoff">case decodeMIRVal col ret_mt (Crucible.AnyValue ty val) of</span>
-<span class="lineno"> 1776 </span><span class="spaces">                 </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">error $ &quot;FIXME: Unsupported return type: &quot; ++ show ret_ty</span></span>
+<span class="lineno"> 1776 </span><span class="spaces">                 </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">fail $ &quot;FIXME: Unsupported return type: &quot; ++ show ret_ty</span></span>
 <span class="lineno"> 1777 </span><span class="spaces">                 </span><span class="istickedoff">Just v -&gt; return (Just v)</span>
 <span class="lineno"> 1778 </span><span class="spaces">     </span><span class="istickedoff">return (retval', globals1)</span>
 <span class="lineno"> 1779 </span><span class="spaces"></span><span class="istickedoff"></span>
