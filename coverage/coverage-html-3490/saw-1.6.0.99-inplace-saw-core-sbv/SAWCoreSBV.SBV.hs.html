@@ -319,12 +319,12 @@ span.spaces    { background: white }
 <span class="lineno">  300 </span>
 <span class="lineno">  301 </span>toBool :: SValue -&gt; SBool
 <span class="lineno">  302 </span><span class="decl"><span class="nottickedoff">toBool (VBool b) = b</span>
-<span class="lineno">  303 </span><span class="spaces"></span><span class="nottickedoff">toBool sv = error $ unwords [&quot;toBool failed:&quot;, show sv]</span></span>
+<span class="lineno">  303 </span><span class="spaces"></span><span class="nottickedoff">toBool sv = panic &quot;toBool&quot; [&quot;Expected bool, got &quot; &lt;&gt; Text.pack (show sv)]</span></span>
 <span class="lineno">  304 </span>
 <span class="lineno">  305 </span>toWord :: SValue -&gt; IO SWord
 <span class="lineno">  306 </span><span class="decl"><span class="istickedoff">toWord (VWord w) = return w</span>
 <span class="lineno">  307 </span><span class="spaces"></span><span class="istickedoff">toWord (VVector vv) = <span class="nottickedoff">symFromBits &lt;$&gt; traverse (fmap toBool . force) vv</span></span>
-<span class="lineno">  308 </span><span class="spaces"></span><span class="istickedoff">toWord x = <span class="nottickedoff">fail $ unwords [&quot;SAWCoreSBV.SBV.toWord&quot;, show x]</span></span></span>
+<span class="lineno">  308 </span><span class="spaces"></span><span class="istickedoff">toWord x = <span class="nottickedoff">panic &quot;toWord&quot; [&quot;Expected word or vector, got &quot; &lt;&gt; Text.pack (show x)]</span></span></span>
 <span class="lineno">  309 </span>
 <span class="lineno">  310 </span>toMaybeWord :: SValue -&gt; IO (Maybe SWord)
 <span class="lineno">  311 </span><span class="decl"><span class="istickedoff">toMaybeWord (VWord w) = return (Just w)</span>
@@ -447,7 +447,7 @@ span.spaces    { background: white }
 <span class="lineno">  428 </span><span class="spaces">      </span><span class="istickedoff">VNat i | <span class="tickonlytrue">j &lt; toInteger (maxBound :: Int)</span> -&gt; return (vWord (natOp x (fromInteger j)))</span>
 <span class="lineno">  429 </span><span class="spaces">        </span><span class="istickedoff">where j = toInteger i `min` toInteger (intSizeOf x)</span>
 <span class="lineno">  430 </span><span class="spaces">      </span><span class="istickedoff">VBVToNat _ v -&gt; fmap (vWord . bvOp x) (toWord v)</span>
-<span class="lineno">  431 </span><span class="spaces">      </span><span class="istickedoff">_        -&gt; <span class="nottickedoff">error $ unwords [&quot;SAWCoreSBV.SBV.bvShiftOp&quot;, show y]</span></span></span>
+<span class="lineno">  431 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;bvShiftOp&quot; [&quot;Expected Nat or BVToNat, got &quot; &lt;&gt; Text.pack (show y)]</span></span></span>
 <span class="lineno">  432 </span>
 <span class="lineno">  433 </span>-- bvShl : (w : Nat) -&gt; Vec w Bool -&gt; Nat -&gt; Vec w Bool;
 <span class="lineno">  434 </span>bvShLOp :: SPrim
@@ -912,269 +912,279 @@ span.spaces    { background: white }
 <span class="lineno">  893 </span>
 <span class="lineno">  894 </span><span class="decl"><span class="istickedoff">getLabels ls d args</span>
 <span class="lineno">  895 </span><span class="spaces">  </span><span class="istickedoff">| <span class="tickonlytrue">length args == length xs</span> = Just (zip args xs)</span>
-<span class="lineno">  896 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> = <span class="nottickedoff">error $ unwords</span></span>
-<span class="lineno">  897 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">[ &quot;SBV SAT results do not match expected arguments &quot;</span></span>
-<span class="lineno">  898 </span><span class="spaces">                </span><span class="istickedoff"><span class="nottickedoff">, show (map vnName args), show xs]</span></span>
-<span class="lineno">  899 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  900 </span><span class="spaces">  </span><span class="istickedoff">where</span>
-<span class="lineno">  901 </span><span class="spaces">  </span><span class="istickedoff">xs = fmap getLabel ls</span>
-<span class="lineno">  902 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  903 </span><span class="spaces">  </span><span class="istickedoff">getLabel (BoolLabel s)    = FOVBit (cvToBool (d Map.! s))</span>
-<span class="lineno">  904 </span><span class="spaces">  </span><span class="istickedoff">getLabel (IntegerLabel s) = <span class="nottickedoff">FOVInt (cvToInteger (d Map.! s))</span></span>
-<span class="lineno">  905 </span><span class="spaces">  </span><span class="istickedoff">getLabel (RationalLabel sNumer sDenom) = <span class="nottickedoff">FOVRational (numer % denom)</span></span>
-<span class="lineno">  906 </span><span class="spaces">    </span><span class="istickedoff">where</span>
-<span class="lineno">  907 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">numer = cvToInteger (d Map.! sNumer)</span></span>
-<span class="lineno">  908 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">denom = cvToInteger (d Map.! sDenom)</span></span>
+<span class="lineno">  896 </span><span class="spaces">  </span><span class="istickedoff">| <span class="nottickedoff">otherwise</span> =</span>
+<span class="lineno">  897 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">let args' = map (\arg -&gt; &quot;   &quot; &lt;&gt; vnName arg) args</span></span>
+<span class="lineno">  898 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">xs' = map (\x -&gt; &quot;   &quot; &lt;&gt; Text.pack (show x)) xs</span></span>
+<span class="lineno">  899 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">nargs' = Text.pack (show $ length args')</span></span>
+<span class="lineno">  900 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">nxs' = Text.pack (show $ length xs')</span></span>
+<span class="lineno">  901 </span><span class="spaces"></span><span class="istickedoff"><span class="nottickedoff"></span></span>
+<span class="lineno">  902 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">line1 = &quot;SBV SAT results do not match expected arguments&quot;</span></span>
+<span class="lineno">  903 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">line2 = nargs' &lt;&gt; &quot; args:&quot;</span></span>
+<span class="lineno">  904 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">lines3 = args'</span></span>
+<span class="lineno">  905 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">line4 = nxs' &lt;&gt; &quot; results:&quot;</span></span>
+<span class="lineno">  906 </span><span class="spaces">            </span><span class="istickedoff"><span class="nottickedoff">lines5 = xs'</span></span>
+<span class="lineno">  907 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">in</span></span>
+<span class="lineno">  908 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">panic &quot;getLabels&quot; ([line1, line2] ++ lines3 ++ [line4] ++ lines5)</span></span>
 <span class="lineno">  909 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  910 </span><span class="spaces">  </span><span class="istickedoff">getLabel (FloatLabel s) = <span class="nottickedoff">FOVFloat $</span></span>
-<span class="lineno">  911 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">FirstOrderFloat</span></span>
-<span class="lineno">  912 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">{ fofExp = fromIntegral @Int @Natural $ SBV.fpExponentSize fp</span></span>
-<span class="lineno">  913 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, fofPrec = fromIntegral @Int @Natural $ SBV.fpSignificandSize fp</span></span>
-<span class="lineno">  914 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, fofValue = SBV.fpValue fp</span></span>
-<span class="lineno">  915 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">}</span></span>
-<span class="lineno">  916 </span><span class="spaces">    </span><span class="istickedoff">where <span class="nottickedoff">fp = cvToFP (d Map.! s)</span></span>
-<span class="lineno">  917 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  918 </span><span class="spaces">  </span><span class="istickedoff">getLabel (WordLabel s)    = FOVWord (cvKind cv) (cvToInteger cv)</span>
-<span class="lineno">  919 </span><span class="spaces">    </span><span class="istickedoff">where cv = d Map.! s</span>
-<span class="lineno">  920 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  921 </span><span class="spaces">  </span><span class="istickedoff">getLabel ZeroWidthWordLabel = <span class="nottickedoff">FOVWord 0 0</span></span>
-<span class="lineno">  922 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  923 </span><span class="spaces">  </span><span class="istickedoff">getLabel (VecLabel t ns) = fovVec t (map getLabel (V.toList ns))</span>
-<span class="lineno">  924 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  925 </span><span class="spaces">  </span><span class="istickedoff">getLabel (TupleLabel ns) = <span class="nottickedoff">FOVTuple $ map getLabel (V.toList ns)</span></span>
-<span class="lineno">  926 </span><span class="spaces">  </span><span class="istickedoff">getLabel (RecLabel ns) = <span class="nottickedoff">FOVRec $ fmap getLabel ns</span></span>
+<span class="lineno">  910 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  911 </span><span class="spaces">  </span><span class="istickedoff">xs = fmap getLabel ls</span>
+<span class="lineno">  912 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  913 </span><span class="spaces">  </span><span class="istickedoff">getLabel (BoolLabel s)    = FOVBit (cvToBool (d Map.! s))</span>
+<span class="lineno">  914 </span><span class="spaces">  </span><span class="istickedoff">getLabel (IntegerLabel s) = <span class="nottickedoff">FOVInt (cvToInteger (d Map.! s))</span></span>
+<span class="lineno">  915 </span><span class="spaces">  </span><span class="istickedoff">getLabel (RationalLabel sNumer sDenom) = <span class="nottickedoff">FOVRational (numer % denom)</span></span>
+<span class="lineno">  916 </span><span class="spaces">    </span><span class="istickedoff">where</span>
+<span class="lineno">  917 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">numer = cvToInteger (d Map.! sNumer)</span></span>
+<span class="lineno">  918 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">denom = cvToInteger (d Map.! sDenom)</span></span>
+<span class="lineno">  919 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  920 </span><span class="spaces">  </span><span class="istickedoff">getLabel (FloatLabel s) = <span class="nottickedoff">FOVFloat $</span></span>
+<span class="lineno">  921 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">FirstOrderFloat</span></span>
+<span class="lineno">  922 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">{ fofExp = fromIntegral @Int @Natural $ SBV.fpExponentSize fp</span></span>
+<span class="lineno">  923 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, fofPrec = fromIntegral @Int @Natural $ SBV.fpSignificandSize fp</span></span>
+<span class="lineno">  924 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">, fofValue = SBV.fpValue fp</span></span>
+<span class="lineno">  925 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">}</span></span>
+<span class="lineno">  926 </span><span class="spaces">    </span><span class="istickedoff">where <span class="nottickedoff">fp = cvToFP (d Map.! s)</span></span>
 <span class="lineno">  927 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  928 </span><span class="spaces">  </span><span class="istickedoff">cvKind cv =</span>
-<span class="lineno">  929 </span><span class="spaces">    </span><span class="istickedoff">case kindOf cv of</span>
-<span class="lineno">  930 </span><span class="spaces">      </span><span class="istickedoff">KBounded _ k -&gt; fromIntegral k</span>
-<span class="lineno">  931 </span><span class="spaces">      </span><span class="istickedoff">_                -&gt; <span class="nottickedoff">error &quot;cvKind&quot;</span></span>
+<span class="lineno">  928 </span><span class="spaces">  </span><span class="istickedoff">getLabel (WordLabel s)    = FOVWord (cvKind cv) (cvToInteger cv)</span>
+<span class="lineno">  929 </span><span class="spaces">    </span><span class="istickedoff">where cv = d Map.! s</span>
+<span class="lineno">  930 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  931 </span><span class="spaces">  </span><span class="istickedoff">getLabel ZeroWidthWordLabel = <span class="nottickedoff">FOVWord 0 0</span></span>
 <span class="lineno">  932 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  933 </span><span class="spaces">  </span><span class="istickedoff">cvToInteger cv =</span>
-<span class="lineno">  934 </span><span class="spaces">    </span><span class="istickedoff">case cvVal cv of</span>
-<span class="lineno">  935 </span><span class="spaces">      </span><span class="istickedoff">CInteger i -&gt; i</span>
-<span class="lineno">  936 </span><span class="spaces">      </span><span class="istickedoff">_               -&gt; <span class="nottickedoff">error &quot;cvToInteger&quot;</span></span>
+<span class="lineno">  933 </span><span class="spaces">  </span><span class="istickedoff">getLabel (VecLabel t ns) = fovVec t (map getLabel (V.toList ns))</span>
+<span class="lineno">  934 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  935 </span><span class="spaces">  </span><span class="istickedoff">getLabel (TupleLabel ns) = <span class="nottickedoff">FOVTuple $ map getLabel (V.toList ns)</span></span>
+<span class="lineno">  936 </span><span class="spaces">  </span><span class="istickedoff">getLabel (RecLabel ns) = <span class="nottickedoff">FOVRec $ fmap getLabel ns</span></span>
 <span class="lineno">  937 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno">  938 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">cvToFP cv =</span></span>
-<span class="lineno">  939 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">case cvVal cv of</span></span>
-<span class="lineno">  940 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">CFP fp -&gt; fp</span></span>
-<span class="lineno">  941 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; error &quot;cvToFP&quot;</span></span></span>
-<span class="lineno">  942 </span>
-<span class="lineno">  943 </span>
-<span class="lineno">  944 </span>------------------------------------------------------------
-<span class="lineno">  945 </span>-- Code Generation
-<span class="lineno">  946 </span>
-<span class="lineno">  947 </span>newCodeGenVars :: (Natural -&gt; Bool) -&gt; FirstOrderType -&gt; StateT Int IO (SBVCodeGen SValue)
-<span class="lineno">  948 </span><span class="decl"><span class="nottickedoff">newCodeGenVars _checkSz FOTBit = nextId &lt;&amp;&gt; \s -&gt; (vBool &lt;$&gt; svCgInput KBool s)</span>
-<span class="lineno">  949 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars _checkSz FOTInt = nextId &lt;&amp;&gt; \s -&gt; (vInteger &lt;$&gt; svCgInput KUnbounded s)</span>
-<span class="lineno">  950 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars _checkSz (FOTIntMod _) = nextId &lt;&amp;&gt; \s -&gt; (vInteger &lt;$&gt; svCgInput KUnbounded s)</span>
-<span class="lineno">  951 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars _checkSz FOTRational = do</span>
-<span class="lineno">  952 </span><span class="spaces">  </span><span class="nottickedoff">sNumer &lt;- nextId</span>
-<span class="lineno">  953 </span><span class="spaces">  </span><span class="nottickedoff">sDenom &lt;- nextId</span>
-<span class="lineno">  954 </span><span class="spaces">  </span><span class="nottickedoff">pure $ do</span>
-<span class="lineno">  955 </span><span class="spaces">    </span><span class="nottickedoff">numer &lt;- svCgInput KUnbounded sNumer</span>
-<span class="lineno">  956 </span><span class="spaces">    </span><span class="nottickedoff">-- TODO(#2433): Assert that the denominator is non-zero.</span>
-<span class="lineno">  957 </span><span class="spaces">    </span><span class="nottickedoff">denom &lt;- svCgInput KUnbounded sDenom</span>
-<span class="lineno">  958 </span><span class="spaces">    </span><span class="nottickedoff">pure $ VRational numer denom</span>
-<span class="lineno">  959 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars _checkSz (FOTFloat e p) = do</span>
-<span class="lineno">  960 </span><span class="spaces">  </span><span class="nottickedoff">s &lt;- nextId</span>
-<span class="lineno">  961 </span><span class="spaces">  </span><span class="nottickedoff">let e' = fromIntegral @Natural @Int e</span>
-<span class="lineno">  962 </span><span class="spaces">  </span><span class="nottickedoff">let p' = fromIntegral @Natural @Int p</span>
-<span class="lineno">  963 </span><span class="spaces">  </span><span class="nottickedoff">pure (vFloat &lt;$&gt; svCgInput (KFP e' p') s)</span>
-<span class="lineno">  964 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars checkSz (FOTVec n FOTBit)</span>
-<span class="lineno">  965 </span><span class="spaces">  </span><span class="nottickedoff">| n == 0    = nextId &lt;&amp;&gt; \_ -&gt; return (vWord (literalSWord 0 0))</span>
-<span class="lineno">  966 </span><span class="spaces">  </span><span class="nottickedoff">| checkSz n = nextId &lt;&amp;&gt; \s -&gt; vWord &lt;$&gt; cgInputSWord s (fromIntegral n)</span>
-<span class="lineno">  967 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = nextId &lt;&amp;&gt; \s -&gt; fail $ &quot;Invalid codegen bit width for input variable \'&quot; ++ s ++ &quot;\': &quot; ++ show n</span>
-<span class="lineno">  968 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars checkSz (FOTVec n (FOTVec m FOTBit))</span>
-<span class="lineno">  969 </span><span class="spaces">  </span><span class="nottickedoff">| m == 0    = nextId &lt;&amp;&gt; \_ -&gt; return (VVector $ V.fromList $ replicate (fromIntegral n) (ready $ vWord (literalSWord 0 0)))</span>
-<span class="lineno">  970 </span><span class="spaces">  </span><span class="nottickedoff">| checkSz m = do</span>
-<span class="lineno">  971 </span><span class="spaces">      </span><span class="nottickedoff">let k = KBounded False (fromIntegral m)</span>
-<span class="lineno">  972 </span><span class="spaces">      </span><span class="nottickedoff">vals &lt;- nextId &lt;&amp;&gt; \s -&gt; svCgInputArr k (fromIntegral n) s</span>
-<span class="lineno">  973 </span><span class="spaces">      </span><span class="nottickedoff">return (VVector . V.fromList . fmap (ready . vWord) &lt;$&gt; vals)</span>
-<span class="lineno">  974 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = nextId &lt;&amp;&gt; \s -&gt; fail $ &quot;Invalid codegen bit width for input variable array \'&quot; ++ s ++ &quot;\': &quot; ++ show n</span>
-<span class="lineno">  975 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars checkSz (FOTVec n tp) = do</span>
-<span class="lineno">  976 </span><span class="spaces">  </span><span class="nottickedoff">vals &lt;- V.replicateM (fromIntegral n) (newCodeGenVars checkSz tp)</span>
-<span class="lineno">  977 </span><span class="spaces">  </span><span class="nottickedoff">return (VVector &lt;$&gt; traverse (fmap ready) vals)</span>
-<span class="lineno">  978 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars _ (FOTArray{}) = fail &quot;FOTArray unimplemented for backend&quot;</span>
-<span class="lineno">  979 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars checkSz (FOTTuple ts) = do</span>
-<span class="lineno">  980 </span><span class="spaces">  </span><span class="nottickedoff">vals &lt;- traverse (newCodeGenVars checkSz) ts</span>
-<span class="lineno">  981 </span><span class="spaces">  </span><span class="nottickedoff">return (vTuple &lt;$&gt; traverse (fmap ready) vals)</span>
-<span class="lineno">  982 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars checkSz (FOTRec tm) = do</span>
-<span class="lineno">  983 </span><span class="spaces">  </span><span class="nottickedoff">vals &lt;- traverse (newCodeGenVars checkSz) tm</span>
-<span class="lineno">  984 </span><span class="spaces">  </span><span class="nottickedoff">return (vRecord &lt;$&gt; traverse (fmap ready) vals)</span></span>
-<span class="lineno">  985 </span>
-<span class="lineno">  986 </span>cgInputSWord :: String -&gt; Int -&gt; SBVCodeGen SWord
-<span class="lineno">  987 </span><span class="decl"><span class="nottickedoff">cgInputSWord s n = svCgInput (KBounded False n) s</span></span>
-<span class="lineno">  988 </span>
-<span class="lineno">  989 </span>argTypes :: SharedContext -&gt; Term -&gt; IO ([Term], Term)
-<span class="lineno">  990 </span><span class="decl"><span class="nottickedoff">argTypes sc t = do</span>
-<span class="lineno">  991 </span><span class="spaces">  </span><span class="nottickedoff">t' &lt;- scWhnf sc t</span>
-<span class="lineno">  992 </span><span class="spaces">  </span><span class="nottickedoff">case t' of</span>
-<span class="lineno">  993 </span><span class="spaces">    </span><span class="nottickedoff">(R.asPi -&gt; Just (_, t1, t2)) -&gt; do</span>
-<span class="lineno">  994 </span><span class="spaces">       </span><span class="nottickedoff">(ts,res) &lt;- argTypes sc t2</span>
-<span class="lineno">  995 </span><span class="spaces">       </span><span class="nottickedoff">return (t1:ts, res)</span>
-<span class="lineno">  996 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; return ([], t')</span></span>
-<span class="lineno">  997 </span>
-<span class="lineno">  998 </span>sbvCodeGen_definition ::
-<span class="lineno">  999 </span>  SharedContext -&gt;
-<span class="lineno"> 1000 </span>  Map QualName SPrim -&gt;
-<span class="lineno"> 1001 </span>  Set VarIndex -&gt;
-<span class="lineno"> 1002 </span>  Term -&gt;
-<span class="lineno"> 1003 </span>  (Natural -&gt; Bool) {- ^ Allowed word sizes -} -&gt;
-<span class="lineno"> 1004 </span>  IO (SBVCodeGen (), [FirstOrderType], FirstOrderType)
-<span class="lineno"> 1005 </span><span class="decl"><span class="nottickedoff">sbvCodeGen_definition sc addlPrims unintSet t checkSz = do</span>
-<span class="lineno"> 1006 </span><span class="spaces">  </span><span class="nottickedoff">ty &lt;- scTypeOf sc t</span>
-<span class="lineno"> 1007 </span><span class="spaces">  </span><span class="nottickedoff">(argTs,resTy) &lt;- argTypes sc ty</span>
-<span class="lineno"> 1008 </span><span class="spaces">  </span><span class="nottickedoff">shapes &lt;- traverse (asFirstOrderType sc) argTs</span>
-<span class="lineno"> 1009 </span><span class="spaces">  </span><span class="nottickedoff">resultShape &lt;- asFirstOrderType sc resTy</span>
-<span class="lineno"> 1010 </span><span class="spaces">  </span><span class="nottickedoff">bval &lt;- sbvSolveBasic sc addlPrims unintSet t</span>
-<span class="lineno"> 1011 </span><span class="spaces">  </span><span class="nottickedoff">vars &lt;- evalStateT (traverse (newCodeGenVars checkSz) shapes) 0</span>
-<span class="lineno"> 1012 </span><span class="spaces">  </span><span class="nottickedoff">let codegen = do</span>
-<span class="lineno"> 1013 </span><span class="spaces">        </span><span class="nottickedoff">args &lt;- traverse (fmap ready) vars</span>
-<span class="lineno"> 1014 </span><span class="spaces">        </span><span class="nottickedoff">bval' &lt;- liftIO (applyAll bval args)</span>
-<span class="lineno"> 1015 </span><span class="spaces">        </span><span class="nottickedoff">sbvSetResult checkSz resultShape bval'</span>
-<span class="lineno"> 1016 </span><span class="spaces">  </span><span class="nottickedoff">return (codegen, shapes, resultShape)</span></span>
-<span class="lineno"> 1017 </span>
-<span class="lineno"> 1018 </span>
-<span class="lineno"> 1019 </span>sbvSetResult :: (Natural -&gt; Bool)
-<span class="lineno"> 1020 </span>             -&gt; FirstOrderType
-<span class="lineno"> 1021 </span>             -&gt; SValue
-<span class="lineno"> 1022 </span>             -&gt; SBVCodeGen ()
-<span class="lineno"> 1023 </span><span class="decl"><span class="nottickedoff">sbvSetResult _checkSz FOTBit (VBool b) = do</span>
-<span class="lineno"> 1024 </span><span class="spaces">   </span><span class="nottickedoff">svCgReturn b</span>
-<span class="lineno"> 1025 </span><span class="spaces"></span><span class="nottickedoff">sbvSetResult checkSz (FOTVec n FOTBit) v</span>
-<span class="lineno"> 1026 </span><span class="spaces">   </span><span class="nottickedoff">| n == 0    = return ()</span>
-<span class="lineno"> 1027 </span><span class="spaces">   </span><span class="nottickedoff">| checkSz n = do</span>
-<span class="lineno"> 1028 </span><span class="spaces">      </span><span class="nottickedoff">w &lt;- liftIO $ toWord v</span>
-<span class="lineno"> 1029 </span><span class="spaces">      </span><span class="nottickedoff">svCgReturn w</span>
-<span class="lineno"> 1030 </span><span class="spaces">   </span><span class="nottickedoff">| otherwise =</span>
-<span class="lineno"> 1031 </span><span class="spaces">      </span><span class="nottickedoff">fail $ &quot;Invalid word size in result: &quot; ++ show n</span>
-<span class="lineno"> 1032 </span><span class="spaces"></span><span class="nottickedoff">sbvSetResult checkSz ft v = do</span>
-<span class="lineno"> 1033 </span><span class="spaces">   </span><span class="nottickedoff">void $ sbvSetOutput checkSz ft v 0</span></span>
-<span class="lineno"> 1034 </span>
-<span class="lineno"> 1035 </span>
-<span class="lineno"> 1036 </span>sbvSetOutput :: (Natural -&gt; Bool)
-<span class="lineno"> 1037 </span>             -&gt; FirstOrderType
-<span class="lineno"> 1038 </span>             -&gt; SValue
-<span class="lineno"> 1039 </span>             -&gt; Int
-<span class="lineno"> 1040 </span>             -&gt; SBVCodeGen Int
-<span class="lineno"> 1041 </span><span class="decl"><span class="nottickedoff">sbvSetOutput _checkSz FOTBit (VBool b) i = do</span>
-<span class="lineno"> 1042 </span><span class="spaces">   </span><span class="nottickedoff">svCgOutput (&quot;out_&quot;++show i) b</span>
-<span class="lineno"> 1043 </span><span class="spaces">   </span><span class="nottickedoff">return $! i+1</span>
-<span class="lineno"> 1044 </span><span class="spaces"></span><span class="nottickedoff">sbvSetOutput checkSz (FOTVec n FOTBit) v i</span>
-<span class="lineno"> 1045 </span><span class="spaces">   </span><span class="nottickedoff">| n == 0    = return i</span>
-<span class="lineno"> 1046 </span><span class="spaces">   </span><span class="nottickedoff">| checkSz n = do</span>
-<span class="lineno"> 1047 </span><span class="spaces">       </span><span class="nottickedoff">w &lt;- liftIO $ toWord v</span>
-<span class="lineno"> 1048 </span><span class="spaces">       </span><span class="nottickedoff">svCgOutput (&quot;out_&quot;++show i) w</span>
-<span class="lineno"> 1049 </span><span class="spaces">       </span><span class="nottickedoff">return $! i+1</span>
-<span class="lineno"> 1050 </span><span class="spaces">   </span><span class="nottickedoff">| otherwise =</span>
-<span class="lineno"> 1051 </span><span class="spaces">       </span><span class="nottickedoff">fail $ &quot;Invalid word size in output &quot; ++ show i ++ &quot;: &quot; ++ show n</span>
-<span class="lineno"> 1052 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1053 </span><span class="spaces"></span><span class="nottickedoff">sbvSetOutput checkSz (FOTVec n t) (VVector xv) i = do</span>
-<span class="lineno"> 1054 </span><span class="spaces">   </span><span class="nottickedoff">xs &lt;- liftIO $ traverse force $ V.toList xv</span>
-<span class="lineno"> 1055 </span><span class="spaces">   </span><span class="nottickedoff">unless (toInteger n == toInteger (length xs)) $</span>
-<span class="lineno"> 1056 </span><span class="spaces">     </span><span class="nottickedoff">fail &quot;sbvCodeGen: vector length mismatch when setting output values&quot;</span>
-<span class="lineno"> 1057 </span><span class="spaces">   </span><span class="nottickedoff">case asWordList xs of</span>
-<span class="lineno"> 1058 </span><span class="spaces">     </span><span class="nottickedoff">Just ws -&gt; do svCgOutputArr (&quot;out_&quot;++show i) ws</span>
-<span class="lineno"> 1059 </span><span class="spaces">                   </span><span class="nottickedoff">return $! i+1</span>
-<span class="lineno"> 1060 </span><span class="spaces">     </span><span class="nottickedoff">Nothing -&gt; foldM (\i' x -&gt; sbvSetOutput checkSz t x i') i xs</span>
-<span class="lineno"> 1061 </span><span class="spaces"></span><span class="nottickedoff">sbvSetOutput _checkSz (FOTTuple []) (VCtorApp 0 _ []) i =</span>
-<span class="lineno"> 1062 </span><span class="spaces">   </span><span class="nottickedoff">return i</span>
-<span class="lineno"> 1063 </span><span class="spaces"></span><span class="nottickedoff">sbvSetOutput checkSz (FOTTuple [t]) v i = sbvSetOutput checkSz t v i</span>
-<span class="lineno"> 1064 </span><span class="spaces"></span><span class="nottickedoff">sbvSetOutput checkSz (FOTTuple (t:ts)) (VCtorApp 0 _ [l, r]) i = do</span>
-<span class="lineno"> 1065 </span><span class="spaces">   </span><span class="nottickedoff">l' &lt;- liftIO $ force l</span>
-<span class="lineno"> 1066 </span><span class="spaces">   </span><span class="nottickedoff">r' &lt;- liftIO $ force r</span>
-<span class="lineno"> 1067 </span><span class="spaces">   </span><span class="nottickedoff">sbvSetOutput checkSz t l' i &gt;&gt;= sbvSetOutput checkSz (FOTTuple ts) r'</span>
-<span class="lineno"> 1068 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1069 </span><span class="spaces"></span><span class="nottickedoff">sbvSetOutput _checkSz (FOTRec fs) (VCtorApp 0 _ []) i | Map.null fs = pure i</span>
-<span class="lineno"> 1070 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1071 </span><span class="spaces"></span><span class="nottickedoff">sbvSetOutput checkSz (FOTRec fs) (VCtorApp 0 _ [x, rest]) i =</span>
-<span class="lineno"> 1072 </span><span class="spaces">  </span><span class="nottickedoff">do x' &lt;- liftIO $ force x</span>
-<span class="lineno"> 1073 </span><span class="spaces">     </span><span class="nottickedoff">rest' &lt;- liftIO $ force rest</span>
-<span class="lineno"> 1074 </span><span class="spaces">     </span><span class="nottickedoff">case Map.minView fs of</span>
-<span class="lineno"> 1075 </span><span class="spaces">       </span><span class="nottickedoff">Just (t, fs') -&gt;</span>
-<span class="lineno"> 1076 </span><span class="spaces">         </span><span class="nottickedoff">sbvSetOutput checkSz t x' i &gt;&gt;=</span>
-<span class="lineno"> 1077 </span><span class="spaces">         </span><span class="nottickedoff">sbvSetOutput checkSz (FOTRec fs') rest'</span>
-<span class="lineno"> 1078 </span><span class="spaces">       </span><span class="nottickedoff">Nothing -&gt; fail &quot;sbvCodeGen: type mismatch when setting record output value&quot;</span>
-<span class="lineno"> 1079 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1080 </span><span class="spaces"></span><span class="nottickedoff">sbvSetOutput _checkSz _ft _v _i = do</span>
-<span class="lineno"> 1081 </span><span class="spaces">   </span><span class="nottickedoff">fail &quot;sbvCode gen: type mismatch when setting output values&quot;</span></span>
-<span class="lineno"> 1082 </span>
-<span class="lineno"> 1083 </span>
-<span class="lineno"> 1084 </span>sbvCodeGen ::
-<span class="lineno"> 1085 </span>  SharedContext -&gt;
-<span class="lineno"> 1086 </span>  Map QualName SPrim -&gt;
-<span class="lineno"> 1087 </span>  Set VarIndex -&gt;
-<span class="lineno"> 1088 </span>  Maybe FilePath -&gt;
-<span class="lineno"> 1089 </span>  String -&gt; Term -&gt; IO ()
-<span class="lineno"> 1090 </span><span class="decl"><span class="nottickedoff">sbvCodeGen sc addlPrims unintSet path fname t = do</span>
-<span class="lineno"> 1091 </span><span class="spaces">  </span><span class="nottickedoff">-- The SBV C code generator expects only these word sizes</span>
-<span class="lineno"> 1092 </span><span class="spaces">  </span><span class="nottickedoff">let checkSz n = n `elem` [8,16,32,64]</span>
-<span class="lineno"> 1093 </span><span class="spaces"></span><span class="nottickedoff"></span>
-<span class="lineno"> 1094 </span><span class="spaces">  </span><span class="nottickedoff">(codegen,_,_) &lt;- sbvCodeGen_definition sc addlPrims unintSet t checkSz</span>
-<span class="lineno"> 1095 </span><span class="spaces">  </span><span class="nottickedoff">compileToC path fname codegen</span></span>
-<span class="lineno"> 1096 </span>
-<span class="lineno"> 1097 </span>generateSMTBenchmarkSat :: Symbolic SBool -&gt; IO FilePath
-<span class="lineno"> 1098 </span><span class="decl"><span class="istickedoff">generateSMTBenchmarkSat script =</span>
-<span class="lineno"> 1099 </span><span class="spaces"></span><span class="istickedoff">#if MIN_VERSION_sbv(10,0,0)</span>
-<span class="lineno"> 1100 </span><span class="spaces">  </span><span class="istickedoff">SBV.generateSMTBenchmarkSat script</span></span>
-<span class="lineno"> 1101 </span>#else
-<span class="lineno"> 1102 </span>  SBV.generateSMTBenchmark True script
-<span class="lineno"> 1103 </span>#endif
-<span class="lineno"> 1104 </span>
-<span class="lineno"> 1105 </span>version :: String
-<span class="lineno"> 1106 </span><span class="decl"><span class="istickedoff">version = VERSION</span></span>_sbv
-<span class="lineno"> 1107 </span>
-<span class="lineno"> 1108 </span>-- | Wrap an action such that, if any asynchronous exceptions are raised during execution,
-<span class="lineno"> 1109 </span>--   the action is cancelled by raising 'ExitFailure' repeatedly until it terminates.
-<span class="lineno"> 1110 </span>cancelToExit :: IO a -&gt; IO a
-<span class="lineno"> 1111 </span><span class="decl"><span class="istickedoff">cancelToExit f = mask $ \restore -&gt; do</span>
-<span class="lineno"> 1112 </span><span class="spaces">  </span><span class="istickedoff">act &lt;- async (restore $ f)</span>
-<span class="lineno"> 1113 </span><span class="spaces">  </span><span class="istickedoff">let kill_act = do</span>
-<span class="lineno"> 1114 </span><span class="spaces">        </span><span class="istickedoff">status &lt;- poll act</span>
-<span class="lineno"> 1115 </span><span class="spaces">        </span><span class="istickedoff">case status of</span>
-<span class="lineno"> 1116 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; do</span>
-<span class="lineno"> 1117 </span><span class="spaces">            </span><span class="istickedoff">-- This is only reached if this thread (not the action thread)</span>
-<span class="lineno"> 1118 </span><span class="spaces">            </span><span class="istickedoff">-- receives an asynchronous exception. The action thread is terminated</span>
-<span class="lineno"> 1119 </span><span class="spaces">            </span><span class="istickedoff">-- via 'ExitFailure', but the original exception is what is</span>
-<span class="lineno"> 1120 </span><span class="spaces">            </span><span class="istickedoff">-- re-thrown.</span>
-<span class="lineno"> 1121 </span><span class="spaces">            </span><span class="istickedoff">throwTo (asyncThreadId act) <span class="nottickedoff">(ExitFailure 1)</span></span>
-<span class="lineno"> 1122 </span><span class="spaces">            </span><span class="istickedoff">yield</span>
-<span class="lineno"> 1123 </span><span class="spaces">            </span><span class="istickedoff">kill_act</span>
-<span class="lineno"> 1124 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; return <span class="nottickedoff">()</span></span>
-<span class="lineno"> 1125 </span><span class="spaces">  </span><span class="istickedoff">-- If the action masks the AsyncCancelled exception, then</span>
-<span class="lineno"> 1126 </span><span class="spaces">  </span><span class="istickedoff">-- attempting to cancel it normally will just block instead.</span>
-<span class="lineno"> 1127 </span><span class="spaces">  </span><span class="istickedoff">-- We could use &quot;Control.Concurrent.Async.cancelWith&quot; with ExitFailure,</span>
-<span class="lineno"> 1128 </span><span class="spaces">  </span><span class="istickedoff">-- but it's possible that the inner action may decide this is non-fatal</span>
-<span class="lineno"> 1129 </span><span class="spaces">  </span><span class="istickedoff">-- and continue running.</span>
-<span class="lineno"> 1130 </span><span class="spaces">  </span><span class="istickedoff">-- Instead, kill_act repeatedly sends ExitFailure and only performs</span>
-<span class="lineno"> 1131 </span><span class="spaces">  </span><span class="istickedoff">-- normal thread cancellation (which is likely redundant) after the</span>
-<span class="lineno"> 1132 </span><span class="spaces">  </span><span class="istickedoff">-- thread has terminated.</span>
-<span class="lineno"> 1133 </span><span class="spaces"></span><span class="istickedoff"></span>
-<span class="lineno"> 1134 </span><span class="spaces">  </span><span class="istickedoff">let cleanup = kill_act &gt;&gt; uninterruptibleCancel act</span>
-<span class="lineno"> 1135 </span><span class="spaces">  </span><span class="istickedoff">-- There are three exit cases for waitCatch:</span>
-<span class="lineno"> 1136 </span><span class="spaces">  </span><span class="istickedoff">-- * normal exit: returns a Right result, the cleanup action</span>
-<span class="lineno"> 1137 </span><span class="spaces">  </span><span class="istickedoff">--     is essentially a no-op since the thread is already terminated</span>
-<span class="lineno"> 1138 </span><span class="spaces">  </span><span class="istickedoff">-- * exception thrown by act: the action itself threw an exception,</span>
-<span class="lineno"> 1139 </span><span class="spaces">  </span><span class="istickedoff">--     This returns a Left result, and the cleanup action is similarly</span>
-<span class="lineno"> 1140 </span><span class="spaces">  </span><span class="istickedoff">--     redundant since the thread has already terminated.</span>
-<span class="lineno"> 1141 </span><span class="spaces">  </span><span class="istickedoff">-- * asynchronous exception thrown to this thread:</span>
-<span class="lineno"> 1142 </span><span class="spaces">  </span><span class="istickedoff">--     waitCatch itself does not catch the exception. It</span>
-<span class="lineno"> 1143 </span><span class="spaces">  </span><span class="istickedoff">--     is caught by 'finally', which triggers the cleanup.</span>
-<span class="lineno"> 1144 </span><span class="spaces">  </span><span class="istickedoff">--     In this case, the thread is still running and is killed</span>
-<span class="lineno"> 1145 </span><span class="spaces">  </span><span class="istickedoff">--     explicitly by kill_act. After cleanup, the original exception</span>
-<span class="lineno"> 1146 </span><span class="spaces">  </span><span class="istickedoff">--     is rethrown.</span>
-<span class="lineno"> 1147 </span><span class="spaces">  </span><span class="istickedoff">res &lt;- (restore $ waitCatch act) `finally` cleanup</span>
-<span class="lineno"> 1148 </span><span class="spaces">  </span><span class="istickedoff">case res of</span>
-<span class="lineno"> 1149 </span><span class="spaces">    </span><span class="istickedoff">-- Here the exception is only something thrown by the action. In particular,</span>
-<span class="lineno"> 1150 </span><span class="spaces">    </span><span class="istickedoff">-- it will only be 'ExitFailure' if this was thrown during the action,</span>
-<span class="lineno"> 1151 </span><span class="spaces">    </span><span class="istickedoff">-- not as part of the cleanup.</span>
-<span class="lineno"> 1152 </span><span class="spaces">    </span><span class="istickedoff">Left e -&gt; throwIO e</span>
-<span class="lineno"> 1153 </span><span class="spaces">    </span><span class="istickedoff">Right a -&gt; return a</span></span>
-<span class="lineno"> 1154 </span>
-<span class="lineno"> 1155 </span>-- | Wrapper around 'SBV.satWith' that ensures asynchronous exceptions are
-<span class="lineno"> 1156 </span>--   not masked and will cause the solver process to terminate.
-<span class="lineno"> 1157 </span>satWith :: SMTConfig -&gt; Symbolic SVal -&gt; IO SatResult
-<span class="lineno"> 1158 </span><span class="decl"><span class="istickedoff">satWith conf script = cancelToExit $ SBV.satWith conf script</span></span>
+<span class="lineno">  938 </span><span class="spaces">  </span><span class="istickedoff">cvKind cv =</span>
+<span class="lineno">  939 </span><span class="spaces">    </span><span class="istickedoff">case kindOf cv of</span>
+<span class="lineno">  940 </span><span class="spaces">      </span><span class="istickedoff">KBounded _ k -&gt; fromIntegral k</span>
+<span class="lineno">  941 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;getLabels / cvKind&quot; [&quot;Not KBounded&quot;]</span></span>
+<span class="lineno">  942 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  943 </span><span class="spaces">  </span><span class="istickedoff">cvToInteger cv =</span>
+<span class="lineno">  944 </span><span class="spaces">    </span><span class="istickedoff">case cvVal cv of</span>
+<span class="lineno">  945 </span><span class="spaces">      </span><span class="istickedoff">CInteger i -&gt; i</span>
+<span class="lineno">  946 </span><span class="spaces">      </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">panic &quot;getLabels / cvToInteger&quot; [&quot;Not integer&quot;]</span></span>
+<span class="lineno">  947 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">  948 </span><span class="spaces">  </span><span class="istickedoff"><span class="nottickedoff">cvToFP cv =</span></span>
+<span class="lineno">  949 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">case cvVal cv of</span></span>
+<span class="lineno">  950 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">CFP fp -&gt; fp</span></span>
+<span class="lineno">  951 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">_ -&gt; panic &quot;getLabels/ cvToFP&quot; [&quot;Not CFP&quot;]</span></span></span>
+<span class="lineno">  952 </span>
+<span class="lineno">  953 </span>
+<span class="lineno">  954 </span>------------------------------------------------------------
+<span class="lineno">  955 </span>-- Code Generation
+<span class="lineno">  956 </span>
+<span class="lineno">  957 </span>newCodeGenVars :: (Natural -&gt; Bool) -&gt; FirstOrderType -&gt; StateT Int IO (SBVCodeGen SValue)
+<span class="lineno">  958 </span><span class="decl"><span class="nottickedoff">newCodeGenVars _checkSz FOTBit = nextId &lt;&amp;&gt; \s -&gt; (vBool &lt;$&gt; svCgInput KBool s)</span>
+<span class="lineno">  959 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars _checkSz FOTInt = nextId &lt;&amp;&gt; \s -&gt; (vInteger &lt;$&gt; svCgInput KUnbounded s)</span>
+<span class="lineno">  960 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars _checkSz (FOTIntMod _) = nextId &lt;&amp;&gt; \s -&gt; (vInteger &lt;$&gt; svCgInput KUnbounded s)</span>
+<span class="lineno">  961 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars _checkSz FOTRational = do</span>
+<span class="lineno">  962 </span><span class="spaces">  </span><span class="nottickedoff">sNumer &lt;- nextId</span>
+<span class="lineno">  963 </span><span class="spaces">  </span><span class="nottickedoff">sDenom &lt;- nextId</span>
+<span class="lineno">  964 </span><span class="spaces">  </span><span class="nottickedoff">pure $ do</span>
+<span class="lineno">  965 </span><span class="spaces">    </span><span class="nottickedoff">numer &lt;- svCgInput KUnbounded sNumer</span>
+<span class="lineno">  966 </span><span class="spaces">    </span><span class="nottickedoff">-- TODO(#2433): Assert that the denominator is non-zero.</span>
+<span class="lineno">  967 </span><span class="spaces">    </span><span class="nottickedoff">denom &lt;- svCgInput KUnbounded sDenom</span>
+<span class="lineno">  968 </span><span class="spaces">    </span><span class="nottickedoff">pure $ VRational numer denom</span>
+<span class="lineno">  969 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars _checkSz (FOTFloat e p) = do</span>
+<span class="lineno">  970 </span><span class="spaces">  </span><span class="nottickedoff">s &lt;- nextId</span>
+<span class="lineno">  971 </span><span class="spaces">  </span><span class="nottickedoff">let e' = fromIntegral @Natural @Int e</span>
+<span class="lineno">  972 </span><span class="spaces">  </span><span class="nottickedoff">let p' = fromIntegral @Natural @Int p</span>
+<span class="lineno">  973 </span><span class="spaces">  </span><span class="nottickedoff">pure (vFloat &lt;$&gt; svCgInput (KFP e' p') s)</span>
+<span class="lineno">  974 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars checkSz (FOTVec n FOTBit)</span>
+<span class="lineno">  975 </span><span class="spaces">  </span><span class="nottickedoff">| n == 0    = nextId &lt;&amp;&gt; \_ -&gt; return (vWord (literalSWord 0 0))</span>
+<span class="lineno">  976 </span><span class="spaces">  </span><span class="nottickedoff">| checkSz n = nextId &lt;&amp;&gt; \s -&gt; vWord &lt;$&gt; cgInputSWord s (fromIntegral n)</span>
+<span class="lineno">  977 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = nextId &lt;&amp;&gt; \s -&gt; fail $ &quot;Invalid codegen bit width for input variable \'&quot; ++ s ++ &quot;\': &quot; ++ show n</span>
+<span class="lineno">  978 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars checkSz (FOTVec n (FOTVec m FOTBit))</span>
+<span class="lineno">  979 </span><span class="spaces">  </span><span class="nottickedoff">| m == 0    = nextId &lt;&amp;&gt; \_ -&gt; return (VVector $ V.fromList $ replicate (fromIntegral n) (ready $ vWord (literalSWord 0 0)))</span>
+<span class="lineno">  980 </span><span class="spaces">  </span><span class="nottickedoff">| checkSz m = do</span>
+<span class="lineno">  981 </span><span class="spaces">      </span><span class="nottickedoff">let k = KBounded False (fromIntegral m)</span>
+<span class="lineno">  982 </span><span class="spaces">      </span><span class="nottickedoff">vals &lt;- nextId &lt;&amp;&gt; \s -&gt; svCgInputArr k (fromIntegral n) s</span>
+<span class="lineno">  983 </span><span class="spaces">      </span><span class="nottickedoff">return (VVector . V.fromList . fmap (ready . vWord) &lt;$&gt; vals)</span>
+<span class="lineno">  984 </span><span class="spaces">  </span><span class="nottickedoff">| otherwise = nextId &lt;&amp;&gt; \s -&gt; fail $ &quot;Invalid codegen bit width for input variable array \'&quot; ++ s ++ &quot;\': &quot; ++ show n</span>
+<span class="lineno">  985 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars checkSz (FOTVec n tp) = do</span>
+<span class="lineno">  986 </span><span class="spaces">  </span><span class="nottickedoff">vals &lt;- V.replicateM (fromIntegral n) (newCodeGenVars checkSz tp)</span>
+<span class="lineno">  987 </span><span class="spaces">  </span><span class="nottickedoff">return (VVector &lt;$&gt; traverse (fmap ready) vals)</span>
+<span class="lineno">  988 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars _ (FOTArray{}) = fail &quot;FOTArray unimplemented for backend&quot;</span>
+<span class="lineno">  989 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars checkSz (FOTTuple ts) = do</span>
+<span class="lineno">  990 </span><span class="spaces">  </span><span class="nottickedoff">vals &lt;- traverse (newCodeGenVars checkSz) ts</span>
+<span class="lineno">  991 </span><span class="spaces">  </span><span class="nottickedoff">return (vTuple &lt;$&gt; traverse (fmap ready) vals)</span>
+<span class="lineno">  992 </span><span class="spaces"></span><span class="nottickedoff">newCodeGenVars checkSz (FOTRec tm) = do</span>
+<span class="lineno">  993 </span><span class="spaces">  </span><span class="nottickedoff">vals &lt;- traverse (newCodeGenVars checkSz) tm</span>
+<span class="lineno">  994 </span><span class="spaces">  </span><span class="nottickedoff">return (vRecord &lt;$&gt; traverse (fmap ready) vals)</span></span>
+<span class="lineno">  995 </span>
+<span class="lineno">  996 </span>cgInputSWord :: String -&gt; Int -&gt; SBVCodeGen SWord
+<span class="lineno">  997 </span><span class="decl"><span class="nottickedoff">cgInputSWord s n = svCgInput (KBounded False n) s</span></span>
+<span class="lineno">  998 </span>
+<span class="lineno">  999 </span>argTypes :: SharedContext -&gt; Term -&gt; IO ([Term], Term)
+<span class="lineno"> 1000 </span><span class="decl"><span class="nottickedoff">argTypes sc t = do</span>
+<span class="lineno"> 1001 </span><span class="spaces">  </span><span class="nottickedoff">t' &lt;- scWhnf sc t</span>
+<span class="lineno"> 1002 </span><span class="spaces">  </span><span class="nottickedoff">case t' of</span>
+<span class="lineno"> 1003 </span><span class="spaces">    </span><span class="nottickedoff">(R.asPi -&gt; Just (_, t1, t2)) -&gt; do</span>
+<span class="lineno"> 1004 </span><span class="spaces">       </span><span class="nottickedoff">(ts,res) &lt;- argTypes sc t2</span>
+<span class="lineno"> 1005 </span><span class="spaces">       </span><span class="nottickedoff">return (t1:ts, res)</span>
+<span class="lineno"> 1006 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; return ([], t')</span></span>
+<span class="lineno"> 1007 </span>
+<span class="lineno"> 1008 </span>sbvCodeGen_definition ::
+<span class="lineno"> 1009 </span>  SharedContext -&gt;
+<span class="lineno"> 1010 </span>  Map QualName SPrim -&gt;
+<span class="lineno"> 1011 </span>  Set VarIndex -&gt;
+<span class="lineno"> 1012 </span>  Term -&gt;
+<span class="lineno"> 1013 </span>  (Natural -&gt; Bool) {- ^ Allowed word sizes -} -&gt;
+<span class="lineno"> 1014 </span>  IO (SBVCodeGen (), [FirstOrderType], FirstOrderType)
+<span class="lineno"> 1015 </span><span class="decl"><span class="nottickedoff">sbvCodeGen_definition sc addlPrims unintSet t checkSz = do</span>
+<span class="lineno"> 1016 </span><span class="spaces">  </span><span class="nottickedoff">ty &lt;- scTypeOf sc t</span>
+<span class="lineno"> 1017 </span><span class="spaces">  </span><span class="nottickedoff">(argTs,resTy) &lt;- argTypes sc ty</span>
+<span class="lineno"> 1018 </span><span class="spaces">  </span><span class="nottickedoff">shapes &lt;- traverse (asFirstOrderType sc) argTs</span>
+<span class="lineno"> 1019 </span><span class="spaces">  </span><span class="nottickedoff">resultShape &lt;- asFirstOrderType sc resTy</span>
+<span class="lineno"> 1020 </span><span class="spaces">  </span><span class="nottickedoff">bval &lt;- sbvSolveBasic sc addlPrims unintSet t</span>
+<span class="lineno"> 1021 </span><span class="spaces">  </span><span class="nottickedoff">vars &lt;- evalStateT (traverse (newCodeGenVars checkSz) shapes) 0</span>
+<span class="lineno"> 1022 </span><span class="spaces">  </span><span class="nottickedoff">let codegen = do</span>
+<span class="lineno"> 1023 </span><span class="spaces">        </span><span class="nottickedoff">args &lt;- traverse (fmap ready) vars</span>
+<span class="lineno"> 1024 </span><span class="spaces">        </span><span class="nottickedoff">bval' &lt;- liftIO (applyAll bval args)</span>
+<span class="lineno"> 1025 </span><span class="spaces">        </span><span class="nottickedoff">sbvSetResult checkSz resultShape bval'</span>
+<span class="lineno"> 1026 </span><span class="spaces">  </span><span class="nottickedoff">return (codegen, shapes, resultShape)</span></span>
+<span class="lineno"> 1027 </span>
+<span class="lineno"> 1028 </span>
+<span class="lineno"> 1029 </span>sbvSetResult :: (Natural -&gt; Bool)
+<span class="lineno"> 1030 </span>             -&gt; FirstOrderType
+<span class="lineno"> 1031 </span>             -&gt; SValue
+<span class="lineno"> 1032 </span>             -&gt; SBVCodeGen ()
+<span class="lineno"> 1033 </span><span class="decl"><span class="nottickedoff">sbvSetResult _checkSz FOTBit (VBool b) = do</span>
+<span class="lineno"> 1034 </span><span class="spaces">   </span><span class="nottickedoff">svCgReturn b</span>
+<span class="lineno"> 1035 </span><span class="spaces"></span><span class="nottickedoff">sbvSetResult checkSz (FOTVec n FOTBit) v</span>
+<span class="lineno"> 1036 </span><span class="spaces">   </span><span class="nottickedoff">| n == 0    = return ()</span>
+<span class="lineno"> 1037 </span><span class="spaces">   </span><span class="nottickedoff">| checkSz n = do</span>
+<span class="lineno"> 1038 </span><span class="spaces">      </span><span class="nottickedoff">w &lt;- liftIO $ toWord v</span>
+<span class="lineno"> 1039 </span><span class="spaces">      </span><span class="nottickedoff">svCgReturn w</span>
+<span class="lineno"> 1040 </span><span class="spaces">   </span><span class="nottickedoff">| otherwise =</span>
+<span class="lineno"> 1041 </span><span class="spaces">      </span><span class="nottickedoff">fail $ &quot;Invalid word size in result: &quot; ++ show n</span>
+<span class="lineno"> 1042 </span><span class="spaces"></span><span class="nottickedoff">sbvSetResult checkSz ft v = do</span>
+<span class="lineno"> 1043 </span><span class="spaces">   </span><span class="nottickedoff">void $ sbvSetOutput checkSz ft v 0</span></span>
+<span class="lineno"> 1044 </span>
+<span class="lineno"> 1045 </span>
+<span class="lineno"> 1046 </span>sbvSetOutput :: (Natural -&gt; Bool)
+<span class="lineno"> 1047 </span>             -&gt; FirstOrderType
+<span class="lineno"> 1048 </span>             -&gt; SValue
+<span class="lineno"> 1049 </span>             -&gt; Int
+<span class="lineno"> 1050 </span>             -&gt; SBVCodeGen Int
+<span class="lineno"> 1051 </span><span class="decl"><span class="nottickedoff">sbvSetOutput _checkSz FOTBit (VBool b) i = do</span>
+<span class="lineno"> 1052 </span><span class="spaces">   </span><span class="nottickedoff">svCgOutput (&quot;out_&quot;++show i) b</span>
+<span class="lineno"> 1053 </span><span class="spaces">   </span><span class="nottickedoff">return $! i+1</span>
+<span class="lineno"> 1054 </span><span class="spaces"></span><span class="nottickedoff">sbvSetOutput checkSz (FOTVec n FOTBit) v i</span>
+<span class="lineno"> 1055 </span><span class="spaces">   </span><span class="nottickedoff">| n == 0    = return i</span>
+<span class="lineno"> 1056 </span><span class="spaces">   </span><span class="nottickedoff">| checkSz n = do</span>
+<span class="lineno"> 1057 </span><span class="spaces">       </span><span class="nottickedoff">w &lt;- liftIO $ toWord v</span>
+<span class="lineno"> 1058 </span><span class="spaces">       </span><span class="nottickedoff">svCgOutput (&quot;out_&quot;++show i) w</span>
+<span class="lineno"> 1059 </span><span class="spaces">       </span><span class="nottickedoff">return $! i+1</span>
+<span class="lineno"> 1060 </span><span class="spaces">   </span><span class="nottickedoff">| otherwise =</span>
+<span class="lineno"> 1061 </span><span class="spaces">       </span><span class="nottickedoff">fail $ &quot;Invalid word size in output &quot; ++ show i ++ &quot;: &quot; ++ show n</span>
+<span class="lineno"> 1062 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1063 </span><span class="spaces"></span><span class="nottickedoff">sbvSetOutput checkSz (FOTVec n t) (VVector xv) i = do</span>
+<span class="lineno"> 1064 </span><span class="spaces">   </span><span class="nottickedoff">xs &lt;- liftIO $ traverse force $ V.toList xv</span>
+<span class="lineno"> 1065 </span><span class="spaces">   </span><span class="nottickedoff">unless (toInteger n == toInteger (length xs)) $</span>
+<span class="lineno"> 1066 </span><span class="spaces">     </span><span class="nottickedoff">fail &quot;sbvCodeGen: vector length mismatch when setting output values&quot;</span>
+<span class="lineno"> 1067 </span><span class="spaces">   </span><span class="nottickedoff">case asWordList xs of</span>
+<span class="lineno"> 1068 </span><span class="spaces">     </span><span class="nottickedoff">Just ws -&gt; do svCgOutputArr (&quot;out_&quot;++show i) ws</span>
+<span class="lineno"> 1069 </span><span class="spaces">                   </span><span class="nottickedoff">return $! i+1</span>
+<span class="lineno"> 1070 </span><span class="spaces">     </span><span class="nottickedoff">Nothing -&gt; foldM (\i' x -&gt; sbvSetOutput checkSz t x i') i xs</span>
+<span class="lineno"> 1071 </span><span class="spaces"></span><span class="nottickedoff">sbvSetOutput _checkSz (FOTTuple []) (VCtorApp 0 _ []) i =</span>
+<span class="lineno"> 1072 </span><span class="spaces">   </span><span class="nottickedoff">return i</span>
+<span class="lineno"> 1073 </span><span class="spaces"></span><span class="nottickedoff">sbvSetOutput checkSz (FOTTuple [t]) v i = sbvSetOutput checkSz t v i</span>
+<span class="lineno"> 1074 </span><span class="spaces"></span><span class="nottickedoff">sbvSetOutput checkSz (FOTTuple (t:ts)) (VCtorApp 0 _ [l, r]) i = do</span>
+<span class="lineno"> 1075 </span><span class="spaces">   </span><span class="nottickedoff">l' &lt;- liftIO $ force l</span>
+<span class="lineno"> 1076 </span><span class="spaces">   </span><span class="nottickedoff">r' &lt;- liftIO $ force r</span>
+<span class="lineno"> 1077 </span><span class="spaces">   </span><span class="nottickedoff">sbvSetOutput checkSz t l' i &gt;&gt;= sbvSetOutput checkSz (FOTTuple ts) r'</span>
+<span class="lineno"> 1078 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1079 </span><span class="spaces"></span><span class="nottickedoff">sbvSetOutput _checkSz (FOTRec fs) (VCtorApp 0 _ []) i | Map.null fs = pure i</span>
+<span class="lineno"> 1080 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1081 </span><span class="spaces"></span><span class="nottickedoff">sbvSetOutput checkSz (FOTRec fs) (VCtorApp 0 _ [x, rest]) i =</span>
+<span class="lineno"> 1082 </span><span class="spaces">  </span><span class="nottickedoff">do x' &lt;- liftIO $ force x</span>
+<span class="lineno"> 1083 </span><span class="spaces">     </span><span class="nottickedoff">rest' &lt;- liftIO $ force rest</span>
+<span class="lineno"> 1084 </span><span class="spaces">     </span><span class="nottickedoff">case Map.minView fs of</span>
+<span class="lineno"> 1085 </span><span class="spaces">       </span><span class="nottickedoff">Just (t, fs') -&gt;</span>
+<span class="lineno"> 1086 </span><span class="spaces">         </span><span class="nottickedoff">sbvSetOutput checkSz t x' i &gt;&gt;=</span>
+<span class="lineno"> 1087 </span><span class="spaces">         </span><span class="nottickedoff">sbvSetOutput checkSz (FOTRec fs') rest'</span>
+<span class="lineno"> 1088 </span><span class="spaces">       </span><span class="nottickedoff">Nothing -&gt; fail &quot;sbvCodeGen: type mismatch when setting record output value&quot;</span>
+<span class="lineno"> 1089 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1090 </span><span class="spaces"></span><span class="nottickedoff">sbvSetOutput _checkSz _ft _v _i = do</span>
+<span class="lineno"> 1091 </span><span class="spaces">   </span><span class="nottickedoff">fail &quot;sbvCode gen: type mismatch when setting output values&quot;</span></span>
+<span class="lineno"> 1092 </span>
+<span class="lineno"> 1093 </span>
+<span class="lineno"> 1094 </span>sbvCodeGen ::
+<span class="lineno"> 1095 </span>  SharedContext -&gt;
+<span class="lineno"> 1096 </span>  Map QualName SPrim -&gt;
+<span class="lineno"> 1097 </span>  Set VarIndex -&gt;
+<span class="lineno"> 1098 </span>  Maybe FilePath -&gt;
+<span class="lineno"> 1099 </span>  String -&gt; Term -&gt; IO ()
+<span class="lineno"> 1100 </span><span class="decl"><span class="nottickedoff">sbvCodeGen sc addlPrims unintSet path fname t = do</span>
+<span class="lineno"> 1101 </span><span class="spaces">  </span><span class="nottickedoff">-- The SBV C code generator expects only these word sizes</span>
+<span class="lineno"> 1102 </span><span class="spaces">  </span><span class="nottickedoff">let checkSz n = n `elem` [8,16,32,64]</span>
+<span class="lineno"> 1103 </span><span class="spaces"></span><span class="nottickedoff"></span>
+<span class="lineno"> 1104 </span><span class="spaces">  </span><span class="nottickedoff">(codegen,_,_) &lt;- sbvCodeGen_definition sc addlPrims unintSet t checkSz</span>
+<span class="lineno"> 1105 </span><span class="spaces">  </span><span class="nottickedoff">compileToC path fname codegen</span></span>
+<span class="lineno"> 1106 </span>
+<span class="lineno"> 1107 </span>generateSMTBenchmarkSat :: Symbolic SBool -&gt; IO FilePath
+<span class="lineno"> 1108 </span><span class="decl"><span class="istickedoff">generateSMTBenchmarkSat script =</span>
+<span class="lineno"> 1109 </span><span class="spaces"></span><span class="istickedoff">#if MIN_VERSION_sbv(10,0,0)</span>
+<span class="lineno"> 1110 </span><span class="spaces">  </span><span class="istickedoff">SBV.generateSMTBenchmarkSat script</span></span>
+<span class="lineno"> 1111 </span>#else
+<span class="lineno"> 1112 </span>  SBV.generateSMTBenchmark True script
+<span class="lineno"> 1113 </span>#endif
+<span class="lineno"> 1114 </span>
+<span class="lineno"> 1115 </span>version :: String
+<span class="lineno"> 1116 </span><span class="decl"><span class="istickedoff">version = VERSION</span></span>_sbv
+<span class="lineno"> 1117 </span>
+<span class="lineno"> 1118 </span>-- | Wrap an action such that, if any asynchronous exceptions are raised during execution,
+<span class="lineno"> 1119 </span>--   the action is cancelled by raising 'ExitFailure' repeatedly until it terminates.
+<span class="lineno"> 1120 </span>cancelToExit :: IO a -&gt; IO a
+<span class="lineno"> 1121 </span><span class="decl"><span class="istickedoff">cancelToExit f = mask $ \restore -&gt; do</span>
+<span class="lineno"> 1122 </span><span class="spaces">  </span><span class="istickedoff">act &lt;- async (restore $ f)</span>
+<span class="lineno"> 1123 </span><span class="spaces">  </span><span class="istickedoff">let kill_act = do</span>
+<span class="lineno"> 1124 </span><span class="spaces">        </span><span class="istickedoff">status &lt;- poll act</span>
+<span class="lineno"> 1125 </span><span class="spaces">        </span><span class="istickedoff">case status of</span>
+<span class="lineno"> 1126 </span><span class="spaces">          </span><span class="istickedoff">Nothing -&gt; do</span>
+<span class="lineno"> 1127 </span><span class="spaces">            </span><span class="istickedoff">-- This is only reached if this thread (not the action thread)</span>
+<span class="lineno"> 1128 </span><span class="spaces">            </span><span class="istickedoff">-- receives an asynchronous exception. The action thread is terminated</span>
+<span class="lineno"> 1129 </span><span class="spaces">            </span><span class="istickedoff">-- via 'ExitFailure', but the original exception is what is</span>
+<span class="lineno"> 1130 </span><span class="spaces">            </span><span class="istickedoff">-- re-thrown.</span>
+<span class="lineno"> 1131 </span><span class="spaces">            </span><span class="istickedoff">throwTo (asyncThreadId act) <span class="nottickedoff">(ExitFailure 1)</span></span>
+<span class="lineno"> 1132 </span><span class="spaces">            </span><span class="istickedoff">yield</span>
+<span class="lineno"> 1133 </span><span class="spaces">            </span><span class="istickedoff">kill_act</span>
+<span class="lineno"> 1134 </span><span class="spaces">          </span><span class="istickedoff">_ -&gt; return <span class="nottickedoff">()</span></span>
+<span class="lineno"> 1135 </span><span class="spaces">  </span><span class="istickedoff">-- If the action masks the AsyncCancelled exception, then</span>
+<span class="lineno"> 1136 </span><span class="spaces">  </span><span class="istickedoff">-- attempting to cancel it normally will just block instead.</span>
+<span class="lineno"> 1137 </span><span class="spaces">  </span><span class="istickedoff">-- We could use &quot;Control.Concurrent.Async.cancelWith&quot; with ExitFailure,</span>
+<span class="lineno"> 1138 </span><span class="spaces">  </span><span class="istickedoff">-- but it's possible that the inner action may decide this is non-fatal</span>
+<span class="lineno"> 1139 </span><span class="spaces">  </span><span class="istickedoff">-- and continue running.</span>
+<span class="lineno"> 1140 </span><span class="spaces">  </span><span class="istickedoff">-- Instead, kill_act repeatedly sends ExitFailure and only performs</span>
+<span class="lineno"> 1141 </span><span class="spaces">  </span><span class="istickedoff">-- normal thread cancellation (which is likely redundant) after the</span>
+<span class="lineno"> 1142 </span><span class="spaces">  </span><span class="istickedoff">-- thread has terminated.</span>
+<span class="lineno"> 1143 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno"> 1144 </span><span class="spaces">  </span><span class="istickedoff">let cleanup = kill_act &gt;&gt; uninterruptibleCancel act</span>
+<span class="lineno"> 1145 </span><span class="spaces">  </span><span class="istickedoff">-- There are three exit cases for waitCatch:</span>
+<span class="lineno"> 1146 </span><span class="spaces">  </span><span class="istickedoff">-- * normal exit: returns a Right result, the cleanup action</span>
+<span class="lineno"> 1147 </span><span class="spaces">  </span><span class="istickedoff">--     is essentially a no-op since the thread is already terminated</span>
+<span class="lineno"> 1148 </span><span class="spaces">  </span><span class="istickedoff">-- * exception thrown by act: the action itself threw an exception,</span>
+<span class="lineno"> 1149 </span><span class="spaces">  </span><span class="istickedoff">--     This returns a Left result, and the cleanup action is similarly</span>
+<span class="lineno"> 1150 </span><span class="spaces">  </span><span class="istickedoff">--     redundant since the thread has already terminated.</span>
+<span class="lineno"> 1151 </span><span class="spaces">  </span><span class="istickedoff">-- * asynchronous exception thrown to this thread:</span>
+<span class="lineno"> 1152 </span><span class="spaces">  </span><span class="istickedoff">--     waitCatch itself does not catch the exception. It</span>
+<span class="lineno"> 1153 </span><span class="spaces">  </span><span class="istickedoff">--     is caught by 'finally', which triggers the cleanup.</span>
+<span class="lineno"> 1154 </span><span class="spaces">  </span><span class="istickedoff">--     In this case, the thread is still running and is killed</span>
+<span class="lineno"> 1155 </span><span class="spaces">  </span><span class="istickedoff">--     explicitly by kill_act. After cleanup, the original exception</span>
+<span class="lineno"> 1156 </span><span class="spaces">  </span><span class="istickedoff">--     is rethrown.</span>
+<span class="lineno"> 1157 </span><span class="spaces">  </span><span class="istickedoff">res &lt;- (restore $ waitCatch act) `finally` cleanup</span>
+<span class="lineno"> 1158 </span><span class="spaces">  </span><span class="istickedoff">case res of</span>
+<span class="lineno"> 1159 </span><span class="spaces">    </span><span class="istickedoff">-- Here the exception is only something thrown by the action. In particular,</span>
+<span class="lineno"> 1160 </span><span class="spaces">    </span><span class="istickedoff">-- it will only be 'ExitFailure' if this was thrown during the action,</span>
+<span class="lineno"> 1161 </span><span class="spaces">    </span><span class="istickedoff">-- not as part of the cleanup.</span>
+<span class="lineno"> 1162 </span><span class="spaces">    </span><span class="istickedoff">Left e -&gt; throwIO e</span>
+<span class="lineno"> 1163 </span><span class="spaces">    </span><span class="istickedoff">Right a -&gt; return a</span></span>
+<span class="lineno"> 1164 </span>
+<span class="lineno"> 1165 </span>-- | Wrapper around 'SBV.satWith' that ensures asynchronous exceptions are
+<span class="lineno"> 1166 </span>--   not masked and will cause the solver process to terminate.
+<span class="lineno"> 1167 </span>satWith :: SMTConfig -&gt; Symbolic SVal -&gt; IO SatResult
+<span class="lineno"> 1168 </span><span class="decl"><span class="istickedoff">satWith conf script = cancelToExit $ SBV.satWith conf script</span></span>
 
 </pre>
 </body>
