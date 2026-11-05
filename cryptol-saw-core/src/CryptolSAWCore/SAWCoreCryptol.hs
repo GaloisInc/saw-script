@@ -77,7 +77,7 @@ import qualified SAWCore.Term.Pretty as SAW
 
 import qualified CryptolSAWCore.CryptolEnv as CrySAW
 import qualified CryptolSAWCore.Cryptol as CrySAW
-import           CryptolSAWCore.GlobalCryptolEnv (CryptolEnv)
+import           CryptolSAWCore.GlobalCryptolEnv (CryptolEnv, getCryptolSettings)
 import qualified CryptolSAWCore.Panic as Panic
 import           CryptolSAWCore.Pretty (pp)
 
@@ -266,11 +266,13 @@ doInferExprSchema nameEnv0 extraVars extraTySyns tvars pexpr = do
 inferSchemaExpr :: Term -> TT (Expr, C.Expr, C.Schema)
 inferSchemaExpr t = do
   sc <- asks ttSc
+  cryenv <- asks ttCryEnv
+  let settings = getCryptolSettings cryenv
   let (vars, t') = asLambdaList t
   ((tvars, pe),ttout) <- listen $ translateLambda vars t'
   extraVars <- liftIO $ CrySAW.eExtraVars sc
   extraTySyns <- liftIO $ CrySAW.eExtraTySyns sc
-  (res,_) <- liftIO $ CrySAW.runModuleM sc $ do
+  (res,_) <- liftIO $ CrySAW.runModuleM sc settings $ do
     doInferExprSchema (ttNamingEnv ttout) extraVars extraTySyns tvars pe
   case res of
     Left e -> errMsg (Text.unpack $ pp e)

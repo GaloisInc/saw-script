@@ -2042,7 +2042,9 @@ default_typed_term :: TypedTerm -> TopLevel TypedTerm
 default_typed_term tt = do
   sc <- getSharedContext
   cenv <- SV.getCryptolEnv
-  cfg <- CSC.meSolverConfig <$> (io $ CSC.eModuleEnv sc)
+  let settings = CSC.getCryptolSettings cenv
+  moduleEnv <- io $ CSC.eModuleEnv sc
+  let cfg = CSC.meSolverConfig moduleEnv settings
   opts <- getOptions
   io $ defaultTypedTerm opts sc cenv cfg tt
 
@@ -2301,7 +2303,8 @@ cryptol_load fileReader path = do
   ce <- SV.getCryptolEnv
   unless (CSC.isToplevel ce) $ do
       fail "cryptol_load is an import operation and is not permitted in nested blocks"
-  m <- io $ CSC.withFileReader sc fileReader $ CSC.loadExtCryptolModule sc path
+  let settings = CSC.getCryptolSettings ce
+  m <- io $ CSC.withFileReader sc fileReader $ CSC.loadExtCryptolModule sc settings path
   return m
 
 cryptol_extract :: CSC.ExtCryptolModule -> Text -> TopLevel TypedTerm

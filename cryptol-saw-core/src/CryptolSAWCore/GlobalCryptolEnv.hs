@@ -21,6 +21,9 @@ module CryptolSAWCore.GlobalCryptolEnv
   , sameHeight
   , pushScope
   , popScope
+  , CryptolSettings(..)
+  , defaultCryptolSettings
+  , getCryptolSettings
   , initEnv
   , CryptolEnv
   , useModEnvSupply
@@ -185,6 +188,17 @@ instance IsMetadata GlobalCryptolEnv where
                }
            }
 
+-- | A type for holding Cryptol-related user settings.
+data CryptolSettings = CryptolSettings {
+    csSolverTimeout :: Int
+}
+
+defaultCryptolSettings :: CryptolSettings
+defaultCryptolSettings = CryptolSettings {
+    -- Inherit Cryptol's default value
+    csSolverTimeout = TM.solverTimeout $ TM.defaultSolverConfig []
+}
+
 -- | A scope frame that captures which Cryptol names are accessible.
 --  `fNamingEnv` is the local naming environment, which can be extended
 --  ad-hoc with additional declarations. `fImports` is a list of all
@@ -200,41 +214,57 @@ data CryptolFrame =
 initFrame :: CryptolFrame
 initFrame = CryptolFrame mempty mempty
 
--- | A nonempty list of 'CryptolFrame's, where the first element is the
---   "bottom" frame that takes highest precedence when looking up
---   names. Each individual frame only contains values declared at
---   exactly that level. The full scope is computed by collecting
---   everything in this stack, via 'eExtraNaming' and 'eImports'.
-newtype CryptolEnv = CryptolEnv (NonEmpty CryptolFrame)
+-- | The transient Cryptol environment carried by the SAWScript
+--   interpreter.
+--
+--   It has two things in it: a naming context, and Cryptol-related
+--   settings.
+--
+--   The naming context is a nonempty list of 'CryptolFrame's, where
+--   the first element is the "bottom" frame that takes highest
+--   precedence when looking up names. Each individual frame only
+--   contains values declared at exactly that level. The full scope is
+--   computed by collecting everything in this stack, via
+--   'eExtraNaming' and 'eImports'.
+data CryptolEnv = CryptolEnv {
+     ceNaming :: NonEmpty CryptolFrame,
+     ceSettings :: CryptolSettings
+}
 
 initEnv :: CryptolEnv
-initEnv = CryptolEnv (initFrame :| [])
+initEnv = CryptolEnv {
+    ceNaming = (initFrame :| []),
+    ceSettings = defaultCryptolSettings
+}
+
+getCryptolSettings :: CryptolEnv -> CryptolSettings
+getCryptolSettings env = ceSettings env
 
 isToplevel :: CryptolEnv -> Bool
-isToplevel (CryptolEnv (_ :| frames)) = null frames
+isToplevel (CryptolEnv (_ :| frames) _) = null frames
 
 -- | Test if the scopes have the same number of frames pushed.
 sameHeight :: CryptolEnv -> CryptolEnv -> Bool
-sameHeight (CryptolEnv scope1) (CryptolEnv scope2) =
+sameHeight (CryptolEnv scope1 _) (CryptolEnv scope2 _) =
   NE.length scope1 == NE.length scope2
 
 mapCurFrame ::
   (CryptolFrame -> CryptolFrame) ->
   CryptolEnv ->
   CryptolEnv
-mapCurFrame f (CryptolEnv (frame :| frames)) =
-  CryptolEnv (f frame :| frames)
+mapCurFrame f (CryptolEnv (frame :| frames) settings) =
+  CryptolEnv (f frame :| frames) settings
 
 -- | Push a fresh frame onto the stack.
 pushScope :: CryptolEnv -> CryptolEnv
-pushScope (CryptolEnv frames) = CryptolEnv (initFrame <| frames)
+pushScope (CryptolEnv frames settings) = CryptolEnv (initFrame <| frames) settings
 
 -- | Pop the current frame from the stack, discarding its
 --   contents. Panics if this is the only frame.
 popScope :: CryptolEnv -> CryptolEnv
-popScope (CryptolEnv frames) = case snd (NE.uncons frames) of
+popScope (CryptolEnv frames settings) = case snd (NE.uncons frames) of
   Nothing -> panic "popScope" [ "Popping topmost scope"]
-  Just frames' -> CryptolEnv frames'
+  Just frames' -> CryptolEnv frames' settings
 
 -- | Map the naming environment of the frame currently in scope.
 mapNaming ::
@@ -368,8 +398,10 @@ eModuleEnv = getGlobal geModuleEnv
 defaultEvalOpts :: E.EvalOpts
 defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
 
-meSolverConfig :: ME.ModuleEnv -> TM.SolverConfig
-meSolverConfig env = TM.defaultSolverConfig (ME.meSearchPath env)
+meSolverConfig :: ME.ModuleEnv -> CryptolSettings -> TM.SolverConfig
+meSolverConfig env settings =
+    let basecfg = TM.defaultSolverConfig (ME.meSearchPath env) in
+    basecfg { TM.solverTimeout = csSolverTimeout settings }
 
 -- | Add an entry to the 'ME.meSearchPath' of the 'eModuleEnv'.
 addSearchPath :: SharedContext -> FilePath -> IO ()
@@ -383,8 +415,9 @@ addSearchPath sc fp = mapGlobal sc $ \genv ->
 -- action. Otherwise, the environment is left unchanged and a
 -- 'MM.ModuleError' is returned.
 runModuleM ::
- SharedContext -> MM.ModuleM a -> IO (Either MM.ModuleError a, [MM.ModuleWarning])
-runModuleM sc m = do
+ SharedContext -> CryptolSettings -> MM.ModuleM a ->
+ IO (Either MM.ModuleError a, [MM.ModuleWarning])
+runModuleM sc settings m = do
   fileReader <- scFileReader sc
   env <- eModuleEnv sc
   let minp solver = MM.ModuleInput {
@@ -395,7 +428,7 @@ runModuleM sc m = do
           MM.minpModuleEnv = env,
           MM.minpTCSolver = solver
       }
-  (res, ws) <- SMT.withSolver (return ()) (meSolverConfig env) $ \solver ->
+  (res, ws) <- SMT.withSolver (return ()) (meSolverConfig env settings) $ \solver ->
     MM.runModuleM (minp solver) m
   case res of
     Right (a, env') -> do
@@ -517,7 +550,7 @@ addInstance sc r =
 -- irregularities that can creep in when we reimplement Cryptol name
 -- resolution.
 eExtraNaming :: CryptolEnv -> MR.NamingEnv
-eExtraNaming (CryptolEnv (frame :| frames)) =
+eExtraNaming (CryptolEnv (frame :| frames) _settings) =
   foldr (\fr ne -> ne `MR.shadowing` (fNamingEnv fr)) (fNamingEnv frame) frames
 
 -- | The list of Cryptol modules which have been brought into the
@@ -528,7 +561,7 @@ eExtraNaming (CryptolEnv (frame :| frames)) =
 --   should only correspond to modules that are present in the module
 --   environment *and* have been translated into SAWCore.
 eImports :: CryptolEnv -> [ImportData]
-eImports (CryptolEnv frames) =
+eImports (CryptolEnv frames _settings) =
   concat $ map fImports $ NE.toList frames
 
 

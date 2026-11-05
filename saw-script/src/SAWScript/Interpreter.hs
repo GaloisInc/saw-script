@@ -3124,7 +3124,9 @@ print_value (VString s) = printOutLnTop Info (Text.unpack s)
 print_value (VTerm t) = do
   sc <- getSharedContext
   cenv <- getCryptolEnv
-  cfg <- CEnv.meSolverConfig <$> (io $ CEnv.eModuleEnv sc)
+  moduleEnv <- io $ CEnv.eModuleEnv sc
+  let settings = CEnv.getCryptolSettings cenv
+  let cfg = CEnv.meSolverConfig moduleEnv settings
   unless (closedTerm (ttTerm t)) $
     fail "term contains symbolic variables"
   sawopts <- getOptions

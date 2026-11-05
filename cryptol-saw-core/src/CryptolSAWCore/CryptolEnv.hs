@@ -210,7 +210,7 @@ initCryptolEnv sc = do
 #endif
 
   -- initialize the module environment stored in the context
-  (_,refTop) <- liftModuleM sc $ do
+  (_,refTop) <- liftModuleM sc defaultCryptolSettings $ do
     MM.modifyModuleEnv $ \env ->
       env { ME.meSearchPath = cryptolPaths ++
               (instDir </> "lib") : ME.meSearchPath env
@@ -785,11 +785,12 @@ prettyExtCryptolModule =
 --       command line.
 loadExtCryptolModule ::
   SharedContext ->
+  CryptolSettings ->
   FilePath ->
   IO ExtCryptolModule
-loadExtCryptolModule sc path =
+loadExtCryptolModule sc settings path =
   do
-  m <- loadAndTranslateModule sc (Left path)
+  m <- loadAndTranslateModule sc settings (Left path)
   cm <- mkCryptolModule sc m
   let doc = PP.vsep [
               "Public interface",
@@ -990,12 +991,13 @@ extractDefFromExtCryptolModule sc env_0 ecm name =
 --
 loadAndTranslateModule ::
   SharedContext             {- ^ Shared context for creating terms -} ->
+  CryptolSettings           {- ^ User settings -} ->
   Either FilePath P.ModName {- ^ Where to find the module -} ->
   IO T.Module
-loadAndTranslateModule sc src =
+loadAndTranslateModule sc settings src =
   do modEnv <- eModuleEnv sc
      cwd <- getCurrentDirectory
-     mtop <- liftModuleM sc $
+     mtop <- liftModuleM sc settings $
        case src of
          Left path ->
            -- Prepend the current directory to make sure it's on the
@@ -1106,11 +1108,12 @@ importCryptolModule ::
   IO CryptolEnv
 importCryptolModule sc env src as isSubmodule vis imps =
   do
+  let settings = getCryptolSettings env
   import' <-
     if not isSubmodule then
       -- importing full module (by path or name):
       do
-      mod' <- loadAndTranslateModule sc src
+      mod' <- loadAndTranslateModule sc settings src
       let modName = locatedUnknown (T.mName mod')
       return $ mkImportData C.ImportTop vis modName as imps
 
@@ -1266,8 +1269,19 @@ bindIntegerType sc (ident, n) =
 -- seems like it should be restricted to this file, or at least belong
 -- to cryptol-saw-core, and not be splattered all over everywhere.
 --
-meSolverConfig :: ME.ModuleEnv -> TM.SolverConfig
-meSolverConfig env = TM.defaultSolverConfig (ME.meSearchPath env)
+-- It is used in:
+--
+-- * default_typed_term in SAWCentral.Builtins
+-- * getDeclsCryptol in SAWScript.AutoMatch.getDeclsCryptol
+-- * print_value in SAWScript.Interpreter
+--
+-- XXX: there's also a second copy of this in GlobalCryptolEnv.hs,
+-- which seems like it should be tidied up.
+--
+meSolverConfig :: ME.ModuleEnv -> CryptolSettings -> TM.SolverConfig
+meSolverConfig env settings =
+    let basecfg = TM.defaultSolverConfig (ME.meSearchPath env) in
+    basecfg { TM.solverTimeout = csSolverTimeout settings }
 
 -- | Look up an identifier in the Cryptol environment and return its
 --   full name.
@@ -1287,7 +1301,8 @@ resolveIdentifier' sc env nameSpace nm =
   where
   doResolve pnm = do
     nameEnv <- getNamingEnv sc env
-    (res, _ws) <- runModuleM sc $
+    let settings = getCryptolSettings env
+    (res, _ws) <- runModuleM sc settings $
       MM.interactive (MB.rename interactiveName nameEnv
                             (MR.resolveNameUse nameSpace pnm))
     pure (either (const Nothing) Just res)
@@ -1345,7 +1360,8 @@ pExprToTypedTerm sc env pexpr = do
   extraVars <- eExtraVars sc
   extraTySyns <- eExtraTySyns sc
 
-  (expr, schema) <- liftModuleM sc $ do
+  let settings = getCryptolSettings env
+  (expr, schema) <- liftModuleM sc settings $ do
     -- Eliminate patterns:
     npe <- MM.interactive (MB.noPat pexpr)
 
@@ -1393,7 +1409,8 @@ parseDecls sc env input = do
   -- Parse
   (decls :: [P.Decl P.PName]) <- ioParseDecls input
 
-  tmodule <- liftModuleM sc $ do
+  let settings = getCryptolSettings env
+  tmodule <- liftModuleM sc settings $ do
 
     -- Eliminate patterns
     (npdecls :: [P.Decl P.PName]) <- MM.interactive (MB.noPat decls)
@@ -1450,7 +1467,8 @@ parseSchema sc env input = do
   -- Parse
   pschema <- ioParseSchema input
 
-  schema <- liftModuleM sc $ do
+  let settings = getCryptolSettings env
+  schema <- liftModuleM sc settings $ do
 
     -- Resolve names
     rschema <- MM.interactive
@@ -1521,9 +1539,9 @@ locatedUnknown x = P.Located P.emptyRange x
 --   computation.
 --
 -- XXX: misnamed, it's not a lift, it's a run.
-liftModuleM :: SharedContext -> MM.ModuleM a -> IO a
-liftModuleM sc m = do
-  (res, ws) <- runModuleM sc m
+liftModuleM :: SharedContext -> CryptolSettings -> MM.ModuleM a -> IO a
+liftModuleM sc settings m = do
+  (res, ws) <- runModuleM sc settings m
   moduleWarns ws
   case res of
     Left err -> errX' $ "Cryptol:" <+> CryPP.pretty err

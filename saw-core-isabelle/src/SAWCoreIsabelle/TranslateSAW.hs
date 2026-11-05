@@ -111,8 +111,9 @@ withCryptolModule mm f = case mm of
   Left _ -> fail $ "Cannot translate SAW internal cryptol module"
   Right fp -> do
     sc <- asks ttSc
+    cenv <- asks ttCryEnv
     cwd <- liftIO getCurrentDirectory
-    m <- liftIO $ SAW.liftModuleM sc $
+    m <- liftIO $ SAW.liftModuleM sc (SAW.getCryptolSettings cenv) $
             -- Prepend the current directory to make sure it's on the
             -- search path. See the comment on the corresponding code
             -- in CryptolSAWCore.CryptolEnv for further info.
