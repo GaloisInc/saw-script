@@ -373,8 +373,24 @@ class SAWConnection:
 
     def set_option(self,
                    option : SAWOption,
+                   value : bool | int,
+                   timeout : Optional[float] = None) -> Command:
+        """Set a SAW option."""
+        self.most_recent_result = SAWSetOption(self, option, value, timeout)
+        return self.most_recent_result
+
+    # type-safe wrapper
+    def set_bool_option(self,
+                   option : BoolSAWOption,
                    value : bool,
                    timeout : Optional[float] = None) -> Command:
         """Set a boolean-valued SAW option."""
-        self.most_recent_result = SAWSetOption(self, option, value, timeout)
-        return self.most_recent_result
+        return self.set_option(option, value, timeout)
+
+    # type-safe wrapper
+    def set_int_option(self,
+                   option : SAWOption,
+                   value : int,
+                   timeout : Optional[float] = None) -> Command:
+        """Set an integer-valued SAW option."""
+        return self.set_option(option, value, timeout)
