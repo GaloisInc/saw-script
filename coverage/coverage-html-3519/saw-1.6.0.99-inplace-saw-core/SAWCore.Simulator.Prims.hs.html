@@ -1209,8 +1209,8 @@ span.spaces    { background: white }
 <span class="lineno"> 1190 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1191 </span><span class="spaces">    </span><span class="istickedoff">-- This can't really be implemented, we should throw an unsupported exception</span>
 <span class="lineno"> 1192 </span><span class="spaces">    </span><span class="istickedoff">-- of some kind instead. For now use pureFail...</span>
-<span class="lineno"> 1193 </span><span class="spaces">    </span><span class="istickedoff">VIntToNat _ | <span class="nottickedoff">bpIsSymbolicEvaluator bp</span> -&gt;</span>
-<span class="lineno"> 1194 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">pureFail &quot;SAWCore.Simulator.Prims expByNatOp&quot; &quot;Got symbolic integer&quot;</span></span>
+<span class="lineno"> 1193 </span><span class="spaces">    </span><span class="istickedoff">VIntToNat _ | <span class="tickonlytrue">bpIsSymbolicEvaluator bp</span> -&gt;</span>
+<span class="lineno"> 1194 </span><span class="spaces">        </span><span class="istickedoff">pureFail &quot;SAWCore.Simulator.Prims expByNatOp&quot; &quot;Got symbolic integer&quot;</span>
 <span class="lineno"> 1195 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno"> 1196 </span><span class="spaces">    </span><span class="istickedoff">VNat n -&gt;</span>
 <span class="lineno"> 1197 </span><span class="spaces">      </span><span class="istickedoff">do let loop acc [] = return acc</span>
