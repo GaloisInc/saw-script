@@ -562,17 +562,6 @@ jobs:
         # case it needs to vary; currently it doesn't.
 
         include:
-            # Default OS, older GHC
-          - os: ubuntu-24.04
-            ghc: "9.4.8"
-            cabal: "3.14.1.0"
-            haddock: true
-            run-integration-tests: false
-            run-other-tests: false
-            allow-test-failures: false
-            hpc: false
-            label: "Build"
-
             # Default OS, default GHC
             # Run the other tests as well as the integration tests.
           - os: ubuntu-24.04
@@ -591,6 +580,30 @@ jobs:
             cabal: "3.14.1.0"
             haddock: true
             run-integration-tests: false
+            run-other-tests: false
+            allow-test-failures: false
+            hpc: false
+            label: "Build"
+
+            # Default OS, newer-newer GHC
+            # Specifically don't run the test suite, as it doesn't
+            # work on 9.10.
+          - os: ubuntu-24.04
+            ghc: "9.10.3"
+            cabal: "3.14.1.0"
+            haddock: true
+            run-integration-tests: false
+            run-other-tests: false
+            allow-test-failures: false
+            hpc: false
+            label: "Build"
+
+            # Default OS, newer-newer-newer GHC
+          - os: ubuntu-24.04
+            ghc: "9.12.4"
+            cabal: "3.14.1.0"
+            haddock: true
+            run-integration-tests: true
             run-other-tests: false
             allow-test-failures: false
             hpc: false

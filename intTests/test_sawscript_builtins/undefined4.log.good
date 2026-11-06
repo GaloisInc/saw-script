@@ -4,5 +4,4 @@ Stack trace:
    (builtin) in f
    undefined4.saw:5:9-5:13 (at top level)
 undefined4.saw:3:12-3:21: Error: evaluated "undefined"
-
 FAILED

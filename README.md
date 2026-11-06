@@ -93,9 +93,12 @@ To build SAW and related utilities from source:
   * Ensure that you have the `cabal` and `ghc` executables in your
     `PATH`. If you don't already have them, we recommend using `ghcup`
     to install them: <https://www.haskell.org/ghcup/>. We recommend
-    Cabal 3.10 or newer, and GHC 9.4, 9.6, or 9.8.
+    Cabal 3.14 or newer, and GHC 9.6, 9.8, or 9.12.
     You may need to install additional system packages for this as well,
     most likely `gmp` and `perl`.
+    (Note: GHC 9.10 is generally expected to work; however, there's an
+    issue apparently in the stdlib that causes extra blank lines to
+    appear in SAW's output, which interferes with the test suite.)
 
   * Ensure that you have Z3 installed (as described above) and that
     the `z3` binary is on your `PATH`.

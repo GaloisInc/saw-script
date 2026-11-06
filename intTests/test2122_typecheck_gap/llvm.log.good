@@ -13,5 +13,4 @@ Abort due to assertion failure:
 Base memory
   Allocations:
     GlobalAlloc 1 0x0:[64] Immutable 1-byte-aligned [defined function ] f
-
 FAILED

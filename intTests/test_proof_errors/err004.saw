@@ -1,0 +1,5 @@
+// Visit "Got symbolic integer" in the SAWCore simulator's primitives,
+// where exponentiating by a symbolic integer isn't supported.
+
+let {{ f (x : [32]) (e: Integer) = x ^^ e }};
+prove_print z3 {{ \x e -> f x e == f x e }};

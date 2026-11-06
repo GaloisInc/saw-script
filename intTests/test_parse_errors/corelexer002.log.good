@@ -4,5 +4,4 @@ Stack trace:
    corelexer002.saw:2:1-2:46 (at top level)
 Module parsing failed:
 corelexer002.sawcore:1:0: Parse error: Unclosed comment
-
 FAILED

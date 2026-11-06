@@ -4,5 +4,4 @@ Stack trace:
    corelexer001.saw:2:1-2:46 (at top level)
 Module parsing failed:
 corelexer001.sawcore:1:46: Unexpected end of file
-
 FAILED

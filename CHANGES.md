@@ -57,6 +57,16 @@ This release supports [version
 
 * Support for CVC4 has been removed. Use CVC5.
 
+## Other Changes
+
+* Support for GHC 9.12 and (partially) 9.10 has been added.
+  Support for GHC 9.4 has been dropped.
+  Note that there is a problem apparently in GHC 9.10's stdlib that
+  causes extra blank lines to appear in SAW's output, which interferes
+  with the test suite.
+  Thus, while 9.10 is expected to work, it is not routinely tested and
+  9.12 is recommended instead.
+
 # 1.6 -- 2026-09-17
 
 This release supports [version
