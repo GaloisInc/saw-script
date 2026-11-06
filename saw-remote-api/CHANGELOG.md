@@ -2,6 +2,10 @@
 
 ## next
 
+* Add a new `Cryptol typechecker timeout` option that allows adjusting
+  the solver timeout used by Cryptol's typechecker.
+  Measured in seconds; the default is 5.
+
 * Add a `SAW/MIR/find name` command, which allows looking up instantiations of
   generic MIR functions.
 

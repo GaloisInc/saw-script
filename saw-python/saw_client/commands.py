@@ -417,8 +417,22 @@ class SAWResetServer(argo.Notification):
 
 class SAWSetOption(SAWCommand):
     def __init__(self, connection : argo.HasProtocolState,
-                 option : SAWOption, value : bool,
+                 option : SAWOption, value : bool | int,
                  timeout : Optional[float]) -> None:
+        # Check that the value type matches the option.
+        #
+        # Unfortunately, isinstance(True, int) gives True, so we need
+        # to be more specific.
+        value_is_bool = isinstance(value, bool)
+        value_is_int = isinstance(value, int) and not value_is_bool
+
+        if isinstance(option, BoolSAWOption) and value_is_bool:
+            pass
+        elif isinstance(option, IntSAWOption) and value_is_int:
+            pass
+        else:
+            raise ValueError(f'{value!r} is not a valid value for the {option} setting')
+
         params = {'option': str(option),
                   'value': value}
         super(SAWSetOption, self).__init__('SAW/set option', params, connection, timeout=timeout)

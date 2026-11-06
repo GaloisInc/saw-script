@@ -850,11 +850,28 @@ def eval_bool(expr: cryptoltypes.CryptolJSON) -> bool:
         raise ValueError(str(v) + " is not a boolean")
     return v
 
-def set_option(option : option.SAWOption, value : bool) -> None:
-    """Set a boolean-valued SAW option."""
+def set_option(option : option.SAWOption, value : bool | int) -> None:
+    """Set a SAW option.
+       This will accept any option of any type. For static checking of the
+       value against the option type, you can use `set_bool_option` or
+       `set_int_option`.
+    """
     global __designated_connection
     if __designated_connection is not None:
         __designated_connection.set_option(option=option,value=value)
+
+# Type-safe wrapper for set_option
+def set_bool_option(option : option.BoolSAWOption, value : bool) -> None:
+    """Set a boolean-valued SAW option."""
+    return set_option(option, value)
+
+# Type-safe(r) wrapper for set_option
+#
+# Unfortunately, both python and mypy think True and False are perfectly
+# fine values of int, so this is not as safe as one might like.
+def set_int_option(option : option.IntSAWOption, value : int) -> None:
+    """Set an integer-valued SAW option."""
+    return set_option(option, value)
 
 @atexit.register
 def script_exit() -> None:
