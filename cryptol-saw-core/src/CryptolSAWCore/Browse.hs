@@ -22,7 +22,7 @@ module CryptolSAWCore.Browse
   ( ME.ModuleEnv
   , ME.ModContext
   , BrowseError(..)
-  , browseErrorText
+  , ppBrowseError
   , loadedModuleNames
   , allModuleContexts
   , moduleContext
@@ -61,8 +61,8 @@ data BrowseError
   | SubmoduleAmbiguous Text [Text]
       -- ^ with the fully qualified names of the candidates
 
-browseErrorText :: BrowseError -> Text
-browseErrorText err =
+ppBrowseError :: BrowseError -> Text
+ppBrowseError err =
   case err of
     ModuleNotLoaded nm    -> "Module `" <> nm <> "' is not loaded."
     SubmoduleNotLoaded nm -> "Submodule `" <> nm <> "' is not loaded."

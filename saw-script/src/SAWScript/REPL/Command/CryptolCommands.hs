@@ -71,7 +71,7 @@ cbrowseCmd args =
   browseWith find modName = do
     modEnv <- getModEnv
     case find modEnv modName of
-      Left err          -> say (Browse.browseErrorText err)
+      Left err          -> say (Browse.ppBrowseError err)
       Right (name, ctx) -> showCtx name ctx
 
   say = liftIO . TextIO.putStrLn
