@@ -1,0 +1,119 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    2 </span>
+<span class="lineno">    3 </span>{- |
+<span class="lineno">    4 </span>Module      : SAWScript.REPL.Command.CryptolCommands
+<span class="lineno">    5 </span>Description :
+<span class="lineno">    6 </span>License     : BSD3
+<span class="lineno">    7 </span>Maintainer  : saw@galois.com
+<span class="lineno">    8 </span>Stability   : provisional
+<span class="lineno">    9 </span>
+<span class="lineno">   10 </span>REPL :-commands for working with Cryptol modules.
+<span class="lineno">   11 </span>
+<span class="lineno">   12 </span>  NOTE on structure:
+<span class="lineno">   13 </span>    This follows the existing Command/*.hs pattern:
+<span class="lineno">   14 </span>      - little is put in ../Command.hs
+<span class="lineno">   15 </span>      - here we do argument parsing, IO, and the output formatting.
+<span class="lineno">   16 </span>      - we call external worker functions as needed.
+<span class="lineno">   17 </span>-}
+<span class="lineno">   18 </span>
+<span class="lineno">   19 </span>module SAWScript.REPL.Command.CryptolCommands
+<span class="lineno">   20 </span>  (
+<span class="lineno">   21 </span>    cbrowseCmd, cbrowseCmdHelp
+<span class="lineno">   22 </span>  )
+<span class="lineno">   23 </span>where
+<span class="lineno">   24 </span>
+<span class="lineno">   25 </span>import Control.Monad.IO.Class (liftIO)
+<span class="lineno">   26 </span>import Data.List (dropWhileEnd, intersperse)
+<span class="lineno">   27 </span>import qualified Data.Text as Text
+<span class="lineno">   28 </span>import Data.Text (Text)
+<span class="lineno">   29 </span>import qualified Data.Text.IO as TextIO
+<span class="lineno">   30 </span>
+<span class="lineno">   31 </span>import qualified CryptolSAWCore.Browse as Browse
+<span class="lineno">   32 </span>import CryptolSAWCore.GlobalCryptolEnv (eModuleEnv)
+<span class="lineno">   33 </span>
+<span class="lineno">   34 </span>import qualified SAWSupport.Pretty as PPS
+<span class="lineno">   35 </span>
+<span class="lineno">   36 </span>import SAWCentral.Value (TopLevelRW(..))
+<span class="lineno">   37 </span>
+<span class="lineno">   38 </span>import SAWScript.REPL.Monad
+<span class="lineno">   39 </span>
+<span class="lineno">   40 </span>
+<span class="lineno">   41 </span>cbrowseCmdHelp :: Text
+<span class="lineno">   42 </span><span class="decl"><span class="nottickedoff">cbrowseCmdHelp =</span>
+<span class="lineno">   43 </span><span class="spaces">  </span><span class="nottickedoff">&quot;list modules '-l', or browse modules ['MODULE' | 'submodule SUBMODULE']&quot;</span></span>
+<span class="lineno">   44 </span>
+<span class="lineno">   45 </span>-- | Display the contents of a Cryptol module (@:cbrowse MODULENAME@)
+<span class="lineno">   46 </span>--   or submodule (@:cbrowse submodule SUBMODULENAME@).  Any loaded
+<span class="lineno">   47 </span>--   (sub)module can be browsed, whether or not it has been imported;
+<span class="lineno">   48 </span>--   it is named by its original name (not by an @import ... as@
+<span class="lineno">   49 </span>--   qualifier).  Private definitions are always included.  With no
+<span class="lineno">   50 </span>--   arguments (@:cbrowse@), all loaded top-level modules are shown;
+<span class="lineno">   51 </span>--   with @:cbrowse -l@, just their names are listed.
+<span class="lineno">   52 </span>--   See &quot;CryptolSAWCore.Browse&quot;.
+<span class="lineno">   53 </span>cbrowseCmd :: [Text] -&gt; REPL ()
+<span class="lineno">   54 </span><span class="decl"><span class="istickedoff">cbrowseCmd args =</span>
+<span class="lineno">   55 </span><span class="spaces">  </span><span class="istickedoff">case args of</span>
+<span class="lineno">   56 </span><span class="spaces">    </span><span class="istickedoff">[]                     -&gt; browseAll</span>
+<span class="lineno">   57 </span><span class="spaces">    </span><span class="istickedoff">[&quot;-l&quot;]                 -&gt; mapM_ say . Browse.loadedModuleNames</span>
+<span class="lineno">   58 </span><span class="spaces">                                </span><span class="istickedoff">=&lt;&lt; getModEnv</span>
+<span class="lineno">   59 </span><span class="spaces">    </span><span class="istickedoff">[modName] | modName /= &quot;submodule&quot;</span>
+<span class="lineno">   60 </span><span class="spaces">                           </span><span class="istickedoff">-&gt; browseWith Browse.moduleContext modName</span>
+<span class="lineno">   61 </span><span class="spaces">    </span><span class="istickedoff">[&quot;submodule&quot;, modName] -&gt; browseWith Browse.submoduleContext modName</span>
+<span class="lineno">   62 </span><span class="spaces">    </span><span class="istickedoff">_ -&gt; say $</span>
+<span class="lineno">   63 </span><span class="spaces">           </span><span class="istickedoff">&quot;Usage: :cbrowse -l&quot;</span>
+<span class="lineno">   64 </span><span class="spaces">           </span><span class="istickedoff">&lt;&gt; &quot; | :cbrowse [MODULENAME]&quot;</span>
+<span class="lineno">   65 </span><span class="spaces">           </span><span class="istickedoff">&lt;&gt; &quot; | :cbrowse submodule SUBMODULENAME&quot;</span>
+<span class="lineno">   66 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">   67 </span><span class="spaces">  </span><span class="istickedoff">browseAll = do</span>
+<span class="lineno">   68 </span><span class="spaces">    </span><span class="istickedoff">ctxs &lt;- Browse.allModuleContexts &lt;$&gt; getModEnv</span>
+<span class="lineno">   69 </span><span class="spaces">    </span><span class="istickedoff">sequence_ $ intersperse (say &quot;&quot;) $ map (uncurry showCtx) ctxs</span>
+<span class="lineno">   70 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">   71 </span><span class="spaces">  </span><span class="istickedoff">browseWith find modName = do</span>
+<span class="lineno">   72 </span><span class="spaces">    </span><span class="istickedoff">modEnv &lt;- getModEnv</span>
+<span class="lineno">   73 </span><span class="spaces">    </span><span class="istickedoff">case find modEnv modName of</span>
+<span class="lineno">   74 </span><span class="spaces">      </span><span class="istickedoff">Left err          -&gt; say (Browse.ppBrowseError err)</span>
+<span class="lineno">   75 </span><span class="spaces">      </span><span class="istickedoff">Right (name, ctx) -&gt; showCtx name ctx</span>
+<span class="lineno">   76 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">   77 </span><span class="spaces">  </span><span class="istickedoff">say = liftIO . TextIO.putStrLn</span>
+<span class="lineno">   78 </span><span class="spaces"></span><span class="istickedoff"></span>
+<span class="lineno">   79 </span><span class="spaces">  </span><span class="istickedoff">-- Show a (sub)module's contents under a &quot;From MODNAME&quot; header,</span>
+<span class="lineno">   80 </span><span class="spaces">  </span><span class="istickedoff">-- underlined, with the contents indented by 2.</span>
+<span class="lineno">   81 </span><span class="spaces">  </span><span class="istickedoff">showCtx :: Text -&gt; Browse.ModContext -&gt; REPL ()</span>
+<span class="lineno">   82 </span><span class="spaces">  </span><span class="istickedoff">showCtx modName ctx = do</span>
+<span class="lineno">   83 </span><span class="spaces">    </span><span class="istickedoff">ppopts &lt;- getPPOpts</span>
+<span class="lineno">   84 </span><span class="spaces">    </span><span class="istickedoff">let header = &quot;From &quot; &lt;&gt; modName</span>
+<span class="lineno">   85 </span><span class="spaces">        </span><span class="istickedoff">-- Cryptol's output has whitespace-only lines and trailing</span>
+<span class="lineno">   86 </span><span class="spaces">        </span><span class="istickedoff">-- blank lines; trim them.</span>
+<span class="lineno">   87 </span><span class="spaces">        </span><span class="istickedoff">body = dropWhileEnd Text.null $ map Text.stripEnd $</span>
+<span class="lineno">   88 </span><span class="spaces">                 </span><span class="istickedoff">Text.lines $ PPS.renderText ppopts (Browse.browseDoc ctx)</span>
+<span class="lineno">   89 </span><span class="spaces">        </span><span class="istickedoff">indent l = if Text.null l then l else &quot;  &quot; &lt;&gt; l</span>
+<span class="lineno">   90 </span><span class="spaces">    </span><span class="istickedoff">say $ Text.intercalate &quot;\n&quot; $</span>
+<span class="lineno">   91 </span><span class="spaces">      </span><span class="istickedoff">header : Text.replicate (Text.length header) &quot;-&quot; : map indent body</span></span>
+<span class="lineno">   92 </span>
+<span class="lineno">   93 </span>getModEnv :: REPL Browse.ModuleEnv
+<span class="lineno">   94 </span><span class="decl"><span class="istickedoff">getModEnv = do</span>
+<span class="lineno">   95 </span><span class="spaces">  </span><span class="istickedoff">rw &lt;- getTopLevelRW</span>
+<span class="lineno">   96 </span><span class="spaces">  </span><span class="istickedoff">liftIO $ eModuleEnv (rwSharedContext rw)</span></span>
+
+</pre>
+</body>
+</html>
