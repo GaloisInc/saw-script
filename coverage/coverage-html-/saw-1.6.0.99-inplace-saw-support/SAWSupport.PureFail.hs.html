@@ -74,17 +74,17 @@ span.spaces    { background: white }
 <span class="lineno">   55 </span>data MadeOfFail = MadeOfFail Text Text
 <span class="lineno">   56 </span>
 <span class="lineno">   57 </span>ppMadeOfFail :: MadeOfFail -&gt; Text
-<span class="lineno">   58 </span><span class="decl"><span class="nottickedoff">ppMadeOfFail (MadeOfFail location message) =</span>
-<span class="lineno">   59 </span><span class="spaces">    </span><span class="nottickedoff">&quot;pureFail call at &quot; &lt;&gt; location &lt;&gt; &quot;:\n&quot; &lt;&gt; message</span></span>
+<span class="lineno">   58 </span><span class="decl"><span class="istickedoff">ppMadeOfFail (MadeOfFail location message) =</span>
+<span class="lineno">   59 </span><span class="spaces">    </span><span class="istickedoff">&quot;pureFail call at &quot; &lt;&gt; location &lt;&gt; &quot;:\n&quot; &lt;&gt; message</span></span>
 <span class="lineno">   60 </span>
 <span class="lineno">   61 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show MadeOfFail</span></span></span></span> where
-<span class="lineno">   62 </span>    <span class="decl"><span class="nottickedoff">show mof = Text.unpack $ ppMadeOfFail mof</span></span>
+<span class="lineno">   62 </span>    <span class="decl"><span class="istickedoff">show mof = Text.unpack $ ppMadeOfFail mof</span></span>
 <span class="lineno">   63 </span>
-<span class="lineno">   64 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Exception MadeOfFail</span></span></span></span></span></span>
+<span class="lineno">   64 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff">Exception MadeOfFail</span></span></span></span></span></span>
 <span class="lineno">   65 </span>
 <span class="lineno">   66 </span>pureFail :: Text -&gt; Text -&gt; a
-<span class="lineno">   67 </span><span class="decl"><span class="nottickedoff">pureFail location message =</span>
-<span class="lineno">   68 </span><span class="spaces">    </span><span class="nottickedoff">throw $ MadeOfFail location message</span></span>
+<span class="lineno">   67 </span><span class="decl"><span class="istickedoff">pureFail location message =</span>
+<span class="lineno">   68 </span><span class="spaces">    </span><span class="istickedoff">throw $ MadeOfFail location message</span></span>
 
 </pre>
 </body>
