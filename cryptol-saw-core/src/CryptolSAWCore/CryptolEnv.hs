@@ -53,7 +53,6 @@ module CryptolSAWCore.CryptolEnv
   , InputText(..)
   , lookupIn
   , resolveIdentifier
-  , meSolverConfig
   , C.ImportPrimitiveOptions(..)
   , C.defaultPrimitiveOptions
   , liftModuleM
@@ -1262,26 +1261,6 @@ bindIntegerType sc (ident, n) =
 
 
 --------------------------------------------------------------------------------
-
--- | Produce a `TM.SolverConfig`.
---
--- XXX: Why is this exported? Calling into the Cryptol typechecker
--- seems like it should be restricted to this file, or at least belong
--- to cryptol-saw-core, and not be splattered all over everywhere.
---
--- It is used in:
---
--- * default_typed_term in SAWCentral.Builtins
--- * getDeclsCryptol in SAWScript.AutoMatch.getDeclsCryptol
--- * print_value in SAWScript.Interpreter
---
--- XXX: there's also a second copy of this in GlobalCryptolEnv.hs,
--- which seems like it should be tidied up.
---
-meSolverConfig :: ME.ModuleEnv -> CryptolSettings -> TM.SolverConfig
-meSolverConfig env settings =
-    let basecfg = TM.defaultSolverConfig (ME.meSearchPath env) in
-    basecfg { TM.solverTimeout = csSolverTimeout settings }
 
 -- | Look up an identifier in the Cryptol environment and return its
 --   full name.

@@ -33,6 +33,7 @@ module CryptolSAWCore.GlobalCryptolEnv
   , eExtraNaming
   , eImports
   , eModuleEnv
+  , meSolverConfig
   , runModuleM
   , addSearchPath
   , eExtraVars
@@ -402,6 +403,18 @@ eModuleEnv = getGlobal geModuleEnv
 defaultEvalOpts :: E.EvalOpts
 defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
 
+-- | Produce a `TM.SolverConfig`.
+--
+-- XXX: Why is this exported? Calling into the Cryptol typechecker
+-- seems like it should be restricted to cryptol-saw-core and not
+-- be splattered all over everywhere.
+--
+-- It is used in:
+--
+-- * default_typed_term in SAWCentral.Builtins
+-- * getDeclsCryptol in SAWScript.AutoMatch.getDeclsCryptol
+-- * print_value in SAWScript.Interpreter
+--
 meSolverConfig :: ME.ModuleEnv -> CryptolSettings -> TM.SolverConfig
 meSolverConfig env settings =
     let basecfg = TM.defaultSolverConfig (ME.meSearchPath env) in

@@ -26,8 +26,7 @@ import qualified Cryptol.TypeCheck.AST as AST
 import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 
 import qualified CryptolSAWCore.Pretty as CryPP
-import CryptolSAWCore.Cryptol (CryptolSettings)
-import CryptolSAWCore.CryptolEnv( meSolverConfig )
+import CryptolSAWCore.Cryptol (CryptolSettings, meSolverConfig)
 
 
 -- | Parse a Cryptol module into a list of declarations
