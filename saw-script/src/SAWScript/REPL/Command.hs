@@ -65,6 +65,7 @@ import SAWScript.Interpreter (interpretReplStmts)
 import SAWScript.REPL.Monad
 import SAWScript.REPL.Data
 
+import SAWScript.REPL.Command.CryptolCommands ( cbrowseCmd, cbrowseCmdHelp )
 import SAWScript.REPL.Command.LLVMCommands ( llvmDisCmd, llvmDisCmdHelp )
 
 
@@ -353,6 +354,7 @@ data CommandBody
   | SymbolNameArg (Text     -> REPL ())
   | ModuleTargetArgs (Text -> Text -> REPL ())
   | TypeArgs      (Text     -> REPL ())
+  | WordArgs      ([Text]   -> REPL ())
   | FilenameArg   (FilePath -> REPL ())
   | NoArg         (REPL ())
 
@@ -382,6 +384,8 @@ nbCommandList  =
     "display the current sawscript type environment"
   , CommandDescr ":type" [":t"]  (ExprArg typeOfCmd)
     "check the type of an expression"
+  , CommandDescr ":cbrowse" []   (WordArgs cbrowseCmd)
+    cbrowseCmdHelp
   , CommandDescr ":llvmdis" []   (ModuleTargetArgs llvmDisCmd)
     llvmDisCmdHelp
   , CommandDescr ":?"    []      (SymbolNameArg helpCmd)
@@ -508,6 +512,8 @@ executeReplCommand cmd args0 =
         ModuleTargetArgs action -> twoarg action args0
         TypeArgs action ->
             action (Text.intercalate " " args0)
+        WordArgs action ->
+            action args0
         FilenameArg action -> do
             args' <- mapM expandHome args0
             onearg action args'

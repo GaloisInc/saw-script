@@ -1,0 +1,22 @@
+// :cbrowse submodule, including nested and private submodules
+
+import "Browse.cry";
+import submodule S1;
+import submodule S1::S2 as T;
+import submodule S3;
+
+print "--------------------------------"
+print "-- submodule S1"
+:cbrowse submodule S1
+
+print "--------------------------------"
+print "-- submodule S1::S2"
+:cbrowse submodule S1::S2
+
+print "--------------------------------"
+print "-- private submodule S3"
+:cbrowse submodule S3
+
+print "--------------------------------"
+print "-- top-level module S1 (not a top-level module)"
+:cbrowse S1

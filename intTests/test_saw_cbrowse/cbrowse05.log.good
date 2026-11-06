@@ -1,0 +1,13 @@
+--------------------------------
+-- submodule S1 (ambiguous)
+Submodule `S1' is ambiguous:
+  Browse::S1
+  Ambig::S1
+--------------------------------
+-- submodule Ambig::S1 (fully qualified)
+From Ambig::S1
+--------------
+  Symbols
+  =======
+
+    a1 : Bit

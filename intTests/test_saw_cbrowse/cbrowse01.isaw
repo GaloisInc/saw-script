@@ -1,0 +1,7 @@
+// :cbrowse of a top-level module, including private definitions
+
+import "Browse.cry";
+
+print "--------------------------------"
+print "-- Browse"
+:cbrowse Browse

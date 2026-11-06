@@ -1,0 +1,6 @@
+module Importer where
+
+import Browse as BB
+
+i1 = 1 : Type1
+type Type1 = [16]

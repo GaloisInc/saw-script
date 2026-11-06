@@ -1,0 +1,6 @@
+module Ambig where
+
+// a submodule with the same name as one in Browse.cry
+
+submodule S1 where
+  a1 = True

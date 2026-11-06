@@ -1,0 +1,11 @@
+module TopFunctor where
+
+// a top-level functor, for testing :cbrowse
+
+parameter
+  type k : #
+  type constraint (fin k)
+  q : [k]
+
+h : [k] -> [k]
+h x = x + q

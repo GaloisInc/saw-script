@@ -1,0 +1,45 @@
+--------------------------------
+-- alias of a submodule
+From Aliases::SubAlias
+----------------------
+  Symbols
+  =======
+
+    demo : Bit
+--------------------------------
+-- alias of a top-level module
+From Aliases::TopAlias
+----------------------
+  Submodules
+  ==========
+
+    S1
+    S3
+
+  Type Synonyms
+  =============
+
+    type Type1 = [32]
+    type Type2 = [16]
+    type Type3 = [16]
+
+  Symbols
+  =======
+
+    x1 : Type1
+    x2 : Type2
+    x3 : Type3
+--------------------------------
+-- module containing submodule aliases
+From Aliases
+------------
+  Submodules
+  ==========
+
+    Sub
+
+  Submodule Aliases
+  =================
+
+    SubAlias = submodule Sub
+    TopAlias = Browse

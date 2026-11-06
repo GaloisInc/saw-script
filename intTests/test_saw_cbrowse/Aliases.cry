@@ -1,0 +1,10 @@
+module Aliases where
+
+import Browse
+
+submodule Sub where
+  demo = True
+
+submodule SubAlias = submodule Sub
+
+submodule TopAlias = Browse
