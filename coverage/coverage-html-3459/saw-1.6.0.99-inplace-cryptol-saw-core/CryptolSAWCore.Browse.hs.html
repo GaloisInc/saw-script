@@ -41,7 +41,7 @@ span.spaces    { background: white }
 <span class="lineno">   22 </span>  ( ME.ModuleEnv
 <span class="lineno">   23 </span>  , ME.ModContext
 <span class="lineno">   24 </span>  , BrowseError(..)
-<span class="lineno">   25 </span>  , browseErrorText
+<span class="lineno">   25 </span>  , ppBrowseError
 <span class="lineno">   26 </span>  , loadedModuleNames
 <span class="lineno">   27 </span>  , allModuleContexts
 <span class="lineno">   28 </span>  , moduleContext
@@ -80,8 +80,8 @@ span.spaces    { background: white }
 <span class="lineno">   61 </span>  | SubmoduleAmbiguous Text [Text]
 <span class="lineno">   62 </span>      -- ^ with the fully qualified names of the candidates
 <span class="lineno">   63 </span>
-<span class="lineno">   64 </span>browseErrorText :: BrowseError -&gt; Text
-<span class="lineno">   65 </span><span class="decl"><span class="istickedoff">browseErrorText err =</span>
+<span class="lineno">   64 </span>ppBrowseError :: BrowseError -&gt; Text
+<span class="lineno">   65 </span><span class="decl"><span class="istickedoff">ppBrowseError err =</span>
 <span class="lineno">   66 </span><span class="spaces">  </span><span class="istickedoff">case err of</span>
 <span class="lineno">   67 </span><span class="spaces">    </span><span class="istickedoff">ModuleNotLoaded nm    -&gt; &quot;Module `&quot; &lt;&gt; nm &lt;&gt; &quot;' is not loaded.&quot;</span>
 <span class="lineno">   68 </span><span class="spaces">    </span><span class="istickedoff">SubmoduleNotLoaded nm -&gt; &quot;Submodule `&quot; &lt;&gt; nm &lt;&gt; &quot;' is not loaded.&quot;</span>

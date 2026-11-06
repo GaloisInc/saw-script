@@ -90,7 +90,7 @@ span.spaces    { background: white }
 <span class="lineno">   71 </span><span class="spaces">  </span><span class="istickedoff">browseWith find modName = do</span>
 <span class="lineno">   72 </span><span class="spaces">    </span><span class="istickedoff">modEnv &lt;- getModEnv</span>
 <span class="lineno">   73 </span><span class="spaces">    </span><span class="istickedoff">case find modEnv modName of</span>
-<span class="lineno">   74 </span><span class="spaces">      </span><span class="istickedoff">Left err          -&gt; say (Browse.browseErrorText err)</span>
+<span class="lineno">   74 </span><span class="spaces">      </span><span class="istickedoff">Left err          -&gt; say (Browse.ppBrowseError err)</span>
 <span class="lineno">   75 </span><span class="spaces">      </span><span class="istickedoff">Right (name, ctx) -&gt; showCtx name ctx</span>
 <span class="lineno">   76 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">   77 </span><span class="spaces">  </span><span class="istickedoff">say = liftIO . TextIO.putStrLn</span>

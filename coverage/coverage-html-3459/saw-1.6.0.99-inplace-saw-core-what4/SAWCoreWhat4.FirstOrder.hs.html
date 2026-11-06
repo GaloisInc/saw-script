@@ -195,9 +195,6 @@ span.spaces    { background: white }
 <span class="lineno">  176 </span><span class="decl"><span class="nottickedoff">tupleToList (viewAssign -&gt; AssignEmpty) (viewAssign -&gt; AssignEmpty) = Right []</span>
 <span class="lineno">  177 </span><span class="spaces"></span><span class="nottickedoff">tupleToList (viewAssign -&gt; AssignExtend rs r) (viewAssign -&gt; AssignExtend gvs gv) =</span>
 <span class="lineno">  178 </span><span class="spaces">  </span><span class="nottickedoff">(:) &lt;$&gt; groundToFOV r (unGVW gv) &lt;*&gt; tupleToList rs gvs</span></span>
-<span class="lineno">  179 </span>#if !MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
-<span class="lineno">  180 </span>tupleToList _ _ = error &quot;GADTs should rule this out.&quot;
-<span class="lineno">  181 </span>#endif
 
 </pre>
 </body>

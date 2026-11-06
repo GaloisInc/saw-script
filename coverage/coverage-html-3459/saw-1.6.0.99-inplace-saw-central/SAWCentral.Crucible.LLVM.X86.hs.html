@@ -535,8 +535,8 @@ span.spaces    { background: white }
 <span class="lineno">  516 </span><span class="spaces">          </span><span class="istickedoff">, _ccUninterp = Set.empty</span>
 <span class="lineno">  517 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  518 </span><span class="spaces">          </span><span class="istickedoff">-- It's unpleasant that we need to do this to use resolveSetupVal.</span>
-<span class="lineno">  519 </span><span class="spaces">          </span><span class="istickedoff">, _ccLLVMSimContext = <span class="nottickedoff">error &quot;Attempted to access ccLLVMSimContext&quot;</span></span>
-<span class="lineno">  520 </span><span class="spaces">          </span><span class="istickedoff">, _ccLLVMGlobals = <span class="nottickedoff">error &quot;Attempted to access ccLLVMGlobals&quot;</span></span>
+<span class="lineno">  519 </span><span class="spaces">          </span><span class="istickedoff">, _ccLLVMSimContext = <span class="nottickedoff">panic &quot;x86&quot; [&quot;Attempted to access ccLLVMSimContext&quot;]</span></span>
+<span class="lineno">  520 </span><span class="spaces">          </span><span class="istickedoff">, _ccLLVMGlobals = <span class="nottickedoff">panic &quot;x86&quot; [&quot;Attempted to access ccLLVMGlobals&quot;]</span></span>
 <span class="lineno">  521 </span><span class="spaces">          </span><span class="istickedoff">}</span>
 <span class="lineno">  522 </span><span class="spaces"></span><span class="istickedoff"></span>
 <span class="lineno">  523 </span><span class="spaces">      </span><span class="istickedoff">liftIO . printOutLn opts Info $ Text.unpack $</span>
