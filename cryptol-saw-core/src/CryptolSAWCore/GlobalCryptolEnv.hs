@@ -190,7 +190,7 @@ instance IsMetadata GlobalCryptolEnv where
            }
 
 -- | A type for holding Cryptol-related user settings.
-data CryptolSettings = CryptolSettings {
+newtype CryptolSettings = CryptolSettings {
     csSolverTimeout :: Int
 }
 
