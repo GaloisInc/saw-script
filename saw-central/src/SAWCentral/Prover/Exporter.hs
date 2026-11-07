@@ -80,6 +80,7 @@ import SAWCore.Recognizer (asPi)
 import SAWCore.SATQuery
 import SAWCore.SharedTerm as SC
 
+import CryptolSAWCore.GlobalCryptolEnv (getCryptolSettings)
 import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadAndTranslateModule, ExtCryptolModule)
 import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import CryptolSAWCore.TypedTerm
@@ -522,7 +523,14 @@ writeRocqCryptolModule ::
   -- | List of identifiers to skip during translation
   [Text] ->
   TopLevel ()
-writeRocqCryptolModule inputFile outputFile notations skips = io $ do
+writeRocqCryptolModule inputFile outputFile notations skips = do
+ -- Get the Cryptol settings out of the existing local Cryptol
+ -- environment. We don't want to share that environment, but we do
+ -- want to not randomly ignore the user's settings either.
+ settings <- do
+     otherenv <- getCryptolEnv
+     pure $ getCryptolSettings otherenv
+ io $ do
   sc  <- mkSharedContext
   ()  <- scLoadPreludeModule sc
   ()  <- scLoadCryptolModule sc
@@ -531,7 +539,7 @@ writeRocqCryptolModule inputFile outputFile notations skips = io $ do
   -- but we do need the setup it does under the covers.
   _ <- initCryptolEnv sc
 
-  cm  <- loadAndTranslateModule sc (Left inputFile)
+  cm  <- loadAndTranslateModule sc settings (Left inputFile)
   mm  <- scGetModuleMap sc
   let ?mm = mm
   let cryptolPreludeDecls =

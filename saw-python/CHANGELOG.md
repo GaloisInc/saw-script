@@ -2,12 +2,25 @@
 
 ## next
 
+* Add a `CryptolTypecheckerTimeout` option.
+  It is integer-valued, unlike all the previously existing options, so add
+  `set_int_option` and `set_bool_option` calls that supplement the existing
+  `set_option` but have restricted static type.
+  `set_option` will now take either boolean or integer options and
+  either boolean or integer values, and mypy can't statically
+  crosscheck that they match.
+
+* Add a `rme_w4` prover, which uses the RME solver via the What4 interface.
+
 * Add a `mir_find_name` function, which allows looking up instantiations of
   generic MIR functions.
 
+* Require certifi 2026.10.19 or higher for a security fix.
+* Require urllib 2.8.0 or higher for security fixes. 
+
 ## 1.6 -- 2026-09-17
 
-* Require urrlib 2.7.0 or higher, and requests 2.33.0 or higher,
+* Require urllib 2.7.0 or higher, and requests 2.33.0 or higher,
   for security fixes.
   This in turn requires Python 3.10, so Python 3.9 is no longer supported.
 

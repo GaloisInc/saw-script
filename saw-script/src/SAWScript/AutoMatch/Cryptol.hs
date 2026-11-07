@@ -26,13 +26,13 @@ import qualified Cryptol.TypeCheck.AST as AST
 import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 
 import qualified CryptolSAWCore.Pretty as CryPP
-import CryptolSAWCore.CryptolEnv( meSolverConfig )
+import CryptolSAWCore.Cryptol (CryptolSettings, meSolverConfig)
 
 
 -- | Parse a Cryptol module into a list of declarations
 --   Yields an Interaction so that we can talk to the user about what went wrong
-getDeclsCryptol :: FilePath -> IO (Interaction (Maybe [Decl]))
-getDeclsCryptol path = do
+getDeclsCryptol :: CryptolSettings -> FilePath -> IO (Interaction (Maybe [Decl]))
+getDeclsCryptol settings path = do
    let evalOpts = EvalOpts quietLogger CryPP.defaultPPOpts
    modEnv <- M.initialModuleEnv
    let minp solver = M.ModuleInput {
@@ -44,7 +44,7 @@ getDeclsCryptol path = do
            minpTCSolver = solver
        }
    (result, warnings) <-
-     SMT.withSolver (return ()) (meSolverConfig modEnv) $ \solver ->
+     SMT.withSolver (return ()) (meSolverConfig modEnv settings) $ \solver ->
          M.loadModuleByPath path (minp solver)
    return $ do
       forM_ warnings $ liftF . flip Warning () . Text.unpack . CryPP.pp

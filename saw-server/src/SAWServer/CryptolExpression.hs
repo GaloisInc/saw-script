@@ -32,7 +32,7 @@ import SAWCentral.Value (biSharedContext, rwGetCryptolEnv)
 import CryptolSAWCore.Cryptol
     ( getAllIfaceDecls,
       translateExpr,
-      CryptolEnv, eExtraVars, eExtraTySyns, runModuleM )
+      CryptolEnv, getCryptolSettings, eExtraVars, eExtraTySyns, runModuleM )
 import CryptolSAWCore.CryptolEnv (getNamingEnv, withFileReader)
 import SAWCore.SharedTerm (SharedContext)
 import CryptolSAWCore.TypedTerm(TypedTerm(..),TypedTermType(..))
@@ -59,7 +59,8 @@ getTypedTermOfCExp fileReader sc cenv expr = withFileReader sc fileReader $
   do extraTySyns <- eExtraTySyns sc
      extraVars <- eExtraVars sc
      nameEnv <- getNamingEnv sc cenv
-     mres <- runModuleM sc $
+     let settings = getCryptolSettings cenv
+     mres <- runModuleM sc settings $
        do npe <- interactive (noPat expr) -- eliminate patterns
 
           -- resolve names
