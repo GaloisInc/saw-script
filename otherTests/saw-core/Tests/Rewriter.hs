@@ -41,7 +41,7 @@ prelude_bveq_sameL_test =
     natType <- scNatType sc
     n <- scFreshVariable sc "n" natType
     boolType <- scBoolType sc
-    bvType <- scVecType sc n boolType
+    bvType <- scVecType sc boolType n
     x <- scFreshVariable sc "x" bvType
     z <- scFreshVariable sc "z" bvType
     let lhs =

@@ -1833,13 +1833,13 @@ scmVector e xs =
      mapM_ check xs
      n <- scmNat (fromIntegral (length xs))
      let tf = FTermF (ArrayValue e (V.fromList xs))
-     ty <- scmVecType n e
+     ty <- scmVecType e n
      scmMakeTerm vt tf (Right ty)
 
--- | Create a term representing a vector type, from a term giving the length
--- and a term giving the element type.
+-- | Create a term representing a vector type, from a term giving the
+-- element type and a term giving the length.
 scmVecType :: Term -> Term -> SCM Term
-scmVecType n e = scmGlobalApply "Prelude::Vec" [n, e]
+scmVecType e n = scmGlobalApply "Prelude::Vec" [e, n]
 
 -- | Create a record term from a list of record fields.
 scmRecordValue :: [(FieldName, Term)] -> SCM Term

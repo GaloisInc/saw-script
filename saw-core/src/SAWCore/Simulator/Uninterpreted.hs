@@ -205,7 +205,7 @@ isSimpleType sc t =
        (asBoolType -> Just ()) -> pure True
        (asNatType -> Just ()) -> pure True
        -- Vectors and pairs are simple if their arguments are.
-       (asVectorType -> Just (_n, a)) -> isSimpleType sc a
+       (asVectorType -> Just (a, _n)) -> isSimpleType sc a
        (asPairType -> Just (a, b)) ->
          allM (isSimpleType sc) [a, b]
        -- Nonrecursive datatypes are simple if all their constructor

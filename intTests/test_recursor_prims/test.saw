@@ -15,7 +15,7 @@ let prop1 =
 
 // Nat#rec with symbolic bvToNat argument
 let prop2 =
-  parse_core "\\ (x : Vec 8 Bool) -> boolEq (bvNonzero 8 x) (Nat#rec (\\ (_ : Nat) -> Bool) False (\\ (_ : Pos) -> True) (bvToNat 8 x))";
+  parse_core "\\ (x : Vec Bool 8) -> boolEq (bvNonzero 8 x) (Nat#rec (\\ (_ : Nat) -> Bool) False (\\ (_ : Pos) -> True) (bvToNat 8 x))";
 
 // Nat#rec with symbolic intToNat argument
 let prop3 =
@@ -27,7 +27,7 @@ let prop4 =
 
 // Bool#rec with symbolic argument
 let prop5 =
-  parse_core "\\ (x : Vec 8 Bool) -> bvEq 8 (bvUDiv 8 x 0x80) (Bool#rec (\\ (_ : Bool) -> Vec 8 Bool) 0x01 0x00 (head 7 Bool x))";
+  parse_core "\\ (x : Vec Bool 8) -> bvEq 8 (bvUDiv 8 x 0x80) (Bool#rec (\\ (_ : Bool) -> Vec Bool 8) 0x01 0x00 (head 7 Bool x))";
 
 prove_all true prop1;
 prove_all true prop2;
