@@ -1059,8 +1059,8 @@ jobs:
         # because it deliberately caches only part of the install,
         # which isn't what we want, and letting it do that will
         # conflict with caching everything.
-      - name: Cache opam environment
-        uses: actions/cache@v6
+      - name: Restore the opam cache
+        uses: actions/cache/restore@v6
         with:
           path: _opam
           key: ${{ env.OPAM_CACHE_VERSION }}-opam-${{ matrix.os }}
@@ -1095,6 +1095,13 @@ jobs:
           opam switch list
           echo "opam list:"
           opam list
+
+      - name: Save the opam cache
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: _opam
+          key: ${{ env.OPAM_CACHE_VERSION }}-opam-${{ matrix.os }}
 
   rocq-builds:
     needs: [rocq-setup, build]
