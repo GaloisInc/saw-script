@@ -1041,6 +1041,8 @@ jobs:
       matrix:
         os: [ubuntu-24.04]
     runs-on: ${{ matrix.os }}
+    outputs:
+      ocaml-version: ${{ steps.settings.outputs.ocaml-version }}
     steps:
         # Note: the logic that tells opam what to install is below,
         # not in a separate file. Rather than hashing ci.yml (and thus
@@ -1065,10 +1067,19 @@ jobs:
           path: _opam
           key: ${{ env.OPAM_CACHE_VERSION }}-opam-${{ matrix.os }}
 
+      - name: Pick the OCaml version
+        id: settings
+        env:
+          OCAML_VERSION: "4.14"
+        # We intentionally don't have the tree at this point, so we
+        # can't use ci.sh.
+        #.github/ci.sh output ocaml-version $OCAML_VERSION
+        run: echo "ocaml-version=$OCAML_VERSION" >> $GITHUB_OUTPUT
+
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@v3
         with:
-          ocaml-compiler: "4.14"
+          ocaml-compiler: ${{ steps.settings.outputs.ocaml-version }}
           cache: false
 
       - name: Add Rocq upstream to opam
@@ -1151,7 +1162,7 @@ jobs:
       - name: Set up OCaml again
         uses: ocaml/setup-ocaml@v3
         with:
-          ocaml-compiler: "4.14"
+          ocaml-compiler: ${{ needs.rocq-setup.outputs.ocaml-version }}
           cache: false
 
       - name: Report the opam setup
