@@ -11,6 +11,8 @@ import Control.Lens (view, set)
 import Data.Aeson (FromJSON(..), Object, withObject, (.:))
 import Data.Aeson.Types (Parser)
 
+import CryptolSAWCore.Cryptol as Cry
+
 import SAWCentral.Value
 
 import qualified Argo
@@ -44,6 +46,12 @@ setOption opt =
          updateRW rw { rwWhat4HashConsing = enabled }
        EnableWhat4Eval enabled ->
          updateRW rw { rwWhat4Eval = enabled }
+       ChangeCryptolTCTimeout secs -> do
+         let ce = rwGetCryptolEnv rw
+         let settings = Cry.getCryptolSettings ce
+         let settings' = settings { Cry.csSolverTimeout = secs }
+         let ce' = Cry.putCryptolSettings ce settings'
+         updateRW $ rwSetCryptolEnv ce' rw
      ok
 
 data SetOptionParams
@@ -54,6 +62,7 @@ data SetOptionParams
   | EnableSMTArrayMemoryModel Bool
   | EnableWhat4HashConsing Bool
   | EnableWhat4Eval Bool
+  | ChangeCryptolTCTimeout Int
 
 parseOption :: Object -> String -> Parser SetOptionParams
 parseOption o name =
@@ -65,6 +74,7 @@ parseOption o name =
     "SMT array memory model" -> EnableSMTArrayMemoryModel <$> o .: "value"
     "What4 hash consing" -> EnableWhat4HashConsing <$> o .: "value"
     "What4 eval" -> EnableWhat4Eval <$> o .: "value"
+    "Cryptol typechecker timeout" -> ChangeCryptolTCTimeout <$> o .: "value"
     _ -> empty
 
 instance FromJSON SetOptionParams where
@@ -75,14 +85,23 @@ instance FromJSON SetOptionParams where
 instance Doc.DescribedMethod SetOptionParams OK where
   parameterFieldDescription =
     [ ("option",
-       Doc.Paragraph [Doc.Text "The option to set and its accompanying value (i.e., true or false); one of the following:"
+       -- FUTURE: after argo #241 gets handled, there should be a
+       -- paragraph break after the list of options, and the list
+       -- of options should be a Doc.DescriptionList.
+       Doc.Paragraph [ Doc.Text "The option to set and its accompanying value; one of the following: "
                      , Doc.Literal "lax arithmetic", Doc.Text ", "
                      , Doc.Literal "lax pointer ordering", Doc.Text ", "
                      , Doc.Literal "lax loads and stores", Doc.Text ", "
                      , Doc.Literal "debug intrinsics", Doc.Text ", "
                      , Doc.Literal "SMT array memory model", Doc.Text ", "
-                     , Doc.Literal "What4 hash consing", Doc.Text ", or "
-                     , Doc.Literal "What4 eval"
+                     , Doc.Literal "What4 hash consing", Doc.Text ", "
+                     , Doc.Literal "What4 eval", Doc.Text ", or "
+                     , Doc.Literal "Cryptol typechecker timeout"
+                     , Doc.Text (". The value should be boolean (i.e., true or false)" <>
+                                 " for all the options but ")
+                     , Doc.Literal "Cryptol typechecker timeout"
+                     , Doc.Text (", where the value should be an integer representing" <>
+                                 " a timeout in seconds.")
                      ])
     ]
   resultFieldDescription = []

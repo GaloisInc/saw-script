@@ -809,7 +809,7 @@ def mir_find_name(module: MIRModule,
 
 def prove(goal: cryptoltypes.CryptolJSON,
           proof_script: proofscript.ProofScript) -> ProofResult:
-    """Atempts to prove that the expression given as the first argument, `goal`, is
+    """Attempts to prove that the expression given as the first argument, `goal`, is
     true for all possible values of free symbolic variables. Uses the proof
     script (potentially specifying an automated prover) provided by the second
     argument.
@@ -831,7 +831,7 @@ def prove(goal: cryptoltypes.CryptolJSON,
     return pr
 
 def eval_int(expr: cryptoltypes.CryptolJSON) -> int:
-    """Atempts to evaluate the given expression as a concrete integer.
+    """Attempts to evaluate the given expression as a concrete integer.
     """
     conn = __get_designated_connection()
     res = conn.eval_int(expr).result()
@@ -841,7 +841,7 @@ def eval_int(expr: cryptoltypes.CryptolJSON) -> int:
     return v
 
 def eval_bool(expr: cryptoltypes.CryptolJSON) -> bool:
-    """Atempts to evaluate the given expression as a concrete boolean.
+    """Attempts to evaluate the given expression as a concrete boolean.
     """
     conn = __get_designated_connection()
     res = conn.eval_bool(expr).result()
@@ -850,11 +850,28 @@ def eval_bool(expr: cryptoltypes.CryptolJSON) -> bool:
         raise ValueError(str(v) + " is not a boolean")
     return v
 
-def set_option(option : option.SAWOption, value : bool) -> None:
-    """Set a boolean-valued SAW option."""
+def set_option(option : option.SAWOption, value : bool | int) -> None:
+    """Set a SAW option.
+       This will accept any option of any type. For static checking of the
+       value against the option type, you can use `set_bool_option` or
+       `set_int_option`.
+    """
     global __designated_connection
     if __designated_connection is not None:
         __designated_connection.set_option(option=option,value=value)
+
+# Type-safe wrapper for set_option
+def set_bool_option(option : option.BoolSAWOption, value : bool) -> None:
+    """Set a boolean-valued SAW option."""
+    return set_option(option, value)
+
+# Type-safe(r) wrapper for set_option
+#
+# Unfortunately, both python and mypy think True and False are perfectly
+# fine values of int, so this is not as safe as one might like.
+def set_int_option(option : option.IntSAWOption, value : int) -> None:
+    """Set an integer-valued SAW option."""
+    return set_option(option, value)
 
 @atexit.register
 def script_exit() -> None:

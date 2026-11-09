@@ -38,6 +38,7 @@ import qualified Cryptol.Parser.Position as Cryptol
 
 import qualified SAWSupport.Pretty as PPS
 
+import qualified CryptolSAWCore.Cryptol as CrySC
 import qualified CryptolSAWCore.Pretty as CryPP
 import qualified SAWCentral.AST as SAWScript
 import SAWCentral.Position
@@ -278,7 +279,10 @@ loadDecls (TaggedSourceFile lang path) = do
    sc <- getSharedContext
    AIGProxy proxy <- getProxy
    case lang of
-      Cryptol -> io $ getDeclsCryptol path
+      Cryptol -> do
+        cenv <- getCryptolEnv
+        let settings = CrySC.getCryptolSettings cenv
+        io $ getDeclsCryptol settings path
       LLVM    -> do
         Some m <- llvm_load_module path
         io $ getDeclsLLVM proxy sc m

@@ -3059,6 +3059,14 @@ set_crucible_timeout t = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwCrucibleTimeout = t }
 
+set_cryptol_tc_timeout :: Int -> TopLevel ()
+set_cryptol_tc_timeout t = do
+  cenv <- getCryptolEnv
+  let settings = CEnv.getCryptolSettings cenv
+  let settings' = settings { CEnv.csSolverTimeout = t }
+  let cenv' = CEnv.putCryptolSettings cenv settings'
+  setCryptolEnv cenv'
+
 modifyPPOpts :: (PPS.Opts -> PPS.Opts) -> TopLevel ()
 modifyPPOpts f = do
   sc <- gets rwSharedContext
@@ -3124,7 +3132,9 @@ print_value (VString s) = printOutLnTop Info (Text.unpack s)
 print_value (VTerm t) = do
   sc <- getSharedContext
   cenv <- getCryptolEnv
-  cfg <- CEnv.meSolverConfig <$> (io $ CEnv.eModuleEnv sc)
+  moduleEnv <- io $ CEnv.eModuleEnv sc
+  let settings = CEnv.getCryptolSettings cenv
+  let cfg = CEnv.meSolverConfig moduleEnv settings
   unless (closedTerm (ttTerm t)) $
     fail "term contains symbolic variables"
   sawopts <- getOptions
@@ -4196,6 +4206,13 @@ primitives = Map.fromList $
     , ""
     , "This setting is used for path-satisfiability checks and"
     , "satisfiability checks when applying overrides."
+    ]
+
+  , prim "set_cryptol_tc_timeout" "Int -> TopLevel ()"
+    (pureVal set_cryptol_tc_timeout)
+    Experimental
+    [ "Set the timeout for the SMT solver used by Cryptol's typechecker."
+    , "Measured in seconds; the default is 5."
     ]
 
   , prim "set_path_sat_solver" "String -> TopLevel ()"

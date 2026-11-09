@@ -8,6 +8,12 @@ This release supports [version
 
 ## New Features
 
+* The new `set_cryptol_tc_timeout` builtin allows adjusting the solver
+  timeout used by Cryptol's typechecker.
+  Measured in seconds; the default is 5.
+  The remote API gains a new `Cryptol typechecker timeout` option
+  setting to do the same thing.
+
 * The new `add_defs` builtin extends a `Simpset` with rules that unfold
   the definitions of the constants named as arguments.
   It works for constants defined in SAWCore, Cryptol, or anywhere.
