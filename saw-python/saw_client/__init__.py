@@ -809,7 +809,7 @@ def mir_find_name(module: MIRModule,
 
 def prove(goal: cryptoltypes.CryptolJSON,
           proof_script: proofscript.ProofScript) -> ProofResult:
-    """Atempts to prove that the expression given as the first argument, `goal`, is
+    """Attempts to prove that the expression given as the first argument, `goal`, is
     true for all possible values of free symbolic variables. Uses the proof
     script (potentially specifying an automated prover) provided by the second
     argument.
@@ -831,7 +831,7 @@ def prove(goal: cryptoltypes.CryptolJSON,
     return pr
 
 def eval_int(expr: cryptoltypes.CryptolJSON) -> int:
-    """Atempts to evaluate the given expression as a concrete integer.
+    """Attempts to evaluate the given expression as a concrete integer.
     """
     conn = __get_designated_connection()
     res = conn.eval_int(expr).result()
@@ -841,7 +841,7 @@ def eval_int(expr: cryptoltypes.CryptolJSON) -> int:
     return v
 
 def eval_bool(expr: cryptoltypes.CryptolJSON) -> bool:
-    """Atempts to evaluate the given expression as a concrete boolean.
+    """Attempts to evaluate the given expression as a concrete boolean.
     """
     conn = __get_designated_connection()
     res = conn.eval_bool(expr).result()
