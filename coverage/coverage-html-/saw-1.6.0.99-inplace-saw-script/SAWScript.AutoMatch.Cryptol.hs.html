@@ -45,13 +45,13 @@ span.spaces    { background: white }
 <span class="lineno">   26 </span>import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 <span class="lineno">   27 </span>
 <span class="lineno">   28 </span>import qualified CryptolSAWCore.Pretty as CryPP
-<span class="lineno">   29 </span>import CryptolSAWCore.Cryptol (CryptolSettings, meSolverConfig)
+<span class="lineno">   29 </span>import CryptolSAWCore.CryptolEnv( meSolverConfig )
 <span class="lineno">   30 </span>
 <span class="lineno">   31 </span>
 <span class="lineno">   32 </span>-- | Parse a Cryptol module into a list of declarations
 <span class="lineno">   33 </span>--   Yields an Interaction so that we can talk to the user about what went wrong
-<span class="lineno">   34 </span>getDeclsCryptol :: CryptolSettings -&gt; FilePath -&gt; IO (Interaction (Maybe [Decl]))
-<span class="lineno">   35 </span><span class="decl"><span class="nottickedoff">getDeclsCryptol settings path = do</span>
+<span class="lineno">   34 </span>getDeclsCryptol :: FilePath -&gt; IO (Interaction (Maybe [Decl]))
+<span class="lineno">   35 </span><span class="decl"><span class="nottickedoff">getDeclsCryptol path = do</span>
 <span class="lineno">   36 </span><span class="spaces">   </span><span class="nottickedoff">let evalOpts = EvalOpts quietLogger CryPP.defaultPPOpts</span>
 <span class="lineno">   37 </span><span class="spaces">   </span><span class="nottickedoff">modEnv &lt;- M.initialModuleEnv</span>
 <span class="lineno">   38 </span><span class="spaces">   </span><span class="nottickedoff">let minp solver = M.ModuleInput {</span>
@@ -63,7 +63,7 @@ span.spaces    { background: white }
 <span class="lineno">   44 </span><span class="spaces">           </span><span class="nottickedoff">minpTCSolver = solver</span>
 <span class="lineno">   45 </span><span class="spaces">       </span><span class="nottickedoff">}</span>
 <span class="lineno">   46 </span><span class="spaces">   </span><span class="nottickedoff">(result, warnings) &lt;-</span>
-<span class="lineno">   47 </span><span class="spaces">     </span><span class="nottickedoff">SMT.withSolver (return ()) (meSolverConfig modEnv settings) $ \solver -&gt;</span>
+<span class="lineno">   47 </span><span class="spaces">     </span><span class="nottickedoff">SMT.withSolver (return ()) (meSolverConfig modEnv) $ \solver -&gt;</span>
 <span class="lineno">   48 </span><span class="spaces">         </span><span class="nottickedoff">M.loadModuleByPath path (minp solver)</span>
 <span class="lineno">   49 </span><span class="spaces">   </span><span class="nottickedoff">return $ do</span>
 <span class="lineno">   50 </span><span class="spaces">      </span><span class="nottickedoff">forM_ warnings $ liftF . flip Warning () . Text.unpack . CryPP.pp</span>
