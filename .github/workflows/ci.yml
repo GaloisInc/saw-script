@@ -1062,6 +1062,7 @@ jobs:
         # which isn't what we want, and letting it do that will
         # conflict with caching everything.
       - name: Restore the opam cache
+        id: restore
         uses: actions/cache/restore@v6
         with:
           path: _opam
@@ -1077,30 +1078,36 @@ jobs:
         run: echo "ocaml-version=$OCAML_VERSION" >> $GITHUB_OUTPUT
 
       - name: Set up OCaml
+        if: steps.restore.outputs.cache-hit != 'true'
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ steps.settings.outputs.ocaml-version }}
           cache: false
 
       - name: Add Rocq upstream to opam
+        if: steps.restore.outputs.cache-hit != 'true'
         run: opam repo add rocq-released https://rocq-prover.org/opam/released
 
       - name: Install rocq-prover
+        if: steps.restore.outputs.cache-hit != 'true'
         run: opam pin add -y rocq-prover 9.0.0
 
       - name: Install rocq-core and rocq-stdlib
+        if: steps.restore.outputs.cache-hit != 'true'
         run: opam install -y rocq-core=9.1.0 rocq-stdlib=9.0.0
 
       # Install coq-bits and coq-flocq from source.
       # FIXME: replace pinned versions with compatible opam-released
       # versions when available.
       - name: Install coq-bits
+        if: steps.restore.outputs.cache-hit != 'true'
         run: |
           opam install -y coq=9.1.0 # coq-* packages include compatibility shims (e.g., coq_makefile).
           opam pin -y coq-bits https://github.com/rocq-community/bits.git#f50fc3e5f1eabcb0b0b94c8d25f75e61a255c2ba
           opam pin -y coq-flocq https://gitlab.inria.fr/flocq/flocq.git#27143972fc1dc96e281626d5194b5b371f05db80
 
       - name: Report the opam setup
+        if: steps.restore.outputs.cache-hit != 'true'
         run: |
           echo "opam switch list:"
           opam switch list
@@ -1108,7 +1115,7 @@ jobs:
           opam list
 
       - name: Save the opam cache
-        if: always()
+        if: steps.restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: _opam
