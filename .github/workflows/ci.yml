@@ -1163,6 +1163,15 @@ jobs:
           path: _opam
           key: ${{ env.OPAM_CACHE_VERSION }}-opam-${{ matrix.os }}
 
+
+      # Check explicitly if the cache restore worked. It should, since
+      # we just saved it, but it might not if the cache space is full.
+      # If we don't check here, the build below will instead fail
+      # confusingly with `rocq` not found.
+      - name: Fail if we didn't retrieve the opam setup
+        if: steps.cache-opam-restore.outputs.cache-hit != 'true'
+        run: false
+
         # Apparently we need to do this or opam itself doesn't exist
         # (this should not do measurable amounts of additional work,
         # I hope)
