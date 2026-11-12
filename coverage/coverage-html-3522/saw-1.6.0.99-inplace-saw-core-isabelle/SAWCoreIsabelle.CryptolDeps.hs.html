@@ -1,0 +1,176 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE LambdaCase #-}
+<span class="lineno">    2 </span>module SAWCoreIsabelle.CryptolDeps 
+<span class="lineno">    3 </span>  ( mkCryptolDeps 
+<span class="lineno">    4 </span>  , mkTyEnv
+<span class="lineno">    5 </span>  , stripProofApps
+<span class="lineno">    6 </span>  , containsName
+<span class="lineno">    7 </span>  , moduleDepsOf
+<span class="lineno">    8 </span>  , nameToModName
+<span class="lineno">    9 </span>  , foldMapNames
+<span class="lineno">   10 </span>  , CryptolDeps(..)
+<span class="lineno">   11 </span>  , CryEntity(..) )
+<span class="lineno">   12 </span>where
+<span class="lineno">   13 </span>
+<span class="lineno">   14 </span>import           Control.Monad.Writer (execWriter, tell)
+<span class="lineno">   15 </span>
+<span class="lineno">   16 </span>import qualified Data.Graph as Graph
+<span class="lineno">   17 </span>import           Data.Hashable
+<span class="lineno">   18 </span>import qualified Data.Map as Map
+<span class="lineno">   19 </span>import           Data.Monoid (Any(..))
+<span class="lineno">   20 </span>import qualified Data.Set as Set
+<span class="lineno">   21 </span>
+<span class="lineno">   22 </span>import qualified Cryptol.ModuleSystem.Env as Cry
+<span class="lineno">   23 </span>import qualified Cryptol.ModuleSystem.Name as Cry
+<span class="lineno">   24 </span>
+<span class="lineno">   25 </span>import qualified Cryptol.TypeCheck.AST as Cry
+<span class="lineno">   26 </span>import           Cryptol.IR.TraverseExprs
+<span class="lineno">   27 </span>import           Cryptol.IR.TraverseNames
+<span class="lineno">   28 </span>import           Cryptol.Utils.PP (pp)
+<span class="lineno">   29 </span>import qualified Cryptol.Utils.Ident as Cry
+<span class="lineno">   30 </span>import Data.Maybe (fromMaybe, fromJust)
+<span class="lineno">   31 </span>
+<span class="lineno">   32 </span>
+<span class="lineno">   33 </span>instance <span class="decl"><span class="nottickedoff">Hashable CryEntity</span></span> where
+<span class="lineno">   34 </span>  <span class="decl"><span class="nottickedoff">hashWithSalt s = \case</span>
+<span class="lineno">   35 </span><span class="spaces">    </span><span class="nottickedoff">CryDecl d -&gt; hashWithSalt s (show $ pp $ stripProofApps d)</span>
+<span class="lineno">   36 </span><span class="spaces">    </span><span class="nottickedoff">CryTySyn t -&gt; hashWithSalt s (show $ pp t)</span>
+<span class="lineno">   37 </span><span class="spaces">    </span><span class="nottickedoff">CryNominalType nt -&gt; hashWithSalt s (show $ pp nt)</span></span>
+<span class="lineno">   38 </span>
+<span class="lineno">   39 </span>data CryEntity = 
+<span class="lineno">   40 </span>    CryDecl Cry.Decl
+<span class="lineno">   41 </span>  | CryTySyn Cry.TySyn
+<span class="lineno">   42 </span>  | CryNominalType Cry.NominalType
+<span class="lineno">   43 </span>
+<span class="lineno">   44 </span>instance TraverseNames CryEntity where
+<span class="lineno">   45 </span>  <span class="decl"><span class="nottickedoff">traverseNamesIP = \case</span>
+<span class="lineno">   46 </span><span class="spaces">    </span><span class="nottickedoff">CryDecl d -&gt; CryDecl &lt;$&gt; traverseNamesIP d</span>
+<span class="lineno">   47 </span><span class="spaces">    </span><span class="nottickedoff">CryTySyn t -&gt; CryTySyn &lt;$&gt; traverseNamesIP t</span>
+<span class="lineno">   48 </span><span class="spaces">    </span><span class="nottickedoff">CryNominalType nt -&gt; CryNominalType &lt;$&gt; traverseNamesIP nt</span></span>
+<span class="lineno">   49 </span>
+<span class="lineno">   50 </span>cryEntityName :: CryEntity -&gt; Cry.Name
+<span class="lineno">   51 </span><span class="decl"><span class="nottickedoff">cryEntityName = \case</span>
+<span class="lineno">   52 </span><span class="spaces">  </span><span class="nottickedoff">CryDecl d -&gt; Cry.dName d</span>
+<span class="lineno">   53 </span><span class="spaces">  </span><span class="nottickedoff">CryTySyn t -&gt; Cry.tsName t</span>
+<span class="lineno">   54 </span><span class="spaces">  </span><span class="nottickedoff">CryNominalType nt -&gt; Cry.ntName nt</span></span>
+<span class="lineno">   55 </span>
+<span class="lineno">   56 </span>instance <span class="decl"><span class="nottickedoff">Eq CryEntity</span></span> where
+<span class="lineno">   57 </span>  <span class="decl"><span class="nottickedoff">ce1 == ce2 = (cryEntityName ce1 == cryEntityName ce2)</span></span>
+<span class="lineno">   58 </span>
+<span class="lineno">   59 </span>stripProofApps :: TraverseExprs t =&gt; t -&gt; t
+<span class="lineno">   60 </span><span class="decl"><span class="nottickedoff">stripProofApps = mapSubExprs go</span>
+<span class="lineno">   61 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">   62 </span><span class="spaces">    </span><span class="nottickedoff">go = \case</span>
+<span class="lineno">   63 </span><span class="spaces">      </span><span class="nottickedoff">Cry.EProofAbs _ e -&gt; e</span>
+<span class="lineno">   64 </span><span class="spaces">      </span><span class="nottickedoff">Cry.EProofApp e -&gt; e</span>
+<span class="lineno">   65 </span><span class="spaces">      </span><span class="nottickedoff">e -&gt; e</span></span>
+<span class="lineno">   66 </span>
+<span class="lineno">   67 </span>foldMapNames :: (TraverseNames t, Monoid m) =&gt; (Cry.Name -&gt; m) -&gt; t -&gt; m
+<span class="lineno">   68 </span><span class="decl"><span class="nottickedoff">foldMapNames f t = execWriter $ traverseNames (\e -&gt; tell (f e) &gt;&gt; return e) t</span></span>
+<span class="lineno">   69 </span>
+<span class="lineno">   70 </span>containsName :: TraverseNames t =&gt; Cry.Name -&gt; t -&gt; Bool
+<span class="lineno">   71 </span><span class="decl"><span class="nottickedoff">containsName nm t = getAny $ foldMapNames (\nm_ -&gt; Any (nm == nm_)) t</span></span>
+<span class="lineno">   72 </span>
+<span class="lineno">   73 </span>modulesToCryEnv :: [Cry.Module] -&gt; [CryEntity]
+<span class="lineno">   74 </span><span class="decl"><span class="nottickedoff">modulesToCryEnv ms = </span>
+<span class="lineno">   75 </span><span class="spaces">  </span><span class="nottickedoff">let </span>
+<span class="lineno">   76 </span><span class="spaces">    </span><span class="nottickedoff">decls = concat $ concatMap (map Cry.groupDecls . Cry.mDecls) ms</span>
+<span class="lineno">   77 </span><span class="spaces">    </span><span class="nottickedoff">tys = concatMap (Map.elems . Cry.mTySyns) ms</span>
+<span class="lineno">   78 </span><span class="spaces">    </span><span class="nottickedoff">tnms = concatMap (Map.elems . Cry.mNominalTypes) ms</span>
+<span class="lineno">   79 </span><span class="spaces">  </span><span class="nottickedoff">in map CryDecl decls ++ map CryTySyn tys ++ map CryNominalType tnms</span></span>
+<span class="lineno">   80 </span>
+<span class="lineno">   81 </span>data CryptolDeps = CryptolDeps 
+<span class="lineno">   82 </span>  { <span class="nottickedoff"><span class="decl"><span class="nottickedoff">entityDeps</span></span></span> :: Map.Map Cry.Name (CryEntity, Set.Set Cry.Name)
+<span class="lineno">   83 </span>  , <span class="nottickedoff"><span class="decl"><span class="nottickedoff">moduleDeps</span></span></span> :: Map.Map Cry.ModName (Cry.LoadedModule, Set.Set Cry.ModName)
+<span class="lineno">   84 </span>  }
+<span class="lineno">   85 </span>
+<span class="lineno">   86 </span>nameToModName :: Cry.Name -&gt; Maybe Cry.ModName
+<span class="lineno">   87 </span><span class="decl"><span class="nottickedoff">nameToModName nm = case Cry.nameInfo nm of</span>
+<span class="lineno">   88 </span><span class="spaces">  </span><span class="nottickedoff">Cry.GlobalName _ og | Cry.TopModule mnm &lt;- Cry.ogModule og -&gt; Just mnm</span>
+<span class="lineno">   89 </span><span class="spaces">  </span><span class="nottickedoff">_ -&gt; Nothing</span></span>
+<span class="lineno">   90 </span>
+<span class="lineno">   91 </span>collapseMaybeSet :: Ord a =&gt; Set.Set (Maybe a) -&gt; Set.Set a
+<span class="lineno">   92 </span><span class="decl"><span class="nottickedoff">collapseMaybeSet = Set.map fromJust . Set.delete Nothing</span></span>
+<span class="lineno">   93 </span>
+<span class="lineno">   94 </span>moduleDepsOf :: TraverseNames t =&gt; CryptolDeps -&gt; t -&gt; Set.Set Cry.ModName
+<span class="lineno">   95 </span><span class="decl"><span class="nottickedoff">moduleDepsOf d = foldMapNames $ \nm -&gt; </span>
+<span class="lineno">   96 </span><span class="spaces">  </span><span class="nottickedoff">let dep_nms = fromMaybe Set.empty $ fmap snd $ Map.lookup nm (entityDeps d)</span>
+<span class="lineno">   97 </span><span class="spaces">      </span><span class="nottickedoff">dep_mods = collapseMaybeSet $ Set.map nameToModName dep_nms</span>
+<span class="lineno">   98 </span><span class="spaces">      </span><span class="nottickedoff">acc_deps mnm = Set.union (fromMaybe Set.empty $ fmap snd $ Map.lookup mnm (moduleDeps d))</span>
+<span class="lineno">   99 </span><span class="spaces">  </span><span class="nottickedoff">in Set.fold acc_deps Set.empty dep_mods</span></span>
+<span class="lineno">  100 </span>
+<span class="lineno">  101 </span>stripGuard :: Cry.Schema -&gt; Cry.Schema
+<span class="lineno">  102 </span><span class="decl"><span class="nottickedoff">stripGuard (Cry.Forall vs _ t) = Cry.Forall vs [] t</span></span>
+<span class="lineno">  103 </span>
+<span class="lineno">  104 </span>mkTyEnv :: CryptolDeps -&gt; Map.Map Cry.Name Cry.Schema
+<span class="lineno">  105 </span><span class="decl"><span class="nottickedoff">mkTyEnv ces = Map.mapMaybe go (entityDeps ces)</span>
+<span class="lineno">  106 </span><span class="spaces">  </span><span class="nottickedoff">where</span>
+<span class="lineno">  107 </span><span class="spaces">    </span><span class="nottickedoff">go = \case</span>
+<span class="lineno">  108 </span><span class="spaces">      </span><span class="nottickedoff">(CryDecl d,_) -&gt; Just (stripGuard $ Cry.dSignature d)</span>
+<span class="lineno">  109 </span><span class="spaces">      </span><span class="nottickedoff">_ -&gt; Nothing</span></span>
+<span class="lineno">  110 </span>
+<span class="lineno">  111 </span>mkCryptolDeps :: [Cry.LoadedModule] -&gt; [Cry.DeclGroup] -&gt; [Cry.TySyn] -&gt; CryptolDeps
+<span class="lineno">  112 </span><span class="decl"><span class="nottickedoff">mkCryptolDeps lms extraDecls extraTys = </span>
+<span class="lineno">  113 </span><span class="spaces">  </span><span class="nottickedoff">let edeps = cryEntityDeps $ modulesToCryEnv (map Cry.lmModule lms) </span>
+<span class="lineno">  114 </span><span class="spaces">       </span><span class="nottickedoff">++ map CryDecl (concat $ map Cry.groupDecls extraDecls)</span>
+<span class="lineno">  115 </span><span class="spaces">       </span><span class="nottickedoff">++ map CryTySyn extraTys</span>
+<span class="lineno">  116 </span><span class="spaces">      </span><span class="nottickedoff">mdeps = cryModuleDeps lms</span>
+<span class="lineno">  117 </span><span class="spaces">  </span><span class="nottickedoff">in CryptolDeps edeps mdeps</span></span>
+<span class="lineno">  118 </span>
+<span class="lineno">  119 </span>collectNames :: TraverseNames t =&gt; t -&gt; Set.Set Cry.Name
+<span class="lineno">  120 </span><span class="decl"><span class="nottickedoff">collectNames = foldMapNames $ \nm -&gt; </span>
+<span class="lineno">  121 </span><span class="spaces">  </span><span class="nottickedoff">case Cry.nameInfo nm of </span>
+<span class="lineno">  122 </span><span class="spaces">    </span><span class="nottickedoff">Cry.LocalName{} -&gt; Set.empty</span>
+<span class="lineno">  123 </span><span class="spaces">    </span><span class="nottickedoff">_ -&gt; Set.singleton nm</span></span>
+<span class="lineno">  124 </span>
+<span class="lineno">  125 </span>cryEntityDeps :: 
+<span class="lineno">  126 </span>  [CryEntity] -&gt;
+<span class="lineno">  127 </span>  Map.Map Cry.Name (CryEntity, Set.Set Cry.Name)
+<span class="lineno">  128 </span><span class="decl"><span class="nottickedoff">cryEntityDeps nes = </span>
+<span class="lineno">  129 </span><span class="spaces">  </span><span class="nottickedoff">let</span>
+<span class="lineno">  130 </span><span class="spaces">    </span><span class="nottickedoff">raw_graph = map (\ne -&gt; (ne, cryEntityName ne, Set.toList $ collectNames ne)) nes</span>
+<span class="lineno">  131 </span><span class="spaces">    </span><span class="nottickedoff">(gr,vert_to_node,nm_to_vert) = Graph.graphFromEdges raw_graph</span>
+<span class="lineno">  132 </span><span class="spaces">    </span><span class="nottickedoff">get_deps ne = case nm_to_vert (cryEntityName ne) of</span>
+<span class="lineno">  133 </span><span class="spaces">      </span><span class="nottickedoff">Just v -&gt; foldr (\v' acc -&gt; </span>
+<span class="lineno">  134 </span><span class="spaces">            </span><span class="nottickedoff">let (_,_,deps) = vert_to_node v' in foldr Set.insert acc deps)</span>
+<span class="lineno">  135 </span><span class="spaces">            </span><span class="nottickedoff">Set.empty</span>
+<span class="lineno">  136 </span><span class="spaces">            </span><span class="nottickedoff">(Graph.reachable gr v) </span>
+<span class="lineno">  137 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; Set.empty</span>
+<span class="lineno">  138 </span><span class="spaces">  </span><span class="nottickedoff">in Map.fromList $ map (\ne -&gt; (cryEntityName ne, (ne, get_deps ne))) nes</span></span>
+<span class="lineno">  139 </span>
+<span class="lineno">  140 </span>cryModuleDeps :: 
+<span class="lineno">  141 </span>  [Cry.LoadedModule] -&gt;
+<span class="lineno">  142 </span>  Map.Map Cry.ModName (Cry.LoadedModule, Set.Set Cry.ModName)
+<span class="lineno">  143 </span><span class="decl"><span class="nottickedoff">cryModuleDeps nes = </span>
+<span class="lineno">  144 </span><span class="spaces">  </span><span class="nottickedoff">let</span>
+<span class="lineno">  145 </span><span class="spaces">    </span><span class="nottickedoff">raw_graph = map (\ne -&gt; (ne, Cry.lmName ne, Set.toList $ Cry.fiImportDeps (Cry.lmFileInfo ne))) nes</span>
+<span class="lineno">  146 </span><span class="spaces">    </span><span class="nottickedoff">(gr,vert_to_node,nm_to_vert) = Graph.graphFromEdges raw_graph</span>
+<span class="lineno">  147 </span><span class="spaces">    </span><span class="nottickedoff">get_deps ne = case nm_to_vert (Cry.lmName ne) of</span>
+<span class="lineno">  148 </span><span class="spaces">      </span><span class="nottickedoff">Just v -&gt; foldr (\v' acc -&gt; </span>
+<span class="lineno">  149 </span><span class="spaces">            </span><span class="nottickedoff">let (_,_,deps) = vert_to_node v' in foldr Set.insert acc deps)</span>
+<span class="lineno">  150 </span><span class="spaces">            </span><span class="nottickedoff">(Set.singleton (Cry.lmName ne))</span>
+<span class="lineno">  151 </span><span class="spaces">            </span><span class="nottickedoff">(Graph.reachable gr v) </span>
+<span class="lineno">  152 </span><span class="spaces">      </span><span class="nottickedoff">Nothing -&gt; Set.singleton (Cry.lmName ne)</span>
+<span class="lineno">  153 </span><span class="spaces">  </span><span class="nottickedoff">in Map.fromList $ map (\ne -&gt; (Cry.lmName ne, (ne, get_deps ne))) nes</span></span>
+
+</pre>
+</body>
+</html>

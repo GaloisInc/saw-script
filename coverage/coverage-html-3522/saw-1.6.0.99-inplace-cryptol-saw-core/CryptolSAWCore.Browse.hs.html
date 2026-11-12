@@ -1,0 +1,210 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{- |
+<span class="lineno">    2 </span>Module      : CryptolSAWCore.Browse
+<span class="lineno">    3 </span>Description : Browsing the contents of loaded Cryptol (sub)modules
+<span class="lineno">    4 </span>Copyright   : Galois, Inc. 2026
+<span class="lineno">    5 </span>License     : BSD3
+<span class="lineno">    6 </span>Maintainer  : saw@galois.com
+<span class="lineno">    7 </span>Stability   : experimental
+<span class="lineno">    8 </span>Portability : non-portable (language extensions)
+<span class="lineno">    9 </span>
+<span class="lineno">   10 </span>Queries over a Cryptol 'ME.ModuleEnv' for browsing loaded modules and
+<span class="lineno">   11 </span>submodules (as done by the SAW REPL's @:cbrowse@ command).
+<span class="lineno">   12 </span>
+<span class="lineno">   13 </span>Any loaded (sub)module can be browsed, whether or not it has been
+<span class="lineno">   14 </span>imported; it is named by its original name (not by an @import ... as@
+<span class="lineno">   15 </span>qualifier).  Private definitions are always included; the virtual
+<span class="lineno">   16 </span>submodules that Cryptol generates are not.
+<span class="lineno">   17 </span>-}
+<span class="lineno">   18 </span>
+<span class="lineno">   19 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">   20 </span>
+<span class="lineno">   21 </span>module CryptolSAWCore.Browse
+<span class="lineno">   22 </span>  ( ME.ModuleEnv
+<span class="lineno">   23 </span>  , ME.ModContext
+<span class="lineno">   24 </span>  , BrowseError(..)
+<span class="lineno">   25 </span>  , ppBrowseError
+<span class="lineno">   26 </span>  , loadedModuleNames
+<span class="lineno">   27 </span>  , allModuleContexts
+<span class="lineno">   28 </span>  , moduleContext
+<span class="lineno">   29 </span>  , submoduleContext
+<span class="lineno">   30 </span>  , browseDoc
+<span class="lineno">   31 </span>  ) where
+<span class="lineno">   32 </span>
+<span class="lineno">   33 </span>import Data.List (nub, sortOn)
+<span class="lineno">   34 </span>import qualified Data.Map as Map
+<span class="lineno">   35 </span>import Data.Set (Set)
+<span class="lineno">   36 </span>import qualified Data.Set as Set
+<span class="lineno">   37 </span>import Data.Text (Text)
+<span class="lineno">   38 </span>import qualified Data.Text as Text
+<span class="lineno">   39 </span>import qualified Prettyprinter as PP
+<span class="lineno">   40 </span>
+<span class="lineno">   41 </span>import qualified Cryptol.ModuleSystem.Env as ME
+<span class="lineno">   42 </span>import qualified Cryptol.ModuleSystem.Interface as MI
+<span class="lineno">   43 </span>import qualified Cryptol.ModuleSystem.Name as MN (
+<span class="lineno">   44 </span>    Name, nameIdent, nameModPathMaybe
+<span class="lineno">   45 </span> )
+<span class="lineno">   46 </span>import qualified Cryptol.Parser.AST as CP (ImpName(..))
+<span class="lineno">   47 </span>import qualified Cryptol.REPL.Browse as CB
+<span class="lineno">   48 </span>import qualified Cryptol.TypeCheck.AST as T (ModuleG(..), Submodule(..))
+<span class="lineno">   49 </span>import qualified Cryptol.Utils.Ident as CI (
+<span class="lineno">   50 </span>    identText, modNameChunksText, modNameToText, modPathSplit,
+<span class="lineno">   51 </span>    textToModName
+<span class="lineno">   52 </span> )
+<span class="lineno">   53 </span>
+<span class="lineno">   54 </span>
+<span class="lineno">   55 </span>-- | Why a (sub)module could not be browsed.  Each constructor holds
+<span class="lineno">   56 </span>--   the name as given.
+<span class="lineno">   57 </span>data BrowseError
+<span class="lineno">   58 </span>  = ModuleNotLoaded Text
+<span class="lineno">   59 </span>  | SubmoduleNotLoaded Text
+<span class="lineno">   60 </span>  | SubmoduleNotFound Text
+<span class="lineno">   61 </span>  | SubmoduleAmbiguous Text [Text]
+<span class="lineno">   62 </span>      -- ^ with the fully qualified names of the candidates
+<span class="lineno">   63 </span>
+<span class="lineno">   64 </span>ppBrowseError :: BrowseError -&gt; Text
+<span class="lineno">   65 </span><span class="decl"><span class="istickedoff">ppBrowseError err =</span>
+<span class="lineno">   66 </span><span class="spaces">  </span><span class="istickedoff">case err of</span>
+<span class="lineno">   67 </span><span class="spaces">    </span><span class="istickedoff">ModuleNotLoaded nm    -&gt; &quot;Module `&quot; &lt;&gt; nm &lt;&gt; &quot;' is not loaded.&quot;</span>
+<span class="lineno">   68 </span><span class="spaces">    </span><span class="istickedoff">SubmoduleNotLoaded nm -&gt; &quot;Submodule `&quot; &lt;&gt; nm &lt;&gt; &quot;' is not loaded.&quot;</span>
+<span class="lineno">   69 </span><span class="spaces">    </span><span class="istickedoff">SubmoduleNotFound nm  -&gt; <span class="nottickedoff">&quot;Submodule `&quot; &lt;&gt; nm &lt;&gt; &quot;' not found.&quot;</span></span>
+<span class="lineno">   70 </span><span class="spaces">    </span><span class="istickedoff">SubmoduleAmbiguous nm cands -&gt;</span>
+<span class="lineno">   71 </span><span class="spaces">      </span><span class="istickedoff">Text.intercalate &quot;\n&quot; $</span>
+<span class="lineno">   72 </span><span class="spaces">        </span><span class="istickedoff">(&quot;Submodule `&quot; &lt;&gt; nm &lt;&gt; &quot;' is ambiguous:&quot;)</span>
+<span class="lineno">   73 </span><span class="spaces">        </span><span class="istickedoff">: map (&quot;  &quot; &lt;&gt;) cands</span></span>
+<span class="lineno">   74 </span>
+<span class="lineno">   75 </span>-- | All loaded top-level modules (loaded directly or indirectly), in
+<span class="lineno">   76 </span>--   order of module name.
+<span class="lineno">   77 </span>loadedModules :: ME.ModuleEnv -&gt; [ME.LoadedModule]
+<span class="lineno">   78 </span><span class="decl"><span class="istickedoff">loadedModules modEnv =</span>
+<span class="lineno">   79 </span><span class="spaces">  </span><span class="istickedoff">sortOn ME.lmName $ ME.getLoadedModules (ME.meLoadedModules modEnv)</span></span>
+<span class="lineno">   80 </span>
+<span class="lineno">   81 </span>-- | The names of all loaded top-level modules, in order.
+<span class="lineno">   82 </span>loadedModuleNames :: ME.ModuleEnv -&gt; [Text]
+<span class="lineno">   83 </span><span class="decl"><span class="istickedoff">loadedModuleNames = map (CI.modNameToText . ME.lmName) . loadedModules</span></span>
+<span class="lineno">   84 </span>
+<span class="lineno">   85 </span>-- | The names and contexts of all loaded top-level modules, in order.
+<span class="lineno">   86 </span>allModuleContexts :: ME.ModuleEnv -&gt; [(Text, ME.ModContext)]
+<span class="lineno">   87 </span><span class="decl"><span class="istickedoff">allModuleContexts modEnv = map (topContext modEnv) (loadedModules modEnv)</span></span>
+<span class="lineno">   88 </span>
+<span class="lineno">   89 </span>-- | The (fully qualified) name and context of a loaded top-level
+<span class="lineno">   90 </span>--   module (loaded directly or indirectly).
+<span class="lineno">   91 </span>moduleContext ::
+<span class="lineno">   92 </span>  ME.ModuleEnv -&gt; Text -&gt; Either BrowseError (Text, ME.ModContext)
+<span class="lineno">   93 </span><span class="decl"><span class="istickedoff">moduleContext modEnv modName =</span>
+<span class="lineno">   94 </span><span class="spaces">  </span><span class="istickedoff">case ME.lookupModule (CI.textToModName modName) modEnv of</span>
+<span class="lineno">   95 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; Left (ModuleNotLoaded modName)</span>
+<span class="lineno">   96 </span><span class="spaces">    </span><span class="istickedoff">Just lm -&gt; Right (topContext modEnv lm)</span></span>
+<span class="lineno">   97 </span>
+<span class="lineno">   98 </span>topContext :: ME.ModuleEnv -&gt; ME.LoadedModule -&gt; (Text, ME.ModContext)
+<span class="lineno">   99 </span><span class="decl"><span class="istickedoff">topContext modEnv lm =</span>
+<span class="lineno">  100 </span><span class="spaces">  </span><span class="istickedoff">( CI.modNameToText (ME.lmName lm)</span>
+<span class="lineno">  101 </span><span class="spaces">  </span><span class="istickedoff">, withoutVirtuals modEnv (ME.lmModContextWith MI.ifsDefines modEnv lm)</span>
+<span class="lineno">  102 </span><span class="spaces">  </span><span class="istickedoff">)</span></span>
+<span class="lineno">  103 </span>
+<span class="lineno">  104 </span>-- | The fully qualified name and context of a loaded submodule,
+<span class="lineno">  105 </span>--   submodule alias, or submodule functor (or a submodule nested in a
+<span class="lineno">  106 </span>--   functor), named by its path within its top-level module (e.g.
+<span class="lineno">  107 </span>--   @S1::S2@), or by its fully qualified path (e.g. @M::S1::S2@).
+<span class="lineno">  108 </span>--   Interface submodules are not supported (Cryptol's
+<span class="lineno">  109 </span>--   'ME.modContextOfWith' does not support them).
+<span class="lineno">  110 </span>submoduleContext ::
+<span class="lineno">  111 </span>  ME.ModuleEnv -&gt; Text -&gt; Either BrowseError (Text, ME.ModContext)
+<span class="lineno">  112 </span><span class="decl"><span class="istickedoff">submoduleContext modEnv modName =</span>
+<span class="lineno">  113 </span><span class="spaces">  </span><span class="istickedoff">case cands of</span>
+<span class="lineno">  114 </span><span class="spaces">    </span><span class="istickedoff">[] -&gt; Left (SubmoduleNotLoaded modName)</span>
+<span class="lineno">  115 </span><span class="spaces">    </span><span class="istickedoff">[nm] -&gt;</span>
+<span class="lineno">  116 </span><span class="spaces">      </span><span class="istickedoff">case ME.modContextOfWith MI.ifsDefines (CP.ImpNested nm) modEnv of</span>
+<span class="lineno">  117 </span><span class="spaces">        </span><span class="istickedoff">Nothing  -&gt; <span class="nottickedoff">Left (SubmoduleNotFound modName)</span></span>
+<span class="lineno">  118 </span><span class="spaces">        </span><span class="istickedoff">Just ctx -&gt; Right (fullName nm, withoutVirtuals modEnv ctx)</span>
+<span class="lineno">  119 </span><span class="spaces">    </span><span class="istickedoff">nms -&gt; Left (SubmoduleAmbiguous modName (map fullName nms))</span>
+<span class="lineno">  120 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  121 </span><span class="spaces">  </span><span class="istickedoff">want = Text.splitOn &quot;::&quot; modName</span>
+<span class="lineno">  122 </span><span class="spaces">  </span><span class="istickedoff">cands = nub [ nm | lm &lt;- ME.getLoadedModules (ME.meLoadedModules modEnv)</span>
+<span class="lineno">  123 </span><span class="spaces">                   </span><span class="istickedoff">, nm &lt;- nestedIn (ME.lmModule lm)</span>
+<span class="lineno">  124 </span><span class="spaces">                   </span><span class="istickedoff">, want `elem` subPaths nm</span>
+<span class="lineno">  125 </span><span class="spaces">              </span><span class="istickedoff">]</span>
+<span class="lineno">  126 </span><span class="spaces">  </span><span class="istickedoff">fullName nm = Text.intercalate &quot;::&quot; (last (subPaths nm))</span></span>
+<span class="lineno">  127 </span>
+<span class="lineno">  128 </span>-- | The ways to name a submodule: its path within its top-level
+<span class="lineno">  129 </span>--   module, and its fully qualified path.
+<span class="lineno">  130 </span>subPaths :: MN.Name -&gt; [[Text]]
+<span class="lineno">  131 </span><span class="decl"><span class="istickedoff">subPaths nm =</span>
+<span class="lineno">  132 </span><span class="spaces">  </span><span class="istickedoff">case MN.nameModPathMaybe nm of</span>
+<span class="lineno">  133 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">[]</span></span>
+<span class="lineno">  134 </span><span class="spaces">    </span><span class="istickedoff">Just p -&gt;</span>
+<span class="lineno">  135 </span><span class="spaces">      </span><span class="istickedoff">let (top, ids) = CI.modPathSplit p</span>
+<span class="lineno">  136 </span><span class="spaces">          </span><span class="istickedoff">rel = map CI.identText (ids ++ [MN.nameIdent nm])</span>
+<span class="lineno">  137 </span><span class="spaces">      </span><span class="istickedoff">in  [rel, CI.modNameChunksText top ++ rel]</span></span>
+<span class="lineno">  138 </span>
+<span class="lineno">  139 </span>-- | The submodules, submodule aliases, and submodule functors in a
+<span class="lineno">  140 </span>--   module, including those nested in functors.  (Those nested in
+<span class="lineno">  141 </span>--   ordinary submodules are already included in the module's maps.)
+<span class="lineno">  142 </span>nestedIn :: T.ModuleG a -&gt; [MN.Name]
+<span class="lineno">  143 </span><span class="decl"><span class="istickedoff">nestedIn m =</span>
+<span class="lineno">  144 </span><span class="spaces">     </span><span class="istickedoff">Map.keys (T.mSubmodules m)</span>
+<span class="lineno">  145 </span><span class="spaces">  </span><span class="istickedoff">++ Map.keys (T.mModAliases m)</span>
+<span class="lineno">  146 </span><span class="spaces">  </span><span class="istickedoff">++ Map.keys (T.mFunctors m)</span>
+<span class="lineno">  147 </span><span class="spaces">  </span><span class="istickedoff">++ concatMap nestedIn (Map.elems (T.mFunctors m))</span></span>
+<span class="lineno">  148 </span>
+<span class="lineno">  149 </span>-- | The virtual submodules in all loaded modules (including those
+<span class="lineno">  150 </span>--   nested in functors): these are generated by Cryptol, e.g., to hold
+<span class="lineno">  151 </span>--   the arguments of a functor instantiation.
+<span class="lineno">  152 </span>virtuals :: ME.ModuleEnv -&gt; Set MN.Name
+<span class="lineno">  153 </span><span class="decl"><span class="istickedoff">virtuals modEnv =</span>
+<span class="lineno">  154 </span><span class="spaces">  </span><span class="istickedoff">Set.fromList</span>
+<span class="lineno">  155 </span><span class="spaces">    </span><span class="istickedoff">[ nm | lm &lt;- ME.getLoadedModules (ME.meLoadedModules modEnv)</span>
+<span class="lineno">  156 </span><span class="spaces">         </span><span class="istickedoff">, nm &lt;- virtualIn (ME.lmModule lm)</span>
+<span class="lineno">  157 </span><span class="spaces">    </span><span class="istickedoff">]</span>
+<span class="lineno">  158 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  159 </span><span class="spaces">  </span><span class="istickedoff">virtualIn :: T.ModuleG a -&gt; [MN.Name]</span>
+<span class="lineno">  160 </span><span class="spaces">  </span><span class="istickedoff">virtualIn m =</span>
+<span class="lineno">  161 </span><span class="spaces">       </span><span class="istickedoff">Map.keys (Map.filter T.smVirtual (T.mSubmodules m))</span>
+<span class="lineno">  162 </span><span class="spaces">    </span><span class="istickedoff">++ concatMap virtualIn (Map.elems (T.mFunctors m))</span></span>
+<span class="lineno">  163 </span>
+<span class="lineno">  164 </span>-- | Don't show virtual submodules (which Cryptol keeps private, but
+<span class="lineno">  165 </span>--   we show private names).
+<span class="lineno">  166 </span>withoutVirtuals :: ME.ModuleEnv -&gt; ME.ModContext -&gt; ME.ModContext
+<span class="lineno">  167 </span><span class="decl"><span class="istickedoff">withoutVirtuals modEnv ctx =</span>
+<span class="lineno">  168 </span><span class="spaces">  </span><span class="istickedoff">ctx { ME.mctxExported =</span>
+<span class="lineno">  169 </span><span class="spaces">          </span><span class="istickedoff">Set.difference (ME.mctxExported ctx) (virtuals modEnv) }</span></span>
+<span class="lineno">  170 </span>
+<span class="lineno">  171 </span>-- | Display the names in a context's 'ME.mctxExported': Cryptol's
+<span class="lineno">  172 </span>--   @:browse@ sections, plus a section for submodule aliases.
+<span class="lineno">  173 </span>browseDoc :: ME.ModContext -&gt; PP.Doc ann
+<span class="lineno">  174 </span><span class="decl"><span class="istickedoff">browseDoc ctx =</span>
+<span class="lineno">  175 </span><span class="spaces">  </span><span class="istickedoff">PP.unAnnotate $</span>
+<span class="lineno">  176 </span><span class="spaces">    </span><span class="istickedoff">CB.browseModContextWith sections CB.BrowseExported ctx</span>
+<span class="lineno">  177 </span><span class="spaces">  </span><span class="istickedoff">where</span>
+<span class="lineno">  178 </span><span class="spaces">  </span><span class="istickedoff">sections =</span>
+<span class="lineno">  179 </span><span class="spaces">    </span><span class="istickedoff">[ CB.browseSignatures</span>
+<span class="lineno">  180 </span><span class="spaces">    </span><span class="istickedoff">, CB.browseMods</span>
+<span class="lineno">  181 </span><span class="spaces">    </span><span class="istickedoff">, CB.browseModAliases</span>
+<span class="lineno">  182 </span><span class="spaces">    </span><span class="istickedoff">, CB.browseFunctors</span>
+<span class="lineno">  183 </span><span class="spaces">    </span><span class="istickedoff">, CB.browseTSyns</span>
+<span class="lineno">  184 </span><span class="spaces">    </span><span class="istickedoff">, CB.browsePrimTys</span>
+<span class="lineno">  185 </span><span class="spaces">    </span><span class="istickedoff">, CB.browseNominalTypes</span>
+<span class="lineno">  186 </span><span class="spaces">    </span><span class="istickedoff">, CB.browseVars</span>
+<span class="lineno">  187 </span><span class="spaces">    </span><span class="istickedoff">]</span></span>
+
+</pre>
+</body>
+</html>
