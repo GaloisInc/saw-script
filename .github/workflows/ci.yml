@@ -262,6 +262,22 @@ jobs:
         with:
           submodules: false
 
+      # The Sphinx cache key includes:
+      #    - a version number to bump in case of cache corruption;
+      #    - "sphinx" to distinguish it from the other caches;
+      #    - the OS so we start a new cache if we go to a newer runner
+      #      OS;
+      #    - a hash of the python deps so we automatically start over
+      #      if that changes.
+      #
+      # Note that cache blobs are write-once, so once we upload a
+      # cache blob for this key we don't upload it again unless it
+      # expires. (This cache doesn't include the frobs for updating on
+      # the fly.) But that's ok because just doing the build should
+      # not change the venv once it's been set up. The rest of the
+      # keying should account for all reasonable cases where we need a
+      # new venv.
+      #
       - name: Cache Python environment
         uses: actions/cache@v6
         with:
@@ -745,6 +761,26 @@ jobs:
         shell: bash
         run: echo "$PWD/bin" >> $GITHUB_PATH
 
+      # The Cabal cache key includes:
+      #    - a version number to bump in case of cache corruption;
+      #    - "cabal" to distinguish it from the other caches;
+      #    - the fields necessary to give each build job its own cache
+      #      (OS, GHC version, and the hpc flag);
+      #    - a hash of the freeze file so if the versions change we start
+      #      over automatically;
+      #    - the commit hash of the current run, so we can upload a new
+      #      cache each time. (cache blobs are write-once.)
+      #
+      # Adding the form without the commit hash to `restore-keys`
+      # causes it to be able to restore a cache blob from an earlier
+      # run. Upstream restrictions on cache access based on branch
+      # mean that we can only restore from an earlier run on the same
+      # branch or on an ancestor branch (meaning in practice master).
+      # However, I don't think there's any guarantee we'll get the
+      # _most recent_ cache blob from a prior run, just some such
+      # cache blob if there is one. But I think that's the best that
+      # one can do.
+      #
       - name: Restore cabal store cache
         uses: actions/cache/restore@v6
         with:
@@ -905,6 +941,35 @@ jobs:
           java-version: "8"
           java-package: jdk
 
+      # The solver cache key includes:
+      #    - a version number to bump in case of cache corruption;
+      #    - "solver-integration-tests" to distinguish it from the
+      #      other caches, and in particular the s2n solver caches;
+      #    - the OS, so we don't try to share cache blobs between OSes;
+      #    - the commit hash of the current run, so we can upload a
+      #      new cache each time. (See the explanation attached to the
+      #      cabal cache keying.)
+      #
+      # Note that the solver caches for the test runs and the solver
+      # caches for the s2n runs are distinct. This is reasonable given
+      # that they're doing totally different things and aren't likely
+      # to see any of the same solver queries.
+      #
+      # XXX: We _do_ end up trying to share the solver cache between
+      # runs on the same OS. Notionally this is ok, because the solver
+      # cache should be fully portable. In fact, ideally we'd have one
+      # solver cache that all runs would share read-write. However,
+      # that's not possible; all we can do is fetch an existing cache
+      # blob and then upload a new one. Furthermore, I continue to
+      # suspect that having two jobs try to upload a cache blob with
+      # the same key at the same time is one of the things that causes
+      # cache corruption. We could have one designated job that
+      # uploads a new cache for that OS, and have the rest only
+      # download (that's what we've been doing for the hpc build) but
+      # coordinating that seems likely to be error-prone. These caches
+      # are tiny by the standards of CI cache blobs, so probably it is
+      # better to just give each run its own cache key.
+      #
       - name: Restore SMT solver result cache
         if: matrix.run-integration-tests == true
         uses: actions/cache/restore@v6
@@ -931,6 +996,35 @@ jobs:
           override: true
           components: rustc-dev, rust-src
 
+      # We need Rust and mir-json to run the crux-mir-comp tests, but
+      # only for that. For SAW's own tests we don't need to be able to
+      # run Rust code, and also check in the generated mir-json blobs
+      # to avoid needing to run mir-json. So we only need Rust if
+      # run-other-tests is true.
+      #
+      # The cache keying for the cargo cache is partially handled by
+      # the rust-cache action. In particular it, takes care of
+      # including a hash of the cargo lock files / version info / etc.
+      # in the underlying key. It seemingly does not include the OS
+      # version, though. It provides three key settings for the user:
+      #    - prefix-key, which comes first and is supposed to include
+      #      the cache version;
+      #    - shared-key, which apparently comes next and we use to
+      #      distinguish from other caches;
+      #    - key, which adds additional material and is intended to
+      #      be used to distinguish different jobs.
+      #
+      # In `prefix-key` we include:
+      #    - a version number to bump in case of cache corruption;
+      #    - the OS, so we start over if we switch runner OSes.
+      # In `shared-key` we include:
+      #    - "cargo-cache" to distinguish it from the other caches.
+      # We don't set `key`.
+      #
+      # Note: this relies on only one of the build jobs, or at least
+      # only one per OS, setting `run-other-tests`. If we change that
+      # around, we should probably add more stuff to the key here.
+      #
       - name: Engage the Cargo cache
         if: matrix.run-other-tests == true
         uses: Swatinem/rust-cache@v2
@@ -1009,17 +1103,9 @@ jobs:
           destination_dir: coverage
           keep_files: false
 
-        # NOTE: The coverage test run uses the SMT solver cache to
-        # improve performance but doesn't save the updated SMT solver
-        # cache. Instead, it shares cache with the non-coverage run on
-        # the same platform. That run will upload an updated cache.
-        # Because the test suite is the same, the resulting cache
-        # files would also be identical. FUTURE: it is not absolutely
-        # clear how well this works without serializing the jobs,
-        # which we've never done and isn't currently possible. It
-        # might be better to extend the cache key scheme so the
-        # coverage run gets its own cache. Revisit this when we have
-        # a good solution for #3379 and can assess the effectiveness.
+      # See keying notes above. We don't upload a new solver cache in
+      # the hpc run because it is, for now at least, sharing the cache
+      # and cache key with the non-hpc run on the same platform.
       - name: Save SMT solver result cache
         if: matrix.run-integration-tests == true && matrix.hpc == false
         uses: actions/cache/save@v6
@@ -1044,6 +1130,13 @@ jobs:
     outputs:
       ocaml-version: ${{ steps.settings.outputs.ocaml-version }}
     steps:
+        # The opam cache key includes:
+        #    - a version number to bump in case of cache corruption,
+        #      or when the install changes;
+        #    - "opam" to distinguish it from the other caches;
+        #    - the OS so we make a new install if the runner OS
+        #      changes.
+        #
         # Note: the logic that tells opam what to install is below,
         # not in a separate file. Rather than hashing ci.yml (and thus
         # incurring a new cache every time anything about the CI
@@ -1404,6 +1497,29 @@ jobs:
         working-directory: s2nTests
         run: docker compose build s2n
 
+      # The solver cache keying here includes:
+      #    - a version number to bump in case of cache corruption,
+      #      which is shared with the test suite's solver caches;
+      #    - "solver-s2n" to distinguish it from the other caches, and
+      #      in particular the test suite solver caches;
+      #    - `s2n-target`, which is the name of the s2n test we're
+      #      running, so each one gets its own cache;
+      #    - the GHC version;
+      #    - the commit hash of the current run, so we can upload a
+      #      new cache each time. (See the explanation attached to the
+      #      cabal cache keying.)
+      #
+      # XXX: the GHC version does not serve any purpose here. There is
+      # no need to start a new solver cache if we recompile with a
+      # different GHC. If doing that breaks existing solver caches, it
+      # should be handled by SAW itself.
+      #
+      # We don't include the OS; changing the runner OS (and
+      # especially, the version of the runner OS; these jobs are not
+      # likely to ever get run on something other than Linux) should
+      # not have any effect on the solver cache. If it does, that's a
+      # SAW bug and we'd rather find out about it.
+      #
       - name: Restore SMT solver result cache
         uses: actions/cache/restore@v6
         with:

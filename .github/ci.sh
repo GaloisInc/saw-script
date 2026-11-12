@@ -262,7 +262,7 @@ make_source_distribution() {
     rmdir distrib
 }
 
-output() { echo "::set-output name=$1::$2"; }
+output() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
 saw_ver() { grep '^Version' saw.cabal | awk '{print $2}'; }
 crux_ver() { grep '^version' crux-mir-comp/crux-mir-comp.cabal | awk '{print $2}'; }
 set_saw_version() { output saw-version "$(saw_ver)"; }
