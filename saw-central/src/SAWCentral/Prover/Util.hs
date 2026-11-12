@@ -1,16 +1,19 @@
 module SAWCentral.Prover.Util (
     checkBooleanSchema,
-    bindAllExts,
     liftCexBB,
     liftLECexBB
   ) where
 
 import qualified Data.Text as Text
 
+-- cryptol
 import qualified Cryptol.TypeCheck.AST as C
 
+-- saw-core
 import SAWCore.SharedTerm
 import SAWCore.FiniteValue
+
+-- cryptol-saw-core
 import qualified CryptolSAWCore.Pretty as CryPP
 import CryptolSAWCore.TypedTerm
 
@@ -30,9 +33,6 @@ checkBooleanSchema _ (TypedTermSchema s) = fail $ "Invalid polymorphic type: " +
 checkBooleanSchema sc tp = do
   tp' <- ppTypedTermType sc tp
   fail $ "Expected boolean type, but got " ++ (Text.unpack tp')
-
-bindAllExts :: SharedContext -> Term -> IO Term
-bindAllExts sc body = scLambdaList sc (getAllVars body) body
 
 -- | Lift a counterexample containing big-endian words
 --

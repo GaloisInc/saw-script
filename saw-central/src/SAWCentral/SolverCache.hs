@@ -73,31 +73,27 @@ module SAWCentral.SolverCache
   , testSolverCacheStats
   ) where
 
-import System.Directory (createDirectoryIfMissing)
 import Control.Exception (try, SomeException)
 import Control.Monad (when, forM_)
-import System.Timeout (timeout)
-
-import GHC.Generics (Generic)
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import Data.IORef (IORef, newIORef, modifyIORef, readIORef)
-import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.List (intercalate, isPrefixOf)
 import Data.Maybe (fromMaybe, isJust)
-import Data.Functor ((<&>))
-import Numeric (readHex)
-
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Functor ((<&>))
 import qualified Data.Vector as V
-
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as TextLazy
 import Data.Text.Lazy.Encoding (encodeUtf8)
+import Data.Time.Clock (UTCTime, getCurrentTime)
 import Text.Printf (printf)
-
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
+import System.Directory (createDirectoryIfMissing)
+import System.Timeout (timeout)
+import Numeric (readHex)
+import GHC.Generics (Generic)
 
 import Data.Aeson ( FromJSON(..), ToJSON(..), FromJSONKey(..), ToJSONKey(..)
                   , (.:), (.:?), (.=), fromJSON )
@@ -108,14 +104,18 @@ import Codec.Serialise (Serialise(..))
 import qualified Database.LMDB.Simple as LMDB
 import qualified Database.LMDB.Simple.Extra as LMDB
 
-import qualified SAWCoreSBV.SBV as SBV
 
+-- saw-core
 import SAWCore.FiniteValue
 import SAWCore.Fingerprint (fingerprintSATQuery)
 import SAWCore.Name (VarName)
 import SAWCore.SATQuery
 import SAWCore.SharedTerm
 
+-- saw-core-sbv
+import qualified SAWCoreSBV.SBV as SBV
+
+-- saw-central
 import SAWCentral.Options
 import SAWCentral.Proof
 

@@ -48,60 +48,33 @@ module SAWCentral.Prover.Exporter
   , bitblastPrim
   ) where
 
-import Data.Foldable(toList)
-
 import Control.Monad (unless)
 import Control.Monad.Except (runExceptT)
 import Control.Monad.State (gets, liftIO)
-import qualified Data.AIG as AIG
+import Data.Foldable (toList)
 import Data.Maybe (mapMaybe)
-import Data.Parameterized.Nonce (globalNonceGenerator)
-import Data.Parameterized.Some (Some(..))
 import qualified Data.Map as Map
 import Data.Set (Set)
-import System.Directory (removeFile)
-import System.FilePath (takeBaseName)
-import System.IO
-import System.IO.Temp(emptySystemTempFile)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as V
+import System.Directory (removeFile)
+import System.FilePath (takeBaseName)
+import System.IO
+import System.IO.Temp (emptySystemTempFile)
+
 import qualified Prettyprinter as PP
 import Prettyprinter.Render.Text
 
+import qualified Data.AIG as AIG
+
+import Data.Parameterized.Nonce (globalNonceGenerator)
+import Data.Parameterized.Some (Some(..))
+
+-- XXX: very weird import
 import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 
-import SAWCore.ExternalFormat(scWriteExternal)
-import SAWCore.FiniteValue
-import SAWCore.Module (emptyModule, moduleDecls)
-import SAWCore.Name (VarName(..), mkModuleName)
-import SAWCore.Prelude (preludeModule)
-import SAWCore.Recognizer (asPi)
-import SAWCore.SATQuery
-import SAWCore.SharedTerm as SC
-
-import CryptolSAWCore.GlobalCryptolEnv (getCryptolSettings)
-import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadAndTranslateModule, ExtCryptolModule)
-import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
-import CryptolSAWCore.TypedTerm
-
-import qualified SAWCoreRocq.Rocq as Rocq
-import qualified Language.Rocq.AST as Rocq
-import qualified SAWCoreAIG.BitBlast as BBSim
-import qualified SAWCore.Simulator.Value as Sim
-import qualified SAWCoreWhat4.What4 as W4Sim
-import qualified SAWCoreSBV.SBV as SBV
-import qualified SAWCoreWhat4.What4 as W -- XXX duplicate!?
-import SAWCoreWhat4.ReturnTrip (newSAWCoreExprBuilder, sawCoreState)
-import qualified SAWCore.Parser.AST as Un
-
-import SAWCentral.Proof
-  (Prop, Sequent, propSize, sequentSharedSize, propToTerm, predicateToSATQuery, sequentToSATQuery)
-import SAWCentral.Prover.SolverStats
-import SAWCentral.Prover.Util
-import SAWCentral.Prover.What4
-import SAWCentral.Value
-
+-- what4
 import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
 import What4.Config (extendConfig, getOptionSetting, setOpt)
@@ -111,7 +84,51 @@ import What4.Protocol.SMTLib2.Response (smtParseOptions)
 import What4.Protocol.VerilogWriter (exprsVerilog)
 import What4.Solver.Adapter
 import qualified What4.SWord as W4Sim
+
+-- saw-core
+import SAWCore.ExternalFormat(scWriteExternal)
+import SAWCore.FiniteValue
+import SAWCore.Module (emptyModule, moduleDecls)
+import SAWCore.Name (VarName(..), mkModuleName)
+import qualified SAWCore.Parser.AST as Un
+import SAWCore.Prelude (preludeModule)
+import SAWCore.Recognizer (asPi)
+import SAWCore.SATQuery
+import SAWCore.SharedTerm as SC
+import qualified SAWCore.Simulator.Value as Sim
+
+-- cryptol-saw-core
+import CryptolSAWCore.GlobalCryptolEnv (getCryptolSettings)
+import CryptolSAWCore.CryptolEnv (initCryptolEnv, loadAndTranslateModule, ExtCryptolModule)
+import CryptolSAWCore.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
+import CryptolSAWCore.TypedTerm
+
+-- saw-core-aig
+import qualified SAWCoreAIG.BitBlast as BBSim
+
+-- saw-core-rocq
+import qualified SAWCoreRocq.Rocq as Rocq
+import qualified Language.Rocq.AST as Rocq
+
+-- saw-core-isabelle
 import qualified SAWCoreIsabelle.TranslateSAW as Isabelle
+
+-- saw-core-sbv
+import qualified SAWCoreSBV.SBV as SBV
+
+-- saw-core-what4
+import qualified SAWCoreWhat4.What4 as W4Sim
+import qualified SAWCoreWhat4.What4 as W -- XXX duplicate!?
+import SAWCoreWhat4.ReturnTrip (newSAWCoreExprBuilder, sawCoreState)
+
+-- saw-central
+import SAWCentral.Proof
+  (Prop, Sequent, propSize, sequentSharedSize, propToTerm, predicateToSATQuery, sequentToSATQuery)
+import SAWCentral.Prover.SolverStats
+import SAWCentral.Prover.Util
+import SAWCentral.Prover.What4
+import SAWCentral.Value
+
 
 proveWithSATExporter ::
   (FilePath -> SATQuery -> TopLevel a) ->

@@ -14,18 +14,22 @@ Stability   : provisional
 module SAWCentral.SolverVersions (getSolverBackendVersions) where
 
 import Control.Exception (SomeException, try)
-import System.Process (readProcessWithExitCode)
-import System.Exit (ExitCode(..))
-
 import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
+import System.Process (readProcessWithExitCode)
+import System.Exit (ExitCode(..))
 
+-- saw-version
+import SAWVersion.GitRevAux
+
+-- saw-core-sbv
 import qualified SAWCoreSBV.SBV as SBV
 
+-- saw-central
 import SAWCentral.Panic (panic)
 import SAWCentral.SolverCache
-import SAWVersion.GitRevAux
+
 
 -- | Given an 'SBV.Solver' from @SBV@, attempt to query the solver for its
 -- version and return the result as a string.

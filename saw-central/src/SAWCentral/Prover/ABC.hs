@@ -15,7 +15,6 @@ import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Text.Read (readMaybe)
-
 import System.Directory
 import System.FilePath ((</>))
 import System.IO
@@ -24,12 +23,17 @@ import System.Process (readProcessWithExitCode)
 
 import qualified Data.AIG as AIG
 
+-- XXX: very weird import
+import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
+
+-- saw-core
 import           SAWCore.FiniteValue
 import           SAWCore.Name
 import           SAWCore.SATQuery
 import           SAWCore.SharedTerm
 import qualified SAWCoreAIG.BitBlast as BBSim
 
+-- saw-central
 import SAWCentral.Panic (panic)
 import SAWCentral.Proof
   ( sequentToSATQuery, goalSequent, ProofGoal
@@ -40,10 +44,6 @@ import SAWCentral.Prover.SolverStats (SolverStats, solverStats)
 import qualified SAWCentral.Prover.Exporter as Exporter
 import SAWCentral.Prover.Util (liftCexBB, liftLECexBB)
 import SAWCentral.Value
-
--- crucible-jvm
--- TODO, very weird import
-import Lang.JVM.ProcessUtils (readProcessExitIfFailure)
 
 
 -- | Bit-blast a proposition and check its validity using ABC.

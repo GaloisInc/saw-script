@@ -24,7 +24,6 @@ module SAWCentral.Proof
   , betaReduceProp
   , falseProp
   , termToProp
-  , termToMaybeProp
   , propToTerm
   , propToRewriteRule
   , propSize
@@ -164,9 +163,11 @@ import Data.Parameterized.Nonce
 import qualified What4.Expr.Builder as W4
 import What4.ProgramLoc (ProgramLoc)
 
+-- saw-support
 import qualified SAWSupport.Pretty as PPS (Doc, Opts, render, renderText)
 import SAWSupport.Position
 
+-- saw-core
 import SAWCore.Recognizer
 import SAWCore.Rewriter
 import SAWCore.SATQuery
@@ -176,18 +177,22 @@ import SAWCore.Term.Functor
 import SAWCore.FiniteValue (FirstOrderValue, prettyFirstOrderValue)
 import qualified SAWCore.Term.Certified as TC
 import SAWCore.Term.Pretty (prettyTermWithEnv, prettyTermContainerWithEnv)
-
 import SAWCore.Simulator.Concrete (evalSharedTerm)
 import SAWCore.Simulator.Value (asFirstOrderTypeValue, Value(..), TValue(..))
 import SAWCore.Simulator.Uninterpreted (generalizeHigherOrderFunctions)
 
+-- cryptol-saw-core
 import CryptolSAWCore.TypedTerm
 
-import SAWCentral.Position
-import SAWCentral.Prover.SolverStats
+-- saw-core-what4
 import qualified SAWCoreWhat4.What4 as W4Sim
 import qualified SAWCoreWhat4.ReturnTrip as W4Sim
+
+-- saw-central
 import SAWCentral.Panic (panic)
+import SAWCentral.Position
+import SAWCentral.Prover.SolverStats
+
 
 -- | A proposition is a saw-core type of type `Prop`.
 -- In particular, this includes any pi type whose result
