@@ -48,7 +48,8 @@ import SAWScript.Panic (HasCallStack, panic)
 import SAWScript.Token (Token, tokPos)
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser
-import SAWScript.Include as Inc
+import qualified SAWScript.Include as Inc
+import qualified SAWScript.Subshells as Subshells
 import SAWScript.Typechecker (checkDecl, checkSchema, checkSchemaPattern)
 import qualified SAWScript.Typechecker as Ty (Message(..))
 
@@ -388,7 +389,8 @@ readExpression opts ppopts fileName environ rbenv avail str = do
   let incpath = (".", Options.importPath opts)
 
   expr0 <- readAnyIO fileName str "end-of-line" parseExpression
-  expr <- resolveIncludes 0{-depth-} seen incpath opts ppopts Inc.processExpr expr0
+  expr1 <- resolveIncludes 0{-depth-} seen incpath opts ppopts Inc.processExpr expr0
+  expr <- Subshells.processExpr expr1
   let Environ varenv tyenv _cryenvs = environ
 
   -- XXX it should not be necessary to do this munging
@@ -429,8 +431,9 @@ readREPLTextUnchecked opts ppopts fileName str = do
   seen <- emptySeenSet
   let incpath = (".", Options.importPath opts)
 
-  stmts <- readAnyIO fileName str "end-of-line" parseREPLText
-  resolveIncludes 0{-depth-} seen incpath opts ppopts Inc.processStmts stmts
+  stmts0 <- readAnyIO fileName str "end-of-line" parseREPLText
+  stmts1 <- resolveIncludes 0{-depth-} seen incpath opts ppopts Inc.processStmts stmts0
+  Subshells.processStmts stmts1
 
 -- | Find a file, potentially looking in a list of multiple search paths (as
 -- specified via the @SAW_IMPORT_PATH@ environment variable or
@@ -503,8 +506,9 @@ includeFile depth seen incpath opts ppopts fname once = do
       Cons.noteN $ "Loading file \"" <> Text.pack fname' <> "\""
       ftext <- TextIO.readFile fname'
 
-      stmts <- wrapDir current' $ readAnyIO fname ftext "end-of-file" parseModule
-      resolveIncludes (depth + 1) seen incpath' opts ppopts Inc.processStmts stmts
+      stmts0 <- wrapDir current' $ readAnyIO fname ftext "end-of-file" parseModule
+      stmts1 <- resolveIncludes (depth + 1) seen incpath' opts ppopts Inc.processStmts stmts0
+      Subshells.processStmts stmts1
 
 -- | Find a file, potentially looking in a list of multiple search paths (as
 -- specified via the @SAW_IMPORT_PATH@ environment variable or

@@ -70,6 +70,8 @@ incs'expr ctx e0 =
         e1' <- incs'expr ctx e1
         pure $ TLookup pos e1' ix
     Var{} -> pure e0
+    Subshell{} -> pure e0
+    ProofSubshell{} -> pure e0
     Lambda pos mname paramPos params namedParams e1 -> do
         e1' <- incs'expr ctx e1
         pure $ Lambda pos mname paramPos params namedParams e1'

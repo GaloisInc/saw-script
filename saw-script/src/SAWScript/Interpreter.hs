@@ -902,6 +902,52 @@ interpretExpr expr =
                       panic "interpretExpr" [
                            "Read of inaccessible variable " <> x
                       ]
+      SS.Subshell pos -> do
+          let x = "subshell"
+          -- Get the type and lifecycle info from the builtins table
+          avail <- gets rwPrimsAvail
+          Environ varenv _tyenv _cryenv <- gets rwEnviron
+          let (lc, ty) = case ScopedMap.lookup x varenv of
+                  Nothing -> panic "interpretExpr" [x <> " builtin missing"]
+                  Just (_defpos, lc', ty', _v, _doc) -> (lc', ty')
+          unless (Set.member lc avail) $ do
+              panic "interpretExpr" ["Read of " <> x <> " when inaccessible"]
+          let ty' = case ty of
+                SS.Forall [] t' -> t'
+                _ -> panic "interpretExpr" [x <> " is unexpectedly polymorphic"]
+          -- Now build a value. The point of having this here is to
+          -- expose the reference to `topLevelSubshell` where we can
+          -- insert extra info from the AST into it. (There isn't any
+          -- yet; so far we're doing setup for future changes.)
+          let f = toplevelSubshell
+              v = toValue ty' x f
+          -- Do the same postprocessing as in the Var case
+          let v' = injectPositionIntoMonadicValue pos v
+              v'' = insertRefChain pos x v'
+          return v''
+      SS.ProofSubshell pos -> do
+          let x = "proof_subshell"
+          -- Get the type and lifecycle info from the builtins table
+          avail <- gets rwPrimsAvail
+          Environ varenv _tyenv _cryenv <- gets rwEnviron
+          let (lc, ty) = case ScopedMap.lookup x varenv of
+                  Nothing -> panic "interpretExpr" [x <> " builtin missing"]
+                  Just (_defpos, lc', ty', _v, _doc) -> (lc', ty')
+          unless (Set.member lc avail) $ do
+              panic "interpretExpr" ["Read of " <> x <> " when inaccessible"]
+          let ty' = case ty of
+                SS.Forall [] t' -> t'
+                _ -> panic "interpretExpr" [x <> " is unexpectedly polymorphic"]
+          -- Now build a value. The point of having this here is to
+          -- expose the reference to `proofScriptSubshell` where we
+          -- can insert extra info from the AST into it. (There isn't
+          -- any yet; so far we're doing setup for future changes.)
+          let f = proofScriptSubshell
+              v = toValue ty' x f
+          -- Do the same postprocessing as in the Var case
+          let v' = injectPositionIntoMonadicValue pos v
+              v'' = insertRefChain pos x v'
+          return v''
       SS.Lambda _pos mname _paramPos params namedParams e -> do
           env <- gets rwEnviron
           let namedParams' = Map.map (\(_, (_, d, p)) -> (d, p)) namedParams
@@ -3708,6 +3754,14 @@ primitives = Map.fromList $
     , "your scripts can be updated."
     ]
 
+
+    -- Caution: "subshell" gets intercepted and turned into an AST
+    -- node. This entry is still used (by hardcoded name) for all
+    -- purposes other than the `Value` produced by introducing the
+    -- builtin; changes to the type or lifecycle status should be made
+    -- here. At eval time, the AST node is turned into a direct call
+    -- to topLevelSubshell, which allows passing extra info stored in
+    -- the AST into the builtin.
   , prim "subshell"            "() -> TopLevel ()"
     (pureVal toplevelSubshell)
     Experimental
@@ -3724,6 +3778,8 @@ primitives = Map.fromList $
     , "memory."
     ]
 
+    -- Caution: "proof_subshell" gets intercepted and turned into an
+    -- AST node like "subshell".
   , prim "proof_subshell"      "() -> ProofScript ()"
     (pureVal proofScriptSubshell)
     Experimental
@@ -8479,8 +8535,8 @@ primitives = Map.fromList $
         -- type is actually looked at by something, like :env, :t,
         -- :search, or a direct use of the builtin. This is one of the
         -- reasons we have a :env call in the test suite, even though
-        -- it requires maintenance for every change to the builtin
-        -- table. Otherwise these panics can go unnoticed.
+        -- it requires maintenance for every change to the builtins.
+        -- Otherwise the panics in readSchemaPure can go unnoticed.
         ty' = Loader.readSchemaPure name lc primNamedTypeEnv ty
         ty'' = case ty' of
             SS.Forall _ t -> t
@@ -8489,16 +8545,18 @@ primitives = Map.fromList $
     pureVal x ty name _ _ = toValue ty name x
 
     -- pureVal can be used for anything with an IsValue instance,
-    -- including functions. However, functions in TopLevel need to use
-    -- funVal* instead; the IsValue instances capture incorrectly and
-    -- you get a function that returns a VTopLevel instead of executing
-    -- in TopLevel. (There isn't a special-case IsValue instance for
-    -- a -> TopLevel t, because that would require overlapping instances;
-    -- but there is an IsValue instance for TopLevel t by itself (that
-    -- produces VTopLevel) so use of pureVal matches that and the
-    -- generic IsValue instance for a -> t.)
+    -- including functions and monadic functions. However, there are
+    -- two kinds of functions in TopLevel that we might embed: those
+    -- that are meant to be "pure" in SAWScript, and those that
+    -- execute in SAWScript's own TopLevel. The former need to use
+    -- funVal* instead. The IsValue instances are intended for
+    -- functions in TopLevel that execute in SAWScript TopLevel. If
+    -- you use that with a function meant to be "pure", you get a
+    -- function that returns a VTopLevel instead of executing.
     --
-    -- XXX: rename these to e.g. monadVal1/2/3 so this is clearer?
+    -- XXX: come up with a clearer name for these... not to mention
+    -- pureVal... considering that it's the "pure" ones that _don't_
+    -- use pureVal...
 
     funVal1 :: forall a t. (FromValue a, IsValue t) => (a -> TopLevel t)
                -> SS.Type -> Text -> Options -> BuiltinContext -> Value

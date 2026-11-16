@@ -826,6 +826,7 @@ library saw-script
   other-modules:
     SAWScript.Panic
     SAWScript.Include
+    SAWScript.Subshells
 
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints

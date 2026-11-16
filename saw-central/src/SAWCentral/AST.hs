@@ -402,6 +402,9 @@ data Expr
   | TLookup Pos Expr Integer
   -- LC
   | Var Pos Name
+    -- Special cases of Var for the subshell and proof_subshell builtins.
+  | Subshell Pos 
+  | ProofSubshell Pos 
   -- | All functions are handled as lambdas. We hang onto the name
   --   from the function declaration (if there was one) for use in
   --   stack traces. The second position (after the name) is the
@@ -576,6 +579,8 @@ instance Positioned Expr where
   getPos (Lookup pos _ _) = pos
   getPos (TLookup pos _ _) = pos
   getPos (Var pos _) = pos
+  getPos (Subshell pos) = pos
+  getPos (ProofSubshell pos) = pos
   getPos (Lambda pos _ _ _ _ _) = pos
   getPos (Application pos _ _) = pos
   getPos (Let pos _ _) = pos
@@ -778,6 +783,10 @@ prettyExpr expr0 = case expr0 of
         expr' <> PP.dot <> n'
     Var _ name ->
         PP.pretty name
+    Subshell _ ->
+       "subshell"
+    ProofSubshell _ ->
+       "proof_subshell"
     Lambda _ _mname _parampos params namedParams expr ->
         let onePositional pat =
                 let pat' = prettyPattern pat in

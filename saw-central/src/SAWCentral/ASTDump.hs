@@ -218,6 +218,10 @@ dumpExpr e0 = case e0 of
         Dump.subelement ("TLookup " <> (Text.pack $ show n)) $ dumpExpr e1
     Var _ x ->
         Dump.singleton ("Var " <> x)
+    Subshell _ ->
+        Dump.singleton "Subshell"
+    ProofSubshell _ ->
+        Dump.singleton "ProofSubshell"
     Lambda _ (mname) _ params namedParams body ->
         let dumpNamedParam (name, (_namepos, (_fullpos, def, pat))) =
                 Dump.fields ("named " <> name) [
