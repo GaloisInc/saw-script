@@ -25,6 +25,7 @@ import Control.Monad ()
 import Control.Monad.State (State, get, gets, modify, put, runState, evalState)
 import Control.Monad.Except (ExceptT, throwError, runExceptT)
 import qualified Data.ByteString.Lazy.UTF8 as B
+import qualified Data.Char as Char
 import qualified Data.List as List
 import Data.Maybe (isJust,isNothing,fromJust)
 import Data.Text (Text)
@@ -231,7 +232,7 @@ AppTerm :: { UTerm } :
 -- Atomic (base) term
 AtomTerm :: { UTerm } :
     nat                                         { NatLit (pos $1) (tokNat (val $1)) }
-  | bvlit                                       { BVLit (pos $1) (tokBits (val $1)) }
+  | bvlit                                       {% mkBVLit (pos $1) (tokBits (val $1)) }
   | string                                      { mkString $1 }
   | QualName                                    { mkName $1 }
   | IdentRec                                    { Recursor (fmap fst $1) (mkSort (snd (val $1))) }
@@ -469,5 +470,38 @@ mkPath ps sps = case (ps,sps) of
 mkQualName :: PosPair ([Text],[Text], Text) -> Maybe Int -> Maybe Namespace -> PosPair QualName
 mkQualName (PosPair p (path,subpath,basename)) midx mnms =
   PosPair p (QN.QualName path subpath basename midx mnms )
+
+-- | Convert a binary string to a big-endian list of bits.
+parseBinBits :: String -> Maybe [Bool]
+parseBinBits = traverse parseBit
+  where
+    parseBit :: Char -> Maybe Bool
+    parseBit '0' = Just False
+    parseBit '1' = Just True
+    parseBit _ = Nothing
+
+-- | Convert a hexadecimal string to a big-endian list of bits.
+parseHexBits :: String -> Maybe [Bool]
+parseHexBits s = concat <$> traverse parseBits s
+  where
+    parseBits :: Char -> Maybe [Bool]
+    parseBits c
+      | Char.isHexDigit c = Just $ map (Bits.testBit (Char.digitToInt c)) [3,2,1,0]
+      | otherwise = Nothing
+
+-- | Convert a binary literal to a big-endian list of bits.
+parseBVLit :: String -> Maybe [Bool]
+parseBVLit ('0' : 'b' : cs) = parseBinBits cs
+parseBVLit ('0' : 'x' : cs) = parseHexBits cs
+parseBVLit _ = Nothing
+
+mkBVLit :: Pos -> String -> Parser UTerm
+mkBVLit p s =
+  case parseBVLit s of
+    Just bs ->
+      pure (BVLit p bs)
+    Nothing ->
+      do addParseError p ("malformed literal: " ++ s)
+         pure (BVLit p [])
 
 }

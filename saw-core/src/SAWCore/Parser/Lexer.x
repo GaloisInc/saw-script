@@ -79,6 +79,7 @@ $cntrl     = [A-Z \@\[\\\]\^\_]
 @hex       = $hexit+
 $idfirst   = [$alpha \_]
 $idchar    = [$alpha $digit $unidigit $unitick \' \_]
+@bvlit     = $digit $idchar*
 @ident     = $idfirst $idchar*
 @punct = "#" | "," | "->" | "." | ";" | ":" | "=" | "*"
        | "\" | "(" | ")" | "[" | "]" | "{" | "}" | "|"
@@ -101,8 +102,7 @@ $whitechar+;
 "-}"        { \_ -> TCommentE }
 \" @string* \" { TString . read   }
 @num        { TNat . read }
-"0x"@hex    { TBitvector . readHexBV . drop 2 }
-"0b"[0-1]+  { TBitvector . readBinBV . drop 2 }
+@bvlit      { TBitvector }
 @key        { TKey }
 @ident      { TIdent }
 
@@ -118,7 +118,7 @@ data Token
   | TRecursor { tokRecursor :: (String, Natural) }   -- ^ Recursor
   | TInductor { tokInductor :: String }   -- ^ Recursor at sort Prop
   | TNat { tokNat :: Natural }  -- ^ Natural number literal
-  | TBitvector { tokBits :: [Bool] } -- ^ Bitvector literal
+  | TBitvector { tokBits :: String } -- ^ Bitvector literal
   | TString { tokString :: String } -- ^ String literal
   | TKey String     -- ^ Keyword or predefined symbol
   | TEnd            -- ^ End of file.
@@ -170,16 +170,6 @@ parseNatural str = read str
 -- | Remove the "#ind" suffix of an inductor string
 dropIndSuffix :: String -> String
 dropIndSuffix str = take (length str - 4) str
-
--- | Convert a hexadecimal string to a big endian list of bits
-readHexBV :: String -> [Bool]
-readHexBV =
-  concatMap (\c -> let i = Char.digitToInt c in
-                   [testBit i 3, testBit i 2, testBit i 1, testBit i 0])
-
--- | Convert a binary string to a big endian list of bits
-readBinBV :: String -> [Bool]
-readBinBV = map (\c -> c == '1')
 
 initialAlexInput :: FilePath -> FilePath -> LText.Text -> AlexInput
 initialAlexInput base path b = PosPair pos input
