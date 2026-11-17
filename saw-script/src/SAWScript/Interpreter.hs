@@ -85,7 +85,7 @@ import qualified SAWScript.Loader as Loader
 import SAWCentral.JavaType
 import SAWCentral.LLVMBuiltins
 import SAWCentral.Options
-import SAWScript.Typechecker (checkStmt, typesMatch)
+import SAWScript.Typechecker (TCIncremental, initialTCIncremental, checkStmt, typesMatch, addAbstractType)
 import qualified SAWScript.Typechecker as Ty (Message(..), StmtContext(..))
 import SAWScript.Panic (HasCallStack, panic)
 import SAWCentral.TopLevel
@@ -3476,8 +3476,8 @@ data Primitive
 -- no particular system to which are there and which are here; some of
 -- the ones there have no special syntax or semantics and should
 -- probably be moved here at some point.
-primTypes :: Map SS.Name PrimType
-primTypes = foldl doadd Map.empty
+primTypes :: (Map SS.Name PrimType, TCIncremental)
+primTypes = foldl doadd (Map.empty, initialTCIncremental)
   [ abstype "BisimTheorem" Experimental
   , abstype "CryptolModule" Current
   , abstype "FunctionProfile" Experimental
@@ -3517,36 +3517,40 @@ primTypes = foldl doadd Map.empty
   , abstype "__DEPRECATED__" HideDeprecated
   ]
   where
-    -- Thread the map through as we add entries so we can
-    -- use it to check the right hand side of any typedefs.
+    -- Thread the typechecker context through as we add entries so we
+    -- can use it to check the right hand side of any typedefs. For now,
+    -- carry both a plain map and a TCIncremental; we should be able to
+    -- get rid of the plain map later.
     doadd ::
-        Map SS.Name PrimType ->
-        (Map SS.Name PrimType -> (SS.Name, PrimType)) ->
-        Map SS.Name PrimType
-    doadd tyenv constructor =
-        let (name, entry) = constructor tyenv in
-        Map.insert name entry tyenv
+        (Map SS.Name PrimType, TCIncremental) ->
+        (Map SS.Name PrimType -> TCIncremental -> (SS.Name, PrimType, TCIncremental)) ->
+        (Map SS.Name PrimType, TCIncremental)
+    doadd (tyenv, tcenv) constructor =
+        let (name, entry, tcenv') = constructor tyenv tcenv in
+        (Map.insert name entry tyenv, tcenv')
 
     -- abstract type of arbitrary kind
     abstype' ::
-        SS.Kind -> Text -> PrimitiveLifecycle -> Map SS.Name PrimType ->
-        (SS.Name, PrimType)
-    abstype' kind name lc _tyenv = (name, info)
+        SS.Kind -> Text -> PrimitiveLifecycle -> Map SS.Name PrimType -> TCIncremental ->
+        (SS.Name, PrimType, TCIncremental)
+    abstype' kind name lc _tyenv tcenv = (name, info, tcenv')
       where
         info = PrimType
           { primTypeType = SS.AbstractType kind
           , primTypeLife = lc
           }
+        tcenv' = addAbstractType name lc kind tcenv
 
     -- abstract type of kind *
-    abstype :: Text -> PrimitiveLifecycle -> Map SS.Name PrimType -> (SS.Name, PrimType)
-    abstype name lc tyenv = abstype' SS.kindStar name lc tyenv
+    abstype :: Text -> PrimitiveLifecycle -> Map SS.Name PrimType -> TCIncremental ->
+               (SS.Name, PrimType, TCIncremental)
+    abstype name lc tyenv tcenv = abstype' SS.kindStar name lc tyenv tcenv
 
-    -- concrete type (not currently used)
+    -- concrete type
     conctype ::
-        Text -> Text -> PrimitiveLifecycle -> Map SS.Name PrimType ->
-        (SS.Name, PrimType)
-    conctype name tystr lc tyenv = (name, info)
+        Text -> Text -> PrimitiveLifecycle -> Map SS.Name PrimType -> TCIncremental ->
+        (SS.Name, PrimType, TCIncremental)
+    conctype name tystr lc tyenv _tcenv = (name, info, tcenv')
       where
         info = PrimType
           { primTypeType = SS.ConcreteType ty
@@ -3561,7 +3565,7 @@ primTypes = foldl doadd Map.empty
         tyenv' = Map.map (\pt -> (primTypeLife pt, primTypeType pt)) tyenv
         tyenv'' = ScopedMap.seed tyenv'
 
-        (ty, _tcenv) = Loader.readTypedefPure lc tyenv'' name tystr
+        (ty, tcenv') = Loader.readTypedefPure lc tyenv'' name tystr
 
 --
 -- Note: the help/doc strings for the primitives should be
@@ -8619,8 +8623,11 @@ primitives = Map.fromList $
 -- uses the same type as the interpreter environment this function
 -- seeds, instead of its own.
 primNamedTypeEnv :: ScopedMap SS.Name (PrimitiveLifecycle, SS.NamedType)
-primNamedTypeEnv = ScopedMap.seed $ fmap extract primTypes
-   where extract pt = (primTypeLife pt, primTypeType pt)
+primNamedTypeEnv =
+    let (tyenv, _tcenv) = primTypes
+        extract pt = (primTypeLife pt, primTypeType pt)
+    in
+    ScopedMap.seed $ fmap extract tyenv
 
 -- | Initial value environment for the interpreter.
 --

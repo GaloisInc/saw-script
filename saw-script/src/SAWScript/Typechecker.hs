@@ -16,6 +16,7 @@ This module contains the typechecker for SAWScript.
 
 module SAWScript.Typechecker
     ( TCIncremental  -- opaque
+    , initialTCIncremental
     , Message(..)
     , StmtContext(..)
     , checkDecl
@@ -23,6 +24,7 @@ module SAWScript.Typechecker
     , typesMatch
     , checkSchema
     , checkTypedef
+    , addAbstractType
     , checkSchemaPattern
     ) where
 
@@ -95,11 +97,20 @@ data TCIncremental = TCIncremental {
     tciSubst :: Subst
 }
 
--- | An initial TCIncremental given an initial varenv and tyenv
-initialIncremental :: VarEnv -> TyEnv -> TCIncremental
-initialIncremental varenv tyenv = TCIncremental {
+-- | Create a TCIncremental given a starting varenv and tyenv
+makeIncremental :: VarEnv -> TyEnv -> TCIncremental
+makeIncremental varenv tyenv = TCIncremental {
     tciVarEnv = varenv,
     tciTyEnv = tyenv,
+    tciNextTypeIndex = 0,
+    tciSubst = Map.empty
+}
+
+-- | An initial, completely empty TCIncremental.
+initialTCIncremental :: TCIncremental
+initialTCIncremental = TCIncremental {
+    tciVarEnv = ScopedMap.empty,
+    tciTyEnv = ScopedMap.empty,
     tciNextTypeIndex = 0,
     tciSubst = Map.empty
 }
@@ -446,7 +457,7 @@ runTI :: PPS.Opts -> Set PrimitiveLifecycle -> VarEnv -> TyEnv -> TI a ->
          FullResult a
 runTI ppopts avail varenv tyenv m =
     let rw = RW {
-            tiIncremental = initialIncremental varenv tyenv,
+            tiIncremental = makeIncremental varenv tyenv,
             tiMessages = []
         }
         ro = RO {
@@ -3296,6 +3307,21 @@ typesMatch ppopts avail tenv name schema'found schema'expected =
   -- return match success/failure
   b
 
+-- | Add an abstract type to the environment, as used when constructing
+--   the builtin types table. (This is an external interface.)
+--
+addAbstractType :: Text -> PrimitiveLifecycle -> Kind -> TCIncremental -> TCIncremental
+addAbstractType name lc kind incr =
+    let tyenv = tciTyEnv incr in
+    case ScopedMap.lookup name tyenv of
+        Nothing ->
+            let tyenv' = ScopedMap.insert name (lc, AbstractType kind) tyenv in
+            incr { tciTyEnv = tyenv' }
+        Just _ ->
+            panic "addAbstractType" [
+                "Type " <> name <> " already exists!"
+            ]
+ 
 -- | Check a schema (type) as used when constructing the builtins
 --   table. (This is an external interface.)
 --
