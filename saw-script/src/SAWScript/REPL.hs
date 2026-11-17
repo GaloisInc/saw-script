@@ -46,7 +46,7 @@ run mfile opts = do
 --
 reenterTopLevel :: TopLevelRO -> TopLevelRW -> IO TopLevelRW
 reenterTopLevel ro rw = do
-    let rst = resumeREPL ro rw Nothing
+    let rst = resumeREPL reenterTopLevel reenterProofScript ro rw Nothing
     (_result, rst') <- runREPL (repl Nothing) rst
     return $ rTopLevelRW rst'
 
@@ -59,7 +59,7 @@ reenterTopLevel ro rw = do
 reenterProofScript ::
     TopLevelRO -> TopLevelRW -> ProofState -> IO (TopLevelRW, ProofState)
 reenterProofScript ro rw pst = do
-    let rst = resumeREPL ro rw (Just pst)
+    let rst = resumeREPL reenterTopLevel reenterProofScript ro rw (Just pst)
     (_result, rst') <- runREPL (repl Nothing) rst
     let rw' = rTopLevelRW rst'
         pst' = case rProofState rst' of

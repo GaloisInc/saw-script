@@ -18,7 +18,9 @@ Stability   : provisional
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module SAWScript.Interpreter
-  ( interpretReplStmts
+  ( TopLevelShellHook,
+    ProofScriptShellHook,
+    interpretReplStmts
   , processFile
   , buildTopLevelEnv
   )
@@ -94,7 +96,7 @@ import SAWCentral.Value
 import SAWScript.ValueOps
 import SAWCentral.SolverCache
 import SAWCentral.SolverVersions
-import SAWCentral.Proof (ProofResult(..), Theorem, emptyTheoremDB)
+import SAWCentral.Proof (ProofState, ProofResult(..), Theorem, emptyTheoremDB)
 import SAWCentral.Prover.Rewrite(basic_ss)
 import SAWCentral.Prover.Exporter
 import SAWCentral.Yosys -- XXX remove in favor of the following later
@@ -135,6 +137,24 @@ import SAWScript.AutoMatch
 
 import qualified Lang.Crucible.FunctionHandle as Crucible
 
+
+------------------------------------------------------------
+-- Subshell hook types
+
+-- These are here now (used to be in Value.hs) so they'll be able to
+-- mention TCIncremental.
+
+-- | Type for the function to start a new REPL in TopLevel.
+--
+--   Passed down from the REPL code to avoid circular references.
+type TopLevelShellHook = TopLevelRO -> TopLevelRW -> IO TopLevelRW
+
+-- | Type for the function to start a new REPL in ProofScript.
+--
+--   Passed down from the REPL code to avoid circular references.
+type ProofScriptShellHook =
+    TopLevelRO -> TopLevelRW -> ProofState ->
+    IO (TopLevelRW, ProofState)
 
 
 ------------------------------------------------------------
@@ -543,7 +563,10 @@ processTypeCheck (msgs, output) =
 --   bunch of legacy code that uses "ctx" for monad context and I
 --   don't want to stop to clean it out.
 --
-data RunCtx = RunCtx
+data RunCtx = RunCtx {
+    rcxTLHook :: TopLevelShellHook,
+    rcxPSHook :: ProofScriptShellHook
+}
 
 
 ------------------------------------------------------------
@@ -1476,11 +1499,15 @@ interpretTopStmt printBinds replTypingHacks stmt = do
 --   This is the entry point used by the REPL for executing stuff the
 --   user types in.
 --
-interpretReplStmts :: InterpreterMonad m => [SS.Stmt] -> m ()
-interpretReplStmts stmts = do
+interpretReplStmts ::
+    InterpreterMonad m =>
+    TopLevelShellHook ->
+    ProofScriptShellHook ->
+    [SS.Stmt] -> m ()
+interpretReplStmts tlhook pshook stmts = do
   let printBinds = True
   let replTypingHacks = True
-  let ?rcx = RunCtx
+  let ?rcx = RunCtx { rcxTLHook = tlhook, rcxPSHook = pshook }
   mapM_ (interpretTopStmt printBinds replTypingHacks) stmts
 
 -- | Hook for AutoMatch
@@ -1510,10 +1537,10 @@ stmtInterpreter ro _rw stmts = do
   -- execute in.
   let opts = roOptions ro
       scriptArgv = ["auto_match"]
-      tlhook = roSubshell ro
-      pshook = roProofSubshell ro
+      tlhook _ _ = liftIO $ fail "No subshells inside AutoMatch"
+      pshook _ _ _ = liftIO $ fail "No proof subshells inside AutoMatch"
   (ro', rw') <- buildTopLevelEnv opts scriptArgv tlhook pshook
-  let ?rcx = RunCtx
+  let ?rcx = RunCtx { rcxTLHook = tlhook, rcxPSHook = pshook }
   let m = mapM_ (interpretTopStmt False False) stmts
   _ <- runTopLevel m ro' rw'
   return ()
@@ -1531,12 +1558,16 @@ restoreDirState (cwd, dirstack) = do
   liftIO $ setCurrentDirectory cwd
   modify (\rw -> rw { rwDirStack = dirstack })
 
-interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
-interpretFile file runMain =
+interpretFile ::
+    TopLevelShellHook ->
+    ProofScriptShellHook ->
+    FilePath -> Bool {- ^ run main? -} ->
+    TopLevel ()
+interpretFile tlhook pshook file runMain =
   bracketTopLevel saveDirState restoreDirState (const interp)
   where
     interp = do
-      let ?rcx = RunCtx
+      let ?rcx = RunCtx { rcxTLHook = tlhook, rcxPSHook = pshook }
 
       opts <- getOptions
       ppopts <- getPPOpts
@@ -1659,8 +1690,6 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
                    , roProxy = proxy
                    , roInitWorkDir = currDir
                    , roBasicSS = ss
-                   , roSubshell = tlhook
-                   , roProofSubshell = pshook
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
@@ -1670,7 +1699,7 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
 
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
-       let ?rcx = RunCtx
+       let ?rcx = RunCtx { rcxTLHook = tlhook, rcxPSHook = pshook }
        let (environ, _tcenv) = primEnviron opts bic ce0
 
        let rw0 = TopLevelRW
@@ -1721,7 +1750,7 @@ processFile ::
   IO ()
 processFile opts file scriptArgv tlhook pshook = do
   (ro, rw) <- buildTopLevelEnv opts scriptArgv tlhook pshook
-  _ <- runTopLevel (interpretFile file True) ro rw
+  _ <- runTopLevel (interpretFile tlhook pshook file True) ro rw
             `X.catch` (handleException opts)
   return ()
 
@@ -2738,7 +2767,7 @@ toplevelSubshell () = do
     pushScope
     ro <- ask
     rw <- get
-    let hook = roSubshell ro
+    let hook = rcxTLHook ?rcx
     rw' <- liftIO $ hook ro rw
     put rw'
     popScope
@@ -2761,7 +2790,7 @@ proofScriptSubshell () = do
         rw_ <- get
         return (ro_, rw_)
     pst <- get
-    let hook = roProofSubshell ro
+    let hook = rcxPSHook ?rcx
     (rw', pst') <- liftIO $ hook ro rw pst
     put pst'
     scriptTopLevel $ do
@@ -3788,7 +3817,7 @@ primitives = Map.fromList $
     -- to topLevelSubshell, which allows passing extra info stored in
     -- the AST into the builtin.
   , prim "subshell"            "() -> TopLevel ()"
-    (pureVal toplevelSubshell)
+    (pureVal $ toplevelSubshell)
     Experimental
     [ "Open an interactive subshell instance nested inside the context"
     , "where 'subshell' was called. The resulting REPL is always"
@@ -3806,7 +3835,7 @@ primitives = Map.fromList $
     -- Caution: "proof_subshell" gets intercepted and turned into an
     -- AST node like "subshell".
   , prim "proof_subshell"      "() -> ProofScript ()"
-    (pureVal proofScriptSubshell)
+    (pureVal $ proofScriptSubshell)
     Experimental
     [ "Open an interactive subshell instance nested inside the context"
     , "where 'proof_subshell' was called. The resulting REPL is always"

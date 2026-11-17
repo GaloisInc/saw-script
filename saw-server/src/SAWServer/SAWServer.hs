@@ -322,8 +322,6 @@ initialState readFileFn =
 #endif
                 , roInitWorkDir = cwd
                 , roBasicSS = ss
-                , roSubshell = \_ _ -> fail "SAW server does not support subshells."
-                , roProofSubshell = \_ _ _ -> fail "SAW server does not support subshells."
                 }
          rw = TopLevelRW
                 { rwEnviron = Environ ScopedMap.empty ScopedMap.empty cenv

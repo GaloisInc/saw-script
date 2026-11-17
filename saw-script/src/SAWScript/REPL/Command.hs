@@ -419,6 +419,8 @@ genericHelp = map cmdHelp commandList
 -- | Execute some SAWScript text.
 executeSAWScriptText :: Text -> REPL ()
 executeSAWScriptText str = exceptionProtect $ do
+  tlhook <- getTLHook
+  pshook <- getPSHook
   ro <- getTopLevelRO
   ppopts <- getPPOpts
   let opts = roOptions ro
@@ -430,8 +432,8 @@ executeSAWScriptText str = exceptionProtect $ do
   stmts <- liftTopLevel $ liftIO $ Loader.readREPLTextUnchecked opts ppopts replFileName str
   mbPst <- getProofState
   case mbPst of
-      Nothing -> void $ liftTopLevel (interpretReplStmts stmts)
-      Just _  -> void $ liftProofScript (interpretReplStmts stmts)
+      Nothing -> void $ liftTopLevel (interpretReplStmts tlhook pshook stmts)
+      Just _  -> void $ liftProofScript (interpretReplStmts tlhook pshook stmts)
 
 
 ------------------------------------------------------------

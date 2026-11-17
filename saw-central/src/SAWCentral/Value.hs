@@ -67,8 +67,6 @@ module SAWCentral.Value (
     rwSetCryptolEnv,
     -- used by SAWScript.ValueOps
     rwModifyCryptolEnv,
-    -- used by SAWScript.Interpreter, and implicitly by SAWScript.REPL and Main
-    TopLevelShellHook, ProofScriptShellHook,
     -- used by SAWScript.Automatch, SAWScript.REPL.*, SAWScript.Interpreter,
     --    SAWServer.SAWServer
     TopLevelRO(..),
@@ -1077,18 +1075,6 @@ rwModifyCryptolEnv f rw =
     in rw { rwEnviron = Environ varenv tyenv (f cenv) }
 
 
--- | Type for the function to start a new REPL in TopLevel.
---
---   Passed down from the REPL code to avoid circular references.
-type TopLevelShellHook = TopLevelRO -> TopLevelRW -> IO TopLevelRW
-
--- | Type for the function to start a new REPL in ProofScript.
---
---   Passed down from the REPL code to avoid circular references.
-type ProofScriptShellHook =
-    TopLevelRO -> TopLevelRW -> ProofState ->
-    IO (TopLevelRW, ProofState)
-
 -- | TopLevel Read-Only Environment.
 data TopLevelRO =
   TopLevelRO
@@ -1098,15 +1084,6 @@ data TopLevelRO =
   , roProxy         :: AIGProxy
   , roInitWorkDir   :: FilePath
   , roBasicSS       :: SAWSimpset
-  , roSubshell      :: TopLevelShellHook
-    -- ^ An action for entering a subshell.  This
-    --   may raise an error if the current execution
-    --   mode doesn't support subshells (e.g., the remote API)
-
-  , roProofSubshell :: ProofScriptShellHook
-    -- ^ An action for entering a subshell in proof mode.  This
-    --   may raise an error if the current execution
-    --   mode doesn't support subshells (e.g., the remote API)
   }
 
 -- | Current state of the Java sub-system.

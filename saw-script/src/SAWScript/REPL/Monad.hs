@@ -24,6 +24,8 @@ module SAWScript.REPL.Monad (
   , liftTopLevel
   , liftProofScript
   , REPLState(..)
+  , getTLHook
+  , getPSHook
   , getCryptolEnv
   , getTopLevelRO
   , getTopLevelRW
@@ -56,12 +58,12 @@ import SAWCentral.TopLevel (
  )
 import SAWCentral.Value (
     ProofScript(..),
-    rwGetCryptolEnv, TopLevelShellHook, ProofScriptShellHook,
+    rwGetCryptolEnv
  )
 import qualified SAWCentral.Value as SV (getPPOpts) -- don't conflict with ours
 
 import SAWScript.Panic (panic)
-import SAWScript.Interpreter (buildTopLevelEnv)
+import SAWScript.Interpreter (buildTopLevelEnv, TopLevelShellHook, ProofScriptShellHook)
 import SAWScript.ValueOps (TopLevelCheckpoint, makeCheckpoint, restoreCheckpoint)
 
 
@@ -97,6 +99,8 @@ import SAWScript.ValueOps (TopLevelCheckpoint, makeCheckpoint, restoreCheckpoint
 data REPLState = REPLState
   { rContinue   :: Bool
   , rIsBatch    :: Bool
+  , rTLHook     :: TopLevelShellHook
+  , rPSHook     :: ProofScriptShellHook
   , rTopLevelRO :: TopLevelRO
   , rTopLevelRW :: TopLevelRW
   , rProofState :: Maybe ProofState
@@ -111,6 +115,8 @@ initREPL isBatch opts tlhook pshook =
      return REPLState
        { rContinue   = True
        , rIsBatch    = isBatch
+       , rTLHook     = tlhook
+       , rPSHook     = pshook
        , rTopLevelRO = ro
        , rTopLevelRW = rw
        , rProofState  = Nothing
@@ -122,11 +128,16 @@ initREPL isBatch opts tlhook pshook =
 -- file in batch mode. Or from the same file that's feeding the parent
 -- shell, though that's probably difficult. For now, assume any
 -- subshells are intended to be interactive.
-resumeREPL :: TopLevelRO -> TopLevelRW -> Maybe ProofState -> REPLState
-resumeREPL ro rw mpst =
+resumeREPL ::
+    TopLevelShellHook -> ProofScriptShellHook ->
+    TopLevelRO -> TopLevelRW -> Maybe ProofState ->
+    REPLState
+resumeREPL tlhook pshook ro rw mpst =
     REPLState {
         rContinue   = True,
         rIsBatch    = False,
+        rTLHook     = tlhook,
+        rPSHook     = pshook,
         rTopLevelRO = ro,
         rTopLevelRW = rw,
         rProofState = mpst
@@ -177,6 +188,12 @@ liftProofScript m = do
 
 ------------------------------------------------------------
 -- Accessors
+
+getTLHook :: REPL TopLevelShellHook
+getTLHook = gets rTLHook
+
+getPSHook :: REPL ProofScriptShellHook
+getPSHook = gets rPSHook
 
 getTopLevelRO :: REPL TopLevelRO
 getTopLevelRO = gets rTopLevelRO
