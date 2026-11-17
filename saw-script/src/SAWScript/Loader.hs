@@ -51,8 +51,7 @@ import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser
 import qualified SAWScript.Include as Inc
 import qualified SAWScript.Subshells as Subshells
-import SAWScript.Typechecker (TCIncremental, checkDecl, checkSchema, checkTypedef, checkSchemaPattern)
-import qualified SAWScript.Typechecker as Ty (Message(..))
+import qualified SAWScript.Typechecker as Ty
 
 
 ------------------------------------------------------------
@@ -342,7 +341,7 @@ readSchemaPure name lc tyenv str =
         whoAmI = "readSchemaPure on " <> name
     in
     let schema = readAnyPure ppopts fakeFileName str "end-of-input" parseSchema whoAmI in
-    panicOnTyMsgs (Text.pack fakeFileName) $ checkSchema ppopts lc tyenv schema name
+    panicOnTyMsgs (Text.pack fakeFileName) $ Ty.checkSchema ppopts lc tyenv schema name
 
 -- | Read a typedef from a pair of strings. The name is separate; the
 --   expansion is a type schema that must be monomorphic. This is used
@@ -372,7 +371,7 @@ readTypedefPure ::
     ScopedMap Name (PrimitiveLifecycle, NamedType) ->
     Text ->
     Text ->
-    (Type, TCIncremental)
+    (Type, Ty.TCIncremental)
 readTypedefPure lc tyenv name str =
     -- This is for use during initialization, so we can use the default ppopts
     let ppopts = PPS.defaultOpts in
@@ -380,7 +379,7 @@ readTypedefPure lc tyenv name str =
         whoAmI = "readTypedefPure on " <> name
     in
     let schema = readAnyPure ppopts fakeFileName str "end-of-input" parseSchema whoAmI in
-    panicOnTyMsgs (Text.pack fakeFileName) $ checkTypedef ppopts lc tyenv name schema
+    panicOnTyMsgs (Text.pack fakeFileName) $ Ty.checkTypedef ppopts lc tyenv name schema
 
 -- | Read a schema pattern from a string. This is used by the
 --   :search REPL command.
@@ -410,7 +409,7 @@ readSchemaPattern _opts fileName environ rbenv avail str = do
       varenv'' = Map.union varenv' rbenv'
       varenv''' = ScopedMap.seed varenv''
 
-  dispatchTyMsgs $ checkSchemaPattern avail varenv''' tyenv pat
+  dispatchTyMsgs $ Ty.checkSchemaPattern avail varenv''' tyenv pat
 
 -- | Read an expression from a string. This is used by the
 --   :type REPL command.
@@ -446,7 +445,7 @@ readExpression opts ppopts fileName environ rbenv avail str = do
 
   -- Throw away the updated type environment because we aren't actually
   -- declaring.
-  (decl', _tcenv') <- dispatchTyMsgs $ checkDecl ppopts avail varenv''' tyenv decl
+  (decl', _tcenv') <- dispatchTyMsgs $ Ty.checkDecl ppopts avail varenv''' tyenv decl
 
   let expr' = dDef decl'
       schema = case dType decl' of
