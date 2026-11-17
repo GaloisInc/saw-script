@@ -1,0 +1,6 @@
+-- Malformed numeric literal
+module test where
+import Prelude;
+
+foo : Nat;
+foo = 10e5;
