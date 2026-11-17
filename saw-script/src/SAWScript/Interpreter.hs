@@ -3523,17 +3523,17 @@ primTypes = foldl doadd (Map.empty, initialTCIncremental)
     -- get rid of the plain map later.
     doadd ::
         (Map SS.Name PrimType, TCIncremental) ->
-        (Map SS.Name PrimType -> TCIncremental -> (SS.Name, PrimType, TCIncremental)) ->
+        (TCIncremental -> (SS.Name, PrimType, TCIncremental)) ->
         (Map SS.Name PrimType, TCIncremental)
     doadd (tyenv, tcenv) constructor =
-        let (name, entry, tcenv') = constructor tyenv tcenv in
+        let (name, entry, tcenv') = constructor tcenv in
         (Map.insert name entry tyenv, tcenv')
 
     -- abstract type of arbitrary kind
     abstype' ::
-        SS.Kind -> Text -> PrimitiveLifecycle -> Map SS.Name PrimType -> TCIncremental ->
+        SS.Kind -> Text -> PrimitiveLifecycle -> TCIncremental ->
         (SS.Name, PrimType, TCIncremental)
-    abstype' kind name lc _tyenv tcenv = (name, info, tcenv')
+    abstype' kind name lc tcenv = (name, info, tcenv')
       where
         info = PrimType
           { primTypeType = SS.AbstractType kind
@@ -3542,15 +3542,15 @@ primTypes = foldl doadd (Map.empty, initialTCIncremental)
         tcenv' = addAbstractType name lc kind tcenv
 
     -- abstract type of kind *
-    abstype :: Text -> PrimitiveLifecycle -> Map SS.Name PrimType -> TCIncremental ->
+    abstype :: Text -> PrimitiveLifecycle -> TCIncremental ->
                (SS.Name, PrimType, TCIncremental)
-    abstype name lc tyenv tcenv = abstype' SS.kindStar name lc tyenv tcenv
+    abstype name lc tcenv = abstype' SS.kindStar name lc tcenv
 
     -- concrete type
     conctype ::
-        Text -> Text -> PrimitiveLifecycle -> Map SS.Name PrimType -> TCIncremental ->
+        Text -> Text -> PrimitiveLifecycle -> TCIncremental ->
         (SS.Name, PrimType, TCIncremental)
-    conctype name tystr lc _tyenv tcenv = (name, info, tcenv')
+    conctype name tystr lc tcenv = (name, info, tcenv')
       where
         info = PrimType
           { primTypeType = SS.ConcreteType ty
