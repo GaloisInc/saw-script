@@ -3550,22 +3550,13 @@ primTypes = foldl doadd (Map.empty, initialTCIncremental)
     conctype ::
         Text -> Text -> PrimitiveLifecycle -> Map SS.Name PrimType -> TCIncremental ->
         (SS.Name, PrimType, TCIncremental)
-    conctype name tystr lc tyenv _tcenv = (name, info, tcenv')
+    conctype name tystr lc _tyenv tcenv = (name, info, tcenv')
       where
         info = PrimType
           { primTypeType = SS.ConcreteType ty
           , primTypeLife = lc
           }
-
-        -- We need a Map Name (PrimitiveLifecycle, NamedType) to feed
-        -- to readTypedefPure. Construct one from the Map Name PrimType
-        -- that we've got. FUTURE: there are too many isomorphic types
-        -- floating around in the builtins handling (not just here)
-        -- and they should all be simplified away.
-        tyenv' = Map.map (\pt -> (primTypeLife pt, primTypeType pt)) tyenv
-        tyenv'' = ScopedMap.seed tyenv'
-
-        (ty, tcenv') = Loader.readTypedefPure lc tyenv'' name tystr
+        (ty, tcenv') = Loader.readTypedefPure lc tcenv name tystr
 
 --
 -- Note: the help/doc strings for the primitives should be

@@ -368,18 +368,18 @@ readSchemaPure name lc tyenv str =
 --
 readTypedefPure ::
     PrimitiveLifecycle ->
-    ScopedMap Name (PrimitiveLifecycle, NamedType) ->
+    Ty.TCIncremental ->
     Text ->
     Text ->
     (Type, Ty.TCIncremental)
-readTypedefPure lc tyenv name str =
+readTypedefPure lc tcenv name str =
     -- This is for use during initialization, so we can use the default ppopts
     let ppopts = PPS.defaultOpts in
     let fakeFileName = Text.unpack $ "<definition of " <> name <> ">"
         whoAmI = "readTypedefPure on " <> name
     in
     let schema = readAnyPure ppopts fakeFileName str "end-of-input" parseSchema whoAmI in
-    panicOnTyMsgs (Text.pack fakeFileName) $ Ty.checkTypedef ppopts lc tyenv name schema
+    panicOnTyMsgs (Text.pack fakeFileName) $ Ty.checkTypedef ppopts lc tcenv name schema
 
 -- | Read a schema pattern from a string. This is used by the
 --   :search REPL command.

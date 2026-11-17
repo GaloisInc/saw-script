@@ -453,11 +453,11 @@ type PartResult a = ([Message], a)
 --   manifestation of the unhealthy codependent relationship with the
 --   interpreter.
 --
-runTI :: PPS.Opts -> Set PrimitiveLifecycle -> VarEnv -> TyEnv -> TI a ->
+runTI :: PPS.Opts -> Set PrimitiveLifecycle -> TCIncremental -> TI a ->
          FullResult a
-runTI ppopts avail varenv tyenv m =
+runTI ppopts avail incr m =
     let rw = RW {
-            tiIncremental = makeIncremental varenv tyenv,
+            tiIncremental = incr,
             tiMessages = []
         }
         ro = RO {
@@ -471,10 +471,10 @@ runTI ppopts avail varenv tyenv m =
     (msgs, (result, incr'))
 
 -- | Variant that doesn't return the output `TCIncremental`.
-runTI' :: PPS.Opts -> Set PrimitiveLifecycle -> VarEnv -> TyEnv  -> TI a ->
+runTI' :: PPS.Opts -> Set PrimitiveLifecycle -> TCIncremental -> TI a ->
           PartResult a
-runTI' ppopts avail varenv tyenv m =
-    let (msgs, (result, _incr')) = runTI ppopts avail varenv tyenv m in
+runTI' ppopts avail incr m =
+    let (msgs, (result, _incr')) = runTI ppopts avail incr m in
     (msgs, result)
 
 -- | Run a speculative sub-action in the `TI` monad. Throw away
@@ -3256,8 +3256,9 @@ checkStmt ppopts avail env tenv ctx stmt =
         ctxtype = case ctx of
             InTopLevel -> TyCon prov TopLevel
             InProofScript -> TyCon prov ProofScript
+        incr = makeIncremental env tenv
     in
-    runTI ppopts avail env tenv (inferSingleStmt prov ctxtype stmt)
+    runTI ppopts avail incr (inferSingleStmt prov ctxtype stmt)
 
 -- | Check a single declaration. (This is an external interface.)
 --
@@ -3271,7 +3272,8 @@ checkDecl ::
       Decl ->
       FullResult Decl
 checkDecl ppopts avail env tenv decl =
-    runTI ppopts avail env tenv (inferDecl ReadOnlyVar decl)
+    let incr = makeIncremental env tenv in
+    runTI ppopts avail incr (inferDecl ReadOnlyVar decl)
 
 -- | Check a found type (first `Schema` argument) against an expected
 --   type (second `Schema` argument) and return True if they can be
@@ -3302,26 +3304,12 @@ typesMatch ppopts avail tenv name schema'found schema'expected =
         ty'found <- unpack schema'found
         ty'expected <- unpack schema'expected
         matches (Pos.getPos ty'found) ty'found ty'expected
+      incr = makeIncremental ScopedMap.empty tenv
   in
-  let (_msgs, (b, _incr')) = runTI ppopts avail ScopedMap.empty tenv match in
+  let (_msgs, (b, _incr')) = runTI ppopts avail incr match in
   -- return match success/failure
   b
 
--- | Add an abstract type to the environment, as used when constructing
---   the builtin types table. (This is an external interface.)
---
-addAbstractType :: Text -> PrimitiveLifecycle -> Kind -> TCIncremental -> TCIncremental
-addAbstractType name lc kind incr =
-    let tyenv = tciTyEnv incr in
-    case ScopedMap.lookup name tyenv of
-        Nothing ->
-            let tyenv' = ScopedMap.insert name (lc, AbstractType kind) tyenv in
-            incr { tciTyEnv = tyenv' }
-        Just _ ->
-            panic "addAbstractType" [
-                "Type " <> name <> " already exists!"
-            ]
- 
 -- | Check a schema (type) as used when constructing the builtins
 --   table. (This is an external interface.)
 --
@@ -3392,7 +3380,8 @@ checkSchema ppopts contextLC tyenv schema fnName = do
           WarnDeprecated -> [Current, WarnDeprecated]
           HideDeprecated -> [Current, WarnDeprecated, HideDeprecated, Experimental]
           Experimental -> [Current, Experimental]
-    runTI' ppopts avail ScopedMap.empty tyenv check
+        incr = makeIncremental ScopedMap.empty tyenv
+    runTI' ppopts avail incr check
 
 -- | Check a typedef as used when constructing the builtin types table.
 --   (This is an external interface.)
@@ -3405,8 +3394,8 @@ checkSchema ppopts contextLC tyenv schema fnName = do
 --
 -- XXX: this should share more logic with other things. More cleanup/reorg needed
 --
-checkTypedef :: PPS.Opts -> PrimitiveLifecycle -> TyEnv -> Text -> Schema -> FullResult Type
-checkTypedef ppopts contextLC tyenv0 name schema = do
+checkTypedef :: PPS.Opts -> PrimitiveLifecycle -> TCIncremental -> Text -> Schema -> FullResult Type
+checkTypedef ppopts contextLC incr name schema = do
     let check = do
           ty <- case schema of
                 Forall [] ty -> pure ty
@@ -3433,7 +3422,22 @@ checkTypedef ppopts contextLC tyenv0 name schema = do
             WarnDeprecated -> [Current, WarnDeprecated]
             HideDeprecated -> [Current, WarnDeprecated, HideDeprecated]
             Experimental -> [Current, Experimental]
-    runTI ppopts avail ScopedMap.empty tyenv0 check
+    runTI ppopts avail incr check
+
+-- | Add an abstract type to the environment, as used when constructing
+--   the builtin types table. (This is an external interface.)
+--
+addAbstractType :: Text -> PrimitiveLifecycle -> Kind -> TCIncremental -> TCIncremental
+addAbstractType name lc kind incr =
+    let tyenv = tciTyEnv incr in
+    case ScopedMap.lookup name tyenv of
+        Nothing ->
+            let tyenv' = ScopedMap.insert name (lc, AbstractType kind) tyenv in
+            incr { tciTyEnv = tyenv' }
+        Just _ ->
+            panic "addAbstractType" [
+                "Type " <> name <> " already exists!"
+            ]
 
 -- | Check a schema (type) pattern as used by @:search@. (This is an
 --   external interface.)
