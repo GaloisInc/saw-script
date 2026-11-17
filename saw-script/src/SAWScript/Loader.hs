@@ -405,7 +405,9 @@ readExpression opts ppopts fileName environ rbenv avail str = do
   let pos = Pos.getPos expr
       decl = Decl pos (PWild pos Nothing) Nothing expr
 
-  decl' <- dispatchTyMsgs $ checkDecl ppopts avail varenv''' tyenv decl
+  -- Throw away the updated type environment because we aren't actually
+  -- declaring.
+  (decl', _tcenv') <- dispatchTyMsgs $ checkDecl ppopts avail varenv''' tyenv decl
 
   let expr' = dDef decl'
       schema = case dType decl' of

@@ -1355,7 +1355,7 @@ interpretTopStmt printBinds replTypingHacks stmt = do
   avail <- liftTopLevel $ gets rwPrimsAvail
   ctx <- getMonadContext
 
-  stmt' <- do
+  (stmt', _tcenv') <- do
       ppopts <- liftTopLevel $ getPPOpts
       -- XXX this is not the right way to do this
       --    - shouldn't have to flatten the environments
@@ -1370,7 +1370,7 @@ interpretTopStmt printBinds replTypingHacks stmt = do
 
       let typingResults =
             if replTypingHacks then
-                let (msgs, output) = checkStmt ppopts avail varenv3 tyenv ctx stmt in
+                let (msgs, result) = checkStmt ppopts avail varenv3 tyenv ctx stmt in
                 let isError msg = case msg of
                         Ty.Error{} -> True
                         _ -> False
@@ -1387,20 +1387,20 @@ interpretTopStmt printBinds replTypingHacks stmt = do
                                 e' = SS.Application epos ret [(Nothing, e)]
                                 rstmt = SS.StmtBind spos (SS.PImplicit wpos wty) e'
                             in
-                            let (msgs', output') =
+                            let (msgs', result') =
                                   checkStmt ppopts avail varenv3 tyenv ctx rstmt
                             in
                             if any isError msgs' then
                                 -- did not work, use original messages
-                                (msgs, output)
+                                (msgs, result)
                             else
                                 -- worked, use this version
-                                (msgs', output')
+                                (msgs', result')
                         _ ->
                             -- doesn't match, use the original errors
-                            (msgs, output)
+                            (msgs, result)
                 else
-                    (msgs, output)
+                    (msgs, result)
             else
                 checkStmt ppopts avail varenv3 tyenv ctx stmt
       processTypeCheck typingResults

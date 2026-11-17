@@ -15,7 +15,8 @@ This module contains the typechecker for SAWScript.
 -}
 
 module SAWScript.Typechecker
-    ( Message(..)
+    ( TCIncremental  -- opaque
+    , Message(..)
     , StmtContext(..)
     , checkDecl
     , checkStmt
@@ -431,7 +432,8 @@ data RW = RW {
 --   The result value is (in general) not meaningful if the message
 --   list contains an error.
 --
-type Result a = ([Message], a)
+type FullResult a = ([Message], (a, TCIncremental))
+type PartResult a = ([Message], a)
 
 -- | Run the TI monad.
 --
@@ -440,7 +442,7 @@ type Result a = ([Message], a)
 --   interpreter.
 --
 runTI :: PPS.Opts -> Set PrimitiveLifecycle -> VarEnv -> TyEnv -> TI a ->
-         Result a
+         FullResult a
 runTI ppopts avail varenv tyenv m =
     let rw = RW {
             tiIncremental = initialIncremental varenv tyenv,
@@ -451,8 +453,16 @@ runTI ppopts avail varenv tyenv m =
             tiPPOpts = ppopts
         }
         (result, rw') = runState (runReaderT (unTI m) ro) rw
+        incr' = tiIncremental rw'
         msgs = reverse $ tiMessages rw'
     in
+    (msgs, (result, incr'))
+
+-- | Variant that doesn't return the output `TCIncremental`.
+runTI' :: PPS.Opts -> Set PrimitiveLifecycle -> VarEnv -> TyEnv  -> TI a ->
+          PartResult a
+runTI' ppopts avail varenv tyenv m =
+    let (msgs, (result, _incr')) = runTI ppopts avail varenv tyenv m in
     (msgs, result)
 
 -- | Run a speculative sub-action in the `TI` monad. Throw away
@@ -3204,7 +3214,7 @@ checkStmt ::
       TyEnv ->
       StmtContext ->
       Stmt ->
-      Result Stmt
+      FullResult Stmt
 checkStmt ppopts avail env tenv ctx stmt =
     -- XXX: we shouldn't need this position here.
     --
@@ -3247,7 +3257,7 @@ checkDecl ::
       VarEnv ->
       TyEnv ->
       Decl ->
-      Result Decl
+      FullResult Decl
 checkDecl ppopts avail env tenv decl =
     runTI ppopts avail env tenv (inferDecl ReadOnlyVar decl)
 
@@ -3256,6 +3266,8 @@ checkDecl ppopts avail env tenv decl =
 --   unified.
 --
 --   Both types are schemes because that's what we need upstream.
+--
+--   Read-only, so does not return a new TCIncremental.
 --
 --   (This is an external interface.)
 typesMatch ::
@@ -3279,7 +3291,7 @@ typesMatch ppopts avail tenv name schema'found schema'expected =
         ty'expected <- unpack schema'expected
         matches (Pos.getPos ty'found) ty'found ty'expected
   in
-  let (_msgs, b) = runTI ppopts avail ScopedMap.empty tenv match in
+  let (_msgs, (b, _incr')) = runTI ppopts avail ScopedMap.empty tenv match in
   -- return match success/failure
   b
 
@@ -3296,7 +3308,8 @@ typesMatch ppopts avail tenv name schema'found schema'expected =
 --   schema that are of use to the caller, on the assumption that the
 --   caller doesn't want to do stuff with the schema before exiting on
 --   errors, which it doesn't. Thus, return the original schema and not
---   one with the potentially updated type.
+--   one with the potentially updated type. Don't return an output
+--   TCIncremental either.
 --
 --   (Otherwise we'd need to rerun `generalize` to build a new schema,
 --   and that's a headache and not worthwhile given that the result
@@ -3324,7 +3337,7 @@ checkSchema ::
       -- | Name of the object whose type it is
       Text ->
       -- | (Theoretically) updated checked result
-      Result Schema
+      PartResult Schema
 checkSchema ppopts contextLC tyenv schema fnName = do
     let check = do
           let Forall tyvars ty = schema
@@ -3352,7 +3365,7 @@ checkSchema ppopts contextLC tyenv schema fnName = do
           WarnDeprecated -> [Current, WarnDeprecated]
           HideDeprecated -> [Current, WarnDeprecated, HideDeprecated, Experimental]
           Experimental -> [Current, Experimental]
-    runTI ppopts avail ScopedMap.empty tyenv check
+    runTI' ppopts avail ScopedMap.empty tyenv check
 
 -- | Check a schema (type) pattern as used by @:search@. (This is an
 --   external interface.)
@@ -3362,12 +3375,14 @@ checkSchema ppopts contextLC tyenv schema fnName = do
 --
 --   Returns a possibly updated pattern.
 --
+--   Otherwise read-only, so does not return a new TCIncremental.
+--
 checkSchemaPattern ::
       Set PrimitiveLifecycle ->
       VarEnv ->
       TyEnv ->
       SchemaPattern ->
-      Result SchemaPattern
+      PartResult SchemaPattern
 checkSchemaPattern _avail _env _tenv pat =
     -- For the time being, do nothing -- we specifically don't want it
     -- to reject unbound/free type variables (see Search.hs for a
