@@ -1469,7 +1469,7 @@ interpretReplStmts stmts = do
 
 -- | Hook for AutoMatch
 stmtInterpreter :: StmtInterpreter
-stmtInterpreter ro rw stmts =
+stmtInterpreter ro _rw stmts = do
   -- What AutoMatch provides is supposed to be a full script for the
   -- syntactic top level, not a do-block. Run it with interpretTopStmt
   -- so as to (a) get the right behavior (as long as interpretTopStmt
@@ -1481,10 +1481,25 @@ stmtInterpreter ro rw stmts =
   -- which would have dropped an ill-specified part of the namespace.
   -- That wasn't particularly sensible and probably wasn't correct,
   -- but we could reasonably here want either the current environment
-  -- or a copy of the environment captured when we start AutoMatch,
+  -- or a copy of the environment captured when we start AutoMatch, or
+  -- for that matter a clean environment for running a separate file,
   -- and it's not obvious which. For the moment, we'll use the current
   -- environment because that doesn't require any fiddling.
-  fst <$> runTopLevel (mapM_ (interpretTopStmt False False) stmts) ro rw
+  --
+  -- Update 20261116: flipping through the interaction stuff shows no
+  -- sign that it's supposed to be able to interact with existing
+  -- stuff in the interpreter context. So even though it has been
+  -- explicitly reusing the interpreter state so far, I think that's
+  -- probably wrong and I'm going to give it a clean state to
+  -- execute in.
+  let opts = roOptions ro
+      scriptArgv = ["auto_match"]
+      tlhook = roSubshell ro
+      pshook = roProofSubshell ro
+  (ro', rw') <- buildTopLevelEnv opts scriptArgv tlhook pshook
+  let m = mapM_ (interpretTopStmt False False) stmts
+  _ <- runTopLevel m ro' rw'
+  return ()
 
 -- Save the system current directory and directory stack
 saveDirState :: TopLevel (FilePath, [FilePath])
