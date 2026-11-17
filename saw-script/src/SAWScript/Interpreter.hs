@@ -1651,8 +1651,10 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
 
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
+       let (environ, _tcenv) = primEnviron opts bic ce0
+
        let rw0 = TopLevelRW
-                   { rwEnviron = primEnviron opts bic ce0
+                   { rwEnviron = environ
                    , rwRebindables = Map.empty
                    , rwPosition = SS.Unknown
                    , rwStackTrace = Trace.empty
@@ -8538,7 +8540,8 @@ primitives = Map.fromList $
         -- reasons we have a :env call in the test suite, even though
         -- it requires maintenance for every change to the builtins.
         -- Otherwise the panics in readSchemaPure can go unnoticed.
-        ty' = Loader.readSchemaPure name lc primNamedTypeEnv ty
+        (_, tcenv) = primNamedTypeEnv
+        ty' = Loader.readSchemaPure name lc tcenv ty
         ty'' = case ty' of
             SS.Forall _ t -> t
 
@@ -8613,12 +8616,12 @@ primitives = Map.fromList $
 -- change going forward we should consider simplifying so primTypes
 -- uses the same type as the interpreter environment this function
 -- seeds, instead of its own.
-primNamedTypeEnv :: ScopedMap SS.Name (PrimitiveLifecycle, SS.NamedType)
+primNamedTypeEnv :: (ScopedMap SS.Name (PrimitiveLifecycle, SS.NamedType), TCIncremental)
 primNamedTypeEnv =
-    let (tyenv, _tcenv) = primTypes
+    let (tyenv, tcenv) = primTypes
         extract pt = (primTypeLife pt, primTypeType pt)
     in
-    ScopedMap.seed $ fmap extract tyenv
+    (ScopedMap.seed $ fmap extract tyenv, tcenv)
 
 -- | Initial value environment for the interpreter.
 --
@@ -8668,7 +8671,7 @@ primValueEnv opts bic = Map.mapWithKey extract primitives
           (pos, primitiveLife p, primitiveType p,
            (primitiveFn p) opts bic, Just $ doc n p)
 
-primEnviron :: Options -> BuiltinContext -> CEnv.CryptolEnv -> Environ
+primEnviron :: Options -> BuiltinContext -> CEnv.CryptolEnv -> (Environ, TCIncremental)
 primEnviron opts bic cenv =
 
     -- Do a scope push so the builtins live by themselves in their own
@@ -8677,8 +8680,8 @@ primEnviron opts bic cenv =
     -- scope) and, because the builtin layer is readonly, might be
     -- marginally more efficient as the user's globals are added.
 
-    let tyenv = ScopedMap.push primNamedTypeEnv
+    let (tyenv0, tcenv) = primNamedTypeEnv
+        tyenv = ScopedMap.push tyenv0
         varenv = ScopedMap.push $ ScopedMap.seed $ primValueEnv opts bic
     in
-    Environ varenv tyenv cenv
-
+    (Environ varenv tyenv cenv, tcenv)

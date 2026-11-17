@@ -3345,15 +3345,15 @@ checkSchema ::
       PPS.Opts ->
       -- | Lifecycle we're declaring in
       PrimitiveLifecycle ->
-      -- | Environment for named types
-      TyEnv ->
+      -- | Typing environment
+      TCIncremental ->
       -- | Type scheme to check
       Schema ->
       -- | Name of the object whose type it is
       Text ->
       -- | (Theoretically) updated checked result
       PartResult Schema
-checkSchema ppopts contextLC tyenv schema fnName = do
+checkSchema ppopts contextLC incr schema fnName = do
     let check = do
           let Forall tyvars ty = schema
           -- Generate unification vars for all the forall-bindings
@@ -3380,7 +3380,6 @@ checkSchema ppopts contextLC tyenv schema fnName = do
           WarnDeprecated -> [Current, WarnDeprecated]
           HideDeprecated -> [Current, WarnDeprecated, HideDeprecated, Experimental]
           Experimental -> [Current, Experimental]
-        incr = makeIncremental ScopedMap.empty tyenv
     runTI' ppopts avail incr check
 
 -- | Check a typedef as used when constructing the builtin types table.

@@ -33,7 +33,6 @@ import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
 import qualified SAWSupport.ScopedMap as ScopedMap
-import SAWSupport.ScopedMap (ScopedMap)
 import qualified SAWSupport.Pretty as PPS
 import qualified SAWSupport.Position as PosSupport
 import qualified SAWSupport.Console as Cons
@@ -328,20 +327,20 @@ readSchemaPure ::
     Text ->
     -- | Lifecycle state of the builtin
     PrimitiveLifecycle ->
-    -- | Environment for named types
-    ScopedMap Name (PrimitiveLifecycle, NamedType) ->
+    -- | Typing environment
+    Ty.TCIncremental ->
     -- | Text to read from
     Text ->
     -- | Result (a type scheme)
     Schema
-readSchemaPure name lc tyenv str =
+readSchemaPure name lc tcenv str =
     -- This is for use during initialization, so we can use the default ppopts
     let ppopts = PPS.defaultOpts in
     let fakeFileName = Text.unpack $ "<definition of " <> name <> ">"
         whoAmI = "readSchemaPure on " <> name
     in
     let schema = readAnyPure ppopts fakeFileName str "end-of-input" parseSchema whoAmI in
-    panicOnTyMsgs (Text.pack fakeFileName) $ Ty.checkSchema ppopts lc tyenv schema name
+    panicOnTyMsgs (Text.pack fakeFileName) $ Ty.checkSchema ppopts lc tcenv schema name
 
 -- | Read a typedef from a pair of strings. The name is separate; the
 --   expansion is a type schema that must be monomorphic. This is used
