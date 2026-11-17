@@ -3554,20 +3554,14 @@ primTypes = foldl doadd Map.empty
           }
 
         -- We need a Map Name (PrimitiveLifecycle, NamedType) to feed
-        -- to readSchemaPure. Construct one from the Map Name PrimType
+        -- to readTypedefPure. Construct one from the Map Name PrimType
         -- that we've got. FUTURE: there are too many isomorphic types
         -- floating around in the builtins handling (not just here)
         -- and they should all be simplified away.
         tyenv' = Map.map (\pt -> (primTypeLife pt, primTypeType pt)) tyenv
         tyenv'' = ScopedMap.seed tyenv'
 
-        ty = case Loader.readSchemaPure name lc tyenv'' tystr of
-            SS.Forall [] ty' ->
-                ty'
-            _ ->
-                panic "primTypes" [
-                    "Builtin typedef " <> name <> " not monomorphic"
-                ]
+        (ty, _tcenv) = Loader.readTypedefPure lc tyenv'' name tystr
 
 --
 -- Note: the help/doc strings for the primitives should be

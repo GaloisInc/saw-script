@@ -22,6 +22,7 @@ module SAWScript.Typechecker
     , checkStmt
     , typesMatch
     , checkSchema
+    , checkTypedef
     , checkSchemaPattern
     ) where
 
@@ -3366,6 +3367,47 @@ checkSchema ppopts contextLC tyenv schema fnName = do
           HideDeprecated -> [Current, WarnDeprecated, HideDeprecated, Experimental]
           Experimental -> [Current, Experimental]
     runTI' ppopts avail ScopedMap.empty tyenv check
+
+-- | Check a typedef as used when constructing the builtin types table.
+--   (This is an external interface.)
+--
+-- The arguments are the same as checkSchema except we also get the
+-- name of the typedef, and we do the same things except that we
+-- also add the name to the incremental state.
+--
+-- Also, polymorphic schemas are rejected.
+--
+-- XXX: this should share more logic with other things. More cleanup/reorg needed
+--
+checkTypedef :: PPS.Opts -> PrimitiveLifecycle -> TyEnv -> Text -> Schema -> FullResult Type
+checkTypedef ppopts contextLC tyenv0 name schema = do
+    let check = do
+          ty <- case schema of
+                Forall [] ty -> pure ty
+                Forall _ ty -> do
+                    let pos = Pos.getPos ty
+                    let name' = PP.pretty name
+                    recordError pos $ "Expansion of typedef" <+> name' <+>
+                                      " may not be polymorphic"
+                    getErrorTyVar pos
+          ty' <- checkType kindStar ty
+          tyenv <- getTyEnv
+          case ScopedMap.lookup name tyenv of
+              Nothing -> do
+                  addTypedef name ty'
+                  return ty'
+              Just (_lc, _expansion) -> do
+                  let pos = Pos.getPos ty
+                  let name' = PP.pretty name
+                  recordError pos $ "Redefinition of type" <+> name'
+                  getErrorTyVar pos
+
+    let avail = Set.fromList $ case contextLC of
+            Current -> [Current]
+            WarnDeprecated -> [Current, WarnDeprecated]
+            HideDeprecated -> [Current, WarnDeprecated, HideDeprecated]
+            Experimental -> [Current, Experimental]
+    runTI ppopts avail ScopedMap.empty tyenv0 check
 
 -- | Check a schema (type) pattern as used by @:search@. (This is an
 --   external interface.)

@@ -9,6 +9,7 @@ Stability   : provisional
 
 module SAWScript.Loader (
     readSchemaPure,
+    readTypedefPure,
     readSchemaPattern,
     readExpression,
     readREPLTextUnchecked,
@@ -50,7 +51,7 @@ import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser
 import qualified SAWScript.Include as Inc
 import qualified SAWScript.Subshells as Subshells
-import SAWScript.Typechecker (checkDecl, checkSchema, checkSchemaPattern)
+import SAWScript.Typechecker (TCIncremental, checkDecl, checkSchema, checkTypedef, checkSchemaPattern)
 import qualified SAWScript.Typechecker as Ty (Message(..))
 
 
@@ -301,7 +302,7 @@ resolveIncludes depth seen incpath opts ppopts process tree =
 -- Entry points for loading
 
 -- | Read a type schema from a string. This is used to digest the type
---   signatures for builtins, and the expansions for builtin typedefs.
+--   signatures for builtins.
 --
 -- Pure function that panics on any error or warning. This is
 -- appropriate since we use it only to handle the builtins; any
@@ -342,6 +343,44 @@ readSchemaPure name lc tyenv str =
     in
     let schema = readAnyPure ppopts fakeFileName str "end-of-input" parseSchema whoAmI in
     panicOnTyMsgs (Text.pack fakeFileName) $ checkSchema ppopts lc tyenv schema name
+
+-- | Read a typedef from a pair of strings. The name is separate; the
+--   expansion is a type schema that must be monomorphic. This is used
+--   to digest builtin typedefs.
+--
+-- Pure function that panics on any error or warning. This is
+-- appropriate since we use it only to handle the builtins; any
+-- glitches there are properly panics.
+--
+-- The first argument (fileName) is a string to pass as the
+-- filename for the lexer, which (complete with line and column
+-- numbering of dubious value) will go into the positions of the
+-- elements of the resulting type.
+--
+-- The fake file name names the builtin object involved, so we'll also
+-- use it as the panic location string if we need to panic.
+--
+-- FUTURE: we should figure out how to generate more meaningful
+-- positions (like "third argument of concat") but this at least
+-- allows telling the user which builtin the type came from.
+--
+-- Note: there is no way to reach @include@ statements from type
+-- schemas, so no need to process includes in what we read.
+--
+readTypedefPure ::
+    PrimitiveLifecycle ->
+    ScopedMap Name (PrimitiveLifecycle, NamedType) ->
+    Text ->
+    Text ->
+    (Type, TCIncremental)
+readTypedefPure lc tyenv name str =
+    -- This is for use during initialization, so we can use the default ppopts
+    let ppopts = PPS.defaultOpts in
+    let fakeFileName = Text.unpack $ "<definition of " <> name <> ">"
+        whoAmI = "readTypedefPure on " <> name
+    in
+    let schema = readAnyPure ppopts fakeFileName str "end-of-input" parseSchema whoAmI in
+    panicOnTyMsgs (Text.pack fakeFileName) $ checkTypedef ppopts lc tyenv name schema
 
 -- | Read a schema pattern from a string. This is used by the
 --   :search REPL command.
