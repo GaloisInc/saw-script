@@ -25,6 +25,7 @@ module SAWScript.Typechecker
     , checkSchema
     , checkTypedef
     , addAbstractType
+    , addBuiltin
     , checkSchemaPattern
     ) where
 
@@ -3436,6 +3437,23 @@ addAbstractType name lc kind incr =
         Just _ ->
             panic "addAbstractType" [
                 "Type " <> name <> " already exists!"
+            ]
+
+-- | Add a value (for a builtin) to the environment, as used when
+--   constructing the builtins table. (This is an external interface.)
+--
+--   Note: the type has already been through `checkSchema`.
+--   FUTURE: consolidate.
+addBuiltin :: Pos -> Text -> PrimitiveLifecycle -> Schema -> TCIncremental -> TCIncremental
+addBuiltin pos name lc ty incr =
+    let varenv = tciVarEnv incr in
+    case ScopedMap.lookup name varenv of
+        Nothing ->
+            let varenv' = ScopedMap.insert name (pos, lc, ReadOnlyVar, ty) varenv in
+            incr { tciVarEnv = varenv' }
+        Just _ ->
+            panic "addBuiltin" [
+                "Value " <> name <> " already exists!"
             ]
 
 -- | Check a schema (type) pattern as used by @:search@. (This is an

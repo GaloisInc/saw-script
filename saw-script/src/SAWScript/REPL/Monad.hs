@@ -111,7 +111,7 @@ initREPL ::
     Bool -> Options -> TopLevelShellHook -> ProofScriptShellHook ->
     IO REPLState
 initREPL isBatch opts tlhook pshook =
-  do (ro, rw) <- buildTopLevelEnv opts [] tlhook pshook
+  do (ro, rw, _tcenv) <- buildTopLevelEnv opts [] tlhook pshook
      return REPLState
        { rContinue   = True
        , rIsBatch    = isBatch

@@ -87,7 +87,7 @@ import qualified SAWScript.Loader as Loader
 import SAWCentral.JavaType
 import SAWCentral.LLVMBuiltins
 import SAWCentral.Options
-import SAWScript.Typechecker (TCIncremental, initialTCIncremental, checkStmt, typesMatch, addAbstractType)
+import SAWScript.Typechecker (TCIncremental, initialTCIncremental, checkStmt, typesMatch, addAbstractType, addBuiltin)
 import qualified SAWScript.Typechecker as Ty (Message(..), StmtContext(..))
 import SAWScript.Panic (HasCallStack, panic)
 import SAWCentral.TopLevel
@@ -1539,7 +1539,7 @@ stmtInterpreter ro _rw stmts = do
       scriptArgv = ["auto_match"]
       tlhook _ _ = liftIO $ fail "No subshells inside AutoMatch"
       pshook _ _ _ = liftIO $ fail "No proof subshells inside AutoMatch"
-  (ro', rw') <- buildTopLevelEnv opts scriptArgv tlhook pshook
+  (ro', rw', _tcenv) <- buildTopLevelEnv opts scriptArgv tlhook pshook
   let ?rcx = RunCtx { rcxTLHook = tlhook, rcxPSHook = pshook }
   let m = mapM_ (interpretTopStmt False False) stmts
   _ <- runTopLevel m ro' rw'
@@ -1669,7 +1669,7 @@ buildTopLevelEnv :: Options
                  -> [Text]
                  -> TopLevelShellHook
                  -> ProofScriptShellHook
-                 -> IO (TopLevelRO, TopLevelRW)
+                 -> IO (TopLevelRO, TopLevelRW, TCIncremental)
 buildTopLevelEnv opts scriptArgv tlhook pshook = do
        let proxy = AIGProxy AIG.compactProxy
        let mn = mkModuleName ["SAWScript"]
@@ -1700,7 +1700,7 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
        let ?rcx = RunCtx { rcxTLHook = tlhook, rcxPSHook = pshook }
-       let (environ, _tcenv) = primEnviron opts bic ce0
+       let (environ, tcenv) = primEnviron opts bic ce0
 
        let rw0 = TopLevelRW
                    { rwEnviron = environ
@@ -1738,7 +1738,7 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
                    , rwSequentGoals = False
                    , rwJavaCodebase = JavaUninitialized
                    }
-       return (ro0, rw0)
+       return (ro0, rw0, tcenv)
 
 -- | Interpret syntactic-top-level statements from a file.
 processFile ::
@@ -1749,7 +1749,7 @@ processFile ::
   ProofScriptShellHook ->
   IO ()
 processFile opts file scriptArgv tlhook pshook = do
-  (ro, rw) <- buildTopLevelEnv opts scriptArgv tlhook pshook
+  (ro, rw, _tcenv) <- buildTopLevelEnv opts scriptArgv tlhook pshook
   _ <- runTopLevel (interpretFile tlhook pshook file True) ro rw
             `X.catch` (handleException opts)
   return ()
@@ -3618,8 +3618,12 @@ primTypes = foldl doadd (Map.empty, initialTCIncremental)
 --     ****************************************************************
 --
 
-primitives :: (?rcx :: RunCtx) => Map SS.Name Primitive
-primitives = Map.fromList $
+-- The table here needs the typechecker environment threaded through
+-- it so as to check the types of the primitives and remember them.
+type RawPrimitive = TCIncremental -> ((SS.Name, Primitive), TCIncremental)
+
+rawprimitives :: (?rcx :: RunCtx) => [RawPrimitive]
+rawprimitives =
   [
     ------------------------------------------------------------
     -- Constants
@@ -8576,25 +8580,34 @@ primitives = Map.fromList $
 
   where
     prim :: Text -> Text -> (SS.Type -> Text -> Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [Text]
-         -> (SS.Name, Primitive)
-    prim name ty fn lc doc = (name, Primitive
-                                     { primitiveType = ty'
-                                     , primitiveRawType = ty
-                                     , primitiveDoc  = doc
-                                     , primitiveFn   = fn ty'' name
-                                     , primitiveLife = lc
-                                     })
+         -> TCIncremental -> ((SS.Name, Primitive), TCIncremental)
+    prim name ty fn lc doc tcenv = ((name, entry), tcenv')
       where
+        entry = Primitive {
+            primitiveType = ty',
+            primitiveRawType = ty,
+            primitiveDoc  = doc,
+            primitiveFn   = fn ty'' name,
+            primitiveLife = lc
+        }
         -- Beware: errors in the type will only be detected when the
         -- type is actually looked at by something, like :env, :t,
         -- :search, or a direct use of the builtin. This is one of the
         -- reasons we have a :env call in the test suite, even though
         -- it requires maintenance for every change to the builtins.
         -- Otherwise the panics in readSchemaPure can go unnoticed.
-        (_, tcenv) = primNamedTypeEnv
         ty' = Loader.readSchemaPure name lc tcenv ty
         ty'' = case ty' of
             SS.Forall _ t -> t
+        -- This is the position we use for the declaration position of
+        -- builtins. FUTURE: use something that prints a little more
+        -- nicely. (Users will see it if they e.g. rebind a builtin's
+        -- name.)
+        pos = SS.PosInternal "<<builtin>>"
+        -- readSchemaPure checks the schema, not a full declaration,
+        -- so it doesn't add to TCIncremental. Add explicitly.
+        -- FUTURE: simplify this so there's one call.
+        tcenv' = addBuiltin pos name lc ty' tcenv
 
     pureVal :: forall t. IsValue t => t -> SS.Type -> Text -> Options -> BuiltinContext -> Value
     pureVal x ty name _ _ = toValue ty name x
@@ -8661,7 +8674,20 @@ primitives = Map.fromList $
               (BuiltinContext -> Options -> t) -> SS.Type -> Text -> Options -> BuiltinContext -> Value
     bicVal f ty name opts bic = toValue ty name (f bic opts)
 
-
+-- The "cooked" primitives table that's been typechecked, and includes
+-- the resulting typing environment.
+--
+-- Note: it doesn't matter what order we process the primitives in, so
+-- this uses foldr because it's generally preferred in Haskell.
+primitives :: (?rcx :: RunCtx) =>
+    TCIncremental -> (Map SS.Name Primitive, TCIncremental)
+primitives tcenv0 =
+    let once rawprim (tbl, tcenv) =
+            let ((name, prim), tcenv') = rawprim tcenv in
+            let tbl' = Map.insert name prim tbl in
+            (tbl', tcenv')
+    in
+    foldr once (Map.empty, tcenv0) rawprimitives
 
 -- FUTURE: extract here is now functionally a nop, so if things don't
 -- change going forward we should consider simplifying so primTypes
@@ -8691,9 +8717,13 @@ primValueEnv ::
    (?rcx :: RunCtx) =>
    Options ->
    BuiltinContext ->
-   Map SS.Name (SS.Pos, PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
-primValueEnv opts bic = Map.mapWithKey extract primitives
+   TCIncremental ->   
+   (Map SS.Name (SS.Pos, PrimitiveLifecycle, SS.Schema, Value, Maybe [Text]),
+    TCIncremental)
+primValueEnv opts bic tcenv = (varenv, tcenv')
   where
+      (primtbl, tcenv') = primitives tcenv
+      varenv = Map.mapWithKey extract primtbl
       header = [
           "Description",
           "-----------",
@@ -8734,6 +8764,7 @@ primEnviron opts bic cenv =
 
     let (tyenv0, tcenv) = primNamedTypeEnv
         tyenv = ScopedMap.push tyenv0
-        varenv = ScopedMap.push $ ScopedMap.seed $ primValueEnv opts bic
+        (varenv0, tcenv') = primValueEnv opts bic tcenv
+        varenv = ScopedMap.push $ ScopedMap.seed varenv0
     in
-    (Environ varenv tyenv cenv, tcenv)
+    (Environ varenv tyenv cenv, tcenv')
