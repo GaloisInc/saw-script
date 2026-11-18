@@ -440,7 +440,7 @@ bindPattern rb pat ms v =
 
 class (Monad m, MonadFail m) => InterpreterMonad m where
   liftTopLevel :: TopLevel a -> m a
-  actionFromValue :: FromValue a => FromValueHow -> Value -> m a
+  actionFromValue :: (FromValue a, ?rcx :: RunCtx) => FromValueHow -> Value -> m a
   mkValue :: SS.Pos -> RefChain -> m Value -> Value
   getMonadContext :: m Ty.StmtContext
   pushScopeAny :: m ()
@@ -532,11 +532,26 @@ processTypeCheck (msgs, output) =
 
 
 ------------------------------------------------------------
+-- Extra run context
+
+-- | This is a type for context that we have to pass around while
+--   executing because we can't keep it in TopLevelRO or TopLevelRW.
+--   I've made it its own type so that it's only one implicit arg in all
+--   the places that need it.
+--
+--   I'm calling this thing "rcx" rather than "ctx" because we have a
+--   bunch of legacy code that uses "ctx" for monad context and I
+--   don't want to stop to clean it out.
+--
+data RunCtx = RunCtx
+
+
+------------------------------------------------------------
 -- Interpreter core
 
 -- | Convenience function for the common case of applying a single
 --   (positional) value.
-applyValue :: SS.Pos -> Text -> Value -> Value -> TopLevel Value
+applyValue :: (?rcx :: RunCtx) => SS.Pos -> Text -> Value -> Value -> TopLevel Value
 applyValue pos v1info v1 v2 =
     applyValues pos v1info v1 [(Nothing, v2)]
 
@@ -556,7 +571,7 @@ applyValue pos v1info v1 v2 =
 --   function turns out not to be a function value, or is a function
 --   value without enough parameters.
 --
-applyValues :: SS.Pos -> Text -> Value -> [(Maybe Text, Value)] -> TopLevel Value
+applyValues :: (?rcx :: RunCtx) => SS.Pos -> Text -> Value -> [(Maybe Text, Value)] -> TopLevel Value
 applyValues pos funinfo fun args =
   let enter name = pushTraceFrame pos name
       leave = popTraceFrame
@@ -854,7 +869,7 @@ lookupVar x = do
 -- in TopLevel when the last argument is applied by applyValue, and
 -- that happens inside here.
 --
-interpretExpr :: SS.Expr -> TopLevel Value
+interpretExpr :: (?rcx :: RunCtx) => SS.Expr -> TopLevel Value
 interpretExpr expr =
     case expr of
       SS.Bool _ b ->
@@ -989,7 +1004,7 @@ interpretExpr expr =
 -- recursive let-bindings.
 --
 -- The bodies are interpreted purely.
-interpretDeclGroup :: SS.Rebindable -> SS.DeclGroup -> TopLevel ()
+interpretDeclGroup :: (?rcx :: RunCtx) => SS.Rebindable -> SS.DeclGroup -> TopLevel ()
 interpretDeclGroup rebindable dg = case dg of
     SS.NonRecursive (SS.Decl _ pat mt expr) -> do
         v <- interpretExpr expr
@@ -1088,7 +1103,7 @@ interpretDeclGroup rebindable dg = case dg of
 -- actionFromValue) because we need the result to do the position
 -- update.
 --
-bindMonadAction :: forall m. InterpreterMonad m => SS.Pos -> Value -> m Value
+bindMonadAction :: forall m. (InterpreterMonad m, ?rcx :: RunCtx) => SS.Pos -> Value -> m Value
 bindMonadAction pos baseVal = do
     plainVal <- interpretMonadAction FromInterpreter baseVal
     let plainVal' = injectPositionIntoMonadicValue pos plainVal
@@ -1097,7 +1112,7 @@ bindMonadAction pos baseVal = do
 
 -- Execute a monad action. This happens in any of the interpreter
 -- monads.
-interpretMonadAction :: forall m. InterpreterMonad m => FromValueHow -> Value -> m Value
+interpretMonadAction :: forall m. (InterpreterMonad m, ?rcx :: RunCtx) => FromValueHow -> Value -> m Value
 interpretMonadAction fromHow v = case v of
   VReturn pos chain v' -> do
     -- VReturn ... v' -> VProofScript ... (return v')
@@ -1175,7 +1190,7 @@ interpretMonadAction fromHow v = case v of
 -- (XXX: should that be stored into the monad context or not? Apparently
 -- not, currently.)
 --
-interpretDoStmt :: forall m. InterpreterMonad m => SS.Stmt -> m ()
+interpretDoStmt :: forall m. (InterpreterMonad m, ?rcx :: RunCtx) => SS.Stmt -> m ()
 interpretDoStmt stmt =
     -- XXX are the uses of push/popPosition here suitable? not super clear
     case stmt of
@@ -1224,7 +1239,7 @@ interpretDoStmt stmt =
 -- to just use mapM on the statements and not need to nest the last
 -- expression inside recursing on the statements.
 --
-interpretDoStmts :: forall m. InterpreterMonad m => ([SS.Stmt], SS.Expr) -> m Value
+interpretDoStmts :: forall m. (InterpreterMonad m, ?rcx :: RunCtx) => ([SS.Stmt], SS.Expr) -> m Value
 interpretDoStmts (stmts, lastexpr) =
     case stmts of
       [] -> do
@@ -1275,7 +1290,7 @@ interpretDoStmts (stmts, lastexpr) =
 
 -- Execute a top-level bind.
 processStmtBind ::
-  InterpreterMonad m =>
+  (InterpreterMonad m, ?rcx :: RunCtx) =>
   Bool ->
   SS.Pos ->
   SS.Pattern ->
@@ -1346,7 +1361,7 @@ processStmtBind printBinds pos pat expr = do
 
 -- | Interpret a top-level statement in an interpreter monad (any of the SAWScript monads)
 --   This duplicates the logic in interpretDoStmt for no particularly good reason.
-interpretTopStmt :: InterpreterMonad m =>
+interpretTopStmt :: (InterpreterMonad m, ?rcx :: RunCtx) =>
   Bool {-^ whether to print non-unit result values -} ->
   Bool {-^ whether to allow pure functions for the REPL -} ->
   SS.Stmt ->
@@ -1465,6 +1480,7 @@ interpretReplStmts :: InterpreterMonad m => [SS.Stmt] -> m ()
 interpretReplStmts stmts = do
   let printBinds = True
   let replTypingHacks = True
+  let ?rcx = RunCtx
   mapM_ (interpretTopStmt printBinds replTypingHacks) stmts
 
 -- | Hook for AutoMatch
@@ -1497,6 +1513,7 @@ stmtInterpreter ro _rw stmts = do
       tlhook = roSubshell ro
       pshook = roProofSubshell ro
   (ro', rw') <- buildTopLevelEnv opts scriptArgv tlhook pshook
+  let ?rcx = RunCtx
   let m = mapM_ (interpretTopStmt False False) stmts
   _ <- runTopLevel m ro' rw'
   return ()
@@ -1519,6 +1536,8 @@ interpretFile file runMain =
   bracketTopLevel saveDirState restoreDirState (const interp)
   where
     interp = do
+      let ?rcx = RunCtx
+
       opts <- getOptions
       ppopts <- getPPOpts
       stmts <- io $ Loader.findAndLoadFileUnchecked opts ppopts file
@@ -1560,7 +1579,7 @@ interpretFile file runMain =
         interpretTopStmt False False s
 
 -- | Evaluate the value called 'main' from the current environment.
-interpretMain :: TopLevel ()
+interpretMain :: (?rcx :: RunCtx) => TopLevel ()
 interpretMain = do
   avail <- gets rwPrimsAvail
   Environ varenv tyenv _cryenv <- gets rwEnviron
@@ -1651,6 +1670,7 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
 
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
+       let ?rcx = RunCtx
        let (environ, _tcenv) = primEnviron opts bic ce0
 
        let rw0 = TopLevelRW
@@ -1851,11 +1871,11 @@ processFile opts file scriptArgv tlhook pshook = do
 --   runtime.
 --
 class IsValue a where
-    toValue :: SS.Type -> Text -> a -> Value
+    toValue :: (?rcx :: RunCtx) => SS.Type -> Text -> a -> Value
     -- these will be overridden on the function instance
     isFunction :: a -> Bool
     isFunction _ = False
-    toWrapper :: SS.Type -> Text -> a -> BuiltinWrapper
+    toWrapper :: (?rcx :: RunCtx) => SS.Type -> Text -> a -> BuiltinWrapper
     toWrapper _ _ _ = panic "toWrapper" ["Invalid call on base value"]
 
 -- | Flag to indicate where/how fromValue was triggered.
@@ -1877,13 +1897,13 @@ data FromValueHow = FromInterpreter | FromArgument
 --   to `a` (which is some @Optional a'@).
 --
 class FromValue a where
-    fromValue :: FromValueHow -> Value -> a
+    fromValue :: (?rcx :: RunCtx) => FromValueHow -> Value -> a
     -- | Hack to allow `toWrapper` to detect and special-case the
     --   `Optional` type; is overridden in the `Optional` instance and
     --   should not be touched otherwise.
     isAnOptional :: a -> Bool
     isAnOptional _ = False
-    fromOptionalValue :: FromValueHow -> Optional Value -> a
+    fromOptionalValue :: (?rcx :: RunCtx) => FromValueHow -> Optional Value -> a
     fromOptionalValue _ _ = panic "fromOptionalValue" ["not Optional"]
 
 
@@ -2713,7 +2733,7 @@ add_primitives lc _bic _opts = do
 -- But note that because the SAWScript interpreter is very fragile it
 -- is very easy for these things to regress.
 --
-toplevelSubshell :: () -> TopLevel Value
+toplevelSubshell :: (?rcx :: RunCtx) => () -> TopLevel Value
 toplevelSubshell () = do
     pushScope
     ro <- ask
@@ -2733,7 +2753,7 @@ toplevelSubshell () = do
 -- Much the same as an ordinary subshell, except it runs in the
 -- ProofScript monad and handles the additional ProofScript state.
 --
-proofScriptSubshell :: () -> ProofScript Value
+proofScriptSubshell :: (?rcx :: RunCtx) => () -> ProofScript Value
 proofScriptSubshell () = do
     (ro, rw) <- scriptTopLevel $ do
         pushScope
@@ -2754,7 +2774,7 @@ proofScriptSubshell () = do
     return $ toValue ty "proof_subshell" ()
 
 -- The "map" builtin.
-mapValue :: Value -> [Value] -> TopLevel Value
+mapValue :: (?rcx :: RunCtx) => Value -> [Value] -> TopLevel Value
 mapValue f xs =
   do let pos = SS.PosInsideBuiltin
      let info = "(value was in a \"map\")"
@@ -2797,7 +2817,7 @@ mapValue f xs =
 -- in terms of calling pieces of the interpreter directly, but that's
 -- likely to be quite messy.
 --
-forValue :: [Value] -> Value -> TopLevel Value
+forValue :: (?rcx :: RunCtx) => [Value] -> Value -> TopLevel Value
 forValue [] _ = return $ VReturn atRestPos [] (VArray [])
 forValue (x : xs) f = do
    let pos = SS.PosInsideBuiltin
@@ -2822,6 +2842,7 @@ str_concats strs optSep = case optSep of
   Given sep -> Text.intercalate sep strs
 
 caseProofResultPrim ::
+  (?rcx :: RunCtx) =>
   ProofResult ->
   Value {- ^ valid case -} ->
   Value {- ^ invalid/unknown case -} ->
@@ -2844,6 +2865,7 @@ caseProofResultPrim pr vValid vInvalid = do
       applyValue pos infoInvalid vInvalid (VTerm tt)
 
 caseSatResultPrim ::
+  (?rcx :: RunCtx) =>
   SatResult ->
   Value {- ^ unsat case -} ->
   Value {- ^ sat/unknown case -} ->
@@ -3567,7 +3589,7 @@ primTypes = foldl doadd (Map.empty, initialTCIncremental)
 --     ****************************************************************
 --
 
-primitives :: Map SS.Name Primitive
+primitives :: (?rcx :: RunCtx) => Map SS.Name Primitive
 primitives = Map.fromList $
   [
     ------------------------------------------------------------
@@ -8637,6 +8659,7 @@ primNamedTypeEnv =
 --   interpreter environment this function seeds, instead of its own.
 --
 primValueEnv ::
+   (?rcx :: RunCtx) =>
    Options ->
    BuiltinContext ->
    Map SS.Name (SS.Pos, PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
@@ -8671,7 +8694,7 @@ primValueEnv opts bic = Map.mapWithKey extract primitives
           (pos, primitiveLife p, primitiveType p,
            (primitiveFn p) opts bic, Just $ doc n p)
 
-primEnviron :: Options -> BuiltinContext -> CEnv.CryptolEnv -> (Environ, TCIncremental)
+primEnviron :: (?rcx :: RunCtx) => Options -> BuiltinContext -> CEnv.CryptolEnv -> (Environ, TCIncremental)
 primEnviron opts bic cenv =
 
     -- Do a scope push so the builtins live by themselves in their own
