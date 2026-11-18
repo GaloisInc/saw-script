@@ -114,11 +114,11 @@ subshell'expr ctx e0 = case e0 of
         e1' <- subshell'expr ctx e1
         pure $ TLookup pos e1' field
     Var pos x -> do
-        shadowed <- isShadowed ctx x
-        case x of
-            "subshell" | not shadowed -> pure $ Subshell pos
-            "proof_subshell" | not shadowed -> pure $ ProofSubshell pos
-            _ -> pure $ Var pos x
+        unshadowed <- not <$> isShadowed ctx x
+        pure $ case x of
+            "subshell" | unshadowed -> Subshell pos emptyAnnotations
+            "proof_subshell" | unshadowed -> ProofSubshell pos emptyAnnotations
+            _ -> Var pos x
     Subshell{} ->
         panic "subshell'expr" ["Preexisting Subshell expression"]
     ProofSubshell{} ->

@@ -902,7 +902,7 @@ interpretExpr expr =
                       panic "interpretExpr" [
                            "Read of inaccessible variable " <> x
                       ]
-      SS.Subshell pos -> do
+      SS.Subshell pos _anns -> do
           let x = "subshell"
           -- Get the type and lifecycle info from the builtins table
           avail <- gets rwPrimsAvail
@@ -925,7 +925,7 @@ interpretExpr expr =
           let v' = injectPositionIntoMonadicValue pos v
               v'' = insertRefChain pos x v'
           return v''
-      SS.ProofSubshell pos -> do
+      SS.ProofSubshell pos _anns -> do
           let x = "proof_subshell"
           -- Get the type and lifecycle info from the builtins table
           avail <- gets rwPrimsAvail

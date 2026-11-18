@@ -212,8 +212,8 @@ instance AppSubst Expr where
         Lookup pos rec fld     -> Lookup pos (appSubst s rec) fld
         TLookup pos tpl idx    -> TLookup pos (appSubst s tpl) idx
         Var _pos _x            -> expr
-        Subshell _pos          -> expr
-        ProofSubshell _pos     -> expr
+        Subshell _pos _anns    -> expr
+        ProofSubshell _pos _anns -> expr
         Lambda pos mname paramPos pats ppats body ->
             let pats' = map (appSubst s) pats
                 ppats' = Map.map (appSubst s) ppats
@@ -1816,7 +1816,7 @@ inferExpr expr = case expr of
         t <- inferVar pos x
         pure (Var pos x, t)
 
-    Subshell pos -> do
+    Subshell pos anns -> do
         -- `Subshell` is a special case of `Var` where the variable is
         -- @subshell@. This allows (will allow, so far) us to store
         -- extra information in the AST. Note that by using `inferVar`
@@ -1824,14 +1824,14 @@ inferExpr expr = case expr of
         -- than its name here, at the cost of requiring that it stay
         -- in the builtins table.
         t <- inferVar pos "subshell"
-        pure (Subshell pos, t)
+        pure (Subshell pos anns, t)
 
-    ProofSubshell pos -> do
+    ProofSubshell pos anns -> do
         -- `ProofSubshell` is a special case of `Var` where the variable
         -- is @proof_subshell@. This allows (will allow, so far) us to store
         -- extra information in the AST.
         t <- inferVar pos "proof_subshell"
-        pure (ProofSubshell pos, t)
+        pure (ProofSubshell pos anns, t)
 
     Lambda pos mname paramPos params namedParams body -> do
         pushScope

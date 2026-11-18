@@ -65,6 +65,10 @@ dumpImportSpec spec = case spec of
 ------------------------------------------------------------
 -- SAWScript AST
 
+dumpAnnotations :: Annotations -> [Dump]
+dumpAnnotations anns =
+    extractAnnotations dumpAnnotation anns
+
 dumpKind :: Kind -> Dump
 dumpKind kind =
     Dump.singleton ("Kind " <> Text.pack (show $ kindNumArgs kind))
@@ -218,10 +222,10 @@ dumpExpr e0 = case e0 of
         Dump.subelement ("TLookup " <> (Text.pack $ show n)) $ dumpExpr e1
     Var _ x ->
         Dump.singleton ("Var " <> x)
-    Subshell _ ->
-        Dump.singleton "Subshell"
-    ProofSubshell _ ->
-        Dump.singleton "ProofSubshell"
+    Subshell _ anns ->
+        Dump.subelements "Subshell" $ dumpAnnotations anns
+    ProofSubshell _ anns ->
+        Dump.subelements "ProofSubshell" $ dumpAnnotations anns
     Lambda _ (mname) _ params namedParams body ->
         let dumpNamedParam (name, (_namepos, (_fullpos, def, pat))) =
                 Dump.fields ("named " <> name) [
