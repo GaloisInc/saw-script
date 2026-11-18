@@ -47,6 +47,7 @@ import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
 import SAWSupport.Position
+import qualified SAWSupport.Dump as Dump
 import qualified SAWSupport.Pretty as PPS
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
@@ -115,6 +116,17 @@ initialTCIncremental = TCIncremental {
     tciNextTypeIndex = 0,
     tciSubst = Map.empty
 }
+
+-- | The hooks needed to allow TCIncremental to appear as an AST
+--   annotation. Don't actually print the contents; they're large and
+--   nobody will want that. FUTURE: when we have such things as dump
+--   points, we should have one to dump the typing environment at the
+--   places where we stash the environment in the AST. (Maybe also
+--   include a serial number so if there's more than one in the AST
+--   they can be told apart.)
+instance IsAnnotation TCIncremental where
+    prettyAnnotation _incr = "[typechecker-incremental-state]"
+    dumpAnnotation _incr = Dump.text "[typechecker incremental state]"
 
 
 ------------------------------------------------------------
@@ -1916,20 +1928,32 @@ inferExpr expr = case expr of
 
     Subshell pos anns -> do
         -- `Subshell` is a special case of `Var` where the variable is
-        -- @subshell@. This allows (will allow, so far) us to store
-        -- extra information in the AST. Note that by using `inferVar`
-        -- we can avoid hardcoding anything about the builtin other
-        -- than its name here, at the cost of requiring that it stay
-        -- in the builtins table.
+        -- @subshell@. This allows us to store extra information in
+        -- the AST. Note that by using `inferVar` we can avoid
+        -- hardcoding anything about the builtin other than its name
+        -- here, at the cost of requiring that it stay in the builtins
+        -- table.
         t <- inferVar pos "subshell"
-        pure (Subshell pos anns, t)
+        -- Capture the current typing environment (in a nested scope)
+        pushScope
+        incr <- gets tiIncremental
+        popScope
+        -- Save in the AST for when the subshell is run
+        let anns' = setAnnotation incr anns
+        pure (Subshell pos anns', t)
 
     ProofSubshell pos anns -> do
-        -- `ProofSubshell` is a special case of `Var` where the variable
-        -- is @proof_subshell@. This allows (will allow, so far) us to store
-        -- extra information in the AST.
+        -- `ProofSubshell` is a special case of `Var` where the
+        -- variable is @proof_subshell@. This allows us to store extra
+        -- information in the AST.
         t <- inferVar pos "proof_subshell"
-        pure (ProofSubshell pos anns, t)
+        -- Capture the current typing environment (in a nested scope)
+        pushScope
+        incr <- gets tiIncremental
+        popScope
+        -- Save in the AST for when the subshell is run
+        let anns' = setAnnotation incr anns
+        pure (ProofSubshell pos anns', t)
 
     Lambda pos mname paramPos params namedParams body -> do
         pushScope

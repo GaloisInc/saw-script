@@ -147,13 +147,15 @@ import qualified Lang.Crucible.FunctionHandle as Crucible
 -- | Type for the function to start a new REPL in TopLevel.
 --
 --   Passed down from the REPL code to avoid circular references.
-type TopLevelShellHook = TopLevelRO -> TopLevelRW -> IO TopLevelRW
+type TopLevelShellHook =
+    TCIncremental -> TopLevelRO -> TopLevelRW ->
+    IO TopLevelRW
 
 -- | Type for the function to start a new REPL in ProofScript.
 --
 --   Passed down from the REPL code to avoid circular references.
 type ProofScriptShellHook =
-    TopLevelRO -> TopLevelRW -> ProofState ->
+    TCIncremental -> TopLevelRO -> TopLevelRW -> ProofState ->
     IO (TopLevelRW, ProofState)
 
 
@@ -947,7 +949,10 @@ interpretExpr expr =
                   let v' = injectPositionIntoMonadicValue pos v
                       v'' = insertRefChain pos x v'
                   return v''
-      SS.Subshell pos _anns -> do
+      SS.Subshell pos anns -> do
+          let tcenv = case SS.getAnnotation anns of
+                Nothing -> panic "interpretExpr" ["subshell missing type env"]
+                Just env -> env
           let x = "subshell"
           -- Look it up in the environment to get the type
           -- (which also crosschecks availability)
@@ -959,13 +964,16 @@ interpretExpr expr =
           -- expose the reference to `topLevelSubshell` where we can
           -- insert extra info from the AST into it. (There isn't any
           -- yet; so far we're doing setup for future changes.)
-          let f = toplevelSubshell
+          let f = toplevelSubshell tcenv
               v = toValue ty' x f
           -- Do the same postprocessing as in the Var case
           let v' = injectPositionIntoMonadicValue pos v
               v'' = insertRefChain pos x v'
           return v''
-      SS.ProofSubshell pos _anns -> do
+      SS.ProofSubshell pos anns -> do
+          let tcenv = case SS.getAnnotation anns of
+                Nothing -> panic "interpretExpr" ["proof_subshell missing type env"]
+                Just env -> env
           let x = "proof_subshell"
           -- Look it up in the environment to get the type
           -- (which also crosschecks availability)
@@ -977,7 +985,7 @@ interpretExpr expr =
           -- expose the reference to `proofScriptSubshell` where we
           -- can insert extra info from the AST into it. (There isn't
           -- any yet; so far we're doing setup for future changes.)
-          let f = proofScriptSubshell
+          let f = proofScriptSubshell tcenv
               v = toValue ty' x f
           -- Do the same postprocessing as in the Var case
           let v' = injectPositionIntoMonadicValue pos v
@@ -1537,8 +1545,8 @@ stmtInterpreter ro _rw stmts = do
   -- execute in.
   let opts = roOptions ro
       scriptArgv = ["auto_match"]
-      tlhook _ _ = liftIO $ fail "No subshells inside AutoMatch"
-      pshook _ _ _ = liftIO $ fail "No proof subshells inside AutoMatch"
+      tlhook _ _ _ = liftIO $ fail "No subshells inside AutoMatch"
+      pshook _ _ _ _ = liftIO $ fail "No proof subshells inside AutoMatch"
   (ro', rw', _tcenv) <- buildTopLevelEnv opts scriptArgv tlhook pshook
   let ?rcx = RunCtx { rcxTLHook = tlhook, rcxPSHook = pshook }
   let m = mapM_ (interpretTopStmt False False) stmts
@@ -2762,13 +2770,13 @@ add_primitives lc _bic _opts = do
 -- But note that because the SAWScript interpreter is very fragile it
 -- is very easy for these things to regress.
 --
-toplevelSubshell :: (?rcx :: RunCtx) => () -> TopLevel Value
-toplevelSubshell () = do
+toplevelSubshell :: (?rcx :: RunCtx) => TCIncremental -> () -> TopLevel Value
+toplevelSubshell tcenv () = do
     pushScope
     ro <- ask
     rw <- get
     let hook = rcxTLHook ?rcx
-    rw' <- liftIO $ hook ro rw
+    rw' <- liftIO $ hook tcenv ro rw
     put rw'
     popScope
     -- Note that (for now at least) toValue just asserts that the type
@@ -2782,8 +2790,8 @@ toplevelSubshell () = do
 -- Much the same as an ordinary subshell, except it runs in the
 -- ProofScript monad and handles the additional ProofScript state.
 --
-proofScriptSubshell :: (?rcx :: RunCtx) => () -> ProofScript Value
-proofScriptSubshell () = do
+proofScriptSubshell :: (?rcx :: RunCtx) => TCIncremental -> () -> ProofScript Value
+proofScriptSubshell tcenv () = do
     (ro, rw) <- scriptTopLevel $ do
         pushScope
         ro_ <- ask
@@ -2791,7 +2799,7 @@ proofScriptSubshell () = do
         return (ro_, rw_)
     pst <- get
     let hook = rcxPSHook ?rcx
-    (rw', pst') <- liftIO $ hook ro rw pst
+    (rw', pst') <- liftIO $ hook tcenv ro rw pst
     put pst'
     scriptTopLevel $ do
         put rw'
@@ -2801,6 +2809,20 @@ proofScriptSubshell () = do
     -- not the type provenance. So it doesn't have to be perfect.
     let ty = SS.tUnit $ SS.TypeFromElement (rwPosition rw) SS.TyCtxExpr
     return $ toValue ty "proof_subshell" ()
+
+-- A dummy value to put in the builtins table for @subshell@.
+-- Not actually reachable.
+fakeSubshell :: (?rcx :: RunCtx) => () -> TopLevel Value
+fakeSubshell () = do
+    let tcenv = panic "fakeSubshell" ["someone called me!"]
+    toplevelSubshell tcenv ()
+
+-- A dummy value to put in the builtins table for @proof_subshell@.
+-- Not actually reachable.
+fakeProofSubshell :: (?rcx :: RunCtx) => () -> ProofScript Value
+fakeProofSubshell () = do
+    let tcenv = panic "fakeProofSubshell" ["someone called me!"]
+    proofScriptSubshell tcenv ()
 
 -- The "map" builtin.
 mapValue :: (?rcx :: RunCtx) => Value -> [Value] -> TopLevel Value
@@ -3821,7 +3843,7 @@ rawprimitives =
     -- to topLevelSubshell, which allows passing extra info stored in
     -- the AST into the builtin.
   , prim "subshell"            "() -> TopLevel ()"
-    (pureVal $ toplevelSubshell)
+    (pureVal $ fakeSubshell)
     Experimental
     [ "Open an interactive subshell instance nested inside the context"
     , "where 'subshell' was called. The resulting REPL is always"
@@ -3839,7 +3861,7 @@ rawprimitives =
     -- Caution: "proof_subshell" gets intercepted and turned into an
     -- AST node like "subshell".
   , prim "proof_subshell"      "() -> ProofScript ()"
-    (pureVal $ proofScriptSubshell)
+    (pureVal $ fakeProofSubshell)
     Experimental
     [ "Open an interactive subshell instance nested inside the context"
     , "where 'proof_subshell' was called. The resulting REPL is always"
