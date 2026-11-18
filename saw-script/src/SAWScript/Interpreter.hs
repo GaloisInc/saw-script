@@ -812,6 +812,33 @@ applyValues pos funinfo fun args =
             funinfo
          ]
 
+-- | Look up a variable in the environment.
+lookupVar :: SS.Name -> TopLevel (SS.Schema, Value)
+lookupVar x = do
+    avail <- gets rwPrimsAvail
+    Environ varenv _tyenv _cryenv <- gets rwEnviron
+    rbenv <- gets rwRebindables
+    let info = case ScopedMap.lookup x varenv of
+            Nothing ->
+                -- Try the rebindable environment
+                case Map.lookup x rbenv of
+                    Nothing -> Nothing
+                    Just (_defpos, ty, v) -> Just (Current, ty, v)
+            Just (_defpos, lc, ty, v, _doc) -> Just (lc, ty, v)
+    case info of
+        Nothing ->
+            -- This should be rejected by the typechecker; panic
+            panic "interpretExpr" [
+                "Read of unknown variable " <> x
+            ]
+        Just (lc, ty, v) -> do
+            unless (Set.member lc avail) $
+                -- This case is also rejected by the typechecker
+                panic "interpretExpr" [
+                     "Read of inaccessible variable " <> x
+                ]
+            pure (ty, v)
+
 -- Eval an expression.
 --
 -- This executes purely: when we see a do-block, return it as a value.
@@ -873,45 +900,20 @@ interpretExpr expr =
           ret <- tupleLookupValue pos a i
           return ret
       SS.Var pos x -> do
-          avail <- gets rwPrimsAvail
-          Environ varenv _tyenv _cryenv <- gets rwEnviron
-          rbenv <- gets rwRebindables
-          let info = case ScopedMap.lookup x varenv of
-                  Nothing ->
-                      -- Try the rebindable environment
-                      case Map.lookup x rbenv of
-                          Nothing -> Nothing
-                          Just (_defpos, _ty, v) -> Just (Current, v)
-                  Just (_defpos, lc, _ty, v, _doc) -> Just (lc, v)
-          case info of
-              Nothing ->
-                  -- This should be rejected by the typechecker; panic
-                  panic "interpretExpr" [
-                      "Read of unknown variable " <> x
-                  ]
-              Just (_lc, VUndefined) -> do
+          (_ty, v) <- lookupVar x
+          case v of
+              VUndefined -> do
                   let pos' = ppPosition pos
                   fail $ Text.unpack $ pos' <> ": Error: evaluated \"undefined\""
-              Just (lc, v)
-                | Set.member lc avail -> do
-                      let v' = injectPositionIntoMonadicValue pos v
-                          v'' = insertRefChain pos x v'
-                      return v''
-                | otherwise ->
-                      -- This case is also rejected by the typechecker
-                      panic "interpretExpr" [
-                           "Read of inaccessible variable " <> x
-                      ]
+              _ -> do
+                  let v' = injectPositionIntoMonadicValue pos v
+                      v'' = insertRefChain pos x v'
+                  return v''
       SS.Subshell pos _anns -> do
           let x = "subshell"
-          -- Get the type and lifecycle info from the builtins table
-          avail <- gets rwPrimsAvail
-          Environ varenv _tyenv _cryenv <- gets rwEnviron
-          let (lc, ty) = case ScopedMap.lookup x varenv of
-                  Nothing -> panic "interpretExpr" [x <> " builtin missing"]
-                  Just (_defpos, lc', ty', _v, _doc) -> (lc', ty')
-          unless (Set.member lc avail) $ do
-              panic "interpretExpr" ["Read of " <> x <> " when inaccessible"]
+          -- Look it up in the environment to get the type
+          -- (which also crosschecks availability)
+          (ty, _v) <- lookupVar x
           let ty' = case ty of
                 SS.Forall [] t' -> t'
                 _ -> panic "interpretExpr" [x <> " is unexpectedly polymorphic"]
@@ -927,14 +929,9 @@ interpretExpr expr =
           return v''
       SS.ProofSubshell pos _anns -> do
           let x = "proof_subshell"
-          -- Get the type and lifecycle info from the builtins table
-          avail <- gets rwPrimsAvail
-          Environ varenv _tyenv _cryenv <- gets rwEnviron
-          let (lc, ty) = case ScopedMap.lookup x varenv of
-                  Nothing -> panic "interpretExpr" [x <> " builtin missing"]
-                  Just (_defpos, lc', ty', _v, _doc) -> (lc', ty')
-          unless (Set.member lc avail) $ do
-              panic "interpretExpr" ["Read of " <> x <> " when inaccessible"]
+          -- Look it up in the environment to get the type
+          -- (which also crosschecks availability)
+          (ty, _v) <- lookupVar x
           let ty' = case ty of
                 SS.Forall [] t' -> t'
                 _ -> panic "interpretExpr" [x <> " is unexpectedly polymorphic"]
