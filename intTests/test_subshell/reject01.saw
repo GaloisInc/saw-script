@@ -1,0 +1,5 @@
+// Referencing "subshell" without applying () is no longer permitted.
+
+enable_experimental;
+
+let foo = subshell;

@@ -1,0 +1,8 @@
+// Before November 2026 this prints 6; after it prints 5, because the
+// rules were changed so (subshell ()) as a function argument captures
+// the context right there.
+enable_experimental;
+
+let f op = do { let x = 6; op; return (); };
+let x = 5;
+f (subshell ());

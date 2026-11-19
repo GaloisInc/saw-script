@@ -1,7 +1,8 @@
 // The subshell itself is its own scope
 // (ProofScript version)
 //
-// note: have to print {{ `x }} for fails to be able to catch it
+// Note: have to print {{ `x }} in a do-block for fails to be able to
+// catch it.
 
 enable_experimental;
 

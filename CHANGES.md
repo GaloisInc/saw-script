@@ -65,6 +65,49 @@ This release supports [version
 
 ## Other Changes
 
+* The underlying workings of the subshell builtins (`subshell` and
+  `proof_subshell`) have been rearranged.
+  The following uses are allowed at the syntactic top level:
+  ```
+     subshell ();
+     proof_subshell ();
+  ```
+  (Note that the REPL of an interactive proof subshell runs at the
+  syntactic top level.)
+  These run in a sub-scope of the top level context they are invoked
+  in.
+  The following uses are allowed in do-blocks:
+  ```
+     do { subshell (); ... };
+     do { proof_subshell (); ... };
+     do { ...; subshell (); ... };
+     do { ...; proof_subshell (); ... };
+  ```
+  Neither may be used in the last (value) position of a do-block.
+  These cases run in a sub-scope of the do-block they are invoked in.
+  This includes variables bound in the do-block as well as the
+  do-block's own lexical environment.
+  The following uses are allowed as function arguments, including
+  named arguments:
+  ```
+     (subshell ())
+     (proof_subshell ())
+  ```
+  These cases run in a sub-scope of the _caller's_ context, that is,
+  where the subshell invocation appears, even though they may be
+  monad-bound later.
+  They still run _when_ monad-bound in the callee; however, the
+  context they run in is captured from the caller.
+  This is a behavioral change, though one not anyone is likely to
+  notice.
+  It is intended to make the common case of passing
+  `(proof_subshell ())` to `prove_print` or `llvm_verify` etc. work as
+  desired.
+  Other uses are rejected.
+  If these restrictions interfere with a non-hypothetical use case,
+  please get in touch.
+  Note that the subshell builtins are tagged experimental.
+
 * Support for GHC 9.12 and (partially) 9.10 has been added.
   Support for GHC 9.4 has been dropped.
   Note that there is a problem apparently in GHC 9.10's stdlib that

@@ -212,6 +212,8 @@ instance AppSubst Expr where
         Lookup pos rec fld     -> Lookup pos (appSubst s rec) fld
         TLookup pos tpl idx    -> TLookup pos (appSubst s tpl) idx
         Var _pos _x            -> expr
+        Subshell _pos _anns    -> expr
+        ProofSubshell _pos _anns -> expr
         Lambda pos mname paramPos pats ppats body ->
             let pats' = map (appSubst s) pats
                 ppats' = Map.map (appSubst s) ppats
@@ -1674,6 +1676,39 @@ addAbstractTyVars vars = do
     let tyenv' = insertAll tyenv
     modify (\rw -> rw { tiTyEnv = tyenv' })
 
+-- | Infer the type for a variable reference.
+--   (Part of `inferExpr` but used from more than one place.)
+inferVar :: Pos -> Text -> TI Type
+inferVar pos x = do
+    let x' = PP.dquotes (PP.pretty x)
+    avail <- asks tiPrimsAvail
+    env <- gets tiVarEnv
+    case ScopedMap.lookup x env of
+        Nothing -> do
+            recordError pos $ "Unbound variable:" <+> x'
+            getErrorTyVar pos
+        Just (_prevpos, lc, _rebindable, Forall as t)
+          | Set.member lc avail -> do
+              when (Util.isDeprecated lc) $
+                  case t of
+                  TyFunc _prov _ _params _namedparams _ret ->
+                      recordWarning pos $ "Function is deprecated:" <+> x'
+                  _ ->
+                      recordWarning pos $ "Value is deprecated:" <+> x'
+
+              -- instantiate the quantifier bindings and
+              -- substitute the fresh tyvars
+              substs <- instantiateForalls x as
+              pure $ Util.substituteTyVars' avail substs t
+          | otherwise -> do
+              recordError pos $ "Inaccessible variable:" <+> x'
+              let how = if lc == HideDeprecated then "deprecated"
+                        else "experimental"
+                  cmd = "`enable_" <> how <> "`."
+              recordComment pos $ "This command is available only" <+>
+                                  "after running" <+> cmd
+              getErrorTyVar pos
+
 -- | Infer the type for an expression.
 --
 inferExpr :: Expr -> TI (OutExpr, Type)
@@ -1778,38 +1813,25 @@ inferExpr expr = case expr of
         return (TLookup pos e1 i, elTy)
 
     Var pos x -> do
-        let x' = PP.dquotes (PP.pretty x)
-        avail <- asks tiPrimsAvail
-        env <- gets tiVarEnv
-        case ScopedMap.lookup x env of
-            Nothing -> do
-                recordError pos $ "Unbound variable:" <+> x'
-                t <- getErrorTyVar pos
-                return (Var pos x, t)
-            Just (_prevpos, lc, _rebindable, Forall as t)
-              | Set.member lc avail -> do
-                  when (Util.isDeprecated lc) $
-                      case t of
-                      TyFunc _prov _ _params _namedparams _ret ->
-                          recordWarning pos $ "Function is deprecated:" <+> x'
-                      _ ->
-                          recordWarning pos $ "Value is deprecated:" <+> x'
+        t <- inferVar pos x
+        pure (Var pos x, t)
 
-                  -- instantiate the quantifier bindings and
-                  -- substitute the fresh tyvars
-                  substs <- instantiateForalls x as
-                  let t' = Util.substituteTyVars' avail substs t
-                  return (Var pos x, t')
-              | otherwise -> do
-                  recordError pos $ "Inaccessible variable:" <+> x'
-                  let how = if lc == HideDeprecated then "deprecated"
-                            else "experimental"
-                      cmd = "`enable_" <> how <> "`."
-                  recordComment pos $ "This command is available only" <+>
-                                      "after running" <+> cmd
+    Subshell pos anns -> do
+        -- `Subshell` is a special case of `Var` where the variable is
+        -- @subshell@. This allows (will allow, so far) us to store
+        -- extra information in the AST. Note that by using `inferVar`
+        -- we can avoid hardcoding anything about the builtin other
+        -- than its name here, at the cost of requiring that it stay
+        -- in the builtins table.
+        t <- inferVar pos "subshell"
+        pure (Subshell pos anns, t)
 
-                  t' <- getErrorTyVar pos
-                  return (Var pos x, t')
+    ProofSubshell pos anns -> do
+        -- `ProofSubshell` is a special case of `Var` where the variable
+        -- is @proof_subshell@. This allows (will allow, so far) us to store
+        -- extra information in the AST.
+        t <- inferVar pos "proof_subshell"
+        pure (ProofSubshell pos anns, t)
 
     Lambda pos mname paramPos params namedParams body -> do
         pushScope

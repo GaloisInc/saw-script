@@ -1,0 +1,6 @@
+// Referencing "proof_subshell" without applying () is no longer
+// permitted.
+
+enable_experimental;
+
+let foo = proof_subshell;

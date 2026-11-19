@@ -7,14 +7,22 @@ Stability   : provisional
 
 SAWScript abstract syntax.
 -}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module SAWCentral.AST (
+       -- * Annotations
+       IsAnnotation(..)
+     , Annotations(..)
+     , emptyAnnotations, getAnnotation, setAnnotation, extractAnnotations
+
        -- * Lifecycle and deprecation
-       PrimitiveLifecycle(..)
+     , PrimitiveLifecycle(..)
      , everythingAvailable
      , defaultAvailable
 
@@ -80,11 +88,6 @@ module SAWCentral.AST (
      , txVar, txApply
      ) where
 
-import qualified SAWSupport.Pretty as PPS
-
-import SAWCentral.Panic (panic)
-import SAWCentral.Position (Pos(..), Positioned(..), maxSpan)
-
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.List (genericReplicate)
@@ -93,12 +96,74 @@ import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.List (intercalate)
+import Data.Typeable (Typeable)
+import Data.Functor.Identity (Identity(..))
+
+import SAWSupport.Dump (Dump)
+import qualified SAWSupport.TypedStore as TypedStore
+import SAWSupport.TypedStore (TypedStore)
+import qualified SAWSupport.Pretty as PPS
+
+import SAWCentral.Panic (panic)
+import SAWCentral.Position (Pos(..), Positioned(..), maxSpan)
 
 import qualified Prettyprinter as PP
 import           Prettyprinter ((<+>))
 
 import qualified Cryptol.Parser.AST as P (ImportSpec(..), ModName)
 import qualified Cryptol.Utils.Ident as P (identText, modNameChunks)
+
+
+------------------------------------------------------------
+-- Annotation hooks
+
+-- This material is here to allow carrying values of type
+-- TCIncremental (defined in, and private to, the typechecker) in the
+-- AST without needing to refer to the type directly. It's annoying
+-- that Haskell doesn't have a way to declare abstract types at any
+-- higher level than a type parameter.
+
+-- | Class for types that can serve as AST annotations.
+class Typeable a => IsAnnotation a where
+    prettyAnnotation :: a -> PPS.Doc
+    dumpAnnotation :: a -> Dump
+
+-- | Wrapper type for AST annotations. Not user-facing.
+data Annotation f a = IsAnnotation a => Annotation (f a)
+
+-- | Type for an annotations bundle.
+--
+--   TypedStore is set up to operate using frobs of kind * -> *, which
+--   we don't really need. But it already exists. So use `Identity`.
+newtype Annotations = Annotations (TypedStore (Annotation Identity))
+
+-- | An empty annotations bundle.
+emptyAnnotations :: Annotations
+emptyAnnotations = Annotations TypedStore.empty
+
+-- | Fetch an annotation of type `a`, if one exists.
+getAnnotation :: IsAnnotation a => Annotations -> Maybe a
+getAnnotation (Annotations store) =
+    case TypedStore.lookup store of
+        Nothing -> Nothing
+        Just (Annotation ann) -> Just $ runIdentity ann
+
+-- | Apply an annotation of type `a`.
+setAnnotation :: IsAnnotation a => a -> Annotations -> Annotations
+setAnnotation ann (Annotations store) =
+    Annotations $ TypedStore.insert (Annotation $ Identity ann) store
+
+-- | Get a list of all the annotations.
+--
+--   Because annotations have heterogeneous type, you have to map them
+--   down into some single type to make a list of them.
+-- 
+extractAnnotations ::
+    forall b.
+        (forall a. IsAnnotation a => a -> b) -> Annotations -> [b]
+extractAnnotations f (Annotations store) =
+    let once (Annotation ann) = f $ runIdentity ann in
+    TypedStore.toList once store
 
 
 ------------------------------------------------------------
@@ -402,6 +467,9 @@ data Expr
   | TLookup Pos Expr Integer
   -- LC
   | Var Pos Name
+    -- Special cases of Var for the subshell and proof_subshell builtins.
+  | Subshell Pos Annotations
+  | ProofSubshell Pos Annotations
   -- | All functions are handled as lambdas. We hang onto the name
   --   from the function declaration (if there was one) for use in
   --   stack traces. The second position (after the name) is the
@@ -576,6 +644,8 @@ instance Positioned Expr where
   getPos (Lookup pos _ _) = pos
   getPos (TLookup pos _ _) = pos
   getPos (Var pos _) = pos
+  getPos (Subshell pos _) = pos
+  getPos (ProofSubshell pos _) = pos
   getPos (Lambda pos _ _ _ _ _) = pos
   getPos (Application pos _ _) = pos
   getPos (Let pos _ _) = pos
@@ -611,6 +681,24 @@ instance Positioned Decl where
 
 ------------------------------------------------------------
 -- Printing
+
+-- | Printer for `Annotations`
+prettyAnnotations :: Maybe PPS.Doc -> Annotations -> PPS.Doc
+prettyAnnotations mbPrefix anns =
+    let entries = extractAnnotations prettyAnnotation anns
+        short =
+            let entries' = case mbPrefix of
+                  Nothing -> entries
+                  Just prefix -> prefix : entries
+            in
+            PP.group $ PP.hsep entries'
+        long =
+            let entries' = PP.vsep entries in
+            case mbPrefix of
+              Nothing -> entries'
+              Just prefix -> prefix <> PP.line <> PP.indent 3 entries'
+    in
+    PP.flatAlt long short
 
 -- | Printer for `Kind`
 ppKind :: Kind -> Text
@@ -778,6 +866,10 @@ prettyExpr expr0 = case expr0 of
         expr' <> PP.dot <> n'
     Var _ name ->
         PP.pretty name
+    Subshell _  anns ->
+       prettyAnnotations (Just "subshell") anns
+    ProofSubshell _ anns ->
+       prettyAnnotations (Just "proof_subshell") anns
     Lambda _ _mname _parampos params namedParams expr ->
         let onePositional pat =
                 let pat' = prettyPattern pat in

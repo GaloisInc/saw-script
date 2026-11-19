@@ -1,0 +1,9 @@
+// Referencing "proof_subshell" without applying () is no longer
+// permitted. (Except specifically as a function argument)
+
+enable_experimental;
+
+do {
+   let foo = proof_subshell;
+   return ();
+};

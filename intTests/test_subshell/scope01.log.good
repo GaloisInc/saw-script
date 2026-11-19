@@ -1,0 +1,9 @@
+Loading file "scope01.saw"
+scope01.saw:20:5-20:6: Warning: Redeclaration of x
+let x = 5;
+    ^
+scope01.saw:18:5-18:6: Previous declaration was here
+let x = 4;
+    ^
+3
+5

@@ -1,0 +1,14 @@
+// "let rebindable" is only allowed at the top level, but subshells
+// are at the syntactic top level. Even if they're invoked from
+// do-blocks.
+//
+// This should print 4.
+enable_experimental;
+
+let rebindable x = 3;
+let f () = do {
+   subshell ();
+   return ();
+};
+f ();
+print x;
