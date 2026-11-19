@@ -2,6 +2,8 @@
 // command is monad-bound and thus executed, not when it's named.
 //
 // The subshell should print 6 and not complain about x being unbound.
+//
+// This is no longer permitted as of November 2026.
 
 enable_experimental;
 

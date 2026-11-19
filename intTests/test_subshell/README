@@ -1,3 +1,51 @@
-Examples from #2242 (scoping regression in proof_subshell), #2243
-(bindings escape proof_subshell), and #2306 (bizarre environment
-capturing in the subshell / proof_subshell commands)
+Tests for checking the behavior of subshell and proof_subshell.
+
+Includes material from:
+   #2242 (scoping regression in proof_subshell)
+   #2243 (bindings escape proof_subshell)
+   #2306 (bizarre environment capturing in subshell / proof_subshell)
+   #2751 (exact scoping semantics of interactive subshells)
+
+as well as further tests developed in the course of #3529.
+
+Up until #3259 in November 2026, the expectation, and eventually the
+actual behavior, was that a subshell would run as a nested scope in
+the lexical context where the "subshell" (or "proof_subshell") command
+was monad-bound. Thus for example in things like
+   do { let s = subshell(); let x = 6; s; return 0; }
+the subshell would see the value of x.
+
+In #3259, in pursuit of the mutually entangled goals of disentangling
+the SAWScript interpreter from the typechecker, and of being able to
+typecheck a whole file at once, restrictions were applied.
+
+These forms are supposed to be accepted:
+
+   do { ... subshell (); ... };
+   do { ... proof_subshell (); ... };
+   somefunction ... (subshell ()) ...
+   somefunction ... (proof_subshell ()) ...
+
+as well as the same forms as in do-blocks at the syntactic top level.
+Other usages should be rejected. That includes applying the unit
+argument and monad-binding the result separately, passing around the
+value without the unit argument applied, and also trying to place
+a subshell as the last value argument of a do-block.
+
+This is to enable capturing a typing environment to typecheck the
+interactive subshell in the correct context, even if we typecheck the
+whole file before executing any of it and therefore execute the
+subshell much later. There are assorted complications with trying to
+capture a typing environment at the monad-bind point rather than at
+the point where the builtin is referenced, and since there's not
+really any good reason to allow those to be different points, we don't
+any more. See the discussion at the top of Subshells.hs for further
+information.
+
+The code in #3259 also intentionally changes the behavior of the
+latter two forms if the function being called is a SAWScript function
+(rather than a builtin, which is the common case with proof_subshell):
+the subshell runs in the context of the caller, regardless of where
+the argument value is monad-bound in the callee. This is to make the
+common case of proof_subshell work and is not intended to be
+particularly principled.
