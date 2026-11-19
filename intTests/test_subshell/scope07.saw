@@ -1,0 +1,5 @@
+// As of #3532, unresolved unification vars do not escape into
+// subshells.
+enable_experimental;
+
+do { x <- return return; subshell (); return (); };

@@ -6,7 +6,7 @@ Includes material from:
    #2306 (bizarre environment capturing in subshell / proof_subshell)
    #2751 (exact scoping semantics of interactive subshells)
 
-as well as further tests developed in the course of #3529.
+as well as further tests developed in the course of #3529 and #3532.
 
 Up until #3259 in November 2026, the expectation, and eventually the
 actual behavior, was that a subshell would run as a nested scope in

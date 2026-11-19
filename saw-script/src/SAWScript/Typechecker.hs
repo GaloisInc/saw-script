@@ -35,6 +35,7 @@ import Control.Monad.Reader (MonadReader(..), ReaderT(..), asks)
 import Control.Monad.State (MonadState(..), StateT, gets, modify, runState)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Identity (Identity)
+import Data.Maybe (fromMaybe)
 import qualified Data.Text as Text
 import Data.Text (Text)
 import Data.List (genericLength)
@@ -42,12 +43,14 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
+import Text.Read (readMaybe)
 
 import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
 import SAWSupport.Position
 import qualified SAWSupport.Dump as Dump
+import SAWSupport.Dump (Dump)
 import qualified SAWSupport.Pretty as PPS
 import qualified SAWSupport.ScopedMap as ScopedMap
 import SAWSupport.ScopedMap (ScopedMap)
@@ -59,6 +62,7 @@ import SAWSupport.ScopedMap (ScopedMap)
 import qualified SAWCentral.Position as Pos
 import SAWCentral.Position (Pos(..))
 import SAWCentral.AST
+import qualified SAWCentral.ASTDump as ASTDump
 import qualified SAWCentral.ASTUtil as Util
 
 import SAWScript.Panic (panic)
@@ -121,6 +125,49 @@ instance IsAnnotation TCIncremental where
 
 
 ------------------------------------------------------------
+-- Dump
+
+-- Dumps for the environments.
+
+dumpVarEnv :: VarEnv -> Dump
+dumpVarEnv varenv =
+    let oneEntry (name, (_pos, lc, rb, ty)) =
+            let lc' = Text.pack $ show lc
+                rb' = case rb of
+                    ReadOnlyVar -> ""
+                    RebindableVar -> " rebindable"
+                ty' = ASTDump.dumpSchema ty
+            in
+            Dump.subelement (name <> " " <> lc' <> rb') ty'
+        oneScope entries =
+            Dump.subelements "scope" $ map oneEntry entries
+    in
+    -- scopedAssocs returns the newest scope first; users normally
+    -- expect the newest scope at the bottom of a print, because
+    -- stacks grow down. so reverse the list.
+    Dump.list $ map oneScope $ reverse $ ScopedMap.scopedAssocs varenv
+
+dumpTyEnv :: TyEnv -> Dump
+dumpTyEnv tyenv =
+    let oneEntry (name, (lc, nt)) =
+            let lc' = Text.pack $ show lc
+                (what', nt') = case nt of
+                   ConcreteType ty ->
+                       ("concrete", ASTDump.dumpType ty)
+                   AbstractType kind ->
+                       ("abstract", ASTDump.dumpKind kind)
+            in
+            Dump.subelement (name <> " " <> lc' <> " " <> what') nt'
+        oneScope entries =
+            Dump.subelements "scope" $ map oneEntry entries
+    in
+    -- scopedAssocs returns the newest scope first; users normally
+    -- expect the newest scope at the bottom of a print, because
+    -- stacks grow down. so reverse the list.
+    Dump.list $ map oneScope $ reverse $ ScopedMap.scopedAssocs tyenv
+
+
+------------------------------------------------------------
 -- Support bits
 
 -- | Like zipWithM_ on two lists, but on maps by aligning keys.
@@ -170,6 +217,9 @@ class UnifyVars t where
 instance (Ord k, UnifyVars a) => UnifyVars (Map k a) where
     unifyVars = unifyVars . Map.elems
 
+instance (Ord k, UnifyVars a) => UnifyVars (ScopedMap k a) where
+    unifyVars tbl = unifyVars $ ScopedMap.allElems tbl
+
 instance (UnifyVars a) => UnifyVars [a] where
     unifyVars ts = Map.unions $ map unifyVars ts
 
@@ -203,6 +253,78 @@ instance UnifyVars NamedType where
     unifyVars nt = case nt of
         ConcreteType ty -> unifyVars ty
         AbstractType _kind -> Map.empty
+
+
+------------------------------------------------------------
+-- UnifyKinds
+
+-- | unifyKinds is a quick kind inference pass implemented as a
+--   type-class-polymorphic function based on observed usage. It
+--   returns a map from TypeIndex to Kind. It is ok for it to not to
+--   be able to figure some things out, so some variables that exist
+--   may not appear in the results. Also, we don't attempt to detect
+--   inconsistent usage; where this is used, there shouldn't be any.
+--   If there is inconsistent usage, we'll return _some_ observed
+--   usage.
+type UnifyKindsResult = Map TypeIndex Kind
+class UnifyKinds t where
+    unifyKinds' :: Maybe Kind -> t -> UnifyKindsResult -> UnifyKindsResult
+    unifyKinds :: t -> UnifyKindsResult
+    unifyKinds x = unifyKinds' Nothing x Map.empty
+
+instance (Ord k, UnifyKinds a) => UnifyKinds (Map k a) where
+    unifyKinds' known xs info = unifyKinds' known (Map.elems xs) info
+
+instance (Ord k, UnifyKinds a) => UnifyKinds (ScopedMap k a) where
+    unifyKinds' known xs info = unifyKinds' known (ScopedMap.allElems xs) info
+
+instance (UnifyKinds a) => UnifyKinds [a] where
+    unifyKinds' known xs info = foldr (unifyKinds' known) info xs
+
+-- If we want to have the PrimitiveLifecycle pair instance that lets
+-- us inspect a VarEnv, we can't also have a generic pair instance;
+-- typeclass rules are alas not derivation patterns. Insert a bogus
+-- unit to distinguish things.
+instance (UnifyKinds a, UnifyKinds b) => UnifyKinds ((), a, b) where
+    unifyKinds' known ((), x, y) info = unifyKinds' known y $ unifyKinds' known x info
+
+instance (UnifyKinds a) => UnifyKinds (PrimitiveLifecycle, a) where
+    unifyKinds' known (_lc, t) info = unifyKinds' known t info
+
+instance (UnifyKinds a) => UnifyKinds (Pos, PrimitiveLifecycle, Rebindable, a) where
+    unifyKinds' known (_pos, _lc, _rb, t) info = unifyKinds' known t info
+
+instance UnifyKinds Type where
+    unifyKinds' known t info = case t of
+        TyCon _ _         -> info
+        TyArray _ t1      -> unifyKinds' (Just kindStar) t1 info
+        TyTuple _ ts      -> unifyKinds' (Just kindStar) ts info
+        TyRecord _ tm     -> unifyKinds' (Just kindStar) tm info
+        TyFunc _ _ params namedParams ret ->
+            let info' = unifyKinds' (Just kindStar) params info
+                info'' = unifyKinds' (Just kindStar) namedParams info'
+                info''' = unifyKinds' (Just kindStar) ret info''
+            in
+            info'''
+        TyVar _ _         -> info
+        TyUnifyVar (TypeFailed _) _i -> info  -- ignore error vars
+        TyUnifyVar _prov i ->
+            case known of
+                Nothing -> info
+                Just kind -> Map.insert i kind info
+        TyApply _ m arg   ->
+            let info' = unifyKinds' (Just kindStarToStar) m info
+                info'' = unifyKinds' (Just kindStar) arg info'
+            in
+            info''
+
+instance UnifyKinds Schema where
+    unifyKinds' known (Forall _ t) info = unifyKinds' known t info
+
+instance UnifyKinds NamedType where
+    unifyKinds' _known nt info = case nt of
+        ConcreteType ty -> unifyKinds' (Just kindStar) ty info
+        AbstractType _kind -> info
 
 
 ------------------------------------------------------------
@@ -348,6 +470,167 @@ instance AppSubst NamedType where
     appSubst s nt = case nt of
         ConcreteType ty -> ConcreteType $ appSubst s ty
         AbstractType kind -> AbstractType kind
+
+
+------------------------------------------------------------
+-- Cleaning an environment for capture
+
+-- When we start an interactive subshell, we need a copy of the typing
+-- environment from its context. That typing environment may contain
+-- unresolved unification variables. Since it's a read-only full copy,
+-- some of them may have been resolved downstream later in the input,
+-- and we won't have those resolutions. This makes it possible to then
+-- resolve the same unification variables differently in the subshell.
+-- That is in turn ok as long as there is no contact between the
+-- elements those variables describe inside and outside the subshell.
+-- _That_ is in turn true for SAWScript... for now... so far...
+-- because of various restrictions we have, any of which we might want
+-- to lift, and more by accident than by design.
+--
+-- Therefore, scan the environment and replace any loose unification
+-- variables with abstract types.
+--
+-- XXX: we may then proceed to generate new unification variables with
+-- the same IDs as were generated elsewhere downstream. This is also
+-- not a problem, as long as those variables don't escape. For now,
+-- they also can't, for the same reasons. But we will probably want to
+-- lift the clumsy restriction on unification variables appearing in
+-- top-level bindings, at which point we'll need to restrict them
+-- explicitly from "let rebindable" unless we fix this properly by
+-- using a global ID supply.
+
+cleanForCapture :: PPS.Opts -> TCIncremental -> TCIncremental
+cleanForCapture ppopts incr =
+    -- First, flatten the environment. We can't return out into the
+    -- scopes that may already exist in it, and anything shadowed can
+    -- be dropped.
+    let varenv = ScopedMap.flatten $ tciVarEnv incr
+        tyenv = ScopedMap.flatten $ tciTyEnv incr
+    in
+
+    -- Second, apply the existing substitution. In principle, the
+    -- environment would be up to date so this wouldn't be necessary;
+    -- but keeping it up to date on every resolution requires
+    -- traversing the whole thing over and over again and that becomes
+    -- quadratic.
+    let (varenv', tyenv') =
+          let subst = tciSubst incr in
+          (appSubst subst varenv, appSubst subst tyenv)
+    in
+    
+    -- Find all the remaining unification vars.
+    let univars = Map.union (unifyVars varenv') (unifyVars tyenv') in
+
+    -- We don't track kind info for unification vars, but we need
+    -- explicit kind info for abstract types. Do a quick kind
+    -- inference run based on what's in the typing environment. In
+    -- practice this should find all unification vars of kind * -> *
+    -- (since occurrences of those are very restricted) and we can
+    -- default the rest to *. FUTURE: we should really just track kind
+    -- info for unification vars.
+    let kinds = unifyKinds ((), varenv', tyenv') in
+
+    -- Pair the unification vars table (values are the provenance
+    -- info) with the kind info. There could be a Map.zip that does
+    -- this, but that would be too easy. Take advantage of knowing
+    -- that univars contains all keys to make the implementation
+    -- simpler.
+    let univars' =
+           let once i prov = (prov, Map.lookup i kinds) in
+           Map.mapWithKey once univars
+    in
+
+    -- Wrappers to put the names of our variables in one place.
+    -- Use the otherwise unreachable names ".abstractNNN".
+    let makeName :: Int -> Text
+        makeName i = ".abstract" <> (Text.pack $ show i)
+    in
+    let readName :: Text -> Maybe Int
+        readName name =
+            if Text.isPrefixOf ".abstract" name then
+                readMaybe $ Text.unpack $ Text.drop 9 name
+            else
+                Nothing
+    in
+
+    -- Scan tyenv for any preexisting variables we generated on an
+    -- earlier run. Start counting past anything we see.
+    let startid =
+          let once name (_lc, _nt) lastidseen =
+                case readName name of
+                    Nothing -> lastidseen
+                    Just n -> max n lastidseen
+          in
+          Map.foldrWithKey once 0 tyenv'
+    in
+
+    -- Make an abstract type for each, and create a substitution to
+    -- insert them. Because we handle abstract types by name, we need
+    -- to introduce names and put those names in tyenv. Generate a
+    -- fresh numbering rather than reusing the unification var
+    -- numbers, to increase the stability of the resulting user
+    -- experience.
+    let (newtys, subst, _nextid) =
+          let once id_ (prov, mbKind) (newtys', subst', nextid) =
+                let kind = fromMaybe kindStar mbKind
+                    name = makeName nextid
+                    ty = TyVar prov name
+                    namedty = AbstractType kind
+                    newtys'' = Map.insert name (Current, namedty) newtys'
+                    subst'' = Map.insert id_ ty subst'
+                in
+                (newtys'', subst'', nextid + 1)
+          in
+          Map.foldrWithKey once (Map.empty, Map.empty, startid) univars'
+    in
+
+    -- wrap this to help with name scoping
+    let result =
+          -- Now apply the new substitution.
+          -- Append the new abstract types to tyenv.
+          let varenv'' = ScopedMap.seed $ appSubst subst varenv'
+              tyenv'' = ScopedMap.seed $ Map.union (appSubst subst tyenv') newtys
+          in
+
+          -- We have substituted all unification vars away, so tciSubst
+          -- can/should be empty, and we can start over at id 0.
+          TCIncremental {
+              tciVarEnv = varenv'',
+              tciTyEnv = tyenv'',
+              tciNextTypeIndex = 0,
+              tciSubst = Map.empty
+          }
+    in
+
+    -- Crosscheck that there are no unification vars left in what
+    -- we're returning. Thread the result through to make sure the
+    -- check actually happens.
+    let check incr' =
+          let varenv'' = tciVarEnv incr'
+              tyenv'' = tciTyEnv incr'
+              leftovers = Map.union (unifyVars varenv'') (unifyVars tyenv'')
+          in
+          if Map.null leftovers then
+              incr'
+          else
+              let ppLeftover (i, prov) = ppType ppopts $ TyUnifyVar prov i
+                  printed'leftovers = map ppLeftover $ Map.toList leftovers
+                  printed'varenv = Dump.render $ dumpVarEnv $ tciVarEnv incr
+                  printed'tyenv = Dump.render $ dumpTyEnv $ tciTyEnv incr
+                  printed'varenv'' = Dump.render $ dumpVarEnv varenv''
+                  printed'tyenv'' = Dump.render $ dumpTyEnv tyenv''
+                  indent x = "   " <> x
+                  ind xs = map indent xs
+                  text =
+                      "Leftover unification vars:" : ind printed'leftovers ++
+                      "Starting VarEnv:" : ind printed'varenv ++
+                      "Starting TyEnv:" : ind printed'tyenv ++
+                      "Ending VarEnv:" : ind printed'varenv'' ++
+                      "Ending TyEnv:" : ind printed'tyenv''
+              in
+              panic "cleanForCapture" text
+    in
+    check result
 
 
 ------------------------------------------------------------
@@ -1928,9 +2211,11 @@ inferExpr expr = case expr of
         -- Capture the current typing environment (in a nested scope)
         pushScope
         incr <- gets tiIncremental
+        ppopts <- asks tiPPOpts
+        let incr' = cleanForCapture ppopts incr
         popScope
         -- Save in the AST for when the subshell is run
-        let anns' = setAnnotation incr anns
+        let anns' = setAnnotation incr' anns
         pure (Subshell pos anns', t)
 
     ProofSubshell pos anns -> do
@@ -1941,9 +2226,11 @@ inferExpr expr = case expr of
         -- Capture the current typing environment (in a nested scope)
         pushScope
         incr <- gets tiIncremental
+        ppopts <- asks tiPPOpts
+        let incr' = cleanForCapture ppopts incr
         popScope
         -- Save in the AST for when the subshell is run
-        let anns' = setAnnotation incr anns
+        let anns' = setAnnotation incr' anns
         pure (ProofSubshell pos anns', t)
 
     Lambda pos mname paramPos params namedParams body -> do
