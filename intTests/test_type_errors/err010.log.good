@@ -9,7 +9,7 @@ err010.saw:12:6-12:9: Error: Type mismatch.
     Expected: TopLevel
     Found:    LLVMSetup
 
-    Expected: TopLevel t.0
+    Expected: TopLevel t.7
     Found:    LLVMSetup (Int, Int)
 
 a <- f 0;

@@ -99,15 +99,6 @@ data TCIncremental = TCIncremental {
     tciSubst :: Subst
 }
 
--- | Create a TCIncremental given a starting varenv and tyenv
-makeIncremental :: VarEnv -> TyEnv -> TCIncremental
-makeIncremental varenv tyenv = TCIncremental {
-    tciVarEnv = varenv,
-    tciTyEnv = tyenv,
-    tciNextTypeIndex = 0,
-    tciSubst = Map.empty
-}
-
 -- | An initial, completely empty TCIncremental.
 initialTCIncremental :: TCIncremental
 initialTCIncremental = TCIncremental {
@@ -483,7 +474,7 @@ runTI ppopts avail incr m =
     in
     (msgs, (result, incr'))
 
--- | Variant that doesn't return the output `TCIncremental`.
+-- | Variant that doesn't return the updated `TCIncremental`.
 runTI' :: PPS.Opts -> Set PrimitiveLifecycle -> TCIncremental -> TI a ->
           PartResult a
 runTI' ppopts avail incr m =
@@ -3247,12 +3238,11 @@ data StmtContext = InTopLevel | InProofScript
 checkStmt ::
       PPS.Opts ->
       Set PrimitiveLifecycle ->
-      VarEnv ->
-      TyEnv ->
+      TCIncremental ->
       StmtContext ->
       Stmt ->
       FullResult Stmt
-checkStmt ppopts avail env tenv ctx stmt =
+checkStmt ppopts avail incr ctx stmt =
     -- XXX: we shouldn't need this position here.
     --
     -- The position is used as the position associated with the
@@ -3281,23 +3271,19 @@ checkStmt ppopts avail env tenv ctx stmt =
         ctxtype = case ctx of
             InTopLevel -> TyCon prov TopLevel
             InProofScript -> TyCon prov ProofScript
-        incr = makeIncremental env tenv
     in
     runTI ppopts avail incr (inferSingleStmt prov ctxtype stmt)
 
 -- | Check a single declaration. (This is an external interface.)
 --
---   The first two arguments are the starting variable and typedef
---   environments to use.
+--   The third argument is the starting environment to use.
 checkDecl ::
       PPS.Opts ->
       Set PrimitiveLifecycle ->
-      VarEnv ->
-      TyEnv ->
+      TCIncremental ->
       Decl ->
       FullResult Decl
-checkDecl ppopts avail env tenv decl =
-    let incr = makeIncremental env tenv in
+checkDecl ppopts avail incr decl =
     runTI ppopts avail incr (inferDecl ReadOnlyVar decl)
 
 -- | Check a found type (first `Schema` argument) against an expected
@@ -3312,12 +3298,12 @@ checkDecl ppopts avail env tenv decl =
 typesMatch ::
       PPS.Opts ->
       Set PrimitiveLifecycle ->
-      TyEnv ->
+      TCIncremental ->
       Text ->
       Schema ->
       Schema ->
       Bool
-typesMatch ppopts avail tenv name schema'found schema'expected =
+typesMatch ppopts avail incr name schema'found schema'expected =
   let unpack (Forall as ty) = do
         -- Generate unification vars for all the forall-bindings
         substs <- instantiateForalls name as
@@ -3329,7 +3315,6 @@ typesMatch ppopts avail tenv name schema'found schema'expected =
         ty'found <- unpack schema'found
         ty'expected <- unpack schema'expected
         matches (Pos.getPos ty'found) ty'found ty'expected
-      incr = makeIncremental ScopedMap.empty tenv
   in
   let (_msgs, (b, _incr')) = runTI ppopts avail incr match in
   -- return match success/failure
@@ -3348,7 +3333,7 @@ typesMatch ppopts avail tenv name schema'found schema'expected =
 --   schema that are of use to the caller, on the assumption that the
 --   caller doesn't want to do stuff with the schema before exiting on
 --   errors, which it doesn't. Thus, return the original schema and not
---   one with the potentially updated type. Don't return an output
+--   one with the potentially updated type. Don't return an updated
 --   TCIncremental either.
 --
 --   (Otherwise we'd need to rerun `generalize` to build a new schema,
@@ -3492,11 +3477,10 @@ addBuiltin pos name lc ty incr =
 --
 checkSchemaPattern ::
       Set PrimitiveLifecycle ->
-      VarEnv ->
-      TyEnv ->
+      TCIncremental ->
       SchemaPattern ->
       PartResult SchemaPattern
-checkSchemaPattern _avail _env _tenv pat =
+checkSchemaPattern _avail _incr pat =
     -- For the time being, do nothing -- we specifically don't want it
     -- to reject unbound/free type variables (see Search.hs for a
     -- discussion of why) or underapplied type constructors, so the

@@ -24,15 +24,12 @@ import Data.IORef (IORef)
 import Data.List (uncons)
 import qualified Data.Set as Set
 import Data.Set (Set)
-import qualified Data.Map as Map
---import Data.Map (Map)
 import System.Directory
 import System.FilePath (normalise, takeDirectory)
 
 import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
-import qualified SAWSupport.ScopedMap as ScopedMap
 import qualified SAWSupport.Pretty as PPS
 import qualified SAWSupport.Position as PosSupport
 import qualified SAWSupport.Console as Cons
@@ -42,7 +39,6 @@ import SAWCentral.Position (Pos(..))
 import qualified SAWCentral.Options as Options
 import SAWCentral.Options (Options)
 import SAWCentral.AST
-import SAWCentral.Value (Environ(..), RebindableEnv)
 
 import SAWScript.Panic (HasCallStack, panic)
 import SAWScript.Token (Token, tokPos)
@@ -390,25 +386,11 @@ readTypedefPure lc tcenv name str =
 --
 readSchemaPattern ::
     Options ->
-    FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text ->
+    FilePath -> Ty.TCIncremental -> Set PrimitiveLifecycle -> Text ->
     IO SchemaPattern
-readSchemaPattern _opts fileName environ rbenv avail str = do
+readSchemaPattern _opts fileName tcenv avail str = do
   pat <- readAnyIO fileName str "end-of-line" parseSchemaPattern
-  let Environ varenv tyenv _cryenv = environ
-
-  -- XXX it should not be necessary to do this munging
-  --
-  -- Note that we need to flatten the scopes we have here
-  -- (outside the typechecker) in order to have the union with
-  -- the rebindable env to work right.
-  let squash (pos, lc, ty, _val, _doc) = (pos, lc, ReadOnlyVar, ty)
-      varenv' = Map.map squash $ ScopedMap.flatten varenv
-      rbsquash (pos, ty, _val) = (pos, Current, RebindableVar, ty)
-      rbenv' = Map.map rbsquash rbenv
-      varenv'' = Map.union varenv' rbenv'
-      varenv''' = ScopedMap.seed varenv''
-
-  dispatchTyMsgs $ Ty.checkSchemaPattern avail varenv''' tyenv pat
+  dispatchTyMsgs $ Ty.checkSchemaPattern avail tcenv pat
 
 -- | Read an expression from a string. This is used by the
 --   :type REPL command.
@@ -419,32 +401,23 @@ readSchemaPattern _opts fileName environ rbenv avail str = do
 --
 readExpression ::
     Options -> PPS.Opts ->
-    FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text ->
+    FilePath -> Ty.TCIncremental -> Set PrimitiveLifecycle -> Text ->
     IO (Schema, Expr)
-readExpression opts ppopts fileName environ rbenv avail str = do
+readExpression opts ppopts fileName tcenv avail str = do
   seen <- emptySeenSet
   let incpath = (".", Options.importPath opts)
 
   expr0 <- readAnyIO fileName str "end-of-line" parseExpression
   expr1 <- resolveIncludes 0{-depth-} seen incpath opts ppopts Inc.processExpr expr0
   expr <- Subshells.processExpr expr1
-  let Environ varenv tyenv _cryenvs = environ
 
-  -- XXX it should not be necessary to do this munging
-  let squash (defpos, lc, ty, _val, _doc) = (defpos, lc, ReadOnlyVar, ty)
-      varenv' = Map.map squash $ ScopedMap.flatten varenv
-      rbsquash (defpos, ty, _val) = (defpos, Current, RebindableVar, ty)
-      rbenv' = Map.map rbsquash rbenv
-      varenv'' = Map.union varenv' rbenv'
-      varenv''' = ScopedMap.seed varenv''
-
-  -- XXX: also it shouldn't be necessary to do this wrappery
+  -- XXX: it shouldn't be necessary to do this wrappery
   let pos = Pos.getPos expr
       decl = Decl pos (PWild pos Nothing) Nothing expr
 
   -- Throw away the updated type environment because we aren't actually
   -- declaring.
-  (decl', _tcenv') <- dispatchTyMsgs $ Ty.checkDecl ppopts avail varenv''' tyenv decl
+  (decl', _tcenv') <- dispatchTyMsgs $ Ty.checkDecl ppopts avail tcenv decl
 
   let expr' = dDef decl'
       schema = case dType decl' of

@@ -174,6 +174,7 @@ searchCmd str
      -- hide them from the search.
      let avail = everythingAvailable
 
+     tcenv <- getTCIncremental
      ro <- getTopLevelRO
      rw <- getTopLevelRW
      ppopts <- getPPOpts
@@ -181,7 +182,7 @@ searchCmd str
          environ = rwEnviron rw
          rebindables = rwRebindables rw
      pat <- liftIO $
-         Loader.readSchemaPattern opts replFileName environ rebindables avail str
+         Loader.readSchemaPattern opts replFileName tcenv avail str
 
      let primsAvail = rwPrimsAvail rw
      let Environ varenv tyenv _cryenv = environ
@@ -314,15 +315,14 @@ typeOfCmd str
   | Text.null str =
         liftIO $ putStrLn "Error: The :type command requires an argument"
   | otherwise = do
+     tcenv <- getTCIncremental
      ro <- getTopLevelRO
      rw <- getTopLevelRW
      ppopts <- getPPOpts
      let opts = roOptions ro
-         environ = rwEnviron rw
-         rebindables = rwRebindables rw
          avail = rwPrimsAvail rw
      (schema, _expr) <- liftIO $
-         Loader.readExpression opts ppopts replFileName environ rebindables avail str
+         Loader.readExpression opts ppopts replFileName tcenv avail str
      liftIO $ TextIO.putStrLn $ ppSchema ppopts schema
 
 

@@ -1402,26 +1402,16 @@ interpretTopStmt :: (InterpreterMonad m, ?rcx :: RunCtx) =>
   TCIncremental ->
   SS.Stmt ->
   m TCIncremental
-interpretTopStmt printBinds replTypingHacks _tcenv stmt = do
+interpretTopStmt printBinds replTypingHacks tcenv stmt = do
   avail <- liftTopLevel $ gets rwPrimsAvail
   ctx <- getMonadContext
 
+  -- XXX shouldn't be typechecking one statement at a time
   (stmt', tcenv') <- do
       ppopts <- liftTopLevel $ getPPOpts
-      -- XXX this is not the right way to do this
-      --    - shouldn't have to flatten the environments
-      --    - shouldn't be typechecking one statement at a time regardless
-      Environ varenv0 tyenv _cryenvs <- liftTopLevel $ gets rwEnviron
-      rbenv <- liftTopLevel $ gets rwRebindables
-      let varenv1 = Map.map (\(pos, lc, ty, _v, _doc) -> (pos, lc, SS.ReadOnlyVar, ty)) $ ScopedMap.flatten varenv0
-          rbenv' = Map.map (\(pos, ty, _v) -> (pos, SS.Current, SS.RebindableVar, ty)) rbenv
-          -- If anything appears in both, favor the real environment
-          varenv2 = Map.union varenv1 rbenv'
-          varenv3 = ScopedMap.seed varenv2
-
       let typingResults =
             if replTypingHacks then
-                let (msgs, result) = checkStmt ppopts avail varenv3 tyenv ctx stmt in
+                let (msgs, result) = checkStmt ppopts avail tcenv ctx stmt in
                 let isError msg = case msg of
                         Ty.Error{} -> True
                         _ -> False
@@ -1439,7 +1429,7 @@ interpretTopStmt printBinds replTypingHacks _tcenv stmt = do
                                 rstmt = SS.StmtBind spos (SS.PImplicit wpos wty) e'
                             in
                             let (msgs', result') =
-                                  checkStmt ppopts avail varenv3 tyenv ctx rstmt
+                                  checkStmt ppopts avail tcenv ctx rstmt
                             in
                             if any isError msgs' then
                                 -- did not work, use original messages
@@ -1453,7 +1443,7 @@ interpretTopStmt printBinds replTypingHacks _tcenv stmt = do
                 else
                     (msgs, result)
             else
-                checkStmt ppopts avail varenv3 tyenv ctx stmt
+                checkStmt ppopts avail tcenv ctx stmt
       processTypeCheck typingResults
 
   case stmt' of
@@ -1642,9 +1632,9 @@ interpretFile tlhook pshook tcenv0 file runMain =
 
 -- | Evaluate the value called 'main' from the current environment.
 interpretMain :: (?rcx :: RunCtx) => TCIncremental -> TopLevel ()
-interpretMain _tcenv = do
+interpretMain tcenv = do
   avail <- gets rwPrimsAvail
-  Environ varenv tyenv _cryenv <- gets rwEnviron
+  Environ varenv _tyenv _cryenv <- gets rwEnviron
   rbenv <- gets rwRebindables
   let pos = SS.PosInternal "call-to-main"
       prov = SS.TypeFromElement pos SS.TyCtxExpr
@@ -1672,7 +1662,7 @@ interpretMain _tcenv = do
         SS.Forall _ (SS.TyApply _ _ _) -> do
             -- It looks like a monadic value, so check more carefully.
             ppopts <- getPPOpts
-            case typesMatch ppopts avail tyenv "main" tyFound tyExpected of
+            case typesMatch ppopts avail tcenv "main" tyFound tyExpected of
               False ->
                   -- While we accept any TopLevel a, don't encourage people
                   -- to do that.
