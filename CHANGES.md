@@ -23,6 +23,9 @@ This release supports [version
 
 ## Bug Fixes
 
+* Unresolved unification variables from the typechecker no longer leak
+  into subshells.
+
 * The `undefined` builtin now reports the source position that
   triggered it (#3508).
   It also now fails in a way that's consistent with failures in other

@@ -53,6 +53,7 @@ module SAWSupport.ScopedMap (
     union,
     scopedAssocs,
     flatten,
+    allAssocs,
     allElems,
     allKeys,
     allKeysSet
@@ -165,7 +166,10 @@ flatten (ScopedMap (s0 :| more0)) =
     in
     visit s0 more0
 
---FUTURE: add allAssocs
+-- | Return all bindings, ignoring scope.
+allAssocs :: Ord k => ScopedMap k v -> [(k, v)]
+allAssocs m =
+    Map.assocs $ flatten m
 
 -- | Return all values, ignoring scope.
 allElems :: Ord k => ScopedMap k v -> [v]
