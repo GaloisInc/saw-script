@@ -32,6 +32,7 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (asks, ask)
 import Control.Monad.State (gets, get, put, modify)
 import qualified Data.ByteString as BS
+import Data.Foldable (foldlM)
 import Data.Maybe (fromMaybe, mapMaybe)
 import qualified Data.Map as Map
 import Data.Map ( Map )
@@ -1392,16 +1393,20 @@ processStmtBind printBinds pos pat expr = do
 
 -- | Interpret a top-level statement in an interpreter monad (any of the SAWScript monads)
 --   This duplicates the logic in interpretDoStmt for no particularly good reason.
+--
+--   Note: we pass around the `TCIncremental` handle because it can't
+--   live in the monad state as long as that comes from saw-central.
 interpretTopStmt :: (InterpreterMonad m, ?rcx :: RunCtx) =>
   Bool {-^ whether to print non-unit result values -} ->
   Bool {-^ whether to allow pure functions for the REPL -} ->
+  TCIncremental ->
   SS.Stmt ->
-  m ()
-interpretTopStmt printBinds replTypingHacks stmt = do
+  m TCIncremental
+interpretTopStmt printBinds replTypingHacks _tcenv stmt = do
   avail <- liftTopLevel $ gets rwPrimsAvail
   ctx <- getMonadContext
 
-  (stmt', _tcenv') <- do
+  (stmt', tcenv') <- do
       ppopts <- liftTopLevel $ getPPOpts
       -- XXX this is not the right way to do this
       --    - shouldn't have to flatten the environments
@@ -1499,6 +1504,8 @@ interpretTopStmt printBinds replTypingHacks stmt = do
     SS.StmtPushdir _ dir -> liftTopLevel $ pushdir dir
     SS.StmtPopdir _ -> liftTopLevel popdir
 
+  return tcenv'
+
 -- | Interpret multiple (syntactic top-level) statements in an
 --   interpreter monad. In practice this will be only the REPL monads,
 --   `TopLevel` and `ProofScript`, but in principle could be any of
@@ -1511,12 +1518,16 @@ interpretReplStmts ::
     InterpreterMonad m =>
     TopLevelShellHook ->
     ProofScriptShellHook ->
-    [SS.Stmt] -> m ()
-interpretReplStmts tlhook pshook stmts = do
+    TCIncremental ->
+    [SS.Stmt] ->
+    m TCIncremental
+interpretReplStmts tlhook pshook tcenv stmts = do
   let printBinds = True
   let replTypingHacks = True
   let ?rcx = RunCtx { rcxTLHook = tlhook, rcxPSHook = pshook }
-  mapM_ (interpretTopStmt printBinds replTypingHacks) stmts
+  -- foldlM's function arg takes TCIncremental -> Stmt -> m TCIncremental
+  -- so we can use interpretTopStmt directly
+  foldlM (interpretTopStmt printBinds replTypingHacks) tcenv stmts
 
 -- | Hook for AutoMatch
 stmtInterpreter :: StmtInterpreter
@@ -1547,9 +1558,11 @@ stmtInterpreter ro _rw stmts = do
       scriptArgv = ["auto_match"]
       tlhook _ _ _ = liftIO $ fail "No subshells inside AutoMatch"
       pshook _ _ _ _ = liftIO $ fail "No proof subshells inside AutoMatch"
-  (ro', rw', _tcenv) <- buildTopLevelEnv opts scriptArgv tlhook pshook
+  (ro', rw', tcenv) <- buildTopLevelEnv opts scriptArgv tlhook pshook
+  -- (here we should typecheck the statements once interpretTopStmt
+  -- stops doing that)
   let ?rcx = RunCtx { rcxTLHook = tlhook, rcxPSHook = pshook }
-  let m = mapM_ (interpretTopStmt False False) stmts
+  let m = foldlM (interpretTopStmt False False) tcenv stmts
   _ <- runTopLevel m ro' rw'
   return ()
 
@@ -1569,9 +1582,11 @@ restoreDirState (cwd, dirstack) = do
 interpretFile ::
     TopLevelShellHook ->
     ProofScriptShellHook ->
-    FilePath -> Bool {- ^ run main? -} ->
+    TCIncremental ->
+    FilePath ->
+    Bool {- ^ run main? -} ->
     TopLevel ()
-interpretFile tlhook pshook file runMain =
+interpretFile tlhook pshook tcenv0 file runMain =
   bracketTopLevel saveDirState restoreDirState (const interp)
   where
     interp = do
@@ -1595,16 +1610,24 @@ interpretFile tlhook pshook file runMain =
                 panic "interpretFile" ["Last statement of file not a popdir"]
 
       -- Run a statement, using the Nothing slot to call `runMain`.
-      let runStmt ms = case ms of
-            Nothing -> when runMain interpretMain
-            Just s -> stmtWithPrint s
+      let runStmt tcenv ms = case ms of
+            Nothing -> do
+                -- Note that interpretMain calls a function and can't
+                -- update tcenv; it only uses it at all to inspect the
+                -- type of the main it finds.
+                when runMain $ interpretMain tcenv
+                pure tcenv
+            Just s ->
+                stmtWithPrint tcenv s
 
       -- Run all the statements, including any "main".
-      mapM_ runStmt stmts'
+      -- Discard the ultimate typechecker environment, because we're
+      -- done with it when we get to the end of the file.
+      _tcenv' <- foldlM runStmt tcenv0 stmts'
 
       writeVerificationSummary
 
-    stmtWithPrint s = do
+    stmtWithPrint tcenv s = do
       let withPos str =
             unlines $ ("[output] at " ++ show (SS.getPos s) ++ ": ") :
                       map (\l -> "\t"  ++ l) (lines str)
@@ -1613,13 +1636,13 @@ interpretFile tlhook pshook file runMain =
         let wrapPrint oldFn = \lvl str -> oldFn lvl (withPos str)
             withPrint opts = opts { printOutFn = wrapPrint (printOutFn opts) }
         in
-        withOptions withPrint (interpretTopStmt False False s)
+        withOptions withPrint (interpretTopStmt False False tcenv s)
       else
-        interpretTopStmt False False s
+        interpretTopStmt False False tcenv s
 
 -- | Evaluate the value called 'main' from the current environment.
-interpretMain :: (?rcx :: RunCtx) => TopLevel ()
-interpretMain = do
+interpretMain :: (?rcx :: RunCtx) => TCIncremental -> TopLevel ()
+interpretMain _tcenv = do
   avail <- gets rwPrimsAvail
   Environ varenv tyenv _cryenv <- gets rwEnviron
   rbenv <- gets rwRebindables
@@ -1757,8 +1780,8 @@ processFile ::
   ProofScriptShellHook ->
   IO ()
 processFile opts file scriptArgv tlhook pshook = do
-  (ro, rw, _tcenv) <- buildTopLevelEnv opts scriptArgv tlhook pshook
-  _ <- runTopLevel (interpretFile tlhook pshook file True) ro rw
+  (ro, rw, tcenv) <- buildTopLevelEnv opts scriptArgv tlhook pshook
+  _ <- runTopLevel (interpretFile tlhook pshook tcenv file True) ro rw
             `X.catch` (handleException opts)
   return ()
 

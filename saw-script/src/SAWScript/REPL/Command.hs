@@ -25,7 +25,7 @@ module SAWScript.REPL.Command (
     sanitize
   ) where
 
-import Control.Monad (unless, void)
+import Control.Monad (unless)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (modify)
 import Data.Char (isSpace)
@@ -430,10 +430,12 @@ executeSAWScriptText str = exceptionProtect $ do
   -- that blows up in the loader. (Note that while by default stack traces
   -- from here aren't particularly interesting, we might be in a nested REPL.)
   stmts <- liftTopLevel $ liftIO $ Loader.readREPLTextUnchecked opts ppopts replFileName str
+  tcenv <- getTCIncremental
   mbPst <- getProofState
-  case mbPst of
-      Nothing -> void $ liftTopLevel (interpretReplStmts tlhook pshook stmts)
-      Just _  -> void $ liftProofScript (interpretReplStmts tlhook pshook stmts)
+  tcenv' <- case mbPst of
+      Nothing -> liftTopLevel (interpretReplStmts tlhook pshook tcenv stmts)
+      Just _  -> liftProofScript (interpretReplStmts tlhook pshook tcenv stmts)
+  putTCIncremental tcenv'
 
 
 ------------------------------------------------------------
