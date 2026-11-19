@@ -386,7 +386,7 @@ span.spaces    { background: white }
 <span class="lineno">  367 </span><span class="spaces">  </span><span class="istickedoff">where</span>
 <span class="lineno">  368 </span><span class="spaces">  </span><span class="istickedoff">insert m (name, d) = Trie.insert name d m</span>
 <span class="lineno">  369 </span><span class="spaces">  </span><span class="istickedoff">expandAliases :: CommandDescr -&gt; [(Text, CommandDescr)]</span>
-<span class="lineno">  370 </span><span class="spaces">  </span><span class="istickedoff">expandAliases d = (cName d, d) : zip (cAliases d) (repeat <span class="nottickedoff">d</span>)</span></span>
+<span class="lineno">  370 </span><span class="spaces">  </span><span class="istickedoff">expandAliases d = (cName d, d) : zip (cAliases d) (repeat d)</span></span>
 <span class="lineno">  371 </span>
 <span class="lineno">  372 </span>-- | REPL command parsing.
 <span class="lineno">  373 </span>commands :: CommandMap
