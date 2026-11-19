@@ -2051,7 +2051,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2032 </span><span class="spaces">  </span><span class="istickedoff">QN.QualName path [] base Nothing Nothing -&gt;</span>
 <span class="lineno"> 2033 </span><span class="spaces">    </span><span class="istickedoff">return $ PosPair p (mkModuleName (path ++ [base]))</span>
 <span class="lineno"> 2034 </span><span class="spaces">  </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno"> 2035 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">addParseError p &quot;invalid module name&quot;</span></span>
+<span class="lineno"> 2035 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">addParseError p &quot;Invalid module name&quot;</span></span>
 <span class="lineno"> 2036 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">return $ PosPair p (mkModuleName [QN.baseName qn])</span></span></span>
 <span class="lineno"> 2037 </span>
 <span class="lineno"> 2038 </span>mkPrimitive :: PosPair Text -&gt; UTerm -&gt; Decl
@@ -2080,7 +2080,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2061 </span><span class="decl"><span class="istickedoff">mkNameSpace t = case QN.readNamespace (val t) of</span>
 <span class="lineno"> 2062 </span><span class="spaces">  </span><span class="istickedoff">Just ns -&gt; return ns</span>
 <span class="lineno"> 2063 </span><span class="spaces">  </span><span class="istickedoff">Nothing -&gt; <span class="nottickedoff">do</span></span>
-<span class="lineno"> 2064 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">addParseError (pos t) &quot;unknown namespace&quot;</span></span>
+<span class="lineno"> 2064 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">addParseError (pos t) &quot;Unknown namespace&quot;</span></span>
 <span class="lineno"> 2065 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">return QN.NamespaceCore</span></span></span>
 <span class="lineno"> 2066 </span>
 <span class="lineno"> 2067 </span>mkLetBind :: PosPair QualName -&gt; UTerm -&gt; Bool -&gt; Parser (PosPair (QualName, UTerm, Bool))
@@ -2091,7 +2091,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2072 </span><span class="spaces">    </span><span class="istickedoff">return $ PosPair p (qnm,rhs,b)</span>
 <span class="lineno"> 2073 </span><span class="spaces">  </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">do</span></span>
 <span class="lineno"> 2074 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">addParseError p $</span></span>
-<span class="lineno"> 2075 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">if b then &quot;invalid let-bound variable name&quot; else &quot;invalid free variable name&quot;</span></span>
+<span class="lineno"> 2075 </span><span class="spaces">      </span><span class="istickedoff"><span class="nottickedoff">if b then &quot;Invalid let-bound variable name&quot; else &quot;Invalid free variable name&quot;</span></span>
 <span class="lineno"> 2076 </span><span class="spaces">    </span><span class="istickedoff"><span class="nottickedoff">return $ PosPair p (qnm,rhs,b)</span></span></span>
 <span class="lineno"> 2077 </span>
 <span class="lineno"> 2078 </span>mkPath :: [PosPair Text] -&gt; [PosPair Text] -&gt; (PosPair ([Text], [Text], Text))
@@ -2137,7 +2137,7 @@ span.spaces    { background: white }
 <span class="lineno"> 2118 </span><span class="spaces">    </span><span class="istickedoff">Just bs -&gt;</span>
 <span class="lineno"> 2119 </span><span class="spaces">      </span><span class="istickedoff">pure (BVLit <span class="nottickedoff">p</span> bs)</span>
 <span class="lineno"> 2120 </span><span class="spaces">    </span><span class="istickedoff">Nothing -&gt;</span>
-<span class="lineno"> 2121 </span><span class="spaces">      </span><span class="istickedoff">do addParseError p (&quot;malformed literal: &quot; ++ s)</span>
+<span class="lineno"> 2121 </span><span class="spaces">      </span><span class="istickedoff">do addParseError p (&quot;Malformed literal: &quot; ++ s)</span>
 <span class="lineno"> 2122 </span><span class="spaces">         </span><span class="istickedoff"><span class="nottickedoff">pure (BVLit p [])</span></span></span>
 <span class="lineno"> 2123 </span>#define HAPPY_COERCE 1
 <span class="lineno"> 2124 </span>-- $Id: GenericTemplate.hs,v 1.26 2005/01/14 14:47:22 simonmar Exp $
