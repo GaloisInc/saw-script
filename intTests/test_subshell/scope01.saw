@@ -1,0 +1,22 @@
+// If you stick "subshell" in a do-block and then throw the do-block
+// around, the environment the subshell captures is the lexical
+// environment of the do-block.
+//
+// This should print 3 (from inside) and 5 (from the top level)
+
+enable_experimental;
+
+let f = do {
+   let x = 3;
+   let g = do {
+      subshell ();
+      return ();
+   };
+   return g;
+};
+
+let x = 4;
+h <- f;
+let x = 5;
+h;
+print x;
