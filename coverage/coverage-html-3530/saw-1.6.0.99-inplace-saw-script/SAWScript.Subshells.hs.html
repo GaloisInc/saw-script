@@ -1,0 +1,484 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    2 </span>{- |
+<span class="lineno">    3 </span>Module      : SAWScript.Subshells
+<span class="lineno">    4 </span>Description : Find &quot;subshell&quot; and &quot;proof_subshell&quot; usage for special handling
+<span class="lineno">    5 </span>License     : BSD3
+<span class="lineno">    6 </span>Maintainer  : saw@galois.com
+<span class="lineno">    7 </span>Stability   : provisional
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>Pass that finds usages of @subshell@ and @proof_subshell@ for
+<span class="lineno">   10 </span>downstream special handling.
+<span class="lineno">   11 </span>
+<span class="lineno">   12 </span>In particular, in order to be able to typecheck what's typed
+<span class="lineno">   13 </span>interactively in a subshell we need to have captured the typing
+<span class="lineno">   14 </span>environment at the point where the subshell is invoked.
+<span class="lineno">   15 </span>
+<span class="lineno">   16 </span>For the time being, the way we do this is by replacing @subshell@ (and
+<span class="lineno">   17 </span>@proof_subshell@) with special-case expressions, and at typechecking
+<span class="lineno">   18 </span>time store a copy of the typing environment in those expressions. The
+<span class="lineno">   19 </span>drawback of this approach is that the expressions appear at the point
+<span class="lineno">   20 </span>where the builtin is mentioned, not where it is actually invoked.
+<span class="lineno">   21 </span>
+<span class="lineno">   22 </span>Because the type of @subshell@ (and comparably @proof_subshell@) in
+<span class="lineno">   23 </span>SAWScript is @() -&gt; TopLevel ()@, two things have to happen after the
+<span class="lineno">   24 </span>builtin is mentioned for it to be actually invoked: someone must apply
+<span class="lineno">   25 </span>a unit argument, and then the resulting value must be monad-bound.
+<span class="lineno">   26 </span>
+<span class="lineno">   27 </span>For soundness, the typing environment on entry to the subshell must
+<span class="lineno">   28 </span>match the value environment. The value environment is captured at the
+<span class="lineno">   29 </span>invocation point, not the mention point. (In principle that could be
+<span class="lineno">   30 </span>changed, but it would be messy and the resulting semantics would be
+<span class="lineno">   31 </span>kind of odd.)
+<span class="lineno">   32 </span>
+<span class="lineno">   33 </span>Therefore, this version rejects uses of @subshell@ and
+<span class="lineno">   34 </span>@proof_subshell@ other than @() &lt;- subshell ()@ or its exact
+<span class="lineno">   35 </span>equivalents. That ensures that, as far as both the typing environment
+<span class="lineno">   36 </span>and value environments are concerned, the capture point is close
+<span class="lineno">   37 </span>enough to the same that the environments will always correspond.
+<span class="lineno">   38 </span>
+<span class="lineno">   39 </span>We have some preexisting cases in the test suite that do things like
+<span class="lineno">   40 </span>
+<span class="lineno">   41 </span>@
+<span class="lineno">   42 </span>   do {
+<span class="lineno">   43 </span>      let x = 3;
+<span class="lineno">   44 </span>      let s = subshell ();
+<span class="lineno">   45 </span>      let x = 4;
+<span class="lineno">   46 </span>      s;
+<span class="lineno">   47 </span>      return ();
+<span class="lineno">   48 </span>   };
+<span class="lineno">   49 </span>@
+<span class="lineno">   50 </span>
+<span class="lineno">   51 </span>and check the value of @x@ in the subshell. (It should be 4 and not 3.)
+<span class="lineno">   52 </span>These arose because the historic behavior was extremely squirrelly.
+<span class="lineno">   53 </span>(Some history: #2751, #2306, #2243, #2242.)
+<span class="lineno">   54 </span>
+<span class="lineno">   55 </span>These cases are now rejected.
+<span class="lineno">   56 </span>
+<span class="lineno">   57 </span>Normal usage never does anything like this, and the oddities got
+<span class="lineno">   58 </span>discovered by prodding, not by anyone stepping on them in the field.
+<span class="lineno">   59 </span>Nonetheless, there's at least one reasonable usage that's now
+<span class="lineno">   60 </span>prohibited, namely this function or one like it:
+<span class="lineno">   61 </span>
+<span class="lineno">   62 </span>@
+<span class="lineno">   63 </span>   let rebindable use_subshells = true;
+<span class="lineno">   64 </span>
+<span class="lineno">   65 </span>   let maybe_subshell () = do {
+<span class="lineno">   66 </span>      if use_subshells then
+<span class="lineno">   67 </span>         subshell ()
+<span class="lineno">   68 </span>      else
+<span class="lineno">   69 </span>         return ();
+<span class="lineno">   70 </span>   };
+<span class="lineno">   71 </span>@
+<span class="lineno">   72 </span>
+<span class="lineno">   73 </span>This provides a function that conditionally starts a subshell when
+<span class="lineno">   74 </span>monad-bound, in the context of where that monad binding happens.
+<span class="lineno">   75 </span>
+<span class="lineno">   76 </span>Though it's very limited because it has to return the subshell value
+<span class="lineno">   77 </span>out without monad-binding it. This variant, for example, invokes the
+<span class="lineno">   78 </span>subshell from inside the @maybe_subshell@ function, which means it
+<span class="lineno">   79 </span>won't be able to see the caller's context:
+<span class="lineno">   80 </span>
+<span class="lineno">   81 </span>@
+<span class="lineno">   82 </span>   let rebindable use_subshells = true;
+<span class="lineno">   83 </span>
+<span class="lineno">   84 </span>   let maybe_subshell () = do {
+<span class="lineno">   85 </span>      if use_subshells then do {
+<span class="lineno">   86 </span>         print &quot;Subshell:&quot;;
+<span class="lineno">   87 </span>         subshell ();
+<span class="lineno">   88 </span>         return ();
+<span class="lineno">   89 </span>      }
+<span class="lineno">   90 </span>      else
+<span class="lineno">   91 </span>         return ();
+<span class="lineno">   92 </span>   };
+<span class="lineno">   93 </span>@
+<span class="lineno">   94 </span>
+<span class="lineno">   95 </span>Nonetheless, it's not an entirely unreasonable thing to do. If we
+<span class="lineno">   96 </span>decide that disallowing cases like this that push the subshell value
+<span class="lineno">   97 </span>around before actually invoking it is too restrictive, there is
+<span class="lineno">   98 </span>another approach that should work. However, it's quite a bit more
+<span class="lineno">   99 </span>complicated and at least for now we've decided not to implement it.
+<span class="lineno">  100 </span>It goes as follows.
+<span class="lineno">  101 </span>
+<span class="lineno">  102 </span>Instead of saving the typing environment in special-case expression
+<span class="lineno">  103 </span>nodes, save the typing environment in monad-bind statements. Then
+<span class="lineno">  104 </span>there's a typing environment available in case the monad bind runs a
+<span class="lineno">  105 </span>subshell. To make that work, we'll need to add two new cases of
+<span class="lineno">  106 </span>`Value`: @VSubshell@ and @VProofSubshell@. Make the builtin table
+<span class="lineno">  107 </span>entries point at a `VLambda` of the form @\() -&gt; VSubshell@. Then
+<span class="lineno">  108 </span>applying the unit argument will give the `@VSubshell@` value, and
+<span class="lineno">  109 </span>it'll appear at monad-bind time. In the monad-bind code, check for
+<span class="lineno">  110 </span>@VSubshell@ and @VProofSubshell@ and dispatch them to the actual
+<span class="lineno">  111 </span>subshell code, using the typing environment stored in the monad bind
+<span class="lineno">  112 </span>statement.
+<span class="lineno">  113 </span>
+<span class="lineno">  114 </span>Now, remove the current @Subshell@ and @ProofSubshell@ expressions and
+<span class="lineno">  115 </span>the code for introducing them. Instead, write a conservative static
+<span class="lineno">  116 </span>analysis that decides which monad bind sites might be subshells, and
+<span class="lineno">  117 </span>mark them. Most won't be. Then have the typechecker capture a typing
+<span class="lineno">  118 </span>environment only at the marked cases. This will avoid generating
+<span class="lineno">  119 </span>hundreds or thousands of copies of the typing environment, which is
+<span class="lineno">  120 </span>not a huge data structure but is large enough to be noticeable.
+<span class="lineno">  121 </span>
+<span class="lineno">  122 </span>This alternate approach has at least a couple advantages; for example,
+<span class="lineno">  123 </span>it hardcodes the strings &quot;subshell&quot; and &quot;proof_subshell&quot; in fewer
+<span class="lineno">  124 </span>places, and doesn't require putting placeholder `Value` entries in the
+<span class="lineno">  125 </span>builtins table. But it's markedly more complicated, and there are some
+<span class="lineno">  126 </span>details that will be a headache to sort out, e.g. making stack traces
+<span class="lineno">  127 </span>work right. Plus there's some risk that the above will not interact
+<span class="lineno">  128 </span>correctly with, or interfere with, the monadic/deferred execution
+<span class="lineno">  129 </span>behavior in the interpreter, which is about as robust as a spiderweb
+<span class="lineno">  130 </span>mounted on a clock face.
+<span class="lineno">  131 </span>
+<span class="lineno">  132 </span>Beyond all that there's a further complication, since the most basic
+<span class="lineno">  133 </span>and normal use of @proof_subshell@ is like this:
+<span class="lineno">  134 </span>
+<span class="lineno">  135 </span>@
+<span class="lineno">  136 </span>   prove_print (proof_subshell ()) {{ ... }};
+<span class="lineno">  137 </span>@
+<span class="lineno">  138 </span>
+<span class="lineno">  139 </span>which /does not have an actual bind site/ anywhere in SAWScript: it
+<span class="lineno">  140 </span>reduces to a Haskell value of type @ProofScript@ and then that gets
+<span class="lineno">  141 </span>evaluated in the internals, which captures the interpreter's
+<span class="lineno">  142 </span>environment at that point.
+<span class="lineno">  143 </span>
+<span class="lineno">  144 </span>I'm going to deal with this for now by wrapping any subshell found in
+<span class="lineno">  145 </span>an argument position in a do-block. That will result in different
+<span class="lineno">  146 </span>semantics from the prior behavior if the argument is a parameter of a
+<span class="lineno">  147 </span>SAWScript function which explicitly monad-binds that parameter after
+<span class="lineno">  148 </span>doing some other local bindings. I think we will just suck that up.
+<span class="lineno">  149 </span>
+<span class="lineno">  150 </span>-}
+<span class="lineno">  151 </span>
+<span class="lineno">  152 </span>module SAWScript.Subshells (processExpr, processStmts) where
+<span class="lineno">  153 </span>
+<span class="lineno">  154 </span>import Control.Exception (throwIO) -- XXX temporary
+<span class="lineno">  155 </span>import Control.Monad (unless)
+<span class="lineno">  156 </span>import qualified Data.IORef as IORef
+<span class="lineno">  157 </span>import Data.IORef (IORef)
+<span class="lineno">  158 </span>
+<span class="lineno">  159 </span>import SAWSupport.Console
+<span class="lineno">  160 </span>import SAWSupport.ConsoleSupport (Fatal(..))
+<span class="lineno">  161 </span>import SAWSupport.ScopedMap (ScopedMap)
+<span class="lineno">  162 </span>import qualified SAWSupport.ScopedMap as ScopedMap
+<span class="lineno">  163 </span>
+<span class="lineno">  164 </span>import qualified SAWCentral.Position as Pos
+<span class="lineno">  165 </span>import SAWCentral.AST
+<span class="lineno">  166 </span>
+<span class="lineno">  167 </span>import SAWScript.Panic
+<span class="lineno">  168 </span>
+<span class="lineno">  169 </span>
+<span class="lineno">  170 </span>------------------------------------------------------------
+<span class="lineno">  171 </span>-- Support logic
+<span class="lineno">  172 </span>
+<span class="lineno">  173 </span>-- | Type for indicating what we have.
+<span class="lineno">  174 </span>data IsSubshell = IsSubshell | NotSubshell
+<span class="lineno">  175 </span>
+<span class="lineno">  176 </span>-- | Context type for the pass.
+<span class="lineno">  177 </span>--
+<span class="lineno">  178 </span>--   We keep a scoped map that remembers which names have been locally
+<span class="lineno">  179 </span>--   defined. If we see the builtin names we're looking for in this
+<span class="lineno">  180 </span>--   map, they don't actually refer to the builtins and shouldn't be
+<span class="lineno">  181 </span>--   rewritten.
+<span class="lineno">  182 </span>--
+<span class="lineno">  183 </span>--   We also remember if we've already printed the long explanation,
+<span class="lineno">  184 </span>--   so it only comes out once.
+<span class="lineno">  185 </span>data Ctx = Ctx {
+<span class="lineno">  186 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">ctxShadowed</span></span></span> :: IORef (ScopedMap Name Bool),
+<span class="lineno">  187 </span>    <span class="istickedoff"><span class="decl"><span class="istickedoff">ctxExplained</span></span></span> :: IORef Bool
+<span class="lineno">  188 </span>}
+<span class="lineno">  189 </span>
+<span class="lineno">  190 </span>-- | Create a new context.
+<span class="lineno">  191 </span>newctx :: IO Ctx
+<span class="lineno">  192 </span><span class="decl"><span class="istickedoff">newctx = do</span>
+<span class="lineno">  193 </span><span class="spaces">    </span><span class="istickedoff">shadowed &lt;- IORef.newIORef $ ScopedMap.empty</span>
+<span class="lineno">  194 </span><span class="spaces">    </span><span class="istickedoff">explained &lt;- IORef.newIORef False</span>
+<span class="lineno">  195 </span><span class="spaces">    </span><span class="istickedoff">pure $ Ctx { ctxShadowed = shadowed, ctxExplained = explained }</span></span>
+<span class="lineno">  196 </span>
+<span class="lineno">  197 </span>-- | Enter a new scope.
+<span class="lineno">  198 </span>pushScope :: Ctx -&gt; IO ()
+<span class="lineno">  199 </span><span class="decl"><span class="istickedoff">pushScope ctx = do</span>
+<span class="lineno">  200 </span><span class="spaces">    </span><span class="istickedoff">shadowed &lt;- IORef.readIORef (ctxShadowed ctx)</span>
+<span class="lineno">  201 </span><span class="spaces">    </span><span class="istickedoff">let shadowed' = ScopedMap.push shadowed</span>
+<span class="lineno">  202 </span><span class="spaces">    </span><span class="istickedoff">IORef.writeIORef (ctxShadowed ctx) shadowed'</span></span>
+<span class="lineno">  203 </span>
+<span class="lineno">  204 </span>-- | Leave a scope.
+<span class="lineno">  205 </span>popScope :: Ctx -&gt; IO ()
+<span class="lineno">  206 </span><span class="decl"><span class="istickedoff">popScope ctx = do</span>
+<span class="lineno">  207 </span><span class="spaces">    </span><span class="istickedoff">shadowed &lt;- IORef.readIORef (ctxShadowed ctx)</span>
+<span class="lineno">  208 </span><span class="spaces">    </span><span class="istickedoff">let shadowed' = ScopedMap.pop shadowed</span>
+<span class="lineno">  209 </span><span class="spaces">    </span><span class="istickedoff">IORef.writeIORef (ctxShadowed ctx) shadowed'</span></span>
+<span class="lineno">  210 </span>
+<span class="lineno">  211 </span>-- | Mark a variable as locally defined.
+<span class="lineno">  212 </span>shadow :: Ctx -&gt; Name -&gt; IO ()
+<span class="lineno">  213 </span><span class="decl"><span class="istickedoff">shadow ctx x = do</span>
+<span class="lineno">  214 </span><span class="spaces">    </span><span class="istickedoff">shadowed &lt;- IORef.readIORef (ctxShadowed ctx)</span>
+<span class="lineno">  215 </span><span class="spaces">    </span><span class="istickedoff">let shadowed' = ScopedMap.insert x <span class="nottickedoff">True</span> shadowed</span>
+<span class="lineno">  216 </span><span class="spaces">    </span><span class="istickedoff">IORef.writeIORef (ctxShadowed ctx) shadowed'</span></span>
+<span class="lineno">  217 </span>
+<span class="lineno">  218 </span>-- | Check if a variable is locally (re)defined.
+<span class="lineno">  219 </span>isShadowed :: Ctx -&gt; Name -&gt; IO Bool
+<span class="lineno">  220 </span><span class="decl"><span class="istickedoff">isShadowed ctx x = do</span>
+<span class="lineno">  221 </span><span class="spaces">    </span><span class="istickedoff">shadowed &lt;- IORef.readIORef (ctxShadowed ctx)</span>
+<span class="lineno">  222 </span><span class="spaces">    </span><span class="istickedoff">pure $ case ScopedMap.lookup x shadowed of</span>
+<span class="lineno">  223 </span><span class="spaces">        </span><span class="istickedoff">Nothing -&gt; False</span>
+<span class="lineno">  224 </span><span class="spaces">        </span><span class="istickedoff">Just t -&gt; <span class="nottickedoff">t</span></span></span>
+<span class="lineno">  225 </span>
+<span class="lineno">  226 </span>
+<span class="lineno">  227 </span>------------------------------------------------------------
+<span class="lineno">  228 </span>-- Error handling tools
+<span class="lineno">  229 </span>
+<span class="lineno">  230 </span>-- | Reject an expression
+<span class="lineno">  231 </span>reject :: Ctx -&gt; Expr -&gt; IO Expr
+<span class="lineno">  232 </span><span class="decl"><span class="istickedoff">reject ctx e = do</span>
+<span class="lineno">  233 </span><span class="spaces">    </span><span class="istickedoff">let pos = Pos.getPos e</span>
+<span class="lineno">  234 </span><span class="spaces">    </span><span class="istickedoff">-- XXX: until we fix up the console handling, errDP will</span>
+<span class="lineno">  235 </span><span class="spaces">    </span><span class="istickedoff">-- exit, even though it isn't supposed to, and so the explanation</span>
+<span class="lineno">  236 </span><span class="spaces">    </span><span class="istickedoff">-- doesn't appear.</span>
+<span class="lineno">  237 </span><span class="spaces">    </span><span class="istickedoff">--errDP pos &quot;Invalid use of subshell&quot;</span>
+<span class="lineno">  238 </span><span class="spaces">    </span><span class="istickedoff">commentP pos &quot;Error: Invalid use of subshell&quot;</span>
+<span class="lineno">  239 </span><span class="spaces">    </span><span class="istickedoff">explained &lt;- IORef.readIORef (ctxExplained ctx)</span>
+<span class="lineno">  240 </span><span class="spaces">    </span><span class="istickedoff">unless explained $ do</span>
+<span class="lineno">  241 </span><span class="spaces">                 </span><span class="istickedoff">--------------------------------------------------------------------------------</span>
+<span class="lineno">  242 </span><span class="spaces">        </span><span class="istickedoff">noteN $ &quot;The usage of the \&quot;subshell\&quot; and \&quot;proof_subshell\&quot; builtins is&quot; &lt;&gt;</span>
+<span class="lineno">  243 </span><span class="spaces">                </span><span class="istickedoff">&quot; restricted.&quot;</span>
+<span class="lineno">  244 </span><span class="spaces">        </span><span class="istickedoff">noteN $ &quot;In a block or at the top level, use these forms:&quot;</span>
+<span class="lineno">  245 </span><span class="spaces">        </span><span class="istickedoff">noteN $ &quot;   subshell ();&quot;</span>
+<span class="lineno">  246 </span><span class="spaces">        </span><span class="istickedoff">noteN $ &quot;   proof_subshell ();&quot;</span>
+<span class="lineno">  247 </span><span class="spaces">        </span><span class="istickedoff">noteN $ &quot;They may not be the final value of a block.&quot;</span>
+<span class="lineno">  248 </span><span class="spaces">        </span><span class="istickedoff">noteN $ &quot;As a function argument, use these forms:&quot;</span>
+<span class="lineno">  249 </span><span class="spaces">        </span><span class="istickedoff">noteN $ &quot;   ... (subshell ()) ...&quot;</span>
+<span class="lineno">  250 </span><span class="spaces">        </span><span class="istickedoff">noteN $ &quot;   ... (proof_subshell ()) ...&quot;</span>
+<span class="lineno">  251 </span><span class="spaces">        </span><span class="istickedoff">noteN $ &quot;but note that the subshell will run in the caller's context.&quot;</span>
+<span class="lineno">  252 </span><span class="spaces">        </span><span class="istickedoff">IORef.writeIORef (ctxExplained ctx) <span class="nottickedoff">True</span></span>
+<span class="lineno">  253 </span><span class="spaces">    </span><span class="istickedoff">-- XXX: bail out directly. remove when we switch the above back to errDP.</span>
+<span class="lineno">  254 </span><span class="spaces">    </span><span class="istickedoff">throwIO (Fatal False)</span></span>
+<span class="lineno">  255 </span>{-
+<span class="lineno">  256 </span>    -- return a placeholder expression (doesn't matter what type it
+<span class="lineno">  257 </span>    -- is, we'll bail before reaching the typechecker)
+<span class="lineno">  258 </span>    pure $ Bool pos False
+<span class="lineno">  259 </span>-}
+<span class="lineno">  260 </span>
+<span class="lineno">  261 </span>
+<span class="lineno">  262 </span>------------------------------------------------------------
+<span class="lineno">  263 </span>-- Main recursive pass
+<span class="lineno">  264 </span>
+<span class="lineno">  265 </span>-- | Process an expression.
+<span class="lineno">  266 </span>--
+<span class="lineno">  267 </span>--   If we see @subshell@ or @proof_subshell@, convert to the
+<span class="lineno">  268 </span>--   special-case version, and mark the return value accordingly.
+<span class="lineno">  269 </span>--
+<span class="lineno">  270 </span>subshell'expr_raw :: Ctx -&gt; Expr -&gt; IO (IsSubshell, Expr)
+<span class="lineno">  271 </span><span class="decl"><span class="istickedoff">subshell'expr_raw ctx e0 = case e0 of</span>
+<span class="lineno">  272 </span><span class="spaces">    </span><span class="istickedoff">Bool{} -&gt; <span class="nottickedoff">pure (NotSubshell, e0)</span></span>
+<span class="lineno">  273 </span><span class="spaces">    </span><span class="istickedoff">String{} -&gt; pure (NotSubshell, e0)</span>
+<span class="lineno">  274 </span><span class="spaces">    </span><span class="istickedoff">Int{} -&gt; pure (NotSubshell, e0)</span>
+<span class="lineno">  275 </span><span class="spaces">    </span><span class="istickedoff">Code{} -&gt; pure (NotSubshell, e0)</span>
+<span class="lineno">  276 </span><span class="spaces">    </span><span class="istickedoff">CType{} -&gt; pure (NotSubshell, e0)</span>
+<span class="lineno">  277 </span><span class="spaces">    </span><span class="istickedoff">Array pos es -&gt; do</span>
+<span class="lineno">  278 </span><span class="spaces">        </span><span class="istickedoff">es' &lt;- mapM (subshell'expr ctx) es</span>
+<span class="lineno">  279 </span><span class="spaces">        </span><span class="istickedoff">pure (NotSubshell, Array pos es')</span>
+<span class="lineno">  280 </span><span class="spaces">    </span><span class="istickedoff">Block pos (stmts, e1) -&gt; do</span>
+<span class="lineno">  281 </span><span class="spaces">        </span><span class="istickedoff">-- A block is never a subshell, even though the block might</span>
+<span class="lineno">  282 </span><span class="spaces">        </span><span class="istickedoff">-- contain one. Don't allow the result value at the end of the</span>
+<span class="lineno">  283 </span><span class="spaces">        </span><span class="istickedoff">-- block to be a subshell though, as that executes in the</span>
+<span class="lineno">  284 </span><span class="spaces">        </span><span class="istickedoff">-- parent context rather than the current context.</span>
+<span class="lineno">  285 </span><span class="spaces">        </span><span class="istickedoff">pushScope ctx</span>
+<span class="lineno">  286 </span><span class="spaces">        </span><span class="istickedoff">stmts' &lt;- mapM (subshell'stmt ctx) stmts</span>
+<span class="lineno">  287 </span><span class="spaces">        </span><span class="istickedoff">e1' &lt;- subshell'expr ctx e1</span>
+<span class="lineno">  288 </span><span class="spaces">        </span><span class="istickedoff">popScope ctx</span>
+<span class="lineno">  289 </span><span class="spaces">        </span><span class="istickedoff">pure (NotSubshell, Block pos (stmts', e1'))</span>
+<span class="lineno">  290 </span><span class="spaces">    </span><span class="istickedoff">Tuple pos es -&gt; do</span>
+<span class="lineno">  291 </span><span class="spaces">        </span><span class="istickedoff">es' &lt;- mapM (subshell'expr ctx) es</span>
+<span class="lineno">  292 </span><span class="spaces">        </span><span class="istickedoff">pure (NotSubshell, Tuple pos es')</span>
+<span class="lineno">  293 </span><span class="spaces">    </span><span class="istickedoff">Record pos etbl -&gt; do</span>
+<span class="lineno">  294 </span><span class="spaces">        </span><span class="istickedoff">etbl' &lt;- traverse (subshell'expr ctx) etbl</span>
+<span class="lineno">  295 </span><span class="spaces">        </span><span class="istickedoff">pure (NotSubshell, Record pos etbl')</span>
+<span class="lineno">  296 </span><span class="spaces">    </span><span class="istickedoff">Index pos e1 e2 -&gt; <span class="nottickedoff">do</span></span>
+<span class="lineno">  297 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">e1' &lt;- subshell'expr ctx e1</span></span>
+<span class="lineno">  298 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">e2' &lt;- subshell'expr ctx e2</span></span>
+<span class="lineno">  299 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">pure (NotSubshell, Index pos e1' e2')</span></span>
+<span class="lineno">  300 </span><span class="spaces">    </span><span class="istickedoff">Lookup pos e1 field -&gt; do</span>
+<span class="lineno">  301 </span><span class="spaces">        </span><span class="istickedoff">e1' &lt;- subshell'expr ctx e1</span>
+<span class="lineno">  302 </span><span class="spaces">        </span><span class="istickedoff">pure (NotSubshell, Lookup pos e1' field)</span>
+<span class="lineno">  303 </span><span class="spaces">    </span><span class="istickedoff">TLookup pos e1 field -&gt; do</span>
+<span class="lineno">  304 </span><span class="spaces">        </span><span class="istickedoff">e1' &lt;- subshell'expr ctx e1</span>
+<span class="lineno">  305 </span><span class="spaces">        </span><span class="istickedoff">pure (NotSubshell, TLookup pos e1' field)</span>
+<span class="lineno">  306 </span><span class="spaces">    </span><span class="istickedoff">Var pos x -&gt; do</span>
+<span class="lineno">  307 </span><span class="spaces">        </span><span class="istickedoff">unshadowed &lt;- not &lt;$&gt; isShadowed ctx x</span>
+<span class="lineno">  308 </span><span class="spaces">        </span><span class="istickedoff">pure $ case x of</span>
+<span class="lineno">  309 </span><span class="spaces">            </span><span class="istickedoff">&quot;subshell&quot; | <span class="tickonlytrue">unshadowed</span> -&gt;</span>
+<span class="lineno">  310 </span><span class="spaces">                </span><span class="istickedoff">(IsSubshell, Subshell pos emptyAnnotations)</span>
+<span class="lineno">  311 </span><span class="spaces">            </span><span class="istickedoff">&quot;proof_subshell&quot; | <span class="tickonlytrue">unshadowed</span> -&gt;</span>
+<span class="lineno">  312 </span><span class="spaces">                </span><span class="istickedoff">(IsSubshell, ProofSubshell pos emptyAnnotations)</span>
+<span class="lineno">  313 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt;</span>
+<span class="lineno">  314 </span><span class="spaces">                </span><span class="istickedoff">(NotSubshell, Var pos x)</span>
+<span class="lineno">  315 </span><span class="spaces">    </span><span class="istickedoff">Subshell{} -&gt;</span>
+<span class="lineno">  316 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">panic &quot;subshell'expr_raw&quot; [&quot;Preexisting Subshell expression&quot;]</span></span>
+<span class="lineno">  317 </span><span class="spaces">    </span><span class="istickedoff">ProofSubshell{} -&gt;</span>
+<span class="lineno">  318 </span><span class="spaces">        </span><span class="istickedoff"><span class="nottickedoff">panic &quot;subshell'expr_raw&quot; [&quot;Preexisting ProofSubshell expression&quot;]</span></span>
+<span class="lineno">  319 </span><span class="spaces">    </span><span class="istickedoff">Lambda pos mname paramPos params namedParams body -&gt; do</span>
+<span class="lineno">  320 </span><span class="spaces">        </span><span class="istickedoff">pushScope ctx</span>
+<span class="lineno">  321 </span><span class="spaces">        </span><span class="istickedoff">mapM_ (subshell'pat ctx) params</span>
+<span class="lineno">  322 </span><span class="spaces">        </span><span class="istickedoff">namedParams' &lt;- do</span>
+<span class="lineno">  323 </span><span class="spaces">            </span><span class="istickedoff">let once (namepos, (patpos, e, pat)) = do</span>
+<span class="lineno">  324 </span><span class="spaces">                  </span><span class="istickedoff">-- A default argument value is an unlikely place to</span>
+<span class="lineno">  325 </span><span class="spaces">                  </span><span class="istickedoff">-- find a subshell, but you never know...</span>
+<span class="lineno">  326 </span><span class="spaces">                  </span><span class="istickedoff">e' &lt;- subshell'expr ctx e</span>
+<span class="lineno">  327 </span><span class="spaces">                  </span><span class="istickedoff">subshell'pat ctx pat</span>
+<span class="lineno">  328 </span><span class="spaces">                  </span><span class="istickedoff">pure $ (<span class="nottickedoff">namepos</span>, (<span class="nottickedoff">patpos</span>, e', pat))</span>
+<span class="lineno">  329 </span><span class="spaces">            </span><span class="istickedoff">traverse once namedParams</span>
+<span class="lineno">  330 </span><span class="spaces">        </span><span class="istickedoff">body' &lt;- subshell'expr ctx body</span>
+<span class="lineno">  331 </span><span class="spaces">        </span><span class="istickedoff">popScope ctx</span>
+<span class="lineno">  332 </span><span class="spaces">        </span><span class="istickedoff">pure (NotSubshell, Lambda pos mname paramPos params namedParams' body')</span>
+<span class="lineno">  333 </span><span class="spaces">    </span><span class="istickedoff">Application pos e1 args -&gt; do</span>
+<span class="lineno">  334 </span><span class="spaces">        </span><span class="istickedoff">-- Allow applying args to a subshell. We don't have to check</span>
+<span class="lineno">  335 </span><span class="spaces">        </span><span class="istickedoff">-- that it's only exactly one unit argument; the typechecker</span>
+<span class="lineno">  336 </span><span class="spaces">        </span><span class="istickedoff">-- will do that.</span>
+<span class="lineno">  337 </span><span class="spaces">        </span><span class="istickedoff">(isshell, e1') &lt;- subshell'expr_raw ctx e1</span>
+<span class="lineno">  338 </span><span class="spaces">        </span><span class="istickedoff">args' &lt;- do</span>
+<span class="lineno">  339 </span><span class="spaces">            </span><span class="istickedoff">let once (mname, e2) = do</span>
+<span class="lineno">  340 </span><span class="spaces">                  </span><span class="istickedoff">e2' &lt;- subshell'expr_wrap ctx e2</span>
+<span class="lineno">  341 </span><span class="spaces">                  </span><span class="istickedoff">pure (mname, e2')</span>
+<span class="lineno">  342 </span><span class="spaces">            </span><span class="istickedoff">mapM once args</span>
+<span class="lineno">  343 </span><span class="spaces">        </span><span class="istickedoff">pure (isshell, Application pos e1' args')</span>
+<span class="lineno">  344 </span><span class="spaces">    </span><span class="istickedoff">Let pos dg e1 -&gt; do</span>
+<span class="lineno">  345 </span><span class="spaces">        </span><span class="istickedoff">dg' &lt;- subshell'declgroup ctx dg</span>
+<span class="lineno">  346 </span><span class="spaces">        </span><span class="istickedoff">pushScope ctx</span>
+<span class="lineno">  347 </span><span class="spaces">        </span><span class="istickedoff">e1' &lt;- subshell'expr ctx e1</span>
+<span class="lineno">  348 </span><span class="spaces">        </span><span class="istickedoff">popScope ctx</span>
+<span class="lineno">  349 </span><span class="spaces">        </span><span class="istickedoff">pure (NotSubshell, Let <span class="nottickedoff">pos</span> dg' e1')</span>
+<span class="lineno">  350 </span><span class="spaces">    </span><span class="istickedoff">TSig pos e1 ty -&gt; do</span>
+<span class="lineno">  351 </span><span class="spaces">        </span><span class="istickedoff">-- Allow type signatures on subshell expressions. No real reason</span>
+<span class="lineno">  352 </span><span class="spaces">        </span><span class="istickedoff">-- not to.</span>
+<span class="lineno">  353 </span><span class="spaces">        </span><span class="istickedoff">(isshell, e1') &lt;- subshell'expr_raw ctx e1</span>
+<span class="lineno">  354 </span><span class="spaces">        </span><span class="istickedoff">pure (isshell, TSig <span class="nottickedoff">pos</span> e1' ty)</span>
+<span class="lineno">  355 </span><span class="spaces">    </span><span class="istickedoff">IfThenElse pos e1 e2 e3 -&gt; do</span>
+<span class="lineno">  356 </span><span class="spaces">        </span><span class="istickedoff">e1' &lt;- subshell'expr ctx e1</span>
+<span class="lineno">  357 </span><span class="spaces">        </span><span class="istickedoff">e2' &lt;- subshell'expr ctx e2</span>
+<span class="lineno">  358 </span><span class="spaces">        </span><span class="istickedoff">e3' &lt;- subshell'expr ctx e3</span>
+<span class="lineno">  359 </span><span class="spaces">        </span><span class="istickedoff">pure (NotSubshell, IfThenElse <span class="nottickedoff">pos</span> e1' e2' e3')</span></span>
+<span class="lineno">  360 </span>
+<span class="lineno">  361 </span>-- | Process an expression, and wrap it in an implicit do-block if
+<span class="lineno">  362 </span>--   it's a subshell with its unit argument applied. (This is used for
+<span class="lineno">  363 </span>--   applications so passing @proof_subshell@ directly to builtins
+<span class="lineno">  364 </span>--   works as expected.) We don't have to check if the arguments
+<span class="lineno">  365 </span>--   applied are actually just unit; the typechecker does that.
+<span class="lineno">  366 </span>subshell'expr_wrap :: Ctx -&gt; Expr -&gt; IO Expr
+<span class="lineno">  367 </span><span class="decl"><span class="istickedoff">subshell'expr_wrap ctx e = do</span>
+<span class="lineno">  368 </span><span class="spaces">    </span><span class="istickedoff">(isshell, e') &lt;- subshell'expr_raw ctx e</span>
+<span class="lineno">  369 </span><span class="spaces">    </span><span class="istickedoff">let deny ee = case ee of</span>
+<span class="lineno">  370 </span><span class="spaces">            </span><span class="istickedoff">Application{} -&gt; False</span>
+<span class="lineno">  371 </span><span class="spaces">            </span><span class="istickedoff">TSig _ ee' _ -&gt; <span class="nottickedoff">deny ee'</span></span>
+<span class="lineno">  372 </span><span class="spaces">            </span><span class="istickedoff">_ -&gt; <span class="nottickedoff">True</span></span>
+<span class="lineno">  373 </span><span class="spaces">    </span><span class="istickedoff">case isshell of</span>
+<span class="lineno">  374 </span><span class="spaces">        </span><span class="istickedoff">NotSubshell -&gt; pure e'</span>
+<span class="lineno">  375 </span><span class="spaces">        </span><span class="istickedoff">IsSubshell</span>
+<span class="lineno">  376 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlyfalse">deny e'</span> -&gt; <span class="nottickedoff">reject ctx e'</span></span>
+<span class="lineno">  377 </span><span class="spaces">          </span><span class="istickedoff">| <span class="tickonlytrue">otherwise</span> -&gt; do</span>
+<span class="lineno">  378 </span><span class="spaces">              </span><span class="istickedoff">let <span class="nottickedoff">pos = Pos.getPos e'</span></span>
+<span class="lineno">  379 </span><span class="spaces">              </span><span class="istickedoff">let bind = StmtBind <span class="nottickedoff">pos</span> (PImplicit <span class="nottickedoff">pos</span> Nothing) e'</span>
+<span class="lineno">  380 </span><span class="spaces">                  </span><span class="istickedoff">unit = Tuple <span class="nottickedoff">pos</span> []</span>
+<span class="lineno">  381 </span><span class="spaces">                  </span><span class="istickedoff">ret = Application <span class="nottickedoff">pos</span> (Var <span class="nottickedoff">pos</span> &quot;return&quot;) [(Nothing, unit)]</span>
+<span class="lineno">  382 </span><span class="spaces">              </span><span class="istickedoff">pure $ Block <span class="nottickedoff">pos</span> ([bind], ret)</span></span>
+<span class="lineno">  383 </span>
+<span class="lineno">  384 </span>-- | Process an expression, and reject it if it's a subshell.
+<span class="lineno">  385 </span>--   (This is the common case.)
+<span class="lineno">  386 </span>subshell'expr :: Ctx -&gt; Expr -&gt; IO Expr
+<span class="lineno">  387 </span><span class="decl"><span class="istickedoff">subshell'expr ctx e = do</span>
+<span class="lineno">  388 </span><span class="spaces">    </span><span class="istickedoff">(isshell, e') &lt;- subshell'expr_raw ctx e</span>
+<span class="lineno">  389 </span><span class="spaces">    </span><span class="istickedoff">case isshell of</span>
+<span class="lineno">  390 </span><span class="spaces">        </span><span class="istickedoff">IsSubshell -&gt; reject ctx e'</span>
+<span class="lineno">  391 </span><span class="spaces">        </span><span class="istickedoff">NotSubshell -&gt; pure e'</span></span>
+<span class="lineno">  392 </span>
+<span class="lineno">  393 </span>-- | Process a pattern.
+<span class="lineno">  394 </span>subshell'pat :: Ctx -&gt; Pattern -&gt; IO ()
+<span class="lineno">  395 </span><span class="decl"><span class="istickedoff">subshell'pat ctx pat0 = case pat0 of</span>
+<span class="lineno">  396 </span><span class="spaces">    </span><span class="istickedoff">PImplicit{} -&gt; pure <span class="nottickedoff">()</span></span>
+<span class="lineno">  397 </span><span class="spaces">    </span><span class="istickedoff">PWild{} -&gt; pure <span class="nottickedoff">()</span></span>
+<span class="lineno">  398 </span><span class="spaces">    </span><span class="istickedoff">PVar _allpos _xpos x _mty -&gt; shadow ctx x</span>
+<span class="lineno">  399 </span><span class="spaces">    </span><span class="istickedoff">PTuple _pos pats -&gt; mapM_ (subshell'pat ctx) pats</span></span>
+<span class="lineno">  400 </span>
+<span class="lineno">  401 </span>-- | Process a declaration group.
+<span class="lineno">  402 </span>subshell'declgroup :: Ctx -&gt; DeclGroup -&gt; IO DeclGroup
+<span class="lineno">  403 </span><span class="decl"><span class="istickedoff">subshell'declgroup ctx dg = case dg of</span>
+<span class="lineno">  404 </span><span class="spaces">    </span><span class="istickedoff">Recursive ds -&gt; do</span>
+<span class="lineno">  405 </span><span class="spaces">        </span><span class="istickedoff">-- Mutually recursive decls: all the bound names go in scope</span>
+<span class="lineno">  406 </span><span class="spaces">        </span><span class="istickedoff">-- at once, then after that we inspect all the bodies.</span>
+<span class="lineno">  407 </span><span class="spaces">        </span><span class="istickedoff">mapM_ (subshell'pat ctx) $ map dPat ds</span>
+<span class="lineno">  408 </span><span class="spaces">        </span><span class="istickedoff">let once d = do</span>
+<span class="lineno">  409 </span><span class="spaces">              </span><span class="istickedoff">pushScope ctx</span>
+<span class="lineno">  410 </span><span class="spaces">              </span><span class="istickedoff">-- rec-binding subshells is not allowed</span>
+<span class="lineno">  411 </span><span class="spaces">              </span><span class="istickedoff">def' &lt;- subshell'expr ctx $ dDef d</span>
+<span class="lineno">  412 </span><span class="spaces">              </span><span class="istickedoff">popScope ctx</span>
+<span class="lineno">  413 </span><span class="spaces">              </span><span class="istickedoff">pure $ d { dDef = def' }</span>
+<span class="lineno">  414 </span><span class="spaces">        </span><span class="istickedoff">ds' &lt;- mapM once ds</span>
+<span class="lineno">  415 </span><span class="spaces">        </span><span class="istickedoff">pure $ Recursive ds'</span>
+<span class="lineno">  416 </span><span class="spaces">    </span><span class="istickedoff">NonRecursive d -&gt; do</span>
+<span class="lineno">  417 </span><span class="spaces">        </span><span class="istickedoff">subshell'pat ctx $ dPat d</span>
+<span class="lineno">  418 </span><span class="spaces">        </span><span class="istickedoff">pushScope ctx</span>
+<span class="lineno">  419 </span><span class="spaces">        </span><span class="istickedoff">-- let-binding subshells is not allowed</span>
+<span class="lineno">  420 </span><span class="spaces">        </span><span class="istickedoff">def' &lt;- subshell'expr ctx $ dDef d</span>
+<span class="lineno">  421 </span><span class="spaces">        </span><span class="istickedoff">popScope ctx</span>
+<span class="lineno">  422 </span><span class="spaces">        </span><span class="istickedoff">let d' = d { dDef = def' }</span>
+<span class="lineno">  423 </span><span class="spaces">        </span><span class="istickedoff">pure $ NonRecursive d'</span></span>
+<span class="lineno">  424 </span>
+<span class="lineno">  425 </span>-- | Process a statement.
+<span class="lineno">  426 </span>subshell'stmt :: Ctx -&gt; Stmt -&gt; IO Stmt
+<span class="lineno">  427 </span><span class="decl"><span class="istickedoff">subshell'stmt ctx s0 = case s0 of</span>
+<span class="lineno">  428 </span><span class="spaces">    </span><span class="istickedoff">StmtBind spos pat e -&gt; do</span>
+<span class="lineno">  429 </span><span class="spaces">        </span><span class="istickedoff">subshell'pat ctx pat</span>
+<span class="lineno">  430 </span><span class="spaces">        </span><span class="istickedoff">-- Binding subshells is ok.</span>
+<span class="lineno">  431 </span><span class="spaces">        </span><span class="istickedoff">(_isshell, e') &lt;- subshell'expr_raw ctx e</span>
+<span class="lineno">  432 </span><span class="spaces">        </span><span class="istickedoff">pure $ StmtBind spos pat e'</span>
+<span class="lineno">  433 </span><span class="spaces">    </span><span class="istickedoff">StmtLet pos rb dg -&gt; do</span>
+<span class="lineno">  434 </span><span class="spaces">        </span><span class="istickedoff">dg' &lt;- subshell'declgroup ctx dg</span>
+<span class="lineno">  435 </span><span class="spaces">        </span><span class="istickedoff">pure $ StmtLet pos rb dg'</span>
+<span class="lineno">  436 </span><span class="spaces">    </span><span class="istickedoff">StmtCode{} -&gt; pure s0</span>
+<span class="lineno">  437 </span><span class="spaces">    </span><span class="istickedoff">StmtImport{} -&gt; pure s0</span>
+<span class="lineno">  438 </span><span class="spaces">    </span><span class="istickedoff">StmtInclude{} -&gt; <span class="nottickedoff">pure s0</span></span>
+<span class="lineno">  439 </span><span class="spaces">    </span><span class="istickedoff">StmtTypedef{} -&gt; pure s0</span>
+<span class="lineno">  440 </span><span class="spaces">    </span><span class="istickedoff">StmtPushdir{} -&gt; pure s0</span>
+<span class="lineno">  441 </span><span class="spaces">    </span><span class="istickedoff">StmtPopdir{} -&gt; pure s0</span></span>
+<span class="lineno">  442 </span>
+<span class="lineno">  443 </span>
+<span class="lineno">  444 </span>------------------------------------------------------------
+<span class="lineno">  445 </span>-- External interface
+<span class="lineno">  446 </span>
+<span class="lineno">  447 </span>-- | Run the pass, and return an updated expression.
+<span class="lineno">  448 </span>processExpr :: Expr -&gt; IO Expr
+<span class="lineno">  449 </span><span class="decl"><span class="istickedoff">processExpr e = do</span>
+<span class="lineno">  450 </span><span class="spaces">    </span><span class="istickedoff">ctx &lt;- newctx</span>
+<span class="lineno">  451 </span><span class="spaces">    </span><span class="istickedoff">e' &lt;- subshell'expr ctx e</span>
+<span class="lineno">  452 </span><span class="spaces">    </span><span class="istickedoff">checkFail</span>
+<span class="lineno">  453 </span><span class="spaces">    </span><span class="istickedoff">pure e'</span></span>
+<span class="lineno">  454 </span>
+<span class="lineno">  455 </span>-- | Run the pass, and return an updated statement list.
+<span class="lineno">  456 </span>processStmts :: [Stmt] -&gt; IO [Stmt]
+<span class="lineno">  457 </span><span class="decl"><span class="istickedoff">processStmts stmts = do</span>
+<span class="lineno">  458 </span><span class="spaces">    </span><span class="istickedoff">ctx &lt;- newctx</span>
+<span class="lineno">  459 </span><span class="spaces">    </span><span class="istickedoff">stmts' &lt;- mapM (subshell'stmt ctx) stmts</span>
+<span class="lineno">  460 </span><span class="spaces">    </span><span class="istickedoff">checkFail</span>
+<span class="lineno">  461 </span><span class="spaces">    </span><span class="istickedoff">pure stmts'</span></span>
+
+</pre>
+</body>
+</html>
