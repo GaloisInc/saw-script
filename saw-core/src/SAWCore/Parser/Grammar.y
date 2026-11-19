@@ -415,7 +415,7 @@ mkPosModuleName (PosPair p qn) = case qn of
   QN.QualName path [] base Nothing Nothing ->
     return $ PosPair p (mkModuleName (path ++ [base]))
   _ -> do
-    addParseError p "invalid module name"
+    addParseError p "Invalid module name"
     return $ PosPair p (mkModuleName [QN.baseName qn])
 
 mkPrimitive :: PosPair Text -> UTerm -> Decl
@@ -444,7 +444,7 @@ mkNameSpace :: PosPair Text -> Parser Namespace
 mkNameSpace t = case QN.readNamespace (val t) of
   Just ns -> return ns
   Nothing -> do
-    addParseError (pos t) "unknown namespace"
+    addParseError (pos t) "Unknown namespace"
     return QN.NamespaceCore
 
 mkLetBind :: PosPair QualName -> UTerm -> Bool -> Parser (PosPair (QualName, UTerm, Bool))
@@ -455,7 +455,7 @@ mkLetBind (PosPair p qnm) rhs b = case (qnm, b) of
     return $ PosPair p (qnm,rhs,b)
   _ -> do
     addParseError p $
-      if b then "invalid let-bound variable name" else "invalid free variable name"
+      if b then "Invalid let-bound variable name" else "Invalid free variable name"
     return $ PosPair p (qnm,rhs,b)
 
 mkPath :: [PosPair Text] -> [PosPair Text] -> (PosPair ([Text], [Text], Text))
@@ -501,7 +501,7 @@ mkBVLit p s =
     Just bs ->
       pure (BVLit p bs)
     Nothing ->
-      do addParseError p ("malformed literal: " ++ s)
+      do addParseError p ("Malformed literal: " ++ s)
          pure (BVLit p [])
 
 }

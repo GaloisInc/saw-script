@@ -3,5 +3,5 @@ Stack trace:
    (builtin) in load_sawcore_from_file
    coreparser002.saw:2:1-2:47 (at top level)
 Module parsing failed:
-coreparser002.sawcore:6:6: Parse error: malformed literal: 10e5
+coreparser002.sawcore:6:6: Parse error: Malformed literal: 10e5
 FAILED
