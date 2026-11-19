@@ -1,0 +1,9 @@
+// Negative Int literals must parse and bind as SAWScript values (#3394).
+let n = -5;
+let m = - 7;
+let p = 5;
+print n;
+print m;
+
+// Non-negative Ints are still mirrored into Cryptol as numeric types.
+print {{ 0 : [p] }};
