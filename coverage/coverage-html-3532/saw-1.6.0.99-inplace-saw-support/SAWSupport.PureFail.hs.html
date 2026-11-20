@@ -1,0 +1,91 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+span.lineno { color: white; background: #aaaaaa; border-right: solid white 12px }
+span.nottickedoff { background: yellow}
+span.istickedoff { background: white }
+span.tickonlyfalse { margin: -1px; border: 1px solid #f20913; background: #f20913 }
+span.tickonlytrue  { margin: -1px; border: 1px solid #60de51; background: #60de51 }
+span.funcount { font-size: small; color: orange; z-index: 2; position: absolute; right: 20 }
+span.decl { font-weight: bold }
+span.spaces    { background: white }
+</style>
+</head>
+<body>
+<pre>
+<span class="decl"><span class="nottickedoff">never executed</span> <span class="tickonlytrue">always true</span> <span class="tickonlyfalse">always false</span></span>
+</pre>
+<pre>
+<span class="lineno">    1 </span>{-# LANGUAGE OverloadedStrings #-}
+<span class="lineno">    2 </span>{- |
+<span class="lineno">    3 </span>Module      : SAWSupport.PureFail
+<span class="lineno">    4 </span>Description : Failure interface for legacy &quot;pure&quot; code
+<span class="lineno">    5 </span>License     : BSD3
+<span class="lineno">    6 </span>Maintainer  : saw@galois.com
+<span class="lineno">    7 </span>Stability   : provisional
+<span class="lineno">    8 </span>
+<span class="lineno">    9 </span>This module contains an exception and a throw function for it that can
+<span class="lineno">   10 </span>be used in existing pure code to fail without it being a panic.
+<span class="lineno">   11 </span>
+<span class="lineno">   12 </span>Replaces uses of `error`; `error` is specifically undesirable for
+<span class="lineno">   13 </span>several reasons.
+<span class="lineno">   14 </span>
+<span class="lineno">   15 </span>New code should not use this interface.
+<span class="lineno">   16 </span>
+<span class="lineno">   17 </span>Needless to say, actual pure code doesn't throw exceptions. Throwing
+<span class="lineno">   18 </span>exceptions from &quot;pure&quot; code is also fundamentally unsafe: it creates
+<span class="lineno">   19 </span>logic bombs that sit in unevaluated expressions and can move around,
+<span class="lineno">   20 </span>and in particular, can move out from under catches that were intended
+<span class="lineno">   21 </span>to intercept them.
+<span class="lineno">   22 </span>
+<span class="lineno">   23 </span>We are not supposed to be doing it at all in SAW, except for panic
+<span class="lineno">   24 </span>(which is itself a compromise) ... however, there's some code that
+<span class="lineno">   25 </span>needs major reworking to be able to fail properly, and for the moment
+<span class="lineno">   26 </span>removing uses of `error` from it is a higher priority.
+<span class="lineno">   27 </span>
+<span class="lineno">   28 </span>Usage: @pureFail location message@ where
+<span class="lineno">   29 </span>
+<span class="lineno">   30 </span>* @location@ (a `Text`) should say where in the source the call is.
+<span class="lineno">   31 </span>  The recommended format is the module name and function, and for
+<span class="lineno">   32 </span>  huge functions perhaps also a sub-function or sub-part.
+<span class="lineno">   33 </span>
+<span class="lineno">   34 </span>  In principle this information could perhaps be extracted with
+<span class="lineno">   35 </span>  `HasCallStack` (e.g. panics do that) but I'm not especially
+<span class="lineno">   36 </span>  interested in reducing the friction associated with using this code.
+<span class="lineno">   37 </span>
+<span class="lineno">   38 </span>* @message@ (a `Text`) should be whatever you'd pass to a proper failure
+<span class="lineno">   39 </span>  function.
+<span class="lineno">   40 </span>
+<span class="lineno">   41 </span>Does not return.
+<span class="lineno">   42 </span>
+<span class="lineno">   43 </span>The exception constructor is intentionally not exported.
+<span class="lineno">   44 </span>
+<span class="lineno">   45 </span>This module is pure fail and should be removed.
+<span class="lineno">   46 </span>-}
+<span class="lineno">   47 </span>
+<span class="lineno">   48 </span>module SAWSupport.PureFail (MadeOfFail, ppMadeOfFail, pureFail) where
+<span class="lineno">   49 </span>
+<span class="lineno">   50 </span>import Control.Exception (Exception, throw)
+<span class="lineno">   51 </span>import qualified Data.Text as Text
+<span class="lineno">   52 </span>import Data.Text (Text)
+<span class="lineno">   53 </span>
+<span class="lineno">   54 </span>
+<span class="lineno">   55 </span>data MadeOfFail = MadeOfFail Text Text
+<span class="lineno">   56 </span>
+<span class="lineno">   57 </span>ppMadeOfFail :: MadeOfFail -&gt; Text
+<span class="lineno">   58 </span><span class="decl"><span class="istickedoff">ppMadeOfFail (MadeOfFail location message) =</span>
+<span class="lineno">   59 </span><span class="spaces">    </span><span class="istickedoff">&quot;pureFail call at &quot; &lt;&gt; location &lt;&gt; &quot;:\n&quot; &lt;&gt; message</span></span>
+<span class="lineno">   60 </span>
+<span class="lineno">   61 </span>instance <span class="decl"><span class="nottickedoff"><span class="decl"><span class="nottickedoff">Show MadeOfFail</span></span></span></span> where
+<span class="lineno">   62 </span>    <span class="decl"><span class="istickedoff">show mof = Text.unpack $ ppMadeOfFail mof</span></span>
+<span class="lineno">   63 </span>
+<span class="lineno">   64 </span>instance <span class="decl"><span class="istickedoff"><span class="decl"><span class="nottickedoff"><span class="decl"><span class="istickedoff">Exception MadeOfFail</span></span></span></span></span></span>
+<span class="lineno">   65 </span>
+<span class="lineno">   66 </span>pureFail :: Text -&gt; Text -&gt; a
+<span class="lineno">   67 </span><span class="decl"><span class="istickedoff">pureFail location message =</span>
+<span class="lineno">   68 </span><span class="spaces">    </span><span class="istickedoff">throw $ MadeOfFail location message</span></span>
+
+</pre>
+</body>
+</html>
