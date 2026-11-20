@@ -1,0 +1,6 @@
+// Referencing "proof_subshell" without directly monad-binding it is
+// no longer permitted. (Except specifically as a function argument)
+
+enable_experimental;
+
+let foo = proof_subshell ();

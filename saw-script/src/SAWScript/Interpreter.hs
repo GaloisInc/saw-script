@@ -18,7 +18,9 @@ Stability   : provisional
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module SAWScript.Interpreter
-  ( interpretReplStmts
+  ( TopLevelShellHook,
+    ProofScriptShellHook,
+    interpretReplStmts
   , processFile
   , buildTopLevelEnv
   )
@@ -30,6 +32,7 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (asks, ask)
 import Control.Monad.State (gets, get, put, modify)
 import qualified Data.ByteString as BS
+import Data.Foldable (foldlM)
 import Data.Maybe (fromMaybe, mapMaybe)
 import qualified Data.Map as Map
 import Data.Map ( Map )
@@ -85,7 +88,7 @@ import qualified SAWScript.Loader as Loader
 import SAWCentral.JavaType
 import SAWCentral.LLVMBuiltins
 import SAWCentral.Options
-import SAWScript.Typechecker (checkStmt, typesMatch)
+import SAWScript.Typechecker (TCIncremental, initialTCIncremental, checkStmt, typesMatch, addAbstractType, addBuiltin)
 import qualified SAWScript.Typechecker as Ty (Message(..), StmtContext(..))
 import SAWScript.Panic (HasCallStack, panic)
 import SAWCentral.TopLevel
@@ -94,7 +97,7 @@ import SAWCentral.Value
 import SAWScript.ValueOps
 import SAWCentral.SolverCache
 import SAWCentral.SolverVersions
-import SAWCentral.Proof (ProofResult(..), Theorem, emptyTheoremDB)
+import SAWCentral.Proof (ProofState, ProofResult(..), Theorem, emptyTheoremDB)
 import SAWCentral.Prover.Rewrite(basic_ss)
 import SAWCentral.Prover.Exporter
 import SAWCentral.Yosys -- XXX remove in favor of the following later
@@ -135,6 +138,26 @@ import SAWScript.AutoMatch
 
 import qualified Lang.Crucible.FunctionHandle as Crucible
 
+
+------------------------------------------------------------
+-- Subshell hook types
+
+-- These are here now (used to be in Value.hs) so they'll be able to
+-- mention TCIncremental.
+
+-- | Type for the function to start a new REPL in TopLevel.
+--
+--   Passed down from the REPL code to avoid circular references.
+type TopLevelShellHook =
+    TCIncremental -> TopLevelRO -> TopLevelRW ->
+    IO TopLevelRW
+
+-- | Type for the function to start a new REPL in ProofScript.
+--
+--   Passed down from the REPL code to avoid circular references.
+type ProofScriptShellHook =
+    TCIncremental -> TopLevelRO -> TopLevelRW -> ProofState ->
+    IO (TopLevelRW, ProofState)
 
 
 ------------------------------------------------------------
@@ -440,7 +463,7 @@ bindPattern rb pat ms v =
 
 class (Monad m, MonadFail m) => InterpreterMonad m where
   liftTopLevel :: TopLevel a -> m a
-  actionFromValue :: FromValue a => FromValueHow -> Value -> m a
+  actionFromValue :: (FromValue a, ?rcx :: RunCtx) => FromValueHow -> Value -> m a
   mkValue :: SS.Pos -> RefChain -> m Value -> Value
   getMonadContext :: m Ty.StmtContext
   pushScopeAny :: m ()
@@ -532,11 +555,29 @@ processTypeCheck (msgs, output) =
 
 
 ------------------------------------------------------------
+-- Extra run context
+
+-- | This is a type for context that we have to pass around while
+--   executing because we can't keep it in TopLevelRO or TopLevelRW.
+--   I've made it its own type so that it's only one implicit arg in all
+--   the places that need it.
+--
+--   I'm calling this thing "rcx" rather than "ctx" because we have a
+--   bunch of legacy code that uses "ctx" for monad context and I
+--   don't want to stop to clean it out.
+--
+data RunCtx = RunCtx {
+    rcxTLHook :: TopLevelShellHook,
+    rcxPSHook :: ProofScriptShellHook
+}
+
+
+------------------------------------------------------------
 -- Interpreter core
 
 -- | Convenience function for the common case of applying a single
 --   (positional) value.
-applyValue :: SS.Pos -> Text -> Value -> Value -> TopLevel Value
+applyValue :: (?rcx :: RunCtx) => SS.Pos -> Text -> Value -> Value -> TopLevel Value
 applyValue pos v1info v1 v2 =
     applyValues pos v1info v1 [(Nothing, v2)]
 
@@ -556,7 +597,7 @@ applyValue pos v1info v1 v2 =
 --   function turns out not to be a function value, or is a function
 --   value without enough parameters.
 --
-applyValues :: SS.Pos -> Text -> Value -> [(Maybe Text, Value)] -> TopLevel Value
+applyValues :: (?rcx :: RunCtx) => SS.Pos -> Text -> Value -> [(Maybe Text, Value)] -> TopLevel Value
 applyValues pos funinfo fun args =
   let enter name = pushTraceFrame pos name
       leave = popTraceFrame
@@ -812,6 +853,33 @@ applyValues pos funinfo fun args =
             funinfo
          ]
 
+-- | Look up a variable in the environment.
+lookupVar :: SS.Name -> TopLevel (SS.Schema, Value)
+lookupVar x = do
+    avail <- gets rwPrimsAvail
+    Environ varenv _tyenv _cryenv <- gets rwEnviron
+    rbenv <- gets rwRebindables
+    let info = case ScopedMap.lookup x varenv of
+            Nothing ->
+                -- Try the rebindable environment
+                case Map.lookup x rbenv of
+                    Nothing -> Nothing
+                    Just (_defpos, ty, v) -> Just (Current, ty, v)
+            Just (_defpos, lc, ty, v, _doc) -> Just (lc, ty, v)
+    case info of
+        Nothing ->
+            -- This should be rejected by the typechecker; panic
+            panic "interpretExpr" [
+                "Read of unknown variable " <> x
+            ]
+        Just (lc, ty, v) -> do
+            unless (Set.member lc avail) $
+                -- This case is also rejected by the typechecker
+                panic "interpretExpr" [
+                     "Read of inaccessible variable " <> x
+                ]
+            pure (ty, v)
+
 -- Eval an expression.
 --
 -- This executes purely: when we see a do-block, return it as a value.
@@ -827,7 +895,7 @@ applyValues pos funinfo fun args =
 -- in TopLevel when the last argument is applied by applyValue, and
 -- that happens inside here.
 --
-interpretExpr :: SS.Expr -> TopLevel Value
+interpretExpr :: (?rcx :: RunCtx) => SS.Expr -> TopLevel Value
 interpretExpr expr =
     case expr of
       SS.Bool _ b ->
@@ -873,35 +941,57 @@ interpretExpr expr =
           ret <- tupleLookupValue pos a i
           return ret
       SS.Var pos x -> do
-          avail <- gets rwPrimsAvail
-          Environ varenv _tyenv _cryenv <- gets rwEnviron
-          rbenv <- gets rwRebindables
-          let info = case ScopedMap.lookup x varenv of
-                  Nothing ->
-                      -- Try the rebindable environment
-                      case Map.lookup x rbenv of
-                          Nothing -> Nothing
-                          Just (_defpos, _ty, v) -> Just (Current, v)
-                  Just (_defpos, lc, _ty, v, _doc) -> Just (lc, v)
-          case info of
-              Nothing ->
-                  -- This should be rejected by the typechecker; panic
-                  panic "interpretExpr" [
-                      "Read of unknown variable " <> x
-                  ]
-              Just (_lc, VUndefined) -> do
+          (_ty, v) <- lookupVar x
+          case v of
+              VUndefined -> do
                   let pos' = ppPosition pos
                   fail $ Text.unpack $ pos' <> ": Error: evaluated \"undefined\""
-              Just (lc, v)
-                | Set.member lc avail -> do
-                      let v' = injectPositionIntoMonadicValue pos v
-                          v'' = insertRefChain pos x v'
-                      return v''
-                | otherwise ->
-                      -- This case is also rejected by the typechecker
-                      panic "interpretExpr" [
-                           "Read of inaccessible variable " <> x
-                      ]
+              _ -> do
+                  let v' = injectPositionIntoMonadicValue pos v
+                      v'' = insertRefChain pos x v'
+                  return v''
+      SS.Subshell pos anns -> do
+          let tcenv = case SS.getAnnotation anns of
+                Nothing -> panic "interpretExpr" ["subshell missing type env"]
+                Just env -> env
+          let x = "subshell"
+          -- Look it up in the environment to get the type
+          -- (which also crosschecks availability)
+          (ty, _v) <- lookupVar x
+          let ty' = case ty of
+                SS.Forall [] t' -> t'
+                _ -> panic "interpretExpr" [x <> " is unexpectedly polymorphic"]
+          -- Now build a value. The point of having this here is to
+          -- expose the reference to `topLevelSubshell` where we can
+          -- insert extra info from the AST into it. (There isn't any
+          -- yet; so far we're doing setup for future changes.)
+          let f = toplevelSubshell tcenv
+              v = toValue ty' x f
+          -- Do the same postprocessing as in the Var case
+          let v' = injectPositionIntoMonadicValue pos v
+              v'' = insertRefChain pos x v'
+          return v''
+      SS.ProofSubshell pos anns -> do
+          let tcenv = case SS.getAnnotation anns of
+                Nothing -> panic "interpretExpr" ["proof_subshell missing type env"]
+                Just env -> env
+          let x = "proof_subshell"
+          -- Look it up in the environment to get the type
+          -- (which also crosschecks availability)
+          (ty, _v) <- lookupVar x
+          let ty' = case ty of
+                SS.Forall [] t' -> t'
+                _ -> panic "interpretExpr" [x <> " is unexpectedly polymorphic"]
+          -- Now build a value. The point of having this here is to
+          -- expose the reference to `proofScriptSubshell` where we
+          -- can insert extra info from the AST into it. (There isn't
+          -- any yet; so far we're doing setup for future changes.)
+          let f = proofScriptSubshell tcenv
+              v = toValue ty' x f
+          -- Do the same postprocessing as in the Var case
+          let v' = injectPositionIntoMonadicValue pos v
+              v'' = insertRefChain pos x v'
+          return v''
       SS.Lambda _pos mname _paramPos params namedParams e -> do
           env <- gets rwEnviron
           let namedParams' = Map.map (\(_, (_, d, p)) -> (d, p)) namedParams
@@ -946,7 +1036,7 @@ interpretExpr expr =
 -- recursive let-bindings.
 --
 -- The bodies are interpreted purely.
-interpretDeclGroup :: SS.Rebindable -> SS.DeclGroup -> TopLevel ()
+interpretDeclGroup :: (?rcx :: RunCtx) => SS.Rebindable -> SS.DeclGroup -> TopLevel ()
 interpretDeclGroup rebindable dg = case dg of
     SS.NonRecursive (SS.Decl _ pat mt expr) -> do
         v <- interpretExpr expr
@@ -1045,7 +1135,7 @@ interpretDeclGroup rebindable dg = case dg of
 -- actionFromValue) because we need the result to do the position
 -- update.
 --
-bindMonadAction :: forall m. InterpreterMonad m => SS.Pos -> Value -> m Value
+bindMonadAction :: forall m. (InterpreterMonad m, ?rcx :: RunCtx) => SS.Pos -> Value -> m Value
 bindMonadAction pos baseVal = do
     plainVal <- interpretMonadAction FromInterpreter baseVal
     let plainVal' = injectPositionIntoMonadicValue pos plainVal
@@ -1054,7 +1144,7 @@ bindMonadAction pos baseVal = do
 
 -- Execute a monad action. This happens in any of the interpreter
 -- monads.
-interpretMonadAction :: forall m. InterpreterMonad m => FromValueHow -> Value -> m Value
+interpretMonadAction :: forall m. (InterpreterMonad m, ?rcx :: RunCtx) => FromValueHow -> Value -> m Value
 interpretMonadAction fromHow v = case v of
   VReturn pos chain v' -> do
     -- VReturn ... v' -> VProofScript ... (return v')
@@ -1132,7 +1222,7 @@ interpretMonadAction fromHow v = case v of
 -- (XXX: should that be stored into the monad context or not? Apparently
 -- not, currently.)
 --
-interpretDoStmt :: forall m. InterpreterMonad m => SS.Stmt -> m ()
+interpretDoStmt :: forall m. (InterpreterMonad m, ?rcx :: RunCtx) => SS.Stmt -> m ()
 interpretDoStmt stmt =
     -- XXX are the uses of push/popPosition here suitable? not super clear
     case stmt of
@@ -1181,7 +1271,7 @@ interpretDoStmt stmt =
 -- to just use mapM on the statements and not need to nest the last
 -- expression inside recursing on the statements.
 --
-interpretDoStmts :: forall m. InterpreterMonad m => ([SS.Stmt], SS.Expr) -> m Value
+interpretDoStmts :: forall m. (InterpreterMonad m, ?rcx :: RunCtx) => ([SS.Stmt], SS.Expr) -> m Value
 interpretDoStmts (stmts, lastexpr) =
     case stmts of
       [] -> do
@@ -1232,7 +1322,7 @@ interpretDoStmts (stmts, lastexpr) =
 
 -- Execute a top-level bind.
 processStmtBind ::
-  InterpreterMonad m =>
+  (InterpreterMonad m, ?rcx :: RunCtx) =>
   Bool ->
   SS.Pos ->
   SS.Pattern ->
@@ -1303,31 +1393,25 @@ processStmtBind printBinds pos pat expr = do
 
 -- | Interpret a top-level statement in an interpreter monad (any of the SAWScript monads)
 --   This duplicates the logic in interpretDoStmt for no particularly good reason.
-interpretTopStmt :: InterpreterMonad m =>
+--
+--   Note: we pass around the `TCIncremental` handle because it can't
+--   live in the monad state as long as that comes from saw-central.
+interpretTopStmt :: (InterpreterMonad m, ?rcx :: RunCtx) =>
   Bool {-^ whether to print non-unit result values -} ->
   Bool {-^ whether to allow pure functions for the REPL -} ->
+  TCIncremental ->
   SS.Stmt ->
-  m ()
-interpretTopStmt printBinds replTypingHacks stmt = do
+  m TCIncremental
+interpretTopStmt printBinds replTypingHacks tcenv stmt = do
   avail <- liftTopLevel $ gets rwPrimsAvail
   ctx <- getMonadContext
 
-  stmt' <- do
+  -- XXX shouldn't be typechecking one statement at a time
+  (stmt', tcenv') <- do
       ppopts <- liftTopLevel $ getPPOpts
-      -- XXX this is not the right way to do this
-      --    - shouldn't have to flatten the environments
-      --    - shouldn't be typechecking one statement at a time regardless
-      Environ varenv0 tyenv _cryenvs <- liftTopLevel $ gets rwEnviron
-      rbenv <- liftTopLevel $ gets rwRebindables
-      let varenv1 = Map.map (\(pos, lc, ty, _v, _doc) -> (pos, lc, SS.ReadOnlyVar, ty)) $ ScopedMap.flatten varenv0
-          rbenv' = Map.map (\(pos, ty, _v) -> (pos, SS.Current, SS.RebindableVar, ty)) rbenv
-          -- If anything appears in both, favor the real environment
-          varenv2 = Map.union varenv1 rbenv'
-          varenv3 = ScopedMap.seed varenv2
-
       let typingResults =
             if replTypingHacks then
-                let (msgs, output) = checkStmt ppopts avail varenv3 tyenv ctx stmt in
+                let (msgs, result) = checkStmt ppopts avail tcenv ctx stmt in
                 let isError msg = case msg of
                         Ty.Error{} -> True
                         _ -> False
@@ -1344,22 +1428,22 @@ interpretTopStmt printBinds replTypingHacks stmt = do
                                 e' = SS.Application epos ret [(Nothing, e)]
                                 rstmt = SS.StmtBind spos (SS.PImplicit wpos wty) e'
                             in
-                            let (msgs', output') =
-                                  checkStmt ppopts avail varenv3 tyenv ctx rstmt
+                            let (msgs', result') =
+                                  checkStmt ppopts avail tcenv ctx rstmt
                             in
                             if any isError msgs' then
                                 -- did not work, use original messages
-                                (msgs, output)
+                                (msgs, result)
                             else
                                 -- worked, use this version
-                                (msgs', output')
+                                (msgs', result')
                         _ ->
                             -- doesn't match, use the original errors
-                            (msgs, output)
+                            (msgs, result)
                 else
-                    (msgs, output)
+                    (msgs, result)
             else
-                checkStmt ppopts avail varenv3 tyenv ctx stmt
+                checkStmt ppopts avail tcenv ctx stmt
       processTypeCheck typingResults
 
   case stmt' of
@@ -1410,6 +1494,8 @@ interpretTopStmt printBinds replTypingHacks stmt = do
     SS.StmtPushdir _ dir -> liftTopLevel $ pushdir dir
     SS.StmtPopdir _ -> liftTopLevel popdir
 
+  return tcenv'
+
 -- | Interpret multiple (syntactic top-level) statements in an
 --   interpreter monad. In practice this will be only the REPL monads,
 --   `TopLevel` and `ProofScript`, but in principle could be any of
@@ -1418,15 +1504,24 @@ interpretTopStmt printBinds replTypingHacks stmt = do
 --   This is the entry point used by the REPL for executing stuff the
 --   user types in.
 --
-interpretReplStmts :: InterpreterMonad m => [SS.Stmt] -> m ()
-interpretReplStmts stmts = do
+interpretReplStmts ::
+    InterpreterMonad m =>
+    TopLevelShellHook ->
+    ProofScriptShellHook ->
+    TCIncremental ->
+    [SS.Stmt] ->
+    m TCIncremental
+interpretReplStmts tlhook pshook tcenv stmts = do
   let printBinds = True
   let replTypingHacks = True
-  mapM_ (interpretTopStmt printBinds replTypingHacks) stmts
+  let ?rcx = RunCtx { rcxTLHook = tlhook, rcxPSHook = pshook }
+  -- foldlM's function arg takes TCIncremental -> Stmt -> m TCIncremental
+  -- so we can use interpretTopStmt directly
+  foldlM (interpretTopStmt printBinds replTypingHacks) tcenv stmts
 
 -- | Hook for AutoMatch
 stmtInterpreter :: StmtInterpreter
-stmtInterpreter ro rw stmts =
+stmtInterpreter ro _rw stmts = do
   -- What AutoMatch provides is supposed to be a full script for the
   -- syntactic top level, not a do-block. Run it with interpretTopStmt
   -- so as to (a) get the right behavior (as long as interpretTopStmt
@@ -1438,10 +1533,28 @@ stmtInterpreter ro rw stmts =
   -- which would have dropped an ill-specified part of the namespace.
   -- That wasn't particularly sensible and probably wasn't correct,
   -- but we could reasonably here want either the current environment
-  -- or a copy of the environment captured when we start AutoMatch,
+  -- or a copy of the environment captured when we start AutoMatch, or
+  -- for that matter a clean environment for running a separate file,
   -- and it's not obvious which. For the moment, we'll use the current
   -- environment because that doesn't require any fiddling.
-  fst <$> runTopLevel (mapM_ (interpretTopStmt False False) stmts) ro rw
+  --
+  -- Update 20261116: flipping through the interaction stuff shows no
+  -- sign that it's supposed to be able to interact with existing
+  -- stuff in the interpreter context. So even though it has been
+  -- explicitly reusing the interpreter state so far, I think that's
+  -- probably wrong and I'm going to give it a clean state to
+  -- execute in.
+  let opts = roOptions ro
+      scriptArgv = ["auto_match"]
+      tlhook _ _ _ = liftIO $ fail "No subshells inside AutoMatch"
+      pshook _ _ _ _ = liftIO $ fail "No proof subshells inside AutoMatch"
+  (ro', rw', tcenv) <- buildTopLevelEnv opts scriptArgv tlhook pshook
+  -- (here we should typecheck the statements once interpretTopStmt
+  -- stops doing that)
+  let ?rcx = RunCtx { rcxTLHook = tlhook, rcxPSHook = pshook }
+  let m = foldlM (interpretTopStmt False False) tcenv stmts
+  _ <- runTopLevel m ro' rw'
+  return ()
 
 -- Save the system current directory and directory stack
 saveDirState :: TopLevel (FilePath, [FilePath])
@@ -1456,11 +1569,19 @@ restoreDirState (cwd, dirstack) = do
   liftIO $ setCurrentDirectory cwd
   modify (\rw -> rw { rwDirStack = dirstack })
 
-interpretFile :: FilePath -> Bool {- ^ run main? -} -> TopLevel ()
-interpretFile file runMain =
+interpretFile ::
+    TopLevelShellHook ->
+    ProofScriptShellHook ->
+    TCIncremental ->
+    FilePath ->
+    Bool {- ^ run main? -} ->
+    TopLevel ()
+interpretFile tlhook pshook tcenv0 file runMain =
   bracketTopLevel saveDirState restoreDirState (const interp)
   where
     interp = do
+      let ?rcx = RunCtx { rcxTLHook = tlhook, rcxPSHook = pshook }
+
       opts <- getOptions
       ppopts <- getPPOpts
       stmts <- io $ Loader.findAndLoadFileUnchecked opts ppopts file
@@ -1479,16 +1600,24 @@ interpretFile file runMain =
                 panic "interpretFile" ["Last statement of file not a popdir"]
 
       -- Run a statement, using the Nothing slot to call `runMain`.
-      let runStmt ms = case ms of
-            Nothing -> when runMain interpretMain
-            Just s -> stmtWithPrint s
+      let runStmt tcenv ms = case ms of
+            Nothing -> do
+                -- Note that interpretMain calls a function and can't
+                -- update tcenv; it only uses it at all to inspect the
+                -- type of the main it finds.
+                when runMain $ interpretMain tcenv
+                pure tcenv
+            Just s ->
+                stmtWithPrint tcenv s
 
       -- Run all the statements, including any "main".
-      mapM_ runStmt stmts'
+      -- Discard the ultimate typechecker environment, because we're
+      -- done with it when we get to the end of the file.
+      _tcenv' <- foldlM runStmt tcenv0 stmts'
 
       writeVerificationSummary
 
-    stmtWithPrint s = do
+    stmtWithPrint tcenv s = do
       let withPos str =
             unlines $ ("[output] at " ++ show (SS.getPos s) ++ ": ") :
                       map (\l -> "\t"  ++ l) (lines str)
@@ -1497,15 +1626,15 @@ interpretFile file runMain =
         let wrapPrint oldFn = \lvl str -> oldFn lvl (withPos str)
             withPrint opts = opts { printOutFn = wrapPrint (printOutFn opts) }
         in
-        withOptions withPrint (interpretTopStmt False False s)
+        withOptions withPrint (interpretTopStmt False False tcenv s)
       else
-        interpretTopStmt False False s
+        interpretTopStmt False False tcenv s
 
 -- | Evaluate the value called 'main' from the current environment.
-interpretMain :: TopLevel ()
-interpretMain = do
+interpretMain :: (?rcx :: RunCtx) => TCIncremental -> TopLevel ()
+interpretMain tcenv = do
   avail <- gets rwPrimsAvail
-  Environ varenv tyenv _cryenv <- gets rwEnviron
+  Environ varenv _tyenv _cryenv <- gets rwEnviron
   rbenv <- gets rwRebindables
   let pos = SS.PosInternal "call-to-main"
       prov = SS.TypeFromElement pos SS.TyCtxExpr
@@ -1533,7 +1662,7 @@ interpretMain = do
         SS.Forall _ (SS.TyApply _ _ _) -> do
             -- It looks like a monadic value, so check more carefully.
             ppopts <- getPPOpts
-            case typesMatch ppopts avail tyenv "main" tyFound tyExpected of
+            case typesMatch ppopts avail tcenv "main" tyFound tyExpected of
               False ->
                   -- While we accept any TopLevel a, don't encourage people
                   -- to do that.
@@ -1561,7 +1690,7 @@ buildTopLevelEnv :: Options
                  -> [Text]
                  -> TopLevelShellHook
                  -> ProofScriptShellHook
-                 -> IO (TopLevelRO, TopLevelRW)
+                 -> IO (TopLevelRO, TopLevelRW, TCIncremental)
 buildTopLevelEnv opts scriptArgv tlhook pshook = do
        let proxy = AIGProxy AIG.compactProxy
        let mn = mkModuleName ["SAWScript"]
@@ -1582,8 +1711,6 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
                    , roProxy = proxy
                    , roInitWorkDir = currDir
                    , roBasicSS = ss
-                   , roSubshell = tlhook
-                   , roProofSubshell = pshook
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
@@ -1593,8 +1720,11 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
 
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
+       let ?rcx = RunCtx { rcxTLHook = tlhook, rcxPSHook = pshook }
+       let (environ, tcenv) = primEnviron opts bic ce0
+
        let rw0 = TopLevelRW
-                   { rwEnviron = primEnviron opts bic ce0
+                   { rwEnviron = environ
                    , rwRebindables = Map.empty
                    , rwPosition = SS.Unknown
                    , rwStackTrace = Trace.empty
@@ -1629,7 +1759,7 @@ buildTopLevelEnv opts scriptArgv tlhook pshook = do
                    , rwSequentGoals = False
                    , rwJavaCodebase = JavaUninitialized
                    }
-       return (ro0, rw0)
+       return (ro0, rw0, tcenv)
 
 -- | Interpret syntactic-top-level statements from a file.
 processFile ::
@@ -1640,8 +1770,8 @@ processFile ::
   ProofScriptShellHook ->
   IO ()
 processFile opts file scriptArgv tlhook pshook = do
-  (ro, rw) <- buildTopLevelEnv opts scriptArgv tlhook pshook
-  _ <- runTopLevel (interpretFile file True) ro rw
+  (ro, rw, tcenv) <- buildTopLevelEnv opts scriptArgv tlhook pshook
+  _ <- runTopLevel (interpretFile tlhook pshook tcenv file True) ro rw
             `X.catch` (handleException opts)
   return ()
 
@@ -1791,11 +1921,11 @@ processFile opts file scriptArgv tlhook pshook = do
 --   runtime.
 --
 class IsValue a where
-    toValue :: SS.Type -> Text -> a -> Value
+    toValue :: (?rcx :: RunCtx) => SS.Type -> Text -> a -> Value
     -- these will be overridden on the function instance
     isFunction :: a -> Bool
     isFunction _ = False
-    toWrapper :: SS.Type -> Text -> a -> BuiltinWrapper
+    toWrapper :: (?rcx :: RunCtx) => SS.Type -> Text -> a -> BuiltinWrapper
     toWrapper _ _ _ = panic "toWrapper" ["Invalid call on base value"]
 
 -- | Flag to indicate where/how fromValue was triggered.
@@ -1817,13 +1947,13 @@ data FromValueHow = FromInterpreter | FromArgument
 --   to `a` (which is some @Optional a'@).
 --
 class FromValue a where
-    fromValue :: FromValueHow -> Value -> a
+    fromValue :: (?rcx :: RunCtx) => FromValueHow -> Value -> a
     -- | Hack to allow `toWrapper` to detect and special-case the
     --   `Optional` type; is overridden in the `Optional` instance and
     --   should not be touched otherwise.
     isAnOptional :: a -> Bool
     isAnOptional _ = False
-    fromOptionalValue :: FromValueHow -> Optional Value -> a
+    fromOptionalValue :: (?rcx :: RunCtx) => FromValueHow -> Optional Value -> a
     fromOptionalValue _ _ = panic "fromOptionalValue" ["not Optional"]
 
 
@@ -2653,13 +2783,13 @@ add_primitives lc _bic _opts = do
 -- But note that because the SAWScript interpreter is very fragile it
 -- is very easy for these things to regress.
 --
-toplevelSubshell :: () -> TopLevel Value
-toplevelSubshell () = do
+toplevelSubshell :: (?rcx :: RunCtx) => TCIncremental -> () -> TopLevel Value
+toplevelSubshell tcenv () = do
     pushScope
     ro <- ask
     rw <- get
-    let hook = roSubshell ro
-    rw' <- liftIO $ hook ro rw
+    let hook = rcxTLHook ?rcx
+    rw' <- liftIO $ hook tcenv ro rw
     put rw'
     popScope
     -- Note that (for now at least) toValue just asserts that the type
@@ -2673,16 +2803,16 @@ toplevelSubshell () = do
 -- Much the same as an ordinary subshell, except it runs in the
 -- ProofScript monad and handles the additional ProofScript state.
 --
-proofScriptSubshell :: () -> ProofScript Value
-proofScriptSubshell () = do
+proofScriptSubshell :: (?rcx :: RunCtx) => TCIncremental -> () -> ProofScript Value
+proofScriptSubshell tcenv () = do
     (ro, rw) <- scriptTopLevel $ do
         pushScope
         ro_ <- ask
         rw_ <- get
         return (ro_, rw_)
     pst <- get
-    let hook = roProofSubshell ro
-    (rw', pst') <- liftIO $ hook ro rw pst
+    let hook = rcxPSHook ?rcx
+    (rw', pst') <- liftIO $ hook tcenv ro rw pst
     put pst'
     scriptTopLevel $ do
         put rw'
@@ -2693,8 +2823,22 @@ proofScriptSubshell () = do
     let ty = SS.tUnit $ SS.TypeFromElement (rwPosition rw) SS.TyCtxExpr
     return $ toValue ty "proof_subshell" ()
 
+-- A dummy value to put in the builtins table for @subshell@.
+-- Not actually reachable.
+fakeSubshell :: (?rcx :: RunCtx) => () -> TopLevel Value
+fakeSubshell () = do
+    let tcenv = panic "fakeSubshell" ["someone called me!"]
+    toplevelSubshell tcenv ()
+
+-- A dummy value to put in the builtins table for @proof_subshell@.
+-- Not actually reachable.
+fakeProofSubshell :: (?rcx :: RunCtx) => () -> ProofScript Value
+fakeProofSubshell () = do
+    let tcenv = panic "fakeProofSubshell" ["someone called me!"]
+    proofScriptSubshell tcenv ()
+
 -- The "map" builtin.
-mapValue :: Value -> [Value] -> TopLevel Value
+mapValue :: (?rcx :: RunCtx) => Value -> [Value] -> TopLevel Value
 mapValue f xs =
   do let pos = SS.PosInsideBuiltin
      let info = "(value was in a \"map\")"
@@ -2737,7 +2881,7 @@ mapValue f xs =
 -- in terms of calling pieces of the interpreter directly, but that's
 -- likely to be quite messy.
 --
-forValue :: [Value] -> Value -> TopLevel Value
+forValue :: (?rcx :: RunCtx) => [Value] -> Value -> TopLevel Value
 forValue [] _ = return $ VReturn atRestPos [] (VArray [])
 forValue (x : xs) f = do
    let pos = SS.PosInsideBuiltin
@@ -2762,6 +2906,7 @@ str_concats strs optSep = case optSep of
   Given sep -> Text.intercalate sep strs
 
 caseProofResultPrim ::
+  (?rcx :: RunCtx) =>
   ProofResult ->
   Value {- ^ valid case -} ->
   Value {- ^ invalid/unknown case -} ->
@@ -2784,6 +2929,7 @@ caseProofResultPrim pr vValid vInvalid = do
       applyValue pos infoInvalid vInvalid (VTerm tt)
 
 caseSatResultPrim ::
+  (?rcx :: RunCtx) =>
   SatResult ->
   Value {- ^ unsat case -} ->
   Value {- ^ sat/unknown case -} ->
@@ -3418,8 +3564,8 @@ data Primitive
 -- no particular system to which are there and which are here; some of
 -- the ones there have no special syntax or semantics and should
 -- probably be moved here at some point.
-primTypes :: Map SS.Name PrimType
-primTypes = foldl doadd Map.empty
+primTypes :: (Map SS.Name PrimType, TCIncremental)
+primTypes = foldl doadd (Map.empty, initialTCIncremental)
   [ abstype "BisimTheorem" Experimental
   , abstype "CryptolModule" Current
   , abstype "FunctionProfile" Experimental
@@ -3459,57 +3605,46 @@ primTypes = foldl doadd Map.empty
   , abstype "__DEPRECATED__" HideDeprecated
   ]
   where
-    -- Thread the map through as we add entries so we can
-    -- use it to check the right hand side of any typedefs.
+    -- Thread the typechecker context through as we add entries so we
+    -- can use it to check the right hand side of any typedefs. For now,
+    -- carry both a plain map and a TCIncremental; we should be able to
+    -- get rid of the plain map later.
     doadd ::
-        Map SS.Name PrimType ->
-        (Map SS.Name PrimType -> (SS.Name, PrimType)) ->
-        Map SS.Name PrimType
-    doadd tyenv constructor =
-        let (name, entry) = constructor tyenv in
-        Map.insert name entry tyenv
+        (Map SS.Name PrimType, TCIncremental) ->
+        (TCIncremental -> (SS.Name, PrimType, TCIncremental)) ->
+        (Map SS.Name PrimType, TCIncremental)
+    doadd (tyenv, tcenv) constructor =
+        let (name, entry, tcenv') = constructor tcenv in
+        (Map.insert name entry tyenv, tcenv')
 
     -- abstract type of arbitrary kind
     abstype' ::
-        SS.Kind -> Text -> PrimitiveLifecycle -> Map SS.Name PrimType ->
-        (SS.Name, PrimType)
-    abstype' kind name lc _tyenv = (name, info)
+        SS.Kind -> Text -> PrimitiveLifecycle -> TCIncremental ->
+        (SS.Name, PrimType, TCIncremental)
+    abstype' kind name lc tcenv = (name, info, tcenv')
       where
         info = PrimType
           { primTypeType = SS.AbstractType kind
           , primTypeLife = lc
           }
+        tcenv' = addAbstractType name lc kind tcenv
 
     -- abstract type of kind *
-    abstype :: Text -> PrimitiveLifecycle -> Map SS.Name PrimType -> (SS.Name, PrimType)
-    abstype name lc tyenv = abstype' SS.kindStar name lc tyenv
+    abstype :: Text -> PrimitiveLifecycle -> TCIncremental ->
+               (SS.Name, PrimType, TCIncremental)
+    abstype name lc tcenv = abstype' SS.kindStar name lc tcenv
 
-    -- concrete type (not currently used)
+    -- concrete type
     conctype ::
-        Text -> Text -> PrimitiveLifecycle -> Map SS.Name PrimType ->
-        (SS.Name, PrimType)
-    conctype name tystr lc tyenv = (name, info)
+        Text -> Text -> PrimitiveLifecycle -> TCIncremental ->
+        (SS.Name, PrimType, TCIncremental)
+    conctype name tystr lc tcenv = (name, info, tcenv')
       where
         info = PrimType
           { primTypeType = SS.ConcreteType ty
           , primTypeLife = lc
           }
-
-        -- We need a Map Name (PrimitiveLifecycle, NamedType) to feed
-        -- to readSchemaPure. Construct one from the Map Name PrimType
-        -- that we've got. FUTURE: there are too many isomorphic types
-        -- floating around in the builtins handling (not just here)
-        -- and they should all be simplified away.
-        tyenv' = Map.map (\pt -> (primTypeLife pt, primTypeType pt)) tyenv
-        tyenv'' = ScopedMap.seed tyenv'
-
-        ty = case Loader.readSchemaPure name lc tyenv'' tystr of
-            SS.Forall [] ty' ->
-                ty'
-            _ ->
-                panic "primTypes" [
-                    "Builtin typedef " <> name <> " not monomorphic"
-                ]
+        (ty, tcenv') = Loader.readTypedefPure lc tcenv name tystr
 
 --
 -- Note: the help/doc strings for the primitives should be
@@ -3518,8 +3653,12 @@ primTypes = foldl doadd Map.empty
 --     ****************************************************************
 --
 
-primitives :: Map SS.Name Primitive
-primitives = Map.fromList $
+-- The table here needs the typechecker environment threaded through
+-- it so as to check the types of the primitives and remember them.
+type RawPrimitive = TCIncremental -> ((SS.Name, Primitive), TCIncremental)
+
+rawprimitives :: (?rcx :: RunCtx) => [RawPrimitive]
+rawprimitives =
   [
     ------------------------------------------------------------
     -- Constants
@@ -3708,8 +3847,16 @@ primitives = Map.fromList $
     , "your scripts can be updated."
     ]
 
+
+    -- Caution: "subshell" gets intercepted and turned into an AST
+    -- node. This entry is still used (by hardcoded name) for all
+    -- purposes other than the `Value` produced by introducing the
+    -- builtin; changes to the type or lifecycle status should be made
+    -- here. At eval time, the AST node is turned into a direct call
+    -- to topLevelSubshell, which allows passing extra info stored in
+    -- the AST into the builtin.
   , prim "subshell"            "() -> TopLevel ()"
-    (pureVal toplevelSubshell)
+    (pureVal $ fakeSubshell)
     Experimental
     [ "Open an interactive subshell instance nested inside the context"
     , "where 'subshell' was called. The resulting REPL is always"
@@ -3724,8 +3871,10 @@ primitives = Map.fromList $
     , "memory."
     ]
 
+    -- Caution: "proof_subshell" gets intercepted and turned into an
+    -- AST node like "subshell".
   , prim "proof_subshell"      "() -> ProofScript ()"
-    (pureVal proofScriptSubshell)
+    (pureVal $ fakeProofSubshell)
     Experimental
     [ "Open an interactive subshell instance nested inside the context"
     , "where 'proof_subshell' was called. The resulting REPL is always"
@@ -8466,39 +8615,51 @@ primitives = Map.fromList $
 
   where
     prim :: Text -> Text -> (SS.Type -> Text -> Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [Text]
-         -> (SS.Name, Primitive)
-    prim name ty fn lc doc = (name, Primitive
-                                     { primitiveType = ty'
-                                     , primitiveRawType = ty
-                                     , primitiveDoc  = doc
-                                     , primitiveFn   = fn ty'' name
-                                     , primitiveLife = lc
-                                     })
+         -> TCIncremental -> ((SS.Name, Primitive), TCIncremental)
+    prim name ty fn lc doc tcenv = ((name, entry), tcenv')
       where
+        entry = Primitive {
+            primitiveType = ty',
+            primitiveRawType = ty,
+            primitiveDoc  = doc,
+            primitiveFn   = fn ty'' name,
+            primitiveLife = lc
+        }
         -- Beware: errors in the type will only be detected when the
         -- type is actually looked at by something, like :env, :t,
         -- :search, or a direct use of the builtin. This is one of the
         -- reasons we have a :env call in the test suite, even though
-        -- it requires maintenance for every change to the builtin
-        -- table. Otherwise these panics can go unnoticed.
-        ty' = Loader.readSchemaPure name lc primNamedTypeEnv ty
+        -- it requires maintenance for every change to the builtins.
+        -- Otherwise the panics in readSchemaPure can go unnoticed.
+        ty' = Loader.readSchemaPure name lc tcenv ty
         ty'' = case ty' of
             SS.Forall _ t -> t
+        -- This is the position we use for the declaration position of
+        -- builtins. FUTURE: use something that prints a little more
+        -- nicely. (Users will see it if they e.g. rebind a builtin's
+        -- name.)
+        pos = SS.PosInternal "<<builtin>>"
+        -- readSchemaPure checks the schema, not a full declaration,
+        -- so it doesn't add to TCIncremental. Add explicitly.
+        -- FUTURE: simplify this so there's one call.
+        tcenv' = addBuiltin pos name lc ty' tcenv
 
     pureVal :: forall t. IsValue t => t -> SS.Type -> Text -> Options -> BuiltinContext -> Value
     pureVal x ty name _ _ = toValue ty name x
 
     -- pureVal can be used for anything with an IsValue instance,
-    -- including functions. However, functions in TopLevel need to use
-    -- funVal* instead; the IsValue instances capture incorrectly and
-    -- you get a function that returns a VTopLevel instead of executing
-    -- in TopLevel. (There isn't a special-case IsValue instance for
-    -- a -> TopLevel t, because that would require overlapping instances;
-    -- but there is an IsValue instance for TopLevel t by itself (that
-    -- produces VTopLevel) so use of pureVal matches that and the
-    -- generic IsValue instance for a -> t.)
+    -- including functions and monadic functions. However, there are
+    -- two kinds of functions in TopLevel that we might embed: those
+    -- that are meant to be "pure" in SAWScript, and those that
+    -- execute in SAWScript's own TopLevel. The former need to use
+    -- funVal* instead. The IsValue instances are intended for
+    -- functions in TopLevel that execute in SAWScript TopLevel. If
+    -- you use that with a function meant to be "pure", you get a
+    -- function that returns a VTopLevel instead of executing.
     --
-    -- XXX: rename these to e.g. monadVal1/2/3 so this is clearer?
+    -- XXX: come up with a clearer name for these... not to mention
+    -- pureVal... considering that it's the "pure" ones that _don't_
+    -- use pureVal...
 
     funVal1 :: forall a t. (FromValue a, IsValue t) => (a -> TopLevel t)
                -> SS.Type -> Text -> Options -> BuiltinContext -> Value
@@ -8548,15 +8709,31 @@ primitives = Map.fromList $
               (BuiltinContext -> Options -> t) -> SS.Type -> Text -> Options -> BuiltinContext -> Value
     bicVal f ty name opts bic = toValue ty name (f bic opts)
 
-
+-- The "cooked" primitives table that's been typechecked, and includes
+-- the resulting typing environment.
+--
+-- Note: it doesn't matter what order we process the primitives in, so
+-- this uses foldr because it's generally preferred in Haskell.
+primitives :: (?rcx :: RunCtx) =>
+    TCIncremental -> (Map SS.Name Primitive, TCIncremental)
+primitives tcenv0 =
+    let once rawprim (tbl, tcenv) =
+            let ((name, prim), tcenv') = rawprim tcenv in
+            let tbl' = Map.insert name prim tbl in
+            (tbl', tcenv')
+    in
+    foldr once (Map.empty, tcenv0) rawprimitives
 
 -- FUTURE: extract here is now functionally a nop, so if things don't
 -- change going forward we should consider simplifying so primTypes
 -- uses the same type as the interpreter environment this function
 -- seeds, instead of its own.
-primNamedTypeEnv :: ScopedMap SS.Name (PrimitiveLifecycle, SS.NamedType)
-primNamedTypeEnv = ScopedMap.seed $ fmap extract primTypes
-   where extract pt = (primTypeLife pt, primTypeType pt)
+primNamedTypeEnv :: (ScopedMap SS.Name (PrimitiveLifecycle, SS.NamedType), TCIncremental)
+primNamedTypeEnv =
+    let (tyenv, tcenv) = primTypes
+        extract pt = (primTypeLife pt, primTypeType pt)
+    in
+    (ScopedMap.seed $ fmap extract tyenv, tcenv)
 
 -- | Initial value environment for the interpreter.
 --
@@ -8572,11 +8749,16 @@ primNamedTypeEnv = ScopedMap.seed $ fmap extract primTypes
 --   interpreter environment this function seeds, instead of its own.
 --
 primValueEnv ::
+   (?rcx :: RunCtx) =>
    Options ->
    BuiltinContext ->
-   Map SS.Name (SS.Pos, PrimitiveLifecycle, SS.Schema, Value, Maybe [Text])
-primValueEnv opts bic = Map.mapWithKey extract primitives
+   TCIncremental ->   
+   (Map SS.Name (SS.Pos, PrimitiveLifecycle, SS.Schema, Value, Maybe [Text]),
+    TCIncremental)
+primValueEnv opts bic tcenv = (varenv, tcenv')
   where
+      (primtbl, tcenv') = primitives tcenv
+      varenv = Map.mapWithKey extract primtbl
       header = [
           "Description",
           "-----------",
@@ -8606,7 +8788,7 @@ primValueEnv opts bic = Map.mapWithKey extract primitives
           (pos, primitiveLife p, primitiveType p,
            (primitiveFn p) opts bic, Just $ doc n p)
 
-primEnviron :: Options -> BuiltinContext -> CEnv.CryptolEnv -> Environ
+primEnviron :: (?rcx :: RunCtx) => Options -> BuiltinContext -> CEnv.CryptolEnv -> (Environ, TCIncremental)
 primEnviron opts bic cenv =
 
     -- Do a scope push so the builtins live by themselves in their own
@@ -8615,8 +8797,9 @@ primEnviron opts bic cenv =
     -- scope) and, because the builtin layer is readonly, might be
     -- marginally more efficient as the user's globals are added.
 
-    let tyenv = ScopedMap.push primNamedTypeEnv
-        varenv = ScopedMap.push $ ScopedMap.seed $ primValueEnv opts bic
+    let (tyenv0, tcenv) = primNamedTypeEnv
+        tyenv = ScopedMap.push tyenv0
+        (varenv0, tcenv') = primValueEnv opts bic tcenv
+        varenv = ScopedMap.push $ ScopedMap.seed varenv0
     in
-    Environ varenv tyenv cenv
-
+    (Environ varenv tyenv cenv, tcenv')

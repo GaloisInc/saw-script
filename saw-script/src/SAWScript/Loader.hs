@@ -9,6 +9,7 @@ Stability   : provisional
 
 module SAWScript.Loader (
     readSchemaPure,
+    readTypedefPure,
     readSchemaPattern,
     readExpression,
     readREPLTextUnchecked,
@@ -23,16 +24,12 @@ import Data.IORef (IORef)
 import Data.List (uncons)
 import qualified Data.Set as Set
 import Data.Set (Set)
-import qualified Data.Map as Map
---import Data.Map (Map)
 import System.Directory
 import System.FilePath (normalise, takeDirectory)
 
 import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
 
-import qualified SAWSupport.ScopedMap as ScopedMap
-import SAWSupport.ScopedMap (ScopedMap)
 import qualified SAWSupport.Pretty as PPS
 import qualified SAWSupport.Position as PosSupport
 import qualified SAWSupport.Console as Cons
@@ -42,15 +39,14 @@ import SAWCentral.Position (Pos(..))
 import qualified SAWCentral.Options as Options
 import SAWCentral.Options (Options)
 import SAWCentral.AST
-import SAWCentral.Value (Environ(..), RebindableEnv)
 
 import SAWScript.Panic (HasCallStack, panic)
 import SAWScript.Token (Token, tokPos)
 import SAWScript.Lexer (lexSAW)
 import SAWScript.Parser
-import SAWScript.Include as Inc
-import SAWScript.Typechecker (checkDecl, checkSchema, checkSchemaPattern)
-import qualified SAWScript.Typechecker as Ty (Message(..))
+import qualified SAWScript.Include as Inc
+import qualified SAWScript.Subshells as Subshells
+import qualified SAWScript.Typechecker as Ty
 
 
 ------------------------------------------------------------
@@ -300,7 +296,7 @@ resolveIncludes depth seen incpath opts ppopts process tree =
 -- Entry points for loading
 
 -- | Read a type schema from a string. This is used to digest the type
---   signatures for builtins, and the expansions for builtin typedefs.
+--   signatures for builtins.
 --
 -- Pure function that panics on any error or warning. This is
 -- appropriate since we use it only to handle the builtins; any
@@ -327,20 +323,58 @@ readSchemaPure ::
     Text ->
     -- | Lifecycle state of the builtin
     PrimitiveLifecycle ->
-    -- | Environment for named types
-    ScopedMap Name (PrimitiveLifecycle, NamedType) ->
+    -- | Typing environment
+    Ty.TCIncremental ->
     -- | Text to read from
     Text ->
     -- | Result (a type scheme)
     Schema
-readSchemaPure name lc tyenv str =
+readSchemaPure name lc tcenv str =
     -- This is for use during initialization, so we can use the default ppopts
     let ppopts = PPS.defaultOpts in
     let fakeFileName = Text.unpack $ "<definition of " <> name <> ">"
         whoAmI = "readSchemaPure on " <> name
     in
     let schema = readAnyPure ppopts fakeFileName str "end-of-input" parseSchema whoAmI in
-    panicOnTyMsgs (Text.pack fakeFileName) $ checkSchema ppopts lc tyenv schema name
+    panicOnTyMsgs (Text.pack fakeFileName) $ Ty.checkSchema ppopts lc tcenv schema name
+
+-- | Read a typedef from a pair of strings. The name is separate; the
+--   expansion is a type schema that must be monomorphic. This is used
+--   to digest builtin typedefs.
+--
+-- Pure function that panics on any error or warning. This is
+-- appropriate since we use it only to handle the builtins; any
+-- glitches there are properly panics.
+--
+-- The first argument (fileName) is a string to pass as the
+-- filename for the lexer, which (complete with line and column
+-- numbering of dubious value) will go into the positions of the
+-- elements of the resulting type.
+--
+-- The fake file name names the builtin object involved, so we'll also
+-- use it as the panic location string if we need to panic.
+--
+-- FUTURE: we should figure out how to generate more meaningful
+-- positions (like "third argument of concat") but this at least
+-- allows telling the user which builtin the type came from.
+--
+-- Note: there is no way to reach @include@ statements from type
+-- schemas, so no need to process includes in what we read.
+--
+readTypedefPure ::
+    PrimitiveLifecycle ->
+    Ty.TCIncremental ->
+    Text ->
+    Text ->
+    (Type, Ty.TCIncremental)
+readTypedefPure lc tcenv name str =
+    -- This is for use during initialization, so we can use the default ppopts
+    let ppopts = PPS.defaultOpts in
+    let fakeFileName = Text.unpack $ "<definition of " <> name <> ">"
+        whoAmI = "readTypedefPure on " <> name
+    in
+    let schema = readAnyPure ppopts fakeFileName str "end-of-input" parseSchema whoAmI in
+    panicOnTyMsgs (Text.pack fakeFileName) $ Ty.checkTypedef ppopts lc tcenv name schema
 
 -- | Read a schema pattern from a string. This is used by the
 --   :search REPL command.
@@ -352,25 +386,11 @@ readSchemaPure name lc tyenv str =
 --
 readSchemaPattern ::
     Options ->
-    FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text ->
+    FilePath -> Ty.TCIncremental -> Set PrimitiveLifecycle -> Text ->
     IO SchemaPattern
-readSchemaPattern _opts fileName environ rbenv avail str = do
+readSchemaPattern _opts fileName tcenv avail str = do
   pat <- readAnyIO fileName str "end-of-line" parseSchemaPattern
-  let Environ varenv tyenv _cryenv = environ
-
-  -- XXX it should not be necessary to do this munging
-  --
-  -- Note that we need to flatten the scopes we have here
-  -- (outside the typechecker) in order to have the union with
-  -- the rebindable env to work right.
-  let squash (pos, lc, ty, _val, _doc) = (pos, lc, ReadOnlyVar, ty)
-      varenv' = Map.map squash $ ScopedMap.flatten varenv
-      rbsquash (pos, ty, _val) = (pos, Current, RebindableVar, ty)
-      rbenv' = Map.map rbsquash rbenv
-      varenv'' = Map.union varenv' rbenv'
-      varenv''' = ScopedMap.seed varenv''
-
-  dispatchTyMsgs $ checkSchemaPattern avail varenv''' tyenv pat
+  dispatchTyMsgs $ Ty.checkSchemaPattern avail tcenv pat
 
 -- | Read an expression from a string. This is used by the
 --   :type REPL command.
@@ -381,29 +401,23 @@ readSchemaPattern _opts fileName environ rbenv avail str = do
 --
 readExpression ::
     Options -> PPS.Opts ->
-    FilePath -> Environ -> RebindableEnv -> Set PrimitiveLifecycle -> Text ->
+    FilePath -> Ty.TCIncremental -> Set PrimitiveLifecycle -> Text ->
     IO (Schema, Expr)
-readExpression opts ppopts fileName environ rbenv avail str = do
+readExpression opts ppopts fileName tcenv avail str = do
   seen <- emptySeenSet
   let incpath = (".", Options.importPath opts)
 
   expr0 <- readAnyIO fileName str "end-of-line" parseExpression
-  expr <- resolveIncludes 0{-depth-} seen incpath opts ppopts Inc.processExpr expr0
-  let Environ varenv tyenv _cryenvs = environ
+  expr1 <- resolveIncludes 0{-depth-} seen incpath opts ppopts Inc.processExpr expr0
+  expr <- Subshells.processExpr expr1
 
-  -- XXX it should not be necessary to do this munging
-  let squash (defpos, lc, ty, _val, _doc) = (defpos, lc, ReadOnlyVar, ty)
-      varenv' = Map.map squash $ ScopedMap.flatten varenv
-      rbsquash (defpos, ty, _val) = (defpos, Current, RebindableVar, ty)
-      rbenv' = Map.map rbsquash rbenv
-      varenv'' = Map.union varenv' rbenv'
-      varenv''' = ScopedMap.seed varenv''
-
-  -- XXX: also it shouldn't be necessary to do this wrappery
+  -- XXX: it shouldn't be necessary to do this wrappery
   let pos = Pos.getPos expr
       decl = Decl pos (PWild pos Nothing) Nothing expr
 
-  decl' <- dispatchTyMsgs $ checkDecl ppopts avail varenv''' tyenv decl
+  -- Throw away the updated type environment because we aren't actually
+  -- declaring.
+  (decl', _tcenv') <- dispatchTyMsgs $ Ty.checkDecl ppopts avail tcenv decl
 
   let expr' = dDef decl'
       schema = case dType decl' of
@@ -429,8 +443,9 @@ readREPLTextUnchecked opts ppopts fileName str = do
   seen <- emptySeenSet
   let incpath = (".", Options.importPath opts)
 
-  stmts <- readAnyIO fileName str "end-of-line" parseREPLText
-  resolveIncludes 0{-depth-} seen incpath opts ppopts Inc.processStmts stmts
+  stmts0 <- readAnyIO fileName str "end-of-line" parseREPLText
+  stmts1 <- resolveIncludes 0{-depth-} seen incpath opts ppopts Inc.processStmts stmts0
+  Subshells.processStmts stmts1
 
 -- | Find a file, potentially looking in a list of multiple search paths (as
 -- specified via the @SAW_IMPORT_PATH@ environment variable or
@@ -503,8 +518,9 @@ includeFile depth seen incpath opts ppopts fname once = do
       Cons.noteN $ "Loading file \"" <> Text.pack fname' <> "\""
       ftext <- TextIO.readFile fname'
 
-      stmts <- wrapDir current' $ readAnyIO fname ftext "end-of-file" parseModule
-      resolveIncludes (depth + 1) seen incpath' opts ppopts Inc.processStmts stmts
+      stmts0 <- wrapDir current' $ readAnyIO fname ftext "end-of-file" parseModule
+      stmts1 <- resolveIncludes (depth + 1) seen incpath' opts ppopts Inc.processStmts stmts0
+      Subshells.processStmts stmts1
 
 -- | Find a file, potentially looking in a list of multiple search paths (as
 -- specified via the @SAW_IMPORT_PATH@ environment variable or

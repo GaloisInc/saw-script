@@ -8,6 +8,7 @@ enable_experimental;
 let foo (x : Integer) : TopLevel () = do {
    let f () = print x;
    subshell ();
+   return ();
 };
 
 foo 5;

@@ -1,0 +1,8 @@
+Loading file "scope02.saw"
+scope02.saw:6:5-6:6: Warning: Redeclaration of x
+let x = ();
+    ^
+scope02.saw:4:5-4:6: Previous declaration was here
+let x = 3;
+    ^
+Int

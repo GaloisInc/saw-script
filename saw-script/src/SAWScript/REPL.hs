@@ -18,6 +18,7 @@ import SAWCentral.Proof (ProofState)
 import SAWCentral.Value (TopLevelRO, TopLevelRW)
 
 import SAWScript.Panic (panic)
+import SAWScript.Typechecker (TCIncremental)
 import SAWScript.REPL.Logo (displayLogo)
 import SAWScript.REPL.Monad (initREPL, resumeREPL, runREPL, REPLState(..))
 import SAWScript.REPL.Haskeline (repl)
@@ -44,9 +45,11 @@ run mfile opts = do
 --   Note that there isn't any REPL state that needs to be transferred
 --   to the nested instance, only the interpreter state.
 --
-reenterTopLevel :: TopLevelRO -> TopLevelRW -> IO TopLevelRW
-reenterTopLevel ro rw = do
-    let rst = resumeREPL ro rw Nothing
+reenterTopLevel ::
+    TCIncremental -> TopLevelRO -> TopLevelRW ->
+    IO TopLevelRW
+reenterTopLevel tcenv ro rw = do
+    let rst = resumeREPL reenterTopLevel reenterProofScript tcenv ro rw Nothing
     (_result, rst') <- runREPL (repl Nothing) rst
     return $ rTopLevelRW rst'
 
@@ -57,9 +60,10 @@ reenterTopLevel ro rw = do
 --   to the nested instance, only the interpreter state.
 --
 reenterProofScript ::
-    TopLevelRO -> TopLevelRW -> ProofState -> IO (TopLevelRW, ProofState)
-reenterProofScript ro rw pst = do
-    let rst = resumeREPL ro rw (Just pst)
+    TCIncremental -> TopLevelRO -> TopLevelRW -> ProofState ->
+    IO (TopLevelRW, ProofState)
+reenterProofScript tcenv ro rw pst = do
+    let rst = resumeREPL reenterTopLevel reenterProofScript tcenv ro rw (Just pst)
     (_result, rst') <- runREPL (repl Nothing) rst
     let rw' = rTopLevelRW rst'
         pst' = case rProofState rst' of

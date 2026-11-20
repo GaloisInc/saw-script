@@ -1,3 +1,0 @@
-Examples from #2242 (scoping regression in proof_subshell), #2243
-(bindings escape proof_subshell), and #2306 (bizarre environment
-capturing in the subshell / proof_subshell commands)

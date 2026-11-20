@@ -24,7 +24,11 @@ module SAWScript.REPL.Monad (
   , liftTopLevel
   , liftProofScript
   , REPLState(..)
+  , getTLHook
+  , getPSHook
   , getCryptolEnv
+  , getTCIncremental
+  , putTCIncremental
   , getTopLevelRO
   , getTopLevelRW
   , getProofState
@@ -56,12 +60,13 @@ import SAWCentral.TopLevel (
  )
 import SAWCentral.Value (
     ProofScript(..),
-    rwGetCryptolEnv, TopLevelShellHook, ProofScriptShellHook,
+    rwGetCryptolEnv
  )
 import qualified SAWCentral.Value as SV (getPPOpts) -- don't conflict with ours
 
 import SAWScript.Panic (panic)
-import SAWScript.Interpreter (buildTopLevelEnv)
+import SAWScript.Typechecker (TCIncremental)
+import SAWScript.Interpreter (buildTopLevelEnv, TopLevelShellHook, ProofScriptShellHook)
 import SAWScript.ValueOps (TopLevelCheckpoint, makeCheckpoint, restoreCheckpoint)
 
 
@@ -97,6 +102,9 @@ import SAWScript.ValueOps (TopLevelCheckpoint, makeCheckpoint, restoreCheckpoint
 data REPLState = REPLState
   { rContinue   :: Bool
   , rIsBatch    :: Bool
+  , rTLHook     :: TopLevelShellHook
+  , rPSHook     :: ProofScriptShellHook
+  , rTCIncremental :: TCIncremental
   , rTopLevelRO :: TopLevelRO
   , rTopLevelRW :: TopLevelRW
   , rProofState :: Maybe ProofState
@@ -107,10 +115,13 @@ initREPL ::
     Bool -> Options -> TopLevelShellHook -> ProofScriptShellHook ->
     IO REPLState
 initREPL isBatch opts tlhook pshook =
-  do (ro, rw) <- buildTopLevelEnv opts [] tlhook pshook
+  do (ro, rw, tcenv) <- buildTopLevelEnv opts [] tlhook pshook
      return REPLState
        { rContinue   = True
        , rIsBatch    = isBatch
+       , rTLHook     = tlhook
+       , rPSHook     = pshook
+       , rTCIncremental = tcenv
        , rTopLevelRO = ro
        , rTopLevelRW = rw
        , rProofState  = Nothing
@@ -122,11 +133,17 @@ initREPL isBatch opts tlhook pshook =
 -- file in batch mode. Or from the same file that's feeding the parent
 -- shell, though that's probably difficult. For now, assume any
 -- subshells are intended to be interactive.
-resumeREPL :: TopLevelRO -> TopLevelRW -> Maybe ProofState -> REPLState
-resumeREPL ro rw mpst =
+resumeREPL ::
+    TopLevelShellHook -> ProofScriptShellHook -> TCIncremental ->
+    TopLevelRO -> TopLevelRW -> Maybe ProofState ->
+    REPLState
+resumeREPL tlhook pshook tcenv ro rw mpst =
     REPLState {
         rContinue   = True,
         rIsBatch    = False,
+        rTLHook     = tlhook,
+        rPSHook     = pshook,
+        rTCIncremental = tcenv,
         rTopLevelRO = ro,
         rTopLevelRW = rw,
         rProofState = mpst
@@ -177,6 +194,18 @@ liftProofScript m = do
 
 ------------------------------------------------------------
 -- Accessors
+
+getTLHook :: REPL TopLevelShellHook
+getTLHook = gets rTLHook
+
+getPSHook :: REPL ProofScriptShellHook
+getPSHook = gets rPSHook
+
+getTCIncremental :: REPL TCIncremental
+getTCIncremental = gets rTCIncremental
+
+putTCIncremental :: TCIncremental -> REPL ()
+putTCIncremental tcenv = modify (\r -> r { rTCIncremental = tcenv })
 
 getTopLevelRO :: REPL TopLevelRO
 getTopLevelRO = gets rTopLevelRO

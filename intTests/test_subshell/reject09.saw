@@ -1,0 +1,9 @@
+// Referencing "subshell" in the last position of a do-block is no
+// longer permitted.
+
+enable_experimental;
+
+let q = do {
+   subshell ();
+};
+

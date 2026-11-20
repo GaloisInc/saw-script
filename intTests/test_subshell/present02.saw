@@ -10,6 +10,7 @@ let foo (x : Integer) : TopLevel Theorem = do {
    
    prove_print do {
       proof_subshell ();
+      return ();
    } {{ `x == 5 }};
 };
 

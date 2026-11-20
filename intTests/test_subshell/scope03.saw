@@ -1,0 +1,11 @@
+// The subshell prints the type of x, which should be Int and not ().
+enable_experimental;
+
+do {
+   let x = 3;
+   let f () = do { subshell (); return (); };
+   let x = ();
+   f ();
+   return ();
+};
+

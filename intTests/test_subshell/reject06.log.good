@@ -1,0 +1,12 @@
+Loading file "reject06.saw"
+reject06.saw:6:11-6:28: Error: Invalid use of subshell
+The usage of the "subshell" and "proof_subshell" builtins is restricted.
+In a block or at the top level, use these forms:
+   subshell ();
+   proof_subshell ();
+They may not be the final value of a block.
+As a function argument, use these forms:
+   ... (subshell ()) ...
+   ... (proof_subshell ()) ...
+but note that the subshell will run in the caller's context.
+FAILED
