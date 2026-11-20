@@ -97,6 +97,7 @@ import qualified Cryptol.Utils.Ident as P (mkIdent, packModName)
   '`'            { TPunct    _ "`"              }
   '->'           { TPunct    _ "->"             }
   '<-'           { TPunct    _ "<-"             }
+  '-'            { TOp       _ "-"              }
   string         { TLit      _ _                }
   code           { TCode     _ _                }
   ctype          { TCType    _ _                }
@@ -226,6 +227,7 @@ AExpr :: { Expr }
  | code                                 { Code (tokPos $1) (tokStr $1) }
  | ctype                                { CType (tokPos $1) (tokStr $1) }
  | num                                  { Int (tokPos $1) (tokNum $1) }
+ | '-' num                              { Int (maxSpan [tokPos $1, tokPos $2]) (negate (tokNum $2)) }
  | name                                 { Var (tokPos $1) (tokStr $1) }
  | '(' Expression ')'                   { $2 } -- { Parens (maxSpan [tokPos $1, tokPos $3]) $2 }
  | '(' commas2(Expression) ')'          { Tuple (maxSpan [tokPos $1, tokPos $3]) $2 }

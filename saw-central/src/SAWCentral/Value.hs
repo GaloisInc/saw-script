@@ -1510,7 +1510,9 @@ extendEnv pos name rb ty doc v = do
            CEnv.bindExtraVar sc (ident, t) ce
          VType s ->
            CEnv.bindTySyn sc (ident, s) ce
-         VInteger n ->
+         -- Only non-negative Ints can be Cryptol numeric types; negative
+         -- Ints stay SAWScript-only.
+         VInteger n | n >= 0 ->
            CEnv.bindIntegerType sc (ident, n) ce
          VCryptolModule m ->
            CEnv.bindExtCryptolModule sc (modname, m) ce

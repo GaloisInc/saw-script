@@ -49,6 +49,10 @@ This release supports [version
 * The `summarize_verification` command now reports which MIR functions were
   analyzed in addition to LLVM functions and JVM methods.
 
+* SAWScript now accepts negative integer literals of type `Int`, such as
+  `-5` (#3394).
+  Negative `Int` values are not exposed to Cryptol as numeric types.
+
 ## Removals / Deprecations
 
 * The type `JVMMethodSpec`, which is an old name for `JVMSpec`, is now
