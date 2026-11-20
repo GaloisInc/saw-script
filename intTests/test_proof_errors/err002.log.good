@@ -5,7 +5,7 @@ Stack trace:
 Cannot add theorem to simplification set; it must be an equality.
 err002.saw:6:1-6:76: Theorem created here
 Theorem as SAWCore:
-   let { _x`1 = Vec 8 Bool;
+   let { _x`1 = Vec Bool 8;
          _x`2 = TCNum 8;
          _x`3 = PRingSeqBool _x`2;
        }

@@ -406,7 +406,7 @@ asFiniteType sc t = do
   case t' of
     (R.asBoolType -> Just ())
       -> return FTBit
-    (R.isVecType return -> Just (n R.:*: tp))
+    (R.isVecType return -> Just (tp R.:*: n))
       -> FTVec n <$> asFiniteType sc tp
     (R.asTupleType -> Just ts)
       -> FTTuple <$> traverse (asFiniteType sc) ts
@@ -438,7 +438,7 @@ asFirstOrderTypeMaybe sc t =
          -> return FOTRational
        (R.asFloatType -> Just (e, p))
          -> return (FOTFloat e p)
-       (R.isVecType return -> Just (n R.:*: tp))
+       (R.isVecType return -> Just (tp R.:*: n))
          -> FOTVec n <$> asFirstOrderTypeMaybe sc tp
        (R.asArrayType -> Just (tp1 R.:*: tp2)) -> do
          tp1' <- asFirstOrderTypeMaybe sc tp1
@@ -455,7 +455,7 @@ asFiniteTypePure :: Term -> Maybe FiniteType
 asFiniteTypePure t =
   case t of
     (R.asBoolType -> Just ()) -> Just FTBit
-    (R.isVecType return -> Just (n R.:*: tp)) -> FTVec n <$> asFiniteTypePure tp
+    (R.isVecType return -> Just (tp R.:*: n)) -> FTVec n <$> asFiniteTypePure tp
     (R.asTupleType -> Just ts) -> FTTuple <$> traverse asFiniteTypePure ts
     (R.asRecordType -> Just fs) -> FTRec <$> traverse asFiniteTypePure (Map.fromList fs)
     _ -> Nothing
@@ -482,7 +482,7 @@ scFirstOrderType sc ft =
                        scFloatType sc e' p'
     FOTVec n t  -> do n' <- scNat sc n
                       t' <- scFirstOrderType sc t
-                      scVecType sc n' t'
+                      scVecType sc t' n'
     FOTArray t1 t2 -> do t1' <- scFirstOrderType sc t1
                          t2' <- scFirstOrderType sc t2
                          scArrayType sc t1' t2'
